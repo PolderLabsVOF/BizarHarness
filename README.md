@@ -132,7 +132,7 @@ After installation, run `/connect` in opencode to add API keys:
 
 | Provider | Models | Auth |
 |---|---|---|
-| **OpenCode Zen** | `opencode/deepseek-v4-flash-free` | Free — no key needed |
+| **OpenCode Zen** | `opencode/deepseek-v4-flash-free` | Free API key from [opencode.ai](https://opencode.ai) — create account, get key, no charges |
 | **minimax.io** | `minimax/MiniMax-M2.7`, `minimax/MiniMax-M3` | API key from [minimax.io](https://minimax.io) — **no `baseURL` override** |
 | **OpenAI** | `openai/gpt-5.5` | ChatGPT subscription (OAuth) |
 
