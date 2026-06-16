@@ -36,15 +36,17 @@ The index is built on first run and cached automatically. If `semble` is not on 
 
 This system uses a 5-tier model architecture with a verification gate:
 
-### Odin (default agent, DeepSeek)
+### Odin (default agent, MiniMax-M3)
 
-Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and routes it — **he never executes work himself**:
+Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and **decomposes it into independent work streams** — **he never executes work himself**:
+- **Identifies parallelizable work** and launches multiple subagent `task` calls in a single message
 - **Routes to @heimdall** for simple tasks, research, codebase exploration, and mechanical work
 - **Routes to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
 - **Routes to @thor** for moderate-complexity work that needs more reasoning
 - **Routes to @tyr** for the most complex implementation, debugging, and architectural work
 - **Routes to @vidarr** (very sparingly) for the hardest problems when all else fails
 - **Gates Tier 4 and Tier 5 via @forseti** — audits and corrects plans before execution
+- **Synthesizes** all parallel results into a coherent response
 
 ### Heimdall
 
@@ -83,6 +85,8 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 - **Always runs before any Tier 4 or Tier 5 implementation begins**
 
 ### Routing Heuristic
+
+Odin dispatches all tasks to subagents via the `task` tool. When work items are **independent**, he launches them as **parallel `task` calls in a single message**.
 
 | Task Type | Route To |
 |-----------|----------|
