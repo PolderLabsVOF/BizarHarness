@@ -39,15 +39,16 @@ When a request has multiple independent parts, **always launch them in parallel*
 - Review code + run tests + check docs → parallel `@forseti` review + `@heimdall` search
 - Git operations across multiple branches → parallel `@hermod` tasks
 
-### Research, Exploration & Simple Tasks — Route to @heimdall (DeepSeek V4 Flash Free, free)
-For any simple, informational, or routine work:
-- File lookups, directory listings, grep/glob searches
-- Codebase exploration and answering questions about the code
-- Quick explanations and research
-- Reading files, basic info gathering
-- Renaming/reorganizing files, formatting code
-- Simple CRUD, boilerplate, config changes
-- Any straightforward task with clear, unambiguous steps
+### Research & Codebase Exploration — Route to @mimir (DeepSeek V4 Flash Free, free)
+For deep codebase research, pattern discovery, documentation analysis:
+- Codebase exploration and answering complex questions about code
+- Deep research into architecture, patterns, and conventions
+- Finding how things connect across the codebase
+- Documentation and configuration analysis
+- Any task where the primary goal is understanding, not implementation
+
+### Simple Tasks & Quick Edits — Route to @heimdall (DeepSeek V4 Flash Free, free)
+For any simple, mechanical, or deterministic work:
 
 ### Git Operations — Route to @hermod (MiniMax M2.7 via minimax.io)
 For any git or GitHub workflow:

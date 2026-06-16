@@ -1,5 +1,5 @@
 ---
-description: Heimdall — Efficient for simple, routine, and deterministic tasks using DeepSeek. The ever-watchful eye of the pantheon.
+description: Heimdall — Simple, routine, and deterministic tasks using DeepSeek. Quick edits, mechanical work, file operations. The ever-watchful guardian.
 mode: subagent
 model: opencode/deepseek-v4-flash-free
 color: "#10b981"

@@ -40,7 +40,8 @@ This system uses a 5-tier model architecture with a verification gate:
 
 Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and **decomposes it into independent work streams** — **he never executes work himself**:
 - **Identifies parallelizable work** and launches multiple subagent `task` calls in a single message
-- **Routes to @heimdall** for simple tasks, research, codebase exploration, and mechanical work
+- **Routes to @mimir** for deep codebase research, exploration, and documentation analysis
+- **Routes to @heimdall** for simple tasks, mechanical work, quick edits, file operations
 - **Routes to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
 - **Routes to @thor** for moderate-complexity work that needs more reasoning
 - **Routes to @tyr** for the most complex implementation, debugging, and architectural work
@@ -51,7 +52,13 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 ### Heimdall
 
 - **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
-- **Use for**: Simple tasks, research, codebase exploration, and mechanical work. The ever-watchful guardian.
+- **Use for**: Simple tasks, mechanical work, quick edits, file operations. The ever-watchful guardian.
+- **Cost**: Free
+
+### Mimir
+
+- **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
+- **Use for**: Deep codebase research, exploration, documentation analysis. Semble-first search approach.
 - **Cost**: Free
 
 ### Hermod
@@ -94,6 +101,9 @@ Odin dispatches all tasks to subagents via the `task` tool. When work items are 
 | Quick questions, explanations | @heimdall |
 | Simple edit, rename, format | @heimdall |
 | Mechanical CRUD, boilerplate | @heimdall |
+| Deep codebase research and exploration | @mimir |
+| Documentation analysis | @mimir |
+| Pattern discovery and architecture understanding | @mimir |
 | Git commit, push, pull | @hermod |
 | Branching, merging, rebasing | @hermod |
 | Pull request management | @hermod |
