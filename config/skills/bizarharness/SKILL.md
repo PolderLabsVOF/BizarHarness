@@ -20,7 +20,7 @@ chmod +x install.sh
 
 Odin is the only primary agent. Every request hits him first. He NEVER does work — he decomposes into parallel streams and dispatches to subagents.
 
-All subagents use Hindsight memory with the **default** bank (omit `bank_id` in all Hindsight calls).
+All subagents use Hindsight memory with **per-project banks**. Call `hindsight_list_banks` at session start to discover available banks, determine the project name, and use `bank_id: "<project-name>"` in all Hindsight calls. The default bank is for general/cross-project knowledge only.
 
 ## Agent Reference
 
