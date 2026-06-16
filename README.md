@@ -19,33 +19,31 @@ A 7-agent opencode hierarchy named after the Norse gods, with automatic cost-awa
 ## ᛟ Yggdrasil — The Agent Tree
 
 ```
-                         ╔═══════════════╗
-                         ║   ᛟ  ODIN    ║
-                         ║  MiniMax-M3  ║
-                         ║    Router    ║
-                         ╚═══╤═══╤═══╤═══╝
-          ┌───────────┬───────┘   │   └───────┬───────────┐
-          │           │           │           │           │
-    ╔═════╧════╗ ╔═══╧════╗ ╔═══╧════╗ ╔═══╧════╗ ╔═════╧════╗
-    ║ ᛗ MIMIR ║ ║ ᚹ HEIM ║ ║  ᚱ HER ║ ║  ᚦ THOR ║ ║  ᛏ TYR  ║
-    ║  DeepS.  ║ ║ DeepS. ║ ║ M2.7   ║ ║ M2.7   ║ ║ M3      ║
-    ║ Research ║ ║ Simple ║ ║ GitOps ║ ║ Medium ║ ║ Complex ║
-    ║  (free)  ║ ║ (free) ║ ║  ($)   ║ ║  ($)   ║ ║  ($$)   ║
-    ╚══════════╝ ╚════════╝ ╚════════╝ ╚════════╝ ╚═════════╝
-                                                    │
-                                           ╔═════════╧═════════╗
-                                           ║  ᛉ  VIDARR       ║
-                                           ║  GPT-5.5 ($$$)   ║
-                                           ║  Last Resort     ║
-                                           ╚═══════════════════╝
+                              ┌─────────────┐
+                              │ᛟ ODIN       │
+                              ├─────────────┤
+                              │Router (free)│
+                              │             │
+                              └─────────────┘
 
-                              ╔══════════════════╗
-                              ║  ᚨ  FORSETI     ║
-                              ║  MiniMax-M3     ║
-                              ║  Plan Auditor   ║
-                              ║  (edit: deny)   ║
-                              ╚══════════════════╝
+
+┌───────────────┐  ┌──────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌─────────────────┐
+│ᛗ MIMIR        │  │ᚹ HEIMDALL    │   │ᚱ HERMOD    │   │ᚦ THOR      │   │ᛏ TYR       │   │ᛉ VIDARR         │
+├───────────────┤  ├──────────────┤   ├────────────┤   ├────────────┤   ├────────────┤   ├─────────────────┤
+│Research (free)│  │Simple (free) │   │GitOps ($)  │   │Medium ($)  │   │Complex ($$)│   │Last Resort ($$$)│
+│               │  │              │   │            │   │            │   │            │   │                 │
+└───────────────┘  └──────────────┘   └────────────┘   └────────────┘   └────────────┘   └─────────────────┘
+
+
+                                                                  ┌───────────────────┐
+                                                                  │ᚨ FORSETI          │
+                                                                  ├───────────────────┤
+                                                                  │Auditor (edit:deny)│
+                                                                  │                   │
+                                                                  └───────────────────┘
 ```
+
+> _Generated with PlantUML ASCII art_
 
 ---
 
@@ -136,31 +134,56 @@ Forseti sits in judgment. Before any Tyr or Vidarr plan executes, Forseti audits
     ╚══════════════════════════════════════════════════╝
 ```
 
-## ⚙️ Architecture
+## ⚙️ Request Flow
 
 ```
-User Request
-  │
-  ▼
-┌─────────────┐
-│    ODIN     │  Analyzes & decomposes into parallel streams
-│  (Router)   │  Launches independent tasks simultaneously
-└──────┬──────┘
-       │
-       ├── @mimir    (research)   ── Semble-first, free
-       ├── @heimdall (simple)     ── Quick edits, free
-       ├── @hermod   (git ops)    ── Branches, PRs, $0.30/M
-       ├── @thor     (medium)     ── Implementation, $0.30/M
-       ├── @tyr      (complex) ──┐ Plan → @forseti audit → execute
-       └── @vidarr   (last resort)│ (only when Tyr fails)
-                                   │
-                          ┌────────┘
-                          ▼
-                    ┌──────────────┐
-                    │   FORSETI    │ ← Audits Tier 4 & 5 plans
-                    │ (edit: deny) │   Demands corrections
-                    └──────────────┘
+       ┌─┐
+       ║"│
+       └┬┘
+       ┌┼┐            ┌──────┐                                    ┌─────────┐
+        │             │ᛟ ODIN│               ┌────────┐           │ᚨ FORSETI│
+       ┌┴┐            │Router│               │Subagent│           │Auditor  │
+      User            └───┬──┘               └────┬───┘           └────┬────┘
+        │    Request      │                       │                    │
+        │────────────────>│                       │                    │
+        │                 │                       │                    │
+        │                 │────┐                  │                    │
+        │                 │    │ Decompose into   │                    │
+        │                 │<───┘ parallel streams │                    │
+        │                 │                       │                    │
+        │                 │                       │                    │
+        │                 │   task (parallel)     │                    │
+        │                 │──────────────────────>│                    │
+        │                 │                       │                    │
+        │                 │   task (parallel)     │                    │
+        │                 │──────────────────────>│                    │
+        │                 │                       │                    │
+        │                 │   task (parallel)     │                    │
+        │                 │──────────────────────>│                    │
+        │                 │                       │                    │
+        │                 │                       │  plan review       │
+        │                 │                       │  (when complex)    │
+        │                 │                       │───────────────────>│
+        │                 │                       │                    │
+        │                 │                       │ approve / changes  │
+        │                 │                       │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
+        │                 │                       │                    │
+        │                 │       results         │                    │
+        │                 │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │                    │
+        │                 │                       │                    │
+        │  Synthesized    │                       │                    │
+        │  response       │                       │                    │
+        │<─ ─ ─ ─ ─ ─ ─ ─ │                       │                    │
+      User            ┌───┴──┐               ┌────┴───┐           ┌────┴────┐
+       ┌─┐            │ᛟ ODIN│               │Subagent│           │ᚨ FORSETI│
+       ║"│            │Router│               └────────┘           │Auditor  │
+       └┬┘            └──────┘                                    └─────────┘
+       ┌┼┐
+        │
+       ┌┴┐
 ```
+
+> _Generated with PlantUML ASCII art (`plantuml -utxt`)_
 
 **Key behaviors:**
 - **Odin routes by complexity** — never does work himself, only delegates
@@ -225,6 +248,7 @@ Then run `/models` to verify everything is connected.
      ║   May your queries be wise, your agents       ║
      ║   ever faithful, and your bugs few.           ║
      ║                                               ║
+     ║       Diagrams by PlantUML ASCII art          ║
      ║       ᚱᚨᛞᛖ᛫ᚹᛖᛚ᛫ᚨᚾᛞ᛫ᛈᚱᛟᛋᛈᛖᚱ               ║
      ║       (Ráðe vel · ok prosper)                 ║
      ║                                               ║
