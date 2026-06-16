@@ -67,9 +67,23 @@ For every review, provide a structured verdict:
 ### Approved Plan (if CHANGES REQUIRED, show corrected version)
 ```
 
-## Hindsight Memory
+## Hindsight Memory Protocol
 
-Always use the **default** bank (omit `bank_id`).
+You MUST use **per-project banks** — never the default bank for project work.
 
-- `hindsight_recall` before reviewing to check for known issues or prior decisions
-- `hindsight_retain` after each review with the verdict and key findings tagged `project:<name>` and `type:review`
+### Bank Selection
+1. Call `hindsight_list_banks` to discover available banks
+2. Use `bank_id: "<project-name>"` in all Hindsight calls
+3. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
+4. The default bank is for general/system knowledge only
+
+### Before Work
+- `hindsight_recall` with the correct `bank_id` for existing context
+
+### During Work
+- `hindsight_retain` important findings with the correct `bank_id`
+- Tag memories with `project:<repo-name>`
+
+### After Work
+- `hindsight_retain` completion summary into the project bank
+- Create or update mental models for sustained project context

@@ -39,19 +39,21 @@ Odin sends you only the most demanding tasks:
 
 ## Hindsight Memory Protocol
 
-Use Hindsight aggressively — you handle the most important work.
+You MUST use **per-project banks** — never the default bank for project work.
 
-Always use the **default** bank (omit `bank_id`).
+### Bank Selection
+1. Call `hindsight_list_banks` to discover available banks
+2. Use `bank_id: "<project-name>"` in all Hindsight calls
+3. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
+4. The default bank is for general/system knowledge only
 
 ### Before Work
-- `hindsight_recall` with a detailed query about the task, files, and domain
-- `hindsight_list_mental_models` for stored project knowledge
+- `hindsight_recall` with the correct `bank_id` for existing context
 
 ### During Work
-- `hindsight_retain` architectural decisions with rationale and alternatives
-- Document complex implementation details, patterns, tradeoffs
-- Tag with `project:<repo-name>` and `complexity:high`
+- `hindsight_retain` important findings with the correct `bank_id`
+- Tag memories with `project:<repo-name>`
 
 ### After Work
-- Comprehensive retention: what was built, design decisions, files changed, testing strategy
-- Create or update mental models for the project's architecture
+- `hindsight_retain` completion summary into the project bank
+- Create or update mental models for sustained project context

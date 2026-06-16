@@ -89,8 +89,21 @@ Every version control workflow runs through you: staging, committing, pushing, p
 
 ## Hindsight Memory Protocol
 
-Always use the **default** bank (omit `bank_id`).
+You MUST use **per-project banks** — never the default bank for project work.
 
-- `hindsight_recall` before starting to check for existing context
-- `hindsight_retain` key operations performed (branches touched, commits made, PRs created)
-- Tag with `project:<repo-name>` and `ops:git`
+### Bank Selection
+1. Call `hindsight_list_banks` to discover available banks
+2. Use `bank_id: "<project-name>"` in all Hindsight calls
+3. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
+4. The default bank is for general/system knowledge only
+
+### Before Work
+- `hindsight_recall` with the correct `bank_id` for existing context
+
+### During Work
+- `hindsight_retain` important findings with the correct `bank_id`
+- Tag memories with `project:<repo-name>`
+
+### After Work
+- `hindsight_retain` completion summary into the project bank
+- Create or update mental models for sustained project context

@@ -110,6 +110,8 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 Odin dispatches all tasks to subagents via the `task` tool. When work items are **independent**, he launches them as **parallel `task` calls in a single message**.
 
+**Before dispatching any task, Odin determines the project name and sets the correct Hindsight bank.** See Hindsight Memory Protocol below for bank selection rules.
+
 | Task Type | Route To |
 |-----------|----------|
 | File lookup, search, ls, info | @heimdall |
@@ -144,12 +146,25 @@ Odin dispatches all tasks to subagents via the `task` tool. When work items are 
 
 ## Hindsight Memory Protocol
 
-A Hindsight memory MCP server is available. All agents **must** use it with the **default** bank (omit `bank_id` in all calls).
+A Hindsight memory MCP server is available. All agents **must** use **per-project banks** — the default bank is for general/cross-project knowledge only.
+
+### Bank Selection Rules
+
+1. **At session start**, call `hindsight_list_banks` to see what banks exist
+2. Determine the project name from your working directory or the task context
+3. Use the project-specific bank by passing `bank_id: "<project-name>"` in all Hindsight calls
+4. If no bank exists for the project, create one with `hindsight_create_bank(bank_id: "<project-name>")`
+5. The **default** bank is reserved for:
+   - General AI-agent system knowledge (model configs, agent definitions, infrastructure)
+   - Cross-project preferences and personal facts about the user
+   - Knowledge that applies regardless of which project
 
 ### Available Hindsight Tools
 
 | Tool | Purpose |
 |------|---------|
+| `hindsight_list_banks` | List all available banks — call this first |
+| `hindsight_create_bank` | Create a new project bank if one doesn't exist |
 | `hindsight_recall` | Search stored memories for relevant context |
 | `hindsight_retain` | Store new information to memory |
 | `hindsight_sync_retain` | Store and block until complete |
@@ -157,16 +172,15 @@ A Hindsight memory MCP server is available. All agents **must** use it with the 
 | `hindsight_list_mental_models` | Check existing mental models |
 | `hindsight_get_mental_model` | Read a mental model's content |
 | `hindsight_create_mental_model` | Create a persistent knowledge summary |
+| `hindsight_update_bank` | Update a bank's name/mission/configuration |
 
 ### Required Workflow
 
-1. **Session start**: `hindsight_recall` for task-relevant context + read `.bizar/AGENTS_SELF_IMPROVEMENT.md` for project-level learnings
-2. **During work**: `hindsight_retain` for architectural decisions, conventions, context
-3. **Task completion**: `hindsight_retain` summary with `project:<name>` tags + record entry in `.bizar/AGENTS_SELF_IMPROVEMENT.md`
+1. **Session start**: `hindsight_list_banks` + `hindsight_recall` (with correct `bank_id`) + read `.bizar/AGENTS_SELF_IMPROVEMENT.md`
+2. **During work**: `hindsight_retain` with correct `bank_id` for all project knowledge
+3. **Task completion**: `hindsight_retain` summary into the project bank + record entry in `.bizar/AGENTS_SELF_IMPROVEMENT.md`
 4. **Project knowledge**: Create mental models for sustained project context
 
----
+### Hindsight MCP Server
 
-## Hindsight MCP Server
-
-The Hindsight MCP server is already configured. All agents interact with it through MCP tools. No bank_id is needed — the default bank is used automatically.
+The Hindsight MCP server is already configured. All agents interact with it through MCP tools. Always pass `bank_id` — do not rely on the default bank for project-specific work.

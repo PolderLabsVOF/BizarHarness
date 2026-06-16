@@ -43,16 +43,21 @@ You have access to the most capable model in the pantheon. You are expected to:
 
 ## Hindsight Memory Protocol
 
-Always use the **default** bank (omit `bank_id`).
+You MUST use **per-project banks** — never the default bank for project work.
+
+### Bank Selection
+1. Call `hindsight_list_banks` to discover available banks
+2. Use `bank_id: "<project-name>"` in all Hindsight calls
+3. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
+4. The default bank is for general/system knowledge only
 
 ### Before Work
-- `hindsight_recall` with a detailed query — check for what was already tried
-- Check mental models for project context
+- `hindsight_recall` with the correct `bank_id` for existing context
 
 ### During Work
-- `hindsight_retain` every important finding, failed approach, and decision
-- Tag with `project:<repo-name>`, `complexity:extreme`, `agent:vidarr`
+- `hindsight_retain` important findings with the correct `bank_id`
+- Tag memories with `project:<repo-name>`
 
 ### After Work
-- Full postmortem: what was tried before, what failed, the breakthrough insight, files changed
-- Update or create mental models for the project
+- `hindsight_retain` completion summary into the project bank
+- Create or update mental models for sustained project context

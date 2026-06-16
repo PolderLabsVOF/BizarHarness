@@ -116,16 +116,21 @@ Watch for these generic AI-generated patterns and flag them:
 
 ## Hindsight Memory Protocol
 
-Always use the **default** bank (omit `bank_id` in all Hindsight calls).
+You MUST use **per-project banks** — never the default bank for project work.
+
+### Bank Selection
+1. Call `hindsight_list_banks` to discover available banks
+2. Use `bank_id: "<project-name>"` in all Hindsight calls
+3. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
+4. The default bank is for general/system knowledge only
 
 ### Before Work
-- `hindsight_recall` for existing design context, prior design decisions
-- Check if a DESIGN.md already exists in the project
+- `hindsight_recall` with the correct `bank_id` for existing context
 
 ### During Work
-- `hindsight_retain` design decisions, color palette choices, typography selections
-- Tag with `project:<repo-name>` and `design`
+- `hindsight_retain` important findings with the correct `bank_id`
+- Tag memories with `project:<repo-name>`
 
 ### After Work
-- `hindsight_retain` what was created, key design rationale, files changed
-- Tag with `project:<repo-name>` and `design`
+- `hindsight_retain` completion summary into the project bank
+- Create or update mental models for sustained project context

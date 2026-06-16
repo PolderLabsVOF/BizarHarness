@@ -184,15 +184,19 @@ Update .bizar/ in this project.
 
 ## Hindsight Memory Protocol
 
-Always use the **default** bank (omit `bank_id` in all Hindsight calls).
+You MUST use **per-project banks** — never the default bank for project work.
 
-### On Session Start
-- `hindsight_recall` with a query summarizing context and likely project
-- `hindsight_list_mental_models` for existing stored knowledge
+### At Session Start
+1. Call `hindsight_list_banks` to discover available banks
+2. Determine the project name from the working directory or task context
+3. Use `bank_id: "<project-name>"` in all Hindsight calls
+4. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
 
 ### During Work
+- `hindsight_recall` with the correct `bank_id` for relevant context
 - `hindsight_retain` important context, architecture, conventions, decisions
 - Before significant changes, `hindsight_recall` for related prior work
+- Tag memories with `project:<repo-name>`
 
 ### On Task Completion
 - `hindsight_retain` what was accomplished, key decisions, files changed

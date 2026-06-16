@@ -15,9 +15,10 @@ Odin (primary router) decomposes every request into parallel streams and dispatc
 ## Conventions
 - Agent files: YAML frontmatter + Markdown body in `config/agents/`
 - Agent count: 10 (Odin, Vör, Mimir, Heimdall, Hermod, Thor, Baldr, Tyr, Vidarr, Forseti)
-- Every agent uses Hindsight memory with default bank
+- Every agent uses Hindsight memory with per-project banks (never default)
 - Project data lives in `.bizar/` folder
 - Self-improvement entries appended at every task completion
+- Memory setup: per-project Hindsight bank with `bank_id: "<project-name>"` — default bank reserved for general/system knowledge only
 
 ## Entry Points
 - Install: `./install.sh`
