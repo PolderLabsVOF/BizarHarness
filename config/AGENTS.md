@@ -44,6 +44,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 - **Routes to @mimir** for deep codebase research, exploration, and documentation analysis
 - **Routes to @heimdall** for simple tasks, mechanical work, quick edits, file operations
 - **Routes to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
+- **Routes to @baldr** for design system creation, DESIGN.md, visual audits
 - **Routes to @thor** for moderate-complexity implementation
 - **Routes to @tyr** for complex implementation and architecture
 - **Routes to @vidarr** (very sparingly) for the hardest problems when all else fails
@@ -73,6 +74,12 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 - **Model**: `minimax/MiniMax-M2.7` (via minimax.io)
 - **Use for**: Moderate complexity features, debugging, code review, refactoring
 - **Cost**: $0.30/M input, $1.20/M output — cheaper than Tyr, more capable than Heimdall
+
+### Baldr
+
+- **Model**: `minimax/MiniMax-M2.7` (via minimax.io)
+- **Use for**: Design system creation, DESIGN.md, visual audit, usability planning. Creates design plans — does not implement.
+- **Cost**: $0.30/M input, $1.20/M output
 
 ### Tyr
 
@@ -114,6 +121,7 @@ Odin dispatches all tasks to subagents via the `task` tool. When work items are 
 | Non-trivial debugging | @thor |
 | Code review, refactoring | @thor |
 | Writing tests (medium complexity) | @thor |
+| Design system creation, DESIGN.md, visual audit | @baldr (plan -> @thor/@tyr execute) |
 | Complex new feature from scratch | @tyr (plan -> @forseti -> execute) |
 | Deep debugging, subtle bugs | @tyr |
 | Architectural design decisions | @tyr (plan -> @forseti -> execute) |
