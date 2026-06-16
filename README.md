@@ -1,66 +1,172 @@
-# BizarHarness — Norse Pantheon Agent Stack
+```
+                    ╔═══════════════════════════════════════╗
+                    ║        B I Z A R H A R N E S S        ║
+                    ║     ᚾᛟᚱᛋᛖ ᛈᚨᚾᛏᚺᛖᛟᚾ ᚨᚷᛖᚾᛏ ᛋᛏᚨᚲᚲ      ║
+                    ╚═══════════════════════════════════════╝
+```
 
-A 6-agent opencode hierarchy named after Norse gods, with automatic cost-aware routing from free (DeepSeek) through mid-tier (MiniMax M2.7) and high-tier (MiniMax M3) up to GPT-5.5 as the ultimate fallback.
+A 7-agent opencode hierarchy named after the Norse gods, with automatic cost-aware routing from free (DeepSeek) through mid-tier (MiniMax M2.7) and high-tier (MiniMax M3) up to GPT-5.5 as the ultimate fallback.
 
-## Agents
+---
 
-| Agent | God | Model | Cost | Role |
-|-------|-----|-------|------|------|
-| **Odin** 🛡️ | All-Father | DeepSeek V4 Flash Free | Free | Router + simple tasks |
-| **Heimdall** 👁️ | Watchman | DeepSeek V4 Flash Free | Free | Mechanical/routine work |
-| **Hermod** ✉️ | Messenger | MiniMax M2.7 | $0.30/$1.20 | Git/gh operations |
-| **Thor** ⚡ | Thunder | MiniMax M2.7 | $0.30/$1.20 | Moderate complexity |
-| **Tyr** ⚖️ | Law | MiniMax M3 | Highest | Complex impl/debug |
-| **Vidarr** 🔥 | Vengeance | GPT-5.5 | Highest | Last resort |
-| **Forseti** 🔍 | Justice | MiniMax M3 *(edit:deny)* | Highest | Plan auditor |
+## ᛟ Yggdrasil — The Agent Tree
 
-## Architecture
+```
+                         ╔═══════════════╗
+                         ║   ᛟ  ODIN    ║
+                         ║  MiniMax-M3  ║
+                         ║    Router    ║
+                         ╚═══╤═══╤═══╤═══╝
+          ┌───────────┬───────┘   │   └───────┬───────────┐
+          │           │           │           │           │
+    ╔═════╧════╗ ╔═══╧════╗ ╔═══╧════╗ ╔═══╧════╗ ╔═════╧════╗
+    ║ ᛗ MIMIR ║ ║ ᚹ HEIM ║ ║  ᚱ HER ║ ║  ᚦ THOR ║ ║  ᛏ TYR  ║
+    ║  DeepS.  ║ ║ DeepS. ║ ║ M2.7   ║ ║ M2.7   ║ ║ M3      ║
+    ║ Research ║ ║ Simple ║ ║ GitOps ║ ║ Medium ║ ║ Complex ║
+    ║  (free)  ║ ║ (free) ║ ║  ($)   ║ ║  ($)   ║ ║  ($$)   ║
+    ╚══════════╝ ╚════════╝ ╚════════╝ ╚════════╝ ╚═════════╝
+                                                    │
+                                           ╔═════════╧═════════╗
+                                           ║  ᛉ  VIDARR       ║
+                                           ║  GPT-5.5 ($$$)   ║
+                                           ║  Last Resort     ║
+                                           ╚═══════════════════╝
+
+                              ╔══════════════════╗
+                              ║  ᚨ  FORSETI     ║
+                              ║  MiniMax-M3     ║
+                              ║  Plan Auditor   ║
+                              ║  (edit: deny)   ║
+                              ╚══════════════════╝
+```
+
+---
+
+## ᚠ The Pantheon
+
+### ᛟ Odin — The All-Father
+**Model:** `minimax/MiniMax-M3` (via minimax.io)
+**Role:** Primary agent & router
+
+Odin is the default agent. He never executes work himself — he analyzes every request, decomposes it into parallel work streams, and dispatches to the right subagent. He routes by task type, model cost, and complexity tier. Independent work items are launched simultaneously via parallel `task` calls.
+
+### ᛗ Mimir — The Wise One
+**Model:** `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free)
+**Role:** Research & codebase exploration
+
+Mimir drinks from the well of knowledge. He is the dedicated exploration agent, using **Semble-first** search before falling back to grep/glob. He discovers patterns, maps architecture, analyzes documentation, and reports findings with file paths and line numbers. He never implements — he discovers and reports.
+
+### ᚹ Heimdall — The Watchman
+**Model:** `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free)
+**Role:** Simple tasks & mechanical work
+
+Heimdall guards the Bifrost bridge. He handles routine, deterministic work — quick edits, file operations, formatting, simple CRUD, boilerplate, and any task where the path is clear and unambiguous.
+
+### ᚱ Hermod — The Swift Messenger
+**Model:** `minimax/MiniMax-M2.7` (via minimax.io)
+**Cost:** $0.30/M input · $1.20/M output
+**Role:** Git & GitHub operations
+
+Hermod rides Sleipnir across branches and repos. He handles commits, pushes, pulls, branching, merging, rebasing, pull requests, conflict resolution, releases, and any `gh` CLI operation.
+
+### ᚦ Thor — The Thunderer
+**Model:** `minimax/MiniMax-M2.7` (via minimax.io)
+**Cost:** $0.30/M input · $1.20/M output
+**Role:** Moderate complexity implementation
+
+Thor wields Mjölnir for tasks that need stronger reasoning than the free tier but don't require Tyr's full power. Features of moderate complexity, non-trivial debugging, code review, refactoring, and well-scoped multi-step work.
+
+### ᛏ Tyr — The Lawgiver
+**Model:** `minimax/MiniMax-M3` (via minimax.io)
+**Cost:** $0.30/M input · $1.20/M output
+**Role:** Complex implementation & deep debugging
+
+Tyr is the boldest — for the most demanding engineering work. Complex features from scratch, deep debugging of subtle bugs, architectural design, cross-cutting refactoring, and critical code review. Every Tyr plan is first audited by Forseti.
+
+### ᛉ Vidarr — The Avenger
+**Model:** `openai/gpt-5.5` (via OpenAI ChatGPT subscription)
+**Cost:** Subscription (highest tier)
+**Role:** Last resort fallback
+
+Vidarr avenges when all others fail. Only invoked when Tyr stalls or debugging is stuck. For novel problems requiring lateral thinking, postmortem analysis of failed attempts, and the hardest unsolvable bugs.
+
+### ᚨ Forseti — The Just One
+**Model:** `minimax/MiniMax-M3` (via minimax.io, **edit: deny**, audit-only)
+**Cost:** $0.30/M input · $1.20/M output
+**Role:** Adversarial plan review
+
+Forseti sits in judgment. Before any Tyr or Vidarr plan executes, Forseti audits it for completeness, correctness, consistency, feasibility, and security. He demands corrections where needed and only approves when the plan is solid. He cannot write code — his only tool is reason.
+
+---
+
+## ⚙️ Architecture
 
 ```
 User Request
-  └─ Odin (router)
-       ├─ Tier 1     → Self-handle (free)
-       ├─ Tier 2     → @heimdall  (free, mechanical)
-       ├─ Git Ops    → @hermod    (free, git/gh)
-       ├─ Tier 3     → @thor      ($, medium)
-       ├─ Tier 4     → @tyr       ($$, complex) ──┐
-       └─ Tier 5     → @vidarr    ($$$, last resort) │
-                                                     │
-                          ┌──────────────────────────┘
+  │
+  ▼
+┌─────────────┐
+│    ODIN     │  Analyzes & decomposes into parallel streams
+│  (Router)   │  Launches independent tasks simultaneously
+└──────┬──────┘
+       │
+       ├── @mimir    (research)   ── Semble-first, free
+       ├── @heimdall (simple)     ── Quick edits, free
+       ├── @hermod   (git ops)    ── Branches, PRs, $0.30/M
+       ├── @thor     (medium)     ── Implementation, $0.30/M
+       ├── @tyr      (complex) ──┐ Plan → @forseti audit → execute
+       └── @vidarr   (last resort)│ (only when Tyr fails)
+                                   │
+                          ┌────────┘
                           ▼
-                    @forseti (audit gate, edit:deny)
-                          │
-                          ▼
-                    Execute
+                    ┌──────────────┐
+                    │   FORSETI    │ ← Audits Tier 4 & 5 plans
+                    │ (edit: deny) │   Demands corrections
+                    └──────────────┘
 ```
 
-- Odin routes every request by complexity
-- Forseti audits all Tier 4 and Tier 5 plans before any code is written
-- Vidarr is invoked only when Tyr fails or debugging stalls
-- All agents use Hindsight memory (default bank) for cross-session context
+**Key behaviors:**
+- **Odin routes by complexity** — never does work himself, only delegates
+- **Mimir uses Semble-first** — semantic search before grep/glob
+- **Forseti gates all Tier 4/5 work** — no Tyr or Vidarr code is written without audit
+- **Parallel dispatch** — independent work items launch simultaneously
+- **Hindsight memory** — all agents use the default bank for cross-session context
 
-## Installation
+---
+
+## 🚀 Installation
 
 ```bash
-# Clone and install
 git clone git@github.com:DrB0rk/BizarHarness.git
 cd BizarHarness
 chmod +x install.sh
 ./install.sh
 ```
 
-## Prerequisites
+The installer copies agent definitions and config to `~/.config/opencode/`, merges the template `opencode.json`, and prints next steps.
 
-- [opencode CLI](https://opencode.ai)
-- API keys for your chosen providers (set up via `/connect` in opencode TUI)
+## 📋 Prerequisites
+
+- [opencode CLI](https://opencode.ai) installed and on your `$PATH`
 - A [Hindsight](https://memory-api.polderlabs.io) API key for persistent memory
+- Provider connections (via `/connect` in opencode TUI)
 
-## Provider Setup
+## 🔑 Provider Setup
 
-After installation, run `/connect` in opencode to add:
+After installation, run `/connect` in opencode to add your API keys:
 
-| Provider | Models | Cost |
+| Provider | Models | Auth |
 |----------|--------|------|
-| OpenCode Zen | DeepSeek V4 Flash Free | Free |
-| minimax.io | MiniMax M2.7, MiniMax M3 | Pay-per-token |
-| OpenAI (ChatGPT sub) | GPT-5.5 | Subscription |
+| **OpenCode Zen** | `opencode/deepseek-v4-flash-free` | Free — no key needed |
+| **minimax.io** | `minimax/MiniMax-M2.7`, `minimax/MiniMax-M3` | API key from [minimax.io](https://minimax.io) |
+| **OpenAI** | `openai/gpt-5.5` | ChatGPT subscription (OAuth) |
+
+Then run `/models` to verify everything is connected.
+
+---
+
+```
+         ⚔️  ᚠᚢᚦᚨᚱᚲ  ⚔️
+    May your queries be wise
+   and your agents ever faithful
+```
