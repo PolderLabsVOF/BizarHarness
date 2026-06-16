@@ -103,11 +103,28 @@
 - **Always parallel** — every request splits into 2+ simultaneous `task` calls
 - **Implementation splits across Thor + Tyr** frontend/backend, file split, impl+tests
 - **Forseti gates all Tier 4/5 work** — Tyr and Vidarr plans audited before execution
-- **Hindsight memory** — all agents use default bank for cross-session context
+- **Hindsight memory** — per-project banks with `bank_id: "<project-name>"`; default bank for general knowledge only
 
 ---
 
 ## 🚀 Installation
+
+### Quick — npm (recommended)
+
+```bash
+npx bizarharness
+```
+
+Or install globally:
+
+```bash
+npm install -g bizarharness
+bizarharness
+```
+
+An interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts opencode.
+
+### Classic — git clone
 
 ```bash
 git clone git@github.com:DrB0rk/BizarHarness.git

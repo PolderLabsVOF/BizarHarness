@@ -1,0 +1,42 @@
+{
+  "name": "bizarharness",
+  "version": "1.0.0",
+  "description": "Norse-pantheon multi-agent system for opencode — 10 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
+  "type": "module",
+  "bin": {
+    "bizarharness": "./cli/bin.mjs"
+  },
+  "files": [
+    "cli/",
+    "config/"
+  ],
+  "scripts": {
+    "postinstall": "node cli/bin.mjs --postinstall"
+  },
+  "keywords": [
+    "opencode",
+    "ai-agent",
+    "norse",
+    "multi-agent",
+    "router",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "boxen": "^8.0.0",
+    "chalk": "^5.4.0",
+    "inquirer": "^12.0.0",
+    "ora": "^8.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrB0rk/BizarHarness.git"
+  },
+  "homepage": "https://github.com/DrB0rk/BizarHarness",
+  "bugs": {
+    "url": "https://github.com/DrB0rk/BizarHarness/issues"
+  }
+}
