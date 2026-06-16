@@ -1,7 +1,7 @@
 ---
 description: Tyr — Handles the most complex implementation, debugging, and architectural work using MiniMax M3 via minimax.io. Unmatched wisdom for the hardest problems.
 mode: subagent
-model: minimax/minimax-m3
+model: minimax/MiniMax-M3
 color: "#f59e0b"
 permission:
   read: allow

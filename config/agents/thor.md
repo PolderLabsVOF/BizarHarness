@@ -1,7 +1,7 @@
 ---
 description: Thor — Handles medium-complexity tasks using MiniMax M2.7 from minimax.io. Strong and reliable, cheaper than Tyr but more capable than Heimdall.
 mode: subagent
-model: minimax/minimax-m2.7
+model: minimax/MiniMax-M2.7
 color: "#a855f7"
 permission:
   read: allow

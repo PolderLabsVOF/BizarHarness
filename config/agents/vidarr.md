@@ -1,7 +1,7 @@
 ---
 description: Vidarr — The ultimate fallback using GPT-5.5 via OpenAI ChatGPT subscription. For the hardest problems when debugging stalls or nothing else works. Use sparingly — highest cost.
 mode: subagent
-model: openai/gpt-5.5
+model: opencode/gpt-5.5
 color: "#dc2626"
 permission:
   read: allow

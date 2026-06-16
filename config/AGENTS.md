@@ -54,31 +54,31 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 ### Hermod
 
-- **Model**: `minimax/minimax-m2.7` (via minimax.io)
+- **Model**: `minimax/MiniMax-M2.7` (via minimax.io)
 - **Use for**: Git and GitHub operations — commit, push, merge, PRs, branches, conflict resolution. The swift messenger.
 - **Cost**: $0.30/M input, $1.20/M output
 
 ### Thor
 
-- **Model**: `minimax/minimax-m2.7` (via minimax.io)
+- **Model**: `minimax/MiniMax-M2.7` (via minimax.io)
 - **Use for**: Moderate complexity features, debugging, code review, refactoring
 - **Cost**: $0.30/M input, $1.20/M output — cheaper than Tyr, more capable than Heimdall
 
 ### Tyr
 
-- **Model**: `minimax/minimax-m3` (via minimax.io)
+- **Model**: `minimax/MiniMax-M3` (via minimax.io)
 - **Use for**: Highest complexity implementation, debugging, architecture, multi-step engineering
 - **Cost**: Higher — reserved for the hardest problems
 
 ### Vidarr
 
-- **Model**: `openai/gpt-5.5` (via OpenAI ChatGPT subscription)
+- **Model**: `opencode/gpt-5.5` (via OpenCode Zen — ChatGPT subscription access)
 - **Use for**: The ultimate fallback — when Tyr stalls, debugging is stuck, or novel insight is needed
 - **Cost**: Highest — use very sparingly, last resort only
 
 ### Forseti
 
-- **Model**: `minimax/minimax-m3` (via minimax.io, audit-only, no edit permissions)
+- **Model**: `minimax/MiniMax-M3` (via minimax.io, audit-only, no edit permissions)
 - **Use for**: Adversarial plan review — audits completeness, correctness, consistency, feasibility, security
 - **Always runs before any Tier 4 or Tier 5 implementation begins**
 
