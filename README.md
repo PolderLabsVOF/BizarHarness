@@ -9,6 +9,7 @@
 [![npm](https://img.shields.io/npm/v/bizarharness?color=cb3837)](https://www.npmjs.com/package/bizarharness)
 [![RTK](https://img.shields.io/badge/rtk-integrated-8A2BE2)](https://github.com/rtk-ai/rtk)
 [![Semble](https://img.shields.io/badge/semble-integrated-0ea5e9)](https://github.com/semble-ai/semble)
+[![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenCode](https://img.shields.io/badge/opencode-%E2%9C%93-6366f1)](https://opencode.ai)
 [![Agents](https://img.shields.io/badge/agents-10-10b981)](#-the-pantheon)
@@ -158,6 +159,7 @@ Copies agent definitions and config to `~/.config/opencode/`, merges `opencode.j
 - Provider connections (via `/connect` in opencode TUI)
 - [RTK](https://github.com/rtk-ai/rtk) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
 - [Semble](https://github.com/semble-ai/semble) (recommended) — AI-powered code search (used by Mimir agent)
+- [Skills CLI](https://www.skills.sh) (recommended) — Agent skill package manager (`npx skills add <owner/repo>`)
 
 ### RTK Setup
 
@@ -197,6 +199,25 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install Semble with MCP support
 uv tool install "semble[mcp]"
 ```
+
+### Skills CLI Setup
+
+[Skills CLI](https://www.skills.sh) is a package manager for AI agent skills — like npm for agent capabilities. Install skills from any public GitHub repo with `npx skills add <owner/repo>`.
+
+The BizarHarness installer handles this automatically. To install manually:
+
+```bash
+npm install -g skills
+```
+
+Then discover and install skills:
+
+```bash
+npx skills find              # Browse the skills directory
+npx skills add <owner/repo>  # Install a skill from GitHub
+```
+
+Available for all major AI coding agents including OpenCode, Claude Code, Cursor, Copilot, Gemini, and more.
 
 ---
 

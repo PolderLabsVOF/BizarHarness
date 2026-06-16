@@ -3,8 +3,8 @@ import boxen from 'boxen';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
-import { detectOpenCode, detectRtk, detectSemble, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk, installSemble } from './copy.mjs';
+import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk, installSemble, installSkillsCli } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'mimir.md', 'heimdall.md', 'hermod.md',
@@ -40,6 +40,13 @@ export async function runInstaller() {
     console.log(chalk.green('  ✓ Semble detected (code search)'));
   } else {
     console.log(chalk.yellow('  ○ Semble not detected — will install'));
+  }
+
+  const skillsCliInstalled = await detectSkillsCli();
+  if (skillsCliInstalled) {
+    console.log(chalk.green('  ✓ Skills CLI detected (skill discovery)'));
+  } else {
+    console.log(chalk.yellow('  ○ Skills CLI not detected — will install'));
   }
   console.log();
 
@@ -109,6 +116,9 @@ export async function runInstaller() {
   // ── Semble (always installed — code search required) ──
   await installSemble();
 
+  // ── Skills CLI (always installed — skill discovery required) ──
+  await installSkillsCli();
+
   // ── Step 6: API keys ──
   sectionHeading('API Keys');
   console.log(chalk.dim('  You can configure API keys now or later via /connect in opencode.'));
@@ -130,6 +140,7 @@ export async function runInstaller() {
     '\n' +
     chalk.green('  ✓ RTK ') + chalk.dim(`(${rtkInstalled ? 'already configured' : 'installed & configured'})`) + '\n' +
     chalk.green('  ✓ Semble ') + chalk.dim(`(${sembleInstalled ? 'ready' : 'installed'})`) + '\n' +
+    chalk.green('  ✓ Skills CLI ') + chalk.dim(`(${skillsCliInstalled ? 'ready' : 'installed'})`) + '\n' +
     '\n' +
     chalk.hex('#a855f7')('  Next steps:') + '\n' +
     chalk.hex('#a855f7')('  1. Restart opencode') + '\n' +
@@ -224,6 +235,20 @@ export async function runPostInstall() {
     }
   } else {
     console.log('BizarHarness: Semble ready.');
+  }
+
+  // Install Skills CLI
+  const skillsPresent = await detectSkillsCli();
+  if (!skillsPresent) {
+    console.log('BizarHarness: installing Skills CLI...');
+    try {
+      execSync('npm install -g skills', { stdio: 'pipe', timeout: 30000 });
+      console.log('BizarHarness: Skills CLI installed.');
+    } catch {
+      console.log('BizarHarness: Skills CLI install failed. Run `npm install -g skills` manually.');
+    }
+  } else {
+    console.log('BizarHarness: Skills CLI ready.');
   }
 
   console.log('Run `bizarharness` for interactive setup.');

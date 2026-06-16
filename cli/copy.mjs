@@ -3,7 +3,7 @@ import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import ora from 'ora';
 import chalk from 'chalk';
-import { repoPath, opencodeConfigDir, opencodeAgentsDir, detectRtk, detectSemble, detectUv } from './utils.mjs';
+import { repoPath, opencodeConfigDir, opencodeAgentsDir, detectRtk, detectSemble, detectUv, detectSkillsCli } from './utils.mjs';
 
 async function fileExists(path) {
   try {
@@ -246,6 +246,28 @@ export async function installSemble() {
     return true;
   } catch {
     spinner.warn(chalk.yellow('Semble install failed. Run `uv tool install "semble[mcp]"` manually'));
+    return false;
+  }
+}
+
+export async function installSkillsCli() {
+  const { execSync } = await import('node:child_process');
+
+  const already = await detectSkillsCli();
+  if (already) {
+    const spinner = ora({ text: 'Checking Skills CLI...', color: 'yellow' }).start();
+    spinner.succeed(chalk.green('Skills CLI ready'));
+    return true;
+  }
+
+  const spinner = ora({ text: 'Installing Skills CLI (skill discovery)...', color: 'yellow' }).start();
+
+  try {
+    execSync('npm install -g skills', { stdio: 'pipe', timeout: 30000 });
+    spinner.succeed(chalk.green('Skills CLI installed'));
+    return true;
+  } catch {
+    spinner.warn(chalk.yellow('Skills CLI install failed. Run `npm install -g skills` manually'));
     return false;
   }
 }

@@ -107,6 +107,16 @@ export async function detectUv() {
   }
 }
 
+export async function detectSkillsCli() {
+  const { execSync } = await import('node:child_process');
+  try {
+    execSync('npx --yes skills --help', { stdio: 'pipe', timeout: 30000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function detectInstalledAgents() {
   const agentsDir = opencodeAgentsDir();
   try {
@@ -127,6 +137,7 @@ export function buildSummary(components, agents, target) {
   if (components.includes('bizar')) parts.push('.bizar/ folder');
   parts.push('RTK');
   parts.push('Semble');
+  parts.push('Skills CLI');
 
   return {
     components: parts.join(', '),
