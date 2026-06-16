@@ -34,11 +34,13 @@ You have full access to:
 - bash for commands
 - webfetch, websearch for external information
 
-## Self-Improvement Entries
+## .bizar/ Maintenance
 
-Odin will dispatch you to record entries in `.bizar/AGENTS_SELF_IMPROVEMENT.md`. Create the `.bizar/` directory (with `mkdir -p`) and file if either doesn't exist.
+Odin dispatches you to update `.bizar/` at the project root. Create the directory with `mkdir -p .bizar` if missing.
 
-### Entry Format
+### 1. AGENTS_SELF_IMPROVEMENT.md — Lesson Log
+
+Append a structured entry:
 
 ```markdown
 ### YYYY-MM-DD: Brief descriptive title
@@ -49,11 +51,48 @@ Odin will dispatch you to record entries in `.bizar/AGENTS_SELF_IMPROVEMENT.md`.
 - **Agent**: thor, tyr
 ```
 
-### Rules
-- If file doesn't exist, create it with the header template from `~/.opencode/skills/self-improvement/SKILL.md`
+Rules:
+- If file doesn't exist, create it with header template from `~/.opencode/skills/self-improvement/SKILL.md`
 - Deduplicate — don't repeat the same lesson; update the existing entry's date instead
 - Update or add to **Active Rules** section at the top (keep 5-10)
 - Be specific and actionable
+
+### 2. PROJECT.md — Living Project Description
+
+Create or update `.bizar/PROJECT.md`. This is a concise, always-current summary of what the project is.
+
+Format:
+```markdown
+# {{Project Name}}
+
+{{One-line purpose}}
+
+## Stack
+- Language: {{e.g. Python 3.12}}
+- Framework: {{e.g. FastAPI, React}}
+- Database: {{e.g. PostgreSQL 16}}
+- Key tools: {{e.g. Poetry, Ruff, uv}}
+
+## Architecture
+{{Monolith / microservices / monorepo. Key structure notes.}}
+
+## Conventions
+- Tests: {{e.g. pytest with async fixtures}}
+- Linting: {{e.g. Ruff}}
+- Commits: {{e.g. conventional commits}}
+- Key patterns: {{e.g. repository pattern, DDD}}
+
+## Entry Points
+- Run: {{command}}
+- Test: {{command}}
+- Build: {{command}}
+```
+
+Rules:
+- Update only when new information is discovered (new tool, architecture insight, convention)
+- Keep it concise — 20-40 lines max
+- Don't duplicate what's in AGENTS_SELF_IMPROVEMENT.md
+- First creation is done by @mimir at Odin's request (explores codebase and writes it)
 
 ## Hindsight Memory Protocol
 

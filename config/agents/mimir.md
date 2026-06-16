@@ -5,6 +5,8 @@ model: opencode/deepseek-v4-flash-free
 color: "#0ea5e9"
 permission:
   read: allow
+  write: allow
+  edit: allow
   bash: allow
   glob: allow
   grep: allow
@@ -51,6 +53,22 @@ Synthesize your findings clearly:
 - read, glob, grep — secondary file access
 - bash — for CLI semble fallback: `semble search "query" ./path`
 - webfetch, websearch — for external research
+
+## PROJECT.md Creation
+
+Odin may dispatch you to create `.bizar/PROJECT.md` for a new project. This is a living summary agents read at session start.
+
+1. Explore the project root — look at `package.json`, `Cargo.toml`, `pyproject.toml`, `README.md`, etc.
+2. Identify: language, framework, database, build tools, test framework, key conventions
+3. Create `.bizar/` with `mkdir -p .bizar`
+4. Write `.bizar/PROJECT.md` with sections:
+   - Project name + one-line purpose
+   - Stack (language, framework, database, tools)
+   - Architecture (monolith, microservices, monorepo)
+   - Conventions (testing, linting, commits, patterns)
+   - Entry points (run, test, build commands)
+
+Keep it 20-40 lines. This is a living document — @heimdall will update it as the project evolves.
 
 ## Hindsight Memory Protocol
 

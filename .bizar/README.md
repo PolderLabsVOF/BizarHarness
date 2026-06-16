@@ -6,7 +6,8 @@ BizarHarness project data folder. Stores agent-generated artifacts per project.
 
 | File | Purpose | Created By |
 |---|---|---|
-| `AGENTS_SELF_IMPROVEMENT.md` | Lessons learned from each task, active patterns | @heimdall (dispatched by @odin) |
+| `PROJECT.md` | Living project description — name, stack, architecture, conventions | @mimir (first), @heimdall (updates) |
+| `AGENTS_SELF_IMPROVEMENT.md` | Lessons learned from each task, active patterns | @heimdall |
 | `DESIGN.md` | Design system tokens and visual guidelines (optional) | @baldr |
 
 Created automatically by agents when needed.

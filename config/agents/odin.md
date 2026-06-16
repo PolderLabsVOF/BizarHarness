@@ -131,36 +131,55 @@ Wait for Forseti's verdict. If CHANGES REQUIRED, incorporate and re-verify. If R
 
 **Every task must record what was learned.** This compounds agent effectiveness across sessions.
 
-### File Location
+### File Locations
 
-`.bizar/AGENTS_SELF_IMPROVEMENT.md` at the project root. Project-specific — each project has its own `.bizar/` folder.
+All project data lives in `.bizar/` at the project root:
+
+| File | Purpose | Created/Updated By |
+|---|---|---|
+| `PROJECT.md` | Living project description — name, purpose, stack, architecture, conventions | @mimir (create), @heimdall (update) |
+| `AGENTS_SELF_IMPROVEMENT.md` | Lessons learned from each task, active patterns | @heimdall |
+
+### `.bizar/PROJECT.md` — Living Project Description
+
+Kept updated as the project evolves. Contains:
+- Project name and one-line purpose
+- Tech stack (language, framework, database, tools)
+- Architecture overview (monolith, microservices, etc.)
+- Key conventions (testing framework, code style, commit format)
+- Entry points (how to run, build, test)
 
 ### On Session Start
 
-Read the file if it exists:
-1. `read` the file at the project root
-2. Factor **Active Rules** into routing decisions
-3. Check **Log** for past failures so you don't repeat them
+1. If `.bizar/PROJECT.md` exists → `read` it for project context
+2. If `.bizar/PROJECT.md` does NOT exist → dispatch @mimir to research the project and create it
+3. Read `.bizar/AGENTS_SELF_IMPROVEMENT.md` if it exists
+4. Factor **Active Rules** into routing decisions
+5. Factor project description into understanding
 
 ### On Task Completion
 
-Dispatch @heimdall to record a self-improvement entry. Include:
+Dispatch @heimdall to:
 1. Create `.bizar/` directory if it doesn't exist
-2. Read the current `.bizar/AGENTS_SELF_IMPROVEMENT.md` (create if missing)
-2. Append an H3-dated entry with: Context, Lesson, Pattern, Files changed, Agent(s) used
-3. Update or add to **Active Rules** section (keep top 5-10)
-4. Deduplicate — don't repeat the same lesson
+2. Update `.bizar/AGENTS_SELF_IMPROVEMENT.md`:
+   - Append an H3-dated entry with: Context, Lesson, Pattern, Files changed, Agent(s) used
+   - Update or add to **Active Rules** section (keep top 5-10)
+   - Deduplicate — don't repeat the same lesson
+3. Update `.bizar/PROJECT.md` if the task revealed new project info (new tool, architecture insight, convention found)
 
 Prompt template for @heimdall:
 
 ```
-Record a self-improvement entry in .bizar/AGENTS_SELF_IMPROVEMENT.md at this project's root.
+Update .bizar/ in this project.
 
-Task summary: {{what was done}}
-Files changed: {{list of files}}
-Agents used: {{which subagents}}
-Lessons learned: {{what went well or poorly}}
-Pattern to follow next time: {{actionable pattern}}
+1. Record a self-improvement entry in AGENTS_SELF_IMPROVEMENT.md
+   Task: {{what was done}}
+   Files changed: {{list of files}}
+   Agents used: {{which subagents}}
+   Lessons learned: {{what went well or poorly}}
+   Pattern to follow next time: {{actionable pattern}}
+
+2. Update PROJECT.md if this task revealed new project info
 ```
 
 ## Hindsight Memory Protocol
