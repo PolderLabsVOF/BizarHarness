@@ -107,6 +107,41 @@ For the most demanding engineering work:
 
 Wait for Forseti's verdict. If CHANGES REQUIRED, incorporate and re-verify. If REJECTED, redesign and re-verify before proceeding.
 
+## Self-Improvement Protocol
+
+**Every task must record what was learned.** This compounds agent effectiveness across sessions.
+
+### File Location
+
+`AGENTS_SELF_IMPROVEMENT.md` at the project root (next to `AGENTS.md` or `package.json`). Project-specific — each project has its own.
+
+### On Session Start
+
+Read the file if it exists:
+1. `read` the file at the project root
+2. Factor **Active Rules** into routing decisions
+3. Check **Log** for past failures so you don't repeat them
+
+### On Task Completion
+
+Dispatch @heimdall to record a self-improvement entry. Include:
+1. Read the current `AGENTS_SELF_IMPROVEMENT.md` (create if missing)
+2. Append an H3-dated entry with: Context, Lesson, Pattern, Files changed, Agent(s) used
+3. Update or add to **Active Rules** section (keep top 5-10)
+4. Deduplicate — don't repeat the same lesson
+
+Prompt template for @heimdall:
+
+```
+Record a self-improvement entry in AGENTS_SELF_IMPROVEMENT.md at this project's root.
+
+Task summary: {{what was done}}
+Files changed: {{list of files}}
+Agents used: {{which subagents}}
+Lessons learned: {{what went well or poorly}}
+Pattern to follow next time: {{actionable pattern}}
+```
+
 ## Hindsight Memory Protocol
 
 Always use the **default** bank (omit `bank_id` in all Hindsight calls).

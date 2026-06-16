@@ -34,6 +34,27 @@ You have full access to:
 - bash for commands
 - webfetch, websearch for external information
 
+## Self-Improvement Entries
+
+Odin will dispatch you to record entries in `AGENTS_SELF_IMPROVEMENT.md`. The file is at the project root.
+
+### Entry Format
+
+```markdown
+### YYYY-MM-DD: Brief descriptive title
+- **Context**: What was the task
+- **Lesson**: What we learned
+- **Pattern**: What to do next time
+- **Files**: src/foo.ts, src/bar.ts
+- **Agent**: thor, tyr
+```
+
+### Rules
+- If file doesn't exist, create it with the header template from `~/.opencode/skills/self-improvement/SKILL.md`
+- Deduplicate — don't repeat the same lesson; update the existing entry's date instead
+- Update or add to **Active Rules** section at the top (keep 5-10)
+- Be specific and actionable
+
 ## Hindsight Memory Protocol
 
 You MUST use Hindsight memory to maintain continuity:

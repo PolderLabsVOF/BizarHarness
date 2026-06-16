@@ -144,9 +144,9 @@ A Hindsight memory MCP server is available. All agents **must** use it with the 
 
 ### Required Workflow
 
-1. **Session start**: `hindsight_recall` for task-relevant context
+1. **Session start**: `hindsight_recall` for task-relevant context + read `AGENTS_SELF_IMPROVEMENT.md` for project-level learnings
 2. **During work**: `hindsight_retain` for architectural decisions, conventions, context
-3. **Task completion**: `hindsight_retain` summary with `project:<name>` tags
+3. **Task completion**: `hindsight_retain` summary with `project:<name>` tags + record entry in `AGENTS_SELF_IMPROVEMENT.md`
 4. **Project knowledge**: Create mental models for sustained project context
 
 ---
