@@ -7,6 +7,7 @@
 10 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
 
 [![npm](https://img.shields.io/npm/v/bizarharness?color=cb3837)](https://www.npmjs.com/package/bizarharness)
+[![RTK](https://img.shields.io/badge/rtk-integrated-8A2BE2)](https://github.com/rtk-ai/rtk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenCode](https://img.shields.io/badge/opencode-%E2%9C%93-6366f1)](https://opencode.ai)
 [![Agents](https://img.shields.io/badge/agents-10-10b981)](#-the-pantheon)
@@ -154,6 +155,32 @@ Copies agent definitions and config to `~/.config/opencode/`, merges `opencode.j
 - [opencode CLI](https://opencode.ai) installed and on `$PATH`
 - A [Hindsight](https://memory-api.polderlabs.io) API key for persistent memory
 - Provider connections (via `/connect` in opencode TUI)
+- [RTK](https://github.com/rtk-ai/rtk) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
+
+### RTK Setup
+
+[RTK](https://github.com/rtk-ai/rtk) (Rust Token Killer) filters and compresses command output before it reaches the LLM context. It saves ~80% on common operations like `ls`, `git status`, `cargo test`, and `git diff`.
+
+Install:
+
+```bash
+# Homebrew (macOS)
+brew install rtk
+
+# Linux/macOS quick install
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+
+# Cargo
+cargo install --git https://github.com/rtk-ai/rtk
+```
+
+Enable for opencode:
+
+```bash
+rtk init -g --opencode
+```
+
+After setup, all Bash commands are transparently rewritten to their rtk equivalents — `git status` → `rtk git status`, `cargo test` → `rtk cargo test`. The LLM receives compact output, saving 60-90% on token costs.
 
 ---
 
