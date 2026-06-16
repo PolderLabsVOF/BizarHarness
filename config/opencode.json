@@ -20,6 +20,11 @@
       "type": "local",
       "command": ["uvx", "--from", "semble[mcp]", "semble"],
       "enabled": true
+    },
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp",
+      "enabled": true
     }
   },
   "provider": {

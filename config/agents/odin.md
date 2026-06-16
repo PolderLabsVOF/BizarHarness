@@ -1,5 +1,5 @@
 ---
-description: Odin — Routes tasks across the Norse pantheon: Heimdall (DeepSeek/free), Thor (M2.7/mid), Tyr (M3/top), Vidarr (GPT-5.5/ultra), Forseti (Verifier/M3 audit-only). Uses Hindsight memory.
+description: Odin — Routes tasks across the Norse pantheon: Heimdall (DeepSeek/free), Thor (M2.7/mid), Tyr (M3/top), Vidarr (GPT-5.5/ultra), Forseti (Verifier/M3 audit-only), Hermod (Git ops/DeepSeek). Uses Hindsight memory.
 mode: primary
 model: opencode/deepseek-v4-flash-free
 color: "#6366f1"
@@ -36,6 +36,15 @@ For mechanical, deterministic tasks that need tool execution:
 - Simple CRUD additions that follow existing patterns
 - Boilerplate generation, config changes
 - Any straightforward task with clear, unambiguous steps
+
+### Git Operations — Route to @hermod (DeepSeek V4 Flash Free, free)
+For any git or GitHub workflow — route here instead of Heimdall when the task involves version control:
+- Committing, pushing, pulling, branching, merging, rebasing
+- Pull request creation, review, and management
+- Merge conflict resolution
+- Git history inspection and cleanup
+- Release tagging and branch management
+- Any `gh` CLI operations (PRs, issues, checks, releases)
 
 ### Tier 3 — Route to @thor (MiniMax M2.7 via minimax.io)
 For tasks that need stronger reasoning than DeepSeek but aren't the hardest problems:

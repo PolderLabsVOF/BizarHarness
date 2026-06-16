@@ -41,6 +41,7 @@ This system uses a 5-tier model architecture with a verification gate:
 Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and routes it:
 - **Self-handles** simple, informational, or routine tasks (file lookups, simple edits, basic questions)
 - **Delegates to @heimdall** for mechanical, deterministic work (renames, formatting, simple CRUD)
+- **Delegates to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
 - **Delegates to @thor** for moderate-complexity work that needs more reasoning
 - **Delegates to @tyr** for the most complex implementation, debugging, and architectural work
 - **Delegates to @vidarr** (very sparingly) for the hardest problems when all else fails
@@ -50,6 +51,12 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 - **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
 - **Use for**: Simple, routine, well-understood tasks. The ever-watchful guardian.
+- **Cost**: Free
+
+### Hermod
+
+- **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
+- **Use for**: Git and GitHub operations — commit, push, merge, PRs, branches, conflict resolution. The swift messenger.
 - **Cost**: Free
 
 ### Thor
@@ -84,6 +91,11 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 | Quick questions, explanations | self-handle |
 | Simple edit, rename, format | @heimdall |
 | Mechanical CRUD, boilerplate | @heimdall |
+| Git commit, push, pull | @hermod |
+| Branching, merging, rebasing | @hermod |
+| Pull request management | @hermod |
+| Merge conflict resolution | @hermod |
+| GitHub operations (gh CLI) | @hermod |
 | Moderate feature implementation | @thor |
 | Non-trivial debugging | @thor |
 | Code review, refactoring | @thor |
