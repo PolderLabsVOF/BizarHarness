@@ -39,12 +39,13 @@ This system uses a 5-tier model architecture with a verification gate:
 ### Odin (default agent, MiniMax-M3)
 
 Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and **decomposes it into independent work streams** — **he never executes work himself**:
-- **Identifies parallelizable work** and launches multiple subagent `task` calls in a single message
+- **Identifies parallelizable work** and launches multiple subagent `task` calls in a **single message** (always 2+)
+- **Always splits implementation** across @thor (M2.7) and @tyr (M3) running in parallel
 - **Routes to @mimir** for deep codebase research, exploration, and documentation analysis
 - **Routes to @heimdall** for simple tasks, mechanical work, quick edits, file operations
 - **Routes to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
-- **Routes to @thor** for moderate-complexity work that needs more reasoning
-- **Routes to @tyr** for the most complex implementation, debugging, and architectural work
+- **Routes to @thor** for moderate-complexity implementation
+- **Routes to @tyr** for complex implementation and architecture
 - **Routes to @vidarr** (very sparingly) for the hardest problems when all else fails
 - **Gates Tier 4 and Tier 5 via @forseti** — audits and corrects plans before execution
 - **Synthesizes** all parallel results into a coherent response
