@@ -68,7 +68,7 @@ echo -e "${BOLD}${CYAN}│${NC}                                                 
 echo -e "${BOLD}${CYAN}│${NC}  ── Pantheon Agents ──                                        │"
 echo -e "${BOLD}${CYAN}│${NC}  Odin     🛡️  DeepSeek V4 Flash Free  Free (router)           │"
 echo -e "${BOLD}${CYAN}│${NC}  Heimdall 👁️  DeepSeek V4 Flash Free  Free (mechanical)        │"
-echo -e "${BOLD}${CYAN}│${NC}  Hermod   ✉️  DeepSeek V4 Flash Free  Free (git ops)            │"
+echo -e "${BOLD}${CYAN}│${NC}  Hermod   ✉️  MiniMax M2.7            \$0.30/\$1.20 (git ops)         │"
 echo -e "${BOLD}${CYAN}│${NC}  Thor     ⚡  MiniMax M2.7           \$0.30/\$1.20 (medium)      │"
 echo -e "${BOLD}${CYAN}│${NC}  Tyr      ⚖️  MiniMax M3             Highest (complex work)     │"
 echo -e "${BOLD}${CYAN}│${NC}  Vidarr   🔥  GPT-5.5                Highest (last resort)      │"

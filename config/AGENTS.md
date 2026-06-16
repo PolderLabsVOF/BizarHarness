@@ -55,9 +55,9 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 ### Hermod
 
-- **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
+- **Model**: `minimax/minimax-m2.7` (via minimax.io)
 - **Use for**: Git and GitHub operations — commit, push, merge, PRs, branches, conflict resolution. The swift messenger.
-- **Cost**: Free
+- **Cost**: $0.30/M input, $1.20/M output
 
 ### Thor
 

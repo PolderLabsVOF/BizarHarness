@@ -8,7 +8,7 @@ A 6-agent opencode hierarchy named after Norse gods, with automatic cost-aware r
 |-------|-----|-------|------|------|
 | **Odin** 🛡️ | All-Father | DeepSeek V4 Flash Free | Free | Router + simple tasks |
 | **Heimdall** 👁️ | Watchman | DeepSeek V4 Flash Free | Free | Mechanical/routine work |
-| **Hermod** ✉️ | Messenger | DeepSeek V4 Flash Free | Free | Git/gh operations |
+| **Hermod** ✉️ | Messenger | MiniMax M2.7 | $0.30/$1.20 | Git/gh operations |
 | **Thor** ⚡ | Thunder | MiniMax M2.7 | $0.30/$1.20 | Moderate complexity |
 | **Tyr** ⚖️ | Law | MiniMax M3 | Highest | Complex impl/debug |
 | **Vidarr** 🔥 | Vengeance | GPT-5.5 | Highest | Last resort |

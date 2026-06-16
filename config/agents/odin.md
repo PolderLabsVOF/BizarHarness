@@ -37,7 +37,7 @@ For mechanical, deterministic tasks that need tool execution:
 - Boilerplate generation, config changes
 - Any straightforward task with clear, unambiguous steps
 
-### Git Operations — Route to @hermod (DeepSeek V4 Flash Free, free)
+### Git Operations — Route to @hermod (MiniMax M2.7 via minimax.io)
 For any git or GitHub workflow — route here instead of Heimdall when the task involves version control:
 - Committing, pushing, pulling, branching, merging, rebasing
 - Pull request creation, review, and management
