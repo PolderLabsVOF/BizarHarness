@@ -87,6 +87,26 @@ export async function detectRtk() {
   }
 }
 
+export async function detectSemble() {
+  const { execSync } = await import('node:child_process');
+  try {
+    execSync('uvx --from "semble[mcp]" semble --help', { stdio: 'pipe', timeout: 15000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function detectUv() {
+  const { execSync } = await import('node:child_process');
+  try {
+    execSync('uv --version', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function detectInstalledAgents() {
   const agentsDir = opencodeAgentsDir();
   try {
@@ -106,6 +126,7 @@ export function buildSummary(components, agents, target) {
   if (components.includes('opencode-json')) parts.push('opencode.json');
   if (components.includes('bizar')) parts.push('.bizar/ folder');
   parts.push('RTK');
+  parts.push('Semble');
 
   return {
     components: parts.join(', '),

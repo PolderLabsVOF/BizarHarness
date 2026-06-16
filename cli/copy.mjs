@@ -3,7 +3,7 @@ import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import ora from 'ora';
 import chalk from 'chalk';
-import { repoPath, opencodeConfigDir, opencodeAgentsDir, detectRtk } from './utils.mjs';
+import { repoPath, opencodeConfigDir, opencodeAgentsDir, detectRtk, detectSemble, detectUv } from './utils.mjs';
 
 async function fileExists(path) {
   try {
@@ -205,6 +205,47 @@ export async function installRtk() {
     return true;
   } catch {
     spinner.fail(chalk.red('RTK install failed. Install manually from https://github.com/rtk-ai/rtk'));
+    return false;
+  }
+}
+
+export async function installSemble() {
+  const { execSync } = await import('node:child_process');
+
+  const already = await detectSemble();
+  if (already) {
+    const spinner = ora({ text: 'Checking Semble code search...', color: 'cyan' }).start();
+    spinner.succeed(chalk.green('Semble ready'));
+    return true;
+  }
+
+  const spinner = ora({ text: 'Setting up Semble (code search)...', color: 'cyan' }).start();
+
+  const hasUv = await detectUv();
+  if (!hasUv) {
+    spinner.text = 'Installing uv (Python package manager)...';
+    try {
+      if (process.platform === 'win32') {
+        spinner.fail(chalk.red('Automatic uv install not supported on Windows. Install from https://docs.astral.sh/uv'));
+        return false;
+      }
+      execSync(
+        'curl -LsSf https://astral.sh/uv/install.sh | sh',
+        { stdio: 'pipe', timeout: 60000 },
+      );
+      spinner.text = 'Setting up Semble...';
+    } catch {
+      spinner.fail(chalk.red('uv install failed. Install manually from https://docs.astral.sh/uv'));
+      return false;
+    }
+  }
+
+  try {
+    execSync('uv tool install "semble[mcp]"', { stdio: 'pipe', timeout: 60000 });
+    spinner.succeed(chalk.green('Semble installed (code search)'));
+    return true;
+  } catch {
+    spinner.warn(chalk.yellow('Semble install failed. Run `uv tool install "semble[mcp]"` manually'));
     return false;
   }
 }

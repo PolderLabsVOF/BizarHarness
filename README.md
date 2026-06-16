@@ -8,6 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/bizarharness?color=cb3837)](https://www.npmjs.com/package/bizarharness)
 [![RTK](https://img.shields.io/badge/rtk-integrated-8A2BE2)](https://github.com/rtk-ai/rtk)
+[![Semble](https://img.shields.io/badge/semble-integrated-0ea5e9)](https://github.com/semble-ai/semble)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenCode](https://img.shields.io/badge/opencode-%E2%9C%93-6366f1)](https://opencode.ai)
 [![Agents](https://img.shields.io/badge/agents-10-10b981)](#-the-pantheon)
@@ -156,6 +157,7 @@ Copies agent definitions and config to `~/.config/opencode/`, merges `opencode.j
 - A [Hindsight](https://memory-api.polderlabs.io) API key for persistent memory
 - Provider connections (via `/connect` in opencode TUI)
 - [RTK](https://github.com/rtk-ai/rtk) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
+- [Semble](https://github.com/semble-ai/semble) (recommended) — AI-powered code search (used by Mimir agent)
 
 ### RTK Setup
 
@@ -181,6 +183,20 @@ rtk init -g --opencode
 ```
 
 After setup, all Bash commands are transparently rewritten to their rtk equivalents — `git status` → `rtk git status`, `cargo test` → `rtk cargo test`. The LLM receives compact output, saving 60-90% on token costs.
+
+### Semble Setup
+
+[Semble](https://github.com/semble-ai/semble) provides AI-powered code search. It indexes your codebase and enables natural-language queries like "where is authentication handled" without relying on grep. The Mimir research agent uses Semble as its primary search tool.
+
+The BizarHarness installer handles this automatically. To install manually:
+
+```bash
+# Install uv if not present
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Semble with MCP support
+uv tool install "semble[mcp]"
+```
 
 ---
 
