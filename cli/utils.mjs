@@ -142,7 +142,7 @@ export function buildSummary(components, agents, target, skillPacks = []) {
 
   return {
     components: parts.join(', '),
-    agents: agents.length === 10 ? '(all 10)' : `(${agents.length} selected)`,
+    agents: agents.length === 11 ? '(all 11)' : `(${agents.length} selected)`,
     target,
     parts,
   };

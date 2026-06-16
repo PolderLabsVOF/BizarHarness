@@ -101,6 +101,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 - **Identifies parallelizable work** and launches multiple subagent `task` calls in a **single message** (always 2+)
 - **Always splits implementation** across @thor (M2.7) and @tyr (M3) running in parallel
 - **Routes to @vör** for ambiguous requests — asks clarifying questions before work begins
+- **Routes to @frigg** for read-only codebase Q&A — just answer questions, no code changes
 - **Routes to @mimir** for deep codebase research, exploration, and documentation analysis
 - **Routes to @heimdall** for simple tasks, mechanical work, quick edits, file operations
 - **Routes to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
@@ -110,6 +111,12 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 - **Routes to @vidarr** (very sparingly) for the hardest problems when all else fails
 - **Gates Tier 4 and Tier 5 via @forseti** — audits and corrects plans before execution
 - **Synthesizes** all parallel results into a coherent response
+
+### Frigg
+
+- **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
+- **Use for**: Read-only codebase Q&A. Ask questions about the project and get answers with file references — never modifies anything.
+- **Cost**: Free
 
 ### Vör
 
@@ -177,6 +184,7 @@ Odin dispatches all tasks to subagents via the `task` tool. When work items are 
 | Quick questions, explanations | @heimdall |
 | Simple edit, rename, format | @heimdall |
 | Mechanical CRUD, boilerplate | @heimdall |
+| Read-only codebase Q&A, "how does X work" | @frigg — asks questions, answers with file references, never modifies |
 | Ambiguous/incomplete requests | @vör — asks clarifying questions |
 | Deep codebase research and exploration | @mimir |
 | Documentation analysis | @mimir |

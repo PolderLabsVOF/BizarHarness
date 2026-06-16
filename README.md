@@ -12,7 +12,7 @@
 [![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenCode](https://img.shields.io/badge/opencode-%E2%9C%93-6366f1)](https://opencode.ai)
-[![Agents](https://img.shields.io/badge/agents-10-10b981)](#-the-pantheon)
+[![Agents](https://img.shields.io/badge/agents-11-10b981)](#-the-pantheon)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
 `npm install bizarharness` · `npx bizarharness`
@@ -65,8 +65,9 @@
 ### Agents
 
 | Agent | Rune | Model | Cost | Role |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | **Odin** | ᛟ | MiniMax-M3 | $0.30/M · $1.20/M out | Primary router — never executes, only delegates |
+| **Frigg** | ᚠ | DeepSeek V4 Flash | **Free** | Read-only Q&A — ask questions, get answers, never modifies |
 | **Vör** | ᛢ | DeepSeek V4 Flash | **Free** | Clarifies ambiguous requests — asks questions until task is well-defined |
 | **Mimir** | ᛗ | DeepSeek V4 Flash | **Free** | Research & codebase exploration (Semble-first) |
 | **Heimdall** | ᚹ | DeepSeek V4 Flash | **Free** | Simple tasks, quick edits, file operations |

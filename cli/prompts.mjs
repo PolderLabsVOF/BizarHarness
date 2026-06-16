@@ -2,6 +2,7 @@ import inquirer from 'inquirer';
 
 const AGENTS_LIST = [
   { name: 'Odin ᛟ  — MiniMax-M3 (Router)', value: 'odin.md', checked: true },
+  { name: 'Frigg ᚠ  — DeepSeek (Codebase Q&A, read-only)', value: 'frigg.md', checked: true },
   { name: 'Vör ᚡ  — DeepSeek (Clarification)', value: 'vor.md', checked: true },
   { name: 'Mimir ᛗ — DeepSeek (Research)', value: 'mimir.md', checked: true },
   { name: 'Heimdall ᚹ — DeepSeek (Simple tasks)', value: 'heimdall.md', checked: true },
@@ -19,7 +20,7 @@ export async function promptComponents() {
     name: 'components',
     message: 'What would you like to install?',
     choices: [
-      { name: 'Agent definitions (all 10 agents)', value: 'agents', checked: true },
+      { name: 'Agent definitions (all 11 agents)', value: 'agents', checked: true },
       { name: 'AGENTS.md routing table', value: 'agents-md', checked: true },
       new inquirer.Separator(),
       { name: 'BizarHarness skill', value: 'skill-bizar', checked: true },
