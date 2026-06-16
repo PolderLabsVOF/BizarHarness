@@ -38,19 +38,18 @@ This system uses a 5-tier model architecture with a verification gate:
 
 ### Odin (default agent, DeepSeek)
 
-Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and routes it:
-- **Self-handles** simple, informational, or routine tasks (file lookups, simple edits, basic questions)
-- **Delegates to @heimdall** for mechanical, deterministic work (renames, formatting, simple CRUD)
-- **Delegates to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
-- **Delegates to @thor** for moderate-complexity work that needs more reasoning
-- **Delegates to @tyr** for the most complex implementation, debugging, and architectural work
-- **Delegates to @vidarr** (very sparingly) for the hardest problems when all else fails
+Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and routes it — **he never executes work himself**:
+- **Routes to @heimdall** for simple tasks, research, codebase exploration, and mechanical work
+- **Routes to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
+- **Routes to @thor** for moderate-complexity work that needs more reasoning
+- **Routes to @tyr** for the most complex implementation, debugging, and architectural work
+- **Routes to @vidarr** (very sparingly) for the hardest problems when all else fails
 - **Gates Tier 4 and Tier 5 via @forseti** — audits and corrects plans before execution
 
 ### Heimdall
 
 - **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
-- **Use for**: Simple, routine, well-understood tasks. The ever-watchful guardian.
+- **Use for**: Simple tasks, research, codebase exploration, and mechanical work. The ever-watchful guardian.
 - **Cost**: Free
 
 ### Hermod
@@ -87,8 +86,8 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 | Task Type | Route To |
 |-----------|----------|
-| File lookup, search, ls, info | self-handle |
-| Quick questions, explanations | self-handle |
+| File lookup, search, ls, info | @heimdall |
+| Quick questions, explanations | @heimdall |
 | Simple edit, rename, format | @heimdall |
 | Mechanical CRUD, boilerplate | @heimdall |
 | Git commit, push, pull | @hermod |
