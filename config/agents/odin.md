@@ -145,7 +145,8 @@ Read the file if it exists:
 ### On Task Completion
 
 Dispatch @heimdall to record a self-improvement entry. Include:
-1. Read the current `.bizar/AGENTS_SELF_IMPROVEMENT.md` (create `.bizar/` dir and file if missing)
+1. Create `.bizar/` directory if it doesn't exist
+2. Read the current `.bizar/AGENTS_SELF_IMPROVEMENT.md` (create if missing)
 2. Append an H3-dated entry with: Context, Lesson, Pattern, Files changed, Agent(s) used
 3. Update or add to **Active Rules** section (keep top 5-10)
 4. Deduplicate — don't repeat the same lesson

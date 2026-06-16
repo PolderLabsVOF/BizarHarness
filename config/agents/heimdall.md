@@ -36,7 +36,7 @@ You have full access to:
 
 ## Self-Improvement Entries
 
-Odin will dispatch you to record entries in `.bizar/AGENTS_SELF_IMPROVEMENT.md`. Create the `.bizar/` directory if it doesn't exist.
+Odin will dispatch you to record entries in `.bizar/AGENTS_SELF_IMPROVEMENT.md`. Create the `.bizar/` directory (with `mkdir -p`) and file if either doesn't exist.
 
 ### Entry Format
 
