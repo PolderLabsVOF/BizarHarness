@@ -77,6 +77,16 @@ export async function detectOpenCode() {
   return { exists, version, configDir, agentsDir };
 }
 
+export async function detectRtk() {
+  const { execSync } = await import('node:child_process');
+  try {
+    execSync('rtk --version', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function detectInstalledAgents() {
   const agentsDir = opencodeAgentsDir();
   try {
@@ -95,6 +105,7 @@ export function buildSummary(components, agents, target) {
   if (components.includes('skill-improve')) parts.push('self-improvement skill');
   if (components.includes('opencode-json')) parts.push('opencode.json');
   if (components.includes('bizar')) parts.push('.bizar/ folder');
+  parts.push('RTK');
 
   return {
     components: parts.join(', '),

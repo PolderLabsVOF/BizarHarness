@@ -3,8 +3,8 @@ import boxen from 'boxen';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
-import { detectOpenCode, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder } from './copy.mjs';
+import { detectOpenCode, detectRtk, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'mimir.md', 'heimdall.md', 'hermod.md',
@@ -23,12 +23,18 @@ export async function runInstaller() {
     console.log(chalk.yellow('  ⚠ opencode config directory not found.'));
     console.log(chalk.dim('  The installer will create it at:'));
     console.log(chalk.dim(`  ${env.configDir}`));
-    console.log();
   } else {
     console.log(chalk.green(`  ✓ opencode detected at ${env.configDir}`));
     if (env.version) console.log(chalk.dim(`    version ${env.version}`));
-    console.log();
   }
+
+  const rtkInstalled = await detectRtk();
+  if (rtkInstalled) {
+    console.log(chalk.green('  ✓ RTK detected (token optimizer)'));
+  } else {
+    console.log(chalk.yellow('  ○ RTK not detected — will install'));
+  }
+  console.log();
 
   // ── Step 1: Component selection ──
   sectionHeading('Component Selection');
@@ -90,6 +96,9 @@ export async function runInstaller() {
     await installBizarFolder();
   }
 
+  // ── RTK (always installed — token optimization required) ──
+  await installRtk();
+
   // ── Step 6: API keys ──
   sectionHeading('API Keys');
   console.log(chalk.dim('  You can configure API keys now or later via /connect in opencode.'));
@@ -108,6 +117,8 @@ export async function runInstaller() {
     '\n' +
     chalk.green(`  ✓ ${selectedAgents.length} agents installed`) + '\n' +
     chalk.green(`  ✓ ${summary.parts.length} components configured`) + '\n' +
+    '\n' +
+    chalk.green('  ✓ RTK ') + chalk.dim(`(${rtkInstalled ? 'already configured' : 'installed & configured'})`) + '\n' +
     '\n' +
     chalk.hex('#a855f7')('  Next steps:') + '\n' +
     chalk.hex('#a855f7')('  1. Restart opencode') + '\n' +
@@ -157,5 +168,32 @@ export async function runPostInstall() {
       copyFileSync(src, dest);
     }
   }
-  console.log('BizarHarness: agents installed. Run `bizarharness` for interactive setup.');
+  console.log('BizarHarness: agents installed.');
+
+  // Install RTK
+  const rtkPresent = await detectRtk();
+  if (!rtkPresent) {
+    console.log('BizarHarness: installing RTK (token optimizer)...');
+    try {
+      const { execSync } = await import('node:child_process');
+      execSync(
+        'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+        { stdio: 'pipe', timeout: 60000 },
+      );
+      execSync('rtk init -g --opencode', { stdio: 'pipe' });
+      console.log('BizarHarness: RTK installed and configured.');
+    } catch (e) {
+      console.log('BizarHarness: RTK install failed. Install manually from https://github.com/rtk-ai/rtk');
+    }
+  } else {
+    try {
+      const { execSync } = await import('node:child_process');
+      execSync('rtk init -g --opencode', { stdio: 'pipe' });
+      console.log('BizarHarness: RTK configured for opencode.');
+    } catch {
+      console.log('BizarHarness: could not configure RTK. Run `rtk init -g --opencode` manually.');
+    }
+  }
+
+  console.log('Run `bizarharness` for interactive setup.');
 }

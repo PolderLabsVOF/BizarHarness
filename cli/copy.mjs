@@ -3,7 +3,7 @@ import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import ora from 'ora';
 import chalk from 'chalk';
-import { repoPath, opencodeConfigDir, opencodeAgentsDir } from './utils.mjs';
+import { repoPath, opencodeConfigDir, opencodeAgentsDir, detectRtk } from './utils.mjs';
 
 async function fileExists(path) {
   try {
@@ -170,4 +170,41 @@ export async function installBizarFolder() {
 
   spinner.succeed(chalk.green('.bizar/ folder created in current directory'));
   return true;
+}
+
+export async function installRtk() {
+  const { execSync } = await import('node:child_process');
+
+  const already = await detectRtk();
+  if (already) {
+    const spinner = ora({ text: 'Configuring RTK for opencode...', color: 'magenta' }).start();
+    try {
+      execSync('rtk init -g --opencode', { stdio: 'pipe' });
+      spinner.succeed(chalk.green('RTK configured for opencode'));
+    } catch {
+      spinner.warn(chalk.yellow('Could not auto-configure RTK — run `rtk init -g --opencode` manually'));
+    }
+    return true;
+  }
+
+  const spinner = ora({ text: 'Installing RTK (Rust Token Killer)...', color: 'magenta' }).start();
+
+  if (process.platform === 'win32') {
+    spinner.fail(chalk.red('Automatic RTK install not supported on Windows. Install manually from https://github.com/rtk-ai/rtk'));
+    return false;
+  }
+
+  try {
+    execSync(
+      'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+      { stdio: 'pipe', timeout: 60000 },
+    );
+    spinner.text = 'Configuring RTK for opencode...';
+    execSync('rtk init -g --opencode', { stdio: 'pipe' });
+    spinner.succeed(chalk.green('RTK installed and configured for opencode'));
+    return true;
+  } catch {
+    spinner.fail(chalk.red('RTK install failed. Install manually from https://github.com/rtk-ai/rtk'));
+    return false;
+  }
 }
