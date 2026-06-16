@@ -1,0 +1,32 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/deepseek-v4-flash-free",
+  "small_model": "opencode/deepseek-v4-flash-free",
+  "default_agent": "odin",
+  "permission": "allow",
+  "snapshot": false,
+  "mcp": {
+    "hindsight": {
+      "type": "remote",
+      "url": "https://memory-api.polderlabs.io/mcp",
+      "enabled": true,
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer YOUR_HINDSIGHT_API_KEY",
+        "Content-Type": "application/json"
+      }
+    },
+    "semble": {
+      "type": "local",
+      "command": ["uvx", "--from", "semble[mcp]", "semble"],
+      "enabled": true
+    }
+  },
+  "provider": {
+    "minimax": {
+      "options": {
+        "baseURL": "https://api.minimax.io/v1"
+      }
+    }
+  }
+}
