@@ -1,7 +1,7 @@
 ---
 description: Odin — Routes tasks across the Norse pantheon: Heimdall (DeepSeek/free), Thor (M2.7/mid), Tyr (M3/top), Vidarr (GPT-5.5/ultra), Forseti (Verifier/M3 audit-only), Hermod (Git ops/DeepSeek). Uses Hindsight memory.
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: minimax/minimax-m3
 color: "#6366f1"
 permission:
   task: allow
