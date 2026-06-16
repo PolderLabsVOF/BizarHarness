@@ -6,10 +6,13 @@
 
 10 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
 
+[![npm](https://img.shields.io/npm/v/bizarharness?color=cb3837)](https://www.npmjs.com/package/bizarharness)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenCode](https://img.shields.io/badge/opencode-%E2%9C%93-6366f1)](https://opencode.ai)
 [![Agents](https://img.shields.io/badge/agents-10-10b981)](#-the-pantheon)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+
+`npm install bizarharness` · `npx bizarharness`
 
 </div>
 
@@ -111,6 +114,10 @@
 
 ### Quick — npm (recommended)
 
+Published on [npmjs.com/package/bizarharness](https://www.npmjs.com/package/bizarharness).
+
+Run without installing:
+
 ```bash
 npx bizarharness
 ```
@@ -122,9 +129,16 @@ npm install -g bizarharness
 bizarharness
 ```
 
-An interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts opencode.
+Or add to a project:
 
-### Classic — git clone
+```bash
+npm install bizarharness
+npx bizarharness
+```
+
+The interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts opencode.
+
+### Source — git clone (contributors)
 
 ```bash
 git clone git@github.com:DrB0rk/BizarHarness.git
@@ -133,7 +147,7 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Copies agent definitions and config to `~/.config/opencode/`, merges `opencode.json`, and prints next steps.
+Copies agent definitions and config to `~/.config/opencode/`, merges `opencode.json`, and prints next steps. Use this if you want to hack on BizarHarness itself.
 
 ### Prerequisites
 

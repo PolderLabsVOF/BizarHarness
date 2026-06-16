@@ -4,7 +4,7 @@
   "description": "Norse-pantheon multi-agent system for opencode — 10 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
   "type": "module",
   "bin": {
-    "bizarharness": "./cli/bin.mjs"
+    "bizarharness": "cli/bin.mjs"
   },
   "files": [
     "cli/",
