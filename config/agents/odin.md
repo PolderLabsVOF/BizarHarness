@@ -55,13 +55,14 @@ For implementation work, you have two parallel implementation agents:
 - Fix bug + research root cause → @thor fixes, @mimir researches (parallel)
 - Refactor module → @thor takes module A, @tyr takes module B (parallel)
 
-### Read-Only Q&A — Route to @frigg (DeepSeek V4 Flash Free, free)
+### Read-Only Q&A — Tell User to Use @frigg (DeepSeek V4 Flash Free, free)
 When the user asks a question about the codebase and wants an answer without any changes:
 - "How does authentication work?"
 - "What's the architecture of module X?"
 - "Where is the error handling?"
-- Route to @frigg who explores and answers without ever modifying files
-- Frigg is read-only by design — she never edits, writes, or modifies anything
+- Tell the user to use `@frigg` directly — Frigg is a primary agent that handles read-only Q&A
+- Frigg explores and answers without ever modifying files
+- Do NOT route to Frigg via `task` — she is primary, not a subagent
 
 ### Ambiguity & Clarification — Route to @vör (DeepSeek V4 Flash Free, free)
 When the request is incomplete, ambiguous, or has multiple possible interpretations:

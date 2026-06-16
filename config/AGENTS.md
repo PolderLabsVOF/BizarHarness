@@ -115,7 +115,8 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 ### Frigg
 
 - **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
-- **Use for**: Read-only codebase Q&A. Ask questions about the project and get answers with file references — never modifies anything.
+- **Use for**: Read-only codebase Q&A. Use `@frigg` to ask questions about the project and get answers with file references — never modifies anything.
+- **Mode**: Primary (directly selectable by the user via `@frigg`)
 - **Cost**: Free
 
 ### Vör
@@ -184,7 +185,7 @@ Odin dispatches all tasks to subagents via the `task` tool. When work items are 
 | Quick questions, explanations | @heimdall |
 | Simple edit, rename, format | @heimdall |
 | Mechanical CRUD, boilerplate | @heimdall |
-| Read-only codebase Q&A, "how does X work" | @frigg — asks questions, answers with file references, never modifies |
+| Read-only codebase Q&A, "how does X work" | @frigg — use `@frigg` directly, asks questions and answers with file references, never modifies |
 | Ambiguous/incomplete requests | @vör — asks clarifying questions |
 | Deep codebase research and exploration | @mimir |
 | Documentation analysis | @mimir |

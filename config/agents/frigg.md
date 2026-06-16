@@ -1,6 +1,6 @@
 ---
 description: Frigg — All-knowing Q&A agent. Read-only codebase questions and answers. Never edits, never writes, only answers.
-mode: subagent
+mode: primary
 model: opencode/deepseek-v4-flash-free
 color: "#06b6d4"
 permission:
