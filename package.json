@@ -1,7 +1,7 @@
 {
   "name": "bizarharness",
-  "version": "1.1.0",
-  "description": "Norse-pantheon multi-agent system for opencode — 10 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
+  "version": "1.2.0",
+  "description": "Norse-pantheon multi-agent system for opencode — 11 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
   "type": "module",
   "bin": {
     "bizarharness": "cli/bin.mjs"
