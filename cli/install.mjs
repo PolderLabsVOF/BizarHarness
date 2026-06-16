@@ -4,7 +4,7 @@ import boxen from 'boxen';
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
 import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk, installSemble, installSkillsCli, installCuratedSkills } from './copy.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'mimir.md', 'heimdall.md', 'hermod.md',
@@ -112,6 +112,20 @@ export async function runInstaller() {
 
   if (components.includes('bizar')) {
     await installBizarFolder();
+  }
+
+  // ── Rules, hooks, commands (optional components) ──
+  if (components.includes('rules')) {
+    const n = await installRules();
+    console.log(chalk.green(`  ✓ ${n} rules installed`));
+  }
+  if (components.includes('hooks')) {
+    const n = await installHooks();
+    console.log(chalk.green(`  ✓ ${n} hooks installed`));
+  }
+  if (components.includes('commands')) {
+    const n = await installCommands();
+    console.log(chalk.green(`  ✓ ${n} commands installed`));
   }
 
   // ── RTK (always installed — token optimization required) ──

@@ -89,6 +89,27 @@ skills add <owner/repo> -s "<skill-name>" -y
 
 All implementation agents: @heimdall, @thor, @tyr, @vidarr. Odin routes with awareness that agents will self-discover skills.
 
+## Always-On Rules
+
+BizarHarness ships always-on coding rules organized by language and concern. All agents MUST follow these rules during implementation.
+
+### Rule Files
+
+| File | Scope |
+|------|-------|
+| `rules/general.md` | Cross-cutting: secrets, logging, code quality |
+| `rules/javascript.md` | JavaScript/TypeScript conventions |
+| `rules/python.md` | Python conventions |
+| `rules/git.md` | Git and commit conventions |
+| `rules/testing.md` | Test methodology and coverage |
+
+### How to Use
+
+1. At session start, Odin reads the relevant rule files based on the detected project stack
+2. Rules are injected into subagent prompts as behavioral constraints
+3. All implementation agents (Heimdall, Thor, Tyr, Vidarr) MUST follow these rules
+4. Agents MAY propose additions to the rule files when patterns are discovered
+
 ---
 
 ## Model Routing & Agents
@@ -105,6 +126,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 - **Routes to @mimir** for deep codebase research, exploration, and documentation analysis
 - **Routes to @heimdall** for simple tasks, mechanical work, quick edits, file operations
 - **Routes to @hermod** for git and GitHub operations (commit, push, merge, PR, branches)
+- **Routes to @frigg** for read-only codebase Q&A — just answer questions, no code changes
 - **Routes to @baldr** for design system creation, DESIGN.md, visual audits
 - **Routes to @thor** for moderate-complexity implementation
 - **Routes to @tyr** for complex implementation and architecture
@@ -209,6 +231,12 @@ Odin dispatches all tasks to subagents via the `task` tool. When work items are 
 | Novel / unsolvable problems | @vidarr (plan -> @forseti -> execute) |
 | Postmortem of failed attempts | @vidarr |
 | Plan/approach review | @forseti |
+| Security audit of agent config | @forseti — runs `bizarharness audit` |
+| Project initialization | @heimdall — runs `bizarharness init` |
+| Cross-harness config export | @heimdall — runs `bizarharness export` |
+| PR review (GitHub) | @hermod — runs `/pr-review` mode with @mimir (research) + @forseti (audit) |
+| Parallel test gate after implementation | @thor — waits for @tyr, then runs `bizarharness test-gate` |
+| Explain code / architecture | @frigg — use `@frigg` directly |
 
 ---
 

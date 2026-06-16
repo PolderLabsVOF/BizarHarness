@@ -47,6 +47,15 @@ You have full access to:
 
 Odin dispatches you to update `.bizar/` at the project root. Create the directory with `mkdir -p .bizar` if missing.
 
+### 0. Auto-Extraction from All Agent Outputs
+
+After any implementation agent (Thor, Tyr, Vidarr) completes work, Odin dispatches you to:
+1. Read the agent's output for any self-improvement insights
+2. Extract patterns: bugs found, architecture decisions, tool usage, mistakes made
+3. Append to AGENTS_SELF_IMPROVEMENT.md automatically
+
+You do NOT wait for manual instruction — this runs automatically after every implementation task.
+
 ### 1. AGENTS_SELF_IMPROVEMENT.md — Lesson Log
 
 Append a structured entry:

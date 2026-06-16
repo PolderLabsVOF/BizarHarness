@@ -70,3 +70,8 @@ You MUST use **per-project banks** — never the default bank for project work.
 ### After Work
 - `hindsight_retain` completion summary into the project bank
 - Create or update mental models for sustained project context
+
+### Auto Self-Improvement
+- After completing work, Odin dispatches @heimdall to auto-extract patterns from this session
+- Include in your output: key decisions made, bugs encountered, patterns worth remembering
+- This happens automatically — you do not need to request it

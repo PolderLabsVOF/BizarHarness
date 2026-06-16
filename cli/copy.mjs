@@ -326,3 +326,42 @@ export async function installCuratedSkills(packs) {
   }
   return true;
 }
+
+export async function installRules() {
+  const src = repoPath('config', 'rules');
+  const dest = join(opencodeConfigDir(), 'rules');
+  const { mkdirSync, readdirSync, copyFileSync } = await import('node:fs');
+  mkdirSync(dest, { recursive: true });
+  let count = 0;
+  for (const file of readdirSync(src).filter(f => f.endsWith('.md'))) {
+    copyFileSync(join(src, file), join(dest, file));
+    count++;
+  }
+  return count;
+}
+
+export async function installHooks() {
+  const src = repoPath('config', 'hooks');
+  const dest = join(opencodeConfigDir(), 'hooks');
+  const { mkdirSync, readdirSync, copyFileSync } = await import('node:fs');
+  mkdirSync(dest, { recursive: true });
+  let count = 0;
+  for (const file of readdirSync(src).filter(f => f.endsWith('.md'))) {
+    copyFileSync(join(src, file), join(dest, file));
+    count++;
+  }
+  return count;
+}
+
+export async function installCommands() {
+  const src = repoPath('config', 'commands');
+  const dest = join(opencodeConfigDir(), 'commands');
+  const { mkdirSync, readdirSync, copyFileSync } = await import('node:fs');
+  mkdirSync(dest, { recursive: true });
+  let count = 0;
+  for (const file of readdirSync(src).filter(f => f.endsWith('.md'))) {
+    copyFileSync(join(src, file), join(dest, file));
+    count++;
+  }
+  return count;
+}

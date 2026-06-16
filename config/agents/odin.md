@@ -80,6 +80,7 @@ For deep codebase research, pattern discovery, documentation analysis:
 - Finding how things connect across the codebase
 - Documentation and configuration analysis
 - Any task where the primary goal is understanding, not implementation
+- Also route to @mimir for running `bizarharness init` to detect project stack and generate `.bizar/PROJECT.md`
 
 ### Simple Tasks & Quick Edits — Route to @heimdall (DeepSeek V4 Flash Free, free)
 For any simple, mechanical, or deterministic work:
@@ -92,6 +93,14 @@ For any git or GitHub workflow:
 - Git history inspection and cleanup
 - Release tagging and branch management
 - Any `gh` CLI operations (PRs, issues, checks, releases)
+
+### PR Review Mode — Route to @hermod (MiniMax M2.7)
+When the user asks for `@hermod /pr-review` or a PR review:
+1. @hermod launches two parallel sub-tasks:
+   - @mimir — researches the PR changes, codebase context, and impact
+   - @forseti — audits the PR for security, correctness, and completeness
+2. @hermod waits for both, synthesizes the review, and posts as a PR comment
+3. @hermod has write access to post PR comments via `gh pr comment`
 
 ### Design System & Visual Planning — Route to @baldr (MiniMax M2.7 via minimax.io)
 For any task that touches visuals, usability, or design systems:
@@ -120,6 +129,13 @@ For the most demanding engineering work:
 - Architectural design and cross-cutting refactoring
 - Critical code review
 - Any task where a cheaper model would likely produce bugs or wrong designs
+
+### Tests Gate — Route to @thor (MiniMax M2.7) after parallel implementation
+When Thor and Tyr both complete implementation work in parallel:
+1. After both return results, route to @thor to run the test gate
+2. @thor runs the full test suite: `npx bizarharness test-gate`
+3. If tests fail, @thor fixes issues and re-runs until green
+4. Only after test gate passes do you synthesize the final response
 
 ### Last Resort — Route to @vidarr (GPT-5.5 via OpenAI ChatGPT subscription)
 **Only when Tyr fails or debugging is stuck.** Vidarr is the ultimate fallback — use very sparingly:

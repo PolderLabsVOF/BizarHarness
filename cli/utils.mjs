@@ -135,6 +135,9 @@ export function buildSummary(components, agents, target, skillPacks = []) {
   if (components.includes('skill-improve')) parts.push('self-improvement skill');
   if (components.includes('opencode-json')) parts.push('opencode.json');
   if (components.includes('bizar')) parts.push('.bizar/ folder');
+  if (components.includes('rules')) parts.push('rules');
+  if (components.includes('hooks')) parts.push('hooks');
+  if (components.includes('commands')) parts.push('commands');
   parts.push('RTK');
   parts.push('Semble');
   parts.push('Skills CLI');

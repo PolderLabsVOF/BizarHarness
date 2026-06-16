@@ -107,3 +107,15 @@ You MUST use **per-project banks** — never the default bank for project work.
 ### After Work
 - `hindsight_retain` completion summary into the project bank
 - Create or update mental models for sustained project context
+
+## PR Review Mode
+
+When dispatched for a `/pr-review`:
+1. Identify the PR number from context or ask the user
+2. Launch @mimir to research the changes and assess impact
+3. Launch @forseti to audit for security and correctness
+4. Wait for both results
+5. Post a structured PR review comment via `gh pr comment <number> --body '<review>'`
+6. The review should cover: correctness, security, testing, style, architecture
+
+You have `gh` access — use it to fetch PR diffs and post comments.
