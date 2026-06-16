@@ -5,6 +5,13 @@
                     ╚═══════════════════════════════════════╝
 ```
 
+```
+              ╔══════════════════════════════════════════╗
+              ║          ᚠᚢᚦᚨᚱᚲ ᛏᛇᚱ ᚷᛟᛞᚨᛉ          ║
+              ║     Elder Futhark · Agent Hierarchy     ║
+              ╚══════════════════════════════════════════╝
+```
+
 A 7-agent opencode hierarchy named after the Norse gods, with automatic cost-aware routing from free (DeepSeek) through mid-tier (MiniMax M2.7) and high-tier (MiniMax M3) up to GPT-5.5 as the ultimate fallback.
 
 ---
@@ -41,6 +48,21 @@ A 7-agent opencode hierarchy named after the Norse gods, with automatic cost-awa
 ```
 
 ---
+
+```
+             \      /      \      /
+              \    /        \    /
+               \  /          \  /
+                \/            \/
+    ╔══════════════════════════════════════════════════╗
+    ║               ᚢᚨᛚᚲᚾᚢᛏ                 ║
+    ║            The Knot of the Slain                  ║
+    ╚══════════════════════════════════════════════════╝
+                /\            /\
+               /  \          /  \
+              /    \        /    \
+             /      \      /      \
+```
 
 ## ᚠ The Pantheon
 
@@ -99,6 +121,21 @@ Forseti sits in judgment. Before any Tyr or Vidarr plan executes, Forseti audits
 
 ---
 
+```
+                 ⎛                 ⎞
+                ⎛   ╱╲     ╱╲    ⎞
+               ⎛   ╱  ╲   ╱  ╲   ⎞
+               ⎜  ╱ ╱╲╲ ╱╱╲╲ ╲  ⎟
+               ⎜  ╲ ╲╱╱ ╲╲╱╱ ╱  ⎟
+               ⎛   ╲  ╱   ╲  ╱   ⎞
+                ⎛   ╲╱     ╲╱    ⎞
+                 ⎛                 ⎞
+    ╔══════════════════════════════════════════════════╗
+    ║              ᚨᛖᚷᛁᛋᚺᛃᚨᛚᛗᚱ               ║
+    ║            The Helm of Awe                        ║
+    ╚══════════════════════════════════════════════════╝
+```
+
 ## ⚙️ Architecture
 
 ```
@@ -134,6 +171,15 @@ User Request
 
 ---
 
+```
+                  ╱⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻⎻╲
+                 ╱    ᚢᚷᚷᛞᚱᚨᛋᛁᛚ     ╲
+                ╱   The World Ash Tree    ╲
+               ╱____________________________╲
+                         ││││
+                    ═════╧╧╧╧═════
+```
+
 ## 🚀 Installation
 
 ```bash
@@ -166,7 +212,21 @@ Then run `/models` to verify everything is connected.
 ---
 
 ```
-         ⚔️  ᚠᚢᚦᚨᚱᚲ  ⚔️
-    May your queries be wise
-   and your agents ever faithful
+          ╔════════════════════════════════════════╗
+          ║     ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ · ᚺ ᚾ ᛁ ᛃ ᛇ ᛈ      ║
+          ║     ᛉ ᛊ ᛏ ᛒ ᛖ ᛗ · ᛚ ᛝ ᛟ ᛞ           ║
+          ║        Elder Futhark · 24 Runes         ║
+          ╚════════════════════════════════════════╝
+```
+
+```
+     ╔═══════════════════════════════════════════════╗
+     ║                                               ║
+     ║   May your queries be wise, your agents       ║
+     ║   ever faithful, and your bugs few.           ║
+     ║                                               ║
+     ║       ᚱᚨᛞᛖ᛫ᚹᛖᛚ᛫ᚨᚾᛞ᛫ᛈᚱᛟᛋᛈᛖᚱ               ║
+     ║       (Ráðe vel · ok prosper)                 ║
+     ║                                               ║
+     ╚═══════════════════════════════════════════════╝
 ```
