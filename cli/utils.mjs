@@ -127,7 +127,7 @@ export async function detectInstalledAgents() {
   }
 }
 
-export function buildSummary(components, agents, target) {
+export function buildSummary(components, agents, target, skillPacks = []) {
   const parts = [];
   if (components.includes('agents')) parts.push(`${agents.length} agents`);
   if (components.includes('agents-md')) parts.push('AGENTS.md');
@@ -138,6 +138,7 @@ export function buildSummary(components, agents, target) {
   parts.push('RTK');
   parts.push('Semble');
   parts.push('Skills CLI');
+  if (skillPacks.length > 0) parts.push(`skills: ${skillPacks.join(', ')}`);
 
   return {
     components: parts.join(', '),

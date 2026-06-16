@@ -271,3 +271,58 @@ export async function installSkillsCli() {
     return false;
   }
 }
+
+export const SKILL_PACKS = {
+  core: {
+    label: 'Core — find-skills, skill-creator, write-a-skill',
+    repos: ['vercel-labs/skills'],
+  },
+  frontend: {
+    label: 'Frontend — React, web-design, composition, a11y, shadcn/ui',
+    repos: ['vercel-labs/agent-skills', 'shadcn/ui'],
+  },
+  backend: {
+    label: 'Backend — Supabase, Postgres, API patterns, auth',
+    repos: ['supabase/agent-skills'],
+  },
+  testing: {
+    label: 'Testing — TDD, E2E, Playwright, test patterns',
+    repos: ['mattpocock/skills', 'microsoft/playwright-cli'],
+  },
+  design: {
+    label: 'Design — frontend-design, UI/UX, taste skills',
+    repos: ['anthropics/skills', 'leonxlnx/taste-skill'],
+  },
+};
+
+export async function installCuratedSkills(packs) {
+  const { execSync } = await import('node:child_process');
+
+  const hasCli = await detectSkillsCli();
+  if (!hasCli) {
+    console.log(chalk.yellow('  ⚠ Skills CLI not available — skipping skill install'));
+    return false;
+  }
+
+  let total = 0;
+  for (const key of packs) {
+    const pack = SKILL_PACKS[key];
+    if (!pack) continue;
+
+    const spinner = ora({ text: `Installing ${key} skills...`, color: 'yellow' }).start();
+    for (const repo of pack.repos) {
+      try {
+        execSync(`skills add ${repo} --all -y`, { stdio: 'pipe', timeout: 60000 });
+        total++;
+      } catch {
+        spinner.warn(chalk.yellow(`  ${repo} — some skills skipped or already installed`));
+      }
+    }
+    spinner.succeed(chalk.green(`${key}: ${pack.label}`));
+  }
+
+  if (total > 0) {
+    console.log(chalk.dim(`  Installed from ${total} skill repositories`));
+  }
+  return true;
+}

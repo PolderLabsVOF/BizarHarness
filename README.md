@@ -27,6 +27,7 @@
 - [Architecture](#-architecture)
 - [Installation](#-installation)
 - [Provider Setup](#-provider-setup)
+- [Skill Discovery](#-skill-discovery)
 - [Routing](#-routing)
 - [Self-Improvement](#-self-improvement)
 - [Contributing](#-contributing)
@@ -218,6 +219,33 @@ npx skills add <owner/repo>  # Install a skill from GitHub
 ```
 
 Available for all major AI coding agents including OpenCode, Claude Code, Cursor, Copilot, Gemini, and more.
+
+---
+
+## ᛉ Skill Discovery
+
+BizarHarness agents **proactively discover and install skills** during execution using the Skills CLI. When Heimdall, Thor, Tyr, or Vidarr receives a task, they:
+
+1. **Assess** whether a skill might exist for the task (framework-specific work, domain tasks, tool usage)
+2. **Check installed** with `skills list --json` to see what's already available
+3. **Install from known repos** based on the task domain — e.g., `skills add supabase/agent-skills --all -y` for database work, `skills add vercel-labs/agent-skills --all -y` for frontend
+4. **Use** the skill's instructions at `~/.opencode/skills/<name>/SKILL.md` via the `skill` tool
+
+This happens automatically and on-demand — agents self-discover capabilities without manual configuration.
+
+### Known Skill Repositories by Domain
+
+| Domain | Repos |
+|--------|-------|
+| General (find-skills, skill-creator) | `vercel-labs/skills` |
+| Frontend (React, a11y, web-design) | `vercel-labs/agent-skills`, `shadcn/ui` |
+| Backend (Supabase, Postgres, auth) | `supabase/agent-skills` |
+| Testing (TDD, E2E, Playwright) | `mattpocock/skills`, `microsoft/playwright-cli` |
+| Design (frontend-design, UI/UX) | `anthropics/skills`, `leonxlnx/taste-skill` |
+
+---
+
+
 
 ---
 

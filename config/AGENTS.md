@@ -32,6 +32,65 @@ The index is built on first run and cached automatically. If `semble` is not on 
 
 ---
 
+## Skill Discovery Protocol
+
+The `skills` CLI (`npm install -g skills`) can install coding skills from skills.sh. Any agent working on implementation tasks MUST proactively use it:
+
+### When to Search
+
+At the start of any non-trivial task, check if a skill exists for it:
+- **Framework-specific work** (React, Vue, Django, etc.)
+- **Domain tasks** (testing, accessibility, security, performance, design)
+- **Tool/technology usage** (Docker, Kubernetes, Supabase, etc.)
+- **Pattern application** (TDD, clean architecture, etc.)
+
+### How to Check Installed Skills
+
+```bash
+# Check if skills CLI is available
+which skills 2>/dev/null
+
+# List installed skills and their locations
+skills list --json
+
+# View installed skill files
+ls ~/.opencode/skills/<skill-name>/SKILL.md
+```
+
+### How to Install
+
+```bash
+# Install all skills from a known skill repo
+skills add <owner/repo> --all -y
+
+# Install a specific skill from a repo  
+skills add <owner/repo> -s "<skill-name>" -y
+```
+
+### Protocol Steps
+
+1. **Assess**: When given a task, consider whether a skill might exist for it
+2. **Check installed**: Run `skills list --json` to see what's already available
+3. **Try known repos**: Based on the task domain, attempt installation from known skill repos (e.g., `skills add supabase/agent-skills --all -y` for database work, `skills add vercel-labs/agent-skills --all -y` for frontend work)
+4. **Use**: After installing, the skill instructions are at `~/.opencode/skills/<skill-name>/SKILL.md` — load them with the `skill` tool
+5. **Skip**: If no skill is found after trying likely repos, proceed without
+
+### Known Skill Repositories by Domain
+
+| Domain | Repos |
+|--------|-------|
+| General (find-skills, skill-creator) | `vercel-labs/skills` |
+| Frontend (React, a11y, web-design) | `vercel-labs/agent-skills`, `shadcn/ui` |
+| Backend (Supabase, Postgres, auth) | `supabase/agent-skills` |
+| Testing (TDD, E2E, Playwright) | `mattpocock/skills`, `microsoft/playwright-cli` |
+| Design (frontend-design, UI/UX) | `anthropics/skills`, `leonxlnx/taste-skill` |
+
+### Agents That Must Comply
+
+All implementation agents: @heimdall, @thor, @tyr, @vidarr. Odin routes with awareness that agents will self-discover skills.
+
+---
+
 ## Model Routing & Agents
 
 This system uses a 5-tier model architecture with a verification gate:
@@ -55,7 +114,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 ### Vör
 
 - **Model**: `opencode/deepseek-v4-flash-free` (via OpenCode Zen — free tier)
-- **Use for**: Clarifying ambiguous or incomplete requests. Asks targeted questions until the task is well-defined, then passes a clear brief back to Odin.
+- **Use for**: Clarifying ambiguous or incomplete requests. First reads project context (`.bizar/PROJECT.md`, Hindsight, project files), then only asks targeted, project-specific questions if still unclear. Never asks generic questions.
 - **Cost**: Free
 
 ### Heimdall

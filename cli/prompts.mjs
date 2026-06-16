@@ -126,3 +126,28 @@ export async function promptRestartOpenCode() {
   }]);
   return restart;
 }
+
+export async function promptSkillPacks() {
+  const { usePacks } = await inquirer.prompt([{
+    type: 'confirm',
+    name: 'usePacks',
+    message: 'Install curated skills from skills.sh ecosystem? (find-skills, React, Supabase, TDD, design, etc.)',
+    default: true,
+  }]);
+  if (!usePacks) return [];
+
+  const { packs } = await inquirer.prompt([{
+    type: 'checkbox',
+    name: 'packs',
+    message: 'Select skill packs to install:',
+    choices: [
+      { name: 'Core — find-skills, skill-creator, write-a-skill', value: 'core', checked: true },
+      { name: 'Frontend — React, web-design, composition, a11y, shadcn/ui', value: 'frontend', checked: false },
+      { name: 'Backend — Supabase, Postgres, API patterns, auth', value: 'backend', checked: false },
+      { name: 'Testing — TDD, E2E, Playwright, test patterns', value: 'testing', checked: false },
+      { name: 'Design — frontend-design, UI/UX, taste skills', value: 'design', checked: false },
+    ],
+    pageSize: 8,
+  }]);
+  return packs;
+}

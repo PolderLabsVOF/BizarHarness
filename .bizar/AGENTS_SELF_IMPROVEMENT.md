@@ -34,3 +34,29 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - `.gitignore`: Added `node_modules/` and `package-lock.json`
 
 **Key insight:** The hardcoded `/` path separator was the most subtle Windows bug — `lastIndexOf('/')` for parent dir silently returns `-1` on `C:\...` paths, which doesn't crash `slice()` but produces wrong paths. `path.dirname()` is the correct cross-platform API.
+
+### 2026-06-16: Fixed Vör questioning agent — research-first protocol
+
+**Task:** Fixed Vör questioning agent — was jumping to generic questions without researching project context first
+**Files changed:**
+  - `config/agents/vor.md` (rewrote workflow: research-first, question-only-if-still-ambiguous, questions must reference project context)
+  - `config/AGENTS.md` (updated Vör description to reflect research-first protocol)
+**Agents used:** heimdall
+
+**Lessons learned:** Vör was asking generic questions ("what framework", "what files") before reading PROJECT.md or Hindsight banks. Fixed by reordering the workflow: project context first, questioning only if ambiguity remains after research, and all questions must reference actual project files/frameworks/patterns.
+
+**Pattern to follow next time:** Any agent that needs to ask about the project must first demonstrate it has read the project context. Questions that could be answered by reading existing files or Hindsight memory indicate insufficient research.
+
+### 2026-06-16: Added Skill Discovery Protocol
+- **Task**: Agents now proactively find and install skills using the Skills CLI during execution
+- **Files changed**:
+  - `cli/copy.mjs` (added SKILL_PACKS + installCuratedSkills())
+  - `cli/prompts.mjs` (added promptSkillPacks())
+  - `cli/install.mjs` (wired skill pack selection + postinstall core skill install)
+  - `cli/utils.mjs` (updated buildSummary for skillPacks)
+  - `config/AGENTS.md` (added Skill Discovery Protocol section)
+  - `config/agents/thor.md`, `tyr.md`, `heimdall.md`, `vidarr.md` (added Skill Discovery Protocol sections)
+  - `README.md` (added Skill Discovery section with domain table)
+- **Agents used**: heimdall, thor
+- **Lessons learned**: Skills CLI `skills find` is interactive-only, so agents can't use it programmatically. Instead, agents should use `skills list --json` to check installed skills, and try known repos by domain (e.g., `skills add supabase/agent-skills --all -y` for database work).
+- **Pattern to follow next time**: When adding a CLI tool dependency, first verify which commands work non-interactively before writing protocol steps.

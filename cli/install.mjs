@@ -2,9 +2,9 @@ import chalk from 'chalk';
 import boxen from 'boxen';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
-import { promptComponents, promptInstallMode, promptAgents, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
+import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
 import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk, installSemble, installSkillsCli } from './copy.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk, installSemble, installSkillsCli, installCuratedSkills } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'mimir.md', 'heimdall.md', 'hermod.md',
@@ -65,8 +65,12 @@ export async function runInstaller() {
   sectionHeading('Installation Mode');
   const mode = await promptInstallMode();
 
-  // ── Step 4: Build summary & confirm ──
-  const summary = buildSummary(components, selectedAgents, env.configDir);
+  // ── Step 4: Skill packs (via skills.sh) ──
+  sectionHeading('Skills from skills.sh');
+  const skillPacks = await promptSkillPacks();
+
+  // ── Step 5: Build summary & confirm ──
+  const summary = buildSummary(components, selectedAgents, env.configDir, skillPacks);
   showPantheon();
   console.log();
   console.log(chalk.dim('  Summary:'));
@@ -119,6 +123,11 @@ export async function runInstaller() {
   // ── Skills CLI (always installed — skill discovery required) ──
   await installSkillsCli();
 
+  // ── Skill packs (via skills.sh ecosystem) ──
+  for (const pack of skillPacks) {
+    await installCuratedSkills([pack]);
+  }
+
   // ── Step 6: API keys ──
   sectionHeading('API Keys');
   console.log(chalk.dim('  You can configure API keys now or later via /connect in opencode.'));
@@ -141,7 +150,7 @@ export async function runInstaller() {
     chalk.green('  ✓ RTK ') + chalk.dim(`(${rtkInstalled ? 'already configured' : 'installed & configured'})`) + '\n' +
     chalk.green('  ✓ Semble ') + chalk.dim(`(${sembleInstalled ? 'ready' : 'installed'})`) + '\n' +
     chalk.green('  ✓ Skills CLI ') + chalk.dim(`(${skillsCliInstalled ? 'ready' : 'installed'})`) + '\n' +
-    '\n' +
+    (skillPacks.length > 0 ? chalk.green(`  ✓ Skill packs: ${skillPacks.join(', ')}`) + '\n' : '') + '\n' +
     chalk.hex('#a855f7')('  Next steps:') + '\n' +
     chalk.hex('#a855f7')('  1. Restart opencode') + '\n' +
     chalk.hex('#a855f7')('  2. Run /connect to add API keys') + '\n' +
@@ -249,6 +258,15 @@ export async function runPostInstall() {
     }
   } else {
     console.log('BizarHarness: Skills CLI ready.');
+  }
+
+  // Install core skill pack
+  console.log('BizarHarness: installing core skills (find-skills, skill-creator)...');
+  try {
+    execSync('skills add vercel-labs/skills --all -y', { stdio: 'pipe', timeout: 60000 });
+    console.log('BizarHarness: core skills installed.');
+  } catch {
+    console.log('BizarHarness: core skill install skipped — run `skills add vercel-labs/skills --all -y` manually.');
   }
 
   console.log('Run `bizarharness` for interactive setup.');
