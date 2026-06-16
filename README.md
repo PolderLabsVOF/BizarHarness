@@ -162,7 +162,7 @@ Then run `/models` to verify connectivity.
 
 ## 📝 Self-Improvement
 
-Every task records what was learned to `AGENTS_SELF_IMPROVEMENT.md` at the project root. Odin reads it at session start and applies past patterns to current routing.
+Every task records what was learned to `.bizar/AGENTS_SELF_IMPROVEMENT.md` at the project root. Odin reads it at session start and applies past patterns to current routing.
 
 ```
 ### 2026-06-16: Fixed routing issue

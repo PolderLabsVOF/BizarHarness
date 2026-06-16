@@ -1,22 +1,22 @@
 ---
 name: self-improvement
-description: Use when setting up, configuring, or debugging the project-level self-improvement system. Every task records lessons learned to AGENTS_SELF_IMPROVEMENT.md for agent behavior improvement across sessions.
+description: Use when setting up, configuring, or debugging the project-level self-improvement system. Every task records lessons learned to .bizar/AGENTS_SELF_IMPROVEMENT.md for agent behavior improvement across sessions.
 ---
 
 # Self Improvement
 
-Project-level learning system. Every task records what worked, what didn't, and what patterns to follow next time — stored in `AGENTS_SELF_IMPROVEMENT.md` at the project root.
+Project-level learning system. Every task records what worked, what didn't, and what patterns to follow next time — stored in `.bizar/AGENTS_SELF_IMPROVEMENT.md` at the project root.
 
 ## How It Works
 
-1. **Session start**: Odin reads `AGENTS_SELF_IMPROVEMENT.md` from project root and factors active rules into routing
+1. **Session start**: Odin reads `.bizar/AGENTS_SELF_IMPROVEMENT.md` from project root and factors active rules into routing
 2. **During work**: Agents follow documented patterns and avoid previously-caught mistakes
 3. **Task completion**: Odin dispatches @heimdall to append a structured entry to the file
 4. **Next session**: The cycle repeats — agents get smarter over time
 
 ## File Format
 
-The file lives at `<project-root>/AGENTS_SELF_IMPROVEMENT.md`. Structure:
+The file lives at `<project-root>/.bizar/AGENTS_SELF_IMPROVEMENT.md`. Structure:
 
 ```markdown
 # Self Improvement
@@ -38,7 +38,7 @@ The file lives at `<project-root>/AGENTS_SELF_IMPROVEMENT.md`. Structure:
 
 When writing an entry:
 
-- **File per project** — `AGENTS_SELF_IMPROVEMENT.md` at the root of whatever project you're working in
+- **File per project** — `.bizar/AGENTS_SELF_IMPROVEMENT.md` at the root of whatever project you're working in
 - **If file doesn't exist**, create it with the header template
 - **Entry format**: H3 date header, bullet list with Context, Lesson, Pattern, Files, Agent
 - **Active Rules**: At the top, keep 5-10 distilled patterns from recent entries. If adding a new entry makes it necessary, add a rule too or promote a pattern from an entry.

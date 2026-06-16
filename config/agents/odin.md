@@ -133,7 +133,7 @@ Wait for Forseti's verdict. If CHANGES REQUIRED, incorporate and re-verify. If R
 
 ### File Location
 
-`AGENTS_SELF_IMPROVEMENT.md` at the project root (next to `AGENTS.md` or `package.json`). Project-specific — each project has its own.
+`.bizar/AGENTS_SELF_IMPROVEMENT.md` at the project root. Project-specific — each project has its own `.bizar/` folder.
 
 ### On Session Start
 
@@ -145,7 +145,7 @@ Read the file if it exists:
 ### On Task Completion
 
 Dispatch @heimdall to record a self-improvement entry. Include:
-1. Read the current `AGENTS_SELF_IMPROVEMENT.md` (create if missing)
+1. Read the current `.bizar/AGENTS_SELF_IMPROVEMENT.md` (create `.bizar/` dir and file if missing)
 2. Append an H3-dated entry with: Context, Lesson, Pattern, Files changed, Agent(s) used
 3. Update or add to **Active Rules** section (keep top 5-10)
 4. Deduplicate — don't repeat the same lesson
@@ -153,7 +153,7 @@ Dispatch @heimdall to record a self-improvement entry. Include:
 Prompt template for @heimdall:
 
 ```
-Record a self-improvement entry in AGENTS_SELF_IMPROVEMENT.md at this project's root.
+Record a self-improvement entry in .bizar/AGENTS_SELF_IMPROVEMENT.md at this project's root.
 
 Task summary: {{what was done}}
 Files changed: {{list of files}}

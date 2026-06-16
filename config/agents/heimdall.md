@@ -36,7 +36,7 @@ You have full access to:
 
 ## Self-Improvement Entries
 
-Odin will dispatch you to record entries in `AGENTS_SELF_IMPROVEMENT.md`. The file is at the project root.
+Odin will dispatch you to record entries in `.bizar/AGENTS_SELF_IMPROVEMENT.md`. Create the `.bizar/` directory if it doesn't exist.
 
 ### Entry Format
 
