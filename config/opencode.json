@@ -6,6 +6,11 @@
   "permission": "allow",
   "snapshot": false,
   "mcp": {
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp",
+      "enabled": true
+    },
     "hindsight": {
       "type": "remote",
       "url": "https://memory-api.polderlabs.io/mcp",
@@ -18,20 +23,13 @@
     },
     "semble": {
       "type": "local",
-      "command": ["uvx", "--from", "semble[mcp]", "semble"],
+      "command": [
+        "uvx",
+        "--from",
+        "semble[mcp]",
+        "semble"
+      ],
       "enabled": true
-    },
-    "supabase": {
-      "type": "remote",
-      "url": "https://mcp.supabase.com/mcp",
-      "enabled": true
-    }
-  },
-  "provider": {
-    "minimax": {
-      "options": {
-        "baseURL": "https://api.minimax.io/v1"
-      }
     }
   }
 }
