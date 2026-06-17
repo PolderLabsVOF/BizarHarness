@@ -1,6 +1,6 @@
 {
   "name": "bizarharness",
-  "version": "1.2.1",
+  "version": "2.0.0",
   "description": "Norse-pantheon multi-agent system for opencode — 11 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
   "type": "module",
   "bin": {
