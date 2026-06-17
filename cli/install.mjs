@@ -9,7 +9,7 @@ import { installAgents, installAgentsMd, installSkill, installOpencodeJson, inst
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'mimir.md', 'heimdall.md', 'hermod.md',
   'thor.md', 'baldr.md', 'tyr.md', 'vidarr.md', 'forseti.md',
-  'semble-search.md',
+  'semble-search.md', 'quick.md',
 ];
 
 export async function runInstaller() {

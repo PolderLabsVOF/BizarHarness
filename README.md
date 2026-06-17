@@ -304,6 +304,18 @@ PRs welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ---
 
+## Development
+
+Development of BizarHarness uses a separate sandbox repo for Docker/dev tooling.
+See [DrB0rk/BizarHarness-dev](https://github.com/DrB0rk/BizarHarness-dev) (private)
+for the local dev environment, including the Docker-based opencode sandbox used to
+test config and plugin changes without touching the system opencode install.
+
+> **Note:** When you push BizarHarness-dev to GitHub, update the URL above to match
+> the actual repo location.
+
+---
+
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
