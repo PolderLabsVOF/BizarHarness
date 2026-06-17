@@ -31,5 +31,19 @@
       ],
       "enabled": true
     }
+  },
+  "plugin": [
+    ["./plugins/bizar/index.ts", {
+      "loopThresholdWarn": 5,
+      "loopThresholdEscalate": 8,
+      "loopThresholdBlock": 12,
+      "loopWindowSize": 10
+    }]
+  ],
+  "tools": {
+    "bizar_spawn_background": true,
+    "bizar_status": true,
+    "bizar_collect": true,
+    "bizar_kill": true
   }
 }

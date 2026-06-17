@@ -29,6 +29,28 @@ echo -e "  ${GREEN}→${NC} Installing AGENTS.md..."
 cp "$REPO_DIR/config/AGENTS.md" "$CONFIG_DIR/AGENTS.md"
 echo -e "    ${GREEN}✓${NC} AGENTS.md"
 
+# ── Copy Bizar plugin ──────────────────────────────────────────────
+echo -e "  ${GREEN}→${NC} Installing Bizar plugin..."
+PLUGIN_SRC="$REPO_DIR/plugins/bizar"
+PLUGIN_DST="$CONFIG_DIR/plugins/bizar"
+if [ -d "$PLUGIN_SRC" ]; then
+  mkdir -p "$PLUGIN_DST"
+  # Copy files, excluding node_modules, dist, *.log, .DS_Store (spec §9.2)
+  while IFS= read -r -d '' f; do
+    rel="${f#$PLUGIN_SRC/}"
+    mkdir -p "$(dirname "$PLUGIN_DST/$rel")"
+    cp "$f" "$PLUGIN_DST/$rel"
+  done < <(find "$PLUGIN_SRC" \
+    -not -path '*/node_modules/*' \
+    -not -path '*/dist/*' \
+    -not -name '*.log' \
+    -not -name '.DS_Store' \
+    -type f -print0)
+  echo -e "    ${GREEN}✓${NC} plugins/bizar/"
+else
+  echo -e "    ${YELLOW}⚠${NC} Bizar plugin source not found at $PLUGIN_SRC — skipping"
+fi
+
 # ── Merge opencode.json ────────────────────────────────────────────
 echo -e "  ${GREEN}→${NC} Configuring opencode.json..."
 TEMPLATE="$REPO_DIR/config/opencode.json"
@@ -41,10 +63,24 @@ fi
 if command -v jq &>/dev/null; then
   jq -s '.[0] * .[1]' "$TEMPLATE" "$CONFIG_DIR/opencode.json" 2>/dev/null ||
     cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"
+  # Ensure the bizar plugin entry exists in the plugin array (idempotent)
+  jq '
+    if (.plugin // []) | map(.[0] == "./plugins/bizar/index.ts") | any then .
+    else .plugin = (.plugin // []) + [["./plugins/bizar/index.ts", {
+      "loopThresholdWarn": 5,
+      "loopThresholdEscalate": 8,
+      "loopThresholdBlock": 12,
+      "loopWindowSize": 10
+    }]]
+    end
+  ' "$CONFIG_DIR/opencode.json" > "$CONFIG_DIR/opencode.json.tmp" \
+    && mv "$CONFIG_DIR/opencode.json.tmp" "$CONFIG_DIR/opencode.json" \
+    || rm -f "$CONFIG_DIR/opencode.json.tmp"
 else
   cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"
 fi
 echo -e "    ${GREEN}✓${NC} opencode.json"
+echo -e "    ${GREEN}✓${NC} Bizar plugin (loop guard)"
 
 # ── Post-install instructions ──────────────────────────────────────
 echo ""

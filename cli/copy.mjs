@@ -172,6 +172,92 @@ export async function installBizarFolder() {
   return true;
 }
 
+/**
+ * Install the Bizar plugin into a project's .opencode/ directory.
+ *
+ * Per spec §9.2:
+ *   - Copies plugins/bizar/ → <project>/.opencode/plugins/bizar/
+ *   - Excludes: node_modules/, dist/, *.log, .DS_Store
+ *   - Returns { copied: number, errors: string[] }
+ *
+ * INSTALL PATH CONCLUSION (step 5 of the Heimdall wiring task):
+ * The install target is INSIDE the project at <project>/.opencode/plugins/bizar/,
+ * NOT in the system config dir (~/.config/opencode/plugins/bizar/).
+ * Rationale:
+ *   1. Per-project isolation — each project pins its own plugin version
+ *      (spec §9.1: "Per-project isolation (each project can pin its own
+ *      plugin version)").
+ *   2. Follows opencode's project-local config convention — the config file
+ *      is at <project>/.opencode/opencode.json and the plugin ref is
+ *      `./plugins/bizar/index.ts` relative to that config dir.
+ *   3. Mirrors the .bizar/ folder pattern (project-local, not system-wide).
+ *   4. Not "polluting" — the .opencode/ directory is the standard location
+ *      for project-local opencode config (analogous to .vscode/).
+ *   5. In the Docker sandbox (BizarHarness-dev), the host project is mounted
+ *      at /project, so /project/.opencode/plugins/bizar/ resolves correctly
+ *      relative to /project/.opencode/opencode.json.
+ *
+ * The source (<repo>/plugins/bizar/) is copied FROM the harness repo INTO
+ * the project's .opencode/ directory. After install, the harness repo is no
+ * longer the authoritative source — the project has its own copy.
+ *
+ * See spec §9.1 for the canonical layout diagram.
+ *
+ * @param {string} [projectRoot] - Project root directory (defaults to cwd)
+ * @returns {Promise<{copied: number, errors: string[]}>}
+ */
+export async function installPluginBizar(projectRoot) {
+  if (!projectRoot) projectRoot = process.cwd();
+  const spinner = ora({ text: 'Installing Bizar plugin...', color: 'cyan' }).start();
+  const srcDir = repoPath('plugins', 'bizar');
+
+  try {
+    await access(srcDir, constants.F_OK);
+  } catch {
+    spinner.warn(chalk.yellow('Bizar plugin source not found — skipping'));
+    return { copied: 0, errors: ['Source not found: ' + srcDir] };
+  }
+
+  const destDir = join(projectRoot, '.opencode', 'plugins', 'bizar');
+  await mkdir(destDir, { recursive: true });
+
+  // Exclude patterns per spec §9.2
+  const isExcluded = (entry) => {
+    const parts = entry.split('/');
+    return parts.some(part =>
+      part === 'node_modules' ||
+      part === 'dist' ||
+      part === '.DS_Store' ||
+      part.endsWith('.log')
+    );
+  };
+
+  const files = await readdirRecursive(srcDir);
+  const errors = [];
+  let copied = 0;
+
+  for (const file of files) {
+    if (isExcluded(file)) continue;
+    const src = join(srcDir, file);
+    const dst = join(destDir, file);
+    const dstParent = dirname(dst);
+    try {
+      await mkdir(dstParent, { recursive: true });
+      await copyFile(src, dst);
+      copied++;
+    } catch (err) {
+      errors.push(`Failed to copy ${file}: ${err.message}`);
+    }
+  }
+
+  if (errors.length === 0) {
+    spinner.succeed(chalk.green(`Installed Bizar plugin (${copied} files)`));
+  } else {
+    spinner.warn(chalk.yellow(`Installed Bizar plugin (${copied} files, ${errors.length} errors)`));
+  }
+  return { copied, errors };
+}
+
 export async function installRtk() {
   const { execSync } = await import('node:child_process');
 

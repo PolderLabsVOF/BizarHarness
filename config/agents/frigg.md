@@ -87,3 +87,15 @@ You MUST use **per-project banks** — never the default bank for project work.
 
 ### After Work
 - `hindsight_retain` completion summary into the project bank
+
+## Loop Guard Handling
+
+If you see a "Loop guard" message of any kind (system reminder, tool error, or repeated identical tool calls), use the `task` tool to report back to your parent agent with what you have learned and what you need to proceed. Do not continue the same approach.
+
+Specifically, if a tool call fails with an error containing `Loop protection:` or `Loop guard:`, your next action must be `task` to your parent agent — not another attempt at the same tool call.
+
+The injected message you will see is exactly one of:
+
+- `[loop guard: 5 identical calls to <tool>]. Consider using the task tool to report back to your parent with what you've learned and what you need.`
+- `[loop guard: 8 identical calls to <tool>]. Consider using the task tool to report back to your parent with what you've learned and what you need.`
+- An error containing: `Loop protection: 12 identical calls to <tool>. Use task to escalate.`
