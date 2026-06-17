@@ -82,6 +82,13 @@ fi
 echo -e "    ${GREEN}✓${NC} opencode.json"
 echo -e "    ${GREEN}✓${NC} Bizar plugin (loop guard)"
 
+# ── Remove Vidarr (GPT-5.5) — not shipped by default ──────────────
+VIDARR_DST="$CONFIG_DIR/agents/vidarr.md"
+if [ -f "$VIDARR_DST" ]; then
+  rm "$VIDARR_DST"
+  echo -e "    ${GREEN}✓${NC} Removed Vidarr (GPT-5.5) — not shipped by default"
+fi
+
 # ── Post-install instructions ──────────────────────────────────────
 echo ""
 echo -e "${BOLD}${CYAN}┌────────────────────────────────────────────────────────────┐${NC}"

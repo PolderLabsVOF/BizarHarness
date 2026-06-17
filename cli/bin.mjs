@@ -20,13 +20,73 @@ function showHelp() {
     bizarharness audit           Run security audit on agent configuration
     bizarharness init            Initialize .bizar/ in current project
     bizarharness export [target]  Export agents/rules to another harness (claude|cursor|opencode)
-    bizarharness plan <subcommand> Manage visual plans (new, open, list, delete, export)
+    bizarharness plan <subcommand> Manage visual plans (new, open, list, delete, export, templates)
     bizarharness test-gate       Detect & run the project's test suite
     bizarharness --help          Show this help
 
   Install:
     npm install -g bizarharness   Install globally, then run 'bizarharness'
     npx bizarharness              Run without installing
+  `);
+}
+
+function showAuditHelp() {
+  console.log(`
+  bizarharness audit — Run security audit on agent configuration
+
+  Usage:
+    bizarharness audit
+
+  Description:
+    Scans opencode agent definitions for security issues:
+    - Agents with read/edit/bash permission conflicts
+    - Agents lacking mode or model definitions
+    - Suspicious tool access patterns
+  `);
+}
+
+function showInitHelp() {
+  console.log(`
+  bizarharness init — Initialize .bizar/ in current project
+
+  Usage:
+    bizarharness init
+
+  Description:
+    Creates a .bizar/ directory in the current project with:
+    - PROJECT.md (living project description)
+    - AGENTS_SELF_IMPROVEMENT.md (lesson log)
+  `);
+}
+
+function showExportHelp() {
+  console.log(`
+  bizarharness export — Export agents/rules to another harness
+
+  Usage:
+    bizarharness export --target <harness>
+
+  Targets:
+    claude     Export to Claude Code format
+    cursor     Export to Cursor format
+    opencode   Export to OpenCode format (default)
+
+  Description:
+    Converts BizarHarness agent definitions and rules
+    to the target harness's native format.
+  `);
+}
+
+function showTestGateHelp() {
+  console.log(`
+  bizarharness test-gate — Detect & run the project's test suite
+
+  Usage:
+    bizarharness test-gate
+
+  Description:
+    Auto-detects the project's test framework (npm test, pytest,
+    cargo test, go test) and runs it. Exits with non-zero on failure.
   `);
 }
 
@@ -68,20 +128,26 @@ function parseFlag(name) {
 
 if (args.includes('--postinstall')) {
   await runPostInstall();
-} else if (args.includes('--help') || args.includes('-h')) {
-  showHelp();
 } else if (args[0] === 'audit') {
-  await runAudit();
+  if (args.includes('--help') || args.includes('-h')) showAuditHelp();
+  else await runAudit();
 } else if (args[0] === 'init') {
-  await runInit(process.cwd());
+  if (args.includes('--help') || args.includes('-h')) showInitHelp();
+  else await runInit(process.cwd());
 } else if (args[0] === 'export') {
-  const target = parseFlag('--target');
-  await runExport(target);
+  if (args.includes('--help') || args.includes('-h')) showExportHelp();
+  else {
+    const target = parseFlag('--target');
+    await runExport(target);
+  }
 } else if (args[0] === 'test-gate') {
-  await runTestGate();
+  if (args.includes('--help') || args.includes('-h')) showTestGateHelp();
+  else await runTestGate();
 } else if (args[0] === 'plan') {
-  const planArgs = args.slice(1); // ['new', 'my-feature'] or ['list'], etc.
+  const planArgs = args.slice(1);
   await runPlan(planArgs, {});
+} else if (args.includes('--help') || args.includes('-h') || args.length === 0) {
+  showHelp();
 } else {
   await runInstaller();
 }

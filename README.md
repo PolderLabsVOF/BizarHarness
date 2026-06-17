@@ -4,7 +4,7 @@
 
 **Norse-pantheon multi-agent system for opencode**
 
-10 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
+12 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
 
 [![npm](https://img.shields.io/npm/v/bizarharness?color=cb3837)](https://www.npmjs.com/package/bizarharness)
 [![RTK](https://img.shields.io/badge/rtk-integrated-8A2BE2)](https://github.com/rtk-ai/rtk)
@@ -12,7 +12,7 @@
 [![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenCode](https://img.shields.io/badge/opencode-%E2%9C%93-6366f1)](https://opencode.ai)
-[![Agents](https://img.shields.io/badge/agents-11-10b981)](#-the-pantheon)
+[![Agents](https://img.shields.io/badge/agents-12-10b981)](#-the-pantheon)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
 `npm install bizarharness` · `npx bizarharness`
@@ -75,7 +75,7 @@
 | **Thor** | ᚦ | MiniMax-M2.7 | $0.30/M · $1.20/M out | Moderate implementation, debugging, refactoring |
 | **Baldr** | ᛒ | MiniMax-M2.7 | $0.30/M · $1.20/M out | UI/UX design system (DESIGN.md plans, visual audits) |
 | **Tyr** | ᛏ | MiniMax-M3 | $0.30/M · $1.20/M out | Complex implementation, architecture, deep debugging |
-| **Vidarr** | ᛉ | GPT-5.5 | Subscription | Last resort — when all others fail |
+| **Vidarr** | ᛉ | GPT-5.5 | Subscription | Last resort — when all others fail ⚠️ Opt-in: not installed by default |
 | **Forseti** | ᚨ | MiniMax-M3 | $0.30/M · $1.20/M out | Adversarial plan reviewer (edit: deny, audit-only) |
 
 ---

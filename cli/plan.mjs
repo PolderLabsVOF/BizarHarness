@@ -2,12 +2,16 @@
  * bizarharness plan <subcommand>
  *
  * Subcommands:
- *   new <slug>     Create a new plan
- *   open <slug>    Open an existing plan in the browser
- *   list           List all plans
- *   delete <slug>  Delete a plan (with confirmation)
- *   export <slug>  Export plan.mdx to stdout
- *   help           Show this help
+ *   new <slug>                 Create a new plan
+ *                              Flags: --template <name> | --template <path>
+ *   open <slug>                Open an existing plan in the browser
+ *   list                       List all plans
+ *   delete <slug>              Delete a plan (with confirmation)
+ *   export <slug>              Export plan.mdx to stdout
+ *   templates                  List available plan templates
+ *   template save <name> <plan-slug>   Save a plan as a library template
+ *   template delete <name>     Delete a user-added library template
+ *   help                       Show this help
  *
  * The local server runs in the SAME process as the CLI (no child process).
  * The CLI keeps the process alive by waiting on a Promise that never resolves
@@ -23,17 +27,61 @@ import {
   readdirSync,
   rmSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { join, resolve, isAbsolute } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  getTemplate,
+  getTemplateNames,
+  listTemplates,
+  printTemplates,
+  substitute,
+  buildVars,
+  saveTemplate as saveTemplateToLibrary,
+  deleteTemplate as deleteLibraryTemplate,
+} from './plan-templates.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
 const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'plan');
 const PLANS_DIR = join(PROJECT_ROOT, 'plans');
+
+// ─── Flag parsing ────────────────────────────────────────────────────────────
+
+/**
+ * Parse a string of CLI args into { positional, flags }.
+ * Supports --flag value and --flag=value styles. Booleans (no value)
+ * are stored as true.
+ */
+function parseArgs(argv) {
+  const positional = [];
+  const flags = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const eq = a.indexOf('=');
+      if (eq !== -1) {
+        flags[a.slice(2, eq)] = a.slice(eq + 1);
+      } else {
+        const key = a.slice(2);
+        const next = argv[i + 1];
+        if (next != null && !next.startsWith('--')) {
+          flags[key] = next;
+          i++;
+        } else {
+          flags[key] = true;
+        }
+      }
+    } else {
+      positional.push(a);
+    }
+  }
+  return { positional, flags };
+}
 
 // ─── Slug validation ─────────────────────────────────────────────────────────
 
@@ -93,7 +141,56 @@ function readPlanFile(slug, filename) {
 
 // ─── new <slug> flow ─────────────────────────────────────────────────────────
 
-async function createPlan(slug) {
+/**
+ * Resolve the content for a new plan from the template system.
+ * - If template is the string "blank" or null → use plan.mdx.template (the v1 default)
+ * - If template is a built-in name (feature-design, etc.) → use that template
+ * - If template is an absolute path to a .mdx file → use that file
+ * - Otherwise → throw with a helpful error
+ *
+ * Returns the MDX content with {{vars}} already substituted.
+ */
+async function resolveTemplateContent(template, vars) {
+  if (template == null || template === '' || template === 'blank') {
+    const tpl = await readTemplate('plan.mdx.template');
+    return { content: replaceTemplate(tpl, vars), templateName: 'blank', source: 'built-in' };
+  }
+
+  // Absolute path to a user file
+  if (isAbsolute(template) || template.endsWith('.mdx') || template.startsWith('.')) {
+    let p = template;
+    if (!isAbsolute(p)) p = resolve(p);
+    if (existsSync(p)) {
+      const fileContent = readFileSync(p, 'utf-8');
+      return {
+        content: substitute(fileContent, vars),
+        templateName: basename(p).replace(/\.mdx$/, ''),
+        source: 'file',
+      };
+    }
+  }
+
+  // Built-in name
+  const tpl = getTemplate(template);
+  if (!tpl) {
+    const available = getTemplateNames().join(', ');
+    throw new Error(
+      `Unknown template "${template}".\n` +
+      `    Built-in templates: ${available}.\n` +
+      `    Or pass an absolute path to a .mdx file.`
+    );
+  }
+
+  if (tpl.content == null) {
+    // "blank" via getTemplate — same as the default branch
+    const blankTpl = await readTemplate('plan.mdx.template');
+    return { content: replaceTemplate(blankTpl, vars), templateName: 'blank', source: 'built-in' };
+  }
+
+  return { content: substitute(tpl.content, vars), templateName: tpl.name, source: tpl.source };
+}
+
+async function createPlan(slug, { template = null } = {}) {
   const planDir = join(PLANS_DIR, slug);
 
   // Step 1: validate
@@ -121,9 +218,19 @@ async function createPlan(slug) {
     lastEdited: now,
   };
 
-  // Step 5: plan.mdx
-  const mdxTemplate = await readTemplate('plan.mdx.template');
-  const mdxContent = replaceTemplate(mdxTemplate, vars);
+  // Step 5: plan.mdx (from template if --template was given)
+  let mdxContent;
+  let templateName = 'blank';
+  try {
+    const resolved = await resolveTemplateContent(template, vars);
+    mdxContent = resolved.content;
+    templateName = resolved.templateName;
+  } catch (err) {
+    console.error(`  ✗ ${err.message}`);
+    // Clean up the empty plan directory we just created
+    rmSync(planDir, { recursive: true, force: true });
+    return false;
+  }
   writePlanFile(slug, 'plan.mdx', mdxContent);
 
   // Step 6: meta.json
@@ -131,13 +238,16 @@ async function createPlan(slug) {
   const metaContent = replaceTemplate(metaTemplate, vars);
   writePlanFile(slug, 'meta.json', metaContent);
 
-  // Step 7: comments.json
-  writePlanFile(slug, 'comments.json', '[]');
+  // Step 7: comments.json (stored as empty array for comments)
+  writePlanFile(slug, 'comments.json', JSON.stringify([], null, 2));
 
   // Step 8: plan.html (regenerate from template)
   await regenerateHtml(slug);
 
   console.log(`  ✓ Created plan "${title}" (slug: ${slug})`);
+  if (templateName !== 'blank') {
+    console.log(`    Template: ${templateName}`);
+  }
   console.log(`    → ${planDir}`);
 
   return true;
@@ -311,21 +421,33 @@ function showHelp() {
   bizarharness plan <subcommand> [options]
 
   Subcommands:
-    new <slug>       Create a new plan
-    open <slug>      Open an existing plan in the browser
-    list             List all plans
-    delete <slug>    Delete a plan (with confirmation)
-    export <slug>    Export plan.mdx to stdout
-    help             Show this help
+    new <slug> [--template <name>]   Create a new plan (default: blank template)
+    open <slug>                      Open an existing plan in the browser
+    list                             List all plans
+    delete <slug>                    Delete a plan (with confirmation)
+    export <slug>                    Export plan.mdx to stdout
+    templates                        List available plan templates
+    template save <name> <plan-slug> Save a plan as a library template
+    template delete <name>           Delete a user-added library template
+    help                             Show this help
 
   Plans are stored in plans/<slug>/ as:
     - plan.mdx         source content (in git)
     - plan.html        viewer/editor (gitignored)
-    - comments.json    comments (gitignored)
+    - comments.json    comments array (gitignored)
     - meta.json        metadata (in git)
+
+  Built-in templates:
+    blank              Empty starter (the v1 default)
+    feature-design     For designing a new feature
+    bug-investigation  For investigating a bug
+    decision-record    Architecture Decision Record (ADR)
 
   Examples:
     bizarharness plan new my-feature
+    bizarharness plan new auth-v2 --template feature-design
+    bizarharness plan new oops --template bug-investigation
+    bizarharness plan templates
     bizarharness plan open my-feature
     bizarharness plan list
     bizarharness plan export my-feature > my-feature.mdx
@@ -555,10 +677,39 @@ function handleRequest(req, res, slug, planDir, serverPort) {
 // ─── Browser opening ─────────────────────────────────────────────────────────
 
 function openBrowser(url) {
-  const cmd =
-    process.platform === 'darwin' ? 'open' :
-    process.platform === 'win32' ? 'start' : 'xdg-open';
-  spawn(cmd, [url], { detached: true, stdio: 'ignore' }).unref();
+  const platform = process.platform;
+  let cmd, args;
+  if (platform === 'darwin') {
+    cmd = 'open';
+    args = [url];
+  } else if (platform === 'win32') {
+    cmd = 'cmd';
+    args = ['/c', 'start', '""', url];
+  } else {
+    cmd = 'xdg-open';
+    args = [url];
+  }
+
+  // Check if the command exists
+  const which = spawnSync('which', [cmd], { stdio: 'ignore' });
+  if (which.status !== 0) {
+    console.log(`  ℹ Open ${url} in your browser (no ${cmd} available)`);
+    return false;
+  }
+
+  try {
+    const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+    child.on('error', (err) => {
+      console.log(`  ℹ Could not open browser: ${err.message}`);
+      console.log(`  Open manually: ${url}`);
+    });
+    child.unref();
+    return true;
+  } catch (err) {
+    console.log(`  ℹ Could not open browser: ${err.message}`);
+    console.log(`  Open manually: ${url}`);
+    return false;
+  }
 }
 
 // ─── Stdin question helper ───────────────────────────────────────────────────
@@ -588,19 +739,89 @@ function waitForSignal(closeFn) {
 // ─── Main dispatcher ─────────────────────────────────────────────────────────
 
 /**
- * Main entry point. Takes (args, flags) as described in spec.
- * args = positional arguments, flags = named flags (unused for now).
+ * Main entry point. Accepts a flat argv array (or a split {positional, flags}
+ * object). Flag forms supported: --flag value, --flag=value.
+ *
+ * Subcommands:
+ *   new <slug> [--template <name>]
+ *   open <slug>
+ *   list
+ *   delete <slug>
+ *   export <slug>
+ *   templates
+ *   template save <name> <plan-slug>
+ *   template delete <name>
+ *   help
  */
-export async function runPlan(args, flags) {
-  const [subcommand, slug] = args;
+export async function runPlan(argsOrPositional, legacyFlags) {
+  // Normalize the input — accept either a flat argv array (current bin.mjs
+  // style) or an already-parsed { positional, flags } object (test style).
+  let positional;
+  let flags;
+  if (Array.isArray(argsOrPositional)) {
+    const parsed = parseArgs(argsOrPositional);
+    positional = parsed.positional;
+    flags = { ...(legacyFlags || {}), ...parsed.flags };
+  } else if (argsOrPositional && Array.isArray(argsOrPositional.positional)) {
+    positional = argsOrPositional.positional;
+    flags = { ...(legacyFlags || {}), ...(argsOrPositional.flags || {}) };
+  } else {
+    positional = [];
+    flags = legacyFlags || {};
+  }
+
+  // Special-case: "template save <name> <plan-slug>" / "template delete <name>"
+  if (positional[0] === 'template') {
+    const action = positional[1];
+    if (action === 'save') {
+      const name = positional[2];
+      const planSlug = positional[3];
+      if (!name || !planSlug) {
+        console.error('  ✗ Usage: bizarharness plan template save <name> <plan-slug>');
+        return false;
+      }
+      try {
+        const target = saveTemplateToLibrary(name, planSlug);
+        console.log(`  ✓ Saved template "${name}" → ${target}`);
+        return true;
+      } catch (err) {
+        console.error(`  ✗ ${err.message}`);
+        return false;
+      }
+    }
+    if (action === 'delete' || action === 'rm') {
+      const name = positional[2];
+      if (!name) {
+        console.error('  ✗ Usage: bizarharness plan template delete <name>');
+        return false;
+      }
+      try {
+        const removed = deleteLibraryTemplate(name);
+        console.log(`  ✓ Removed template "${name}" from library (${removed})`);
+        return true;
+      } catch (err) {
+        console.error(`  ✗ ${err.message}`);
+        return false;
+      }
+    }
+    if (action === 'list' || action === undefined) {
+      printTemplates();
+      return true;
+    }
+    console.error(`  ✗ Unknown template action: "${action}"`);
+    console.error('    Use: save <name> <plan-slug>, delete <name>, or list');
+    return false;
+  }
+
+  const [subcommand, slug] = positional;
 
   switch (subcommand) {
     case 'new': {
       if (!slug) {
-        console.error('  ✗ Usage: bizarharness plan new <slug>');
+        console.error('  ✗ Usage: bizarharness plan new <slug> [--template <name>]');
         return false;
       }
-      const created = await createPlan(slug);
+      const created = await createPlan(slug, { template: flags.template || null });
       if (!created) return false;
       // Start server and open browser
       return await openPlan(slug);
@@ -632,6 +853,11 @@ export async function runPlan(args, flags) {
         return false;
       }
       return await exportPlan(slug);
+    }
+
+    case 'templates': {
+      printTemplates();
+      return true;
     }
 
     case 'help':

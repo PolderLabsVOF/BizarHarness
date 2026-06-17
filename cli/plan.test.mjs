@@ -416,4 +416,288 @@ describe('Local HTTP server', () => {
   });
 });
 
+// ── Template library tests ─────────────────────────────────────────────────────
+// Tests for plan-templates.mjs — getTemplate, getTemplateNames, printTemplates, etc.
+
+import {
+  getTemplate,
+  getTemplateNames,
+  listTemplates,
+  printTemplates,
+  substitute,
+  buildVars,
+} from './plan-templates.mjs';
+
+describe('Template library — getTemplate', () => {
+  test('getTemplate("feature-design") returns content', () => {
+    const tpl = getTemplate('feature-design');
+    assert.ok(tpl, 'should return a template object');
+    assert.equal(tpl.name, 'feature-design');
+    assert.ok(tpl.description, 'should have a description');
+    assert.ok(tpl.content, 'should have non-null content');
+    assert.ok(tpl.content.includes('Feature:'), 'content should contain title placeholder');
+    assert.ok(tpl.content.includes('{{title}}'), 'content should have {{title}} variable');
+    assert.ok(['built-in', 'library'].includes(tpl.source), 'source should be valid');
+  });
+
+  test('getTemplate("bug-investigation") returns content', () => {
+    const tpl = getTemplate('bug-investigation');
+    assert.ok(tpl, 'should return a template object');
+    assert.ok(tpl.content, 'should have non-null content');
+    assert.ok(tpl.content.includes('Bug:'), 'content should reference bug theme');
+  });
+
+  test('getTemplate("decision-record") returns content', () => {
+    const tpl = getTemplate('decision-record');
+    assert.ok(tpl, 'should return a template object');
+    assert.ok(tpl.content, 'should have non-null content');
+    assert.ok(tpl.content.includes('Decision:'), 'content should reference ADR theme');
+  });
+
+  test('getTemplate("blank") returns null content', () => {
+    const tpl = getTemplate('blank');
+    assert.ok(tpl, 'should return a template object for blank');
+    assert.equal(tpl.name, 'blank');
+    assert.strictEqual(tpl.content, null, 'blank template should have null content');
+    assert.equal(tpl.source, 'built-in');
+  });
+
+  test('getTemplate("nonexistent") returns null', () => {
+    assert.strictEqual(getTemplate('nonexistent'), null);
+  });
+
+  test('getTemplate("") returns null', () => {
+    assert.strictEqual(getTemplate(''), null);
+  });
+
+  test('getTemplate(null) returns null', () => {
+    assert.strictEqual(getTemplate(null), null);
+  });
+
+  test('getTemplate is case-insensitive', () => {
+    const tpl = getTemplate('FEATURE-DESIGN');
+    assert.ok(tpl, 'uppercase name should still match');
+    assert.equal(tpl.name, 'feature-design');
+  });
+});
+
+describe('Template library — getTemplateNames', () => {
+  test('includes all 4 built-in names', () => {
+    const names = getTemplateNames();
+    assert.ok(Array.isArray(names));
+    assert.ok(names.includes('blank'), 'should include blank');
+    assert.ok(names.includes('feature-design'), 'should include feature-design');
+    assert.ok(names.includes('bug-investigation'), 'should include bug-investigation');
+    assert.ok(names.includes('decision-record'), 'should include decision-record');
+    assert.equal(names.length, 4, 'should have exactly 4 built-in names');
+  });
+
+  test('names are sorted alphabetically', () => {
+    const names = getTemplateNames();
+    const sorted = [...names].sort();
+    assert.deepEqual(names, sorted, 'names should already be sorted');
+  });
+});
+
+describe('Template library — listTemplates', () => {
+  test('returns array with name, description, source for each', () => {
+    const all = listTemplates();
+    assert.ok(Array.isArray(all));
+    assert.ok(all.length >= 4, 'should have at least 4 templates');
+    for (const t of all) {
+      assert.ok(t.name, `template should have a name (got ${JSON.stringify(t)})`);
+      assert.ok(t.description, `template "${t.name}" should have a description`);
+      assert.ok(['built-in', 'library'].includes(t.source), `template "${t.name}" should have valid source`);
+    }
+  });
+});
+
+describe('Template library — printTemplates', () => {
+  test('writes output to console (capture stdout)', () => {
+    const logs = [];
+    const origLog = console.log;
+    console.log = (...args) => logs.push(args.join(' '));
+
+    printTemplates();
+
+    console.log = origLog;
+
+    assert.ok(logs.length > 0, 'should have logged something');
+    const output = logs.join('\n');
+    assert.ok(output.includes('feature-design'), 'output should mention feature-design');
+    assert.ok(output.includes('bug-investigation'), 'output should mention bug-investigation');
+    assert.ok(output.includes('decision-record'), 'output should mention decision-record');
+    assert.ok(output.includes('blank'), 'output should mention blank');
+    assert.ok(output.includes('--template'), 'output should mention --template flag');
+  });
+});
+
+describe('Template library — substitute', () => {
+  test('replaces {{title}} and {{slug}} in content', () => {
+    const content = '# {{title}}\n\nSlug: {{slug}}';
+    const result = substitute(content, { title: 'My Feature', slug: 'my-feature' });
+    assert.equal(result, '# My Feature\n\nSlug: my-feature');
+  });
+
+  test('leaves unknown variables as-is', () => {
+    const content = 'Hello {{name}}';
+    const result = substitute(content, {});
+    assert.equal(result, 'Hello {{name}}');
+  });
+
+  test('replaces all occurrences of the same variable', () => {
+    const content = '{{x}}-{{x}}-{{x}}';
+    const result = substitute(content, { x: 'foo' });
+    assert.equal(result, 'foo-foo-foo');
+  });
+
+  test('handles empty content', () => {
+    assert.equal(substitute('', { a: 'b' }), '');
+  });
+
+  test('handles empty variables', () => {
+    assert.equal(substitute('hello', {}), 'hello');
+  });
+});
+
+describe('Template library — buildVars', () => {
+  test('builds standard variable set', () => {
+    const vars = buildVars({ slug: 'my-feature', title: 'My Feature' });
+    assert.equal(vars.title, 'My Feature');
+    assert.equal(vars.slug, 'my-feature');
+    assert.ok(vars.author, 'author should be set');
+    assert.ok(vars.created, 'created should be set');
+    assert.ok(vars.lastEdited, 'lastEdited should be set');
+    assert.equal(vars.lastEdited, vars.created, 'created and lastEdited should match for a new plan');
+  });
+
+  test('auto-generates title from slug when not provided', () => {
+    const vars = buildVars({ slug: 'my-feature' });
+    assert.equal(vars.title, 'my-feature');
+  });
+
+  test('dates are valid ISO strings', () => {
+    const vars = buildVars({ slug: 'test' });
+    const created = new Date(vars.created);
+    assert.ok(created instanceof Date && !isNaN(created), 'created should be a valid date');
+  });
+});
+
+describe('Template library — template content via runPlan', () => {
+  const TEST_SLUG = 'test-tpl-new-' + Date.now();
+
+  afterEach(() => {
+    // Clean up plan directory if created
+    const planDir = join(PLANS_DIR, TEST_SLUG);
+    if (existsSync(planDir)) rmSync(planDir, { recursive: true, force: true });
+  });
+
+  test('runPlan new with invalid template returns false', async () => {
+    const result = await runPlan(
+      ['new', TEST_SLUG, '--template', 'nonexistent-template-name-xyz'],
+      {}
+    );
+    assert.equal(result, false, 'should return false for invalid template');
+
+    // Verify no plan directory was left behind
+    const planDir = join(PLANS_DIR, TEST_SLUG);
+    assert.equal(existsSync(planDir), false, 'should clean up on error');
+  });
+});
+
+// ── Comment regression: createPlan → POST /api/comments ──────────────────────
+// This regression test ensures that a freshly created plan (with comments.json
+// as an empty array []) can receive the first comment via POST without crashing.
+// Previously, createPlan wrote {schemaVersion: 2, threads: []} which caused
+// JSON.parse + .push() to fail on the first comment.
+
+describe('Comment regression: createPlan → POST /api/comments', () => {
+  const TEST_SLUG = 'test-comment-regression-' + Date.now();
+  let serverInfo;
+  let baseUrl;
+
+  afterEach(async () => {
+    if (serverInfo) await serverInfo.close();
+    cleanupPlan(TEST_SLUG);
+  });
+
+  test('first comment on freshly created plan works (array shape)', async () => {
+    // Create a plan directory — replicating what createPlan() does after the fix
+    const planDir = join(PLANS_DIR, TEST_SLUG);
+    mkdirSync(planDir, { recursive: true });
+
+    const now = new Date().toISOString();
+    const meta = {
+      title: 'Comment Regression Test',
+      slug: TEST_SLUG,
+      status: 'draft',
+      author: 'tester',
+      created: now,
+      lastEdited: now,
+    };
+    writeFileSync(join(planDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
+    writeFileSync(join(planDir, 'plan.mdx'), '# Comment Regression Test\n\nTest.\n', 'utf-8');
+    // Write as [] — same shape as the fixed createPlan() now produces
+    writeFileSync(join(planDir, 'comments.json'), '[]', 'utf-8');
+
+    // Start server (port 0 = OS-assigned)
+    serverInfo = await startServer(TEST_SLUG, planDir, 0);
+    baseUrl = `http://127.0.0.1:${serverInfo.port}`;
+
+    // POST a comment — this is the path that crashed before the fix
+    const res = await fetch(`${baseUrl}/api/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectionId: 'regression-test',
+        text: 'First comment on a fresh plan',
+        author: 'test-gate',
+      }),
+    });
+    assert.equal(res.status, 200, 'POST should succeed without crashing');
+
+    // Verify the comment was saved by re-reading the file
+    const updated = JSON.parse(readFileSync(join(planDir, 'comments.json'), 'utf-8'));
+    assert.equal(Array.isArray(updated), true, 'comments should be an array');
+    assert.equal(updated.length, 1, 'should have exactly 1 comment');
+    assert.equal(updated[0].sectionId, 'regression-test');
+    assert.equal(updated[0].text, 'First comment on a fresh plan');
+    assert.equal(updated[0].author, 'test-gate');
+
+    // Verify the file is still valid JSON
+    assert.doesNotThrow(() => JSON.parse(readFileSync(join(planDir, 'comments.json'), 'utf-8')));
+
+    // Verify GET returns the comments array correctly
+    const getRes = await fetch(`${baseUrl}/api/comments`);
+    assert.equal(getRes.status, 200);
+    const getData = await getRes.json();
+    assert.equal(Array.isArray(getData), true);
+    assert.equal(getData.length, 1);
+
+    // Verify PUT replaces the array cleanly
+    const replacement = [
+      {
+        id: 'replaced',
+        sectionId: 'intro',
+        text: 'Replaced comment',
+        author: 'test',
+        created: new Date().toISOString(),
+      },
+    ];
+    const putRes = await fetch(`${baseUrl}/api/comments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(replacement),
+    });
+    assert.equal(putRes.status, 200);
+
+    const afterPut = JSON.parse(readFileSync(join(planDir, 'comments.json'), 'utf-8'));
+    assert.equal(Array.isArray(afterPut), true);
+    assert.equal(afterPut.length, 1);
+    assert.equal(afterPut[0].id, 'replaced');
+  });
+});
+
+// ── End of template tests ──────────────────────────────────────────────────────
+
 console.log('  plan.mjs tests loaded — run with: node --test cli/plan.test.mjs');

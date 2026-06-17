@@ -1,0 +1,19 @@
+# Exclude Vidarr (GPT-5.5) — not shipped by default
+config/agents/vidarr.md
+
+# Exclude test files from npm tarball
+cli/*.test.mjs
+
+# Internal design docs (not for npm)
+.bizar/
+
+# Project plans (user data, not package)
+plans/
+
+# GitHub wiki (lives on GitHub)
+wiki/
+
+# Standard npmignore
+node_modules/
+*.log
+.DS_Store
