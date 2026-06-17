@@ -7,6 +7,7 @@ import { runInstaller, runPostInstall } from './install.mjs';
 import { runAudit } from './audit.mjs';
 import { runInit } from './init.mjs';
 import { runExport } from './export.mjs';
+import runPlan from './plan.mjs';
 
 const args = process.argv.slice(2);
 
@@ -16,11 +17,12 @@ function showHelp() {
 
   Usage:
     bizarharness                  Run interactive installer
-    bizarharness audit            Run security audit on agent configuration
-    bizarharness init             Initialize .bizar/ in current project
+    bizarharness audit           Run security audit on agent configuration
+    bizarharness init            Initialize .bizar/ in current project
     bizarharness export [target]  Export agents/rules to another harness (claude|cursor|opencode)
-    bizarharness test-gate        Detect & run the project's test suite
-    bizarharness --help           Show this help
+    bizarharness plan <subcommand> Manage visual plans (new, open, list, delete, export)
+    bizarharness test-gate       Detect & run the project's test suite
+    bizarharness --help          Show this help
 
   Install:
     npm install -g bizarharness   Install globally, then run 'bizarharness'
@@ -77,6 +79,9 @@ if (args.includes('--postinstall')) {
   await runExport(target);
 } else if (args[0] === 'test-gate') {
   await runTestGate();
+} else if (args[0] === 'plan') {
+  const planArgs = args.slice(1); // ['new', 'my-feature'] or ['list'], etc.
+  await runPlan(planArgs, {});
 } else {
   await runInstaller();
 }

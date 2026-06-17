@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}} — Bizar Plan</title>
+  <style>
+    /* ============================================================
+       Theme tokens
+       ============================================================ */
+    :root {
+      --color-bg: #ffffff;
+      --color-text: #1a1a1a;
+      --color-muted: #6b7280;
+      --color-border: #e5e7eb;
+      --color-accent: #3b82f6;
+      --color-accent-hover: #2563eb;
+      --color-code-bg: #f3f4f6;
+      --color-table-stripe: #f9fafb;
+      --color-card-bg: #ffffff;
+      --color-card-shadow: rgba(0, 0, 0, 0.06);
+      --color-blockquote-border: #e5e7eb;
+      --color-button-text: #1a1a1a;
+      --color-primary-text: #ffffff;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #0f172a;
+        --color-text: #e2e8f0;
+        --color-muted: #94a3b8;
+        --color-border: #334155;
+        --color-accent: #60a5fa;
+        --color-accent-hover: #93c5fd;
+        --color-code-bg: #1e293b;
+        --color-table-stripe: #1e293b;
+        --color-card-bg: #1e293b;
+        --color-card-shadow: rgba(0, 0, 0, 0.4);
+        --color-blockquote-border: #334155;
+        --color-button-text: #e2e8f0;
+        --color-primary-text: #0f172a;
+      }
+    }
+
+    /* ============================================================
+       Base
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 6rem;
+    }
+
+    h1 { font-size: 2em; line-height: 1.2; margin: 0 0 0.5rem; }
+    h2 { font-size: 1.4em; line-height: 1.3; margin: 1.5rem 0 0.75rem; }
+    h3 { font-size: 1.2em; margin: 1.25rem 0 0.5rem; }
+    h4, h5, h6 { margin: 1rem 0 0.5rem; }
+    p { margin: 0.75rem 0; }
+
+    a { color: var(--color-accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.9em;
+      background: var(--color-code-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-family: var(--font-mono);
+      background: var(--color-code-bg);
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code { background: none; padding: 0; }
+
+    ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+    li { margin: 0.25rem 0; }
+
+    blockquote {
+      border-left: 3px solid var(--color-blockquote-border);
+      margin: 1rem 0;
+      padding: 0.25rem 0 0.25rem 1rem;
+      color: var(--color-muted);
+    }
+
+    hr { border: 0; border-top: 1px solid var(--color-border); margin: 2rem 0; }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+    }
+    th, td {
+      border: 1px solid var(--color-border);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+    th { background: var(--color-code-bg); font-weight: 600; }
+    tbody tr:nth-child(even) { background: var(--color-table-stripe); }
+
+    /* ============================================================
+       Header
+       ============================================================ */
+    header.plan-header {
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .meta {
+      color: var(--color-muted);
+      font-size: 0.9em;
+      margin: 0.25rem 0 1rem;
+    }
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+
+    /* ============================================================
+       Buttons
+       ============================================================ */
+    button {
+      font: inherit;
+      cursor: pointer;
+      border: 1px solid var(--color-border);
+      background: var(--color-card-bg);
+      color: var(--color-button-text);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    button:hover { background: var(--color-code-bg); }
+    button:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+    button.primary {
+      background: var(--color-accent);
+      color: var(--color-primary-text);
+      border-color: var(--color-accent);
+    }
+    button.primary:hover {
+      background: var(--color-accent-hover);
+      border-color: var(--color-accent-hover);
+    }
+    button[hidden] { display: none; }
+
+    /* ============================================================
+       Table of contents
+       ============================================================ */
+    .toc {
+      position: sticky;
+      top: 0;
+      background: var(--color-bg);
+      z-index: 50;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--color-border);
+      margin: 0 -1.5rem 2rem;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+    .toc-title {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-muted);
+      margin: 0 0 0.5rem;
+      font-weight: 600;
+    }
+    .toc ol { margin: 0; padding-left: 1.5rem; }
+    .toc a { color: var(--color-text); }
+    .toc a:hover { color: var(--color-accent); }
+
+    /* ============================================================
+       Sections
+       ============================================================ */
+    main section {
+      border-left: 4px solid var(--color-accent);
+      padding-left: 1.5rem;
+      margin-bottom: 2.5rem;
+      scroll-margin-top: 5rem;
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .section-header h2 { margin: 0; }
+    .comment-btn {
+      font-size: 0.85em;
+      padding: 0.3rem 0.7rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .comment-btn .count {
+      font-weight: 600;
+      margin-left: 0.25rem;
+    }
+    .comment-btn.has-comments {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+    .comment-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .section-editor {
+      width: 100%;
+      min-height: 200px;
+      font-family: var(--font-mono);
+      font-size: 0.9em;
+      background: var(--color-code-bg);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      resize: vertical;
+      line-height: 1.5;
+      margin: 0.5rem 0;
+    }
+
+    body[data-mode="edit"] .comment-btn { display: none; }
+
+    /* ============================================================
+       Footer (save/discard in edit mode)
+       ============================================================ */
+    footer.editor-footer {
+      position: sticky;
+      bottom: 0;
+      background: var(--color-bg);
+      border-top: 1px solid var(--color-border);
+      padding: 1rem 0;
+      margin: 2rem -1.5rem 0;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+      display: none;
+      gap: 0.5rem;
+      z-index: 40;
+    }
+    body[data-mode="edit"] footer.editor-footer { display: flex; }
+
+    /* ============================================================
+       Comment side panel
+       ============================================================ */
+    .comment-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 420px;
+      max-width: 100vw;
+      height: 100vh;
+      background: var(--color-card-bg);
+      box-shadow: -2px 0 12px var(--color-card-shadow);
+      transform: translateX(100%);
+      transition: transform 0.25s ease-out;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .comment-panel.open { transform: translateX(0); }
+
+    .comment-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .comment-panel-header h3 { margin: 0; font-size: 1.05em; }
+    #close-comment-panel {
+      background: transparent;
+      border: 0;
+      font-size: 1.5em;
+      line-height: 1;
+      padding: 0.25rem 0.5rem;
+      color: var(--color-muted);
+    }
+    #close-comment-panel:hover { color: var(--color-text); background: transparent; }
+
+    #comment-list {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+    }
+    .comment {
+      background: var(--color-code-bg);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .comment-meta {
+      font-size: 0.8em;
+      color: var(--color-muted);
+      margin-bottom: 0.35rem;
+    }
+    .comment-text {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .empty {
+      color: var(--color-muted);
+      text-align: center;
+      padding: 2rem 1rem;
+      font-style: italic;
+    }
+    .comment-form {
+      border-top: 1px solid var(--color-border);
+      padding-top: 1rem;
+    }
+    .comment-form textarea {
+      width: 100%;
+      min-height: 80px;
+      font: inherit;
+      background: var(--color-bg);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 0.5rem;
+      resize: vertical;
+      margin-bottom: 0.5rem;
+    }
+    .comment-form-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .comment-form-actions .hint {
+      font-size: 0.8em;
+      color: var(--color-muted);
+      margin-left: auto;
+    }
+
+    /* ============================================================
+       Responsive
+       ============================================================ */
+    @media (max-width: 600px) {
+      body { padding: 1rem; }
+      h1 { font-size: 1.6em; }
+      h2 { font-size: 1.2em; }
+      .comment-panel { width: 100%; }
+      main section { padding-left: 1rem; }
+      .toc, footer.editor-footer { margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; }
+    }
+  </style>
+</head>
+<body data-mode="view">
+  <!-- Raw markdown source (CLI escapes `</script>` for safety) -->
+  <template id="plan-source">{{planMarkdown}}</template>
+
+  <header class="plan-header">
+    <h1 id="header-title">{{title}}</h1>
+    <div class="meta" id="header-meta">
+      Slug: {{slug}} · Status: {{status}} · Created: {{created}} · Last edited: {{lastEdited}} · Author: {{author}}
+    </div>
+    <div class="header-actions">
+      <button id="edit-toggle" type="button" title="Edit plan content">✏️ Edit</button>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <p class="toc-title">Contents</p>
+    <ol id="toc-list"></ol>
+  </nav>
+
+  <main id="main"></main>
+
+  <footer class="editor-footer">
+    <button id="save-btn" type="button" class="primary" title="Save changes">💾 Save</button>
+    <button id="discard-btn" type="button" title="Discard changes">↩️ Discard</button>
+  </footer>
+
+  <aside id="comment-panel" class="comment-panel" aria-hidden="true">
+    <div class="comment-panel-header">
+      <h3>Comments on <span id="comment-section-title"></span></h3>
+      <button id="close-comment-panel" type="button" aria-label="Close comments">×</button>
+    </div>
+    <div id="comment-list"></div>
+    <div class="comment-form">
+      <textarea id="new-comment" placeholder="Add a comment…"></textarea>
+      <div class="comment-form-actions">
+        <button id="add-comment-btn" type="button" class="primary">Add</button>
+        <span class="hint">⌘/Ctrl+Enter</span>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ============================================================
+      // Embedded state (CLI bakes these in via string replacement)
+      // ============================================================
+      // The CLI bakes in placeholders at this point. The plan-placeholder
+      // is documented as "the plan as a JSON string". The CLI may send it
+      // as either a JSON-encoded string (JSON.stringify of the raw mdx) or
+      // a structured object ({ markdown: "..." }). We handle both.
+      // (We avoid using the literal placeholder names in comments because
+      //  the raw-markdown placeholder contains real newlines that would
+      //  break single-line // comments.)
+      var PLAN_RAW = {{planJson}};
+      var COMMENTS_JSON = {{commentsJson}};
+      var META_JSON = {{metaJson}};
+
+      function resolvePlanMarkdown(planRaw) {
+        if (planRaw == null) return '';
+        if (typeof planRaw === 'string') return planRaw;
+        if (typeof planRaw === 'object' && typeof planRaw.markdown === 'string') {
+          return planRaw.markdown;
+        }
+        return '';
+      }
+
+      // Defense: if the raw-markdown placeholder wasn't substituted by the
+      // CLI, the <template id="plan-source"> content still contains the
+      // literal placeholder name. We detect that and skip it as a fallback
+      // source — the primary source is the plan-placeholder above.
+      var rawMarkdownFromTemplate = '';
+      var tmpl = document.getElementById('plan-source');
+      if (tmpl && tmpl.content) {
+        var tplText = tmpl.content.textContent || '';
+        // If the template content contains "{" or "}" placeholders, it
+        // wasn't substituted — skip it. Otherwise treat it as raw markdown.
+        if (tplText && tplText.indexOf('PLAN_MARKDOWN_PLACEHOLDER') === -1 &&
+            !/\{[\{][^}]+[\}]\}/.test(tplText)) {
+          rawMarkdownFromTemplate = tplText;
+        }
+      }
+
+      var state = {
+        plan: parsePlan(resolvePlanMarkdown(PLAN_RAW) || rawMarkdownFromTemplate || ''),
+        comments: Array.isArray(COMMENTS_JSON) ? COMMENTS_JSON : [],
+        meta: META_JSON || {},
+        activeSectionId: null
+      };
+
+      // ============================================================
+      // Markdown renderer (hand-rolled, no CDN dependency)
+      // Supports: headers, lists, code, bold, italic, links, tables,
+      //           blockquotes, horizontal rules
+      // ============================================================
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function renderInline(text) {
+        var s = escapeHtml(text);
+        // Inline code first (preserve its contents from further processing)
+        s = s.replace(/`([^`]+)`/g, function (_, code) {
+          return '<code>' + code + '</code>';
+        });
+        // Bold (**text**)
+        s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+        // Italic (*text*) — must not match inside <strong> tags, so we
+        // anchor on a non-asterisk boundary. Single-line only.
+        s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+        // Links [text](url) — reject javascript: and data: URLs for safety
+        s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (_, label, url) {
+          var safe = /^(https?:|mailto:|#|\/)/i.test(url) ? url : '#';
+          return '<a href="' + safe + '" rel="noopener">' + label + '</a>';
+        });
+        return s;
+      }
+
+      function isBlockStart(line) {
+        return /^#{1,6}\s+/.test(line)
+          || /^[-*]\s+/.test(line)
+          || /^\d+\.\s+/.test(line)
+          || /^```/.test(line)
+          || /^>\s?/.test(line)
+          || /^---+\s*$/.test(line);
+      }
+
+      function splitTableRow(line) {
+        var s = line.trim();
+        if (s.charAt(0) === '|') s = s.slice(1);
+        if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+        return s.split('|').map(function (c) { return c.trim(); });
+      }
+
+      function renderMarkdown(md) {
+        if (md == null) return '';
+        var lines = String(md).replace(/\r\n/g, '\n').split('\n');
+        var out = [];
+        var i = 0;
+
+        while (i < lines.length) {
+          var line = lines[i];
+
+          // Fenced code block
+          if (line.indexOf('```') === 0) {
+            var lang = line.slice(3).trim();
+            var codeLines = [];
+            i++;
+            while (i < lines.length && lines[i].indexOf('```') !== 0) {
+              codeLines.push(lines[i]);
+              i++;
+            }
+            i++; // skip closing fence (or past EOF)
+            var langAttr = lang ? ' class="lang-' + escapeHtml(lang) + '"' : '';
+            out.push('<pre><code' + langAttr + '>' + escapeHtml(codeLines.join('\n')) + '</code></pre>');
+            continue;
+          }
+
+          // ATX headers (# to ######)
+          var headerMatch = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+          if (headerMatch) {
+            var level = headerMatch[1].length;
+            out.push('<h' + level + '>' + renderInline(headerMatch[2]) + '</h' + level + '>');
+            i++;
+            continue;
+          }
+
+          // Horizontal rule
+          if (/^-{3,}\s*$/.test(line) || /^\*{3,}\s*$/.test(line)) {
+            out.push('<hr>');
+            i++;
+            continue;
+          }
+
+          // Blockquote (collect consecutive)
+          if (/^>\s?/.test(line)) {
+            var quoteLines = [];
+            while (i < lines.length && /^>\s?/.test(lines[i])) {
+              quoteLines.push(lines[i].replace(/^>\s?/, ''));
+              i++;
+            }
+            out.push('<blockquote>' + renderInline(quoteLines.join('\n')) + '</blockquote>');
+            continue;
+          }
+
+          // Unordered list (collect consecutive items)
+          if (/^[-*]\s+/.test(line)) {
+            var ulItems = [];
+            while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+              ulItems.push(lines[i].replace(/^[-*]\s+/, ''));
+              i++;
+            }
+            out.push('<ul>' + ulItems.map(function (t) {
+              return '<li>' + renderInline(t) + '</li>';
+            }).join('') + '</ul>');
+            continue;
+          }
+
+          // Ordered list (collect consecutive items)
+          if (/^\d+\.\s+/.test(line)) {
+            var olItems = [];
+            while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+              olItems.push(lines[i].replace(/^\d+\.\s+/, ''));
+              i++;
+            }
+            out.push('<ol>' + olItems.map(function (t) {
+              return '<li>' + renderInline(t) + '</li>';
+            }).join('') + '</ol>');
+            continue;
+          }
+
+          // Table: header row, separator row, then body rows
+          if (line.indexOf('|') !== -1 && i + 1 < lines.length) {
+            var sep = lines[i + 1].trim();
+            if (/^\|?[\s:|-]+\|?$/.test(sep) && sep.indexOf('-') !== -1) {
+              var headerCells = splitTableRow(line);
+              i += 2;
+              var bodyRows = [];
+              while (i < lines.length && lines[i].indexOf('|') !== -1 && lines[i].trim() !== '') {
+                bodyRows.push(splitTableRow(lines[i]));
+                i++;
+              }
+              var thead = '<thead><tr>' + headerCells.map(function (c) {
+                return '<th>' + renderInline(c) + '</th>';
+              }).join('') + '</tr></thead>';
+              var tbody = '<tbody>' + bodyRows.map(function (r) {
+                return '<tr>' + r.map(function (c) {
+                  return '<td>' + renderInline(c) + '</td>';
+                }).join('') + '</tr>';
+              }).join('') + '</tbody>';
+              out.push('<table>' + thead + tbody + '</table>');
+              continue;
+            }
+          }
+
+          // Empty line
+          if (line.trim() === '') {
+            i++;
+            continue;
+          }
+
+          // Paragraph: collect lines until blank or block start
+          var paraLines = [];
+          while (i < lines.length
+                 && lines[i].trim() !== ''
+                 && !isBlockStart(lines[i])) {
+            paraLines.push(lines[i]);
+            i++;
+          }
+          if (paraLines.length > 0) {
+            out.push('<p>' + renderInline(paraLines.join(' ')) + '</p>');
+          } else {
+            i++;
+          }
+        }
+
+        return out.join('\n');
+      }
+
+      // ============================================================
+      // Plan parsing & serialization
+      // ============================================================
+      function slugify(text) {
+        var s = String(text)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .replace(/-{2,}/g, '-');
+        return s || 'section';
+      }
+
+      function parsePlan(markdown) {
+        var lines = String(markdown == null ? '' : markdown)
+          .replace(/\r\n/g, '\n')
+          .split('\n');
+        var result = { title: null, preamble: '', sections: [] };
+
+        var current = null;
+        var preambleLines = [];
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+
+          // First-level title (# Title) — only the first one, only before any section
+          if (!result.title && /^#\s+/.test(line) && !current) {
+            result.title = line.replace(/^#\s+/, '').trim();
+            continue;
+          }
+
+          // Section header (## Title)
+          if (/^##\s+/.test(line)) {
+            if (current) {
+              result.sections.push(current);
+            } else if (preambleLines.length > 0) {
+              result.preamble = preambleLines.join('\n').trim();
+            }
+            current = {
+              title: line.replace(/^##\s+/, '').trim(),
+              body: '',
+              id: null
+            };
+            continue;
+          }
+
+          if (current) {
+            current.body += (current.body ? '\n' : '') + line;
+          } else {
+            preambleLines.push(line);
+          }
+        }
+
+        if (current) {
+          result.sections.push(current);
+        } else if (preambleLines.length > 0) {
+          result.preamble = preambleLines.join('\n').trim();
+        }
+
+        // Trim trailing whitespace from each body
+        for (var j = 0; j < result.sections.length; j++) {
+          result.sections[j].body = result.sections[j].body.replace(/\s+$/, '');
+        }
+
+        // Assign unique kebab-case IDs
+        var seen = Object.create(null);
+        for (var k = 0; k < result.sections.length; k++) {
+          var base = slugify(result.sections[k].title);
+          var id = base;
+          var n = 2;
+          while (seen[id]) {
+            id = base + '-' + n;
+            n++;
+          }
+          seen[id] = true;
+          result.sections[k].id = id;
+        }
+
+        return result;
+      }
+
+      function buildMarkdown(plan) {
+        var parts = [];
+        if (plan.title) parts.push('# ' + plan.title);
+        if (plan.preamble) parts.push(plan.preamble);
+        for (var i = 0; i < plan.sections.length; i++) {
+          var s = plan.sections[i];
+          parts.push('## ' + s.title + '\n\n' + s.body);
+        }
+        return parts.join('\n\n') + '\n';
+      }
+
+      // ============================================================
+      // DOM helpers
+      // ============================================================
+      function $(sel) { return document.querySelector(sel); }
+      function $$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+
+      function formatDate(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return String(iso);
+        return d.toLocaleString();
+      }
+
+      function commentCountFor(sectionId) {
+        var n = 0;
+        for (var i = 0; i < state.comments.length; i++) {
+          if (state.comments[i].sectionId === sectionId) n++;
+        }
+        return n;
+      }
+
+      // ============================================================
+      // Rendering
+      // ============================================================
+      function renderTOC() {
+        var ol = $('#toc-list');
+        ol.innerHTML = '';
+        for (var i = 0; i < state.plan.sections.length; i++) {
+          var sec = state.plan.sections[i];
+          var li = document.createElement('li');
+          var a = document.createElement('a');
+          a.href = '#' + sec.id;
+          a.textContent = sec.title;
+          li.appendChild(a);
+          ol.appendChild(li);
+        }
+      }
+
+      function renderSections() {
+        var main = $('#main');
+        main.innerHTML = '';
+        for (var i = 0; i < state.plan.sections.length; i++) {
+          var sec = state.plan.sections[i];
+          var sectionEl = document.createElement('section');
+          sectionEl.id = sec.id;
+          sectionEl.dataset.sectionId = sec.id;
+
+          var header = document.createElement('div');
+          header.className = 'section-header';
+
+          var h2 = document.createElement('h2');
+          h2.textContent = sec.title;
+          header.appendChild(h2);
+
+          var btn = document.createElement('button');
+          btn.className = 'comment-btn';
+          btn.type = 'button';
+          btn.dataset.sectionId = sec.id;
+          btn.setAttribute('aria-label', 'View comments on ' + sec.title);
+          var count = commentCountFor(sec.id);
+          btn.innerHTML = '💬 <span class="count">' + count + '</span>';
+          if (count > 0) btn.classList.add('has-comments');
+          (function (sid) {
+            btn.addEventListener('click', function () { openCommentPanel(sid); });
+          })(sec.id);
+          header.appendChild(btn);
+
+          sectionEl.appendChild(header);
+
+          var content = document.createElement('div');
+          content.className = 'content';
+          content.dataset.sectionId = sec.id;
+          content.innerHTML = renderMarkdown(sec.body);
+          sectionEl.appendChild(content);
+
+          main.appendChild(sectionEl);
+        }
+      }
+
+      function updateCommentCounts() {
+        $$('.comment-btn').forEach(function (btn) {
+          var id = btn.dataset.sectionId;
+          var count = commentCountFor(id);
+          var span = btn.querySelector('.count');
+          if (span) span.textContent = String(count);
+          btn.classList.toggle('has-comments', count > 0);
+        });
+      }
+
+      // ============================================================
+      // Edit mode
+      // ============================================================
+      function enterEditMode() {
+        document.body.dataset.mode = 'edit';
+        $('#edit-toggle').hidden = true;
+        $('#save-btn').hidden = false;
+        $('#discard-btn').hidden = false;
+
+        for (var i = 0; i < state.plan.sections.length; i++) {
+          var sec = state.plan.sections[i];
+          var content = document.querySelector('.content[data-section-id="' + sec.id + '"]');
+          if (!content) continue;
+          var ta = document.createElement('textarea');
+          ta.className = 'section-editor';
+          ta.dataset.sectionId = sec.id;
+          ta.value = sec.body;
+          ta.rows = Math.max(5, sec.body.split('\n').length + 2);
+          ta.setAttribute('aria-label', 'Edit ' + sec.title);
+          content.parentNode.replaceChild(ta, content);
+        }
+      }
+
+      function exitEditMode() {
+        document.body.dataset.mode = 'view';
+        $('#edit-toggle').hidden = false;
+        $('#save-btn').hidden = true;
+        $('#discard-btn').hidden = true;
+        renderSections();
+      }
+
+      function savePlan() {
+        var textareas = $$('.section-editor');
+        for (var i = 0; i < textareas.length; i++) {
+          var ta = textareas[i];
+          var id = ta.dataset.sectionId;
+          for (var j = 0; j < state.plan.sections.length; j++) {
+            if (state.plan.sections[j].id === id) {
+              state.plan.sections[j].body = ta.value;
+              break;
+            }
+          }
+        }
+
+        var newMarkdown = buildMarkdown(state.plan);
+        var saveBtn = $('#save-btn');
+        var origLabel = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+
+        fetch('/api/plan', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body: newMarkdown
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('Server returned ' + r.status);
+            return fetch('/api/comments', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(state.comments)
+            });
+          })
+          .then(function (r) {
+            if (!r.ok) throw new Error('Server returned ' + r.status);
+            location.reload();
+          })
+          .catch(function (err) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = origLabel;
+            alert('Save failed: ' + err.message);
+          });
+      }
+
+      // ============================================================
+      // Comments
+      // ============================================================
+      function openCommentPanel(sectionId) {
+        state.activeSectionId = sectionId;
+        var sec = null;
+        for (var i = 0; i < state.plan.sections.length; i++) {
+          if (state.plan.sections[i].id === sectionId) { sec = state.plan.sections[i]; break; }
+        }
+        $('#comment-section-title').textContent = sec ? sec.title : sectionId;
+        renderComments(sectionId);
+        $('#new-comment').value = '';
+        var panel = $('#comment-panel');
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        setTimeout(function () { $('#new-comment').focus(); }, 300);
+      }
+
+      function closeCommentPanel() {
+        var panel = $('#comment-panel');
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+        state.activeSectionId = null;
+      }
+
+      function renderComments(sectionId) {
+        var list = $('#comment-list');
+        var items = [];
+        for (var i = 0; i < state.comments.length; i++) {
+          if (state.comments[i].sectionId === sectionId) items.push(state.comments[i]);
+        }
+        items.sort(function (a, b) {
+          return String(a.timestamp || '').localeCompare(String(b.timestamp || ''));
+        });
+
+        if (items.length === 0) {
+          list.innerHTML = '<p class="empty">No comments yet — be the first.</p>';
+          return;
+        }
+
+        list.innerHTML = items.map(function (c) {
+          return '<div class="comment">'
+            + '<div class="comment-meta">' + escapeHtml(c.author || 'Anonymous')
+            + ' · ' + escapeHtml(formatDate(c.timestamp)) + '</div>'
+            + '<div class="comment-text">' + escapeHtml(c.text || '') + '</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      function addComment() {
+        var sectionId = state.activeSectionId;
+        var ta = $('#new-comment');
+        var text = ta.value.trim();
+        if (!sectionId || !text) return;
+
+        var comment = {
+          id: 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+          sectionId: sectionId,
+          text: text,
+          author: (state.meta && state.meta.author) || 'Anonymous',
+          timestamp: new Date().toISOString()
+        };
+
+        var btn = $('#add-comment-btn');
+        btn.disabled = true;
+        btn.textContent = 'Adding…';
+
+        fetch('/api/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(comment)
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('Server returned ' + r.status);
+            state.comments.push(comment);
+            ta.value = '';
+            renderComments(sectionId);
+            updateCommentCounts();
+          })
+          .catch(function (err) {
+            alert('Add comment failed: ' + err.message);
+          })
+          .then(function () {
+            btn.disabled = false;
+            btn.textContent = 'Add';
+          });
+      }
+
+      // ============================================================
+      // Header meta (also reflects META_JSON in JS-land)
+      // ============================================================
+      function renderHeader() {
+        var m = state.meta;
+        var titleText = (m && m.title) || 'Untitled plan';
+        document.title = titleText + ' — Bizar Plan';
+        $('#header-title').textContent = titleText;
+
+        var parts = [];
+        if (m && m.slug) parts.push('Slug: ' + m.slug);
+        if (m && m.status) parts.push('Status: ' + m.status);
+        if (m && m.created) parts.push('Created: ' + formatDate(m.created));
+        if (m && m.lastEdited) parts.push('Last edited: ' + formatDate(m.lastEdited));
+        if (m && m.author) parts.push('Author: ' + m.author);
+        if (parts.length > 0) {
+          $('#header-meta').textContent = parts.join(' · ');
+        }
+      }
+
+      // ============================================================
+      // Init
+      // ============================================================
+      function init() {
+        renderHeader();
+        renderTOC();
+
+        if (state.plan.sections.length === 0) {
+          var empty = document.createElement('section');
+          empty.innerHTML = '<h2>No sections</h2>'
+            + '<p>This plan has no <code>##</code> sections yet. Open it in edit mode and add some.</p>';
+          $('#main').appendChild(empty);
+        } else {
+          renderSections();
+        }
+
+        $('#edit-toggle').addEventListener('click', enterEditMode);
+        $('#save-btn').addEventListener('click', savePlan);
+        $('#discard-btn').addEventListener('click', exitEditMode);
+        $('#close-comment-panel').addEventListener('click', closeCommentPanel);
+        $('#add-comment-btn').addEventListener('click', addComment);
+
+        var newComment = $('#new-comment');
+        newComment.addEventListener('keydown', function (e) {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            addComment();
+          }
+        });
+
+        // Esc closes the comment panel
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && $('#comment-panel').classList.contains('open')) {
+            closeCommentPanel();
+          }
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>

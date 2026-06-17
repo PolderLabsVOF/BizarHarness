@@ -4,7 +4,7 @@ import boxen from 'boxen';
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
 import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands } from './copy.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'mimir.md', 'heimdall.md', 'hermod.md',
@@ -112,6 +112,13 @@ export async function runInstaller() {
 
   if (components.includes('bizar')) {
     await installBizarFolder();
+  }
+
+  if (components.includes('plugin-bizar')) {
+    const result = await installPluginBizar();
+    if (result.errors.length > 0) {
+      console.log(chalk.yellow(`  ⚠ Plugin install: ${result.errors.length} error(s)`));
+    }
   }
 
   // ── Rules, hooks, commands (optional components) ──

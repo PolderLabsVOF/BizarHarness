@@ -1,0 +1,46 @@
+# {{title}}
+
+**Slug:** {{slug}} · **Status:** Draft · **Author:** {{author}} · **Created:** {{created}}
+
+---
+
+## Overview
+
+_A short description of what this plan is about._
+
+## Goals
+
+- [ ] Goal 1
+- [ ] Goal 2
+
+## Non-Goals
+
+- What this plan does **not** cover
+
+## Background
+
+_Context and motivation for this plan._
+
+## Detailed Plan
+
+### Phase 1: Foundation
+
+_First steps._
+
+### Phase 2: Core Implementation
+
+_Main work._
+
+### Phase 3: Validation
+
+_Testing and verification._
+
+## Open Questions
+
+1. _Question 1_
+2. _Question 2_
+
+## References
+
+- [Link 1]
+- [Link 2]

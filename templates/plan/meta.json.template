@@ -1,0 +1,8 @@
+{
+  "title": "{{title}}",
+  "slug": "{{slug}}",
+  "status": "draft",
+  "author": "{{author}}",
+  "created": "{{created}}",
+  "lastEdited": "{{lastEdited}}"
+}

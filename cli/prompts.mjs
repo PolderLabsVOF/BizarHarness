@@ -32,8 +32,10 @@ export async function promptComponents() {
       new inquirer.Separator(),
       { name: 'opencode.json (provider + MCP config)', value: 'opencode-json', checked: true },
       { name: '.bizar/ folder (self-improvement log)', value: 'bizar', checked: true },
+      new inquirer.Separator(),
+      { name: 'Bizar plugin (loop guard, status, handoff signal)', value: 'plugin-bizar', checked: true },
     ],
-    pageSize: 10,
+    pageSize: 16,
     validate(answer) {
       if (answer.length === 0) return 'Select at least one component.';
       return true;
