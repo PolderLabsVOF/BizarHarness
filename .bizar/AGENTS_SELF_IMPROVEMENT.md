@@ -11,6 +11,13 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 ## Log
 
+### 2026-06-17: Created bizar-remote repo from scaffold
+- **Context**: Scaffold had 1 TSX file with backticks in template literal causing parse error
+- **Lesson**: Template literals with inner backticks fail at compile time. Use string concatenation for help text containing backticks.
+- **Pattern**: When TypeScript `noUncheckedIndexedAccess` is on (our default), always guard `array[i]` lookups with `if (!arg) continue` before using `.startsWith()` etc.
+- **Files**: src/cli/bin.ts
+- **Agent**: heimdall
+
 ### 2026-06-16: Created .bizar/ folder
 - **Context**: Centralizing all BizarHarness project data into a single folder
 - **Lesson**: Keeping project root clean — all agent-learning data in one place
@@ -114,3 +121,10 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - Always define interface contracts explicitly in the task prompt when dispatching parallel agents to the same file area. Naming collisions are the #1 cause of merge conflicts in parallel work.
   - The `## Loop Guard Handling` section text must be **byte-identical** across all subagents — verified by SHA256 after the edit. One canonical text, never paraphrased.
   - When writing spec sections, run a self-audit pass after each changelog: check that no test bullet contradicts any lifecycle claim. The v0.3 → v0.3.1 fix was an internal contradiction between §4.5.1 and §12.1 — caught only because Tyr explicitly flagged it.
+
+### 2026-06-17: Template system verification + spawnSync bugfix + test coverage
+- **Context**: Wire template system (plan-templates.mjs) into plan.mjs with --template flag and templates subcommand
+- **Lesson**: The wiring was already fully implemented — all imports, flag parsing, case handling, and help text were present. Only real fix was a pre-existing bug: `spawnSync` was used in `openBrowser()` but only `spawn` was imported from `child_process`.
+- **Pattern**: Always verify the codebase state against task instructions before making changes — the spec may describe already-implemented features. Look for actual bugs (like missing imports) rather than assuming everything needs to be built from scratch.
+- **Files**: cli/plan.mjs, cli/plan.test.mjs
+- **Agent**: heimdall
