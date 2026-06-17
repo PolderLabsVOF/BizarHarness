@@ -60,3 +60,57 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Agents used**: heimdall, thor
 - **Lessons learned**: Skills CLI `skills find` is interactive-only, so agents can't use it programmatically. Instead, agents should use `skills list --json` to check installed skills, and try known repos by domain (e.g., `skills add supabase/agent-skills --all -y` for database work).
 - **Pattern to follow next time**: When adding a CLI tool dependency, first verify which commands work non-interactively before writing protocol steps.
+
+### 2026-06-17: Split dev sandbox into separate `BizarHarness-dev` repo
+- **Task**: User wanted dev-only files (Docker, scripts, dev docs) out of the main BizarHarness repo. Created sibling repo `BizarHarness-dev` and wired bidirectional git remotes.
+- **Files changed**:
+  - Created: `/home/drb0rk/Projects/BizarHarness-dev/{Dockerfile, docker-compose.yml, .dockerignore, .gitignore, README.md, DOCKER_DEV.md, scripts/dev.sh, scripts/dev-clean.sh}`
+  - Removed from main: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `scripts/dev.sh`, `scripts/dev-clean.sh`, `DOCKER_DEV.md`
+  - Main repo `README.md`: added "Development" section pointing to the dev repo
+  - `scripts/dev.sh`: rewrote to use sibling-relative path resolution (`dirname dirname BASH_SOURCE` → `../BizarHarness`)
+- **Agents used**: heimdall (Docker setup), hermod (repo split + remotes), thor (quick agent + name research)
+- **Lessons learned**:
+  - opencode config is **always** merged from global + project + env. There is no "skip global" flag. Only Docker gives true clean-install isolation. For daily dev, harness scripts in a temp dir + symlinks are fast and inherit API keys.
+  - When splitting a repo, copy first, commit, then `git rm` from source. Use local file paths for the remotes (not GitHub URLs) — developer can swap to GitHub when ready.
+  - The dev sandbox's `dev.sh` should validate that the sibling project exists before launching (`test -f $PROJECT_DIR/opencode.json`) so misconfig fails fast.
+- **Pattern to follow next time**: For any opencode config/plugin project, default architecture is two repos — the main (shipped) and a `-dev` sibling (Docker sandbox + dev scripts). Use bidirectional file-path remotes; swap to GitHub URLs when pushing.
+
+### 2026-06-17: Built Bizar opencode plugin (v0.1 → v0.3.1 spec → implementation)
+- **Task**: User wanted loop detection, agent status reporting, and handoff-to-Odin for stuck subagents. Built the `bizar` opencode plugin in 7 source files, 7 test files, 112 tests passing.
+- **Files changed** (under `plugins/bizar/`):
+  - `index.ts` — Plugin entry, hook wiring, init try/catch, per-session mutex
+  - `src/fingerprint.ts` — Canonical key sort, worktree-relative path normalization, sha256 hash
+  - `src/state.ts` — SessionState, StateStore (atomic writes, per-session mutex, 7-day cleanup, corrupt fallback)
+  - `src/report.ts` — LogWriter with 10MB rotation, metadata-only (no args in logs)
+  - `src/loop.ts` — Threshold decision tree (5 warn / 8 escalate / 12 block)
+  - `src/handoff.ts` — 3 static message templates for `experimental.chat.system.transform`
+  - `src/logger.ts` — Thin wrapper over `client.app.log` with BIZAR_LOG_LEVEL
+  - `src/options.ts` — Clamping, secret-dir refusal, env var flags
+  - `scripts/check-forbidden-imports.sh` — CI gate: no `node:dns|net|http|https`
+  - 5 test files, 112 tests, 241 assertions, all green
+  - `README.md` with mandatory `## Limitations` section per spec §15 #4
+- **Files changed** (wiring):
+  - `cli/copy.mjs` — `installPluginBizar()` function (86 lines)
+  - `cli/install.mjs`, `cli/prompts.mjs`, `cli/utils.mjs` — wired as install component
+  - `config/opencode.json` — added `plugin` array with bizar entry + options
+  - `install.sh` — plugin copy section + post-merge jq injection (idempotent)
+- **Files changed** (agent prompts):
+  - All 11 subagent files got byte-identical `## Loop Guard Handling` section (verified via SHA256)
+  - `odin.md` got the longer Odin-specific PROTOCOL wording (recognizes 3 emitted strings + recovery procedure)
+- **Spec files**: `.bizar/plugin-architecture-v0.{1,2,3}.md` (3 versions of the spec, kept for history)
+- **Agents used**: mimir (research x2), thor (quick agent + name research + supporting modules + tests), tyr (spec revisions + core impl + agent prompt updates), heimdall (Docker sandbox + install wiring), hermod (repo split), forseti (3 audit passes)
+- **Lessons learned**:
+  - **Forseti audit pattern works**: 3 spec revisions caught 6 HIGH + 17 MEDIUM + 11 LOW + 5 open questions before any code was written. The single most important catch was the §11.1 recognition pattern mismatch — without the audit, the entire handoff mechanism would have been built on a phantom marker.
+  - **The `__ABS__` global sentinel is a security/precision anti-pattern**. Use `path.relative(worktree, ...)` for in-worktree paths and per-path hash for outside. A global sentinel allows false-positive collisions (different files with same prefix) and false-negative loop-detection bypass.
+  - **`tool.execute.before` does NOT carry the agent name**. Drop per-call agent attribution; track per-session only. Agent identity comes from `chat.message` history.
+  - **Bun is single-threaded but async I/O interleaves** — you need a per-session mutex (chain of pending Promises) to prevent re-entrancy corruption in `tool.execute.after`.
+  - **Use `experimental.chat.system.transform`** for handoff message injection. NOT `chat.message` (which fires for every user message, not just on dispatch) and NOT mutating `output.parts` (risky).
+  - **opencode agent file name IS the TUI display name** — the `name:` frontmatter field is silently ignored. For user-visible function descriptors in agent names, the only viable separator is hyphen (`odin-orchestrator.md`, NOT `odin (orchestrator).md` which would show parens literally). User input needed to decide on naming.
+  - **Per-session mutex is necessary but not free** — `bun test` default 5s timeout can hit if the mutex test is real I/O. Use in-memory locks for unit tests.
+  - **When two parallel agents (Thor + Tyr) both implement `options.ts`**, the second must delete theirs and re-create to match the first's naming. Interface contracts in the task prompt prevent this; explicit naming matters.
+  - **`jq -s '.[0] * .[1]'` does NOT deep-merge arrays** — it REPLACES them. For `install.sh`, after the merge, post-inject the plugin entry to handle the case where the existing config has `plugin: []` that would wipe the template's plugin array.
+- **Pattern to follow next time**:
+  - For any new opencode plugin: 3-phase flow (spec → Forseti audit → parallel impl by Thor+Tyr). Skip audit for trivial plugins (<100 lines, no security implications).
+  - Always define interface contracts explicitly in the task prompt when dispatching parallel agents to the same file area. Naming collisions are the #1 cause of merge conflicts in parallel work.
+  - The `## Loop Guard Handling` section text must be **byte-identical** across all subagents — verified by SHA256 after the edit. One canonical text, never paraphrased.
+  - When writing spec sections, run a self-audit pass after each changelog: check that no test bullet contradicts any lifecycle claim. The v0.3 → v0.3.1 fix was an internal contradiction between §4.5.1 and §12.1 — caught only because Tyr explicitly flagged it.
