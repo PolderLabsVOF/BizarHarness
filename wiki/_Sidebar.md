@@ -28,6 +28,10 @@ Norse-pantheon multi-agent system for opencode.
 - [Contributing](Contributing)
 - [Troubleshooting](Troubleshooting)
 
+## Future
+
+- [Bizar Remote](Bizar-Remote) (preview)
+
 ## Community
 
 - [FAQ](FAQ)
