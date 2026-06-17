@@ -298,6 +298,40 @@ Every task records what was learned to `.bizar/AGENTS_SELF_IMPROVEMENT.md` at th
 
 ---
 
+## 📋 Plans
+
+BizarHarness includes a built-in visual plan editor for drafting architectural decisions, feature designs, and project plans. Plans are stored as MDX source files with an auto-generated HTML viewer/editor.
+
+```bash
+# Create a new plan
+bizarharness plan new my-feature
+
+# Open an existing plan
+bizarharness plan open my-feature
+
+# List all plans
+bizarharness plan list
+
+# Export plan to standalone file
+bizarharness plan export my-feature > my-feature.mdx
+
+# Delete a plan (with confirmation)
+bizarharness plan delete my-feature
+```
+
+Plans are stored in `plans/<slug>/` with four files:
+
+| File | Purpose | In git? |
+|---|---|---|
+| `plan.mdx` | Source content (the plan) | ✓ Yes |
+| `plan.html` | Viewer/editor (auto-generated) | ✗ No |
+| `comments.json` | Section comments | ✗ No |
+| `meta.json` | Title, status, author, timestamps | ✓ Yes |
+
+The HTML viewer runs a tiny local HTTP server (`localhost:4321`) — no network, no sharing. Edit mode toggles all sections to textareas; comments appear in a side panel per section.
+
+---
+
 ## 🤝 Contributing
 
 PRs welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
