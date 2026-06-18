@@ -21,7 +21,7 @@ npx bizarharness
 For an install that sticks:
 
 ```bash
-npm install -g bizarharness
+npm install -g @polderlabs/bizarharness
 bizarharness
 ```
 

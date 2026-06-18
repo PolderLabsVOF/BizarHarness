@@ -1,6 +1,6 @@
 {
-  "name": "@bizarharness/bizar-plugin",
-  "version": "0.1.0",
+  "name": "@polderlabs/bizarharness-plugin",
+  "version": "0.2.0",
   "description": "Bizar opencode plugin — loop detection, status reporting, and handoff signal for subagent activity",
   "type": "module",
   "main": "./index.ts",
@@ -30,5 +30,11 @@
     "@opencode-ai/plugin": "^1.17.7",
     "@types/bun": "latest",
     "typescript": "^5.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.17.0"
   }
 }

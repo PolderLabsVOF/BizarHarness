@@ -116,7 +116,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 
 ## "npm install" warnings about peer dependencies
 
-**Symptom:** `npm install -g bizarharness` prints warnings about peer dependencies.
+**Symptom:** `npm install -g @polderlabs/bizarharness` prints warnings about peer dependencies.
 
 **Cause:** Some BizarHarness dependencies (like `inquirer` v12) require Node 20+. If you're on an older Node, you get warnings.
 

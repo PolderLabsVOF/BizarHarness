@@ -35,7 +35,7 @@ It's especially useful if you:
 npx bizarharness
 
 # Or install globally
-npm install -g bizarharness
+npm install -g @polderlabs/bizarharness
 bizarharness
 ```
 

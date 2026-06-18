@@ -15,7 +15,7 @@
 [![Agents](https://img.shields.io/badge/agents-12-10b981)](#-the-pantheon)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-`npm install bizarharness` · `npx bizarharness`
+`npm install @polderlabs/bizarharness` · `npx bizarharness`
 
 </div>
 
@@ -130,14 +130,14 @@ npx bizarharness
 Or install globally:
 
 ```bash
-npm install -g bizarharness
+npm install -g @polderlabs/bizarharness
 bizarharness
 ```
 
 Or add to a project:
 
 ```bash
-npm install bizarharness
+npm install @polderlabs/bizarharness
 npx bizarharness
 ```
 

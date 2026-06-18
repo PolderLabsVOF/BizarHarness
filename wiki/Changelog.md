@@ -2,10 +2,11 @@
 
 All notable changes to BizarHarness are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-For npm releases, see https://www.npmjs.com/package/bizarharness. For GitHub releases, see https://github.com/DrB0rk/BizarHarness/releases.
+For npm releases, see https://www.npmjs.com/package/@polderlabs/bizarharness. For GitHub releases, see https://github.com/DrB0rk/BizarHarness/releases.
 
 ## Unreleased
 
+- **Package moved to @polderlabs npm org.** Main package: `bizarharness` → `@polderlabs/bizarharness` (v2.1.2). Plugin: `@bizarharness/bizar-plugin` → `@polderlabs/bizarharness-plugin` (v0.2.0). Old `bizarharness` package deprecated. Install with: `npm install -g @polderlabs/bizarharness`
 - Background agents v0.4.2 (Forseti audit fixes) — see [Background Agents](Background-Agents).
 - Dev sandbox moved into its own `BizarHarness-dev` project.
 - Per-project Hindsight bank migration (40+ docs moved from default to project banks).

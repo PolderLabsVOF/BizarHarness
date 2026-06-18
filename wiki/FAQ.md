@@ -82,9 +82,9 @@ In principle, yes. The agent files accept any `<provider>/<model>` string. Confi
 ### How do I update BizarHarness?
 
 ```bash
-npm update -g bizarharness
+npm update -g @polderlabs/bizarharness
 # or
-npm install -g bizarharness@latest
+npm install -g @polderlabs/bizarharness@latest
 ```
 
 After the npm package updates, re-run the installer:

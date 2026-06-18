@@ -1,6 +1,6 @@
 {
-  "name": "bizarharness",
-  "version": "2.1.1",
+  "name": "@polderlabs/bizarharness",
+  "version": "2.1.2",
   "description": "Norse-pantheon multi-agent system for opencode — 12 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
   "type": "module",
   "bin": {
@@ -40,5 +40,8 @@
   "homepage": "https://github.com/DrB0rk/BizarHarness",
   "bugs": {
     "url": "https://github.com/DrB0rk/BizarHarness/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

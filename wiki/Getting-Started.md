@@ -27,7 +27,7 @@ npx bizarharness
 If you'd rather install it globally so `bizarharness` is always available:
 
 ```bash
-npm install -g bizarharness
+npm install -g @polderlabs/bizarharness
 bizarharness
 ```
 
