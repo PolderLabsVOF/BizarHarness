@@ -24,6 +24,30 @@ for f in "$REPO_DIR/config/agents/"*.md; do
   echo -e "    ${GREEN}✓${NC} agents/$name"
 done
 
+# ── Copy commands (slash commands) ──────────────────────────────────
+if [ -d "$REPO_DIR/config/commands/" ]; then
+  echo -e "  ${GREEN}→${NC} Installing slash commands..."
+  mkdir -p "$CONFIG_DIR/commands"
+  for f in "$REPO_DIR/config/commands/"*.md; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f")"
+    cp "$f" "$CONFIG_DIR/commands/$name"
+    echo -e "    ${GREEN}✓${NC} commands/$name"
+  done
+fi
+
+# ── Copy hooks ─────────────────────────────────────────────────────
+if [ -d "$REPO_DIR/config/hooks/" ]; then
+  echo -e "  ${GREEN}→${NC} Installing hooks..."
+  mkdir -p "$CONFIG_DIR/hooks"
+  for f in "$REPO_DIR/config/hooks/"*; do
+    [ -e "$f" ] || continue
+    name="$(basename "$f")"
+    cp -R "$f" "$CONFIG_DIR/hooks/$name"
+    echo -e "    ${GREEN}✓${NC} hooks/$name"
+  done
+fi
+
 # ── Copy AGENTS.md ─────────────────────────────────────────────────
 echo -e "  ${GREEN}→${NC} Installing AGENTS.md..."
 cp "$REPO_DIR/config/AGENTS.md" "$CONFIG_DIR/AGENTS.md"
