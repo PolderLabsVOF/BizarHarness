@@ -11,7 +11,9 @@ It does three things:
    that nudges it (or the parent) to reassign via the `task` tool.
 
 The plugin is specified in `.bizar/plugin-architecture-v0.3.md` and
-implemented against that contract.
+implemented against that contract. v0.4.0 adds slash commands and the
+visual-plan flow (settings store, slash command parser, plan action
+tool, and wait-for-feedback tool).
 
 ## Install
 
@@ -230,6 +232,64 @@ This nudges the agent out of pure thinking and toward concrete progress. The int
 10. **Custom agents without loop-guard instructions will not see the marker as a task cue.**
 11. **v0.3.0 — Stall and thinking-loop detection has a 15-second polling latency.** The periodic checker runs every 15 seconds, so the actual detection happens within `timeout + 15s`. Adjust the timeouts downward if you need tighter SLAs.
 12. **v0.3.0 — A stalled-but-already-closing serve child may briefly show `failed` with the stall message.** The abort call is best-effort; if the serve child has just died, the stall message is the user-visible reason. The underlying cause is captured in the plugin log.
+
+## Slash commands and visual plan flow
+
+v0.4.0 introduces a "visual plan that waits for feedback" feature. The
+plugin supports slash commands in any user message and ships two new
+tools for the agent to drive the visual plan canvas.
+
+### Slash commands
+
+The `chat.message` hook detects slash commands before state seeding.
+A recognized command runs to completion; the response text is surfaced
+to the user (the host renders it as a tool error, the same pattern
+`tool.execute.before` uses for loop blocks).
+
+| Command | Effect |
+|---|---|
+| `/visual-plan on` / `/off` | Toggle visual plan mode. Persists to settings. |
+| `/visual-plan` | Show current state (mode, default template, last slug). |
+| `/plan new <slug> [template]` | Create a new plan. Optional template: `blank`, `feature-design`, `bug-investigation`, `decision-record`. |
+| `/plan list` | List all plans in the worktree's `plans/` directory. |
+| `/plan open <slug>` | Return the URL for a plan. (Server startup is deferred to v0.5.0 — the URL is informational.) |
+| `/help` or `/commands` | List available commands. |
+
+Unknown commands return an error response (not a crash). Non-slash
+messages pass through to the LLM unchanged.
+
+### The visual plan flow
+
+When visual plan mode is enabled, the agent's first action on a complex
+task is to create a plan canvas (using `bizar_plan_action`), present
+it to the user (via `bizar_wait_for_feedback`), and **wait for approval
+or feedback** before continuing.
+
+The agent uses two new tools to interact with the plan:
+
+- `bizar_plan_action` — CRUD on the canvas (add elements, comments,
+  connections, set plan status). Pure file I/O — does not require the
+  `opencode serve` child, so it works in any environment.
+- `bizar_wait_for_feedback` — polls every 2 seconds until a new comment
+  appears, status becomes `approved` / `rejected`, or the timeout fires.
+  Default timeout 10 minutes; range `[5 s, 30 min]`.
+
+### Settings persistence
+
+Plan settings are persisted at
+`~/.cache/bizarharness/plan-settings.json`:
+
+```json
+{
+  "visualPlanEnabled": true,
+  "defaultTemplate": "blank",
+  "lastUsedSlug": "my-feature"
+}
+```
+
+The `SettingsStore` writes atomically (via `writeFileSync(tmp) + renameSync`)
+and falls back to defaults on missing or corrupt files. All methods
+are async and never throw on bad input.
 
 ### Odin usage example
 

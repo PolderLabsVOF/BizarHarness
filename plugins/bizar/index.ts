@@ -27,6 +27,25 @@
  *     - §8.2 — create directories on init. If creation fails, return empty hooks.
  *     - §10.1 — per-call log line via `LogWriter.write`.
  *
+ *   v0.4.0 (visual plan flow — slash commands + plan tools):
+ *     - §v4.1 — `chat.message` hook detects slash commands BEFORE state
+ *       seeding. Settings changes are applied silently; commands with
+ *       a response text are surfaced by throwing from the hook (the
+ *       same pattern `tool.execute.before` uses for block decisions).
+ *     - §v4.2 — `SettingsStore` persists user-controlled plan settings
+ *       (visualPlanEnabled, defaultTemplate, lastUsedSlug) at
+ *       `~/.cache/bizarharness/plan-settings.json`. Atomic writes,
+ *       corrupt-file fallback to defaults, no throw on bad input.
+ *     - §v4.3 — `parseSlashCommand` is a pure function (no I/O). The
+ *       hook gathers context (current settings, available plan slugs)
+ *       and feeds it to the parser.
+ *     - §v4.4 — `bizar_plan_action` tool exposes CRUD on the v2
+ *       canvas (`plan.json`) and the plan metadata (`meta.json`).
+ *       Pure file I/O — no serve child required.
+ *     - §v4.5 — `bizar_wait_for_feedback` tool polls every 2 s until
+ *       a new comment appears, status becomes approved/rejected, or
+ *       the timeout fires. Never throws.
+ *
  *   v0.4.2 (background agents):
  *     - §1 — start `opencode serve` on init; spawn background sessions
  *       via `POST /session` + `POST /session/{id}/prompt_async`.
@@ -73,6 +92,12 @@ import { createBgStatusTool } from "./src/tools/bg-status.js";
 import { createBgCollectTool } from "./src/tools/bg-collect.js";
 import { createBgKillTool } from "./src/tools/bg-kill.js";
 import { createBgGetCommentsTool } from "./src/tools/bg-get-comments.js";
+
+// v0.4.0 — visual plan flow: settings, slash commands, plan tools
+import { SettingsStore } from "./src/settings.js";
+import { parseSlashCommand } from "./src/commands.js";
+import { createPlanActionTool } from "./src/tools/plan-action.js";
+import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
 
 // --- Env-var constants (per spec §8) -------------------------------------
 
@@ -174,6 +199,7 @@ interface RuntimeContext {
   options: NormalizedOptions;
   envFlags: EnvFlags;
   stateStore: StateStore;
+  settingsStore: SettingsStore;
   logWriter: LogWriter;
   worktree: string;
   /** sessionID → set of message IDs already processed (spec §4.5). */
@@ -251,6 +277,7 @@ async function init(
   }
 
   const stateStore = new StateStore(options.stateDir, logger);
+  const settingsStore = new SettingsStore(options.stateDir, logger);
   const logWriter = new LogWriter(options.logDir, options.logRotationBytes, logger);
 
   // §4.6 — stale session cleanup (best-effort, on init).
@@ -384,6 +411,7 @@ async function init(
     options,
     envFlags,
     stateStore,
+    settingsStore,
     logWriter,
     worktree: input.worktree,
     seenMessageIds: new Map(),
@@ -493,17 +521,100 @@ interface BgDeps {
   bgAvailable: boolean;
 }
 
+// --- Slash-command helpers (v0.4.0) ------------------------------------
+
+/**
+ * Read the user-typed text from a `chat.message` hook output.
+ *
+ * `output.parts` is a discriminated union (`Part[]`). We concatenate any
+ * TextPart entries. Other part types (file, tool, etc.) are skipped.
+ *
+ * Returns `null` if no text could be extracted (e.g. the message is a
+ * file-only attachment, or the parts array is missing/malformed).
+ */
+function readMessageText(
+  output: { message?: unknown; parts?: unknown } | undefined,
+): string | null {
+  if (!output || !Array.isArray(output.parts)) return null;
+  const parts = output.parts as Array<{ type?: string; text?: string }>;
+  const fragments: string[] = [];
+  for (const part of parts) {
+    if (part && part.type === "text" && typeof part.text === "string") {
+      fragments.push(part.text);
+    }
+  }
+  const joined = fragments.join("\n").trim();
+  return joined === "" ? null : joined;
+}
+
+/**
+ * List the slugs of plans in the worktree's `plans/` directory.
+ *
+ * Pure best-effort: returns `[]` on missing dir, read errors, or any
+ * I/O exception. The slash-command parser uses this only for the
+ * `/plan list` response, so a missing list should not throw.
+ */
+async function listPlanSlugs(worktree: string, logger: Logger): Promise<string[]> {
+  try {
+    const { readdirSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const plansDir = join(worktree, "plans");
+    let entries: string[];
+    try {
+      entries = readdirSync(plansDir);
+    } catch {
+      return [];
+    }
+    const slugs: string[] = [];
+    for (const name of entries) {
+      try {
+        const stat = statSync(join(plansDir, name));
+        if (stat.isDirectory()) slugs.push(name);
+      } catch {
+        // skip unreadable entries
+      }
+    }
+    slugs.sort();
+    return slugs;
+  } catch (err: unknown) {
+    logger.debug(
+      `bizar: listPlanSlugs failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return [];
+  }
+}
+
 /**
  * Build the hooks object. Each hook is a small async function that
  * delegates to the runtime context and the supporting modules.
  */
 function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
-  // Build the 5 tools. We always register them; if the serve child is
+  // Build the 7 tools. We always register them; if the serve child is
   // not available, the background tools return a clear error. The
-  // bizarre_get_plan_comments tool is read-only and only needs the
-  // worktree, so it works regardless of the serve child's state.
+  // bizarre_get_plan_comments, bizarre_plan_action, and
+  // bizarre_wait_for_feedback tools only need the worktree, so they
+  // work regardless of the serve child's state.
+  //
+  // v0.4.0 — added `bizarre_plan_action` (CRUD on the v2 canvas) and
+  // `bizarre_wait_for_feedback` (poll until feedback). Both are pure
+  // file I/O — no serve child required.
+  const basePlanTools = {
+    bizarre_get_plan_comments: createBgGetCommentsTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+    bizarre_plan_action: createPlanActionTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+    bizarre_wait_for_feedback: createWaitForFeedbackTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+  };
   const tools = bg.instanceManager
     ? {
+        ...basePlanTools,
         bizarre_spawn_background: createBgSpawnTool({
           instanceManager: bg.instanceManager,
           http: (bg.instanceManager as unknown as { http: HttpClient }).http,
@@ -522,20 +633,10 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
           instanceManager: bg.instanceManager,
           logger: ctx.logger,
         }),
-        bizarre_get_plan_comments: createBgGetCommentsTool({
-          worktree: ctx.worktree,
-          logger: ctx.logger,
-        }),
       }
     : {
+        ...basePlanTools,
         ...bgDisabledTools(ctx.logger),
-        // bizarre_get_plan_comments is read-only — it does not need the
-        // background serve child. Register it even when the other
-        // background tools are disabled.
-        bizarre_get_plan_comments: createBgGetCommentsTool({
-          worktree: ctx.worktree,
-          logger: ctx.logger,
-        }),
       };
 
   return {
@@ -573,12 +674,72 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // §4.5 — seed session state on first user message per session.
     // The hook key is the literal string "chat.message" (with a dot) per
     // the opencode plugin API.
-    "chat.message": async (input, _output) => {
-      if (ctx.envFlags.disableLoop && ctx.envFlags.disableLog) return;
+    //
+    // §v4.1 (v0.4.0) — Slash command detection happens FIRST, before the
+    // existing state-seeding logic. If the user typed a slash command we:
+    //   1. Apply any settings patch via `SettingsStore`.
+    //   2. Throw the response text. The host (TUI/CLI) surfaces it to
+    //      the user; the LLM sees it on the next turn as a tool error.
+    //
+    // We chose throw-over-mutate because:
+    //   - Throwing is the same pattern `tool.execute.before` uses for
+    //     loop-detection blocks (see §5.4). It's well-tested in production.
+    //   - Mutating `output.parts` / `output.message` is brittle — the
+    //     shapes differ between opencode versions, and the host may not
+    //     honor a synthetic `text` part from a hook.
+    "chat.message": async (input, output) => {
       const sessionID = input.sessionID;
       const messageID = input.messageID;
       const agent = input.agent;
       if (!sessionID) return;
+
+      // --- v0.4.0: slash command detection -----------------------------
+      // Runs before the disableLoop/disableLog check — slash commands
+      // should work even when loop detection / logging is off.
+      try {
+        const messageText = readMessageText(output);
+        if (messageText !== null) {
+          const currentSettings = await ctx.settingsStore.get();
+          const availableSlugs = await listPlanSlugs(ctx.worktree, ctx.logger);
+          const result = parseSlashCommand(messageText, {
+            currentSettings,
+            availablePlanSlugs: availableSlugs,
+            defaultPort: 4321,
+          });
+          if (result !== null) {
+            if (result.settingsPatch) {
+              await ctx.settingsStore.update(result.settingsPatch);
+            }
+            // Surface the response to the user/host. We throw so the
+            // message is treated as handled; the LLM does not process
+            // it further. The host renders the throw message.
+            throw new Error(result.response);
+          }
+        }
+      } catch (err) {
+        // Re-throw — if it's our slash-command response, propagate it.
+        // If it's an unexpected I/O error, log and fall through.
+        if (err instanceof Error && err.message !== "" && err.message !== undefined) {
+          // Heuristic: errors we throw ourselves contain a non-technical
+          // response (starts with one of the canonical prefixes OR is
+          // simply a human-readable sentence). Errors from I/O contain
+          // "ENOENT", "EACCES", etc. We always re-throw errors that the
+          // parser produced (response starts with known prefixes or
+          // doesn't contain a colon+code pattern).
+          const msg = err.message;
+          const looksLikeIoError = /(ENOENT|EACCES|EROFS|EISDIR|EPERM|Error:)/.test(msg);
+          if (!looksLikeIoError) {
+            throw err;
+          }
+        }
+        ctx.logger.warn(
+          `bizar: slash-command handling failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        // Fall through to normal state seeding.
+      }
+
+      // --- v0.3.0: state seeding ----------------------------------------
+      if (ctx.envFlags.disableLoop && ctx.envFlags.disableLog) return;
 
       // Dedupe by message ID (spec §4.5).
       if (messageID) {
@@ -801,9 +962,10 @@ function findLastIndex<T>(
  * When the serve child failed to start, register the 4 background tools
  * as stubs that return a clear error. This keeps the agent experience
  * consistent: calling `bizar_spawn_background` always returns JSON, not
- * a thrown exception from the tool framework. The
- * `bizar_get_plan_comments` tool is NOT a background tool — it reads
- * plan files directly — and is always registered in `buildHooks`.
+ * a thrown exception from the tool framework. The plan tools
+ * (`bizar_get_plan_comments`, `bizar_plan_action`, `bizar_wait_for_feedback`)
+ * are NOT background tools — they read/write plan files directly — and
+ * are always registered in `buildHooks`.
  */
 function bgDisabledTools(logger: Logger): Hooks["tool"] {
   const disabled = (name: string) =>
