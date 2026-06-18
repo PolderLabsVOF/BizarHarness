@@ -8,40 +8,45 @@ For npm releases, see https://www.npmjs.com/package/@polderlabs/bizarharness. Fo
 
 ### Added
 
-- Plan side-effects wired: `/plan new|list|open` actually create, list, and link plans instead of parsing-only.
-- New subcommands: `/plan get`, `/plan add`, `/plan update`, `/plan delete`, `/plan comment`, `/plan status`, `/plan comments`. These route to `bizar_plan_action` and `bizar_get_plan_comments` via the unified `SideEffect.tool_invocation` shape.
-- Plan tools listed in `config/opencode.json` `tools`: `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`.
-- Synthetic `ToolContext` construction: slash-command-driven tool calls now build the required `ToolContext` from `ctx.worktree`, `ctx.directory`, and a fresh `AbortController`.
-- `cli/install.mjs` now idempotently merges the 7 tool keys into user-level `~/.config/opencode/opencode.json`.
-- `.bizar/archive/` created with the superseded spec files.
+- **`/tailscale-serve` command.** Authenticate and configure Tailscale Serve to expose a local port on your tailnet. Surfaces the admin-enable URL when Serve is not yet enabled. See [Commands Reference → /tailscale-serve](Commands-Reference#tailscale-serve--magicdns-hosting).
+- **`install.sh` deploys `commands/` and `hooks/`.** Pre-v0.5.1, only `agents/`, `skills/`, and the Bizar plugin were copied to `~/.config/opencode/`. The v0.5.1 installer adds two new copy blocks for `config/commands/*.md` and `config/hooks/*` (recursive). All future commands ship via `install.sh` automatically.
+- **Commands Reference wiki page.** New page documenting all three command layers: Bizar plugin (`/plan`, `/visual-plan`, `/help`), user-level (`/init`, `/learn`, `/plan`, etc.), and project-level (e.g. `/tailscale-serve`). See [Commands Reference](Commands-Reference).
 
 ### Fixed
 
-- Tool-name typo: `bizarre_*` (double-r) renamed to `bizar_*` in `plugins/bizar/index.ts` to match docs and config. The 4 background-agent tools are no longer silently disabled by the typo.
-- Stale JSDoc in `src/settings.ts:62` now points at the real tools (`bizar_plan_action` + `bizar_wait_for_feedback`).
+- **`bizar_spawn_background` empty-sessionId bug (v0.5.1).** `InstanceManager.add()` was synchronously calling `attachEventHandler` with `sessionId: ""` (filled in later by `POST /session`). The `EventStream` guard rejected the empty string and the spawn failed before any HTTP call. Fix: move `attachEventHandler` out of `add()` and into `bg-spawn.ts` after the real sessionId is known. The "track BEFORE HTTP" invariant is preserved. Covered by `plugins/bizar/tests/attach-handler-bug.test.ts` (3 tests). Test count: 488 → 491 pass. See [Bizar Plugin → Recent fixes](Bizar-Plugin#recent-fixes).
 
-### Security
+### Known limitations (v0.5+)
+
+- Plugin has no hot-reload — source changes require opencode restart.
+- `install.sh` does not detect when the installed plugin is older than the source. Re-run after every `git pull`.
+
+## 2.1.0 — 2026-06-18 (Bizar plugin v0.5.0)
+
+The "plan side-effects" release. Wires the `/plan` slash commands to the Bizar plugin's `bizar_plan_action` tool, adds `bizar_wait_for_feedback`, and brings the plugin to v0.5.0.
+
+### Added (Bizar plugin v0.5.0)
+
+- **Plan side-effects wired.** `/plan new|list|open` actually create, list, and link plans instead of parsing-only.
+- **New subcommands:** `/plan get`, `/plan add`, `/plan update`, `/plan delete`, `/plan comment`, `/plan status`, `/plan comments`. These route to `bizar_plan_action` and `bizar_get_plan_comments` via the unified `SideEffect.tool_invocation` shape.
+- **Plan tools in `opencode.json`:** `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`.
+- **Synthetic `ToolContext` construction.** Slash-command-driven tool calls build the required `ToolContext` from `ctx.worktree`, `ctx.directory`, and a fresh `AbortController`.
+- **`bizar_wait_for_feedback` tool.** Blocks on a plan's comment file or `meta.json` status. Used by `/plan wait <slug>` to pause until the user comments or approves/rejects. Returns `feedback_received`, `approved`, `rejected`, or `timed_out`.
+- **Background state on disk.** Each background instance writes its `BackgroundState` to `~/.cache/bizarharness/state/bg/<instanceId>.json` on every transition. The plugin recovers running instances on restart.
+- **Stall and thinking-loop detection.** Long-running background sessions are monitored for no-event stalls (default 180s) and thinking-only loops (default 300s, max 1 intervention). Configurable via plugin options or `BIZAR_STALL_TIMEOUT_MS`.
+
+### Fixed (Bizar plugin v0.5.0)
+
+- **Tool-name typo: `bizarre_*` (double-r) renamed to `bizar_*` in `plugins/bizar/index.ts`.** The 4 background-agent tools are no longer silently disabled by the typo.
+- Stale JSDoc in `src/settings.ts:62` now points at the real tools (`bizar_plan_action` + `bizar_wait_for_feedback`).
+- **Startup hang recovery (2026-06-18).** Wrapped `client.session.list()` in plugin init with a 1-second timeout guard to prevent init promise deadlock. Postmortem at `docs/postmortems/2026-06-18-plugin-state-deadlock.md`.
+- **Re-entrant lock removed from plugin state layer.** `plugins/bizar/src/state.ts` had a per-session mutex that self-deadlocked on first message submit. Removed nested locking from `load()`, `save()`, and `delete()`.
+
+### Security (v0.5.0)
 
 - Live Hindsight bearer token replaced with placeholder in `config/opencode.json`. `.gitignore` verified/updated to exclude the file. Token rotation is the user's responsibility.
 
-### Fixed
-
-- **Startup hang recovery (2026-06-18).** Wrapped `client.session.list()` in plugin init with a 1-second timeout guard to prevent init promise deadlock on a slow/blocked session store. Full incident postmortem at `docs/postmortems/2026-06-18-plugin-state-deadlock.md`.
-- **Hindsight MCP key persistence.** Created `~/.config/environment.d/90-hindsight.conf` and added shell loaders to `~/.bashrc`, `~/.profile`, and `~/.config/fish/conf.d/90-hindsight.fish`. OpenCode config updated with bearer-token fallback.
-- **Global OpenCode config normalization.** Reset `~/.opencode/opencode.json` and `~/.config/opencode/opencode.json` to stable MiniMax models (`minimax/MiniMax-M3` / `minimax/MiniMax-M2.7`), `default_agent: quick`, with `supabase.enabled: false`, `hindsight.enabled: false`, and MCP permissions set to `deny`.
-- **Project-local config override aligned.** `~/Projects/BizarHarness/config/opencode.json` was re-enabling `default_agent: odin`, `model: opencode/deepseek-v4-flash-free`, and broken MCPs — corrected to match global baseline.
-- **Interactive agents rerouted to M2.7.** `config/agents/{quick,frigg,vor,mimir,heimdall}.md` had `model: opencode/deepseek-v4-flash-free` hard-coded in YAML frontmatter — switched to `minimax/MiniMax-M2.7` to respect tier-routing design.
-- **Re-entrant lock removed from plugin state layer.** `plugins/bizar/src/state.ts` had a per-session mutex that self-deadlocked on first message submit (`chat.message → withLock → load → withLock` and `chat.message → withLock → save → withLock`). Removed nested locking from `load()`, `save()`, and `delete()` — these methods now perform direct file I/O without holding a session lock.
-
-### Changed
-
-- **Package moved to @polderlabs npm org.** Main package: `bizarharness` → `@polderlabs/bizarharness` (v2.1.2). Plugin: `@bizarharness/bizar-plugin` → `@polderlabs/bizarharness-plugin` (v0.2.0). Old `bizarharness` package deprecated. Install with: `npm install -g @polderlabs/bizarharness`
-- Background agents v0.4.2 (Forseti audit fixes) — see [Background Agents](Background-Agents).
-- Dev sandbox moved into its own `BizarHarness-dev` project.
-- Per-project Hindsight bank migration (40+ docs moved from default to project banks).
-- Windows path-separator fixes in the CLI (`path.dirname` instead of `lastIndexOf`).
-
-## 2.0.0 (current) — 2026-06-17
+## 2.0.0 — 2026-06-17
 
 The "Bizar plugin" release. Adds the bundled opencode plugin, the visual plan tool, the Quick agent, and the self-improvement protocol. Backwards-compatible with 1.x agent definitions and routing.
 

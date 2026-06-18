@@ -14,6 +14,7 @@ Norse-pantheon multi-agent system for opencode.
 - [Architecture](Architecture)
 - [Agents Reference](Agents-Reference)
 - [Model Routing](Model-Routing)
+- [Commands Reference](Commands-Reference) — slash commands
 - [Plans Command](Plans-Command)
 - [Self-Improvement](Self-Improvement)
 

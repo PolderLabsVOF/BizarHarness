@@ -155,6 +155,50 @@ The plugin is verified to:
 
 The forbidden-import check is enforced by `scripts/check-forbidden-imports.sh` in the plugin repo and runs as part of the test script. CI fails the build if any forbidden `node:` import is found.
 
+## Background agents (v0.4+)
+
+The plugin also runs an asynchronous subagent system. See [Background Agents](Background-Agents) for the full reference. Briefly:
+
+- **`bizar_spawn_background`** (Odin only) — spawns a subagent on a shared `opencode serve` instance. Returns an `instanceId` immediately.
+- **`bizar_status`** (any agent) — read-only list of instances and their state.
+- **`bizar_collect`** (Odin only) — blocks until the instance completes or times out.
+- **`bizar_kill`** (Odin only) — aborts a running instance via `POST /session/{id}/abort`.
+- **`bizar_wait_for_feedback`** — blocks on user feedback for a plan (or a timeout).
+
+The plugin tracks each instance's state on disk in `~/.cache/bizarharness/state/bg/<instanceId>.json` so it survives an opencode restart. Recovery on restart: any instance still in `running` or `pending` is marked `failed` with `error: "recovered after restart"`.
+
+## Recent fixes
+
+### v0.5.1 — `bizarre_spawn_background` empty-sessionId bug
+
+**Symptom:** `bizar_spawn_background` failed immediately with `EventStream.onSessionEvent: sessionId must be non-empty`.
+
+**Root cause:** `InstanceManager.add()` was calling `attachEventHandler(full)` synchronously with `sessionId: ""` (the real sessionId is filled in later by `POST /session`). The EventStream guard rejects empty strings.
+
+**Fix:**
+
+- `plugins/bizar/src/background.ts` — removed inline `attachEventHandler` from `add()`; made `attachEventHandler` `public`.
+- `plugins/bizar/src/tools/bg-spawn.ts` — calls `attachEventHandler` after `POST /session` returns the real sessionId. Wrapped in try/catch so a disconnected SSE stream doesn't fail the spawn.
+- The "track BEFORE HTTP" invariant (HIGH-21) is preserved — the instance is in the map immediately. Only the per-session event subscription is deferred.
+
+**Regression test:** `plugins/bizar/tests/attach-handler-bug.test.ts` (3 tests). The tests exercise the **real** `InstanceManager` (not a fake) with a minimal `EventStream` stub. One of the three tests was designed to fail on the buggy code; it was verified by reverting the fix and re-running.
+
+**Test count:** 488 → **491 pass, 0 fail**.
+
+### v0.5.1 — `install.sh` now deploys `commands/` and `hooks/`
+
+The original `install.sh` only copied `agents/`, `skills/`, and the Bizar plugin to `~/.config/opencode/`. Slash commands and hooks were not deployed, so commands like `/init` and `/learn` had to be set up manually. The updated `install.sh` adds two new copy blocks for `config/commands/*.md` and `config/hooks/*` (recursive, so the `post-tool-use.md` and `pre-tool-use.md` files are included).
+
+## Limitations (v0.5+ additions)
+
+The full [Limitations](#limitations) list is above. Two v0.5+-specific ones to be aware of:
+
+12. **Plugin has no hot-reload.** Once opencode loads the plugin, source changes don't take effect until you restart opencode. This makes the install-then-iterate loop slow. There is no fix planned — restarting opencode is reliable and the cycle is short. See [Troubleshooting](Troubleshooting#installed-plugin-source-changes-arent-taking-effect).
+
+13. **`install.sh` is not idempotent against source changes.** If you `git pull` updated plugin source, you must re-run `bash install.sh` to deploy it. The script does not detect that the installed copy is older than the source. There is a proposed fix in [Self-Improvement](Self-Improvement#active-rules) to add a `git rev-parse` check at the top of `install.sh`.
+
 ## Next steps
 
-Next: [Background Agents](Background-Agents) — the experimental async subagent system that runs on top of the Bizar plugin (v0.4+).
+Next: [Background Agents](Background-Agents) — the full async subagent reference.
+
+For the slash commands this plugin surfaces (`/plan`, `/visual-plan`, `/help`), see [Commands Reference](Commands-Reference).

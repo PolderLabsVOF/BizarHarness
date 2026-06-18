@@ -2,7 +2,7 @@
 
 Background agents are asynchronous subagents that Odin can spawn without blocking the main conversation. They run on a single shared `opencode serve` instance, are managed by the Bizar plugin, and are designed for independent work that doesn't need a tight coordination loop with the main agent.
 
-This page documents the experimental v0.4 implementation. See [Bizar Plugin](Bizar-Plugin) for the underlying loop-detection and handoff machinery.
+This page documents the v0.4+ implementation, including the v0.5.x fixes. See [Bizar Plugin](Bizar-Plugin) for the underlying loop-detection and handoff machinery.
 
 ## When to use background vs sync
 
@@ -200,6 +200,90 @@ The `prompt` argument to `bizar_spawn_background` is sent verbatim to the LLM in
 8. **`bizar_collect` on a killed/failed instance returns the partial result.** It does not retry.
 9. **The `model` parameter is not validated.** opencode will reject unknown providers/models with a 4xx.
 10. **Custom agents without loop-guard instructions will not see the marker as a task cue.**
+
+## v0.5+ changes
+
+The plugin shipped v0.5.0 in mid-2026 and v0.5.1 shortly after. Key changes for background agents:
+
+### v0.5.0 — new tools
+
+- **`bizar_wait_for_feedback`** — blocks on a plan's comment file or `meta.json` status. Used by `/plan wait <slug>` to pause until the user comments or approves/rejects. Returns `feedback_received`, `approved`, `rejected`, or `timed_out`.
+- **`bizar_get_plan_comments`** — read-only, returns all comments on a plan (optionally filtered by `elementId`). Used by the Bizar plan canvas.
+- **`bizar_plan_action`** — the workhorse for the plan canvas. Supports `get_canvas`, `add_element`, `update_element`, `delete_element`, `add_connection`, `delete_connection`, `add_comment`, `reply_to_comment`, and `set_status`.
+
+These are documented in [Bizar Plugin](Bizar-Plugin#background-agents-v04).
+
+### v0.5.0 — instance state file
+
+Each background instance now writes its `BackgroundState` to `~/.cache/bizarharness/state/bg/<instanceId>.json` on every state transition (atomic rename). On plugin restart, the `rebuildInMemoryMap` step marks any `running` or `pending` instance as `failed` with `error: "recovered after restart"`. See `rebuildInMemoryMap` in `plugins/bizar/src/background.ts` for the test coverage.
+
+### v0.5.0 — stall and thinking-loop detection
+
+Long-running background sessions are now monitored for two failure modes:
+
+- **Stall timeout** (default 180s) — no SSE event for this long → the instance is marked `failed` with a stall error. The check runs on a periodic interval.
+- **Thinking-loop timeout** (default 300s) — repeated `thinking` parts with no tool or text output → after `maxInterventions` (default 1) prompt intervention, the instance is aborted as a thinking loop.
+
+Both are configurable via `opencode.json` plugin options (`backgroundStallTimeoutMs`, `backgroundThinkingLoopTimeoutMs`, `backgroundMaxInterventions`) or env vars (`BIZAR_STALL_TIMEOUT_MS`).
+
+### v0.5.1 — `bizar_spawn_background` empty-sessionId fix
+
+The single critical bug in v0.5.0. `bizar_spawn_background` failed with `EventStream.onSessionEvent: sessionId must be non-empty` because `InstanceManager.add()` synchronously called `attachEventHandler(full)` with `sessionId: ""`. The fix moved the `attachEventHandler` call into `bg-spawn.ts` and runs it **after** `POST /session` returns the real sessionId. The "track BEFORE HTTP" invariant is preserved — only the per-session event subscription is deferred.
+
+The fix is covered by `plugins/bizar/tests/attach-handler-bug.test.ts` (3 tests, including one that fails on the buggy code). Test count: 488 → 491 pass.
+
+For the full fix writeup, see [Bizar Plugin → Recent fixes](Bizar-Plugin#recent-fixes).
+
+## Common workflows
+
+### Research a question while implementing
+
+```ts
+// From Odin:
+const { instanceId } = await bizar_spawn_background({
+  agent: "mimir",
+  prompt: "Research how the auth module is structured. Look at src/auth/. Report back with a 1-paragraph summary and file pointers.",
+  timeoutMs: 120_000,
+}, odinCtx);
+// Continue with implementation work in the main conversation.
+// Later, when the main work references the research:
+const findings = await bizar_collect({ instanceId, timeoutMs: 60_000 }, odinCtx);
+```
+
+### Parallel fan-out
+
+```ts
+const [a, b, c] = await Promise.all([
+  bizar_spawn_background({ agent: "mimir", prompt: "Research X" }, odinCtx),
+  bizar_spawn_background({ agent: "thor", prompt: "Implement helper for Y" }, odinCtx),
+  bizar_spawn_background({ agent: "heimdall", prompt: "Copy test fixtures" }, odinCtx),
+]);
+```
+
+All three run concurrently on the same `opencode serve` instance. Each has its own session. The cap is 8 by default; configurable up to 32.
+
+### Recover from a stuck instance
+
+```ts
+const status = await bizar_status({ instanceId }, odinCtx);
+if (status.status === "running" && status.toolCallCount > 100) {
+  await bizar_kill({ instanceId }, odinCtx);
+  // Spawn a replacement with a clearer prompt
+  const next = await bizar_spawn_background({
+    agent: status.agent,
+    prompt: `(context: previous attempt got stuck) <clearer prompt>`,
+  }, odinCtx);
+}
+```
+
+### Inspect a failed instance
+
+```ts
+const result = await bizar_collect({ instanceId, timeoutMs: 5_000 }, odinCtx);
+// result.error contains the failure reason
+// result.resultPreview contains the last 200 chars of the agent's output
+// result.status is "failed" | "killed" | "timed_out" | "done"
+```
 
 ## Next steps
 

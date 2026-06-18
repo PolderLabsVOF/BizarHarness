@@ -157,6 +157,31 @@ bizarharness plan delete oauth-integration
 
 The plan lives in your repo as long as the work is in flight. Once the implementation is merged, you can delete the plan directory (or keep it as a record of the design).
 
+## v0.5+ — Plugin-driven plan canvas (in-opencode)
+
+As of v0.5.0, the Bizar plugin ships its own plan canvas that runs **inside opencode**, accessible via the `/plan` slash command family. This is the recommended path for new work; the CLI tool above is still supported for power users and CI integration.
+
+The plugin-driven plan is a single source of truth at `plans/<slug>/plan.json` with a sidecar `meta.json` for status. The plugin's `bizar_plan_action` tool handles all reads and writes. The plugin tool surface is exposed to the agent through a synthetic `ToolContext`, and the agent invokes the tool in response to `/plan new|add|comment|status` slash commands.
+
+| Slash command | Routes to | What it does |
+|---|---|---|
+| `/plan new <slug>` | `bizar_plan_action(action: "create_plan")` | Creates the plan, refuses to clobber existing. |
+| `/plan list` | `bizar_plan_action(action: "list_plans")` | Lists all plans in the project, sorted by last edited. |
+| `/plan open <slug>` | `bizar_plan_action(action: "open_plan_url")` | Returns the local viewer URL. |
+| `/plan get <slug>` | `bizar_plan_action(action: "get_canvas")` | Dumps the full plan.json. |
+| `/plan add <slug> --title X --type task` | `bizar_plan_action(action: "add_element")` | Adds a new element. |
+| `/plan update <slug> <id> --x 50 --y 50` | `bizar_plan_action(action: "update_element")` | Patches an element. |
+| `/plan delete <slug> <id>` | `bizar_plan_action(action: "delete_element")` | Removes the element and its connections + comments. |
+| `/plan comment <slug> [el_id] "text"` | `bizar_plan_action(action: "add_comment")` | Pins a comment to an element (or the canvas). |
+| `/plan comments <slug> [el_id]` | `bizar_get_plan_comments` | Lists comments (optionally filtered by element). |
+| `/plan status <slug> <status>` | `bizar_plan_action(action: "set_status")` | Sets status: `draft`, `approved`, `rejected`, `in-progress`, `done`. |
+| `/plan wait <slug>` | `bizar_wait_for_feedback` | Defers — agent pauses for human feedback. Returns `feedback_received`, `approved`, `rejected`, or `timed_out`. |
+| `/help` | (plugin) | Lists the plugin's own commands. |
+
+The two implementations (`bizarharness plan` CLI vs `/plan` slash command) read and write the same `plan.json` format. You can mix and match: use the CLI for CI or batch operations, use the slash command for in-opencode work. The slash command is the recommended path because it stays in the agent's context and supports comments and status.
+
+For the full reference, see [Commands Reference → Bizar plugin commands](Commands-Reference#bizar-plugin-commands).
+
 ## Next steps
 
 Next: [Self-Improvement](Self-Improvement) — how agents record lessons and improve over time.

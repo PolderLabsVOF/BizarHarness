@@ -166,6 +166,84 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 3. **If the serve child died,** check the plugin log at `~/.cache/bizarharness/logs/`. Look for "serve child exited unexpectedly" — the plugin will auto-retry on the next spawn.
 4. **Reduce the timeout** for slow tasks: `bizar_collect(instanceId, { timeoutMs: 60_000 })`. If you need more time, increase the cap with `BIZAR_MAX_CONCURRENT_INSTANCES` and `BIZAR_BACKGROUND_TOOL_CALL_CAP` (if your instance is hitting it).
 
+## "bizar_spawn_background" fails with "sessionId must be non-empty"
+
+**Symptom:** Calling `bizar_spawn_background` (or any Odin dispatch that uses it) immediately returns:
+
+```
+EventStream.onSessionEvent: sessionId must be non-empty
+```
+
+**Cause:** The installed plugin is **pre-v0.5.1**. The bug was that `InstanceManager.add()` synchronously called `attachEventHandler` with the draft's empty `sessionId`. Fixed in v0.5.1.
+
+**Fix:**
+
+1. **Verify the installed version.** From the BizarHarness repo on the same machine:
+   ```bash
+   grep version ~/.config/opencode/plugins/bizar/package.json
+   ```
+   Should be `0.5.1` or later.
+2. **If older:** re-run `bash install.sh` from the BizarHarness repo. This copies the new source to `~/.config/opencode/plugins/bizar/`.
+3. **If the version is correct but the error still appears:** the plugin was loaded by the *old* source at opencode startup. **Restart opencode** to load the new code. The plugin has no hot-reload.
+4. **Run the regression test** to confirm the fix is in the source you deployed:
+   ```bash
+   cd ~/.config/opencode/plugins/bizar && export PATH="$HOME/.bun/bin:$PATH" && bun test tests/attach-handler-bug.test.ts
+   ```
+   All 3 tests should pass.
+
+## Installed plugin source changes aren't taking effect
+
+**Symptom:** You edited a file in `plugins/bizar/src/` and re-ran `install.sh`, but opencode is still using the old behavior. No error, just no change.
+
+**Cause:** The Bizar plugin has **no hot-reload**. opencode loads the plugin at process start and keeps it in memory for the session lifetime. `install.sh` only copies files to disk — it does not signal opencode to reload.
+
+**Fix:**
+
+1. **Restart opencode.** This is the only reliable way. There's no in-process reload.
+2. If you're seeing this frequently during development, consider using the [Dev Sandbox](Dev-Sandbox) — the Docker-based sibling repo reloads the plugin on every opencode restart in a fresh container, which is much faster than restarting your main opencode.
+
+## "install.sh" didn't deploy the latest commands
+
+**Symptom:** You `git pull`'d BizarHarness and see new commands in `config/commands/`, but `/help` in opencode doesn't show them.
+
+**Cause:** Pre-v0.5.1, `install.sh` only copied `agents/`, `skills/`, and the Bizar plugin. Slash commands and hooks were not deployed.
+
+**Fix:**
+
+1. Re-run `bash install.sh`. The v0.5.1 installer copies `config/commands/*.md` and `config/hooks/*` (recursive).
+2. Restart opencode to pick up the new commands.
+3. Verify with `ls ~/.config/opencode/commands/` — your new commands should appear.
+
+## "tailscale serve" hangs forever
+
+**Symptom:** You run `/tailscale-serve` (or `tailscale serve --bg <port>`) and the command never returns.
+
+**Cause:** `tailscale serve` may try to open a browser to walk you through admin enable flow. If you're on a headless box (SSH, no `$DISPLAY`), the browser never opens, the prompt never resolves, and the command hangs.
+
+**Fix:**
+
+1. **Cancel the hanging command** (Ctrl-C).
+2. **Run with a timeout** from a script:
+   ```bash
+   timeout 5 tailscale serve --bg --https=443 http://127.0.0.1:8765
+   ```
+3. **Or use the `/tailscale-serve` command** shipped with BizarHarness — it has the timeout built in and surfaces the admin-enable URL clearly if serve is not yet enabled.
+4. **If you need serve enabled but can't reach a browser:** visit `https://login.tailscale.com/f/serve?node=<your-node-id>` from any device logged into the tailnet. The node ID is shown in `tailscale status --json` (`Self.ID`).
+
+## "/tailscale-serve" says "Serve is not enabled"
+
+**Symptom:** The command reports the admin-enable URL.
+
+**Cause:** Tailscale Serve is a tailnet-level setting. The admin (you) must enable it once for the whole tailnet — there is no per-device flag.
+
+**Fix:**
+
+1. Click the URL the command printed, or visit `https://login.tailscale.com/f/serve?node=<node-id>` from any tailnet device.
+2. Confirm the enable.
+3. Re-run `/tailscale-serve` — the command will now succeed and print the `https://<magicdns>/` URL.
+
+**Workaround while waiting for admin enable:** the demo's `npm run host:start` script binds the static server to `0.0.0.0:8765` and lets you reach it at `http://devbox.<your-tailnet>.ts.net:8765/`. Plain HTTP, but safe inside the tailnet (WireGuard-encrypted). Don't expose port 8765 to the public internet.
+
 ## Where to get more help
 
 - **GitHub Issues:** https://github.com/DrB0rk/BizarHarness/issues

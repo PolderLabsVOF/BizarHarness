@@ -146,11 +146,102 @@ https://github.com/DrB0rk/BizarHarness
 
 ### Is BizarHarness production-ready?
 
-BizarHarness 1.2.1 is stable for daily use. The agent routing, the install flow, and the Bizar plugin are tested. The experimental features (background agents, visual plans) are clearly marked as such. Use them in dev, not in production-critical paths, until v2.0 ships.
+BizarHarness 2.0+ (with the Bizar plugin at v0.5.1) is stable for daily use. Agent routing, the install flow, the Bizar plugin's loop guard and plan canvas, and the slash commands are all tested. Background agents (v0.4+) are no longer marked experimental — they are used in production validation runs. The `/tailscale-serve` command (v0.5.1) is a thin wrapper around `tailscale serve`; the upstream Tailscale feature is the long-term stable surface.
+
+The remaining limitations are documented: plugin has no hot-reload, `install.sh` does not detect when the installed plugin is older than the source, and certain pre-existing tsc errors in plugin tests are not yet fixed. See [Troubleshooting](Troubleshooting) for the full list.
 
 ### How is BizarHarness licensed?
 
 MIT. See the [LICENSE](https://github.com/DrB0rk/BizarHarness/blob/main/LICENSE) file in the repo.
+
+## Bizar plugin
+
+### What's the difference between v0.3, v0.4, v0.5?
+
+- **v0.3.x** — loop guard, status reporting, handoff. Single tool surface (per-session, per-tool fingerprint). The original release.
+- **v0.4.x** — adds background agents (`bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`). Single `opencode serve` child. State on disk.
+- **v0.5.0** — adds plan side-effects (`/plan new|add|comment|status`), `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`, stall and thinking-loop detection. Plan files at `~/.cache/bizarharness/state/bg/<instanceId>.json`.
+- **v0.5.1** — fixes the empty-sessionId bug in `bizar_spawn_background`. The regression test in `plugins/bizar/tests/attach-handler-bug.test.ts` would have caught this. Test count: 488 → 491.
+
+### What happens if the plugin crashes mid-session?
+
+The plugin's `dispose()` handler runs on `SIGTERM` or `SIGINT` (or on process exit). It:
+
+1. Marks all `running` and `pending` background instances as `failed` with `error: "shutdown"`.
+2. Calls `POST /session/{id}/abort` on each.
+3. Sends `SIGTERM` to the `opencode serve` child (if alive).
+4. Closes the SSE stream.
+5. Calls `process.exit(0)`.
+
+State files at `~/.cache/bizarharness/state/bg/*.json` are **preserved** — they are the recovery surface for the next opencode launch.
+
+### How do I add a new loop-guard threshold?
+
+Edit the plugin options in `opencode.json`:
+
+```jsonc
+"plugin": [
+  ["./plugins/bizar/index.ts", {
+    "loopThresholdWarn": 4,
+    "loopThresholdEscalate": 7,
+    "loopThresholdBlock": 10,
+    "loopWindowSize": 8
+  }]
+]
+```
+
+The plugin clamps and reorders the values: `warn < escalate < block`, and `block <= window + 2`. It will not throw on bad input.
+
+**Warning:** the canonical handoff messages hardcode the default threshold numbers ("5 identical calls", "8 identical calls", "12 identical calls"). If you reconfigure the thresholds, the actions still fire at the new counts, but the message text still says the defaults. Subagents may fail to recognize the handoff. Either keep the defaults, or update the agent prompts' recognition patterns.
+
+## Slash commands
+
+### How do I see all available slash commands?
+
+Type `/help` in opencode. The plugin's `/help` returns its own command list; the opencode-built-in `/help` returns the broader set including user-level and project-level commands.
+
+The full list is on the [Commands Reference](Commands-Reference) page.
+
+### How do I add a project-specific slash command?
+
+Drop a markdown file in `<project>/.opencode/commands/<name>.md` with this frontmatter:
+
+```markdown
+---
+description: One-line description
+---
+
+# Command Name
+
+Body of the command — the prompt the model sees.
+```
+
+Restart opencode. The command is now scoped to that project.
+
+### How do I add a global slash command for all my projects?
+
+Drop a markdown file in `~/.config/opencode/commands/<name>.md` (same format). It's available in every opencode session.
+
+### What's the difference between /plan and /visual-plan?
+
+- `/plan new|add|comment|status` — operate on a plan canvas. Creates elements, comments, status.
+- `/visual-plan on|off` — toggle the agent's behavior. When **on**, the agent will create a plan and wait for feedback on complex tasks. When **off**, the agent works without surfacing intermediate plans.
+
+These are independent. You can use `/plan` directly without `/visual-plan` being on.
+
+## Tailscale / MagicDNS
+
+### What is `/tailscale-serve`?
+
+A slash command that authenticates and configures Tailscale Serve to expose a local port on your tailnet. Surfaces the admin-enable URL when Serve is not yet enabled. See [Commands Reference → /tailscale-serve](Commands-Reference#tailscale-serve--magicdns-hosting).
+
+### Why doesn't the command fall back to plain HTTP if Serve isn't enabled?
+
+You asked for authentication, not a workaround. The HTTP fallback (binding to the Tailscale IP) is available in the demo project's `npm run host:start` script, but the command itself stops at the admin-enable URL so the user can make an informed choice about HTTPS vs HTTP.
+
+### How do I enable Tailscale Serve on my tailnet?
+
+Visit the URL the command prints, or go to https://login.tailscale.com/f/serve?node=<your-node-id> from any tailnet device. Confirm the enable once and it applies to the whole tailnet.
 
 ## Next steps
 

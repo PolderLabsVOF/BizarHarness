@@ -113,6 +113,34 @@ The agents listed above (`@frigg`, `@mimir`, `@thor`, etc.) are *also* first-cla
 
 Going through Odin (the default) is the right call for any non-trivial request because Odin will decompose it, run the streams in parallel, and synthesize the result.
 
+## Slash commands
+
+BizarHarness also exposes a large set of slash commands. Try `/help` to see them all, or jump to [Commands Reference](Commands-Reference) for the full list. A few to know:
+
+- `/plan new <slug>` — open the visual plan canvas for a new feature or change.
+- `/visual-plan on` — toggle the agent to auto-create plans on complex tasks.
+- `/init` — detect the project stack and create `.bizar/PROJECT.md`.
+- `/explain` — route the current question to Frigg for a read-only answer.
+- `/tdd` — enforce TDD with 80%+ coverage.
+- `/verify` — run the full verification loop (build, typecheck, lint, test, security).
+- `/tailscale-serve` — expose a local port on your tailnet via Tailscale MagicDNS.
+
+## MagicDNS hosting (optional)
+
+If you want to expose a local service on your tailnet (e.g. a dev dashboard, a test API, a local preview server), use `/tailscale-serve`:
+
+```
+# 1. Start your local service on a port (e.g. 8765)
+npm run dev  # or any server
+
+# 2. In opencode, type:
+/tailscale-serve 8765
+```
+
+If Tailscale Serve is already enabled on your tailnet, the command prints the `https://<magicdns>/` URL. If not, it prints the admin-enable URL — visit it once from any tailnet device, then re-run `/tailscale-serve`.
+
+For the HTTP fallback (no admin enable), bind your service to `0.0.0.0:<port>` and reach it at `http://<magicdns>:<port>/` (safe inside the tailnet because all traffic is WireGuard-encrypted).
+
 ## Next steps
 
 Next: [Architecture](Architecture) — the Norse-pantheon metaphor, the 5-tier model architecture, and the Odin router in detail.

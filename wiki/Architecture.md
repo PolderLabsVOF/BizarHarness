@@ -4,14 +4,14 @@ BizarHarness is a thin orchestration layer on top of [opencode](https://opencode
 
 ## The Norse-pantheon metaphor
 
-Each agent in the system is named after a Norse deity. The metaphor is loose — it gives each agent a memorable identity and a one-rune symbol — but the role mapping is mostly accidental. The full pantheon:
+Each agent in the system is named after a Norse deity. The metaphor is loose — it gives each agent a memorable identity and a one-rune symbol — but the role mapping is mostly accidental. The full pantheon (13 agents):
 
 | Agent | Rune | Role |
 |---|---|---|
 | **Odin** | ᛟ | Router — never executes work, always dispatches |
 | **Frigg** | ᚠ | Read-only Q&A — answers, never modifies |
 | **Vör** | ᛢ | Clarifier — asks if the request is ambiguous |
-| **Quick** | ᛟ | Single-shot fast path — no decomposition, no delegation |
+| **Quick** | ᛃ | Single-shot fast path — no decomposition, no delegation |
 | **Mimir** | ᛗ | Research — codebase exploration, Semble-first search |
 | **Heimdall** | ᚹ | Simple — file ops, mechanical work, quick edits |
 | **Hermod** | ᚱ | Git ops — commit, push, merge, PR, rebase |
@@ -20,6 +20,7 @@ Each agent in the system is named after a Norse deity. The metaphor is loose —
 | **Tyr** | ᛏ | Complex — architecture, deep debugging, multi-step |
 | **Vidarr** | ᛉ | Last resort — GPT-5.5 escape hatch when all else fails |
 | **Forseti** | ᚨ | Auditor — adversarial plan review, edit-deny |
+| **Semble-search** | (none) | Codebase search via Semble MCP (subagent of Mimir) |
 
 The metaphor is useful as a mental model for routing: when in doubt, pick the agent whose role matches the task. See [Agents Reference](Agents-Reference) for per-agent details.
 
