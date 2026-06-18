@@ -197,9 +197,7 @@ export class StateStore {
       return { ...EMPTY_STATE, sessionId };
     }
 
-    return withLock(this.locks, sessionId, () =>
-      Promise.resolve(readState(filePath, sessionId, this.logger))
-    );
+    return Promise.resolve(readState(filePath, sessionId, this.logger));
   }
 
   /**
@@ -209,10 +207,8 @@ export class StateStore {
     if (!this.ensureStateDir()) return;
 
     const filePath = stateFilePath(this.stateDir, state.sessionId);
-    return withLock(this.locks, state.sessionId, () => {
-      writeStateAtomic(filePath, state, this.logger);
-      return Promise.resolve();
-    });
+    writeStateAtomic(filePath, state, this.logger);
+    return Promise.resolve();
   }
 
   /**
@@ -220,18 +216,16 @@ export class StateStore {
    */
   async delete(sessionId: string): Promise<void> {
     const filePath = stateFilePath(this.stateDir, sessionId);
-    return withLock(this.locks, sessionId, async () => {
-      try {
-        if (existsSync(filePath)) {
-          unlinkSync(filePath);
-        }
-      } catch (err: unknown) {
-        this.logger.log({
-          level: "warn",
-          message: `bizar: failed to delete state file ${filePath}: ${String(err)}`,
-        });
+    try {
+      if (existsSync(filePath)) {
+        unlinkSync(filePath);
       }
-    });
+    } catch (err: unknown) {
+      this.logger.log({
+        level: "warn",
+        message: `bizar: failed to delete state file ${filePath}: ${String(err)}`,
+      });
+    }
   }
 
   /**
