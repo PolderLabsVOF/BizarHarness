@@ -527,14 +527,55 @@ function installSignalHandlers(
   }
 }
 
+// --- Init helpers ---------------------------------------------------------
+
+/**
+ * Race a promise against a timeout. Returns the promise's value if it
+ * resolves in time; throws a labeled `Error` otherwise.
+ *
+ * The original promise is intentionally NOT cancelled (we don't have
+ * an `AbortSignal` to pass to the opencode client). If the underlying
+ * call eventually rejects after we've already returned, the caller
+ * should attach a no-op `.catch(() => undefined)` to suppress the
+ * unhandled-rejection warning.
+ *
+ * v0.5.2: extracted from `readValidSessionIds` so it can be unit
+ * tested in isolation. See `tests/init-helpers.test.ts`.
+ */
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 // --- Hooks ----------------------------------------------------------------
 
 /**
  * Best-effort read of valid session IDs from opencode. If `client.session`
- * is unavailable or the call fails, return an empty set — the age-based
- * branch of the cleanup still runs (spec §4.6).
+ * is unavailable or the call fails or times out, return an empty set —
+ * the age-based branch of the cleanup still runs (spec §4.6).
+ *
+ * v0.5.2 FIX (postmortem 2026-06-18, Layer 1): the previous version
+ * called `client.session.list()` with no timeout. If the session
+ * store was slow, busy, or in a broken state, the call would hang
+ * forever, blocking the plugin's `init()` and stalling the UI on a
+ * blank screen. We now race the call against a 1-second timeout and
+ * fall back to an empty set on timeout.
  */
-async function readValidSessionIds(input: PluginInput): Promise<Set<string>> {
+export async function readValidSessionIds(input: PluginInput): Promise<Set<string>> {
   try {
     const client = input.client as unknown as {
       session?: { list?: () => Promise<{ data?: Array<{ id: string }> } | Array<{ id: string }>> };
@@ -542,7 +583,15 @@ async function readValidSessionIds(input: PluginInput): Promise<Set<string>> {
     if (!client.session || typeof client.session.list !== "function") {
       return new Set();
     }
-    const result = await client.session.list();
+    // Suppress unhandled rejection if the call eventually rejects after
+    // the timeout has already fired (see `withTimeout` note above).
+    const listPromise = client.session.list();
+    listPromise.catch(() => undefined);
+    const result = await withTimeout(
+      listPromise,
+      1000,
+      "client.session.list",
+    );
     const list = Array.isArray(result) ? result : (result.data ?? []);
     return new Set(list.map((s) => s.id));
   } catch {
