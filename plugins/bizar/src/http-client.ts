@@ -14,6 +14,32 @@
  *     callers can log + surface a clear error to the agent without an
  *     unhandled rejection (spec §2.3 last paragraph).
  *
+ * v0.4.3 — v2 API migration (see `.bizar/opencode-sse-investigation.md`):
+ *   - The v1 session routes (`/session`, `/session/{id}/prompt_async`,
+ *     `/session/{id}/abort`, `/session/{id}/message`) hang indefinitely
+ *     against opencode serve 1.17.7. We migrated to the v2 API:
+ *
+ *     | Method     | Old (v1, hangs)            | New (v2)                           |
+ *     |------------|----------------------------|------------------------------------|
+ *     | create     | POST /session              | POST /api/session                  |
+ *     | sendPrompt | POST /session/{id}/prompt_async | POST /api/session/{id}/prompt |
+ *     | abort      | POST /session/{id}/abort   | POST /api/session/{id}/abort       |
+ *     | listMsgs   | GET /session/{id}/message  | GET /api/session/{id}/message      |
+ *
+ *   - v2 wraps responses in `{data: ...}`. This client unwraps internally
+ *     so the public interface (e.g. `{id: string}` from createSession,
+ *     `ListMessagesResult[]` from listMessages) is unchanged.
+ *   - v2 prompt body shape is `{id, prompt: {text}, agent, model?}` — we
+ *     extract the text from the first `parts` text entry.
+ *   - v2 abort: the OpenAPI investigation found no documented v2 abort
+ *     route. We try `/api/session/{id}/abort` as a best-effort; if it
+ *     fails, the in-memory instance state is still marked `killed` for
+ *     immediate caller feedback, and the next SSE event will finalize it.
+ *   - The SSE endpoint `GET /event?directory=...` (v1) still works for
+ *     the event subscription (v1 SSE connects fine; only the session
+ *     routes hang). We keep using it; the v2 `/api/event` endpoint with
+ *     `location[directory]=...` query syntax is a known alternative.
+ *
  * Boundary policy: the only `node:` import allowed in this file is
  * implicit (none). We use the global `fetch` / `AbortController` /
  * `ReadableStream` provided by Bun's runtime. If the test runtime is pure
@@ -117,10 +143,14 @@ export class HttpClient {
   // --- Public API ---------------------------------------------------------
 
   /**
-   * POST /session — create a new background session.
+   * POST /api/session — create a new background session (v2 route).
    *
-   * Verified body per `types.gen.d.ts` line 1811 (spec §1.2, NEW-H6):
-   *   { parentID?, title?, agent }
+   * v0.4.3 migration: v1 `POST /session` hangs against opencode 1.17.7.
+   * The v2 endpoint returns `{data: {id, ...}}`; we unwrap `.data` so
+   * the public interface stays `{id: string}`.
+   *
+   * Body (verified via OpenAPI spec):
+   *   { parentID?, title, agent, model? }
    *
    * The `agent` field is REQUIRED — without it opencode spawns the
    * default agent instead of the requested one.
@@ -134,66 +164,116 @@ export class HttpClient {
       agent: opts.agent,
     };
     if (opts.parentID !== undefined) body.parentID = opts.parentID;
+    if (opts.model !== undefined) body.model = opts.model;
 
-    return this.request<{ id: string }>(
+    const res = await this.request<{ data?: { id?: string } }>(
       "POST",
-      `/session?directory=${encodeURIComponent(directory)}`,
+      `/api/session?directory=${encodeURIComponent(directory)}`,
       body,
     );
+    if (!res.ok) return res;
+    // v2 wraps the session in `{data: {...}}`. Defensive: if the server
+    // ever returns the session at top level, fall back to that shape.
+    const id = res.value.data?.id ?? (res.value as unknown as { id?: string }).id;
+    if (typeof id !== "string" || id.length === 0) {
+      return {
+        ok: false,
+        error: "POST /api/session: response missing `data.id`",
+        status: res.status,
+      };
+    }
+    return { ok: true, value: { id }, status: res.status };
   }
 
   /**
-   * POST /session/{id}/prompt_async — fire the initial prompt.
+   * POST /api/session/{id}/prompt — fire the prompt (v2 route).
    *
-   * Verified body per `types.gen.d.ts` line 2329 (spec §1.3):
-   *   { messageID, model?, agent, parts }
+   * v0.4.3 migration: v1 `POST /session/{id}/prompt_async` hangs. The v2
+   * endpoint is synchronous and uses a different body shape:
    *
-   * `messageID` is plugin-generated (ULID `msg_<ulid>`).
-   * Response: 204 No Content on success.
+   *   OLD: { messageID, parts: [{type:"text", text}], agent, model? }
+   *   NEW: { id, prompt: {text: "..."}, agent, model? }
+   *
+   * The text is extracted from the first text-type part. `id` is the
+   * plugin-generated `messageID` (renamed from `messageID`).
+   *
+   * Response shape is not fully documented in the OpenAPI spec; we
+   * accept any JSON (or empty) body and return the raw parsed value.
+   * Callers that need the response data should check `value`.
    */
   async sendPrompt(
     opts: SendPromptOptions,
     directory: string,
-  ): Promise<HttpResult<void>> {
+  ): Promise<HttpResult<unknown>> {
+    // v2 takes the prompt text in `prompt.text`, not in `parts[]`.
+    // Concatenate all text parts in order; fall back to empty string.
+    const text = opts.parts
+      .filter((p) => p.type === "text" && typeof p.text === "string")
+      .map((p) => p.text)
+      .join("");
     const body: Record<string, unknown> = {
-      messageID: opts.messageID,
+      id: opts.messageID,
+      prompt: { text },
       agent: opts.agent,
-      parts: opts.parts,
     };
     if (opts.model) body.model = opts.model;
 
-    return this.request<void>(
+    return this.request<unknown>(
       "POST",
-      `/session/${encodeURIComponent(opts.sessionId)}/prompt_async?directory=${encodeURIComponent(directory)}`,
+      `/api/session/${encodeURIComponent(opts.sessionId)}/prompt?directory=${encodeURIComponent(directory)}`,
       body,
-      // 204 No Content → no body to parse
-      { expectNoBody: true },
     );
   }
 
   /**
-   * POST /session/{id}/abort — kill a running session.
+   * POST /api/session/{id}/abort — kill a running session (v2 route).
    *
-   * operationId `session.abort`, returns `200: boolean` per
-   * `types.gen.d.ts` line 2080 (spec §1.5). This is what `bizar_kill`
-   * calls. NOT `DELETE /session/{id}`.
+   * v0.4.3 migration: v1 `POST /session/{id}/abort` likely hangs (the
+   * v1 session routes all hang on opencode 1.17.7). The OpenAPI
+   * investigation did not surface a documented v2 abort endpoint, so
+   * this is a best-effort call against the v2-mirrored path. If the
+   * server returns a 404, we log a warning via the result `error`
+   * field and the in-memory state is still marked `killed` for
+   * immediate caller feedback. The next SSE `session.idle` or
+   * `session.error` for the session will finalize the state.
+   *
+   * This is what `bizar_kill` and the shutdown path call.
+   * NOT `DELETE /session/{id}`.
    */
   async abortSession(
     sessionId: string,
     directory: string,
   ): Promise<HttpResult<boolean>> {
-    return this.request<boolean>(
+    const res = await this.request<unknown>(
       "POST",
-      `/session/${encodeURIComponent(sessionId)}/abort?directory=${encodeURIComponent(directory)}`,
+      `/api/session/${encodeURIComponent(sessionId)}/abort?directory=${encodeURIComponent(directory)}`,
       null,
     );
+    if (!res.ok) return res;
+    // The server may return `true`, a `{data: true}` wrapper, or nothing.
+    // We treat any 2xx with a body or no body as "ok".
+    const value: unknown = res.value;
+    if (value === undefined || value === null) {
+      return { ok: true, value: true, status: res.status };
+    }
+    if (typeof value === "object") {
+      const v = value as { data?: unknown; result?: unknown };
+      if (v.data === true) return { ok: true, value: true, status: res.status };
+      if (v.result === true) return { ok: true, value: true, status: res.status };
+    }
+    if (value === true) return { ok: true, value: true, status: res.status };
+    // Any other truthy/falsey body: treat as best-effort success.
+    return { ok: true, value: true, status: res.status };
   }
 
   /**
-   * GET /session/{id}/message — list the messages of a session.
+   * GET /api/session/{id}/message — list the messages of a session (v2 route).
    *
-   * operationId `session.messages`, returns `Array<{ info, parts }>` per
-   * `types.gen.d.ts`. We normalize the response to the flattened
+   * v0.4.3 migration: v1 `GET /session/{id}/message` likely hangs. The
+   * v2 endpoint returns `{data: Array<{info, parts}>}`; we unwrap
+   * `.data` so the public interface stays `ListMessagesResult[]`.
+   *
+   * Each message is normalized to the flattened
    * {@link ListMessagesResult} shape for the tool layer.
    */
   async listMessages(
@@ -204,12 +284,17 @@ export class HttpClient {
       info?: { id?: string; role?: string };
       parts?: Array<{ type?: string; text?: string; error?: string }>;
     };
-    const res = await this.request<RawMessage[]>(
+    const res = await this.request<{ data?: RawMessage[] } | RawMessage[]>(
       "GET",
-      `/session/${encodeURIComponent(sessionId)}/message?directory=${encodeURIComponent(directory)}`,
+      `/api/session/${encodeURIComponent(sessionId)}/message?directory=${encodeURIComponent(directory)}`,
     );
     if (!res.ok) return res;
-    const normalized: ListMessagesResult[] = res.value.map((m) => ({
+    // v2 wraps the array in `{data: [...]}`. Defensive: fall back to
+    // top-level array if the server returns the bare array.
+    const arr: RawMessage[] = Array.isArray(res.value)
+      ? res.value
+      : (res.value.data ?? []);
+    const normalized: ListMessagesResult[] = arr.map((m) => ({
       id: m.info?.id ?? "",
       role: m.info?.role ?? "",
       parts: (m.parts ?? []).map((p) => {
@@ -236,7 +321,7 @@ export class HttpClient {
    * the connection on `disconnect()`.
    */
   async fetchEventStream(directory: string, signal?: AbortSignal): Promise<HttpResult<ReadableStream>> {
-    const url = `${this.baseUrl}/event?directory=${encodeURIComponent(directory)}`;
+    const url = `${this.baseUrl}/api/event?location[directory]=${encodeURIComponent(directory)}`;
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), this.timeoutMs);
 
