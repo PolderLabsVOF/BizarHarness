@@ -15,7 +15,9 @@
  *     `BIZAR_DISABLE_LOOP`, `BIZAR_DISABLE_LOG`, `BIZAR_LOG_LEVEL`,
  *     `BIZAR_SERVE_PORT`, `BIZAR_MAX_CONCURRENT_INSTANCES`,
  *     `BIZAR_SERVE_DISABLE`, `BIZAR_BACKGROUND_TOOL_CALL_CAP`,
- *     `BIZAR_BACKGROUND_SKIP_PERMISSIONS`). Env vars are read once at init;
+ *     `BIZAR_BACKGROUND_SKIP_PERMISSIONS`,
+ *     `BIZAR_STALL_TIMEOUT_MS`, `BIZAR_THINKING_LOOP_TIMEOUT_MS`,
+ *     `BIZAR_MAX_INTERVENTIONS`). Env vars are read once at init;
  *     mid-session changes are ignored.
  */
 
@@ -37,6 +39,10 @@ export interface RawOptions {
   backgroundToolCallCap?: unknown;
   backgroundSkipPermissions?: unknown;
   httpTimeoutMs?: unknown;
+  // v0.3.0 — stall and thinking-loop protection
+  backgroundStallTimeoutMs?: unknown;
+  backgroundThinkingLoopTimeoutMs?: unknown;
+  backgroundMaxInterventions?: unknown;
 }
 
 /**
@@ -57,6 +63,13 @@ export interface NormalizedOptions {
   backgroundToolCallCap: number;
   backgroundSkipPermissions: boolean;
   httpTimeoutMs: number;
+  // v0.3.0 — stall and thinking-loop protection
+  /** ms without any SSE event before a non-terminal instance is aborted as stalled (default 180000 = 3 min, range [10000, 600000]). */
+  backgroundStallTimeoutMs: number;
+  /** ms without any tool/text part before a `running` instance is flagged as a thinking loop (default 300000 = 5 min, range [30000, 900000]). */
+  backgroundThinkingLoopTimeoutMs: number;
+  /** max number of research interventions sent before forcing an abort (default 1, range [1, 3]). */
+  backgroundMaxInterventions: number;
 }
 
 /** Environment-variable override flags. */
@@ -81,6 +94,10 @@ export const DEFAULT_OPTIONS: NormalizedOptions = {
   backgroundToolCallCap: 500,      // §8 / §6.2
   backgroundSkipPermissions: false, // §8 / §6.4
   httpTimeoutMs: 30_000,           // §2.3 / §8
+  // v0.3.0 — stall and thinking-loop protection
+  backgroundStallTimeoutMs: 180_000,        // 3 min
+  backgroundThinkingLoopTimeoutMs: 300_000, // 5 min
+  backgroundMaxInterventions: 1,
 };
 
 const SECRET_DIRS: readonly string[] = [
@@ -288,6 +305,62 @@ export function normalizeOptions(raw: RawOptions | undefined): {
     httpTimeoutMs = DEFAULT_OPTIONS.httpTimeoutMs;
   }
 
+  // --- v0.3.0 stall and thinking-loop protection -------------------------
+
+  // backgroundStallTimeoutMs: default 180000, range [10000, 600000] (10s..10min)
+  const rawStallTimeout = toFiniteInt(r.backgroundStallTimeoutMs);
+  const envStallTimeout = toFiniteInt(process.env.BIZAR_STALL_TIMEOUT_MS);
+  let backgroundStallTimeoutMs: number;
+  if (rawStallTimeout !== undefined) {
+    backgroundStallTimeoutMs = Math.min(Math.max(10_000, rawStallTimeout), 600_000);
+    if (rawStallTimeout !== backgroundStallTimeoutMs) {
+      notes.push(`backgroundStallTimeoutMs ${rawStallTimeout} clamped to ${backgroundStallTimeoutMs} (range [10000, 600000])`);
+    }
+  } else if (envStallTimeout !== undefined) {
+    backgroundStallTimeoutMs = Math.min(Math.max(10_000, envStallTimeout), 600_000);
+    if (envStallTimeout !== backgroundStallTimeoutMs) {
+      notes.push(`backgroundStallTimeoutMs ${envStallTimeout} (env) clamped to ${backgroundStallTimeoutMs} (range [10000, 600000])`);
+    }
+  } else {
+    backgroundStallTimeoutMs = DEFAULT_OPTIONS.backgroundStallTimeoutMs;
+  }
+
+  // backgroundThinkingLoopTimeoutMs: default 300000, range [30000, 900000] (30s..15min)
+  const rawThinkingTimeout = toFiniteInt(r.backgroundThinkingLoopTimeoutMs);
+  const envThinkingTimeout = toFiniteInt(process.env.BIZAR_THINKING_LOOP_TIMEOUT_MS);
+  let backgroundThinkingLoopTimeoutMs: number;
+  if (rawThinkingTimeout !== undefined) {
+    backgroundThinkingLoopTimeoutMs = Math.min(Math.max(30_000, rawThinkingTimeout), 900_000);
+    if (rawThinkingTimeout !== backgroundThinkingLoopTimeoutMs) {
+      notes.push(`backgroundThinkingLoopTimeoutMs ${rawThinkingTimeout} clamped to ${backgroundThinkingLoopTimeoutMs} (range [30000, 900000])`);
+    }
+  } else if (envThinkingTimeout !== undefined) {
+    backgroundThinkingLoopTimeoutMs = Math.min(Math.max(30_000, envThinkingTimeout), 900_000);
+    if (envThinkingTimeout !== backgroundThinkingLoopTimeoutMs) {
+      notes.push(`backgroundThinkingLoopTimeoutMs ${envThinkingTimeout} (env) clamped to ${backgroundThinkingLoopTimeoutMs} (range [30000, 900000])`);
+    }
+  } else {
+    backgroundThinkingLoopTimeoutMs = DEFAULT_OPTIONS.backgroundThinkingLoopTimeoutMs;
+  }
+
+  // backgroundMaxInterventions: default 1, range [1, 3]
+  const rawMaxInterventions = toFiniteInt(r.backgroundMaxInterventions);
+  const envMaxInterventions = toFiniteInt(process.env.BIZAR_MAX_INTERVENTIONS);
+  let backgroundMaxInterventions: number;
+  if (rawMaxInterventions !== undefined) {
+    backgroundMaxInterventions = Math.min(Math.max(1, rawMaxInterventions), 3);
+    if (rawMaxInterventions !== backgroundMaxInterventions) {
+      notes.push(`backgroundMaxInterventions ${rawMaxInterventions} clamped to ${backgroundMaxInterventions} (range [1, 3])`);
+    }
+  } else if (envMaxInterventions !== undefined) {
+    backgroundMaxInterventions = Math.min(Math.max(1, envMaxInterventions), 3);
+    if (envMaxInterventions !== backgroundMaxInterventions) {
+      notes.push(`backgroundMaxInterventions ${envMaxInterventions} (env) clamped to ${backgroundMaxInterventions} (range [1, 3])`);
+    }
+  } else {
+    backgroundMaxInterventions = DEFAULT_OPTIONS.backgroundMaxInterventions;
+  }
+
   // --- Paths (§6.1 defaults) ---
   const logDir = toStringPath(r.logDir) ?? DEFAULT_OPTIONS.logDir;
   const stateDir = toStringPath(r.stateDir) ?? DEFAULT_OPTIONS.stateDir;
@@ -307,6 +380,9 @@ export function normalizeOptions(raw: RawOptions | undefined): {
       backgroundToolCallCap,
       backgroundSkipPermissions,
       httpTimeoutMs,
+      backgroundStallTimeoutMs,
+      backgroundThinkingLoopTimeoutMs,
+      backgroundMaxInterventions,
     },
     notes,
   };

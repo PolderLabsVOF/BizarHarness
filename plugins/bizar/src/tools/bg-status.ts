@@ -79,10 +79,21 @@ function toViewShape(inst: import("../background-state.js").BackgroundState): In
     promptPreview: inst.promptPreview,
     parentAgent: inst.parentAgent,
     sessionId: inst.sessionId,
+    // v0.3.0 — always surface lastEventAt so callers can compute the
+    // current "freshness" of an instance (now - lastEventAt).
+    lastEventAt: inst.lastEventAt,
   };
   if (inst.completedAt !== undefined) v.completedAt = inst.completedAt;
   if (inst.resultPreview !== undefined) v.resultPreview = inst.resultPreview;
   if (inst.error !== undefined) v.error = inst.error;
   if (inst.parentInstanceId !== undefined) v.parentInstanceId = inst.parentInstanceId;
+  // v0.3.0 — only surface intervention metadata when at least one
+  // intervention has actually been sent.
+  const interventionCount = inst.interventionCount ?? 0;
+  if (interventionCount > 0) {
+    v.interventionCount = interventionCount;
+    if (inst.interventionAt !== undefined) v.interventionAt = inst.interventionAt;
+    if (inst.interventionReason !== undefined) v.interventionReason = inst.interventionReason;
+  }
   return v;
 }

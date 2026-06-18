@@ -82,6 +82,23 @@ export type BackgroundStatus =
  *   - `loopGuardTool` — set when threshold-12 throw is captured. Used at
  *     `bizar_collect` to prepend the marker.
  *   - `timeoutMs` — collect-time timeout requested by caller.
+ *   - `lastEventAt` — epoch ms when the most recent SSE event arrived for
+ *     this instance. Set on every event the manager observes (tool/text
+ *     part updates, session.idle, session.error, session.created/updated/
+ *     deleted). Used by the stall checker (§v0.3.0). Optional in the
+ *     type but always populated by `InstanceManager.add()` (the manager
+ *     seeds it from `startedAt`); older on-disk files written before
+ *     v0.3.0 are backfilled in `readState`.
+ *   - `lastToolOrTextAt` — epoch ms when the most recent `tool` or `text`
+ *     part arrived. `thinking` parts do NOT advance this timestamp; that
+ *     is the whole point — repeated `thinking` parts with no `tool` or
+ *     `text` is what we detect as a thinking loop (§v0.3.0).
+ *   - `interventionCount` — number of research interventions sent for
+ *     this instance. Reset to 0 when the agent makes progress (tool or
+ *     text part after an intervention). Default 0.
+ *   - `interventionAt` — epoch ms of the most recent intervention.
+ *   - `interventionReason` — short human-readable description of the
+ *     intervention, e.g. `"thinking loop (5m 12s without tool/text)"`.
  */
 export interface BackgroundState {
   instanceId: string;
@@ -101,6 +118,15 @@ export interface BackgroundState {
   timeoutMs: number;
   toolCallCount: number;
   loopGuardTool?: string;
+  // v0.3.0 — stall and thinking-loop protection. These are typed as
+  // optional in the schema because (a) the field can be absent in older
+  // files on disk, and (b) the `InstanceManager.add()` input (AddDraft)
+  // does not require them — the manager seeds them itself.
+  lastEventAt?: number;
+  lastToolOrTextAt?: number;
+  interventionCount?: number;
+  interventionAt?: number;
+  interventionReason?: string;
 }
 
 /**
@@ -125,6 +151,14 @@ export const EMPTY_BACKGROUND_STATE: Omit<
 > = {
   status: "pending",
   toolCallCount: 0,
+  // v0.3.0 — stall and thinking-loop protection defaults. The manager
+  // seeds `lastEventAt` and `lastToolOrTextAt` from `Date.now()` at
+  // `add()` time; we set them to 0 here so a draft shape remains valid
+  // even if it is constructed without the manager (the manager always
+  // overwrites them).
+  lastEventAt: 0,
+  lastToolOrTextAt: 0,
+  interventionCount: 0,
 };
 
 /**
@@ -245,6 +279,13 @@ function writeStateAtomic(
 /**
  * Read & validate a single background state file. Returns null on missing
  * or corrupt input. Logs a warning on corrupt files.
+ *
+ * Backward compatibility (v0.3.0): state files written before the stall
+ * and thinking-loop fields existed may not carry `lastEventAt` /
+ * `lastToolOrTextAt` / `interventionCount`. We backfill them here from
+ * `startedAt` so the stall and thinking-loop checkers have a sensible
+ * baseline (and so a plugin restart does not immediately flag a
+ * pre-existing live instance as stalled).
  */
 function readState(
   filePath: string,
@@ -262,6 +303,16 @@ function readState(
       typeof parsed.status !== "string"
     ) {
       throw new Error("schema mismatch");
+    }
+    // Backfill v0.3.0 fields for files written by older versions.
+    if (typeof parsed.lastEventAt !== "number") {
+      parsed.lastEventAt = parsed.startedAt;
+    }
+    if (typeof parsed.lastToolOrTextAt !== "number") {
+      parsed.lastToolOrTextAt = parsed.startedAt;
+    }
+    if (typeof parsed.interventionCount !== "number") {
+      parsed.interventionCount = 0;
     }
     return parsed;
   } catch (err: unknown) {

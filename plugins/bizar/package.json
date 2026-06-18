@@ -1,7 +1,7 @@
 {
   "name": "@polderlabs/bizarharness-plugin",
-  "version": "0.2.1",
-  "description": "Bizar opencode plugin — loop detection, status reporting, and handoff signal for subagent activity",
+  "version": "0.3.0",
+  "description": "Bizar opencode plugin — loop detection, status reporting, handoff signal, and stall/thinking-loop protection for subagent activity",
   "type": "module",
   "main": "./index.ts",
   "types": "./index.ts",
@@ -11,7 +11,7 @@
   "scripts": {
     "check:imports": "bash scripts/check-forbidden-imports.sh",
     "typecheck": "tsc --noEmit",
-    "test": "npm run check:imports && bun test tests/loop.test.ts tests/block.test.ts"
+    "test": "npm run check:imports && bun test tests/loop.test.ts tests/block.test.ts tests/stall-think.test.ts"
   },
   "keywords": [
     "opencode",

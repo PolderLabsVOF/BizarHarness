@@ -36,6 +36,25 @@
  *   - On `EventSessionIdle`, mark the instance `done`.
  *   - On `EventSessionError`, mark the instance `failed` with the error.
  *
+ * v0.3.0 — stall and thinking-loop protection:
+ *   - Every event handler updates `lastEventAt` (the "heartbeat"). The
+ *     stall checker fires every `STALL_CHECK_INTERVAL_MS`; if a non-terminal
+ *     instance has `now - lastEventAt > backgroundStallTimeoutMs`, the
+ *     session is aborted and the instance marked `failed`.
+ *   - `tool` and `text` parts advance `lastToolOrTextAt`. `thinking`
+ *     parts do NOT advance it; that is the loop indicator.
+ *   - The thinking-loop checker fires every `STALL_CHECK_INTERVAL_MS`. For
+ *     a `running` instance with `now - lastToolOrTextAt >
+ *     backgroundThinkingLoopTimeoutMs`:
+ *       - If `interventionCount < backgroundMaxInterventions`: send a
+ *         research-intervention prompt (fire-and-forget) and increment the
+ *         counter.
+ *       - Otherwise: abort the session and mark `failed`.
+ *   - When a `tool` or `text` part arrives after one or more interventions,
+ *     the counter is reset to 0 (sign of progress). The intervention
+ *     metadata is cleared so a later status check does not show stale
+ *     intervention info.
+ *
  * "Track BEFORE HTTP" invariant (spec §2.2 / HIGH-21):
  *   - The instance is added to the map (status `pending`) BEFORE any HTTP
  *     call. If the HTTP call fails, the instance is marked `failed`. The
@@ -47,6 +66,7 @@ import { TERMINAL_STATUSES } from "./background-state.js";
 import type { HttpClient } from "./http-client.js";
 import type { EventStream, StreamEvent, SessionEventHandler } from "./event-stream.js";
 import type { ServeLifecycle } from "./serve.js";
+import { researchInterventionPrompt } from "./research-prompt.js";
 
 // --- Public surface -------------------------------------------------------
 
@@ -64,6 +84,11 @@ export interface InstanceView {
   parentAgent: string;
   parentInstanceId?: string;
   sessionId: string;
+  // v0.3.0 — stall and thinking-loop protection
+  lastEventAt?: number;
+  interventionCount?: number;
+  interventionAt?: number;
+  interventionReason?: string;
 }
 
 /** The return shape of `bizar_collect`. */
@@ -98,6 +123,14 @@ const PROMPT_PREVIEW_MAX = 200;
 /** Tool-call cap regex (spec §4.1, NEW-H8 pin). */
 const LOOP_GUARD_RE = /Loop protection: 12 identical calls to (\S+)/;
 
+/**
+ * How often the stall + thinking-loop checker fires. 15 seconds is short
+ * enough to detect stalls within one tick of the default 3-min stall
+ * timeout, and long enough that the per-instance mutex is not constantly
+ * contested. Spec §v0.3.0.
+ */
+const STALL_CHECK_INTERVAL_MS = 15_000;
+
 // --- Class ---------------------------------------------------------------
 
 /**
@@ -115,6 +148,14 @@ export class InstanceManager {
   private http: HttpClient;
   private stream: EventStream;
   private worktree: string;
+  // v0.3.0 — stall and thinking-loop protection
+  private stallTimeoutMs: number;
+  private thinkingLoopTimeoutMs: number;
+  private maxInterventions: number;
+  /** Interval handle for the periodic stall + thinking-loop checker. */
+  private stallCheckerTimer: ReturnType<typeof setInterval> | null = null;
+  /** Guard so tests can disable the interval without monkey-patching. */
+  private stallCheckerDisabled = false;
 
   constructor(opts: {
     stateStore: BackgroundStateStore;
@@ -124,6 +165,10 @@ export class InstanceManager {
     serve: ServeLifecycle;
     http: HttpClient;
     stream: EventStream;
+    // v0.3.0
+    stallTimeoutMs?: number;
+    thinkingLoopTimeoutMs?: number;
+    maxInterventions?: number;
   }) {
     this.stateStore = opts.stateStore;
     this.maxConcurrent = Math.max(1, Math.floor(opts.maxConcurrent));
@@ -133,12 +178,102 @@ export class InstanceManager {
     this.http = opts.http;
     this.stream = opts.stream;
     this.worktree = opts.serve.worktree;
+    this.stallTimeoutMs = Math.max(
+      1_000,
+      Math.floor(opts.stallTimeoutMs ?? 180_000),
+    );
+    this.thinkingLoopTimeoutMs = Math.max(
+      1_000,
+      Math.floor(opts.thinkingLoopTimeoutMs ?? 300_000),
+    );
+    this.maxInterventions = Math.max(1, Math.floor(opts.maxInterventions ?? 1));
+    // Schedule the periodic stall + thinking-loop checker. The interval
+    // reference is stored so `shutdownAll` / `dispose` can clear it.
+    this.stallCheckerTimer = setInterval(
+      () => void this.runStallAndLoopChecks(),
+      STALL_CHECK_INTERVAL_MS,
+    );
   }
 
   // --- Getters ------------------------------------------------------------
 
   get size(): number {
     return this.instances.size;
+  }
+
+  /** Current stall timeout (ms). Exposed for tests. */
+  get stallTimeoutMsValue(): number {
+    return this.stallTimeoutMs;
+  }
+
+  /** Current thinking-loop timeout (ms). Exposed for tests. */
+  get thinkingLoopTimeoutMsValue(): number {
+    return this.thinkingLoopTimeoutMs;
+  }
+
+  /** Current max interventions. Exposed for tests. */
+  get maxInterventionsValue(): number {
+    return this.maxInterventions;
+  }
+
+  /**
+   * Disable the periodic stall + thinking-loop checker. Used by tests
+   * that want to call `runStallAndLoopChecks()` directly without racing
+   * the interval. Idempotent.
+   */
+  disablePeriodicChecks(): void {
+    this.stallCheckerDisabled = true;
+    if (this.stallCheckerTimer !== null) {
+      clearInterval(this.stallCheckerTimer);
+      this.stallCheckerTimer = null;
+    }
+  }
+
+  /**
+   * Run one iteration of the stall + thinking-loop checker. Public so
+   * tests can invoke it deterministically. Production code drives this
+   * via the `setInterval` registered in the constructor.
+   */
+  async runStallAndLoopChecks(): Promise<void> {
+    if (this.stallCheckerDisabled) return;
+    // Snapshot the instance ids so we do not iterate while the map mutates.
+    const ids: string[] = [];
+    for (const inst of this.instances.values()) {
+      if (TERMINAL_STATUSES.has(inst.status)) continue;
+      ids.push(inst.instanceId);
+    }
+    for (const id of ids) {
+      const inst = this.instances.get(id);
+      if (!inst || TERMINAL_STATUSES.has(inst.status)) continue;
+      const now = Date.now();
+      // `lastEventAt` / `lastToolOrTextAt` are seeded by `add()` and
+      // backfilled in `readState`, so they are guaranteed to be set on
+      // any instance that ever reached this method. We coalesce with
+      // `?? 0` because TS strict mode treats the schema field as
+      // optional — the value is informational in the rare case where
+      // it is missing (an old or corrupt state file).
+      const lastEventAt = inst.lastEventAt ?? 0;
+      const lastToolOrTextAt = inst.lastToolOrTextAt ?? 0;
+      // Stall check fires first; it is the more severe failure.
+      if (now - lastEventAt > this.stallTimeoutMs) {
+        await this._abortAsStalled(inst);
+        continue;
+      }
+      // Thinking-loop check applies to `running` instances only. A
+      // `pending` instance has not yet started generating, so it is not
+      // a candidate for the loop detector.
+      if (inst.status === "running") {
+        const since = now - lastToolOrTextAt;
+        if (since > this.thinkingLoopTimeoutMs) {
+          const currentCount = inst.interventionCount ?? 0;
+          if (currentCount < this.maxInterventions) {
+            await this._sendIntervention(inst, since);
+          } else {
+            await this._abortAsThinkingLoop(inst, since);
+          }
+        }
+      }
+    }
   }
 
   // --- Atomic add (spec §2.2) ---------------------------------------------
@@ -169,6 +304,14 @@ export class InstanceManager {
         toolCallCount: draft.toolCallCount ?? 0,
         // Trim the prompt preview so the JSON stays small.
         promptPreview: (draft.promptPreview ?? "").slice(0, PROMPT_PREVIEW_MAX),
+        // v0.3.0 — seed the liveness timestamps so the stall and
+        // thinking-loop checkers have a baseline. We seed BOTH from
+        // `startedAt` so a freshly-spawned instance is not immediately
+        // flagged as stalled while the session is still being created
+        // (the first event typically arrives within seconds).
+        lastEventAt: now,
+        lastToolOrTextAt: now,
+        interventionCount: 0,
       };
       this.instances.set(draft.instanceId, full);
       // Persist asynchronously; failure is logged but does not roll back
@@ -420,8 +563,19 @@ export class InstanceManager {
    * abort all running sessions best-effort (5s timeout per call, in
    * parallel), then return. The serve child termination is the
    * caller's responsibility.
+   *
+   * Also clears the v0.3.0 stall-checker interval. After `shutdownAll`,
+   * the manager is effectively inert — no more periodic checks will
+   * fire even though the InstanceManager object itself is still alive.
    */
   async shutdownAll(): Promise<void> {
+    // v0.3.0 — clear the periodic checker first so it does not race
+    // the in-flight updates below.
+    if (this.stallCheckerTimer !== null) {
+      clearInterval(this.stallCheckerTimer);
+      this.stallCheckerTimer = null;
+    }
+    this.stallCheckerDisabled = true;
     const live: BackgroundState[] = [];
     for (const inst of this.instances.values()) {
       if (!TERMINAL_STATUSES.has(inst.status)) {
@@ -446,6 +600,102 @@ export class InstanceManager {
     this.logger.info(`bizar: shutdownAll complete (${live.length} instances aborted)`);
   }
 
+  // --- v0.3.0 stall and thinking-loop helpers ----------------------------
+
+  /**
+   * Mark an instance `failed` with the canonical stall message and
+   * fire-and-forget the opencode abort call. The stall timeout is
+   * intentionally short enough that an abort that fails gracefully
+   * (the serve child is dead, etc.) does not leave the user waiting.
+   */
+  private async _abortAsStalled(inst: BackgroundState): Promise<void> {
+    const lastEventAt = inst.lastEventAt ?? 0;
+    const sinceMs = Date.now() - lastEventAt;
+    this.logger.warn(
+      `bizar: instance ${inst.instanceId} stalled (no event for ${sinceMs}ms); aborting`,
+    );
+    // Fire-and-forget. If the serve child is dead, this returns a
+    // failure result but we still mark the instance failed in-memory.
+    this.http
+      .abortSession(inst.sessionId, this.worktree)
+      .catch(() => undefined);
+    await this.update(inst.instanceId, {
+      status: "failed",
+      error: `No activity for ${this.stallTimeoutMs}ms — LLM appears stalled`,
+      completedAt: Date.now(),
+    });
+  }
+
+  /**
+   * Send the research-intervention prompt to the running session. The
+   * message interrupts the current generation and starts a new turn
+   * with the prompt as the next user message. This is fire-and-forget:
+   * we do not wait for the prompt to complete, only for the HTTP call
+   * to return.
+   */
+  private async _sendIntervention(
+    inst: BackgroundState,
+    sinceMs: number,
+  ): Promise<void> {
+    const messageID = generateMessageId();
+    const prompt = researchInterventionPrompt(sinceMs);
+    const currentCount = inst.interventionCount ?? 0;
+    this.logger.warn(
+      `bizar: instance ${inst.instanceId} thinking loop (${sinceMs}ms without tool/text); sending intervention #${currentCount + 1}/${this.maxInterventions}`,
+    );
+    try {
+      await this.http.sendPrompt(
+        {
+          sessionId: inst.sessionId,
+          messageID,
+          agent: inst.agent,
+          parts: [{ type: "text", text: prompt }],
+        },
+        this.worktree,
+      );
+    } catch (err: unknown) {
+      // We swallow the error: the periodic checker will try again next
+      // tick. The intervention counter is still incremented below so
+      // we eventually escalate to an abort if the prompt keeps failing.
+      this.logger.warn(
+        `bizar: intervention prompt send failed for ${inst.instanceId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    const reason = `thinking loop (${formatDuration(sinceMs)} without tool/text)`;
+    await this.update(inst.instanceId, {
+      interventionCount: currentCount + 1,
+      interventionAt: Date.now(),
+      interventionReason: reason,
+      // Bumping lastEventAt here is intentional: the intervention call
+      // counted as an HTTP-driven activity, so the stall checker does
+      // not fire immediately after.
+      lastEventAt: Date.now(),
+    });
+  }
+
+  /**
+   * Mark an instance `failed` with the canonical thinking-loop message
+   * and fire-and-forget the abort call.
+   */
+  private async _abortAsThinkingLoop(
+    inst: BackgroundState,
+    sinceMs: number,
+  ): Promise<void> {
+    this.logger.warn(
+      `bizar: instance ${inst.instanceId} thinking loop exhausted ${this.maxInterventions} intervention(s) over ${sinceMs}ms; aborting`,
+    );
+    this.http
+      .abortSession(inst.sessionId, this.worktree)
+      .catch(() => undefined);
+    await this.update(inst.instanceId, {
+      status: "failed",
+      error: `Thinking loop detected: ${formatDuration(sinceMs)} of thinking without tool calls or output. Spawn a Mimir agent for research.`,
+      completedAt: Date.now(),
+    });
+  }
+
   // --- Internal: per-session event handler -------------------------------
 
   private attachEventHandler(inst: BackgroundState): () => void {
@@ -465,6 +715,12 @@ export class InstanceManager {
     // Already terminal — ignore further events (e.g., after kill, an
     // EventSessionError may still arrive).
     if (TERMINAL_STATUSES.has(inst.status)) return;
+
+    // v0.3.0 — every event advances the heartbeat. We do this BEFORE
+    // any further work (or inside the per-instance mutex in update())
+    // so the stall checker sees the freshest timestamp regardless of
+    // how the rest of the handler proceeds.
+    inst.lastEventAt = Date.now();
 
     if (ev.type === "message.part.updated") {
       await this.onPartUpdated(instanceId, ev);
@@ -490,6 +746,21 @@ export class InstanceManager {
     const inst = this.instances.get(instanceId);
     if (!inst) return;
     const part = ev.part;
+
+    // v0.3.0 — tool and text parts advance the "progress" timestamp.
+    // `thinking` parts do NOT, because that is the loop indicator.
+    if (part.type === "tool" || part.type === "text") {
+      inst.lastToolOrTextAt = Date.now();
+      // The agent has shown concrete progress after one or more
+      // interventions — reset the intervention counter so the next
+      // thinking loop has a fresh budget. Clear the intervention
+      // metadata so a later status check does not show stale info.
+      if ((inst.interventionCount ?? 0) > 0) {
+        inst.interventionCount = 0;
+        delete inst.interventionAt;
+        delete inst.interventionReason;
+      }
+    }
 
     // --- Tool-call cap (spec §6.2) ---
     if (part.type === "tool") {
@@ -578,6 +849,17 @@ export class InstanceManager {
 // --- Helpers --------------------------------------------------------------
 
 /**
+ * Format a millisecond duration as `Xm Ys` (or just `Ys` if under a minute).
+ * Used in stall and thinking-loop error messages.
+ */
+function formatDuration(ms: number): string {
+  const safeMs = Math.max(0, Math.floor(ms));
+  const minutes = Math.floor(safeMs / 60_000);
+  const seconds = Math.floor((safeMs % 60_000) / 1000);
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
+/**
  * Generate a unique instance id: `bgr_<22-char base32>` (ULID-like).
  * We use 16 random bytes encoded as 22 base32 characters. The prefix
  * `bgr_` makes the file naming scheme obvious.
@@ -631,11 +913,23 @@ function toView(inst: BackgroundState): InstanceView {
     promptPreview: inst.promptPreview,
     parentAgent: inst.parentAgent,
     sessionId: inst.sessionId,
+    // v0.3.0 — stall and thinking-loop protection. Always include
+    // lastEventAt so a status caller can see how fresh the activity is.
+    lastEventAt: inst.lastEventAt,
   };
   if (inst.completedAt !== undefined) v.completedAt = inst.completedAt;
   if (inst.resultPreview !== undefined) v.resultPreview = inst.resultPreview;
   if (inst.error !== undefined) v.error = inst.error;
   if (inst.parentInstanceId !== undefined) v.parentInstanceId = inst.parentInstanceId;
+  // Only surface intervention metadata when we have actually intervened.
+  // `interventionCount > 0` is the canonical signal; absent fields mean
+  // "no intervention has been sent yet", which is the common case.
+  const interventionCount = inst.interventionCount ?? 0;
+  if (interventionCount > 0) {
+    v.interventionCount = interventionCount;
+    if (inst.interventionAt !== undefined) v.interventionAt = inst.interventionAt;
+    if (inst.interventionReason !== undefined) v.interventionReason = inst.interventionReason;
+  }
   return v;
 }
 

@@ -82,6 +82,9 @@ input is clamped, never rejected — the plugin never throws on bad config.
 | `logDir` | `~/.cache/bizarharness/logs` | Refused if inside `~/.ssh/`, `~/.gnupg/`, `~/.aws/`, `~/.kube/`. |
 | `stateDir` | `~/.cache/bizarharness` | Refused if inside a secret directory (same list as `logDir`). |
 | `logRotationBytes` | `10485760` (10 MB) | `Math.max(1024, Math.floor(value))`. |
+| `backgroundStallTimeoutMs` | `180000` (3 min) | v0.3.0 — stall timeout in ms. Clamped to `[10000, 600000]`. |
+| `backgroundThinkingLoopTimeoutMs` | `300000` (5 min) | v0.3.0 — thinking-loop timeout in ms. Clamped to `[30000, 900000]`. |
+| `backgroundMaxInterventions` | `1` | v0.3.0 — max research interventions before forced abort. Clamped to `[1, 3]`. |
 
 ## Environment variables
 
@@ -91,6 +94,9 @@ input is clamped, never rejected — the plugin never throws on bad config.
 | `BIZAR_DISABLE_LOOP=1` | Loop guard disabled (no fingerprint, no threshold check, no throw). Status reporting still active. |
 | `BIZAR_DISABLE_LOG=1` | Status reporting disabled. Loop guard still active. |
 | `BIZAR_LOG_LEVEL=debug\|info\|warn\|error` | Sets log verbosity. Default `info`. Invalid values fall back to `info` with a warning. |
+| `BIZAR_STALL_TIMEOUT_MS` | v0.3.0 — overrides `backgroundStallTimeoutMs`. |
+| `BIZAR_THINKING_LOOP_TIMEOUT_MS` | v0.3.0 — overrides `backgroundThinkingLoopTimeoutMs`. |
+| `BIZAR_MAX_INTERVENTIONS` | v0.3.0 — overrides `backgroundMaxInterventions`. |
 
 Env vars are read once at plugin init. Mid-session changes are ignored.
 
@@ -189,6 +195,27 @@ await bizarre_kill({ instanceId: "bgr_01ARSH..." }, ctx);
 - **`--dangerously-skip-permissions` opt-in** — by default the serve child respects the user's agent permission config. Set `BIZAR_BACKGROUND_SKIP_PERMISSIONS=1` to skip (not recommended).
 - **Odin-only spawn** — only Odin can spawn background agents. Other agents (Vör, Frigg, Mimir, etc.) can call `bizar_status` (read-only).
 
+## Stall and thinking loop protection
+
+Background agents can hang in two ways:
+
+1. **Stall** — the LLM provider drops the connection or the model stops emitting tokens. No SSE events arrive. The session is "alive" but not making progress.
+2. **Thinking loop** — the model is in its internal reasoning phase, emitting `thinking` parts, but never calling tools or producing output. Events are flowing, just not useful ones.
+
+v0.3.0 adds automatic protection against both:
+
+| Guard | Default | Triggers when | Action |
+|---|---|---|---|
+| `backgroundStallTimeoutMs` | 180000 (3 min) | No SSE event arrives for N seconds | Abort session, mark `failed` with "No activity for N ms — LLM appears stalled" |
+| `backgroundThinkingLoopTimeoutMs` | 300000 (5 min) | No tool/text part arrives for N minutes (only `thinking` parts) | Send research intervention prompt (1 by default), then abort if still stuck |
+
+The intervention prompt instructs the LLM to:
+- Spawn a Mimir agent for research
+- Or use read/grep/glob for codebase info
+- Or use bash for observable commands
+
+This nudges the agent out of pure thinking and toward concrete progress. The intervention counter is reset to 0 the moment the agent makes progress (any `tool` or `text` part after an intervention), so a single intervention followed by activity does not count against the next thinking loop.
+
 ### Limitations
 
 1. **Threshold-5/8 in background are not visible to Odin.** They happen in the background session's LLM context. Odin only sees the threshold-12 marker in the result. Developers can see threshold-5/8 in the plugin log.
@@ -201,6 +228,8 @@ await bizarre_kill({ instanceId: "bgr_01ARSH..." }, ctx);
 8. **`bizar_collect` on a killed/failed instance returns the partial result.** It does not retry.
 9. **The `model` parameter is not validated.** opencode will reject unknown providers/models with a 4xx.
 10. **Custom agents without loop-guard instructions will not see the marker as a task cue.**
+11. **v0.3.0 — Stall and thinking-loop detection has a 15-second polling latency.** The periodic checker runs every 15 seconds, so the actual detection happens within `timeout + 15s`. Adjust the timeouts downward if you need tighter SLAs.
+12. **v0.3.0 — A stalled-but-already-closing serve child may briefly show `failed` with the stall message.** The abort call is best-effort; if the serve child has just died, the stall message is the user-visible reason. The underlying cause is captured in the plugin log.
 
 ### Odin usage example
 
