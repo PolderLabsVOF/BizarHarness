@@ -6,6 +6,17 @@ For npm releases, see https://www.npmjs.com/package/@polderlabs/bizarharness. Fo
 
 ## Unreleased
 
+### Fixed
+
+- **Startup hang recovery (2026-06-18).** Wrapped `client.session.list()` in plugin init with a 1-second timeout guard to prevent init promise deadlock on a slow/blocked session store. Full incident postmortem at `docs/postmortems/2026-06-18-plugin-state-deadlock.md`.
+- **Hindsight MCP key persistence.** Created `~/.config/environment.d/90-hindsight.conf` and added shell loaders to `~/.bashrc`, `~/.profile`, and `~/.config/fish/conf.d/90-hindsight.fish`. OpenCode config updated with bearer-token fallback.
+- **Global OpenCode config normalization.** Reset `~/.opencode/opencode.json` and `~/.config/opencode/opencode.json` to stable MiniMax models (`minimax/MiniMax-M3` / `minimax/MiniMax-M2.7`), `default_agent: quick`, with `supabase.enabled: false`, `hindsight.enabled: false`, and MCP permissions set to `deny`.
+- **Project-local config override aligned.** `~/Projects/BizarHarness/config/opencode.json` was re-enabling `default_agent: odin`, `model: opencode/deepseek-v4-flash-free`, and broken MCPs — corrected to match global baseline.
+- **Interactive agents rerouted to M2.7.** `config/agents/{quick,frigg,vor,mimir,heimdall}.md` had `model: opencode/deepseek-v4-flash-free` hard-coded in YAML frontmatter — switched to `minimax/MiniMax-M2.7` to respect tier-routing design.
+- **Re-entrant lock removed from plugin state layer.** `plugins/bizar/src/state.ts` had a per-session mutex that self-deadlocked on first message submit (`chat.message → withLock → load → withLock` and `chat.message → withLock → save → withLock`). Removed nested locking from `load()`, `save()`, and `delete()` — these methods now perform direct file I/O without holding a session lock.
+
+### Changed
+
 - **Package moved to @polderlabs npm org.** Main package: `bizarharness` → `@polderlabs/bizarharness` (v2.1.2). Plugin: `@bizarharness/bizar-plugin` → `@polderlabs/bizarharness-plugin` (v0.2.0). Old `bizarharness` package deprecated. Install with: `npm install -g @polderlabs/bizarharness`
 - Background agents v0.4.2 (Forseti audit fixes) — see [Background Agents](Background-Agents).
 - Dev sandbox moved into its own `BizarHarness-dev` project.
