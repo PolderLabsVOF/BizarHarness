@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.6.1 — 2026-06-19
+
+### Fixed
+- **`bizar` install hangs** after completing all work. The `installPluginBizar()` function started a spinner but returned early (without stopping it) when the local `plugins/bizar/` directory didn't exist. The dangling spinner kept an interval alive, preventing the process from exiting. Now stops the spinner cleanly in the early-return path.
+
 ## v2.6.0 — 2026-06-19
 
 ### Changed
