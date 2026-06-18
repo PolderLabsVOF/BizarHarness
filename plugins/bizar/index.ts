@@ -39,8 +39,12 @@
  *       orphaned `running`/`pending` as `failed`.
  *     - §6.1 — 32-byte secret for the serve child; `node:crypto` only in `serve.ts`.
  *     - §6.3 — only Odin may call `bizar_spawn_background`.
- *     - §7.1 — register 4 tools: `bizar_spawn_background`, `bizar_status`,
- *       `bizar_collect`, `bizar_kill`.
+ *     - §7.1 — register 4 background tools: `bizar_spawn_background`,
+ *       `bizar_status`, `bizar_collect`, `bizar_kill`.
+ *     - §v2.1 — register 1 read-only tool: `bizar_get_plan_comments`.
+ *       Reads `plans/<slug>/plan.json` so background agents can pick up
+ *       user feedback pinned to the elements they're working on.
+ *       Available to all agents (read-only — no serve child required).
  *     - §5.5 — `--hostname 127.0.0.1` hardcoded.
  */
 
@@ -68,6 +72,7 @@ import { createBgSpawnTool } from "./src/tools/bg-spawn.js";
 import { createBgStatusTool } from "./src/tools/bg-status.js";
 import { createBgCollectTool } from "./src/tools/bg-collect.js";
 import { createBgKillTool } from "./src/tools/bg-kill.js";
+import { createBgGetCommentsTool } from "./src/tools/bg-get-comments.js";
 
 // --- Env-var constants (per spec §8) -------------------------------------
 
@@ -101,6 +106,42 @@ function readToolCallCap(): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 1) return 500;
   return Math.floor(n);
+}
+
+/**
+ * v0.3.0 — `BIZAR_STALL_TIMEOUT_MS` — default 180000 (3 min).
+ * Range [10000, 600000]; out-of-range falls back to default.
+ */
+function readStallTimeoutMs(): number {
+  const raw = process.env.BIZAR_STALL_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return 180_000;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 10_000) return 180_000;
+  return Math.min(Math.floor(n), 600_000);
+}
+
+/**
+ * v0.3.0 — `BIZAR_THINKING_LOOP_TIMEOUT_MS` — default 300000 (5 min).
+ * Range [30000, 900000]; out-of-range falls back to default.
+ */
+function readThinkingLoopTimeoutMs(): number {
+  const raw = process.env.BIZAR_THINKING_LOOP_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return 300_000;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 30_000) return 300_000;
+  return Math.min(Math.floor(n), 900_000);
+}
+
+/**
+ * v0.3.0 — `BIZAR_MAX_INTERVENTIONS` — default 1.
+ * Range [1, 3]; out-of-range falls back to default.
+ */
+function readMaxInterventions(): number {
+  const raw = process.env.BIZAR_MAX_INTERVENTIONS;
+  if (raw === undefined || raw === "") return 1;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(Math.floor(n), 3);
 }
 
 /** `BIZAR_HTTP_TIMEOUT_MS` — default 30000. */
@@ -247,6 +288,9 @@ async function init(
       const maxConcurrent = readMaxConcurrent();
       const toolCallCap = readToolCallCap();
       const httpTimeoutMs = readHttpTimeoutMs();
+      const stallTimeoutMs = readStallTimeoutMs();
+      const thinkingLoopTimeoutMs = readThinkingLoopTimeoutMs();
+      const maxInterventions = readMaxInterventions();
 
       serve = new ServeLifecycle({
         port: servePort,
@@ -279,6 +323,9 @@ async function init(
         serve,
         http,
         stream,
+        stallTimeoutMs,
+        thinkingLoopTimeoutMs,
+        maxInterventions,
       });
       instanceManagerHandle = instanceManager;
 
@@ -318,7 +365,7 @@ async function init(
       }
 
       logger.info(
-        `bizar: background agents ready (port=${serveInfo.port}, cap=${maxConcurrent}, toolCallCap=${toolCallCap})`,
+        `bizar: background agents ready (port=${serveInfo.port}, cap=${maxConcurrent}, toolCallCap=${toolCallCap}, stallTimeoutMs=${stallTimeoutMs}, thinkingLoopTimeoutMs=${thinkingLoopTimeoutMs}, maxInterventions=${maxInterventions})`,
       );
     } catch (err: unknown) {
       logger.warn(
@@ -451,8 +498,10 @@ interface BgDeps {
  * delegates to the runtime context and the supporting modules.
  */
 function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
-  // Build the 4 tools. We always register them; if the serve child is
-  // not available, the tools return a clear error.
+  // Build the 5 tools. We always register them; if the serve child is
+  // not available, the background tools return a clear error. The
+  // bizarre_get_plan_comments tool is read-only and only needs the
+  // worktree, so it works regardless of the serve child's state.
   const tools = bg.instanceManager
     ? {
         bizarre_spawn_background: createBgSpawnTool({
@@ -473,8 +522,21 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
           instanceManager: bg.instanceManager,
           logger: ctx.logger,
         }),
+        bizarre_get_plan_comments: createBgGetCommentsTool({
+          worktree: ctx.worktree,
+          logger: ctx.logger,
+        }),
       }
-    : bgDisabledTools(ctx.logger);
+    : {
+        ...bgDisabledTools(ctx.logger),
+        // bizarre_get_plan_comments is read-only — it does not need the
+        // background serve child. Register it even when the other
+        // background tools are disabled.
+        bizarre_get_plan_comments: createBgGetCommentsTool({
+          worktree: ctx.worktree,
+          logger: ctx.logger,
+        }),
+      };
 
   return {
     // §3.1 — config: no mutation. We already resolved options in init().
@@ -736,10 +798,12 @@ function findLastIndex<T>(
 }
 
 /**
- * When the serve child failed to start, register the 4 tools as stubs
- * that return a clear error. This keeps the agent experience consistent:
- * calling `bizar_spawn_background` always returns JSON, not a thrown
- * exception from the tool framework.
+ * When the serve child failed to start, register the 4 background tools
+ * as stubs that return a clear error. This keeps the agent experience
+ * consistent: calling `bizar_spawn_background` always returns JSON, not
+ * a thrown exception from the tool framework. The
+ * `bizar_get_plan_comments` tool is NOT a background tool — it reads
+ * plan files directly — and is always registered in `buildHooks`.
  */
 function bgDisabledTools(logger: Logger): Hooks["tool"] {
   const disabled = (name: string) =>

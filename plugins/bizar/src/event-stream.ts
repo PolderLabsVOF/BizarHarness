@@ -13,6 +13,32 @@
  *     NOT marked failed (they may still complete once we reconnect).
  *   - `disconnect()` closes the stream and prevents further reconnects.
  *
+ * v0.4.3 — CloudEvents-style schema support (see
+ * `.bizar/opencode-sse-investigation.md`):
+ *   - The actual event schema on opencode serve 1.17.7 has two flavors:
+ *
+ *     1) **Direct events** (flat JSON, native `type` field):
+ *        ```
+ *        { id, type: "session.idle", properties: { sessionID } }
+ *        { id, type: "message.part.delta", properties: { sessionID, ... } }
+ *        ```
+ *
+ *     2) **Sync events** (CloudEvents-style, wrapped):
+ *        ```
+ *        { type: "sync", syncEvent: {
+ *            type: "session.created.1",   // `.1` version suffix
+ *            id, seq, aggregateID,
+ *            data: { sessionID, info }
+ *        }}
+ *        ```
+ *        Sync events are the primary delivery mechanism for session and
+ *        message lifecycle events. Event names like `session.created.1`,
+ *        `message.part.updated.1` carry a numeric version suffix.
+ *
+ *   - This module unwraps sync events and strips the version suffix so
+ *     downstream consumers (InstanceManager) see the same logical
+ *     `StreamEvent` shape regardless of which wire format arrived.
+ *
  * This module is a pure transport. The `InstanceManager` registers a
  * handler per instance that does the actual state work (tool counting,
  * loop-guard detection, status transitions, awaiting collect).
@@ -307,18 +333,52 @@ export class EventStream {
 
   /**
    * Map a raw opencode event to a `StreamEvent` and dispatch to handlers.
+   *
+   * v0.4.3: handles two wire formats.
+   *   1) Direct events — `{type, properties: {sessionID, ...}}`.
+   *   2) Sync events — `{type: "sync", syncEvent: {type: "x.y.1", data: {...}}}`.
+   *      We unwrap the sync wrapper and set `obj` to `syncEvent.data` so
+   *      downstream code can read `obj.sessionID`, `obj.part`, etc.
+   *
+   * After unwrapping, the event type from sync events has a version
+   * suffix (e.g. `session.created.1`). We strip the suffix so
+   * downstream code can match on `session.created` (the version is
+   * for the wire format, not the plugin's logical event name).
    */
   private dispatchEvent(eventName: string | null, raw: unknown): void {
-    const obj = raw as Record<string, unknown> | null;
+    let obj = raw as Record<string, unknown> | null;
     if (obj === null || typeof obj !== "object") return;
-    // Extract the event type. Prefer the explicit `type` field, fall back
-    // to the SSE `event:` line.
-    const typeFromObj = typeof obj.type === "string" ? obj.type : null;
-    const type = typeFromObj ?? eventName ?? "unknown";
+
+    // Step 1: Detect sync event wrapper, unwrap to the inner data.
+    // Sync events have shape: {type: "sync", syncEvent: {type: "x.y.1", data: {...}}}
+    // After unwrap, obj points to the inner data so the rest of this
+    // method can read fields directly (obj.sessionID, obj.part, etc.).
+    let innerType: string | null = null;
+    if (obj.type === "sync" && obj.syncEvent) {
+      const syncEvent = obj.syncEvent as Record<string, unknown> | null;
+      if (syncEvent && typeof syncEvent === "object") {
+        if (typeof syncEvent.type === "string") innerType = syncEvent.type;
+        const syncData = syncEvent.data;
+        if (syncData && typeof syncData === "object") {
+          obj = syncData as Record<string, unknown>;
+        }
+      }
+    }
+
+    // Step 2: Resolve the event type and strip the version suffix.
+    // Sync event types look like "session.created.1"; we strip to "session.created".
+    const typeFromObj = innerType ?? (typeof obj.type === "string" ? obj.type : null);
+    const rawType = typeFromObj ?? eventName ?? "unknown";
+    const type = stripVersionSuffix(rawType);
+
     const sessionID = extractSessionId(obj);
     const messageID = extractMessageId(obj);
-    const part = obj.part as { type?: string; text?: string; error?: string; state?: { status?: string; error?: string } } | undefined;
-    const partID = typeof obj.partID === "string" ? obj.partID : "";
+    // After unwrap, `obj.part` exists for `message.part.updated.*` events
+    // (sync) and may exist on the top-level payload. We also fall back to
+    // `obj.partID` on the part object itself for sync events whose
+    // `data` block does not carry `partID` separately.
+    const part = obj.part as { type?: string; text?: string; error?: string; state?: { status?: string; error?: string }; id?: string } | undefined;
+    const partID = extractPartId(obj, part);
 
     // Build the typed event. We use a temporary permissive shape and only
     // assign to a strongly-typed StreamEvent at the end of each branch.
@@ -341,7 +401,16 @@ export class EventStream {
     } else if (type === "message.updated" && sessionID) {
       event = { type: "message.updated", sessionID, messageID: messageID ?? "", raw };
     } else if (type === "session.error" && sessionID) {
-      const errorField = typeof obj.error === "string" ? obj.error : undefined;
+      // session.error may carry the error string on `properties.error`
+      // (direct event) or on `data.error` (sync, but we already
+      // unwrapped, so both paths land at `obj.error`).
+      const props = obj.properties;
+      let errorField: string | undefined =
+        typeof obj.error === "string" ? obj.error : undefined;
+      if (errorField === undefined && props && typeof props === "object") {
+        const p = props as Record<string, unknown>;
+        if (typeof p.error === "string") errorField = p.error;
+      }
       event = errorField !== undefined
         ? { type: "session.error", sessionID, error: errorField, raw }
         : { type: "session.error", sessionID, raw };
@@ -355,14 +424,15 @@ export class EventStream {
       event = { type: "session.deleted", sessionID, raw };
     } else {
       // Unknown / untyped event — drop silently. Logged at debug level.
+      // We log the *raw* type (with version suffix) for diagnostics.
       this._logger.debug(
-        `bizar: SSE: dropping untyped event (type=${type}${sessionID ? ` sessionID=${sessionID}` : ""})`,
+        `bizar: SSE: dropping untyped event (rawType=${rawType}${sessionID ? ` sessionID=${sessionID}` : ""})`,
       );
       return;
     }
 
     if (event === null) {
-      this._logger.debug(`bizar: SSE: event without sessionID (type=${type})`);
+      this._logger.debug(`bizar: SSE: event without sessionID (rawType=${rawType})`);
       return;
     }
     this.dispatchToHandlers(sessionID, event);
@@ -434,9 +504,17 @@ export class EventStream {
 // --- Helpers --------------------------------------------------------------
 
 /**
- * Extract the `sessionID` from an opencode event payload. The spec is
- * permissive: opencode events may carry it as `properties.sessionID`
- * (CloudEvents-style), as a top-level `sessionID`, or as `sessionId`.
+ * Extract the `sessionID` from an opencode event payload.
+ *
+ * v0.4.3: this is called AFTER sync unwrapping, so the `obj` we receive
+ * is either:
+ *   - A direct event: `{properties: {sessionID}}` or `{sessionID}`.
+ *   - A sync event's `data` block: `{sessionID, ...}` (top-level).
+ *
+ * We check (in order):
+ *   1. `properties.sessionID` / `properties.sessionId` (direct events)
+ *   2. Top-level `sessionID` / `sessionId` (direct or post-unwrapped sync)
+ *
  * Returns `undefined` if none of those is present.
  */
 function extractSessionId(obj: Record<string, unknown>): string | undefined {
@@ -461,4 +539,36 @@ function extractMessageId(obj: Record<string, unknown>): string | undefined {
   if (typeof obj.messageID === "string") return obj.messageID;
   if (typeof obj.messageId === "string") return obj.messageId;
   return undefined;
+}
+
+/**
+ * Extract the `partID` from an event payload. We check (in order):
+ *   1. `properties.partID` (direct events like `message.part.delta`)
+ *   2. Top-level `partID` (after sync unwrap, if the data block carries it)
+ *   3. `part.id` (sync `message.part.updated.1` — the part object itself
+ *      carries its own id)
+ */
+function extractPartId(
+  obj: Record<string, unknown>,
+  part: { id?: string } | undefined,
+): string {
+  const props = obj.properties;
+  if (props && typeof props === "object") {
+    const p = props as Record<string, unknown>;
+    if (typeof p.partID === "string" && p.partID.length > 0) return p.partID;
+    if (typeof p.partId === "string" && p.partId.length > 0) return p.partId;
+  }
+  if (typeof obj.partID === "string" && obj.partID.length > 0) return obj.partID;
+  if (typeof obj.partId === "string" && obj.partId.length > 0) return obj.partId;
+  if (part && typeof part.id === "string" && part.id.length > 0) return part.id;
+  return "";
+}
+
+/**
+ * Strip a trailing version suffix from an event type.
+ * e.g. `"session.created.1"` → `"session.created"`, `"foo.bar.baz.12"` → `"foo.bar.baz"`.
+ * If the type has no `.N` suffix at the end, it is returned unchanged.
+ */
+function stripVersionSuffix(type: string): string {
+  return type.replace(/\.\d+$/, "");
 }
