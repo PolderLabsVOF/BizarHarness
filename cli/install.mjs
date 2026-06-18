@@ -1,11 +1,12 @@
 import chalk from 'chalk';
 import boxen from 'boxen';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
 import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, mergeToolsIntoUserConfig } from './copy.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'quick.md',
@@ -295,13 +296,25 @@ export async function runInstaller() {
 
 export async function runPostInstall() {
   const { mkdirSync, copyFileSync, existsSync } = await import('node:fs');
-  const { join } = await import('node:path');
   const { execSync } = await import('node:child_process');
+
+  const dest = join(opencodeConfigDir(), 'opencode.json');
+  const templateSrc = repoPath('config', 'opencode.json');
+  if (!existsSync(dest)) {
+    if (existsSync(templateSrc)) {
+      mkdirSync(opencodeConfigDir(), { recursive: true });
+      copyFileSync(templateSrc, dest);
+      console.log('  ✓ opencode.json bootstrapped from package template');
+    }
+  }
+
+  // Install Bizar commands to commands-bizar/ (separate from ECC's commands symlink)
+  await installCommandsBizar();
 
   const env = await detectOpenCode();
   if (!env.exists) {
-    console.log('BizarHarness: opencode not detected — skipping auto-install.');
-    return;
+    mkdirSync(opencodeConfigDir(), { recursive: true });
+    console.log('BizarHarness: created ~/.config/opencode/');
   }
 
   mkdirSync(opencodeAgentsDir(), { recursive: true });
