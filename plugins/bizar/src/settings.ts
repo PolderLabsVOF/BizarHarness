@@ -59,7 +59,8 @@ export const KNOWN_TEMPLATES: readonly DefaultTemplate[] = [
 
 export interface PlanSettings {
   /** When true, the agent's first action on a complex task is to
-   *  call `bizar_create_visual_plan` and wait for feedback. */
+   *  call `bizar_plan_action` (e.g. with `action: "get_canvas"` or `add_element`)
+   *  and `bizar_wait_for_feedback` to coordinate with the visual plan. */
   visualPlanEnabled: boolean;
   /** Default template to use when `/plan new` is invoked without one. */
   defaultTemplate: DefaultTemplate;

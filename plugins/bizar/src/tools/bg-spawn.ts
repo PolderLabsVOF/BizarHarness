@@ -78,7 +78,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
   return tool({
     description:
       "Spawn a background agent that runs asynchronously. Only Odin may call this tool. " +
-      "Returns an instanceId; use bizarre_status / bizarre_collect / bizarre_kill to manage the instance.",
+      "Returns an instanceId; use bizar_status / bizar_collect / bizar_kill to manage the instance.",
     args: {
       agent: z.string().min(1).describe("Agent name to spawn (e.g. 'mimir', 'thor', 'tyr')."),
       prompt: z.string().min(1).describe("User prompt for the background session."),
@@ -155,7 +155,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       if (addRes === "cap_reached") {
         return {
           output: JSON.stringify({
-            error: `Max concurrent instances reached. Wait for one to finish or call bizarre_kill.`,
+            error: `Max concurrent instances reached. Wait for one to finish or call bizar_kill.`,
           }),
         };
       }

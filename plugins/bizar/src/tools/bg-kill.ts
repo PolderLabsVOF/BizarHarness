@@ -37,14 +37,14 @@ export function createBgKillTool(deps: BgKillDeps) {
       instanceId: z
         .string()
         .min(1)
-        .describe("Instance id returned by bizarre_spawn_background."),
+        .describe("Instance id returned by bizar_spawn_background."),
     },
     execute: async (rawArgs, ctx) => {
       if (ctx.agent !== "odin") {
         return {
           output: JSON.stringify({
             error:
-              "Only Odin can kill background agents. Use bizarre_status to inspect or ask Odin to kill.",
+              "Only Odin can kill background agents. Use bizar_status to inspect or ask Odin to kill.",
           }),
         };
       }

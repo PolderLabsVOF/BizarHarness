@@ -310,9 +310,16 @@ describe("parseSlashCommand — unknown commands", () => {
     expect(r!.response).toMatch(/Unknown command/);
   });
 
-  test("'/plan delete' (unsupported in MVP) returns error response", () => {
-    const r = parseSlashCommand("/plan delete foo", baseCtx);
-    expect(r!.response).toMatch(/Unknown \/plan subcommand/);
+  test("'/plan delete foo bar' routes to bizar_plan_action (delete_element)", () => {
+    const r = parseSlashCommand("/plan delete foo bar", baseCtx);
+    expect(r).not.toBeNull();
+    expect(r!.handled).toBe(true);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: { action: "delete_element", planSlug: "foo", elementId: "bar" },
+    });
+    expect(r!.settingsPatch).toEqual({ lastUsedSlug: "foo" });
   });
 });
 
@@ -342,5 +349,200 @@ describe("parseSlashCommand — /plan usage", () => {
     expect(r!.response).toMatch(/Plan commands:/);
     expect(r!.response).toMatch(/\/plan new/);
     expect(r!.response).toMatch(/\/plan list/);
+  });
+});
+
+// ===========================================================================
+// Group 10 — v0.5.0 subcommands (R3)
+// ===========================================================================
+
+describe("parseSlashCommand — /plan get", () => {
+  test("'/plan get foo' routes to bizar_plan_action get_canvas", () => {
+    const r = parseSlashCommand("/plan get foo", baseCtx);
+    expect(r).not.toBeNull();
+    expect(r!.handled).toBe(true);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: { action: "get_canvas", planSlug: "foo" },
+    });
+    expect(r!.settingsPatch).toEqual({ lastUsedSlug: "foo" });
+  });
+
+  test("'/plan get' (no slug) returns usage", () => {
+    const r = parseSlashCommand("/plan get", baseCtx);
+    expect(r!.response).toMatch(/Usage/);
+  });
+});
+
+describe("parseSlashCommand — /plan add", () => {
+  test("'/plan add foo --title X --type task' builds add_element args", () => {
+    const r = parseSlashCommand("/plan add foo --title X --type task", baseCtx);
+    expect(r!.handled).toBe(true);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: {
+        action: "add_element",
+        planSlug: "foo",
+        element: { title: "X", type: "task" },
+      },
+    });
+    expect(r!.settingsPatch).toEqual({ lastUsedSlug: "foo" });
+  });
+
+  test("'/plan add foo --title \"Hello world\"' preserves quoted strings", () => {
+    const r = parseSlashCommand('/plan add foo --title "Hello world"', baseCtx);
+    expect(r!.sideEffect).toMatchObject({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: {
+        action: "add_element",
+        planSlug: "foo",
+        element: { title: "Hello world" },
+      },
+    });
+  });
+
+  test("'/plan add foo --x 100 --y 200' parses numeric flags", () => {
+    const r = parseSlashCommand("/plan add foo --x 100 --y 200", baseCtx);
+    expect(r!.sideEffect).toMatchObject({
+      args: {
+        action: "add_element",
+        planSlug: "foo",
+        element: { x: 100, y: 200 },
+      },
+    });
+  });
+
+  test("'/plan add foo' (no flags) returns usage", () => {
+    const r = parseSlashCommand("/plan add foo", baseCtx);
+    expect(r!.response).toMatch(/Usage/);
+    expect(r!.response).toMatch(/At least one/);
+  });
+});
+
+describe("parseSlashCommand — /plan update", () => {
+  test("'/plan update foo el_1 --x 50 --y 60' builds update_element args", () => {
+    const r = parseSlashCommand("/plan update foo el_1 --x 50 --y 60", baseCtx);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: {
+        action: "update_element",
+        planSlug: "foo",
+        elementId: "el_1",
+        element: { x: 50, y: 60 },
+      },
+    });
+  });
+
+  test("'/plan update foo el_1' (no flags) returns usage", () => {
+    const r = parseSlashCommand("/plan update foo el_1", baseCtx);
+    expect(r!.response).toMatch(/Usage/);
+  });
+});
+
+describe("parseSlashCommand — /plan comment", () => {
+  test("'/plan comment foo \"Make it bigger\"' builds add_comment (canvas-pinned)", () => {
+    const r = parseSlashCommand('/plan comment foo "Make it bigger"', baseCtx);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: {
+        action: "add_comment",
+        planSlug: "foo",
+        comment: {
+          elementId: null,
+          author: "user",
+          text: "Make it bigger",
+        },
+      },
+    });
+  });
+
+  test("'/plan comment foo el_1 \"text\"' pins comment to element", () => {
+    const r = parseSlashCommand('/plan comment foo el_1 "text"', baseCtx);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: {
+        action: "add_comment",
+        planSlug: "foo",
+        comment: { elementId: "el_1", author: "user", text: "text" },
+      },
+    });
+  });
+});
+
+describe("parseSlashCommand — /plan comments (list)", () => {
+  test("'/plan comments foo' routes to bizar_get_plan_comments", () => {
+    const r = parseSlashCommand("/plan comments foo", baseCtx);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_get_plan_comments",
+      args: { planSlug: "foo" },
+    });
+  });
+
+  test("'/plan comments foo el_1' filters by elementId", () => {
+    const r = parseSlashCommand("/plan comments foo el_1", baseCtx);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_get_plan_comments",
+      args: { planSlug: "foo", elementId: "el_1" },
+    });
+  });
+});
+
+describe("parseSlashCommand — /plan status", () => {
+  test("'/plan status foo approved' builds set_status args", () => {
+    const r = parseSlashCommand("/plan status foo approved", baseCtx);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_plan_action",
+      args: { action: "set_status", planSlug: "foo", status: "approved" },
+    });
+  });
+
+  test("'/plan status foo bogus' rejects invalid status", () => {
+    const r = parseSlashCommand("/plan status foo bogus", baseCtx);
+    expect(r!.response).toMatch(/Invalid status/);
+    expect(r!.sideEffect).toBeUndefined();
+  });
+});
+
+describe("parseSlashCommand — /plan wait (deferred)", () => {
+  test("'/plan wait foo' returns the deferred response (no side effect, no block)", () => {
+    const r = parseSlashCommand("/plan wait foo", baseCtx);
+    expect(r).not.toBeNull();
+    expect(r!.handled).toBe(true);
+    expect(r!.sideEffect).toBeUndefined();
+    expect(r!.response).toMatch(/deferred/i);
+    expect(r!.response).toMatch(/bizar_wait_for_feedback/);
+  });
+
+  test("'/plan wait' (no slug) returns usage", () => {
+    const r = parseSlashCommand("/plan wait", baseCtx);
+    expect(r!.response).toMatch(/Usage/);
+  });
+});
+
+describe("parseSlashCommand — /help includes new subcommands", () => {
+  test("'/help' lists get, add, update, delete, comment, comments, status, wait", () => {
+    const r = parseSlashCommand("/help", baseCtx);
+    const text = r!.response;
+    for (const cmd of [
+      "/plan get",
+      "/plan add",
+      "/plan update",
+      "/plan delete",
+      "/plan comment",
+      "/plan comments",
+      "/plan status",
+      "/plan wait",
+    ]) {
+      expect(text).toContain(cmd);
+    }
   });
 });

@@ -43,7 +43,7 @@ export function createBgCollectTool(deps: BgCollectDeps) {
       instanceId: z
         .string()
         .min(1)
-        .describe("Instance id returned by bizarre_spawn_background."),
+        .describe("Instance id returned by bizar_spawn_background."),
       timeoutMs: z
         .number()
         .int()
@@ -57,7 +57,7 @@ export function createBgCollectTool(deps: BgCollectDeps) {
         return {
           output: JSON.stringify({
             error:
-              "Only Odin can collect background agent results. Use bizarre_status to inspect or ask Odin to collect.",
+              "Only Odin can collect background agent results. Use bizar_status to inspect or ask Odin to collect.",
           }),
         };
       }

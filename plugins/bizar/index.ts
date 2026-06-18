@@ -46,6 +46,32 @@
  *       a new comment appears, status becomes approved/rejected, or
  *       the timeout fires. Never throws.
  *
+ *   v0.5.0 (visual plan wiring — chat hook executes side effects):
+ *     - §v5.1 — `chat.message` hook now invokes the parser, then
+ *       calls `executeSideEffect(result.sideEffect, ctx, opts)` from
+ *       `src/commands-impl.ts` BEFORE throwing the response. Side
+ *       effects include `create_plan` (mkdir + write meta/canvas
+ *       via `src/plan-fs.ts`), `list_plans` (re-read directory and
+ *       return rich list), `open_plan_url` (no I/O), and
+ *       `tool_invocation` (build synthetic `ToolContext`, validate
+ *       args via the tool's Zod schema, then call `tool.execute`).
+ *     - §v5.2 — synthetic `ToolContext` is built from the runtime
+ *       context's `worktree` and `directory`, a fresh
+ *       `AbortController().signal`, and no-op `metadata`/`ask`
+ *       stubs. NOT from the chat-message input. Session/message/agent
+ *       IDs use a `"slash-command"` sentinel so downstream code can
+ *       recognize out-of-band calls.
+ *     - §v5.3 — tool key names use the `bizar_*` form (single `r`)
+ *       throughout the plugin, matching the docs and
+ *       `config/opencode.json`. The earlier `bizarre_*` typo silently
+ *       disabled the plan tools at runtime; the rename brings the
+ *       runtime registry back in sync.
+ *     - §v5.4 — subcommand form: `/plan get|add|update|delete|comment|
+ *       comments|status|wait` route through `bizar_plan_action` (or
+ *       `bizar_get_plan_comments`) via the new `tool_invocation`
+ *       side-effect. `/plan wait` is deferred from MVP and returns
+ *       a clear "use bizar_wait_for_feedback directly" response.
+ *
  *   v0.4.2 (background agents):
  *     - §1 — start `opencode serve` on init; spawn background sessions
  *       via `POST /session` + `POST /session/{id}/prompt_async`.
@@ -98,6 +124,9 @@ import { SettingsStore } from "./src/settings.js";
 import { parseSlashCommand } from "./src/commands.js";
 import { createPlanActionTool } from "./src/tools/plan-action.js";
 import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
+
+// v0.5.0 — visual plan wiring: side-effect executor + plan-fs
+import { executeSideEffect, type ExecuteOptions } from "./src/commands-impl.js";
 
 // --- Env-var constants (per spec §8) -------------------------------------
 
@@ -202,6 +231,10 @@ interface RuntimeContext {
   settingsStore: SettingsStore;
   logWriter: LogWriter;
   worktree: string;
+  /** Project directory (often equal to `worktree`; the viewer / TUI
+   *  may use this to display paths differently). v0.5.0 — the synthetic
+   *  `ToolContext` built for slash-command tool invocations reads this. */
+  directory: string;
   /** sessionID → set of message IDs already processed (spec §4.5). */
   seenMessageIds: Map<string, Set<string>>;
   /** sessionID → pending system-transform message, set at warn/escalate. */
@@ -414,6 +447,7 @@ async function init(
     settingsStore,
     logWriter,
     worktree: input.worktree,
+    directory: input.directory,
     seenMessageIds: new Map(),
     pendingInjections: new Map(),
   };
@@ -591,23 +625,28 @@ async function listPlanSlugs(worktree: string, logger: Logger): Promise<string[]
 function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   // Build the 7 tools. We always register them; if the serve child is
   // not available, the background tools return a clear error. The
-  // bizarre_get_plan_comments, bizarre_plan_action, and
-  // bizarre_wait_for_feedback tools only need the worktree, so they
+  // bizar_get_plan_comments, bizar_plan_action, and
+  // bizar_wait_for_feedback tools only need the worktree, so they
   // work regardless of the serve child's state.
   //
-  // v0.4.0 — added `bizarre_plan_action` (CRUD on the v2 canvas) and
-  // `bizarre_wait_for_feedback` (poll until feedback). Both are pure
+  // v0.4.0 — added `bizar_plan_action` (CRUD on the v2 canvas) and
+  // `bizar_wait_for_feedback` (poll until feedback). Both are pure
   // file I/O — no serve child required.
+  //
+  // v0.5.0 — renamed `bizarre_*` → `bizar_*` (single `r`) to match
+  // the docs and `config/opencode.json`. The earlier typo silently
+  // disabled the plan tools at runtime; this fix brings the registry
+  // in sync.
   const basePlanTools = {
-    bizarre_get_plan_comments: createBgGetCommentsTool({
+    bizar_get_plan_comments: createBgGetCommentsTool({
       worktree: ctx.worktree,
       logger: ctx.logger,
     }),
-    bizarre_plan_action: createPlanActionTool({
+    bizar_plan_action: createPlanActionTool({
       worktree: ctx.worktree,
       logger: ctx.logger,
     }),
-    bizarre_wait_for_feedback: createWaitForFeedbackTool({
+    bizar_wait_for_feedback: createWaitForFeedbackTool({
       worktree: ctx.worktree,
       logger: ctx.logger,
     }),
@@ -615,21 +654,21 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   const tools = bg.instanceManager
     ? {
         ...basePlanTools,
-        bizarre_spawn_background: createBgSpawnTool({
+        bizar_spawn_background: createBgSpawnTool({
           instanceManager: bg.instanceManager,
           http: (bg.instanceManager as unknown as { http: HttpClient }).http,
           worktree: ctx.worktree,
           logger: ctx.logger,
         }),
-        bizarre_status: createBgStatusTool({
+        bizar_status: createBgStatusTool({
           instanceManager: bg.instanceManager,
           logger: ctx.logger,
         }),
-        bizarre_collect: createBgCollectTool({
+        bizar_collect: createBgCollectTool({
           instanceManager: bg.instanceManager,
           logger: ctx.logger,
         }),
-        bizarre_kill: createBgKillTool({
+        bizar_kill: createBgKillTool({
           instanceManager: bg.instanceManager,
           logger: ctx.logger,
         }),
@@ -678,7 +717,8 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // §v4.1 (v0.4.0) — Slash command detection happens FIRST, before the
     // existing state-seeding logic. If the user typed a slash command we:
     //   1. Apply any settings patch via `SettingsStore`.
-    //   2. Throw the response text. The host (TUI/CLI) surfaces it to
+    //   2. Execute the side-effect (v0.5.0 — previously silently dropped).
+    //   3. Throw the response text. The host (TUI/CLI) surfaces it to
     //      the user; the LLM sees it on the next turn as a tool error.
     //
     // We chose throw-over-mutate because:
@@ -710,10 +750,48 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
             if (result.settingsPatch) {
               await ctx.settingsStore.update(result.settingsPatch);
             }
+            // --- v0.5.0: execute the side-effect (was silently dropped
+            //             in v0.4.0). The executor returns an optional
+            //             override/suffix that replaces/appends the
+            //             parser's response. Tool invocations build a
+            //             synthetic ToolContext and pre-validate args.
+            let finalResponse = result.response;
+            if (result.sideEffect !== undefined) {
+              const execOpts: ExecuteOptions = {
+                tools,
+                defaultTemplate: currentSettings.defaultTemplate,
+                defaultPort: 4321,
+              };
+              try {
+                const exec = await executeSideEffect(
+                  result.sideEffect,
+                  {
+                    worktree: ctx.worktree,
+                    directory: ctx.directory,
+                    logger: ctx.logger,
+                  },
+                  execOpts,
+                );
+                if (exec.responseOverride !== undefined) {
+                  finalResponse = exec.responseOverride;
+                } else if (exec.responseSuffix !== undefined) {
+                  finalResponse = `${result.response}${exec.responseSuffix}`;
+                }
+              } catch (execErr: unknown) {
+                // Defense-in-depth — `executeSideEffect` already catches
+                // its own errors, but if it ever throws (e.g. a bug in
+                // a future handler) we stringify into the response
+                // rather than crashing the chat hook.
+                const msg =
+                  execErr instanceof Error ? execErr.message : String(execErr);
+                ctx.logger.warn(`bizar: side-effect crashed: ${msg}`);
+                finalResponse = `Command failed: ${msg}`;
+              }
+            }
             // Surface the response to the user/host. We throw so the
             // message is treated as handled; the LLM does not process
             // it further. The host renders the throw message.
-            throw new Error(result.response);
+            throw new Error(finalResponse);
           }
         }
       } catch (err) {
@@ -864,7 +942,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
         if (idx >= 0) {
           const call = state.toolCalls[idx];
           if (call) {
-            call.outcome = output && output.output ? "ok" : "error";
+            call.outcome = output && typeof output.output === "string" ? "ok" : "error";
           }
         }
         state.lastActivityAt = Date.now();
@@ -874,7 +952,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       // Per-call log line (§10.1). Metadata only — no args.
       if (!ctx.envFlags.disableLog) {
         const durationMs = Date.now() - startMs;
-        const outcome: "ok" | "error" = output && output.output ? "ok" : "error";
+        const outcome: "ok" | "error" = output && typeof output.output === "string" ? "ok" : "error";
         const fp = fingerprint(tool, input.args, ctx.worktree);
         try {
           await ctx.logWriter.write({
@@ -978,9 +1056,9 @@ function bgDisabledTools(logger: Logger): Hooks["tool"] {
       };
     };
   return {
-    bizarre_spawn_background: { execute: disabled("bizarre_spawn_background") } as never,
-    bizarre_status: { execute: disabled("bizarre_status") } as never,
-    bizarre_collect: { execute: disabled("bizarre_collect") } as never,
-    bizarre_kill: { execute: disabled("bizarre_kill") } as never,
+    bizar_spawn_background: { execute: disabled("bizar_spawn_background") } as never,
+    bizar_status: { execute: disabled("bizar_status") } as never,
+    bizar_collect: { execute: disabled("bizar_collect") } as never,
+    bizar_kill: { execute: disabled("bizar_kill") } as never,
   };
 }
