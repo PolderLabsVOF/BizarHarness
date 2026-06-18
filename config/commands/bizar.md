@@ -1,44 +1,18 @@
-# Bizar Plugin Menu
+# Bizar Dashboard
 
-You are @odin, the routing agent. The user invoked /bizar. They wrote: $ARGUMENTS
+The `/bizar` command launches the Bizar dashboard in your browser — a fully integrated workspace with Overview, Chat, Agents, Plans, Projects, Config, and Settings panels. The dashboard binds to `127.0.0.1` only and runs as a local Express + WebSocket server on a free port (preferred: 4321).
 
-Based on their request, route them to the right Bizar action.
+If the user invoked `/bizar` with arguments, treat them as a request and route appropriately:
 
-## Available commands
+- "explain X" → invoke `/explain X`
+- "plan Y" → invoke `/visual-plan on` and then `/plan new <slug>` with the user's intent as the slug
+- "review PR" → invoke `/pr-review`
+- "audit" → invoke `/audit`
+- "learn" → invoke `/learn`
+- "init" → invoke `/init`
+- "dashboard" or "open dashboard" → `/bizar` (no args, will launch the dashboard)
+- Otherwise: ask one clarifying question
 
-- `/visual-plan on|off|status` — Toggle the Bizar visual plan canvas
-- `/plan new <slug> [template]` — Create a new visual plan
-- `/plan list` — List existing plans
-- `/plan open <slug>` — Open a plan
-- `/plan get <slug>` — Get plan content
-- `/plan add <slug> --title "..."` — Add element to plan
-- `/plan update <slug> <id> ...` — Update element
-- `/plan delete <slug> <id>` — Delete element
-- `/plan comment <slug> [id] "..."` — Add comment
-- `/plan comments <slug> [id]` — List comments
-- `/plan status <slug> <status>` — Set plan status
-- `/plan wait <slug>` — Wait for plan feedback
-- `/audit` — Run a security audit
-- `/explain <question>` — Read-only Q&A (routes to @frigg)
-- `/init` — Initialize Bizar in the current project
-- `/learn` — Extract patterns from the session (routes to @heimdall)
-- `/pr-review` — Run a PR review with @mimir + @forseti (routes to @hermod)
-- `/tailscale-serve` — Set up Tailscale Serve
+If the user invoked `/bizar` with no arguments, the dashboard is launching in the background. Visit `http://localhost:<port>/` to access it. The plugin's `chat.message` hook spawns `bizar dashboard start` as a detached child process and surfaces the live URL in its response.
 
-## Routing rules
-
-1. If the user wants to read code or understand something without changes → invoke `/explain` or answer as @frigg
-2. If the user wants to plan work visually → `/visual-plan on` then `/plan new <slug>`
-3. If the user wants to do a security audit → `/audit`
-4. If the user wants to review a PR → `/pr-review`
-5. If the user wants to learn patterns from a session → `/learn`
-6. If the user wants to initialize Bizar → `/init`
-7. Otherwise, ask a clarifying question and route to the appropriate sub-agent
-
-## Response format
-
-Briefly explain what you'll do, then either:
-- Run the appropriate slash command, OR
-- Ask one clarifying question if the request is ambiguous
-
-Never make changes to the codebase. You are a router, not an executor.
+Common ports: 4321 is preferred; if it's taken, the launcher walks upward and picks the next free port. The PID and port are recorded under `~/.config/bizar/dashboard.{pid,port}` so `bizar dashboard stop` and `bizar dashboard status` can find the running instance.

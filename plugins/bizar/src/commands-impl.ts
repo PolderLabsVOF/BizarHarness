@@ -112,6 +112,9 @@ export interface ExecuteResult {
  *                    list so we can include status + lastEdited).
  * `open_plan_url` — just returns the parser's response (the parser
  *                    already built the URL). No I/O.
+ * `launch_dashboard` — spawns `bizar dashboard start` as a detached
+ *                    child process. Reads the port file back and
+ *                    appends the URL to the parser's response.
  * `tool_invocation` — delegates to `executeToolInvocation`.
  *
  * Never throws. All failures become `responseOverride` strings.
@@ -131,6 +134,8 @@ export async function executeSideEffect(
         // No I/O — the parser already built the URL. The chat hook
         // uses the parser's response unchanged.
         return {};
+      case "launch_dashboard":
+        return await executeLaunchDashboard(sideEffect.defaultPort, ctx);
       case "tool_invocation":
         return await executeToolInvocation(sideEffect, ctx, opts);
       default: {
@@ -185,6 +190,96 @@ async function executeListPlans(
   );
   return {
     responseOverride: `Plans in this worktree (${list.length}):\n${lines.join("\n")}`,
+  };
+}
+
+/**
+ * Launch the Bizar dashboard as a detached child process.
+ *
+ * We spawn `bizar dashboard start` with `detached: true` and `unref()`
+ * so the child's lifetime is independent of the plugin host. We then
+ * poll the port file (written by the child) for up to ~3s and append
+ * the URL to the parser's response. If anything goes wrong we surface
+ * a clear error so the user knows where to look.
+ *
+ * Never throws — all failures become responseSuffix/Override.
+ */
+async function executeLaunchDashboard(
+  defaultPort: number,
+  ctx: ExecutorContext,
+): Promise<ExecuteResult> {
+  const { spawn } = await import("node:child_process");
+  const { existsSync, readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { homedir } = await import("node:os");
+
+  const portFile = join(homedir(), ".config", "bizar", "dashboard.port");
+
+  // If a dashboard is already running, just report its URL.
+  if (existsSync(portFile)) {
+    try {
+      const port = readFileSync(portFile, "utf8").trim();
+      if (port && Number.isFinite(Number(port))) {
+        return {
+          responseSuffix:
+            `\n✓ Dashboard already running at http://localhost:${port}/`,
+        };
+      }
+    } catch {
+      /* fall through to spawn */
+    }
+  }
+
+  try {
+    // `bizar` is on $PATH for global installs; for npx / local installs
+    // we'd want to resolve to the package's bin. Spawn `bizar` directly
+    // for now — the user's $PATH is the source of truth.
+    const child = spawn("bizar", ["dashboard", "start"], {
+      detached: true,
+      stdio: "ignore",
+      cwd: ctx.worktree,
+    });
+    child.on("error", (err) => {
+      ctx.logger.warn(`bizar: dashboard spawn error: ${err.message}`);
+    });
+    child.unref();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      responseOverride:
+        `Could not launch the Bizar dashboard: ${msg}\n` +
+        `Try running \`bizar dashboard start\` in your terminal.`,
+    };
+  }
+
+  // Poll the port file briefly so the response carries the live URL.
+  const deadline = Date.now() + 3000;
+  let resolvedPort: number | null = null;
+  while (Date.now() < deadline) {
+    if (existsSync(portFile)) {
+      try {
+        const port = Number(readFileSync(portFile, "utf8").trim());
+        if (Number.isFinite(port) && port > 0) {
+          resolvedPort = port;
+          break;
+        }
+      } catch {
+        /* ignore — keep polling */
+      }
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  if (resolvedPort === null) {
+    return {
+      responseSuffix:
+        `\n✓ Dashboard launching… (preferred port ${defaultPort}, ` +
+        `fallback to a free port). The browser will open shortly.`,
+    };
+  }
+
+  return {
+    responseSuffix: `\n✓ Dashboard running at http://localhost:${resolvedPort}/`,
   };
 }
 

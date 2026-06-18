@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   "files": [
     "cli/",
     "config/",
+    "dashboard/",
     "templates/",
     "!cli/*.test.mjs"
   ],
@@ -27,8 +28,11 @@
   "dependencies": {
     "boxen": "^8.0.0",
     "chalk": "^5.4.0",
+    "chokidar": "^3.6.0",
+    "express": "^4.22.2",
     "inquirer": "^12.0.0",
-    "ora": "^8.1.0"
+    "ora": "^8.1.0",
+    "ws": "^8.21.0"
   },
   "engines": {
     "node": ">=20"

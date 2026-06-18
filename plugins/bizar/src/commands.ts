@@ -61,6 +61,10 @@ export type SideEffect =
       kind: "list_plans";
     }
   | {
+      kind: "launch_dashboard";
+      defaultPort: number;
+    }
+  | {
       kind: "tool_invocation";
       toolName: string;
       args: unknown;
@@ -264,6 +268,8 @@ export function parseSlashCommand(
       return handleVisualPlan(rest, ctx);
     case "plan":
       return handlePlan(rest, ctx);
+    case "bizar":
+      return handleBizar(rest, ctx);
     case "help":
     case "commands":
       return helpResult();
@@ -842,6 +848,53 @@ function handlePlanWait(args: string[]): SlashCommandResult {
       `visual-plan flow uses. A future release will wire /plan wait to an ` +
       `SSE push from the local viewer so the user does not see a polling ` +
       `loop.`,
+  };
+}
+
+// --- /bizar --------------------------------------------------------------
+
+/**
+ * v2.5.0 — `/bizar [args]` launches the dashboard or routes a sub-request.
+ *
+ * Behavior:
+ *   - `/bizar` (no args) — emits a `launch_dashboard` side-effect. The
+ *     executor spawns `bizar dashboard start` as a detached child
+ *     process, then the host surfaces the URL in the response.
+ *   - `/bizar <args>` — passes the args to the menu command file. Today
+ *     the menu routes intent (`/explain`, `/plan`, `/audit`, etc.); the
+ *     response is the menu's natural-language routing advice.
+ *
+ * Note: the menu text lives in `config/commands/bizar.md` and is shipped
+ * via the CLI package. The plugin only handles the no-arg case for the
+ * side-effect; with args we return a short pointer so the user knows
+ * where the routing table lives.
+ */
+function handleBizar(arg: string, ctx: ParseContext): SlashCommandResult {
+  const trimmed = arg.trim();
+
+  if (trimmed === "") {
+    const port = ctx.defaultPort ?? 4321;
+    return {
+      handled: true,
+      response:
+        `🪩 Bizar dashboard launching in the background.\n` +
+        `Visit http://localhost:${port}/ once the server is ready.\n` +
+        `(If the browser did not open automatically, click the URL above.)`,
+      sideEffect: {
+        kind: "launch_dashboard",
+        defaultPort: port,
+      },
+    };
+  }
+
+  // With args, defer to the menu command file shipped with the CLI.
+  return {
+    handled: true,
+    response:
+      `🪩 Bizar routing your request: "${trimmed}"\n` +
+      `The menu command file (config/commands/bizar.md) maps intents like\n` +
+      `"explain X", "plan Y", "review PR", "audit", "learn", and "init"\n` +
+      `to the right Bizar action. For the dashboard, use \`/bizar\` with no args.`,
   };
 }
 
