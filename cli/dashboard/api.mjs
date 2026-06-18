@@ -11,6 +11,7 @@
 import express from 'express';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
+import { createTask, updateTask, deleteTask, moveTask } from './tasks-store.mjs';
 
 /**
  * @param {object} deps
@@ -19,6 +20,7 @@ import { join, dirname, basename } from 'node:path';
  * @param {string} deps.projectRoot
  * @param {string} deps.opencodeConfigDir
  * @param {string} deps.bizarRoot
+ * @param {function} deps.broadcast - WS broadcast function ({ type, ... }) => void
  */
 export function createApiRouter({
   state,
@@ -26,6 +28,7 @@ export function createApiRouter({
   projectRoot,
   opencodeConfigDir,
   bizarRoot,
+  broadcast = () => {},
 }) {
   const router = express.Router();
 
@@ -187,6 +190,57 @@ export function createApiRouter({
     });
   }));
 
+  router.get('/plans/:slug/canvas', wrap(async (req, res) => {
+    const slug = req.params.slug;
+    const local = join(state.paths.plansDir, slug);
+    const global = join(state.paths.globalPlansDir, slug);
+    const dir = existsSync(local) ? local : existsSync(global) ? global : null;
+    if (!dir) {
+      res.status(404).json({
+        error: 'not_found',
+        message: `plan "${slug}" not found`,
+      });
+      return;
+    }
+    const planJson = join(dir, 'plan.json');
+    const canvas = readMaybe(planJson);
+    if (canvas === null) {
+      res.json({
+        slug,
+        dir,
+        canvas: {
+          schemaVersion: 2,
+          title: slug,
+          elements: [],
+          connections: [],
+          comments: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+        },
+      });
+      return;
+    }
+    try {
+      res.json({
+        slug,
+        dir,
+        canvas: JSON.parse(canvas),
+      });
+    } catch {
+      res.json({
+        slug,
+        dir,
+        canvas: {
+          schemaVersion: 2,
+          title: slug,
+          elements: [],
+          connections: [],
+          comments: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+        },
+      });
+    }
+  }));
+
   router.put('/plans/:slug', wrap(async (req, res) => {
     const slug = req.params.slug;
     const local = join(state.paths.plansDir, slug);
@@ -314,6 +368,57 @@ export function createApiRouter({
     const updated = state.setSettings(body);
     state.appendActivity({ kind: 'settings.update' });
     res.json(updated);
+  }));
+
+  // ── /api/tasks ────────────────────────────────────────────────────────────
+  router.get('/tasks', wrap(async (_req, res) => {
+    res.json(state.getTasks());
+  }));
+
+  router.post('/tasks', wrap(async (req, res) => {
+    const { title, description, status, tags, priority } = req.body || {};
+    if (!title || typeof title !== 'string' || title.length > 200) {
+      res.status(400).json({ error: 'bad_request', message: 'title required (1-200 chars)' });
+      return;
+    }
+    const task = await createTask({ title, description, status, tags, priority });
+    broadcast({ type: 'tasks:change', task });
+    res.status(201).json(task);
+  }));
+
+  router.put('/tasks/:id', wrap(async (req, res) => {
+    const task = await updateTask(req.params.id, req.body || {});
+    if (!task) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
+  }));
+
+  router.patch('/tasks/:id/status', wrap(async (req, res) => {
+    const { status } = req.body || {};
+    if (!['queued', 'doing', 'done'].includes(status)) {
+      res.status(400).json({ error: 'bad_request', message: 'invalid status' });
+      return;
+    }
+    const task = await moveTask(req.params.id, status);
+    if (!task) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
+  }));
+
+  router.delete('/tasks/:id', wrap(async (req, res) => {
+    const ok = await deleteTask(req.params.id);
+    if (!ok) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'tasks:delete', id: req.params.id });
+    res.status(204).end();
   }));
 
   // ── health ────────────────────────────────────────────────────────────────

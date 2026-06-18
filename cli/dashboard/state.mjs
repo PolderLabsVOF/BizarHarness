@@ -24,6 +24,7 @@ import {
 } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { loadTasks } from './tasks-store.mjs';
 
 const HOME = homedir();
 
@@ -377,6 +378,10 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     };
   }
 
+  function getTasks() {
+    return loadTasks();
+  }
+
   // ── mutators ──────────────────────────────────────────────────────────────
 
   function setConfig(newData) {
@@ -425,6 +430,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     getProjects,
     getConfig,
     getSettings,
+    getTasks,
     setConfig,
     setSettings,
     appendActivity,

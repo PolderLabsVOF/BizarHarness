@@ -36,11 +36,15 @@ export async function render(ctx) {
 
         <div class="form-row">
           <label>Theme</label>
-          <select id="set-theme">
-            <option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>Dark</option>
-            <option value="light" ${s.theme === 'light' ? 'selected' : ''}>Light</option>
-            <option value="system" ${s.theme === 'system' ? 'selected' : ''}>System</option>
-          </select>
+          <div class="flex gap-2 items-center">
+            <select id="set-theme">
+              <option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>Dark</option>
+              <option value="light" ${s.theme === 'light' ? 'selected' : ''}>Light</option>
+              <option value="system" ${s.theme === 'system' ? 'selected' : ''}>System</option>
+            </select>
+            <span class="theme-swatch" id="theme-swatch-dark" title="Dark" style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#0d1117;border:1px solid #30363d;cursor:pointer"></span>
+            <span class="theme-swatch" id="theme-swatch-light" title="Light" style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#f6f8fa;border:1px solid #d0d7de;cursor:pointer"></span>
+          </div>
           <span class="help">Dark is the default; light is a low-contrast variant.</span>
         </div>
 
@@ -87,9 +91,27 @@ function wire(root, ctx) {
   const reload = root.querySelector('#set-reload');
   const fields = ['theme', 'defaultAgent', 'defaultModel', 'n-agent', 'n-plan'];
 
-  // Apply theme on change
+  // Apply theme on change — instant, no save required
   root.querySelector('#set-theme')?.addEventListener('change', (e) => {
-    applyTheme(e.target.value);
+    const val = e.target.value;
+    __bizar.applyTheme(val);
+    __bizar.settings = { ...(__bizar.settings || {}), theme: val };
+  });
+
+  // Swatch click shortcuts
+  root.querySelector('#theme-swatch-dark')?.addEventListener('click', () => {
+    root.querySelector('#set-theme').value = 'dark';
+    __bizar.applyTheme('dark');
+    __bizar.settings = { ...(__bizar.settings || {}), theme: 'dark' };
+    settingsState.dirty = true;
+    save.disabled = false;
+  });
+  root.querySelector('#theme-swatch-light')?.addEventListener('click', () => {
+    root.querySelector('#set-theme').value = 'light';
+    __bizar.applyTheme('light');
+    __bizar.settings = { ...(__bizar.settings || {}), theme: 'light' };
+    settingsState.dirty = true;
+    save.disabled = false;
   });
 
   const markDirty = () => {
@@ -119,8 +141,21 @@ function wire(root, ctx) {
       settingsState.dirty = false;
       settingsState.saving = false;
       ctx.snapshot = { ...(ctx.snapshot || {}), settings: result };
-      ctx.showToast('Settings saved.', 'success');
-      render(ctx);
+      // Apply theme immediately + update global state
+      __bizar.applyTheme(newData.theme);
+      __bizar.settings = { ...(__bizar.settings || {}), theme: newData.theme };
+      // Broadcast so other tabs/clients update
+      ctx.ws.send({ type: 'settings:change', settings: result.data });
+      // Show saved indicator
+      save.textContent = '✓ Saved';
+      setTimeout(() => {
+        if (settingsState.dirty) {
+          save.textContent = 'Save';
+        } else {
+          save.textContent = 'Save';
+        }
+      }, 1500);
+      ctx.showToast('Settings saved.', 'success', 2000);
     } catch (err) {
       settingsState.saving = false;
       save.disabled = false;
