@@ -1,0 +1,4 @@
+interface:
+  display_name: "C++ Testing"
+  short_description: "C++ unit, integration, and host test patterns"
+  default_prompt: "Use $cpp-testing to design or improve C++ test coverage, host tests, and TDD workflows."

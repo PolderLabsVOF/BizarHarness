@@ -107,6 +107,18 @@ export async function runInstaller() {
     await installSkill('self-improvement');
   }
 
+  if (components.includes('skill-cpp-std')) {
+    await installSkill('cpp-coding-standards');
+  }
+
+  if (components.includes('skill-cpp-test')) {
+    await installSkill('cpp-testing');
+  }
+
+  if (components.includes('skill-esp-idf')) {
+    await installSkill('embedded-esp-idf');
+  }
+
   if (components.includes('opencode-json')) {
     await installOpencodeJson(mode);
   }

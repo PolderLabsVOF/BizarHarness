@@ -34,7 +34,7 @@ bizarharness
 The first run opens the interactive installer. It walks you through:
 
 1. **Pre-flight checks** — detects opencode, RTK, Semble, and the Skills CLI. Missing optional tools are installed automatically.
-2. **Component selection** — pick what to install: agent definitions, the `AGENTS.md` master config, the `opencode.json` template, the Bizar plugin, optional rules/hooks/commands, and the bundled `.bizar/` folder.
+2. **Component selection** — pick what to install: agent definitions, the `AGENTS.md` master config, the `opencode.json` template, the Bizar plugin, optional rules/hooks/commands, bundled skills (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF), and the `.bizar/` folder.
 3. **Agent selection** — choose which of the twelve agents to enable. The default is to install all of them.
 4. **Install mode** — merge into your existing `~/.config/opencode/` or install into a project-local `.opencode/` directory.
 5. **Skill packs** — pick from curated skills.sh packs (e.g., `vercel-labs/agent-skills` for React, `supabase/agent-skills` for Postgres).

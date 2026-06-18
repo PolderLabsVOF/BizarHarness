@@ -25,6 +25,9 @@ export async function promptComponents() {
       new inquirer.Separator(),
       { name: 'BizarHarness skill', value: 'skill-bizar', checked: true },
       { name: 'Self-improvement skill', value: 'skill-improve', checked: true },
+      { name: 'C++ coding standards skill', value: 'skill-cpp-std', checked: false },
+      { name: 'C++ testing skill', value: 'skill-cpp-test', checked: false },
+      { name: 'Embedded ESP-IDF skill', value: 'skill-esp-idf', checked: true },
       new inquirer.Separator(),
       { name: 'Always-on rules (5 rule files)', value: 'rules', checked: true },
       { name: 'Hook system (behavioral hooks)', value: 'hooks', checked: true },
@@ -35,7 +38,7 @@ export async function promptComponents() {
       new inquirer.Separator(),
       { name: 'Bizar plugin (loop guard, status, handoff signal)', value: 'plugin-bizar', checked: true },
     ],
-    pageSize: 16,
+    pageSize: 18,
     validate(answer) {
       if (answer.length === 0) return 'Select at least one component.';
       return true;
