@@ -269,8 +269,11 @@ export async function installPluginBizar(projectRoot) {
   try {
     await access(srcDir, constants.F_OK);
   } catch {
-    spinner.warn(chalk.yellow('Bizar plugin source not found — skipping'));
-    return { copied: 0, errors: ['Source not found: ' + srcDir] };
+    // The Bizar plugin now lives in a separate npm package
+    // (@polderlabs/bizar-plugin). The interactive installer copies it from
+    // there; the source tree no longer carries plugins/bizar/.
+    // Silent return — no warning needed.
+    return { copied: 0, errors: [] };
   }
 
   const destDir = join(projectRoot, '.opencode', 'plugins', 'bizar');
@@ -498,6 +501,43 @@ export async function installCommands() {
   const src = repoPath('config', 'commands');
   const dest = join(opencodeConfigDir(), 'commands');
   const { mkdirSync, readdirSync, copyFileSync } = await import('node:fs');
+  mkdirSync(dest, { recursive: true });
+  let count = 0;
+  for (const file of readdirSync(src).filter(f => f.endsWith('.md'))) {
+    copyFileSync(join(src, file), join(dest, file));
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Install Bizar-specific commands to commands-bizar/ (separate from ECC's
+ * commands/ symlink). This directory holds the Bizar plugin's own command
+ * templates: audit, explain, init, learn, plan, pr-review, tailscale-serve,
+ * visual-plan, and bizar.
+ *
+ * If dest is a symlink (e.g. the ECC installer symlinked it), skip with a
+ * friendly message — we don't want to follow a symlink and write into someone
+ * else's directory.
+ *
+ * @returns {Promise<number>} count of .md files copied
+ */
+export async function installCommandsBizar() {
+  const src = repoPath('config', 'commands');
+  const dest = join(opencodeConfigDir(), 'commands-bizar');
+  const { mkdirSync, readdirSync, copyFileSync, lstatSync } = await import('node:fs');
+
+  // Guard: skip if dest is a symlink (don't follow other packages' symlinks)
+  try {
+    const stat = lstatSync(dest);
+    if (stat.isSymbolicLink()) {
+      console.log('BizarHarness: commands-bizar/ is a symlink — skipping install.');
+      return 0;
+    }
+  } catch {
+    // dest does not exist — that's fine, we'll create it
+  }
+
   mkdirSync(dest, { recursive: true });
   let count = 0;
   for (const file of readdirSync(src).filter(f => f.endsWith('.md'))) {
