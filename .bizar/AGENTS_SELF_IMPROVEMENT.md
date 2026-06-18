@@ -11,6 +11,8 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 6. **Config files with tokens go in .gitignore from day 1** — `config/opencode.json` leaked a Hindsight bearer token for 30+ commits. Use `.template` files for reference, never commit live config.
 7. **Pre-commit hook scans for secrets** — a token-scanning pre-commit hook (`scripts/git-hooks/pre-commit`) is mandatory for any project handling credentials. Install via `scripts/install-hooks.sh`.
 8. **Release audits check for Bearer tokens** — before publishing any release, grep for `Bearer [A-Za-z0-9+/=]{20,}` in every config file.
+9. **Forward-test new skills on a real task before shipping** — skills written in isolation are biased toward the author's mental model. Dispatch a fresh subagent on a real repo task, require explicit references to skill sections, and report whether the skill actually helped or was noise. The first forward-test of `$cpp-coding-standards` + `$cpp-testing` + `$embedded-esp-idf` on `feature_flags.cpp` found 9 real issues and identified 4 concrete skill improvements.
+10. **Skills should expose a task-to-reference index** — when a skill has 7+ references, agents waste context loading the wrong one. A small table mapping common tasks to the single best reference is worth more than perfect section ordering in SKILL.md.
 
 ## Log
 
@@ -166,3 +168,17 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - git history: BFG scrub removed the token from all 56 commits that contained it
 
 **Agent(s) used**: heimdall
+
+### 2026-06-18: Added 3 C++ skills to BizarHarness (cpp-coding-standards, cpp-testing, embedded-esp-idf)
+- **Context**: User asked to fill gaps in the opencode skills bundle and then ship them in BizarHarness. Authored 3 skills in `~/.opencode/skills/`, copied them to `BizarHarness/config/skills/`, wired the installer, and forward-tested on `feature_flags.cpp` in `/projects/ams7_esp32/`.
+- **Lesson**: Forward-testing is non-negotiable for non-trivial skills. The first pass of `$embedded-esp-idf` buried NVS and logging under FreeRTOS and IRAM, which the forward test immediately flagged as wrong-priority for review tasks. A 1-line task-to-reference index in the Resources section fixes this without restructuring SKILL.md.
+- **Pattern**: For any new skill with 5+ references, add a task-to-reference table near the Resources section. Tests showed agents waste context loading the wrong reference (~5KB each) when no index exists.
+- **Files**: `BizarHarness/config/skills/{cpp-coding-standards,cpp-testing,embedded-esp-idf}/`, `cli/prompts.mjs`, `cli/install.mjs`, `install.sh`, `wiki/Getting-Started.md`, `wiki/Installation.md`, `.bizar/PROJECT.md`
+- **Agent(s) used**: odin (decompose), heimdall (CLI + wiki + PROJECT.md wiring), thor (forward-test on AMS7 feature_flags.cpp), tyr (skill authoring)
+- **Details**:
+  - `cpp-coding-standards` (631 lines SKILL.md, 5 references) — universal C++17/20 RAII/memory-safety/modern-idioms/concurrency/review-checklist. Trigger on writing/reviewing/refactoring C++.
+  - `cpp-testing` (303 lines, 5 references) — GoogleTest/Catch2/doctest selection, host-test pattern for embedded firmware (mirrors AMS7's `tests/<area>/run_*.sh` shell wrappers), mocking (abstract interface + link-time seam + `std::function` injection), TDD, 80% coverage gate.
+  - `embedded-esp-idf` (421 lines, 7 references + 2 scripts) — ESP-IDF v5.x C++ patterns with AMS7 extensions tagged `(AMS7)`. Includes `scripts/idf_env.sh` and `scripts/size_check.sh`. Trigger on idf.py, FreeRTOS, IRAM/DRAM/PSRAM, packed structs, NVS, BLE/ESP-NOW, Kconfig, host tests.
+  - Forward-test on `/projects/ams7_esp32/main/runtime/feature_flags.cpp` found 9 real issues: VLA in `Configuration::GetString` (gcc extension), virtual destructor with no base class, unused `<fstream>`/`<list>` headers, hardcoded `"DEBUG"` log tag, missing `const` on query functions, swallowed `nvs_set_*` errors, `nvs_flash_init()` called on every operation, fragile `FeatureFlag::Count`-sized array, and a missing test file.
+  - Skills improved post-test: added `references/nvs.md` to embedded-esp-idf (NVS init anti-patterns, error handling, AMS7 `"ams7cfg"` namespace); added task-to-reference index; added 2 quick-start checklist items to cpp-coding-standards (virtual destructor without base, unused standard-library headers).
+  - BizarHarness installer now exposes all 3 as opt-in components (`skill-cpp-std`, `skill-cpp-test`, `skill-esp-idf`) plus the new `install.sh` skills loop that copies all 5 bundled skills to `~/.opencode/skills/`. `install.sh` previously did NOT copy any skills — this was a gap-fill.

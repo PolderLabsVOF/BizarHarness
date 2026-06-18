@@ -1,0 +1,4 @@
+interface:
+  display_name: "C++ Coding Standards"
+  short_description: "Modern C++17/20 idioms, RAII, and memory safety"
+  default_prompt: "Use $cpp-coding-standards to apply modern C++ idioms, RAII, and memory-safety rules to code I am writing or reviewing."

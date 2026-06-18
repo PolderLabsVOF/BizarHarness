@@ -1,0 +1,4 @@
+interface:
+  display_name: "Embedded ESP-IDF"
+  short_description: "ESP-IDF v5.3 firmware C++ patterns and idf.py"
+  default_prompt: "Use $embedded-esp-idf to write, review, or debug ESP-IDF C++ firmware, including FreeRTOS tasks, packed structs, IRAM/DRAM budget, and the idf.py build/flash/monitor workflow."

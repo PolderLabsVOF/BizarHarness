@@ -29,6 +29,21 @@ echo -e "  ${GREEN}→${NC} Installing AGENTS.md..."
 cp "$REPO_DIR/config/AGENTS.md" "$CONFIG_DIR/AGENTS.md"
 echo -e "    ${GREEN}✓${NC} AGENTS.md"
 
+# ── Copy bundled skills ────────────────────────────────────────────
+SKILLS_DIR="$HOME/.opencode/skills"
+echo -e "  ${GREEN}→${NC} Installing bundled skills..."
+for skill in bizarharness self-improvement cpp-coding-standards cpp-testing embedded-esp-idf; do
+  if [ -d "$REPO_DIR/config/skills/$skill" ]; then
+    mkdir -p "$SKILLS_DIR/$skill"
+    cp -R "$REPO_DIR/config/skills/$skill/." "$SKILLS_DIR/$skill/"
+    echo -e "    ${GREEN}✓${NC} skills/$skill"
+  else
+    echo -e "    ${YELLOW}⚠${NC} skills/$skill — source not found, skipping"
+  fi
+done
+# Make scripts executable for skills that bundle them
+chmod +x "$SKILLS_DIR"/embedded-esp-idf/scripts/*.sh 2>/dev/null || true
+
 # ── Copy Bizar plugin ──────────────────────────────────────────────
 echo -e "  ${GREEN}→${NC} Installing Bizar plugin..."
 PLUGIN_SRC="$REPO_DIR/plugins/bizar"
@@ -86,6 +101,9 @@ echo -e "    ${GREEN}✓${NC} Bizar plugin (loop guard)"
 echo ""
 echo -e "${BOLD}${CYAN}┌────────────────────────────────────────────────────────────┐${NC}"
 echo -e "${BOLD}${CYAN}│${NC}  ${BOLD}BizarHarness installed!${NC}                                         │"
+echo -e "${BOLD}${CYAN}│${NC}                                                          │"
+echo -e "${BOLD}${CYAN}│${NC}  Bundled skills: C++ coding standards, C++ testing,        │"
+echo -e "${BOLD}${CYAN}│${NC}  Embedded ESP-IDF (plus BizarHarness, self-improvement)     │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
 echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}Next steps:${NC}                                                   │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"

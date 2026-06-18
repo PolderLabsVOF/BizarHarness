@@ -7,6 +7,7 @@ Norse-pantheon multi-agent system for opencode. 10 agents across 4 cost tiers wi
 - Models: DeepSeek V4 Flash Free, MiniMax-M2.7, MiniMax-M3, GPT-5.5
 - Memory: Hindsight MCP (memory-api.polderlabs.io)
 - Search: Semble MCP
+- Skills: 5 bundled (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF)
 - Diagrams: PlantUML ASCII art
 
 ## Architecture
@@ -15,6 +16,13 @@ Odin (primary router) decomposes every request into parallel streams and dispatc
 Agents have **self-skill-discovery capability** — they can proactively find and install Skills CLI packs by domain (e.g., `skills add supabase/agent-skills --all -y` for database work) during execution. The Skill Discovery Protocol is documented in `config/AGENTS.md` and in individual agent files.
 
 **Vör Research-First Protocol**: Vör must read PROJECT.md and check Hindsight banks before asking any questions. Questions are only allowed after research is exhausted, and must reference actual project files/frameworks/patterns — never ask generic discovery questions.
+
+## Bundled Skills
+- **BizarHarness** — task-planning and BizarHarness framework skill
+- **Self-improvement** — AGENTS_SELF_IMPROVEMENT.md maintenance and lesson logging
+- **C++ coding standards** — C++17/20 conventions, naming, header hygiene, const correctness
+- **C++ testing** — Google Test/Google Mock patterns, embedded test fixtures, coverage
+- **Embedded ESP-IDF** — ESP32/ESP-IDF build system, FreeRTOS, Kconfig, flash partitioning
 
 ## Conventions
 - Agent files: YAML frontmatter + Markdown body in `config/agents/`

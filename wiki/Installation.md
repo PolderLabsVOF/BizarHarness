@@ -68,10 +68,11 @@ The script:
 1. Creates `~/.config/opencode/agents/` if it doesn't exist.
 2. Copies every file from `config/agents/*.md` into that directory.
 3. Copies the master `config/AGENTS.md` to `~/.config/opencode/AGENTS.md`.
-4. Copies the bundled plugin from `plugins/bizar/` to `~/.config/opencode/plugins/bizar/`, excluding `node_modules`, `dist`, and `*.log`.
-5. Merges the template `config/opencode.json` into your existing `~/.config/opencode/opencode.json` using `jq`. If `jq` is missing, it falls back to a copy. If a config already exists, it's backed up to `opencode.json.bak` first.
-6. Idempotently ensures the Bizar plugin entry is in the `plugin` array, even if the merge step replaced the array.
-7. Prints next steps (edit `opencode.json`, restart opencode, `/connect`).
+4. Installs bundled skills (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF) to `~/.opencode/skills/`.
+5. Copies the bundled plugin from `plugins/bizar/` to `~/.config/opencode/plugins/bizar/`, excluding `node_modules`, `dist`, and `*.log`.
+6. Merges the template `config/opencode.json` into your existing `~/.config/opencode/opencode.json` using `jq`. If `jq` is missing, it falls back to a copy. If a config already exists, it's backed up to `opencode.json.bak` first.
+7. Idempotently ensures the Bizar plugin entry is in the `plugin` array, even if the merge step replaced the array.
+8. Prints next steps (edit `opencode.json`, restart opencode, `/connect`).
 
 After the script runs, restart opencode and run `/connect`.
 
