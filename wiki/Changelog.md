@@ -6,20 +6,24 @@ For npm releases, see https://www.npmjs.com/package/@polderlabs/bizar. For GitHu
 
 ## Unreleased
 
-### Added
+### Changed (v0.5.4)
 
-- **`/tailscale-serve` command.** Authenticate and configure Tailscale Serve to expose a local port on your tailnet. Surfaces the admin-enable URL when Serve is not yet enabled. See [Commands Reference → /tailscale-serve](Commands-Reference#tailscale-serve--magicdns-hosting).
-- **`install.sh` deploys `commands/` and `hooks/`.** Pre-v0.5.1, only `agents/`, `skills/`, and the Bizar plugin were copied to `~/.config/opencode/`. The v0.5.1 installer adds two new copy blocks for `config/commands/*.md` and `config/hooks/*` (recursive). All future commands ship via `install.sh` automatically.
-- **Commands Reference wiki page.** New page documenting all three command layers: Bizar plugin (`/plan`, `/visual-plan`, `/help`), user-level (`/init`, `/learn`, `/plan`, etc.), and project-level (e.g. `/tailscale-serve`). See [Commands Reference](Commands-Reference).
+- **Major rename: `bizarharness` → `bizar`.** The CLI command is now `bizar` (was `bizarharness`). The npm packages are renamed:
+  - `@polderlabs/bizarharness` → `@polderlabs/bizar` (CLI, v2.3.0)
+  - `@polderlabs/bizarharness-plugin` → `@polderlabs/bizar-plugin` (plugin, v0.5.3)
+- **New `bizar update` subcommand.** Update opencode, `@polderlabs/bizar`, and/or `@polderlabs/bizar-plugin`. By default prompts for each component; with `--all` or explicit subcommands (`opencode`, `bizar`, `plugin`) runs only the named update. After any package update, re-runs the install script so the locally deployed plugin matches the registry (fixes the BUGS.md "version skew" trap).
+- **Bundled skill renamed:** `config/skills/bizarharness/` → `config/skills/bizar/` (folder and `SKILL.md` frontmatter).
+- **Default cache path renamed:** `~/.cache/bizarharness/` → `~/.cache/bizar/`. The renamed path is a clean break — no migration script. Existing users will see new files at the new path; old files at the old path are orphaned but harmless.
+- **All in-repo references updated.** README, all 19 wiki pages, all CLI source files, the plugin source, and the bundled skill are clean of `bizarharness`. The brand name "BizarHarness" is preserved in titles and historical context (the project is BizarHarness; the tool is `bizar`).
 
-### Fixed
+### Upgrade notes
 
-- **`bizar_spawn_background` empty-sessionId bug (v0.5.1).** `InstanceManager.add()` was synchronously calling `attachEventHandler` with `sessionId: ""` (filled in later by `POST /session`). The `EventStream` guard rejected the empty string and the spawn failed before any HTTP call. Fix: move `attachEventHandler` out of `add()` and into `bg-spawn.ts` after the real sessionId is known. The "track BEFORE HTTP" invariant is preserved. Covered by `plugins/bizar/tests/attach-handler-bug.test.ts` (3 tests). Test count: 488 → 491 pass. See [Bizar Plugin → Recent fixes](Bizar-Plugin#recent-fixes).
+If upgrading from a previous version:
+1. Re-run `bash install.sh` from the source tree.
+2. The next `bizar update` will pull the latest npm package and re-deploy the plugin.
+3. Old `~/.cache/bizarharness/` files are orphaned but harmless. Delete them with `rm -rf ~/.cache/bizarharness` if you want to clean up.
 
-### Known limitations (v0.5+)
-
-- Plugin has no hot-reload — source changes require opencode restart.
-- `install.sh` does not detect when the installed plugin is older than the source. Re-run after every `git pull`.
+## v0.5.2 — 2026-06-18
 
 ## 0.5.2 — 2026-06-18
 
