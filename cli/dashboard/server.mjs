@@ -96,6 +96,16 @@ export function createServer({
   const server = createHttpServer(app);
   const wss = new WebSocketServer({ server, path: '/ws' });
 
+  /** Broadcast a message to all connected WS clients. */
+  function broadcast(msg) {
+    const payload = JSON.stringify(msg);
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1) {
+        try { client.send(payload); } catch { /* dropped */ }
+      }
+    });
+  }
+
   // Routes
   app.use(
     '/api',
@@ -105,6 +115,7 @@ export function createServer({
       projectRoot,
       opencodeConfigDir,
       bizarRoot,
+      broadcast,
     }),
   );
 
@@ -128,6 +139,7 @@ export function createServer({
             projects: state.getProjects(),
             config: state.getConfig(),
             settings: state.getSettings(),
+            tasks: state.getTasks(),
           },
         }),
       );
@@ -163,6 +175,7 @@ export function createServer({
                   projects: state.getProjects(),
                   config: state.getConfig(),
                   settings: state.getSettings(),
+                  tasks: state.getTasks(),
                 },
               }),
             );
