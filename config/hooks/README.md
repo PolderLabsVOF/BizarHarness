@@ -19,7 +19,7 @@ Each hook is enforced by agent instructions in the agent `.md` files:
 
 - **Pre-tool-use**: All implementation agents check for exposed secrets before any `write` or `edit` call
 - **Post-tool-use**: After file modifications, agents auto-run the linter and formatter
-- **Session-start**: Odin reads `.bizar/PROJECT.md` and Hindsight; Heimdall runs `bizarharness init` if missing
+- **Session-start**: Odin reads `.bizar/PROJECT.md` and Hindsight; Heimdall runs `bizar init` if missing
 - **Session-end**: Odin dispatches Heimdall to auto-extract self-improvement entries
 - **Pre-commit**: Hermod checks for console.log and .env before allowing git commits
 - **Post-implement**: After Thor+Tyr complete, Odin routes to Thor for test gate

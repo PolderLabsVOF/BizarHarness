@@ -1,11 +1,11 @@
 ---
-name: bizarharness
-description: Use when working with, configuring, troubleshooting, or understanding the BizarHarness Norse-pantheon multi-agent system for opencode. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
+name: bizar
+description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system for opencode. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
 ---
 
-# BizarHarness
+# Bizar
 
-Norse-pantheon multi-agent system for opencode. 9 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
+Norse-pantheon multi-agent system for opencode. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
 
 ## Installation
 

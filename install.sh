@@ -56,7 +56,7 @@ echo -e "    ${GREEN}✓${NC} AGENTS.md"
 # ── Copy bundled skills ────────────────────────────────────────────
 SKILLS_DIR="$HOME/.opencode/skills"
 echo -e "  ${GREEN}→${NC} Installing bundled skills..."
-for skill in bizarharness self-improvement cpp-coding-standards cpp-testing embedded-esp-idf; do
+for skill in bizar self-improvement cpp-coding-standards cpp-testing embedded-esp-idf; do
   if [ -d "$REPO_DIR/config/skills/$skill" ]; then
     mkdir -p "$SKILLS_DIR/$skill"
     cp -R "$REPO_DIR/config/skills/$skill/." "$SKILLS_DIR/$skill/"

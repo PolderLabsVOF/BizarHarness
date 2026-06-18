@@ -231,11 +231,11 @@ Odin dispatches all tasks to subagents via the `task` tool. When work items are 
 | Novel / unsolvable problems | @vidarr (plan -> @forseti -> execute) |
 | Postmortem of failed attempts | @vidarr |
 | Plan/approach review | @forseti |
-| Security audit of agent config | @forseti — runs `bizarharness audit` |
-| Project initialization | @heimdall — runs `bizarharness init` |
-| Cross-harness config export | @heimdall — runs `bizarharness export` |
+| Security audit of agent config | @forseti — runs `bizar audit` |
+| Project initialization | @heimdall — runs `bizar init` |
+| Cross-harness config export | @heimdall — runs `bizar export` |
 | PR review (GitHub) | @hermod — runs `/pr-review` mode with @mimir (research) + @forseti (audit) |
-| Parallel test gate after implementation | @thor — waits for @tyr, then runs `bizarharness test-gate` |
+| Parallel test gate after implementation | @thor — waits for @tyr, then runs `bizar test-gate` |
 | Explain code / architecture | @frigg — use `@frigg` directly |
 
 ---

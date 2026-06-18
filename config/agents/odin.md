@@ -80,7 +80,7 @@ For deep codebase research, pattern discovery, documentation analysis:
 - Finding how things connect across the codebase
 - Documentation and configuration analysis
 - Any task where the primary goal is understanding, not implementation
-- Also route to @mimir for running `bizarharness init` to detect project stack and generate `.bizar/PROJECT.md`
+- Also route to @mimir for running `bizar init` to detect project stack and generate `.bizar/PROJECT.md`
 
 ### Simple Tasks & Quick Edits — Route to @heimdall (DeepSeek V4 Flash Free, free)
 For any simple, mechanical, or deterministic work:
@@ -133,7 +133,7 @@ For the most demanding engineering work:
 ### Tests Gate — Route to @thor (MiniMax M2.7) after parallel implementation
 When Thor and Tyr both complete implementation work in parallel:
 1. After both return results, route to @thor to run the test gate
-2. @thor runs the full test suite: `npx bizarharness test-gate`
+2. @thor runs the full test suite: `npx bizar test-gate`
 3. If tests fail, @thor fixes issues and re-runs until green
 4. Only after test gate passes do you synthesize the final response
 
@@ -273,7 +273,7 @@ The result includes a `result` string (the concatenated assistant text) and `too
 
 ### Loop guard in background
 
-Background sessions run the same loop guard as sync subagents. Threshold-12 is captured and surfaced as a marker in the result string. Threshold-5/8 are NOT visible in the result (they happen in the background session's LLM context). If the result begins with `[loop guard: 12 identical calls to <tool>]`, treat the instance as failed. Read `~/.cache/bizarharness/logs/<sessionId>.log` for the full tool history.
+Background sessions run the same loop guard as sync subagents. Threshold-12 is captured and surfaced as a marker in the result string. Threshold-5/8 are NOT visible in the result (they happen in the background session's LLM context). If the result begins with `[loop guard: 12 identical calls to <tool>]`, treat the instance as failed. Read `~/.cache/bizar/logs/<sessionId>.log` for the full tool history.
 
 ### Limits
 
@@ -293,7 +293,7 @@ Match on the literal substrings above. `<tool>` is whatever tool name the openco
 
 Recovery procedure:
 
-1. Read the subagent's findings from `~/.cache/bizarharness/logs/<sessionId>.log` to understand what it did before looping.
+1. Read the subagent's findings from `~/.cache/bizar/logs/<sessionId>.log` to understand what it did before looping.
 2. Decompose the remaining work into a new task whose prompt begins with a summary of those findings.
 3. Dispatch to a different agent tier if possible (e.g., escalate from @thor to @tyr). If only the same tier is available, re-dispatch to the same agent with the rewritten prompt — never with the original one.
 
