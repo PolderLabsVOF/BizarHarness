@@ -1,9 +1,10 @@
 import chalk from 'chalk';
 import boxen from 'boxen';
+import { existsSync } from 'node:fs';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
-import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, repoPath } from './utils.mjs';
+import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
 import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands } from './copy.mjs';
 
 const AGENT_FILES = [
@@ -12,6 +13,71 @@ const AGENT_FILES = [
   'tyr.md', 'vidarr.md', 'forseti.md',
   'semble-search.md',
 ];
+
+/**
+ * Install the Bizar opencode plugin from the separate global npm package
+ * `@polderlabs/bizarharness-plugin`. The main `@polderlabs/bizarharness` package
+ * no longer ships `plugins/bizar/` — the plugin lives in its own scoped package
+ * so it can be versioned and published independently.
+ *
+ * If the plugin package is globally installed, copies its contents into
+ * `~/.config/opencode/plugins/bizar/` (or the platform-equivalent path via
+ * `opencodeConfigDir()`). Otherwise, prints a hint directing the user to run
+ * `npm install -g @polderlabs/bizarharness-plugin`.
+ *
+ * Returns `true` if the plugin was installed, `false` otherwise. Never throws.
+ */
+export async function installPluginFromGlobal() {
+  const { execSync } = await import('node:child_process');
+  const { mkdir, readdir, copyFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+
+  let globalRoot;
+  try {
+    globalRoot = execSync('npm root -g', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    console.log(chalk.yellow('  ⚠ Could not determine npm global root — skipping plugin install'));
+    return false;
+  }
+
+  const pluginPath = join(globalRoot, '@polderlabs', 'bizarharness-plugin');
+  if (!existsSync(pluginPath)) {
+    console.log(chalk.dim('  ℹ Bizar plugin not installed globally. To install it:'));
+    console.log(chalk.dim('    npm install -g @polderlabs/bizarharness-plugin'));
+    return false;
+  }
+
+  const destDir = join(opencodeConfigDir(), 'plugins', 'bizar');
+  await mkdir(destDir, { recursive: true });
+
+  async function copyRecursive(srcDir, dstDir) {
+    const entries = await readdir(srcDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const src = join(srcDir, entry.name);
+      const dst = join(dstDir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+        await mkdir(dst, { recursive: true });
+        await copyRecursive(src, dst);
+      } else {
+        if (entry.name === '.DS_Store' || entry.name.endsWith('.log')) continue;
+        await copyFile(src, dst);
+      }
+    }
+  }
+
+  try {
+    await copyRecursive(pluginPath, destDir);
+    console.log(chalk.green(`  ✓ Bizar plugin installed from global package`));
+    console.log(chalk.dim(`    ${pluginPath} → ${destDir}`));
+    return true;
+  } catch (err) {
+    console.log(chalk.yellow(`  ⚠ Failed to copy Bizar plugin: ${err.message}`));
+    return false;
+  }
+}
 
 export async function runInstaller() {
   showBanner();
@@ -121,6 +187,10 @@ export async function runInstaller() {
       console.log(chalk.yellow(`  ⚠ Plugin install: ${result.errors.length} error(s)`));
     }
   }
+
+  // Also try to install the plugin from the separate global npm package
+  // `@polderlabs/bizarharness-plugin` (preferred path going forward).
+  await installPluginFromGlobal();
 
   // ── Rules, hooks, commands (optional components) ──
   if (components.includes('rules')) {
@@ -290,6 +360,10 @@ export async function runPostInstall() {
   } catch {
     console.log('BizarHarness: core skill install skipped — run `skills add vercel-labs/skills --all -y` manually.');
   }
+
+  // Try to install the Bizar plugin from the separate global npm package.
+  // Non-fatal: prints a hint if the package isn't installed globally yet.
+  await installPluginFromGlobal();
 
   console.log('Run `bizarharness` for interactive setup.');
 }

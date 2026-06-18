@@ -25,8 +25,9 @@ function showHelp() {
     bizarharness --help          Show this help
 
   Install:
-    npm install -g bizarharness   Install globally, then run 'bizarharness'
-    npx bizarharness              Run without installing
+    npm install -g @polderlabs/bizarharness         Install globally, then run 'bizarharness'
+    npm install -g @polderlabs/bizarharness-plugin  Install the Bizar opencode plugin
+    npx @polderlabs/bizarharness                    Run without installing
   `);
 }
 
@@ -146,7 +147,7 @@ if (args.includes('--postinstall')) {
 } else if (args[0] === 'plan') {
   const planArgs = args.slice(1);
   await runPlan(planArgs, {});
-} else if (args.includes('--help') || args.includes('-h') || args.length === 0) {
+} else if (args.includes('--help') || args.includes('-h')) {
   showHelp();
 } else {
   await runInstaller();
