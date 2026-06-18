@@ -71,7 +71,7 @@ The most common Windows-specific issues are documented in the [Troubleshooting](
 
 ### Does this work with Claude Code / Cursor / Copilot?
 
-The Bizar plugin is opencode-specific (it uses opencode's plugin API and hook surface). The agent definitions and the BizarHarness CLI can be adapted to other harnesses via `bizarharness export <target>`, but the bundled plugin only works in opencode.
+The Bizar plugin is opencode-specific (it uses opencode's plugin API and hook surface). The agent definitions and the BizarHarness CLI can be adapted to other harnesses via `bizar export <target>`, but the bundled plugin only works in opencode.
 
 ### Does this work with local models (Ollama, LM Studio)?
 
@@ -82,15 +82,15 @@ In principle, yes. The agent files accept any `<provider>/<model>` string. Confi
 ### How do I update BizarHarness?
 
 ```bash
-npm update -g @polderlabs/bizarharness
+npm update -g @polderlabs/bizar
 # or
-npm install -g @polderlabs/bizarharness@latest
+npm install -g @polderlabs/bizar@latest
 ```
 
 After the npm package updates, re-run the installer:
 
 ```bash
-bizarharness
+bizar
 ```
 
 The installer is idempotent — it preserves your existing config and only copies new or changed files. If a config conflict arises, it backs up the existing file to `opencode.json.bak` first.
@@ -105,10 +105,10 @@ git pull
 
 ### How do I see what the agents are doing in real time?
 
-The Bizar plugin logs every tool call to `~/.cache/bizarharness/logs/<sessionId>.log`. Tail the file in another terminal:
+The Bizar plugin logs every tool call to `~/.cache/bizar/logs/<sessionId>.log`. Tail the file in another terminal:
 
 ```bash
-tail -f ~/.cache/bizarharness/logs/<sessionId>.log
+tail -f ~/.cache/bizar/logs/<sessionId>.log
 ```
 
 The log is metadata only (timestamp, session ID, tool name, fingerprint hash, outcome, duration) — no tool args or session content.
@@ -160,7 +160,7 @@ MIT. See the [LICENSE](https://github.com/DrB0rk/BizarHarness/blob/main/LICENSE)
 
 - **v0.3.x** — loop guard, status reporting, handoff. Single tool surface (per-session, per-tool fingerprint). The original release.
 - **v0.4.x** — adds background agents (`bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`). Single `opencode serve` child. State on disk.
-- **v0.5.0** — adds plan side-effects (`/plan new|add|comment|status`), `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`, stall and thinking-loop detection. Plan files at `~/.cache/bizarharness/state/bg/<instanceId>.json`.
+- **v0.5.0** — adds plan side-effects (`/plan new|add|comment|status`), `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`, stall and thinking-loop detection. Plan files at `~/.cache/bizar/state/bg/<instanceId>.json`.
 - **v0.5.1** — fixes the empty-sessionId bug in `bizar_spawn_background`. The regression test in `plugins/bizar/tests/attach-handler-bug.test.ts` would have caught this. Test count: 488 → 491.
 
 ### What happens if the plugin crashes mid-session?
@@ -173,7 +173,7 @@ The plugin's `dispose()` handler runs on `SIGTERM` or `SIGINT` (or on process ex
 4. Closes the SSE stream.
 5. Calls `process.exit(0)`.
 
-State files at `~/.cache/bizarharness/state/bg/*.json` are **preserved** — they are the recovery surface for the next opencode launch.
+State files at `~/.cache/bizar/state/bg/*.json` are **preserved** — they are the recovery surface for the next opencode launch.
 
 ### How do I add a new loop-guard threshold?
 

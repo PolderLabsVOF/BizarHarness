@@ -91,8 +91,8 @@ These are deployed by `install.sh` to `~/.config/opencode/commands/`. All BizarH
 
 | Command | What it does | Agent |
 |---|---|---|
-| `/init` | Run `bizarharness init` to detect the project stack, install relevant skills, and create `.bizar/PROJECT.md`. | build |
-| `/audit` | Run `bizarharness audit` to scan agent config for security issues. | security |
+| `/init` | Run `bizar init` to detect the project stack, install relevant skills, and create `.bizar/PROJECT.md`. | build |
+| `/audit` | Run `bizar audit` to scan agent config for security issues. | security |
 | `/security-scan` | Run AgentShield against agent, hook, MCP, permission, and secret surfaces. | security |
 | `/harness-audit` | Deterministic repository harness audit with a prioritized scorecard. | general |
 | `/projects` | List registered projects and their instinct counts. | general |

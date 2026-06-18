@@ -4,7 +4,7 @@ A five-minute tour of BizarHarness. This page assumes you've already run the ins
 
 ## Open opencode in a project
 
-Start opencode from the root of any project that has a `.bizar/` folder (run `bizarharness init` first if you don't have one):
+Start opencode from the root of any project that has a `.bizar/` folder (run `bizar init` first if you don't have one):
 
 ```bash
 cd ~/my-project

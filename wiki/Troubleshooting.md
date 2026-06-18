@@ -26,7 +26,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 **Fix:**
 
 1. **Confirm the plugin is loaded.** In opencode, run `/plugins` and check that `bizar` appears. If not, check `opencode.json` for the `plugin` array and verify `./plugins/bizar/index.ts` is present.
-2. **Check the plugin logs.** Look at `~/.cache/bizarharness/logs/<sessionId>.log`. You should see per-tool-call lines. If the file is empty, the plugin is not running.
+2. **Check the plugin logs.** Look at `~/.cache/bizar/logs/<sessionId>.log`. You should see per-tool-call lines. If the file is empty, the plugin is not running.
 3. **Disable the plugin for one session** to recover: `BIZAR_DISABLE=1 opencode`.
 4. **Disable only the loop guard** if status reporting is useful: `BIZAR_DISABLE_LOOP=1 opencode`.
 5. **If you added custom agents,** make sure they include the canonical `## Loop Guard Handling` section. Without it, the loop guard will throw at threshold 12 but the agent will keep retrying. See [Bizar Plugin](Bizar-Plugin) for the full limitations list.
@@ -40,7 +40,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 **Fix:**
 
 1. List installed agents: `ls ~/.config/opencode/agents/`. You should see `odin.md`, `frigg.md`, `vor.md`, `quick.md`, `mimir.md`, `heimdall.md`, `hermod.md`, `thor.md`, `baldr.md`, `tyr.md`, `vidarr.md`, `forseti.md`, and `semble-search.md`.
-2. If a file is missing, re-run the installer: `bizarharness`.
+2. If a file is missing, re-run the installer: `bizar`.
 3. For per-project installs, also check `<project>/.opencode/agents/`.
 4. Restart opencode after re-installing.
 
@@ -73,7 +73,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 
 1. **Reduce parallelism.** If Odin is firing 5+ parallel tasks, narrow the request. Opencode is rate-limited per provider; 5 parallel M2.7 calls is fine, 5 parallel M3 calls can hit limits.
 2. **Use the background-agent tool-call cap.** Set `BIZAR_BACKGROUND_TOOL_CALL_CAP=200` to abort background instances that have run too long.
-3. **Use the test gate.** After implementation, run `bizarharness test-gate` instead of asking Odin to keep iterating.
+3. **Use the test gate.** After implementation, run `bizar test-gate` instead of asking Odin to keep iterating.
 4. **Temporarily disable high-cost tiers.** Edit `config/agents/tyr.md` and change the model to `minimax/MiniMax-M2.7` (one tier down). Re-run the installer.
 5. **For emergency stop,** Ctrl-C the opencode session. The Bizar plugin will mark all in-flight background instances as failed and abort the serve child.
 
@@ -116,7 +116,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 
 ## "npm install" warnings about peer dependencies
 
-**Symptom:** `npm install -g @polderlabs/bizarharness` prints warnings about peer dependencies.
+**Symptom:** `npm install -g @polderlabs/bizar` prints warnings about peer dependencies.
 
 **Cause:** Some BizarHarness dependencies (like `inquirer` v12) require Node 20+. If you're on an older Node, you get warnings.
 
@@ -163,7 +163,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 
 1. **Call `bizar_status(instanceId)`** to see the current state. Check `toolCallCount` — if it's near 500, the cap is about to fire.
 2. **If stuck, kill it:** `bizar_kill(instanceId)`.
-3. **If the serve child died,** check the plugin log at `~/.cache/bizarharness/logs/`. Look for "serve child exited unexpectedly" — the plugin will auto-retry on the next spawn.
+3. **If the serve child died,** check the plugin log at `~/.cache/bizar/logs/`. Look for "serve child exited unexpectedly" — the plugin will auto-retry on the next spawn.
 4. **Reduce the timeout** for slow tasks: `bizar_collect(instanceId, { timeoutMs: 60_000 })`. If you need more time, increase the cap with `BIZAR_MAX_CONCURRENT_INSTANCES` and `BIZAR_BACKGROUND_TOOL_CALL_CAP` (if your instance is hitting it).
 
 ## "bizar_spawn_background" fails with "sessionId must be non-empty"

@@ -6,7 +6,7 @@ Thanks for your interest in BizarHarness. This page covers the repository struct
 
 ```
 BizarHarness/
-├── cli/                  # the bizarharness CLI (ESM .mjs files)
+├── cli/                  # the bizar CLI (ESM .mjs files)
 │   ├── bin.mjs           # entry point
 │   ├── install.mjs       # interactive installer
 │   ├── init.mjs          # per-project .bizar/ init
@@ -59,7 +59,7 @@ For non-trivial changes (anything that touches more than a single file or has se
 
    The two streams should have **explicit interface contracts** to avoid merge conflicts. Naming conventions, function signatures, and data shapes should be pinned in the task prompt.
 
-4. **Test gate** — after both streams complete, run `bizarharness test-gate` to detect and run the project's test suite. For the BizarHarness repo itself, this runs `npm test`.
+4. **Test gate** — after both streams complete, run `bizar test-gate` to detect and run the project's test suite. For the BizarHarness repo itself, this runs `npm test`.
 
 5. **Review and merge** — open a PR. A second agent (or a human reviewer) reviews the diff. The PR is merged after CI passes and review approves.
 

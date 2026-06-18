@@ -6,7 +6,7 @@
 
 12 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
 
-[![npm](https://img.shields.io/npm/v/bizarharness?color=cb3837)](https://www.npmjs.com/package/bizarharness)
+[![npm](https://img.shields.io/npm/v/bizar?color=cb3837)](https://www.npmjs.com/package/bizar)
 [![RTK](https://img.shields.io/badge/rtk-integrated-8A2BE2)](https://github.com/rtk-ai/rtk)
 [![Semble](https://img.shields.io/badge/semble-integrated-0ea5e9)](https://github.com/semble-ai/semble)
 [![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
@@ -15,7 +15,7 @@
 [![Agents](https://img.shields.io/badge/agents-12-10b981)](#-the-pantheon)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-`npm install @polderlabs/bizarharness` · `npx bizarharness`
+`npm install @polderlabs/bizar` · `npx bizar`
 
 </div>
 
@@ -119,26 +119,26 @@
 
 ### Quick — npm (recommended)
 
-Published on [npmjs.com/package/bizarharness](https://www.npmjs.com/package/bizarharness).
+Published on [npmjs.com/package/bizar](https://www.npmjs.com/package/bizar).
 
 Run without installing:
 
 ```bash
-npx bizarharness
+npx bizar
 ```
 
 Or install globally:
 
 ```bash
-npm install -g @polderlabs/bizarharness
-bizarharness
+npm install -g @polderlabs/bizar
+bizar
 ```
 
 Or add to a project:
 
 ```bash
-npm install @polderlabs/bizarharness
-npx bizarharness
+npm install @polderlabs/bizar
+npx bizar
 ```
 
 The interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts opencode.
@@ -304,19 +304,19 @@ BizarHarness includes a built-in visual plan editor for drafting architectural d
 
 ```bash
 # Create a new plan
-bizarharness plan new my-feature
+bizar plan new my-feature
 
 # Open an existing plan
-bizarharness plan open my-feature
+bizar plan open my-feature
 
 # List all plans
-bizarharness plan list
+bizar plan list
 
 # Export plan to standalone file
-bizarharness plan export my-feature > my-feature.mdx
+bizar plan export my-feature > my-feature.mdx
 
 # Delete a plan (with confirmation)
-bizarharness plan delete my-feature
+bizar plan delete my-feature
 ```
 
 Plans are stored in `plans/<slug>/` with four files:

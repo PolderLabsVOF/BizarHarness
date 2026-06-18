@@ -147,7 +147,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Adversarial plan reviewer. Audits completeness, correctness, consistency, feasibility, and security of plans from Tyr and Vidarr. **Edit permission: denied** — runs in audit-only mode.
 - **Tools:** `read`, `glob`, `grep`, MCP tools. No `edit`, `write`, or `bash`.
-- **When to use:** Never invoked directly. Auto-runs before any Tier 4 or Tier 5 implementation. Also runs `bizarharness audit` for a security review of agent config.
+- **When to use:** Never invoked directly. Auto-runs before any Tier 4 or Tier 5 implementation. Also runs `bizar audit` for a security review of agent config.
 - **Example:** Not directly invokable by users; auto-triggered by Odin.
 - **Routing rule:** Auto-dispatched by Odin for plans involving Tyr or Vidarr. Returns approve, request-changes, or reject.
 

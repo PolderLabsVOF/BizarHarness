@@ -113,7 +113,7 @@ Every BizarHarness project has a `.bizar/` folder at the root. It contains:
 
 - `PROJECT.md` — stack, conventions, entry points. Vör reads this first when clarifying.
 - `AGENTS_SELF_IMPROVEMENT.md` — the running log of lessons learned. Read at session start, appended to at session end.
-- Plans (created by `bizarharness plan new`) — visual plan files in MDX format.
+- Plans (created by `bizar plan new`) — visual plan files in MDX format.
 
 The folder is the contract between the developer and the agents. Edit `PROJECT.md` to set conventions; the next session will read them. Read `AGENTS_SELF_IMPROVEMENT.md` to see what the agents have learned; the agents will read it before routing.
 
@@ -122,10 +122,10 @@ The folder is the contract between the developer and the agents. Edit `PROJECT.m
 The bundled Bizar plugin runs as an opencode plugin. It does three things:
 
 1. **Loop detection** — fingerprints tool calls and warn/block on repetition. Defaults: warn at 5, escalate at 8, block at 12.
-2. **Periodic status reporting** — logs every tool call (metadata only) to `~/.cache/bizarharness/logs/<sessionId>.log`.
+2. **Periodic status reporting** — logs every tool call (metadata only) to `~/.cache/bizar/logs/<sessionId>.log`.
 3. **Handoff signal** — when a subagent is stuck, injects a system message that nudges it to use the `task` tool to escalate.
 
-The plugin is read-only on the project, makes no outbound network calls, and writes only to `~/.cache/bizarharness/`. See [Bizar Plugin](Bizar-Plugin) for the full spec.
+The plugin is read-only on the project, makes no outbound network calls, and writes only to `~/.cache/bizar/`. See [Bizar Plugin](Bizar-Plugin) for the full spec.
 
 ## Background agents (experimental)
 

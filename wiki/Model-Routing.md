@@ -91,7 +91,7 @@ Models are matched by the `<provider>/<model>` string. If the string doesn't mat
 To disable a tier entirely, remove the agent definitions that use it. For example, to disable the GPT-5.5 tier:
 
 1. Delete or move `config/agents/vidarr.md` out of the agents directory.
-2. Re-run `./install.sh` or `bizarharness`.
+2. Re-run `./install.sh` or `bizar`.
 3. Restart opencode.
 
 Odin will skip Vidarr in its routing table. The escape hatch is gone — Tier 4 work will simply fail rather than escalate to GPT-5.5.

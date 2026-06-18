@@ -1,28 +1,28 @@
 # Plans Command
 
-`bizarharness plan` is a developer tool for creating local visual plans. A plan is a single source-of-truth `.mdx` file with an auto-generated HTML viewer/editor that runs in your browser via a tiny local server. Comments are stored in a sidecar JSON file. Everything is local — no network, no sharing, no remote storage.
+`bizar plan` is a developer tool for creating local visual plans. A plan is a single source-of-truth `.mdx` file with an auto-generated HTML viewer/editor that runs in your browser via a tiny local server. Comments are stored in a sidecar JSON file. Everything is local — no network, no sharing, no remote storage.
 
 ## Quick start
 
 ```bash
 # Create a new plan
-bizarharness plan new my-feature
+bizar plan new my-feature
 ```
 
 This creates `plans/my-feature/` with four files, regenerates the HTML viewer, starts a local server on port 4321, and opens the viewer in your default browser. The server runs until you press Ctrl-C.
 
 ```bash
 # Open an existing plan
-bizarharness plan open my-feature
+bizar plan open my-feature
 
 # List all plans
-bizarharness plan list
+bizar plan list
 
 # Delete a plan (with confirmation)
-bizarharness plan delete my-feature
+bizar plan delete my-feature
 
 # Export the plan as MDX to stdout
-bizarharness plan export my-feature > my-feature.mdx
+bizar plan export my-feature > my-feature.mdx
 ```
 
 ## The 5 subcommands
@@ -57,7 +57,7 @@ plans/<slug>/
 - `plan.html` — auto-generated from the template. **Gitignored.**
 - `comments.json` — comment data. **Gitignored.**
 
-The first time you run `bizarharness plan new` in a project, the CLI suggests adding these lines to `.gitignore`:
+The first time you run `bizar plan new` in a project, the CLI suggests adding these lines to `.gitignore`:
 
 ```
 plans/*/plan.html
@@ -134,7 +134,7 @@ A typical workflow:
 
 ```bash
 # 1. Draft a plan for a new feature
-bizarharness plan new oauth-integration
+bizar plan new oauth-integration
 
 # 2. Edit the plan in the browser (textareas toggle, save persists)
 #    Add sections, write the API contract, sketch the migration
@@ -145,14 +145,14 @@ git add plans/oauth-integration/plan.mdx plans/oauth-integration/meta.json
 git commit -m "docs(plan): draft oauth-integration plan"
 
 # 4. Open the plan during standup
-bizarharness plan open oauth-integration
+bizar plan open oauth-integration
 
 # 5. Once the plan is approved, dispatch implementation
 #    (in opencode, with BizarHarness routing)
 @tyr execute plans/oauth-integration/plan.mdx
 
 # 6. When done, archive or delete
-bizarharness plan delete oauth-integration
+bizar plan delete oauth-integration
 ```
 
 The plan lives in your repo as long as the work is in flight. Once the implementation is merged, you can delete the plan directory (or keep it as a record of the design).
@@ -178,7 +178,7 @@ The plugin-driven plan is a single source of truth at `plans/<slug>/plan.json` w
 | `/plan wait <slug>` | `bizar_wait_for_feedback` | Defers — agent pauses for human feedback. Returns `feedback_received`, `approved`, `rejected`, or `timed_out`. |
 | `/help` | (plugin) | Lists the plugin's own commands. |
 
-The two implementations (`bizarharness plan` CLI vs `/plan` slash command) read and write the same `plan.json` format. You can mix and match: use the CLI for CI or batch operations, use the slash command for in-opencode work. The slash command is the recommended path because it stays in the agent's context and supports comments and status.
+The two implementations (`bizar plan` CLI vs `/plan` slash command) read and write the same `plan.json` format. You can mix and match: use the CLI for CI or batch operations, use the slash command for in-opencode work. The slash command is the recommended path because it stays in the agent's context and supports comments and status.
 
 For the full reference, see [Commands Reference → Bizar plugin commands](Commands-Reference#bizar-plugin-commands).
 

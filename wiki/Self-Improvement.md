@@ -51,7 +51,7 @@ The bank-selection protocol:
 
 1. At session start, call `hindsight_list_banks` to see what banks exist.
 2. Determine the project name from the working directory.
-3. Call `hindsight_recall` with the correct `bank_id` (e.g., `bank_id: "bizarharness"`).
+3. Call `hindsight_recall` with the correct `bank_id` (e.g., `bank_id: "bizar"`).
 4. If no bank exists for the project, create one with `hindsight_create_bank(bank_id: "<project-name>")`.
 
 The default bank is **never** used for project-specific work. It holds general AI-agent system knowledge (model configs, agent definitions, infrastructure) and cross-project preferences.

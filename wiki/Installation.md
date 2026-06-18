@@ -4,14 +4,14 @@ BizarHarness can be installed three ways: from npm, from source, or per-project.
 
 ## npm (recommended)
 
-The package is published to npm at [`bizarharness`](https://www.npmjs.com/package/bizarharness).
+The package is published to npm at [`bizar`](https://www.npmjs.com/package/bizar).
 
 ### Run without installing
 
 The fastest way to try BizarHarness without leaving anything on your machine:
 
 ```bash
-npx bizarharness
+npx bizar
 ```
 
 `npx` downloads the package to a temp directory, runs the interactive installer, and cleans up. Use this to evaluate BizarHarness before committing to a global install.
@@ -21,25 +21,25 @@ npx bizarharness
 For an install that sticks:
 
 ```bash
-npm install -g @polderlabs/bizarharness
-bizarharness
+npm install -g @polderlabs/bizar
+bizar
 ```
 
-This puts the `bizarharness` binary on your `$PATH`. Verify with:
+This puts the `bizar` binary on your `$PATH`. Verify with:
 
 ```bash
-bizarharness --help
+bizar --help
 ```
 
 You should see the help text with usage, subcommands (`audit`, `init`, `export`, `plan`, `test-gate`), and the install hint.
 
 ### Add to a project as a dev dependency
 
-If you want `bizarharness` to be available only inside a specific project (and tracked in `package.json`):
+If you want `bizar` to be available only inside a specific project (and tracked in `package.json`):
 
 ```bash
-npm install --save-dev bizarharness
-npx bizarharness
+npm install --save-dev bizar
+npx bizar
 ```
 
 The `--save-dev` flag keeps the install out of production dependencies. The `npx` invocation is needed because the binary isn't on the global `$PATH` from a local install.
@@ -47,7 +47,7 @@ The `--save-dev` flag keeps the install out of production dependencies. The `npx
 ### Verify the install
 
 ```bash
-bizarharness --version
+bizar --version
 ```
 
 The current version is `1.2.1`. If the command is not found, your `$PATH` does not include the npm global bin directory. On most systems this is `~/.npm-global/bin` (custom) or `$(npm config get prefix)/bin` (default). Add it to your shell rc.
@@ -76,13 +76,13 @@ The script:
 
 After the script runs, restart opencode and run `/connect`.
 
-## Per-project install (bizarharness init)
+## Per-project install (bizar init)
 
 If you want BizarHarness to live inside a single project — useful for monorepos, multi-tenant setups, or contributors who don't want a global install — use `init`:
 
 ```bash
 cd ~/my-project
-bizarharness init
+bizar init
 ```
 
 `init` is a lighter-weight version of the full installer. It:
@@ -99,7 +99,7 @@ bizarharness init
 To remove BizarHarness globally:
 
 ```bash
-npm uninstall -g bizarharness
+npm uninstall -g bizar
 ```
 
 Then clean up the artifacts it left behind:
@@ -137,7 +137,7 @@ npm uninstall -g skills
 
 ## Troubleshooting install issues
 
-**`bizarharness: command not found` after `npm install -g`.**
+**`bizar: command not found` after `npm install -g`.**
 
 Your npm global bin directory is not on `$PATH`. Find it with `npm config get prefix`, then add `<prefix>/bin` to your shell rc. Restart the shell.
 
@@ -161,7 +161,7 @@ The `find` command in `install.sh` uses POSIX semantics. On Windows, use Git Bas
 
 The opencode TUI caches the agent list at startup. After running the installer, fully quit opencode (Ctrl-C twice) and start it again — `/agents` should now show Odin, Thor, Tyr, etc.
 
-**`bizarharness init` doesn't detect my stack.**
+**`bizar init` doesn't detect my stack.**
 
 `init` only recognizes `package.json`, `pyproject.toml`, `Cargo.toml`, and `go.mod`. If your project uses something else (Bun, Deno, a Makefile-only build), `init` will report the language as "unknown" and skip skill pack installation. The `.bizar/PROJECT.md` file is still created and can be edited by hand.
 

@@ -5,10 +5,10 @@ The Bizar plugin is an opencode plugin bundled with BizarHarness. It runs inside
 ## What it does
 
 1. **Loop detection.** Fingerprints every tool call and counts how often the same fingerprint appears in the recent window. When the count crosses a threshold, the plugin acts: warn at 5, escalate at 8, hard-block at 12.
-2. **Periodic status reporting.** Logs every tool call (metadata only) to `~/.cache/bizarharness/logs/<sessionId>.log`. The log is one line per call and contains no tool args, paths, or session content.
+2. **Periodic status reporting.** Logs every tool call (metadata only) to `~/.cache/bizar/logs/<sessionId>.log`. The log is one line per call and contains no tool args, paths, or session content.
 3. **Handoff signal.** When a subagent is clearly stuck, the plugin injects a system message into the agent's next-turn context. The message is a static string that tells the subagent to use the `task` tool to escalate to its parent.
 
-The plugin is read-only on the project. It makes no outbound network calls and writes only to `~/.cache/bizarharness/`.
+The plugin is read-only on the project. It makes no outbound network calls and writes only to `~/.cache/bizar/`.
 
 ## Loop detection
 
@@ -28,7 +28,7 @@ The plugin's hard block at threshold 12 runs **before** opencode's built-in `doo
 Per-session log files are written to:
 
 ```
-~/.cache/bizarharness/logs/<sessionId>.log
+~/.cache/bizar/logs/<sessionId>.log
 ```
 
 The log rotates at 10 MB by default. Rotation keeps the last 3 files: `plan.html` → `.1.log` → `.2.log` → `.3.log`. The `.3.log` is deleted.
@@ -44,7 +44,7 @@ It contains the ISO timestamp, session ID, tool name, fingerprint hash, outcome,
 State files (per-session metadata) are written to:
 
 ```
-~/.cache/bizarharness/<sessionId>.json
+~/.cache/bizar/<sessionId>.json
 ```
 
 State is keyed by session ID, not by agent name. The `parentAgent` field is seeded from the first user message in a session and is not updated for subagent dispatches within the same session.
@@ -74,8 +74,8 @@ Plugin options are passed in the `opencode.json` `plugin` array:
     "loopThresholdEscalate": 8,
     "loopThresholdBlock": 12,
     "loopWindowSize": 10,
-    "logDir": "~/.cache/bizarharness/logs",
-    "stateDir": "~/.cache/bizarharness",
+    "logDir": "~/.cache/bizar/logs",
+    "stateDir": "~/.cache/bizar",
     "logRotationBytes": 10485760
   }]
 ]
@@ -87,8 +87,8 @@ Plugin options are passed in the `opencode.json` `plugin` array:
 | `loopThresholdEscalate` | 8 | Auto-set to `warn + 1` if out of order |
 | `loopThresholdBlock` | 12 | Auto-set to `escalate + 1` if out of order |
 | `loopWindowSize` | 10 | Clamped to `[3, 50]` |
-| `logDir` | `~/.cache/bizarharness/logs` | Refused if inside `~/.ssh/`, `~/.gnupg/`, `~/.aws/`, `~/.kube/` |
-| `stateDir` | `~/.cache/bizarharness` | Same secret-dir refusal |
+| `logDir` | `~/.cache/bizar/logs` | Refused if inside `~/.ssh/`, `~/.gnupg/`, `~/.aws/`, `~/.kube/` |
+| `stateDir` | `~/.cache/bizar` | Same secret-dir refusal |
 | `logRotationBytes` | 10485760 (10 MB) | `Math.max(1024, floor(value))` |
 
 Missing options fall back to defaults. Bad input is clamped, never rejected. The plugin never throws on bad config.
@@ -115,7 +115,7 @@ These are documented in the plugin spec and are part of the release contract. Cu
 5. **Corrupt state files are not auto-recovered.** A corrupt JSON file is logged and ignored; the session starts with empty state. The corrupt file is preserved for forensic inspection.
 6. **Out-of-worktree paths are hashed, not stored.** A loop involving files outside the worktree produces stable fingerprints across runs (good) but the original path is not recoverable from the log.
 7. **Stale session cleanup is best-effort.** If `client.session.list()` fails, the age-based cleanup still runs but the "session no longer in opencode" branch is skipped.
-8. **Single-host state.** State files are local to `~/.cache/bizarharness/`. Cross-host loop detection is out of scope.
+8. **Single-host state.** State files are local to `~/.cache/bizar/`. Cross-host loop detection is out of scope.
 9. **Env var changes mid-session are ignored.** Env vars are read once at plugin init.
 10. **Log rotation is best-effort.** If a `renameSync` fails, that step is skipped and a warning is logged. The log may grow past `logRotationBytes` in degenerate cases.
 11. **Canonical handoff messages hardcode the default threshold numbers.** The warn, escalate, and block message templates contain the literal text `"5 identical calls"`, `"8 identical calls"`, and `"12 identical calls"`. If you reconfigure the thresholds via plugin options, the action still fires at the new counts, but the message text still says the defaults. The agent prompts' recognition patterns match the default text — non-default thresholds may cause subagents to fail to recognize the handoff. Leave the thresholds at defaults unless you also update the agent prompts.
@@ -148,7 +148,7 @@ The plugin is verified to:
 
 - Not import `node:dns`, `node:net`, `node:http`, or `node:https`.
 - Not call any external API.
-- Not write outside `~/.cache/bizarharness/` (configurable).
+- Not write outside `~/.cache/bizar/` (configurable).
 - Not read environment variables other than the four documented above.
 - Not override agent prompts (only injects ephemeral system messages into the current turn's context).
 - Not modify user files.
@@ -165,7 +165,7 @@ The plugin also runs an asynchronous subagent system. See [Background Agents](Ba
 - **`bizar_kill`** (Odin only) — aborts a running instance via `POST /session/{id}/abort`.
 - **`bizar_wait_for_feedback`** — blocks on user feedback for a plan (or a timeout).
 
-The plugin tracks each instance's state on disk in `~/.cache/bizarharness/state/bg/<instanceId>.json` so it survives an opencode restart. Recovery on restart: any instance still in `running` or `pending` is marked `failed` with `error: "recovered after restart"`.
+The plugin tracks each instance's state on disk in `~/.cache/bizar/state/bg/<instanceId>.json` so it survives an opencode restart. Recovery on restart: any instance still in `running` or `pending` is marked `failed` with `error: "recovered after restart"`.
 
 ## Recent fixes
 

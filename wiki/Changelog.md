@@ -2,7 +2,7 @@
 
 All notable changes to BizarHarness are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-For npm releases, see https://www.npmjs.com/package/@polderlabs/bizarharness. For GitHub releases, see https://github.com/DrB0rk/BizarHarness/releases.
+For npm releases, see https://www.npmjs.com/package/@polderlabs/bizar. For GitHub releases, see https://github.com/DrB0rk/BizarHarness/releases.
 
 ## Unreleased
 
@@ -58,7 +58,7 @@ The "plan side-effects" release. Wires the `/plan` slash commands to the Bizar p
 - **Plan tools in `opencode.json`:** `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`.
 - **Synthetic `ToolContext` construction.** Slash-command-driven tool calls build the required `ToolContext` from `ctx.worktree`, `ctx.directory`, and a fresh `AbortController`.
 - **`bizar_wait_for_feedback` tool.** Blocks on a plan's comment file or `meta.json` status. Used by `/plan wait <slug>` to pause until the user comments or approves/rejects. Returns `feedback_received`, `approved`, `rejected`, or `timed_out`.
-- **Background state on disk.** Each background instance writes its `BackgroundState` to `~/.cache/bizarharness/state/bg/<instanceId>.json` on every transition. The plugin recovers running instances on restart.
+- **Background state on disk.** Each background instance writes its `BackgroundState` to `~/.cache/bizar/state/bg/<instanceId>.json` on every transition. The plugin recovers running instances on restart.
 - **Stall and thinking-loop detection.** Long-running background sessions are monitored for no-event stalls (default 180s) and thinking-only loops (default 300s, max 1 intervention). Configurable via plugin options or `BIZAR_STALL_TIMEOUT_MS`.
 
 ### Fixed (Bizar plugin v0.5.0)
@@ -80,15 +80,15 @@ The "Bizar plugin" release. Adds the bundled opencode plugin, the visual plan to
 
 - **Bizar opencode plugin (v0.3.1).** Loop detection at thresholds 5/8/12, periodic status reporting, handoff signal. The plugin is bundled with the installer and enabled by default. See [Bizar Plugin](Bizar-Plugin).
 - **Background agents (v0.4.2, experimental).** Asynchronous subagent execution via a single `opencode serve` instance. Four custom tools: `bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`. See [Background Agents](Background-Agents).
-- **`bizarharness plan` command.** Visual plan tool with a browser-based viewer/editor. Subcommands: `new`, `open`, `list`, `delete`, `export`. See [Plans Command](Plans-Command).
+- **`bizar plan` command.** Visual plan tool with a browser-based viewer/editor. Subcommands: `new`, `open`, `list`, `delete`, `export`. See [Plans Command](Plans-Command).
 - **Quick agent.** Free single-shot fast-path agent. Skips decomposition and delegation. Useful for one-line changes.
 - **Forseti auditor.** Adversarial plan review for Tier 4 and Tier 5 work. Runs in M3 with `edit: deny`.
 - **Self-improvement log.** Every task appends a lesson to `.bizar/AGENTS_SELF_IMPROVEMENT.md`. Read at session start.
 - **Per-project Hindsight banks.** Every project gets its own bank; the default bank is reserved for general/system knowledge only.
 - **Skill discovery protocol.** Agents proactively install Skills CLI packs by domain (e.g., `skills add supabase/agent-skills --all -y` for database work).
-- **`bizarharness audit` subcommand.** Security audit of agent configuration.
-- **`bizarharness test-gate` subcommand.** Detect and run the project's test suite.
-- **`bizarharness export` subcommand.** Export agents/rules to another harness (Claude Code, Cursor, opencode).
+- **`bizar audit` subcommand.** Security audit of agent configuration.
+- **`bizar test-gate` subcommand.** Detect and run the project's test suite.
+- **`bizar export` subcommand.** Export agents/rules to another harness (Claude Code, Cursor, opencode).
 
 ### Changed
 
@@ -148,7 +148,7 @@ The initial release.
 - **Heimdall** (free, file ops and mechanical work).
 - **Hermod** (M2.7, git ops).
 - **Vidarr** (GPT-5.5, last resort).
-- **`bizarharness` interactive installer.**
+- **`bizar` interactive installer.**
 - **Source install script** (`install.sh`).
 - **`opencode.json` template** with deep-merge via `jq`.
 - **Master `AGENTS.md`** with the routing table and skill discovery protocol.

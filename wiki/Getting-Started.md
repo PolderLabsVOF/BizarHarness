@@ -21,14 +21,14 @@ Optional but recommended:
 The fastest path is `npx`:
 
 ```bash
-npx bizarharness
+npx bizar
 ```
 
-If you'd rather install it globally so `bizarharness` is always available:
+If you'd rather install it globally so `bizar` is always available:
 
 ```bash
-npm install -g @polderlabs/bizarharness
-bizarharness
+npm install -g @polderlabs/bizar
+bizar
 ```
 
 The first run opens the interactive installer. It walks you through:
@@ -72,7 +72,7 @@ BizarHarness is most useful inside a project. To bootstrap one:
 
 ```bash
 cd ~/my-project
-bizarharness init
+bizar init
 ```
 
 The `init` command:

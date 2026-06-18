@@ -46,7 +46,7 @@ The image is built from a `Dockerfile` in the dev sandbox project. It includes:
 
 The image is persistent across runs — it's only rebuilt when you ask (`--rebuild`) or when it doesn't exist yet. Most iterations are just a `./scripts/dev.sh` away with near-instant startup.
 
-A named Docker volume `bizarharness-dev-cache` is mounted at `~/.cache` inside the container. It includes `~/.cache/opencode/` and `~/.cache/bizarharness/`. The volume is **isolated from the host** — nothing leaks into your real `~/.cache/`. Use `./scripts/dev.sh --clean` to wipe it.
+A named Docker volume `bizar-dev-cache` is mounted at `~/.cache` inside the container. It includes `~/.cache/opencode/` and `~/.cache/bizar/`. The volume is **isolated from the host** — nothing leaks into your real `~/.cache/`. Use `./scripts/dev.sh --clean` to wipe it.
 
 ## .env configuration
 
@@ -195,7 +195,7 @@ host: ~/.local/share/opencode/auth.json
 DEV_UID=$(id -u) ./scripts/dev.sh --rebuild
 ```
 
-**"The sandbox feels slow"** — First run downloads npm packages. Subsequent runs are instant unless `--rebuild` is used. The cache volume (`bizarharness-dev-cache`) speeds up repeated use significantly.
+**"The sandbox feels slow"** — First run downloads npm packages. Subsequent runs are instant unless `--rebuild` is used. The cache volume (`bizar-dev-cache`) speeds up repeated use significantly.
 
 ## Next steps
 

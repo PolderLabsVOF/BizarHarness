@@ -215,7 +215,7 @@ These are documented in [Bizar Plugin](Bizar-Plugin#background-agents-v04).
 
 ### v0.5.0 — instance state file
 
-Each background instance now writes its `BackgroundState` to `~/.cache/bizarharness/state/bg/<instanceId>.json` on every state transition (atomic rename). On plugin restart, the `rebuildInMemoryMap` step marks any `running` or `pending` instance as `failed` with `error: "recovered after restart"`. See `rebuildInMemoryMap` in `plugins/bizar/src/background.ts` for the test coverage.
+Each background instance now writes its `BackgroundState` to `~/.cache/bizar/state/bg/<instanceId>.json` on every state transition (atomic rename). On plugin restart, the `rebuildInMemoryMap` step marks any `running` or `pending` instance as `failed` with `error: "recovered after restart"`. See `rebuildInMemoryMap` in `plugins/bizar/src/background.ts` for the test coverage.
 
 ### v0.5.0 — stall and thinking-loop detection
 

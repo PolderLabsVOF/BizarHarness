@@ -38,11 +38,11 @@ It's especially useful if you:
 
 ```bash
 # Try it without installing
-npx bizarharness
+npx bizar
 
 # Or install globally
-npm install -g @polderlabs/bizarharness
-bizarharness
+npm install -g @polderlabs/bizar
+bizar
 ```
 
 The interactive installer walks you through component selection, agent choice, install mode, optional skill packs, and API key setup. On exit it offers to restart opencode.
