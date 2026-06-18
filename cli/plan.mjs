@@ -1,5 +1,5 @@
 /**
- * bizarharness plan <subcommand>
+ * bizar plan <subcommand>
  *
  * Subcommands:
  *   new <slug>                 Create a new plan
@@ -230,7 +230,7 @@ function loadOrMigrateCanvas(planDir, fallbackTitle) {
  * Convert a v2 canvas state to a derived markdown document.
  * Used by:
  *   - the /api/<slug>/markdown-export endpoint
- *   - the `bizarharness plan export` subcommand (for backwards compat)
+ *   - the `bizar plan export` subcommand (for backwards compat)
  *
  * Strategy: emit each element as a section, in a stable order (top-to-bottom
  * by y, then left-to-right by x). Connections are not represented in the
@@ -423,7 +423,7 @@ async function createPlan(slug, { template = null } = {}) {
   // Step 2: check existence
   if (existsSync(planDir)) {
     console.error(`  ✗ Plan "${slug}" already exists at ${planDir}`);
-    console.error(`    Use "bizarharness plan open ${slug}" to open it.`);
+    console.error(`    Use "bizar plan open ${slug}" to open it.`);
     return false;
   }
 
@@ -548,7 +548,7 @@ async function openPlan(slug) {
   const planDir = join(PLANS_DIR, slug);
   if (!existsSync(planDir)) {
     console.error(`  ✗ Plan "${slug}" not found at ${planDir}`);
-    console.error(`    Use "bizarharness plan new ${slug}" to create it.`);
+    console.error(`    Use "bizar plan new ${slug}" to create it.`);
     return false;
   }
 
@@ -572,7 +572,7 @@ async function openPlan(slug) {
 
 async function listPlans() {
   if (!existsSync(PLANS_DIR)) {
-    console.log('  No plans found. Run `bizarharness plan new <slug>` to create one.');
+    console.log('  No plans found. Run `bizar plan new <slug>` to create one.');
     return true;
   }
 
@@ -581,7 +581,7 @@ async function listPlans() {
   });
 
   if (dirs.length === 0) {
-    console.log('  No plans found. Run `bizarharness plan new <slug>` to create one.');
+    console.log('  No plans found. Run `bizar plan new <slug>` to create one.');
     return true;
   }
 
@@ -685,7 +685,7 @@ async function exportPlan(slug) {
 
 function showHelp() {
   console.log(`
-  bizarharness plan <subcommand> [options]
+  bizar plan <subcommand> [options]
 
   Subcommands:
     new <slug> [--template <name>]   Create a new plan (default: blank template)
@@ -711,13 +711,13 @@ function showHelp() {
     decision-record    Architecture Decision Record (ADR)
 
   Examples:
-    bizarharness plan new my-feature
-    bizarharness plan new auth-v2 --template feature-design
-    bizarharness plan new oops --template bug-investigation
-    bizarharness plan templates
-    bizarharness plan open my-feature
-    bizarharness plan list
-    bizarharness plan export my-feature > my-feature.mdx
+    bizar plan new my-feature
+    bizar plan new auth-v2 --template feature-design
+    bizar plan new oops --template bug-investigation
+    bizar plan templates
+    bizar plan open my-feature
+    bizar plan list
+    bizar plan export my-feature > my-feature.mdx
   `);
 }
 
@@ -1092,7 +1092,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       const htmlPath = join(planDir, 'plan.html');
       if (!existsSync(htmlPath)) {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('plan.html not found. Run `bizarharness plan new ${slug}` first.');
+        res.end('plan.html not found. Run `bizar plan new ${slug}` first.');
         return;
       }
       const html = readFileSync(htmlPath, 'utf-8');
@@ -1961,7 +1961,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
       const name = positional[2];
       const planSlug = positional[3];
       if (!name || !planSlug) {
-        console.error('  ✗ Usage: bizarharness plan template save <name> <plan-slug>');
+        console.error('  ✗ Usage: bizar plan template save <name> <plan-slug>');
         return false;
       }
       try {
@@ -1976,7 +1976,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
     if (action === 'delete' || action === 'rm') {
       const name = positional[2];
       if (!name) {
-        console.error('  ✗ Usage: bizarharness plan template delete <name>');
+        console.error('  ✗ Usage: bizar plan template delete <name>');
         return false;
       }
       try {
@@ -2002,7 +2002,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
   switch (subcommand) {
     case 'new': {
       if (!slug) {
-        console.error('  ✗ Usage: bizarharness plan new <slug> [--template <name>]');
+        console.error('  ✗ Usage: bizar plan new <slug> [--template <name>]');
         return false;
       }
       const created = await createPlan(slug, { template: flags.template || null });
@@ -2013,7 +2013,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
 
     case 'open': {
       if (!slug) {
-        console.error('  ✗ Usage: bizarharness plan open <slug>');
+        console.error('  ✗ Usage: bizar plan open <slug>');
         return false;
       }
       return await openPlan(slug);
@@ -2025,7 +2025,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
 
     case 'delete': {
       if (!slug) {
-        console.error('  ✗ Usage: bizarharness plan delete <slug>');
+        console.error('  ✗ Usage: bizar plan delete <slug>');
         return false;
       }
       return await deletePlan(slug);
@@ -2033,7 +2033,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
 
     case 'export': {
       if (!slug) {
-        console.error('  ✗ Usage: bizarharness plan export <slug>');
+        console.error('  ✗ Usage: bizar plan export <slug>');
         return false;
       }
       return await exportPlan(slug);
@@ -2052,7 +2052,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
 
     default: {
       console.error(`  ✗ Unknown subcommand: "${subcommand}"`);
-      console.error(`    Run "bizarharness plan help" for usage.`);
+      console.error(`    Run "bizar plan help" for usage.`);
       return false;
     }
   }

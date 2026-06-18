@@ -131,7 +131,7 @@ export function buildSummary(components, agents, target, skillPacks = []) {
   const parts = [];
   if (components.includes('agents')) parts.push(`${agents.length} agents`);
   if (components.includes('agents-md')) parts.push('AGENTS.md');
-  if (components.includes('skill-bizar')) parts.push('bizarharness skill');
+  if (components.includes('skill-bizar')) parts.push('bizar skill');
   if (components.includes('skill-improve')) parts.push('self-improvement skill');
   if (components.includes('opencode-json')) parts.push('opencode.json');
   if (components.includes('bizar')) parts.push('.bizar/ folder');

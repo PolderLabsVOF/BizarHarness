@@ -16,14 +16,14 @@ const AGENT_FILES = [
 
 /**
  * Install the Bizar opencode plugin from the separate global npm package
- * `@polderlabs/bizarharness-plugin`. The main `@polderlabs/bizarharness` package
+ * `@polderlabs/bizar-plugin`. The main `@polderlabs/bizar` package
  * no longer ships `plugins/bizar/` — the plugin lives in its own scoped package
  * so it can be versioned and published independently.
  *
  * If the plugin package is globally installed, copies its contents into
  * `~/.config/opencode/plugins/bizar/` (or the platform-equivalent path via
  * `opencodeConfigDir()`). Otherwise, prints a hint directing the user to run
- * `npm install -g @polderlabs/bizarharness-plugin`.
+ * `npm install -g @polderlabs/bizar-plugin`.
  *
  * Returns `true` if the plugin was installed, `false` otherwise. Never throws.
  */
@@ -42,10 +42,10 @@ export async function installPluginFromGlobal() {
     return false;
   }
 
-  const pluginPath = join(globalRoot, '@polderlabs', 'bizarharness-plugin');
+  const pluginPath = join(globalRoot, '@polderlabs', 'bizar-plugin');
   if (!existsSync(pluginPath)) {
     console.log(chalk.dim('  ℹ Bizar plugin not installed globally. To install it:'));
-    console.log(chalk.dim('    npm install -g @polderlabs/bizarharness-plugin'));
+    console.log(chalk.dim('    npm install -g @polderlabs/bizar-plugin'));
     return false;
   }
 
@@ -166,7 +166,7 @@ export async function runInstaller() {
   }
 
   if (components.includes('skill-bizar')) {
-    await installSkill('bizarharness');
+    await installSkill('bizar');
   }
 
   if (components.includes('skill-improve')) {
@@ -210,7 +210,7 @@ export async function runInstaller() {
   }
 
   // Also try to install the plugin from the separate global npm package
-  // `@polderlabs/bizarharness-plugin` (preferred path going forward).
+  // `@polderlabs/bizar-plugin` (preferred path going forward).
   await installPluginFromGlobal();
 
   // ── Rules, hooks, commands (optional components) ──
@@ -386,5 +386,5 @@ export async function runPostInstall() {
   // Non-fatal: prints a hint if the package isn't installed globally yet.
   await installPluginFromGlobal();
 
-  console.log('Run `bizarharness` for interactive setup.');
+  console.log('Run `bizar` for interactive setup.');
 }

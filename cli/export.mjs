@@ -80,7 +80,7 @@ ${content}
     }
 
     case 'opencode': {
-      console.log(chalk.dim('  Already configured for opencode. Run `bizarharness` for interactive setup.'));
+      console.log(chalk.dim('  Already configured for opencode. Run `bizar` for interactive setup.'));
       break;
     }
   }

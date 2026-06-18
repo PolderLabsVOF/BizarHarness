@@ -1,5 +1,5 @@
 /**
- * bizarharness plan-templates.mjs
+ * bizar plan-templates.mjs
  *
  * Built-in template library for the visual planner v2.
  *
@@ -418,7 +418,7 @@ export function printTemplates() {
     console.log(`    ${t.name.padEnd(nameWidth)}  ${t.description}${tag}`);
   }
   console.log();
-  console.log('  Use: bizarharness plan new <slug> --template <name>');
+  console.log('  Use: bizar plan new <slug> --template <name>');
   console.log('  Built-in: ' + Object.keys(BUILT_IN_TEMPLATES).join(', '));
 }
 
@@ -459,14 +459,14 @@ export function buildVars({ slug, title }) {
 // ─── CLI helpers (for `plan template save/list/delete`) ──────────────────────
 //
 // These are minimal — the spec for v2 calls for full user-saved templates
-// in ~/.config/bizarharness/plan-templates/. v2.0 ships a stub for
+// in ~/.config/bizar/plan-templates/. v2.0 ships a stub for
 // library-directory operations; the user-templates dir is deferred to
 // a follow-up.
 
 const USER_TEMPLATES_DIR = join(
   process.env.HOME || process.env.USERPROFILE || '~',
   '.config',
-  'bizarharness',
+  'bizar',
   'plan-templates',
 );
 
