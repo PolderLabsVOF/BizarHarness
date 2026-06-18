@@ -41,6 +41,9 @@
     }]
   ],
   "tools": {
+    "bizar_plan_action": true,
+    "bizar_get_plan_comments": true,
+    "bizar_wait_for_feedback": true,
     "bizar_spawn_background": true,
     "bizar_status": true,
     "bizar_collect": true,

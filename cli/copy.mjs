@@ -135,6 +135,61 @@ export async function installOpencodeJson(mode) {
   }
 }
 
+/**
+ * The 7 BizarHarness tool keys that must be enabled in the user's opencode.json.
+ * These are merged idempotently — existing tool keys are never overwritten.
+ */
+const BIZAR_TOOLS = {
+  bizar_plan_action: true,
+  bizar_get_plan_comments: true,
+  bizar_wait_for_feedback: true,
+  bizar_spawn_background: true,
+  bizar_status: true,
+  bizar_collect: true,
+  bizar_kill: true,
+};
+
+/**
+ * Idempotently merge the 7 BizarHarness tool keys into the user's
+ * `~/.config/opencode/opencode.json` (or the platform-equivalent config dir).
+ * Does NOT overwrite any other user config.
+ * Logs a diff of what was added.
+ */
+export async function mergeToolsIntoUserConfig() {
+  const dest = join(opencodeConfigDir(), 'opencode.json');
+
+  // If user has no config yet, nothing to merge into
+  if (!(await fileExists(dest))) {
+    return { merged: false, reason: 'no-existing-config' };
+  }
+
+  try {
+    const existingRaw = await readFile(dest, 'utf-8');
+    const existing = JSON.parse(existingRaw);
+
+    const tools = existing.tools || {};
+    const added = [];
+    for (const [key, value] of Object.entries(BIZAR_TOOLS)) {
+      if (!(key in tools)) {
+        tools[key] = value;
+        added.push(key);
+      }
+    }
+
+    if (added.length === 0) {
+      return { merged: false, reason: 'all-keys-present' };
+    }
+
+    const merged = { ...existing, tools };
+    await writeFile(dest, JSON.stringify(merged, null, 2));
+
+    console.log(chalk.dim(`  [tools] added: ${added.join(', ')}`));
+    return { merged: true, added };
+  } catch (err) {
+    return { merged: false, reason: 'error', error: err.message };
+  }
+}
+
 function deepMerge(target, source) {
   const out = { ...target };
   for (const [key, value] of Object.entries(source)) {

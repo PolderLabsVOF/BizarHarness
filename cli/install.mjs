@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
 import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands } from './copy.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, mergeToolsIntoUserConfig } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'quick.md',
@@ -187,6 +187,15 @@ export async function runInstaller() {
 
   if (components.includes('opencode-json')) {
     await installOpencodeJson(mode);
+  }
+
+  // Always attempt to merge the 7 BizarHarness tool keys idempotently.
+  // Safe to call even if opencode-json wasn't selected — skips silently.
+  {
+    const result = await mergeToolsIntoUserConfig();
+    if (result.merged) {
+      console.log(chalk.green(`  ✓ ${result.added.length} BizarHarness tool key(s) merged into opencode.json`));
+    }
   }
 
   if (components.includes('bizar')) {

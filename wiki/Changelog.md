@@ -6,6 +6,24 @@ For npm releases, see https://www.npmjs.com/package/@polderlabs/bizarharness. Fo
 
 ## Unreleased
 
+### Added
+
+- Plan side-effects wired: `/plan new|list|open` actually create, list, and link plans instead of parsing-only.
+- New subcommands: `/plan get`, `/plan add`, `/plan update`, `/plan delete`, `/plan comment`, `/plan status`, `/plan comments`. These route to `bizar_plan_action` and `bizar_get_plan_comments` via the unified `SideEffect.tool_invocation` shape.
+- Plan tools listed in `config/opencode.json` `tools`: `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`.
+- Synthetic `ToolContext` construction: slash-command-driven tool calls now build the required `ToolContext` from `ctx.worktree`, `ctx.directory`, and a fresh `AbortController`.
+- `cli/install.mjs` now idempotently merges the 7 tool keys into user-level `~/.config/opencode/opencode.json`.
+- `.bizar/archive/` created with the superseded spec files.
+
+### Fixed
+
+- Tool-name typo: `bizarre_*` (double-r) renamed to `bizar_*` in `plugins/bizar/index.ts` to match docs and config. The 4 background-agent tools are no longer silently disabled by the typo.
+- Stale JSDoc in `src/settings.ts:62` now points at the real tools (`bizar_plan_action` + `bizar_wait_for_feedback`).
+
+### Security
+
+- Live Hindsight bearer token replaced with placeholder in `config/opencode.json`. `.gitignore` verified/updated to exclude the file. Token rotation is the user's responsibility.
+
 ### Fixed
 
 - **Startup hang recovery (2026-06-18).** Wrapped `client.session.list()` in plugin init with a 1-second timeout guard to prevent init promise deadlock on a slow/blocked session store. Full incident postmortem at `docs/postmortems/2026-06-18-plugin-state-deadlock.md`.
