@@ -281,6 +281,7 @@ export async function regenerateHtml(slug) {
     title: meta.title || slug,
     slug: meta.slug || slug,
     status: meta.status || 'draft',
+    created: meta.created || new Date().toISOString(),
     lastEdited: meta.lastEdited || new Date().toISOString(),
     author: meta.author || 'unknown',
     planJson,
@@ -454,6 +455,98 @@ function showHelp() {
   `);
 }
 
+// ─── HTML fragment helpers (for htmx) ────────────────────────────────────────
+
+/** Minimal HTML escaper — same rules as the client-side renderer. */
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString();
+}
+
+/** Render a single comment as an <li> fragment (no wrapper). */
+function renderCommentLi(c) {
+  return '<li class="comment" id="comment-' + escapeHtml(c.id) + '">'
+    + '<div class="comment-meta">' + escapeHtml(c.author || 'Anonymous')
+    + ' · ' + escapeHtml(formatDate(c.timestamp || c.created)) + '</div>'
+    + '<div class="comment-text">' + escapeHtml(c.text || '') + '</div>'
+    + '</li>';
+}
+
+/** Render a comments list as <li> elements. If empty, returns the empty marker. */
+function renderCommentListHtml(comments, sectionId) {
+  const items = comments
+    .filter((c) => !sectionId || c.sectionId === sectionId)
+    .sort((a, b) => String(a.timestamp || a.created || '').localeCompare(String(b.timestamp || b.created || '')));
+  if (items.length === 0) {
+    return '<li class="empty" data-empty>No comments yet — be the first.</li>';
+  }
+  return items.map(renderCommentLi).join('');
+}
+
+/** Render just the count badge for a section, used to update the comment button. */
+function renderCommentCountHtml(count) {
+  return '<span class="count">' + count + '</span>';
+}
+
+/** Parse an HTTP request body. Supports:
+ *   - application/x-www-form-urlencoded  (htmx default for <form>)
+ *   - application/json                   (legacy / direct API)
+ *   - text/plain                         (raw MDX for plan save)
+ *   - anything else: returns raw string
+ */
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      const ct = (req.headers['content-type'] || '').toLowerCase();
+      try {
+        if (ct.includes('application/x-www-form-urlencoded')) {
+          const params = new URLSearchParams(body);
+          const obj = {};
+          for (const [k, v] of params) obj[k] = v;
+          resolve({ kind: 'form', data: obj, raw: body });
+        } else if (ct.includes('application/json')) {
+          resolve({ kind: 'json', data: body ? JSON.parse(body) : {}, raw: body });
+        } else {
+          resolve({ kind: 'raw', data: body, raw: body });
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+/** Tiny in-memory helper — generates a stable-enough id for new comments. */
+function makeCommentId() {
+  return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+/** Update the meta.json's lastEdited timestamp; ignores errors so a single bad
+ *  meta doesn't block the rest of the save. */
+function bumpLastEdited(planDir) {
+  const metaPath = join(planDir, 'meta.json');
+  if (!existsSync(metaPath)) return;
+  try {
+    const meta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+    meta.lastEdited = new Date().toISOString();
+    writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+  } catch { /* swallow */ }
+}
+
 // ─── Local HTTP server ───────────────────────────────────────────────────────
 
 /**
@@ -471,7 +564,17 @@ export async function startServer(slug, planDir, startPort = 4321) {
     port = startPort + attempt;
     try {
       server = await new Promise((resolve, reject) => {
-        const srv = createServer((req, res) => handleRequest(req, res, slug, planDir, port));
+        const srv = createServer((req, res) => {
+          // Fire-and-forget: handleRequest is async because PUT/POST bodies
+          // are streamed, but Node's HTTP server is happy to wait for res.end().
+          handleRequest(req, res, slug, planDir, port).catch((err) => {
+            console.error(`[${new Date().toISOString()}] ERROR: ${err.stack || err.message}`);
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'text/plain' });
+            }
+            try { res.end('Server error: ' + (err.message || String(err))); } catch { /* already closed */ }
+          });
+        });
         srv.on('error', reject);
         srv.listen(port, '127.0.0.1', () => resolve(srv));
       });
@@ -511,7 +614,7 @@ export async function startServer(slug, planDir, startPort = 4321) {
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
  */
-function handleRequest(req, res, slug, planDir, serverPort) {
+async function handleRequest(req, res, slug, planDir, serverPort) {
   const now = new Date().toISOString();
   // Use path-only URL parsing to avoid host-header injection
   const pathname = req.url.split('?')[0].split('#')[0];
@@ -543,6 +646,157 @@ function handleRequest(req, res, slug, planDir, serverPort) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
       return;
+    }
+
+    // ── Self-hosted htmx — served from templates/plan/htmx.min.js ────────────
+    if (pathname === '/htmx.min.js' && req.method === 'GET') {
+      const htmxPath = join(TEMPLATES_DIR, 'htmx.min.js');
+      if (!existsSync(htmxPath)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('htmx.min.js not found in templates/plan/');
+        return;
+      }
+      const buf = readFileSync(htmxPath);
+      res.writeHead(200, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600',
+      });
+      res.end(buf);
+      return;
+    }
+
+    // ── New RESTful, slug-scoped routes (preferred for htmx) ─────────────────
+    //   GET    /api/<slug>/plan         → MDX text/plain
+    //   PUT    /api/<slug>/plan         → save MDX, returns empty 200
+    //   GET    /api/<slug>/comments     → JSON (default) or HTML (?format=html or ?sectionId=)
+    //   POST   /api/<slug>/comments     → add a comment, returns the new <li> HTML
+    //   PUT    /api/<slug>/comments     → replace the whole comments array (JSON)
+    //   GET    /api/<slug>/count        → comment count for a section (?sectionId=)
+    // We validate the slug in the URL against the bound slug so the server can't
+    // be tricked into serving data for a different plan.
+
+    if (pathname.startsWith('/api/') && pathname.split('/').length >= 4) {
+      const parts = pathname.split('/').filter(Boolean); // ['api', '<urlSlug>', '<resource>']
+      const urlSlug = parts[1];
+      const resource = parts[2];
+
+      if (urlSlug !== slug) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end(`Forbidden: this server is bound to plan "${slug}"`);
+        return;
+      }
+
+      // GET /api/<slug>/plan
+      if (resource === 'plan' && req.method === 'GET') {
+        const mdx = readFileSync(join(planDir, 'plan.mdx'), 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(mdx);
+        return;
+      }
+
+      // PUT /api/<slug>/plan  (form data with name="content", or raw body)
+      if (resource === 'plan' && req.method === 'PUT') {
+        const parsed = await readRequestBody(req);
+        const content = parsed.kind === 'form' ? (parsed.data.content || '') : parsed.data;
+        if (typeof content !== 'string') {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Expected a "content" form field or a raw text body');
+          return;
+        }
+        try {
+          writeFileSync(join(planDir, 'plan.mdx'), content, 'utf-8');
+          bumpLastEdited(planDir);
+          // htmx with hx-swap="none" doesn't care about the body — we just send 200
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('saved');
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Save failed: ' + err.message);
+        }
+        return;
+      }
+
+      // GET /api/<slug>/comments?format=html&sectionId=...  → HTML <li> list
+      // GET /api/<slug>/comments                              → JSON array
+      if (resource === 'comments' && req.method === 'GET') {
+        const query = req.url.split('?')[1] || '';
+        const params = new URLSearchParams(query);
+        const format = (params.get('format') || 'json').toLowerCase();
+        const sectionId = params.get('sectionId') || '';
+        const comments = JSON.parse(readFileSync(join(planDir, 'comments.json'), 'utf-8'));
+
+        if (format === 'html') {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(renderCommentListHtml(comments, sectionId));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(comments));
+        }
+        return;
+      }
+
+      // POST /api/<slug>/comments
+      //   form: sectionId=...&text=...&author=...
+      //   json: { sectionId, text, author }
+      // Returns the new comment as an HTML <li> (htmx-friendly).
+      if (resource === 'comments' && req.method === 'POST') {
+        const parsed = await readRequestBody(req);
+        const sectionId = parsed.data.sectionId;
+        const text = parsed.data.text;
+        const author = parsed.data.author;
+        if (!sectionId || !text) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Missing sectionId or text');
+          return;
+        }
+        const comments = JSON.parse(readFileSync(join(planDir, 'comments.json'), 'utf-8'));
+        const newComment = {
+          id: makeCommentId(),
+          sectionId,
+          text,
+          author: author || process.env.USER || 'anonymous',
+          timestamp: new Date().toISOString(),
+        };
+        comments.push(newComment);
+        writeFileSync(join(planDir, 'comments.json'), JSON.stringify(comments, null, 2), 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderCommentLi(newComment));
+        return;
+      }
+
+      // PUT /api/<slug>/comments  → replace the whole array (JSON body)
+      if (resource === 'comments' && req.method === 'PUT') {
+        const parsed = await readRequestBody(req);
+        let arr;
+        try {
+          arr = typeof parsed.data === 'string' ? JSON.parse(parsed.data) : parsed.data;
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Invalid JSON');
+          return;
+        }
+        if (!Array.isArray(arr)) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Expected a JSON array of comments');
+          return;
+        }
+        writeFileSync(join(planDir, 'comments.json'), JSON.stringify(arr, null, 2), 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('ok');
+        return;
+      }
+
+      // GET /api/<slug>/count?sectionId=...  → HTML <span class="count">N</span>
+      if (resource === 'count' && req.method === 'GET') {
+        const query = req.url.split('?')[1] || '';
+        const params = new URLSearchParams(query);
+        const sectionId = params.get('sectionId') || '';
+        const comments = JSON.parse(readFileSync(join(planDir, 'comments.json'), 'utf-8'));
+        const n = comments.filter((c) => !sectionId || c.sectionId === sectionId).length;
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderCommentCountHtml(n));
+        return;
+      }
     }
 
     if (pathname === '/api/plan' && req.method === 'GET') {
@@ -642,6 +896,7 @@ function handleRequest(req, res, slug, planDir, serverPort) {
           title: meta.title || slug,
           slug: meta.slug || slug,
           status: meta.status || 'draft',
+          created: meta.created || new Date().toISOString(),
           lastEdited: meta.lastEdited || new Date().toISOString(),
           author: meta.author || 'unknown',
           planJson,

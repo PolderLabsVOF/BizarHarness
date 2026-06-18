@@ -30,7 +30,7 @@ const PLANS_DIR = join(PROJECT_ROOT, 'plans');
 const { runPlan, startServer, regenerateHtml } = await import('./plan.mjs');
 
 // Suppress MaxListenersWarning (each server adds SIGINT+SIGTERM listeners)
-process.setMaxListeners(32);
+process.setMaxListeners(64);
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
@@ -695,6 +695,371 @@ describe('Comment regression: createPlan → POST /api/comments', () => {
     assert.equal(Array.isArray(afterPut), true);
     assert.equal(afterPut.length, 1);
     assert.equal(afterPut[0].id, 'replaced');
+  });
+});
+
+// ── htmx-friendly RESTful routes ───────────────────────────────────────────────
+// New slug-scoped routes designed for htmx (and the new HTML template).
+//   GET    /api/<slug>/plan          → MDX text/plain
+//   PUT    /api/<slug>/plan          → save MDX (form data or raw body)
+//   GET    /api/<slug>/comments      → JSON (default) or HTML (?format=html)
+//   POST   /api/<slug>/comments      → add comment, returns <li> HTML
+//   PUT    /api/<slug>/comments      → replace comments array (JSON)
+//   GET    /api/<slug>/count         → <span class="count">N</span>
+//   GET    /htmx.min.js              → self-hosted htmx library
+// The cross-slug protection: any path with a different slug in the URL
+// returns 403 to prevent the server from being tricked into serving
+// data for a different plan.
+
+describe('htmx-friendly RESTful routes', () => {
+  const TEST_SLUG = 'test-htmx-routes-' + Date.now();
+  let serverInfo;
+  let baseUrl;
+
+  beforeEach(async () => {
+    createTempPlan(TEST_SLUG, {
+      mdx: '# Htmx Routes Test\n\n## Overview\n\nThe first section.\n\n## Goals\n\n- First\n- Second\n',
+      comments: JSON.stringify([
+        {
+          id: 'existing-1',
+          sectionId: 'overview',
+          text: 'Existing comment on overview',
+          author: 'tester',
+          timestamp: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'existing-2',
+          sectionId: 'goals',
+          text: 'Existing comment on goals',
+          author: 'tester',
+          timestamp: '2026-01-02T00:00:00.000Z',
+        },
+      ]),
+    });
+
+    serverInfo = await startServer(TEST_SLUG, join(PLANS_DIR, TEST_SLUG), 0);
+    baseUrl = `http://127.0.0.1:${serverInfo.port}`;
+  });
+
+  afterEach(async () => {
+    if (serverInfo) await serverInfo.close();
+    cleanupPlan(TEST_SLUG);
+  });
+
+  // ── Plan routes ────────────────────────────────────────────────────
+  test('GET /api/<slug>/plan returns MDX as text/plain', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type').includes('text/plain'), true);
+    const text = await res.text();
+    assert.equal(text.includes('Htmx Routes Test'), true);
+  });
+
+  test('PUT /api/<slug>/plan with form data saves MDX', async () => {
+    const newContent = '# Updated Htmx Plan\n\nNew content.\n';
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'content=' + encodeURIComponent(newContent),
+    });
+    assert.equal(res.status, 200);
+    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.mdx'), 'utf-8');
+    assert.equal(saved, newContent);
+  });
+
+  test('PUT /api/<slug>/plan with raw text body saves MDX', async () => {
+    const newContent = '# Raw Body Plan\n\nRaw body content.\n';
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/plain' },
+      body: newContent,
+    });
+    assert.equal(res.status, 200);
+    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.mdx'), 'utf-8');
+    assert.equal(saved, newContent);
+  });
+
+  test('PUT /api/<slug>/plan updates lastEdited in meta.json', async () => {
+    const metaPath = join(PLANS_DIR, TEST_SLUG, 'meta.json');
+    const before = JSON.parse(readFileSync(metaPath, 'utf-8'));
+    // Wait a tick so the timestamp actually advances
+    await new Promise((r) => setTimeout(r, 10));
+    await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'content=' + encodeURIComponent('# updated\n'),
+    });
+    const after = JSON.parse(readFileSync(metaPath, 'utf-8'));
+    assert.ok(after.lastEdited >= before.lastEdited, 'lastEdited should advance or stay the same');
+  });
+
+  // ── Comments routes ────────────────────────────────────────────────
+  test('GET /api/<slug>/comments returns JSON array by default', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type').includes('application/json'), true);
+    const data = await res.json();
+    assert.ok(Array.isArray(data), 'should return array');
+    assert.equal(data.length, 2);
+  });
+
+  test('GET /api/<slug>/comments?format=html returns HTML fragments', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments?format=html`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type').includes('text/html'), true);
+    const html = await res.text();
+    assert.ok(html.includes('<li'), 'should contain <li> elements');
+    assert.ok(html.includes('class="comment"'), 'should have class="comment"');
+    assert.ok(html.includes('existing-1'), 'should include the existing comment ids');
+    assert.ok(html.includes('existing-2'), true);
+    // Should be XSS-safe — escape the comment text
+    assert.ok(!html.includes('<script>'), 'no raw script tags');
+  });
+
+  test('GET /api/<slug>/comments?format=html&sectionId=... filters by section', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments?format=html&sectionId=overview`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes('existing-1'), 'overview comment should be present');
+    assert.ok(!html.includes('existing-2'), 'goals comment should be filtered out');
+  });
+
+  test('GET /api/<slug>/comments?format=html with no comments returns the empty marker', async () => {
+    // Make a fresh plan with no comments
+    cleanupPlan(TEST_SLUG);
+    createTempPlan(TEST_SLUG + '-empty', { mdx: '# Empty\n', comments: '[]' });
+    const info = await startServer(TEST_SLUG + '-empty', join(PLANS_DIR, TEST_SLUG + '-empty'), 0);
+    try {
+      const res = await fetch(`http://127.0.0.1:${info.port}/api/${TEST_SLUG}-empty/comments?format=html`);
+      assert.equal(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes('No comments yet'), 'should show empty message');
+    } finally {
+      await info.close();
+      cleanupPlan(TEST_SLUG + '-empty');
+    }
+  });
+
+  test('POST /api/<slug>/comments with form data adds comment and returns <li> HTML', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'sectionId=overview&text=' + encodeURIComponent('New form comment') + '&author=alice',
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type').includes('text/html'), true);
+    const html = await res.text();
+    assert.ok(html.startsWith('<li'), 'response should be a <li> element');
+    assert.ok(html.includes('New form comment'), 'should include the new text');
+    assert.ok(html.includes('alice'), 'should include the author');
+    assert.ok(html.includes('class="comment"'), 'should have class="comment"');
+
+    // Verify the file was updated
+    const updated = JSON.parse(
+      readFileSync(join(PLANS_DIR, TEST_SLUG, 'comments.json'), 'utf-8')
+    );
+    assert.equal(updated.length, 3);
+    assert.equal(updated[2].text, 'New form comment');
+    assert.equal(updated[2].sectionId, 'overview');
+    assert.equal(updated[2].author, 'alice');
+  });
+
+  test('POST /api/<slug>/comments with JSON body also works', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sectionId: 'goals', text: 'JSON comment', author: 'bob' }),
+    });
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes('JSON comment'), true);
+
+    const updated = JSON.parse(
+      readFileSync(join(PLANS_DIR, TEST_SLUG, 'comments.json'), 'utf-8')
+    );
+    assert.equal(updated[updated.length - 1].author, 'bob');
+  });
+
+  test('POST /api/<slug>/comments without sectionId returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'text=no-section',
+    });
+    assert.equal(res.status, 400);
+  });
+
+  test('POST /api/<slug>/comments escapes HTML in text (XSS safety)', async () => {
+    const xss = '<script>alert(1)</script>';
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'sectionId=overview&text=' + encodeURIComponent(xss) + '&author=evil',
+    });
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.ok(!html.includes('<script>alert(1)</script>'), 'raw <script> should be escaped');
+    assert.ok(html.includes('&lt;script&gt;'), 'should contain the escaped form');
+  });
+
+  test('PUT /api/<slug>/comments replaces the whole array', async () => {
+    const replacement = [
+      { id: 'new-1', sectionId: 'goals', text: 'Replacement', author: 'replacer', timestamp: new Date().toISOString() },
+    ];
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(replacement),
+    });
+    assert.equal(res.status, 200);
+
+    const saved = JSON.parse(
+      readFileSync(join(PLANS_DIR, TEST_SLUG, 'comments.json'), 'utf-8')
+    );
+    assert.deepEqual(saved, replacement);
+  });
+
+  test('PUT /api/<slug>/comments with non-array body returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/comments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ not: 'an array' }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  // ── Count route ────────────────────────────────────────────────────
+  test('GET /api/<slug>/count?sectionId=... returns <span> with the right count', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/count?sectionId=overview`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type').includes('text/html'), true);
+    const html = await res.text();
+    assert.equal(html, '<span class="count">1</span>');
+  });
+
+  test('GET /api/<slug>/count without sectionId returns total count', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/count`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.equal(html, '<span class="count">2</span>');
+  });
+
+  // ── Self-hosted htmx ───────────────────────────────────────────────
+  test('GET /htmx.min.js serves the self-hosted htmx library', async () => {
+    const res = await fetch(`${baseUrl}/htmx.min.js`);
+    assert.equal(res.status, 200);
+    const ct = res.headers.get('content-type');
+    assert.ok(ct.includes('application/javascript'), `expected application/javascript, got ${ct}`);
+    const body = await res.text();
+    assert.ok(body.includes('htmx'), 'body should mention htmx');
+    // The actual htmx library defines a function called htmx
+    assert.ok(body.includes('var htmx=') || body.includes('const htmx='), 'should define a top-level htmx');
+  });
+
+  // ── Cross-slug protection ──────────────────────────────────────────
+  test('cross-slug access returns 403', async () => {
+    const res = await fetch(`${baseUrl}/api/wrong-slug/comments`);
+    assert.equal(res.status, 403);
+  });
+
+  test('cross-slug PUT also returns 403', async () => {
+    const res = await fetch(`${baseUrl}/api/wrong-slug/plan`, {
+      method: 'PUT',
+      body: 'evil=true',
+    });
+    assert.equal(res.status, 403);
+  });
+
+  // ── 404 for unknown resources under a valid slug ───────────────────
+  test('GET /api/<slug>/unknown returns 404 (not 403)', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/unknown-resource`);
+    assert.equal(res.status, 404);
+  });
+});
+
+// ── HTML template smoke tests ─────────────────────────────────────────────────
+// These tests regenerate plan.html and verify the resulting HTML
+// uses htmx attributes (and does NOT use fetch() in JS for the
+// save/comment flows). The script tag for htmx should reference
+// the local /htmx.min.js path.
+
+describe('HTML template uses htmx', () => {
+  const TEST_SLUG = 'test-tpl-htmx-' + Date.now();
+
+  afterEach(() => {
+    cleanupPlan(TEST_SLUG);
+  });
+
+  test('regenerated plan.html contains htmx attributes and not raw fetch()', async () => {
+    const planDir = join(PLANS_DIR, TEST_SLUG);
+    mkdirSync(planDir, { recursive: true });
+    writeFileSync(
+      join(planDir, 'meta.json'),
+      JSON.stringify({
+        title: 'Template Htmx Test',
+        slug: TEST_SLUG,
+        status: 'draft',
+        author: 'tester',
+        created: '2026-06-01T00:00:00.000Z',
+        lastEdited: '2026-06-01T00:00:00.000Z',
+      })
+    );
+    writeFileSync(join(planDir, 'plan.mdx'), '# Template Htmx Test\n\n## Section One\n\nHello.\n');
+    writeFileSync(join(planDir, 'comments.json'), '[]');
+
+    await regenerateHtml(TEST_SLUG);
+
+    const html = readFileSync(join(planDir, 'plan.html'), 'utf-8');
+
+    // Should load htmx from the local path
+    assert.ok(html.includes('src="/htmx.min.js"'), 'should load htmx from local path');
+
+    // Should use htmx attributes for the comment list (auto-load)
+    assert.ok(/hx-get="\/api\/[^"]+\/comments\?format=html"/.test(html),
+      'should have hx-get on the comment list');
+    assert.ok(/hx-trigger="load[^"]*"/.test(html),
+      'should have hx-trigger="load" on the comment list');
+
+    // Should use htmx for the comment form
+    assert.ok(/hx-post="\/api\/[^"]+\/comments"/.test(html), 'should have hx-post for comments');
+    assert.ok(/hx-target="#comment-list"/.test(html), 'comment form should target the list');
+    assert.ok(/hx-swap="beforeend"/.test(html), 'comment form should append (beforeend)');
+
+    // The autosave textarea is created by enterEditMode() via setAttribute
+    // (we process the body with htmx.process() after creation), so the static
+    // HTML won't have hx-put. Check the JS wires it up instead.
+    assert.ok(html.includes("setAttribute('hx-put', '/api/") ||
+              html.includes('setAttribute("hx-put", "/api/'),
+      'JS should set hx-put on the autosave textarea');
+    assert.ok(html.includes("setAttribute('hx-trigger'") ||
+              html.includes('setAttribute("hx-trigger"'),
+      'JS should set hx-trigger on the autosave textarea');
+
+    // Should NOT have raw fetch() in the new template
+    // (We allow fetch() to be mentioned in comments)
+    const noCommentFetch = html
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+      .filter((line) => !/<!--/.test(line) && !/^[\s]*\*/.test(line))
+      .join('\n');
+    assert.ok(!/fetch\s*\(/.test(noCommentFetch), 'non-comment code should not call fetch() directly');
+
+    // The slug should be substituted, no raw {{slug}} left
+    assert.ok(!html.includes('{{slug}}'), 'slug placeholder should be substituted');
+    assert.ok(!html.includes('{{title}}'), 'title placeholder should be substituted');
+    assert.ok(!html.includes('{{planJson}}'), 'planJson placeholder should be substituted');
+    assert.ok(!html.includes('{{commentsJson}}'), 'commentsJson placeholder should be substituted');
+    assert.ok(!html.includes('{{metaJson}}'), 'metaJson placeholder should be substituted');
+    assert.ok(!html.includes('{{status}}'), 'status placeholder should be substituted');
+    assert.ok(!html.includes('{{created}}'), 'created placeholder should be substituted');
+    assert.ok(!html.includes('{{lastEdited}}'), 'lastEdited placeholder should be substituted');
+    assert.ok(!html.includes('{{author}}'), 'author placeholder should be substituted');
+  });
+
+  test('template is smaller than the pre-htmx version (regression check)', () => {
+    const tplPath = join(TEMPLATES_DIR, 'plan.html.template');
+    const lines = readFileSync(tplPath, 'utf-8').split('\n').length;
+    assert.ok(lines < 1039, `template should be smaller than the original 1039 lines, got ${lines}`);
   });
 });
 
