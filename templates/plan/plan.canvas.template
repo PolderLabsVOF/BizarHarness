@@ -1,0 +1,1711 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}} — Bizar Plan</title>
+
+  <!-- Self-hosted htmx (no CDN) — used for the comment side panel where
+       it shines. Canvas interactions (pan/zoom/drag) are vanilla JS. -->
+  <script src="/htmx.min.js"></script>
+
+  <style>
+    /* ============================================================
+       Theme tokens (match the v1 viewer for visual continuity)
+       ============================================================ */
+    :root {
+      --color-bg: #ffffff;
+      --color-text: #1a1a1a;
+      --color-muted: #6b7280;
+      --color-border: #e5e7eb;
+      --color-accent: #3b82f6;
+      --color-accent-hover: #2563eb;
+      --color-code-bg: #f3f4f6;
+      --color-card-bg: #ffffff;
+      --color-card-shadow: rgba(0, 0, 0, 0.08);
+      --color-button-text: #1a1a1a;
+      --color-primary-text: #ffffff;
+      --color-save-ok: #10b981;
+      --color-save-err: #ef4444;
+      --color-pin: #f59e0b;
+      --color-pin-hover: #d97706;
+      --color-connection: #6b7280;
+      --color-connection-arrow: #3b82f6;
+      --color-canvas-bg: #f8fafc;
+      --color-canvas-grid: #e2e8f0;
+      --color-element-selected: #3b82f6;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #0f172a;
+        --color-text: #e2e8f0;
+        --color-muted: #94a3b8;
+        --color-border: #334155;
+        --color-accent: #60a5fa;
+        --color-accent-hover: #93c5fd;
+        --color-code-bg: #1e293b;
+        --color-card-bg: #1e293b;
+        --color-card-shadow: rgba(0, 0, 0, 0.4);
+        --color-button-text: #e2e8f0;
+        --color-primary-text: #0f172a;
+        --color-save-ok: #34d399;
+        --color-save-err: #f87171;
+        --color-pin: #fbbf24;
+        --color-pin-hover: #f59e0b;
+        --color-connection: #94a3b8;
+        --color-connection-arrow: #60a5fa;
+        --color-canvas-bg: #0b1220;
+        --color-canvas-grid: #1e293b;
+        --color-element-selected: #60a5fa;
+      }
+    }
+
+    /* ============================================================
+       Base
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      overflow: hidden; /* the canvas handles its own scrolling */
+    }
+    button { font: inherit; cursor: pointer; }
+
+    /* ============================================================
+       Layout
+       ============================================================ */
+    .app { display: flex; flex-direction: column; height: 100vh; }
+    .header {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-card-bg);
+      flex-shrink: 0;
+      z-index: 30;
+    }
+    .header h1 { margin: 0; font-size: 1.05em; font-weight: 600; }
+    .header .meta {
+      color: var(--color-muted); font-size: 0.85em; margin-left: 0.5rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .header-actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+    .save-status { font-size: 0.8em; color: var(--color-muted); margin-left: 0.5rem; }
+    .save-status.saved { color: var(--color-save-ok); }
+    .save-status.error { color: var(--color-save-err); }
+
+    /* ============================================================
+       Toolbar
+       ============================================================ */
+    .toolbar {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-card-bg);
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    .toolbar button {
+      border: 1px solid var(--color-border);
+      background: var(--color-card-bg);
+      color: var(--color-button-text);
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.9em;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .toolbar button:hover { background: var(--color-code-bg); }
+    .toolbar button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+    .toolbar button.active {
+      background: var(--color-accent);
+      color: var(--color-primary-text);
+      border-color: var(--color-accent);
+    }
+    .toolbar .sep {
+      width: 1px; height: 1.5rem; background: var(--color-border); margin: 0 0.25rem;
+    }
+    .toolbar .zoom-controls { display: flex; align-items: center; gap: 0.25rem; }
+    .toolbar .zoom-controls .zoom-level { font-size: 0.8em; color: var(--color-muted); min-width: 3.5em; text-align: center; }
+    .toolbar .spacer { flex: 1; }
+    .toolbar .view-toggle { font-size: 0.85em; color: var(--color-muted); }
+
+    /* ============================================================
+       Canvas (infinite scrollable surface)
+       ============================================================ */
+    .canvas-wrap {
+      position: relative; flex: 1; min-height: 0;
+      background: var(--color-canvas-bg);
+      overflow: hidden;
+    }
+    .canvas {
+      position: absolute; top: 0; left: 0;
+      width: 5000px; height: 5000px; /* large virtual area */
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+    .canvas.panning { cursor: grabbing; }
+    .canvas.space-down { cursor: grab; }
+
+    /* Subtle dot grid background, painted via SVG via background-image fallback */
+    .canvas::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background-image: radial-gradient(circle, var(--color-canvas-grid) 1px, transparent 1px);
+      background-size: 24px 24px;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    /* SVG layer for connections — sits behind elements but in front of the grid */
+    #connections-layer {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; /* let the canvas receive pan events; individual
+                              <path>s re-enable pointer-events: stroke below */
+      z-index: 1;
+    }
+    #connections-layer path {
+      pointer-events: stroke;
+      cursor: pointer;
+    }
+    #connections-layer .connection-hit { stroke-width: 14; stroke: transparent; fill: none; }
+    #connections-layer .connection-line { stroke: var(--color-connection); stroke-width: 2; fill: none; }
+    #connections-layer .connection-arrow.arrow    { marker-end: url(#arrowhead); stroke: var(--color-connection-arrow); }
+    #connections-layer .connection-arrow.dependency { marker-end: url(#arrowhead-dep); stroke-dasharray: 6 4; stroke: var(--color-connection); }
+    #connections-layer .connection-label { fill: var(--color-text); font: 12px var(--font-sans); paint-order: stroke; stroke: var(--color-card-bg); stroke-width: 4; }
+
+    /* ============================================================
+       Elements
+       ============================================================ */
+    .element {
+      position: absolute;
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      box-shadow: 0 1px 3px var(--color-card-shadow);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      z-index: 5;
+      min-width: 80px; min-height: 40px;
+    }
+    .element:hover { box-shadow: 0 2px 8px var(--color-card-shadow); }
+    .element.selected { border-color: var(--color-element-selected); box-shadow: 0 0 0 2px var(--color-element-selected); }
+    .element.connect-source { border-color: var(--color-connection-arrow); }
+
+    .element-header {
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.5rem;
+      background: var(--color-code-bg);
+      border-bottom: 1px solid var(--color-border);
+      cursor: move;
+      font-size: 0.85em;
+      user-select: none;
+    }
+    .element-header .type-badge {
+      font-size: 0.75em; color: var(--color-muted);
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      padding: 0.1em 0.4em;
+      flex-shrink: 0;
+    }
+    .element-header .title {
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .element-header .actions { display: flex; gap: 0.25rem; flex-shrink: 0; }
+    .element-header .actions button {
+      background: transparent; border: 0; padding: 0.1rem 0.35rem;
+      color: var(--color-muted); font-size: 0.85em; cursor: pointer;
+      border-radius: 3px;
+    }
+    .element-header .actions button:hover { background: var(--color-border); color: var(--color-text); }
+
+    .element-body { flex: 1; overflow: auto; padding: 0.5rem 0.75rem; }
+    .element-body pre {
+      margin: 0; font-family: var(--font-mono); font-size: 0.85em;
+      white-space: pre-wrap; word-wrap: break-word;
+    }
+    .element-body img { max-width: 100%; height: auto; display: block; }
+    .element-body code { font-family: var(--font-mono); font-size: 0.85em; }
+    .element-body .ui-mockup-button {
+      display: inline-block; padding: 0.4rem 1rem;
+      background: var(--color-accent); color: var(--color-primary-text);
+      border: 0; border-radius: 4px; font-size: 0.95em;
+    }
+    .element-body .ui-mockup-input {
+      display: block; width: 100%; padding: 0.4rem 0.6rem;
+      font: inherit; border: 1px solid var(--color-border); border-radius: 4px;
+      background: var(--color-bg); color: var(--color-text);
+    }
+    .element-body .ui-mockup-card {
+      padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 6px;
+    }
+    .element-body .ui-mockup-card h4 { margin: 0 0 0.5rem; font-size: 1em; }
+    .element-body .ui-mockup-card p { margin: 0; color: var(--color-muted); }
+
+    .element-body[contenteditable="true"] { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+    .resize-handle {
+      position: absolute; right: 0; bottom: 0; width: 12px; height: 12px;
+      cursor: nwse-resize;
+      background: linear-gradient(135deg, transparent 50%, var(--color-muted) 50%);
+    }
+
+    /* ============================================================
+       Comment pins
+       ============================================================ */
+    .comment-pin {
+      position: absolute;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--color-pin);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8em; font-weight: 600;
+      cursor: grab;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      z-index: 10;
+      user-select: none;
+    }
+    .comment-pin:hover { background: var(--color-pin-hover); }
+    .comment-pin.active {
+      outline: 3px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+    .comment-pin.dragging { cursor: grabbing; }
+
+    /* ============================================================
+       Comment side panel
+       ============================================================ */
+    .comment-panel {
+      position: fixed; top: 0; right: 0;
+      width: 420px; max-width: 100vw; height: 100vh;
+      background: var(--color-card-bg);
+      box-shadow: -2px 0 12px var(--color-card-shadow);
+      transform: translateX(100%);
+      transition: transform 0.25s ease-out;
+      z-index: 100;
+      display: flex; flex-direction: column;
+      box-sizing: border-box;
+    }
+    .comment-panel.open { transform: translateX(0); }
+    .comment-panel-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--color-border);
+      flex-shrink: 0;
+    }
+    .comment-panel-header h3 { margin: 0; font-size: 1em; }
+    #close-comment-panel {
+      background: transparent; border: 0; font-size: 1.4em; line-height: 1;
+      padding: 0.25rem 0.5rem; color: var(--color-muted); cursor: pointer;
+    }
+    #close-comment-panel:hover { color: var(--color-text); }
+
+    .comment-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1; }
+    .comment { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--color-border); }
+    .comment-meta { font-size: 0.8em; color: var(--color-muted); margin-bottom: 0.25rem; }
+    .comment-text { white-space: pre-wrap; word-wrap: break-word; }
+    .reply {
+      margin-top: 0.5rem; margin-left: 1rem;
+      padding-left: 0.75rem; border-left: 2px solid var(--color-accent);
+    }
+    .reply-meta { font-size: 0.75em; color: var(--color-muted); margin-bottom: 0.15rem; }
+    .reply-text { white-space: pre-wrap; word-wrap: break-word; font-size: 0.9em; }
+    .empty { color: var(--color-muted); text-align: center; padding: 2rem 1rem; font-style: italic; list-style: none; }
+
+    .comment-form {
+      border-top: 1px solid var(--color-border);
+      padding: 0.75rem 1.25rem;
+      flex-shrink: 0;
+    }
+    .comment-form textarea {
+      width: 100%; min-height: 70px; font: inherit;
+      background: var(--color-bg); color: var(--color-text);
+      border: 1px solid var(--color-border); border-radius: 6px;
+      padding: 0.5rem; resize: vertical; box-sizing: border-box;
+    }
+    .comment-form-actions {
+      display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;
+    }
+    .comment-form .hint { font-size: 0.8em; color: var(--color-muted); margin-left: auto; }
+
+    /* ============================================================
+       Modal: add/edit element
+       ============================================================ */
+    .modal-backdrop {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.4);
+      display: none; align-items: center; justify-content: center;
+      z-index: 200;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--color-card-bg);
+      border-radius: 8px;
+      padding: 1.25rem;
+      width: 480px; max-width: 92vw;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .modal h2 { margin: 0 0 1rem; font-size: 1.1em; }
+    .modal label { display: block; margin-bottom: 0.75rem; font-size: 0.9em; }
+    .modal label span { display: block; margin-bottom: 0.25rem; color: var(--color-muted); font-size: 0.85em; }
+    .modal input, .modal textarea, .modal select {
+      width: 100%; padding: 0.4rem 0.6rem; font: inherit;
+      border: 1px solid var(--color-border); border-radius: 4px;
+      background: var(--color-bg); color: var(--color-text);
+      box-sizing: border-box;
+    }
+    .modal textarea { min-height: 100px; resize: vertical; }
+    .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+    .modal button {
+      padding: 0.45rem 0.9rem; border: 1px solid var(--color-border);
+      background: var(--color-card-bg); color: var(--color-button-text);
+      border-radius: 4px; cursor: pointer;
+    }
+    .modal button.primary { background: var(--color-accent); color: var(--color-primary-text); border-color: var(--color-accent); }
+    .modal button:hover { background: var(--color-code-bg); }
+    .modal button.primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+
+    /* ============================================================
+       Misc
+       ============================================================ */
+    .empty-canvas {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--color-muted); font-style: italic;
+      pointer-events: none;
+      text-align: center;
+    }
+    .empty-canvas.hidden { display: none; }
+
+    /* hide the cursor while we draw a connection line */
+    .canvas.connecting { cursor: crosshair; }
+
+    @media (max-width: 700px) {
+      .comment-panel { width: 100%; }
+      .header h1 { font-size: 0.95em; }
+      .toolbar button { padding: 0.35rem 0.5rem; font-size: 0.85em; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- ── Header ────────────────────────────────────────────────── -->
+    <header class="header">
+      <h1 id="header-title">{{title}}</h1>
+      <span class="meta" id="header-meta">
+        Slug: {{slug}} · Status: {{status}} · Author: {{author}}
+      </span>
+      <div class="header-actions">
+        <button id="export-md-btn" type="button" title="Export as Markdown">📤 Export</button>
+        <span id="save-status" class="save-status" aria-live="polite"></span>
+      </div>
+    </header>
+
+    <!-- ── Toolbar ───────────────────────────────────────────────── -->
+    <div class="toolbar" role="toolbar" aria-label="Canvas tools">
+      <button data-tool="select" class="active" title="Select / pan (Esc)">↖ Select</button>
+      <button data-tool="text" title="Add a text block (T)">📝 Text</button>
+      <button data-tool="image" title="Add an image (I)">🖼 Image</button>
+      <button data-tool="code" title="Add a code block (C)">💻 Code</button>
+      <button data-tool="diagram" title="Add a mermaid diagram (D)">📊 Diagram</button>
+      <button data-tool="ui-mockup" title="Add a UI mockup (U)">🎨 UI Mockup</button>
+      <span class="sep"></span>
+      <button data-tool="connect" title="Draw a connection between elements (L)">↔ Connect</button>
+      <button data-tool="comment" title="Click to drop a comment pin (M)">💬 Comment</button>
+      <span class="spacer"></span>
+      <div class="zoom-controls" aria-label="Zoom">
+        <button id="zoom-out" type="button" title="Zoom out (-)">−</button>
+        <span class="zoom-level" id="zoom-level">100%</span>
+        <button id="zoom-in" type="button" title="Zoom in (+)">+</button>
+        <button id="zoom-reset" type="button" title="Reset zoom (0)">⤢</button>
+      </div>
+    </div>
+
+    <!-- ── Canvas ────────────────────────────────────────────────── -->
+    <div class="canvas-wrap" id="canvas-wrap">
+      <div class="canvas" id="canvas">
+        <svg id="connections-layer" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-connection-arrow)"></path>
+            </marker>
+            <marker id="arrowhead-dep" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-connection)"></path>
+            </marker>
+          </defs>
+          <g id="connections-g"></g>
+          <g id="pending-connection-g"></g>
+        </svg>
+        <div id="elements-layer" aria-label="Canvas elements"></div>
+        <div id="comments-layer" aria-label="Canvas comments"></div>
+        <div class="empty-canvas" id="empty-canvas-msg">
+          Empty canvas — pick a tool from the toolbar to add an element.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Comment side panel ──────────────────────────────────────── -->
+  <aside id="comment-panel" class="comment-panel" aria-hidden="true">
+    <div class="comment-panel-header">
+      <h3>Comments <span id="comment-target" style="font-weight: normal; color: var(--color-muted);"></span></h3>
+      <button id="close-comment-panel" type="button" aria-label="Close comments">×</button>
+    </div>
+    <ul id="comment-list" class="comment-list"></ul>
+    <!-- Reply form: htmx PUTs to /api/<slug>/comments/<id>; the response is
+         the full updated <li class="comment"> thread which htmx swaps in
+         place of the current thread (outerHTML on #comment-list).
+         The hx-put URL is updated by JS via setAttribute() when a
+         comment is opened. The placeholder hx-put here keeps the form
+         semantically valid (and testable) before any comment is opened. -->
+    <form class="comment-form" id="comment-form" autocomplete="off"
+          hx-put="/api/{{slug}}/comments/_"
+          hx-target="#comment-list"
+          hx-swap="outerHTML"
+          hx-trigger="submit">
+      <textarea name="reply" id="new-comment" placeholder="Reply or add a comment…"></textarea>
+      <input type="hidden" name="replyAuthor" id="reply-author">
+      <div class="comment-form-actions">
+        <button type="submit" class="primary" id="comment-submit">Add</button>
+        <span class="hint">⌘/Ctrl+Enter</span>
+      </div>
+    </form>
+  </aside>
+
+  <!-- ── Add element modal ──────────────────────────────────────── -->
+  <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-labelledby="modal-title">
+      <h2 id="modal-title">Add element</h2>
+      <!-- htmx attributes are set by JS based on whether we're adding or
+           editing (hx-post vs hx-put). hx-target is the elements layer so
+           the new element is appended. hx-swap="beforeend" only applies on
+           POST; for PUT (edit) we use "outerHTML" via JS (see submitElementForm). -->
+      <form id="element-form"
+            hx-post="/api/{{slug}}/elements"
+            hx-target="#elements-layer"
+            hx-swap="beforeend"
+            hx-on::after-request="if(event.detail.successful &amp;&amp; !window.__elementEditId) { this.dispatchEvent(new CustomEvent('element-added', {bubbles:true, detail:event.detail})); }">
+        <label id="modal-type-row" hidden>
+          <span>Type</span>
+          <select id="el-type" name="type">
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+            <option value="code">Code</option>
+            <option value="diagram">Mermaid diagram</option>
+            <option value="ui-mockup">UI mockup</option>
+          </select>
+        </label>
+        <label>
+          <span>Title (optional)</span>
+          <input type="text" id="el-title" name="title" placeholder="A short label">
+        </label>
+        <label id="el-language-row" hidden>
+          <span>Language (for code blocks)</span>
+          <input type="text" id="el-language" name="language" placeholder="javascript">
+        </label>
+        <label id="el-content-row">
+          <span id="el-content-label">Content</span>
+          <textarea id="el-content" name="content" placeholder="Write the text content…"></textarea>
+        </label>
+        <label id="el-component-row" hidden>
+          <span>UI component</span>
+          <select id="el-component" name="component">
+            <option value="button">Button</option>
+            <option value="input">Input field</option>
+            <option value="card">Card</option>
+          </select>
+        </label>
+        <label id="el-label-row" hidden>
+          <span>Button label</span>
+          <input type="text" id="el-label" name="label" placeholder="Submit">
+        </label>
+        <label id="el-placeholder-row" hidden>
+          <span>Input placeholder</span>
+          <input type="text" id="el-placeholder" name="placeholder" placeholder="Email">
+        </label>
+        <label id="el-value-row" hidden>
+          <span>Input value</span>
+          <input type="text" id="el-value" name="value" placeholder="">
+        </label>
+        <label id="el-card-body-row" hidden>
+          <span>Card body</span>
+          <textarea id="el-card-body" name="body" placeholder="Body text"></textarea>
+        </label>
+        <!-- x/y/width/height are filled in by JS just before submit so the
+             new element lands in the centre of the current view. -->
+        <input type="hidden" id="el-x" name="x">
+        <input type="hidden" id="el-y" name="y">
+        <input type="hidden" id="el-width" name="width">
+        <input type="hidden" id="el-height" name="height">
+        <div class="modal-actions">
+          <button type="button" id="modal-cancel">Cancel</button>
+          <button type="submit" class="primary" id="modal-ok">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Embedded state (baked in via {{…}} substitution) ─────── -->
+  <script id="meta-source" type="application/json">{{metaJson}}</script>
+  <script id="canvas-source" type="application/json">{{canvasJson}}</script>
+
+  <script>
+    /* ============================================================
+     * Bizar Plan — Canvas viewer
+     *
+     * State model (v2):
+     *   - elements:    positioned, draggable cards (text/image/code/diagram/ui-mockup)
+     *   - connections: SVG arrows/lines between two element ids
+     *   - comments:    pins placed at (x,y) on the canvas, optionally
+     *                  attached to an elementId; each comment has a thread
+     *                  of replies.
+     *   - viewport:    { x, y, zoom } — pan & zoom state
+     *
+     * Interaction model:
+     *   - Pan:    hold space + drag, or middle-mouse drag
+     *   - Zoom:   Ctrl+scroll, or +/-/reset buttons
+     *   - Drag:   grab the element header and drag
+     *   - Edit:   double-click an element to edit content inline
+     *   - Connect: switch to Connect tool, click first element, then second
+     *   - Comment: switch to Comment tool, click anywhere on the canvas
+     *
+     * Persistence: every change autosaves via PUT /api/<slug>/canvas.
+     * ============================================================ */
+    (function () {
+      'use strict';
+
+      // ── Embedded state (baked in via {{…}}) ─────────────────────
+      var META = {{metaJson}};
+      var INITIAL_CANVAS = {{canvasJson}};
+
+      var SLUG = (META && META.slug) || '{{slug}}';
+      var TITLE = (META && META.title) || '{{title}}';
+      var AUTHOR = (META && META.author) || (typeof process !== 'undefined' && process.env && process.env.USER) || 'anonymous';
+
+      // ── In-memory state ─────────────────────────────────────────
+      // Live state — what the UI renders from, and what we PUT back.
+      var state = normalizeCanvas(INITIAL_CANVAS, TITLE);
+      var activeTool = 'select';
+      var selectedElementId = null;
+      var activeCommentId = null;       // currently-open comment in side panel
+      var connectFromId = null;          // first element of a pending connection
+      var pendingPin = null;             // { x, y } while user clicks to drop a pin
+      var spaceDown = false;             // spacebar held = pan mode
+      var panState = null;               // { startX, startY, origX, origY }
+      var resizeState = null;            // { id, startX, startY, origW, origH }
+
+      // ── DOM helpers ─────────────────────────────────────────────
+      function $(sel) { return document.querySelector(sel); }
+      function $$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        if (attrs) for (var k in attrs) {
+          if (k === 'class') node.className = attrs[k];
+          else if (k === 'text') node.textContent = attrs[k];
+          else if (k.indexOf('on') === 0) node.addEventListener(k.slice(2), attrs[k]);
+          else if (k === 'dataset') for (var d in attrs[k]) node.dataset[d] = attrs[k][d];
+          else node.setAttribute(k, attrs[k]);
+        }
+        if (children) {
+          if (!Array.isArray(children)) children = [children];
+          for (var i = 0; i < children.length; i++) {
+            var c = children[i];
+            if (c == null) continue;
+            if (typeof c === 'string') node.appendChild(document.createTextNode(c));
+            else node.appendChild(c);
+          }
+        }
+        return node;
+      }
+      function svgEl(tag, attrs) {
+        var node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        if (attrs) for (var k in attrs) node.setAttribute(k, attrs[k]);
+        return node;
+      }
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      // ── State normalization ─────────────────────────────────────
+      function normalizeCanvas(raw, fallbackTitle) {
+        if (raw == null || typeof raw !== 'object') {
+          return emptyCanvas(fallbackTitle);
+        }
+        var c = {
+          schemaVersion: raw.schemaVersion || 2,
+          title: typeof raw.title === 'string' ? raw.title : (fallbackTitle || 'Untitled'),
+          elements: Array.isArray(raw.elements) ? raw.elements : [],
+          connections: Array.isArray(raw.connections) ? raw.connections : [],
+          comments: Array.isArray(raw.comments) ? raw.comments : [],
+          viewport: raw.viewport && typeof raw.viewport === 'object'
+            ? raw.viewport : { x: 0, y: 0, zoom: 1 },
+        };
+        return c;
+      }
+      function emptyCanvas(title) {
+        return {
+          schemaVersion: 2,
+          title: title || 'Untitled',
+          elements: [], connections: [], comments: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+        };
+      }
+
+      // ── Save status indicator ───────────────────────────────────
+      function setSaveStatus(text, kind) {
+        var s = $('#save-status');
+        if (!s) return;
+        s.textContent = text || '';
+        s.className = 'save-status' + (kind ? ' ' + kind : '');
+      }
+      var saveDebounce = null;
+      function scheduleSave() {
+        if (saveDebounce) clearTimeout(saveDebounce);
+        setSaveStatus('Saving…');
+        saveDebounce = setTimeout(saveNow, 500);
+      }
+      function saveNow() {
+        saveDebounce = null;
+        // htmx.ajax does the PUT for us. The server returns a saved-status
+        // <span> which htmx swaps into #save-status. On error, htmx fires
+        // htmx:responseError; we listen for it in wire() to show the message.
+        try {
+          window.htmx.ajax('PUT', '/api/' + encodeURIComponent(SLUG) + '/canvas', {
+            source: '#save-status',
+            target: '#save-status',
+            swap: 'innerHTML',
+            values: state,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch (err) {
+          setSaveStatus('Save failed: ' + err.message, 'error');
+        }
+      }
+
+      // ── Coordinate conversion ───────────────────────────────────
+      // The canvas is a 5000×5000 surface translated by viewport.x, viewport.y
+      // and scaled by viewport.zoom. Anything inside the canvas is in
+      // "world" coordinates; clicks/mouse events arrive in "screen" coords.
+      function screenToWorld(sx, sy) {
+        var r = $('#canvas').getBoundingClientRect();
+        // r.left/r.top is the top-left of the canvas in screen coords.
+        // World point of (sx, sy) is:
+        //   worldX = (sx - r.left - viewport.x) / zoom
+        //   worldY = (sy - r.top  - viewport.y) / zoom
+        var wx = (sx - r.left - state.viewport.x) / state.viewport.zoom;
+        var wy = (sy - r.top  - state.viewport.y) / state.viewport.zoom;
+        return { x: wx, y: wy };
+      }
+      function applyViewport() {
+        var canvas = $('#canvas');
+        canvas.style.transform =
+          'translate(' + state.viewport.x + 'px, ' + state.viewport.y + 'px) scale(' + state.viewport.zoom + ')';
+        $('#zoom-level').textContent = Math.round(state.viewport.zoom * 100) + '%';
+      }
+
+      // ── Element rendering ───────────────────────────────────────
+      function findElement(id) {
+        for (var i = 0; i < state.elements.length; i++) {
+          if (state.elements[i].id === id) return state.elements[i];
+        }
+        return null;
+      }
+      function findComment(id) {
+        for (var i = 0; i < state.comments.length; i++) {
+          if (state.comments[i].id === id) return state.comments[i];
+        }
+        return null;
+      }
+      function renderBody(e) {
+        var body = el('div', { class: 'element-body' });
+        if (e.type === 'text') {
+          // Render the text as preformatted so multi-line content is preserved
+          body.appendChild(el('pre', { text: e.content || '' }));
+        } else if (e.type === 'image') {
+          if (e.content) body.appendChild(el('img', { src: e.content, alt: e.title || 'image' }));
+          else body.appendChild(el('div', { text: '(no image URL set — double-click to edit)', class: 'muted' }));
+        } else if (e.type === 'code') {
+          var pre = el('pre', null, [el('code', { class: e.language ? 'language-' + e.language : '', text: e.content || '' })]);
+          body.appendChild(pre);
+        } else if (e.type === 'diagram') {
+          var code = el('pre', { class: 'mermaid', text: e.content || '' });
+          body.appendChild(code);
+        } else if (e.type === 'ui-mockup') {
+          var comp = (e.component || '').toLowerCase();
+          if (comp === 'button') {
+            body.appendChild(el('button', { class: 'ui-mockup-button', text: e.label || 'Button' }));
+          } else if (comp === 'input') {
+            body.appendChild(el('input', {
+              class: 'ui-mockup-input', type: 'text',
+              placeholder: e.placeholder || '',
+              value: e.value || '',
+            }));
+          } else if (comp === 'card') {
+            body.appendChild(el('div', { class: 'ui-mockup-card' }, [
+              el('h4', { text: e.title || 'Card' }),
+              el('p', { text: e.body || '' }),
+            ]));
+          } else {
+            body.appendChild(el('div', { text: 'Unknown ui-mockup component: ' + comp }));
+          }
+        } else {
+          body.appendChild(el('pre', { text: e.content || '' }));
+        }
+        return body;
+      }
+      function renderElement(e) {
+        var node = el('div', {
+          class: 'element' + (e.id === selectedElementId ? ' selected' : '')
+                 + (e.id === connectFromId ? ' connect-source' : ''),
+          dataset: { elementId: e.id, elementType: e.type },
+        });
+        node.style.left = e.x + 'px';
+        node.style.top = e.y + 'px';
+        node.style.width = e.width + 'px';
+        node.style.height = e.height + 'px';
+
+        var typeBadge = el('span', { class: 'type-badge', text: typeLabel(e.type) });
+        var title = el('span', { class: 'title', text: e.title || '' });
+        // Edit/Delete buttons now use data-action so event delegation in
+        // wire() can pick them up (works for htmx-injected elements too).
+        var actions = el('div', { class: 'actions' }, [
+          el('button', { type: 'button', title: 'Edit content',
+            'data-action': 'edit-element', text: '✎' }),
+          el('button', { type: 'button', title: 'Delete element',
+            'data-action': 'delete-element', text: '🗑' }),
+        ]);
+        var header = el('div', { class: 'element-header' }, [typeBadge, title, actions]);
+        // Drag: pointerdown on header starts drag
+        header.addEventListener('pointerdown', function (ev) {
+          if (ev.button !== 0) return;
+          // Ignore drags that start on action buttons (they have their own handlers)
+          if (ev.target.closest('button')) return;
+          ev.stopPropagation();
+          startElementDrag(e.id, ev);
+        });
+        node.appendChild(header);
+        node.appendChild(renderBody(e));
+
+        // Click on element: select it (so connection tool knows the source)
+        node.addEventListener('click', function (ev) {
+          if (ev.target.closest('button') || ev.target.closest('input,textarea,select')) return;
+          ev.stopPropagation();
+          handleElementClick(e);
+        });
+
+        // Double-click: edit content
+        node.addEventListener('dblclick', function (ev) {
+          ev.stopPropagation();
+          openElementEditor(e);
+        });
+
+        // Resize handle
+        var handle = el('div', { class: 'resize-handle', title: 'Resize' });
+        handle.addEventListener('pointerdown', function (ev) {
+          if (ev.button !== 0) return;
+          ev.stopPropagation();
+          startElementResize(e.id, ev);
+        });
+        node.appendChild(handle);
+
+        return node;
+      }
+      function typeLabel(t) {
+        if (t === 'ui-mockup') return 'UI';
+        if (t === 'text') return 'TXT';
+        if (t === 'image') return 'IMG';
+        if (t === 'code') return 'CODE';
+        if (t === 'diagram') return 'DIAG';
+        return (t || '').toUpperCase();
+      }
+
+      // ── Re-extract an element's state from its DOM node (used after htmx
+      // has appended server-rendered HTML so local state stays in sync). ──
+      function readElementFromNode(node) {
+        if (!node) return null;
+        return {
+          id: node.dataset.elementId,
+          type: node.dataset.elementType,
+          x: parseFloat(node.style.left) || 0,
+          y: parseFloat(node.style.top) || 0,
+          width: parseFloat(node.style.width) || 240,
+          height: parseFloat(node.style.height) || 160,
+          // Content fields are not in data-attributes (could be large); the
+          // existing in-memory copy is authoritative for content edits.
+          // Walk the in-memory state to find the matching id — but since
+          // the server just made it, it won't be there yet. Caller must
+          // merge with `props` if it has them.
+        };
+      }
+
+      /** Re-draw only the connections layer (cheaper than full rerender). */
+      function rerenderConnections() { renderConnections(); }
+
+      /** Re-draw only the comment pins (cheaper than full rerender). */
+      function rerenderComments() {
+        var layer = $('#comments-layer');
+        if (!layer) return;
+        // Replace the entire layer's children with what we know about.
+        // htmx has already appended the new pin; we need to re-attach
+        // drag handlers via delegation (already wired in wire()).
+        layer.innerHTML = '';
+        for (var j = 0; j < state.comments.length; j++) {
+          var pin = renderCommentPin(state.comments[j]);
+          layer.appendChild(pin);
+        }
+        // Active highlight
+        $$('.comment-pin').forEach(function (p) {
+          p.classList.toggle('active', p.dataset.commentId === activeCommentId);
+        });
+      }
+      function handleElementClick(e) {
+        if (activeTool === 'connect') {
+          if (!connectFromId) {
+            connectFromId = e.id;
+            rerender();
+          } else if (connectFromId !== e.id) {
+            // Create the connection
+            addConnection(connectFromId, e.id);
+            connectFromId = null;
+            activeTool = 'select';
+            updateToolbar();
+            rerender();
+          }
+          return;
+        }
+        selectedElementId = e.id;
+        rerender();
+      }
+
+      // ── Comment rendering ───────────────────────────────────────
+      function renderCommentPin(c) {
+        var pin = el('div', {
+          class: 'comment-pin' + (c.id === activeCommentId ? ' active' : ''),
+          dataset: { commentId: c.id },
+          title: (c.text || '').slice(0, 80),
+          text: commentIndex(c.id),
+        });
+        pin.style.left = c.x + 'px';
+        pin.style.top = c.y + 'px';
+        pin.addEventListener('pointerdown', function (ev) {
+          if (ev.button !== 0) return;
+          ev.stopPropagation();
+          startPinDrag(c.id, ev);
+        });
+        pin.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          openCommentPanel(c.id);
+        });
+        return pin;
+      }
+      function commentIndex(commentId) {
+        // 1-based number for visual identification (sorted by created time).
+        var sorted = state.comments.slice().sort(function (a, b) {
+          return String(a.created || '').localeCompare(String(b.created || ''));
+        });
+        for (var i = 0; i < sorted.length; i++) {
+          if (sorted[i].id === commentId) return i + 1;
+        }
+        return '?';
+      }
+      function startPinDrag(commentId, ev) {
+        var c = findComment(commentId);
+        if (!c) return;
+        var pin = ev.currentTarget;
+        pin.classList.add('dragging');
+        var pointerId = ev.pointerId;
+        pin.setPointerCapture(pointerId);
+        var startWorld = screenToWorld(ev.clientX, ev.clientY);
+        var orig = { x: c.x, y: c.y };
+        function onMove(e) {
+          var w = screenToWorld(e.clientX, e.clientY);
+          c.x = Math.round(orig.x + (w.x - startWorld.x));
+          c.y = Math.round(orig.y + (w.y - startWorld.y));
+          // Move the pin directly without a full rerender
+          var node = document.querySelector('.comment-pin[data-comment-id="' + c.id + '"]');
+          if (node) { node.style.left = c.x + 'px'; node.style.top = c.y + 'px'; }
+        }
+        function onUp() {
+          pin.releasePointerCapture(pointerId);
+          pin.classList.remove('dragging');
+          pin.removeEventListener('pointermove', onMove);
+          pin.removeEventListener('pointerup', onUp);
+          pin.removeEventListener('pointercancel', onUp);
+          scheduleSave();
+        }
+        pin.addEventListener('pointermove', onMove);
+        pin.addEventListener('pointerup', onUp);
+        pin.addEventListener('pointercancel', onUp);
+      }
+
+      // ── Connection rendering (SVG) ──────────────────────────────
+      function elementCenter(e) {
+        // Center in world coordinates. The element is positioned at (e.x, e.y)
+        // with size (e.width, e.height). Center is (e.x + e.w/2, e.y + e.h/2).
+        return {
+          x: (e.x || 0) + (e.width || 0) / 2,
+          y: (e.y || 0) + (e.height || 0) / 2,
+        };
+      }
+      function renderConnections() {
+        var g = $('#connections-g');
+        g.innerHTML = '';
+        for (var i = 0; i < state.connections.length; i++) {
+          var c = state.connections[i];
+          var from = findElement(c.from);
+          var to = findElement(c.to);
+          if (!from || !to) continue; // skip orphans
+          var a = elementCenter(from);
+          var b = elementCenter(to);
+          // The SVG has its own viewBox = canvas size (5000x5000) so we draw
+          // in world coordinates directly. (The transform on the parent .canvas
+          // applies uniformly to the SVG and the divs.)
+          g.appendChild(svgEl('path', {
+            class: 'connection-hit',
+            d: 'M ' + a.x + ' ' + a.y + ' L ' + b.x + ' ' + b.y,
+          }));
+          var lineClass = 'connection-line connection-arrow ' + (c.type || 'arrow');
+          g.appendChild(svgEl('path', {
+            class: lineClass,
+            d: 'M ' + a.x + ' ' + a.y + ' L ' + b.x + ' ' + b.y,
+            dataset: { connectionId: c.id },
+          }));
+          if (c.label) {
+            var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 8 };
+            var text = svgEl('text', {
+              class: 'connection-label',
+              x: mid.x, y: mid.y,
+              'text-anchor': 'middle',
+            });
+            text.textContent = c.label;
+            g.appendChild(text);
+          }
+        }
+      }
+
+      // ── Server interactions (via htmx.ajax — declarative data layer) ─────
+      // These functions used to call fetch() directly; now they delegate
+      // to htmx which posts the request and swaps the server's HTML
+      // fragment into the appropriate layer. We listen for htmx:afterRequest
+      // to capture the new entity's id (returned via HX-Trigger-After-Swap)
+      // and update local state for the controller layer to know about.
+
+      /**
+       * Add a new element. The server returns the <div class="element"> HTML
+       * which htmx appends to #elements-layer (target + swap are on the
+       * server's element-form). This function is called from the modal
+       * submit flow after the form has set hidden x/y/width/height.
+       */
+      function addElement(type, props) {
+        var body = Object.assign({ type: type }, props || {});
+        // Trigger htmx POST programmatically with the values as the form body.
+        return new Promise(function (resolve) {
+          // Listen for the htmx:afterRequest to capture the new id.
+          var id = null;
+          var oneOff = function (ev) {
+            document.body.removeEventListener('htmx:afterRequest', oneOff);
+            var resp = ev.detail && ev.detail.xhr && ev.detail.xhr.response;
+            if (resp && typeof resp === 'string') {
+              var m = resp.match(/data-element-id="([^"]+)"/);
+              if (m) id = m[1];
+            }
+            if (id) {
+              // Push the new element into local state by re-extracting from
+              // the DOM htmx just appended. This keeps state in sync with
+              // what the server actually wrote.
+              var node = document.querySelector('[data-element-id="' + id + '"]');
+              if (node) state.elements.push(readElementFromNode(node));
+              resolve(state.elements[state.elements.length - 1]);
+            } else {
+              setSaveStatus('Add failed: no element id in response', 'error');
+              resolve(null);
+            }
+          };
+          document.body.addEventListener('htmx:afterRequest', oneOff);
+          // Fire the POST through htmx.
+          window.htmx.ajax('POST', '/api/' + encodeURIComponent(SLUG) + '/elements', {
+            target: '#elements-layer',
+            swap: 'beforeend',
+            values: body,
+          });
+        });
+      }
+
+      /** Delete an element. htmx removes the DOM node; we update state after. */
+      function deleteElement(id) {
+        var node = document.querySelector('[data-element-id="' + id + '"]');
+        if (node) {
+          // Use htmx.ajax with swap='delete' so the node is removed on 200.
+          window.htmx.ajax('DELETE',
+            '/api/' + encodeURIComponent(SLUG) + '/elements/' + encodeURIComponent(id),
+            { target: node, swap: 'delete' });
+        }
+        // Update local state immediately (cascade is server-side).
+        state.elements = state.elements.filter(function (e) { return e.id !== id; });
+        state.connections = state.connections.filter(function (c) { return c.from !== id && c.to !== id; });
+        for (var i = 0; i < state.comments.length; i++) {
+          if (state.comments[i].elementId === id) state.comments[i].elementId = null;
+        }
+        if (selectedElementId === id) selectedElementId = null;
+      }
+
+      /** Add a connection. Server returns an SVG <g data-connection-id> fragment. */
+      function addConnection(fromId, toId, type) {
+        var body = { from: fromId, to: toId, type: type || 'arrow' };
+        var oneOff = function (ev) {
+          document.body.removeEventListener('htmx:afterRequest', oneOff);
+          var resp = ev.detail && ev.detail.xhr && ev.detail.xhr.response;
+          if (resp && typeof resp === 'string') {
+            var m = resp.match(/data-connection-id="([^"]+)"/);
+            if (m) {
+              state.connections.push({
+                id: m[1], from: fromId, to: toId, type: type || 'arrow',
+              });
+              rerenderConnections(); // re-draw with real geometry
+            }
+          }
+        };
+        document.body.addEventListener('htmx:afterRequest', oneOff);
+        window.htmx.ajax('POST', '/api/' + encodeURIComponent(SLUG) + '/connections', {
+          target: '#connections-g',
+          swap: 'beforeend',
+          values: body,
+        });
+      }
+
+      /** Add a comment pin. Server returns the pin <div> appended to the layer. */
+      function addComment(x, y, text, elementId) {
+        var body = { x: x, y: y, text: text, author: AUTHOR, elementId: elementId || null };
+        var oneOff = function (ev) {
+          document.body.removeEventListener('htmx:afterRequest', oneOff);
+          var resp = ev.detail && ev.detail.xhr && ev.detail.xhr.response;
+          var newId = null;
+          if (resp && typeof resp === 'string') {
+            var m = resp.match(/data-comment-id="([^"]+)"/);
+            if (m) newId = m[1];
+          }
+          if (newId) {
+            state.comments.push({
+              id: newId, x: x, y: y, text: text,
+              author: AUTHOR, elementId: elementId || null,
+              created: new Date().toISOString(), thread: [],
+            });
+            rerenderComments();
+            openCommentPanel(newId);
+          } else {
+            setSaveStatus('Comment failed: no id in response', 'error');
+          }
+        };
+        document.body.addEventListener('htmx:afterRequest', oneOff);
+        window.htmx.ajax('POST', '/api/' + encodeURIComponent(SLUG) + '/comments', {
+          target: '#comments-layer',
+          swap: 'beforeend',
+          values: body,
+        });
+      }
+
+      // ── Element editor (double-click to edit) ───────────────────
+      function openElementEditor(e) {
+        // Open the modal in edit mode. Reuse the add flow by setting hidden
+        // fields and filling in current values.
+        var m = $('#modal-backdrop');
+        $('#modal-title').textContent = 'Edit element';
+        $('#modal-ok').textContent = 'Save';
+        $('#el-type').value = e.type;
+        $('#el-type').disabled = true;       // can't change type on edit
+        $('#modal-type-row').hidden = false;
+        $('#el-title').value = e.title || '';
+        $('#el-language').value = e.language || '';
+        $('#el-content').value = e.content || '';
+        $('#el-component').value = e.component || 'button';
+        $('#el-label').value = e.label || '';
+        $('#el-placeholder').value = e.placeholder || '';
+        $('#el-value').value = e.value || '';
+        $('#el-card-body').value = e.body || '';
+        syncEditorFieldsForType(e.type);
+        m.dataset.editElementId = e.id;
+        m.classList.add('open');
+        m.setAttribute('aria-hidden', 'false');
+        setTimeout(function () { $('#el-title').focus(); }, 50);
+      }
+      function syncEditorFieldsForType(t) {
+        $('#el-language-row').hidden = (t !== 'code');
+        $('#el-component-row').hidden = (t !== 'ui-mockup');
+        $('#el-label-row').hidden = !(t === 'ui-mockup' && $('#el-component').value === 'button');
+        $('#el-placeholder-row').hidden = !(t === 'ui-mockup' && $('#el-component').value === 'input');
+        $('#el-value-row').hidden = !(t === 'ui-mockup' && $('#el-component').value === 'input');
+        $('#el-card-body-row').hidden = !(t === 'ui-mockup' && $('#el-component').value === 'card');
+        var labelText = t === 'code' ? 'Code' : t === 'image' ? 'Image URL' : t === 'diagram' ? 'Mermaid source' : 'Content';
+        $('#el-content-label').textContent = labelText;
+      }
+      function openElementAdder(type) {
+        var m = $('#modal-backdrop');
+        $('#modal-title').textContent = 'Add ' + typeLabel(type).toLowerCase();
+        $('#modal-ok').textContent = 'Add';
+        $('#el-type').value = type;
+        $('#el-type').disabled = true;
+        $('#modal-type-row').hidden = true;
+        $('#el-title').value = '';
+        $('#el-language').value = '';
+        $('#el-content').value = '';
+        $('#el-component').value = 'button';
+        $('#el-label').value = '';
+        $('#el-placeholder').value = '';
+        $('#el-value').value = '';
+        $('#el-card-body').value = '';
+        syncEditorFieldsForType(type);
+        delete m.dataset.editElementId;
+        m.classList.add('open');
+        m.setAttribute('aria-hidden', 'false');
+        setTimeout(function () { $('#el-title').focus(); }, 50);
+      }
+      function closeModal() {
+        var m = $('#modal-backdrop');
+        m.classList.remove('open');
+        m.setAttribute('aria-hidden', 'true');
+        $('#el-type').disabled = false;
+      }
+      function readModalElement() {
+        var type = $('#el-type').value;
+        var e = {
+          type: type,
+          title: $('#el-title').value || '',
+          content: $('#el-content').value || '',
+        };
+        if (type === 'code') e.language = $('#el-language').value || '';
+        if (type === 'ui-mockup') {
+          e.component = $('#el-component').value || 'button';
+          if (e.component === 'button') e.label = $('#el-label').value || 'Button';
+          if (e.component === 'input') {
+            e.placeholder = $('#el-placeholder').value || '';
+            e.value = $('#el-value').value || '';
+          }
+          if (e.component === 'card') {
+            e.title = e.title || 'Card';
+            e.body = $('#el-card-body').value || '';
+          }
+        }
+        return e;
+      }
+      async function submitElementForm(ev) {
+        ev.preventDefault();
+        var m = $('#modal-backdrop');
+        var form = $('#element-form');
+        var data = readModalElement();
+        var editId = m.dataset.editElementId;
+        if (editId) {
+          // ── EDIT MODE: PUT to /elements/<id>. The server returns the
+          // updated <div class="element"> HTML; htmx swaps it in place of
+          // the existing element via outerHTML. ──
+          form.setAttribute('hx-put',
+            '/api/' + encodeURIComponent(SLUG) + '/elements/' + encodeURIComponent(editId));
+          form.setAttribute('hx-target', '[data-element-id="' + editId + '"]');
+          form.setAttribute('hx-swap', 'outerHTML');
+          // Listen for the response so we can update local state.
+          var oneOff = function (ev2) {
+            document.body.removeEventListener('htmx:afterRequest', oneOff);
+            if (ev2.detail && ev2.detail.successful) {
+              var xhr = ev2.detail.xhr;
+              var resp = xhr && xhr.response;
+              if (resp && typeof resp === 'string') {
+                var m2 = resp.match(/data-element-id="([^"]+)"/);
+                if (m2) {
+                  var id2 = m2[1];
+                  for (var i = 0; i < state.elements.length; i++) {
+                    if (state.elements[i].id === id2) {
+                      // Preserve x/y/width/height (the server keeps them,
+                      // but the PUT body may not include them — re-read from DOM).
+                      var node = document.querySelector('[data-element-id="' + id2 + '"]');
+                      if (node) {
+                        state.elements[i].x = parseFloat(node.style.left) || state.elements[i].x;
+                        state.elements[i].y = parseFloat(node.style.top) || state.elements[i].y;
+                        state.elements[i].width = parseFloat(node.style.width) || state.elements[i].width;
+                        state.elements[i].height = parseFloat(node.style.height) || state.elements[i].height;
+                      }
+                      // Update content fields from the form data
+                      for (var k in data) state.elements[i][k] = data[k];
+                      break;
+                    }
+                  }
+                  rerenderConnections();
+                }
+              }
+            }
+            closeModal();
+            // Reset form attrs to default (POST mode)
+            form.removeAttribute('hx-put');
+            form.setAttribute('hx-target', '#elements-layer');
+            form.setAttribute('hx-swap', 'beforeend');
+          };
+          document.body.addEventListener('htmx:afterRequest', oneOff);
+          // Trigger htmx to submit the form
+          window.htmx.trigger(form, 'submit');
+          return;
+        }
+        // ── ADD MODE: center the new element in the current view ──
+        var wrap = $('#canvas-wrap').getBoundingClientRect();
+        var cx = (wrap.width / 2 - state.viewport.x) / state.viewport.zoom;
+        var cy = (wrap.height / 2 - state.viewport.y) / state.viewport.zoom;
+        if (data.type === 'code') { data.width = 360; data.height = 200; }
+        else if (data.type === 'image') { data.width = 320; data.height = 240; }
+        else if (data.type === 'diagram') { data.width = 360; data.height = 220; }
+        else if (data.type === 'ui-mockup') { data.width = 280; data.height = 140; }
+        else { data.width = 280; data.height = 160; }
+        data.x = Math.round(cx - data.width / 2);
+        data.y = Math.round(cy - data.height / 2);
+        // Fill hidden inputs so the form submits the right geometry
+        $('#el-x').value = data.x;
+        $('#el-y').value = data.y;
+        $('#el-width').value = data.width;
+        $('#el-height').value = data.height;
+        // Reset to POST (in case we previously edited)
+        form.setAttribute('hx-target', '#elements-layer');
+        form.setAttribute('hx-swap', 'beforeend');
+        form.removeAttribute('hx-put');
+        // After htmx appends, capture the new element id and update state
+        var oneOff2 = function (ev2) {
+          document.body.removeEventListener('htmx:afterRequest', oneOff2);
+          if (ev2.detail && ev2.detail.successful) {
+            var xhr = ev2.detail.xhr;
+            var resp = xhr && xhr.response;
+            if (resp && typeof resp === 'string') {
+              var mm = resp.match(/data-element-id="([^"]+)"/);
+              if (mm) {
+                state.elements.push(Object.assign({}, data, { id: mm[1] }));
+              }
+            }
+          }
+          closeModal();
+        };
+        document.body.addEventListener('htmx:afterRequest', oneOff2);
+        window.htmx.trigger(form, 'submit');
+      }
+
+      // ── Element drag/resize ─────────────────────────────────────
+      function startElementDrag(elementId, ev) {
+        var e = findElement(elementId);
+        if (!e) return;
+        if (activeTool === 'connect') return; // don't drag while connecting
+        var pointerId = ev.pointerId;
+        ev.currentTarget.setPointerCapture(pointerId);
+        var startWorld = screenToWorld(ev.clientX, ev.clientY);
+        var orig = { x: e.x, y: e.y };
+        var node = document.querySelector('.element[data-element-id="' + e.id + '"]');
+        function onMove(ev2) {
+          var w = screenToWorld(ev2.clientX, ev2.clientY);
+          e.x = Math.round(orig.x + (w.x - startWorld.x));
+          e.y = Math.round(orig.y + (w.y - startWorld.y));
+          if (node) { node.style.left = e.x + 'px'; node.style.top = e.y + 'px'; }
+          renderConnections();
+        }
+        function onUp() {
+          ev.currentTarget.releasePointerCapture(pointerId);
+          ev.currentTarget.removeEventListener('pointermove', onMove);
+          ev.currentTarget.removeEventListener('pointerup', onUp);
+          ev.currentTarget.removeEventListener('pointercancel', onUp);
+          scheduleSave();
+        }
+        ev.currentTarget.addEventListener('pointermove', onMove);
+        ev.currentTarget.addEventListener('pointerup', onUp);
+        ev.currentTarget.addEventListener('pointercancel', onUp);
+      }
+      function startElementResize(elementId, ev) {
+        var e = findElement(elementId);
+        if (!e) return;
+        var pointerId = ev.pointerId;
+        ev.currentTarget.setPointerCapture(pointerId);
+        var startScreen = { x: ev.clientX, y: ev.clientY };
+        var orig = { w: e.width, h: e.height };
+        var node = document.querySelector('.element[data-element-id="' + e.id + '"]');
+        function onMove(ev2) {
+          var dx = (ev2.clientX - startScreen.x) / state.viewport.zoom;
+          var dy = (ev2.clientY - startScreen.y) / state.viewport.zoom;
+          e.width = Math.max(80, Math.round(orig.w + dx));
+          e.height = Math.max(40, Math.round(orig.h + dy));
+          if (node) { node.style.width = e.width + 'px'; node.style.height = e.height + 'px'; }
+          renderConnections();
+        }
+        function onUp() {
+          ev.currentTarget.releasePointerCapture(pointerId);
+          ev.currentTarget.removeEventListener('pointermove', onMove);
+          ev.currentTarget.removeEventListener('pointerup', onUp);
+          ev.currentTarget.removeEventListener('pointercancel', onUp);
+          scheduleSave();
+        }
+        ev.currentTarget.addEventListener('pointermove', onMove);
+        ev.currentTarget.addEventListener('pointerup', onUp);
+        ev.currentTarget.addEventListener('pointercancel', onUp);
+      }
+
+      // ── Pan & zoom ──────────────────────────────────────────────
+      function startPan(ev) {
+        if (ev.button !== 0 && ev.button !== 1) return; // left or middle
+        if (ev.button === 0 && !spaceDown) return;        // left only with space
+        ev.preventDefault();
+        var canvas = $('#canvas');
+        canvas.classList.add('panning');
+        var startX = ev.clientX, startY = ev.clientY;
+        var orig = { x: state.viewport.x, y: state.viewport.y };
+        function onMove(ev2) {
+          state.viewport.x = Math.round(orig.x + (ev2.clientX - startX));
+          state.viewport.y = Math.round(orig.y + (ev2.clientY - startY));
+          applyViewport();
+        }
+        function onUp() {
+          canvas.classList.remove('panning');
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+          scheduleSave();
+        }
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+      }
+      function zoom(delta, ev) {
+        var newZoom = Math.max(0.2, Math.min(3, state.viewport.zoom + delta));
+        if (newZoom === state.viewport.zoom) return;
+        // Zoom toward the cursor: keep the world point under the cursor fixed.
+        if (ev) {
+          var before = screenToWorld(ev.clientX, ev.clientY);
+          state.viewport.zoom = newZoom;
+          applyViewport();
+          var after = screenToWorld(ev.clientX, ev.clientY);
+          state.viewport.x += Math.round((after.x - before.x) * newZoom);
+          state.viewport.y += Math.round((after.y - before.y) * newZoom);
+        } else {
+          state.viewport.zoom = newZoom;
+        }
+        applyViewport();
+        scheduleSave();
+      }
+      function resetZoom() {
+        state.viewport = { x: 0, y: 0, zoom: 1 };
+        applyViewport();
+        scheduleSave();
+      }
+
+      // ── Comment panel ───────────────────────────────────────────
+      function openCommentPanel(commentId) {
+        activeCommentId = commentId;
+        renderCommentList();
+        var panel = $('#comment-panel');
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        // Highlight the pin
+        $$('.comment-pin').forEach(function (p) { p.classList.toggle('active', p.dataset.commentId === commentId); });
+        setTimeout(function () { $('#new-comment').focus(); }, 200);
+      }
+      function closeCommentPanel() {
+        var panel = $('#comment-panel');
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+        activeCommentId = null;
+        $$('.comment-pin').forEach(function (p) { p.classList.remove('active'); });
+      }
+      function renderCommentList() {
+        var c = findComment(activeCommentId);
+        var list = $('#comment-list');
+        list.innerHTML = '';
+        if (!c) {
+          list.appendChild(el('li', { class: 'empty', text: 'No comment selected.' }));
+          return;
+        }
+        var target = c.elementId ? (findElement(c.elementId) || {}).title || 'element' : 'canvas';
+        $('#comment-target').textContent = '· ' + target;
+        var li = el('li', { class: 'comment' });
+        li.appendChild(el('div', { class: 'comment-meta',
+          text: (c.author || 'Anonymous') + ' · ' + formatDate(c.created) }));
+        li.appendChild(el('div', { class: 'comment-text', text: c.text || '' }));
+        list.appendChild(li);
+        // Replies
+        if (Array.isArray(c.thread)) {
+          for (var i = 0; i < c.thread.length; i++) {
+            var r = c.thread[i];
+            var reply = el('li', { class: 'reply' });
+            reply.appendChild(el('div', { class: 'reply-meta',
+              text: (r.author || 'ai') + ' · ' + formatDate(r.created) }));
+            reply.appendChild(el('div', { class: 'reply-text', text: r.text || '' }));
+            list.appendChild(reply);
+          }
+        }
+      }
+      function formatDate(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return String(iso);
+        return d.toLocaleString();
+      }
+      async function submitCommentForm(ev) {
+        ev.preventDefault();
+        var text = $('#new-comment').value.trim();
+        if (!text) return;
+        if (!activeCommentId) return; // No active comment → no-op
+        // htmx: the form already has hx-target="#comment-list" + hx-swap="outerHTML".
+        // We just need to set hx-put to the active comment's URL.
+        var form = $('#comment-form');
+        form.setAttribute('hx-put',
+          '/api/' + encodeURIComponent(SLUG) + '/comments/' + encodeURIComponent(activeCommentId));
+        $('#reply-author').value = AUTHOR;
+        // Listen for the response so we can update local state with the
+        // server's updated comment (which includes the new reply in its thread).
+        var oneOff = function (ev2) {
+          document.body.removeEventListener('htmx:afterRequest', oneOff);
+          if (ev2.detail && ev2.detail.successful) {
+            var xhr = ev2.detail.xhr;
+            var resp = xhr && xhr.response;
+            if (resp && typeof resp === 'string') {
+              var m = resp.match(/id="comment-([^"]+)"/);
+              if (m) {
+                var id = m[1];
+                var idx = state.comments.findIndex(function (c) { return c.id === id; });
+                if (idx >= 0) {
+                  // Update thread from the new state (server is authoritative)
+                  var threadMatch = resp.match(/<li class="reply"[\s\S]*?<\/li>/g);
+                  if (threadMatch) {
+                    state.comments[idx].thread = state.comments[idx].thread || [];
+                  }
+                }
+              }
+            }
+          } else {
+            setSaveStatus('Reply failed', 'error');
+          }
+          $('#new-comment').value = '';
+        };
+        document.body.addEventListener('htmx:afterRequest', oneOff);
+        window.htmx.trigger(form, 'submit');
+        // (Top-level "add new comment" happens on canvas click in comment tool.)
+      }
+
+      // ── Render everything ───────────────────────────────────────
+      function rerender() {
+        // Elements
+        var layer = $('#elements-layer');
+        layer.innerHTML = '';
+        for (var i = 0; i < state.elements.length; i++) {
+          layer.appendChild(renderElement(state.elements[i]));
+        }
+        // Comments
+        var commentsLayer = $('#comments-layer');
+        commentsLayer.innerHTML = '';
+        for (var j = 0; j < state.comments.length; j++) {
+          commentsLayer.appendChild(renderCommentPin(state.comments[j]));
+        }
+        // Empty-canvas message
+        $('#empty-canvas-msg').classList.toggle('hidden',
+          state.elements.length > 0 || state.comments.length > 0);
+        // Connections
+        renderConnections();
+        // Active comment highlight
+        $$('.comment-pin').forEach(function (p) {
+          p.classList.toggle('active', p.dataset.commentId === activeCommentId);
+        });
+      }
+      function updateToolbar() {
+        $$('.toolbar button[data-tool]').forEach(function (b) {
+          b.classList.toggle('active', b.dataset.tool === activeTool);
+        });
+        $('#canvas').classList.toggle('connecting', activeTool === 'connect' || activeTool === 'comment');
+      }
+
+      // ── Wire up events ──────────────────────────────────────────
+      function wire() {
+        // Toolbar tool selection
+        $$('.toolbar button[data-tool]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            activeTool = b.dataset.tool;
+            if (activeTool !== 'connect') connectFromId = null;
+            updateToolbar();
+            rerender();
+            if (['text', 'image', 'code', 'diagram', 'ui-mockup'].indexOf(activeTool) >= 0) {
+              openElementAdder(activeTool);
+            }
+          });
+        });
+        // Zoom
+        $('#zoom-in').addEventListener('click', function (ev) { zoom(0.1, ev); });
+        $('#zoom-out').addEventListener('click', function (ev) { zoom(-0.1, ev); });
+        $('#zoom-reset').addEventListener('click', resetZoom);
+
+        // Header — Markdown export. This stays as fetch() because it's a
+        // download flow (Blob → URL.createObjectURL) which doesn't fit
+        // htmx's swap model. It's not CRUD on canvas data.
+        $('#export-md-btn').addEventListener('click', async function () {
+          try {
+            var res = await fetch('/api/' + encodeURIComponent(SLUG) + '/markdown-export');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var md = await res.text();
+            var blob = new Blob([md], { type: 'text/markdown' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = SLUG + '.md';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } catch (err) {
+            setSaveStatus('Export failed: ' + err.message, 'error');
+          }
+        });
+
+        // Canvas pan: hold space + drag, or middle-mouse
+        var wrap = $('#canvas-wrap');
+        wrap.addEventListener('pointerdown', startPan);
+
+        // Canvas click: drop a comment pin if the comment tool is active
+        wrap.addEventListener('click', function (ev) {
+          // Only respond to clicks on the canvas background, not on elements
+          if (ev.target.closest('.element') || ev.target.closest('.comment-pin')) return;
+          if (activeTool !== 'comment') return;
+          var w = screenToWorld(ev.clientX, ev.clientY);
+          var text = prompt('Comment text:');
+          if (text && text.trim()) {
+            addComment(Math.round(w.x), Math.round(w.y), text.trim(), null);
+          }
+          activeTool = 'select';
+          updateToolbar();
+        });
+
+        // Mouse wheel: zoom with Ctrl, otherwise no-op (the canvas is infinite)
+        wrap.addEventListener('wheel', function (ev) {
+          if (!ev.ctrlKey && !ev.metaKey) return;
+          ev.preventDefault();
+          var delta = ev.deltaY < 0 ? 0.1 : -0.1;
+          zoom(delta, ev);
+        }, { passive: false });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function (ev) {
+          // Spacebar → enter pan mode
+          if (ev.code === 'Space' && !ev.target.matches('input,textarea,select')) {
+            ev.preventDefault();
+            spaceDown = true;
+            $('#canvas').classList.add('space-down');
+          }
+          // Tool shortcuts
+          if (ev.target.matches('input,textarea,select')) return;
+          var k = ev.key.toLowerCase();
+          if (k === 't') { activeTool = 'text'; openElementAdder('text'); updateToolbar(); }
+          else if (k === 'i') { activeTool = 'image'; openElementAdder('image'); updateToolbar(); }
+          else if (k === 'c') { activeTool = 'code'; openElementAdder('code'); updateToolbar(); }
+          else if (k === 'd') { activeTool = 'diagram'; openElementAdder('diagram'); updateToolbar(); }
+          else if (k === 'u') { activeTool = 'ui-mockup'; openElementAdder('ui-mockup'); updateToolbar(); }
+          else if (k === 'l') { activeTool = 'connect'; connectFromId = null; updateToolbar(); }
+          else if (k === 'm') { activeTool = 'comment'; updateToolbar(); }
+          else if (k === 'escape') {
+            activeTool = 'select';
+            connectFromId = null;
+            selectedElementId = null;
+            closeModal();
+            updateToolbar(); rerender();
+          } else if (k === '+' || k === '=') { zoom(0.1, null); }
+          else if (k === '-' || k === '_') { zoom(-0.1, null); }
+          else if (k === '0') { resetZoom(); }
+          // Cmd/Ctrl+Enter in comment form → submit
+          if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter' &&
+              ev.target && ev.target.id === 'new-comment') {
+            ev.preventDefault();
+            $('#comment-form').requestSubmit();
+          }
+        });
+        document.addEventListener('keyup', function (ev) {
+          if (ev.code === 'Space') {
+            spaceDown = false;
+            $('#canvas').classList.remove('space-down');
+          }
+        });
+
+        // Comment form
+        $('#comment-form').addEventListener('submit', submitCommentForm);
+        $('#close-comment-panel').addEventListener('click', closeCommentPanel);
+
+        // Modal
+        $('#modal-cancel').addEventListener('click', closeModal);
+        $('#element-form').addEventListener('submit', submitElementForm);
+        $('#el-component').addEventListener('change', function () {
+          syncEditorFieldsForType('ui-mockup');
+        });
+        $('#el-type').addEventListener('change', function () {
+          syncEditorFieldsForType($('#el-type').value);
+        });
+        $('#modal-backdrop').addEventListener('click', function (ev) {
+          if (ev.target.id === 'modal-backdrop') closeModal();
+        });
+
+        // Click on canvas background (no tool) → deselect
+        $('#canvas').addEventListener('click', function (ev) {
+          if (ev.target.id === 'canvas' || ev.target.classList.contains('empty-canvas')) {
+            selectedElementId = null;
+            connectFromId = null;
+            rerender();
+          }
+        });
+
+        // ── Event delegation for htmx-injected elements ───────────────────
+        // Because htmx appends server-rendered HTML on add/delete, those
+        // new nodes don't have JS-bound event listeners. We delegate clicks
+        // on action buttons (data-action="...") to the controller layer.
+        $('#elements-layer').addEventListener('click', function (ev) {
+          var btn = ev.target.closest('button[data-action]');
+          if (!btn) return;
+          ev.stopPropagation();
+          var elementNode = btn.closest('[data-element-id]');
+          if (!elementNode) return;
+          var id = elementNode.dataset.elementId;
+          var e = findElement(id);
+          if (!e) return;
+          if (btn.dataset.action === 'edit-element') {
+            openElementEditor(e);
+          } else if (btn.dataset.action === 'delete-element') {
+            if (confirm('Delete this element?')) deleteElement(id);
+          }
+        });
+
+        // ── htmx error handling ──────────────────────────────────────────
+        document.body.addEventListener('htmx:responseError', function (ev) {
+          var status = ev.detail && ev.detail.xhr && ev.detail.xhr.status;
+          setSaveStatus('Request failed: HTTP ' + status, 'error');
+        });
+        document.body.addEventListener('htmx:sendError', function (ev) {
+          setSaveStatus('Network error', 'error');
+        });
+
+        // ── htmx after-process-node: re-apply connection lines after a
+        // server-rendered element is swapped in via outerHTML. ──
+        document.body.addEventListener('htmx:afterSwap', function (ev) {
+          // The target was an existing element → re-attach connections
+          var tgt = ev.detail && ev.detail.target;
+          if (tgt && tgt.classList && tgt.classList.contains('element')) {
+            rerenderConnections();
+          }
+        });
+      }
+
+      // ── Init ────────────────────────────────────────────────────
+      function init() {
+        document.title = TITLE + ' — Bizar Plan';
+        $('#header-title').textContent = TITLE;
+        applyViewport();
+        rerender();
+        updateToolbar();
+        wire();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>

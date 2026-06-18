@@ -14,3 +14,7 @@ wiki/
 node_modules/
 *.log
 .DS_Store
+
+# Self-hosted frontend assets — must ship in the npm tarball
+# so the local plan server can serve them with no network access.
+!templates/plan/htmx.min.js
