@@ -4,3 +4,7 @@ package-lock.json
 # Plans (gitignored — regenerable from plan.mdx)
 plans/*/plan.html
 plans/*/comments.json
+
+# Per-user opencode config (contains API tokens, do not commit)
+# Use config/opencode.json.template as a starting point
+config/opencode.json

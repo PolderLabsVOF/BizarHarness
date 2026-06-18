@@ -8,6 +8,9 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 3. **Never use default for project work** — pass `bank_id: "<project-name>"` in all Hindsight calls
 4. **Create bank if missing** — if no bank exists for a project, create it with `hindsight_create_bank`
 5. **AMS Studio bank populated** — 40+ documents migrated from default to ams-studio bank
+6. **Config files with tokens go in .gitignore from day 1** — `config/opencode.json` leaked a Hindsight bearer token for 30+ commits. Use `.template` files for reference, never commit live config.
+7. **Pre-commit hook scans for secrets** — a token-scanning pre-commit hook (`scripts/git-hooks/pre-commit`) is mandatory for any project handling credentials. Install via `scripts/install-hooks.sh`.
+8. **Release audits check for Bearer tokens** — before publishing any release, grep for `Bearer [A-Za-z0-9+/=]{20,}` in every config file.
 
 ## Log
 
@@ -128,3 +131,38 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Pattern**: Always verify the codebase state against task instructions before making changes — the spec may describe already-implemented features. Look for actual bugs (like missing imports) rather than assuming everything needs to be built from scratch.
 - **Files**: cli/plan.mjs, cli/plan.test.mjs
 - **Agent**: heimdall
+
+### 2026-06-18: SECURITY INCIDENT — Hindsight bearer token leaked
+
+**Context**: A Hindsight API bearer token was committed to `config/opencode.json` on Jun 16 (commit `f167aec`) and shipped in npm versions 1.0.0, 1.1.0, 1.2.0, 1.2.1, 1.2.2, and 2.0.0. Detected during a v2.1.0 audit on Jun 18. Fixed in commit `6fe76df` (replaced with placeholder).
+
+**Timeline**:
+- Jun 16 20:58 — token introduced in commit `f167aec`
+- Jun 17 23:19 — npm v2.0.0 published with token
+- Jun 18 00:03 — token replaced with placeholder in commit `6fe76df`
+- Jun 18 ~00:30 — npm v2.1.0 published with placeholder
+- Jun 18 — incident response: npm deprecate, BFG history scrub, gitignore + pre-commit hook
+
+**Lessons learned**:
+- **Audit files before pushing them.** The token was in `config/opencode.json` since v1.2.1; multiple audit passes during v2.0.0 development should have caught this BEFORE pushing to GitHub and npm. They didn't.
+- **Never commit tokens to a repo, even private ones.** Tokens belong in environment variables or gitignored local files. The "private repo is safe" assumption failed here — even a private repo's history is a leak surface.
+- **Add `.gitignore` BEFORE the first commit, not after.** The fix should be: `config/opencode.json` was never tracked.
+- **Pre-commit hooks catch what humans miss.** A token-scanning pre-commit hook would have blocked the original commit.
+- **Audit responses must include git history cleanup**, not just file fixes. The file fix doesn't remove the token from history.
+- **npm deprecate is not enough** — old tarballs remain downloadable. The token must be REVOKED at the provider regardless.
+
+**Pattern to follow next time**:
+- All config files that may contain environment-specific values go in `.gitignore` from day 1
+- A token-scanning pre-commit hook is mandatory for any project that handles credentials
+- During release audits, explicitly grep for `Bearer [A-Za-z0-9+/=]{20,}` in every config file
+- If a leak is found post-push, the response is: revoke + deprecate + scrub history + add preventive measures
+
+**Files changed in response**:
+- `config/opencode.json` — removed from tracking (replaced with `config/opencode.json.template`)
+- `.gitignore` — added `config/opencode.json`
+- `scripts/git-hooks/pre-commit` — new hook that scans staged changes for secrets
+- `scripts/install-hooks.sh` — new script to install the hook per-clone
+- npm: deprecated versions 1.0.0–2.0.0 with security warning
+- git history: BFG scrub removed the token from all 56 commits that contained it
+
+**Agent(s) used**: heimdall

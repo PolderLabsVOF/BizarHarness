@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# BizarHarness pre-commit hook
+# Scans staged changes for likely secrets (Bearer tokens, API keys, etc.)
+# Install with: ./scripts/install-hooks.sh
+
+set -e
+
+STAGED=$(git diff --cached --name-only)
+LEAK_FOUND=0
+
+# Patterns to detect:
+# - Bearer tokens (40+ base64-like chars)
+# - Anthropic API keys (sk-ant-...)
+# - OpenAI API keys (sk-...)
+# - Generic API keys in config files
+PATTERNS=(
+  'Bearer [A-Za-z0-9+/=_-]{40,}'
+  'sk-ant-[A-Za-z0-9-]{40,}'
+  'sk-[A-Za-z0-9]{40,}'
+  'ghp_[A-Za-z0-9]{36}'
+  'gho_[A-Za-z0-9]{36}'
+  'AIza[A-Za-z0-9_-]{35}'
+)
+
+for file in $STAGED; do
+  if [ -f "$file" ]; then
+    for pattern in "${PATTERNS[@]}"; do
+      if git diff --cached "$file" | grep -qE "$pattern"; then
+        echo "⚠️  Potential secret leak in $file matching: $pattern"
+        LEAK_FOUND=1
+      fi
+    done
+  fi
+done
+
+if [ $LEAK_FOUND -eq 1 ]; then
+  echo ""
+  echo "❌ COMMIT BLOCKED: potential secret detected"
+  echo "If this is a false positive, you can bypass with: git commit --no-verify"
+  echo ""
+  exit 1
+fi
+
+exit 0
