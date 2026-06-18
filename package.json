@@ -9,11 +9,18 @@
   "files": [
     "cli/",
     "config/",
-    "dashboard/",
+    "dist/",
+    "src/",
     "templates/",
+    "vite.config.ts",
+    "tsconfig.json",
     "!cli/*.test.mjs"
   ],
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "postinstall": "node cli/bin.mjs --postinstall"
   },
   "keywords": [
@@ -31,7 +38,12 @@
     "chokidar": "^3.6.0",
     "express": "^4.22.2",
     "inquirer": "^12.0.0",
+    "lucide-react": "^0.460.0",
     "ora": "^8.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.1.0",
+    "remark-gfm": "^4.0.1",
     "ws": "^8.21.0"
   },
   "engines": {
@@ -47,5 +59,13 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21"
   }
 }

@@ -52,6 +52,21 @@ export function createApiRouter({
     res.json(state.getOverview());
   }));
 
+  // ── /api/snapshot ──────────────────────────────────────────────────────────
+  // Returns every dashboard panel in one round-trip — used by the React SPA
+  // for its initial load. Mirrors the WS snapshot payload shape.
+  router.get('/snapshot', wrap(async (_req, res) => {
+    res.json({
+      overview: state.getOverview(),
+      agents: state.getAgents(),
+      plans: state.getPlans(),
+      projects: state.getProjects(),
+      config: state.getConfig(),
+      settings: state.getSettings(),
+      tasks: state.getTasks(),
+    });
+  }));
+
   // ── /api/chat ──────────────────────────────────────────────────────────────
   router.get('/chat', wrap(async (req, res) => {
     const sessionId = req.query.session
