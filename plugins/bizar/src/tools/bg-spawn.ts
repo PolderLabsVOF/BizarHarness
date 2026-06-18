@@ -192,6 +192,28 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         status: "running",
       });
 
+      // 6b. BUGFIX (v0.5.1): Now that the real sessionId is known,
+      // attach the SSE event handler for this instance. The track-BEFORE-
+      // HTTP invariant is preserved (instance is in the map from step 4),
+      // but the per-session event subscription is deferred to here so it
+      // can be registered against the real sessionId rather than "".
+      // Re-read the instance so the SSE handler sees the updated sessionId.
+      const freshInstance = await deps.instanceManager.get(instanceId);
+      if (freshInstance) {
+        try {
+          deps.instanceManager.attachEventHandler(freshInstance);
+        } catch (err: unknown) {
+          // Event handler attachment is best-effort. If it fails (e.g. the
+          // SSE stream is disconnected) the instance is still tracked and
+          // can be re-attached later via a reconnect.
+          deps.logger.warn(
+            `bizar: attachEventHandler failed for ${instanceId}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      }
+
       // 7. POST /session/{id}/prompt_async.
       const messageID = generateMessageId();
       const sendRes = await deps.http.sendPrompt(

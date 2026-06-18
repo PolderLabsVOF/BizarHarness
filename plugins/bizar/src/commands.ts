@@ -495,7 +495,7 @@ function handlePlanOpen(args: string[], ctx: ParseContext): SlashCommandResult {
     response:
       `Plan URL: ${url}\n` +
       `(v0.5.0 MVP — server startup is a future enhancement; the URL is ` +
-      `informational. Use "bizarharness plan open ${slug}" in the terminal to ` +
+      `informational. Use "bizar plan open ${slug}" in the terminal to ` +
       `start the local viewer.)`,
     settingsPatch: { lastUsedSlug: slug },
     sideEffect: {

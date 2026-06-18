@@ -13,7 +13,7 @@
  *     schema that already has 8 existing fields — exactly the field
  *     proliferation Forseti flagged.
  *   - The new `BackgroundState` lives at
- *     `~/.cache/bizarharness/bg/<instanceId>.json`. The existing `state.ts`
+ *     `~/.cache/bizar/bg/<instanceId>.json`. The existing `state.ts`
  *     is unchanged.
  *
  * Concurrency model (spec §3.3):
@@ -77,7 +77,7 @@ export type BackgroundStatus =
  *     `failed` to `running` (retry is not in v0.4).
  *   - `parentAgent` — who spawned it (always "odin" in v0.4 per §6.3).
  *   - `parentInstanceId` — for nested spawns (reserved, not in v0.4).
- *   - `logPath` — path to `~/.cache/bizarharness/logs/<sessionId>.log`.
+ *   - `logPath` — path to `~/.cache/bizar/logs/<sessionId>.log`.
  *   - `toolCallCount` — updated via `EventMessagePartUpdated` events.
  *   - `loopGuardTool` — set when threshold-12 throw is captured. Used at
  *     `bizar_collect` to prepend the marker.

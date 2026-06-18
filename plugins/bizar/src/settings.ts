@@ -13,7 +13,7 @@
  *   - §8.2 — mkdirSync on init with EACCES/EROFS handling; if creation
  *     fails the store returns defaults rather than throwing.
  *
- * The file is stored at `~/.cache/bizarharness/plan-settings.json`. We
+ * The file is stored at `~/.cache/bizar/plan-settings.json`. We
  * `expandHome` in the constructor, just like `StateStore` does.
  *
  * Atomic writes use the same `writeFileSync(tmp) + renameSync(tmp, final)`
@@ -236,7 +236,7 @@ export class SettingsStore {
 
   /**
    * @param settingsDir Directory containing the settings file. Typically
-   *                     `"~/.cache/bizarharness"`. The constructor
+   *                     `"~/.cache/bizar"`. The constructor
    *                     expands `~` to the home directory.
    */
   constructor(settingsDir: string, logger: Logger) {

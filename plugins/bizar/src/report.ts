@@ -2,7 +2,7 @@
  * report.ts
  *
  * Per-session log writer. Appends metadata-only lines (no args) to
- * ~/.cache/bizarharness/logs/<sessionId>.log with 10 MB rotation.
+ * ~/.cache/bizar/logs/<sessionId>.log with 10 MB rotation.
  * Per §7.1, §7.6, §8.3, §10.1.
  */
 

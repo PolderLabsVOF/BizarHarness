@@ -34,7 +34,7 @@
  *       same pattern `tool.execute.before` uses for block decisions).
  *     - §v4.2 — `SettingsStore` persists user-controlled plan settings
  *       (visualPlanEnabled, defaultTemplate, lastUsedSlug) at
- *       `~/.cache/bizarharness/plan-settings.json`. Atomic writes,
+ *       `~/.cache/bizar/plan-settings.json`. Atomic writes,
  *       corrupt-file fallback to defaults, no throw on bad input.
  *     - §v4.3 — `parseSlashCommand` is a pure function (no I/O). The
  *       hook gathers context (current settings, available plan slugs)

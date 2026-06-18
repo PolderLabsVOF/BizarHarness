@@ -85,8 +85,8 @@ export const DEFAULT_OPTIONS: NormalizedOptions = {
   loopThresholdEscalate: 8,
   loopThresholdBlock: 12,
   loopWindowSize: 10,
-  logDir: "~/.cache/bizarharness/logs",
-  stateDir: "~/.cache/bizarharness",
+  logDir: "~/.cache/bizar/logs",
+  stateDir: "~/.cache/bizar",
   logRotationBytes: 10_485_760, // 10 MB
   servePort: 0,                    // 0 = random OS-assigned port (§1.1)
   maxConcurrentInstances: 8,       // §8
@@ -109,7 +109,7 @@ const SECRET_DIRS: readonly string[] = [
 
 /**
  * Expand a leading `~` to the user's home directory. The spec's default
- * paths use `~/.cache/bizarharness`; we honor that.
+ * paths use `~/.cache/bizar`; we honor that.
  */
 export function expandHome(p: string): string {
   if (p === "~") return os.homedir();

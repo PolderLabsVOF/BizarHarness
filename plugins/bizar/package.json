@@ -1,6 +1,6 @@
 {
-  "name": "@polderlabs/bizarharness-plugin",
-  "version": "0.5.2",
+  "name": "@polderlabs/bizar-plugin",
+  "version": "0.5.3",
   "description": "Bizar opencode plugin — loop detection, status reporting, handoff signal, background agents, and slash commands + visual plan flow for subagent activity",
   "type": "module",
   "main": "./index.ts",

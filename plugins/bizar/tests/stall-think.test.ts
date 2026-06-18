@@ -443,7 +443,7 @@ function makeBgState(overrides: Partial<BackgroundState> = {}): BackgroundState 
     error: undefined,
     parentAgent: "odin",
     parentInstanceId: undefined,
-    logPath: "~/.cache/bizarharness/logs/test.log",
+    logPath: "~/.cache/bizar/logs/test.log",
     timeoutMs: 300_000,
     toolCallCount: 0,
     loopGuardTool: undefined,

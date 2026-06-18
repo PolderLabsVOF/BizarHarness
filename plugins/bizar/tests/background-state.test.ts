@@ -47,7 +47,7 @@ function makeState(overrides: Partial<BackgroundState> = {}): BackgroundState {
     error: undefined,
     parentAgent: "odin",
     parentInstanceId: undefined,
-    logPath: "~/.cache/bizarharness/logs/sess_abc123.log",
+    logPath: "~/.cache/bizar/logs/sess_abc123.log",
     timeoutMs: 300_000,
     toolCallCount: 0,
     loopGuardTool: undefined,

@@ -323,9 +323,14 @@ export class InstanceManager {
           }`,
         );
       });
-      // Subscribe to events for this session so we can update state and
-      // forward terminal events to awaiters.
-      this.attachEventHandler(full);
+      // BUGFIX (v0.5.1): Do NOT call attachEventHandler() here. The
+      // instance was just added with sessionId="" (filled in later by
+      // POST /session). EventStream.onSessionEvent rejects empty strings,
+      // so attaching here threw and the spawn failed before the HTTP
+      // call could run. Callers must call attachEventHandler() explicitly
+      // after the real sessionId is known. See test in
+      // tests/background.test.ts "add() does not attach event handler
+      // (empty sessionId)".
       return full;
     }))) as AddResult;
   }
@@ -698,7 +703,7 @@ export class InstanceManager {
 
   // --- Internal: per-session event handler -------------------------------
 
-  private attachEventHandler(inst: BackgroundState): () => void {
+  public attachEventHandler(inst: BackgroundState): () => void {
     const handler: SessionEventHandler = (ev: StreamEvent) => {
       void this.handleInstanceEvent(inst.instanceId, ev);
     };

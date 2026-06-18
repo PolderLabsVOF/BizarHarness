@@ -65,8 +65,8 @@ Plugin options are passed as the second element of the `plugin` tuple in
     "loopThresholdEscalate": 8,
     "loopThresholdBlock": 12,
     "loopWindowSize": 10,
-    "logDir": "~/.cache/bizarharness/logs",
-    "stateDir": "~/.cache/bizarharness",
+    "logDir": "~/.cache/bizar/logs",
+    "stateDir": "~/.cache/bizar",
     "logRotationBytes": 10485760
   }]
 ]
@@ -81,8 +81,8 @@ input is clamped, never rejected — the plugin never throws on bad config.
 | `loopThresholdEscalate` | `8` | `Math.max(1, Math.floor(value))`. |
 | `loopThresholdBlock` | `12` | `Math.max(1, Math.floor(value))`. Constrained: `block <= loopWindowSize + 2`. |
 | `loopWindowSize` | `10` | Clamped to `[3, 50]`. |
-| `logDir` | `~/.cache/bizarharness/logs` | Refused if inside `~/.ssh/`, `~/.gnupg/`, `~/.aws/`, `~/.kube/`. |
-| `stateDir` | `~/.cache/bizarharness` | Refused if inside a secret directory (same list as `logDir`). |
+| `logDir` | `~/.cache/bizar/logs` | Refused if inside `~/.ssh/`, `~/.gnupg/`, `~/.aws/`, `~/.kube/`. |
+| `stateDir` | `~/.cache/bizar` | Refused if inside a secret directory (same list as `logDir`). |
 | `logRotationBytes` | `10485760` (10 MB) | `Math.max(1024, Math.floor(value))`. |
 | `backgroundStallTimeoutMs` | `180000` (3 min) | v0.3.0 — stall timeout in ms. Clamped to `[10000, 600000]`. |
 | `backgroundThinkingLoopTimeoutMs` | `300000` (5 min) | v0.3.0 — thinking-loop timeout in ms. Clamped to `[30000, 900000]`. |
@@ -128,7 +128,7 @@ The plugin's hard-block at threshold 12 runs BEFORE opencode's soft
   messages into the current turn's context).
 - It does **not** manage subagent lifecycle (opencode does that).
 - It does **not** read environment variables other than the four listed above.
-- It does **not** write outside `~/.cache/bizarharness/` by default.
+- It does **not** write outside `~/.cache/bizar/` by default.
 - It does **not** register slash commands in v0.1.
 
 ## Background Agents
@@ -137,7 +137,7 @@ v0.4 adds **background agents** — asynchronous subagent execution via a single
 
 ### Architecture
 
-The plugin starts one `opencode serve` process on init (single-serve, multi-session). All background sessions share this process. Each background instance is tracked in `BackgroundState` at `~/.cache/bizarharness/bg/<instanceId>.json`.
+The plugin starts one `opencode serve` process on init (single-serve, multi-session). All background sessions share this process. Each background instance is tracked in `BackgroundState` at `~/.cache/bizar/bg/<instanceId>.json`.
 
 ### The 4 tools
 
@@ -277,7 +277,7 @@ The agent uses two new tools to interact with the plan:
 ### Settings persistence
 
 Plan settings are persisted at
-`~/.cache/bizarharness/plan-settings.json`:
+`~/.cache/bizar/plan-settings.json`:
 
 ```json
 {
@@ -330,7 +330,7 @@ they are not network-bearing.
 
 ## What gets logged
 
-The per-call log line at `~/.cache/bizarharness/logs/<sessionId>.log` is
+The per-call log line at `~/.cache/bizar/logs/<sessionId>.log` is
 metadata only:
 
 ```
@@ -382,7 +382,7 @@ contract; custom integrations must work around them, not against them.
    fails, the age-based cleanup still runs but the "session no longer in
    opencode" branch is skipped.
 
-8. **Single-host state.** State files are local to `~/.cache/bizarharness/`.
+8. **Single-host state.** State files are local to `~/.cache/bizar/`.
    A user with multiple machines will have separate state on each.
    Cross-host loop detection is out of scope.
 
