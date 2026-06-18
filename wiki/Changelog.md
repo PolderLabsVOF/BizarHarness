@@ -21,6 +21,32 @@ For npm releases, see https://www.npmjs.com/package/@polderlabs/bizarharness. Fo
 - Plugin has no hot-reload — source changes require opencode restart.
 - `install.sh` does not detect when the installed plugin is older than the source. Re-run after every `git pull`.
 
+## 0.5.2 — 2026-06-18
+
+The "postmortem Layer 1" release. Closes the last open item from the [2026-06-18 startup hang postmortem](../postmortems/2026-06-18-plugin-state-deadlock.md) — Layer 1 was documented as "fixed" but never actually landed in the code.
+
+### Fixed (v0.5.2)
+
+- **Startup hang: 1-second timeout on `client.session.list()`.** `readValidSessionIds` in `plugins/bizar/index.ts` now races the opencode session-list call against a 1-second timeout via a small `withTimeout(promise, ms, label)` helper. On timeout, the function returns an empty set; the age-based cleanup branch still runs. A no-op `.catch(() => undefined)` is attached to the original promise to prevent late-rejection crashes after the race winner is discarded.
+
+### Added (v0.5.2)
+
+- **`withTimeout` helper, exported from `plugins/bizar/index.ts`.** Pure async helper — race a promise against a timer, throw a labeled error on timeout, clear the timer in a `finally` block. Extracted from `readValidSessionIds` so it can be unit tested in isolation.
+- **`readValidSessionIds` exported from `plugins/bizar/index.ts`.** Previously private; now exported for testing.
+
+### Tests (v0.5.2)
+
+- **11 new regression tests in `plugins/bizar/tests/init-helpers.test.ts`.** Cover the `withTimeout` helper (4 tests) and the `readValidSessionIds` integration path (7 tests), including a test that simulates a hanging `list()` and verifies the function returns within 1.5s (it actually returns in ~1.0s).
+- Test count: 491 → **502 pass, 0 fail**.
+
+### Release
+
+- Plugin version bumped to `0.5.2`. `package.json` and the version-pin in `config.test.ts` are updated in lockstep.
+- Release notes at `docs/releases/v0.5.2.md`.
+- Git tag `v0.5.2` points at the release commit.
+
+## 2.1.0 — 2026-06-18 (Bizar plugin v0.5.0)
+
 ## 2.1.0 — 2026-06-18 (Bizar plugin v0.5.0)
 
 The "plan side-effects" release. Wires the `/plan` slash commands to the Bizar plugin's `bizar_plan_action` tool, adds `bizar_wait_for_feedback`, and brings the plugin to v0.5.0.
