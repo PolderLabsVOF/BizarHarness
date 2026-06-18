@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bizar Dashboard</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪩</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🪩</span>
+        <span class="title">Bizar</span>
+        <span class="version" id="version">v2.5.0</span>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="overview" class="tab active">Overview</button>
+        <button data-tab="chat" class="tab">Chat</button>
+        <button data-tab="agents" class="tab">Agents</button>
+        <button data-tab="plans" class="tab">Plans</button>
+        <button data-tab="projects" class="tab">Projects</button>
+        <button data-tab="config" class="tab">Config</button>
+        <button data-tab="settings" class="tab">Settings</button>
+      </nav>
+      <div class="status" id="status">
+        <span class="indicator" id="ws-indicator"></span>
+        <span id="ws-text">connecting…</span>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="view" id="view-overview"></div>
+      <div class="view" id="view-chat" hidden></div>
+      <div class="view" id="view-agents" hidden></div>
+      <div class="view" id="view-plans" hidden></div>
+      <div class="view" id="view-projects" hidden></div>
+      <div class="view" id="view-config" hidden></div>
+      <div class="view" id="view-settings" hidden></div>
+    </main>
+
+    <div id="toast-container"></div>
+    <div id="modal-container"></div>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

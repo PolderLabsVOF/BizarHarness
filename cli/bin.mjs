@@ -24,6 +24,7 @@ function showHelp() {
     bizar plan <subcommand>     Manage visual plans (new, open, list, delete, export, templates)
     bizar test-gate             Detect & run the project's test suite
     bizar update                Update opencode, bizar, and/or bizar-plugin
+    bizar dashboard [start|stop|status]  Launch or control the web dashboard (v2.5.0+)
     bizar --help                Show this help
 
   Install:
@@ -91,6 +92,75 @@ function showTestGateHelp() {
     Auto-detects the project's test framework (npm test, pytest,
     cargo test, go test) and runs it. Exits with non-zero on failure.
   `);
+}
+
+function showDashboardHelp() {
+  console.log(`
+  bizar dashboard — Launch or control the Bizar web dashboard
+
+  Usage:
+    bizar dashboard             Start the dashboard (default action = start)
+    bizar dashboard start       Start the dashboard in the current process
+    bizar dashboard stop        Kill the running dashboard (reads PID file)
+    bizar dashboard status      Print port + URL of any running dashboard
+
+  Description:
+    Starts a local Express + WebSocket server on 127.0.0.1, opens the
+    user's default browser to the dashboard URL, and broadcasts live
+    file-change events from config/, agents/, commands-bizar/, .bizar/,
+    and plans/. The server binds loopback only — never expose it.
+  `);
+}
+
+async function runDashboard(action) {
+  const sub = action || 'start';
+  const { launchDashboard, PORT_FILE, PID_FILE } = await import('./dashboard.mjs');
+  const { existsSync, readFileSync, unlinkSync } = await import('node:fs');
+
+  if (sub === 'status') {
+    if (existsSync(PORT_FILE)) {
+      const port = readFileSync(PORT_FILE, 'utf8').trim();
+      console.log(`Bizar dashboard is running at http://localhost:${port}/`);
+      if (existsSync(PID_FILE)) {
+        console.log(`PID: ${readFileSync(PID_FILE, 'utf8').trim()}`);
+      }
+    } else {
+      console.log('No Bizar dashboard is running. Use: bizar dashboard start');
+    }
+    return;
+  }
+
+  if (sub === 'stop') {
+    if (!existsSync(PID_FILE)) {
+      console.log('No Bizar dashboard is running.');
+      return;
+    }
+    const pid = parseInt(readFileSync(PID_FILE, 'utf8').trim(), 10);
+    if (!Number.isFinite(pid)) {
+      console.log(`Bad PID file: ${PID_FILE}`);
+      return;
+    }
+    try {
+      process.kill(pid, 'SIGTERM');
+      console.log(`Stopped Bizar dashboard (pid ${pid}).`);
+    } catch (err) {
+      console.log(`Could not stop dashboard (pid ${pid}): ${err.message}`);
+    }
+    try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
+    try { unlinkSync(PID_FILE); } catch { /* ignore */ }
+    return;
+  }
+
+  if (sub !== 'start') {
+    showDashboardHelp();
+    return;
+  }
+
+  // Start — keep the process alive so the server stays up
+  await launchDashboard();
+  console.log(chalk.dim('  Press Ctrl-C to stop the dashboard.'));
+  // Wait forever; SIGINT will exit the process.
+  await new Promise(() => {});
 }
 
 function showUpdateHelp() {
@@ -179,6 +249,9 @@ if (args.includes('--postinstall')) {
 } else if (args[0] === 'plan') {
   const planArgs = args.slice(1);
   await runPlan(planArgs, {});
+} else if (args[0] === 'dashboard') {
+  if (args.includes('--help') || args.includes('-h')) showDashboardHelp();
+  else await runDashboard(args[1]);
 } else if (args.includes('--help') || args.includes('-h')) {
   showHelp();
 } else {
