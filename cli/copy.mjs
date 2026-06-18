@@ -272,48 +272,53 @@ export async function installPluginBizar(projectRoot) {
     // The Bizar plugin now lives in a separate npm package
     // (@polderlabs/bizar-plugin). The interactive installer copies it from
     // there; the source tree no longer carries plugins/bizar/.
-    // Silent return — no warning needed.
+    spinner.info(chalk.dim('  ℹ No local plugins/bizar/ — using @polderlabs/bizar-plugin from npm'));
     return { copied: 0, errors: [] };
   }
 
-  const destDir = join(projectRoot, '.opencode', 'plugins', 'bizar');
-  await mkdir(destDir, { recursive: true });
+  try {
+    const destDir = join(projectRoot, '.opencode', 'plugins', 'bizar');
+    await mkdir(destDir, { recursive: true });
 
-  // Exclude patterns per spec §9.2
-  const isExcluded = (entry) => {
-    const parts = entry.split('/');
-    return parts.some(part =>
-      part === 'node_modules' ||
-      part === 'dist' ||
-      part === '.DS_Store' ||
-      part.endsWith('.log')
-    );
-  };
+    // Exclude patterns per spec §9.2
+    const isExcluded = (entry) => {
+      const parts = entry.split('/');
+      return parts.some(part =>
+        part === 'node_modules' ||
+        part === 'dist' ||
+        part === '.DS_Store' ||
+        part.endsWith('.log')
+      );
+    };
 
-  const files = await readdirRecursive(srcDir);
-  const errors = [];
-  let copied = 0;
+    const files = await readdirRecursive(srcDir);
+    const errors = [];
+    let copied = 0;
 
-  for (const file of files) {
-    if (isExcluded(file)) continue;
-    const src = join(srcDir, file);
-    const dst = join(destDir, file);
-    const dstParent = dirname(dst);
-    try {
-      await mkdir(dstParent, { recursive: true });
-      await copyFile(src, dst);
-      copied++;
-    } catch (err) {
-      errors.push(`Failed to copy ${file}: ${err.message}`);
+    for (const file of files) {
+      if (isExcluded(file)) continue;
+      const src = join(srcDir, file);
+      const dst = join(destDir, file);
+      const dstParent = dirname(dst);
+      try {
+        await mkdir(dstParent, { recursive: true });
+        await copyFile(src, dst);
+        copied++;
+      } catch (err) {
+        errors.push(`Failed to copy ${file}: ${err.message}`);
+      }
     }
-  }
 
-  if (errors.length === 0) {
-    spinner.succeed(chalk.green(`Installed Bizar plugin (${copied} files)`));
-  } else {
-    spinner.warn(chalk.yellow(`Installed Bizar plugin (${copied} files, ${errors.length} errors)`));
+    if (errors.length === 0) {
+      spinner.succeed(chalk.green(`Installed Bizar plugin (${copied} files)`));
+    } else {
+      spinner.warn(chalk.yellow(`Installed Bizar plugin (${copied} files, ${errors.length} errors)`));
+    }
+    return { copied, errors };
+  } catch (err) {
+    spinner.fail(chalk.red(`Failed to install Bizar plugin: ${err.message}`));
+    return { copied: 0, errors: [err.message] };
   }
-  return { copied, errors };
 }
 
 export async function installRtk() {
