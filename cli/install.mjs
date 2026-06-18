@@ -7,9 +7,10 @@ import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary,
 import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands } from './copy.mjs';
 
 const AGENT_FILES = [
-  'odin.md', 'vor.md', 'frigg.md', 'mimir.md', 'heimdall.md', 'hermod.md',
-  'thor.md', 'baldr.md', 'tyr.md', 'forseti.md',
-  'semble-search.md', 'quick.md',
+  'odin.md', 'vor.md', 'frigg.md', 'quick.md',
+  'mimir.md', 'heimdall.md', 'hermod.md', 'thor.md', 'baldr.md',
+  'tyr.md', 'vidarr.md', 'forseti.md',
+  'semble-search.md',
 ];
 
 export async function runInstaller() {

@@ -75,7 +75,7 @@
 | **Thor** | ᚦ | MiniMax-M2.7 | $0.30/M · $1.20/M out | Moderate implementation, debugging, refactoring |
 | **Baldr** | ᛒ | MiniMax-M2.7 | $0.30/M · $1.20/M out | UI/UX design system (DESIGN.md plans, visual audits) |
 | **Tyr** | ᛏ | MiniMax-M3 | $0.30/M · $1.20/M out | Complex implementation, architecture, deep debugging |
-| **Vidarr** | ᛉ | GPT-5.5 | Subscription | Last resort — when all others fail ⚠️ Opt-in: not installed by default |
+| **Vidarr** | ᛉ | GPT-5.5 | Subscription | Last resort — GPT-5.5 |
 | **Forseti** | ᚨ | MiniMax-M3 | $0.30/M · $1.20/M out | Adversarial plan reviewer (edit: deny, audit-only) |
 
 ---

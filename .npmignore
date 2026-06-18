@@ -1,6 +1,3 @@
-# Exclude Vidarr (GPT-5.5) — not shipped by default
-config/agents/vidarr.md
-
 # Exclude test files from npm tarball
 cli/*.test.mjs
 

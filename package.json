@@ -1,7 +1,7 @@
 {
   "name": "bizarharness",
-  "version": "2.1.0",
-  "description": "Norse-pantheon multi-agent system for opencode — 12 agents across 4 cost tiers (Vidarr opt-in) with cost-aware routing and per-project Hindsight memory",
+  "version": "2.1.1",
+  "description": "Norse-pantheon multi-agent system for opencode — 12 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
   "type": "module",
   "bin": {
     "bizarharness": "cli/bin.mjs"
@@ -10,8 +10,7 @@
     "cli/",
     "config/",
     "templates/",
-    "!cli/*.test.mjs",
-    "!config/agents/vidarr.md"
+    "!cli/*.test.mjs"
   ],
   "scripts": {
     "postinstall": "node cli/bin.mjs --postinstall"
