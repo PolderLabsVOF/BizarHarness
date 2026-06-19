@@ -36,6 +36,26 @@ import { homedir } from 'node:os';
 const HOME = homedir();
 const AGENTS_DIR = join(HOME, '.config', 'opencode', 'agents');
 
+// v3.2.0 — agent hierarchy. Odin sits at the top as router; Tyr/Thor/
+// Hermod/Baldr/Mimir report directly to Odin; Forseti is peer-to-Odin
+// for audits; Vidarr is the ultimate fallback. Level 0 = router,
+// 1 = coordinator, 2 = worker, 3 = fallback.
+const HIERARCHY = {
+  odin: { level: 0, parent: null, role: 'router' },
+  forseti: { level: 0, parent: null, role: 'auditor' },
+  tyr: { level: 1, parent: 'odin', role: 'implementer' },
+  thor: { level: 1, parent: 'odin', role: 'implementer' },
+  hermod: { level: 1, parent: 'odin', role: 'gitops' },
+  baldr: { level: 1, parent: 'odin', role: 'designer' },
+  mimir: { level: 1, parent: 'odin', role: 'researcher' },
+  heimdall: { level: 2, parent: 'thor', role: 'executor' },
+  frigg: { level: 2, parent: 'mimir', role: 'qa' },
+  vor: { level: 2, parent: 'mimir', role: 'clarifier' },
+  quick: { level: 2, parent: null, role: 'quick' },
+  'semble-search': { level: 2, parent: 'mimir', role: 'search' },
+  vidarr: { level: 3, parent: null, role: 'fallback' },
+};
+
 // v3.1.0 — Runtime agent status. Persisted in memory; flushed to
 // ~/.config/bizar/agent-status.json so the dashboard can show real
 // activity even after a restart. This is the single source of truth
@@ -196,7 +216,35 @@ function readAgent(name) {
     tasksSucceeded: status.tasksSucceeded || 0,
     tasksFailed: status.tasksFailed || 0,
     isStuck: isStuck(status),
+    // v3.2.0 — hierarchy metadata.
+    level: HIERARCHY[name]?.level ?? 2,
+    parent: HIERARCHY[name]?.parent ?? null,
+    role: HIERARCHY[name]?.role ?? 'unknown',
   };
+}
+
+/** Build a tree representation of the agent hierarchy. */
+export function buildHierarchyTree(agents) {
+  const byParent = new Map();
+  for (const a of agents) {
+    const key = a.parent || '__root__';
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(a);
+  }
+  const seen = new Set();
+  function node(name) {
+    if (seen.has(name)) return null;
+    seen.add(name);
+    const agent = agents.find((a) => a.name === name) || null;
+    const children = (byParent.get(name) || []).map((c) => node(c.name)).filter(Boolean);
+    return {
+      name,
+      agent,
+      children,
+    };
+  }
+  const roots = (byParent.get('__root__') || []).map((a) => node(a.name)).filter(Boolean);
+  return { roots, all: agents };
 }
 
 export const agentsStore = {

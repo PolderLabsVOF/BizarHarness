@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.2.0 — 2026-06-19
+
+### Fixed
+- **Redirect-to-home on click**: form submits and stray `setActiveTab('overview')` calls were triggering unwanted navigation. Digit-key shortcuts (`1`, `2`, …) now bail out when focus is on any focusable form control (`<input>`, `<textarea>`, `<select>`, `<button>`, `<option>`, `<label>`, `[contenteditable]`) or when the target is inside a `<form>`, `[role="dialog"]`, `[contenteditable]`, or `[data-no-key]`. The shell's keyboard handler also short-circuits when `Shift` is held so OS / extension shortcuts pass through cleanly.
+
+### Added
+- **Main task container with auto-delegation**: Submit a task to Odin via the Tasks view's "Submit to Odin" modal. Odin analyzes the title/description, splits it into subtasks using a heuristic (detect `implement / test / docs / design / research / refactor`), assigns each subtask to the best-fit agent based on keyword + tag rules, and best-effort dispatches them to the background-agent infrastructure. New `POST /api/tasks/submit` returns `{ main, subtasks }`. New `src/server/task-delegator.mjs` (411 LoC) + `splitTask` / `matchAgent` / `dispatchToBackground` helpers.
+- **Background agents via tmux**: New Background tab/API bridge (`src/server/background-store.mjs`). Lists all running bg instances from `~/.cache/bizar/bg/*.json`, `~/.config/opencode/bg/`, and `~/.bizar/bg/`, enriches with live tmux session info (active state, last N lines of output), and exposes `sendMessage` / `kill` / `captureOutput` / `attachCommand` operations. New endpoints: `GET /api/background`, `GET /api/background/:id`, `GET /api/background/:id/output`, `POST /api/background/:id/message`, `DELETE /api/background/:id`.
+- **Agent hierarchy**: Each agent has `level` (0=router, 1=coordinator, 2=worker, 3=fallback), `parent` (who delegates to them), and `role`. New `GET /api/agents/hierarchy` returns a tree (roots + flat `all`). 13 agents mapped: Odin & Forseti at level 0; Tyr, Thor, Hermod, Baldr, Mimir report to Odin; Heimdall under Thor; Frigg & Vor under Mimir; Vidarr at level 3 as ultimate fallback. `Agent` type extended with `level` / `parent` / `role`.
+- **Activity canvas**: New Activity tab with a full-graph SVG canvas. All agents, active tasks, and bg instances rendered as nodes. Edges show hierarchy (`parent → child`, accent color), assignment (`agent → task`, info color), and subtask relationships (`task → child task`, dashed muted). Pan/zoom (mouse drag, scroll-wheel), click any node for details. `data-task-parent` added to task cards for cross-linking. New `src/web/views/Activity.tsx` (690 LoC) + `src/web/styles/main.css` `+340` lines for the canvas, controls, legend, and detail panel.
+- **Comment + task injection on canvas nodes**: Click any node to open a 360px detail panel showing the node's meta (type, status, role, model, assignee, priority, started at, description, prompt preview). For bg nodes: live tmux output, refresh button, kill button, send-message input. For all nodes: a per-node activity log + comment thread, plus a quick "Create follow-up task" form. New endpoints: `POST /api/comments` (node-scoped), `POST /api/nodes/:nodeId/tasks` (creates a task tagged with the node id), `POST /api/activity`, `GET /api/activity` (filter by `nodeId` or `kind`).
+- **Activity log**: Append-only JSONL at `~/.config/opencode/activity.jsonl`. Auto-rotates when >5MB. The task delegator writes `task.delegated` events; canvas comments write `node.comment`; node-created tasks write `node.task`. All events are broadcast over WebSocket as `activity:change`. New `src/server/activity-log.mjs` (157 LoC) with `append` / `recent` / `forNode` / `byKind` / `stats`.
+
+### Changed
+- **App.tsx** — imports + mounts the Activity view; broadens the digit-key guard. `VERSION` bumped to `v3.2.0`.
+- **Topbar.tsx** — adds the "Activity" tab (icon: `Activity`).
+- **types.ts** — extends `Agent` with `level` / `parent` / `role`; extends `Task` with `subtasks` (string[]) and `metadata` (Record<string, unknown>).
+- **api.mjs** — adds `/api/tasks/submit`, `/api/agents/hierarchy`, `/api/background[/...]`, `/api/activity`, `/api/comments`, `/api/nodes/:nodeId/tasks`. Bumps `about.version` to `3.2.0`. Reorders the `/api/agents/*` block so `/agents/hierarchy` and `/agents/stuck` are mounted before the `/agents/:name` catch-all.
+- **agents-store.mjs** — `HIERARCHY` map + `level` / `parent` / `role` on every agent snapshot. New `buildHierarchyTree(agents)` exported helper.
+- **tasks-store.mjs** — `create()` now persists `subtasks` and `metadata`; `update()` merges metadata and replaces subtask ids.
+- **diagnostics-store.mjs** — `version` → `3.2.0`.
+
+### Verified
+- Type-check: 0 errors (103 errors → 0; added explicit types in `Activity.tsx` and `Tasks.tsx`).
+- Build: passes (`vite build` — 503 KB JS / 68 KB CSS).
+- Tests: **140/140 pass** (`node --test cli/plan.test.mjs`).
+- Task submission creates subtasks and dispatches to background; round-trips via `POST /api/tasks/submit` for both `impl+test` (thor) and `research+design` (baldr) prompts.
+- Activity canvas renders agents, tasks, and bg instances.
+- All existing endpoints (`/api/agents`, `/api/projects`, `/api/search`, `/api/diagnostics`, `/api/chat`, `/api/plans`, …) still work.
+- The global install at `~/.local/npm/lib/node_modules/@polderlabs/bizar-dash` was synced in place (no publish).
+
 ## v3.1.1 — 2026-06-19
 
 ### Fixed

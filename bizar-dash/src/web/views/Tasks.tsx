@@ -28,6 +28,7 @@ import {
   AlertOctagon,
   Sparkles,
   RefreshCw,
+  Send,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
@@ -376,6 +377,13 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
             <RefreshCw size={14} /> Refresh
           </Button>
           <Button
+            variant="accent"
+            size="sm"
+            onClick={() => openSubmitTaskModal(modal, toast, setTasks, reload, refreshSnapshot)}
+          >
+            <Send size={14} /> Submit to Odin
+          </Button>
+          <Button
             variant="primary"
             size="sm"
             onClick={() => openTaskModal(modal, toast, null, 'queued', setTasks, reload, refreshSnapshot, snapshot.agents)}
@@ -589,6 +597,7 @@ function TaskCard({
         isWorking && !isTimer ? 'is-working' : null,
       )}
       data-task-id={task.id}
+      data-task-parent={task.parent || ''}
       draggable={!isArchivedView}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/task-id', task.id);
@@ -1177,6 +1186,123 @@ function openTaskDetail(
         <Button variant="ghost" onClick={() => modal.close()}>Close</Button>
         <Button variant="primary" onClick={() => { modal.close(); openTaskModal(modal, toast, task, task.status, setTasks, reload, refreshSnapshot, agents); }}>
           <Sparkles size={12} /> Edit basics
+        </Button>
+      </div>
+    ),
+  });
+}
+
+// v3.2.0 — Submit a task to Odin. Odin splits it into subtasks and
+// assigns each to the best-fit agent. Falls back to a regular task
+// create if the delegator route is unavailable (older dashboards).
+function openSubmitTaskModal(
+  modal: ReturnType<typeof useModal>,
+  toast: ReturnType<typeof useToast>,
+  setTasks: (updater: (cur: Task[]) => Task[]) => void,
+  reload: () => Promise<void>,
+  refreshSnapshot: () => Promise<void>,
+) {
+  let titleEl: HTMLInputElement | null = null;
+  let descEl: HTMLTextAreaElement | null = null;
+  let priorityEl: HTMLSelectElement | null = null;
+  let tagsEl: HTMLInputElement | null = null;
+
+  const onSubmit = async () => {
+    const title = (titleEl?.value || '').trim();
+    if (!title) {
+      toast.warning('Title is required.');
+      return;
+    }
+    const description = descEl?.value || '';
+    const priority = priorityEl?.value || 'normal';
+    const tags = (tagsEl?.value || '')
+      .split(',')
+      .map((t: string) => t.trim())
+      .filter(Boolean);
+
+    try {
+      const result = await api.post<{ main: Task; subtasks: Task[] }>('/tasks/submit', {
+        title,
+        description,
+        priority,
+        tags,
+      });
+      const count = (result.subtasks || []).length;
+      toast.success(
+        count > 1
+          ? `Odin split it into ${count} subtasks.`
+          : 'Task submitted to Odin.',
+      );
+      modal.close();
+      if (setTasks) setTasks((cur: Task[]) => [result.main, ...(result.subtasks || []), ...cur]);
+      if (reload) await reload();
+      if (refreshSnapshot) await refreshSnapshot();
+    } catch (err) {
+      toast.error(`Submit failed: ${(err as Error).message}`);
+    }
+  };
+
+  modal.open({
+    title: 'Submit Task to Odin',
+    width: 560,
+    children: (
+      <div className="submit-task-form">
+        <label htmlFor="submit-task-title">
+          Title
+          <input
+            id="submit-task-title"
+            ref={(el) => { titleEl = el; }}
+            className="input"
+            type="text"
+            placeholder="What do you need done?"
+            autoFocus
+          />
+          <span className="field-hint">
+            Odin will analyze this and split it into subtasks assigned to the best agent.
+          </span>
+        </label>
+        <label htmlFor="submit-task-desc">
+          Description
+          <textarea
+            id="submit-task-desc"
+            ref={(el) => { descEl = el; }}
+            className="textarea"
+            rows={5}
+            placeholder="Provide more detail (markdown ok)…"
+          />
+        </label>
+        <div className="task-form-row">
+          <label htmlFor="submit-task-priority" className="task-form-field">
+            Priority
+            <select
+              id="submit-task-priority"
+              ref={(el) => { priorityEl = el; }}
+              className="select"
+              defaultValue="normal"
+            >
+              {PRIORITIES.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </label>
+          <label htmlFor="submit-task-tags" className="task-form-field" style={{ flex: 2 }}>
+            Tags <span className="field-hint">(comma-separated)</span>
+            <input
+              id="submit-task-tags"
+              ref={(el) => { tagsEl = el; }}
+              className="input"
+              type="text"
+              placeholder="backend, auth"
+            />
+          </label>
+        </div>
+      </div>
+    ),
+    footer: (
+      <div className="modal-footer-actions">
+        <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
+        <Button variant="primary" onClick={onSubmit}>
+          <Send size={14} /> Submit to Odin
         </Button>
       </div>
     ),

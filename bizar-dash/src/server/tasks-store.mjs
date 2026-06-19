@@ -146,6 +146,9 @@ export const tasksStore = {
         archived: false,
         workedBy: null,
         dueDate: typeof input.dueDate === 'string' ? input.dueDate : null,
+        // v3.2.0 — fields for the task delegator.
+        subtasks: Array.isArray(input.subtasks) ? input.subtasks : undefined,
+        metadata: input.metadata && typeof input.metadata === 'object' ? input.metadata : undefined,
         createdAt: now,
         updatedAt: now,
         completedAt: null,
@@ -202,6 +205,15 @@ export const tasksStore = {
       }
       if (typeof patch.dueDate === 'string' || patch.dueDate === null) {
         task.dueDate = patch.dueDate || null;
+      }
+      // v3.2.0 — generic metadata bag (used by task-delegator to
+      // record bg instance IDs, dispatch timestamps, etc.).
+      if (patch.metadata && typeof patch.metadata === 'object') {
+        task.metadata = { ...(task.metadata || {}), ...patch.metadata };
+      }
+      // v3.2.0 — main tasks track their subtask ids.
+      if (Array.isArray(patch.subtasks)) {
+        task.subtasks = patch.subtasks.map(String);
       }
 
       task.updatedAt = new Date().toISOString();

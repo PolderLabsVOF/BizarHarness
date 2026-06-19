@@ -4297,3 +4297,343 @@ html[data-animations="false"] * {
     padding: var(--space-3);
   }
 }
+
+/* v3.2.0 ───────────────────────────────────────────────────────────
+   Activity graph canvas + node detail panel.
+   Layout: flex row of (canvas, detail panel). Detail panel is 360px
+   on desktop, hides under 900px. Canvas is the rest of the space.
+   ──────────────────────────────────────────────────────────────── */
+.view-activity {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 600px;
+}
+
+.activity-layout {
+  display: flex;
+  flex: 1;
+  gap: var(--space-4);
+  min-height: 600px;
+}
+
+.activity-canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.activity-canvas svg {
+  display: block;
+}
+
+.activity-zoom-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  box-shadow: var(--shadow-1);
+}
+
+.activity-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: 11px;
+  box-shadow: var(--shadow-1);
+  max-width: 70%;
+}
+
+.activity-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.activity-legend .legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.activity-legend .legend-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+}
+
+.activity-detail {
+  width: 360px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.activity-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  margin-bottom: var(--space-3);
+}
+
+.activity-detail-meta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.activity-detail-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.activity-detail-create,
+.activity-detail-bg,
+.activity-detail-comments {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bg-output {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+}
+
+.bg-output-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.comment-item {
+  padding: 8px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.comment-text {
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.comment-input-row .input {
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .activity-layout {
+    flex-direction: column;
+  }
+  .activity-detail {
+    width: 100%;
+    max-height: 400px;
+  }
+}
+
+/* v3.2.0 ───────────────────────────────────────────────────────────
+   Submit Task to Odin modal — consistent form layout.
+   ──────────────────────────────────────────────────────────────── */
+.submit-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.submit-task-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.submit-task-form label > .field-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.submit-task-form textarea {
+  font-family: var(--font-sans);
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* v3.2.0 ───────────────────────────────────────────────────────────
+   Agents hierarchy tree view.
+   ──────────────────────────────────────────────────────────────── */
+.agent-hierarchy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.agent-level-group {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+}
+
+.agent-level-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-2);
+}
+
+.agent-level-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+}
+
+.agent-card-mini {
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.agent-card-mini-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-card-mini-role {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agent-card-mini-status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  margin-top: 2px;
+  align-self: flex-start;
+}
+
+/* v3.2.0 ───────────────────────────────────────────────────────────
+   Focus rings — consistent across all interactive elements. The
+   previous design relied on browser default focus outlines, which
+   were inconsistent across the app. Apply a uniform ring on every
+   interactive role.
+   ──────────────────────────────────────────────────────────────── */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+.task-card:focus-visible,
+.plan-card:focus-visible,
+.agent-card-mini:focus-visible,
+.activity-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* v3.2.0 — Buttons get a 120ms hover transition for snappiness. */
+.btn,
+.icon-btn {
+  transition: background-color 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+
+/* v3.2.0 — Empty state has a friendlier tone. */
+.empty-state {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty-state h3 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: 16px;
+  color: var(--text);
+}
+
+.empty-state p {
+  font-size: 13px;
+  max-width: 480px;
+  margin: 0 auto var(--space-3);
+}

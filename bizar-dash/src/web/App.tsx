@@ -25,6 +25,7 @@ import { Chat } from './views/Chat';
 import { Agents } from './views/Agents';
 import { Plans } from './views/Plans';
 import { Tasks } from './views/Tasks';
+import { Activity } from './views/Activity';
 import { Config } from './views/Config';
 import { SettingsView } from './views/Settings';
 import { Mods } from './views/Mods';
@@ -49,6 +50,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   agents: Agents,
   plans: Plans,
   tasks: Tasks,
+  activity: Activity,
   config: Config,
   settings: SettingsView,
   mods: Mods,
@@ -56,7 +58,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   skills: Skills,
 };
 
-const VERSION = 'v3.1.1';
+const VERSION = 'v3.2.0';
 
 export function App() {
   return (
@@ -248,14 +250,35 @@ function Shell() {
           return;
         }
       }
-      const t = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      // v3.2.0 — broader guard. Digit-key shortcuts must not fire while
+      // the user is interacting with ANY focusable form control or a
+      // modal/contentEditable region. Previously this only excluded
+      // <input> and <textarea>, which let digit presses through when
+      // focus was on a <select>, <button>, <label>, or contenteditable
+      // node — causing mysterious tab switches (most often back to
+      // "overview" via the `1` shortcut).
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const isFormControl =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        tag === 'button' ||
+        tag === 'option' ||
+        tag === 'label' ||
+        !!target?.isContentEditable;
+      // Inside a form? Even safer: walk up to check.
+      let inForm = false;
+      if (target && typeof target.closest === 'function') {
+        inForm = !!target.closest('form, [role="dialog"], [contenteditable], [data-no-key]');
+      }
       if (
-        t === 'input' ||
-        t === 'textarea' ||
-        (e.target as HTMLElement)?.isContentEditable ||
+        isFormControl ||
+        inForm ||
         e.metaKey ||
         e.ctrlKey ||
-        e.altKey
+        e.altKey ||
+        e.shiftKey
       )
         return;
       const id = map[e.key];

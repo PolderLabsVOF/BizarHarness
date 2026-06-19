@@ -85,7 +85,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.1.1',
+    version: '3.2.0',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -281,6 +281,29 @@ export function createApiRouter({
     const task = await tasksStore.create(projectId, req.body || {});
     broadcast({ type: 'tasks:change', task });
     res.status(201).json(task);
+  }));
+
+  // v3.2.0 — Odin task delegation. Splits the input into subtasks,
+  // matches each to an agent, and dispatches them to the background
+  // agent infrastructure (best-effort).
+  router.post('/tasks/submit', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const { taskDelegator } = await import('./task-delegator.mjs');
+    try {
+      const result = await taskDelegator.submit(req.body || {}, {
+        projectRoot,
+        projectId,
+        state,
+        broadcast,
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      const status = err?.message?.includes('required') ? 400 : 500;
+      res.status(status).json({
+        error: status === 400 ? 'bad_request' : 'submission_failed',
+        message: err?.message || String(err),
+      });
+    }
   }));
 
   router.put('/tasks/:id', wrap(async (req, res) => {
@@ -583,6 +606,15 @@ export function createApiRouter({
     res.json({ stuck: agentsStore.stuck() });
   }));
 
+  // v3.2.0 — Agent hierarchy. Must be defined BEFORE /agents/:name
+  // or Express will treat "hierarchy" as a name.
+  router.get('/agents/hierarchy', wrap(async (_req, res) => {
+    const { buildHierarchyTree } = await import('./agents-store.mjs');
+    const agents = agentsStore.list();
+    const tree = buildHierarchyTree(agents);
+    res.json(tree);
+  }));
+
   router.get('/agents/:name', wrap(async (req, res) => {
     const agent = agentsStore.get(req.params.name);
     if (!agent) {
@@ -662,6 +694,137 @@ export function createApiRouter({
     }
     broadcast({ type: 'agents:change' });
     res.status(204).end();
+  }));
+
+  // v3.2.0 — Agent hierarchy. Tree structure showing parent/child
+  // reporting chains. (Mounted earlier, before /agents/:name — see
+  // /agents/stuck above for the same pattern.)
+
+  // ── /api/background (v3.2.0) ───────────────────────────────────────
+  // Bridge to the plugin's background-agent infrastructure. Lists
+  // active/in-flight bg instances, optionally attaches tmux hints,
+  // and exposes a kill switch + message endpoint.
+  router.get('/background', wrap(async (_req, res) => {
+    const { backgroundStore } = await import('./background-store.mjs');
+    const instances = backgroundStore.list();
+    res.json({ instances, status: backgroundStore.status() });
+  }));
+
+  router.get('/background/:id', wrap(async (req, res) => {
+    const { backgroundStore } = await import('./background-store.mjs');
+    const inst = backgroundStore.get(req.params.id);
+    if (!inst) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.json(inst);
+  }));
+
+  router.get('/background/:id/output', wrap(async (req, res) => {
+    const { backgroundStore } = await import('./background-store.mjs');
+    const lines = Math.min(500, Math.max(1, parseInt(req.query.lines || '50', 10) || 50));
+    const result = backgroundStore.captureOutput(req.params.id, lines);
+    res.json(result);
+  }));
+
+  router.post('/background/:id/message', wrap(async (req, res) => {
+    const { backgroundStore } = await import('./background-store.mjs');
+    const message = (req.body?.message || '').toString();
+    if (!message.trim()) {
+      res.status(400).json({ error: 'bad_request', message: 'message required' });
+      return;
+    }
+    const result = backgroundStore.sendMessage(req.params.id, message);
+    res.json(result);
+  }));
+
+  router.delete('/background/:id', wrap(async (req, res) => {
+    const { backgroundStore } = await import('./background-store.mjs');
+    const result = backgroundStore.kill(req.params.id);
+    if (!result.ok) {
+      // 200 with ok:false is fine — the caller distinguishes via `ok`.
+      res.json(result);
+      return;
+    }
+    broadcast({ type: 'background:change', action: 'kill', id: req.params.id });
+    res.json(result);
+  }));
+
+  // ── /api/activity (v3.2.0) ──────────────────────────────────────────
+  // Append-only event log for the Activity tab + canvas-node details.
+  router.get('/activity', wrap(async (req, res) => {
+    const { activityLog } = await import('./activity-log.mjs');
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '100', 10) || 100));
+    const kind = req.query.kind ? String(req.query.kind) : null;
+    const nodeId = req.query.nodeId ? String(req.query.nodeId) : null;
+    let events;
+    if (nodeId) events = activityLog.forNode(nodeId, limit);
+    else if (kind) events = activityLog.byKind(kind, limit);
+    else events = activityLog.recent(limit);
+    res.json({ events, stats: activityLog.stats() });
+  }));
+
+  router.post('/activity', wrap(async (req, res) => {
+    const { activityLog } = await import('./activity-log.mjs');
+    const event = req.body || {};
+    if (!event.kind) {
+      res.status(400).json({ error: 'bad_request', message: 'kind required' });
+      return;
+    }
+    const record = activityLog.append(event);
+    broadcast({ type: 'activity:change', event: record });
+    res.status(201).json(record);
+  }));
+
+  // ── /api/comments (v3.2.0 — node-scoped, generic) ──────────────────
+  // Comments on any node (agent, task, bg instance, etc.). Stored in
+  // the activity log so they show up in the global stream and the
+  // per-node drilldown.
+  router.post('/comments', wrap(async (req, res) => {
+    const { activityLog } = await import('./activity-log.mjs');
+    const { nodeId, text, author } = req.body || {};
+    if (!nodeId || !text) {
+      res.status(400).json({ error: 'bad_request', message: 'nodeId and text required' });
+      return;
+    }
+    const record = activityLog.append({
+      kind: 'node.comment',
+      nodeId,
+      author: author || 'user',
+      text: String(text).slice(0, 4000),
+    });
+    broadcast({ type: 'comment:new', comment: record });
+    res.status(201).json(record);
+  }));
+
+  // v3.2.0 — Create a task from a canvas node (used by the Activity
+  // tab to spin up follow-up tasks).
+  router.post('/nodes/:nodeId/tasks', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const { title, description, priority, assignee } = req.body || {};
+    if (!title) {
+      res.status(400).json({ error: 'bad_request', message: 'title required' });
+      return;
+    }
+    const task = await tasksStore.create(projectId, {
+      title,
+      description: description || '',
+      priority: ['low', 'normal', 'high'].includes(priority) ? priority : 'normal',
+      assignee: assignee || null,
+      tags: [`node:${req.params.nodeId}`],
+    });
+    // Record in the activity log so it shows up under this node.
+    try {
+      const { activityLog } = await import('./activity-log.mjs');
+      activityLog.append({
+        kind: 'node.task',
+        nodeId: req.params.nodeId,
+        taskId: task.id,
+        title: task.title,
+      });
+    } catch { /* best-effort */ }
+    broadcast({ type: 'tasks:change', task });
+    res.status(201).json(task);
   }));
 
   // ── /api/config ────────────────────────────────────────────────────────

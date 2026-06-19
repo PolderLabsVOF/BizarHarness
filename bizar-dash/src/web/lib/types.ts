@@ -51,6 +51,10 @@ export type Agent = {
   tasksSucceeded?: number;
   tasksFailed?: number;
   isStuck?: boolean;
+  // v3.2.0 — agent hierarchy (parent/level/role).
+  level?: number;
+  parent?: string | null;
+  role?: string;
 };
 
 export type ProjectRecord = {
@@ -222,6 +226,9 @@ export type Task = {
   archived?: boolean;
   workedBy?: string | null;
   dueDate?: string | null;
+  // v3.2.0 — main-task fields from the task delegator.
+  subtasks?: string[];
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;

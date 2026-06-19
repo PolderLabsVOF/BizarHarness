@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Power,
   Sparkles,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -36,6 +37,7 @@ export const TABS: TabDef[] = [
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'plans', label: 'Plans', icon: Map },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+  { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'mods', label: 'Mods', icon: Puzzle },
   { id: 'schedules', label: 'Schedules', icon: Clock },
