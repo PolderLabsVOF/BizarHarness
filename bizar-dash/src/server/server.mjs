@@ -156,7 +156,10 @@ export async function createServer({
     app.get('/m', (_req, res) => {
       res.sendFile(join(DIST_DIR, 'mobile.html'));
     });
-    app.get('/m/*', (_req, res) => {
+    // SPA fallback for /m/* — but ONLY for HTML navigation requests
+    // The negative lookahead (?!assets/) excludes asset paths so they fall
+    // through to the static /assets/* handler above
+    app.get(/^\/m\/(?!assets\/)/, (_req, res) => {
       res.sendFile(join(DIST_DIR, 'mobile.html'));
     });
     app.use(

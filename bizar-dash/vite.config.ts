@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   root: resolve(__dirname, 'src/web'),
-  base: './',
+  base: '/',
   build: {
     outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,

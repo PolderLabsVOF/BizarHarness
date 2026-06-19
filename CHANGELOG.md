@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.5.1 — 2026-06-19
+
+### Fixed
+- **Mobile dashboard blank page on Tailscale**: `mobile.html` used relative asset paths (`./assets/...`) which resolved to `/m/assets/...` when served at `/m`. The server's `/m/*` SPA fallback route intercepted these asset requests and returned HTML instead of JS, causing the mobile bundle to fail to load. Two-part fix:
+  1. Changed `vite.config.ts` `base: './'` → `base: '/'` so all asset paths are absolute
+  2. Tightened the server's `/m/*` SPA fallback to a regex `/^\/m\/(?!assets\/)/` that excludes `/assets/*` paths
+
 ## v3.5.0 — 2026-06-19
 
 ### Added
