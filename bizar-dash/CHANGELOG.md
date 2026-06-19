@@ -1,5 +1,10 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.1.1 — 2026-06-19
+
+### Fixed
+- **Sidebar (and topbar) disappeared on chat/plans/skills tabs.** The "fullscreen" CSS used `position: fixed; inset: 0; z-index: 5` which covered the entire viewport including the sidebar. Now these views fill the content area (`flex: 1`) while the sidebar and topbar stay visible above.
+
 ## v3.0.3 — 2026-06-19
 
 ### Fixed

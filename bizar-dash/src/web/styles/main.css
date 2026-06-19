@@ -262,18 +262,21 @@ pre,
   max-width: none;
 }
 
+/* Immersive views fill their content area, not the viewport.
+   The sidebar and topbar remain visible above. */
 .view-chat-fullscreen,
 .view-plans-fullscreen,
 .view-skills-fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  background: var(--bg);
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
   max-width: none;
   margin: 0;
-  /* Sit below the topbar (z 10) but above everything else. */
+  background: var(--bg);
 }
 
 .view-chat-fullscreen > .chat-layout,
