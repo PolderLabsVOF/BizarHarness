@@ -14,6 +14,8 @@ import {
   Server as ServerIcon,
   RotateCcw,
   Plug,
+  Download,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -71,6 +73,152 @@ const LAYOUTS = [
   { id: 'sidebar', label: 'Sidebar' },
   { id: 'both', label: 'Both' },
 ] as const;
+
+// v3.3.3 — Updates card
+function UpdatesCard() {
+  const toast = useToast();
+  const [status, setStatus] = useState<{
+    current: Record<string, string | null>;
+    latest: Record<string, string | null> | null;
+    checking: boolean;
+    applying: boolean;
+    hasUpdates: boolean;
+    error?: string;
+    results?: Record<string, { ok: boolean; output?: string; error?: string }>;
+  }>({
+    current: {},
+    latest: null,
+    checking: false,
+    applying: false,
+    hasUpdates: false,
+  });
+
+  // Load current versions on mount
+  useEffect(() => {
+    api.get<{ current: Record<string, string | null> }>('/updates/status')
+      .then((r) => setStatus((s) => ({ ...s, current: r.current })))
+      .catch((e) => setStatus((s) => ({ ...s, error: e.message })));
+  }, []);
+
+  const check = async () => {
+    setStatus((s) => ({ ...s, checking: true, error: undefined }));
+    try {
+      const r = await api.get<{
+        current: Record<string, string | null>;
+        latest: Record<string, string | null>;
+        hasUpdates: boolean;
+      }>('/updates/check');
+      setStatus((s) => ({
+        ...s,
+        checking: false,
+        current: r.current,
+        latest: r.latest,
+        hasUpdates: r.hasUpdates,
+      }));
+    } catch (err) {
+      setStatus((s) => ({ ...s, checking: false, error: (err as Error).message }));
+    }
+  };
+
+  const apply = async () => {
+    if (!confirm('Update Bizar to the latest version? The dashboard may need to be restarted.')) return;
+    setStatus((s) => ({ ...s, applying: true, error: undefined }));
+    try {
+      const result = await api.post<Record<string, { ok: boolean; output?: string; error?: string }>>(
+        '/updates/apply',
+        { packages: ['bizar', 'bizar-dash'] },
+      );
+      setStatus((s) => ({
+        ...s,
+        applying: false,
+        results: result,
+        hasUpdates: false,
+      }));
+      toast.success('Update complete. Restart the dashboard to use the new version.');
+    } catch (err) {
+      setStatus((s) => ({ ...s, applying: false, error: (err as Error).message }));
+    }
+  };
+
+  const packages = [
+    { id: 'bizar', name: 'Bizar CLI' },
+    { id: 'bizar-dash', name: 'Dashboard' },
+    { id: 'bizar-plugin', name: 'Opencode Plugin' },
+  ];
+
+  return (
+    <Card title="Updates">
+      <div className="updates-current">
+        <h4>Installed versions</h4>
+        <ul>
+          {packages.map((p) => (
+            <li key={p.id}>
+              <span>{p.name}</span>
+              <code className="mono">{status.current[p.id] || '—'}</code>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="updates-actions">
+        <Button onClick={check} disabled={status.checking || status.applying}>
+          {status.checking ? <span className="btn-spinner" /> : <RefreshCw size={14} />}
+          Check for updates
+        </Button>
+        {status.latest && (
+          <Button
+            variant="primary"
+            onClick={apply}
+            disabled={!status.hasUpdates || status.applying}
+          >
+            {status.applying ? <span className="btn-spinner" /> : <Download size={14} />}
+            {status.hasUpdates ? 'Update now' : 'Up to date'}
+          </Button>
+        )}
+      </div>
+
+      {status.latest && (
+        <div className="updates-latest">
+          <h4>Latest available</h4>
+          <ul>
+            {packages.map((p) => {
+              const cur = status.current[p.id];
+              const lat = status.latest?.[p.id];
+              const isOutdated = cur && lat && cur !== lat;
+              return (
+                <li key={p.id} className={isOutdated ? 'updates-outdated' : 'updates-current-version'}>
+                  <span>{p.name}</span>
+                  <code className="mono">
+                    {lat || '—'}
+                    {isOutdated && <span className="updates-badge">update available</span>}
+                  </code>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {status.error && (
+        <div className="updates-error">
+          <AlertTriangle size={14} />
+          <span>{status.error}</span>
+        </div>
+      )}
+
+      {status.results && (
+        <div className="updates-results">
+          <h4>Update results</h4>
+          {Object.entries(status.results).map(([pkg, r]) => (
+            <div key={pkg} className={`updates-result ${r.ok ? 'ok' : 'err'}`}>
+              <strong>{pkg}</strong>: {r.ok ? 'updated' : `failed: ${r.error}`}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   const toast = useToast();
@@ -393,6 +541,8 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <span>Enable animations</span>
           </label>
         </Card>
+
+        <UpdatesCard />
 
         <Card>
           <CardTitle><LayoutIcon size={14} /> UI layout</CardTitle>

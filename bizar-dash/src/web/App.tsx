@@ -71,7 +71,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   skills: Skills,
 };
 
-  const VERSION = 'v3.3.2';
+  const VERSION = 'v3.3.3';
 
 export function App() {
   return (

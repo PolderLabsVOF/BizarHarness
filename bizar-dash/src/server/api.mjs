@@ -31,6 +31,7 @@ import { tailscaleStore } from './tailscale-store.mjs';
 import { plansStore } from './plans-store.mjs';
 import { skillsStore } from './skills-store.mjs';
 import { notificationsStore } from './notifications-store.mjs';
+import { updateStore } from './update-store.mjs';
 
 const HOME = homedir();
 const OPENCODE_DIR = join(HOME, '.config', 'opencode');
@@ -86,7 +87,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.3.2',
+    version: '3.3.3',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -1388,6 +1389,40 @@ export function createApiRouter({
     }
     broadcast({ type: 'plan:change', slug: req.params.slug });
     res.status(204).end();
+  }));
+
+  // ── /api/updates (v3.3.3) ──────────────────────────────────────────
+  router.get('/updates/status', wrap(async (_req, res) => {
+    res.json({ current: updateStore.current() });
+  }));
+
+  router.get('/updates/check', wrap(async (_req, res) => {
+    try {
+      const current = updateStore.current();
+      const latest = await updateStore.latest();
+      res.json({
+        current,
+        latest,
+        hasUpdates: updateStore.hasUpdates(current, latest),
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'check_failed', message: err.message });
+    }
+  }));
+
+  router.post('/updates/apply', wrap(async (req, res) => {
+    const packages = req.body?.packages || ['bizar', 'bizar-dash'];
+    try {
+      const result = await updateStore.apply({
+        packages,
+        broadcast: (msg) => {
+          if (typeof broadcast === 'function') broadcast(msg);
+        },
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: 'apply_failed', message: err.message });
+    }
   }));
 
   // ── /api/health ───────────────────────────────────────────────────────

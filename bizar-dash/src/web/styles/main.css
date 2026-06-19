@@ -5110,3 +5110,81 @@ select:focus-visible,
   max-width: 480px;
   margin: 0 auto var(--space-3);
 }
+
+/* v3.3.3 — Updates card */
+.updates-current ul,
+.updates-latest ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.updates-current li,
+.updates-latest li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.updates-current-version code {
+  color: var(--success);
+}
+
+.updates-outdated {
+  background: var(--accent-bg);
+}
+
+.updates-outdated code {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.updates-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.updates-actions {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.updates-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--accent-bg);
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  color: var(--error);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.updates-results {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 6px;
+}
+
+.updates-result.ok {
+  color: var(--success);
+}
+
+.updates-result.err {
+  color: var(--error);
+}

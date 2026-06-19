@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.3.3 — 2026-06-19
+
+### Added
+- **Updates card in Settings**: shows currently installed versions of `@polderlabs/bizar`, `@polderlabs/bizar-dash`, and `@polderlabs/bizar-plugin`. "Check for updates" button queries npm for latest versions. "Update now" button runs `npm install -g @latest --ignore-scripts`. Progress and result displayed in the card.
+
+### API
+- `GET /api/updates/status` — current installed versions
+- `GET /api/updates/check` — current + latest (queries npm)
+- `POST /api/updates/apply` body `{ packages: [...] }` — run updates
+
 ## v3.3.2 — 2026-06-19
 
 ### Fixed
