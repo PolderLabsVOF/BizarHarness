@@ -9,6 +9,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <script>
+      // v3.5.0 — Auto-redirect to /m on mobile devices
+      (function () {
+        var isMobile =
+          window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches ||
+          /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        var wantsDesktop = new URLSearchParams(window.location.search).has('desktop');
+        if (isMobile && !wantsDesktop && !window.location.pathname.startsWith('/m')) {
+          window.location.replace('/m' + window.location.pathname + window.location.search);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

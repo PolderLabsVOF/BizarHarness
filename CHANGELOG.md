@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.5.0 — 2026-06-19
+
+### Added
+- **Mobile dashboard at `/m`**: New mobile-friendly version of the Bizar dashboard optimized for phones (320px-768px wide). Features bottom navigation bar (5 tabs: Activity, Chat, Tasks, Settings, More), single-column layouts, 44px touch targets, sticky bottom chat composer, and touch-first interactions. Auto-redirects mobile users from `/` to `/m`. Use `?desktop=1` to bypass the redirect.
+
+### API
+- `GET /m` — serves the mobile dashboard HTML entry
+- `GET /m/*` — serves the mobile dashboard HTML entry
+
+### Files
+- `bizar-dash/src/web/mobile.html` — mobile HTML entry point
+- `bizar-dash/src/web/mobile.tsx` — mobile React entry point
+- `bizar-dash/src/web/MobileApp.tsx` — mobile shell with bottom nav + tab routing
+- `bizar-dash/src/web/mobile/MobileTopbar.tsx` — compact top bar (48px)
+- `bizar-dash/src/web/mobile/MobileBottomNav.tsx` — bottom navigation (56px)
+- `bizar-dash/src/web/mobile/views/MobileActivity.tsx` — quick stats + activity feed
+- `bizar-dash/src/web/mobile/views/MobileChat.tsx` — messages + sticky composer
+- `bizar-dash/src/web/mobile/views/MobileTasks.tsx` — vertical task list by status
+- `bizar-dash/src/web/mobile/views/MobileSettings.tsx` — theme/project/about settings
+- `bizar-dash/src/web/mobile/views/MobileMore.tsx` — agents, plans, projects, mods
+- `bizar-dash/src/web/styles/mobile.css` — mobile-specific CSS (44px tap targets, safe areas, sticky nav)
+
 ## v3.4.1 — 2026-06-19
 
 ### Fixed (CRITICAL)

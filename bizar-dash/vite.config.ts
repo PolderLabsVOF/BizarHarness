@@ -14,7 +14,10 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
-      input: resolve(__dirname, 'src/web/index.html'),
+      input: {
+        main: resolve(__dirname, 'src/web/index.html'),
+        mobile: resolve(__dirname, 'src/web/mobile.html'),
+      },
     },
   },
   server: {

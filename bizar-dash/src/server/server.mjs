@@ -152,11 +152,18 @@ export async function createServer({
         express.static(assetsDir, { maxAge: '1y', immutable: true, index: false }),
       );
     }
+    // v3.5.0 — Mobile dashboard at /m
+    app.get('/m', (_req, res) => {
+      res.sendFile(join(DIST_DIR, 'mobile.html'));
+    });
+    app.get('/m/*', (_req, res) => {
+      res.sendFile(join(DIST_DIR, 'mobile.html'));
+    });
     app.use(
       express.static(DIST_DIR, {
         extensions: ['html'],
         setHeaders: (res, filePath) => {
-          if (filePath.endsWith('index.html')) {
+          if (filePath.endsWith('index.html') || filePath.endsWith('mobile.html')) {
             res.setHeader('Cache-Control', 'no-cache');
           }
         },
