@@ -12,6 +12,7 @@ import {
   Sliders,
   Puzzle,
   Clock,
+  History as HistoryIcon,
   Search as SearchIcon,
   ChevronDown,
   Plus,
@@ -41,6 +42,7 @@ export const TABS: TabDef[] = [
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'mods', label: 'Mods', icon: Puzzle },
   { id: 'schedules', label: 'Schedules', icon: Clock },
+  { id: 'history', label: 'History', icon: HistoryIcon },
   { id: 'config', label: 'Config', icon: Settings2 },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];

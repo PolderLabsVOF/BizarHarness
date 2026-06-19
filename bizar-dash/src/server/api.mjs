@@ -87,7 +87,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.3.3',
+    version: '3.4.0',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -800,6 +800,60 @@ export function createApiRouter({
     const record = activityLog.append(event);
     broadcast({ type: 'activity:change', event: record });
     res.status(201).json(record);
+  }));
+
+  // ── /api/history (v3.4.0) ────────────────────────────────────────────
+  // Cross-project history view: aggregates activity log events with
+  // per-project task / plan counts. Supports date filtering.
+  router.get('/history', wrap(async (req, res) => {
+    const { activityLog } = await import('./activity-log.mjs');
+    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit || '500', 10) || 500));
+    const sinceStr = req.query.since ? String(req.query.since) : null;
+    const since = sinceStr ? new Date(sinceStr).getTime() : null;
+    const events = activityLog.recent(limit)
+      .filter((e) => {
+        if (!since) return true;
+        const t = new Date(e.ts).getTime();
+        return Number.isFinite(t) && t >= since;
+      })
+      .reverse(); // oldest-first for timeline display
+
+    // Per-project rollups
+    const projectTasks = {};
+    const projectPlans = {};
+    const projects = projectsStore.list();
+    for (const p of projects) {
+      try {
+        const tasks = tasksStore.loadTasks(p.id);
+        projectTasks[p.id] = {
+          total: tasks.length,
+          done: tasks.filter((t) => t.status === 'done').length,
+          doing: tasks.filter((t) => t.status === 'doing').length,
+          blocked: tasks.filter((t) => t.status === 'blocked').length,
+          queued: tasks.filter((t) => t.status === 'queued').length,
+        };
+      } catch {
+        projectTasks[p.id] = { total: 0, done: 0, doing: 0, blocked: 0, queued: 0 };
+      }
+    }
+    try {
+      const plans = plansStore.list(projectRoot);
+      for (const plan of plans) {
+        const pid = plan.projectId || 'global';
+        projectPlans[pid] = (projectPlans[pid] || 0) + 1;
+      }
+    } catch { /* best-effort */ }
+
+    res.json({
+      events,
+      projects: projects.map((p) => ({
+        ...p,
+        tasks: projectTasks[p.id] || { total: 0, done: 0, doing: 0, blocked: 0, queued: 0 },
+        plans: projectPlans[p.id] || 0,
+      })),
+      stats: activityLog.stats(),
+      generatedAt: new Date().toISOString(),
+    });
   }));
 
   // ── /api/comments (v3.2.0 — node-scoped, generic) ──────────────────

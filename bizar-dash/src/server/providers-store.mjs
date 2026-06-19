@@ -126,13 +126,34 @@ export const mcpsStore = {
   list() {
     const cfg = loadConfig();
     const mcps = cfg.mcp || {};
-    return Object.entries(mcps).map(([id, m]) => ({
-      id,
-      command: m.command || '',
-      args: Array.isArray(m.args) ? m.args : [],
-      env: m.env || {},
-      enabled: m.enabled !== false,
-    }));
+    return Object.entries(mcps).map(([id, m]) => {
+      const isRemote = m?.type === 'remote';
+      // Local MCP: command is an array in newer opencode.json. Older
+      // format had separate `command` (string) + `args` (array). Normalize.
+      const command = isRemote
+        ? ''
+        : Array.isArray(m.command)
+          ? m.command.join(' ')
+          : (m.command || '');
+      const args = isRemote
+        ? []
+        : Array.isArray(m.command)
+          ? m.command
+          : Array.isArray(m.args)
+            ? m.args
+            : [];
+      return {
+        id,
+        type: isRemote ? 'remote' : 'local',
+        command,
+        args,
+        env: m.env || {},
+        url: m.url || '',
+        headers: m.headers || {},
+        oauth: !!m.oauth,
+        enabled: m.enabled !== false,
+      };
+    });
   },
 
   get(id) {
@@ -147,12 +168,23 @@ export const mcpsStore = {
     const cfg = loadConfig();
     cfg.mcp = cfg.mcp || {};
     if (cfg.mcp[input.id]) throw new Error(`mcp "${input.id}" exists`);
-    cfg.mcp[input.id] = {
-      command: input.command || '',
-      args: Array.isArray(input.args) ? input.args : [],
-      env: input.env || {},
-      enabled: input.enabled !== false,
-    };
+    const isRemote = input.type === 'remote';
+    cfg.mcp[input.id] = isRemote
+      ? {
+          type: 'remote',
+          url: input.url || '',
+          headers: input.headers || {},
+          oauth: !!input.oauth,
+          enabled: input.enabled !== false,
+        }
+      : {
+          type: 'local',
+          command: Array.isArray(input.args) && input.args.length > 0
+            ? [input.command || '', ...input.args].filter(Boolean)
+            : (input.command || ''),
+          enabled: input.enabled !== false,
+          ...(input.env && Object.keys(input.env).length > 0 ? { env: input.env } : {}),
+        };
     saveConfig(cfg);
     return this.get(input.id);
   },
@@ -163,12 +195,29 @@ export const mcpsStore = {
     cfg.mcp = cfg.mcp || {};
     const cur = cfg.mcp[id];
     if (!cur) throw new Error(`mcp "${id}" not found`);
-    cfg.mcp[id] = {
-      command: patch.command ?? cur.command,
-      args: Array.isArray(patch.args) ? patch.args : cur.args,
-      env: patch.env || cur.env,
-      enabled: patch.enabled ?? cur.enabled,
-    };
+    const wasRemote = cur.type === 'remote';
+    const isRemote = patch.type ? patch.type === 'remote' : wasRemote;
+    if (isRemote) {
+      cfg.mcp[id] = {
+        type: 'remote',
+        url: patch.url ?? cur.url ?? '',
+        headers: patch.headers ?? cur.headers ?? {},
+        oauth: patch.oauth ?? cur.oauth ?? false,
+        enabled: patch.enabled ?? cur.enabled ?? true,
+      };
+    } else {
+      const nextCommand = Array.isArray(patch.args) && patch.args.length > 0
+        ? [patch.command ?? cur.command ?? '', ...patch.args].filter(Boolean)
+        : (patch.command ?? cur.command ?? '');
+      cfg.mcp[id] = {
+        type: 'local',
+        command: nextCommand,
+        enabled: patch.enabled ?? cur.enabled ?? true,
+        ...((patch.env && Object.keys(patch.env).length > 0) || cur.env
+          ? { env: patch.env ?? cur.env ?? {} }
+          : {}),
+      };
+    }
     saveConfig(cfg);
     return this.get(id);
   },

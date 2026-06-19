@@ -1,4 +1,4 @@
-// src/views/Overview.tsx — system overview: project picker + counts + activity.
+// src/views/Overview.tsx — v3.4.0 hero textbox takes the focus, no card wrapper.
 import { useEffect, useRef, useState } from 'react';
 import {
   Bot,
@@ -15,8 +15,8 @@ import {
   Plus,
   Trash2,
   Power,
-  Search as SearchIcon,
   Send,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -178,39 +178,15 @@ export function Overview({
 
   return (
     <div className="view view-overview">
-      <header className="view-header">
-        <div className="view-header-text">
-          <h2 className="view-title">
-            <LayoutDashboard size={18} />
-            System Overview
-          </h2>
-          <p className="view-subtitle">
-            {projects.length} project{projects.length === 1 ? '' : 's'} ·
-            {' '}{overview.counts.agents} agents ·
-            {' '}{overview.counts.sessions} session{overview.counts.sessions === 1 ? '' : 's'}
-          </p>
-        </div>
-        <div className="view-actions">
-          <Button variant="secondary" size="sm" onClick={onUseCurrentDir} title="Register the server's working directory as a project">
-            <Plus size={14} /> Use current dir
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onAddProject}>
-            <Plus size={14} /> Add project
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onRefresh}>
-            <RefreshCw size={14} /> Refresh
-          </Button>
-        </div>
-      </header>
-
-      {/* v3.3.2 — Hero text input: "What would you like to do?" */}
-      <div className="overview-hero">
-        <h1 className="overview-hero-title">What would you like to do?</h1>
+      {/* v3.4.0 — Hero takes the spotlight. No card wrapper. */}
+      <div className="overview-hero-noframe">
+        <h1>What do you want to do?</h1>
         <p className="overview-hero-subtitle">
-          Odin will split it into tasks, create a plan, and delegate to background agents.
+          Describe what you want — Odin will split it into tasks, create a plan,
+          delegate to background agents, and track progress in real time.
         </p>
         <form
-          className="overview-hero-form"
+          className="overview-hero-form-noframe"
           onSubmit={async (e) => {
             e.preventDefault();
             const text = (inputRef.current?.value || '').trim();
@@ -230,24 +206,29 @@ export function Overview({
         >
           <textarea
             ref={inputRef}
-            className="overview-hero-input"
-            placeholder="e.g. Implement user authentication with email/password and add tests"
-            rows={3}
+            className="overview-input-hero"
+            placeholder="e.g. Implement user authentication with email + password, including registration, login, password reset, and integration tests. Use Bcrypt, JWT tokens, and the existing API style."
             disabled={submitting}
           />
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            disabled={submitting}
-          >
-            {submitting ? <Spinner size="sm" /> : <Send size={16} />}
-            Submit to Odin
-          </Button>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              disabled={submitting}
+            >
+              {submitting ? <Spinner size="sm" /> : <Send size={16} />}
+              Submit to Odin
+            </Button>
+            <span className="muted" style={{ fontSize: 12 }}>
+              <Sparkles size={12} style={{ display: 'inline', verticalAlign: -2, color: 'var(--accent)' }} />
+              {' '}Odin + 12 specialist agents available
+            </span>
+          </div>
         </form>
 
-        <div className="overview-quick-actions">
-          {['Implement feature', 'Fix bug', 'Refactor', 'Investigate', 'Add tests', 'Document'].map((action) => (
+        <div className="overview-quick-actions-row">
+          {['Implement feature', 'Fix bug', 'Refactor', 'Investigate', 'Add tests', 'Document', 'Optimize', 'Deploy'].map((action) => (
             <button
               key={action}
               type="button"
@@ -265,13 +246,45 @@ export function Overview({
         </div>
       </div>
 
+      <div className="overview-feed">
+        <h2>Recent activity</h2>
+        {overview.recentActivity.length === 0 ? (
+          <div className="muted" style={{ padding: '24px 0', fontSize: 13 }}>
+            No activity yet. Use the chat above or invoke a Bizar command to start a feed.
+          </div>
+        ) : (
+          <ul className="activity-list">
+            {overview.recentActivity.slice(0, 30).map((it, idx) => (
+              <li key={idx} className="activity-item">
+                <span className="activity-ts tabular-nums">
+                  {formatRelative(it.ts)}
+                </span>
+                <span className="activity-kind">{it.kind}</span>
+                <span className="activity-msg">{formatActivity(it)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* v3.4.0 — Below-the-fold: projects + meta (compact) */}
       <Card className="project-picker">
         <CardTitle>
           <Folder size={14} /> Projects
+          <Button variant="ghost" size="sm" style={{ marginLeft: 'auto' }} onClick={onAddProject}>
+            <Plus size={12} /> Add
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onUseCurrentDir} title="Use the server's working directory">
+            <Plus size={12} /> Auto-detect
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onRefresh} title="Refresh">
+            <RefreshCw size={12} />
+          </Button>
         </CardTitle>
         <CardMeta>
-          Click "Open" to switch the active project. Per-project data lives in
-          {' '}<code>~/.config/opencode/projects/&lt;id&gt;/</code>.
+          {projects.length} project{projects.length === 1 ? '' : 's'} ·
+          {' '}{overview.counts.agents} agents ·
+          {' '}{overview.counts.sessions} session{overview.counts.sessions === 1 ? '' : 's'}
         </CardMeta>
         {projects.length === 0 ? (
           <EmptyState
@@ -305,32 +318,6 @@ export function Overview({
       </Card>
 
       <div className="overview-cols">
-        <Card>
-          <CardTitle>
-            <Zap size={14} /> Recent activity
-          </CardTitle>
-          <CardMeta>Last 30 events</CardMeta>
-          {overview.recentActivity.length === 0 ? (
-            <EmptyState
-              icon={<FileText size={28} />}
-              title="No activity yet"
-              message="Use the chat or invoke a Bizar command to start a feed."
-            />
-          ) : (
-            <ul className="activity-list">
-              {overview.recentActivity.slice(0, 30).map((it, idx) => (
-                <li key={idx} className="activity-item">
-                  <span className="activity-ts tabular-nums">
-                    {formatRelative(it.ts)}
-                  </span>
-                  <span className="activity-kind">{it.kind}</span>
-                  <span className="activity-msg">{formatActivity(it)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
         <Card>
           <CardTitle>Mods</CardTitle>
           <CardMeta>Extensions installed under <code>~/.config/bizar/mods/</code></CardMeta>

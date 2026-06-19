@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.4.0 — 2026-06-19
+
+### Fixed
+- **Pervasive theme bug — all colors + shadows now respond to theme change**. Audit of every hardcoded `rgba(0,0,0,...)` / `rgba(139,92,246,...)` / `rgba(248,113,113,...)` / `rgba(52,211,153,...)` in `main.css`. Replaced with theme-aware CSS variables: `--accent-glow`, `--accent-soft`, `--success-soft`, `--error-soft`, `--warning-soft`, `--overlay-bg`, `--shadow-color-strong`. Sidebar tab text colors, drop shadows on cards, modal backdrops, status pills, badge borders, focus rings, WebSocket indicator, brand-logo glow, and button hover backgrounds all switch correctly between dark/light.
+
+### Added
+- **Config page rewrite — sidebar nav + fully editable Providers/MCPs**: two-column layout with left nav (OpenCode / Providers / MCPs / Diagnostics / Export). Add, edit, delete, toggle on/off for both providers and MCPs through proper modal forms. Provider fields: id, name, base URL, API key (masked), models (list), enabled toggle. MCP fields: id, type (local/remote), command + args OR URL + headers + OAuth, enabled toggle.
+- **MCP store — supports new opencode.json format**: handles `command: [...]` array, `type: "remote"` with `url`/`headers`/`oauth`, and the legacy `command: "string"` + `args: [...]` shape.
+- **Tasks horizontal kanban**: 4 columns (Queued / Doing / Blocked / Done) side-by-side. On narrow viewports, columns scroll horizontally with scroll-snap. Card drag-drop with smooth highlight on hover-target.
+- **Tasks compact toolbar**: single-row layout with grouped Search / Filter / Sort labels + actions on the right. Replaces the previous oversized button row.
+- **Activity visual timeline canvas**: new "Timeline" mode (alongside existing Graph view). X-axis = time, Y-axis = lane per agent (+ system, plans, bg). Events render as colored circles on their lane with hover tooltips. Time axis with hour:minute ticks. Lane separators. Event kind filter. Zoom in/out. Click event → opens node detail panel.
+- **Overview — big no-frame hero**: replaced card wrapper with `.overview-hero-noframe`. 48px gradient title (`var(--text-strong)` → `var(--accent)`). 160px min-height textarea with glow focus ring. Quick-action chips in a centered row.
+- **History view (new tab)**: cross-project history with time range filter (1h / 1d / 7d / 30d / all). Per-project expandable timeline rows showing recent events. Project stats (tasks done/doing/blocked/queued, plan count, last opened). Global events section. JSON export. Tag in Topbar.
+- **New `/api/history` endpoint**: aggregates activity log events with per-project task + plan counts. Supports `?since=` and `?limit=` query params.
+
+### API
+- `GET /api/history?since=&limit=` — cross-project history
+- `GET /api/config/providers` — list (was already there, now reliable)
+- `POST /api/config/providers` — add (was already there)
+- `PUT /api/config/providers/:id` — update (was already there)
+- `DELETE /api/config/providers/:id` — remove (was already there)
+- `GET /api/config/mcps` — list, now with type/url/headers/oauth fields
+- `POST /api/config/mcps` — add, handles local + remote
+- `PUT /api/config/mcps/:id` — update
+- `DELETE /api/config/mcps/:id` — remove
+
+### Plan
+- `plans/v3-4-0-ui-overhaul/` — visual plan tracking the UI overhaul work
+
 ## v3.3.3 — 2026-06-19
 
 ### Added

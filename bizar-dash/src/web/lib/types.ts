@@ -317,9 +317,13 @@ export type Provider = {
 
 export type McpServer = {
   id: string;
+  type?: 'local' | 'remote';
   command: string;
   args: string[];
   env: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  oauth?: boolean;
   enabled: boolean;
 };
 

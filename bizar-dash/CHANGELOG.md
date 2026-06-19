@@ -1,5 +1,28 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.4.0 — 2026-06-19
+
+### Fixed
+- **Pervasive theme bug — all colors + shadows now respond to theme change**. Audit of every hardcoded `rgba(...)` in `main.css`. Replaced with theme-aware CSS variables: `--accent-glow`, `--accent-soft`, `--success-soft`, `--error-soft`, `--warning-soft`, `--overlay-bg`, `--shadow-color-strong`. Sidebar text, drop shadows, modal backdrops, status pills, badge borders, focus rings all switch correctly between dark/light.
+
+### Added
+- **Config page rewrite — sidebar nav + fully editable Providers/MCPs**: two-column layout with left nav (OpenCode / Providers / MCPs / Diagnostics / Export). Add, edit, delete, toggle for both providers and MCPs through proper modal forms.
+- **MCP store — supports new opencode.json format**: handles `command: [...]` array, `type: "remote"` with `url`/`headers`/`oauth`, and the legacy `command: "string"` + `args: [...]` shape.
+- **Tasks horizontal kanban**: 4 columns side-by-side with horizontal scroll fallback on narrow viewports.
+- **Tasks compact toolbar**: single-row layout with grouped Search / Filter / Sort labels + actions on the right.
+- **Activity visual timeline canvas**: new "Timeline" mode (alongside Graph view). X-axis = time, Y-axis = lane per agent. Event kind filter, zoom controls, hover tooltips, click-to-detail.
+- **Overview — big no-frame hero**: 48px gradient title, 160px min-height textarea, glow focus ring, quick-action chips.
+- **History view (new tab)**: cross-project history with time range filter, per-project expandable timelines, JSON export.
+- **New `/api/history` endpoint** with `?since=` + `?limit=` query params.
+
+### Changed
+- `about.version` → `3.4.0` in `api.mjs`; `VERSION` → `v3.4.0` in `App.tsx`; diagnostics-store `version` → `3.4.0`.
+
+### Verified
+- TypeScript: 0 errors.
+- Vite build: success (537 KB JS, 85 KB CSS).
+- Existing test suite: 140/140 pass.
+
 ## v3.3.0 — 2026-06-19
 
 ### Fixed

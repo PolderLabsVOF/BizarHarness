@@ -32,6 +32,7 @@ import { SettingsView } from './views/Settings';
 import { Mods } from './views/Mods';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
+import { History } from './views/History';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
 import { AlertTriangle, X } from 'lucide-react';
@@ -69,9 +70,10 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   mods: Mods,
   schedules: Schedules,
   skills: Skills,
+  history: History,
 };
 
-  const VERSION = 'v3.3.3';
+  const VERSION = 'v3.4.0';
 
 export function App() {
   return (

@@ -1,4 +1,4 @@
-// src/views/Config.tsx — v3: collapsible Advanced section + Diagnostics + Providers + MCPs.
+// src/views/Config.tsx — v3.4.0: sidebar nav + fully editable providers/MCPs.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings2,
@@ -6,23 +6,24 @@ import {
   RefreshCw,
   Save,
   FileCode2,
-  ChevronDown,
-  ChevronRight,
   Stethoscope,
   Server as ServerIcon,
   Plug,
   Plus,
   Trash2,
+  Pencil,
   Download,
   Activity,
-  AlertCircle,
+  Wrench,
+  Database,
+  History as HistoryIcon,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
 import { api } from '../lib/api';
-import { cn, debounce, hashText, formatRelative } from '../lib/utils';
+import { cn, debounce, hashText } from '../lib/utils';
 import { JsonHighlight } from '../lib/markdown';
 import type {
   ConfigResponse,
@@ -41,10 +42,23 @@ type Props = {
   refreshSnapshot: () => Promise<void>;
 };
 
+type NavId = 'opencode' | 'providers' | 'mcps' | 'diagnostics' | 'export';
+
+const NAV_ITEMS: { id: NavId; label: string; icon: typeof Settings2; desc: string }[] = [
+  { id: 'opencode', label: 'OpenCode config', icon: FileCode2, desc: 'Edit opencode.json directly' },
+  { id: 'providers', label: 'Providers', icon: ServerIcon, desc: 'AI providers + API keys' },
+  { id: 'mcps', label: 'MCPs', icon: Plug, desc: 'Model Context Protocol servers' },
+  { id: 'diagnostics', label: 'Diagnostics', icon: Stethoscope, desc: 'Service health + counts' },
+  { id: 'export', label: 'Export / Import', icon: Download, desc: 'Download diagnostics bundle' },
+];
+
 export function Config({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
   const modal = useModal();
   const initial: ConfigResponse | undefined = snapshot.config;
+  const [activeNav, setActiveNav] = useState<NavId>('opencode');
+
+  // OpenCode editor state
   const [original, setOriginal] = useState<string>(
     initial?.raw || (initial?.data ? JSON.stringify(initial.data, null, 2) : ''),
   );
@@ -56,12 +70,14 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [path, setPath] = useState<string>(initial?.path || '');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Diagnostics state
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+
+  // Providers + MCPs state — re-fetch when nav switches so we always have fresh data.
   const [providers, setProviders] = useState<Provider[]>(snapshot.providers || []);
   const [mcps, setMcps] = useState<McpServer[]>(snapshot.mcps || []);
-  const [activeAdvTab, setActiveAdvTab] = useState<string>('config');
-  const taRef = useRef<HTMLTextAreaElement>(null);
 
   const originalHash = useMemo(() => hashText(original), [original]);
 
@@ -70,7 +86,7 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
     if (snapshot.mcps) setMcps(snapshot.mcps);
   }, [snapshot.providers, snapshot.mcps]);
 
-  const reload = async () => {
+  const reloadConfig = async () => {
     try {
       const d = await api.post<ConfigResponse>('/config/reload');
       const raw = d.raw || (d.data ? JSON.stringify(d.data, null, 2) : '');
@@ -83,6 +99,32 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
       toast.error(`Reload failed: ${(err as Error).message}`);
     }
   };
+
+  const reloadProviders = async () => {
+    try {
+      const r = await api.get<{ providers: Provider[] }>('/config/providers');
+      setProviders(r.providers || []);
+    } catch (err) {
+      toast.error(`Providers load failed: ${(err as Error).message}`);
+    }
+  };
+
+  const reloadMcps = async () => {
+    try {
+      const r = await api.get<{ mcps: McpServer[] }>('/config/mcps');
+      setMcps(r.mcps || []);
+    } catch (err) {
+      toast.error(`MCPs load failed: ${(err as Error).message}`);
+    }
+  };
+
+  // Reload data when nav changes so each panel shows fresh server data.
+  useEffect(() => {
+    if (activeNav === 'providers' && providers.length === 0) reloadProviders();
+    if (activeNav === 'mcps' && mcps.length === 0) reloadMcps();
+    if (activeNav === 'diagnostics' && !diagnostics) loadDiagnostics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNav]);
 
   const applyEdit = (val: string) => {
     setParsed((cur) => {
@@ -107,10 +149,6 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
     [originalHash],
   );
 
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    applyEdit(e.target.value);
-  };
-
   const save = async () => {
     if (!parsed.data || parsed.error || saving) return;
     setSaving(true);
@@ -122,6 +160,9 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
       setDirty(false);
       toast.success('Config saved.');
       await refreshSnapshot();
+      // Re-fetch providers + MCPs because config may have changed.
+      await reloadProviders();
+      await reloadMcps();
     } catch (err) {
       toast.error(`Save failed: ${(err as Error).message}`);
     } finally {
@@ -138,20 +179,14 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  useEffect(() => {
-    if (advancedOpen && !diagnostics) {
-      loadDiagnostics();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [advancedOpen]);
-
-  const onDownloadDiagnostics = async () => {
-    // Build a small bundle on the client
+  const onDownloadDiagnostics = () => {
     const bundle = {
       generatedAt: new Date().toISOString(),
       diagnostics,
       config: parsed.data,
       opencodeJsonPath: path,
+      providers,
+      mcps,
     };
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -160,6 +195,7 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
     a.download = `bizar-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success('Bundle downloaded.');
   };
 
   return (
@@ -170,113 +206,66 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
             <Settings2 size={18} /> Config
           </h2>
           <p className="view-subtitle">
-            Diagnostic snapshot below. The raw <code>opencode.json</code> editor
-            is in the Advanced section.
+            Manage OpenCode config, providers, MCPs, and diagnostics.
           </p>
-        </div>
-        <div className="view-actions">
-          <Button variant="secondary" size="sm" onClick={loadDiagnostics}>
-            <Stethoscope size={14} /> Run diagnostics
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onDownloadDiagnostics}>
-            <Download size={14} /> Download bundle
-          </Button>
         </div>
       </header>
 
-      <DiagnosticsPanel diagnostics={diagnostics} loading={!diagnostics} onReload={loadDiagnostics} />
-
-      <Card className="config-advanced">
-        <button
-          type="button"
-          className="config-advanced-head"
-          onClick={() => setAdvancedOpen((v) => !v)}
-          aria-expanded={advancedOpen}
-          aria-controls="config-advanced-body"
-        >
-          <div className="config-advanced-head-left">
-            <Sliders size={16} aria-hidden />
-            <div>
-              <div className="config-advanced-head-title">Advanced</div>
-              <div className="config-advanced-head-desc">opencode.json editor · providers · MCPs · debug log</div>
-            </div>
-          </div>
-          {advancedOpen ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />}
-        </button>
-        {advancedOpen && (
-          <div id="config-advanced-body" className="config-advanced-body">
-            <div className="config-advanced-tabs" role="tablist">
+      <div className="config-layout">
+        <nav className="config-nav" role="navigation" aria-label="Config sections">
+          {NAV_ITEMS.map((n) => {
+            const Icon = n.icon;
+            return (
               <button
+                key={n.id}
                 type="button"
-                role="tab"
-                aria-selected={activeAdvTab === 'config'}
-                className={cn('tab', activeAdvTab === 'config' && 'tab-active')}
-                onClick={() => setActiveAdvTab('config')}
+                className={cn('config-nav-item', activeNav === n.id && 'config-nav-item-active')}
+                onClick={() => setActiveNav(n.id)}
+                aria-current={activeNav === n.id ? 'page' : undefined}
               >
-                <FileCode2 size={12} /> OpenCode config
+                <Icon size={14} />
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                  <span>{n.label}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 400 }}>
+                    {n.desc}
+                  </span>
+                </div>
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeAdvTab === 'providers'}
-                className={cn('tab', activeAdvTab === 'providers' && 'tab-active')}
-                onClick={() => setActiveAdvTab('providers')}
-              >
-                <ServerIcon size={12} /> Providers
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeAdvTab === 'mcps'}
-                className={cn('tab', activeAdvTab === 'mcps' && 'tab-active')}
-                onClick={() => setActiveAdvTab('mcps')}
-              >
-                <Plug size={12} /> MCPs
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeAdvTab === 'log'}
-                className={cn('tab', activeAdvTab === 'log' && 'tab-active')}
-                onClick={() => setActiveAdvTab('log')}
-              >
-                <Activity size={12} /> Debug log
-              </button>
-            </div>
-            <div className="config-advanced-panel" role="tabpanel">
-              {activeAdvTab === 'config' && (
-                <ConfigEditorPanel
-                  parsed={parsed}
-                  dirty={dirty}
-                  saving={saving}
-                  onReload={reload}
-                  onSave={save}
-                  onChange={applyEdit}
-                  textareaRef={taRef}
-                />
-              )}
+            );
+          })}
+        </nav>
 
-              {activeAdvTab === 'providers' && (
-                <ProvidersPanel
-                  providers={providers}
-                  onChange={setProviders}
-                />
-              )}
+        <div className="config-content">
+          {activeNav === 'opencode' && (
+            <ConfigEditorPanel
+              parsed={parsed}
+              dirty={dirty}
+              saving={saving}
+              path={path}
+              onReload={reloadConfig}
+              onSave={save}
+              onChange={applyEdit}
+              textareaRef={taRef}
+            />
+          )}
 
-              {activeAdvTab === 'mcps' && (
-                <McpsPanel
-                  mcps={mcps}
-                  onChange={setMcps}
-                />
-              )}
+          {activeNav === 'providers' && (
+            <ProvidersPanel providers={providers} onChange={setProviders} onReload={reloadProviders} />
+          )}
 
-              {activeAdvTab === 'log' && (
-                <DebugLogPanel />
-              )}
-            </div>
-          </div>
-        )}
-      </Card>
+          {activeNav === 'mcps' && (
+            <McpsPanel mcps={mcps} onChange={setMcps} onReload={reloadMcps} />
+          )}
+
+          {activeNav === 'diagnostics' && (
+            <DiagnosticsPanel diagnostics={diagnostics} loading={!diagnostics} onReload={loadDiagnostics} />
+          )}
+
+          {activeNav === 'export' && (
+            <ExportPanel onDownload={onDownloadDiagnostics} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -285,6 +274,7 @@ function ConfigEditorPanel({
   parsed,
   dirty,
   saving,
+  path,
   onReload,
   onSave,
   onChange,
@@ -293,16 +283,22 @@ function ConfigEditorPanel({
   parsed: { raw: string; data: unknown; error: string | null };
   dirty: boolean;
   saving: boolean;
+  path: string;
   onReload: () => void;
   onSave: () => void;
   onChange: (val: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
 }) {
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(e.target.value);
-  };
   return (
-    <div className="config-editor">
+    <Card>
+      <CardTitle>
+        <FileCode2 size={14} /> OpenCode config
+      </CardTitle>
+      <CardMeta>
+        <code className="mono ellipsis" style={{ fontSize: 11 }}>
+          {path || '~/.config/opencode/opencode.json'}
+        </code>
+      </CardMeta>
       <div className="view-actions" style={{ marginBottom: 12 }}>
         <Button variant="secondary" size="sm" onClick={onReload}>
           <RefreshCw size={14} /> Reload from disk
@@ -318,9 +314,8 @@ function ConfigEditorPanel({
         </Button>
       </div>
       <div className="config-grid">
-        <Card>
-          <CardTitle>JSON tree</CardTitle>
-          <CardMeta>Parsed from current editor</CardMeta>
+        <div>
+          <div className="config-grid-label">JSON tree</div>
           <div className="json-tree">
             {parsed.data != null ? (
               <JsonHighlight value={parsed.data} />
@@ -328,26 +323,26 @@ function ConfigEditorPanel({
               <span className="muted">{parsed.error ? 'Invalid JSON' : 'No data'}</span>
             )}
           </div>
-        </Card>
-        <Card>
-          <CardTitle>Raw JSON</CardTitle>
-          <CardMeta>
+        </div>
+        <div>
+          <div className="config-grid-label">
+            Raw JSON
             {parsed.error ? (
-              <span className="text-error">{parsed.error}</span>
+              <span className="text-error" style={{ marginLeft: 8 }}>{parsed.error}</span>
             ) : (
-              <span className="muted">Live validation as you type</span>
+              <span className="muted" style={{ marginLeft: 8 }}>Live validation</span>
             )}
-          </CardMeta>
+          </div>
           <textarea
             ref={textareaRef}
             className={cn('textarea config-textarea', parsed.error && 'invalid')}
             spellCheck={false}
             value={parsed.raw}
-            onChange={handleInput}
+            onChange={(e) => onChange(e.target.value)}
           />
-        </Card>
+        </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -361,8 +356,10 @@ function DiagnosticsPanel({
   onReload: () => void;
 }) {
   return (
-    <Card className="diagnostics-card">
-      <CardTitle><Stethoscope size={14} /> Diagnostics</CardTitle>
+    <Card>
+      <CardTitle>
+        <Stethoscope size={14} /> Diagnostics
+      </CardTitle>
       <CardMeta>
         System health, file counts, recent errors.{' '}
         <button type="button" className="link-btn" onClick={onReload}>Refresh</button>
@@ -446,39 +443,170 @@ function DiagnosticsPanel({
   );
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Providers Panel — fully editable with proper modal forms.
+   ────────────────────────────────────────────────────────────── */
+
+type ProviderDraft = {
+  id: string;
+  name: string;
+  baseURL: string;
+  apiKey: string;
+  models: string[];
+  enabled: boolean;
+};
+
 function ProvidersPanel({
   providers,
   onChange,
+  onReload,
 }: {
   providers: Provider[];
   onChange: (p: Provider[]) => void;
+  onReload: () => Promise<void>;
 }) {
   const toast = useToast();
-  const onAdd = () => {
+  const modal = useModal();
+
+  const openProviderModal = (existing?: Provider) => {
     let idEl: HTMLInputElement | null = null;
     let nameEl: HTMLInputElement | null = null;
     let baseEl: HTMLInputElement | null = null;
     let keyEl: HTMLInputElement | null = null;
     let modelsEl: HTMLInputElement | null = null;
-    // Use a modal from useModal — but for simplicity inline a confirm-prompt
-    const id = (prompt('Provider id (a-z, 0-9, dashes):') || '').trim();
-    if (!id) return;
-    if (providers.find((p) => p.id === id)) {
-      toast.error(`Provider "${id}" exists.`);
-      return;
-    }
-    const name = prompt('Display name:', id) || id;
-    const baseURL = prompt('Base URL:', '') || '';
-    const apiKey = prompt('API key:', '') || '';
-    const modelsRaw = prompt('Models (comma-separated):', '') || '';
-    const models = modelsRaw.split(',').map((m) => m.trim()).filter(Boolean);
-    api
-      .post<Provider>('/config/providers', { id, name, baseURL, apiKey, models, enabled: true })
-      .then((p) => {
-        onChange([...providers, p]);
-        toast.success('Provider added.');
-      })
-      .catch((err) => toast.error(`Add failed: ${(err as Error).message}`));
+    let enabledEl: HTMLInputElement | null = null;
+
+    const isEdit = !!existing;
+    const initialId = existing?.id || '';
+    const initialName = existing?.name || '';
+    const initialBase = existing?.baseURL || '';
+    // Show masked key as-is in edit mode (so user can see what's stored).
+    const initialKey = existing?.apiKey || '';
+    const initialModels = (existing?.models || []).join(', ');
+    const initialEnabled = existing?.enabled !== false;
+
+    modal.open({
+      title: isEdit ? `Edit provider "${existing!.id}"` : 'Add provider',
+      children: (
+        <div>
+          <div className="modal-form-row">
+            <label>ID (a-z, 0-9, dashes)</label>
+            <input
+              ref={(el) => (idEl = el)}
+              className="input"
+              type="text"
+              defaultValue={initialId}
+              placeholder="anthropic"
+              disabled={isEdit}
+            />
+          </div>
+          <div className="modal-form-row">
+            <label>Display name</label>
+            <input
+              ref={(el) => (nameEl = el)}
+              className="input"
+              type="text"
+              defaultValue={initialName}
+              placeholder="Anthropic"
+            />
+          </div>
+          <div className="modal-form-row">
+            <label>Base URL</label>
+            <input
+              ref={(el) => (baseEl = el)}
+              className="input"
+              type="text"
+              defaultValue={initialBase}
+              placeholder="https://api.anthropic.com"
+            />
+          </div>
+          <div className="modal-form-row">
+            <label>API key{isEdit && ' (leave masked value unchanged to keep)'}</label>
+            <input
+              ref={(el) => (keyEl = el)}
+              className="input"
+              type="password"
+              defaultValue={initialKey}
+              placeholder="sk-..."
+              autoComplete="off"
+            />
+          </div>
+          <div className="modal-form-row">
+            <label>Models (comma-separated)</label>
+            <textarea
+              ref={(el) => (modelsEl = el as unknown as HTMLInputElement)}
+              className="textarea"
+              defaultValue={initialModels}
+              placeholder="claude-sonnet-4-5, claude-opus-4-1"
+              rows={3}
+            />
+          </div>
+          <div className="modal-form-row">
+            <label className="checkbox-row">
+              <input
+                ref={(el) => (enabledEl = el)}
+                type="checkbox"
+                defaultChecked={initialEnabled}
+              />
+              Enabled
+            </label>
+          </div>
+        </div>
+      ),
+      footer: (
+        <div className="modal-footer-actions">
+          <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              const id = (idEl?.value || '').trim();
+              const name = (nameEl?.value || '').trim();
+              const baseURL = (baseEl?.value || '').trim();
+              const apiKey = keyEl?.value || '';
+              const modelsRaw = modelsEl?.value || '';
+              const models = modelsRaw.split(/[,\n]/).map((m) => m.trim()).filter(Boolean);
+              const enabled = !!enabledEl?.checked;
+
+              if (!id) {
+                toast.warning('ID is required.');
+                return;
+              }
+              if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id)) {
+                toast.warning('ID must be a-z, 0-9, dashes.');
+                return;
+              }
+              try {
+                const payload: ProviderDraft & { id: string } = {
+                  id,
+                  name: name || id,
+                  baseURL,
+                  apiKey,
+                  models,
+                  enabled,
+                };
+                if (isEdit) {
+                  const updated = await api.put<Provider>(
+                    `/config/providers/${encodeURIComponent(id)}`,
+                    payload,
+                  );
+                  onChange(providers.map((p) => (p.id === id ? updated : p)));
+                  toast.success(`Provider "${id}" updated.`);
+                } else {
+                  const created = await api.post<Provider>('/config/providers', payload);
+                  onChange([...providers, created]);
+                  toast.success(`Provider "${id}" added.`);
+                }
+                modal.close();
+              } catch (err) {
+                toast.error(`Save failed: ${(err as Error).message}`);
+              }
+            }}
+          >
+            {isEdit ? 'Update' : 'Add'} provider
+          </Button>
+        </div>
+      ),
+    });
   };
 
   const onRemove = async (id: string) => {
@@ -493,24 +621,61 @@ function ProvidersPanel({
   };
 
   return (
-    <div>
+    <Card>
+      <CardTitle>
+        <ServerIcon size={14} /> Providers ({providers.length})
+      </CardTitle>
+      <CardMeta>
+        AI providers configured under <code>opencode.json#provider</code>.
+        Each provider has a base URL, API key, and a list of model IDs.
+      </CardMeta>
       <div className="view-actions" style={{ marginBottom: 12 }}>
-        <Button variant="primary" size="sm" onClick={onAdd}>
+        <Button variant="primary" size="sm" onClick={() => openProviderModal()}>
           <Plus size={14} /> Add provider
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onReload}>
+          <RefreshCw size={14} /> Refresh
         </Button>
       </div>
       {providers.length === 0 ? (
-        <p className="muted">No providers configured. Add one to register an AI provider.</p>
+        <EmptyProviders onAdd={() => openProviderModal()} />
       ) : (
         <div className="provider-list">
           {providers.map((p) => (
             <Card key={p.id} className="provider-row">
               <div className="provider-row-head">
-                <div>
-                  <div className="provider-name">{p.name}</div>
-                  <div className="provider-id mono">{p.id}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="provider-name">{p.name || p.id}</div>
+                  <div className="provider-id">{p.id}</div>
                 </div>
                 <div className="provider-actions">
+                  <label className="toggle-row" title="Enabled">
+                    <input
+                      type="checkbox"
+                      checked={p.enabled !== false}
+                      onChange={async (e) => {
+                        try {
+                          const updated = await api.put<Provider>(
+                            `/config/providers/${encodeURIComponent(p.id)}`,
+                            { enabled: e.target.checked },
+                          );
+                          onChange(providers.map((x) => (x.id === p.id ? updated : x)));
+                        } catch (err) {
+                          toast.error(`Toggle failed: ${(err as Error).message}`);
+                        }
+                      }}
+                    />
+                    {p.enabled !== false ? 'on' : 'off'}
+                  </label>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Edit"
+                    title="Edit"
+                    onClick={() => openProviderModal(p)}
+                  >
+                    <Pencil size={12} />
+                  </button>
                   <button
                     type="button"
                     className="icon-btn icon-btn-danger"
@@ -531,35 +696,280 @@ function ProvidersPanel({
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function EmptyProviders({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div style={{
+      padding: '32px 16px',
+      textAlign: 'center',
+      color: 'var(--text-dim)',
+      border: '1px dashed var(--border)',
+      borderRadius: 'var(--radius-md)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      alignItems: 'center',
+    }}>
+      <ServerIcon size={28} />
+      <div>No providers configured.</div>
+      <div style={{ fontSize: 12 }}>Add a provider to connect an AI model.</div>
+      <Button variant="primary" size="sm" onClick={onAdd}>
+        <Plus size={14} /> Add your first provider
+      </Button>
     </div>
   );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   MCPs Panel — fully editable with proper modal forms.
+   ────────────────────────────────────────────────────────────── */
+
+type McpDraft = {
+  id: string;
+  type: 'local' | 'remote';
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  url: string;
+  headers: Record<string, string>;
+  oauth: boolean;
+  enabled: boolean;
+};
+
+function parseEnv(s: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of s.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const k = trimmed.slice(0, eq).trim();
+    const v = trimmed.slice(eq + 1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
 }
 
 function McpsPanel({
   mcps,
   onChange,
+  onReload,
 }: {
   mcps: McpServer[];
   onChange: (m: McpServer[]) => void;
+  onReload: () => Promise<void>;
 }) {
   const toast = useToast();
-  const onAdd = () => {
-    const id = (prompt('MCP id (a-z, 0-9, dashes):') || '').trim();
-    if (!id) return;
-    if (mcps.find((m) => m.id === id)) {
-      toast.error(`MCP "${id}" exists.`);
-      return;
-    }
-    const command = prompt('Command (e.g. npx):', 'npx') || '';
-    const argsRaw = prompt('Args (space-separated):', '') || '';
-    const args = argsRaw.split(/\s+/).filter(Boolean);
-    api
-      .post<McpServer>('/config/mcps', { id, command, args, env: {}, enabled: true })
-      .then((m) => {
-        onChange([...mcps, m]);
-        toast.success('MCP added.');
-      })
-      .catch((err) => toast.error(`Add failed: ${(err as Error).message}`));
+  const modal = useModal();
+
+  const openMcpModal = (existing?: McpServer) => {
+    let idEl: HTMLInputElement | null = null;
+    let typeLocalEl: HTMLInputElement | null = null;
+    let typeRemoteEl: HTMLInputElement | null = null;
+    let commandEl: HTMLInputElement | null = null;
+    let argsEl: HTMLInputElement | null = null;
+    let envEl: HTMLTextAreaElement | null = null;
+    let urlEl: HTMLInputElement | null = null;
+    let headersEl: HTMLTextAreaElement | null = null;
+    let oauthEl: HTMLInputElement | null = null;
+    let enabledEl: HTMLInputElement | null = null;
+
+    const isEdit = !!existing;
+    const isRemote = existing?.type === 'remote' || (!existing && false);
+    const initialType: 'local' | 'remote' = existing?.type === 'remote' ? 'remote' : 'local';
+    const initialCommand = existing?.command || '';
+    const initialArgs = (existing?.args || []).join(' ');
+    const initialEnv = existing?.env ? Object.entries(existing.env).map(([k, v]) => `${k}=${v}`).join('\n') : '';
+    const initialUrl = existing?.url || '';
+    const initialHeaders = existing?.headers ? Object.entries(existing.headers).map(([k, v]) => `${k}: ${v}`).join('\n') : '';
+    const initialOauth = !!existing?.oauth;
+    const initialEnabled = existing?.enabled !== false;
+
+    modal.open({
+      title: isEdit ? `Edit MCP "${existing!.id}"` : 'Add MCP',
+      children: (
+        <div>
+          <div className="modal-form-row">
+            <label>ID (a-z, 0-9, dashes)</label>
+            <input
+              ref={(el) => (idEl = el)}
+              className="input"
+              type="text"
+              defaultValue={existing?.id || ''}
+              placeholder="supabase"
+              disabled={isEdit}
+            />
+          </div>
+          <div className="modal-form-row">
+            <label>Type</label>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <label className="radio-label">
+                <input
+                  ref={(el) => (typeLocalEl = el)}
+                  type="radio"
+                  name="mcp-type"
+                  value="local"
+                  defaultChecked={initialType === 'local'}
+                />
+                Local (stdio)
+              </label>
+              <label className="radio-label">
+                <input
+                  ref={(el) => (typeRemoteEl = el)}
+                  type="radio"
+                  name="mcp-type"
+                  value="remote"
+                  defaultChecked={initialType === 'remote'}
+                />
+                Remote (HTTP)
+              </label>
+            </div>
+          </div>
+
+          <div data-mcp-section="local">
+            <div className="modal-form-row">
+              <label>Command (binary to invoke)</label>
+              <input
+                ref={(el) => (commandEl = el)}
+                className="input"
+                type="text"
+                defaultValue={initialCommand}
+                placeholder="uvx --from semble[mcp] semble"
+              />
+            </div>
+            <div className="modal-form-row">
+              <label>Extra args (space-separated)</label>
+              <input
+                ref={(el) => (argsEl = el)}
+                className="input"
+                type="text"
+                defaultValue={initialArgs}
+                placeholder="--port 8080"
+              />
+              <div className="field-help">These are appended after the command.</div>
+            </div>
+            <div className="modal-form-row">
+              <label>Environment variables</label>
+              <textarea
+                ref={(el) => (envEl = el)}
+                className="textarea"
+                defaultValue={initialEnv}
+                placeholder="API_KEY=xxx&#10;DEBUG=true"
+                rows={3}
+              />
+              <div className="field-help">One KEY=VALUE per line.</div>
+            </div>
+          </div>
+
+          <div data-mcp-section="remote">
+            <div className="modal-form-row">
+              <label>URL</label>
+              <input
+                ref={(el) => (urlEl = el)}
+                className="input"
+                type="text"
+                defaultValue={initialUrl}
+                placeholder="https://mcp.example.com/mcp"
+              />
+            </div>
+            <div className="modal-form-row">
+              <label>Headers</label>
+              <textarea
+                ref={(el) => (headersEl = el)}
+                className="textarea"
+                defaultValue={initialHeaders}
+                placeholder="Authorization: Bearer xxx&#10;Content-Type: application/json"
+                rows={3}
+              />
+              <div className="field-help">One "Key: Value" per line.</div>
+            </div>
+            <div className="modal-form-row">
+              <label className="checkbox-row">
+                <input
+                  ref={(el) => (oauthEl = el)}
+                  type="checkbox"
+                  defaultChecked={initialOauth}
+                />
+                Use OAuth (browser-based auth flow)
+              </label>
+            </div>
+          </div>
+
+          <div className="modal-form-row">
+            <label className="checkbox-row">
+              <input
+                ref={(el) => (enabledEl = el)}
+                type="checkbox"
+                defaultChecked={initialEnabled}
+              />
+              Enabled
+            </label>
+          </div>
+        </div>
+      ),
+      footer: (
+        <div className="modal-footer-actions">
+          <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              const id = (idEl?.value || '').trim();
+              const isRemote = !!typeRemoteEl?.checked;
+              const command = (commandEl?.value || '').trim();
+              const argsStr = (argsEl?.value || '').trim();
+              const args = argsStr ? argsStr.split(/\s+/) : [];
+              const env = parseEnv(envEl?.value || '');
+              const url = (urlEl?.value || '').trim();
+              const headers = parseEnv(headersEl?.value || '');
+              const oauth = !!oauthEl?.checked;
+              const enabled = !!enabledEl?.checked;
+
+              if (!id) {
+                toast.warning('ID is required.');
+                return;
+              }
+              if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id)) {
+                toast.warning('ID must be a-z, 0-9, dashes.');
+                return;
+              }
+              try {
+                const payload: McpDraft = {
+                  id,
+                  type: isRemote ? 'remote' : 'local',
+                  command,
+                  args,
+                  env,
+                  url,
+                  headers,
+                  oauth,
+                  enabled,
+                };
+                if (isEdit) {
+                  const updated = await api.put<McpServer>(
+                    `/config/mcps/${encodeURIComponent(id)}`,
+                    payload,
+                  );
+                  onChange(mcps.map((m) => (m.id === id ? updated : m)));
+                  toast.success(`MCP "${id}" updated.`);
+                } else {
+                  const created = await api.post<McpServer>('/config/mcps', payload);
+                  onChange([...mcps, created]);
+                  toast.success(`MCP "${id}" added.`);
+                }
+                modal.close();
+              } catch (err) {
+                toast.error(`Save failed: ${(err as Error).message}`);
+              }
+            }}
+          >
+            {isEdit ? 'Update' : 'Add'} MCP
+          </Button>
+        </div>
+      ),
+    });
   };
 
   const onRemove = async (id: string) => {
@@ -574,164 +984,139 @@ function McpsPanel({
   };
 
   return (
-    <div>
+    <Card>
+      <CardTitle>
+        <Plug size={14} /> MCPs ({mcps.length})
+      </CardTitle>
+      <CardMeta>
+        Model Context Protocol servers under <code>opencode.json#mcp</code>.
+        Local MCPs run as stdio subprocesses; remote MCPs are HTTP endpoints.
+      </CardMeta>
       <div className="view-actions" style={{ marginBottom: 12 }}>
-        <Button variant="primary" size="sm" onClick={onAdd}>
+        <Button variant="primary" size="sm" onClick={() => openMcpModal()}>
           <Plus size={14} /> Add MCP
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onReload}>
+          <RefreshCw size={14} /> Refresh
         </Button>
       </div>
       {mcps.length === 0 ? (
-        <p className="muted">No MCPs configured.</p>
+        <div style={{
+          padding: '32px 16px',
+          textAlign: 'center',
+          color: 'var(--text-dim)',
+          border: '1px dashed var(--border)',
+          borderRadius: 'var(--radius-md)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Plug size={28} />
+          <div>No MCPs configured.</div>
+          <Button variant="primary" size="sm" onClick={() => openMcpModal()}>
+            <Plus size={14} /> Add your first MCP
+          </Button>
+        </div>
       ) : (
         <div className="mcp-list">
           {mcps.map((m) => (
             <Card key={m.id} className="mcp-row">
               <div className="mcp-row-head">
-                <div className="mcp-name">{m.id}</div>
-                <button
-                  type="button"
-                  className="icon-btn icon-btn-danger"
-                  aria-label="Remove"
-                  title="Remove"
-                  onClick={() => onRemove(m.id)}
-                >
-                  <Trash2 size={12} />
-                </button>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="mcp-name">{m.id}</div>
+                  <div className="mcp-id">
+                    {m.type === 'remote' ? 'remote' : 'local'} {m.enabled !== false ? '· enabled' : '· disabled'}
+                  </div>
+                </div>
+                <div className="mcp-actions">
+                  <label className="toggle-row" title="Enabled">
+                    <input
+                      type="checkbox"
+                      checked={m.enabled !== false}
+                      onChange={async (e) => {
+                        try {
+                          const updated = await api.put<McpServer>(
+                            `/config/mcps/${encodeURIComponent(m.id)}`,
+                            { enabled: e.target.checked },
+                          );
+                          onChange(mcps.map((x) => (x.id === m.id ? updated : x)));
+                        } catch (err) {
+                          toast.error(`Toggle failed: ${(err as Error).message}`);
+                        }
+                      }}
+                    />
+                    {m.enabled !== false ? 'on' : 'off'}
+                  </label>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Edit"
+                    title="Edit"
+                    onClick={() => openMcpModal(m)}
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-danger"
+                    aria-label="Remove"
+                    title="Remove"
+                    onClick={() => onRemove(m.id)}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               </div>
               <div className="mcp-meta">
-                <code>{m.command} {(m.args || []).join(' ')}</code>
+                {m.type === 'remote' ? (
+                  <>
+                    <div><span className="muted">URL:</span> <code>{m.url || '—'}</code></div>
+                    {Object.keys(m.headers || {}).length > 0 && (
+                      <div><span className="muted">Headers:</span> <code>{Object.keys(m.headers || {}).length} header(s)</code></div>
+                    )}
+                    {m.oauth && <div><span className="muted">Auth:</span> <code>OAuth</code></div>}
+                  </>
+                ) : (
+                  <>
+                    <div><span className="muted">Command:</span> <code>{m.command || '—'}</code></div>
+                    {m.args && m.args.length > 0 && (
+                      <div><span className="muted">Args:</span> <code>{m.args.join(' ')}</code></div>
+                    )}
+                    {m.env && Object.keys(m.env).length > 0 && (
+                      <div><span className="muted">Env:</span> <code>{Object.keys(m.env).length} var(s)</code></div>
+                    )}
+                  </>
+                )}
               </div>
             </Card>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
-function DebugLogPanel() {
-  const [lines, setLines] = useState<string[]>([]);
-  const [tail, setTail] = useState(100);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [connected, setConnected] = useState(false);
-  const [logFile, setLogFile] = useState<string | null>(null);
-  const [displayLines, setDisplayLines] = useState<string[]>([]);
-  const listRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-
-  const loadLogs = async (n: number) => {
-    try {
-      const r = await api.get<{ lines: string[]; file: string | null }>(`/diagnostics/logs?tail=${n}`);
-      setLines(r.lines || []);
-      setLogFile(r.file);
-      setDisplayLines(r.lines || []);
-    } catch {
-      setLines(['(failed to load logs)']);
-      setDisplayLines(['(failed to load logs)']);
-    }
-  };
-
-  const connectWs = () => {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws/logs`);
-    wsRef.current = ws;
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => {
-      setConnected(false);
-      // Reconnect after 3s
-      setTimeout(connectWs, 3000);
-    };
-    ws.onerror = () => {
-      setConnected(false);
-    };
-    ws.onmessage = (evt) => {
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.type === 'log init') {
-          setLines(msg.lines || []);
-          setDisplayLines(msg.lines || []);
-          setLogFile(msg.file);
-        } else if (msg.type === 'log line') {
-          setLines((prev) => [...prev.slice(-(tail * 2)), msg.line]);
-          setDisplayLines((prev) => [...prev.slice(-(tail * 2)), msg.line]);
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-  };
-
-  useEffect(() => {
-    loadLogs(tail);
-    connectWs();
-    return () => {
-      wsRef.current?.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Auto-scroll
-  useEffect(() => {
-    if (autoScroll && listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [displayLines, autoScroll]);
-
-  const handleClear = () => {
-    setDisplayLines([]);
-  };
-
-  const TAIL_OPTIONS = [50, 100, 500, 1000];
-
+function ExportPanel({ onDownload }: { onDownload: () => void }) {
   return (
-    <div className="debug-log-panel">
-      <div className="debug-log-toolbar">
-        <span className="muted" style={{ fontSize: 11 }}>
-          {connected ? (
-            <span className="tag tag-success" style={{ fontSize: 10 }}>live</span>
-          ) : (
-            <span className="tag tag-neutral" style={{ fontSize: 10 }}>disconnected</span>
-          )}
-          {' '}log: <code>{logFile ? logFile.split('/').pop() : 'none'}</code>
-        </span>
-        <div className="debug-log-controls">
-          <span className="muted" style={{ fontSize: 11 }}>Lines:</span>
-          {TAIL_OPTIONS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={cn('tag', tail === n && 'tag-active')}
-              onClick={() => { setTail(n); loadLogs(n); }}
-            >
-              {n}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={cn('tag', autoScroll && 'tag-active')}
-            onClick={() => setAutoScroll((v) => !v)}
-          >
-            Auto-scroll
-          </button>
-          <Button variant="ghost" size="sm" onClick={handleClear}>
-            Clear
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => loadLogs(tail)}>
-            <RefreshCw size={12} /> Reload
-          </Button>
-        </div>
+    <Card>
+      <CardTitle>
+        <Download size={14} /> Export / Import
+      </CardTitle>
+      <CardMeta>
+        Download a JSON bundle of diagnostics, configuration, providers, and MCPs
+        for support requests or backup. Server-side imports are not yet implemented.
+      </CardMeta>
+      <div className="view-actions" style={{ marginTop: 12 }}>
+        <Button variant="primary" onClick={onDownload}>
+          <Download size={14} /> Download diagnostics bundle
+        </Button>
       </div>
-      <div className="debug-log-list" ref={listRef}>
-        {displayLines.length === 0 ? (
-          <p className="muted" style={{ padding: 12 }}>
-            {logFile ? '(log is empty)' : 'No log file found. The service log is at ~/.config/bizar/service.log'}
-          </p>
-        ) : (
-          displayLines.map((line, i) => (
-            <div key={i} className="debug-log-line mono">{line}</div>
-          ))
-        )}
+      <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-dim)' }}>
+        <Database size={12} style={{ display: 'inline', verticalAlign: -2 }} /> Bundles include:
+        opencode.json snapshot, providers list (with masked API keys), MCP list, recent
+        service log errors, and active project metadata.
       </div>
-    </div>
+    </Card>
   );
 }

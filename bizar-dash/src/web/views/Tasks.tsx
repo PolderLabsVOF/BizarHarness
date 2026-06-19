@@ -295,9 +295,13 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
             Personal kanban. Click a card for details (subtasks, deps, timer, comments, activity).
           </p>
         </div>
-        <div className="view-actions">
-          <div className="search-input">
-            <Search size={14} />
+      </header>
+
+      {/* v3.4.0 — Compact single-row toolbar: search + filters + sort + actions */}
+      <div className="tasks-toolbar">
+        <div className="tasks-toolbar-group">
+          <div className="search-input" style={{ width: 200 }}>
+            <Search size={12} />
             <input
               className="input"
               type="text"
@@ -316,10 +320,17 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
               </button>
             )}
           </div>
+        </div>
+
+        <div className="tasks-toolbar-divider" />
+
+        <div className="tasks-toolbar-group">
+          <span className="tasks-toolbar-label">Filter</span>
           <select
             className="select select-sm"
             value={assigneeFilter}
             onChange={(e) => setAssigneeFilter(e.target.value)}
+            title="Assignee"
           >
             <option value="">All assignees</option>
             <option value="me">Me</option>
@@ -331,7 +342,7 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
             className="select select-sm"
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            title="Filter by priority"
+            title="Priority"
           >
             <option value="">All priorities</option>
             {PRIORITIES.map((p) => (
@@ -343,7 +354,7 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
               className="select select-sm"
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
-              title="Filter by tag"
+              title="Tag"
             >
               <option value="">All tags</option>
               {allTags.map((t) => (
@@ -351,16 +362,27 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
               ))}
             </select>
           )}
+        </div>
+
+        <div className="tasks-toolbar-divider" />
+
+        <div className="tasks-toolbar-group">
+          <span className="tasks-toolbar-label">Sort</span>
           <select
             className="select select-sm"
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
-            title="Sort"
+            title="Sort by"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
+        </div>
+
+        <div className="tasks-toolbar-spacer" />
+
+        <div className="tasks-toolbar-group">
           <Button
             variant={showArchived ? 'primary' : 'ghost'}
             size="sm"
@@ -373,25 +395,25 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
             {showArchived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
             {showArchived ? 'Active' : 'Archived'}
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => reload()}>
-            <RefreshCw size={14} /> Refresh
+          <Button variant="ghost" size="sm" onClick={() => reload()} title="Refresh">
+            <RefreshCw size={14} />
           </Button>
           <Button
             variant="accent"
             size="sm"
             onClick={() => openSubmitTaskModal(modal, toast, setTasks, reload, refreshSnapshot)}
           >
-            <Send size={14} /> Submit to Odin
+            <Send size={14} /> Odin
           </Button>
           <Button
             variant="primary"
             size="sm"
             onClick={() => openTaskModal(modal, toast, null, 'queued', setTasks, reload, refreshSnapshot, snapshot.agents)}
           >
-            <Plus size={14} /> Add task
+            <Plus size={14} /> Add
           </Button>
         </div>
-      </header>
+      </div>
 
       {selected.size > 0 && (
         <div className="task-bulk-bar">
