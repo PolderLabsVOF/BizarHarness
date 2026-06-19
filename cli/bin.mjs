@@ -26,15 +26,29 @@ import { runInit } from './init.mjs';
 import { runExport } from './export.mjs';
 import runPlan from './plan.mjs';
 import { runUpdate } from './update.mjs';
+import { ensureSetup, checkSetupStatus } from './bootstrap.mjs';
 
 const args = process.argv.slice(2);
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+// Every bin command checks setup status on first invocation.
+// Skip only when: --postinstall (manual trigger), --check (status only),
+// BIZAR_SKIP_INSTALL=1 (disabled), or already handled via npm script.
+if (
+  !args.includes('--postinstall') &&
+  !args.includes('--check') &&
+  !process.env.BIZAR_SKIP_INSTALL
+) {
+  await ensureSetup({ silent: true });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function showHelp() {
   console.log(`
   Bizar — Norse Pantheon Agent System for opencode
 
   Usage:
-    bizar                       Launch the TUI dashboard (default)
+    bizar                       Launch the TUI dashboard (auto-runs first-time setup if needed)
     bizar --web                 Launch TUI + auto-open web dashboard
     bizar --no-web              Launch TUI only (no browser)
     bizar --web-only            Web dashboard only (no TUI, in browser)
@@ -49,6 +63,8 @@ function showHelp() {
     bizar update                Update opencode, bizar, and/or bizar-plugin
     bizar service               Manage the background service daemon
     bizar dashboard             Launch the web dashboard (uses bizar-dash)
+    bizar --setup               Re-run setup manually (agents, plugin, RTK, Semble, Skills CLI)
+    bizar --check               Print setup status as JSON, exit 1 if setup needed
     bizar --help                Show this help
 
   Install:
@@ -229,8 +245,17 @@ async function runServiceCommand(sub) {
   await runService(sub || 'status', args.slice(2));
 }
 
-if (args[0] === '--postinstall') {
-  await runPostInstall();
+if (args.includes('--check')) {
+  const status = checkSetupStatus();
+  console.log(JSON.stringify(status, null, 2));
+  process.exit(status.needed ? 1 : 0);
+} else if (args.includes('--setup')) {
+  await ensureSetup({ silent: false });
+  process.exit(0);
+} else if (args.includes('--postinstall')) {
+  // Legacy manual trigger — now an alias for --setup
+  await ensureSetup({ silent: false });
+  process.exit(0);
 } else if (args[0] === 'audit') {
   if (args.includes('--help') || args.includes('-h')) showAuditHelp();
   else await runAudit();

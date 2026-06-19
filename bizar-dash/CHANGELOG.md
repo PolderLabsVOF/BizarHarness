@@ -1,5 +1,10 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.2.2 — 2026-06-19
+
+### Fixed
+- **npm install no longer requires allow-scripts approval** for the parent `@polderlabs/bizar` package. Setup now self-bootstraps on first bin invocation.
+
 ## v3.2.1 — 2026-06-19
 
 ### Added

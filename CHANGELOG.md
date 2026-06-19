@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.2.2 — 2026-06-19
+
+### Fixed
+- **npm install no longer requires allow-scripts approval.** npm v10+ blocks postinstall scripts by default. The setup work (agents, plugin, RTK, Semble, Skills CLI, core skills) used to live entirely in the postinstall hook, which meant many users had a broken install without knowing it. The setup logic now self-bootstraps on first bin invocation.
+
+### Added
+- **`bizar --setup`** explicitly runs the setup (replaces `node cli/bin.mjs --postinstall`).
+- **`bizar --check`** prints setup status as JSON, exits 1 if setup is needed (useful for CI/scripts).
+- **`BIZAR_SKIP_INSTALL=1`** env var disables auto-setup (useful for sandboxed environments).
+- Every bin command (`bizar`, `install`, `bizar-dash`, etc.) now checks setup status on entry. If anything is missing, the setup runs automatically before the command proceeds. Already-installed components are detected and skipped.
+
+### Removed
+- The `postinstall` script in package.json. npm install just installs the package files now — setup happens on first use.
+
+### Migration
+- Nothing required. Existing installs work as before. Future installs work without needing `npm approve-scripts`.
+
 ## v3.2.1 — 2026-06-19
 
 ### Added
