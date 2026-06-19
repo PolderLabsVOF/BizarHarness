@@ -87,6 +87,9 @@ export type Settings = {
     onAgentComplete: boolean;
     onPlanApproval: boolean;
   };
+  dashboard: {
+    autoLaunchWeb: boolean;
+  };
   about: {
     version: string;
     homepage: string;

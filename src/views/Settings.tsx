@@ -8,6 +8,7 @@ import {
   Moon,
   Monitor,
   Info,
+  Globe,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -75,13 +76,16 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   };
 
   const about = settings.about || {
-    version: '2.6.0',
+    version: '2.7.0',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   };
   const notif = settings.notifications || {
     onAgentComplete: true,
     onPlanApproval: true,
+  };
+  const dash = settings.dashboard || {
+    autoLaunchWeb: true,
   };
 
   return (
@@ -227,6 +231,35 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Notify when a plan needs approval</span>
           </label>
+        </Card>
+
+        <Card>
+          <CardTitle>
+            <Globe size={14} /> Dashboard
+          </CardTitle>
+          <CardMeta>Controls how `bizar` starts up.</CardMeta>
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={dash.autoLaunchWeb !== false}
+              onChange={(e) =>
+                setSettings((cur) => ({
+                  ...cur,
+                  dashboard: {
+                    ...(cur.dashboard || { autoLaunchWeb: true }),
+                    autoLaunchWeb: e.target.checked,
+                  },
+                }))
+              }
+            />
+            <span>Auto-launch web UI alongside TUI</span>
+          </label>
+          <span className="field-help">
+            When on (default), running <code>bizar</code> opens your browser
+            in addition to the TUI. Disable to keep the TUI only — or use
+            <code> bizar --no-web</code> for a one-off override.
+          </span>
         </Card>
       </div>
 

@@ -363,14 +363,28 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
         onAgentComplete: true,
         onPlanApproval: true,
       },
+      dashboard: {
+        autoLaunchWeb: true,
+      },
       about: {
-        version: '2.5.0',
+        version: '2.7.0',
         homepage: 'https://github.com/DrB0rk/BizarHarness',
         license: 'MIT',
       },
     };
     const existing = safeReadJSON(paths.settingsFile, null);
+    // Deep-merge nested objects (notifications, dashboard) so that adding a
+    // new field to defaults doesn't wipe the user's existing nested prefs.
     const merged = { ...defaults, ...(existing || {}) };
+    if (existing?.notifications && typeof existing.notifications === 'object') {
+      merged.notifications = { ...defaults.notifications, ...existing.notifications };
+    }
+    if (existing?.dashboard && typeof existing.dashboard === 'object') {
+      merged.dashboard = { ...defaults.dashboard, ...existing.dashboard };
+    }
+    if (existing?.about && typeof existing.about === 'object') {
+      merged.about = { ...defaults.about, ...existing.about };
+    }
     return {
       path: paths.settingsFile,
       data: merged,

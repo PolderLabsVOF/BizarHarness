@@ -17,7 +17,11 @@ function showHelp() {
   Bizar — Norse Pantheon Agent System for opencode
 
   Usage:
-    bizar                       Launch the web dashboard (in your browser)
+    bizar                       Launch the TUI dashboard in the current terminal
+    bizar --web                 Launch TUI + auto-open web dashboard (default)
+    bizar --no-web              Launch TUI only (no browser)
+    bizar --web-only            Launch web dashboard only (no TUI, in browser)
+    bizar --bg, --detach        Launch web dashboard in background, return to shell
     install                     Run the interactive installer
     bizar install               Same as \`install\`
     bizar audit                 Run security audit on agent configuration
@@ -32,7 +36,14 @@ function showHelp() {
   Install:
     npm install -g @polderlabs/bizar          Install globally, then run 'install'
     npm install -g @polderlabs/bizar-plugin   Install the Bizar opencode plugin
-    npx @polderlabs/bizar                     Run without installing (npx bizar → dashboard)
+    npx @polderlabs/bizar                     Run without installing (npx bizar → TUI)
+
+  Notes:
+    - The TUI is now the default command — press 1-8 for tabs, q to quit.
+    - Use \`bizar --bg\` to launch the dashboard server detached and return to
+      your shell. \`bizar dashboard stop\` will terminate it (reads PID file).
+    - The \`dashboard.autoLaunchWeb\` setting controls whether the default
+      \`bizar\` invocation opens the browser. Override with --no-web.
   `);
 }
 
@@ -111,6 +122,11 @@ function showDashboardHelp() {
     user's default browser to the dashboard URL, and broadcasts live
     file-change events from config/, agents/, commands-bizar/, .bizar/,
     and plans/. The server binds loopback only — never expose it.
+
+  Background:
+    Use \`bizar --bg\` (or \`bizar --detach\`) to start the dashboard in
+    the background and return to your shell immediately. Use
+    \`bizar dashboard stop\` to terminate it.
   `);
 }
 
@@ -163,6 +179,46 @@ async function runDashboard(action) {
   console.log(chalk.dim('  Press Ctrl-C to stop the dashboard.'));
   // Wait forever; SIGINT will exit the process.
   await new Promise(() => {});
+}
+
+/**
+ * Spawn `bizar dashboard start` detached and return. The detached process
+ * writes its PID to ~/.config/bizar/dashboard.pid (via launchDashboard) so
+ * `bizar dashboard stop` can find it later.
+ */
+async function runDashboardBackground() {
+  const { spawn } = await import('node:child_process');
+  const path = await import('node:path');
+const { fileURLToPath } = await import('node:url');
+  const os = await import('node:os');
+  const fs = await import('node:fs');
+
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const binPath = path.join(__dirname, 'bin.mjs');
+
+  const child = spawn(process.execPath, [binPath, 'dashboard', 'start'], {
+    detached: true,
+    stdio: 'ignore',
+    cwd: process.cwd(),
+    env: process.env,
+  });
+  child.on('error', (err) => {
+    console.error(`Failed to start background dashboard: ${err.message}`);
+  });
+  child.unref();
+
+  // Give the server a moment to start and write the port file.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  const portFile = path.join(os.homedir(), '.config', 'bizar', 'dashboard.port');
+  if (fs.existsSync(portFile)) {
+    const port = fs.readFileSync(portFile, 'utf8').trim();
+    console.log(`Bizar dashboard started in background on http://localhost:${port}/`);
+    console.log(`Use 'bizar dashboard status' to check, 'bizar dashboard stop' to stop.`);
+  } else {
+    console.log('Bizar dashboard starting in background (port file not yet written)...');
+    console.log(`Use 'bizar dashboard status' to check, 'bizar dashboard stop' to stop.`);
+  }
 }
 
 function showUpdateHelp() {
@@ -225,6 +281,122 @@ function parseFlag(name) {
   return args[idx + 1] || null;
 }
 
+/**
+ * Read the current dashboard.autoLaunchWeb setting without forcing the
+ * full dashboard state to load. Returns true unless explicitly disabled.
+ */
+async function readAutoLaunchWeb() {
+  try {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const file = path.join(os.homedir(), '.config', 'bizar', 'settings.json');
+    if (!fs.existsSync(file)) return true;
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (parsed && parsed.dashboard && typeof parsed.dashboard.autoLaunchWeb === 'boolean') {
+      return parsed.dashboard.autoLaunchWeb;
+    }
+  } catch {
+    /* fall through */
+  }
+  return true;
+}
+
+/**
+ * Run the TUI: start the server on a free port, optionally open the browser,
+ * then hand off to the blessed TUI. Blocks until the user quits.
+ */
+async function runTui({ launchWeb } = {}) {
+  const { launchTui } = await import('./dashboard-tui.mjs');
+  const { createServer } = await import('./dashboard/server.mjs');
+  const { launchBrowser } = await import('./dashboard/browser.mjs');
+  const { DEFAULT_PORT } = await import('./dashboard.mjs');
+  const { join } = await import('node:path');
+  const { homedir } = await import('node:os');
+
+  // 1. Pick a free port using the same logic as launchDashboard.
+  const port = await findFreePort(DEFAULT_PORT);
+
+  // 2. Start the server (does not auto-open browser; we'll do that here).
+  const { server, close: closeServer } = createServer({
+    port,
+    projectRoot: process.cwd(),
+    opencodeConfigDir: join(homedir(), '.config', 'opencode'),
+    bizarRoot: new URL('..', import.meta.url).pathname,
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  // 3. Write the PID + port files so `bizar dashboard stop` works while the
+  //    TUI is also running. Same paths as launchDashboard().
+  const path = await import('node:path');
+  const fs = await import('node:fs');
+  const bizarHome = path.join(homedir(), '.config', 'bizar');
+  fs.mkdirSync(bizarHome, { recursive: true });
+  fs.writeFileSync(path.join(bizarHome, 'dashboard.port'), String(port), 'utf8');
+  fs.writeFileSync(path.join(bizarHome, 'dashboard.pid'), String(process.pid), 'utf8');
+
+  // 4. Optionally open the browser. The TUI itself runs in this terminal,
+  //    so we don't need to wait — open in background, then launch TUI.
+  if (launchWeb) {
+    const url = `http://localhost:${port}/`;
+    // Fire and forget — blessed.screen will replace stdio immediately.
+    launchBrowser(url).catch(() => {});
+    console.log(`Web dashboard: ${url}`);
+  }
+
+  try {
+    await launchTui({ port });
+  } finally {
+    try {
+      closeServer();
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(path.join(bizarHome, 'dashboard.port'));
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(path.join(bizarHome, 'dashboard.pid'));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function findFreePort(preferred) {
+  const net = await import('node:net');
+  for (let p = preferred; p < preferred + 100; p++) {
+    if (await isPortFree(net, p)) return p;
+  }
+  throw new Error(
+    `No free port found in range ${preferred}..${preferred + 99}`,
+  );
+}
+
+async function isPortFree(net, port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    server.once('error', () => finish(false));
+    server.once('listening', () => server.close(() => finish(true)));
+    const timer = setTimeout(() => finish(false), 1000);
+    server.listen(port, '127.0.0.1', () => clearTimeout(timer));
+  });
+}
+
 // Detect which name we were invoked as (helps when the same script is
 // exposed under multiple bin names — e.g. 'bizar' and 'install').
 const invokedAs = (() => {
@@ -265,15 +437,29 @@ if (args.includes('--postinstall')) {
 } else if (args[0] === 'dashboard') {
   if (args.includes('--help') || args.includes('-h')) showDashboardHelp();
   else await runDashboard(args[1]);
+} else if (args.includes('--bg') || args.includes('--detach')) {
+  // Background mode: spawn detached web dashboard, return immediately.
+  await runDashboardBackground();
+} else if (args.includes('--web-only')) {
+  // Web dashboard only — no TUI, foreground.
+  await runDashboard('start');
 } else if (args.includes('--help') || args.includes('-h')) {
   showHelp();
 } else {
   // Default behavior depends on how the script was invoked:
-  //   - `bizar` (no args)  → launch the dashboard
+  //   - `bizar` (no args)  → launch the TUI dashboard
   //   - `install` (no args) → run the interactive installer
+  //
+  // Flags that affect the default:
+  //   --no-web    → TUI only, skip browser
+  //   --web       → TUI + browser (overrides dashboard.autoLaunchWeb=false)
   if (invokedAs === 'install') {
     await runInstaller();
   } else {
-    await runDashboard('start');
+    const skipWeb = args.includes('--no-web');
+    const forceWeb = args.includes('--web');
+    const settingAuto = await readAutoLaunchWeb();
+    const launchWeb = !skipWeb && (forceWeb || settingAuto);
+    await runTui({ launchWeb });
   }
 }

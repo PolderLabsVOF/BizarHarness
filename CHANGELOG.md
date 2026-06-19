@@ -1,5 +1,72 @@
 # Changelog
 
+## v2.7.0 — 2026-06-19
+
+### Added
+- **TUI dashboard** — `cli/dashboard-tui.mjs` is a full terminal dashboard
+  built on `blessed`. It launches when you run `bizar` with no arguments and
+  replaces the previous default of opening the browser. Eight tabs:
+  - **Overview** — counts (agents / plans / projects / sessions), versions,
+    last 15 activity events.
+  - **Chat** — last 20 messages; press `c` to compose (POSTs to `/api/chat`).
+  - **Agents** — two-column card grid parsed from
+    `~/.config/opencode/agents/*.md`.
+  - **Plans** — list of worktree + global plans; press `n` to create one.
+  - **Projects** — list of projects discovered via `.bizar/PROJECT.md` markers
+    and `~/Projects/*`.
+  - **Tasks** — three-column kanban (queued / doing / done); press `n` to add.
+  - **Config** — pretty-printed JSON of `opencode.json` with syntax colors.
+  - **Settings** — current settings (theme, agent, model, notifications,
+    `dashboard.autoLaunchWeb`, about); press `t` to toggle autoLaunchWeb.
+  Keyboard: `1`–`8` jump tabs, `Tab` / `Shift-Tab` cycle, `r` reload,
+  `c` compose chat, `n` new item, `t` toggle web auto-launch, `?` help,
+  `q` / `Ctrl-C` quit. Connects to the same Express + WebSocket server the
+  web UI uses, with auto-reconnect on server restarts.
+- **Configurable web UI launch** — `bizar` honours a new
+  `dashboard.autoLaunchWeb` setting (default `true`). When true, `bizar`
+  starts the TUI **and** opens your browser; when false, it starts the TUI
+  only. Visible as a checkbox on the Settings view in both the web UI
+  (Settings card "Dashboard → Auto-launch web UI alongside TUI") and the
+  TUI (press `t`).
+- **Background launch mode** — new `bizar --bg` (alias `--detach`) flag
+  spawns the web dashboard as a detached child process and returns to the
+  shell immediately. Writes the same `~/.config/bizar/dashboard.{port,pid}`
+  files the foreground launcher does, so `bizar dashboard status` and
+  `bizar dashboard stop` work the same way.
+
+### Changed
+- **`bizar` (no args) now launches the TUI** in your current terminal.
+  The browser is opened as well unless `--no-web` is passed or
+  `dashboard.autoLaunchWeb` is `false`. Previously this command opened the
+  web UI in your browser; that behaviour is now available via `bizar --bg`
+  (background) or `bizar --web-only` (foreground, no TUI).
+- **`cli/dashboard/state.mjs#getSettings`** now deep-merges nested objects
+  (`notifications`, `dashboard`, `about`) instead of shallow-merging only the
+  top level. Adding a new setting field no longer overwrites the user's
+  existing nested preferences.
+
+### CLI flags (added)
+| Flag             | Effect                                                  |
+| ---------------- | ------------------------------------------------------- |
+| `bizar --web`    | Force-launch the browser alongside the TUI              |
+| `bizar --no-web` | TUI only (no browser); overrides `autoLaunchWeb=true`   |
+| `bizar --web-only` | Foreground web dashboard only (no TUI)                |
+| `bizar --bg`     | Spawn web dashboard detached, return to shell           |
+| `bizar --detach` | Alias for `--bg`                                        |
+
+### Plugin
+- No changes — the TUI is purely a CLI addition; the opencode plugin is
+  untouched.
+
+### Files
+- `package.json` — `blessed@^0.1.81` added (hoisted to top-level
+  `node_modules` for both the source tree and the global install).
+- `cli/dashboard-tui.mjs` — new (~700 LOC).
+- `cli/bin.mjs` — dispatch + flags + help text rewritten.
+- `cli/dashboard/state.mjs` — `dashboard.autoLaunchWeb` default + deep merge.
+- `src/lib/types.ts` — `Settings.dashboard` field added.
+- `src/views/Settings.tsx` — new "Dashboard" card with autoLaunchWeb checkbox.
+
 ## v2.6.2 — 2026-06-19
 
 ### Changed
