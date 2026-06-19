@@ -54,14 +54,24 @@ function safeReadJSON(file, fallback = null) {
 
 function listModFolders() {
   if (!existsSync(MODS_DIR)) return [];
-  return readdirSync(MODS_DIR)
-    .map((name) => {
-      const full = join(MODS_DIR, name);
-      const st = statSync(full);
-      if (!st.isDirectory()) return null;
-      return { id: name, dir: full };
-    })
-    .filter(Boolean);
+  try {
+    return readdirSync(MODS_DIR)
+      .map((name) => {
+        const full = join(MODS_DIR, name);
+        let st;
+        try {
+          st = statSync(full);
+        } catch {
+          return null; // folder deleted between readdir and stat — ignore
+        }
+        if (!st.isDirectory()) return null;
+        return { id: name, dir: full };
+      })
+      .filter(Boolean);
+  } catch {
+    // Mods dir exists but can't be read (permissions?) — return empty.
+    return [];
+  }
 }
 
 function loadMod({ id, dir }) {
@@ -120,10 +130,15 @@ export const modsLoader = {
     mkdirSync(MODS_DIR, { recursive: true });
   },
 
-  /** List all installed mods. */
+  /** List all installed mods. v3.3.1 — never throws. */
   list() {
-    this.ensureModsDir();
-    return listModFolders().map(loadMod);
+    try {
+      this.ensureModsDir();
+      return listModFolders().map(loadMod);
+    } catch (err) {
+      console.error('[mods-loader] list failed:', err);
+      return [];
+    }
   },
 
   /** Read a single mod by id. */
@@ -312,46 +327,52 @@ export const modsLoader = {
    *
    * Returns [{ id, modId, kind: 'iframe'|'tab', label?, icon?, path?, description? }]
    */
+  /** List available views for enabled mods. v3.3.1 — never throws. */
   listModViews() {
-    const mods = this.list().filter((m) => m.enabled);
-    const views = [];
-    for (const mod of mods) {
-      // Check web/index.html
-      const webIndex = join(mod.path, 'web', 'index.html');
-      if (existsSync(webIndex)) {
-        views.push({
-          id: `${mod.id}:web`,
-          modId: mod.id,
-          kind: 'iframe',
-          label: mod.name,
-          description: mod.description || 'Mod web view',
-          path: webIndex,
-          url: null, // resolved server-side when served
-        });
-      }
-      // Check views/registry.json
-      const registryPath = join(mod.path, 'views', 'registry.json');
-      if (existsSync(registryPath)) {
-        try {
-          const reg = JSON.parse(readFileSync(registryPath, 'utf8'));
-          for (const view of reg.views || []) {
-            views.push({
-              id: `${mod.id}:${view.id}`,
-              modId: mod.id,
-              kind: 'tab',
-              label: view.label || view.id,
-              icon: view.icon || 'Puzzle',
-              description: view.description || '',
-              component: view.component || null,
-              path: join(mod.path, 'views', view.component || ''),
-            });
+    try {
+      const mods = this.list().filter((m) => m.enabled);
+      const views = [];
+      for (const mod of mods) {
+        // Check web/index.html
+        const webIndex = join(mod.path, 'web', 'index.html');
+        if (existsSync(webIndex)) {
+          views.push({
+            id: `${mod.id}:web`,
+            modId: mod.id,
+            kind: 'iframe',
+            label: mod.name,
+            description: mod.description || 'Mod web view',
+            path: webIndex,
+            url: null, // resolved server-side when served
+          });
+        }
+        // Check views/registry.json
+        const registryPath = join(mod.path, 'views', 'registry.json');
+        if (existsSync(registryPath)) {
+          try {
+            const reg = JSON.parse(readFileSync(registryPath, 'utf8'));
+            for (const view of reg.views || []) {
+              views.push({
+                id: `${mod.id}:${view.id}`,
+                modId: mod.id,
+                kind: 'tab',
+                label: view.label || view.id,
+                icon: view.icon || 'Puzzle',
+                description: view.description || '',
+                component: view.component || null,
+                path: join(mod.path, 'views', view.component || ''),
+              });
+            }
+          } catch {
+            /* ignore malformed registry */
           }
-        } catch {
-          /* ignore malformed registry */
         }
       }
+      return views;
+    } catch (err) {
+      console.error('[mods-loader] listModViews failed:', err);
+      return [];
     }
-    return views;
   },
 };
 

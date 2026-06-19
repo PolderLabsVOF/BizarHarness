@@ -684,7 +684,7 @@ pre,
 
 .btn-success {
   background: var(--success);
-  color: #0b0e14;
+  color: var(--text-strong);
   border: 1px solid var(--success);
 }
 .btn-success:hover:not(:disabled) {
@@ -1864,6 +1864,15 @@ pre,
   border-color: var(--accent-border);
 }
 
+.skill-category-count {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--bg-elev-3);
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+
 .skills-section {
   display: flex;
   flex-direction: column;
@@ -2890,6 +2899,113 @@ pre,
     #f7f8fa 50%,
     #f7f8fa 100%
   );
+}
+
+/* v3.3.1 — Theme preset swatches */
+.theme-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.theme-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+
+.theme-preset:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.theme-preset-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  color: var(--accent);
+}
+
+.theme-preset-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  display: block;
+}
+
+.theme-preset-name {
+  white-space: nowrap;
+}
+
+/* v3.3.1 — Skills collapsible categories */
+.skills-categories-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.skills-category {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.skills-category-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+  user-select: none;
+  list-style: none;
+}
+
+.skills-category-summary::-webkit-details-marker {
+  display: none;
+}
+
+.skills-category-summary::before {
+  content: '▶';
+  font-size: 9px;
+  color: var(--text-muted);
+  transition: transform var(--motion-fast);
+  margin-right: var(--space-2);
+}
+
+details[open] .skills-category-summary::before {
+  transform: rotate(90deg);
+}
+
+.skills-category-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.skills-category .skills-grid {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+/* v3.3.1 — icon-btn active state for activity tabs */
+.icon-btn-active {
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-elevated));
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* ─── Toasts ───────────────────────────────────────────────────────── */
@@ -4307,14 +4423,65 @@ html[data-animations="false"] * {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 600px;
+  min-height: 0;
 }
 
 .activity-layout {
   display: flex;
   flex: 1;
   gap: var(--space-4);
-  min-height: 600px;
+  min-height: 0;
+}
+
+/* v3.3.1 — Timeline tab */
+.activity-timeline-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.timeline-event {
+  display: grid;
+  grid-template-columns: 160px 28px 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.timeline-event:hover {
+  background: var(--bg-elevated);
+}
+
+.timeline-time {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+}
+
+.timeline-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-message {
+  color: var(--text);
+}
+
+.timeline-node {
+  grid-column: 3;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .activity-canvas {

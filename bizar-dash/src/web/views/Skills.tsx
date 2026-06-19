@@ -79,6 +79,10 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
   const [searchResults, setSearchResults] = useState<Skill[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
+  // v3.3.1 — tracks which category <details> elements are open. Default: first 3.
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set(['all', 'languages', 'frameworks']),
+  );
 
   const reload = async () => {
     setLoading(true);
@@ -237,23 +241,7 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
         </div>
       </header>
 
-      <div className="skills-categories">
-        {categories.map((c) => {
-          const Icon = ICONS[c.id] || Sparkles;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              className={cn('skill-category', activeCategory === c.id && 'skill-category-active')}
-              onClick={() => setActiveCategory(c.id)}
-            >
-              <Icon size={14} />
-              <span>{c.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
+      {/* v3.3.1 — Search results take priority over category view */}
       {searchQ.trim() && (
         <section className="skills-section">
           <h3 className="skills-section-title">
@@ -289,36 +277,82 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
         </section>
       )}
 
-      <section className="skills-section">
-        <h3 className="skills-section-title">
-          <CheckCircle2 size={14} /> Installed ({filteredInstalled.length})
-        </h3>
-        {loading ? (
-          <div className="view-loading"><Spinner size="lg" /></div>
-        ) : filteredInstalled.length === 0 ? (
-          <EmptyState
-            icon={<Sparkles size={28} />}
-            title="No skills in this category"
-            message="Browse the registry above to install new skills."
-            action={
-              <Button variant="primary" size="sm" onClick={() => setActiveCategory('all')}>
-                Show all
-              </Button>
-            }
-          />
-        ) : (
-          <div className="skills-grid">
-            {filteredInstalled.map((s) => (
-              <SkillCard
-                key={s.id}
-                skill={s}
-                onShow={() => onShowDetails(s)}
-                onToggle={() => onToggle(s)}
-              />
-            ))}
+      {/* v3.3.1 — Collapsible category sections */}
+      {!searchQ.trim() && (
+        <>
+          {/* Quick category pills */}
+          <div className="skills-categories">
+            {categories.map((c) => {
+              const Icon = ICONS[c.id] || Sparkles;
+              const count = skills.filter((s) => (s.category || 'tools') === c.id).length;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={cn('skill-category', activeCategory === c.id && 'skill-category-active')}
+                  onClick={() => setActiveCategory(c.id)}
+                >
+                  <Icon size={14} />
+                  <span>{c.label}</span>
+                  {count > 0 && <span className="skill-category-count">{count}</span>}
+                </button>
+              );
+            })}
           </div>
-        )}
-      </section>
+
+          {/* Installed skills grouped by category with <details> */}
+          <section className="skills-section">
+            <h3 className="skills-section-title">
+              <CheckCircle2 size={14} /> Installed
+            </h3>
+            {loading ? (
+              <div className="view-loading"><Spinner size="lg" /></div>
+            ) : (
+              <div className="skills-categories-list">
+                {categories.map((cat) => {
+                  const catSkills = filteredInstalled.filter((s) => (s.category || 'tools') === cat.id);
+                  if (catSkills.length === 0) return null;
+                  const isOpen = expandedCategories.has(cat.id);
+                  return (
+                    <details
+                      key={cat.id}
+                      className="skills-category"
+                      open={isOpen}
+                      onToggle={(e) => {
+                        const tgt = e.currentTarget as HTMLDetailsElement;
+                        setExpandedCategories((prev) => {
+                          const next = new Set(prev);
+                          if (tgt.open) next.add(cat.id);
+                          else next.delete(cat.id);
+                          return next;
+                        });
+                      }}
+                    >
+                      <summary className="skills-category-summary">
+                        <span className="skills-category-name">
+                          {ICONS[cat.id] && (() => { const Icon = ICONS[cat.id]; return <Icon size={14} />; })()}
+                          {cat.label}
+                        </span>
+                        <span className="skill-category-count">{catSkills.length}</span>
+                      </summary>
+                      <div className="skills-grid">
+                        {catSkills.map((s) => (
+                          <SkillCard
+                            key={s.id}
+                            skill={s}
+                            onShow={() => onShowDetails(s)}
+                            onToggle={() => onToggle(s)}
+                          />
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }

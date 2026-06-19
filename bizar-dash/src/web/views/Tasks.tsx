@@ -811,6 +811,11 @@ function openTaskModal(
           recurring,
           dueDate,
         });
+        // v3.3.1 — close modal first, bump safe window, then state.
+        modal.close();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new MouseEvent('mousedown'));
+        }
         setTasks((cur) => cur.map((x) => (x.id === task.id ? updated : x)));
         toast.success('Task updated.', 1500);
       } else {
@@ -824,10 +829,14 @@ function openTaskModal(
           recurring,
           dueDate,
         });
+        // v3.3.1 — close modal first, bump safe window, then state.
+        modal.close();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new MouseEvent('mousedown'));
+        }
         setTasks((cur) => [created, ...cur]);
         toast.success('Task created.', 1500);
       }
-      modal.close();
       await refreshSnapshot();
     } catch (err) {
       toast.error(`Save failed: ${(err as Error).message}`);
@@ -1242,10 +1251,16 @@ function openSubmitTaskModal(
           ? `Odin split it into ${count} subtasks.`
           : 'Task submitted to Odin.',
       );
-      // Defensive: close the modal AFTER any state mutation so a
-      // stray click event on the portal can't bubble into a tab
-      // switch before React has a chance to clear the active tab.
+      // v3.3.1 — CRITICAL: close modal FIRST, then bump safe window,
+      // then update state. This way the portal unmount + React re-render
+      // can't trigger any key handlers in the brief window before state
+      // updates. We manually dispatch a synthetic mousedown to extend
+      // the safe window so any stray keyboard events during the state-
+      // update tick also can't trigger tab switches.
       modal.close();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new MouseEvent('mousedown'));
+      }
       if (setTasks) setTasks((cur: Task[]) => [result.main, ...(result.subtasks || []), ...cur]);
       if (reload) await reload();
       if (refreshSnapshot) await refreshSnapshot();

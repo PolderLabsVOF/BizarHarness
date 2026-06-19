@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Layers,
   Target,
+  Clock,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
@@ -136,6 +137,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [activeActivityTab, setActiveActivityTab] = useState<'canvas' | 'timeline'>('canvas');
 
   // Detail-panel local state
   const [commentText, setCommentText] = useState('');
@@ -501,19 +503,39 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
-            <ActivityIcon size={18} /> Activity graph
+            <ActivityIcon size={18} /> Activity
           </h2>
           <p className="view-subtitle">
             Live agent/task/background wiring. Drag to pan, scroll to zoom, click a node for details.
           </p>
         </div>
         <div className="view-actions">
+          <div className="view-tabs" style={{ display: 'flex', gap: '4px', marginRight: '8px' }}>
+            <button
+              type="button"
+              className={`icon-btn ${activeActivityTab === 'canvas' ? 'icon-btn-active' : ''}`}
+              onClick={() => setActiveActivityTab('canvas')}
+              title="Canvas view"
+            >
+              <Layers size={14} /> Canvas
+            </button>
+            <button
+              type="button"
+              className={`icon-btn ${activeActivityTab === 'timeline' ? 'icon-btn-active' : ''}`}
+              onClick={() => setActiveActivityTab('timeline')}
+              title="Timeline view"
+            >
+              <Clock size={14} /> Timeline
+            </button>
+          </div>
           <Button variant="secondary" size="sm" onClick={() => setRefreshTick((t) => t + 1)}>
             <RefreshCw size={14} /> Refresh
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setTransform({ x: 80, y: 80, scale: 1 })} title="Reset view (0)">
-            <Move size={14} /> Reset
-          </Button>
+          {activeActivityTab === 'canvas' && (
+            <Button variant="ghost" size="sm" onClick={() => setTransform({ x: 80, y: 80, scale: 1 })} title="Reset view (0)">
+              <Move size={14} /> Reset
+            </Button>
+          )}
         </div>
       </header>
 
@@ -528,164 +550,204 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
           message="Once agents, tasks, or background instances exist, they'll show up here as nodes."
         />
       ) : (
-        <div className="activity-layout">
-          <div
-            ref={canvasRef}
-            className="activity-canvas"
-            style={{ cursor: drag ? 'grabbing' : 'grab' } as CSSProperties}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-            onWheel={onWheel}
-            role="application"
-            aria-label="Activity graph"
-          >
-            <svg width="100%" height="100%">
-              <defs>
-                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--border)" strokeWidth="0.5" opacity={0.3} />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid)" />
-              <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
-                {edges.map(renderEdge)}
-                {nodes.map(renderNode)}
-              </g>
-            </svg>
-
-            {/* Canvas overlay controls */}
-            <div className="activity-zoom-controls">
-              <button type="button" className="icon-btn" onClick={() => setTransform((t) => ({ ...t, scale: Math.min(2.5, t.scale + 0.15) }))} title="Zoom in">
-                <ZoomIn size={14} />
-              </button>
-              <button type="button" className="icon-btn" onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale - 0.15) }))} title="Zoom out">
-                <ZoomOut size={14} />
-              </button>
-              <span className="muted mono">{(transform.scale * 100).toFixed(0)}%</span>
-            </div>
-
-            <div className="activity-legend">
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.working }} /> working</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.queued }} /> queued</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.blocked }} /> blocked</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.error }} /> error</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.stuck }} /> stuck</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.idle }} /> idle</div>
-              <div className="legend-sep" />
-              <div className="legend-item"><Layers size={12} /> agent · <Target size={12} /> task · <Cpu size={12} /> bg</div>
-            </div>
-          </div>
-
-          {selectedNode && (
-            <aside className="activity-detail">
-              <Card>
-                <CardTitle>
-                  {selectedNode.type === 'agent' && <Bot size={14} />}
-                  {selectedNode.type === 'task' && <CheckSquare size={14} />}
-                  {selectedNode.type === 'bg' && <Cpu size={14} />}
-                  {selectedNode.label}
-                  <button type="button" className="icon-btn" onClick={() => setSelectedNode(null)} title="Close" style={{ marginLeft: 'auto' }}>
-                    <X size={14} />
-                  </button>
-                </CardTitle>
-                <div className="activity-detail-meta">
-                  <div><span className="muted">type</span> {selectedNode.type}</div>
-                  <div><span className="muted">status</span> <code>{selectedNode.status}</code></div>
-                  {selectedNode.data?.role && <div><span className="muted">role</span> {selectedNode.data.role}</div>}
-                  {selectedNode.data?.model && <div><span className="muted">model</span> {selectedNode.data.model}</div>}
-                  {selectedNode.data?.assignee && <div><span className="muted">assignee</span> @{selectedNode.data.assignee}</div>}
-                  {selectedNode.data?.priority && <div><span className="muted">priority</span> {selectedNode.data.priority}</div>}
-                  {selectedNode.data?.startedAt && <div><span className="muted">started</span> {new Date(selectedNode.data.startedAt).toLocaleString()}</div>}
-                </div>
-                {selectedNode.data?.description && (
-                  <div className="activity-detail-desc">{selectedNode.data.description}</div>
-                )}
-                {selectedNode.data?.promptPreview && (
-                  <div className="activity-detail-desc">{selectedNode.data.promptPreview}</div>
-                )}
-
-                {selectedNode.type === 'bg' && (
-                  <div className="activity-detail-bg">
-                    <div className="field-label">tmux session: <code>{selectedNode.data.tmuxSession}</code> {selectedNode.data.tmuxActive ? <span className="tag tag-success">active</span> : <span className="tag">inactive</span>}</div>
-                    <pre className="bg-output">{bgOutput || '(no output — start the session via tmux attach)'}</pre>
-                    <div className="bg-output-actions">
-                      <Button variant="ghost" size="sm" onClick={refetchOutput}><RefreshCw size={12} /> Refresh output</Button>
-                      <Button variant="danger" size="sm" onClick={onKillBg}><Trash2 size={12} /> Kill session</Button>
-                    </div>
-                    <div className="task-form-row">
-                      <input
-                        className="input"
-                        placeholder="Send a message to this bg session…"
-                        value={bgMessage}
-                        onChange={(e) => setBgMessage(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') onSendBgMessage();
-                        }}
-                      />
-                      <Button variant="primary" size="sm" disabled={!bgMessage.trim()} onClick={onSendBgMessage}>
-                        <Send size={12} /> Send
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {selectedNode.type !== 'bg' && (
-                  <div className="activity-detail-create">
-                    <div className="field-label">Create follow-up task</div>
-                    <input
-                      className="input"
-                      placeholder="Task title"
-                      value={taskTitle}
-                      onChange={(e) => setTaskTitle(e.target.value)}
-                    />
-                    <div className="task-form-row">
-                      <select className="select" value={taskPriority} onChange={(e) => setTaskPriority(e.target.value)}>
-                        <option value="low">Low</option>
-                        <option value="normal">Normal</option>
-                        <option value="high">High</option>
-                      </select>
-                      <Button variant="primary" size="sm" disabled={!taskTitle.trim() || creatingTask} onClick={onCreateTaskFromNode}>
-                        <Plus size={12} /> Add task
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="activity-detail-comments">
-                  <div className="field-label"><MessageSquare size={12} /> Comments &amp; activity</div>
-                  <ul className="comment-list">
-                    {comments.length === 0 && <li className="muted">No comments yet.</li>}
-                    {comments.map((c, i) => (
-                      <li key={i} className="comment-item">
-                        <div className="comment-head">
-                          <strong>{c.author || 'system'}</strong>
-                          <span className="muted">{c.kind} · {new Date(c.ts).toLocaleString()}</span>
+        <>
+          {/* v3.3.1 — Timeline tab */}
+          {activeActivityTab === 'timeline' && (
+            <div className="activity-timeline-panel">
+              {events.length === 0 ? (
+                <EmptyState
+                  icon={<Clock size={28} />}
+                  title="No events yet"
+                  message="Activity events will appear here as agents and tasks run."
+                />
+              ) : (
+                <div className="timeline-list">
+                  {[...events].reverse().map((ev, i) => {
+                    const AgentIcon = ev.author ? Bot : ev.kind === 'task' ? CheckSquare : ev.kind === 'bg' ? Cpu : ActivityIcon;
+                    return (
+                      <div key={i} className="timeline-event">
+                        <div className="timeline-time">
+                          {new Date(ev.ts).toLocaleString()}
                         </div>
-                        {c.text && <div className="comment-text">{c.text}</div>}
-                        {c.taskId && <div className="muted">→ task <code>{String(c.taskId)}</code></div>}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="comment-input-row">
-                    <input
-                      className="input"
-                      placeholder="Add a comment…"
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) onAddComment();
-                      }}
-                    />
-                    <Button variant="secondary" size="sm" disabled={!commentText.trim() || postingComment} onClick={onAddComment}>
-                      <Send size={12} /> Post
-                    </Button>
-                  </div>
+                        <div className="timeline-icon" style={{ color: statusColor(ev.kind) }}>
+                          <AgentIcon size={14} />
+                        </div>
+                        <div className="timeline-message">
+                          {ev.author && <strong>{ev.author}</strong>}
+                          {ev.text && <span> {ev.text}</span>}
+                          {!ev.author && !ev.text && <span className="muted">{ev.kind}</span>}
+                        </div>
+                        {ev.nodeId && <div className="timeline-node muted mono">{ev.nodeId}</div>}
+                      </div>
+                    );
+                  })}
                 </div>
-              </Card>
-            </aside>
+              )}
+            </div>
           )}
-        </div>
+
+          {/* v3.3.1 — Canvas tab */}
+          {activeActivityTab === 'canvas' && (
+            <div className="activity-layout" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+              <div
+                ref={canvasRef}
+                className="activity-canvas"
+                style={{ flex: 1, minHeight: 0, cursor: drag ? 'grabbing' : 'grab' } as CSSProperties}
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onMouseLeave={onMouseUp}
+                onWheel={onWheel}
+                role="application"
+                aria-label="Activity graph"
+              >
+                <svg width="100%" height="100%">
+                  <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--border)" strokeWidth="0.5" opacity={0.3} />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+                  <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
+                    {edges.map(renderEdge)}
+                    {nodes.map(renderNode)}
+                  </g>
+                </svg>
+
+                {/* Canvas overlay controls */}
+                <div className="activity-zoom-controls">
+                  <button type="button" className="icon-btn" onClick={() => setTransform((t) => ({ ...t, scale: Math.min(2.5, t.scale + 0.15) }))} title="Zoom in">
+                    <ZoomIn size={14} />
+                  </button>
+                  <button type="button" className="icon-btn" onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale - 0.15) }))} title="Zoom out">
+                    <ZoomOut size={14} />
+                  </button>
+                  <span className="muted mono">{(transform.scale * 100).toFixed(0)}%</span>
+                </div>
+
+                <div className="activity-legend">
+                  <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.working }} /> working</div>
+                  <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.queued }} /> queued</div>
+                  <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.blocked }} /> blocked</div>
+                  <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.error }} /> error</div>
+                  <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.stuck }} /> stuck</div>
+                  <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.idle }} /> idle</div>
+                  <div className="legend-sep" />
+                  <div className="legend-item"><Layers size={12} /> agent · <Target size={12} /> task · <Cpu size={12} /> bg</div>
+                </div>
+              </div>
+
+              {selectedNode && (
+                <aside className="activity-detail">
+                  <Card>
+                    <CardTitle>
+                      {selectedNode.type === 'agent' && <Bot size={14} />}
+                      {selectedNode.type === 'task' && <CheckSquare size={14} />}
+                      {selectedNode.type === 'bg' && <Cpu size={14} />}
+                      {selectedNode.label}
+                      <button type="button" className="icon-btn" onClick={() => setSelectedNode(null)} title="Close" style={{ marginLeft: 'auto' }}>
+                        <X size={14} />
+                      </button>
+                    </CardTitle>
+                    <div className="activity-detail-meta">
+                      <div><span className="muted">type</span> {selectedNode.type}</div>
+                      <div><span className="muted">status</span> <code>{selectedNode.status}</code></div>
+                      {selectedNode.data?.role && <div><span className="muted">role</span> {selectedNode.data.role}</div>}
+                      {selectedNode.data?.model && <div><span className="muted">model</span> {selectedNode.data.model}</div>}
+                      {selectedNode.data?.assignee && <div><span className="muted">assignee</span> @{selectedNode.data.assignee}</div>}
+                      {selectedNode.data?.priority && <div><span className="muted">priority</span> {selectedNode.data.priority}</div>}
+                      {selectedNode.data?.startedAt && <div><span className="muted">started</span> {new Date(selectedNode.data.startedAt).toLocaleString()}</div>}
+                    </div>
+                    {selectedNode.data?.description && (
+                      <div className="activity-detail-desc">{selectedNode.data.description}</div>
+                    )}
+                    {selectedNode.data?.promptPreview && (
+                      <div className="activity-detail-desc">{selectedNode.data.promptPreview}</div>
+                    )}
+
+                    {selectedNode.type === 'bg' && (
+                      <div className="activity-detail-bg">
+                        <div className="field-label">tmux session: <code>{selectedNode.data.tmuxSession}</code> {selectedNode.data.tmuxActive ? <span className="tag tag-success">active</span> : <span className="tag">inactive</span>}</div>
+                        <pre className="bg-output">{bgOutput || '(no output — start the session via tmux attach)'}</pre>
+                        <div className="bg-output-actions">
+                          <Button variant="ghost" size="sm" onClick={refetchOutput}><RefreshCw size={12} /> Refresh output</Button>
+                          <Button variant="danger" size="sm" onClick={onKillBg}><Trash2 size={12} /> Kill session</Button>
+                        </div>
+                        <div className="task-form-row">
+                          <input
+                            className="input"
+                            placeholder="Send a message to this bg session…"
+                            value={bgMessage}
+                            onChange={(e) => setBgMessage(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') onSendBgMessage();
+                            }}
+                          />
+                          <Button variant="primary" size="sm" disabled={!bgMessage.trim()} onClick={onSendBgMessage}>
+                            <Send size={12} /> Send
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedNode.type !== 'bg' && (
+                      <div className="activity-detail-create">
+                        <div className="field-label">Create follow-up task</div>
+                        <input
+                          className="input"
+                          placeholder="Task title"
+                          value={taskTitle}
+                          onChange={(e) => setTaskTitle(e.target.value)}
+                        />
+                        <div className="task-form-row">
+                          <select className="select" value={taskPriority} onChange={(e) => setTaskPriority(e.target.value)}>
+                            <option value="low">Low</option>
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                          </select>
+                          <Button variant="primary" size="sm" disabled={!taskTitle.trim() || creatingTask} onClick={onCreateTaskFromNode}>
+                            <Plus size={12} /> Add task
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="activity-detail-comments">
+                      <div className="field-label"><MessageSquare size={12} /> Comments &amp; activity</div>
+                      <ul className="comment-list">
+                        {comments.length === 0 && <li className="muted">No comments yet.</li>}
+                        {comments.map((c, i) => (
+                          <li key={i} className="comment-item">
+                            <div className="comment-head">
+                              <strong>{c.author || 'system'}</strong>
+                              <span className="muted">{c.kind} · {new Date(c.ts).toLocaleString()}</span>
+                            </div>
+                            {c.text && <div className="comment-text">{c.text}</div>}
+                            {c.taskId && <div className="muted">→ task <code>{String(c.taskId)}</code></div>}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="comment-input-row">
+                        <input
+                          className="input"
+                          placeholder="Add a comment…"
+                          value={commentText}
+                          onChange={(e) => setCommentText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) onAddComment();
+                          }}
+                        />
+                        <Button variant="secondary" size="sm" disabled={!commentText.trim() || postingComment} onClick={onAddComment}>
+                          <Send size={12} /> Post
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                </aside>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

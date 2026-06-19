@@ -75,7 +75,7 @@ export const diagnosticsStore = {
     const tasks = active ? tasksStore.loadTasks(active.id) : [];
     const schedules = active ? schedulesStore.list(active.id) : [];
     return {
-      version: '3.3.0',
+      version: '3.3.1',
       uptimeMs: Date.now() - startedAt,
       uptime: Math.floor((Date.now() - startedAt) / 1000),
       nodeVersion: process.version,

@@ -44,6 +44,18 @@ const THEMES: { id: ThemeName; label: string; Icon: typeof Sun }[] = [
   { id: 'system', label: 'System', Icon: Monitor },
 ];
 
+// v3.3.1 — One-click accent color presets.
+const PRESET_THEMES = [
+  { name: 'Purple', accent: '#8b5cf6' },
+  { name: 'Blue', accent: '#3b82f6' },
+  { name: 'Green', accent: '#10b981' },
+  { name: 'Orange', accent: '#f97316' },
+  { name: 'Red', accent: '#ef4444' },
+  { name: 'Pink', accent: '#ec4899' },
+  { name: 'Cyan', accent: '#06b6d4' },
+  { name: 'Mono', accent: '#6b7280' },
+];
+
 const FONT_FAMILIES = [
   'Inter',
   'system-ui',
@@ -202,6 +214,31 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         <Card>
           <CardTitle><Palette size={14} /> Theme</CardTitle>
           <CardMeta>Mode, accent, and colors. Live preview as you tweak.</CardMeta>
+
+          {/* v3.3.1 — Accent color presets */}
+          <div className="field" data-setting-id="theme.presets">
+            <label className="field-label">Accent presets</label>
+            <div className="theme-presets">
+              {PRESET_THEMES.map((t) => (
+                <button
+                  key={t.name}
+                  type="button"
+                  className={cn(
+                    'theme-preset',
+                    settings.theme.accent === t.accent && 'theme-preset-active',
+                  )}
+                  onClick={() => patchTheme({ accent: t.accent })}
+                  title={t.name}
+                >
+                  <span
+                    className="theme-preset-swatch"
+                    style={{ background: t.accent }}
+                  />
+                  <span className="theme-preset-name">{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="field" data-setting-id="theme.mode">
             <label className="field-label">Mode</label>

@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.3.1 — 2026-06-19
+
+### Fixed
+- **Chat redirect after actions (real fix)**: The v3.3.0 fix used a 250ms safe window which was too short. Now extended to 1500ms and listens for `focusin` and `keydown` events too. Also bails when active element is body/null within the safe window (the actual bug case — modal close → focus moves to body → stray keypress triggers tab switch).
+- **Mods page**: `mods-loader.mjs` now never throws — all listing functions return empty arrays on error and protect against race conditions in `statSync`.
+- **Submit handlers**: Every submit handler in Tasks view explicitly calls `preventDefault` + `stopPropagation`, closes the modal first, bumps the safe window, then updates state.
+
+### Improved
+- **Activity canvas**: No longer has a fixed `min-height: 600px` — now fills available space. New Timeline tab showing chronological events with timestamps.
+- **Skills page**: Collapsible `<details>`/`<summary>` category sections (first 3 expanded by default). Search input stays at top.
+- **Theme presets**: 8 one-click accent color swatches in Settings (Purple/Blue/Green/Orange/Red/Pink/Cyan/Mono).
+- **CSS**: `.btn-success` now uses `var(--text-strong)` instead of hardcoded `#0b0e14`.
+
 ## v3.2.2 — 2026-06-19
 
 ### Fixed
