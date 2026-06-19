@@ -73,7 +73,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   history: History,
 };
 
-  const VERSION = 'v3.5.2';
+  const VERSION = 'v3.5.3';
 
 export function App() {
   return (

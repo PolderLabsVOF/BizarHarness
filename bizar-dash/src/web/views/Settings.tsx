@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   QrCode,
   Smartphone,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '../components/Button';
@@ -210,24 +212,88 @@ const LAYOUTS = [
   { id: 'both', label: 'Both' },
 ] as const;
 
-// v3.3.3 — Updates card
+// v3.5.3 — Updates card with per-package selection, live progress, and auto-restart
+type PkgStatus = {
+  status: 'idle' | 'starting' | 'installing' | 'done' | 'error';
+  error?: string;
+  newVersion?: string;
+  logs: string[];
+};
+
 function UpdatesCard() {
   const toast = useToast();
   const [status, setStatus] = useState<{
     current: Record<string, string | null>;
     latest: Record<string, string | null> | null;
     checking: boolean;
-    applying: boolean;
+    updating: boolean;
     hasUpdates: boolean;
+    requiresRestart: boolean;
+    perPackage: Record<string, PkgStatus>;
     error?: string;
-    results?: Record<string, { ok: boolean; output?: string; error?: string }>;
   }>({
     current: {},
     latest: null,
     checking: false,
-    applying: false,
+    updating: false,
     hasUpdates: false,
+    requiresRestart: false,
+    perPackage: {},
   });
+
+  // WebSocket subscription for live update progress
+  useEffect(() => {
+    const protocols = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocols}//${window.location.host}/ws`);
+    ws.onmessage = (e) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(e.data as string);
+      } catch {
+        return;
+      }
+      if (msg.type === 'update:progress' || msg.type === 'update:log' || msg.type === 'update:complete') {
+        setStatus((s) => {
+          if (msg.type === 'update:complete') {
+            return {
+              ...s,
+              updating: false,
+              requiresRestart: Boolean((msg as { requiresRestart?: boolean }).requiresRestart),
+            };
+          }
+          if (msg.type === 'update:log') {
+            const m = msg as { pkg: string; line: string };
+            const existing = s.perPackage[m.pkg] || { logs: [] };
+            return {
+              ...s,
+              perPackage: {
+                ...s.perPackage,
+                [m.pkg]: {
+                  ...existing,
+                  logs: [...(existing.logs || []).slice(-50), m.line],
+                },
+              },
+            };
+          }
+          // update:progress
+          const m = msg as { pkg: string; status: PkgStatus['status']; error?: string; newVersion?: string };
+          return {
+            ...s,
+            perPackage: {
+              ...s.perPackage,
+              [m.pkg]: {
+                ...s.perPackage[m.pkg],
+                status: m.status,
+                error: m.error,
+                newVersion: m.newVersion,
+              },
+            },
+          };
+        });
+      }
+    };
+    return () => ws.close();
+  }, []);
 
   // Load current versions on mount
   useEffect(() => {
@@ -256,23 +322,31 @@ function UpdatesCard() {
     }
   };
 
-  const apply = async () => {
-    if (!confirm('Update Bizar to the latest version? The dashboard may need to be restarted.')) return;
-    setStatus((s) => ({ ...s, applying: true, error: undefined }));
+  const applyUpdate = async () => {
+    if (!confirm('Update Bizar packages? The dashboard will restart automatically.')) return;
+    setStatus((s) => ({
+      ...s,
+      updating: true,
+      requiresRestart: false,
+      perPackage: {},
+      error: undefined,
+    }));
     try {
-      const result = await api.post<Record<string, { ok: boolean; output?: string; error?: string }>>(
-        '/updates/apply',
-        { packages: ['bizar', 'bizar-dash'] },
-      );
-      setStatus((s) => ({
-        ...s,
-        applying: false,
-        results: result,
-        hasUpdates: false,
-      }));
-      toast.success('Update complete. Restart the dashboard to use the new version.');
+      await api.post('/updates/apply', { packages: ['bizar', 'bizar-dash', 'bizar-plugin'] });
+      // Progress streams via WebSocket
     } catch (err) {
-      setStatus((s) => ({ ...s, applying: false, error: (err as Error).message }));
+      setStatus((s) => ({ ...s, updating: false, error: (err as Error).message }));
+    }
+  };
+
+  const restart = async () => {
+    if (!confirm('Restart the dashboard? You will be disconnected briefly.')) return;
+    try {
+      await api.post('/restart');
+      toast.info('Restarting…', 3000);
+      setTimeout(() => window.location.reload(), 3000);
+    } catch {
+      toast.error('Restart failed');
     }
   };
 
@@ -282,8 +356,11 @@ function UpdatesCard() {
     { id: 'bizar-plugin', name: 'Opencode Plugin' },
   ];
 
+  const isBusy = status.checking || status.updating;
+
   return (
     <Card title="Updates">
+      {/* Current versions */}
       <div className="updates-current">
         <h4>Installed versions</h4>
         <ul>
@@ -296,23 +373,7 @@ function UpdatesCard() {
         </ul>
       </div>
 
-      <div className="updates-actions">
-        <Button onClick={check} disabled={status.checking || status.applying}>
-          {status.checking ? <span className="btn-spinner" /> : <RefreshCw size={14} />}
-          Check for updates
-        </Button>
-        {status.latest && (
-          <Button
-            variant="primary"
-            onClick={apply}
-            disabled={!status.hasUpdates || status.applying}
-          >
-            {status.applying ? <span className="btn-spinner" /> : <Download size={14} />}
-            {status.hasUpdates ? 'Update now' : 'Up to date'}
-          </Button>
-        )}
-      </div>
-
+      {/* Latest + per-package status */}
       {status.latest && (
         <div className="updates-latest">
           <h4>Latest available</h4>
@@ -335,21 +396,68 @@ function UpdatesCard() {
         </div>
       )}
 
+      {/* Per-package progress rows (shown while updating) */}
+      {status.updating && (
+        <div className="updates-progress-rows">
+          {packages.map((p) => {
+            const pkgStatus = status.perPackage[p.id] || { status: 'idle', logs: [] as string[] };
+            return (
+              <div key={p.id} className="updates-pkg-row">
+                <div className="updates-pkg-row-header">
+                  <span className="updates-pkg-name">{p.name}</span>
+                  <div className="updates-pkg-status">
+                    {pkgStatus.status === 'starting' && <span className="btn-spinner" />}
+                    {pkgStatus.status === 'installing' && <span className="btn-spinner" />}
+                    {pkgStatus.status === 'done' && <CheckCircle size={14} className="icon-success" />}
+                    {pkgStatus.status === 'error' && <AlertCircle size={14} className="icon-error" />}
+                    <span>{pkgStatus.status}</span>
+                    {pkgStatus.newVersion && (
+                      <code className="mono" style={{ fontSize: 11 }}>→ {pkgStatus.newVersion}</code>
+                    )}
+                  </div>
+                </div>
+                {pkgStatus.logs.length > 0 && (
+                  <details className="updates-pkg-logs">
+                    <summary>npm output ({pkgStatus.logs.length} lines)</summary>
+                    <pre>{pkgStatus.logs.join('\n')}</pre>
+                  </details>
+                )}
+                {pkgStatus.status === 'error' && pkgStatus.error && (
+                  <div className="updates-pkg-error">
+                    <AlertTriangle size={12} /> {pkgStatus.error}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="updates-actions">
+        <Button onClick={check} disabled={isBusy}>
+          {status.checking ? <span className="btn-spinner" /> : <RefreshCw size={14} />}
+          Check for updates
+        </Button>
+        <Button
+          variant="primary"
+          onClick={applyUpdate}
+          disabled={!status.hasUpdates || status.updating}
+        >
+          {status.updating ? <span className="btn-spinner" /> : <Download size={14} />}
+          {status.updating ? 'Updating…' : (status.hasUpdates ? 'Update now' : 'Up to date')}
+        </Button>
+        {status.requiresRestart && (
+          <Button variant="danger" onClick={restart}>
+            <RefreshCw size={14} /> Restart Dashboard
+          </Button>
+        )}
+      </div>
+
       {status.error && (
         <div className="updates-error">
           <AlertTriangle size={14} />
           <span>{status.error}</span>
-        </div>
-      )}
-
-      {status.results && (
-        <div className="updates-results">
-          <h4>Update results</h4>
-          {Object.entries(status.results).map(([pkg, r]) => (
-            <div key={pkg} className={`updates-result ${r.ok ? 'ok' : 'err'}`}>
-              <strong>{pkg}</strong>: {r.ok ? 'updated' : `failed: ${r.error}`}
-            </div>
-          ))}
         </div>
       )}
     </Card>

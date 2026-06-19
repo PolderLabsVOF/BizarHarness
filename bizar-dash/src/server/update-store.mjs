@@ -1,10 +1,10 @@
 /**
  * src/server/update-store.mjs
  *
- * v3.3.3 — Read installed package versions, check npm for latest,
+ * v3.5.3 — Read installed package versions, check npm for latest,
  * and apply updates for the three core bizarre packages.
  */
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -91,5 +91,78 @@ export const updateStore = {
     }
 
     return results;
+  },
+
+  /**
+   * Apply updates for specified packages with live progress via broadcast.
+   * Streams events:
+   *   { type: 'update:progress', pkg, status: 'starting' }
+   *   { type: 'update:progress', pkg, status: 'installing' }
+   *   { type: 'update:progress', pkg, status: 'done', newVersion }
+   *   { type: 'update:progress', pkg, status: 'error', error }
+   *   { type: 'update:complete', results, requiresRestart: true }
+   */
+  async applyWithProgress({ packages, broadcast }) {
+    const results = {};
+    let allOk = true;
+
+    for (const pkg of packages) {
+      const pkgDef = PACKAGES.find((p) => p.id === pkg);
+      if (!pkgDef) continue;
+
+      broadcast?.({ type: 'update:progress', pkg, status: 'starting' });
+
+      try {
+        broadcast?.({ type: 'update:progress', pkg, status: 'installing' });
+
+        // Use spawn so we can stream stdout/stderr
+        const child = spawn('npm', ['install', '-g', `${pkgDef.name}@latest`, '--ignore-scripts'], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        // Stream stdout/stderr to broadcast for live log display
+        child.stdout.on('data', (data) => {
+          const line = data.toString().trim();
+          if (line) broadcast?.({ type: 'update:log', pkg, line });
+        });
+        child.stderr.on('data', (data) => {
+          const line = data.toString().trim();
+          if (line) broadcast?.({ type: 'update:log', pkg, line });
+        });
+
+        const exitCode = await new Promise((resolve) => {
+          child.on('close', resolve);
+        });
+
+        if (exitCode !== 0) {
+          allOk = false;
+          results[pkg] = { ok: false, error: `npm exited with code ${exitCode}` };
+          broadcast?.({ type: 'update:progress', pkg, status: 'error', error: `exit ${exitCode}` });
+          continue;
+        }
+
+        // Get the new version
+        const newVersion = this.getInstalledVersion(pkg);
+        results[pkg] = { ok: true, newVersion };
+        broadcast?.({ type: 'update:progress', pkg, status: 'done', newVersion });
+      } catch (err) {
+        allOk = false;
+        results[pkg] = { ok: false, error: err.message };
+        broadcast?.({ type: 'update:progress', pkg, status: 'error', error: err.message });
+      }
+    }
+
+    broadcast?.({ type: 'update:complete', results, requiresRestart: true, allOk });
+    return { results, requiresRestart: true };
+  },
+
+  getInstalledVersion(pkgId) {
+    const pkgDef = PACKAGES.find((p) => p.id === pkgId);
+    if (!pkgDef) return null;
+    try {
+      return require(`${pkgDef.name}/package.json`).version;
+    } catch {
+      return null;
+    }
   },
 };

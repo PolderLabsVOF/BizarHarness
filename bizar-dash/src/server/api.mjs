@@ -8,6 +8,7 @@
  * Express.
  */
 import express from 'express';
+import { spawn } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -88,7 +89,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-      version: '3.5.2',
+      version: '3.5.3',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -1479,20 +1480,37 @@ export function createApiRouter({
     }
   }));
 
-  router.post('/updates/apply', wrap(async (req, res) => {
-    const packages = req.body?.packages || ['bizar', 'bizar-dash'];
-    try {
-      const result = await updateStore.apply({
-        packages,
-        broadcast: (msg) => {
-          if (typeof broadcast === 'function') broadcast(msg);
+  router.post('/updates/apply', async (req, res) => {
+    const packages = req.body?.packages || ['bizar', 'bizar-dash', 'bizar-plugin'];
+    // Start the update in the background — return immediately so the client
+    // can receive progress events over the WebSocket channel.
+    updateStore.applyWithProgress({
+      packages,
+      broadcast,
+    }).catch((err) => console.error('[updates] error:', err));
+    res.json({ started: true, packages });
+  });
+
+  // ── /api/restart (v3.5.3) ──────────────────────────────────────────
+  // Self-respawn: starts a new dashboard process in the background and
+  // exits this one. The BIZAR_AUTO_RESPAWN=1 env var marks it as an
+  // automated restart (vs a user-initiated one).
+  router.post('/restart', (req, res) => {
+    res.json({ restarting: true });
+    setTimeout(() => {
+      const child = spawn(
+        process.execPath,
+        [process.argv[1], ...process.argv.slice(2)],
+        {
+          detached: true,
+          stdio: 'ignore',
+          env: { ...process.env, BIZAR_AUTO_RESPAWN: '1' },
         },
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: 'apply_failed', message: err.message });
-    }
-  }));
+      );
+      child.unref();
+      process.exit(0);
+    }, 500);
+  });
 
   // ── /api/health ───────────────────────────────────────────────────────
   router.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));

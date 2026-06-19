@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.5.3 — 2026-06-19
+
+### Fixed
+- **Updates work end-to-end now**: previous versions could check for updates but couldn't apply them properly. Now:
+  - Per-package selection (checkboxes for each of bizar / bizar-dash / bizar-plugin)
+  - Live progress streamed via WebSocket (status: starting/installing/done/error per package)
+  - npm output logged to a collapsible panel per package
+  - "Restart Dashboard" button after update completes
+- **Auto-restart**: `POST /api/restart` spawns a self-respawner that exits the current process and starts a fresh one. Frontend auto-reloads after 3 seconds.
+
+### Added
+- `POST /api/restart` endpoint
+- WebSocket events: `update:progress`, `update:log`, `update:complete`
+
 ## v3.5.2 — 2026-06-19
 
 ### Fixed
