@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-dash",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Web + TUI dashboard for the Bizar agent platform (optional companion to @polderlabs/bizar)",
   "type": "module",
   "bin": {
@@ -42,7 +42,7 @@
     "@polderlabs/bizar": ">=2.7.0"
   },
   "peerDependenciesMeta": {
-    "@polderlabs/bizar-dash": {
+    "@polderlabs/bizar": {
       "optional": true
     }
   },

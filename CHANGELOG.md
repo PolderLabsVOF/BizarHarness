@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.0.1 — 2026-06-19
+
+### Fixed
+- Removed spurious `@polderlabs/bizar-dash` self-reference from `bizar-dash/package.json#peerDependenciesMeta`. The package was referring to itself as an optional peer, which is invalid. Only `@polderlabs/bizar` should be there.
+
 ## v3.0.0 — 2026-06-19
 
 ### BREAKING — Package split
