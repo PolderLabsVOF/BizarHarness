@@ -13,7 +13,7 @@ A sample mod that ships with the Bizar platform. It demonstrates:
 
 ```bash
 # from the bizarre-dash package root
-bizar-dash mod install ./templates/mod/hello-mod
+bizar mod install ./templates/mod/hello-mod
 ```
 
 Or copy the folder into `~/.config/bizar/mods/hello-mod/` by hand.

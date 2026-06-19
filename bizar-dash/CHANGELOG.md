@@ -1,5 +1,26 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.5.4 — 2026-06-19
+
+### Changed
+- **Activity page fully overhauled — now a live timeline.** The v3.5.2 graph-of-all-agents view has been replaced with a Gantt-style time-axis timeline:
+  - X-axis is time (1m / 5m / 30m / 1h zoom levels); Y-axis is lanes (one per BG instance + tasks assigned greedily)
+  - Tasks rendered as bars: pulsing border for `doing`, translucent dashed for `queued`, faded for `done`
+  - Vertical red "now" line updates every second and re-anchors when it nears the right edge
+  - Live event stream (left column) and detail panel (right column when a bar is clicked) are now proper sibling grid columns — no more absolute-positioned overlays obscuring the canvas
+  - Mobile: stream collapses to a toggleable drawer; detail panel slides up from the bottom
+  - Polling cadence: `/background` + `/activity` every 3s; now-line redraw every 1s
+
+### Fixed
+- **Plans canvas appeared blank when opening a plan.** Root cause: `.plans-canvas-wrap` had no `flex: 1` or `height: 100%`, so its absolutely-positioned `.canvas-root` child had nothing to anchor to and collapsed to toolbar height. Fixed by adding `flex: 1; height: 100%` to `.plans-canvas-wrap`, making `.plan-canvas-wrapper` a proper flex column, and changing `.canvas-root` from `position: absolute; inset: 0` to `position: relative; flex: 1; min-height: 0` so it claims remaining flex space.
+
+### Cleanup
+- Removed 121 lines of dead duplicate Activity CSS at `main.css:3499-3619` (the v3.3.2 absolute-positioned block that conflicted with the v3.3.1 flex version at line 4751+). The v3.5.4 rewrite uses entirely new class names (`.tl-*` prefix) so the old `.activity-canvas-*` and `.activity-timeline-*` rules are no longer referenced anywhere.
+
+### Files
+- `bizar-dash/src/web/views/Activity.tsx` — full rewrite (761 → 1155 lines)
+- `bizar-dash/src/web/styles/main.css` — appended `/* v3.5.4 Activity timeline view */` block (lines 5819-6356); removed dead v3.3.2 Activity block (lines 3499-3619)
+
 ## v3.4.0 — 2026-06-19
 
 ### Fixed

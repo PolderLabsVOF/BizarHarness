@@ -29,18 +29,18 @@ const DEFAULT_PORT = 4321;
 
 function showHelp() {
   console.log(`
-  bizar-dash — Web + TUI dashboard for the Bizar agent platform
+  bizar — Web + TUI dashboard for the Bizar agent platform
 
   Usage:
-    bizar-dash                    Launch the dashboard (default = web)
-    bizar-dash start              Start the dashboard in this process
-    bizar-dash stop               Kill the running dashboard
-    bizar-dash status             Show port + URL of any running dashboard
-    bizar-dash tui [--no-web]     Run the TUI dashboard
-    bizar-dash --bg, --detach     Start in background, return to shell
-    bizar-dash --web-only         Web dashboard only (no TUI)
-    bizar-dash --no-web           TUI only (no browser)
-    bizar-dash --help             Show this help
+    bizar                    Launch the dashboard (default = web)
+    bizar start              Start the dashboard in this process
+    bizar stop               Kill the running dashboard
+    bizar status             Show port + URL of any running dashboard
+    bizar tui [--no-web]     Run the TUI dashboard
+    bizar --bg, --detach     Start in background, return to shell
+    bizar --web-only         Web dashboard only (no TUI)
+    bizar --no-web           TUI only (no browser)
+    bizar --help             Show this help
 
   Notes:
     The dashboard reads your opencode config at
@@ -128,7 +128,7 @@ async function startInBackground(args) {
   if (existsSync(PORT_FILE)) {
     const port = readFileSync(PORT_FILE, 'utf8').trim();
     console.log(`Bizar dashboard started in background on http://localhost:${port}/`);
-    console.log(`Use 'bizar-dash status' to check, 'bizar-dash stop' to stop.`);
+    console.log(`Use 'bizar status' to check, 'bizar stop' to stop.`);
   } else {
     console.log('Bizar dashboard starting in background (port file not yet written)...');
   }
@@ -162,7 +162,7 @@ function showStatus() {
       console.log(`PID: ${readFileSync(PID_FILE, 'utf8').trim()}`);
     }
   } else {
-    console.log('No Bizar dashboard is running. Use: bizar-dash start');
+    console.log('No Bizar dashboard is running. Use: bizar start');
   }
 }
 

@@ -1,7 +1,12 @@
-// src/views/Activity.tsx — v3.5.2: single integrated fullscreen mode (graph + timeline merged).
+// src/views/Activity.tsx — v3.5.4: timeline-based activity view (replaces the v3.5.2 graph+strip hybrid).
+// Layout: CSS grid with 3 sibling columns — left event stream, center timeline canvas, right detail panel.
+// X axis is time; Y axis is lanes (BG instances + tasks). Active tasks pulse; queued tasks are translucent
+// dashed; done tasks are faded. A red "now" line updates every 1s and re-anchors when it nears the right edge.
 
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,30 +15,29 @@ import {
   Activity as ActivityIcon,
   Bot,
   CheckSquare,
-  CheckSquare as CheckSquareIcon,
   Cpu,
   RefreshCw,
   Send,
   X,
   Plus,
   Trash2,
-  ZoomIn,
-  ZoomOut,
   MessageSquare,
+  History,
+  Pause,
+  Play,
+  PanelLeftClose,
+  PanelLeftOpen,
   Layers,
   Target,
-  Maximize2,
-  History,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
-import { CanvasContextMenu, type ContextMenuState } from '../components/CanvasContextMenu';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
-import type { Settings, Snapshot } from '../lib/types';
+import type { Settings, Snapshot, Task, Agent } from '../lib/types';
 
 type Props = {
   snapshot: Snapshot;
@@ -68,31 +72,25 @@ type ActivityEvent = {
   [k: string]: unknown;
 };
 
-type GraphNode = {
-  id: string;
-  type: 'agent' | 'task' | 'bg';
-  x: number;
-  y: number;
-  label: string;
-  sub?: string;
-  status: string;
-  level?: number;
-  // Mixed source: Agent | Task | BgInstance. `any` here is the
-  // pragmatic call — narrowing every `data.role` / `data.model` etc.
-  // in the JSX would balloon the file. The shape is documented at the
-  // call sites (filter by `type`).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any;
-};
+// ─── Time / layout constants ──────────────────────────────────────────
 
-type GraphEdge = {
-  id: string;
-  from: string;
-  to: string;
-  kind: 'hierarchy' | 'assignment' | 'subtask';
-};
+const ZOOM_RANGES = {
+  '1m': 60 * 1000,
+  '5m': 5 * 60 * 1000,
+  '30m': 30 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+} as const;
+type ZoomKey = keyof typeof ZOOM_RANGES;
 
-const STATUS_COLORS = {
+const LANE_HEIGHT = 56;
+const TIME_AXIS_HEIGHT = 32;
+const EVENTS_STRIP_HEIGHT = 22;
+const MIN_BAR_WIDTH = 4;
+const REANCHOR_RATIO = 0.9; // when now_x exceeds this fraction of canvas width, re-anchor viewStart
+
+// ─── Status → color ───────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
   working: 'var(--success)',
   running: 'var(--success)',
   doing: 'var(--info)',
@@ -104,44 +102,139 @@ const STATUS_COLORS = {
   failed: 'var(--error)',
   stuck: 'var(--warning)',
   killed: 'var(--error)',
-  idle: 'var(--text-muted)',
+  idle: 'var(--text-dim)',
   pending: 'var(--info)',
   timed_out: 'var(--warning)',
 };
 
-const EDGE_COLORS = {
-  hierarchy: 'var(--accent)',
-  assignment: 'var(--info)',
-  subtask: 'var(--text-muted)',
-};
-
 function statusColor(s: string | null | undefined): string {
   if (!s) return STATUS_COLORS.idle;
-  return (STATUS_COLORS as Record<string, string>)[s] || STATUS_COLORS.idle;
+  return STATUS_COLORS[s] || STATUS_COLORS.idle;
 }
 
-function shortLabel(s: string | null | undefined, n = 16): string {
+function shortLabel(s: string | null | undefined, n = 24): string {
   if (!s) return '';
   if (s.length <= n) return s;
   return s.slice(0, n - 1) + '…';
 }
 
+// ─── Time helpers ─────────────────────────────────────────────────────
+
+function parseTs(ts: string | number | null | undefined): number {
+  if (ts == null) return 0;
+  if (typeof ts === 'number') return ts;
+  const t = new Date(ts).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function taskStartMs(t: Task): number {
+  // v3.5.4 — prefer _timerStart (set when work begins), fall back to createdAt.
+  const ts = (t as { _timerStart?: number })._timerStart;
+  if (typeof ts === 'number' && ts > 0) return ts;
+  return parseTs(t.createdAt) || Date.now();
+}
+
+function taskEndMs(t: Task, now: number): number {
+  if (t.status === 'done' || t.status === 'archived' || t.status === 'failed' || t.status === 'killed') {
+    return parseTs(t.completedAt) || parseTs(t.updatedAt) || now;
+  }
+  // Active tasks: pin to now.
+  return now;
+}
+
+function bgStartMs(b: BgInstance): number {
+  return typeof b.startedAt === 'number' && b.startedAt > 0 ? b.startedAt : Date.now();
+}
+
+function bgEndMs(b: BgInstance, now: number): number {
+  if (b.status === 'done' || b.status === 'killed' || b.status === 'failed' || b.status === 'error') return now;
+  return now;
+}
+
+function chooseTickStep(rangeMs: number): number {
+  if (rangeMs <= 60_000) return 10_000;
+  if (rangeMs <= 300_000) return 30_000;
+  if (rangeMs <= 1_800_000) return 300_000;
+  return 600_000;
+}
+
+function formatTickLabel(t: number, rangeMs: number): string {
+  const d = new Date(t);
+  if (rangeMs <= 300_000) {
+    return d.toLocaleTimeString('en-GB', { hour12: false });
+  }
+  return d.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit' });
+}
+
+// ─── Lane + tick types ────────────────────────────────────────────────
+
+type Lane =
+  | { kind: 'bg'; id: string; index: number; label: string; sub: string; start: number; end: number; data: BgInstance }
+  | { kind: 'task'; id: string; index: number; label: string; sub: string; start: number; end: number; data: Task }
+  | { kind: 'events'; id: string; index: number; label: string; sub: string; start: number; end: number };
+
+type SelectedItem = {
+  id: string;
+  kind: 'task' | 'bg' | 'agent';
+  label: string;
+  status: string;
+  data: Task | BgInstance | Agent;
+};
+
+type EventMarker = {
+  id: string;
+  x: number;
+  y: number;
+  kind: string;
+  ts: number;
+  text: string;
+  author?: string;
+};
+
+type TaskBar = {
+  id: string;
+  laneIndex: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label: string;
+  statusClass: 'doing' | 'done' | 'queued' | 'blocked' | 'failed';
+  selected: boolean;
+  data: Task | BgInstance;
+  kind: 'task' | 'bg';
+  start: number;
+  end: number;
+};
+
+// ─── Component ────────────────────────────────────────────────────────
+
 export function Activity({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
-  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
 
-  // View state — single integrated mode (v3.5.2: removed graph/timeline toggle)
-  const [timelineOpen, setTimelineOpen] = useState(true);
-  const [transform, setTransform] = useState<{ x: number; y: number; scale: number }>({ x: 80, y: 80, scale: 1 });
-  const [drag, setDrag] = useState<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
-  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  // View state
+  const [mode, setMode] = useState<'live' | 'pause'>('live');
+  const [zoom, setZoom] = useState<ZoomKey>('5m');
+  const [streamOpen, setStreamOpen] = useState(true);
+
+  // Data
   const [bgInstances, setBgInstances] = useState<BgInstance[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
-  // Detail-panel local state
+  // Time
+  const [nowTick, setNowTick] = useState<number>(Date.now());
+  const [viewStart, setViewStart] = useState<number>(() => Date.now() - ZOOM_RANGES['5m'] * 0.1);
+
+  // Canvas size (observed)
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({ width: 800, height: 400 });
+
+  // Selection / detail
+  const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
+
+  // Detail panel local state
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<ActivityEvent[]>([]);
   const [taskTitle, setTaskTitle] = useState('');
@@ -153,9 +246,12 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
 
   const agents = snapshot.agents || [];
   const tasks = snapshot.tasks || [];
+  const rangeMs = ZOOM_RANGES[zoom];
+  const rangeStart = viewStart;
+  const rangeEnd = viewStart + rangeMs;
 
-  // Load bg + events
-  const reloadAll = async () => {
+  // ─── Data polling ───────────────────────────────────────────────────
+  const reloadAll = useCallback(async () => {
     try {
       const [bgRes, evRes] = await Promise.all([
         api.get<{ instances: BgInstance[] }>('/background').catch(() => ({ instances: [] })),
@@ -164,189 +260,285 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
       setBgInstances(bgRes.instances || []);
       setEvents(evRes.events || []);
     } catch (err) {
-      // soft-fail
       console.warn('activity reload failed:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     reloadAll();
-    const id = setInterval(reloadAll, 5000);
+    const id = setInterval(reloadAll, 3000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTick]);
+  }, [reloadAll]);
 
-  // Reload events when snapshot changes
+  // Trigger a re-fetch when the snapshot's task/agent counts change.
   useEffect(() => {
     setRefreshTick((t) => t + 1);
-  }, [snapshot.tasks?.length, snapshot.agents?.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length, agents.length]);
 
-  // Build graph nodes/edges
-  const { nodes, edges } = useMemo<{ nodes: GraphNode[]; edges: GraphEdge[] }>(() => {
-    const result: GraphNode[] = [];
-    const edgeList: GraphEdge[] = [];
-
-    // Agents — grouped by level
-    const byLevel = new Map<number, typeof agents>();
-    for (const a of agents) {
-      const lvl = a.level ?? 2;
-      if (!byLevel.has(lvl)) byLevel.set(lvl, []);
-      byLevel.get(lvl)!.push(a);
-    }
-    const levels = Array.from(byLevel.keys()).sort((a, b) => a - b);
-    for (const lvl of levels) {
-      const ags = byLevel.get(lvl)!;
-      ags.forEach((a, j) => {
-        result.push({
-          id: `agent:${a.name}`,
-          type: 'agent',
-          x: 100 + lvl * 260,
-          y: 100 + j * 100,
-          label: a.name,
-          sub: a.role || a.model || '',
-          status: a.status || 'idle',
-          level: lvl,
-          data: a,
-        });
-      });
-    }
-
-    // Active tasks
-    const activeTasks = tasks.filter(
-      (t) => t.status === 'doing' || t.status === 'queued' || t.status === 'blocked',
-    );
-    activeTasks.forEach((t, i) => {
-      result.push({
-        id: `task:${t.id}`,
-        type: 'task',
-        x: 950 + (i % 4) * 230,
-        y: 100 + Math.floor(i / 4) * 130,
-        label: shortLabel(t.title, 18),
-        sub: t.status,
-        status: t.status,
-        data: t,
-      });
-    });
-
-    // BG instances
-    bgInstances.forEach((b, i) => {
-      result.push({
-        id: `bg:${b.instanceId}`,
-        type: 'bg',
-        x: 1900,
-        y: 100 + i * 100,
-        label: shortLabel(b.promptPreview || b.instanceId, 18),
-        sub: b.status || 'pending',
-        status: b.status || 'pending',
-        data: b,
-      });
-    });
-
-    // Edges
-    for (const a of agents) {
-      if (a.parent) {
-        edgeList.push({
-          id: `h:${a.name}`,
-          from: `agent:${a.parent}`,
-          to: `agent:${a.name}`,
-          kind: 'hierarchy',
-        });
-      }
-    }
-    for (const t of tasks) {
-      if (t.assignee) {
-        edgeList.push({
-          id: `a:${t.id}`,
-          from: `agent:${t.assignee}`,
-          to: `task:${t.id}`,
-          kind: 'assignment',
-        });
-      }
-      if (t.parent) {
-        edgeList.push({
-          id: `s:${t.id}`,
-          from: `task:${t.parent}`,
-          to: `task:${t.id}`,
-          kind: 'subtask',
-        });
-      }
-    }
-
-    return { nodes: result, edges: edgeList };
-  }, [agents, tasks, bgInstances]);
-
-  const nodeIndex = useMemo(() => {
-    const m = new Map<string, GraphNode>();
-    for (const n of nodes) m.set(n.id, n);
-    return m;
-  }, [nodes]);
-
-  // Pan + zoom handlers
-  const onMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    setDrag({ startX: e.clientX, startY: e.clientY, baseX: transform.x, baseY: transform.y });
-  };
-
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!drag) return;
-    setTransform((t) => ({
-      ...t,
-      x: drag.baseX + (e.clientX - drag.startX),
-      y: drag.baseY + (e.clientY - drag.startY),
-    }));
-  };
-
-  const onMouseUp = () => setDrag(null);
-
-  const zoomIn = () => setTransform((t) => ({ ...t, scale: Math.min(2.5, t.scale + 0.15) }));
-  const zoomOut = () => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale - 0.15) }));
-  const fitToView = () => setTransform({ x: 80, y: 80, scale: 1 });
-  const refresh = () => setRefreshTick((t) => t + 1);
-
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = -e.deltaY * 0.0015;
-    setTransform((t) => {
-      const next = Math.max(0.3, Math.min(2.5, t.scale + delta));
-      return { ...t, scale: next };
-    });
-  };
-
-  // Keyboard helpers
+  // ─── Now tick (1s) — paused when mode === 'pause' ───────────────────
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedNode(null);
-      if (e.key === '0' && !e.metaKey && !e.ctrlKey) {
-        setTransform({ x: 80, y: 80, scale: 1 });
+    if (mode === 'pause') return;
+    setNowTick(Date.now());
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [mode, refreshTick]);
+
+  // ─── Re-anchor viewStart when the now line nears the right edge ────
+  useEffect(() => {
+    if (mode === 'pause') return;
+    const nowRatio = (nowTick - viewStart) / rangeMs;
+    if (nowRatio > REANCHOR_RATIO) {
+      setViewStart(nowTick - rangeMs * 0.1);
+    }
+  }, [nowTick, viewStart, rangeMs, mode]);
+
+  // On zoom change, reset viewStart so now sits at 10% from the left.
+  useEffect(() => {
+    setViewStart(Date.now() - rangeMs * 0.1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom]);
+
+  // On resume from pause, re-anchor so the now line lands at 10%.
+  useEffect(() => {
+    if (mode === 'live') {
+      setViewStart(Date.now() - rangeMs * 0.1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  // ─── Canvas size observer ───────────────────────────────────────────
+  useLayoutEffect(() => {
+    const el = canvasWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setCanvasSize({
+          width: Math.max(200, Math.floor(width)),
+          height: Math.max(120, Math.floor(height)),
+        });
       }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
-  // When a node is selected, fetch its events
+  // ─── Lane allocation ────────────────────────────────────────────────
+  const lanes: Lane[] = useMemo(() => {
+    const out: Lane[] = [];
+    let idx = 0;
+
+    // BG instances — one lane each, at the top.
+    for (const bg of bgInstances) {
+      out.push({
+        kind: 'bg',
+        id: `bg:${bg.instanceId}`,
+        index: idx++,
+        label: `BG ${shortLabel(bg.promptPreview, 20) || bg.instanceId.slice(0, 10)}`,
+        sub: bg.status || 'pending',
+        start: bgStartMs(bg),
+        end: bgEndMs(bg, nowTick),
+        data: bg,
+      });
+    }
+
+    // Tasks — greedy lane assignment (fill first lane that has no overlap).
+    const sorted = [...tasks].sort((a, b) => taskStartMs(a) - taskStartMs(b));
+    const taskLaneEnds: number[] = []; // end-time of last task placed in each lane
+    for (const t of sorted) {
+      const s = taskStartMs(t);
+      const e = taskEndMs(t, nowTick);
+      let assigned = -1;
+      for (let i = 0; i < taskLaneEnds.length; i++) {
+        if (taskLaneEnds[i] <= s) {
+          taskLaneEnds[i] = e;
+          assigned = i;
+          break;
+        }
+      }
+      if (assigned === -1) {
+        taskLaneEnds.push(e);
+        assigned = taskLaneEnds.length - 1;
+      }
+      out.push({
+        kind: 'task',
+        id: `task:${t.id}`,
+        index: idx + assigned,
+        label: shortLabel(t.title, 32),
+        sub: t.status,
+        start: s,
+        end: e,
+        data: t,
+      });
+    }
+
+    return out;
+  }, [bgInstances, tasks, nowTick]);
+
+  const laneById = useMemo(() => {
+    const m = new Map<string, Lane>();
+    for (const l of lanes) m.set(l.id, l);
+    return m;
+  }, [lanes]);
+
+  // ─── Time → X coordinate ────────────────────────────────────────────
+  const timeToX = useCallback(
+    (t: number): number => {
+      if (rangeMs <= 0) return 0;
+      return ((t - rangeStart) / rangeMs) * canvasSize.width;
+    },
+    [rangeStart, rangeMs, canvasSize.width],
+  );
+
+  // ─── Tick marks for the time axis ───────────────────────────────────
+  const ticks = useMemo(() => {
+    const step = chooseTickStep(rangeMs);
+    const result: { t: number; x: number; label: string }[] = [];
+    // Align to step boundary.
+    const startAligned = Math.floor(rangeStart / step) * step;
+    for (let t = startAligned; t <= rangeEnd + step; t += step) {
+      if (t < rangeStart - step) continue;
+      if (t > rangeEnd) break;
+      const x = timeToX(t);
+      if (x < -40 || x > canvasSize.width + 40) continue;
+      result.push({ t, x, label: formatTickLabel(t, rangeMs) });
+    }
+    return result;
+  }, [rangeStart, rangeEnd, rangeMs, canvasSize.width, timeToX]);
+
+  // ─── Build task/bg bars ─────────────────────────────────────────────
+  const bars: TaskBar[] = useMemo(() => {
+    const out: TaskBar[] = [];
+    for (const lane of lanes) {
+      if (lane.kind === 'events') continue;
+      const x = timeToX(lane.start);
+      const xEnd = timeToX(lane.end);
+      const w = Math.max(MIN_BAR_WIDTH, xEnd - x);
+      const y = TIME_AXIS_HEIGHT + EVENTS_STRIP_HEIGHT + lane.index * LANE_HEIGHT + 8;
+      const h = LANE_HEIGHT - 16;
+
+      let statusClass: TaskBar['statusClass'] = 'doing';
+      if (lane.kind === 'bg') {
+        const s = lane.data.status || 'pending';
+        if (s === 'done' || s === 'success') statusClass = 'done';
+        else if (s === 'failed' || s === 'killed' || s === 'error') statusClass = 'failed';
+        else if (s === 'queued' || s === 'pending') statusClass = 'queued';
+        else if (s === 'blocked' || s === 'stuck') statusClass = 'blocked';
+        else statusClass = 'doing';
+      } else {
+        const s = lane.data.status;
+        if (s === 'done' || s === 'archived') statusClass = 'done';
+        else if (s === 'failed' || s === 'killed') statusClass = 'failed';
+        else if (s === 'queued') statusClass = 'queued';
+        else if (s === 'blocked') statusClass = 'blocked';
+        else statusClass = 'doing';
+      }
+
+      const selected = selectedItem?.id === lane.id;
+
+      out.push({
+        id: lane.id,
+        laneIndex: lane.index,
+        x,
+        y,
+        w,
+        h,
+        label: lane.label,
+        statusClass,
+        selected,
+        data: lane.data,
+        kind: lane.kind,
+        start: lane.start,
+        end: lane.end,
+      });
+    }
+    return out;
+  }, [lanes, timeToX, selectedItem]);
+
+  // ─── Build event markers (placed on the lane of their related entity) ─
+  const eventMarkers: EventMarker[] = useMemo(() => {
+    const out: EventMarker[] = [];
+    for (const ev of events) {
+      const ts = parseTs(ev.ts);
+      if (ts < rangeStart - 5000 || ts > rangeEnd + 5000) continue;
+      const x = timeToX(ts);
+
+      // Try to find a related lane.
+      let y = TIME_AXIS_HEIGHT + 12; // default: events strip
+      if (ev.taskId) {
+        const lane = laneById.get(`task:${ev.taskId}`);
+        if (lane) y = TIME_AXIS_HEIGHT + EVENTS_STRIP_HEIGHT + lane.index * LANE_HEIGHT + LANE_HEIGHT / 2;
+      } else if (ev.nodeId) {
+        const id = String(ev.nodeId);
+        const lane = laneById.get(id.startsWith('task:') || id.startsWith('bg:') ? id : `task:${id}`);
+        if (lane) y = TIME_AXIS_HEIGHT + EVENTS_STRIP_HEIGHT + lane.index * LANE_HEIGHT + LANE_HEIGHT / 2;
+      }
+
+      out.push({
+        id: `${ev.ts}-${ev.kind}-${ev.author ?? ''}-${ev.taskId ?? ''}`,
+        x,
+        y,
+        kind: ev.kind || 'event',
+        ts,
+        text: String(ev.text || ev.kind || ''),
+        author: ev.author as string | undefined,
+      });
+    }
+    return out;
+  }, [events, rangeStart, rangeEnd, timeToX, laneById]);
+
+  // ─── Lane backgrounds (alternating) ─────────────────────────────────
+  const laneRects = useMemo(() => {
+    return lanes.map((lane) => ({
+      id: lane.id,
+      y: TIME_AXIS_HEIGHT + EVENTS_STRIP_HEIGHT + lane.index * LANE_HEIGHT,
+      h: LANE_HEIGHT,
+    }));
+  }, [lanes]);
+
+  // ─── Now line position ──────────────────────────────────────────────
+  const nowX = useMemo(() => {
+    const x = timeToX(nowTick);
+    return Math.max(0, Math.min(canvasSize.width, x));
+  }, [timeToX, nowTick, canvasSize.width]);
+
+  // ─── Click on a bar → open detail panel ─────────────────────────────
+  const onSelectBar = useCallback((bar: TaskBar) => {
+    const id = bar.id; // 'task:xxx' or 'bg:xxx'
+    const item: SelectedItem = {
+      id,
+      kind: bar.kind,
+      label: bar.label,
+      status: bar.statusClass,
+      data: bar.data,
+    };
+    setSelectedItem(item);
+  }, []);
+
+  // ─── Detail panel: fetch related data when selection changes ────────
   useEffect(() => {
-    if (!selectedNode) {
+    if (!selectedItem) {
       setComments([]);
+      setBgOutput('');
       return;
     }
     setCommentText('');
     setTaskTitle('');
     setBgMessage('');
-    setBgOutput('');
     (async () => {
       try {
         const r = await api.get<{ events: ActivityEvent[] }>(
-          `/activity?nodeId=${encodeURIComponent(selectedNode.id)}&limit=50`,
+          `/activity?nodeId=${encodeURIComponent(selectedItem.id)}&limit=50`,
         );
         setComments(r.events || []);
       } catch {
         setComments([]);
       }
-      if (selectedNode.type === 'bg') {
-        const bgData = selectedNode.data as BgInstance;
+      if (selectedItem.kind === 'bg') {
+        const bgData = selectedItem.data as BgInstance;
         try {
           const r = await api.get<{ output: string }>(
             `/background/${encodeURIComponent(bgData.instanceId)}/output?lines=80`,
@@ -357,16 +549,17 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
         }
       }
     })();
-  }, [selectedNode]);
+  }, [selectedItem]);
 
+  // ─── Detail actions ─────────────────────────────────────────────────
   const onAddComment = async () => {
-    if (!selectedNode || !commentText.trim()) return;
+    if (!selectedItem || !commentText.trim()) return;
     setPostingComment(true);
     try {
-      await api.post('/comments', { nodeId: selectedNode.id, text: commentText, author: 'user' });
+      await api.post('/comments', { nodeId: selectedItem.id, text: commentText, author: 'user' });
       setCommentText('');
       const r = await api.get<{ events: ActivityEvent[] }>(
-        `/activity?nodeId=${encodeURIComponent(selectedNode.id)}&limit=50`,
+        `/activity?nodeId=${encodeURIComponent(selectedItem.id)}&limit=50`,
       );
       setComments(r.events || []);
       toast.success('Comment added.');
@@ -378,12 +571,12 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   };
 
   const onCreateTaskFromNode = async () => {
-    if (!selectedNode || !taskTitle.trim()) return;
+    if (!selectedItem || !taskTitle.trim()) return;
     setCreatingTask(true);
     try {
-      await api.post(`/nodes/${encodeURIComponent(selectedNode.id)}/tasks`, {
+      await api.post(`/nodes/${encodeURIComponent(selectedItem.id)}/tasks`, {
         title: taskTitle,
-        description: `Created from canvas node ${selectedNode.id}.`,
+        description: `Created from timeline selection ${selectedItem.id}.`,
         priority: taskPriority,
       });
       setTaskTitle('');
@@ -397,8 +590,8 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   };
 
   const onSendBgMessage = async () => {
-    if (!selectedNode || selectedNode.type !== 'bg' || !bgMessage.trim()) return;
-    const bgData = selectedNode.data as BgInstance;
+    if (!selectedItem || selectedItem.kind !== 'bg' || !bgMessage.trim()) return;
+    const bgData = selectedItem.data as BgInstance;
     try {
       const r = await api.post<{ ok: boolean; error?: string }>(
         `/background/${encodeURIComponent(bgData.instanceId)}/message`,
@@ -416,9 +609,9 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   };
 
   const onKillBg = async () => {
-    if (!selectedNode || selectedNode.type !== 'bg') return;
+    if (!selectedItem || selectedItem.kind !== 'bg') return;
     if (!confirm('Kill this bg instance session?')) return;
-    const bgData = selectedNode.data as BgInstance;
+    const bgData = selectedItem.data as BgInstance;
     try {
       const r = await api.del<{ ok: boolean; error?: string }>(
         `/background/${encodeURIComponent(bgData.instanceId)}`,
@@ -432,8 +625,8 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   };
 
   const refetchOutput = async () => {
-    if (!selectedNode || selectedNode.type !== 'bg') return;
-    const bgData = selectedNode.data as BgInstance;
+    if (!selectedItem || selectedItem.kind !== 'bg') return;
+    const bgData = selectedItem.data as BgInstance;
     try {
       const r = await api.get<{ output: string }>(
         `/background/${encodeURIComponent(bgData.instanceId)}/output?lines=80`,
@@ -444,82 +637,65 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  // Render helpers
-  const nodeRadius = (n: GraphNode): number => (n.type === 'agent' ? 36 : 28);
+  // ─── Keyboard helpers ───────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedItem(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
-  const renderEdge = (e: GraphEdge) => {
-    const a = nodeIndex.get(e.from);
-    const b = nodeIndex.get(e.to);
-    if (!a || !b) return null;
-    const stroke = (EDGE_COLORS as Record<string, string>)[e.kind];
-    return (
-      <line
-        key={e.id}
-        x1={a.x}
-        y1={a.y}
-        x2={b.x}
-        y2={b.y}
-        stroke={stroke}
-        strokeWidth={e.kind === 'hierarchy' ? 2.5 : 1.8}
-        strokeDasharray={e.kind === 'subtask' ? '6,4' : undefined}
-        opacity={0.65}
-      />
-    );
+  // ─── Refresh handler ────────────────────────────────────────────────
+  const refresh = () => {
+    setRefreshTick((t) => t + 1);
+    reloadAll();
   };
 
-  const renderNode = (n: GraphNode) => {
-    const r = nodeRadius(n);
-    const fill = 'var(--bg-elevated)';
-    const stroke = statusColor(n.status);
-    const selected = selectedNode?.id === n.id;
-    const Icon = n.type === 'agent' ? Bot : n.type === 'task' ? CheckSquare : Cpu;
-    return (
-      <g
-        key={n.id}
-        transform={`translate(${n.x}, ${n.y})`}
-        style={{ cursor: 'pointer' }}
-        onClick={(e) => {
-          e.stopPropagation();
-          setSelectedNode(n);
-        }}
-      >
-        <circle r={r + 4} fill="transparent" stroke={selected ? 'var(--accent)' : 'transparent'} strokeWidth={2} />
-        <circle r={r} fill={fill} stroke={stroke} strokeWidth={2.5} />
-        <foreignObject x={-8} y={-8} width={16} height={16} style={{ overflow: 'visible' }}>
-          <Icon size={16} style={{ color: stroke, marginLeft: 0 }} />
-        </foreignObject>
-        <text textAnchor="middle" y={r + 16} fontSize={12} fill="var(--text)" style={{ fontWeight: 600 }}>
-          {n.label}
-        </text>
-        {n.sub && (
-          <text textAnchor="middle" y={r + 30} fontSize={10} fill="var(--text-muted)">
-            {n.sub}
-          </text>
-        )}
-        {n.status && (
-          <circle cx={r * 0.7} cy={-r * 0.7} r={5} fill={stroke}>
-            <animate attributeName="opacity" values="1;0.3;1" dur={1.6} repeatCount="indefinite" />
-          </circle>
-        )}
-      </g>
-    );
-  };
+  // ─── Derived: total content height (for SVG sizing) ─────────────────
+  const contentHeight = TIME_AXIS_HEIGHT + EVENTS_STRIP_HEIGHT + lanes.length * LANE_HEIGHT;
 
+  // ─── Render ─────────────────────────────────────────────────────────
   return (
     <div className="view view-activity">
+      {/* Top header bar — title + live/pause + zoom + refresh */}
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
             <ActivityIcon size={18} /> Activity
           </h2>
           <p className="view-subtitle">
-            Live agent/task/background graph with integrated timeline strip. Drag to pan, scroll to zoom, click a node for details.
+            Live timeline of agents, tasks, and background sessions. Active tasks pulse; the red line marks &ldquo;now&rdquo;.
           </p>
         </div>
         <div className="view-actions">
-          <Button variant="secondary" size="sm" onClick={refresh}>
-            <RefreshCw size={14} /> Refresh
-          </Button>
+          <div className="tl-mode-toggle">
+            <Button
+              variant={mode === 'live' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setMode(mode === 'live' ? 'pause' : 'live')}
+              title={mode === 'live' ? 'Pause timeline' : 'Resume timeline'}
+            >
+              {mode === 'live' ? <Pause size={14} /> : <Play size={14} />}
+              {mode === 'live' ? 'Live' : 'Paused'}
+            </Button>
+            <div className="tl-zoom-group">
+              {(['1m', '5m', '30m', '1h'] as ZoomKey[]).map((z) => (
+                <button
+                  type="button"
+                  key={z}
+                  className={cn('tl-zoom-btn', zoom === z && 'tl-zoom-btn-active')}
+                  onClick={() => setZoom(z)}
+                  title={`Zoom to ${z}`}
+                >
+                  {z}
+                </button>
+              ))}
+            </div>
+            <Button variant="secondary" size="sm" onClick={refresh} title="Refresh">
+              <RefreshCw size={14} /> Refresh
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -531,231 +707,449 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
         <EmptyState
           icon={<ActivityIcon size={32} />}
           title="No activity yet"
-          message="Once agents, tasks, or background instances exist, they'll show up here as nodes."
+          message="Once agents, tasks, or background instances exist, they'll show up here on the timeline."
         />
       ) : (
-        <div className="activity-canvas-container">
-          {/* Floating timeline panel (left) */}
-          <aside className={cn('activity-timeline-panel', !timelineOpen && 'collapsed')}>
-            <div className="activity-timeline-head">
-              <h3><History size={13} /> Timeline</h3>
-              <button type="button" className="icon-btn" onClick={() => setTimelineOpen(false)} title="Collapse timeline">
-                <X size={14} />
-              </button>
-            </div>
-            {timelineOpen && (
-              <div className="activity-timeline-list">
+        <div className={cn('tl-view', selectedItem && 'tl-view-detail-open')}>
+          <div className="tl-body">
+            {/* Left column — event stream (sibling, not overlay) */}
+            <aside className={cn('tl-stream', !streamOpen && 'tl-stream-collapsed')}>
+              <div className="tl-stream-head">
+                <h3>
+                  <History size={13} /> Live events
+                </h3>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setStreamOpen(false)}
+                  title="Hide event stream"
+                  aria-label="Hide event stream"
+                >
+                  <PanelLeftClose size={14} />
+                </button>
+              </div>
+              <div className="tl-stream-list">
                 {events.length === 0 ? (
-                  <div className="empty-state" style={{ padding: 'var(--space-4)' }}>
-                    <p className="muted text-sm">No events yet.</p>
+                  <div className="tl-stream-empty">
+                    <p>No events yet.</p>
                   </div>
                 ) : (
                   [...events].reverse().map((ev, i) => {
-                    const AgentIcon = ev.author ? Bot : ev.kind === 'task' ? CheckSquareIcon : ev.kind === 'bg' ? Cpu : ActivityIcon;
+                    const Icon =
+                      ev.author ? Bot : ev.kind === 'task' ? CheckSquare : ev.kind === 'bg' ? Cpu : ActivityIcon;
                     return (
-                      <div key={i} className="activity-timeline-event">
-                        <div className="activity-timeline-event-time">
-                          {new Date(ev.ts).toLocaleTimeString()}
-                        </div>
-                        <div className="activity-timeline-event-content" style={{ color: statusColor(ev.kind) }}>
-                          <AgentIcon size={11} style={{ display: 'inline', marginRight: 4 }} />
+                      <div
+                        key={`${ev.ts}-${i}`}
+                        className="tl-stream-event"
+                        style={{ borderLeftColor: statusColor(ev.kind) }}
+                      >
+                        <span className="tl-stream-event-time">
+                          {new Date(ev.ts).toLocaleTimeString('en-GB', { hour12: false })}
+                        </span>
+                        <span className="tl-stream-event-icon" style={{ color: statusColor(ev.kind) }}>
+                          <Icon size={12} />
+                        </span>
+                        <span className="tl-stream-event-text">
                           {ev.author || ev.text || ev.kind}
-                        </div>
+                        </span>
                       </div>
                     );
                   })
                 )}
               </div>
-            )}
-          </aside>
+            </aside>
 
-          {/* Floating controls (top center) */}
-          <div className="activity-canvas-controls">
-            <button
-              type="button"
-              className={cn('icon-btn', timelineOpen && 'icon-btn-active')}
-              onClick={() => setTimelineOpen((v) => !v)}
-              title={timelineOpen ? 'Hide timeline' : 'Show timeline'}
-            >
-              <History size={14} />
-            </button>
-            <span className="activity-canvas-zoom-label">{(transform.scale * 100).toFixed(0)}%</span>
-            <button type="button" className="icon-btn" onClick={zoomIn} title="Zoom in">
-              <ZoomIn size={14} />
-            </button>
-            <button type="button" className="icon-btn" onClick={zoomOut} title="Zoom out">
-              <ZoomOut size={14} />
-            </button>
-            <button type="button" className="icon-btn" onClick={fitToView} title="Fit to view (0)">
-              <Maximize2 size={14} />
-            </button>
-            <button type="button" className="icon-btn" onClick={refresh} title="Refresh">
-              <RefreshCw size={14} />
-            </button>
-          </div>
-
-          {/* Canvas */}
-          <div
-            ref={canvasRef}
-            className="activity-canvas-svg-wrap"
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-            onWheel={onWheel}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setContextMenu({
-                x: e.clientX,
-                y: e.clientY,
-                items: [
-                  { label: 'Fit to view', icon: Maximize2, onClick: fitToView },
-                  { label: 'Refresh', icon: RefreshCw, onClick: refresh },
-                ],
-              });
-            }}
-            role="application"
-            aria-label="Activity graph"
-          >
-            <svg width="100%" height="100%">
-              <defs>
-                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--border)" strokeWidth="0.5" opacity={0.3} />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid)" />
-              <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
-                {edges.map(renderEdge)}
-                {nodes.map(renderNode)}
-              </g>
-            </svg>
-
-            {/* Legend overlay */}
-            <div className="activity-legend">
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.working }} /> working</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.queued }} /> queued</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.blocked }} /> blocked</div>
-              <div className="legend-item"><span className="legend-dot" style={{ background: STATUS_COLORS.error }} /> error</div>
-              <div className="legend-sep" />
-              <div className="legend-item"><Layers size={12} /> agent · <Target size={12} /> task · <Cpu size={12} /> bg</div>
-            </div>
-          </div>
-
-          {/* Node detail panel */}
-          {selectedNode && (
-            <aside className="activity-detail">
-              <Card>
-                <CardTitle>
-                  {selectedNode.type === 'agent' && <Bot size={14} />}
-                  {selectedNode.type === 'task' && <CheckSquare size={14} />}
-                  {selectedNode.type === 'bg' && <Cpu size={14} />}
-                  {selectedNode.label}
-                  <button type="button" className="icon-btn" onClick={() => setSelectedNode(null)} title="Close" style={{ marginLeft: 'auto' }}>
-                    <X size={14} />
-                  </button>
-                </CardTitle>
-                <div className="activity-detail-meta">
-                  <div><span className="muted">type</span> {selectedNode.type}</div>
-                  <div><span className="muted">status</span> <code>{selectedNode.status}</code></div>
-                  {selectedNode.data?.role && <div><span className="muted">role</span> {selectedNode.data.role}</div>}
-                  {selectedNode.data?.model && <div><span className="muted">model</span> {selectedNode.data.model}</div>}
-                  {selectedNode.data?.assignee && <div><span className="muted">assignee</span> @{selectedNode.data.assignee}</div>}
-                  {selectedNode.data?.priority && <div><span className="muted">priority</span> {selectedNode.data.priority}</div>}
-                  {selectedNode.data?.startedAt && <div><span className="muted">started</span> {new Date(selectedNode.data.startedAt).toLocaleString()}</div>}
+            {/* Center column — timeline canvas */}
+            <div className="tl-canvas-wrap" ref={canvasWrapRef}>
+              <div className="tl-canvas-toolbar">
+                <div className="tl-canvas-toolbar-left">
+                  {!streamOpen && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setStreamOpen(true)}
+                      title="Show event stream"
+                    >
+                      <PanelLeftOpen size={14} /> Events
+                    </Button>
+                  )}
+                  <span className="tl-canvas-mode">
+                    {mode === 'live' ? '● Live' : '⏸ Paused'}
+                  </span>
+                  <span className="tl-canvas-range">
+                    {new Date(rangeStart).toLocaleTimeString('en-GB', { hour12: false })} →{' '}
+                    {new Date(rangeEnd).toLocaleTimeString('en-GB', { hour12: false })}
+                  </span>
                 </div>
-                {selectedNode.data?.description && (
-                  <div className="activity-detail-desc">{selectedNode.data.description}</div>
-                )}
-                {selectedNode.data?.promptPreview && (
-                  <div className="activity-detail-desc">{selectedNode.data.promptPreview}</div>
-                )}
+                <div className="tl-canvas-legend">
+                  <span className="tl-legend-item"><span className="tl-legend-dot" style={{ background: 'var(--success)' }} /> active</span>
+                  <span className="tl-legend-item"><span className="tl-legend-dot tl-legend-dot-dashed" style={{ borderColor: 'var(--info)' }} /> queued</span>
+                  <span className="tl-legend-item"><span className="tl-legend-dot" style={{ background: 'var(--warning)' }} /> blocked</span>
+                  <span className="tl-legend-item"><span className="tl-legend-dot" style={{ background: 'var(--error)' }} /> error</span>
+                  <span className="tl-legend-sep" />
+                  <span className="tl-legend-item"><Layers size={11} /> agent</span>
+                  <span className="tl-legend-item"><Target size={11} /> task</span>
+                  <span className="tl-legend-item"><Cpu size={11} /> bg</span>
+                </div>
+              </div>
 
-                {selectedNode.type === 'bg' && (
-                  <div className="activity-detail-bg">
-                    <div className="field-label">tmux session: <code>{selectedNode.data.tmuxSession}</code> {selectedNode.data.tmuxActive ? <span className="tag tag-success">active</span> : <span className="tag">inactive</span>}</div>
-                    <pre className="bg-output">{bgOutput || '(no output — start the session via tmux attach)'}</pre>
-                    <div className="bg-output-actions">
-                      <Button variant="ghost" size="sm" onClick={refetchOutput}><RefreshCw size={12} /> Refresh output</Button>
-                      <Button variant="danger" size="sm" onClick={onKillBg}><Trash2 size={12} /> Kill session</Button>
+              <div className="tl-canvas-scroll">
+                <svg
+                  className="tl-canvas"
+                  width={canvasSize.width}
+                  height={Math.max(canvasSize.height, contentHeight)}
+                  role="application"
+                  aria-label="Activity timeline"
+                >
+                  <defs>
+                    <pattern
+                      id="tl-canvas-grid"
+                      width={canvasSize.width}
+                      height={LANE_HEIGHT}
+                      patternUnits="userSpaceOnUse"
+                    >
+                      <path
+                        d={`M 0 0 L 0 ${LANE_HEIGHT}`}
+                        fill="none"
+                        stroke="var(--border)"
+                        strokeWidth={0.5}
+                        opacity={0.35}
+                      />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#tl-canvas-grid)" />
+
+                  {/* Lane backgrounds (alternating) */}
+                  {laneRects.map((lr) => (
+                    <rect
+                      key={`bg-${lr.id}`}
+                      className="tl-lane-bg"
+                      x={0}
+                      y={lr.y}
+                      width={canvasSize.width}
+                      height={lr.h}
+                      fill={lr.id.charCodeAt(lr.id.length - 1) % 2 === 0 ? 'var(--bg-elev-2)' : 'var(--bg-elev)'}
+                      opacity={0.4}
+                    />
+                  ))}
+
+                  {/* Time axis tick lines + labels */}
+                  <g className="tl-time-axis">
+                    {ticks.map((t) => (
+                      <g key={`tick-${t.t}`}>
+                        <line
+                          x1={t.x}
+                          y1={0}
+                          x2={t.x}
+                          y2={contentHeight}
+                          stroke="var(--border)"
+                          strokeWidth={0.5}
+                          strokeDasharray="2,4"
+                          opacity={0.5}
+                        />
+                        <text
+                          x={t.x + 4}
+                          y={TIME_AXIS_HEIGHT - 8}
+                          fontSize={10}
+                          fontFamily="var(--font-mono)"
+                          fill="var(--text-dim)"
+                        >
+                          {t.label}
+                        </text>
+                      </g>
+                    ))}
+                  </g>
+
+                  {/* Lane labels (rendered inside SVG, x=4) */}
+                  {lanes.map((lane) => {
+                    const y = TIME_AXIS_HEIGHT + EVENTS_STRIP_HEIGHT + lane.index * LANE_HEIGHT + LANE_HEIGHT / 2;
+                    return (
+                      <g key={`label-${lane.id}`} className="tl-lane-label-group">
+                        <text
+                          x={6}
+                          y={y - 2}
+                          className="tl-lane-label"
+                          textAnchor="start"
+                        >
+                          {shortLabel(lane.label, 28)}
+                        </text>
+                        <text
+                          x={6}
+                          y={y + 10}
+                          className="tl-lane-label-sub"
+                          textAnchor="start"
+                        >
+                          {lane.sub}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Task / BG bars */}
+                  {bars.map((bar) => {
+                    const fillColor = statusColor(bar.statusClass);
+                    const isSelected = bar.id === selectedItem?.id;
+                    return (
+                      <g
+                        key={`bar-${bar.id}`}
+                        className={cn('tl-task-bar', `tl-task-bar-${bar.statusClass}`, isSelected && 'tl-task-bar-selected')}
+                        onClick={() => onSelectBar(bar)}
+                      >
+                        <rect
+                          x={bar.x}
+                          y={bar.y}
+                          width={bar.w}
+                          height={bar.h}
+                          rx={6}
+                          fill={fillColor}
+                          fillOpacity={bar.statusClass === 'done' ? 0.35 : bar.statusClass === 'queued' ? 0.18 : 0.85}
+                          stroke={fillColor}
+                          strokeWidth={isSelected ? 2.5 : 1.5}
+                          strokeOpacity={bar.statusClass === 'done' ? 0.5 : 1}
+                          strokeDasharray={bar.statusClass === 'queued' ? '4 4' : undefined}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        {bar.w > 36 && (
+                          <text
+                            x={bar.x + 8}
+                            y={bar.y + bar.h / 2 + 4}
+                            fontSize={11}
+                            fontFamily="var(--font-sans)"
+                            fontWeight={500}
+                            fill="var(--text-strong)"
+                            style={{ pointerEvents: 'none' }}
+                            opacity={bar.statusClass === 'done' ? 0.7 : 1}
+                          >
+                            {shortLabel(bar.label, Math.max(4, Math.floor(bar.w / 7)))}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+
+                  {/* Event markers */}
+                  {eventMarkers.map((m) => {
+                    const color = statusColor(m.kind);
+                    return (
+                      <g key={`ev-${m.id}`} className="tl-event-marker-group">
+                        <line
+                          x1={m.x}
+                          y1={m.y - 6}
+                          x2={m.x}
+                          y2={m.y + 6}
+                          stroke={color}
+                          strokeWidth={1.2}
+                          opacity={0.7}
+                        />
+                        <circle
+                          cx={m.x}
+                          cy={m.y}
+                          r={4}
+                          fill={color}
+                          opacity={0.9}
+                        >
+                          <title>
+                            {`${m.kind}${m.author ? ` · ${m.author}` : ''} · ${new Date(m.ts).toLocaleTimeString('en-GB', { hour12: false })}`}
+                          </title>
+                        </circle>
+                      </g>
+                    );
+                  })}
+
+                  {/* Now line (red, vertical) */}
+                  <line
+                    className="tl-now-line"
+                    x1={nowX}
+                    y1={0}
+                    x2={nowX}
+                    y2={contentHeight}
+                    stroke="var(--error)"
+                    strokeWidth={1.5}
+                    opacity={0.9}
+                  />
+                  <g className="tl-now-marker">
+                    <circle cx={nowX} cy={TIME_AXIS_HEIGHT - 4} r={4} fill="var(--error)" />
+                    <text
+                      x={nowX + 6}
+                      y={TIME_AXIS_HEIGHT - 4}
+                      fontSize={10}
+                      fontWeight={700}
+                      fill="var(--error)"
+                      fontFamily="var(--font-mono)"
+                    >
+                      now
+                    </text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+
+            {/* Right column — detail panel */}
+            {selectedItem && (
+              <aside className="tl-detail tl-detail-enter" key={selectedItem.id}>
+                <Card>
+                  <CardTitle>
+                    {selectedItem.kind === 'agent' && <Bot size={14} />}
+                    {selectedItem.kind === 'task' && <CheckSquare size={14} />}
+                    {selectedItem.kind === 'bg' && <Cpu size={14} />}
+                    {selectedItem.label}
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => setSelectedItem(null)}
+                      title="Close"
+                      style={{ marginLeft: 'auto' }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </CardTitle>
+                  <div className="tl-detail-meta">
+                    <div><span className="muted">type</span> {selectedItem.kind}</div>
+                    <div><span className="muted">status</span> <code>{selectedItem.status}</code></div>
+                    {selectedItem.kind === 'agent' && (() => {
+                      const a = selectedItem.data as Agent;
+                      return (
+                        <>
+                          {a.role && <div><span className="muted">role</span> {a.role}</div>}
+                          {a.model && <div><span className="muted">model</span> {a.model}</div>}
+                        </>
+                      );
+                    })()}
+                    {selectedItem.kind === 'task' && (() => {
+                      const t = selectedItem.data as Task;
+                      return (
+                        <>
+                          {t.assignee && <div><span className="muted">assignee</span> @{t.assignee}</div>}
+                          {t.priority && <div><span className="muted">priority</span> {t.priority}</div>}
+                          {t.createdAt && <div><span className="muted">created</span> {new Date(t.createdAt).toLocaleString()}</div>}
+                        </>
+                      );
+                    })()}
+                    {selectedItem.kind === 'bg' && (() => {
+                      const b = selectedItem.data as BgInstance;
+                      return (
+                        <>
+                          {b.startedAt && <div><span className="muted">started</span> {new Date(b.startedAt).toLocaleString()}</div>}
+                          {b.tmuxSession && <div><span className="muted">tmux</span> <code>{b.tmuxSession}</code> {b.tmuxActive ? <span className="tag tag-success">active</span> : <span className="tag">inactive</span>}</div>}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  {selectedItem.kind === 'task' && (selectedItem.data as Task).description && (
+                    <div className="tl-detail-desc">{(selectedItem.data as Task).description}</div>
+                  )}
+                  {selectedItem.kind === 'bg' && (selectedItem.data as BgInstance).promptPreview && (
+                    <div className="tl-detail-desc">{(selectedItem.data as BgInstance).promptPreview}</div>
+                  )}
+
+                  {selectedItem.kind === 'bg' && (
+                    <div className="tl-detail-bg">
+                      <pre className="tl-bg-output">{bgOutput || '(no output — start the session via tmux attach)'}</pre>
+                      <div className="tl-bg-output-actions">
+                        <Button variant="ghost" size="sm" onClick={refetchOutput}>
+                          <RefreshCw size={12} /> Refresh output
+                        </Button>
+                        <Button variant="danger" size="sm" onClick={onKillBg}>
+                          <Trash2 size={12} /> Kill session
+                        </Button>
+                      </div>
+                      <div className="tl-form-row">
+                        <input
+                          className="input"
+                          placeholder="Send a message to this bg session…"
+                          value={bgMessage}
+                          onChange={(e) => setBgMessage(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') onSendBgMessage();
+                          }}
+                        />
+                        <Button variant="primary" size="sm" disabled={!bgMessage.trim()} onClick={onSendBgMessage}>
+                          <Send size={12} /> Send
+                        </Button>
+                      </div>
                     </div>
-                    <div className="task-form-row">
+                  )}
+
+                  {selectedItem.kind !== 'bg' && (
+                    <div className="tl-detail-create">
+                      <div className="field-label">Create follow-up task</div>
                       <input
                         className="input"
-                        placeholder="Send a message to this bg session…"
-                        value={bgMessage}
-                        onChange={(e) => setBgMessage(e.target.value)}
+                        placeholder="Task title"
+                        value={taskTitle}
+                        onChange={(e) => setTaskTitle(e.target.value)}
+                      />
+                      <div className="tl-form-row">
+                        <select
+                          className="select"
+                          value={taskPriority}
+                          onChange={(e) => setTaskPriority(e.target.value)}
+                        >
+                          <option value="low">Low</option>
+                          <option value="normal">Normal</option>
+                          <option value="high">High</option>
+                        </select>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={!taskTitle.trim() || creatingTask}
+                          onClick={onCreateTaskFromNode}
+                        >
+                          <Plus size={12} /> Add task
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="tl-detail-comments">
+                    <div className="field-label">
+                      <MessageSquare size={12} /> Comments &amp; activity
+                    </div>
+                    <ul className="comment-list">
+                      {comments.length === 0 && <li className="muted">No comments yet.</li>}
+                      {comments.map((c, i) => (
+                        <li key={`c-${i}`} className="comment-item">
+                          <div className="comment-head">
+                            <strong>{c.author || 'system'}</strong>
+                            <span className="muted">
+                              {c.kind} · {new Date(c.ts).toLocaleString()}
+                            </span>
+                          </div>
+                          {c.text && <div className="comment-text">{c.text}</div>}
+                          {c.taskId && (
+                            <div className="muted">
+                              → task <code>{String(c.taskId)}</code>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="comment-input-row">
+                      <input
+                        className="input"
+                        placeholder="Add a comment…"
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') onSendBgMessage();
+                          if (e.key === 'Enter' && !e.shiftKey) onAddComment();
                         }}
                       />
-                      <Button variant="primary" size="sm" disabled={!bgMessage.trim()} onClick={onSendBgMessage}>
-                        <Send size={12} /> Send
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!commentText.trim() || postingComment}
+                        onClick={onAddComment}
+                      >
+                        <Send size={12} /> Post
                       </Button>
                     </div>
                   </div>
-                )}
-
-                {selectedNode.type !== 'bg' && (
-                  <div className="activity-detail-create">
-                    <div className="field-label">Create follow-up task</div>
-                    <input
-                      className="input"
-                      placeholder="Task title"
-                      value={taskTitle}
-                      onChange={(e) => setTaskTitle(e.target.value)}
-                    />
-                    <div className="task-form-row">
-                      <select className="select" value={taskPriority} onChange={(e) => setTaskPriority(e.target.value)}>
-                        <option value="low">Low</option>
-                        <option value="normal">Normal</option>
-                        <option value="high">High</option>
-                      </select>
-                      <Button variant="primary" size="sm" disabled={!taskTitle.trim() || creatingTask} onClick={onCreateTaskFromNode}>
-                        <Plus size={12} /> Add task
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="activity-detail-comments">
-                  <div className="field-label"><MessageSquare size={12} /> Comments &amp; activity</div>
-                  <ul className="comment-list">
-                    {comments.length === 0 && <li className="muted">No comments yet.</li>}
-                    {comments.map((c, i) => (
-                      <li key={i} className="comment-item">
-                        <div className="comment-head">
-                          <strong>{c.author || 'system'}</strong>
-                          <span className="muted">{c.kind} · {new Date(c.ts).toLocaleString()}</span>
-                        </div>
-                        {c.text && <div className="comment-text">{c.text}</div>}
-                        {c.taskId && <div className="muted">→ task <code>{String(c.taskId)}</code></div>}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="comment-input-row">
-                    <input
-                      className="input"
-                      placeholder="Add a comment…"
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) onAddComment();
-                      }}
-                    />
-                    <Button variant="secondary" size="sm" disabled={!commentText.trim() || postingComment} onClick={onAddComment}>
-                      <Send size={12} /> Post
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </aside>
-          )}
-
-          {/* Right-click context menu */}
-          <CanvasContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+                </Card>
+              </aside>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
-

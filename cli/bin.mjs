@@ -61,7 +61,7 @@ function showHelp() {
     bizar test-gate             Detect & run the project's test suite
     bizar update                Update opencode, bizar, and/or bizar-plugin
     bizar service               Manage the background service daemon
-    bizar dashboard             Launch the web dashboard (uses bizar-dash)
+    bizar dashboard             Launch the web dashboard (uses bizar)
     bizar --setup               Re-run setup manually (agents, plugin, RTK, Semble, Skills CLI)
     bizar --check               Print setup status as JSON, exit 1 if setup needed
     bizar --help                Show this help
@@ -280,7 +280,7 @@ if (args.includes('--check')) {
 } else if (args[0] === 'service') {
   if (args.includes('--help') || args.includes('-h')) showServiceHelp();
   else await runServiceCommand(args[1]);
-} else if (args[0] === 'dashboard') {
+} else if (args[0] === 'dashboard' || args[0] === 'start' || args[0] === 'stop' || args[0] === 'status' || args[0] === 'tui') {
   if (args.includes('--help') || args.includes('-h')) showDashboardHelp();
   else await delegateToDash(args.slice(1));
 } else if (args.includes('--bg') || args.includes('--detach')) {
