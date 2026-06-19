@@ -87,7 +87,7 @@ export function Topbar({
     <header className="topbar">
       <div className="topbar-row">
         <div className="brand">
-          <span className="brand-logo" aria-hidden>🪩</span>
+          <span className="brand-logo" aria-hidden="true">ᛒ</span>
           <span className="brand-title">Bizar</span>
           <span className="brand-version">{version}</span>
         </div>

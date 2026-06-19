@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.3.2 — 2026-06-19
+
+### Fixed
+- **Theme color/shadow leakage**: hardcoded `rgba(0,0,0,...)` shadows that didn't respond to light theme. Now all shadows use `--shadow-color` CSS variable, defined as `rgba(0,0,0,0.45)` (dark) and `rgba(15,23,42,0.08)` (light).
+- **Logo**: changed from emoji to runic B (ᛒ).
+
+### Added
+- **Activity canvas**: timeline panel is now embedded IN the canvas (left side, collapsible) instead of a separate tab. Floating controls bar at top center (zoom %, +/-, fit, refresh, timeline toggle).
+- **Plans canvas**: floating controls overlay at top (Back, plan name, status, + Element, Comment, Configure).
+- **Custom right-click context menu** in canvases (Activity + Plans): reusable `CanvasContextMenu` component. Right-click on canvas to access actions.
+- **Overview main text input**: prominent hero input at the top of Overview — "What would you like to do?" with quick-action chips below. Submits to Odin via `POST /api/tasks/submit`.
+
 ## v3.3.1 — 2026-06-19
 
 ### Fixed

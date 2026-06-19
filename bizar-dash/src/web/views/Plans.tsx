@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Settings as SettingsIcon,
   MessageCircle,
+  MessageSquare,
   Maximize2,
   Minimize2,
   X,
@@ -35,6 +36,7 @@ import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
+import { CanvasContextMenu, type ContextMenuState } from '../components/CanvasContextMenu';
 import { api } from '../lib/api';
 import { cn, formatRelative, truncate } from '../lib/utils';
 import type {
@@ -343,6 +345,7 @@ function PlanEditor({
   const [selectedElId, setSelectedElId] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(true);
   const [showComments, setShowComments] = useState(true);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -622,17 +625,54 @@ function PlanEditor({
       />
 
       <div className="plans-body">
-        <CanvasViewport
-          canvas={canvas}
-          selectedElId={selectedElId}
-          onSelect={setSelectedElId}
-          onMoveElement={(id, x, y) => updateElement(id, { x, y })}
-          onMoveEnd={updatePositions}
-          onDeleteElement={deleteElement}
-          onConnect={(from, to) => addConnection(from, to)}
-          onDeleteConnection={deleteConnection}
-          onEditElement={(el) => editElementInline(modal, slug, el, updateElement, toast)}
-        />
+        {/* Canvas wrapper with floating controls */}
+        <div className="plan-canvas-wrapper">
+          <div className="plan-canvas-floating-controls">
+            <Button variant="ghost" size="sm" onClick={onBack} title="Back to plans list">
+              <ArrowLeft size={14} /> Back
+            </Button>
+            <h3>{meta?.title || slug}</h3>
+            {meta && <StatusBadge kind={planStatusKind(meta.status)}>{meta.status}</StatusBadge>}
+            <Button variant="secondary" size="sm" onClick={onAddElement}>
+              <Plus size={14} /> Element
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onCanvasComment}>
+              <MessageCircle size={14} /> Comment
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan">
+              <SettingsIcon size={14} />
+            </Button>
+          </div>
+
+          <CanvasViewport
+            canvas={canvas}
+            selectedElId={selectedElId}
+            onSelect={setSelectedElId}
+            onMoveElement={(id, x, y) => updateElement(id, { x, y })}
+            onMoveEnd={updatePositions}
+            onDeleteElement={deleteElement}
+            onConnect={(from, to) => addConnection(from, to)}
+            onDeleteConnection={deleteConnection}
+            onEditElement={(el) => editElementInline(modal, slug, el, updateElement, toast)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  { label: 'Add element', icon: Plus, onClick: onAddElement },
+                  { label: 'Add comment', icon: MessageSquare, onClick: onCanvasComment },
+                  { type: 'separator' },
+                  { label: 'Configure plan', icon: SettingsIcon, onClick: onConfigure },
+                  { label: 'Delete plan', icon: Trash2, onClick: onDelete },
+                ],
+              });
+            }}
+          />
+
+          {/* Context menu */}
+          <CanvasContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+        </div>
 
         {showComments && (
           <CommentsPanel
@@ -791,6 +831,8 @@ type ViewportProps = {
   onConnect: (from: string, to: string) => void;
   onDeleteConnection: (id: string) => void;
   onEditElement: (el: CanvasElement) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+  fitToView?: () => void;
 };
 
 function CanvasViewport({
@@ -803,6 +845,7 @@ function CanvasViewport({
   onConnect,
   onDeleteConnection,
   onEditElement,
+  onContextMenu,
 }: ViewportProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -1006,7 +1049,7 @@ function CanvasViewport({
           Pan: drag empty · Zoom: scroll · Drag element header to move · Double-click to edit
         </span>
       </div>
-      <div className="canvas-root" ref={rootRef}>
+      <div className="canvas-root" ref={rootRef} onContextMenu={onContextMenu}>
         <div className="canvas-grid-bg" />
         <div className="canvas-inner" ref={innerRef}>
           {canvas.elements.length === 0 ? (

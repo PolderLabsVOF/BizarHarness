@@ -1,5 +1,5 @@
 // src/views/Overview.tsx — system overview: project picker + counts + activity.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Bot,
   CheckSquare,
@@ -16,6 +16,7 @@ import {
   Trash2,
   Power,
   Search as SearchIcon,
+  Send,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -43,6 +44,7 @@ export function Overview({
 }: Props) {
   const toast = useToast();
   const modal = useModal();
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [overview, setOverview] = useState<Overview | null>(
     snapshot.overview ?? null,
   );
@@ -52,6 +54,7 @@ export function Overview({
     snapshot.activeProject?.id || null,
   );
   const [mods, setMods] = useState<Mod[]>(snapshot.mods || []);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (snapshot.overview) {
@@ -199,6 +202,68 @@ export function Overview({
           </Button>
         </div>
       </header>
+
+      {/* v3.3.2 — Hero text input: "What would you like to do?" */}
+      <div className="overview-hero">
+        <h1 className="overview-hero-title">What would you like to do?</h1>
+        <p className="overview-hero-subtitle">
+          Odin will split it into tasks, create a plan, and delegate to background agents.
+        </p>
+        <form
+          className="overview-hero-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const text = (inputRef.current?.value || '').trim();
+            if (!text) return;
+            setSubmitting(true);
+            try {
+              const r = await api.post<{ subtasks?: unknown[] }>('/tasks/submit', { title: text });
+              toast.success(`Odin split it into ${(r.subtasks?.length || 1)} task(s)`);
+              if (inputRef.current) inputRef.current.value = '';
+              await refreshSnapshot();
+            } catch (err) {
+              toast.error(`Failed: ${(err as Error).message}`);
+            } finally {
+              setSubmitting(false);
+            }
+          }}
+        >
+          <textarea
+            ref={inputRef}
+            className="overview-hero-input"
+            placeholder="e.g. Implement user authentication with email/password and add tests"
+            rows={3}
+            disabled={submitting}
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            disabled={submitting}
+          >
+            {submitting ? <Spinner size="sm" /> : <Send size={16} />}
+            Submit to Odin
+          </Button>
+        </form>
+
+        <div className="overview-quick-actions">
+          {['Implement feature', 'Fix bug', 'Refactor', 'Investigate', 'Add tests', 'Document'].map((action) => (
+            <button
+              key={action}
+              type="button"
+              className="overview-quick-chip"
+              onClick={() => {
+                if (inputRef.current) {
+                  inputRef.current.value = action;
+                  inputRef.current.focus();
+                }
+              }}
+            >
+              {action}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <Card className="project-picker">
         <CardTitle>

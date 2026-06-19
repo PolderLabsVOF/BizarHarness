@@ -86,7 +86,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.3.1',
+    version: '3.3.2',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
