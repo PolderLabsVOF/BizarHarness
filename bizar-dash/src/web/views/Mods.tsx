@@ -43,40 +43,54 @@ type ModView = {
 export function Mods({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
   const modal = useModal();
-  const [mods, setMods] = useState<Mod[]>(snapshot.mods || []);
-  const [loading, setLoading] = useState(!snapshot.mods);
+  // v3.3.0 — Always start by loading from the server, not just the
+  // snapshot. The snapshot can be stale if the user installed a mod
+  // from the CLI or added files directly to ~/.config/bizar/mods.
+  // We seed the initial state from the snapshot for instant paint
+  // but always re-fetch on mount and after every mutation.
+  const [mods, setMods] = useState<Mod[]>(Array.isArray(snapshot.mods) ? snapshot.mods : []);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [modViews, setModViews] = useState<ModView[]>([]);
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
 
   const reload = async () => {
     try {
+      // Always pull fresh from the server. snapshot is fine for
+      // optimistic initial render, but a fresh fetch makes the page
+      // behave correctly even if the snapshot was empty or stale.
       const r = await api.get<{ mods: Mod[] }>('/mods');
       setMods(r.mods || []);
-      const v = await api.get<{ views: ModView[] }>('/mods/views');
-      setModViews(v.views || []);
+      try {
+        const v = await api.get<{ views: ModView[] }>('/mods/views');
+        setModViews(v.views || []);
+      } catch {
+        setModViews([]);
+      }
     } catch (err) {
       toast.error(`Mods load failed: ${(err as Error).message}`);
     } finally {
+      // v3.3.0 — Always clear loading even on failure so the empty
+      // state can render. Without this, a network blip would leave
+      // the user staring at a spinner forever.
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (snapshot.mods?.length || snapshot.mods) {
-      setMods(snapshot.mods || []);
-      setLoading(false);
-      return;
-    }
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot.mods]);
-
-  // Load mod views when tab becomes active
+  // Initial load — runs once on mount.
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-sync from snapshot when it changes (other tabs may have
+  // triggered a refreshSnapshot that updated the mod list).
+  useEffect(() => {
+    if (Array.isArray(snapshot.mods) && snapshot.mods !== mods) {
+      setMods(snapshot.mods);
+    }
+    // eslint-disable-next-line react-hooks-exhaustive-deps
+  }, [snapshot.mods]);
 
   const onInstall = () => {
     let pathEl: HTMLInputElement | null = null;

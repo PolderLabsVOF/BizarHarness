@@ -30,6 +30,7 @@ import { diagnosticsStore } from './diagnostics-store.mjs';
 import { tailscaleStore } from './tailscale-store.mjs';
 import { plansStore } from './plans-store.mjs';
 import { skillsStore } from './skills-store.mjs';
+import { notificationsStore } from './notifications-store.mjs';
 
 const HOME = homedir();
 const OPENCODE_DIR = join(HOME, '.config', 'opencode');
@@ -85,7 +86,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.2.2',
+    version: '3.3.0',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -333,6 +334,30 @@ export function createApiRouter({
     if (status === 'done' && task.recurring) {
       const next = await tasksStore.spawnNextRecurrence(projectId, task);
       if (next) broadcast({ type: 'tasks:change', task: next });
+    }
+    // v3.3.0 — Fire a notification on completion. The Tasks view
+    // already paints the badge in real time via tasks:change; the
+    // notification is the cross-tab history bit.
+    if (status === 'done') {
+      try {
+        notificationsStore.add({
+          severity: 'success',
+          source: 'tasks',
+          title: 'Task completed',
+          message: task.title || task.id,
+          meta: { taskId: task.id },
+        }, { broadcast });
+      } catch { /* best-effort */ }
+    } else if (status === 'blocked') {
+      try {
+        notificationsStore.add({
+          severity: 'warning',
+          source: 'tasks',
+          title: 'Task blocked',
+          message: task.title || task.id,
+          meta: { taskId: task.id },
+        }, { broadcast });
+      } catch { /* best-effort */ }
     }
     res.json(task);
   }));
@@ -1369,9 +1394,20 @@ export function createApiRouter({
   router.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
   // ── /api/skills ──────────────────────────────────────────────────────
-  router.get('/skills', wrap(async (_req, res) => {
+  // v3.3.0 — `?category=foo` filters the list server-side. The
+  // frontend uses this to power the collapsible categories view
+  // (the old "all in one list" mode is now the default "Show all"
+  // toggle in the UI).
+  router.get('/skills', wrap(async (req, res) => {
     const skills = await skillsStore.list();
-    res.json({ skills, categories: skillsStore.CATEGORIES });
+    let out = skills;
+    if (req.query.category) {
+      const wanted = String(req.query.category).toLowerCase();
+      if (wanted !== 'all') {
+        out = skills.filter((s) => (s.category || '').toLowerCase() === wanted);
+      }
+    }
+    res.json({ skills: out, categories: skillsStore.CATEGORIES, total: skills.length });
   }));
 
   router.get('/skills/search', wrap(async (req, res) => {
@@ -1405,6 +1441,167 @@ export function createApiRouter({
     const out = skillsStore.enable(req.params.id);
     broadcast({ type: 'skills:change' });
     res.json(out);
+  }));
+
+  // ── /api/notifications (v3.3.0) ────────────────────────────────────
+  // Per-user notification stream. Backed by an append-only JSONL log
+  // at ~/.config/bizar/notifications.jsonl. Read state is persisted
+  // separately at notifications.read.json.
+  router.get('/notifications', wrap(async (req, res) => {
+    const unread = req.query.unread === 'true' || req.query.unread === '1';
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '200', 10) || 200));
+    const items = notificationsStore.list({ unread, limit });
+    res.json({ notifications: items, stats: notificationsStore.stats() });
+  }));
+
+  router.post('/notifications/:id/read', wrap(async (req, res) => {
+    const ok = notificationsStore.markRead(req.params.id);
+    res.json({ ok });
+  }));
+
+  router.post('/notifications/read-all', wrap(async (_req, res) => {
+    const marked = notificationsStore.markAllRead();
+    broadcast({ type: 'notifications:change' });
+    res.json({ ok: true, marked });
+  }));
+
+  router.delete('/notifications/:id', wrap(async (req, res) => {
+    const ok = notificationsStore.remove(req.params.id);
+    if (!ok) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.status(204).end();
+  }));
+
+  // ── /api/themes (v3.3.0) ───────────────────────────────────────────
+  // Named custom themes. The active theme lives in settings.json as
+  // before; this is the registry of saved themes the user can apply
+  // with one click.
+  router.get('/themes', wrap(async (_req, res) => {
+    res.json(state.getThemes());
+  }));
+
+  router.post('/themes', wrap(async (req, res) => {
+    const { name, colors } = req.body || {};
+    if (typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({ error: 'bad_request', message: 'name is required' });
+      return;
+    }
+    if (!colors || typeof colors !== 'object') {
+      res.status(400).json({ error: 'bad_request', message: 'colors object is required' });
+      return;
+    }
+    const out = state.addTheme(name.trim().slice(0, 60), colors);
+    res.status(201).json(out);
+  }));
+
+  router.delete('/themes/:name', wrap(async (req, res) => {
+    const out = state.removeTheme(decodeURIComponent(req.params.name));
+    if (!out.removed) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.status(204).end();
+  }));
+
+  // ── /api/activity/session (v3.3.0) ────────────────────────────────
+  // Returns activity events scoped to the "current session". A
+  // session is the most recent hour of activity, or — if the
+  // caller provides `?since=<iso>` — the events since that
+  // timestamp. Used by the Activity tab to drive the new
+  // "session timeline" view.
+  router.get('/activity/session', wrap(async (req, res) => {
+    const { activityLog } = await import('./activity-log.mjs');
+    const sinceParam = req.query.since ? new Date(String(req.query.since)) : null;
+    const sinceTs = sinceParam && !Number.isNaN(sinceParam.getTime())
+      ? sinceParam.getTime()
+      : Date.now() - 60 * 60 * 1000; // 1h default
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '200', 10) || 200));
+    const recent = activityLog.recent(limit * 4);
+    const events = recent
+      .filter((e) => {
+        const t = e.ts ? new Date(e.ts).getTime() : 0;
+        return t >= sinceTs;
+      })
+      .slice(0, limit);
+    // Group events by "agent involved" — the agent name, when
+    // available, lives in `agent`, `actor`, `assignee`, or
+    // `nodeId="agent:<name>"`. The Activity canvas uses this to
+    // filter the graph down to session participants.
+    const agents = new Set();
+    for (const e of events) {
+      if (typeof e.agent === 'string') agents.add(e.agent);
+      if (typeof e.assignee === 'string') agents.add(e.assignee);
+      if (typeof e.actor === 'string') agents.add(e.actor);
+      if (typeof e.nodeId === 'string' && e.nodeId.startsWith('agent:')) {
+        agents.add(e.nodeId.slice('agent:'.length));
+      }
+      if (typeof e.taskId && e.subtaskIds) {
+        // task.delegated event — has subtaskIds
+      }
+    }
+    res.json({
+      events,
+      since: new Date(sinceTs).toISOString(),
+      agents: Array.from(agents),
+      stats: activityLog.stats(),
+    });
+  }));
+
+  // ── /api/plans/:slug/questions/:qid/respond (v3.3.0) ──────────────
+  // Agent-side integration for the question element: an agent posts
+  // a question via the plan's canvas; the user clicks a choice in
+  // the dashboard, this endpoint records the choice, marks the
+  // question resolved, and broadcasts the answer so the agent
+  // (when its plugin is updated) can pick it up.
+  router.post('/plans/:slug/questions/:qid/respond', wrap(async (req, res) => {
+    const { choiceId, text } = req.body || {};
+    const out = plansStore.respondToQuestion(
+      req.params.slug,
+      req.params.qid,
+      { choiceId, text },
+      projectRoot,
+    );
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    // Also drop a notification so the agent can re-poll.
+    try {
+      notificationsStore.add({
+        severity: 'info',
+        source: 'plan',
+        title: `Plan: ${req.params.slug}`,
+        message: `Question answered: choice=${choiceId || 'freeform'}`,
+        link: `/plans/${req.params.slug}`,
+        meta: { slug: req.params.slug, qid: req.params.qid, choiceId, text },
+      }, { broadcast });
+    } catch { /* best-effort */ }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.json(out);
+  }));
+
+  // ── /api/tasks/:id/progress (v3.3.0) ───────────────────────────────
+  // Task progress updates from agents. Updates the in-store
+  // metadata.progress + metadata.currentStep and broadcasts a WS
+  // event so the Tasks view can paint the progress bar in real
+  // time.
+  router.post('/tasks/:id/progress', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const { progress, step, agent } = req.body || {};
+    const task = await tasksStore.updateProgress(projectId, req.params.id, {
+      progress: Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0,
+      step: typeof step === 'string' ? step.slice(0, 200) : null,
+      agent: typeof agent === 'string' ? agent.slice(0, 60) : null,
+    });
+    if (!task) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'task:progress', taskId: task.id, progress: task.metadata?.progress, step: task.metadata?.currentStep, agent: task.metadata?.progressAgent });
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
   }));
 
   router.use((req, res) => {

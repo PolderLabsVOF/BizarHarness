@@ -251,6 +251,43 @@ export const tasksStore = {
     return this.update(projectId, id, { status: newStatus });
   },
 
+  /**
+   * v3.3.0 — Update progress for a task. Used by agents to push
+   * real-time status. Patches metadata.progress (0-100) and
+   * metadata.currentStep (string). Also appends a row to
+   * metadata.progressHistory for the timeline view.
+   */
+  async updateProgress(projectId, id, { progress, step, agent } = {}) {
+    await acquire();
+    try {
+      const file = resolveStorageFile(projectId);
+      const store = loadStore(file);
+      const idx = store.tasks.findIndex((t) => t.id === id);
+      if (idx === -1) return null;
+      const task = { ...store.tasks[idx] };
+      const meta = { ...(task.metadata || {}) };
+      const clamped = Math.max(0, Math.min(100, Number.isFinite(progress) ? progress : 0));
+      meta.progress = clamped;
+      if (typeof step === 'string') meta.currentStep = step;
+      if (typeof agent === 'string') meta.progressAgent = agent;
+      if (!Array.isArray(meta.progressHistory)) meta.progressHistory = [];
+      meta.progressHistory.push({ ts: new Date().toISOString(), progress: clamped, step: step || null, agent: agent || null });
+      // Hard-cap the history length to avoid unbounded growth.
+      if (meta.progressHistory.length > 100) {
+        meta.progressHistory = meta.progressHistory.slice(-100);
+      }
+      meta.startedAt = meta.startedAt || new Date().toISOString();
+      task.metadata = meta;
+      task.updatedAt = new Date().toISOString();
+      appendActivity(task, 'progress', { progress: clamped, step: step || null, agent: agent || null });
+      store.tasks[idx] = task;
+      saveStore(file, store);
+      return task;
+    } finally {
+      release();
+    }
+  },
+
   /** Add a comment to a task. */
   async addComment(projectId, id, text) {
     if (!text || typeof text !== 'string') throw new Error('comment text required');

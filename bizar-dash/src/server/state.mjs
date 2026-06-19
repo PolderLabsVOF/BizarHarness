@@ -360,6 +360,59 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     }
   }
 
+  // v3.3.0 — Custom theme registry. Saved as a small JSON file under
+  // ~/.config/bizar/themes.json so users can persist a few named
+  // themes and switch between them from the Settings tab.
+  const THEMES_FILE = join(HOME, '.config', 'bizar', 'themes.json');
+
+  function readThemes() {
+    try {
+      if (!existsSync(THEMES_FILE)) return { themes: [] };
+      const text = readFileSync(THEMES_FILE, 'utf8');
+      if (!text.trim()) return { themes: [] };
+      const parsed = JSON.parse(text);
+      const themes = Array.isArray(parsed?.themes) ? parsed.themes : [];
+      // Drop any malformed entries — each must have a name + colors.
+      const cleaned = themes
+        .filter((t) => t && typeof t === 'object' && typeof t.name === 'string' && t.colors && typeof t.colors === 'object')
+        .map((t) => ({ name: t.name, colors: t.colors, createdAt: t.createdAt || null }));
+      return { themes: cleaned };
+    } catch {
+      return { themes: [] };
+    }
+  }
+
+  function writeThemes(payload) {
+    try {
+      mkdirSync(HOME + '/.config/bizar', { recursive: true });
+    } catch {
+      /* best-effort */
+    }
+    const themes = Array.isArray(payload?.themes) ? payload.themes : [];
+    const cleaned = themes
+      .filter((t) => t && typeof t === 'object' && typeof t.name === 'string' && t.colors)
+      .map((t) => ({ name: t.name, colors: t.colors, createdAt: t.createdAt || new Date().toISOString() }));
+    writeFileSync(THEMES_FILE, JSON.stringify({ themes: cleaned }, null, 2) + '\n', 'utf8');
+    return { themes: cleaned };
+  }
+
+  function addTheme(name, colors) {
+    const cur = readThemes();
+    const idx = cur.themes.findIndex((t) => t.name === name);
+    if (idx >= 0) cur.themes[idx] = { name, colors, createdAt: new Date().toISOString() };
+    else cur.themes.push({ name, colors, createdAt: new Date().toISOString() });
+    return writeThemes(cur);
+  }
+
+  function removeTheme(name) {
+    const cur = readThemes();
+    const before = cur.themes.length;
+    cur.themes = cur.themes.filter((t) => t.name !== name);
+    if (cur.themes.length === before) return { themes: cur.themes, removed: false };
+    writeThemes(cur);
+    return { themes: cur.themes, removed: true };
+  }
+
   return {
     paths,
     getOverview,
@@ -368,5 +421,10 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     getPlans,
     getProjects,
     appendActivity,
+    // v3.3.0 — theme registry
+    getThemes: readThemes,
+    setThemes: writeThemes,
+    addTheme,
+    removeTheme,
   };
 }

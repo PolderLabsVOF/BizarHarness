@@ -229,10 +229,45 @@ export type Task = {
   // v3.2.0 — main-task fields from the task delegator.
   subtasks?: string[];
   metadata?: Record<string, unknown> | null;
+  // v3.3.0 — progress fields surfaced from metadata.
+  progress?: number;
+  currentStep?: string | null;
+  progressAgent?: string | null;
+  progressHistory?: { ts: string; progress: number; step: string | null; agent?: string | null }[];
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;
   _timerStart?: number;
+};
+
+export type Notification = {
+  id: string;
+  ts: string;
+  severity: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+  source: string;
+  title?: string;
+  link?: string | null;
+  read?: boolean;
+  meta?: Record<string, unknown> | null;
+};
+
+export type NotificationStats = {
+  total: number;
+  unread: number;
+  lastTs: string | null;
+  counts: Record<string, number>;
+};
+
+export type NotificationsResponse = {
+  notifications: Notification[];
+  stats: NotificationStats;
+};
+
+export type CustomTheme = {
+  name: string;
+  colors: Partial<ThemeSettings>;
+  createdAt?: string | null;
 };
 
 export type Schedule = {
@@ -352,6 +387,7 @@ export type WsMessage =
   | { type: 'change'; event: string; path: string; ts: number }
   | { type: 'tasks:change'; task: Task }
   | { type: 'tasks:delete'; id: string }
+  | { type: 'task:progress'; taskId: string; progress?: number; step?: string | null; agent?: string | null }
   | { type: 'settings:change'; settings: Settings }
   | { type: 'agents:change' }
   | { type: 'agent:status'; agent: Agent }
@@ -361,6 +397,8 @@ export type WsMessage =
   | { type: 'schedules:change' }
   | { type: 'project:change'; project?: ProjectRecord }
   | { type: 'chat:message'; message: ChatMessage }
+  | { type: 'notification:new'; notification: Notification }
+  | { type: 'notifications:change' }
   | { type: 'pong'; ts: number }
   | { type: 'ping' }
   | { type: 'refresh' };

@@ -1207,7 +1207,16 @@ function openSubmitTaskModal(
   let priorityEl: HTMLSelectElement | null = null;
   let tagsEl: HTMLInputElement | null = null;
 
-  const onSubmit = async () => {
+  // v3.3.0 — Wraps the submit click so we can preventDefault /
+  // stopPropagation. Without this, a click on a button could bubble
+  // up through the modal portal after the modal closes and either
+  // trigger a sibling button or, more importantly, allow a
+  // subsequent digit-key event to fire setActiveTab("overview")
+  // because the just-closed modal had removed the user's focused
+  // form control.
+  const onSubmit = async (e?: React.SyntheticEvent) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     const title = (titleEl?.value || '').trim();
     if (!title) {
       toast.warning('Title is required.');
@@ -1233,12 +1242,26 @@ function openSubmitTaskModal(
           ? `Odin split it into ${count} subtasks.`
           : 'Task submitted to Odin.',
       );
+      // Defensive: close the modal AFTER any state mutation so a
+      // stray click event on the portal can't bubble into a tab
+      // switch before React has a chance to clear the active tab.
       modal.close();
       if (setTasks) setTasks((cur: Task[]) => [result.main, ...(result.subtasks || []), ...cur]);
       if (reload) await reload();
       if (refreshSnapshot) await refreshSnapshot();
     } catch (err) {
       toast.error(`Submit failed: ${(err as Error).message}`);
+    }
+  };
+
+  // v3.3.0 — Submit on Enter from the title input. Without an
+  // explicit onKeyDown, the implicit form-submit behavior can fire
+  // when a user presses Enter. Even though we don't wrap inputs in
+  // <form>, this is the safest pattern.
+  const onTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSubmit(e);
     }
   };
 
@@ -1256,6 +1279,7 @@ function openSubmitTaskModal(
             type="text"
             placeholder="What do you need done?"
             autoFocus
+            onKeyDown={onTitleKeyDown}
           />
           <span className="field-hint">
             Odin will analyze this and split it into subtasks assigned to the best agent.
@@ -1301,7 +1325,11 @@ function openSubmitTaskModal(
     footer: (
       <div className="modal-footer-actions">
         <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
-        <Button variant="primary" onClick={onSubmit}>
+        <Button
+          variant="primary"
+          type="button"
+          onClick={(e) => onSubmit(e)}
+        >
           <Send size={14} /> Submit to Odin
         </Button>
       </div>

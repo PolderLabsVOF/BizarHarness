@@ -102,10 +102,18 @@ function ModalShell({
   onClose: () => void;
   depth: number;
 }) {
+  // v3.3.0 — Backdrop click stops propagation. This stops a click on
+  // the dim area from bubbling to the document/App level where it
+  // could otherwise be misread by the digit-key shortcut handler
+  // (the click that closes the modal would otherwise leave focus on
+  // <body>, and any subsequent accidental digit press would fire
+  // setActiveTab("overview")). The click itself only fires onClose()
+  // when the user actually clicked the backdrop, not a child.
   return (
     <div
       className="modal-backdrop"
       onClick={(e) => {
+        e.stopPropagation();
         if (e.target === e.currentTarget) onClose();
       }}
       style={depth > 0 ? { background: 'rgba(0,0,0,0.4)' } : undefined}
@@ -114,6 +122,7 @@ function ModalShell({
         className="modal"
         role="dialog"
         aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
         style={modal.width ? { maxWidth: modal.width } : undefined}
       >
         {modal.title && (

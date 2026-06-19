@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { ProjectRecord, WsStatus } from '../lib/types';
+import type { ProjectRecord, WsStatus, WsMessage } from '../lib/types';
 import { api } from '../lib/api';
 
 export type TabDef = {
@@ -57,6 +57,12 @@ export type TopbarProps = {
   onOpenSearch: () => void;
   rightSlot?: ReactNode;
   /**
+   * v3.3.0 — Optional slot for the notifications bell. The host
+   * (App.tsx) mounts the Notifications component here so it can
+   * subscribe to the same WebSocket the rest of the app uses.
+   */
+  notificationsSlot?: ReactNode;
+  /**
    * Whether to render the tabs row. In sidebar/both layouts the sidebar
    * carries navigation, so we hide this row to keep the topbar slim.
    */
@@ -74,6 +80,7 @@ export function Topbar({
   onProjectsRefresh,
   onOpenSearch,
   rightSlot,
+  notificationsSlot,
   showTabs = true,
 }: TopbarProps) {
   return (
@@ -102,6 +109,7 @@ export function Topbar({
         </button>
         <div className="topbar-spacer" />
         <div className="topbar-right">
+          {notificationsSlot}
           {rightSlot}
           <div className={cn('ws-status', `ws-${wsStatus}`)} title={`WebSocket: ${wsStatus}`}>
             <span className="ws-dot" />

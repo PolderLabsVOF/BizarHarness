@@ -17,6 +17,7 @@
 
 import { tasksStore } from './tasks-store.mjs';
 import { agentsStore } from './agents-store.mjs';
+import { notificationsStore } from './notifications-store.mjs';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -78,8 +79,21 @@ export const taskDelegator = {
       tags: Array.isArray(taskInput.tags) ? taskInput.tags : [],
       assignee: 'odin',
       parent: null,
+      metadata: { progress: 0, currentStep: 'Queued for delegation', progressHistory: [{ ts: new Date().toISOString(), progress: 0, step: 'Queued for delegation' }] },
     });
     broadcast({ type: 'tasks:change', task: main });
+
+    // v3.3.0 — Drop a notification that the user submitted a task.
+    try {
+      notificationsStore.add({
+        severity: 'info',
+        source: 'odin',
+        title: 'Task submitted',
+        message: `Odin is splitting "${title}" into subtasks.`,
+        link: null,
+        meta: { taskId: main.id },
+      }, { broadcast });
+    } catch { /* best-effort */ }
 
     // 2. Odin analyzes and splits.
     const subtasks = await this.splitTask(main, ctx);
@@ -101,6 +115,7 @@ export const taskDelegator = {
     main.subtasks = subtasks.map((s) => s.id);
     const moved = await tasksStore.update(projectId, main.id, {
       status: 'doing',
+      metadata: { progress: 10, currentStep: `Split into ${subtasks.length} subtask(s)`, startedAt: new Date().toISOString() },
     });
     if (moved) {
       moved.subtasks = subtasks.map((s) => s.id);
@@ -334,6 +349,13 @@ export const taskDelegator = {
         const metadata = { ...(sub.metadata || {}) };
         if (bgId) metadata.bgInstanceId = bgId;
         metadata.dispatchedAt = new Date().toISOString();
+        metadata.progress = 5;
+        metadata.currentStep = bgId ? `Dispatched (${bgId})` : 'Dispatched';
+        metadata.progressHistory = [
+          ...(metadata.progressHistory || []),
+          { ts: new Date().toISOString(), progress: 5, step: metadata.currentStep, agent: sub.assignee || null },
+        ];
+        metadata.startedAt = metadata.startedAt || new Date().toISOString();
 
         const updated = await tasksStore.update(projectId, sub.id, {
           status: 'doing',
@@ -341,6 +363,7 @@ export const taskDelegator = {
         });
         if (updated) {
           broadcast({ type: 'tasks:change', task: updated });
+          broadcast({ type: 'task:progress', taskId: sub.id, progress: 5, step: metadata.currentStep, agent: sub.assignee || null });
         }
       } catch (err) {
         // Don't crash the loop on a single failure.

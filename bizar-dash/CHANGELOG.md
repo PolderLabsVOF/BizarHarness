@@ -1,5 +1,32 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.3.0 — 2026-06-19
+
+### Fixed
+- **Mods page broken**: Mods view always loaded stale snapshot data. Now fetches fresh from `/api/mods` on mount so newly installed mods appear immediately without a full page refresh.
+- **Chat redirect after actions**: "Submit to Odin" modal now calls `preventDefault()`/`stopPropagation()` on the submit handler to prevent a stray click/key-repeat from triggering digit-key tab switches after modal close. App keyboard handler also gates digit shortcuts with a 250ms `safeUntil` window after any click.
+
+### Added
+- **Notifications system** (`notifications-store.mjs` + `/api/notifications*`): Per-user append-only notification stream at `~/.config/bizar/notifications.jsonl`. Endpoints: `GET /notifications`, `POST /notifications/:id/read`, `POST /notifications/read-all`, `DELETE /notifications/:id`. Task completion and blocking automatically fire notifications. Bell icon component (`Notifications.tsx`) with severity icons, unread badge, mark-read, mark-all, and dismiss.
+- **`POST /api/tasks/:id/progress`**: Agents can push `{ progress, step, agent }` updates to paint live progress bars in the Tasks view via WebSocket `task:progress` events.
+- **`GET /api/activity/session`**: Activity events scoped to the last hour (or `?since=<iso>`), with a list of agent names that participated in the session. Powers the Activity canvas session-filtering (UI pending).
+- **Custom themes API** (`state.mjs` + `/api/themes*`): `GET /api/themes` lists saved themes; `POST /api/themes` saves a named theme; `DELETE /api/themes/:name` removes one. Themes stored at `~/.config/bizar/themes.json`.
+- **Skills collapsible categories** (`Skills.tsx`): Category filter buttons above the skills grid. `GET /api/skills?category=foo` filters server-side. Category list loaded from `skillsStore.CATEGORIES`.
+- **`POST /api/plans/:slug/questions/:qid/respond`**: Records a user's choice on a canvas question element, marks it resolved, drops a notification for the agent, and broadcasts `plan:change`.
+- **Task notifications on completion/block**: `PATCH /api/tasks/:id/status` now fires a `success` notification when status→`done` and a `warning` notification when status→`blocked`.
+- **`CrossViewState` type + `crossState` prop** in App shell: Scratch state channel for cross-view handoffs (e.g. "Open in chat" from Agents tab) without URL state.
+
+### Changed
+- `about.version` → `3.3.0` in `api.mjs`; `VERSION` → `v3.3.0` in `App.tsx`; diagnostics-store `version` → `3.3.0`.
+- `DEFAULT_SETTINGS.theme` gains `animations` and `compactMode` fields.
+- `Task` type gains `progress`, `currentStep`, `progressAgent`, `progressHistory` fields surfaced from `metadata`.
+
+### Verified
+- TypeScript: 0 errors.
+- Build: passes.
+- API smoke test: `/api/health`, `/api/notifications`, `/api/projects`, `/api/agents` all return 2xx.
+- `cli/plan.test.mjs`: 140 tests, all pass.
+
 ## v3.2.2 — 2026-06-19
 
 ### Fixed

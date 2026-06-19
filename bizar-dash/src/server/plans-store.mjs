@@ -400,6 +400,53 @@ export const plansStore = {
     return { plan, canvas };
   },
 
+  /**
+   * v3.3.0 — Record the user's response to a question element on the
+   * canvas. Marks the question resolved, attaches the choice + any
+   * freeform text to the element's `question.response` field, and
+   * also writes a canvas-level comment so the conversation shows up
+   * in the existing comment thread.
+   *
+   * Returns { plan, canvas, element, response } or null if not found.
+   */
+  respondToQuestion(slug, qid, { choiceId, text } = {}, projectRoot) {
+    const plan = this.get(slug, projectRoot);
+    if (!plan) return null;
+    const canvas = sanitizeCanvas(plan.canvas, plan.meta?.title || slug);
+    const idx = canvas.elements.findIndex((e) => e.id === qid);
+    if (idx === -1) return null;
+    const el = canvas.elements[idx];
+    if (el.type !== 'question') return null;
+    const choices = Array.isArray(el.choices) ? el.choices : [];
+    const choice = choices.find((c) => c.id === choiceId) || null;
+    const response = {
+      choiceId: choiceId || null,
+      label: choice?.label || null,
+      text: text || null,
+      respondedAt: new Date().toISOString(),
+    };
+    const next = {
+      ...el,
+      status: 'resolved',
+      response,
+    };
+    canvas.elements[idx] = next;
+    // Drop a canvas comment so the conversation thread is visible.
+    const comment = {
+      id: typeof el.id === 'string' && el.id.length >= 9 ? `cmt_${el.id.slice(-9)}` : `cmt_${Date.now().toString(36)}`,
+      elementId: el.id,
+      author: 'user',
+      text: response.text
+        ? `Answer: ${response.label || response.choiceId || 'custom'} — ${response.text}`
+        : `Answer: ${response.label || response.choiceId || 'custom'}`,
+      created: response.respondedAt,
+      thread: [],
+    };
+    canvas.comments.push(comment);
+    this._writePlan(plan.dir, { ...plan.meta, lastEdited: new Date().toISOString() }, canvas);
+    return { plan, canvas, element: next, response, comment };
+  },
+
   // ── internal ────────────────────────────────────────────────────────
   _writePlan(dir, meta, canvas) {
     mkdirSync(dir, { recursive: true });

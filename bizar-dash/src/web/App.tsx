@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { ModalProvider } from './components/Modal';
 import { ToastProvider, useToast } from './components/Toast';
 import { SearchModal } from './components/SearchModal';
+import { Notifications } from './components/Notifications';
 import { api } from './lib/api';
 import { Ws } from './lib/ws';
 import {
@@ -42,6 +43,18 @@ type ViewProps = {
   activeTab: string;
   setActiveTab: (id: string) => void;
   refreshSnapshot: () => Promise<void>;
+  /**
+   * v3.3.0 — Cross-view scratch state. The "Open in chat" button
+   * on the Agents tab sets `pendingInitialAgent`, which the Chat
+   * view reads on mount (and clears). Keeps the chat a true
+   * one-click handoff without needing URL state.
+   */
+  crossState?: CrossViewState;
+  setCrossState?: (patch: Partial<CrossViewState>) => void;
+};
+
+export type CrossViewState = {
+  initialAgent?: string | null;
 };
 
 const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
@@ -58,7 +71,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   skills: Skills,
 };
 
-const VERSION = 'v3.2.2';
+const VERSION = 'v3.3.0';
 
 export function App() {
   return (
@@ -257,6 +270,16 @@ function Shell() {
       // focus was on a <select>, <button>, <label>, or contenteditable
       // node — causing mysterious tab switches (most often back to
       // "overview" via the `1` shortcut).
+      //
+      // v3.3.0 — "click after modal close" guard. When a modal closes
+      // (e.g. the user clicks "Submit to Odin" in the Tasks tab),
+      // React portals the modal out of the DOM and the previously-
+      // focused button is unmounted. Focus falls back to <body>. If
+      // the user then accidentally taps a digit key (1/2/3/...) — or
+      // a key-repeat event fires while they're still mid-click — the
+      // handler would switch tabs. The most common case was jumping
+      // back to Overview. We now also bail when the active element is
+      // <body> or null for ~120ms after a modal closes.
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
       const isFormControl =
@@ -272,13 +295,19 @@ function Shell() {
       if (target && typeof target.closest === 'function') {
         inForm = !!target.closest('form, [role="dialog"], [contenteditable], [data-no-key]');
       }
+      // v3.3.0 — A click anywhere that just closed a modal lands focus
+      // on document.body. Treat that as a transient focus target that
+      // should NOT trigger digit shortcuts. The window-level
+      // mousedown handler below bumps `safeUntil` whenever the user
+      // clicks, giving the next digit press a 200ms grace period.
       if (
         isFormControl ||
         inForm ||
         e.metaKey ||
         e.ctrlKey ||
         e.altKey ||
-        e.shiftKey
+        e.shiftKey ||
+        Date.now() < safeUntilRef.current
       )
         return;
       const id = map[e.key];
@@ -289,6 +318,25 @@ function Shell() {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  // v3.3.0 — Track recent clicks. After any click anywhere in the
+  // app we set a 200ms "safe" window during which digit-key shortcuts
+  // are suppressed. This protects against the case where a modal
+  // closes on a click and the user's next key event (often a
+  // accidental key repeat) would otherwise trigger
+  // setActiveTab("overview").
+  const safeUntilRef = useRef(0);
+  useEffect(() => {
+    const bump = () => {
+      safeUntilRef.current = Date.now() + 250;
+    };
+    document.addEventListener('mousedown', bump, true);
+    document.addEventListener('click', bump, true);
+    return () => {
+      document.removeEventListener('mousedown', bump, true);
+      document.removeEventListener('click', bump, true);
+    };
   }, []);
 
   const View = VIEW_MAP[activeTab];
