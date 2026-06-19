@@ -83,7 +83,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.0.3',
+    version: '3.0.4',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -213,6 +213,18 @@ export function createApiRouter({
   }));
 
   router.post('/projects/refresh', wrap(async (_req, res) => {
+    res.json(projectsStore.list());
+  }));
+
+  // v3.0.4 — Manual auto-detect trigger for the "Use current directory"
+  // button on the Overview. Auto-detects the server's `projectRoot` and
+  // returns the (possibly updated) registry. Idempotent.
+  router.post('/projects/auto-detect', wrap(async (_req, res) => {
+    const detected = projectsStore.autoDetect({ cwd: projectRoot });
+    if (detected) {
+      state.appendActivity({ kind: 'project.auto-detect', id: detected.id, path: detected.path });
+      broadcast({ type: 'project:change', project: detected });
+    }
     res.json(projectsStore.list());
   }));
 
@@ -698,6 +710,35 @@ export function createApiRouter({
       });
     sessions.sort((a, b) => b.mtime - a.mtime);
     res.json({ sessions });
+  }));
+
+  // v3.0.4 — Create a new chat session. Generates an id, ensures the
+  // sessions dir + empty .jsonl file exist, and returns the session
+  // metadata. Idempotent: if the session already exists, returns it.
+  router.post('/chat/sessions', wrap(async (req, res) => {
+    const active = projectsStore.active();
+    if (!active) {
+      res.status(400).json({ error: 'no_active_project', message: 'No active project. Pick one in Overview first.' });
+      return;
+    }
+    const requestedId = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
+    const sessionId = requestedId && /^[\w-]+$/.test(requestedId)
+      ? requestedId
+      : `sess_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const dir = join(projectsStore.ensureProjectDir(active.id), 'sessions');
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, `${sessionId}.jsonl`);
+    if (!existsSync(file)) {
+      writeFileSync(file, '', 'utf8');
+    }
+    state.appendActivity({ kind: 'chat.session.create', id: sessionId });
+    broadcast({ type: 'chat:session:create', sessionId });
+    res.status(201).json({
+      id: sessionId,
+      file: `${sessionId}.jsonl`,
+      mtime: Date.now(),
+      size: 0,
+    });
   }));
 
   // ── /api/search ────────────────────────────────────────────────────────

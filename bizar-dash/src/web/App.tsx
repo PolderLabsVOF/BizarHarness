@@ -51,7 +51,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   schedules: Schedules,
 };
 
-const VERSION = 'v3.0.3';
+const VERSION = 'v3.0.4';
 
 export function App() {
   return (
@@ -264,6 +264,32 @@ function Shell() {
     } else if (t === 'command') {
       // No command page; just toast
       toast.info(`/${(r.item as { name: string }).name} — run from the TUI`, 2500);
+    } else if (t === 'setting') {
+      // v3.0.4 — Jump to Settings view and scroll to the matching row.
+      const settingId = (r.item as { id?: string; path?: string }).id
+        || (r.item as { path?: string }).path
+        || '';
+      setActiveTab('settings');
+      // Defer the scroll to allow the view to mount, then apply a brief
+      // CSS highlight. We poll a few times because the Settings view
+      // mounts lazily after tab switch.
+      const tryScroll = (tries: number) => {
+        if (tries <= 0) return;
+        const el = settingId
+          ? document.querySelector(`[data-setting-id="${CSS.escape(settingId)}"]`)
+          : null;
+        if (el) {
+          (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.remove('setting-flash');
+          // Force reflow so the animation re-triggers on rapid jumps.
+          void (el as HTMLElement).offsetWidth;
+          el.classList.add('setting-flash');
+          window.setTimeout(() => el.classList.remove('setting-flash'), 1500);
+        } else {
+          window.setTimeout(() => tryScroll(tries - 1), 80);
+        }
+      };
+      window.setTimeout(() => tryScroll(15), 60);
     }
   };
 

@@ -20,6 +20,7 @@ const SCOPES = [
   { id: 'mods', label: 'Mods' },
   { id: 'schedules', label: 'Schedules' },
   { id: 'commands', label: 'Commands' },
+  { id: 'settings', label: 'Settings' },
 ] as const;
 
 export function SearchModal({ open, onClose, onSelect }: Props) {
@@ -105,7 +106,7 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
           <input
             ref={inputRef}
             className="search-modal-input"
-            placeholder="Search tasks, plans, agents, projects, mods…"
+            placeholder="Search tasks, agents, settings, projects…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
@@ -181,5 +182,13 @@ function summarize(r: SearchResult): string {
   if (r.type === 'mod') return `${i.name} v${i.version} — ${i.description || ''}`;
   if (r.type === 'schedule') return `${i.name} (${i.type}: ${i.schedule})`;
   if (r.type === 'command') return `${i.name} — ${i.description || ''}`;
+  if (r.type === 'setting') {
+    const val = i.value === null || i.value === undefined
+      ? ''
+      : typeof i.value === 'string'
+        ? ` = ${i.value}`
+        : ` = ${JSON.stringify(i.value)}`;
+    return `${i.label}${val}  —  ${i.desc || ''}`.trim();
+  }
   return JSON.stringify(i).slice(0, 80);
 }

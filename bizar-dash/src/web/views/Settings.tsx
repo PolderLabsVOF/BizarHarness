@@ -162,7 +162,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   };
 
   const about = settings.about || {
-    version: '3.0.3',
+    version: '3.0.4',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   };
@@ -203,7 +203,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           <CardTitle><Palette size={14} /> Theme</CardTitle>
           <CardMeta>Mode, accent, and colors. Live preview as you tweak.</CardMeta>
 
-          <div className="field">
+          <div className="field" data-setting-id="theme.mode">
             <label className="field-label">Mode</label>
             <div className="theme-row">
               {THEMES.map(({ id, label, Icon }) => {
@@ -230,7 +230,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </div>
 
           <div className="theme-colors">
-            <div className="field">
+            <div className="field" data-setting-id="theme.accent">
               <label className="field-label">Accent</label>
               <div className="color-row">
                 <input
@@ -247,7 +247,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                 />
               </div>
             </div>
-            <div className="field">
+            <div className="field" data-setting-id="theme.success">
               <label className="field-label">Success</label>
               <div className="color-row">
                 <input
@@ -264,7 +264,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                 />
               </div>
             </div>
-            <div className="field">
+            <div className="field" data-setting-id="theme.warning">
               <label className="field-label">Warning</label>
               <div className="color-row">
                 <input
@@ -281,7 +281,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                 />
               </div>
             </div>
-            <div className="field">
+            <div className="field" data-setting-id="theme.error">
               <label className="field-label">Error</label>
               <div className="color-row">
                 <input
@@ -298,7 +298,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                 />
               </div>
             </div>
-            <div className="field">
+            <div className="field" data-setting-id="theme.info">
               <label className="field-label">Info</label>
               <div className="color-row">
                 <input
@@ -317,7 +317,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             </div>
           </div>
 
-          <div className="field">
+          <div className="field" data-setting-id="theme.fontFamily">
             <label className="field-label">Font family</label>
             <select
               className="select"
@@ -329,7 +329,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               ))}
             </select>
           </div>
-          <div className="field">
+          <div className="field" data-setting-id="theme.fontSize">
             <label className="field-label">Font size: {settings.theme.fontSize}px</label>
             <input
               type="range"
@@ -339,7 +339,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               onChange={(e) => patchTheme({ fontSize: Number(e.target.value) })}
             />
           </div>
-          <label className="checkbox-row">
+          <label className="checkbox-row" data-setting-id="theme.compactMode">
             <input
               type="checkbox"
               checked={settings.theme.compactMode}
@@ -347,7 +347,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Compact mode (denser UI)</span>
           </label>
-          <label className="checkbox-row">
+          <label className="checkbox-row" data-setting-id="theme.animations">
             <input
               type="checkbox"
               checked={settings.theme.animations}
@@ -360,7 +360,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         <Card>
           <CardTitle><LayoutIcon size={14} /> UI layout</CardTitle>
           <CardMeta>Choose how the dashboard's navigation is presented.</CardMeta>
-          <div className="layout-row">
+          <div className="layout-row" data-setting-id="ui.layout">
             {LAYOUTS.map((l) => (
               <button
                 key={l.id}
@@ -372,7 +372,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               </button>
             ))}
           </div>
-          <label className="checkbox-row">
+          <label className="checkbox-row" data-setting-id="ui.showHeader">
             <input
               type="checkbox"
               checked={settings.ui.showHeader}
@@ -380,7 +380,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Show header</span>
           </label>
-          <label className="checkbox-row">
+          <label className="checkbox-row" data-setting-id="ui.showStatusBar">
             <input
               type="checkbox"
               checked={settings.ui.showStatusBar}
@@ -388,7 +388,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Show status bar</span>
           </label>
-          <div className="field">
+          <div className="field" data-setting-id="ui.defaultTab">
             <label className="field-label">Default tab</label>
             <select
               className="select"
@@ -412,7 +412,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         <Card>
           <CardTitle>General</CardTitle>
           <CardMeta>Default agent + model override.</CardMeta>
-          <div className="field">
+          <div className="field" data-setting-id="defaultAgent">
             <label className="field-label" htmlFor="set-default-agent">Default agent</label>
             <input
               id="set-default-agent"
@@ -423,7 +423,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               onChange={(e) => patchTop('defaultAgent', e.target.value)}
             />
           </div>
-          <div className="field">
+          <div className="field" data-setting-id="defaultModel">
             <label className="field-label" htmlFor="set-default-model">Model override</label>
             <input
               id="set-default-model"
@@ -439,21 +439,23 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         <Card>
           <CardTitle><ServerIcon size={14} /> Service</CardTitle>
           <CardMeta>Background daemon that runs schedules.</CardMeta>
-          {tailscale ? (
-            <div className="service-card">
-              <p>
-                Status: <strong>{tailscale?.settings.enabled ? 'enabled' : 'disabled'}</strong>
-                {' '}· Tailscale installed: <strong>{tailscale.installed ? 'yes' : 'no'}</strong>
-                {' '}· authenticated: <strong>{tailscale.authenticated ? 'yes' : 'no'}</strong>
-              </p>
-              <p className="muted">
-                Use <code>bizar service start</code> / <code>bizar service stop</code> in
-                your terminal to control the daemon.
-              </p>
-            </div>
-          ) : (
-            <p className="muted">Loading service status…</p>
-          )}
+          <div data-setting-id="service.enabled">
+            {tailscale ? (
+              <div className="service-card">
+                <p>
+                  Status: <strong>{tailscale?.settings.enabled ? 'enabled' : 'disabled'}</strong>
+                  {' '}· Tailscale installed: <strong>{tailscale.installed ? 'yes' : 'no'}</strong>
+                  {' '}· authenticated: <strong>{tailscale.authenticated ? 'yes' : 'no'}</strong>
+                </p>
+                <p className="muted">
+                  Use <code>bizar service start</code> / <code>bizar service stop</code> in
+                  your terminal to control the daemon.
+                </p>
+              </div>
+            ) : (
+              <p className="muted">Loading service status…</p>
+            )}
+          </div>
         </Card>
 
         <Card>
@@ -503,7 +505,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         <Card>
           <CardTitle>Notifications</CardTitle>
           <CardMeta>Toast triggers inside the dashboard.</CardMeta>
-          <label className="checkbox-row">
+          <label className="checkbox-row" data-setting-id="notifications.onAgentComplete">
             <input
               type="checkbox"
               checked={!!settings.notifications.onAgentComplete}
@@ -516,7 +518,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Notify when an agent invocation completes</span>
           </label>
-          <label className="checkbox-row">
+          <label className="checkbox-row" data-setting-id="notifications.onPlanApproval">
             <input
               type="checkbox"
               checked={!!settings.notifications.onPlanApproval}
@@ -534,7 +536,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         <Card>
           <CardTitle><Globe size={14} /> Dashboard</CardTitle>
           <CardMeta>Controls how <code>bizar</code> starts up.</CardMeta>
-          <label className="checkbox-row">
+          <label className="checkbox-row" data-setting-id="dashboard.autoLaunchWeb">
             <input
               type="checkbox"
               checked={settings.dashboard.autoLaunchWeb !== false}

@@ -14,7 +14,9 @@ import {
   Server,
   Terminal,
   Sparkles,
+  Plus,
   X,
+  Folder,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -59,12 +61,13 @@ const BUILTIN_COMMANDS: SlashCommand[] = [
   { cmd: '/help', desc: 'Show all slash commands' },
 ];
 
-export function Chat({ snapshot, settings }: Props) {
+export function Chat({ snapshot, settings, setActiveTab }: Props) {
   const toast = useToast();
   const modal = useModal();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -95,6 +98,43 @@ export function Chat({ snapshot, settings }: Props) {
       toast.error(`Chat load failed: ${(err as Error).message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Refresh only the sessions list (without reloading messages). Useful
+  // after creating or deleting a session.
+  const refreshSessions = async () => {
+    try {
+      const data = await api.get<{ sessions: ChatSession[] }>('/chat/sessions');
+      setSessions(data.sessions || []);
+    } catch {
+      /* best-effort */
+    }
+  };
+
+  // v3.0.4 — Explicit "create new session" flow. Persists an empty
+  // session file on disk via POST /api/chat/sessions, loads it, and
+  // resets the composer.
+  const onCreateSession = async () => {
+    if (creating) return;
+    if (!snapshot.activeProject) {
+      toast.warning('Pick a project in Overview to scope chat sessions.', 4000);
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await api.post<ChatSession>('/chat/sessions', {});
+      await refreshSessions();
+      setSessionId(created.id);
+      setMessages([]);
+      setPinned(new Set());
+      await loadChat(created.id);
+      toast.success(`Session ${created.id} created.`);
+      inputRef.current?.focus();
+    } catch (err) {
+      toast.error(`Create failed: ${(err as Error).message}`);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -266,22 +306,43 @@ export function Chat({ snapshot, settings }: Props) {
           <aside className="chat-sessions">
             <div className="chat-sessions-head">
               <span className="muted">Sessions</span>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="New session"
-                title="New session"
-                onClick={() => {
-                  setSessionId('');
-                  setMessages([]);
-                }}
-              >
-                <Sparkles size={12} />
-              </button>
+              <span className="chat-sessions-count mono">{sessions.length}</span>
             </div>
+            {/* v3.0.4 — Prominent "+ New session" button. The previous icon
+                button was too small and silently cleared state without
+                persisting a session. This writes a new .jsonl file on
+                disk so reloads preserve the conversation. */}
+            <button
+              type="button"
+              className="chat-sessions-new"
+              onClick={onCreateSession}
+              disabled={creating || !snapshot.activeProject}
+              title={snapshot.activeProject ? 'Create new session' : 'Pick a project in Overview first'}
+              aria-label="Create new session"
+            >
+              {creating ? <Spinner size="sm" /> : <Plus size={14} />}
+              {creating ? 'Creating…' : 'New session'}
+            </button>
             <ul className="chat-sessions-list">
               {sessions.length === 0 && (
-                <li className="muted">No sessions yet.</li>
+                <li className="chat-sessions-empty">
+                  <EmptyState
+                    icon={<Sparkles size={20} />}
+                    title="Create your first session"
+                    message={snapshot.activeProject
+                      ? 'Start a new conversation to begin chatting with this project.'
+                      : 'Pick a project in Overview to scope chat sessions.'}
+                    action={snapshot.activeProject ? (
+                      <Button variant="primary" size="sm" onClick={onCreateSession} loading={creating}>
+                        <Plus size={12} /> New session
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" size="sm" onClick={() => setActiveTab('overview')}>
+                        <Folder size={12} /> Open Overview
+                      </Button>
+                    )}
+                  />
+                </li>
               )}
               {sessions.map((s) => (
                 <li
@@ -304,11 +365,37 @@ export function Chat({ snapshot, settings }: Props) {
           <div className="chat-list" ref={listRef}>
             {loading ? (
               <div className="view-loading"><Spinner /></div>
+            ) : !snapshot.activeProject ? (
+              <EmptyState
+                icon={<Folder size={32} />}
+                title="No active project"
+                message="Pick a project in Overview to scope chat sessions."
+                action={
+                  <Button variant="primary" onClick={() => setActiveTab('overview')}>
+                    <Folder size={14} /> Open Overview
+                  </Button>
+                }
+              />
             ) : messages.length === 0 ? (
               <EmptyState
                 icon={<MessageSquare size={28} />}
                 title="No messages yet"
-                message="Type something below to start. Press / for commands, Tab to autocomplete, ⌘/Ctrl+Enter to send."
+                message={
+                  <>
+                    {sessionId
+                      ? `Session ${sessionId} is empty. Type below to start.`
+                      : 'Pick a session on the left or create a new one.'}
+                    {' '}Press <kbd>/</kbd> for commands, <kbd>Tab</kbd> to autocomplete,
+                    <kbd>⌘/Ctrl+Enter</kbd> to send.
+                  </>
+                }
+                action={
+                  !sessionId && (
+                    <Button variant="primary" onClick={onCreateSession} loading={creating}>
+                      <Plus size={14} /> Create session
+                    </Button>
+                  )
+                }
               />
             ) : (
               orderedWithPinned.map((m, idx) => {

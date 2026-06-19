@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.0.4 — 2026-06-19
+
+### Fixed
+- **Auto-detect current directory as a project** on dashboard startup. The user's cwd is now registered in the projects registry if not already present, and set as active if no active project exists.
+- **Chat sessions UX**: prominent "New session" button, better empty states ("Pick a project in Overview" when no project, "Create your first session" when no sessions).
+- **Search now includes settings**: type `theme`, `accent`, `layout`, etc. to find settings. Settings results link to the Settings view and scroll/highlight the relevant setting.
+
+### Changed
+- Comprehensive UI consistency pass: spacing, focus rings, hover states, transitions, empty states, loading states.
+- Settings rows tagged with `data-setting-id` so search can scroll to them.
+
 ## v3.0.3 — 2026-06-19
 
 ### Fixed

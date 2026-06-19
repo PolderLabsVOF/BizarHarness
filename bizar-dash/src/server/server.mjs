@@ -18,6 +18,7 @@ import { createApiRouter } from './api.mjs';
 import { createState } from './state.mjs';
 import { createWatcher } from './watcher.mjs';
 import { modsLoader } from './mods-loader.mjs';
+import { projectsStore } from './projects-store.mjs';
 import { homedir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -56,6 +57,21 @@ export async function createServer({
   );
 
   const state = createState({ projectRoot, opencodeConfigDir, bizarRoot });
+
+  // v3.0.4 — Auto-detect the user's cwd as a project on startup. This is
+  // idempotent and safe to call on every boot. The first time a user runs
+  // the dashboard, BizarHarness/ (or whatever their cwd is) shows up as
+  // a project without any manual setup.
+  try {
+    const detected = projectsStore.autoDetect({ cwd: projectRoot });
+    if (detected) {
+      // eslint-disable-next-line no-console
+      console.log(`[bizar-dash] auto-detected project: ${detected.id} (${detected.path})`);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[bizar-dash] autoDetect failed:', err.message);
+  }
 
   const watchPaths = [
     state.paths.opencodeJson,

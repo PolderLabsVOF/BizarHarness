@@ -21,4 +21,5 @@ dist/
 
 # Test fixtures and scratch
 *.log
+*.tgz
 

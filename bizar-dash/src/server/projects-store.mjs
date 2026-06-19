@@ -25,7 +25,7 @@ import {
   statSync,
   mkdirSync,
 } from 'node:fs';
-import { join, basename, dirname } from 'node:path';
+import { join, basename, dirname, resolve as pathResolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
@@ -176,6 +176,50 @@ export const projectsStore = {
       found.lastAccessed = new Date().toISOString();
       saveRegistry(reg);
     }
+  },
+
+  /**
+   * v3.0.4 — Auto-detect the user's current working directory.
+   *
+   * If `cwd` is not already registered, add it. If no active project
+   * exists, set it as active. Idempotent: safe to call on every server
+   * startup, and safe to call multiple times.
+   *
+   * Returns the resulting active project entry, or null if `cwd` was
+   * not a string / could not be resolved.
+   */
+  autoDetect({ cwd } = {}) {
+    if (!cwd || typeof cwd !== 'string') return null;
+    const abs = pathResolve(cwd);
+    const id = projectIdFromPath(abs);
+    const reg = loadRegistry();
+    const existing = reg.projects.find((p) => p.id === id);
+    const now = new Date().toISOString();
+    if (existing) {
+      // Keep the existing path/name in sync if the cwd moved, but
+      // do not stomp on a user-edited name.
+      existing.path = abs;
+      existing.lastAccessed = now;
+      // Don't change the active project — the user already chose one.
+      saveRegistry(reg);
+      return existing;
+    }
+    const entry = {
+      id,
+      name: basename(abs) || id,
+      path: abs,
+      lastAccessed: now,
+      status: 'inactive',
+      summary: '',
+    };
+    reg.projects.push(entry);
+    if (!reg.active) reg.active = id;
+    saveRegistry(reg);
+    // Make sure the per-project dir exists so the rest of the server
+    // can write to it without further checks.
+    ensureProjectsDir();
+    mkdirSync(projectDir(id), { recursive: true });
+    return entry;
   },
 
   /** Per-project file helpers. */

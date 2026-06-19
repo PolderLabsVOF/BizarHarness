@@ -126,6 +126,21 @@ export function Overview({
     });
   };
 
+  const onUseCurrentDir = async () => {
+    try {
+      const data = await api.post<{ projects: ProjectRecord[]; active: string | null }>(
+        '/projects/auto-detect',
+      );
+      setProjects(data.projects || []);
+      setActiveId(data.active || null);
+      const newActive = data.projects?.find((p) => p.id === data.active);
+      toast.success(newActive ? `Active: ${newActive.name}` : 'Projects refreshed.');
+      await refreshSnapshot();
+    } catch (err) {
+      toast.error(`Auto-detect failed: ${(err as Error).message}`);
+    }
+  };
+
   const onActivate = async (id: string) => {
     try {
       await api.post(`/projects/${encodeURIComponent(id)}/activate`);
@@ -173,6 +188,9 @@ export function Overview({
           </p>
         </div>
         <div className="view-actions">
+          <Button variant="secondary" size="sm" onClick={onUseCurrentDir} title="Register the server's working directory as a project">
+            <Plus size={14} /> Use current dir
+          </Button>
           <Button variant="secondary" size="sm" onClick={onAddProject}>
             <Plus size={14} /> Add project
           </Button>
@@ -195,6 +213,16 @@ export function Overview({
             icon={<Folder size={32} />}
             title="No projects yet"
             message="Add a project to start tracking its tasks, plans, and schedules."
+            action={
+              <div className="empty-state-actions">
+                <Button variant="primary" onClick={onUseCurrentDir}>
+                  <Plus size={14} /> Use current directory
+                </Button>
+                <Button variant="secondary" onClick={onAddProject}>
+                  Add by path…
+                </Button>
+              </div>
+            }
           />
         ) : (
           <div className="project-grid">

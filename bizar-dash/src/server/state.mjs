@@ -169,12 +169,27 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
   }
 
   function getChat({ sessionId = null, limit = 200 } = {}) {
+    // v3.0.4 — Always return gracefully, even if no project is active
+    // and the legacy .bizar/sessions dir doesn't exist. The frontend
+    // relies on this returning an empty shape rather than crashing.
     const active = projectsStore.active();
-    const sessionsDir = active
-      ? join(projectsStore.projectDir(active.id), 'sessions')
-      : paths.sessionsDir;
-    if (!existsSync(sessionsDir)) return { messages: [], sessions: [] };
-    const allFiles = readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
+    let sessionsDir;
+    try {
+      sessionsDir = active
+        ? join(projectsStore.projectDir(active.id), 'sessions')
+        : paths.sessionsDir;
+    } catch {
+      return { messages: [], sessions: [] };
+    }
+    if (!sessionsDir || !existsSync(sessionsDir)) {
+      return { messages: [], sessions: [] };
+    }
+    let allFiles;
+    try {
+      allFiles = readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
+    } catch {
+      return { messages: [], sessions: [] };
+    }
     const sessions = allFiles.map((f) => {
       const st = safeStat(join(sessionsDir, f));
       return {
