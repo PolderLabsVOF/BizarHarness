@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.6.2 — 2026-06-19
+
+### Changed
+- **`bizar` (no args) now launches the dashboard** instead of running the interactive installer. The dashboard is the day-to-day command — installer should be explicit.
+- **`install` is now its own command** that runs the interactive installer. Previously this was triggered by running `bizar` with no arguments.
+- `bizar install` still works as an alias for `install`.
+
+### Migration
+- Old: `bizar` → ran installer
+- New: `install` → runs installer; `bizar` → launches dashboard
+- All other subcommands (`bizar audit`, `bizar plan`, etc.) are unchanged.
+
 ## v2.6.1 — 2026-06-19
 
 ### Fixed

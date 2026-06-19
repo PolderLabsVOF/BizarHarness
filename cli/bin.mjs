@@ -17,20 +17,22 @@ function showHelp() {
   Bizar — Norse Pantheon Agent System for opencode
 
   Usage:
-    bizar                       Run interactive installer
+    bizar                       Launch the web dashboard (in your browser)
+    install                     Run the interactive installer
+    bizar install               Same as \`install\`
     bizar audit                 Run security audit on agent configuration
     bizar init                  Initialize .bizar/ in current project
-    bizar export [target]       Export agents/rules to another harness (claude|cursor|opencode)
-    bizar plan <subcommand>     Manage visual plans (new, open, list, delete, export, templates)
+    bizar export [target]       Export agents/rules to another harness
+    bizar plan <subcommand>     Manage visual plans
     bizar test-gate             Detect & run the project's test suite
     bizar update                Update opencode, bizar, and/or bizar-plugin
-    bizar dashboard [start|stop|status]  Launch or control the web dashboard (v2.5.0+)
+    bizar dashboard [start|stop|status]  Launch or control the web dashboard
     bizar --help                Show this help
 
   Install:
-    npm install -g @polderlabs/bizar          Install globally, then run 'bizar'
+    npm install -g @polderlabs/bizar          Install globally, then run 'install'
     npm install -g @polderlabs/bizar-plugin   Install the Bizar opencode plugin
-    npx @polderlabs/bizar                     Run without installing
+    npx @polderlabs/bizar                     Run without installing (npx bizar → dashboard)
   `);
 }
 
@@ -223,6 +225,14 @@ function parseFlag(name) {
   return args[idx + 1] || null;
 }
 
+// Detect which name we were invoked as (helps when the same script is
+// exposed under multiple bin names — e.g. 'bizar' and 'install').
+const invokedAs = (() => {
+  const exe = process.argv[1] || '';
+  if (exe.endsWith('/install') || exe.endsWith('\\install') || exe === 'install') return 'install';
+  return 'bizar';
+})();
+
 if (args.includes('--postinstall')) {
   await runPostInstall();
 } else if (args[0] === 'audit') {
@@ -249,11 +259,21 @@ if (args.includes('--postinstall')) {
 } else if (args[0] === 'plan') {
   const planArgs = args.slice(1);
   await runPlan(planArgs, {});
+} else if (args[0] === 'install') {
+  // Explicit `bizar install` subcommand — runs the interactive installer
+  await runInstaller();
 } else if (args[0] === 'dashboard') {
   if (args.includes('--help') || args.includes('-h')) showDashboardHelp();
   else await runDashboard(args[1]);
 } else if (args.includes('--help') || args.includes('-h')) {
   showHelp();
 } else {
-  await runInstaller();
+  // Default behavior depends on how the script was invoked:
+  //   - `bizar` (no args)  → launch the dashboard
+  //   - `install` (no args) → run the interactive installer
+  if (invokedAs === 'install') {
+    await runInstaller();
+  } else {
+    await runDashboard('start');
+  }
 }
