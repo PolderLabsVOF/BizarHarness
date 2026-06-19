@@ -1,0 +1,67 @@
+{
+  "name": "@polderlabs/bizar-dash",
+  "version": "3.0.0",
+  "description": "Web + TUI dashboard for the Bizar agent platform (optional companion to @polderlabs/bizar)",
+  "type": "module",
+  "bin": {
+    "bizar-dash": "src/cli.mjs"
+  },
+  "main": "src/server/server.mjs",
+  "files": [
+    "src/",
+    "dist/",
+    "vite.config.ts",
+    "tsconfig.json",
+    "templates/"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "chokidar": "^3.6.0",
+    "express": "^4.22.0",
+    "fuse.js": "^7.0.0",
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-markdown": "^9.0.0",
+    "remark-gfm": "^4.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0"
+  },
+  "peerDependencies": {
+    "@polderlabs/bizar": ">=2.7.0"
+  },
+  "peerDependenciesMeta": {
+    "@polderlabs/bizar-dash": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrB0rk/BizarHarness.git"
+  },
+  "keywords": [
+    "opencode",
+    "ai-agent",
+    "dashboard",
+    "bizar",
+    "norse"
+  ]
+}

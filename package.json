@@ -1,7 +1,7 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "2.7.0",
-  "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing and per-project Hindsight memory",
+  "version": "3.0.0",
+  "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing, per-project Hindsight memory, mods, schedules, and a background service daemon",
   "type": "module",
   "bin": {
     "bizar": "cli/bin.mjs",
@@ -10,17 +10,9 @@
   "files": [
     "cli/",
     "config/",
-    "dist/",
-    "src/",
-    "templates/",
-    "vite.config.ts",
-    "tsconfig.json",
-    "!cli/*.test.mjs"
+    "templates/"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "postinstall": "node cli/bin.mjs --postinstall"
   },
@@ -30,23 +22,25 @@
     "norse",
     "multi-agent",
     "router",
-    "cli"
+    "cli",
+    "platform",
+    "mods",
+    "schedules"
   ],
   "license": "MIT",
   "dependencies": {
-    "blessed": "^0.1.81",
     "boxen": "^8.0.0",
     "chalk": "^5.4.0",
-    "chokidar": "^3.6.0",
-    "express": "^4.22.2",
     "inquirer": "^12.0.0",
-    "lucide-react": "^0.460.0",
-    "ora": "^8.1.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-markdown": "^9.1.0",
-    "remark-gfm": "^4.0.1",
-    "ws": "^8.21.0"
+    "ora": "^8.1.0"
+  },
+  "peerDependencies": {
+    "@polderlabs/bizar-dash": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@polderlabs/bizar-dash": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=20"
@@ -64,10 +58,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.21",
-    "@types/react": "^18.3.31",
-    "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react": "^4.7.0",
-    "typescript": "^5.9.3",
-    "vite": "^5.4.21"
+    "typescript": "^5.9.3"
   }
 }

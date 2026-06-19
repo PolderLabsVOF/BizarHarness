@@ -1,5 +1,217 @@
 # Changelog
 
+## v3.0.0 — 2026-06-19
+
+### BREAKING — Package split
+- **The dashboard is now a separate npm package: `@polderlabs/bizar-dash`**.
+  - `@polderlabs/bizar` (this package) is the core runtime — CLI,
+    installer, audit, init, export, plan, update, **service**, and the
+    dashboard-launcher that delegates to `@polderlabs/bizar-dash`.
+  - `@polderlabs/bizar-dash` is the optional web + TUI dashboard. It
+    ships its own `bizar-dash` bin that mirrors the previous
+    `bizar dashboard` / `bizar --web*` commands.
+  - The peer dependency is **optional** — `bizar` continues to work
+    without the dashboard, and prints an install hint when you try to
+    launch the web UI.
+  - The dashboard now lives at `<repo>/bizar-dash/`. The root `src/`,
+    `dist/`, `cli/dashboard*` files are removed.
+
+### Added — Mods system
+- **Mods are now a first-class concept** in the Bizar platform.
+- Storage: `~/.config/bizar/mods/<mod-id>/`. Each mod is a folder
+  with a `mod.json` manifest.
+- Manifest schema: `id`, `name`, `version`, `author`, `description`,
+  `bizar` (compat), `type` (`agent` / `command` / `view` / `route` /
+  `tui` / `full`), `enabled`, `permissions[]`, `entry{}`.
+- Folder layout: `agents/`, `commands/`, `routes/`, `views/`,
+  `web/`, `tui/`, `hooks/`.
+- Mod loader scans the mods dir on dashboard start. Custom agents
+  appear in the Agents view; custom commands appear in the chat
+  slash-command helper.
+- New Mods view in the dashboard — list, install, enable / disable,
+  uninstall, view file tree + manifest.
+- REST surface: `GET /api/mods`, `POST /api/mods` (install from path),
+  `PUT /api/mods/:id` (toggle enabled), `DELETE /api/mods/:id`,
+  `GET/PUT /api/mods/:id/files/*`.
+- **Sample mod**: `bizar-dash/templates/mod/hello-mod/` ships a
+  working example (greeter agent + `/hello` command + sample
+  route + sample view).
+
+### Added — Project selector + per-project data
+- **All dashboard data is now project-scoped**, except the dashboard
+  view itself (which is the project picker).
+- Project registry: `~/.config/opencode/projects.json` with
+  `projects[]` and `active` id.
+- Per-project data: `~/.config/opencode/projects/<id>/` containing
+  `tasks.json`, `plans.json` (future), `schedules.json`, `state.json`,
+  `sessions/`, `activity.log`.
+- Project id is the path basename (e.g. `/home/user/myapp` → `myapp`).
+- Topbar project selector: dropdown of all known projects with
+  current active highlighted, `+` to add current cwd, refresh button.
+- Overview view: card grid of all projects, with status
+  (active / inactive / error), last-accessed time, task counts
+  (queued / doing / done), and recent activity.
+- REST surface: `GET /api/projects`, `POST /api/projects`,
+  `POST /api/projects/:id/activate`, `DELETE /api/projects/:id`,
+  `GET /api/projects/active/{tasks,schedules,mods,state}`.
+- WebSocket broadcasts `project:change` so the dashboard re-fetches
+  on activation.
+
+### Added — Background service daemon + scheduled tasks
+- **`bizar service`** manages a long-running background daemon.
+  - `bizar service start` — spawn detached.
+  - `bizar service stop` — kill via PID file.
+  - `bizar service status` — running / stopped.
+  - `bizar service logs` — tail `~/.config/bizar/service.log`.
+- The service:
+  - Watches per-project schedules and fires them at the right time.
+  - Ticks every 5 seconds; idle when no schedules are due.
+  - Writes PID to `~/.config/bizar/service.pid`.
+  - Logs every tick + every run to `~/.config/bizar/service.log`.
+- Schedule types: `interval` ("30m", "2h", "1d"), `cron`
+  ("0 9 * * *"), and `once` (ISO timestamp).
+- Schedule action types: `command` (spawn shell), `agent` (deferred
+  to v3.1+), `webhook` (POST JSON).
+- Schedules view: list, create, edit, delete, **Run now**, view
+  history of past runs (last 50).
+- REST surface: full CRUD on `/api/schedules` plus
+  `POST /api/schedules/:id/run` for immediate execution.
+- New schedule cron parser supports `*`, `*/N`, integers, lists, and
+  ranges.
+
+### Added — Floating chat with right info sidebar
+- The chat view was squished in v2.7.0; v3.0.0 fixes that.
+- Layout: `Sessions` rail (left, ~200px) + `Messages` (centre, full
+  height) + `Info sidebar` (right, ~280px).
+- Floating chatbox anchored to the bottom of the chat column,
+  ~80 px tall, with: textarea, **agent selector**, **model override**,
+  **attach files** button, Send button (Enter or ⌘/Ctrl+Enter).
+- Slash-command autocomplete appears above the input as you type
+  `/` — includes built-in commands **and** mod-supplied commands.
+- Right sidebar shows: active session info (id, message count,
+  pinned count, current agent + model), agents in the project, active
+  MCPs with on/off status, recent slash commands, project
+  references.
+- Per-message actions: copy, regenerate, pin, delete.
+- Pin messages to keep them at the top of the session.
+
+### Added — Config editor (Advanced section) + Diagnostics
+- Config view now lives behind a collapsible **Advanced** section
+  (default collapsed). The Diagnostics card is always visible above
+  it.
+- Diagnostics card shows: version, uptime, node version, platform,
+  heap + RSS memory, service running state with PID, active project,
+  counts (agents / projects / mods / schedules / tasks / providers /
+  mcps), and the **last 10 errors** from the service log.
+- "Run diagnostics" and "Download diagnostics bundle" buttons
+  generate a JSON snapshot for support.
+- Advanced section has 4 sub-tabs:
+  - **OpenCode config** — JSON tree + raw editor + diff (kept from
+    v2.x, polished).
+  - **Providers** — add / remove AI providers (name, base URL, API
+    key — masked, models list).
+  - **MCPs** — add / remove MCP servers (command, args, env).
+  - **Debug log** — recent log entries.
+- All sub-sections write to `~/.config/opencode/opencode.json` under
+  the `provider` and `mcp` keys.
+- REST surface: full CRUD on `/api/config/providers` and
+  `/api/config/mcps`.
+
+### Added — Theme colors + Theme settings
+- Settings schema now includes a rich `theme` block:
+  - `mode`: `dark` / `light` / `system` (kept from v2.x).
+  - `accent`, `success`, `warning`, `error`, `info`: hex colors.
+  - `fontFamily`: dropdown (Inter, system-ui, Segoe UI, Roboto, JetBrains Mono, …).
+  - `fontSize`: 12–20 px slider.
+  - `compactMode`: denser UI.
+  - `animations`: enable / disable motion.
+- Live preview: the moment you tweak a color picker, the entire
+  dashboard updates via CSS custom properties on `<html>`.
+- "Reset to defaults" button on the settings page.
+- Settings card in the new UI: Theme, **UI layout** (topnav /
+  sidebar / both), default tab, status bar toggle.
+
+### Added — UI customization
+- New `ui` block in settings: `layout` (`topnav` / `sidebar` / `both`),
+  `showHeader`, `showStatusBar`, `defaultTab`, `accentColor`.
+- Layout applies a grid that switches between topnav, sidebar, and
+  both. The change is live.
+
+### Added — Tailscale serve config
+- New Tailscale card in the Settings view.
+- Reads `tailscale` CLI status: installed, version, authenticated,
+  backend, hostname.
+- Enable / disable Tailscale serve for the dashboard port via
+  `tailscale serve --bg https <port>`.
+- REST surface: `GET /api/tailscale/status`, `POST /api/tailscale/enable`,
+  `POST /api/tailscale/disable`.
+
+### Added — Fuzzy search across everything
+- New search bar in the topbar. Press `/` or **⌘ / Ctrl + K** to
+  open the search modal.
+- Searches: tasks, plans, agents, projects, mods, schedules, slash
+  commands.
+- Results are grouped by type. ↑/↓ to navigate, ↵ to open, Esc to
+  close.
+- REST surface: `GET /api/search?q=<query>&scope=<type>`.
+
+### Added — Editable agents
+- Every agent card now has **Edit** + **Delete** buttons.
+- **New agent** wizard with name, description, model dropdown, mode
+  (primary / subagent / all), color, tools checkboxes, and a system
+  prompt textarea.
+- Edits write to `~/.config/opencode/agents/<name>.md` and update
+  the frontmatter + body in place.
+- REST surface: `GET /api/agents`, `GET /api/agents/:name`,
+  `POST /api/agents`, `PUT /api/agents/:name`,
+  `DELETE /api/agents/:name`.
+
+### Added — Extended tasks
+- Tasks now have: `assignee`, `parent` (subtasks), `dependencies`,
+  `timeSpent`, `recurring` (cron), `attachments`, `comments[]`,
+  `activity[]`.
+- Task detail modal: timer (start / stop), add / remove dependencies,
+  set / clear recurring, post comments, view activity timeline.
+- Bulk-action "Assign to me" on each card.
+- Activity log records `created`, `status` changes, `completed`,
+  `timer-start`, `timer-stop`, `comment` events.
+
+### Added — OpenCode config UI
+- Providers and MCPs are now first-class in the dashboard, with
+  add / remove cards. Provider API keys are masked in responses and
+  round-trip through the unmask sentinel (`***…***`) so the user
+  can save without re-typing the key.
+
+### Added — Diagnostics
+- New `/api/diagnostics` endpoint returns version, uptime, memory,
+  service status, all counts, and the last 10 errors from the
+  service log. Surfaced in the Config view's always-visible
+  diagnostics card.
+
+### Changed
+- `bizar` no longer ships dashboard source code. The dashboard is
+  installed separately as `@polderlabs/bizar-dash`.
+- The default `bizar` invocation now checks whether
+  `@polderlabs/bizar-dash` is installed. If it is, it delegates to
+  the dashboard's TUI; if not, it prints an install hint.
+- Tasks endpoint now scopes to a project. The legacy global file
+  (`~/.config/bizar/tasks.json`) is the fallback when no project is
+  active.
+- `~/.config/bizar/settings.json` now contains a nested `theme{}`,
+  `ui{}`, and `service{}` block. Existing v2.7.0 settings are deep-
+  merged forward, so old user state still works.
+
+### Migration notes
+- The dashboard moves to its own package. Install with:
+  `npm install -g @polderlabs/bizar-dash`.
+- The dashboard reads the same opencode config and the same
+  per-project data dirs as v2.7.0, so existing agents / commands /
+  plans / projects continue to work.
+- Tasks created with v2.7.0 are read from the legacy
+  `~/.config/bizar/tasks.json` until you add a project and create a
+  new one — at which point everything new lives in
+  `~/.config/opencode/projects/<id>/tasks.json`.
+
 ## v2.7.0 — 2026-06-19
 
 ### Added

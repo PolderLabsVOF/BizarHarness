@@ -1,18 +1,19 @@
 /**
- * cli/dashboard/state.mjs
+ * src/server/state.mjs
  *
- * Aggregates every piece of state the dashboard surfaces. Each getter is
- * defensive: missing files, missing directories, parse errors — all become
- * sensible empty defaults rather than crashes.
+ * v3.0.0 — Server-side state aggregation.
+ *
+ * Holds the read-only legacy endpoints (overview, plans, chat-via-legacy,
+ * etc.) used by both the dashboard and the TUI. New endpoints (per-project
+ * tasks, schedules, mods, projects) live directly in api.mjs and use the
+ * dedicated stores.
  *
  * Data sources:
  *   - getOverview:  counts + .bizar/activity.log tail
- *   - getChat:      .bizar/sessions/*.jsonl (one JSON record per line)
+ *   - getChat:      per-project sessions/<id>.jsonl (preferred) — falls
+ *                   back to legacy .bizar/sessions if no project is active
  *   - getAgents:    ~/.config/opencode/agents/*.md (frontmatter parse)
  *   - getPlans:     scans plans/ (worktree) and ~/.config/opencode/plans/
- *   - getProjects:  walks cwd for .bizar/PROJECT.md, also ~/Projects/*
- *   - getConfig:    ~/.config/opencode/opencode.json (live)
- *   - getSettings:  ~/.config/bizar/settings.json (created on demand)
  */
 import {
   existsSync,
@@ -24,7 +25,7 @@ import {
 } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { loadTasks } from './tasks-store.mjs';
+import { projectsStore } from './projects-store.mjs';
 
 const HOME = homedir();
 
@@ -50,8 +51,6 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     settingsFile: join(HOME, '.config', 'bizar', 'settings.json'),
   };
 
-  // ── helpers ───────────────────────────────────────────────────────────────
-
   function safeReadJSON(file, fallback = null) {
     try {
       if (!existsSync(file)) return fallback;
@@ -72,17 +71,6 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     }
   }
 
-  function listFiles(dir, ext) {
-    try {
-      if (!existsSync(dir)) return [];
-      return readdirSync(dir).filter((f) =>
-        ext ? f.endsWith(ext) : true,
-      );
-    } catch {
-      return [];
-    }
-  }
-
   function safeStat(p) {
     try {
       return statSync(p);
@@ -91,7 +79,6 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     }
   }
 
-  /** Minimal frontmatter parser: returns { frontmatter, body }. */
   function parseFrontmatter(raw) {
     if (!raw.startsWith('---')) return { frontmatter: {}, body: raw };
     const end = raw.indexOf('\n---', 3);
@@ -104,7 +91,6 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
       if (!m) continue;
       const key = m[1];
       let val = m[2].trim();
-      // strip surrounding quotes
       if (
         (val.startsWith('"') && val.endsWith('"')) ||
         (val.startsWith("'") && val.endsWith("'"))
@@ -116,20 +102,26 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     return { frontmatter, body };
   }
 
-  // ── public getters ────────────────────────────────────────────────────────
-
   function getOverview() {
-    const agents = getAgents();
-    const plans = getPlans();
-    const projects = getProjects();
+    // Use the new store for project count to keep the v3 view consistent.
+    const projectsList = projectsStore.list();
+    const agents = readAgents();
+    const plans = readPlans();
+    const active = projectsStore.active();
 
-    const sessionsDir = paths.sessionsDir;
     let sessionCount = 0;
-    if (existsSync(sessionsDir)) {
+    if (active) {
+      const dir = join(projectsStore.projectDir(active.id), 'sessions');
+      if (existsSync(dir)) {
+        try {
+          sessionCount = readdirSync(dir).filter((f) => f.endsWith('.jsonl')).length;
+        } catch {
+          sessionCount = 0;
+        }
+      }
+    } else if (existsSync(paths.sessionsDir)) {
       try {
-        sessionCount = readdirSync(sessionsDir).filter((f) =>
-          f.endsWith('.jsonl'),
-        ).length;
+        sessionCount = readdirSync(paths.sessionsDir).filter((f) => f.endsWith('.jsonl')).length;
       } catch {
         sessionCount = 0;
       }
@@ -137,21 +129,23 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
 
     const recentActivity = [];
     try {
-      if (existsSync(paths.activityLog)) {
-        const lines = readFileSync(paths.activityLog, 'utf8').split(/\r?\n/);
+      const logFile = active
+        ? join(projectsStore.projectDir(active.id), 'activity.log')
+        : paths.activityLog;
+      if (existsSync(logFile)) {
+        const lines = readFileSync(logFile, 'utf8').split(/\r?\n/);
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
             recentActivity.push(JSON.parse(line));
           } catch {
-            // skip malformed lines
+            // skip
           }
         }
       }
     } catch {
       /* ignore */
     }
-    // Last 30, newest first
     recentActivity.reverse();
     const trimmedActivity = recentActivity.slice(0, 30);
 
@@ -159,8 +153,9 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
       counts: {
         agents: agents.length,
         plans: plans.length,
-        projects: projects.length,
+        projects: projectsList.projects.length,
         sessions: sessionCount,
+        activeProject: active?.id || null,
       },
       recentActivity: trimmedActivity,
       versions: {
@@ -174,12 +169,14 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
   }
 
   function getChat({ sessionId = null, limit = 200 } = {}) {
-    if (!existsSync(paths.sessionsDir)) return { messages: [], sessions: [] };
-    const allFiles = readdirSync(paths.sessionsDir).filter((f) =>
-      f.endsWith('.jsonl'),
-    );
+    const active = projectsStore.active();
+    const sessionsDir = active
+      ? join(projectsStore.projectDir(active.id), 'sessions')
+      : paths.sessionsDir;
+    if (!existsSync(sessionsDir)) return { messages: [], sessions: [] };
+    const allFiles = readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
     const sessions = allFiles.map((f) => {
-      const st = safeStat(join(paths.sessionsDir, f));
+      const st = safeStat(join(sessionsDir, f));
       return {
         id: f.replace(/\.jsonl$/, ''),
         file: f,
@@ -195,7 +192,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
 
     const messages = [];
     for (const file of target) {
-      const full = join(paths.sessionsDir, file);
+      const full = join(sessionsDir, file);
       try {
         const lines = readFileSync(full, 'utf8').split(/\r?\n/);
         for (const line of lines) {
@@ -203,23 +200,19 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
           try {
             messages.push(JSON.parse(line));
           } catch {
-            // skip malformed line
+            /* skip */
           }
         }
       } catch {
-        // skip unreadable file
+        /* skip */
       }
     }
 
-    // newest first, then truncate
     messages.reverse();
-    return {
-      messages: messages.slice(0, limit),
-      sessions,
-    };
+    return { messages: messages.slice(0, limit), sessions };
   }
 
-  function getAgents() {
+  function readAgents() {
     const dir = paths.agentsDir;
     if (!existsSync(dir)) return [];
     const out = [];
@@ -246,6 +239,10 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     return out;
   }
 
+  function getAgents() {
+    return readAgents();
+  }
+
   function readPlansFromDir(dir) {
     if (!existsSync(dir)) return [];
     const out = [];
@@ -270,7 +267,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     return out;
   }
 
-  function getPlans() {
+  function readPlans() {
     const a = readPlansFromDir(paths.plansDir);
     const b = readPlansFromDir(paths.globalPlansDir);
     const seen = new Set();
@@ -284,9 +281,14 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     return out;
   }
 
+  function getPlans() {
+    return readPlans();
+  }
+
   function getProjects() {
+    // Legacy v2.x shape — list of {name, path, ...} for the Dashboard
+    // UI. The new v3 API lives in api.mjs and returns the richer registry.
     const out = [];
-    // 1. Walk up from projectRoot looking for .bizar/PROJECT.md markers
     let dir = projectRoot;
     const seen = new Set();
     while (dir && dir !== dirname(dir) && !seen.has(dir)) {
@@ -294,28 +296,16 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
       const marker = join(dir, '.bizar', 'PROJECT.md');
       if (existsSync(marker)) {
         const st = safeStat(marker);
-        const hindsight = join(dir, '.bizar', '.hindsight');
-        let hcount = 0;
-        if (existsSync(hindsight)) {
-          try {
-            hcount = readdirSync(hindsight).length;
-          } catch {
-            hcount = 0;
-          }
-        }
         out.push({
           name: basename(dir),
           path: dir,
           projectMdSize: st ? st.size : 0,
-          hindsightCount: hcount,
           mtime: st ? st.mtimeMs : 0,
           active: dir === projectRoot,
         });
       }
       dir = dirname(dir);
     }
-
-    // 2. Also scan ~/Projects/* as a discovery surface
     const projectsRoot = join(HOME, 'Projects');
     if (existsSync(projectsRoot)) {
       try {
@@ -324,13 +314,10 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
           const st = safeStat(full);
           if (!st || !st.isDirectory()) continue;
           if (out.some((p) => p.path === full)) continue;
-          const marker = join(full, '.bizar', 'PROJECT.md');
-          const hasMarker = existsSync(marker);
           out.push({
             name: entry,
             path: full,
-            projectMdSize: hasMarker ? safeStat(marker)?.size || 0 : 0,
-            hindsightCount: 0,
+            projectMdSize: 0,
             mtime: st.mtimeMs,
             active: false,
           });
@@ -339,97 +326,20 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
         /* ignore */
       }
     }
-
     out.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
     return out;
   }
 
-  function getConfig() {
-    const data = safeReadJSON(paths.opencodeJson, null);
-    return {
-      path: paths.opencodeJson,
-      data,
-      raw: data === null ? '' : JSON.stringify(data, null, 2),
-      exists: existsSync(paths.opencodeJson),
-    };
-  }
-
-  function getSettings() {
-    const defaults = {
-      theme: 'dark',
-      defaultAgent: 'odin',
-      defaultModel: '',
-      notifications: {
-        onAgentComplete: true,
-        onPlanApproval: true,
-      },
-      dashboard: {
-        autoLaunchWeb: true,
-      },
-      about: {
-        version: '2.7.0',
-        homepage: 'https://github.com/DrB0rk/BizarHarness',
-        license: 'MIT',
-      },
-    };
-    const existing = safeReadJSON(paths.settingsFile, null);
-    // Deep-merge nested objects (notifications, dashboard) so that adding a
-    // new field to defaults doesn't wipe the user's existing nested prefs.
-    const merged = { ...defaults, ...(existing || {}) };
-    if (existing?.notifications && typeof existing.notifications === 'object') {
-      merged.notifications = { ...defaults.notifications, ...existing.notifications };
-    }
-    if (existing?.dashboard && typeof existing.dashboard === 'object') {
-      merged.dashboard = { ...defaults.dashboard, ...existing.dashboard };
-    }
-    if (existing?.about && typeof existing.about === 'object') {
-      merged.about = { ...defaults.about, ...existing.about };
-    }
-    return {
-      path: paths.settingsFile,
-      data: merged,
-      exists: existsSync(paths.settingsFile),
-    };
-  }
-
-  function getTasks() {
-    return loadTasks();
-  }
-
-  // ── mutators ──────────────────────────────────────────────────────────────
-
-  function setConfig(newData) {
-    mkdirSync(dirname(paths.opencodeJson), { recursive: true });
-    writeFileSync(
-      paths.opencodeJson,
-      JSON.stringify(newData, null, 2) + '\n',
-      'utf8',
-    );
-    return getConfig();
-  }
-
-  function setSettings(newData) {
-    mkdirSync(dirname(paths.settingsFile), { recursive: true });
-    writeFileSync(
-      paths.settingsFile,
-      JSON.stringify(newData, null, 2) + '\n',
-      'utf8',
-    );
-    return getSettings();
-  }
-
   function appendActivity(event) {
     try {
-      mkdirSync(paths.bizarDir, { recursive: true });
-      const record = {
-        ts: new Date().toISOString(),
-        ...event,
-      };
-      writeFileSync(
-        paths.activityLog,
-        JSON.stringify(record) + '\n',
-        { flag: 'a', encoding: 'utf8' },
-      );
+      const active = projectsStore.active();
+      const targetDir = active
+        ? projectsStore.ensureProjectDir(active.id)
+        : paths.bizarDir;
+      const logFile = join(targetDir, 'activity.log');
+      mkdirSync(targetDir, { recursive: true });
+      const record = { ts: new Date().toISOString(), ...event };
+      writeFileSync(logFile, JSON.stringify(record) + '\n', { flag: 'a', encoding: 'utf8' });
     } catch (err) {
       console.error('[dashboard state] appendActivity failed:', err);
     }
@@ -442,11 +352,6 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     getAgents,
     getPlans,
     getProjects,
-    getConfig,
-    getSettings,
-    getTasks,
-    setConfig,
-    setSettings,
     appendActivity,
   };
 }
