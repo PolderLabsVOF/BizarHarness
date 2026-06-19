@@ -1,4 +1,4 @@
-// src/views/Mods.tsx — list, install, enable/disable mods.
+// src/views/Mods.tsx — list, install, enable/disable mods + mod views.
 import { useEffect, useState } from 'react';
 import {
   Puzzle,
@@ -9,6 +9,9 @@ import {
   Folder,
   FileText,
   X,
+  ExternalLink,
+  Globe,
+  LayoutTemplate,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -28,17 +31,30 @@ type Props = {
   refreshSnapshot: () => Promise<void>;
 };
 
+type ModView = {
+  id: string;
+  modId: string;
+  kind: 'iframe' | 'tab';
+  label: string;
+  description?: string;
+  path?: string;
+};
+
 export function Mods({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
   const modal = useModal();
   const [mods, setMods] = useState<Mod[]>(snapshot.mods || []);
   const [loading, setLoading] = useState(!snapshot.mods);
   const [selected, setSelected] = useState<string | null>(null);
+  const [modViews, setModViews] = useState<ModView[]>([]);
+  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
 
   const reload = async () => {
     try {
       const r = await api.get<{ mods: Mod[] }>('/mods');
       setMods(r.mods || []);
+      const v = await api.get<{ views: ModView[] }>('/mods/views');
+      setModViews(v.views || []);
     } catch (err) {
       toast.error(`Mods load failed: ${(err as Error).message}`);
     } finally {
@@ -55,6 +71,12 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.mods]);
+
+  // Load mod views when tab becomes active
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onInstall = () => {
     let pathEl: HTMLInputElement | null = null;
@@ -213,6 +235,71 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
             ))}
           </div>
           {sel && <ModDetails mod={sel} />}
+        </div>
+      )}
+
+      {/* Mod views section — web/index.html and registered tabs */}
+      {modViews.length > 0 && (
+        <div className="mods-views-section">
+          <h3 className="view-subtitle">
+            <Globe size={14} /> Mod views
+          </h3>
+          <div className="mods-views-grid">
+            {modViews.map((v) => (
+              <Card key={v.id} className="mod-view-card">
+                <div className="mod-view-card-head">
+                  <div>
+                    <div className="mod-view-label">
+                      {v.kind === 'tab' ? <LayoutTemplate size={12} /> : <Globe size={12} />}
+                      {v.label}
+                    </div>
+                    <div className="mod-view-mod muted">by {v.modId}</div>
+                    {v.description && (
+                      <div className="mod-view-desc muted ellipsis-2">{v.description}</div>
+                    )}
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      if (v.kind === 'iframe' && v.path) {
+                        // Open the mod's web/index.html in an iframe panel
+                        setIframeUrl(`/api/mods/${v.modId}/web/index.html`);
+                      } else {
+                        // For registered tabs without web view, show placeholder
+                        toast.info(`Tab view for "${v.label}" — full TSX loading lands in v3.1.`, 2500);
+                      }
+                    }}
+                  >
+                    <ExternalLink size={12} /> Open
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Iframe panel for mod web views */}
+      {iframeUrl && (
+        <div className="mod-iframe-panel">
+          <div className="mod-iframe-header">
+            <span>Mod view — <a href={iframeUrl} target="_blank" rel="noreferrer">{iframeUrl}</a></span>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Close iframe"
+              onClick={() => setIframeUrl(null)}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <iframe
+            src={iframeUrl}
+            className="mod-iframe"
+            title="Mod view"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          />
         </div>
       )}
     </div>

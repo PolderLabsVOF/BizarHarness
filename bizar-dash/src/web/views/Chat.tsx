@@ -149,6 +149,20 @@ export function Chat({ snapshot, settings }: Props) {
     }
   };
 
+  const onRegenerate = async (messageId: string | number) => {
+    try {
+      await api.post('/chat/regenerate', { sessionId, messageId });
+      toast.success('Regenerating…', 1500);
+      // Re-fetch messages so the new one appears
+      await loadChat(sessionId || undefined);
+    } catch (err) {
+      toast.error(`Regenerate failed: ${(err as Error).message}`);
+    }
+  };
+
+  // Wrapper that captures the messageId from the bubble
+  const makeRegenerateHandler = (messageId: string) => () => onRegenerate(messageId);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -298,7 +312,7 @@ export function Chat({ snapshot, settings }: Props) {
                     onCopy={() => copyMessage(m)}
                     onDelete={() => deleteMessage(originalIdx)}
                     onTogglePin={() => togglePin(originalIdx)}
-                    onRegenerate={() => toast.info('Regenerate is dispatched to the TUI; coming in v3.1.', 2500)}
+                    onRegenerate={makeRegenerateHandler(String(m.ts) || String(originalIdx))}
                   />
                 );
               })

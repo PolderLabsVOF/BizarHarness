@@ -377,7 +377,7 @@ export class InstanceManager {
         current.completedAt = Date.now();
       }
       try {
-        await this.stateStore.save(current);
+        await this.stateStore.saveUnlocked(current);
       } catch (err: unknown) {
         this.logger.warn(
           `bizar: failed to persist update for ${instanceId}: ${

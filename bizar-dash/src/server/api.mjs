@@ -420,7 +420,10 @@ export function createApiRouter({
     res.json({ files: modsLoader.listFiles(req.params.id) });
   }));
 
-  router.get('/mods/:id/files/*', wrap(async (req, res) => {
+  // NOTE: we use /mods/:id/mod-file/* (named route) to avoid conflicting
+  // with mod route mounting at /api/mods/:id/*. The wildcard in /* was
+  // too greedy and captured paths like /mods/test-mod/hello.
+  router.get('/mods/:id/mod-file/*', wrap(async (req, res) => {
     const rel = req.params[0] || '';
     const content = modsLoader.readFile(req.params.id, rel);
     if (content === null) {
@@ -430,14 +433,45 @@ export function createApiRouter({
     res.type('text/plain').send(content);
   }));
 
-  router.put('/mods/:id/files/*', wrap(async (req, res) => {
+  router.put('/mods/:id/mod-file/*', wrap(async (req, res) => {
     const rel = req.params[0] || '';
     const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body, null, 2);
     modsLoader.writeFile(req.params.id, rel, body);
     res.json({ ok: true });
   }));
 
-  // ── /api/agents ────────────────────────────────────────────────────────
+  // ── /api/mods/views ──────────────────────────────────────────────────
+  router.get('/mods/views', wrap(async (_req, res) => {
+    const views = modsLoader.listModViews();
+    res.json({ views });
+  }));
+
+  // ── /api/mods/:id/mod-web/* ──────────────────────────────────────────
+  // Serve files from each mod's web/ directory (for iframe embedding)
+  // Named 'mod-web' to avoid conflict with mod route mounting at /:id/*
+  router.get('/mods/:id/mod-web/*', wrap(async (req, res) => {
+    const mod = modsLoader.get(req.params.id);
+    if (!mod || !mod.enabled) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const rel = req.params[0] || '';
+    const filePath = join(mod.path, 'web', rel);
+    if (!filePath.startsWith(mod.path)) {
+      res.status(403).json({ error: 'forbidden' });
+      return;
+    }
+    if (!existsSync(filePath)) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.sendFile(filePath);
+  }));
+
+  
+
+  
+// ── /api/agents ────────────────────────────────────────────────────────
   router.get('/agents', wrap(async (_req, res) => {
     res.json({ agents: agentsStore.list() });
   }));
@@ -683,6 +717,26 @@ export function createApiRouter({
     res.json(diagnosticsStore.health());
   }));
 
+  router.get('/diagnostics/logs', wrap(async (req, res) => {
+    const tail = Math.min(Number(req.query.tail) || 100, 5000);
+    const serviceLog = join(BIZAR_HOME, 'service.log');
+    const dashboardLog = join(BIZAR_HOME, 'dashboard.log');
+    // Prefer service.log, fall back to dashboard.log
+    const logFile = existsSync(serviceLog) ? serviceLog : existsSync(dashboardLog) ? dashboardLog : null;
+    if (!logFile) {
+      res.json({ lines: [], file: null, total: 0 });
+      return;
+    }
+    try {
+      const text = readFileSync(logFile, 'utf8');
+      const allLines = text.split(/\r?\n/).filter(Boolean);
+      const lines = allLines.slice(-tail);
+      res.json({ lines, file: logFile, total: allLines.length });
+    } catch (err) {
+      res.status(500).json({ error: 'read_failed', message: err.message });
+    }
+  }));
+
   // ── /api/tailscale ─────────────────────────────────────────────────────
   router.get('/tailscale/status', wrap(async (_req, res) => {
     res.json(await tailscaleStore.status());
@@ -696,12 +750,110 @@ export function createApiRouter({
     res.json(await tailscaleStore.disable());
   }));
 
-  // ── /api/chat (legacy) ────────────────────────────────────────────────
-  // Kept for backward compat — returns the latest chat for the active project.
-  router.get('/chat', wrap(async (req, res) => {
-    const sessionId = req.query.session ? String(req.query.session) : null;
-    const limit = req.query.limit ? Number(req.query.limit) : 200;
-    res.json(state.getChat({ sessionId, limit }));
+  // ── /api/chat/regenerate ─────────────────────────────────────────────
+  // v3.0.0: re-dispatches the last user message before messageId via POST /chat.
+  // Full opencode re-dispatch lands in v3.1 when the plugin exposes a stable HTTP API.
+  router.post('/chat/regenerate', wrap(async (req, res) => {
+    const { sessionId, messageId } = req.body || {};
+    if (!messageId) {
+      res.status(400).json({ error: 'bad_request', message: 'messageId is required' });
+      return;
+    }
+    const active = projectsStore.active();
+    if (!active) {
+      res.status(400).json({ error: 'no_active_project', message: 'no active project' });
+      return;
+    }
+    const dir = projectsStore.ensureProjectDir(active.id);
+    const sessionsDir = join(dir, 'sessions');
+    if (!existsSync(sessionsDir)) {
+      res.status(404).json({ error: 'not_found', message: 'no sessions found' });
+      return;
+    }
+    const allFiles = readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
+    const targetFiles = sessionId ? allFiles.filter((f) => f === `${sessionId}.jsonl`) : allFiles;
+    if (!targetFiles.length) {
+      res.status(404).json({ error: 'not_found', message: 'session not found' });
+      return;
+    }
+    // Read the session file and find the last user message before messageId
+    const full = join(sessionsDir, targetFiles[0]);
+    let lastUserMessage = null;
+    let foundTarget = false;
+    try {
+      const lines = readFileSync(full, 'utf8').split(/\r?\n/).filter(Boolean);
+      for (let i = 0; i < lines.length; i++) {
+        try {
+          const msg = JSON.parse(lines[i]);
+          if (msg.id === messageId || (messageId && String(msg.ts) === String(messageId))) {
+            foundTarget = true;
+            for (let j = i - 1; j >= 0; j--) {
+              try {
+                const prev = JSON.parse(lines[j]);
+                if (prev.role === 'user') {
+                  lastUserMessage = prev;
+                  break;
+                }
+              } catch {
+                /* skip */
+              }
+            }
+            break;
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    } catch (err) {
+      res.status(500).json({ error: 'read_failed', message: err.message });
+      return;
+    }
+    // Fallback: find last user message
+    if (!lastUserMessage) {
+      try {
+        const lines = readFileSync(full, 'utf8').split(/\r?\n/).filter(Boolean).reverse();
+        for (const line of lines) {
+          try {
+            const msg = JSON.parse(line);
+            if (msg.role === 'user') {
+              lastUserMessage = msg;
+              break;
+            }
+          } catch {
+            /* skip */
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!lastUserMessage) {
+      res.status(404).json({ error: 'not_found', message: 'no user message found to regenerate' });
+      return;
+    }
+    // Re-post via POST /chat (queued for agent processing)
+    const record = {
+      ts: new Date().toISOString(),
+      role: 'user',
+      agent: lastUserMessage.agent || null,
+      model: lastUserMessage.model || null,
+      content: lastUserMessage.content || lastUserMessage.message || '',
+      attachments: lastUserMessage.attachments || [],
+    };
+    try {
+      const lines = existsSync(full) ? readFileSync(full, 'utf8').split(/\r?\n/).filter(Boolean) : [];
+      lines.push(JSON.stringify(record));
+      writeFileSync(full, lines.join('\n') + '\n', 'utf8');
+    } catch {
+      /* best effort */
+    }
+    state.appendActivity({
+      kind: 'chat.regenerate',
+      agent: lastUserMessage.agent || null,
+      message: (lastUserMessage.content || '').slice(0, 500),
+    });
+    broadcast({ type: 'chat:regenerate', message: record });
+    res.status(202).json({ accepted: true, regeneratedMessage: record });
   }));
 
   // ── /api/plans (kept from v2.x) ───────────────────────────────────────

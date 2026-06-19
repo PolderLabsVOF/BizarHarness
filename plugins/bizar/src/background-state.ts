@@ -389,11 +389,22 @@ export class BackgroundStateStore {
    */
   async save(state: BackgroundState): Promise<void> {
     if (!this.ensureDir()) return;
+    return withLock(this.locks, state.instanceId, () => this.saveUnlocked(state));
+  }
+
+  /**
+   * Persist a `BackgroundState` without acquiring the per-instance mutex.
+   *
+   * Callers must already hold the lock for `state.instanceId`. This exists
+   * for internal code paths such as `InstanceManager.update()` that need to
+   * mutate in-memory state while holding the same lock; calling `save()`
+   * there would re-enter the mutex and deadlock the promise chain.
+   */
+  saveUnlocked(state: BackgroundState): Promise<void> {
+    if (!this.ensureDir()) return Promise.resolve();
     const filePath = backgroundStateFilePath(this.stateDir, state.instanceId);
-    return withLock(this.locks, state.instanceId, () => {
-      writeStateAtomic(filePath, state, this.logger);
-      return Promise.resolve();
-    });
+    writeStateAtomic(filePath, state, this.logger);
+    return Promise.resolve();
   }
 
   /**

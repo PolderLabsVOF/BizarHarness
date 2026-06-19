@@ -10,7 +10,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, hostname as getOsHostname } from 'node:os';
 
 const execFileP = promisify(execFile);
 const HOME = homedir();
@@ -82,9 +82,16 @@ export const tailscaleStore = {
       // best-effort detection — `tailscale` may be in $PATH elsewhere
     }
     try {
-      const args = ['serve', '--bg', https ? 'https' : 'http', String(port)];
+      // Resolve hostname: use provided value, or fall back to current machine hostname
+      const resolvedHostname = hostname || getOsHostname();
+      const args = ['serve', '--bg'];
+      // Pass hostname via --host flag (Tailscale serve uses this for HTTPS certificate)
+      if (resolvedHostname) {
+        args.push('--host', resolvedHostname);
+      }
+      args.push(https ? 'https' : 'http', `localhost:${port}`);
       await execFileP('tailscale', args, { timeout: 10000 });
-      const cfg = { enabled: true, port, https, hostname };
+      const cfg = { enabled: true, port, https, hostname: resolvedHostname };
       saveSettings(cfg);
       return { ok: true, settings: cfg };
     } catch (err) {

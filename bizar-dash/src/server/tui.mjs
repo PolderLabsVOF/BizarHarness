@@ -825,7 +825,7 @@ if (isMain) {
   // Note: when run directly, the caller is responsible for starting the
   // server. We import it lazily so the module is usable as a library too.
   const { createServer } = await import('./server.mjs');
-  const { server, close } = createServer({
+  const { server, close } = await createServer({
     port,
     projectRoot: process.cwd(),
     opencodeConfigDir: join(HOME, '.config', 'opencode'),

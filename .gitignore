@@ -11,3 +11,14 @@ config/opencode.json
 dist/
 
 # Vite build output (compiled React SPA)
+
+# Per-user state (activity logs, internal investigation notes)
+.bizar/activity.log
+.bizar/opencode-sse-investigation.md
+
+# Opencode runtime state
+.opencode/
+
+# Test fixtures and scratch
+*.log
+

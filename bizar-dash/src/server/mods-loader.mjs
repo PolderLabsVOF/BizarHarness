@@ -32,6 +32,7 @@ import {
   mkdirSync,
   rmSync,
   cpSync,
+  unlinkSync,
 } from 'node:fs';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -228,6 +229,129 @@ export const modsLoader = {
     mkdirSync(dirnameSafe(full), { recursive: true });
     writeFileSync(full, content, 'utf8');
     return true;
+  },
+
+  /**
+   * Load Express routers from enabled mods that declare entry.route.
+   *
+   * Each route file must default-export one of:
+   *   - An express.Router
+   *   - A function (app, ctx) => void that registers routes on the passed router
+   *
+   * Because mods live outside the package tree, their route files cannot
+   * `import { Router } from 'express'` directly (no node_modules). We solve
+   * this by reading the route file as text, prepending an inline import for
+   * express, and then evaluating it using a vm.Module sandbox.
+   *
+   * Returns { id, router, mountPath } for each loaded mod.
+   *
+   * @param {object} ctx - context passed to each route handler
+   * @param {Function} ctx.broadcast
+   * @param {object} ctx.state
+   * @param {string} ctx.projectRoot
+   * @param {string} ctx.opencodeConfigDir
+   */
+  async loadModRouters(ctx = {}) {
+    const mods = this.list().filter((m) => m.enabled && m.entry?.route);
+    const results = [];
+    const { createRequire } = await import('node:module');
+    const _require = createRequire(import.meta.url);
+    let expressMod;
+    try {
+      expressMod = _require('express');
+    } catch {
+      console.warn('[mods-loader] could not preload express for mod routes');
+      return results;
+    }
+    // Resolve express's main entry as an absolute path for import injection
+    const expressPath = _require.resolve('express');
+    for (const mod of mods) {
+      let router;
+      try {
+        const routePath = join(mod.path, mod.entry.route);
+        if (!existsSync(routePath)) continue;
+        const routeSource = readFileSync(routePath, 'utf8');
+        // Write a temp file that injects the express import before the user's code.
+        // This lets mod route files use `import { Router } from 'express'` even though
+        // they live outside the package tree (no node_modules).
+        const { tmpdir } = await import('node:os');
+        const { join: joinPath } = await import('node:path');
+        const tmpFile = joinPath(tmpdir(), `bizar-mod-route-${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`);
+        const injectedSource = `import express from ${JSON.stringify('file://' + expressPath)};\n${routeSource}`;
+        writeFileSync(tmpFile, injectedSource, 'utf8');
+        try {
+          const modImport = await import(/* @vite-ignore */ `file://${tmpFile}?t=${Date.now()}`);
+          const exported = modImport.default;
+          if (typeof exported === 'function') {
+            router = expressMod.Router();
+            exported({ router }, ctx);
+          } else if (exported && typeof exported === 'object' && typeof exported.handle === 'function') {
+            router = exported;
+          } else {
+            console.warn(`[mods-loader] ${mod.id} entry.route exported unexpected type: ${typeof exported}`);
+            continue;
+          }
+        } finally {
+          // Clean up temp file
+          try { unlinkSync(tmpFile); } catch { /* ignore */ }
+        }
+      } catch (err) {
+        console.error(`[mods-loader] failed to load router for ${mod.id}:`, err.message);
+        continue;
+      }
+      if (router) results.push({ id: mod.id, router, mountPath: `/api/mods/${mod.id}` });
+    }
+    return results;
+  },
+
+  /**
+   * List available views for enabled mods.
+   * Scans for:
+   *   - web/index.html  (iframe-able web view)
+   *   - views/registry.json  (static tab registration)
+   *
+   * Returns [{ id, modId, kind: 'iframe'|'tab', label?, icon?, path?, description? }]
+   */
+  listModViews() {
+    const mods = this.list().filter((m) => m.enabled);
+    const views = [];
+    for (const mod of mods) {
+      // Check web/index.html
+      const webIndex = join(mod.path, 'web', 'index.html');
+      if (existsSync(webIndex)) {
+        views.push({
+          id: `${mod.id}:web`,
+          modId: mod.id,
+          kind: 'iframe',
+          label: mod.name,
+          description: mod.description || 'Mod web view',
+          path: webIndex,
+          url: null, // resolved server-side when served
+        });
+      }
+      // Check views/registry.json
+      const registryPath = join(mod.path, 'views', 'registry.json');
+      if (existsSync(registryPath)) {
+        try {
+          const reg = JSON.parse(readFileSync(registryPath, 'utf8'));
+          for (const view of reg.views || []) {
+            views.push({
+              id: `${mod.id}:${view.id}`,
+              modId: mod.id,
+              kind: 'tab',
+              label: view.label || view.id,
+              icon: view.icon || 'Puzzle',
+              description: view.description || '',
+              component: view.component || null,
+              path: join(mod.path, 'views', view.component || ''),
+            });
+          }
+        } catch {
+          /* ignore malformed registry */
+        }
+      }
+    }
+    return views;
   },
 };
 

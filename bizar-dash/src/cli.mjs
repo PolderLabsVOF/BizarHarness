@@ -83,7 +83,7 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot 
   const { launchBrowser } = await import('./server/browser.mjs');
 
   const usePort = port || (await findFreePort(DEFAULT_PORT));
-  const { server, close } = createServer({
+  const { server, close } = await createServer({
     port: usePort,
     projectRoot: projectRoot || process.cwd(),
     opencodeConfigDir: opencodeConfigDir || join(homedir(), '.config', 'opencode'),
@@ -172,7 +172,7 @@ async function runTui({ launchWeb } = {}) {
   const { launchTui } = await import('./server/tui.mjs');
 
   const port = await findFreePort(DEFAULT_PORT);
-  const { server, close: closeServer } = createServer({
+  const { server, close: closeServer } = await createServer({
     port,
     projectRoot: process.cwd(),
     opencodeConfigDir: join(homedir(), '.config', 'opencode'),

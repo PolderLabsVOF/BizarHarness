@@ -12,11 +12,13 @@ import { WebSocketServer } from 'ws';
 import { createServer as createHttpServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { dirname as pathDirname } from 'node:path';
 import { createApiRouter } from './api.mjs';
 import { createState } from './state.mjs';
 import { createWatcher } from './watcher.mjs';
+import { modsLoader } from './mods-loader.mjs';
+import { homedir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // server.mjs lives at src/server/ — dist/ is at the package root
@@ -29,7 +31,7 @@ const DIST_DIR = join(__dirname, '..', '..', 'dist');
  * @param {string} opts.opencodeConfigDir
  * @param {string} opts.bizarRoot
  */
-export function createServer({
+export async function createServer({
   port,
   projectRoot,
   opencodeConfigDir,
@@ -96,17 +98,31 @@ export function createServer({
     });
   }
 
-  app.use(
-    '/api',
-    createApiRouter({
-      state,
-      watcher,
-      projectRoot,
-      opencodeConfigDir,
-      bizarRoot,
-      broadcast,
-    }),
-  );
+  const apiRouter = createApiRouter({
+    state,
+    watcher,
+    projectRoot,
+    opencodeConfigDir,
+    bizarRoot,
+    broadcast,
+  });
+
+  // ── Mod route mounting ──────────────────────────────────────────────
+  // Mod routers are mounted BEFORE the apiRouter is registered with app.
+  // Mounting directly on app (outside /api prefix) so there are no
+  // conflicts with the apiRouter's catch-all handler.
+  {
+    const modCtx = { broadcast, state, projectRoot, opencodeConfigDir };
+    const modRouters = await modsLoader.loadModRouters(modCtx);
+    for (const { id, router: modRouter, mountPath } of modRouters) {
+      app.use(mountPath, modRouter);
+      // eslint-disable-next-line no-console
+      console.log(`[mod] mounted ${id} routes at ${mountPath}`);
+    }
+  }
+
+  // All /api/* routes go through apiRouter (after mod routes are checked)
+  app.use('/api', apiRouter);
 
   // ── Static frontend (React SPA in dist/) ─────────────────────────
   const distBuilt =
@@ -149,7 +165,82 @@ export function createServer({
     );
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    const path = req.url || '';
+
+    // /ws/logs — stream log file changes
+    if (path === '/ws/logs') {
+      const HOME = homedir();
+      const serviceLog = join(HOME, '.config', 'bizar', 'service.log');
+      const dashboardLog = join(HOME, '.config', 'bizar', 'dashboard.log');
+      const logFile = existsSync(serviceLog) ? serviceLog : existsSync(dashboardLog) ? dashboardLog : null;
+
+      let fileSize = logFile && existsSync(logFile) ? statSync(logFile).size : 0;
+
+      // Send initial tail
+      if (logFile) {
+        try {
+          const text = readFileSync(logFile, 'utf8');
+          const lines = text.split(/\r?\n/).filter(Boolean).slice(-100);
+          ws.send(JSON.stringify({ type: 'log init', lines, file: logFile }));
+        } catch {
+          ws.send(JSON.stringify({ type: 'log init', lines: [], file: logFile }));
+        }
+      } else {
+        ws.send(JSON.stringify({ type: 'log init', lines: [], file: null }));
+      }
+
+      let destroying = false;
+      function sendLogChunk() {
+        if (destroying || ws.readyState !== 1) return;
+        try {
+          const f = logFile;
+          if (!f || !existsSync(f)) return;
+          const newSize = statSync(f).size;
+          if (newSize > fileSize) {
+            // Read only the new bytes
+            const fd = openSync(f, 'r');
+            const buf = Buffer.alloc(newSize - fileSize);
+            readSync(fd, buf, 0, buf.length, fileSize);
+            closeSync(fd);
+            const newText = buf.toString('utf8');
+            const newLines = newText.split(/\r?\n/).filter(Boolean);
+            for (const line of newLines) {
+              ws.send(JSON.stringify({ type: 'log line', line, ts: Date.now() }));
+            }
+            fileSize = newSize;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const interval = setInterval(sendLogChunk, 1000);
+
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg?.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+          }
+        } catch {
+          /* ignore */
+        }
+      });
+
+      ws.on('close', () => {
+        destroying = true;
+        clearInterval(interval);
+      });
+
+      ws.on('error', () => {
+        destroying = true;
+        clearInterval(interval);
+      });
+      return;
+    }
+
+    // Default /ws — snapshot + ping/pong
     try {
       ws.send(
         JSON.stringify({

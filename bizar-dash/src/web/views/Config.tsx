@@ -557,30 +557,127 @@ function McpsPanel({
 
 function DebugLogPanel() {
   const [lines, setLines] = useState<string[]>([]);
-  const [pos, setPos] = useState(0);
+  const [tail, setTail] = useState(100);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [logFile, setLogFile] = useState<string | null>(null);
+  const [displayLines, setDisplayLines] = useState<string[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  const reload = async () => {
+  const loadLogs = async (n: number) => {
     try {
-      const r = await fetch('http://127.0.0.1:4321/api/snapshot');
-      void r;
-    } catch { /* ignore */ }
-    // For v3, the dashboard just shows service log via a small text file fetch.
-    // The server doesn't expose this yet; show a placeholder.
-    setLines(['(debug log is read from ~/.config/bizar/service.log)']);
+      const r = await api.get<{ lines: string[]; file: string | null }>(`/diagnostics/logs?tail=${n}`);
+      setLines(r.lines || []);
+      setLogFile(r.file);
+      setDisplayLines(r.lines || []);
+    } catch {
+      setLines(['(failed to load logs)']);
+      setDisplayLines(['(failed to load logs)']);
+    }
+  };
+
+  const connectWs = () => {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${window.location.host}/ws/logs`);
+    wsRef.current = ws;
+    ws.onopen = () => setConnected(true);
+    ws.onclose = () => {
+      setConnected(false);
+      // Reconnect after 3s
+      setTimeout(connectWs, 3000);
+    };
+    ws.onerror = () => {
+      setConnected(false);
+    };
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === 'log init') {
+          setLines(msg.lines || []);
+          setDisplayLines(msg.lines || []);
+          setLogFile(msg.file);
+        } else if (msg.type === 'log line') {
+          setLines((prev) => [...prev.slice(-(tail * 2)), msg.line]);
+          setDisplayLines((prev) => [...prev.slice(-(tail * 2)), msg.line]);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
   };
 
   useEffect(() => {
-    reload();
+    loadLogs(tail);
+    connectWs();
+    return () => {
+      wsRef.current?.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-scroll
+  useEffect(() => {
+    if (autoScroll && listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [displayLines, autoScroll]);
+
+  const handleClear = () => {
+    setDisplayLines([]);
+  };
+
+  const TAIL_OPTIONS = [50, 100, 500, 1000];
+
   return (
-    <div>
-      <Button variant="secondary" size="sm" onClick={reload}>
-        <RefreshCw size={14} /> Reload
-      </Button>
-      <pre className="mono debug-log">
-        {lines.length === 0 ? '(no log)' : lines.join('\n')}
-      </pre>
+    <div className="debug-log-panel">
+      <div className="debug-log-toolbar">
+        <span className="muted" style={{ fontSize: 11 }}>
+          {connected ? (
+            <span className="tag tag-success" style={{ fontSize: 10 }}>live</span>
+          ) : (
+            <span className="tag tag-neutral" style={{ fontSize: 10 }}>disconnected</span>
+          )}
+          {' '}log: <code>{logFile ? logFile.split('/').pop() : 'none'}</code>
+        </span>
+        <div className="debug-log-controls">
+          <span className="muted" style={{ fontSize: 11 }}>Lines:</span>
+          {TAIL_OPTIONS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={cn('tag', tail === n && 'tag-active')}
+              onClick={() => { setTail(n); loadLogs(n); }}
+            >
+              {n}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={cn('tag', autoScroll && 'tag-active')}
+            onClick={() => setAutoScroll((v) => !v)}
+          >
+            Auto-scroll
+          </button>
+          <Button variant="ghost" size="sm" onClick={handleClear}>
+            Clear
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => loadLogs(tail)}>
+            <RefreshCw size={12} /> Reload
+          </Button>
+        </div>
+      </div>
+      <div className="debug-log-list" ref={listRef}>
+        {displayLines.length === 0 ? (
+          <p className="muted" style={{ padding: 12 }}>
+            {logFile ? '(log is empty)' : 'No log file found. The service log is at ~/.config/bizar/service.log'}
+          </p>
+        ) : (
+          displayLines.map((line, i) => (
+            <div key={i} className="debug-log-line mono">{line}</div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
