@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.0.2 — 2026-06-19
+
+### Fixed
+- **Documentation: removed incorrect "build the dashboard" instructions.** The `@polderlabs/bizar-dash` package ships a prebuilt `dist/` and does not require a build step on install. Updated README, server fallback page, and GitHub release notes.
+- **`bizar-dash` server fallback page**: improved error message when `dist/index.html` is missing — points users at `npm install -g @polderlabs/bizar-dash --force` instead of telling them to run `npm run build` (which requires dev dependencies not installed for global users).
+
 ## v3.0.1 — 2026-06-19
 
 ### Fixed

@@ -151,6 +151,15 @@ export async function createServer({
       res.sendFile(join(DIST_DIR, 'index.html'));
     });
   } else {
+    const distIndex = join(DIST_DIR, 'index.html');
+    if (!existsSync(distIndex)) {
+      // eslint-disable-next-line no-console
+      console.error(`[bizar-dash] dist/index.html not found at ${DIST_DIR}`);
+      // eslint-disable-next-line no-console
+      console.error(`[bizar-dash] The published package should include a prebuilt dist/.`);
+      // eslint-disable-next-line no-console
+      console.error(`[bizar-dash] Try: npm install -g @polderlabs/bizar-dash --force`);
+    }
     app.get('/', (_req, res) => res.status(503).type('html').send(renderNotBuiltPage()));
     app.get('*', (_req, res) => {
       if (_req.path.startsWith('/api') || _req.path === '/ws') {
@@ -159,10 +168,6 @@ export async function createServer({
       }
       res.status(503).type('html').send(renderNotBuiltPage());
     });
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[dashboard] dist/ not found at ${DIST_DIR}. Run \`npm run build\` to build the React SPA.`,
-    );
   }
 
   wss.on('connection', (ws, req) => {
@@ -344,7 +349,7 @@ function renderNotBuiltPage() {
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Bizar Dashboard — not built</title>
+    <title>Dashboard assets not found</title>
     <style>
       :root { color-scheme: dark; }
       body {
@@ -373,11 +378,13 @@ function renderNotBuiltPage() {
   </head>
   <body>
     <div class="card">
-      <h1>Dashboard not built</h1>
-      <p>The React SPA has not been built yet. The Bizar dashboard server
-        is running, but the frontend bundle is missing.</p>
-      <p>Build from the <code>bizar-dash</code> package root:</p>
-      <pre><code>cd bizar-dash &amp;&amp; npm run build</code></pre>
+      <h1>Dashboard assets not found</h1>
+      <p>The <code>@polderlabs/bizar-dash</code> package ships prebuilt assets
+        in <code>dist/</code>. If you are seeing this, your install is broken.</p>
+      <p>Try:</p>
+      <pre><code>npm install -g @polderlabs/bizar-dash --force</code></pre>
+      <p>If the problem persists, file an issue at<br/>
+        <code>github.com/DrB0rk/BizarHarness</code></p>
       <p>The REST API and WebSocket are still live at <code>/api/*</code>
         and <code>/ws</code>.</p>
     </div>
