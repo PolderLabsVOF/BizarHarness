@@ -1,5 +1,5 @@
 // src/views/Settings.tsx — v3 settings: theme colors, UI layout, defaults, Tailscale, service.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Sliders,
   Save,
@@ -16,7 +16,10 @@ import {
   Plug,
   Download,
   AlertTriangle,
+  QrCode,
+  Smartphone,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { useToast } from '../components/Toast';
@@ -67,6 +70,139 @@ const FONT_FAMILIES = [
   'SF Mono',
   'Cascadia Code',
 ];
+
+// v3.5.2 — Pair-with-mobile companion card.
+type PairSession = {
+  token: string;
+  qrPayload: string;
+  publicUrl: string;
+  expiresAt: number;
+};
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return 'expired';
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function PairDeviceCard() {
+  const toast = useToast();
+  const [pair, setPair] = useState<PairSession | null>(null);
+  const [pairing, setPairing] = useState(false);
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  const start = useCallback(async () => {
+    setPairing(true);
+    setPairError(null);
+    try {
+      const res = await api.post<PairSession>('/pair/start');
+      setPair(res);
+    } catch (err) {
+      setPairError((err as Error)?.message || 'Failed to start pairing');
+      toast.error('Pairing failed.');
+    } finally {
+      setPairing(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (!pair) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [pair]);
+
+  const remaining = pair ? pair.expiresAt - now : 0;
+  const expired = pair != null && remaining <= 0;
+
+  return (
+    <Card>
+      <CardTitle>
+        <Smartphone size={14} /> Companion App
+      </CardTitle>
+      <CardMeta>
+        Scan the QR with <a href="https://github.com/DrB0rk/BizarHarness" target="_blank" rel="noopener noreferrer">Bizar Companion</a> to pair.
+        Tokens expire after 5 minutes.
+      </CardMeta>
+
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '0 0 auto' }}>
+          {pair && !expired ? (
+            <div style={{ background: '#fff', padding: 12, borderRadius: 12 }}>
+              <QRCodeSVG value={pair.qrPayload} size={192} level="M" includeMargin={false} />
+            </div>
+          ) : (
+            <div
+              style={{
+                width: 216,
+                height: 216,
+                borderRadius: 12,
+                background: 'var(--surface-2, #161b22)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-muted, #8b949e)',
+                fontSize: 12,
+                textAlign: 'center',
+                padding: 16,
+                border: '1px dashed var(--border, #30363d)',
+              }}
+            >
+              {pair && expired ? 'QR expired' : 'No QR generated yet'}
+            </div>
+          )}
+        </div>
+
+        <div style={{ flex: '1 1 240px', minWidth: 220 }}>
+          {!pair && (
+            <Button variant="primary" onClick={start} disabled={pairing}>
+              <QrCode size={14} /> {pairing ? 'Generating…' : 'Generate QR Code'}
+            </Button>
+          )}
+
+          {pair && !expired && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <strong>Expires in</strong> <span className="mono">{formatCountdown(remaining)}</span>
+              </div>
+              <div style={{ marginBottom: 6 }}>
+                <strong>URL:</strong> <span className="mono" style={{ wordBreak: 'break-all' }}>{pair.publicUrl}</span>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <strong>Token:</strong>{' '}
+                <span className="mono" style={{ wordBreak: 'break-all', fontSize: 12 }}>
+                  {pair.token.slice(0, 16)}…{pair.token.slice(-6)}
+                </span>
+              </div>
+              <Button variant="secondary" onClick={start} disabled={pairing}>
+                <RefreshCw size={14} /> Regenerate
+              </Button>
+            </>
+          )}
+
+          {pair && expired && (
+            <>
+              <div style={{ marginBottom: 12, color: 'var(--error, #f85149)' }}>
+                Token expired — generate a fresh QR to pair again.
+              </div>
+              <Button variant="primary" onClick={() => { setPair(null); start(); }}>
+                <RefreshCw size={14} /> Generate new QR
+              </Button>
+            </>
+          )}
+
+          {pairError && (
+            <div style={{ marginTop: 10, color: 'var(--error, #f85149)', fontSize: 12 }}>
+              {pairError}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 const LAYOUTS = [
   { id: 'topnav', label: 'Top nav' },
@@ -738,6 +874,8 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </label>
         </Card>
       </div>
+
+      <PairDeviceCard />
 
       <Card>
         <CardTitle><Info size={14} /> About</CardTitle>

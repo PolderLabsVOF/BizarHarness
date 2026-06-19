@@ -739,9 +739,61 @@ export async function launchTui(opts = {}) {
   function actionHelp() {
     toast(
       screen,
-      '1-8 tab · Tab cycle · r reload · c chat · n new · t toggle web · q quit',
+      '1-8 tab · Tab cycle · r reload · c chat · n new · t toggle web · p pair · q quit',
       { color: 'cyan', ms: 5000 },
     );
+  }
+
+  // v3.5.2 — Pair-device QR code for the Bizar Companion mobile app.
+  // Renders the QR in the terminal using qrcode-terminal (if installed)
+  // and shows the URL + token so the user can copy-paste if needed.
+  async function actionPair() {
+    try {
+      const data = await api.post('/api/pair/start');
+      // Render outside of the blessed screen — the QR is dense and the
+      // terminal-renderer is happiest in a plain TTY frame.
+      screen.destroy();
+      try {
+        const qrcodeTerminal = (await import('qrcode-terminal')).default;
+        qrcodeTerminal.generate(data.qrPayload, { small: true }, (qr) => {
+          process.stdout.write('\n');
+          process.stdout.write(qr);
+          process.stdout.write(`\nURL:   ${data.publicUrl}\n`);
+          process.stdout.write(`Token: ${data.token}\n`);
+          process.stdout.write(`Expires at: ${new Date(data.expiresAt).toLocaleString()}\n\n`);
+          process.stdout.write('Open the Bizar Companion app and scan the QR above.\n');
+          process.stdout.write('Press any key to return to the dashboard.\n');
+        });
+      } catch (impErr) {
+        // Fallback when qrcode-terminal isn't installed.
+        process.stdout.write(`\nPairing QR (install qrcode-terminal to render):\n`);
+        process.stdout.write(`URL:   ${data.publicUrl}\n`);
+        process.stdout.write(`Token: ${data.token}\n`);
+        process.stdout.write(`Payload: ${data.qrPayload}\n`);
+        process.stdout.write(`Expires: ${new Date(data.expiresAt).toISOString()}\n\n`);
+        process.stdout.write('Press any key to return to the dashboard.\n');
+      }
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        // Rebuild the screen — there is no public re-init helper, so we
+        // hand control back via a full TUI restart. Cheapest is to exit.
+        // (Users can re-run `bizar` to re-pair with a fresh QR.)
+        process.stdout.write('\nReturning to a fresh TUI requires restarting the command.\n');
+        process.exit(0);
+      });
+    } catch (err) {
+      // If the screen was already destroyed above, fall back to plain log.
+      try {
+        screen.destroy();
+      } catch {
+        /* ignore */
+      }
+      process.stdout.write(`\nPairing failed: ${err?.message || err}\n`);
+      process.exit(1);
+    }
   }
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
@@ -770,6 +822,7 @@ export async function launchTui(opts = {}) {
     else toast(screen, 'Nothing to create on this tab.', { color: 'yellow' });
   });
   screen.key(['t'], () => actionToggleAutoLaunch());
+  screen.key(['p'], () => actionPair());
   screen.key(['?'], () => actionHelp());
   screen.key(['q', 'C-c'], () => shutdown());
   screen.key(['escape'], () => content.focus());

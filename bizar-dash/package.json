@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-dash",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "description": "Web + TUI dashboard for the Bizar agent platform (optional companion to @polderlabs/bizar)",
   "type": "module",
   "bin": {
@@ -25,6 +25,8 @@
     "express": "^4.22.0",
     "fuse.js": "^7.0.0",
     "lucide-react": "^0.460.0",
+    "qrcode-terminal": "^0.12.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-markdown": "^9.0.0",

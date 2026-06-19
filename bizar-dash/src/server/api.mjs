@@ -32,6 +32,7 @@ import { plansStore } from './plans-store.mjs';
 import { skillsStore } from './skills-store.mjs';
 import { notificationsStore } from './notifications-store.mjs';
 import { updateStore } from './update-store.mjs';
+import { pairStore } from './pair-store.mjs';
 
 const HOME = homedir();
 const OPENCODE_DIR = join(HOME, '.config', 'opencode');
@@ -87,7 +88,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-      version: '3.5.0',
+      version: '3.5.1',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -162,6 +163,12 @@ export function createApiRouter({
   broadcast = () => {},
 }) {
   const router = express.Router();
+
+  // v3.5.2 — Pair-token enrichment middleware. Does NOT block requests; the
+  // dashboard itself is unauthenticated. This just tags requests with
+  // req.pairToken / req.pairEntry so future handlers can recognize paired
+  // companion clients and (later) scope them to a single project.
+  router.use(pairStore.middleware);
 
   const wrap = (fn) => async (req, res, ...rest) => {
     try {
@@ -1693,6 +1700,50 @@ export function createApiRouter({
     broadcast({ type: 'task:progress', taskId: task.id, progress: task.metadata?.progress, step: task.metadata?.currentStep, agent: task.metadata?.progressAgent });
     broadcast({ type: 'tasks:change', task });
     res.json(task);
+  }));
+
+  // ── /api/pair — companion-app pairing (v3.5.2) ──────────────────────────
+  // Mint a short-lived token the Bizar Companion app can use as a Bearer
+  // header. The companion scans a QR containing the URL + token, calls
+  // /api/pair/verify to confirm, then stores the credentials in
+  // expo-secure-store.
+  router.post('/pair/start', wrap(async (req, res) => {
+    const port = req.app?.get('port') || (req.socket?.server?.address()?.port) || 4321;
+    const publicUrl = pairStore.detectPublicUrl(req, port);
+    const ttlMs = Math.max(30_000, Math.min(15 * 60 * 1000, Number(req.body?.ttlMs) || 5 * 60 * 1000));
+    const entry = pairStore.mint(publicUrl, ttlMs);
+    state.appendActivity({ kind: 'pair.start', publicUrl: entry.publicUrl, expiresAt: entry.expiresAt });
+    broadcast({ type: 'pair:change', publicUrl: entry.publicUrl, expiresAt: entry.expiresAt });
+    res.json({
+      token: entry.token,
+      qrPayload: entry.qrPayload,
+      publicUrl: entry.publicUrl,
+      expiresAt: entry.expiresAt,
+    });
+  }));
+
+  // Used by the companion right after scanning the QR to confirm the token
+  // works before persisting it. Returns { valid: true } on success, 401
+  // { error: 'expired' | 'no_token' } on failure.
+  router.get('/pair/verify', wrap(async (req, res) => {
+    const auth = req.headers.authorization || '';
+    if (!auth.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'no_token', message: 'missing Authorization: Bearer' });
+      return;
+    }
+    const token = auth.slice(7).trim();
+    const entry = pairStore.verify(token);
+    if (!entry) {
+      res.status(401).json({ error: 'expired', message: 'pair token invalid or expired' });
+      return;
+    }
+    res.json({ valid: true, publicUrl: entry.publicUrl, expiresAt: entry.expiresAt });
+  }));
+
+  // Lightweight introspection — useful for the Settings card and the TUI
+  // to show "X tokens active". Always returns { active: <count> }.
+  router.get('/pair/status', wrap(async (_req, res) => {
+    res.json({ active: pairStore._size() });
   }));
 
   router.use((req, res) => {
