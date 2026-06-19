@@ -151,6 +151,11 @@ export type Settings = {
     homepage: string;
     license: string;
   };
+  agents: {
+    maxParallel: number;
+    stuckThresholdMs: number;
+    autoRestart: boolean;
+  };
 };
 
 export type SettingsResponse = {

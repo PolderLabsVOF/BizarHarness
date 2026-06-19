@@ -1,13 +1,17 @@
 /**
  * src/server/task-delegator.mjs
  *
- * v3.2.0 — Odin task delegation.
+ * v3.5.2 — Odin task delegation.
  *
  * Accepts a single "natural language" task from the user. Splits it into
  * 1-5 subtasks via heuristic rules (an LLM call would replace this in
  * v3.3), assigns each subtask to the best-fit agent based on tags /
  * keywords / category, and dispatches them to the background agent
  * infrastructure when available.
+ *
+ * v3.5.1 — agents.maxParallel cap applied here. Background dispatch is
+ * limited to the configured number of concurrent instances; overflow
+ * subtasks are marked queued and dispatched as slots free up.
  *
  * The delegator is intentionally tolerant: a failure to enqueue a
  * background instance must NOT break the user-facing task creation.
@@ -18,6 +22,7 @@
 import { tasksStore } from './tasks-store.mjs';
 import { agentsStore } from './agents-store.mjs';
 import { notificationsStore } from './notifications-store.mjs';
+import { backgroundStore } from './background-store.mjs';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -316,23 +321,68 @@ export const taskDelegator = {
    * Best-effort dispatch to the background agent infrastructure.
    * Reads the plugin's bg state dir for visibility and tries to create
    * a new bg instance via the local CLI. Never throws.
+   *
+   * v3.5.1 — Respects agents.maxParallel: caps concurrent dispatches
+   * to the configured limit; overflow subtasks are queued until a slot
+   * frees up (next dispatch after a bg instance finishes).
    */
   async dispatchToBackground(main, subtasks, ctx, broadcast) {
     const projectRoot = ctx.projectRoot || process.cwd();
     const projectId = ctx.projectId || null;
     const bgDir = pickBgDir();
 
+    // v3.5.1 — Read agents.maxParallel from settings (default 6).
+    const SETTINGS_FILE = join(HOME, '.config', 'bizar', 'settings.json');
+    let maxParallel = 6;
+    try {
+      if (existsSync(SETTINGS_FILE)) {
+        const raw = readFileSync(SETTINGS_FILE, 'utf8');
+        const settings = JSON.parse(raw);
+        maxParallel = settings?.agents?.maxParallel ?? 6;
+      }
+    } catch {
+      maxParallel = 6;
+    }
+
+    // Count currently running bg instances across all candidate dirs.
+    const runningInstances = backgroundStore.list().filter(
+      (b) => b.status === 'running' || b.status === 'pending',
+    );
+    const runningCount = runningInstances.length;
+    const slotsAvailable = Math.max(0, maxParallel - runningCount);
+
     // Try to import the plugin's CLI dynamically. If absent, just
     // mark subtasks as doing and rely on agent heartbeats.
     let cliAvailable = false;
     try {
-      const { existsSync } = await import('node:fs');
-      cliAvailable = existsSync(join(projectRoot, 'plugins', 'bizar', 'dist', 'cli.js'));
+      const { existsSync: es2 } = await import('node:fs');
+      cliAvailable = es2(join(projectRoot, 'plugins', 'bizar', 'dist', 'cli.js'));
     } catch {
       cliAvailable = false;
     }
 
-    for (const sub of subtasks) {
+    // Split: first N get dispatched now, rest are queued.
+    const toDispatch = subtasks.slice(0, slotsAvailable);
+    const toQueue = subtasks.slice(slotsAvailable);
+
+    for (const sub of toQueue) {
+      const metadata = {
+        ...(sub.metadata || {}),
+        waitingForSlot: true,
+        queuedAt: new Date().toISOString(),
+        maxParallel,
+      };
+      await tasksStore.update(projectId, sub.id, {
+        status: 'queued',
+        metadata,
+      });
+      broadcast({
+        type: 'tasks:change',
+        task: { id: sub.id, status: 'queued', metadata },
+      });
+    }
+
+    for (const sub of toDispatch) {
       try {
         let bgId = null;
         if (cliAvailable) {

@@ -73,7 +73,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   history: History,
 };
 
-  const VERSION = 'v3.5.1';
+  const VERSION = 'v3.5.2';
 
 export function App() {
   return (
@@ -332,6 +332,11 @@ function Shell() {
       if (target && typeof target.closest === 'function') {
         inForm = !!target.closest('form, [role="dialog"], [contenteditable], [data-no-key]');
       }
+      // v3.5.2 — reject key-repeat events. When a user presses and holds
+      // a digit key the browser fires repeated keydown events; we must only
+      // act on the first (e.repeat === false). This prevents the modal-close
+      // + key-repeat scenario from switching tabs after the safe window closes.
+      if (e.repeat) return;
       if (
         isFormControl ||
         inForm ||

@@ -857,6 +857,69 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         </Card>
 
         <Card>
+          <CardTitle><ServerIcon size={14} /> Agent Behavior</CardTitle>
+          <CardMeta>Limits and timeouts for background agent dispatch.</CardMeta>
+          <div className="form-row">
+            <label htmlFor="agents-maxParallel">
+              Max parallel agents
+              <span className="meta-badge">default: 6</span>
+            </label>
+            <input
+              id="agents-maxParallel"
+              type="number"
+              min={1}
+              max={20}
+              value={settings.agents?.maxParallel ?? 6}
+              onChange={(e) =>
+                setSettings((cur) => ({
+                  ...cur,
+                  agents: {
+                    ...cur.agents,
+                    maxParallel: Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 6)),
+                  },
+                }))
+              }
+            />
+          </div>
+          <div className="form-row">
+            <label htmlFor="agents-stuckThresholdMs">
+              Stuck threshold (ms)
+              <span className="meta-badge">default: 600000 (10 min)</span>
+            </label>
+            <input
+              id="agents-stuckThresholdMs"
+              type="number"
+              min={60000}
+              max={3600000}
+              step={60000}
+              value={settings.agents?.stuckThresholdMs ?? 600000}
+              onChange={(e) =>
+                setSettings((cur) => ({
+                  ...cur,
+                  agents: {
+                    ...cur.agents,
+                    stuckThresholdMs: Math.max(60000, Math.min(3600000, parseInt(e.target.value, 10) || 600000)),
+                  },
+                }))
+              }
+            />
+          </div>
+          <label className="checkbox-row" data-setting-id="agents.autoRestart">
+            <input
+              type="checkbox"
+              checked={!!settings.agents?.autoRestart}
+              onChange={(e) =>
+                setSettings((cur) => ({
+                  ...cur,
+                  agents: { ...cur.agents, autoRestart: e.target.checked },
+                }))
+              }
+            />
+            <span>Auto-restart stuck agents</span>
+          </label>
+        </Card>
+
+        <Card>
           <CardTitle><Globe size={14} /> Dashboard</CardTitle>
           <CardMeta>Controls how <code>bizar</code> starts up.</CardMeta>
           <label className="checkbox-row" data-setting-id="dashboard.autoLaunchWeb">

@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings2,
-  Sliders,
   RefreshCw,
   Save,
   FileCode2,
@@ -13,10 +12,9 @@ import {
   Trash2,
   Pencil,
   Download,
-  Activity,
-  Wrench,
   Database,
   History as HistoryIcon,
+  X,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -24,7 +22,6 @@ import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
 import { api } from '../lib/api';
 import { cn, debounce, hashText } from '../lib/utils';
-import { JsonHighlight } from '../lib/markdown';
 import type {
   ConfigResponse,
   Diagnostics,
@@ -270,6 +267,21 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
   );
 }
 
+// ─── OpenCode config form (v3.5.2) ─────────────────────────────────
+// Structured UI for opencode.json sections: Model, Plugins, Tools,
+// Permissions, Hooks. Raw JSON available via "Advanced" toggle.
+
+type OcSection = 'model' | 'plugins' | 'tools' | 'permissions' | 'hooks' | 'advanced';
+
+const OC_SECTIONS: { id: OcSection; label: string }[] = [
+  { id: 'model', label: 'Model' },
+  { id: 'plugins', label: 'Plugins' },
+  { id: 'tools', label: 'Tools' },
+  { id: 'permissions', label: 'Permissions' },
+  { id: 'hooks', label: 'Hooks' },
+  { id: 'advanced', label: 'Advanced' },
+];
+
 function ConfigEditorPanel({
   parsed,
   dirty,
@@ -289,6 +301,16 @@ function ConfigEditorPanel({
   onChange: (val: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
 }) {
+  const [section, setSection] = useState<OcSection>('model');
+
+  const cfg = parsed.data as Record<string, unknown> | null;
+
+  const apply = (patch: Record<string, unknown>) => {
+    if (!cfg) return;
+    const next = { ...cfg, ...patch };
+    onChange(JSON.stringify(next, null, 2));
+  };
+
   return (
     <Card>
       <CardTitle>
@@ -301,7 +323,7 @@ function ConfigEditorPanel({
       </CardMeta>
       <div className="view-actions" style={{ marginBottom: 12 }}>
         <Button variant="secondary" size="sm" onClick={onReload}>
-          <RefreshCw size={14} /> Reload from disk
+          <RefreshCw size={14} /> Reload
         </Button>
         <Button
           variant="primary"
@@ -313,24 +335,54 @@ function ConfigEditorPanel({
           Save
         </Button>
       </div>
-      <div className="config-grid">
+
+      {/* Section tabs */}
+      <div className="config-section-tabs" style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+        {OC_SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={cn('tab-btn', section === s.id && 'active')}
+            onClick={() => setSection(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Model section */}
+      {section === 'model' && (
+        <ModelForm cfg={cfg} apply={apply} />
+      )}
+
+      {/* Plugins section */}
+      {section === 'plugins' && (
+        <PluginsForm cfg={cfg} apply={apply} />
+      )}
+
+      {/* Tools section */}
+      {section === 'tools' && (
+        <ToolsForm cfg={cfg} apply={apply} />
+      )}
+
+      {/* Permissions section */}
+      {section === 'permissions' && (
+        <PermissionsForm cfg={cfg} apply={apply} />
+      )}
+
+      {/* Hooks section */}
+      {section === 'hooks' && (
+        <HooksForm cfg={cfg} apply={apply} />
+      )}
+
+      {/* Advanced: raw JSON editor */}
+      {section === 'advanced' && (
         <div>
-          <div className="config-grid-label">JSON tree</div>
-          <div className="json-tree">
-            {parsed.data != null ? (
-              <JsonHighlight value={parsed.data} />
-            ) : (
-              <span className="muted">{parsed.error ? 'Invalid JSON' : 'No data'}</span>
-            )}
-          </div>
-        </div>
-        <div>
-          <div className="config-grid-label">
-            Raw JSON
+          <div className="config-grid-label" style={{ marginBottom: 8 }}>
             {parsed.error ? (
-              <span className="text-error" style={{ marginLeft: 8 }}>{parsed.error}</span>
+              <span className="text-error">{parsed.error}</span>
             ) : (
-              <span className="muted" style={{ marginLeft: 8 }}>Live validation</span>
+              <span className="muted">Raw JSON — edit with care</span>
             )}
           </div>
           <textarea
@@ -339,10 +391,283 @@ function ConfigEditorPanel({
             spellCheck={false}
             value={parsed.raw}
             onChange={(e) => onChange(e.target.value)}
+            style={{ minHeight: 300 }}
           />
         </div>
-      </div>
+      )}
     </Card>
+  );
+}
+
+// ── Sub-forms ─────────────────────────────────────────────────────────
+
+function ModelForm({ cfg, apply }: { cfg: Record<string, unknown> | null; apply: (p: Record<string, unknown>) => void }) {
+  const model = (cfg?.model || {}) as Record<string, unknown>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <p className="muted text-sm">Configure the default model used by OpenCode agents.</p>
+      <div className="field-row">
+        <label className="field-label">Provider</label>
+        <input
+          className="input"
+          value={String(model.provider || '')}
+          onChange={(e) => apply({ model: { ...model, provider: e.target.value } })}
+          placeholder="e.g. openai, anthropic, google"
+        />
+      </div>
+      <div className="field-row">
+        <label className="field-label">Model ID</label>
+        <input
+          className="input"
+          value={String(model.model || '')}
+          onChange={(e) => apply({ model: { ...model, model: e.target.value } })}
+          placeholder="e.g. gpt-4o, claude-sonnet-4-20250514"
+        />
+      </div>
+      {!!model.apiKey && (
+        <div className="field-row">
+          <label className="field-label">API Key</label>
+          <input
+            className="input"
+            type="password"
+            value={String(model.apiKey || '')}
+            onChange={(e) => apply({ model: { ...model, apiKey: e.target.value } })}
+            placeholder="sk-..."
+          />
+        </div>
+      )}
+      {!!model.baseURL && (
+        <div className="field-row">
+          <label className="field-label">Base URL</label>
+          <input
+            className="input"
+            value={String(model.baseURL || '')}
+            onChange={(e) => apply({ model: { ...model, baseURL: e.target.value } })}
+            placeholder="https://api.openai.com/v1"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PluginsForm({ cfg, apply }: { cfg: Record<string, unknown> | null; apply: (p: Record<string, unknown>) => void }) {
+  const plugins = Array.isArray(cfg?.plugins) ? (cfg.plugins as Record<string, unknown>[]) : [];
+  const [editing, setEditing] = useState<number | null>(null);
+  const [draft, setDraft] = useState<Record<string, unknown>>({});
+
+  const addPlugin = () => {
+    const next = [...plugins, { name: '', enabled: true }];
+    apply({ plugins: next });
+  };
+
+  const removePlugin = (i: number) => {
+    const next = plugins.filter((_, idx) => idx !== i);
+    apply({ plugins: next });
+  };
+
+  const updatePlugin = (i: number, patch: Record<string, unknown>) => {
+    const next = plugins.map((p, idx) => (idx === i ? { ...p, ...patch } : p));
+    apply({ plugins: next });
+    setEditing(null);
+  };
+
+  return (
+    <div>
+      <p className="muted text-sm" style={{ marginBottom: 12 }}>Manage enabled plugins.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {plugins.length === 0 && <p className="muted text-sm">No plugins configured.</p>}
+        {plugins.map((p, i) => (
+          <div key={i} className="config-list-row">
+            {editing === i ? (
+              <div style={{ display: 'flex', gap: 8, flex: 1, alignItems: 'center' }}>
+                <input
+                  className="input"
+                  value={String(draft.name || '')}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  placeholder="plugin-name"
+                />
+                <label style={{ display: 'flex', gap: 4, fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!draft.enabled}
+                    onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
+                  />
+                  enabled
+                </label>
+                <Button variant="primary" size="sm" onClick={() => updatePlugin(i, draft)}>Apply</Button>
+                <Button variant="ghost" size="sm" onClick={() => setEditing(null)}><X size={12} /></Button>
+              </div>
+            ) : (
+              <>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                  {(p as { name?: string }).name || 'unnamed'}
+                </span>
+                <span className={cn('tag', (p as { enabled?: boolean }).enabled !== false ? 'tag-success' : 'tag-neutral')}>
+                  {(p as { enabled?: boolean }).enabled !== false ? 'enabled' : 'disabled'}
+                </span>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                  <button type="button" className="icon-btn" onClick={() => { setEditing(i); setDraft(p as Record<string, unknown>); }} title="Edit">
+                    <Pencil size={12} />
+                  </button>
+                  <button type="button" className="icon-btn text-error" onClick={() => removePlugin(i)} title="Remove">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <Button variant="secondary" size="sm" onClick={addPlugin} style={{ marginTop: 8 }}>
+        <Plus size={12} /> Add plugin
+      </Button>
+    </div>
+  );
+}
+
+function ToolsForm({ cfg, apply }: { cfg: Record<string, unknown> | null; apply: (p: Record<string, unknown>) => void }) {
+  const tools = (cfg?.tools as Record<string, boolean> | null) || {};
+
+  const toggle = (name: string) => {
+    apply({ tools: { ...tools, [name]: !tools[name] } });
+  };
+
+  const addTool = (name: string) => {
+    if (!name || tools[name] !== undefined) return;
+    apply({ tools: { ...tools, [name]: true } });
+  };
+
+  const removeTool = (name: string) => {
+    const next = { ...tools };
+    delete next[name];
+    apply({ tools: next });
+  };
+
+  return (
+    <div>
+      <p className="muted text-sm" style={{ marginBottom: 12 }}>Enable or disable built-in tools.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {Object.keys(tools).length === 0 && <p className="muted text-sm">No tools configured.</p>}
+        {Object.entries(tools).map(([name, enabled]) => (
+          <div key={name} className="config-list-row">
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{name}</span>
+            <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }}>
+              <input type="checkbox" checked={!!enabled} onChange={() => toggle(name)} />
+              enabled
+            </label>
+            <button type="button" className="icon-btn text-error" style={{ marginLeft: 'auto' }} onClick={() => removeTool(name)} title="Remove">
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <input
+          className="input"
+          placeholder="tool-name"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') addTool((e.target as HTMLInputElement).value.trim());
+          }}
+        />
+        <Button variant="secondary" size="sm"
+          onClick={(e) => addTool((e.currentTarget.closest('div')?.querySelector('input') as HTMLInputElement)?.value.trim() || '')}
+        >
+          <Plus size={12} /> Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PermissionsForm({ cfg, apply }: { cfg: Record<string, unknown> | null; apply: (p: Record<string, unknown>) => void }) {
+  const permissions = (cfg?.permissions as Record<string, unknown> | null) || {};
+  const [tab, setTab] = useState<'allow' | 'deny'>('allow');
+  const allow = Array.isArray(permissions.allow) ? (permissions.allow as string[]) : [];
+  const deny = Array.isArray(permissions.deny) ? (permissions.deny as string[]) : [];
+
+  const addRule = (list: string[], key: 'allow' | 'deny') => (name: string) => {
+    if (!name) return;
+    apply({ permissions: { ...permissions, [key]: [...list, name] } });
+  };
+
+  const removeRule = (key: 'allow' | 'deny', list: string[], i: number) => {
+    apply({ permissions: { ...permissions, [key]: list.filter((_, idx) => idx !== i) } });
+  };
+
+  const list = tab === 'allow' ? allow : deny;
+
+  return (
+    <div>
+      <p className="muted text-sm" style={{ marginBottom: 12 }}>Allow or deny tool/scope rules.</p>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+        <button type="button" className={cn('tab-btn', tab === 'allow' && 'active')} onClick={() => setTab('allow')}>Allow ({allow.length})</button>
+        <button type="button" className={cn('tab-btn', tab === 'deny' && 'active')} onClick={() => setTab('deny')}>Deny ({deny.length})</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {list.length === 0 && <p className="muted text-sm">No {tab} rules.</p>}
+        {list.map((rule, i) => (
+          <div key={i} className="config-list-row">
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{rule}</span>
+            <button type="button" className="icon-btn text-error" style={{ marginLeft: 'auto' }} onClick={() => removeRule(tab, list, i)}>
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <input
+          className="input"
+          placeholder={`${tab} rule (e.g. tool:read, scope:filesystem)`}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const v = (e.target as HTMLInputElement).value.trim();
+              if (v) { addRule(list, tab)(v); (e.target as HTMLInputElement).value = ''; }
+            }
+          }}
+        />
+        <Button variant="secondary" size="sm" onClick={(e) => {
+          const inp = e.currentTarget.closest('div')?.querySelector('input') as HTMLInputElement;
+          const v = inp?.value.trim();
+          if (v) { addRule(list, tab)(v); inp.value = ''; }
+        }}>
+          <Plus size={12} /> Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function HooksForm({ cfg, apply }: { cfg: Record<string, unknown> | null; apply: (p: Record<string, unknown>) => void }) {
+  const hooks = (cfg?.hooks as Record<string, unknown> | null) || {};
+
+  const updateHook = (name: string, value: unknown) => {
+    apply({ hooks: { ...hooks, [name]: value } });
+  };
+
+  return (
+    <div>
+      <p className="muted text-sm" style={{ marginBottom: 12 }}>Configure pre/post tool hooks.</p>
+      {Object.keys(hooks).length === 0 && <p className="muted text-sm">No hooks configured.</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {(['preTool', 'postTool', 'preAgent', 'postAgent'] as const).map((hookName) => {
+          const hook = hooks[hookName];
+          return (
+            <div key={hookName} className="field-row" style={{ alignItems: 'flex-start' }}>
+              <label className="field-label" style={{ minWidth: 100 }}>{hookName}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                <input
+                  className="input"
+                  value={typeof hook === 'object' && hook !== null && 'command' in hook ? String((hook as { command: string }).command || '') : ''}
+                  onChange={(e) => updateHook(hookName, { command: e.target.value })}
+                  placeholder={`${hookName} command (e.g. node /path/to/hook.js)`}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.5.2 — 2026-06-19
+
+### Fixed
+- **WebUI randomly jumps back to Overview on data refresh**: Fixed a key-repeat event bug in the digit-key shortcut handler. When a user closes a modal and the browser fires a delayed key-repeat for a digit key, the handler was incorrectly switching tabs after the 1500ms safe window had closed. Added `if (e.repeat) return;` as the first guard in the handler, ensuring only the initial keydown fires a tab switch.
+- **History tab broken**: The `/api/history` endpoint was already implemented. The view component was structurally correct; the apparent "broken" state was likely secondary to the tab-switching bug causing navigation away from the History tab.
+
+### Changed
+- **Activity tab redesigned**: Removed the separate Canvas/Timeline mode toggle. The Activity view is now a single integrated fullscreen mode combining the live agent/task graph with a collapsible timeline event strip. Users see one unified canvas with the floating control bar (zoom, fit, refresh) and a collapsible left-side timeline panel.
+- **OpenCode config now has a real UI**: The Config → OpenCode config section no longer shows just a raw JSON editor. It now has a structured tabbed form with dedicated sections for Model (provider, model ID, base URL), Plugins (list with add/edit/delete/enable), Tools (enable/disable per tool), Permissions (allow/deny rule lists), and Hooks (pre/post tool and agent hooks). A raw JSON "Advanced" tab remains for power users.
+
 ## v3.5.1 — 2026-06-19
 
 ### Fixed

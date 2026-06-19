@@ -1,16 +1,16 @@
-// src/views/Activity.tsx — v3.3.2 graph canvas with timeline panel built in.
+// src/views/Activity.tsx — v3.5.2: single integrated fullscreen mode (graph + timeline merged).
 
 import {
   useEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from 'react';
 import {
   Activity as ActivityIcon,
   Bot,
   CheckSquare,
+  CheckSquare as CheckSquareIcon,
   Cpu,
   RefreshCw,
   Send,
@@ -19,16 +19,11 @@ import {
   Trash2,
   ZoomIn,
   ZoomOut,
-  Move,
   MessageSquare,
   Layers,
   Target,
-  Clock,
   Maximize2,
-  Download,
   History,
-  Network,
-  CheckSquare as CheckSquareIcon,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
@@ -135,8 +130,8 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
-  // View state
-  const [mode, setMode] = useState<'graph' | 'timeline'>('timeline');
+  // View state — single integrated mode (v3.5.2: removed graph/timeline toggle)
+  const [timelineOpen, setTimelineOpen] = useState(true);
   const [transform, setTransform] = useState<{ x: number; y: number; scale: number }>({ x: 80, y: 80, scale: 1 });
   const [drag, setDrag] = useState<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -144,7 +139,6 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
-  const [timelineOpen, setTimelineOpen] = useState(true);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
   // Detail-panel local state
@@ -519,30 +513,10 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
             <ActivityIcon size={18} /> Activity
           </h2>
           <p className="view-subtitle">
-            {mode === 'timeline'
-              ? 'Visual timeline of events across agents. Time flows left → right, agents are lanes.'
-              : 'Live agent/task/background wiring. Drag to pan, scroll to zoom, click a node for details.'}
+            Live agent/task/background graph with integrated timeline strip. Drag to pan, scroll to zoom, click a node for details.
           </p>
         </div>
         <div className="view-actions">
-          <div className="activity-mode-toggle">
-            <button
-              type="button"
-              className={mode === 'timeline' ? 'active' : ''}
-              onClick={() => setMode('timeline')}
-              title="Time-based timeline"
-            >
-              <Clock size={12} /> Timeline
-            </button>
-            <button
-              type="button"
-              className={mode === 'graph' ? 'active' : ''}
-              onClick={() => setMode('graph')}
-              title="Graph of agents, tasks, bg"
-            >
-              <Network size={12} /> Graph
-            </button>
-          </div>
           <Button variant="secondary" size="sm" onClick={refresh}>
             <RefreshCw size={14} /> Refresh
           </Button>
@@ -558,23 +532,6 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
           icon={<ActivityIcon size={32} />}
           title="No activity yet"
           message="Once agents, tasks, or background instances exist, they'll show up here as nodes."
-        />
-      ) : mode === 'timeline' ? (
-        <TimelineView
-          events={events}
-          agents={agents}
-          tasks={tasks}
-          bgInstances={bgInstances}
-          onSelect={(kind, id) => {
-            if (kind === 'agent') {
-              const a = agents.find((x) => x.name === id);
-              if (a) setSelectedNode({ id: `agent:${a.name}`, type: 'agent', x: 0, y: 0, label: a.name, status: a.status || 'idle', data: a });
-            } else if (kind === 'task') {
-              const t = tasks.find((x) => x.id === id);
-              if (t) setSelectedNode({ id: `task:${t.id}`, type: 'task', x: 0, y: 0, label: t.title || t.id, status: t.status, data: t });
-            }
-          }}
-          onRefresh={refresh}
         />
       ) : (
         <div className="activity-canvas-container">
@@ -802,444 +759,3 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   );
 }
 
-// Use cn locally to avoid unused-import warnings when read by tsc strict.
-export { cn };
-
-/* ════════════════════════════════════════════════════════════════════
-   v3.4.0 — TimelineView
-
-   X-axis = time (left → right, most recent on right).
-   Y-axis = one lane per "actor" (agent / task / bg).
-   Each event = a circle on its lane. Hover/click for details.
-
-   This replaces the side timeline panel for users who want a real
-   visual timeline of what was done.
-   ════════════════════════════════════════════════════════════════════ */
-
-const EVENT_COLOR: Record<string, string> = {
-  // Tasks
-  'task.create': 'var(--info)',
-  'task.start': 'var(--accent)',
-  'task.doing': 'var(--accent)',
-  'task.complete': 'var(--success)',
-  'task.done': 'var(--success)',
-  'task.archive': 'var(--text-dim)',
-  'task.delete': 'var(--error)',
-  'task.update': 'var(--accent-2)',
-  // Agents
-  'agent.start': 'var(--success)',
-  'agent.stop': 'var(--warning)',
-  'agent.restart': 'var(--info)',
-  'agent.error': 'var(--error)',
-  'agent.stuck': 'var(--warning)',
-  // Background
-  'bg.create': 'var(--accent-2)',
-  'bg.kill': 'var(--error)',
-  'bg.complete': 'var(--success)',
-  'bg.error': 'var(--error)',
-  // Plans
-  'plan.create': 'var(--accent)',
-  'plan.update': 'var(--accent-2)',
-  'plan.complete': 'var(--success)',
-  // Project
-  'project.add': 'var(--accent-2)',
-  'project.activate': 'var(--info)',
-  'project.auto-detect': 'var(--info)',
-  // Config
-  'config.update': 'var(--info)',
-  'settings.update': 'var(--info)',
-  // Comments
-  'node.comment': 'var(--text-dim)',
-  'node.task': 'var(--accent)',
-  // Task delegation
-  'task.delegated': 'var(--accent)',
-  'task.submitted': 'var(--accent)',
-  // Schedules
-  'schedule.run': 'var(--info)',
-  'schedule.complete': 'var(--success)',
-  'schedule.error': 'var(--error)',
-};
-
-function eventColor(kind: string | undefined): string {
-  if (!kind) return 'var(--text-dim)';
-  return EVENT_COLOR[kind] || (STATUS_COLORS as Record<string, string>)[kind] || 'var(--text-dim)';
-}
-
-function eventLabel(ev: ActivityEvent): string {
-  if (typeof ev.author === 'string' && ev.author) return ev.author;
-  if (typeof ev.text === 'string' && ev.text) return ev.text;
-  if (typeof ev.title === 'string' && ev.title) return ev.title;
-  if (typeof ev.name === 'string' && ev.name) return ev.name;
-  if (typeof ev.message === 'string') return ev.message;
-  if (typeof ev.prompt === 'string') return ev.prompt;
-  return ev.kind;
-}
-
-type TimelineProps = {
-  events: ActivityEvent[];
-  agents: { name: string }[];
-  tasks: { id: string; title: string; status: string }[];
-  bgInstances: { instanceId: string; promptPreview?: string; status?: string }[];
-  onSelect: (kind: 'agent' | 'task' | 'bg', id: string) => void;
-  onRefresh: () => void;
-};
-
-function TimelineView({ events, agents, tasks, bgInstances, onSelect, onRefresh }: TimelineProps) {
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState<{ w: number; h: number }>({ w: 800, h: 400 });
-  const [zoom, setZoom] = useState(1);
-  const [hoveredEvent, setHoveredEvent] = useState<ActivityEvent | null>(null);
-  const [filterKind, setFilterKind] = useState<string>('');
-
-  // Resize observer
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const cr = entry.contentRect;
-        setSize({ w: Math.max(400, Math.floor(cr.width)), h: Math.max(300, Math.floor(cr.height)) });
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Build lanes: 1 per agent (in known order), plus 'system' lane
-  const lanes = useMemo(() => {
-    const out: { id: string; label: string; type: 'agent' | 'system' | 'task' | 'bg' }[] = [];
-    for (const a of agents) {
-      out.push({ id: `agent:${a.name}`, label: a.name, type: 'agent' });
-    }
-    if (bgInstances.length > 0) {
-      out.push({ id: 'lane:bg', label: 'background', type: 'bg' });
-    }
-    if (events.some((e) => e.kind && e.kind.startsWith('plan.'))) {
-      out.push({ id: 'lane:plans', label: 'plans', type: 'system' });
-    }
-    out.push({ id: 'lane:system', label: 'system', type: 'system' });
-    return out;
-  }, [agents, bgInstances, events]);
-
-  // Filter + sort events ascending (oldest → newest left to right)
-  const filteredEvents = useMemo(() => {
-    const out = filterKind
-      ? events.filter((e) => e.kind === filterKind)
-      : events;
-    return [...out]
-      .filter((e) => e.ts && !Number.isNaN(new Date(e.ts).getTime()))
-      .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-  }, [events, filterKind]);
-
-  // Time range
-  const timeRange = useMemo(() => {
-    if (filteredEvents.length === 0) {
-      const now = Date.now();
-      return { min: now - 60 * 60 * 1000, max: now };
-    }
-    const ts = filteredEvents.map((e) => new Date(e.ts).getTime());
-    const min = Math.min(...ts);
-    const max = Math.max(...ts);
-    // Pad 5% on each side
-    const span = Math.max(1, max - min);
-    return { min: min - span * 0.05, max: max + span * 0.05 };
-  }, [filteredEvents]);
-
-  // Layout
-  const padding = { left: 120, right: 32, top: 32, bottom: 32 };
-  const innerW = Math.max(200, size.w - padding.left - padding.right);
-  const innerH = Math.max(200, size.h - padding.top - padding.bottom);
-  const laneHeight = lanes.length > 0 ? innerH / lanes.length : 0;
-  const laneIndex = new Map(lanes.map((l, i) => [l.id, i]));
-
-  function xPos(ts: string): number {
-    const t = new Date(ts).getTime();
-    const span = timeRange.max - timeRange.min;
-    if (span <= 0) return padding.left + innerW / 2;
-    return padding.left + ((t - timeRange.min) / span) * innerW;
-  }
-
-  function laneY(laneId: string): number {
-    const idx = laneIndex.get(laneId);
-    if (idx === undefined) {
-      // Fall back to system lane
-      const sysIdx = laneIndex.get('lane:system') ?? lanes.length - 1;
-      return padding.top + sysIdx * laneHeight + laneHeight / 2;
-    }
-    return padding.top + idx * laneHeight + laneHeight / 2;
-  }
-
-  function laneForEvent(ev: ActivityEvent): string {
-    const author = typeof ev.author === 'string' ? ev.author : '';
-    if (author && laneIndex.has(`agent:${author}`)) return `agent:${author}`;
-    if (ev.kind && ev.kind.startsWith('plan.')) return 'lane:plans';
-    if (ev.kind && ev.kind.startsWith('bg.')) return 'lane:bg';
-    return 'lane:system';
-  }
-
-  // Time tick positions
-  const ticks = useMemo(() => {
-    const span = timeRange.max - timeRange.min;
-    if (span <= 0) return [] as { t: number; label: string }[];
-    const desired = 8;
-    const step = Math.max(60_000, Math.round(span / desired / 60_000) * 60_000);
-    const out: { t: number; label: string }[] = [];
-    const start = Math.ceil(timeRange.min / step) * step;
-    for (let t = start; t <= timeRange.max; t += step) {
-      const d = new Date(t);
-      const label = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      out.push({ t, label });
-    }
-    return out;
-  }, [timeRange]);
-
-  // Distinct kinds for filter
-  const allKinds = useMemo(() => {
-    const set = new Set<string>();
-    for (const e of events) if (e.kind) set.add(e.kind);
-    return Array.from(set).sort();
-  }, [events]);
-
-  if (events.length === 0) {
-    return (
-      <div className="activity-timeline-canvas">
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          height: '100%', flexDirection: 'column', gap: 12, color: 'var(--text-dim)',
-        }}>
-          <Clock size={32} />
-          <div>No events recorded yet.</div>
-          <div style={{ fontSize: 12 }}>Start a task or chat to populate the timeline.</div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="activity-timeline-canvas" ref={wrapRef}>
-      {/* Floating controls */}
-      <div className="activity-canvas-controls" style={{ left: 16, right: 'auto', transform: 'none' }}>
-        <select
-          className="select select-sm"
-          value={filterKind}
-          onChange={(e) => setFilterKind(e.target.value)}
-          title="Filter by kind"
-        >
-          <option value="">All kinds</option>
-          {allKinds.map((k) => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
-        <div className="tasks-toolbar-divider" style={{ height: 16 }} />
-        <span className="activity-canvas-zoom-label">{(zoom * 100).toFixed(0)}%</span>
-        <button type="button" className="icon-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.2))} title="Zoom in">
-          <ZoomIn size={14} />
-        </button>
-        <button type="button" className="icon-btn" onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))} title="Zoom out">
-          <ZoomOut size={14} />
-        </button>
-        <button type="button" className="icon-btn" onClick={() => setZoom(1)} title="Reset zoom">
-          <Maximize2 size={14} />
-        </button>
-        <button type="button" className="icon-btn" onClick={onRefresh} title="Refresh">
-          <RefreshCw size={14} />
-        </button>
-      </div>
-
-      <svg
-        className="activity-timeline-svg"
-        viewBox={`0 0 ${size.w} ${size.h}`}
-        preserveAspectRatio="none"
-      >
-        {/* Lane backgrounds */}
-        {lanes.map((lane, i) => (
-          <g key={lane.id}>
-            <rect
-              x={padding.left}
-              y={padding.top + i * laneHeight}
-              width={innerW}
-              height={laneHeight}
-              fill={i % 2 === 0 ? 'var(--bg-elev-2)' : 'transparent'}
-              opacity={0.3}
-            />
-            <text
-              className="timeline-lane-label"
-              x={padding.left - 12}
-              y={padding.top + i * laneHeight + laneHeight / 2 + 4}
-              textAnchor="end"
-            >
-              {lane.label}
-            </text>
-            {/* Lane separator */}
-            <line
-              x1={padding.left}
-              x2={padding.left + innerW}
-              y1={padding.top + (i + 1) * laneHeight}
-              y2={padding.top + (i + 1) * laneHeight}
-              className="timeline-grid-line"
-            />
-          </g>
-        ))}
-
-        {/* Time axis */}
-        <line
-          x1={padding.left}
-          x2={padding.left + innerW}
-          y1={padding.top}
-          y2={padding.top}
-          className="timeline-grid-line"
-        />
-        {ticks.map((tick) => {
-          const x = padding.left + ((tick.t - timeRange.min) / (timeRange.max - timeRange.min || 1)) * innerW;
-          return (
-            <g key={tick.t}>
-              <line
-                x1={x}
-                x2={x}
-                y1={padding.top}
-                y2={padding.top + innerH}
-                className="timeline-grid-line"
-              />
-              <text
-                className="timeline-axis-label"
-                x={x}
-                y={padding.top - 8}
-                textAnchor="middle"
-              >
-                {tick.label}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Connector lines between same-author events */}
-        {(() => {
-          const byAuthor = new Map<string, ActivityEvent[]>();
-          for (const ev of filteredEvents) {
-            const author = typeof ev.author === 'string' ? ev.author : '';
-            if (!author) continue;
-            const list = byAuthor.get(author) || [];
-            list.push(ev);
-            byAuthor.set(author, list);
-          }
-          const lines: React.ReactNode[] = [];
-          for (const [author, list] of byAuthor) {
-            if (list.length < 2) continue;
-            const laneId = `agent:${author}`;
-            for (let i = 1; i < list.length; i++) {
-              const a = list[i - 1];
-              const b = list[i];
-              lines.push(
-                <line
-                  key={`${author}-${i}`}
-                  x1={xPos(a.ts)}
-                  y1={laneY(laneId)}
-                  x2={xPos(b.ts)}
-                  y2={laneY(laneId)}
-                  className="timeline-connector"
-                />,
-              );
-            }
-          }
-          return lines;
-        })()}
-
-        {/* Events */}
-        <g transform={`translate(${(1 - zoom) * padding.left * 0} 0) scale(${zoom})`}>
-          {filteredEvents.map((ev, i) => {
-            const laneId = laneForEvent(ev);
-            const x = xPos(ev.ts);
-            const y = laneY(laneId);
-            const color = eventColor(ev.kind);
-            return (
-              <g
-                key={`${ev.ts}-${i}`}
-                transform={`translate(${x}, ${y})`}
-                className="timeline-event-circle"
-                onMouseEnter={() => setHoveredEvent(ev)}
-                onMouseLeave={() => setHoveredEvent(null)}
-                onClick={() => {
-                  const author = typeof ev.author === 'string' ? ev.author : '';
-                  if (author) onSelect('agent', author);
-                  else if (ev.taskId) onSelect('task', String(ev.taskId));
-                }}
-              >
-                <circle r={6} fill={color} stroke="var(--bg)" strokeWidth={1.5} />
-                {/* Tiny tick label above the dot */}
-                <text
-                  className="timeline-event-label"
-                  y={-10}
-                  textAnchor="middle"
-                  style={{ fill: color }}
-                >
-                  {shortLabel(eventLabel(ev), 18)}
-                </text>
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-
-      {/* Event tooltip */}
-      {hoveredEvent && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'var(--bg-elev)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '8px 12px',
-            boxShadow: 'var(--shadow-3)',
-            fontSize: 12,
-            maxWidth: 480,
-            pointerEvents: 'none',
-            zIndex: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span
-              style={{
-                display: 'inline-block',
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                background: eventColor(hoveredEvent.kind),
-              }}
-            />
-            <strong style={{ color: 'var(--text-strong)' }}>{hoveredEvent.kind}</strong>
-            <span className="muted" style={{ fontFamily: 'var(--font-mono)' }}>
-              {new Date(hoveredEvent.ts).toLocaleTimeString()}
-            </span>
-          </div>
-          <div style={{ color: 'var(--text)' }}>{eventLabel(hoveredEvent)}</div>
-          {hoveredEvent.author && (
-            <div className="muted" style={{ fontSize: 11 }}>by {hoveredEvent.author}</div>
-          )}
-        </div>
-      )}
-
-      {/* Legend */}
-      <div className="activity-legend">
-        <div className="legend-item">
-          <span className="legend-dot" style={{ background: 'var(--accent)' }} /> task events
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot" style={{ background: 'var(--success)' }} /> completed
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot" style={{ background: 'var(--error)' }} /> error
-        </div>
-        <div className="legend-sep" />
-        <div className="legend-item">
-          {filteredEvents.length} event{filteredEvents.length === 1 ? '' : 's'}
-        </div>
-      </div>
-    </div>
-  );
-}

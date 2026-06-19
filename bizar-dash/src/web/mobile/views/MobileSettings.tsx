@@ -224,7 +224,7 @@ export function MobileSettings({ settings, snapshot }: Props) {
         <div className="mobile-card">
           <div className="mobile-setting-row">
             <span className="mobile-setting-label">Version</span>
-            <span className="mobile-setting-value mono">{settings.about?.version || 'v3.5.1'}</span>
+            <span className="mobile-setting-value mono">{settings.about?.version || 'v3.5.2'}</span>
           </div>
           <div className="mobile-setting-row">
             <span className="mobile-setting-label">Agents</span>
