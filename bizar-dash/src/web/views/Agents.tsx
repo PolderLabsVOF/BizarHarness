@@ -1,6 +1,25 @@
-// src/views/Agents.tsx — editable agent grid with CRUD modal.
+// src/views/Agents.tsx — v3.1.0 agents with tags, categories, real-time status.
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, Plus, RefreshCw, Pencil, Trash2, Play, Save, X } from 'lucide-react';
+import {
+  Bot,
+  Plus,
+  RefreshCw,
+  Pencil,
+  Trash2,
+  Play,
+  Save,
+  X,
+  RotateCw,
+  Activity,
+  Tag as TagIcon,
+  Folder,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  Circle,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
@@ -9,7 +28,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
-import { formatRelative, truncate } from '../lib/utils';
+import { cn, formatRelative, truncate } from '../lib/utils';
 import type { Agent, Settings, Snapshot } from '../lib/types';
 
 type Props = {
@@ -30,20 +49,49 @@ const MODELS = [
   'minimax/MiniMax-M2.7',
 ];
 
+const CATEGORIES = [
+  { id: 'reasoning', label: 'Reasoning', color: 'var(--accent)' },
+  { id: 'code', label: 'Code', color: 'var(--info)' },
+  { id: 'design', label: 'Design', color: 'var(--success)' },
+  { id: 'planning', label: 'Planning', color: 'var(--warning)' },
+  { id: 'gitops', label: 'GitOps', color: 'var(--error)' },
+  { id: 'analysis', label: 'Analysis', color: 'var(--text-dim)' },
+];
+
+function categoryColor(cat: string | undefined): string {
+  return CATEGORIES.find((c) => c.id === cat)?.color || 'var(--text-dim)';
+}
+
+function StatusDot({ status, isStuck }: { status?: string; isStuck?: boolean }) {
+  const color =
+    isStuck ? 'var(--error)'
+    : status === 'working' ? 'var(--info)'
+    : status === 'error' ? 'var(--error)'
+    : 'var(--text-dim)';
+  return <span className="agent-status-dot" style={{ background: color }} />;
+}
+
+function StatusPill({ agent }: { agent: Agent }) {
+  if (agent.isStuck) {
+    return <StatusBadge kind="error" dot>stuck</StatusBadge>;
+  }
+  const status = agent.status || 'idle';
+  if (status === 'working') return <StatusBadge kind="info" dot>working</StatusBadge>;
+  if (status === 'error') return <StatusBadge kind="error" dot>error</StatusBadge>;
+  return <StatusBadge kind="neutral" dot>idle</StatusBadge>;
+}
+
 export function Agents({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
   const modal = useModal();
   const [agents, setAgents] = useState<Agent[]>(snapshot.agents || []);
   const [loading, setLoading] = useState(!snapshot.agents);
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    if (snapshot.agents?.length || snapshot.agents) {
-      setAgents(snapshot.agents || []);
-      setLoading(false);
-      return;
-    }
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setAgents(snapshot.agents || []);
+    setLoading(!snapshot.agents);
   }, [snapshot.agents]);
 
   const reload = async () => {
@@ -57,10 +105,28 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  const sorted = useMemo(
-    () => [...agents].sort((a, b) => a.name.localeCompare(b.name)),
-    [agents],
-  );
+  const sorted = useMemo(() => {
+    let out = [...agents];
+    if (categoryFilter) {
+      out = out.filter((a) => (a.category || '') === categoryFilter);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      out = out.filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          (a.description || '').toLowerCase().includes(q) ||
+          (a.tags || []).some((t) => t.toLowerCase().includes(q)),
+      );
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }, [agents, categoryFilter, search]);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of agents) for (const t of a.tags || []) set.add(t);
+    return Array.from(set).sort();
+  }, [agents]);
 
   const onCreate = () => {
     let nameEl: HTMLInputElement | null = null;
@@ -70,6 +136,8 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     let colorEl: HTMLInputElement | null = null;
     let promptEl: HTMLTextAreaElement | null = null;
     let toolsContainer: HTMLDivElement | null = null;
+    let tagsEl: HTMLInputElement | null = null;
+    let categoryEl: HTMLSelectElement | null = null;
 
     modal.open({
       title: 'New agent',
@@ -114,6 +182,21 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
               <input ref={(el) => (colorEl = el)} className="input" type="color" defaultValue="#8b5cf6" />
             </div>
           </div>
+          <div className="task-form-row">
+            <div className="task-form-field" style={{ flex: 1 }}>
+              <label className="field-label">Category</label>
+              <select ref={(el) => (categoryEl = el)} className="select" defaultValue="">
+                <option value="">(none)</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="task-form-field" style={{ flex: 2 }}>
+              <label className="field-label">Tags (comma-separated)</label>
+              <input ref={(el) => (tagsEl = el)} className="input" type="text" placeholder="reasoning, code, planning" />
+            </div>
+          </div>
           <label className="field-label">Tools</label>
           <div ref={(el) => (toolsContainer = el)} className="agent-tools">
             {TOOL_OPTIONS.map((t) => (
@@ -149,6 +232,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                   tools.push(cb.value);
                 });
               }
+              const tags = (tagsEl?.value || '').split(',').map((t) => t.trim()).filter(Boolean);
               try {
                 const created = await api.post<Agent>('/agents', {
                   name,
@@ -157,6 +241,8 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                   mode: modeEl?.value || 'subagent',
                   color: colorEl?.value || '',
                   tools,
+                  tags,
+                  category: categoryEl?.value || '',
                   prompt: promptEl?.value || '',
                 });
                 setAgents((cur) => [...cur, created]);
@@ -182,6 +268,8 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     let colorEl: HTMLInputElement | null = null;
     let promptEl: HTMLTextAreaElement | null = null;
     let toolsContainer: HTMLDivElement | null = null;
+    let tagsEl: HTMLInputElement | null = null;
+    let categoryEl: HTMLSelectElement | null = null;
     try {
       const full = await api.get<Agent>(`/agents/${encodeURIComponent(a.name)}`);
       modal.open({
@@ -222,6 +310,26 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                 <input ref={(el) => (colorEl = el)} className="input" type="color" defaultValue={full.color || '#8b5cf6'} />
               </div>
             </div>
+            <div className="task-form-row">
+              <div className="task-form-field" style={{ flex: 1 }}>
+                <label className="field-label">Category</label>
+                <select ref={(el) => (categoryEl = el)} className="select" defaultValue={full.category || ''}>
+                  <option value="">(none)</option>
+                  {CATEGORIES.map((c) => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="task-form-field" style={{ flex: 2 }}>
+                <label className="field-label">Tags (comma-separated)</label>
+                <input
+                  ref={(el) => (tagsEl = el)}
+                  className="input"
+                  type="text"
+                  defaultValue={(full.tags || []).join(', ')}
+                />
+              </div>
+            </div>
             <label className="field-label">Tools</label>
             <div ref={(el) => (toolsContainer = el)} className="agent-tools">
               {TOOL_OPTIONS.map((t) => (
@@ -252,6 +360,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                     tools.push(cb.value);
                   });
                 }
+                const tags = (tagsEl?.value || '').split(',').map((t) => t.trim()).filter(Boolean);
                 try {
                   const updated = await api.put<Agent>(
                     `/agents/${encodeURIComponent(a.name)}`,
@@ -261,6 +370,8 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                       mode: modeEl?.value || 'subagent',
                       color: colorEl?.value || '',
                       tools,
+                      tags,
+                      category: categoryEl?.value || '',
                       prompt: promptEl?.value || '',
                     },
                   );
@@ -340,6 +451,25 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     });
   };
 
+  const onRestart = async (a: Agent) => {
+    try {
+      const updated = await api.post<Agent>(`/agents/${encodeURIComponent(a.name)}/restart`);
+      setAgents((cur) => cur.map((x) => (x.name === a.name ? updated : x)));
+      toast.success(`${a.name} restarted.`);
+    } catch (err) {
+      toast.error(`Restart failed: ${(err as Error).message}`);
+    }
+  };
+
+  const onSetStatus = async (a: Agent, status: 'idle' | 'working' | 'error') => {
+    try {
+      const updated = await api.post<Agent>(`/agents/${encodeURIComponent(a.name)}/status`, { status });
+      setAgents((cur) => cur.map((x) => (x.name === a.name ? updated : x)));
+    } catch (err) {
+      toast.error(`Status update failed: ${(err as Error).message}`);
+    }
+  };
+
   return (
     <div className="view view-agents">
       <header className="view-header">
@@ -352,6 +482,26 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
           </p>
         </div>
         <div className="view-actions">
+          <div className="search-input">
+            <input
+              className="input"
+              type="text"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="select select-sm"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="">All categories</option>
+            {CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>{c.label}</option>
+            ))}
+            <option value="__none__">(no category)</option>
+          </select>
           <Button variant="secondary" size="sm" onClick={reload}>
             <RefreshCw size={14} /> Refresh
           </Button>
@@ -360,6 +510,15 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
           </Button>
         </div>
       </header>
+
+      {allTags.length > 0 && (
+        <div className="agent-tags-row">
+          <TagIcon size={12} />
+          {allTags.map((t) => (
+            <span key={t} className="tag">{t}</span>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="view-loading"><Spinner size="lg" /></div>
@@ -372,35 +531,171 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
       ) : (
         <div className="agent-grid">
           {sorted.map((a) => (
-            <Card key={a.name} variant="elevated" interactive className="agent-card">
-              <div className="agent-card-head">
-                <div className="agent-card-name">{a.name}</div>
-                <StatusBadge kind={a.mode === 'primary' ? 'accent' : 'neutral'}>
-                  {a.mode || 'agent'}
-                </StatusBadge>
-              </div>
-              <p className="agent-card-desc">{truncate(a.description, 200)}</p>
-              <div className="agent-card-meta">
-                <span className="mono" title={a.model || ''}>
-                  {a.model || '—'}
-                </span>
-                <span className="tabular-nums muted">{formatRelative(a.mtime)}</span>
-              </div>
-              <div className="agent-card-actions">
-                <Button variant="primary" size="sm" onClick={() => onInvoke(a)}>
-                  <Play size={12} /> Invoke
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => onEdit(a)}>
-                  <Pencil size={12} /> Edit
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => onDelete(a)}>
-                  <Trash2 size={12} /> Delete
-                </Button>
-              </div>
-            </Card>
+            <AgentCard
+              key={a.name}
+              agent={a}
+              onInvoke={() => onInvoke(a)}
+              onEdit={() => onEdit(a)}
+              onDelete={() => onDelete(a)}
+              onRestart={() => onRestart(a)}
+              onSetStatus={(s) => onSetStatus(a, s)}
+            />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+function AgentCard({
+  agent,
+  onInvoke,
+  onEdit,
+  onDelete,
+  onRestart,
+  onSetStatus,
+}: {
+  agent: Agent;
+  onInvoke: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onRestart: () => void;
+  onSetStatus: (s: 'idle' | 'working' | 'error') => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const catColor = categoryColor(agent.category);
+  const isWorking = (agent.status === 'working' || !!agent.currentTaskId) && !agent.isStuck;
+  return (
+    <Card
+      variant="elevated"
+      interactive
+      className={cn(
+        'agent-card',
+        isWorking && 'is-working',
+        agent.isStuck && 'is-stuck',
+      )}
+    >
+      <div className="agent-card-head">
+        <div className="agent-card-name">
+          <StatusDot status={agent.status} isStuck={agent.isStuck} />
+          {agent.name}
+        </div>
+        <div className="agent-card-badges">
+          {agent.category && (
+            <span
+              className="agent-card-category"
+              style={{ background: `color-mix(in srgb, ${catColor} 18%, transparent)`, color: catColor }}
+            >
+              {agent.category}
+            </span>
+          )}
+          <StatusPill agent={agent} />
+        </div>
+      </div>
+      <p className="agent-card-desc">{truncate(agent.description, 200)}</p>
+      <div className="agent-card-meta">
+        <span className="mono" title={agent.model || ''}>
+          {agent.model || '—'}
+        </span>
+        <span className="tabular-nums muted">{formatRelative(agent.mtime)}</span>
+      </div>
+      {agent.tags && agent.tags.length > 0 && (
+        <div className="agent-card-tags">
+          {agent.tags.map((t) => (
+            <span key={t} className="agent-card-tag">{t}</span>
+          ))}
+        </div>
+      )}
+      {(isWorking || agent.lastTask) && (
+        <div className="agent-card-activity">
+          {agent.currentTaskId && (
+            <div className="agent-card-row">
+              <Activity size={12} />
+              <span className="muted">Working on</span>
+              <code className="mono">{agent.currentTaskId}</code>
+            </div>
+          )}
+          {agent.lastTask && !agent.currentTaskId && (
+            <div className="agent-card-row">
+              <CheckCircle2 size={12} />
+              <span className="muted">Last</span>
+              <code className="mono">{agent.lastTask.id}</code>
+              <span className="muted tabular-nums">{formatRelative(agent.lastTask.finishedAt)}</span>
+            </div>
+          )}
+          {agent.tasksTotal != null && agent.tasksTotal > 0 && (
+            <div className="agent-card-row">
+              <Circle size={12} />
+              <span className="muted">Success rate</span>
+              <span className="tabular-nums">{Math.round((agent.successRate || 0) * 100)}%</span>
+              <span className="muted tabular-nums">({agent.tasksSucceeded}/{agent.tasksTotal})</span>
+            </div>
+          )}
+        </div>
+      )}
+      {agent.lastError && (
+        <div className="agent-card-error">
+          <AlertTriangle size={12} />
+          <span className="muted">Last error: {agent.lastError.message}</span>
+        </div>
+      )}
+      <div className="agent-card-actions">
+        <Button variant="primary" size="sm" onClick={onInvoke}>
+          <Play size={12} /> Invoke
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onEdit}>
+          <Pencil size={12} /> Edit
+        </Button>
+        {(agent.isStuck || agent.status === 'working' || agent.status === 'error') && (
+          <Button variant="ghost" size="sm" onClick={onRestart} title="Reset agent status">
+            <RotateCw size={12} /> Restart
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" onClick={onDelete}>
+          <Trash2 size={12} />
+        </Button>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+          onClick={() => setExpanded((v) => !v)}
+          style={{ marginLeft: 'auto' }}
+        >
+          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+      </div>
+      {expanded && (
+        <div className="agent-card-expanded">
+          <div className="agent-card-status-actions">
+            <span className="muted text-sm">Set status:</span>
+            <Button
+              variant={agent.status === 'idle' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => onSetStatus('idle')}
+            >
+              Idle
+            </Button>
+            <Button
+              variant={agent.status === 'working' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => onSetStatus('working')}
+            >
+              Working
+            </Button>
+            <Button
+              variant={agent.status === 'error' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => onSetStatus('error')}
+            >
+              Error
+            </Button>
+          </div>
+          <div className="agent-card-meta">
+            <Folder size={11} />
+            <code className="mono agent-card-path">{agent.path}</code>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

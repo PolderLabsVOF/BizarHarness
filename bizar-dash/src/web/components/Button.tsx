@@ -8,7 +8,8 @@ export type ButtonVariant =
   | 'secondary'
   | 'ghost'
   | 'danger'
-  | 'accent';
+  | 'accent'
+  | 'success';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {

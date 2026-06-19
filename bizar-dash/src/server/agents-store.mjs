@@ -2,6 +2,8 @@
  * src/server/agents-store.mjs
  *
  * v3.0.0 — Editable agents.
+ * v3.1.0 — Real-time agent status, stuck detection, tags + category,
+ *          tags + category exposed via list().
  *
  * Each agent is a markdown file with frontmatter at:
  *   ~/.config/opencode/agents/<name>.md
@@ -13,6 +15,8 @@
  *   mode: ...
  *   color: ...
  *   tools: ["bash","read","edit"]
+ *   tags: ["reasoning","code"]
+ *   category: "reasoning"
  *   permissions: {...}
  *   ---
  *   <prompt body>
@@ -31,6 +35,56 @@ import { homedir } from 'node:os';
 
 const HOME = homedir();
 const AGENTS_DIR = join(HOME, '.config', 'opencode', 'agents');
+
+// v3.1.0 — Runtime agent status. Persisted in memory; flushed to
+// ~/.config/bizar/agent-status.json so the dashboard can show real
+// activity even after a restart. This is the single source of truth
+// for "is this agent currently working on a task?".
+const STATUS_FILE = join(HOME, '.config', 'bizar', 'agent-status.json');
+const _status = new Map(); // name -> { status, currentTaskId, lastSeen, heartbeat, currentTaskStartedAt, lastError }
+let _statusLoaded = false;
+
+function loadStatus() {
+  if (_statusLoaded) return;
+  _statusLoaded = true;
+  try {
+    if (existsSync(STATUS_FILE)) {
+      const raw = JSON.parse(readFileSync(STATUS_FILE, 'utf8'));
+      for (const [name, s] of Object.entries(raw || {})) {
+        _status.set(name, s);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function saveStatus() {
+  try {
+    mkdirSync(dirname(STATUS_FILE), { recursive: true });
+    const obj = {};
+    for (const [k, v] of _status.entries()) obj[k] = v;
+    writeFileSync(STATUS_FILE, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+  } catch {
+    /* best effort */
+  }
+}
+
+function defaultStatus(name) {
+  return {
+    status: 'idle',
+    currentTaskId: null,
+    lastSeen: 0,
+    heartbeat: 0,
+    currentTaskStartedAt: 0,
+    lastError: null,
+    lastTask: null,
+    tasksTotal: 0,
+    tasksSucceeded: 0,
+    tasksFailed: 0,
+    successRate: 0,
+  };
+}
 
 function safeReadText(file, fallback = '') {
   try {
@@ -59,7 +113,18 @@ function parseFrontmatter(raw) {
     ) {
       val = val.slice(1, -1);
     }
-    frontmatter[key] = val;
+    if (val.startsWith('[') && val.endsWith(']')) {
+      // v3.1.0 — Inline array: [a, "b", c]
+      const inner = val.slice(1, -1).trim();
+      frontmatter[key] = inner
+        ? inner
+            .split(',')
+            .map((x) => x.trim().replace(/^['"]|['"]$/g, ''))
+            .filter(Boolean)
+        : [];
+    } else {
+      frontmatter[key] = val;
+    }
   }
   return { frontmatter, body };
 }
@@ -99,6 +164,7 @@ function readAgent(name) {
   const raw = safeReadText(file);
   const { frontmatter, body } = parseFrontmatter(raw);
   const st = statSync(file);
+  const status = _status.get(name) || defaultStatus(name);
   return {
     name,
     description: frontmatter.description || '',
@@ -108,11 +174,28 @@ function readAgent(name) {
     tools: typeof frontmatter.tools === 'string'
       ? frontmatter.tools.split(',').map((s) => s.trim()).filter(Boolean)
       : Array.isArray(frontmatter.tools) ? frontmatter.tools : [],
+    tags: typeof frontmatter.tags === 'string'
+      ? frontmatter.tags.split(',').map((s) => s.trim()).filter(Boolean)
+      : Array.isArray(frontmatter.tags) ? frontmatter.tags : [],
+    category: frontmatter.category || '',
     permissions: frontmatter.permissions || null,
     prompt: body.trim(),
     file,
     path: file,
     mtime: st.mtimeMs,
+    // v3.1.0 — runtime status, attached to the read-only snapshot.
+    status: status.status,
+    currentTaskId: status.currentTaskId || null,
+    currentTaskStartedAt: status.currentTaskStartedAt || 0,
+    lastSeen: status.lastSeen || 0,
+    heartbeat: status.heartbeat || 0,
+    lastError: status.lastError || null,
+    lastTask: status.lastTask || null,
+    successRate: status.successRate || 0,
+    tasksTotal: status.tasksTotal || 0,
+    tasksSucceeded: status.tasksSucceeded || 0,
+    tasksFailed: status.tasksFailed || 0,
+    isStuck: isStuck(status),
   };
 }
 
@@ -156,6 +239,8 @@ export const agentsStore = {
       mode: input.mode || 'subagent',
       color: input.color || '',
       tools: Array.isArray(input.tools) ? input.tools : [],
+      tags: Array.isArray(input.tags) ? input.tags : [],
+      category: input.category || '',
       permissions: input.permissions || null,
       prompt: input.prompt || '',
     };
@@ -174,6 +259,8 @@ export const agentsStore = {
       mode: patch.mode ?? cur.mode,
       color: patch.color ?? cur.color,
       tools: Array.isArray(patch.tools) ? patch.tools : cur.tools,
+      tags: Array.isArray(patch.tags) ? patch.tags : (cur.tags || []),
+      category: patch.category ?? cur.category ?? '',
       permissions: patch.permissions ?? cur.permissions,
       prompt: patch.prompt ?? cur.prompt,
     };
@@ -185,6 +272,143 @@ export const agentsStore = {
     const file = join(AGENTS_DIR, `${name}.md`);
     if (!existsSync(file)) return false;
     unlinkSync(file);
+    _status.delete(name);
+    saveStatus();
     return true;
   },
+
+  /**
+   * v3.1.0 — Update the runtime status for a single agent. Used by
+   * the opencode plugin (via POST /api/agents/:name/status) and the
+   * task lifecycle (when an agent starts/finishes a task).
+   *
+   * Status: 'idle' | 'working' | 'error' | 'stuck'.
+   */
+  updateStatus(name, status, currentTaskId = null) {
+    loadStatus();
+    const prev = _status.get(name) || defaultStatus(name);
+    const now = Date.now();
+    const next = { ...prev };
+    if (status) next.status = status;
+    if (currentTaskId !== undefined) next.currentTaskId = currentTaskId;
+    next.lastSeen = now;
+    next.heartbeat = now;
+    if (status === 'working' && currentTaskId && currentTaskId !== prev.currentTaskId) {
+      next.currentTaskStartedAt = now;
+    }
+    if (status === 'idle' || status === 'error' || status === 'stuck') {
+      if (prev.currentTaskId) {
+        next.lastTask = {
+          id: prev.currentTaskId,
+          finishedAt: now,
+          status,
+        };
+      }
+      next.currentTaskId = null;
+      next.currentTaskStartedAt = 0;
+    }
+    if (status === 'error') {
+      next.lastError = { ts: now, message: typeof currentTaskId === 'string' ? currentTaskId : 'error' };
+    }
+    _status.set(name, next);
+    saveStatus();
+    return readAgent(name);
+  },
+
+  /** Heartbeat ping — keeps lastSeen fresh without changing status. */
+  heartbeat(name) {
+    loadStatus();
+    const cur = _status.get(name) || defaultStatus(name);
+    cur.heartbeat = Date.now();
+    cur.lastSeen = cur.heartbeat;
+    _status.set(name, cur);
+    saveStatus();
+    return readAgent(name);
+  },
+
+  /**
+   * Mark that an agent finished a task. Bumps the success/failure
+   * counters and clears the currentTaskId.
+   */
+  recordTaskResult(name, taskId, ok) {
+    loadStatus();
+    const cur = _status.get(name) || defaultStatus(name);
+    cur.tasksTotal += 1;
+    if (ok) cur.tasksSucceeded += 1;
+    else cur.tasksFailed += 1;
+    cur.successRate = cur.tasksTotal > 0 ? cur.tasksSucceeded / cur.tasksTotal : 0;
+    cur.lastTask = { id: taskId, finishedAt: Date.now(), status: ok ? 'success' : 'failed' };
+    cur.currentTaskId = null;
+    cur.currentTaskStartedAt = 0;
+    cur.status = 'idle';
+    cur.lastSeen = Date.now();
+    _status.set(name, cur);
+    saveStatus();
+    return readAgent(name);
+  },
+
+  /** Get raw status for a single agent. */
+  getStatus(name) {
+    loadStatus();
+    return _status.get(name) || defaultStatus(name);
+  },
+
+  /** Return the list of stuck agents (used by /api/agents/stuck). */
+  stuck() {
+    loadStatus();
+    const out = [];
+    for (const [name, s] of _status.entries()) {
+      if (isStuck(s)) {
+        out.push({ name, ...s });
+      }
+    }
+    return out;
+  },
+
+  /**
+   * v3.1.0 — "Restart" an agent. For this release this resets the
+   * runtime status (clears the current task, marks idle) and removes
+   * the stuck flag. A real process restart is documented as v3.2.
+   */
+  restart(name) {
+    loadStatus();
+    const cur = _status.get(name) || defaultStatus(name);
+    cur.status = 'idle';
+    cur.currentTaskId = null;
+    cur.currentTaskStartedAt = 0;
+    cur.lastSeen = Date.now();
+    cur.heartbeat = Date.now();
+    cur.lastError = null;
+    _status.set(name, cur);
+    saveStatus();
+    return readAgent(name);
+  },
+
+  STATUS_FILE,
 };
+
+// ── v3.1.0 — Stuck detection ────────────────────────────────────────
+// A "working" agent is stuck if it has been on a single task for
+// longer than STUCK_WORKING_MS without a heartbeat. An "idle" agent
+// with a queued task is stuck if lastSeen is older than
+// STUCK_IDLE_MS. Both thresholds are intentionally conservative
+// for v3.1.0; settings overrides land in v3.2.
+
+const STUCK_WORKING_MS = 10 * 60 * 1000; // 10 min
+const STUCK_IDLE_MS = 5 * 60 * 1000; // 5 min
+
+function isStuck(status) {
+  if (!status) return false;
+  const now = Date.now();
+  if (status.status === 'working' && status.currentTaskStartedAt) {
+    const elapsed = now - status.currentTaskStartedAt;
+    if (elapsed > STUCK_WORKING_MS) return true;
+  }
+  if (status.status === 'error' && status.lastError?.ts) {
+    const elapsed = now - new Date(status.lastError.ts).getTime();
+    if (elapsed > STUCK_WORKING_MS) return true;
+  }
+  return false;
+}
+
+export { isStuck };

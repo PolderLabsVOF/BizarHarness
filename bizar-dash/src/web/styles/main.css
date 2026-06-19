@@ -245,6 +245,45 @@ pre,
 }
 .view-chat { max-width: 1600px; }
 
+/* v3.1.0 — Fullscreen views. The Chat tab (and other immersive views
+   like Plans editor) use a fixed-position root that overlays the
+   .content container edge-to-edge. The topbar remains visible because
+   the shell still wraps the view, but the .content padding/max-width
+   must not constrain the immersive view. */
+.app[data-active-tab="chat"] > .layout-body > .content {
+  padding: 0;
+  max-width: none;
+  overflow: hidden;
+}
+
+.app[data-active-tab="plans"] > .layout-body > .content,
+.app[data-active-tab="skills"] > .layout-body > .content {
+  padding: 0;
+  max-width: none;
+}
+
+.view-chat-fullscreen,
+.view-plans-fullscreen,
+.view-skills-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  margin: 0;
+  /* Sit below the topbar (z 10) but above everything else. */
+}
+
+.view-chat-fullscreen > .chat-layout,
+.view-plans-fullscreen > .plans-body,
+.view-skills-fullscreen > .skills-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
 .view-loading {
   display: flex;
   flex-direction: column;
@@ -638,6 +677,15 @@ pre,
 }
 .btn-danger:hover:not(:disabled) {
   background: rgba(248, 113, 113, 0.12);
+}
+
+.btn-success {
+  background: var(--success);
+  color: #0b0e14;
+  border: 1px solid var(--success);
+}
+.btn-success:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 .btn-loading {
@@ -1638,6 +1686,800 @@ pre,
 
 .comment-reply-text {
   color: var(--text-dim);
+}
+
+/* v3.1.0 — Agents: status dot, category badge, tag chips, activity row */
+.agent-card-head {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.agent-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.agent-card-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 14px;
+  min-width: 0;
+}
+.agent-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.agent-card-category {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+}
+.agent-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.agent-card-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+}
+.agent-card-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 11px;
+}
+.agent-card-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.agent-card-row code {
+  font-size: 10px;
+  background: var(--bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.agent-card-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--error);
+}
+.agent-card-expanded {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-card-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.agent-card-path {
+  font-size: 10px;
+  background: var(--bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: -8px;
+}
+
+/* v3.1.0 — Tasks bulk action bar */
+.task-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 12px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.task-bulk-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.task-bulk-bar > .text-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* v3.1.0 — Skills page */
+.skills-categories {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.skill-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
+  font-family: inherit;
+}
+.skill-category:hover {
+  background: var(--bg-elev-3);
+  color: var(--text);
+}
+.skill-category-active {
+  background: var(--accent-bg);
+  color: var(--accent-2);
+  border-color: var(--accent-border);
+}
+
+.skills-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.skills-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin: 0;
+  font-weight: 600;
+}
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-3);
+}
+.skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skill-card-disabled {
+  opacity: 0.55;
+}
+.skill-card-skeleton {
+  height: 160px;
+  background: linear-gradient(90deg, var(--bg-elev-2), var(--bg-elev-3), var(--bg-elev-2));
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.4s linear infinite;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+@keyframes skeleton-pulse {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.skill-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.skill-card-icon {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+  color: var(--accent-2);
+}
+.skill-card-title-area {
+  flex: 1;
+  min-width: 0;
+}
+.skill-card-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skill-card-source {
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skill-card-desc {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 3em;
+}
+.skill-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.skill-card-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+}
+.skill-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.skill-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.skill-detail-source {
+  font-size: 11px;
+}
+.skill-detail-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.skill-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.skill-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.skill-detail-cmd {
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  color: var(--accent-2);
+}
+
+/* v3.1.0 — Stuck agents banner */
+.stuck-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-elev));
+  border-bottom: 1px solid var(--error);
+  color: var(--text);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.stuck-banner .icon-btn {
+  margin-left: auto;
+}
+.stuck-banner > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* v3.1.0 — Pulse animation for working / running timers. */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.is-working {
+  animation: pulse-soft 1.6s var(--ease) infinite;
+  position: relative;
+}
+.is-working::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--info);
+  pointer-events: none;
+  animation: pulse-soft 1.6s var(--ease) infinite;
+}
+.is-stuck {
+  position: relative;
+}
+.is-stuck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--error);
+  pointer-events: none;
+}
+.stuck-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-elev));
+  border-bottom: 1px solid var(--error);
+  color: var(--text);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.stuck-banner .icon-btn {
+  margin-left: auto;
+}
+.stuck-banner > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* v3.1.0 — Pulse animation for working / running timers. */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.is-working {
+  animation: pulse-soft 1.6s var(--ease) infinite;
+  position: relative;
+}
+.is-working::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--info);
+  pointer-events: none;
+  animation: pulse-soft 1.6s var(--ease) infinite;
+}
+.is-stuck {
+  position: relative;
+}
+.is-stuck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--error);
+  pointer-events: none;
+}
+.stuck-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-elev));
+  border-bottom: 1px solid var(--error);
+  color: var(--text);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.stuck-banner .icon-btn {
+  margin-left: auto;
+}
+.stuck-banner > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* v3.1.0 — Pulse animation for working / running timers. */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.is-working {
+  animation: pulse-soft 1.6s var(--ease) infinite;
+  position: relative;
+}
+.is-working::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--info);
+  pointer-events: none;
+  animation: pulse-soft 1.6s var(--ease) infinite;
+}
+.is-stuck {
+  position: relative;
+}
+.is-stuck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--error);
+  pointer-events: none;
+}
+.stuck-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-elev));
+  border-bottom: 1px solid var(--error);
+  color: var(--text);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.stuck-banner .icon-btn {
+  margin-left: auto;
+}
+.stuck-banner > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* v3.1.0 — Pulse animation for working / running timers. */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.is-working {
+  animation: pulse-soft 1.6s var(--ease) infinite;
+  position: relative;
+}
+.is-working::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--info);
+  pointer-events: none;
+  animation: pulse-soft 1.6s var(--ease) infinite;
+}
+.is-stuck {
+  position: relative;
+}
+.is-stuck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--error);
+  pointer-events: none;
+}
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+/* v3.1.0 — Plans fullscreen editor. */
+.plans-editor-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.plans-editor-bar-left,
+.plans-editor-bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.plans-editor-bar-right {
+  flex-shrink: 0;
+}
+.plans-editor-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.plans-editor-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
+}
+.plans-editor-slug {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.plans-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  min-width: 0;
+}
+.plans-body:has(.plans-comments-panel-closed),
+.plans-body:not(:has(.plans-comments-panel)) {
+  grid-template-columns: 1fr;
+}
+@media (max-width: 1000px) {
+  .plans-body { grid-template-columns: 1fr; }
+}
+
+.plans-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* v3.1.0 — Plan element card */
+.canvas-element-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin: -12px -12px 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+}
+.canvas-element-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 0;
+}
+.canvas-element-type span { color: inherit; }
+.canvas-element-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.canvas-element-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+.canvas-element-handle {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: grab;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+}
+.canvas-element-handle:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+.canvas-element-handle:active {
+  cursor: grabbing;
+}
+.canvas-element-status {
+  margin-top: 6px;
+  font-size: 10px;
+}
+
+.canvas-connection {
+  cursor: pointer;
+  pointer-events: all;
+}
+.canvas-connection:hover line {
+  stroke: var(--error);
+  stroke-width: 2;
+}
+.canvas-connection-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--accent-2);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3;
+  pointer-events: all;
+}
+
+/* v3.1.0 — Comments side panel */
+.plans-comments-panel {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--bg-elev);
+  min-height: 0;
+  min-width: 0;
+}
+.plans-comments-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.plans-comments-panel-head .card-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.plans-comments-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+.plans-comments-panel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  flex-shrink: 0;
+}
+.plans-comments-panel-form .textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+.plans-comments-panel-form .btn {
+  align-self: flex-end;
+}
+
+.plan-comment {
+  padding: 8px 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.plan-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.plan-comment-author {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-2);
+}
+.plan-comment-time {
+  font-size: 10px;
+}
+.plan-comment-head .icon-btn {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+}
+.plan-comment-text {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.plan-config-form,
+.plan-element-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Embedded (not fullscreen) plans */
+.view-plans-embedded {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin: var(--space-4);
 }
 
 /* ─── Projects ─────────────────────────────────────────────────────── */
@@ -2712,6 +3554,19 @@ kbd {
 .chat-layout > .chat-info {
   min-height: 0;
   min-width: 0;
+}
+
+/* When the chat view is in fullscreen mode, drop the rounded border so
+   the sessions rail, list, and info sidebar are flush to the viewport. */
+.view-chat-fullscreen > .chat-layout {
+  border: none;
+  border-radius: 0;
+}
+.view-chat-fullscreen > .view-header {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  flex-shrink: 0;
 }
 
 .chat-sessions {

@@ -272,7 +272,7 @@ export function Chat({ snapshot, settings, setActiveTab }: Props) {
   }, [text]);
 
   return (
-    <div className="view view-chat">
+    <div className="view view-chat view-chat-fullscreen">
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">

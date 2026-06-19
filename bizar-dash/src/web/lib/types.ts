@@ -33,9 +33,24 @@ export type Agent = {
   path: string;
   mtime: number;
   tools?: string[];
+  tags?: string[];
+  category?: string;
   color?: string;
   prompt?: string;
   permissions?: unknown;
+  // v3.1.0 — runtime status (server-attached)
+  status?: 'idle' | 'working' | 'error' | 'stuck' | string;
+  currentTaskId?: string | null;
+  currentTaskStartedAt?: number;
+  lastSeen?: number;
+  heartbeat?: number;
+  lastError?: { ts: number; message: string } | null;
+  lastTask?: { id: string; finishedAt: number; status: string } | null;
+  successRate?: number;
+  tasksTotal?: number;
+  tasksSucceeded?: number;
+  tasksFailed?: number;
+  isStuck?: boolean;
 };
 
 export type ProjectRecord = {
@@ -72,6 +87,7 @@ export type CanvasElement = {
   y: number;
   width: number;
   height: number;
+  status?: string;
 };
 
 export type CanvasConnection = {
@@ -80,6 +96,7 @@ export type CanvasConnection = {
   from?: string;
   toElementId?: string;
   to?: string;
+  label?: string;
 };
 
 export type CanvasComment = {
@@ -191,20 +208,24 @@ export type Task = {
   id: string;
   title: string;
   description: string;
-  status: 'queued' | 'doing' | 'done' | string;
+  status: 'queued' | 'doing' | 'done' | 'blocked' | 'archived' | string;
   tags: string[];
   priority: 'low' | 'normal' | 'high' | string;
   assignee?: string | null;
   parent?: string | null;
   dependencies?: string[];
   timeSpent?: number;
-  recurring?: { cron?: string; lastGenerated?: string } | null;
+  recurring?: { cron?: string; lastGenerated?: string; freq?: 'daily' | 'weekly' | 'monthly' | string } | null;
   attachments?: string[];
   comments?: { id: string; text: string; createdAt: string }[];
   activity?: { id: string; type: string; ts: string; data?: unknown }[];
+  archived?: boolean;
+  workedBy?: string | null;
+  dueDate?: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;
+  _timerStart?: number;
 };
 
 export type Schedule = {
@@ -326,6 +347,10 @@ export type WsMessage =
   | { type: 'tasks:delete'; id: string }
   | { type: 'settings:change'; settings: Settings }
   | { type: 'agents:change' }
+  | { type: 'agent:status'; agent: Agent }
+  | { type: 'agent:restarted'; agent: Agent }
+  | { type: 'agent:stuck'; agents: { name: string }[] }
+  | { type: 'plan:change'; slug: string; deleted?: boolean }
   | { type: 'schedules:change' }
   | { type: 'project:change'; project?: ProjectRecord }
   | { type: 'chat:message'; message: ChatMessage }

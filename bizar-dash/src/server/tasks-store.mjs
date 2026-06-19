@@ -95,12 +95,18 @@ function appendActivity(task, type, data) {
 
 export const tasksStore = {
   /** Load tasks for a project (or legacy). */
-  loadTasks(projectId) {
+  loadTasks(projectId, opts = {}) {
     const file = resolveStorageFile(projectId);
     const store = loadStore(file);
-    return store.tasks
-      .slice()
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const includeArchived = !!opts.includeArchived;
+    const onlyArchived = !!opts.onlyArchived;
+    let tasks = store.tasks.slice();
+    if (onlyArchived) {
+      tasks = tasks.filter((t) => t.archived);
+    } else if (!includeArchived) {
+      tasks = tasks.filter((t) => !t.archived);
+    }
+    return tasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   },
 
   /** Save all tasks. */
@@ -126,7 +132,7 @@ export const tasksStore = {
         id: genId(),
         title: input.title,
         description: input.description || '',
-        status: ['queued', 'doing', 'done'].includes(input.status) ? input.status : 'queued',
+        status: ['queued', 'doing', 'done', 'blocked', 'archived'].includes(input.status) ? input.status : 'queued',
         tags: Array.isArray(input.tags) ? input.tags : [],
         priority: ['low', 'normal', 'high'].includes(input.priority) ? input.priority : 'normal',
         assignee: input.assignee || null,
@@ -137,6 +143,9 @@ export const tasksStore = {
         attachments: Array.isArray(input.attachments) ? input.attachments : [],
         comments: [],
         activity: [],
+        archived: false,
+        workedBy: null,
+        dueDate: typeof input.dueDate === 'string' ? input.dueDate : null,
         createdAt: now,
         updatedAt: now,
         completedAt: null,
@@ -162,7 +171,7 @@ export const tasksStore = {
 
       if (typeof patch.title === 'string') task.title = patch.title.slice(0, 200);
       if (typeof patch.description === 'string') task.description = patch.description;
-      if (['queued', 'doing', 'done'].includes(patch.status)) {
+      if (['queued', 'doing', 'done', 'blocked', 'archived'].includes(patch.status)) {
         if (patch.status !== task.status) {
           appendActivity(task, 'status', { from: task.status, to: patch.status });
         }
@@ -186,6 +195,14 @@ export const tasksStore = {
         task.recurring = patch.recurring;
       }
       if (Array.isArray(patch.attachments)) task.attachments = patch.attachments;
+      if (patch.archived === true) task.archived = true;
+      if (patch.archived === false) task.archived = false;
+      if (typeof patch.workedBy === 'string' || patch.workedBy === null) {
+        task.workedBy = patch.workedBy;
+      }
+      if (typeof patch.dueDate === 'string' || patch.dueDate === null) {
+        task.dueDate = patch.dueDate || null;
+      }
 
       task.updatedAt = new Date().toISOString();
       if (task.status === 'done' && !task.completedAt) {
@@ -271,5 +288,150 @@ export const tasksStore = {
     } finally {
       release();
     }
+  },
+
+  // v3.1.0 ─────────────────────────────────────────────────────────
+  /** Start the timer for a task (idempotent). */
+  async startTimer(projectId, id) {
+    await acquire();
+    try {
+      const file = resolveStorageFile(projectId);
+      const store = loadStore(file);
+      const task = store.tasks.find((t) => t.id === id);
+      if (!task) return null;
+      if (!task._timerStart) {
+        task._timerStart = Date.now();
+        appendActivity(task, 'timer-start', null);
+        task.updatedAt = new Date().toISOString();
+        saveStore(file, store);
+      }
+      return task;
+    } finally {
+      release();
+    }
+  },
+
+  /** Stop the timer for a task. */
+  async stopTimer(projectId, id) {
+    await acquire();
+    try {
+      const file = resolveStorageFile(projectId);
+      const store = loadStore(file);
+      const task = store.tasks.find((t) => t.id === id);
+      if (!task) return null;
+      if (task._timerStart) {
+        const elapsed = Math.floor((Date.now() - task._timerStart) / 1000);
+        task.timeSpent = (task.timeSpent || 0) + elapsed;
+        appendActivity(task, 'timer-stop', { elapsed });
+        delete task._timerStart;
+        task.updatedAt = new Date().toISOString();
+        saveStore(file, store);
+      }
+      return task;
+    } finally {
+      release();
+    }
+  },
+
+  /** Archive a task (keeps it in the store; the UI hides it by default). */
+  async archive(projectId, id) {
+    return this.update(projectId, id, { archived: true, status: 'archived' });
+  },
+
+  /** Unarchive — restore to the prior status (queued) by default. */
+  async unarchive(projectId, id) {
+    return this.update(projectId, id, { archived: false, status: 'queued' });
+  },
+
+  /**
+   * Bulk action over a set of task ids. Actions: 'archive' | 'unarchive' |
+   * 'delete' | 'move' | 'tag' | 'assign' | 'priority'.
+   * Returns { affected: [{ id, ok, error? }, ...] }.
+   */
+  async bulk(projectId, ids, action, params = {}) {
+    const out = [];
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return { affected: out, action, params };
+    }
+    for (const id of ids) {
+      try {
+        let result = null;
+        if (action === 'archive') result = await this.archive(projectId, id);
+        else if (action === 'unarchive') result = await this.unarchive(projectId, id);
+        else if (action === 'delete') {
+          const ok = await this.delete(projectId, id);
+          result = ok ? { id, deleted: true } : null;
+        } else if (action === 'move') {
+          result = await this.move(projectId, id, params.status);
+        } else if (action === 'priority') {
+          result = await this.update(projectId, id, { priority: params.priority });
+        } else if (action === 'assign') {
+          result = await this.update(projectId, id, { assignee: params.assignee });
+        } else if (action === 'tag') {
+          const t = await this.update(projectId, id, { tags: Array.isArray(params.tags) ? params.tags : [] });
+          result = t;
+        } else {
+          out.push({ id, ok: false, error: `unknown action: ${action}` });
+          continue;
+        }
+        out.push({ id, ok: !!result });
+      } catch (err) {
+        out.push({ id, ok: false, error: err.message });
+      }
+    }
+    return { affected: out, action, params };
+  },
+
+  /**
+   * Mark a task as "worked on" by an agent. The dashboard listens for
+   * this on the WS and updates the agent's status accordingly. If the
+   * task is recurring, completing it spawns the next occurrence when
+   * `complete=true`.
+   */
+  async setWorkedBy(projectId, id, agentName, opts = {}) {
+    const updated = await this.update(projectId, id, { workedBy: agentName });
+    if (!updated) return null;
+    if (opts.status) {
+      const moved = await this.move(projectId, id, opts.status);
+      if (moved?.recurring && opts.status === 'done' && opts.complete) {
+        await this.spawnNextRecurrence(projectId, moved);
+      }
+      return moved;
+    }
+    return updated;
+  },
+
+  /** Create the next occurrence of a recurring task. */
+  async spawnNextRecurrence(projectId, task) {
+    if (!task.recurring) return null;
+    const now = new Date().toISOString();
+    const next = {
+      title: task.title,
+      description: task.description || '',
+      status: 'queued',
+      priority: task.priority || 'normal',
+      assignee: task.assignee || null,
+      tags: task.tags || [],
+      recurring: task.recurring,
+      parent: task.id,
+    };
+    const created = await this.create(projectId, next);
+    if (created && task.recurring) {
+      // Persist lastGenerated on the original task.
+      task.recurring = { ...task.recurring, lastGenerated: now };
+      await acquire();
+      try {
+        const file = resolveStorageFile(projectId);
+        const store = loadStore(file);
+        const idx = store.tasks.findIndex((t) => t.id === task.id);
+        if (idx >= 0) {
+          store.tasks[idx] = task;
+          saveStore(file, store);
+        }
+      } finally {
+        release();
+      }
+    }
+    return created;
   },
 };

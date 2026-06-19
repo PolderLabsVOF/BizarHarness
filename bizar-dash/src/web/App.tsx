@@ -11,6 +11,7 @@ import { Ws } from './lib/ws';
 import {
   applyTheme,
   applyThemeTokens,
+  type Plan,
   type Settings,
   type SettingsResponse,
   type Snapshot,
@@ -28,7 +29,10 @@ import { Config } from './views/Config';
 import { SettingsView } from './views/Settings';
 import { Mods } from './views/Mods';
 import { Schedules } from './views/Schedules';
+import { Skills } from './views/Skills';
 import { Spinner } from './components/Spinner';
+import { Button } from './components/Button';
+import { AlertTriangle, X } from 'lucide-react';
 import './styles/main.css';
 
 type ViewProps = {
@@ -49,9 +53,10 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   settings: SettingsView,
   mods: Mods,
   schedules: Schedules,
+  skills: Skills,
 };
 
-const VERSION = 'v3.0.4';
+const VERSION = 'v3.1.0';
 
 export function App() {
   return (
@@ -71,6 +76,8 @@ function Shell() {
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   const [bootError, setBootError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [stuckAgents, setStuckAgents] = useState<{ name: string }[]>([]);
+  const [stuckBannerDismissed, setStuckBannerDismissed] = useState(false);
   const wsRef = useRef<Ws | null>(null);
 
   // Apply theme tokens
@@ -96,11 +103,13 @@ function Shell() {
     Promise.all([
       api.get<Snapshot>('/snapshot').catch(() => null),
       api.get<SettingsResponse>('/settings').catch(() => null),
+      api.get<{ stuck: { name: string }[] }>('/agents/stuck').catch(() => null),
     ])
-      .then(([snap, set]) => {
+      .then(([snap, set, stuck]) => {
         if (cancelled) return;
         if (snap) setSnapshot(snap);
         if (set?.data) setSettings(set.data);
+        if (stuck?.stuck) setStuckAgents(stuck.stuck);
         if (!snap && !set) setBootError('Dashboard server unreachable.');
         if (set?.data?.ui?.defaultTab) setActiveTab(set.data.ui.defaultTab);
       })
@@ -114,6 +123,36 @@ function Shell() {
       cancelled = true;
     };
   }, [toast]);
+
+  // v3.1.0 — Periodic stuck-agent poll. Light-weight; the server does
+  // the threshold math and only returns the list.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const r = await api.get<{ stuck: { name: string }[] }>('/agents/stuck');
+        if (!cancelled) {
+          setStuckAgents((cur) => {
+            const next = r.stuck || [];
+            const wasEmpty = cur.length === 0;
+            if (wasEmpty && next.length > 0) {
+              toast.warning(`${next.length} agent${next.length === 1 ? '' : 's'} stuck`, 5000);
+            }
+            return next;
+          });
+        }
+      } catch {
+        /* best-effort */
+      }
+    };
+    const id = setInterval(tick, 30_000);
+    tick();
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // WebSocket lifecycle
   useEffect(() => {
@@ -162,6 +201,24 @@ function Shell() {
           .get<Snapshot>('/snapshot')
           .then((s) => setSnapshot((cur) => ({ ...(cur ?? ({} as Snapshot)), ...s })))
           .catch(() => undefined);
+      } else if (msg.type === 'agent:status' || msg.type === 'agent:restarted') {
+        const m = msg;
+        setSnapshot((cur) => {
+          if (!cur) return cur;
+          const agents = (cur.agents || []).map((a) => (a.name === m.agent.name ? m.agent : a));
+          return { ...cur, agents };
+        });
+      } else if (msg.type === 'plan:change') {
+        // Plans list refreshes after any plan mutation.
+        api
+          .get<{ plans: Plan[] }>('/plans')
+          .then((d) => {
+            setSnapshot((cur) => (cur ? { ...cur, plans: d.plans || [] } : cur));
+          })
+          .catch(() => undefined);
+      } else if (msg.type === 'agent:stuck') {
+        const m = msg;
+        setStuckAgents(m.agents || []);
       }
     });
     return () => {
@@ -296,7 +353,7 @@ function Shell() {
   const layout = settings?.ui?.layout || 'topnav';
 
   return (
-    <div className="app" data-layout={layout}>
+    <div className="app" data-layout={layout} data-active-tab={activeTab}>
       <Topbar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -309,6 +366,35 @@ function Shell() {
         onOpenSearch={() => setSearchOpen(true)}
         showTabs={layout === 'topnav'}
       />
+      {stuckAgents.length > 0 && !stuckBannerDismissed && (
+        <div className="stuck-banner" role="alert">
+          <AlertTriangle size={16} />
+          <span>
+            <strong>{stuckAgents.length}</strong> agent{stuckAgents.length === 1 ? '' : 's'} stuck:{' '}
+            <span className="mono">
+              {stuckAgents.map((a) => a.name).join(', ')}
+            </span>
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setActiveTab('agents');
+              setStuckBannerDismissed(true);
+            }}
+          >
+            Review
+          </Button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Dismiss"
+            onClick={() => setStuckBannerDismissed(true)}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <div className="layout-body">
         {layout !== 'topnav' && (
           <Sidebar

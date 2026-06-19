@@ -28,6 +28,8 @@ import { schedulesRunner } from './schedules-runner.mjs';
 import { searchStore } from './search-store.mjs';
 import { diagnosticsStore } from './diagnostics-store.mjs';
 import { tailscaleStore } from './tailscale-store.mjs';
+import { plansStore } from './plans-store.mjs';
+import { skillsStore } from './skills-store.mjs';
 
 const HOME = homedir();
 const OPENCODE_DIR = join(HOME, '.config', 'opencode');
@@ -83,7 +85,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.0.4',
+    version: '3.1.0',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -267,9 +269,11 @@ export function createApiRouter({
   }));
 
   // ── /api/tasks ─────────────────────────────────────────────────────────
-  router.get('/tasks', wrap(async (_req, res) => {
+  router.get('/tasks', wrap(async (req, res) => {
     const projectId = req.query.projectId || readActiveProjectId();
-    res.json(tasksStore.loadTasks(projectId));
+    const includeArchived = req.query.archived === 'true' || req.query.archived === '1';
+    const onlyArchived = req.query.archived === 'only' || req.query.archived === 'archived';
+    res.json(tasksStore.loadTasks(projectId, { includeArchived, onlyArchived }));
   }));
 
   router.post('/tasks', wrap(async (req, res) => {
@@ -293,7 +297,7 @@ export function createApiRouter({
   router.patch('/tasks/:id/status', wrap(async (req, res) => {
     const projectId = req.body?.projectId || readActiveProjectId();
     const { status } = req.body || {};
-    if (!['queued', 'doing', 'done'].includes(status)) {
+    if (!['queued', 'doing', 'done', 'blocked', 'archived'].includes(status)) {
       res.status(400).json({ error: 'bad_request', message: 'invalid status' });
       return;
     }
@@ -303,6 +307,10 @@ export function createApiRouter({
       return;
     }
     broadcast({ type: 'tasks:change', task });
+    if (status === 'done' && task.recurring) {
+      const next = await tasksStore.spawnNextRecurrence(projectId, task);
+      if (next) broadcast({ type: 'tasks:change', task: next });
+    }
     res.json(task);
   }));
 
@@ -328,6 +336,87 @@ export function createApiRouter({
     res.json(task);
   }));
 
+  router.post('/tasks/:id/timer/start', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const task = await tasksStore.startTimer(projectId, req.params.id);
+    if (!task) { res.status(404).json({ error: 'not_found' }); return; }
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
+  }));
+
+  router.post('/tasks/:id/timer/stop', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const task = await tasksStore.stopTimer(projectId, req.params.id);
+    if (!task) { res.status(404).json({ error: 'not_found' }); return; }
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
+  }));
+
+  // v3.1.0 — Archive / unarchive / bulk.
+  router.post('/tasks/:id/archive', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const task = await tasksStore.archive(projectId, req.params.id);
+    if (!task) { res.status(404).json({ error: 'not_found' }); return; }
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
+  }));
+
+  router.post('/tasks/:id/unarchive', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const task = await tasksStore.unarchive(projectId, req.params.id);
+    if (!task) { res.status(404).json({ error: 'not_found' }); return; }
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
+  }));
+
+  router.post('/tasks/bulk', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const { ids, action, params } = req.body || {};
+    if (!Array.isArray(ids)) {
+      res.status(400).json({ error: 'bad_request', message: 'ids[] required' });
+      return;
+    }
+    const out = await tasksStore.bulk(projectId, ids, action, params || {});
+    for (const r of out.affected) {
+      if (!r.ok) continue;
+      if (action === 'delete') {
+        broadcast({ type: 'tasks:delete', id: r.id });
+      } else {
+        const all = await tasksStore.loadTasks(projectId, { includeArchived: true });
+        const t = all.find((x) => x.id === r.id);
+        if (t) broadcast({ type: 'tasks:change', task: t });
+      }
+    }
+    res.json(out);
+  }));
+
+  // v3.1.0 — Mark a task as worked-on by an agent. Bumps both sides.
+  router.post('/tasks/:id/work', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const { agent, status, complete } = req.body || {};
+    if (!agent) {
+      res.status(400).json({ error: 'bad_request', message: 'agent is required' });
+      return;
+    }
+    const task = await tasksStore.setWorkedBy(projectId, req.params.id, agent, { status, complete: !!complete });
+    if (!task) { res.status(404).json({ error: 'not_found' }); return; }
+    let agentSnapshot = null;
+    if (status === 'doing') {
+      agentSnapshot = agentsStore.updateStatus(agent, 'working', task.id);
+    } else if (status === 'done' || complete) {
+      agentSnapshot = agentsStore.recordTaskResult(agent, task.id, complete !== false);
+    } else {
+      agentSnapshot = agentsStore.updateStatus(agent, 'idle', null);
+    }
+    if (agentSnapshot) broadcast({ type: 'agent:status', agent: agentSnapshot });
+    broadcast({ type: 'tasks:change', task });
+    if (task.recurring && status === 'done') {
+      const next = await tasksStore.spawnNextRecurrence(projectId, task);
+      if (next) broadcast({ type: 'tasks:change', task: next });
+    }
+    res.json(task);
+  }));
+
   router.delete('/tasks/:id', wrap(async (req, res) => {
     const projectId = req.query.projectId || readActiveProjectId();
     const ok = await tasksStore.delete(projectId, req.params.id);
@@ -340,7 +429,7 @@ export function createApiRouter({
   }));
 
   // ── /api/schedules ─────────────────────────────────────────────────────
-  router.get('/schedules', wrap(async (_req, res) => {
+  router.get('/schedules', wrap(async (req, res) => {
     const projectId = req.query.projectId || readActiveProjectId();
     res.json(schedulesStore.list(projectId || 'default'));
   }));
@@ -488,6 +577,12 @@ export function createApiRouter({
     res.json({ agents: agentsStore.list() });
   }));
 
+  // v3.1.0 — /api/agents/stuck must be defined BEFORE the /:name
+  // catch-all or Express will treat "stuck" as an agent name.
+  router.get('/agents/stuck', wrap(async (_req, res) => {
+    res.json({ stuck: agentsStore.stuck() });
+  }));
+
   router.get('/agents/:name', wrap(async (req, res) => {
     const agent = agentsStore.get(req.params.name);
     if (!agent) {
@@ -518,6 +613,45 @@ export function createApiRouter({
     }
     state.appendActivity({ kind: 'agent.invoke', agent: name, prompt: String(prompt).slice(0, 500) });
     res.status(202).json({ accepted: true, agent: name });
+  }));
+
+  // v3.1.0 — Agent status (idle / working / error / stuck). The opencode
+  // plugin pings this when it picks up or finishes a task; the dashboard
+  // also calls it on the lifecycle hooks below.
+  router.post('/agents/:name/status', wrap(async (req, res) => {
+    const name = req.params.name;
+    const { status, currentTaskId } = req.body || {};
+    const valid = ['idle', 'working', 'error', 'stuck'];
+    if (status && !valid.includes(status)) {
+      res.status(400).json({ error: 'bad_request', message: `invalid status (use: ${valid.join(', ')})` });
+      return;
+    }
+    const agent = agentsStore.updateStatus(name, status || 'idle', currentTaskId ?? null);
+    if (!agent) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'agent:status', agent });
+    res.json(agent);
+  }));
+
+  router.post('/agents/:name/heartbeat', wrap(async (req, res) => {
+    const agent = agentsStore.heartbeat(req.params.name);
+    if (!agent) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.json(agent);
+  }));
+
+  router.post('/agents/:name/restart', wrap(async (req, res) => {
+    const agent = agentsStore.restart(req.params.name);
+    if (!agent) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'agent:restarted', agent });
+    res.json(agent);
   }));
 
   router.delete('/agents/:name', wrap(async (req, res) => {
@@ -897,27 +1031,218 @@ export function createApiRouter({
     res.status(202).json({ accepted: true, regeneratedMessage: record });
   }));
 
-  // ── /api/plans (kept from v2.x) ───────────────────────────────────────
+  // ── /api/plans ───────────────────────────────────────────────────────
   router.get('/plans', wrap(async (_req, res) => {
-    res.json({ plans: state.getPlans() });
+    res.json({ plans: plansStore.list(projectRoot) });
   }));
 
   router.get('/plans/:slug', wrap(async (req, res) => {
-    const slug = req.params.slug;
-    const local = join(state.paths.plansDir, slug);
-    const global = join(state.paths.globalPlansDir, slug);
-    const dir = existsSync(local) ? local : existsSync(global) ? global : null;
-    if (!dir) {
+    const plan = plansStore.get(req.params.slug, projectRoot);
+    if (!plan) {
       res.status(404).json({ error: 'not_found' });
       return;
     }
-    const meta = safeReadJSON(join(dir, 'meta.json'), null);
-    const planMdx = safeReadText(join(dir, 'plan.mdx'));
-    res.json({ slug, dir, meta, planMdx });
+    res.json(plan);
+  }));
+
+  // v3.1.0 — Full plan CRUD + canvas editing.
+  router.post('/plans', wrap(async (req, res) => {
+    const slug = (req.body?.slug || '').trim();
+    try {
+      const plan = plansStore.create(slug, req.body || {}, projectRoot);
+      broadcast({ type: 'plan:change', slug });
+      res.status(201).json(plan);
+    } catch (err) {
+      res.status(err.status || 500).json({ error: 'create_failed', message: err.message });
+    }
+  }));
+
+  router.put('/plans/:slug', wrap(async (req, res) => {
+    const plan = plansStore.updateMeta(req.params.slug, req.body || {}, projectRoot);
+    if (!plan) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.json(plan);
+  }));
+
+  router.delete('/plans/:slug', wrap(async (req, res) => {
+    const ok = plansStore.delete(req.params.slug, projectRoot);
+    if (!ok) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug, deleted: true });
+    res.status(204).end();
+  }));
+
+  // ── /api/plans/:slug/canvas ──────────────────────────────────────────
+  router.get('/plans/:slug/canvas', wrap(async (req, res) => {
+    const canvas = plansStore.getCanvas(req.params.slug, projectRoot);
+    if (!canvas) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.json({ canvas });
+  }));
+
+  router.put('/plans/:slug/canvas', wrap(async (req, res) => {
+    const plan = plansStore.saveCanvas(req.params.slug, req.body?.canvas, projectRoot);
+    if (!plan) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.json(plan);
+  }));
+
+  // ── /api/plans/:slug/elements ────────────────────────────────────────
+  router.post('/plans/:slug/elements', wrap(async (req, res) => {
+    const out = plansStore.addElement(req.params.slug, req.body || {}, projectRoot);
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(201).json(out);
+  }));
+
+  router.put('/plans/:slug/elements/:id', wrap(async (req, res) => {
+    const out = plansStore.updateElement(req.params.slug, req.params.id, req.body || {}, projectRoot);
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.json(out);
+  }));
+
+  router.delete('/plans/:slug/elements/:id', wrap(async (req, res) => {
+    const out = plansStore.deleteElement(req.params.slug, req.params.id, projectRoot);
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(204).end();
+  }));
+
+  // ── /api/plans/:slug/position — bulk update positions (drag end) ─────
+  router.put('/plans/:slug/position', wrap(async (req, res) => {
+    const out = plansStore.updatePositions(req.params.slug, req.body?.positions, projectRoot);
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.json(out);
+  }));
+
+  // ── /api/plans/:slug/connections ─────────────────────────────────────
+  router.post('/plans/:slug/connections', wrap(async (req, res) => {
+    const out = plansStore.addConnection(req.params.slug, req.body || {}, projectRoot);
+    if (!out) {
+      res.status(400).json({ error: 'bad_request', message: 'from and to are required' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(201).json(out);
+  }));
+
+  router.delete('/plans/:slug/connections/:id', wrap(async (req, res) => {
+    const out = plansStore.deleteConnection(req.params.slug, req.params.id, projectRoot);
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(204).end();
+  }));
+
+  // ── /api/plans/:slug/elements/:id/comments ───────────────────────────
+  router.post('/plans/:slug/elements/:id/comments', wrap(async (req, res) => {
+    const out = plansStore.addComment(req.params.slug, req.params.id, req.body || {}, projectRoot);
+    if (!out) {
+      res.status(400).json({ error: 'bad_request', message: 'comment text is required' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(201).json(out);
+  }));
+
+  router.delete('/plans/:slug/elements/:id/comments/:cid', wrap(async (req, res) => {
+    const out = plansStore.deleteComment(req.params.slug, req.params.cid, projectRoot);
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(204).end();
+  }));
+
+  // Canvas-level comments (no elementId) — POST /plans/:slug/comments
+  router.post('/plans/:slug/comments', wrap(async (req, res) => {
+    const out = plansStore.addComment(req.params.slug, null, req.body || {}, projectRoot);
+    if (!out) {
+      res.status(400).json({ error: 'bad_request', message: 'comment text is required' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(201).json(out);
+  }));
+
+  router.delete('/plans/:slug/comments/:cid', wrap(async (req, res) => {
+    const out = plansStore.deleteComment(req.params.slug, req.params.cid, projectRoot);
+    if (!out) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'plan:change', slug: req.params.slug });
+    res.status(204).end();
   }));
 
   // ── /api/health ───────────────────────────────────────────────────────
   router.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
+  // ── /api/skills ──────────────────────────────────────────────────────
+  router.get('/skills', wrap(async (_req, res) => {
+    const skills = await skillsStore.list();
+    res.json({ skills, categories: skillsStore.CATEGORIES });
+  }));
+
+  router.get('/skills/search', wrap(async (req, res) => {
+    const q = (req.query.q || '').toString();
+    const results = await skillsStore.search(q);
+    res.json({ results, query: q, categories: skillsStore.CATEGORIES });
+  }));
+
+  router.post('/skills/install', wrap(async (req, res) => {
+    const { name, source } = req.body || {};
+    if (!name && !source) {
+      res.status(400).json({ error: 'bad_request', message: 'name or source is required' });
+      return;
+    }
+    try {
+      const result = await skillsStore.install(name, source);
+      broadcast({ type: 'skills:change' });
+      res.status(202).json(result);
+    } catch (err) {
+      res.status(500).json({ error: 'install_failed', message: err.message });
+    }
+  }));
+
+  router.post('/skills/:id/disable', wrap(async (req, res) => {
+    const out = skillsStore.disable(req.params.id);
+    broadcast({ type: 'skills:change' });
+    res.json(out);
+  }));
+
+  router.post('/skills/:id/enable', wrap(async (req, res) => {
+    const out = skillsStore.enable(req.params.id);
+    broadcast({ type: 'skills:change' });
+    res.json(out);
+  }));
 
   router.use((req, res) => {
     res.status(404).json({
