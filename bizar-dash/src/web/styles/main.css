@@ -931,7 +931,7 @@ pre,
 }
 .badge-info {
   color: var(--info);
-  border-color: rgba(96, 165, 250, 0.4);
+  border-color: var(--info);
 }
 .badge-accent {
   color: var(--accent-2);
@@ -3984,7 +3984,7 @@ kbd {
   border-radius: 3px;
   text-transform: uppercase;
 }
-.mod-mini-pill-on { background: rgba(63, 185, 80, 0.18); color: var(--success); }
+.mod-mini-pill-on { background: var(--success-soft); color: var(--success); }
 .mod-mini-pill-off { background: var(--bg-elev-2); color: var(--text-dim); }
 
 /* Mods view layout */

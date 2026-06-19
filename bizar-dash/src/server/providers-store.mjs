@@ -75,22 +75,24 @@ export const providersStore = {
   },
 
   add(input) {
-    if (!input || !input.id) throw new Error('id is required');
-    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(input.id)) {
+    if (!input || typeof input !== 'object') throw new Error('input required');
+    // Auto-generate id from name if not provided
+    const id = input.id || (input.name ? input.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '').replace(/-+/g, '-') : `provider_${Date.now().toString(36)}`);
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id)) {
       throw new Error('invalid id');
     }
     const cfg = loadConfig();
     cfg.provider = cfg.provider || {};
-    if (cfg.provider[input.id]) throw new Error(`provider "${input.id}" exists`);
-    cfg.provider[input.id] = {
-      name: input.name || input.id,
+    if (cfg.provider[id]) throw new Error(`provider "${id}" exists`);
+    cfg.provider[id] = {
+      name: input.name || id,
       baseURL: input.baseURL || '',
       apiKey: input.apiKey || '',
       models: Array.isArray(input.models) ? input.models : [],
       enabled: input.enabled !== false,
     };
     saveConfig(cfg);
-    return this.get(input.id);
+    return this.get(id);
   },
 
   update(id, patch) {

@@ -87,7 +87,7 @@ const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.4.0',
+    version: '3.4.1',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -105,6 +105,8 @@ function mergeSettings(existing) {
   merged.dashboard = { ...DEFAULT_SETTINGS.dashboard, ...(existing.dashboard || {}) };
   merged.service = { ...DEFAULT_SETTINGS.service, ...(existing.service || {}) };
   merged.about = { ...DEFAULT_SETTINGS.about, ...(existing.about || {}) };
+  // Always use the package version — never let user settings override it
+  merged.about.version = DEFAULT_SETTINGS.about.version;
   return merged;
 }
 

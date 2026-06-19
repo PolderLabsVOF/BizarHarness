@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.4.1 — 2026-06-19
+
+### Fixed (CRITICAL)
+- **Removed `install` bin that shadowed the system `install(1)` command.** The `install` symlink in `package.json#bin` was pointing to the same script as `bizar`. When opencode or any program ran `install -dm700 /some/path` (a common Unix idiom for creating directories with specific permissions), it was hitting the bizarre installer instead of the system `install` command, causing the dashboard to spawn in a broken state. The `bizar install` subcommand continues to work — users should use `bizar install` explicitly instead of just `install`.
+
+### Fixed
+- **Settings `about.version` was being overridden by stale user settings.** `mergeSettings()` was allowing the user settings file to override `about.version`, causing the UI to show an outdated version. Now `about.version` is always sourced from the package default.
+- **CSS hardcoded colors replaced with CSS variables.** `.badge-info` border and `.mod-mini-pill-on` background were using hardcoded rgba values instead of theme-aware variables.
+- **Provider POST now auto-generates `id` from `name`** — was requiring `id` field in request body unnecessarily.
+
 ## v3.4.0 — 2026-06-19
 
 ### Fixed

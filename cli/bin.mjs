@@ -53,8 +53,7 @@ function showHelp() {
     bizar --no-web              Launch TUI only (no browser)
     bizar --web-only            Web dashboard only (no TUI, in browser)
     bizar --bg, --detach        Launch web dashboard in background, return to shell
-    install                     Run the interactive installer
-    bizar install               Same as \`install\`
+    bizar install               Run the interactive installer
     bizar audit                 Run security audit on agent configuration
     bizar init                  Initialize .bizar/ in current project
     bizar export [target]       Export agents/rules to another harness
