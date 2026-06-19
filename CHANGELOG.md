@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.2.1 — 2026-06-19
+
+### Added
+- **Install prompts**: When you run `npm install -g @polderlabs/bizar`, the postinstall now detects missing `@polderlabs/bizar-plugin` and `@polderlabs/bizar-dash` and prompts to install them. Defaults to yes (just press Enter).
+- **Skip flag**: Set `BIZAR_SKIP_OPTIONAL_INSTALLS=1` to skip the prompts (useful for CI).
+- Plugin prompt explains: "required for /bizar in opencode"
+- Dashboard prompt explains: "optional web/TUI dashboard"
+- If a package is already installed, it's detected and the prompt is skipped.
+- If installation fails, helpful message with manual fallback command.
+
 ## v3.2.0 — 2026-06-19
 
 ### Fixed

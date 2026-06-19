@@ -1,5 +1,10 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.2.1 — 2026-06-19
+
+### Added
+- **Install prompts**: `npm install -g @polderlabs/bizar` now prompts to install `@polderlabs/bizar-plugin` (required for /bizar in opencode) and `@polderlabs/bizar-dash` (optional web/TUI dashboard). Defaults to yes. Set `BIZAR_SKIP_OPTIONAL_INSTALLS=1` to skip. Non-TTY environments skip prompts automatically.
+
 ## v3.2.0 — 2026-06-19
 
 ### Fixed

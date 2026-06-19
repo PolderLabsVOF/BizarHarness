@@ -294,7 +294,102 @@ export async function runInstaller() {
   console.log(chalk.dim('\n  Odin watches. The Pantheon awaits. ᛟ\n'));
 }
 
+// ── Interactive prompts for optional packages ─────────────────────────────────
+
+import { execSync } from 'node:child_process';
+import { createInterface } from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+
+async function promptYesNo(question, defaultYes = true) {
+  // If not a TTY (CI, automated install), skip the prompt
+  if (!stdin.isTTY || !stdout.isTTY) {
+    return false;
+  }
+
+  const rl = createInterface({ input: stdin, output: stdout });
+  try {
+    const hint = defaultYes ? '[Y/n]' : '[y/N]';
+    const answer = (await rl.question(`  ${question} ${hint}: `)).trim().toLowerCase();
+    rl.close();
+
+    if (answer === '') return defaultYes;
+    if (['y', 'yes'].includes(answer)) return true;
+    if (['n', 'no'].includes(answer)) return false;
+    return defaultYes;
+  } catch {
+    rl.close();
+    return false;
+  }
+}
+
+async function isPackageInstalled(name) {
+  try {
+    const globalRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+    require.resolve(name, { paths: [globalRoot] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function promptAndInstallOptional() {
+  // Plugin
+  const pluginInstalled = await isPackageInstalled('@polderlabs/bizar-plugin');
+  if (!pluginInstalled) {
+    console.log('');
+    console.log('  The Bizar opencode plugin is required for the /bizar command and agent integration.');
+    const install = await promptYesNo(
+      'Install @polderlabs/bizar-plugin?',
+      true,
+    );
+    if (install) {
+      try {
+        console.log('  Installing @polderlabs/bizar-plugin...');
+        execSync('npm install -g @polderlabs/bizar-plugin', { stdio: 'inherit' });
+        console.log('  ✓ @polderlabs/bizar-plugin installed');
+      } catch (err) {
+        console.log(`  ✗ Failed to install @polderlabs/bizar-plugin: ${err.message}`);
+        console.log('  You can install it later with: npm install -g @polderlabs/bizar-plugin');
+      }
+    } else {
+      console.log('  Skipped. Install later with: npm install -g @polderlabs/bizar-plugin');
+    }
+  } else {
+    console.log('  ✓ @polderlabs/bizar-plugin already installed');
+  }
+
+  // Dashboard
+  const dashInstalled = await isPackageInstalled('@polderlabs/bizar-dash');
+  if (!dashInstalled) {
+    console.log('');
+    console.log('  The Bizar dashboard provides the web UI (React + Vite) and TUI (blessed).');
+    console.log('  It\'s optional — install it for the full experience, or use the CLI alone.');
+    const install = await promptYesNo(
+      'Install @polderlabs/bizar-dash?',
+      true,
+    );
+    if (install) {
+      try {
+        console.log('  Installing @polderlabs/bizar-dash...');
+        execSync('npm install -g @polderlabs/bizar-dash', { stdio: 'inherit' });
+        console.log('  ✓ @polderlabs/bizar-dash installed');
+      } catch (err) {
+        console.log(`  ✗ Failed to install @polderlabs/bizar-dash: ${err.message}`);
+        console.log('  You can install it later with: npm install -g @polderlabs/bizar-dash');
+      }
+    } else {
+      console.log('  Skipped. Install later with: npm install -g @polderlabs/bizar-dash');
+    }
+  } else {
+    console.log('  ✓ @polderlabs/bizar-dash already installed');
+  }
+}
+
 export async function runPostInstall() {
+  // Skip interactive prompts in CI / non-TTY environments
+  if (!process.env.BIZAR_SKIP_OPTIONAL_INSTALLS) {
+    await promptAndInstallOptional();
+  }
   const { mkdirSync, copyFileSync, existsSync } = await import('node:fs');
   const { execSync } = await import('node:child_process');
 

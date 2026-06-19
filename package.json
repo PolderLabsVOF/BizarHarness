@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing, per-project Hindsight memory, mods, schedules, and a background service daemon",
   "type": "module",
   "bin": {
