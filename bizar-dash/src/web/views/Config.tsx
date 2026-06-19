@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings2,
+  Sliders,
   RefreshCw,
   Save,
   FileCode2,
@@ -83,7 +84,7 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  const onChange = (val: string) => {
+  const applyEdit = (val: string) => {
     setParsed((cur) => {
       const next: typeof parsed = { raw: val, data: cur.data, error: null };
       try {
@@ -95,6 +96,7 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
       }
       return next;
     });
+    onChangeDebounced(val);
   };
 
   const onChangeDebounced = useMemo(
@@ -106,9 +108,7 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
   );
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const v = e.target.value;
-    onChange(v);
-    onChangeDebounced(v);
+    applyEdit(e.target.value);
   };
 
   const save = async () => {
@@ -191,16 +191,25 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
           type="button"
           className="config-advanced-head"
           onClick={() => setAdvancedOpen((v) => !v)}
+          aria-expanded={advancedOpen}
+          aria-controls="config-advanced-body"
         >
-          {advancedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          <strong>Advanced</strong>
-          <span className="muted">— opencode.json editor · providers · MCPs · debug log</span>
+          <div className="config-advanced-head-left">
+            <Sliders size={16} aria-hidden />
+            <div>
+              <div className="config-advanced-head-title">Advanced</div>
+              <div className="config-advanced-head-desc">opencode.json editor · providers · MCPs · debug log</div>
+            </div>
+          </div>
+          {advancedOpen ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />}
         </button>
         {advancedOpen && (
-          <div className="config-advanced-body">
-            <div className="config-advanced-tabs">
+          <div id="config-advanced-body" className="config-advanced-body">
+            <div className="config-advanced-tabs" role="tablist">
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeAdvTab === 'config'}
                 className={cn('tab', activeAdvTab === 'config' && 'tab-active')}
                 onClick={() => setActiveAdvTab('config')}
               >
@@ -208,6 +217,8 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeAdvTab === 'providers'}
                 className={cn('tab', activeAdvTab === 'providers' && 'tab-active')}
                 onClick={() => setActiveAdvTab('providers')}
               >
@@ -215,6 +226,8 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeAdvTab === 'mcps'}
                 className={cn('tab', activeAdvTab === 'mcps' && 'tab-active')}
                 onClick={() => setActiveAdvTab('mcps')}
               >
@@ -222,77 +235,118 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeAdvTab === 'log'}
                 className={cn('tab', activeAdvTab === 'log' && 'tab-active')}
                 onClick={() => setActiveAdvTab('log')}
               >
                 <Activity size={12} /> Debug log
               </button>
             </div>
+            <div className="config-advanced-panel" role="tabpanel">
+              {activeAdvTab === 'config' && (
+                <ConfigEditorPanel
+                  parsed={parsed}
+                  dirty={dirty}
+                  saving={saving}
+                  onReload={reload}
+                  onSave={save}
+                  onChange={applyEdit}
+                  textareaRef={taRef}
+                />
+              )}
 
-            {activeAdvTab === 'config' && (
-              <div>
-                <div className="view-actions" style={{ marginBottom: 12 }}>
-                  <Button variant="secondary" size="sm" onClick={reload}>
-                    <RefreshCw size={14} /> Reload from disk
-                  </Button>
-                  <Button variant="primary" size="sm" disabled={!parsed.data || !!parsed.error || !dirty} onClick={save}>
-                    {saving ? <span className="btn-spinner" /> : <Save size={14} />}
-                    Save
-                  </Button>
-                </div>
-                <div className="config-grid">
-                  <Card>
-                    <CardTitle>JSON tree</CardTitle>
-                    <CardMeta>Parsed from current editor</CardMeta>
-                    <div className="json-tree">
-                      {parsed.data != null ? (
-                        <JsonHighlight value={parsed.data} />
-                      ) : (
-                        <span className="muted">{parsed.error ? 'Invalid JSON' : 'No data'}</span>
-                      )}
-                    </div>
-                  </Card>
-                  <Card>
-                    <CardTitle>Raw JSON</CardTitle>
-                    <CardMeta>
-                      {parsed.error ? (
-                        <span className="text-error">{parsed.error}</span>
-                      ) : (
-                        <span className="muted">Live validation as you type</span>
-                      )}
-                    </CardMeta>
-                    <textarea
-                      ref={taRef}
-                      className={cn('textarea config-textarea', parsed.error && 'invalid')}
-                      spellCheck={false}
-                      value={parsed.raw}
-                      onChange={handleInput}
-                    />
-                  </Card>
-                </div>
-              </div>
-            )}
+              {activeAdvTab === 'providers' && (
+                <ProvidersPanel
+                  providers={providers}
+                  onChange={setProviders}
+                />
+              )}
 
-            {activeAdvTab === 'providers' && (
-              <ProvidersPanel
-                providers={providers}
-                onChange={setProviders}
-              />
-            )}
+              {activeAdvTab === 'mcps' && (
+                <McpsPanel
+                  mcps={mcps}
+                  onChange={setMcps}
+                />
+              )}
 
-            {activeAdvTab === 'mcps' && (
-              <McpsPanel
-                mcps={mcps}
-                onChange={setMcps}
-              />
-            )}
-
-            {activeAdvTab === 'log' && (
-              <DebugLogPanel />
-            )}
+              {activeAdvTab === 'log' && (
+                <DebugLogPanel />
+              )}
+            </div>
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function ConfigEditorPanel({
+  parsed,
+  dirty,
+  saving,
+  onReload,
+  onSave,
+  onChange,
+  textareaRef,
+}: {
+  parsed: { raw: string; data: unknown; error: string | null };
+  dirty: boolean;
+  saving: boolean;
+  onReload: () => void;
+  onSave: () => void;
+  onChange: (val: string) => void;
+  textareaRef: React.RefObject<HTMLTextAreaElement>;
+}) {
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value);
+  };
+  return (
+    <div className="config-editor">
+      <div className="view-actions" style={{ marginBottom: 12 }}>
+        <Button variant="secondary" size="sm" onClick={onReload}>
+          <RefreshCw size={14} /> Reload from disk
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!parsed.data || !!parsed.error || !dirty}
+          onClick={onSave}
+        >
+          {saving ? <span className="btn-spinner" /> : <Save size={14} />}
+          Save
+        </Button>
+      </div>
+      <div className="config-grid">
+        <Card>
+          <CardTitle>JSON tree</CardTitle>
+          <CardMeta>Parsed from current editor</CardMeta>
+          <div className="json-tree">
+            {parsed.data != null ? (
+              <JsonHighlight value={parsed.data} />
+            ) : (
+              <span className="muted">{parsed.error ? 'Invalid JSON' : 'No data'}</span>
+            )}
+          </div>
+        </Card>
+        <Card>
+          <CardTitle>Raw JSON</CardTitle>
+          <CardMeta>
+            {parsed.error ? (
+              <span className="text-error">{parsed.error}</span>
+            ) : (
+              <span className="muted">Live validation as you type</span>
+            )}
+          </CardMeta>
+          <textarea
+            ref={textareaRef}
+            className={cn('textarea config-textarea', parsed.error && 'invalid')}
+            spellCheck={false}
+            value={parsed.raw}
+            onChange={handleInput}
+          />
+        </Card>
+      </div>
     </div>
   );
 }

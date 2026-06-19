@@ -162,7 +162,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   };
 
   const about = settings.about || {
-    version: '3.0.0',
+    version: '3.0.3',
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   };

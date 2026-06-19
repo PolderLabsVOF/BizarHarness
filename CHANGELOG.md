@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.0.3 — 2026-06-19
+
+### Fixed
+- **Dashboard — sidebar layout was completely broken in `topnav` / `sidebar` / `both` modes.** The previous CSS at `src/web/styles/main.css:3130-3144` set `.app[data-layout="sidebar"] { display: grid; grid-template-columns: 200px 1fr; }` and tried to hide the topbar `.tabs`, but there was no actual `<aside>` element — so the grid created a 200px gap with nothing in it, the topbar tabs were hidden (creating dead space), and the content area got squeezed or overlapped the topbar. Now there's a real `Sidebar` component (`src/web/components/Sidebar.tsx`) that renders when `layout !== 'topnav'`, and the topbar tabs row is conditionally rendered via a new `showTabs` prop (false in sidebar/both modes). The shell is now flex-based: `.app` → `.topbar` → `.layout-body` (flex row) → `[<Sidebar />] <main.content>`. Mobile (≤900px) collapses the sidebar to a fixed drawer.
+- **Dashboard — chat composer was squished.** The `<textarea className="chat-input">` lived in a single `.chat-composer-row` that also held the agent selector, model input, attach button, and Send button — every item competed for horizontal space and the textarea was squeezed into a corner. The composer is now a proper floating chatbox at the bottom of `.chat-main`: a `.chat-composer-toolbar` row on top (agent select + model input + attach button + keyboard hint) and a `.chat-composer-input` row below (full-width `<textarea>` + square Send button). The textarea auto-grows up to 240px via `useLayoutEffect` and clamps with internal scroll.
+- **Dashboard — Config page "Advanced" section was clipping/cramped.** The tabs (`OpenCode config · Providers · MCPs · Debug log`) didn't wrap, panels were tiny, and at narrow widths things overlapped. Now the section uses a proper collapsible header (chevron + title + description), the tabs wrap (`flex-wrap: wrap`), the body has `min-height: 320px`, and the JSON editor collapses to single column under 1100px. The editor panel was extracted into a `ConfigEditorPanel` component for cleaner structure.
+- **Dashboard — comprehensive UI polish.** Consolidated duplicate `.chat-list` / `.chat-composer` / `.chat-input` CSS rules (legacy v2.6.0 block conflicted with the v3 floating-chat block); removed dead `.tabs` rules in favour of the new `.tabs-row` rendered by `Topbar.tsx`; added focus rings (`outline: 2px solid var(--accent)`) on the chat input, agent/model selects, and attach button; added smooth `120ms` transitions on hover/focus for color, background, and border; standardized the `.view` container to fill its parent's height (so the floating chat layout has space to fill).
+
+### Changed
+- `src/web/App.tsx` — restructured: `<div className="layout-body">` wraps `<Sidebar />` (conditional) + `<main className="content">`. `VERSION` constant bumped to `v3.0.3`.
+- `src/web/components/Topbar.tsx` — refactored to use a two-row layout: `.topbar-row` (brand + project selector + search + ws status, fixed 56px) + optional `.tabs-row` (when `showTabs` is true). New `showTabs?: boolean` prop (default `true`).
+- `src/web/components/Sidebar.tsx` — **new file**. Renders the vertical nav rail: `<aside className="sidebar">` with `<nav className="sidebar-nav">` and one `button.sidebar-tab` per tab. Includes active-state styling, hover transitions, and proper `role="tablist"` / `role="tab"` for a11y.
+- `src/web/views/Chat.tsx` — composer restructured (toolbar + input row, full-width textarea, square send button, auto-grow). Removed unused `CornerDownLeft` and `FileText` imports. `Wrench` icon now unused (cleanup). Attachment remove uses `<X size={10} />` icon instead of `×` literal.
+- `src/web/views/Config.tsx` — Advanced section is now a proper collapsible card with icon + title + description + chevron. `ConfigEditorPanel` extracted. Tabs are real `role="tab"` buttons. Imported `Sliders` icon.
+- `src/web/styles/main.css` — major pass:
+  - Layout shell: replaced broken 200px grid (`app[data-layout="sidebar"] { grid-template-columns: 200px 1fr }`) with proper flex layout (`.layout-body` is `display: flex` with `flex: 1`).
+  - New `.sidebar` / `.sidebar-nav` / `.sidebar-tab` / `.sidebar-tab-active` styles.
+  - New `.topbar-row` / `.tabs-row` for the slim two-row topbar.
+  - New `.chat-composer-toolbar` / `.chat-composer-input` / `.send-btn` / `.attach-btn` / `.toolbar-spacer` / `.hint` for the floating composer.
+  - Replaced dual `.chat-list` / `.chat-composer` / `.chat-input` definitions with single consolidated rules.
+  - `.config-advanced` / `.config-advanced-head` / `.config-advanced-body` / `.config-advanced-tabs` / `.config-advanced-panel` for the collapsible advanced section.
+  - `.view-chat` and `.view-config` now have `height: 100%; min-height: 0` so the floating chat layout fills the available space.
+  - Chat layout collapses to single column under 1200px (sessions + info panels hide).
+  - Sidebar collapses to fixed drawer under 900px (mobile).
+- `src/server/api.mjs` and `src/server/diagnostics-store.mjs` — version bumped from `3.0.0` to `3.0.3` in the default settings + diagnostics responses.
+- `src/web/views/Settings.tsx` — fallback `about.version` bumped from `3.0.0` to `3.0.3`.
+
+### Verified
+- `npx tsc --noEmit` — no errors.
+- `npm run build` — builds cleanly: 52.7 kB CSS (gzip 9.4 kB), 437 kB JS (gzip 129 kB).
+- Dashboard smoke test (`node src/cli.mjs start` + curl) — serves HTML 200, JS+CSS assets serve 200, new classes (`sidebar-tab`, `tabs-row`, `chat-composer-toolbar`, `send-btn`, `config-advanced-head-title`) present in the bundles.
+- Existing test suite (`node --test cli/plan.test.mjs`) — 140/140 pass.
+
 ## v3.0.2 — 2026-06-19
 
 ### Fixed

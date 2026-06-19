@@ -52,6 +52,11 @@ export type TopbarProps = {
   onProjectsRefresh: () => void;
   onOpenSearch: () => void;
   rightSlot?: ReactNode;
+  /**
+   * Whether to render the tabs row. In sidebar/both layouts the sidebar
+   * carries navigation, so we hide this row to keep the topbar slim.
+   */
+  showTabs?: boolean;
 };
 
 export function Topbar({
@@ -65,57 +70,63 @@ export function Topbar({
   onProjectsRefresh,
   onOpenSearch,
   rightSlot,
+  showTabs = true,
 }: TopbarProps) {
   return (
     <header className="topbar">
-      <div className="brand">
-        <span className="brand-logo" aria-hidden>🪩</span>
-        <span className="brand-title">Bizar</span>
-        <span className="brand-version">{version}</span>
-      </div>
-      <ProjectSelector
-        activeProject={activeProject}
-        projects={projects}
-        onChange={onProjectChange}
-        onRefresh={onProjectsRefresh}
-      />
-      <button
-        type="button"
-        className="topbar-search"
-        onClick={onOpenSearch}
-        title="Search (Ctrl/Cmd+K)"
-      >
-        <SearchIcon size={14} />
-        <span className="muted">Search…</span>
-        <kbd>⌘K</kbd>
-      </button>
-      <nav className="tabs" role="tablist">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const active = tab.id === activeTab;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={cn('tab', active && 'tab-active')}
-              onClick={() => onTabChange(tab.id)}
-              title={tab.label}
-            >
-              <Icon size={14} className="tab-icon" />
-              <span className="tab-label">{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
-      <div className="topbar-right">
-        {rightSlot}
-        <div className={cn('ws-status', `ws-${wsStatus}`)} title={`WebSocket: ${wsStatus}`}>
-          <span className="ws-dot" />
-          <span className="ws-label">{wsStatus}</span>
+      <div className="topbar-row">
+        <div className="brand">
+          <span className="brand-logo" aria-hidden>🪩</span>
+          <span className="brand-title">Bizar</span>
+          <span className="brand-version">{version}</span>
+        </div>
+        <ProjectSelector
+          activeProject={activeProject}
+          projects={projects}
+          onChange={onProjectChange}
+          onRefresh={onProjectsRefresh}
+        />
+        <button
+          type="button"
+          className="topbar-search"
+          onClick={onOpenSearch}
+          title="Search (Ctrl/Cmd+K)"
+        >
+          <SearchIcon size={14} />
+          <span className="muted">Search…</span>
+          <kbd>⌘K</kbd>
+        </button>
+        <div className="topbar-spacer" />
+        <div className="topbar-right">
+          {rightSlot}
+          <div className={cn('ws-status', `ws-${wsStatus}`)} title={`WebSocket: ${wsStatus}`}>
+            <span className="ws-dot" />
+            <span className="ws-label">{wsStatus}</span>
+          </div>
         </div>
       </div>
+      {showTabs && (
+        <nav className="tabs-row" role="tablist">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = tab.id === activeTab;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={cn('tab', active && 'tab-active')}
+                onClick={() => onTabChange(tab.id)}
+                title={tab.label}
+              >
+                <Icon size={14} className="tab-icon" />
+                <span className="tab-label">{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
     </header>
   );
 }

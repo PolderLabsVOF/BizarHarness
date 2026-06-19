@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Topbar, TABS } from './components/Topbar';
+import { Sidebar } from './components/Sidebar';
 import { ModalProvider } from './components/Modal';
 import { ToastProvider, useToast } from './components/Toast';
 import { SearchModal } from './components/SearchModal';
@@ -50,7 +51,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   schedules: Schedules,
 };
 
-const VERSION = 'v3.0.0';
+const VERSION = 'v3.0.3';
 
 export function App() {
   return (
@@ -266,8 +267,10 @@ function Shell() {
     }
   };
 
+  const layout = settings?.ui?.layout || 'topnav';
+
   return (
-    <div className="app" data-layout={settings?.ui?.layout || 'topnav'}>
+    <div className="app" data-layout={layout}>
       <Topbar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -278,34 +281,44 @@ function Shell() {
         onProjectChange={onActivateProject}
         onProjectsRefresh={refreshProjects}
         onOpenSearch={() => setSearchOpen(true)}
+        showTabs={layout === 'topnav'}
       />
-      <main className="content">
-        {bootError && (
-          <div className="boot-error">
-            <h2>Dashboard unavailable</h2>
-            <p>{bootError}</p>
-            <p className="boot-error-hint">
-              Make sure the Bizar dashboard server is running. Try{' '}
-              <code>bizar-dash start</code> in your terminal.
-            </p>
-          </div>
-        )}
-        {!bootError && (!snapshot || !settings) && (
-          <div className="loading">
-            <Spinner size="lg" />
-            <p>Loading Bizar…</p>
-          </div>
-        )}
-        {snapshot && settings && View && (
-          <View
-            snapshot={snapshot}
-            settings={settings}
+      <div className="layout-body">
+        {layout !== 'topnav' && (
+          <Sidebar
+            tabs={TABS}
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            refreshSnapshot={refreshSnapshot}
+            onTabChange={setActiveTab}
           />
         )}
-      </main>
+        <main className="content">
+          {bootError && (
+            <div className="boot-error">
+              <h2>Dashboard unavailable</h2>
+              <p>{bootError}</p>
+              <p className="boot-error-hint">
+                Make sure the Bizar dashboard server is running. Try{' '}
+                <code>bizar-dash start</code> in your terminal.
+              </p>
+            </div>
+          )}
+          {!bootError && (!snapshot || !settings) && (
+            <div className="loading">
+              <Spinner size="lg" />
+              <p>Loading Bizar…</p>
+            </div>
+          )}
+          {snapshot && settings && View && (
+            <View
+              snapshot={snapshot}
+              settings={settings}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              refreshSnapshot={refreshSnapshot}
+            />
+          )}
+        </main>
+      </div>
       <SearchModal
         open={searchOpen}
         onClose={() => setSearchOpen(false)}

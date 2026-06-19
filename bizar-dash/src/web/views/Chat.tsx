@@ -1,11 +1,10 @@
 // src/views/Chat.tsx — v3 floating chat: messages, sessions, agent selector, slash autocomplete.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   MessageSquare,
   Send,
-  CornerDownLeft,
   Bot,
   Paperclip,
   Pin,
@@ -13,10 +12,9 @@ import {
   RefreshCw,
   Trash2,
   Server,
-  Wrench,
   Terminal,
-  FileText,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -222,9 +220,20 @@ export function Chat({ snapshot, settings }: Props) {
     ...ordered.filter((_, i) => !pinned.has(messages.length - 1 - i)),
   ];
 
+  // Auto-grow the textarea up to 240px based on content.
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const max = 240;
+    const next = Math.min(el.scrollHeight, max);
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden';
+  }, [text]);
+
   return (
     <div className="view view-chat">
-      <header className="view-header chat-header">
+      <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
             <MessageSquare size={18} /> Chat
@@ -346,21 +355,24 @@ export function Chat({ snapshot, settings }: Props) {
                     <Paperclip size={10} /> {a}
                     <button
                       type="button"
-                      className="icon-btn"
+                      className="chat-attachment-remove"
+                      aria-label={`Remove ${a}`}
+                      title="Remove"
                       onClick={() => setAttachments((cur) => cur.filter((_, j) => j !== i))}
                     >
-                      ×
+                      <X size={10} />
                     </button>
                   </span>
                 ))}
               </div>
             )}
-            <div className="chat-composer-row">
+            <div className="chat-composer-toolbar">
               <select
-                className="select select-sm"
+                className="agent-select"
                 value={agent}
                 onChange={(e) => setAgent(e.target.value)}
                 title="Agent"
+                aria-label="Agent"
               >
                 {(snapshot.agents || []).map((a) => (
                   <option key={a.name} value={a.name}>
@@ -370,18 +382,18 @@ export function Chat({ snapshot, settings }: Props) {
                 <option value="">(no agent)</option>
               </select>
               <input
-                className="input input-sm"
+                className="model-input"
                 type="text"
                 placeholder="model (optional)"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                style={{ width: 140 }}
+                aria-label="Model"
               />
               <button
                 type="button"
-                className="icon-btn"
+                className="attach-btn"
                 aria-label="Attach files"
-                title="Attach"
+                title="Attach files"
                 onClick={onAttach}
               >
                 <Paperclip size={14} />
@@ -393,21 +405,31 @@ export function Chat({ snapshot, settings }: Props) {
                 style={{ display: 'none' }}
                 onChange={onFiles}
               />
+              <span className="toolbar-spacer" />
+              <span className="hint">Enter to send · Shift+Enter newline · / commands</span>
+            </div>
+            <div className="chat-composer-input">
               <textarea
                 ref={inputRef}
                 className="chat-input"
-                placeholder="Send a message… (Enter to send, Shift+Enter for newline, / for commands)"
-                rows={2}
+                placeholder="Send a message…"
+                rows={1}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
                 disabled={sending}
+                aria-label="Message"
               />
-              <Button variant="primary" onClick={onSend} disabled={sending || !text.trim()}>
-                {sending ? <Spinner size="sm" /> : <Send size={14} />}
-                <span>Send</span>
-                <CornerDownLeft size={12} className="hint-key" />
-              </Button>
+              <button
+                type="button"
+                className="send-btn"
+                onClick={onSend}
+                disabled={sending || !text.trim()}
+                aria-label="Send message"
+                title="Send (Enter)"
+              >
+                {sending ? <Spinner size="sm" /> : <Send size={18} />}
+              </button>
             </div>
           </div>
         </div>
