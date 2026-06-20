@@ -29,15 +29,18 @@ import {
   PanelLeftOpen,
   Layers,
   Target,
+  FileText,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
+import { useModal } from '../components/Modal';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import type { Settings, Snapshot, Task, Agent } from '../lib/types';
+import { openArtifactViewer } from '../components/ArtifactViewer';
 
 type Props = {
   snapshot: Snapshot;
@@ -59,6 +62,7 @@ type BgInstance = {
   parentInstanceId?: string;
   tmuxSession?: string;
   tmuxActive?: boolean;
+  taskId?: string; // v3.6.2 — linked task for artifact lookup
   _bgDir?: string;
 };
 
@@ -243,6 +247,10 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   const [bgOutput, setBgOutput] = useState('');
   const [creatingTask, setCreatingTask] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
+  // v3.6.2 — artifact IDs fetched from the task linked to the selected bg instance.
+  const [bgArtifactIds, setBgArtifactIds] = useState<string[]>([]);
+
+  const modal = useModal();
 
   const agents = snapshot.agents || [];
   const tasks = snapshot.tasks || [];
@@ -523,11 +531,13 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
     if (!selectedItem) {
       setComments([]);
       setBgOutput('');
+      setBgArtifactIds([]);
       return;
     }
     setCommentText('');
     setTaskTitle('');
     setBgMessage('');
+    setBgArtifactIds([]);
     (async () => {
       try {
         const r = await api.get<{ events: ActivityEvent[] }>(
@@ -546,6 +556,17 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
           setBgOutput(r.output || '');
         } catch {
           setBgOutput('');
+        }
+        // v3.6.2 — If the bg instance has a linked taskId, fetch its artifacts.
+        if (bgData.taskId) {
+          try {
+            const artR = await api.get<{ artifacts: { id: string }[] }>(
+              `/tasks/${encodeURIComponent(bgData.taskId)}/artifacts`,
+            );
+            setBgArtifactIds((artR.artifacts || []).map((a) => a.id));
+          } catch {
+            setBgArtifactIds([]);
+          }
         }
       }
     })();
@@ -1049,6 +1070,15 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                         <Button variant="ghost" size="sm" onClick={refetchOutput}>
                           <RefreshCw size={12} /> Refresh output
                         </Button>
+                        {bgArtifactIds.length > 0 && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => openArtifactViewer(modal, bgArtifactIds[0])}
+                          >
+                            <FileText size={12} /> Open artifact
+                          </Button>
+                        )}
                         <Button variant="danger" size="sm" onClick={onKillBg}>
                           <Trash2 size={12} /> Kill session
                         </Button>

@@ -21,6 +21,7 @@ import { createWatcher } from './watcher.mjs';
 import { modsLoader } from './mods-loader.mjs';
 import { projectsStore } from './projects-store.mjs';
 import { homedir } from 'node:os';
+import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // server.mjs lives at src/server/ — dist/ is at the package root
@@ -311,7 +312,23 @@ export async function createServer({
 
   watcher.start();
 
+  // v3.5.5 — Bridge bg state file changes into task status updates +
+  // artifact auto-detection. Started after the watcher so the WS
+  // broadcast channel is fully wired by the time the first tick
+  // runs. Idempotent — calling startBgPoller twice is a no-op.
+  try {
+    startBgPoller();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[bizar-dash] failed to start bg-poller:', err.message);
+  }
+
   function close() {
+    try {
+      stopBgPoller();
+    } catch {
+      /* ignore */
+    }
     try {
       watcher.stop();
     } catch {

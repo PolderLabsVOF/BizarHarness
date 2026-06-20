@@ -25,6 +25,15 @@
  *         started it. Response shape: `{data: Array<SessionView>}` where
  *         SessionView is {id, projectID, parentID?, title, agent, model,
  *         time:{created,updated,archived}, location:{directory,...}, ...}.
+ *   - `GET /api/session/{sessionId}/message?directory={worktree}`
+ *       — Lists every message in a session. Response shape:
+ *         `{data: Array<{info, parts}>}` where info is
+ *         {id, role, time:{created,...}} and parts is
+ *         `Array<{type, text}>` (text-bearing parts only contribute to
+ *         the chat display; tool/agent parts are ignored by the chat
+ *         layer but still in the response). Used by the chat endpoint
+ *         to poll for assistant responses, and by the bg-poller to scan
+ *         the final assistant message for an `html-artifact` block.
  *
  * Both endpoints are best-effort. Failure to call them does not crash the
  * dashboard — we surface a structured `{ok:false, error}` result and let
@@ -402,6 +411,128 @@ export async function sendOpencodePrompt(info, opts, directory, timeoutMs = DEFA
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ── v3.5.5 — chat + artifact integration ──────────────────────────────
+//
+// The chat endpoint (POST /api/chat) and the bg-poller both need to
+// read the opencode session's message list so they can:
+//   1. Capture the assistant's reply to a user prompt (chat polling).
+//   2. Scan the final assistant message for an `html-artifact` block
+//      that the agent emitted to declare a tangible artifact.
+//
+// `listOpencodeMessages` is a thin fetch wrapper over
+// `GET /api/session/{id}/message?directory=...`. The response shape
+// (per the plugin's own http-client.ts → listMessages()) is either a
+// raw `Array<{ info, parts }>` or `{ data: Array<{ info, parts }> }`.
+// We accept both.
+//
+// `extractContentFromOpencodeMessage` flattens the `parts[]` array
+// into a single string for chat persistence and artifact detection.
+
+/**
+ * GET /api/session/{id}/message — list the messages of a session.
+ *
+ * v2 wire format (per plugins/bizar/src/http-client.ts): response is
+ * `{ data: Array<{ info, parts }> }` or a bare array. We accept both.
+ *
+ * @param {ServeInfo} info
+ * @param {string} sessionId
+ * @param {string} [directory]
+ * @param {number} [timeoutMs]
+ * @returns {Promise<{ok:true,messages:Array}|{ok:false,error:string,status?:number}>}
+ */
+export async function listOpencodeMessages(info, sessionId, directory, timeoutMs = 8_000) {
+  if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
+  if (!sessionId) return { ok: false, error: 'sessionId is required' };
+  const dir = directory || info.worktree || '';
+  const url = `${info.baseUrl}/api/session/${encodeURIComponent(sessionId)}/message?directory=${encodeURIComponent(dir)}`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: buildAuthHeader(info),
+        Accept: 'application/json',
+      },
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.text()).slice(0, 500); } catch { /* ignore */ }
+      return {
+        ok: false,
+        status: res.status,
+        error: `GET /api/session/.../message failed: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`,
+      };
+    }
+    const body = await res.json().catch(() => null);
+    if (!body) return { ok: true, messages: [] };
+    const messages = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
+    return { ok: true, messages };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    return {
+      ok: false,
+      error: isAbort ? `listMessages timed out after ${timeoutMs}ms` : `listMessages network error: ${msg}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Flatten an opencode message's `parts[]` into a single string.
+ *
+ * Opencode v2 messages look like:
+ *   { info: { id, role, time }, parts: [{type, text}, {type, text}, ...] }
+ *
+ * We concatenate every `text` part in order, joined by `\n\n`. Non-text
+ * parts (tool calls, etc.) are skipped — they don't contribute to a
+ * human-readable chat or artifact scan.
+ *
+ * @param {object} msg  one entry from `listOpencodeMessages().messages`
+ * @returns {string}
+ */
+export function extractContentFromOpencodeMessage(msg) {
+  if (!msg) return '';
+  // Some opencode v1 builds put text directly on the message itself.
+  if (typeof msg.text === 'string') return msg.text;
+  if (typeof msg.content === 'string') return msg.content;
+  const parts = Array.isArray(msg.parts) ? msg.parts : [];
+  const textParts = parts
+    .filter((p) => p && (p.type === 'text' || typeof p.text === 'string'))
+    .map((p) => (typeof p.text === 'string' ? p.text : ''))
+    .filter(Boolean);
+  return textParts.join('\n\n');
+}
+
+/**
+ * Normalize an opencode message into the dashboard's chat shape:
+ *   { id, role, content, ts, agent? }
+ *
+ * Used by GET /api/tasks/:id/chat to surface a bg instance's opencode
+ * session inside the chat UI.
+ *
+ * @param {object} msg
+ * @returns {{id:string,role:string,content:string,ts:number}}
+ */
+export function normalizeOpencodeMessage(msg) {
+  if (!msg) return { id: '', role: 'assistant', content: '', ts: Date.now() };
+  const id = msg?.info?.id || msg?.id || '';
+  const role = msg?.info?.role || msg?.role || 'assistant';
+  const ts = msg?.info?.time?.created
+    || (typeof msg?.info?.time === 'object' ? msg.info.time.created : null)
+    || (typeof msg?.time?.created === 'number' ? msg.time.created : null)
+    || Date.now();
+  return {
+    id: String(id),
+    role: String(role),
+    content: extractContentFromOpencodeMessage(msg),
+    ts: typeof ts === 'number' ? ts : Date.now(),
+  };
 }
 
 /**

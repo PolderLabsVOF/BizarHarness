@@ -16,6 +16,9 @@ import {
   writeFileSync,
   readdirSync,
   statSync,
+  appendFileSync,
+  renameSync,
+  unlinkSync,
 } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -34,6 +37,16 @@ import { skillsStore } from './skills-store.mjs';
 import { notificationsStore } from './notifications-store.mjs';
 import { updateStore } from './update-store.mjs';
 import { pairStore } from './pair-store.mjs';
+import { artifactsStore } from './artifacts-store.mjs';
+import {
+  readServeInfo,
+  createOpencodeSession,
+  sendOpencodePrompt,
+  listOpencodeMessages,
+  extractContentFromOpencodeMessage,
+  normalizeOpencodeMessage,
+  abortSession,
+} from './serve-info.mjs';
 
 const HOME = homedir();
 const OPENCODE_DIR = join(HOME, '.config', 'opencode');
@@ -447,6 +460,189 @@ export function createApiRouter({
     res.json(task);
   }));
 
+  // v3.5.5 — Chat-task linkage. Given a task id, return the
+  // opencode session's messages so the chat UI can open a thread
+  // for an in-progress or completed task. The task must have a
+  // `bgInstanceId` (or `sessionId`) in its metadata — the delegator
+  // writes that when the opencode session is created.
+  //
+  // Response shape:
+  //   { taskId, bgInstanceId, sessionId, agent, messages: [{id,role,content,ts}, ...] }
+  //
+  // Status codes:
+  //   200 — messages returned (may be empty)
+  //   404 — task not found, or no bg instance / session id
+  //   503 — plugin offline
+  //   502 — opencode listMessages call failed
+  router.get('/tasks/:id/chat', wrap(async (req, res) => {
+    const projectId = req.query.projectId || readActiveProjectId();
+    const task = await tasksStore.getById(projectId, req.params.id);
+    if (!task) {
+      res.status(404).json({ error: 'not_found', message: `task ${req.params.id} not found` });
+      return;
+    }
+    const meta = task.metadata || {};
+    let bgInstanceId = meta.bgInstanceId || meta.instanceId || null;
+    let sessionId = meta.sessionId || null;
+    let agent = meta.agent || task.assignee || null;
+
+    // If we have a bgInstanceId but not a sessionId, look it up.
+    if (bgInstanceId && !sessionId) {
+      try {
+        const { backgroundStore } = await import('./background-store.mjs');
+        const bg = backgroundStore.get(bgInstanceId);
+        if (bg) {
+          sessionId = bg.sessionId || null;
+          agent = agent || bg.agent || null;
+        }
+      } catch { /* best effort */ }
+    }
+    if (!bgInstanceId && !sessionId) {
+      return res.status(404).json({
+        error: 'no_bg_instance',
+        message: 'task has no bg instance or opencode session id',
+        taskId: task.id,
+      });
+    }
+
+    const serveInfo = readServeInfo();
+    if (!serveInfo) {
+      return res.status(503).json({
+        error: 'plugin_offline',
+        message: 'opencode plugin is not running',
+        taskId: task.id,
+      });
+    }
+    if (!sessionId) {
+      return res.status(404).json({
+        error: 'no_session',
+        message: 'bg instance has no opencode session id',
+        taskId: task.id,
+        bgInstanceId,
+      });
+    }
+
+    const active = projectsStore.active();
+    const directory = (active && active.path) || serveInfo.worktree || '';
+    const result = await listOpencodeMessages(serveInfo, sessionId, directory);
+    if (!result.ok) {
+      return res.status(502).json({
+        error: 'opencode_error',
+        message: result.error || 'listOpencodeMessages failed',
+        taskId: task.id,
+        sessionId,
+      });
+    }
+    const messages = Array.isArray(result.messages)
+      ? result.messages.map(normalizeOpencodeMessage)
+      : [];
+    res.json({
+      taskId: task.id,
+      bgInstanceId,
+      sessionId,
+      agent,
+      messages,
+    });
+  }));
+
+  // v3.5.5 — Artifact endpoints. Artifacts are self-contained
+  // HTML files emitted by agents via the `html-artifact` convention
+  // (see artifacts-store.mjs). Tasks link to one or more artifacts
+  // via `task.metadata.artifactId` / `task.metadata.artifactIds[]`.
+  // The bg-poller auto-creates artifacts when an agent declares one
+  // at the end of its final message.
+  //
+  // Routes:
+  //   GET  /api/tasks/:id/artifacts        — list artifacts for a task
+  //   POST /api/tasks/:id/artifacts        — manually attach an artifact
+  //   GET  /api/artifacts                  — list all artifacts
+  //   GET  /api/artifacts/:id              — artifact metadata
+  //   GET  /api/artifacts/:id/content      — artifact body (text/html)
+  //   DELETE /api/artifacts/:id            — remove artifact + sidecar
+
+  // v3.5.5 — `GET /api/artifacts` must be defined BEFORE
+  // `/api/artifacts/:id` or Express will treat the literal "all" as
+  // an id. (Same Express-ordering fix as `/agents/stuck`.)
+  router.get('/artifacts', wrap(async (_req, res) => {
+    const items = artifactsStore.list();
+    res.json({ artifacts: items });
+  }));
+
+  router.get('/tasks/:id/artifacts', wrap(async (req, res) => {
+    const items = artifactsStore.list({ taskId: req.params.id });
+    res.json({ artifacts: items, taskId: req.params.id });
+  }));
+
+  router.post('/tasks/:id/artifacts', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const active = projectsStore.active();
+    const { name, contentType, content } = req.body || {};
+    if (typeof content !== 'string' || !content.length) {
+      res.status(400).json({ error: 'content_required', message: 'content (string) is required' });
+      return;
+    }
+    const meta = artifactsStore.save({
+      taskId: req.params.id,
+      projectId: projectId || (active ? active.id : null),
+      name: name || `Artifact for ${req.params.id}`,
+      contentType: contentType || 'text/html',
+      content,
+    });
+    // Link the artifact back to the task. We do NOT overwrite
+    // existing artifactId/artifactIds metadata; the new id is
+    // appended to the array and the legacy `artifactId` field is
+    // bumped to the latest.
+    let updated = null;
+    if (projectId) {
+      const task = await tasksStore.getById(projectId, req.params.id);
+      const prevMeta = (task && task.metadata) || {};
+      const prevIds = Array.isArray(prevMeta.artifactIds) ? prevMeta.artifactIds : [];
+      const newIds = prevIds.includes(meta.id) ? prevIds : [...prevIds, meta.id];
+      updated = await tasksStore.update(projectId, req.params.id, {
+        metadata: {
+          artifactId: meta.id,
+          artifactIds: newIds,
+          artifactName: meta.name,
+        },
+      });
+      if (updated) {
+        broadcast({ type: 'tasks:change', task: updated });
+      }
+    }
+    broadcast({ type: 'artifact:new', artifact: meta });
+    res.status(201).json(meta);
+  }));
+
+  router.get('/artifacts/:id', wrap(async (req, res) => {
+    const meta = artifactsStore.get(req.params.id);
+    if (!meta) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.json(meta);
+  }));
+
+  router.get('/artifacts/:id/content', wrap(async (req, res) => {
+    const result = artifactsStore.read(req.params.id);
+    if (!result) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    // We respect the stored contentType. Default to text/html so
+    // opening the URL in a browser just works.
+    res.type(result.meta.contentType || 'text/html').send(result.content);
+  }));
+
+  router.delete('/artifacts/:id', wrap(async (req, res) => {
+    const ok = artifactsStore.delete(req.params.id);
+    if (!ok) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'artifact:delete', id: req.params.id });
+    res.status(204).end();
+  }));
+
   router.post('/tasks/:id/timer', wrap(async (req, res) => {
     const projectId = req.body?.projectId || readActiveProjectId();
     const task = await tasksStore.toggleTimer(projectId, req.params.id);
@@ -826,6 +1022,17 @@ export function createApiRouter({
     res.json(result);
   }));
 
+  // v3.5.5 — Tmux session metadata. The UI uses this to render an
+  // "Attach" button next to a running bg instance. Returns the
+  // computed session name, the local attach command, and whether
+  // the session actually exists right now. Always 200 — the caller
+  // can tell `exists: false` apart from a missing instance.
+  router.get('/background/:id/tmux', wrap(async (req, res) => {
+    const { backgroundStore } = await import('./background-store.mjs');
+    const info = backgroundStore.tmuxAttachInfo(req.params.id);
+    res.json(info);
+  }));
+
   router.post('/background/:id/message', wrap(async (req, res) => {
     const { backgroundStore } = await import('./background-store.mjs');
     const message = (req.body?.message || '').toString();
@@ -1103,6 +1310,33 @@ export function createApiRouter({
     res.json(state.getChat({ sessionId, limit }));
   }));
 
+  // v3.5.5 — POST /api/chat now actually invokes the agent.
+  //
+  // Flow:
+  //   1. Persist the user message to the per-project .jsonl log (same
+  //      as before — keeps the chat history intact even when the plugin
+  //      is offline).
+  //   2. Resolve a chat session id (use the body-provided one, or mint
+  //      a new `sess_*`).
+  //   3. Look up (or create) the opencode session id that backs this
+  //      chat session — stored in a sidecar file at
+  //      `<sessions>/<chatSessionId>.opencode.json`.
+  //   4. POST the prompt to the opencode session via the plugin's
+  //      opencode serve child.
+  //   5. Poll for the assistant response (up to 90s) and persist it.
+  //   6. Broadcast both messages on the WS `chat:message` channel.
+  //
+  // Failure modes:
+  //   - No active project: we still broadcast the message but skip
+  //     persistence and return 202 (legacy behavior).
+  //   - No serve-info: we fall back to the legacy "queued" path —
+  //     the user message is persisted and broadcast but no agent
+  //     invocation happens. The client can poll GET /api/chat for an
+  //     eventual reply if the plugin comes up.
+  //   - createSession / sendPrompt failure: 502 with the underlying
+  //     error, the user message is still persisted.
+  //   - Polling timeout: 202 with `timeout: true` so the client knows
+  //     the agent is still working and can poll again.
   router.post('/chat', wrap(async (req, res) => {
     const body = req.body || {};
     const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -1111,14 +1345,21 @@ export function createApiRouter({
       return;
     }
     const active = projectsStore.active();
+
+    // 1. Persist the user message to the per-project .jsonl log.
+    //    (No-op when no project is active — the legacy fallback path
+    //    only broadcast.)
+    let chatSessionId = null;
+    let file = null;
+    let record = null;
     if (active) {
-      // Append to per-project session
       const dir = projectsStore.ensureProjectDir(active.id);
       const sessionsDir = join(dir, 'sessions');
       mkdirSync(sessionsDir, { recursive: true });
-      const sessionId = body.session || `sess_${Date.now().toString(36)}`;
-      const file = join(sessionsDir, `${sessionId}.jsonl`);
-      const record = {
+      chatSessionId = body.session || `sess_${Date.now().toString(36)}`;
+      file = join(sessionsDir, `${chatSessionId}.jsonl`);
+      record = {
+        id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
         ts: new Date().toISOString(),
         role: 'user',
         agent: body.agent || null,
@@ -1127,23 +1368,200 @@ export function createApiRouter({
         attachments: body.attachments || [],
       };
       try {
-        const lines = existsSync(file) ? readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean) : [];
-        lines.push(JSON.stringify(record));
-        writeFileSync(file, lines.map((l) => l).join('\n') + '\n', 'utf8');
-      } catch (err) {
+        appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
+      } catch {
         // best effort
       }
+    } else {
+      // No project — synthesize an id so the response shape is consistent.
+      chatSessionId = body.session || `sess_${Date.now().toString(36)}`;
+      record = {
+        id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        ts: new Date().toISOString(),
+        role: 'user',
+        agent: body.agent || null,
+        model: body.model || null,
+        content: message,
+        attachments: body.attachments || [],
+      };
     }
+
     state.appendActivity({
       kind: 'chat.message',
       agent: body.agent || null,
       message: message.slice(0, 500),
     });
-    broadcast({ type: 'chat:message', message: record });
-    res.status(202).json({
+    broadcast({ type: 'chat:message', sessionId: chatSessionId, message: record });
+
+    // 2. No active project → legacy 202. Don't try to dispatch.
+    if (!active) {
+      return res.status(202).json({
+        accepted: true,
+        agent: body.agent || null,
+        queued: true,
+        reason: 'no_active_project',
+      });
+    }
+
+    // 3. No plugin running → fall back to queued. The user message is
+    //    already persisted + broadcast; the next time the plugin comes
+    //    up the user can re-send or POST /api/chat/regenerate.
+    const serveInfo = readServeInfo();
+    if (!serveInfo) {
+      return res.status(202).json({
+        accepted: true,
+        agent: body.agent || null,
+        queued: true,
+        session: chatSessionId,
+        reason: 'plugin_offline',
+      });
+    }
+
+    const sessionsDir = join(projectsStore.ensureProjectDir(active.id), 'sessions');
+    const sidecarPath = join(sessionsDir, `${chatSessionId}.opencode.json`);
+
+    // 4. Resolve or create the opencode session that backs this chat.
+    let opencodeSessionId = null;
+    try {
+      if (existsSync(sidecarPath)) {
+        const sidecar = JSON.parse(readFileSync(sidecarPath, 'utf8'));
+        opencodeSessionId = sidecar?.opencodeSessionId || null;
+      }
+    } catch {
+      opencodeSessionId = null;
+    }
+
+    if (!opencodeSessionId) {
+      const agentName = body.agent || active.defaultAgent || 'odin';
+      const create = await createOpencodeSession(
+        serveInfo,
+        { title: `Chat: ${agentName}`, agent: agentName },
+        active.path || serveInfo.worktree,
+      );
+      if (!create.ok || !create.sessionId) {
+        return res.status(502).json({
+          error: 'create_session_failed',
+          message: create.error || 'failed to create opencode session',
+          session: chatSessionId,
+        });
+      }
+      opencodeSessionId = create.sessionId;
+      try {
+        const sidecar = {
+          opencodeSessionId,
+          agent: agentName,
+          createdAt: Date.now(),
+          chatSessionId,
+        };
+        writeFileSync(sidecarPath, JSON.stringify(sidecar, null, 2) + '\n', 'utf8');
+      } catch {
+        // best effort
+      }
+    }
+
+    // 5. POST the prompt. We use the opencode session id as the
+    //    messageID — the polling loop below uses it to detect the
+    //    "before vs after" boundary.
+    const agentName = body.agent || active.defaultAgent || 'odin';
+    const send = await sendOpencodePrompt(
+      serveInfo,
+      {
+        sessionId: opencodeSessionId,
+        agent: agentName,
+        text: message,
+        messageID: record.id,
+      },
+      active.path || serveInfo.worktree,
+    );
+    if (!send.ok) {
+      return res.status(502).json({
+        error: 'send_prompt_failed',
+        message: send.error || 'failed to send prompt to opencode',
+        session: chatSessionId,
+        opencodeSessionId,
+      });
+    }
+
+    // 6. Poll for the assistant response. We look for the LAST
+    //    assistant message; if its creation time is greater than the
+    //    user's messageID timestamp, we consider it our reply. This
+    //    is the same heuristic the plugin's own event stream uses.
+    const promptSentAt = Date.now();
+    const deadline = promptSentAt + 90_000;
+    let assistantRecord = null;
+    let lastSeenAssistantId = null;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2_000));
+      const list = await listOpencodeMessages(
+        serveInfo,
+        opencodeSessionId,
+        active.path || serveInfo.worktree,
+      );
+      if (!list.ok || !Array.isArray(list.messages) || list.messages.length === 0) {
+        continue;
+      }
+      // Walk newest → oldest; pick the first assistant message that
+      // was created at or after promptSentAt.
+      const assistants = list.messages
+        .filter((m) => (m?.info?.role || m?.role) === 'assistant')
+        .sort((a, b) => {
+          const ta = a?.info?.time?.created || 0;
+          const tb = b?.info?.time?.created || 0;
+          return tb - ta;
+        });
+      for (const m of assistants) {
+        const created = m?.info?.time?.created || 0;
+        if (created >= promptSentAt - 1_000) {
+          const id = m?.info?.id || '';
+          if (id && id === lastSeenAssistantId) continue;
+          lastSeenAssistantId = id;
+          assistantRecord = {
+            id: id || `asst_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            ts: new Date(created || Date.now()).toISOString(),
+            role: 'assistant',
+            agent: agentName,
+            content: extractContentFromOpencodeMessage(m),
+            opencodeSessionId,
+            inReplyTo: record.id,
+          };
+          break;
+        }
+      }
+      if (assistantRecord) break;
+    }
+
+    if (assistantRecord) {
+      // 7. Persist + broadcast the assistant message.
+      try {
+        appendFileSync(file, JSON.stringify(assistantRecord) + '\n', 'utf8');
+      } catch {
+        // best effort
+      }
+      broadcast({ type: 'chat:message', sessionId: chatSessionId, message: assistantRecord });
+      state.appendActivity({
+        kind: 'chat.response',
+        agent: agentName,
+        message: (assistantRecord.content || '').slice(0, 500),
+      });
+      return res.json({
+        accepted: true,
+        session: chatSessionId,
+        opencodeSessionId,
+        userMessage: record,
+        assistantMessage: assistantRecord,
+      });
+    }
+
+    // 8. Timeout — the agent is still working. The next poll of GET
+    //    /api/chat?session=… will pick up whatever has arrived by
+    //    then. Return 202 so the client knows nothing failed.
+    return res.status(202).json({
       accepted: true,
-      agent: body.agent || null,
+      session: chatSessionId,
+      opencodeSessionId,
+      userMessage: record,
       queued: true,
+      timeout: true,
     });
   }));
 

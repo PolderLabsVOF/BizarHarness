@@ -1,6 +1,6 @@
 // src/mobile/views/MobileTasks.tsx — kanban-style task board with task detail.
 import { useEffect, useState } from 'react';
-import { CheckSquare, RefreshCw, Plus, Trash2, Archive, X, Clock, MessageSquare, Link2 } from 'lucide-react';
+import { CheckSquare, RefreshCw, Plus, Trash2, Archive, X, Clock, MessageSquare, Link2, FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatRelative, priorityColors } from '../../lib/utils';
 import type { Snapshot, Task } from '../../lib/types';
@@ -12,6 +12,9 @@ type Props = {
   onRefresh: () => Promise<void>;
   selectedTaskId?: string;
   onCloseDetail?: () => void;
+  // v3.6.2 — Pipeline: callbacks to open chat or artifact for a task.
+  onOpenChat?: (taskId: string) => void;
+  onOpenArtifact?: (artifactId: string) => void;
 };
 
 const STATUS_ORDER = ['queued', 'doing', 'blocked', 'done'];
@@ -28,13 +31,19 @@ const NEXT_STATUS: Record<string, string> = {
   done: 'queued',
 };
 
-export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail }: Props) {
+export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail, onOpenChat, onOpenArtifact }: Props) {
   const [tasks, setTasks] = useState<Task[]>(snapshot.tasks || []);
   const [loading, setLoading] = useState(!snapshot.tasks);
   const [filter, setFilter] = useState('');
   const [activeStatus, setActiveStatus] = useState<string>('queued');
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  // v3.6.2 — state for the mobile artifact viewer sheet.
+  const [artifactTaskId, setArtifactTaskId] = useState<string | null>(null);
+  const [artifactIds, setArtifactIds] = useState<string[]>([]);
+  const [artifactContent, setArtifactContent] = useState<string>('');
+  const [artifactMeta, setArtifactMeta] = useState<{ name?: string; contentType?: string; size?: number } | null>(null);
+  const [artifactLoading, setArtifactLoading] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'priority'>('updated');
 
@@ -138,6 +147,33 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
       setNewTaskOpen(false);
     } catch {
       // best-effort
+    }
+  };
+
+  // v3.6.2 — Open the artifact viewer for a task's artifact.
+  const openTaskArtifact = async (taskId: string) => {
+    setArtifactLoading(true);
+    setArtifactContent('');
+    setArtifactMeta(null);
+    setArtifactTaskId(taskId);
+    try {
+      const artR = await api.get<{ artifacts: { id: string; name?: string; contentType?: string; size?: number }[] }>(
+        `/tasks/${encodeURIComponent(taskId)}/artifacts`,
+      );
+      const ids = (artR.artifacts || []).map((a) => a.id);
+      setArtifactIds(ids);
+      if (ids.length > 0) {
+        const [meta, content] = await Promise.all([
+          api.get<{ name?: string; contentType?: string; size?: number }>(`/artifacts/${encodeURIComponent(ids[0])}`),
+          fetch(`/api/artifacts/${encodeURIComponent(ids[0])}/content`).then((r) => r.text()),
+        ]);
+        setArtifactMeta(meta);
+        setArtifactContent(content);
+      }
+    } catch {
+      // best-effort
+    } finally {
+      setArtifactLoading(false);
     }
   };
 
@@ -270,6 +306,26 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
               >
                 <Archive size={14} /> Archive
               </button>
+              {/* v3.6.2 — Pipeline: Chat button */}
+              {!!((detailTask.metadata as { sessionId?: string; bgInstanceId?: string })?.sessionId || (detailTask.metadata as { sessionId?: string; bgInstanceId?: string })?.bgInstanceId) && (
+                <button
+                  type="button"
+                  className="mobile-btn mobile-btn-secondary"
+                  onClick={() => { onOpenChat?.(detailTask.id); }}
+                >
+                  <MessageSquare size={14} /> Chat
+                </button>
+              )}
+              {/* v3.6.2 — Pipeline: Artifact button */}
+              {!!((detailTask.metadata as { artifactIds?: string[]; artifactId?: string })?.artifactIds?.length || (detailTask.metadata as { artifactIds?: string[]; artifactId?: string })?.artifactId) && (
+                <button
+                  type="button"
+                  className="mobile-btn mobile-btn-secondary"
+                  onClick={() => { openTaskArtifact(detailTask.id); }}
+                >
+                  <FileText size={14} /> Artifact
+                </button>
+              )}
               <button
                 type="button"
                 className="mobile-btn mobile-btn-danger"
@@ -348,6 +404,59 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
         onCreate={createTask}
         agents={agents}
       />
+
+      {/* v3.6.2 — Mobile artifact viewer sheet */}
+      <MobileBottomSheet
+        open={!!artifactTaskId}
+        onClose={() => { setArtifactTaskId(null); setArtifactContent(''); setArtifactMeta(null); }}
+        title={artifactMeta?.name || 'Artifact'}
+        actions={
+          artifactIds.length > 1 ? (
+            <div className="mobile-task-detail-actions">
+              {artifactIds.map((id, i) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="mobile-btn mobile-btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    // Reload for the selected artifact
+                    setArtifactLoading(true);
+                    Promise.all([
+                      api.get<{ name?: string; contentType?: string; size?: number }>(`/artifacts/${encodeURIComponent(id)}`),
+                      fetch(`/api/artifacts/${encodeURIComponent(id)}/content`).then((r) => r.text()),
+                    ]).then(([meta, content]) => {
+                      setArtifactMeta(meta);
+                      setArtifactContent(content);
+                      setArtifactLoading(false);
+                    }).catch(() => setArtifactLoading(false));
+                  }}
+                >
+                  Artifact {i + 1}
+                </button>
+              ))}
+            </div>
+          ) : null
+        }
+      >
+        <div className="mobile-artifact-viewer">
+          {artifactLoading ? (
+            <div className="mobile-loading"><p>Loading artifact…</p></div>
+          ) : artifactContent ? (
+            <iframe
+              srcDoc={artifactContent}
+              className="mobile-artifact-iframe"
+              sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+              title={artifactMeta?.name || 'Artifact'}
+            />
+          ) : (
+            <div className="mobile-empty">
+              <FileText size={32} />
+              <p className="muted">No artifact content available.</p>
+            </div>
+          )}
+        </div>
+      </MobileBottomSheet>
     </div>
   );
 }

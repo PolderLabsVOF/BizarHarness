@@ -550,6 +550,33 @@ export const taskDelegator = {
             );
             if (!send.ok) {
               dispatchError = send.error || 'sendOpencodePrompt failed';
+            } else {
+              // v3.5.5 — Wrap the agent run in a tmux session so
+              // operators can `tmux attach -t bizar-bg-<id>` and watch
+              // the opencode process in real time. We shell out a
+              // `tail -f` against the opencode log file; opencode
+              // serves its session on the plugin's opencode serve
+              // child, so the tail is a passive monitor rather than
+              // a redundant runner. Failures are silent — the agent
+              // dispatch itself succeeded; tmux is a nice-to-have.
+              try {
+                const logFile = join(serveInfo.worktree || process.cwd(), '.bizar', 'opencode.log');
+                const tailCmd = `mkdir -p "$(dirname "${logFile}")" 2>/dev/null; touch "${logFile}"; tail -n 200 -f "${logFile}" 2>/dev/null || sleep 86400`;
+                const tmuxRes = backgroundStore.spawnTmuxFor(
+                  `bg_${sessionId.slice(0, 16)}`,
+                  tailCmd,
+                  serveInfo.worktree,
+                );
+                if (tmuxRes.ok) {
+                  // We do not fail the dispatch when tmux is missing.
+                  if (tmuxRes.note) {
+                    // pre-existing session, no log
+                  }
+                }
+              } catch (err) {
+                // Silent — tmux is best-effort.
+                console.warn(`[task-delegator] tmux wrap failed: ${err.message}`);
+              }
             }
           }
         } catch (err) {

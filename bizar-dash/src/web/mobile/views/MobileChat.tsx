@@ -9,6 +9,15 @@ import type { ChatMessage, Settings, Snapshot } from '../../lib/types';
 type Props = {
   snapshot: Snapshot;
   settings: Settings | null;
+  // v3.6.2 — Optional taskId to load a specific task's chat session.
+  initialTaskId?: string | null;
+  onClearTaskId?: () => void;
+};
+
+// v3.6.2 — Response from GET /api/tasks/:id/chat
+type TaskChatSession = {
+  sessionId?: string;
+  messages: ChatMessage[];
 };
 
 const SLASH_COMMANDS = [
@@ -18,7 +27,7 @@ const SLASH_COMMANDS = [
   { cmd: '/plan', desc: 'Create a plan' },
 ];
 
-export function MobileChat({ snapshot, settings }: Props) {
+export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -42,8 +51,33 @@ export function MobileChat({ snapshot, settings }: Props) {
     }
   };
 
+  // v3.6.2 — Load chat messages for a specific task's opencode session.
+  const loadTaskChat = async (taskId: string) => {
+    setLoading(true);
+    try {
+      const data = await api.get<TaskChatSession>(`/tasks/${encodeURIComponent(taskId)}/chat`);
+      setMessages(data.messages || []);
+    } catch {
+      // best-effort
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // v3.6.2 — On mount, load either the task chat session or the default chat.
+  // Uses a mutable ref to track whether to load task chat so that the
+  // effect only fires once on mount (not on subsequent initialTaskId changes).
+  const initialTaskIdRef = useRef(initialTaskId);
   useEffect(() => {
-    loadChat();
+    if (initialTaskIdRef.current) {
+      loadTaskChat(initialTaskIdRef.current).then(() => {
+        initialTaskIdRef.current = null;
+        onClearTaskId?.();
+      });
+    } else {
+      loadChat();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

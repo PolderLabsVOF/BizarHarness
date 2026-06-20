@@ -109,6 +109,7 @@ import {
 } from "./src/options.js";
 
 import { ServeLifecycle } from "./src/serve.js";
+import { writeServeInfo, clearServeInfo } from "./src/serve-info.js";
 import { HttpClient } from "./src/http-client.js";
 import { EventStream } from "./src/event-stream.js";
 import { BackgroundStateStore, type BackgroundState } from "./src/background-state.js";
@@ -359,6 +360,20 @@ async function init(
       });
       serveHandle = serve;
       const serveInfo = await serve.start();
+      // v3.5.7 — Persist serve-info so the dashboard can talk to us
+      try {
+        writeServeInfo(options.stateDir, {
+          baseUrl: serveInfo.baseUrl,
+          port: serveInfo.port,
+          password: serveInfo.password,
+          worktree: serveInfo.worktree,
+          pid: serveInfo.pid,
+          startedAt: serveInfo.startedAt,
+        }, logger);
+        logger.info(`[bizar] wrote serve-info to ${options.stateDir}/serve.json`);
+      } catch (err) {
+        logger.warn(`[bizar] failed to write serve-info: ${err instanceof Error ? err.message : String(err)}`);
+      }
       const http = new HttpClient({
         baseUrl: `http://127.0.0.1:${serveInfo.port}`,
         password: serveInfo.password,
@@ -437,7 +452,7 @@ async function init(
 
   // --- Signal traps (spec §5.3) ------------------------------------------
 
-  installSignalHandlers(logger, instanceManager, serve, stream);
+  installSignalHandlers(logger, instanceManager, serve, stream, options.stateDir);
 
   const ctx: RuntimeContext = {
     logger,
@@ -462,6 +477,7 @@ function installSignalHandlers(
   instanceManager: InstanceManager | null,
   serve: ServeLifecycle | null,
   stream: EventStream | null,
+  stateDir: string,
 ): void {
   const onSignal = async (sig: "SIGTERM" | "SIGINT") => {
     if (shuttingDown) return;
@@ -503,7 +519,10 @@ function installSignalHandlers(
       }
     }
 
-    // 4. Exit. (Note: the host may keep the process alive if other work
+    // 4. Clear serve-info so the dashboard doesn't try to talk to a dead serve.
+    clearServeInfo(stateDir, logger);
+
+    // 5. Exit. (Note: the host may keep the process alive if other work
     //    is pending, but for the plugin process this is the end.)
     try {
       process.exit(0);

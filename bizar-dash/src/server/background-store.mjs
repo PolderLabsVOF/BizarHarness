@@ -185,6 +185,62 @@ export const backgroundStore = {
   },
 
   /**
+   * v3.5.5 — Return tmux session metadata for the API layer to
+   * expose as `GET /api/background/:id/tmux`. Always returns the
+   * computed session name so the UI can render an "Attach" button
+   * even when the session doesn't exist (the button just opens a
+   * new detached session that shares the same name).
+   *
+   * @param {string} instanceId
+   * @returns {{ exists: boolean, session: string, attachCommand: string, attachUrl: string }}
+   */
+  tmuxAttachInfo(instanceId) {
+    const session = tmuxSessionFor(instanceId);
+    return {
+      exists: tmuxHasSession(session),
+      session,
+      attachCommand: `tmux attach -t ${session}`,
+      attachUrl: `tmux://${session}`,
+    };
+  },
+
+  /**
+   * v3.5.5 — Spawn a tmux session that wraps the agent run. Used
+   * by the task delegator so operators can `tmux attach -t …` and
+   * watch the opencode process in real time. The session is named
+   * `bizar-bg-<id>` and runs the supplied shell command inside
+   * the optional `cwd`.
+   *
+   * Returns `{ ok, session, error? }`. Never throws — failures are
+   * logged and reported so the dispatch path can keep going.
+   *
+   * @param {string} instanceId
+   * @param {string} command
+   * @param {string} [cwd]
+   */
+  spawnTmuxFor(instanceId, command, cwd) {
+    const session = tmuxSessionFor(instanceId);
+    if (tmuxHasSession(session)) {
+      return { ok: true, session, note: 'session already existed' };
+    }
+    // v3.5.5 — Use the user's shell so paths / env / aliases resolve
+    // the same way `opencode` does when invoked from the CLI. We wrap
+    // the supplied command in `bash -lc` and switch into cwd first.
+    const safeCmd = String(command || '').replace(/"/g, '\\"');
+    const workdir = cwd && typeof cwd === 'string' ? cwd.replace(/"/g, '\\"') : '';
+    const wrapped = `bash -lc 'cd "${workdir}" 2>/dev/null || true; ${safeCmd}'`;
+    try {
+      execSync(`tmux new-session -d -s ${session} -x 220 -y 50 "${wrapped}"`, {
+        stdio: 'ignore',
+        timeout: 5_000,
+      });
+      return { ok: true, session };
+    } catch (err) {
+      return { ok: false, session, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /**
    * Capture the tail of the tmux session for an instance.
    */
   captureOutput(instanceId, lines = 50) {

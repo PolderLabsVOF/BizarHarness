@@ -29,6 +29,7 @@ import {
   Sparkles,
   RefreshCw,
   Send,
+  FileText,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
@@ -41,6 +42,7 @@ import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { cn, formatRelative, priorityColors } from '../lib/utils';
 import type { Agent, Settings, Snapshot, Task } from '../lib/types';
+import { openArtifactViewer } from '../components/ArtifactViewer';
 
 type Props = {
   snapshot: Snapshot;
@@ -74,7 +76,7 @@ const SORTS: { id: SortKey; label: string }[] = [
   { id: 'due', label: 'Due date' },
 ];
 
-export function Tasks({ snapshot, refreshSnapshot }: Props) {
+export function Tasks({ snapshot, refreshSnapshot, setActiveTab }: Props) {
   const toast = useToast();
   const modal = useModal();
   const [tasks, setTasks] = useState<Task[]>(snapshot.tasks || []);
@@ -284,6 +286,19 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
     });
   };
 
+  // v3.6.2 — Pipeline: open task chat session.
+  const onOpenTaskChat = (taskId: string) => {
+    setActiveTab('chat');
+    // The Chat view reads crossState.initialChatTaskId to pre-load a session.
+    // We set it via a custom event that Chat.tsx listens to on mount.
+    window.dispatchEvent(new CustomEvent('bizar:setChatTask', { detail: { taskId } }));
+  };
+
+  // v3.6.2 — Pipeline: open task artifact viewer.
+  const onOpenTaskArtifact = (artifactId: string) => {
+    openArtifactViewer(modal, artifactId);
+  };
+
   return (
     <div className="view view-tasks">
       <header className="view-header">
@@ -467,6 +482,8 @@ export function Tasks({ snapshot, refreshSnapshot }: Props) {
               onAdd={() => openTaskModal(modal, toast, null, col.id, setTasks, reload, refreshSnapshot, snapshot.agents)}
               onAssignMe={onAssignMe}
               onMarkWorkedBy={onMarkWorkedBy}
+              onOpenChat={onOpenTaskChat}
+              onOpenArtifact={onOpenTaskArtifact}
               isArchivedView={showArchived}
             />
           ))}
@@ -491,6 +508,8 @@ function KanbanColumn({
   onAdd,
   onAssignMe,
   onMarkWorkedBy,
+  onOpenChat,
+  onOpenArtifact,
   isArchivedView,
 }: {
   column: Column;
@@ -507,6 +526,8 @@ function KanbanColumn({
   onAdd: () => void;
   onAssignMe: (task: Task) => void;
   onMarkWorkedBy: (task: Task, agent: string, status: 'doing' | 'done' | 'idle', complete: boolean) => void;
+  onOpenChat: (taskId: string) => void;
+  onOpenArtifact: (artifactId: string) => void;
   isArchivedView: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -566,6 +587,8 @@ function KanbanColumn({
               onUnarchive={() => onUnarchive(t.id)}
               onAssignMe={() => onAssignMe(t)}
               onMarkWorkedBy={(agent, status, complete) => onMarkWorkedBy(t, agent, status, complete)}
+              onOpenChat={onOpenChat}
+              onOpenArtifact={onOpenArtifact}
               isArchivedView={isArchivedView}
             />
           ))
@@ -593,6 +616,8 @@ function TaskCard({
   onUnarchive,
   onAssignMe,
   onMarkWorkedBy,
+  onOpenChat,
+  onOpenArtifact,
   isArchivedView,
 }: {
   task: Task;
@@ -605,10 +630,24 @@ function TaskCard({
   onUnarchive: () => void;
   onAssignMe: () => void;
   onMarkWorkedBy: (agent: string, status: 'doing' | 'done' | 'idle', complete: boolean) => void;
+  onOpenChat: (taskId: string) => void;
+  onOpenArtifact: (artifactId: string) => void;
   isArchivedView: boolean;
 }) {
   const isTimer = task._timerStart;
   const isWorking = (task.workedBy || task.status === 'doing') && !isArchivedView;
+
+  // v3.6.2 — Pipeline: determine if task has a chat session or artifact.
+  type TaskPipelineMeta = {
+    sessionId?: string;
+    bgInstanceId?: string;
+    artifactIds?: string[];
+    artifactId?: string;
+  };
+  const metadata = (task.metadata || {}) as TaskPipelineMeta;
+  const hasChatSession = !!(metadata.sessionId || metadata.bgInstanceId);
+  const artifactIds: string[] = metadata.artifactIds || (metadata.artifactId ? [metadata.artifactId] : []);
+  const primaryArtifactId = artifactIds[0];
   return (
     <div
       className={cn(
@@ -697,6 +736,28 @@ function TaskCard({
               >
                 <TagIcon size={14} />
               </button>
+              {hasChatSession && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Open chat"
+                  title="Open in chat"
+                  onClick={() => onOpenChat(task.id)}
+                >
+                  <MessageSquare size={14} />
+                </button>
+              )}
+              {primaryArtifactId && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Open artifact"
+                  title="Open artifact"
+                  onClick={() => onOpenArtifact(primaryArtifactId)}
+                >
+                  <FileText size={14} />
+                </button>
+              )}
               {isArchivedView ? (
                 <button
                   type="button"

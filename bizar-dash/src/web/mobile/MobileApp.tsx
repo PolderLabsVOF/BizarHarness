@@ -52,6 +52,8 @@ export function MobileApp() {
   const [stack, setStack] = useState<MobileView[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  // v3.6.2 — Pipeline: pending taskId to open in chat when switching tabs.
+  const [pendingChatTaskId, setPendingChatTaskId] = useState<string | null>(null);
 
   const refreshSnapshot = useCallback(async () => {
     try {
@@ -102,6 +104,12 @@ export function MobileApp() {
       case 'agent': push({ id: 'agent-detail', name: id }); break;
       default: break;
     }
+  };
+
+  // v3.6.2 — Switch to chat tab and signal a task session to load.
+  const onOpenChat = (taskId: string) => {
+    setPendingChatTaskId(taskId);
+    goToTab('chat');
   };
 
   const currentView = stack.length > 0 ? stack[stack.length - 1] : { id: activeTab };
@@ -169,8 +177,8 @@ export function MobileApp() {
 
     switch (activeTab) {
       case 'activity': return <MobileActivity snapshot={snapshot!} onRefresh={refreshSnapshot} />;
-      case 'chat': return <MobileChat snapshot={snapshot!} settings={settings!} />;
-      case 'tasks': return <MobileTasks snapshot={snapshot!} onRefresh={refreshSnapshot} />;
+      case 'chat': return <MobileChat snapshot={snapshot!} settings={settings!} initialTaskId={pendingChatTaskId} onClearTaskId={() => setPendingChatTaskId(null)} />;
+      case 'tasks': return <MobileTasks snapshot={snapshot!} onRefresh={refreshSnapshot} onOpenChat={onOpenChat} />;
       case 'settings': return <MobileSettings settings={settings!} snapshot={snapshot} onRefresh={refreshSnapshot} />;
       case 'more': return (
         <MobileMore

@@ -43,9 +43,17 @@ type Props = {
   activeTab: string;
   setActiveTab: (id: string) => void;
   refreshSnapshot: () => Promise<void>;
+  // v3.6.2 — Optional taskId to pre-load a specific task's chat session.
+  initialTaskId?: string | null;
 };
 
 type SlashCommand = { cmd: string; desc: string; mod?: string };
+
+// v3.6.2 — Response from GET /api/tasks/:id/chat
+type TaskChatSession = {
+  sessionId?: string;
+  messages: ChatMessage[];
+};
 
 const BUILTIN_COMMANDS: SlashCommand[] = [
   { cmd: '/plan new <slug>', desc: 'Create a new plan' },
@@ -61,7 +69,7 @@ const BUILTIN_COMMANDS: SlashCommand[] = [
   { cmd: '/help', desc: 'Show all slash commands' },
 ];
 
-export function Chat({ snapshot, settings, setActiveTab }: Props) {
+export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props) {
   const toast = useToast();
   const modal = useModal();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -96,6 +104,20 @@ export function Chat({ snapshot, settings, setActiveTab }: Props) {
       setSessions(data.sessions || []);
     } catch (err) {
       toast.error(`Chat load failed: ${(err as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // v3.6.2 — Load chat messages for a specific task's opencode session.
+  const loadTaskChat = async (taskId: string) => {
+    setLoading(true);
+    try {
+      const data = await api.get<TaskChatSession>(`/tasks/${encodeURIComponent(taskId)}/chat`);
+      setMessages(data.messages || []);
+      setSessionId(data.sessionId || taskId);
+    } catch (err) {
+      toast.error(`Task chat load failed: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -143,6 +165,26 @@ export function Chat({ snapshot, settings, setActiveTab }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // v3.6.2 — Listen for the 'bizar:setChatTask' custom event dispatched
+  // by Tasks.tsx when the "Open in chat" button is clicked.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const taskId = (e as CustomEvent<{ taskId: string }>).detail?.taskId;
+      if (taskId) loadTaskChat(taskId);
+    };
+    window.addEventListener('bizar:setChatTask', handler);
+    return () => window.removeEventListener('bizar:setChatTask', handler);
+  }, []);
+
+  // v3.6.2 — If an initialTaskId prop is provided (e.g. from URL state),
+  // load that task's chat session on mount.
+  useEffect(() => {
+    if (initialTaskId) {
+      loadTaskChat(initialTaskId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-scroll on new messages
   useEffect(() => {
     if (listRef.current) {
@@ -176,8 +218,25 @@ export function Chat({ snapshot, settings, setActiveTab }: Props) {
     setText('');
     setSuggestions([]);
     try {
-      await api.post('/chat', { message, agent, model, attachments });
-      toast.success('Message accepted.');
+      // v3.6.2 — POST /api/chat now returns the full exchange (user + assistant)
+      // in the HTTP response, polling for up to 90s for the assistant reply.
+      const response = await api.post<{ messages?: ChatMessage[] }>('/chat', { message, agent, model, attachments });
+      // If assistant messages came back in the response, add them.
+      if (response?.messages) {
+        for (const msg of response.messages) {
+          if (msg.role === 'assistant') {
+            setMessages((cur) => {
+              // Avoid duplicates if WS already delivered it.
+              const exists = cur.some((m) => m.ts === msg.ts);
+              return exists ? cur : [...cur, msg];
+            });
+          }
+        }
+      } else {
+        // No messages in response — show "still processing" toast and
+        // let the WebSocket event deliver the eventual response.
+        toast.info('Still processing… the response will appear shortly.', 3000);
+      }
     } catch (err) {
       setMessages((cur) => cur.filter((m) => m !== optimistic));
       toast.error(`Send failed: ${(err as Error).message}`);
