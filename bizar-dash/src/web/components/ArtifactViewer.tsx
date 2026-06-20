@@ -125,16 +125,15 @@ async function fetchRawContent(artifactId: string): Promise<string> {
   return r.text();
 }
 
-// Hook to open the artifact viewer via the modal system.
+// v3.5.7 — Open the artifact in a new browser tab at full window size.
+// The artifact's own HTML renders edge-to-edge, which is what users want
+// for visual artifacts (they're meant to be viewed, not crammed in a modal).
 export function openArtifactViewer(
-  modal: ReturnType<typeof useModal>,
+  _modal: ReturnType<typeof useModal>,
   artifactId: string,
 ) {
-  modal.open({
-    title: 'Artifact',
-    width: 900,
-    children: <ArtifactViewerModal artifactId={artifactId} />,
-  });
+  const url = `/api/artifacts/${encodeURIComponent(artifactId)}/content`;
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function ArtifactViewerModal({ artifactId }: { artifactId: string }) {
