@@ -22,6 +22,7 @@ export type ModalProps = {
 export type ModalApi = {
   open: (props: ModalProps) => string;
   close: (id?: string) => void;
+  isModalOpen: boolean;
 };
 
 const ModalContext = createContext<ModalApi | null>(null);
@@ -29,7 +30,7 @@ const ModalContext = createContext<ModalApi | null>(null);
 export function useModal(): ModalApi {
   const ctx = useContext(ModalContext);
   if (!ctx) {
-    return { open: () => '', close: () => undefined };
+    return { open: () => '', close: () => undefined, isModalOpen: false };
   }
   return ctx;
 }
@@ -70,7 +71,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   }, [stack.length, close]);
 
   return (
-    <ModalContext.Provider value={{ open, close }}>
+    <ModalContext.Provider value={{ open, close, isModalOpen: stack.length > 0 }}>
       {children}
       {typeof document !== 'undefined' &&
         createPortal(

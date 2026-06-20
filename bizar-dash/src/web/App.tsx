@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Topbar, TABS } from './components/Topbar';
 import { Sidebar } from './components/Sidebar';
-import { ModalProvider } from './components/Modal';
+import { ModalProvider, useModal } from './components/Modal';
 import { ToastProvider, useToast } from './components/Toast';
 import { SearchModal } from './components/SearchModal';
 import { Notifications } from './components/Notifications';
@@ -87,6 +87,8 @@ export function App() {
 
 function Shell() {
   const toast = useToast();
+  const { isModalOpen } = useModal();
+  const isModalOpenRef = useRef(false);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -105,6 +107,15 @@ function Shell() {
     }
   }, [settings?.theme]);
 
+  // v3.6.1 — Keep a ref in sync with isModalOpen so the keyboard handler
+  // always reads the current value even between state updates and effect
+  // re-runs. This closes the race window where modal.close() has cleared
+  // the state but the old keyboard handler (with isModalOpen=false in
+  // its closure) hasn't been replaced yet.
+  useEffect(() => {
+    isModalOpenRef.current = isModalOpen;
+  }, [isModalOpen]);
+
   // System-mode listener
   useEffect(() => {
     if (settings?.theme?.mode !== 'system') return;
@@ -114,7 +125,7 @@ function Shell() {
     return () => mql.removeEventListener('change', handler);
   }, [settings?.theme?.mode]);
 
-  // Initial fetch
+  // Initial fetch — runs once on mount
   useEffect(() => {
     let cancelled = false;
     Promise.all([
@@ -128,7 +139,6 @@ function Shell() {
         if (set?.data) setSettings(set.data);
         if (stuck?.stuck) setStuckAgents(stuck.stuck);
         if (!snap && !set) setBootError('Dashboard server unreachable.');
-        if (set?.data?.ui?.defaultTab) setActiveTab(set.data.ui.defaultTab);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -140,6 +150,21 @@ function Shell() {
       cancelled = true;
     };
   }, [toast]);
+
+  // Apply defaultTab ONCE on mount only — must NOT re-fire on toast changes
+  useEffect(() => {
+    let cancelled = false;
+    api.get<SettingsResponse>('/settings')
+      .then((set) => {
+        if (cancelled) return;
+        const defaultTab = set?.data?.ui?.defaultTab;
+        if (defaultTab) setActiveTab(defaultTab);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);  // empty deps — runs once on mount
 
   // v3.1.0 — Periodic stuck-agent poll. Light-weight; the server does
   // the threshold math and only returns the list.
@@ -251,6 +276,15 @@ function Shell() {
   // closes on a click and the user's next key event (often a key-repeat)
   // would otherwise trigger setActiveTab("overview").
   // v3.3.0 used 250ms which was too short (keyboard repeat can fire later).
+  //
+  // v3.5.4 (bug #4) — The safe window alone was not enough. Users were
+  // still being bounced to overview after action grace windows expired
+  // because the transientFocus check (activeElement === body) was nested
+  // inside the safe-window branch. See the handler below for the new
+  // two-gate model: (1) body/null focus ALWAYS blocks digit shortcuts;
+  // (2) the safe window relaxes that block only for the first 1500ms
+  // after an interaction. After the window passes, the user must
+  // explicitly focus a real element before digit-key tab switches work.
   const safeUntilRef = useRef(0);
   useEffect(() => {
     const bump = () => {
@@ -305,16 +339,23 @@ function Shell() {
       // The safe window is now 1500ms (up from 250ms) and covers all
       // interaction types (mousedown/click/focusin/keydown).
       //
-      // v3.3.1 — transient-focus check. If active element is body/null
-      // within the safe window, treat it as a transient focus state
-      // (modal close → body fallback) and bail. This check runs BEFORE
-      // isFormControl so we catch the actual bug case.
+      // v3.3.1 — transient-focus check. If active element is body/null,
+      // treat it as a transient focus state (modal close → body fallback)
+      // and bail. v3.5.4 (bug #4): this check is now independent of the
+      // safe window — it ALWAYS applies. Previously it was only effective
+      // inside the 1500ms grace window, which let digit-key presses through
+      // once the window expired. The user would see themselves bounced back
+      // to overview (digit `1`) after every action whose grace window had
+      // already elapsed. The safe window now only relaxes the rule
+      // temporarily for the action that JUST happened; it must be combined
+      // with a real focus element for digit-key shortcuts to fire.
       const activeEl = document.activeElement;
-      const transientFocus = !activeEl || activeEl === document.body;
-      if (
-        transientFocus &&
-        Date.now() < safeUntilRef.current
-      ) {
+      const transientFocus = !activeEl || activeEl === document.body || activeEl === document.documentElement;
+      if (transientFocus) {
+        // Even within the grace window, body/null focus means there is
+        // no real input target — refuse to switch tabs. The user must
+        // explicitly click into a focusable element (input, button, etc.)
+        // to enable digit-key tab switching again.
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -337,6 +378,9 @@ function Shell() {
       // act on the first (e.repeat === false). This prevents the modal-close
       // + key-repeat scenario from switching tabs after the safe window closes.
       if (e.repeat) return;
+      // v3.6.1 — Check isModalOpenRef (not the closure variable) so we always
+      // see the current value even between state update and effect re-run.
+      if (isModalOpenRef.current) return;
       if (
         isFormControl ||
         inForm ||

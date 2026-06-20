@@ -368,7 +368,15 @@ export const plansStore = {
     return { plan, canvas };
   },
 
-  /** Add a comment. Pass elementId to pin to an element; omit for canvas-level. */
+  /**
+   * Add a comment. Pass elementId to pin to an element; omit for canvas-level.
+   *
+   * v3.5.4 (bug: pin) — Accepts optional `x` and `y` (finite numbers) on the
+   * body. Stored verbatim on the comment so the UI can render a canvas pin
+   * even for canvas-level comments. `elementId` and (x, y) are independent:
+   * a comment can be pinned to an element AND have a position override, or
+   * be canvas-only with no coords. Both fields default to null.
+   */
   addComment(slug, elId, body, projectRoot) {
     const plan = this.get(slug, projectRoot);
     if (!plan) return null;
@@ -383,6 +391,13 @@ export const plansStore = {
       created: new Date().toISOString(),
       thread: [],
     };
+    // v3.5.4 (bug: pin) — Persist canvas-pin coordinates if provided. We
+    // accept either `x`/`y` as direct numbers or a `pin: {x, y}` object so
+    // the frontend can send whichever shape is convenient.
+    const rawX = body?.pin?.x ?? body?.x;
+    const rawY = body?.pin?.y ?? body?.y;
+    if (Number.isFinite(rawX)) comment.x = rawX;
+    if (Number.isFinite(rawY)) comment.y = rawY;
     canvas.comments.push(comment);
     this._writePlan(plan.dir, { ...plan.meta, lastEdited: new Date().toISOString() }, canvas);
     return { plan, canvas, comment };
@@ -483,7 +498,12 @@ function sanitizeCanvas(raw, fallbackTitle) {
     ? raw.comments
         .map((c) => {
           if (!c || typeof c !== 'object') return null;
-          return {
+          // v3.5.4 (bug: pin) — Preserve canvas-pin coordinates when
+          // re-reading a plan. `pin: {x, y}` and top-level `x`/`y` both
+          // round-trip; we normalize to top-level on the stored shape.
+          const pinX = c.pin?.x ?? c.x;
+          const pinY = c.pin?.y ?? c.y;
+          const next = {
             id: typeof c.id === 'string' ? c.id : genId('cmt'),
             elementId: c.elementId || null,
             author: typeof c.author === 'string' ? c.author : 'drb0rk',
@@ -491,6 +511,9 @@ function sanitizeCanvas(raw, fallbackTitle) {
             created: typeof c.created === 'string' ? c.created : new Date().toISOString(),
             thread: Array.isArray(c.thread) ? c.thread : [],
           };
+          if (Number.isFinite(pinX)) next.x = pinX;
+          if (Number.isFinite(pinY)) next.y = pinY;
+          return next;
         })
         .filter((c) => c.text)
     : [];

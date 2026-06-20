@@ -304,6 +304,11 @@ export function createApiRouter({
   // v3.2.0 — Odin task delegation. Splits the input into subtasks,
   // matches each to an agent, and dispatches them to the background
   // agent infrastructure (best-effort).
+  //
+  // v3.5.4 — Response now includes `dispatch: { dispatched[], errors[], warnings[] }`.
+  // When dispatch fails (plugin offline, serve unreachable, etc.) the
+  // subtasks are still persisted but the response tells the caller so
+  // the UI can prompt the user to retry via POST /api/tasks/:id/start.
   router.post('/tasks/submit', wrap(async (req, res) => {
     const projectId = req.body?.projectId || readActiveProjectId();
     const { taskDelegator } = await import('./task-delegator.mjs');
@@ -314,7 +319,10 @@ export function createApiRouter({
         state,
         broadcast,
       });
-      res.status(201).json(result);
+      // 207 Multi-Status when some dispatches failed — caller can decide
+      // whether to retry. Pure success keeps 201.
+      const partial = (result?.dispatch?.errors || []).length > 0;
+      res.status(partial ? 207 : 201).json(result);
     } catch (err) {
       const status = err?.message?.includes('required') ? 400 : 500;
       res.status(status).json({
@@ -333,6 +341,55 @@ export function createApiRouter({
     }
     broadcast({ type: 'tasks:change', task });
     res.json(task);
+  }));
+
+  // v3.5.4 — Trigger execution of a queued task. Used by external
+  // operators, tests, and the UI's "Retry dispatch" button. Reuses the
+  // same dispatch logic as `/tasks/submit` so dispatch errors surface
+  // in the same shape. Returns 400 when the task is not in `queued`
+  // status, 404 when missing.
+  router.post('/tasks/:id/start', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || req.query?.projectId || readActiveProjectId();
+    const taskId = req.params.id;
+    const task = await tasksStore.getById(projectId, taskId);
+    if (!task) {
+      res.status(404).json({ error: 'not_found', message: `task ${taskId} not found` });
+      return;
+    }
+    if (task.status !== 'queued') {
+      res.status(400).json({
+        error: 'invalid_status',
+        message: `task is '${task.status}', must be 'queued' to start`,
+        task,
+      });
+      return;
+    }
+    const { taskDelegator } = await import('./task-delegator.mjs');
+    const result = await taskDelegator.dispatchSingleTask(taskId, {
+      projectRoot,
+      projectId,
+      state,
+      broadcast,
+    });
+    if (!result.ok) {
+      // Surface dispatch errors with 502 so callers know the task did
+      // not actually start. `result.task` carries the refreshed state.
+      const code = (result.errors || []).some((e) => e.kind === 'not_found') ? 404 : 502;
+      res.status(code).json({
+        error: 'dispatch_failed',
+        message: (result.errors || []).map((e) => e.message).join('; ') || 'dispatch failed',
+        task: result.task,
+        errors: result.errors || [],
+        warnings: result.warnings || [],
+      });
+      return;
+    }
+    res.status(202).json({
+      ok: true,
+      task: result.task,
+      dispatched: result.dispatched,
+      warnings: result.warnings || [],
+    });
   }));
 
   router.patch('/tasks/:id/status', wrap(async (req, res) => {
@@ -748,7 +805,7 @@ export function createApiRouter({
   // and exposes a kill switch + message endpoint.
   router.get('/background', wrap(async (_req, res) => {
     const { backgroundStore } = await import('./background-store.mjs');
-    const instances = backgroundStore.list();
+    const instances = await backgroundStore.list();
     res.json({ instances, status: backgroundStore.status() });
   }));
 
@@ -782,13 +839,19 @@ export function createApiRouter({
 
   router.delete('/background/:id', wrap(async (req, res) => {
     const { backgroundStore } = await import('./background-store.mjs');
-    const result = backgroundStore.kill(req.params.id);
-    if (!result.ok) {
-      // 200 with ok:false is fine — the caller distinguishes via `ok`.
-      res.json(result);
-      return;
+    // v3.5.4 (bug #3) — `kill()` is now async (it awaits the abortSession
+    // HTTP call to opencode serve, then deletes the state file, then
+    // best-effort tmux). The result includes a `steps[]` array so the UI
+    // can report exactly what happened.
+    //
+    // We always return 200 — the result body's `ok` distinguishes
+    // success from partial failure (e.g. abort succeeded but tmux kill
+    // did not). Returning 502 would force the fetch wrapper into its
+    // error branch and we'd lose the `steps[]` diagnostic.
+    const result = await backgroundStore.kill(req.params.id);
+    if (result.ok) {
+      broadcast({ type: 'background:change', action: 'kill', id: req.params.id });
     }
-    broadcast({ type: 'background:change', action: 'kill', id: req.params.id });
     res.json(result);
   }));
 

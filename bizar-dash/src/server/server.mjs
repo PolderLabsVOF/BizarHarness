@@ -8,6 +8,7 @@
  * HTTP + WS pair.
  */
 import express from 'express';
+import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer as createHttpServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +40,13 @@ export async function createServer({
   bizarRoot,
 }) {
   const app = express();
+  // v3.5.4 (CORS) — Reflect the request Origin back as
+  // Access-Control-Allow-Origin so the Vite dev server (5174), a tunneled
+  // remote, or a localhost:4321 same-origin tab all work. We also allow
+  // credentials so the dashboard can keep using cookie-style pair tokens.
+  // This is a local tool — same-origin is the norm; reflection is the
+  // simplest correct policy.
+  app.use(cors({ origin: true, credentials: true }));
   app.use(express.json({ limit: '2mb' }));
 
   app.use(

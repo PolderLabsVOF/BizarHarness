@@ -17,16 +17,35 @@
  * background instance must NOT break the user-facing task creation.
  * Subtasks are always persisted to the regular tasks store first; the
  * background dispatch is best-effort.
+ *
+ * v3.5.4 (bug: dispatch stuck) — Dispatch path replaced. The previous
+ * implementation shell-executed `node plugins/bizar/dist/cli.js bg enqueue`,
+ * but the plugin is a Bun-native TS project with no compiled `dist/`,
+ * so the exec always failed. The silent try/catch around execSync meant
+ * the failure was invisible to both the user and the dashboard log.
+ *
+ * New path:
+ *   1. Read the plugin's serve-info file (port + password + worktree).
+ *   2. POST /api/session on the plugin's opencode serve child.
+ *   3. POST /api/session/{id}/prompt to fire the task prompt.
+ *   4. Write a state file under ~/.cache/bizar/bg/ so the dashboard's
+ *      background-store can list and kill it.
+ *
+ * If serve-info is missing (plugin not running) we log a clear warning
+ * at startup AND surface the dispatch failure in the `/submit` response,
+ * so the user can re-dispatch manually with `/api/tasks/:id/start`
+ * after the plugin is up.
  */
 
 import { tasksStore } from './tasks-store.mjs';
 import { agentsStore } from './agents-store.mjs';
 import { notificationsStore } from './notifications-store.mjs';
 import { backgroundStore } from './background-store.mjs';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 
 const HOME = homedir();
 
@@ -42,6 +61,64 @@ const BG_DIRS = [
 
 function genId(prefix) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function genShortHex(bytes = 6) {
+  return randomBytes(bytes).toString('hex');
+}
+
+/**
+ * v3.5.4 — Synthesize the prompt text for a subtask. Combines the
+ * subtask title and description in the same shape the plugin's own
+ * `bizar_spawn_background` tool uses internally, so an opencode agent
+ * receives the same brief whether it was dispatched via MCP or via
+ * the dashboard's HTTP bridge.
+ */
+function buildPromptText(sub) {
+  const parts = [];
+  parts.push(`# ${sub.title || 'Subtask'}`);
+  if (sub.description) parts.push(String(sub.description).trim());
+  parts.push('');
+  parts.push('---');
+  parts.push(`Subtask ID: ${sub.id}`);
+  parts.push(`Assigned agent: ${sub.assignee || 'tyr'}`);
+  parts.push(`Parent task ID: ${sub.parent || '(none)'}`);
+  return parts.join('\n');
+}
+
+/**
+ * v3.5.4 — Write a per-instance state file under BG_DIRS so the
+ * dashboard's `backgroundStore.list()` and `kill()` paths find this
+ * bg instance. The shape matches what `background-state.ts` writes
+ * so the existing merge + dedupe logic works without changes.
+ *
+ * Idempotent: writes are atomic via tmp + rename. Failures are logged
+ * but do NOT throw — the opencode session is already running.
+ */
+function writeBgStateFile(instanceId, payload) {
+  const dir = pickBgDir();
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    console.warn(`[task-delegator] cannot create bg dir ${dir}: ${err.message}`);
+    return null;
+  }
+  const file = join(dir, `${instanceId}.json`);
+  const tmp = `${file}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
+    try {
+      execSync(`mv "${tmp}" "${file}"`, { stdio: 'ignore' });
+    } catch {
+      // Node 20 fallback: writeFileSync below is also acceptable if
+      // rename fails for some odd FS reason.
+      writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
+    }
+    return file;
+  } catch (err) {
+    console.warn(`[task-delegator] failed to write bg state file ${file}: ${err.message}`);
+    return null;
+  }
 }
 
 /**
@@ -127,13 +204,34 @@ export const taskDelegator = {
       broadcast({ type: 'tasks:change', task: moved });
     }
 
-    // 5. Best-effort dispatch to background infrastructure. Failures
-    //    here are logged but never fail the request — the tasks are
-    //    already saved and the user can re-dispatch manually.
+    // 5. Best-effort dispatch to background infrastructure. We collect
+    //    per-subtask errors instead of swallowing them so the response
+    //    includes `dispatchErrors[]`. The HTTP caller (and the UI toast)
+    //    can then surface "X subtasks could not be dispatched" instead
+    //    of a silent success.
+    const dispatchResult = { dispatched: [], errors: [], warnings: [] };
     try {
-      await this.dispatchToBackground(moved || main, subtasks, ctx, broadcast);
+      const r = await this.dispatchToBackground(moved || main, subtasks, ctx, broadcast);
+      if (r && typeof r === 'object') {
+        if (Array.isArray(r.dispatched)) dispatchResult.dispatched = r.dispatched;
+        if (Array.isArray(r.errors)) dispatchResult.errors = r.errors;
+        if (Array.isArray(r.warnings)) dispatchResult.warnings = r.warnings;
+      }
     } catch (err) {
-      console.error('[task-delegator] dispatch failed:', err.message);
+      console.error('[task-delegator] dispatch crashed:', err.message);
+      dispatchResult.errors.push({ kind: 'fatal', message: err.message || String(err) });
+    }
+
+    if (dispatchResult.errors.length > 0) {
+      try {
+        notificationsStore.add({
+          severity: 'warning',
+          source: 'odin',
+          title: 'Dispatch incomplete',
+          message: `${dispatchResult.errors.length} subtask(s) could not be dispatched. Use POST /api/tasks/:id/start to retry.`,
+          meta: { mainId: main.id, errors: dispatchResult.errors.slice(0, 5) },
+        }, { broadcast });
+      } catch { /* best-effort */ }
     }
 
     // 6. Audit activity.
@@ -160,7 +258,7 @@ export const taskDelegator = {
       /* best-effort */
     }
 
-    return { main: moved || main, subtasks };
+    return { main: moved || main, subtasks, dispatch: dispatchResult };
   },
 
   /**
@@ -318,18 +416,31 @@ export const taskDelegator = {
   },
 
   /**
-   * Best-effort dispatch to the background agent infrastructure.
-   * Reads the plugin's bg state dir for visibility and tries to create
-   * a new bg instance via the local CLI. Never throws.
+   * v3.5.4 (bug: dispatch stuck) — Best-effort dispatch to the background
+   * agent infrastructure. Talks to the plugin's opencode serve child via
+   * HTTP (createSession + sendPrompt) and writes a per-instance state
+   * file under BG_DIRS so the dashboard's `backgroundStore.list()` and
+   * `kill()` paths find the instance.
    *
-   * v3.5.1 — Respects agents.maxParallel: caps concurrent dispatches
-   * to the configured limit; overflow subtasks are queued until a slot
-   * frees up (next dispatch after a bg instance finishes).
+   * Replaces the previous `execSync('node plugins/bizar/dist/cli.js …')`
+   * path which silently failed because the plugin is a Bun-native TS
+   * project with no compiled `dist/`.
+   *
+   * Returns a structured `{ dispatched: string[], errors: Array<…>, warnings: Array<…> }`
+   * so the caller (and `/api/tasks/submit`) can surface failures to the
+   * user instead of swallowing them.
+   *
+   * v3.5.1 — Respects agents.maxParallel: caps concurrent dispatches to
+   * the configured limit; overflow subtasks are queued until a slot
+   * frees up.
+   *
+   * @returns {Promise<{ dispatched: string[], errors: Array<{ subtaskId: string, kind: string, message: string }>, warnings: string[] }>}
    */
   async dispatchToBackground(main, subtasks, ctx, broadcast) {
     const projectRoot = ctx.projectRoot || process.cwd();
     const projectId = ctx.projectId || null;
     const bgDir = pickBgDir();
+    const result = { dispatched: [], errors: [], warnings: [] };
 
     // v3.5.1 — Read agents.maxParallel from settings (default 6).
     const SETTINGS_FILE = join(HOME, '.config', 'bizar', 'settings.json');
@@ -345,20 +456,37 @@ export const taskDelegator = {
     }
 
     // Count currently running bg instances across all candidate dirs.
-    const runningInstances = backgroundStore.list().filter(
+    // v3.5.4 (bug #5) — `list()` is now async because it merges
+    // opencode-direct sessions via fetch.
+    const runningInstances = (await backgroundStore.list()).filter(
       (b) => b.status === 'running' || b.status === 'pending',
     );
     const runningCount = runningInstances.length;
     const slotsAvailable = Math.max(0, maxParallel - runningCount);
 
-    // Try to import the plugin's CLI dynamically. If absent, just
-    // mark subtasks as doing and rely on agent heartbeats.
-    let cliAvailable = false;
+    // v3.5.4 (bug: dispatch stuck) — Resolve the opencode serve child
+    // the plugin owns. If the plugin is not running we record a warning
+    // and skip the actual spawn (subtasks still flip to `doing` so the
+    // user can see them, but `metadata.dispatchPending = true` tells
+    // them to retry via `/api/tasks/:id/start` once the plugin is up).
+    let serveInfo = null;
+    let serveReachable = false;
     try {
-      const { existsSync: es2 } = await import('node:fs');
-      cliAvailable = es2(join(projectRoot, 'plugins', 'bizar', 'dist', 'cli.js'));
-    } catch {
-      cliAvailable = false;
+      const { readServeInfo, pingOpencodeServe } = await import('./serve-info.mjs');
+      serveInfo = readServeInfo();
+      if (!serveInfo) {
+        result.warnings.push('serve-info not found — the bizar plugin is not running. Tasks will be marked queued; retry via POST /api/tasks/:id/start once the plugin is up.');
+        console.warn('[task-delegator] serve-info missing — plugin may not be running. Dispatch will be deferred.');
+      } else {
+        serveReachable = await pingOpencodeServe(serveInfo);
+        if (!serveReachable) {
+          result.warnings.push(`opencode serve at ${serveInfo.baseUrl} is not reachable. Tasks will be marked queued; retry via POST /api/tasks/:id/start.`);
+          console.warn(`[task-delegator] opencode serve not reachable at ${serveInfo.baseUrl}`);
+        }
+      }
+    } catch (err) {
+      result.warnings.push(`could not load serve-info helper: ${err.message}`);
+      console.warn('[task-delegator] serve-info helper failed:', err.message);
     }
 
     // Split: first N get dispatched now, rest are queued.
@@ -382,42 +510,135 @@ export const taskDelegator = {
       });
     }
 
+    // v3.5.4 (bug: dispatch stuck) — Per-subtask dispatch path. We
+    // collect errors instead of swallowing them. Two failure modes:
+    //   - serveInfo/serveReachable missing: mark dispatchPending so
+    //     the UI shows "Awaiting dispatch" and `/api/tasks/:id/start`
+    //     can retry.
+    //   - HTTP error: record error message so the API response carries
+    //     it.
     for (const sub of toDispatch) {
-      try {
-        let bgId = null;
-        if (cliAvailable) {
-          const cmd = `node "${join(projectRoot, 'plugins', 'bizar', 'dist', 'cli.js')}" bg enqueue --agent ${sub.assignee || 'tyr'} --task "${String(sub.title).replace(/"/g, '\\"')}" --description "${String(sub.description || '').replace(/"/g, '\\"').replace(/\n/g, ' ')}"`;
-          const out = execSync(cmd, { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'pipe'] });
-          try {
-            const parsed = JSON.parse(out);
-            bgId = parsed.id || null;
-          } catch {
-            bgId = null;
+      const startedAt = new Date().toISOString();
+      let bgInstanceId = null;
+      let sessionId = null;
+      let dispatchError = null;
+      let dispatchPending = false;
+
+      if (serveInfo && serveReachable) {
+        try {
+          const { createOpencodeSession, sendOpencodePrompt } = await import('./serve-info.mjs');
+          // 1. Create the opencode session owned by the requested agent.
+          const create = await createOpencodeSession(
+            serveInfo,
+            { title: sub.title || 'subtask', agent: sub.assignee || 'tyr', parentID: sub.parent || undefined },
+            serveInfo.worktree,
+          );
+          if (!create.ok) {
+            dispatchError = create.error || 'createOpencodeSession failed';
+          } else {
+            sessionId = create.sessionId;
+            // 2. Fire the prompt.
+            const promptText = buildPromptText(sub);
+            const send = await sendOpencodePrompt(
+              serveInfo,
+              {
+                sessionId,
+                agent: sub.assignee || 'tyr',
+                text: promptText,
+              },
+              serveInfo.worktree,
+            );
+            if (!send.ok) {
+              dispatchError = send.error || 'sendOpencodePrompt failed';
+            }
           }
+        } catch (err) {
+          dispatchError = err instanceof Error ? err.message : String(err);
         }
+      } else {
+        // Plugin not running — leave the subtask marked queued with a
+        // dispatchPending flag. The UI surfaces this and the user can
+        // retry via POST /api/tasks/:id/start.
+        dispatchPending = true;
+      }
 
-        const metadata = { ...(sub.metadata || {}) };
-        if (bgId) metadata.bgInstanceId = bgId;
-        metadata.dispatchedAt = new Date().toISOString();
-        metadata.progress = 5;
-        metadata.currentStep = bgId ? `Dispatched (${bgId})` : 'Dispatched';
-        metadata.progressHistory = [
-          ...(metadata.progressHistory || []),
-          { ts: new Date().toISOString(), progress: 5, step: metadata.currentStep, agent: sub.assignee || null },
-        ];
-        metadata.startedAt = metadata.startedAt || new Date().toISOString();
+      // v3.5.4 (bug: dispatch stuck) — Generate a bg instance ID even on
+      // failure so the dashboard can track attempts. Successful dispatches
+      // get a deterministic id derived from the opencode session ID.
+      bgInstanceId = sessionId
+        ? `bg_${sessionId.slice(0, 16)}`
+        : `bg_${genShortHex(8)}`;
 
-        const updated = await tasksStore.update(projectId, sub.id, {
-          status: 'doing',
-          metadata,
-        });
-        if (updated) {
-          broadcast({ type: 'tasks:change', task: updated });
-          broadcast({ type: 'task:progress', taskId: sub.id, progress: 5, step: metadata.currentStep, agent: sub.assignee || null });
+      // 3. Always write the bg state file so the dashboard's background
+      //    list reflects every dispatch attempt (success or failure).
+      writeBgStateFile(bgInstanceId, {
+        instanceId: bgInstanceId,
+        sessionId: sessionId || null,
+        agent: sub.assignee || 'tyr',
+        parentAgent: 'odin',
+        status: dispatchError ? 'failed' : 'pending',
+        startedAt: Date.now(),
+        lastActivityAt: Date.now(),
+        toolCallCount: 0,
+        promptPreview: (sub.title || '').slice(0, 200),
+        taskId: sub.id,
+        mainTaskId: main?.id || null,
+        dispatchPending,
+        error: dispatchError || null,
+      });
+
+      const metadata = { ...(sub.metadata || {}) };
+      if (bgInstanceId) metadata.bgInstanceId = bgInstanceId;
+      metadata.dispatchedAt = startedAt;
+      metadata.progress = dispatchError ? 0 : 5;
+      metadata.currentStep = dispatchError
+        ? `Dispatch failed: ${dispatchError}`
+        : (dispatchPending ? 'Awaiting dispatch (plugin offline)' : `Dispatched (${bgInstanceId})`);
+      metadata.progressHistory = [
+        ...(metadata.progressHistory || []),
+        {
+          ts: startedAt,
+          progress: metadata.progress,
+          step: metadata.currentStep,
+          agent: sub.assignee || null,
+          ...(dispatchError ? { error: dispatchError } : {}),
+        },
+      ];
+      metadata.startedAt = metadata.startedAt || startedAt;
+      if (dispatchError) metadata.dispatchError = dispatchError;
+      if (dispatchPending) metadata.dispatchPending = true;
+
+      // v3.5.4 (bug: dispatch stuck) — Mark as queued (not doing) when
+      // dispatch failed or is pending, so the task doesn't sit forever
+      // at 5% doing. The UI can still show "Dispatch pending" via the
+      // metadata flag.
+      const newStatus = dispatchError || dispatchPending ? 'queued' : 'doing';
+      const updated = await tasksStore.update(projectId, sub.id, {
+        status: newStatus,
+        metadata,
+      });
+      if (updated) {
+        broadcast({ type: 'tasks:change', task: updated });
+        if (!dispatchError && !dispatchPending) {
+          broadcast({
+            type: 'task:progress',
+            taskId: sub.id,
+            progress: 5,
+            step: metadata.currentStep,
+            agent: sub.assignee || null,
+          });
         }
-      } catch (err) {
-        // Don't crash the loop on a single failure.
-        console.error(`[task-delegator] dispatch ${sub.id} failed:`, err.message);
+      }
+
+      if (dispatchError) {
+        result.errors.push({ subtaskId: sub.id, kind: 'spawn_failed', message: dispatchError });
+        console.error(`[task-delegator] dispatch ${sub.id} failed:`, dispatchError);
+      } else if (dispatchPending) {
+        // Pending is not an error — just record which subtasks are
+        // waiting for the plugin to come up.
+        result.warnings.push(`subtask ${sub.id} awaiting plugin (${sub.assignee || 'tyr'})`);
+      } else {
+        result.dispatched.push(bgInstanceId);
       }
     }
 
@@ -426,6 +647,58 @@ export const taskDelegator = {
       type: 'tasks:change',
       task: { id: main.id, _bgDir: bgDir },
     });
+
+    return result;
+  },
+
+  /**
+   * v3.5.4 — Dispatch a single queued task. Used by POST /api/tasks/:id/start
+   * to retry dispatch after the plugin comes up. Resolves to the same
+   * structured result as `dispatchToBackground`. Loads the task first so
+   * the caller doesn't need to know the storage layer.
+   *
+   * @param {string} taskId
+   * @param {object} ctx - { projectId, projectRoot, broadcast }
+   * @returns {Promise<{ ok: boolean, task?: object, errors: Array<…>, warnings: Array<…> }>}
+   */
+  async dispatchSingleTask(taskId, ctx = {}) {
+    const projectId = ctx.projectId || null;
+    const broadcast = ctx.broadcast || (() => {});
+    const all = await tasksStore.loadTasks(projectId, { includeArchived: false });
+    const task = all.find((t) => t.id === taskId);
+    if (!task) {
+      return { ok: false, errors: [{ subtaskId: taskId, kind: 'not_found', message: 'task not found' }], warnings: [] };
+    }
+    if (task.status !== 'queued') {
+      return {
+        ok: false,
+        task,
+        errors: [{ subtaskId: taskId, kind: 'invalid_status', message: `task is '${task.status}', must be 'queued' to start` }],
+        warnings: [],
+      };
+    }
+
+    // The task may be a subtask (has parent) or a top-level delegated
+    // task. We dispatch as a single-item subtask list so the same code
+    // path handles both.
+    const asSubtask = {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      assignee: task.assignee || 'tyr',
+      parent: task.parent || null,
+    };
+    const synthMain = { id: task.id };
+    const result = await this.dispatchToBackground(synthMain, [asSubtask], ctx, broadcast);
+    const reloaded = await tasksStore.loadTasks(projectId, { includeArchived: false });
+    const refreshed = reloaded.find((t) => t.id === taskId) || task;
+    return {
+      ok: result.errors.length === 0,
+      task: refreshed,
+      dispatched: result.dispatched,
+      errors: result.errors,
+      warnings: result.warnings,
+    };
   },
 
   /** For tests / introspection. */

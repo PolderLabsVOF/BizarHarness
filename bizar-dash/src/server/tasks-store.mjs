@@ -115,6 +115,19 @@ export const tasksStore = {
     saveStore(file, { version: 2, tasks });
   },
 
+  /**
+   * v3.5.4 — Look up a single task by id. Returns null if the id does
+   * not exist. Loads the full project file once; callers that need
+   * many ids should batch via `loadTasks` + filter instead.
+   */
+  async getById(projectId, id) {
+    if (!id) return null;
+    const file = resolveStorageFile(projectId);
+    const store = loadStore(file);
+    const t = (store.tasks || []).find((x) => x && x.id === id);
+    return t ? { ...t } : null;
+  },
+
   /** Create a task. */
   async create(projectId, input) {
     if (!input || typeof input !== 'object') {

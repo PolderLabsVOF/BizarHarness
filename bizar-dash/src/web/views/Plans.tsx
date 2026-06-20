@@ -343,9 +343,10 @@ function PlanEditor({
   const [meta, setMeta] = useState<{ title: string; status: string; tags: string[]; description?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedElId, setSelectedElId] = useState<string | null>(null);
-  const [fullscreen, setFullscreen] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [showComments, setShowComments] = useState(true);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [contextMenuWorldPos, setContextMenuWorldPos] = useState<{ x: number; y: number } | null>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -368,11 +369,32 @@ function PlanEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
+  // Issue 3 fix — wire fullscreen state to browser Fullscreen API
+  useEffect(() => {
+    if (!fullscreen) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      return;
+    }
+    // Sync state when user exits via ESC key — before entering, so we don't
+    // double-set on the way in
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setFullscreen(false);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    // Attempt to enter fullscreen (fails silently if unsupported or blocked)
+    document.documentElement.requestFullscreen().catch(() => {});
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreen]);
+
   const totalComments = canvas?.comments.length ?? 0;
 
-  const addElement = async (body: { type: string; title: string; content: string; x: number; y: number }) => {
+  const addElement = async (body: { type: string; title: string; content: string; x: number; y: number }, position?: { x: number; y: number }) => {
     try {
-      await api.post(`/plans/${encodeURIComponent(slug)}/elements`, body);
+      const payload = position ? { ...body, x: position.x, y: position.y } : body;
+      await api.post(`/plans/${encodeURIComponent(slug)}/elements`, payload);
       await reload();
       toast.success('Element added.');
     } catch (err) {
@@ -419,12 +441,14 @@ function PlanEditor({
     }
   };
 
-  const addComment = async (text: string, elementId: string | null) => {
+  const addComment = async (text: string, elementId: string | null, worldPos?: { x: number; y: number }) => {
     try {
       const path = elementId
         ? `/plans/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}/comments`
         : `/plans/${encodeURIComponent(slug)}/comments`;
-      await api.post(path, { text, elementId });
+      const body: { text: string; elementId: string | null; x?: number; y?: number } = { text, elementId };
+      if (worldPos) { body.x = worldPos.x; body.y = worldPos.y; }
+      await api.post(path, body);
       await reload();
       toast.success('Comment added.');
     } catch (err) {
@@ -504,7 +528,7 @@ function PlanEditor({
     });
   };
 
-  const onAddElement = () => {
+  const onAddElement = (worldPos?: { x: number; y: number }) => {
     let typeEl: HTMLSelectElement | null = null;
     let titleEl: HTMLInputElement | null = null;
     let contentEl: HTMLTextAreaElement | null = null;
@@ -530,16 +554,28 @@ function PlanEditor({
           <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
           <Button
             variant="primary"
-            onClick={async () => {
-              const maxX = (canvas?.elements || []).reduce((acc, el) => Math.max(acc, el.x || 0), 0);
-              const maxY = (canvas?.elements || []).reduce((acc, el) => Math.max(acc, el.y || 0), 0);
-              await addElement({
-                type: typeEl?.value || 'note',
-                title: (titleEl?.value || 'Untitled').trim(),
-                content: contentEl?.value || '',
-                x: 80 + Math.min(maxX + 40, 200),
-                y: 80 + Math.min(maxY + 40, 200),
-              });
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (worldPos) {
+                await addElement({
+                  type: typeEl?.value || 'note',
+                  title: (titleEl?.value || 'Untitled').trim(),
+                  content: contentEl?.value || '',
+                  x: worldPos.x,
+                  y: worldPos.y,
+                });
+              } else {
+                const maxX = (canvas?.elements || []).reduce((acc, el) => Math.max(acc, el.x || 0), 0);
+                const maxY = (canvas?.elements || []).reduce((acc, el) => Math.max(acc, el.y || 0), 0);
+                await addElement({
+                  type: typeEl?.value || 'note',
+                  title: (titleEl?.value || 'Untitled').trim(),
+                  content: contentEl?.value || '',
+                  x: 80 + Math.min(maxX + 40, 200),
+                  y: 80 + Math.min(maxY + 40, 200),
+                });
+              }
               modal.close();
             }}
           >
@@ -550,7 +586,7 @@ function PlanEditor({
     });
   };
 
-  const onCanvasComment = () => {
+  const onCanvasComment = (worldPos?: { x: number; y: number }) => {
     let textEl: HTMLTextAreaElement | null = null;
     modal.open({
       title: 'Add canvas comment',
@@ -566,10 +602,12 @@ function PlanEditor({
           <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
           <Button
             variant="primary"
-            onClick={async () => {
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
               const text = (textEl?.value || '').trim();
               if (!text) return;
-              await addComment(text, null);
+              await addComment(text, null, worldPos);
               modal.close();
             }}
           >
@@ -610,39 +648,43 @@ function PlanEditor({
 
   return (
     <div className={cn('view view-plans view-plans-fullscreen', !fullscreen && 'view-plans-embedded')}>
-      <PlanEditorHeader
-        slug={slug}
-        meta={meta}
-        counts={{ elements: canvas.elements.length, comments: totalComments }}
-        onBack={onBack}
-        onConfigure={onConfigure}
-        onAddElement={onAddElement}
-        onCanvasComment={onCanvasComment}
-        onRefresh={reload}
-        onDelete={onDelete}
-        fullscreen={fullscreen}
-        setFullscreen={setFullscreen}
-      />
+      {!fullscreen && (
+        <PlanEditorHeader
+          slug={slug}
+          meta={meta}
+          counts={{ elements: canvas.elements.length, comments: totalComments }}
+          onBack={onBack}
+          onConfigure={onConfigure}
+          onAddElement={onAddElement}
+          onCanvasComment={onCanvasComment}
+          onRefresh={reload}
+          onDelete={onDelete}
+          fullscreen={fullscreen}
+          setFullscreen={setFullscreen}
+        />
+      )}
 
-      <div className="plans-body">
-        {/* Canvas wrapper with floating controls */}
-        <div className="plan-canvas-wrapper">
-          <div className="plan-canvas-floating-controls">
+        <div className="plans-body">
+          {/* Canvas wrapper with floating controls */}
+          <div className="plan-canvas-wrapper">
+            {fullscreen && (
+            <div className="plan-canvas-floating-controls">
             <Button variant="ghost" size="sm" onClick={onBack} title="Back to plans list">
               <ArrowLeft size={14} /> Back
             </Button>
             <h3>{meta?.title || slug}</h3>
             {meta && <StatusBadge kind={planStatusKind(meta.status)}>{meta.status}</StatusBadge>}
-            <Button variant="secondary" size="sm" onClick={onAddElement}>
+            <Button variant="secondary" size="sm" onClick={() => onAddElement()}>
               <Plus size={14} /> Element
             </Button>
-            <Button variant="secondary" size="sm" onClick={onCanvasComment}>
+            <Button variant="secondary" size="sm" onClick={() => onCanvasComment()}>
               <MessageCircle size={14} /> Comment
             </Button>
             <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan">
               <SettingsIcon size={14} />
             </Button>
-          </div>
+            </div>
+            )}
 
           <CanvasViewport
             canvas={canvas}
@@ -654,14 +696,15 @@ function PlanEditor({
             onConnect={(from, to) => addConnection(from, to)}
             onDeleteConnection={deleteConnection}
             onEditElement={(el) => editElementInline(modal, slug, el, updateElement, toast)}
-            onContextMenu={(e) => {
+            onContextMenu={(e, worldPos) => {
               e.preventDefault();
+              setContextMenuWorldPos(worldPos);
               setContextMenu({
                 x: e.clientX,
                 y: e.clientY,
                 items: [
-                  { label: 'Add element', icon: Plus, onClick: onAddElement },
-                  { label: 'Add comment', icon: MessageSquare, onClick: onCanvasComment },
+                  { label: 'Add element', icon: Plus, onClick: () => onAddElement(worldPos) },
+                  { label: 'Add comment', icon: MessageSquare, onClick: () => onCanvasComment(worldPos) },
                   { type: 'separator' },
                   { label: 'Configure plan', icon: SettingsIcon, onClick: onConfigure },
                   { label: 'Delete plan', icon: Trash2, onClick: onDelete },
@@ -831,7 +874,7 @@ type ViewportProps = {
   onConnect: (from: string, to: string) => void;
   onDeleteConnection: (id: string) => void;
   onEditElement: (el: CanvasElement) => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent, worldPos: { x: number; y: number }) => void;
   fitToView?: () => void;
 };
 
@@ -1049,7 +1092,14 @@ function CanvasViewport({
           Pan: drag empty · Zoom: scroll · Drag element header to move · Double-click to edit
         </span>
       </div>
-      <div className="canvas-root" ref={rootRef} onContextMenu={onContextMenu}>
+      <div className="canvas-root" ref={rootRef} onContextMenu={(e) => {
+        e.preventDefault();
+        const rect = innerRef.current?.getBoundingClientRect();
+        const s = stateRef.current;
+        if (!rect) return;
+        const worldPos = { x: (e.clientX - rect.left) / s.scale, y: (e.clientY - rect.top) / s.scale };
+        onContextMenu?.(e, worldPos);
+      }}>
         <div className="canvas-grid-bg" />
         <div className="canvas-inner" ref={innerRef}>
           {canvas.elements.length === 0 ? (
