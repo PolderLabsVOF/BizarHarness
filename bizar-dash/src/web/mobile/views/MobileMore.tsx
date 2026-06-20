@@ -1,120 +1,115 @@
-// src/mobile/views/MobileMore.tsx — mobile More tab: agents, plans, projects, config.
-import { Bot, FileText, Folder, Sliders, ChevronRight } from 'lucide-react';
+// src/mobile/views/MobileMore.tsx — real navigation hub: Plans, Agents, Skills, Mods, Schedules, History, Config.
+import { useState } from 'react';
+import { Bot, FileText, Sliders, Clock, History, Settings, ChevronRight, Search } from 'lucide-react';
 import type { Snapshot } from '../../lib/types';
 
 type Props = {
   snapshot: Snapshot;
-  setActiveTab: (id: string) => void;
+  onNavigate: (id: string) => void;
 };
 
-export function MobileMore({ snapshot, setActiveTab }: Props) {
-  const agents = snapshot.agents || [];
-  const plans = snapshot.plans || [];
-  const projects = snapshot.projects || [];
-  const mods = snapshot.mods || [];
+export function MobileMore({ snapshot, onNavigate }: Props) {
+  const [search, setSearch] = useState('');
+
+  const entries = [
+    {
+      id: 'plans',
+      icon: FileText,
+      label: 'Plans',
+      count: snapshot.plans?.length || 0,
+      desc: 'Visual plans with elements & comments',
+    },
+    {
+      id: 'agents',
+      icon: Bot,
+      label: 'Agents',
+      count: snapshot.agents?.length || 0,
+      desc: 'The Norse pantheon',
+    },
+    {
+      id: 'skills',
+      icon: Sliders,
+      label: 'Skills',
+      count: snapshot.mods?.length || 0,
+      desc: 'Agent capabilities & tools',
+    },
+    {
+      id: 'mods',
+      icon: Sliders,
+      label: 'Mods',
+      count: snapshot.mods?.length || 0,
+      desc: 'Installed modifications',
+    },
+    {
+      id: 'schedules',
+      icon: Clock,
+      label: 'Schedules',
+      count: snapshot.schedules?.length || 0,
+      desc: 'Cron jobs & automated tasks',
+    },
+    {
+      id: 'history',
+      icon: History,
+      label: 'History',
+      count: null,
+      desc: 'Past sessions & outputs',
+    },
+    {
+      id: 'config',
+      icon: Settings,
+      label: 'Config',
+      count: null,
+      desc: 'Key-value configuration editor',
+    },
+  ];
+
+  const filtered = search.trim()
+    ? entries.filter((e) => e.label.toLowerCase().includes(search.toLowerCase()) || e.desc.toLowerCase().includes(search.toLowerCase()))
+    : entries;
 
   return (
     <div className="mobile-view">
-      {/* Agents */}
-      <section className="mobile-section">
-        <h3 className="mobile-section-title">
-          <Bot size={14} /> Agents ({agents.length})
-        </h3>
-        <div className="mobile-card-list">
-          {agents.slice(0, 10).map((a) => (
-            <div key={a.name} className="mobile-list-item">
-              <div className="mobile-list-icon">
-                <Bot size={16} />
-              </div>
-              <div className="mobile-list-content">
-                <span className="mobile-list-title">{a.name}</span>
-                <span className="mobile-list-meta">{a.model || a.mode || '—'}</span>
-              </div>
-              <div className="mobile-list-badge" data-status={a.status || 'idle'}>
-                {a.status || 'idle'}
-              </div>
-            </div>
-          ))}
-          {agents.length === 0 && (
-            <p className="mobile-empty-inline">No agents configured.</p>
-          )}
-        </div>
-      </section>
+      {/* Search */}
+      <div className="mobile-tasks-toolbar">
+        <input
+          className="mobile-search-input"
+          type="text"
+          placeholder="Search…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ flex: 1 }}
+        />
+      </div>
 
-      {/* Plans */}
-      <section className="mobile-section">
-        <h3 className="mobile-section-title">
-          <FileText size={14} /> Plans ({plans.length})
-        </h3>
-        <div className="mobile-card-list">
-          {plans.slice(0, 10).map((p) => (
-            <div key={p.slug} className="mobile-list-item">
-              <div className="mobile-list-icon">
-                <FileText size={16} />
+      {/* Nav entries */}
+      <div className="mobile-card-list">
+        {filtered.map((entry) => {
+          const Icon = entry.icon;
+          return (
+            <div
+              key={entry.id}
+              className="mobile-more-nav-item"
+              onClick={() => onNavigate(entry.id)}
+            >
+              <div className="mobile-more-nav-icon">
+                <Icon size={20} />
               </div>
-              <div className="mobile-list-content">
-                <span className="mobile-list-title">{p.title}</span>
-                <span className="mobile-list-meta">{p.status} · {p.source}</span>
-              </div>
-            </div>
-          ))}
-          {plans.length === 0 && (
-            <p className="mobile-empty-inline">No plans yet.</p>
-          )}
-        </div>
-      </section>
-
-      {/* Projects */}
-      {projects.length > 0 && (
-        <section className="mobile-section">
-          <h3 className="mobile-section-title">
-            <Folder size={14} /> Projects ({projects.length})
-          </h3>
-          <div className="mobile-card-list">
-            {projects.slice(0, 8).map((p) => (
-              <div key={p.id} className="mobile-list-item">
-                <div className="mobile-list-icon">
-                  <Folder size={16} />
-                </div>
-                <div className="mobile-list-content">
-                  <span className="mobile-list-title">{p.name}</span>
-                  <span className="mobile-list-meta">{p.status}</span>
-                </div>
-                {snapshot.activeProject?.id === p.id && (
-                  <span className="mobile-active-badge">active</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Mods */}
-      {mods.length > 0 && (
-        <section className="mobile-section">
-          <h3 className="mobile-section-title">
-            <Sliders size={14} /> Mods ({mods.length})
-          </h3>
-          <div className="mobile-card-list">
-            {mods.slice(0, 10).map((m) => (
-              <div key={m.id} className="mobile-list-item">
-                <div className="mobile-list-icon">
-                  <Sliders size={16} />
-                </div>
-                <div className="mobile-list-content">
-                  <span className="mobile-list-title">{m.name}</span>
-                  <span className="mobile-list-meta">v{m.version}</span>
-                </div>
-                <span className={`mobile-list-badge ${m.enabled ? 'badge-on' : 'badge-off'}`}>
-                  {m.enabled ? 'on' : 'off'}
+              <div className="mobile-more-nav-content">
+                <span className="mobile-more-nav-label">
+                  {entry.label}
+                  {entry.count != null && (
+                    <span className="mobile-more-nav-count">{entry.count}</span>
+                  )}
                 </span>
+                <span className="mobile-more-nav-desc">{entry.desc}</span>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+              <ChevronRight size={16} className="mobile-more-nav-arrow" />
+            </div>
+          );
+        })}
+      </div>
 
-      {/* Footer links */}
+      {/* Footer */}
       <div className="mobile-more-footer">
         <a href="/?desktop=1" className="mobile-more-link">
           Switch to Desktop <ChevronRight size={14} />
