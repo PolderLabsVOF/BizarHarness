@@ -141,6 +141,14 @@ export function MobileApp() {
     }
   };
 
+  const handleTopbarNavigate = (_type: string, _id: string) => {
+    // Navigation from topbar notifications — tab navigation is handled via activeTab state
+  };
+
+  const handleMoreNavigate = (id: string) => {
+    setActiveTab(id);
+  };
+
   if (loading) {
     return (
       <div className="mobile-loading">
@@ -166,11 +174,12 @@ export function MobileApp() {
         activeTab={activeTab}
         snapshot={snapshot}
         onSearch={() => {}}
+        onNavigate={handleTopbarNavigate}
       />
 
       <main className="mobile-content">
         {activeTab === 'activity' && snapshot && (
-          <MobileActivity snapshot={snapshot} />
+          <MobileActivity snapshot={snapshot} onRefresh={refreshSnapshot} />
         )}
         {activeTab === 'chat' && snapshot && (
           <MobileChat snapshot={snapshot} settings={settings} />
@@ -179,10 +188,10 @@ export function MobileApp() {
           <MobileTasks snapshot={snapshot} onRefresh={refreshSnapshot} />
         )}
         {activeTab === 'settings' && settings && (
-          <MobileSettings settings={settings} snapshot={snapshot} />
+          <MobileSettings settings={settings} snapshot={snapshot} onRefresh={refreshSnapshot} />
         )}
         {activeTab === 'more' && snapshot && (
-          <MobileMore snapshot={snapshot} setActiveTab={setActiveTab} />
+          <MobileMore snapshot={snapshot} onNavigate={handleMoreNavigate} />
         )}
       </main>
 
