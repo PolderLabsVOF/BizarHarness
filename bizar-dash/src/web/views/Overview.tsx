@@ -1,4 +1,4 @@
-// src/views/Overview.tsx — v3.4.0 hero textbox takes the focus, no card wrapper.
+// src/views/Overview.tsx — v3.7.0 activity cards + SSE stream.
 import { useEffect, useRef, useState } from 'react';
 import {
   Bot,
@@ -17,6 +17,12 @@ import {
   Power,
   Send,
   Sparkles,
+  AlertOctagon,
+  AlertTriangle,
+  CheckCircle2,
+  Activity,
+  Puzzle,
+  Clock,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -27,6 +33,7 @@ import { useModal } from '../components/Modal';
 import { api } from '../lib/api';
 import { formatRelative, formatTime } from '../lib/utils';
 import type { Overview, Settings, Snapshot, ActivityItem, ProjectRecord, Mod } from '../lib/types';
+import { cn } from '../lib/utils';
 
 type Props = {
   snapshot: Snapshot;
@@ -55,16 +62,43 @@ export function Overview({
   );
   const [mods, setMods] = useState<Mod[]>(snapshot.mods || []);
   const [submitting, setSubmitting] = useState(false);
+  // v3.7.0 — Live activity feed via SSE
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>(
+    snapshot.overview?.recentActivity ?? [],
+  );
 
+  // v3.7.0 — Sync initial snapshot data
   useEffect(() => {
     if (snapshot.overview) {
       setOverview(snapshot.overview);
+      setActivityItems(snapshot.overview.recentActivity ?? []);
       setLoading(false);
     }
     setProjects(snapshot.projects || []);
     setActiveId(snapshot.activeProject?.id || null);
     setMods(snapshot.mods || []);
   }, [snapshot.overview, snapshot.projects, snapshot.activeProject, snapshot.mods]);
+
+  // v3.7.0 — Subscribe to SSE activity stream
+  useEffect(() => {
+    let es: EventSource;
+    try {
+      es = new EventSource('/api/activity/stream');
+      es.addEventListener('snapshot', (e) => {
+        try {
+          const parsed = JSON.parse((e as MessageEvent).data) as { events: ActivityItem[]; generatedAt?: string };
+          setActivityItems(Array.isArray(parsed.events) ? parsed.events.slice(0, 50) : []);
+        } catch { /* ignore parse errors */ }
+      });
+      es.addEventListener('activity', (e) => {
+        try {
+          const entry = JSON.parse((e as MessageEvent).data) as ActivityItem;
+          setActivityItems((cur) => [entry, ...cur].slice(0, 50));
+        } catch { /* ignore parse errors */ }
+      });
+    } catch { /* SSE not available — fallback to snapshot data */ }
+    return () => { try { es?.close(); } catch { /* ignore */ } };
+  }, []);
 
   const onRefresh = async () => {
     toast.info('Refreshing…', 1500);
@@ -248,22 +282,20 @@ export function Overview({
 
       <div className="overview-feed">
         <h2>Recent activity</h2>
-        {overview.recentActivity.length === 0 ? (
+        {activityItems.length === 0 ? (
           <div className="muted" style={{ padding: '24px 0', fontSize: 13 }}>
             No activity yet. Use the chat above or invoke a Bizar command to start a feed.
           </div>
         ) : (
-          <ul className="activity-list">
-            {overview.recentActivity.slice(0, 30).map((it, idx) => (
-              <li key={idx} className="activity-item">
-                <span className="activity-ts tabular-nums">
-                  {formatRelative(it.ts)}
-                </span>
-                <span className="activity-kind">{it.kind}</span>
-                <span className="activity-msg">{formatActivity(it)}</span>
-              </li>
+          <div className="activity-card-grid">
+            {activityItems.slice(0, 30).map((it, idx) => (
+              <ActivityCard
+                key={`${it.ts}-${idx}`}
+                item={it}
+                onNavigate={setActiveTab}
+              />
             ))}
-          </ul>
+          </div>
         )}
       </div>
 
@@ -427,4 +459,97 @@ function formatActivity(it: ActivityItem): string {
   }
   if (typeof it.name === 'string') return `name=${it.name}`;
   return JSON.stringify(it);
+}
+
+// v3.7.0 — Format a timestamp as a relative string ("2m ago", "1h ago")
+function formatRelativeTime(ts: string): string {
+  return formatRelative(ts);
+}
+
+// v3.7.0 — Get severity color token from kind or status field
+function activitySeverity(it: ActivityItem): 'error' | 'warning' | 'success' | 'info' {
+  const k = ((it.kind as string) || '').toLowerCase();
+  const s = ((it.status as string) || '').toLowerCase();
+  if (k.includes('error') || s === 'error' || s === 'failure') return 'error';
+  if (k.includes('warn') || s === 'blocked') return 'warning';
+  if (k.includes('done') || k.includes('success') || s === 'done') return 'success';
+  return 'info';
+}
+
+// v3.7.0 — Map activity kind to icon
+function activityIcon(kind: string) {
+  const k = kind.toLowerCase();
+  if (k === 'task') return CheckSquare;
+  if (k === 'agent') return Bot;
+  if (k === 'plan') return Map;
+  if (k.includes('bg') || k.includes('background') || k.includes('job')) return Zap;
+  if (k === 'mod') return Puzzle;
+  if (k === 'skill') return Sparkles;
+  if (k.includes('error') || k.includes('failure')) return AlertOctagon;
+  if (k.includes('warn')) return AlertTriangle;
+  return Activity;
+}
+
+// v3.7.0 — Navigate to the relevant tab when a card is clicked
+function activityNavTarget(kind: string): string | null {
+  const k = kind.toLowerCase();
+  if (k === 'task') return 'tasks';
+  if (k === 'agent') return 'agents';
+  if (k === 'plan') return 'plans';
+  if (k.includes('bg') || k.includes('background')) return 'activity';
+  if (k === 'mod') return 'mods';
+  if (k === 'skill') return 'skills';
+  return null;
+}
+
+// v3.7.0 — Activity card component
+function ActivityCard({
+  item,
+  onNavigate,
+}: {
+  item: ActivityItem;
+  onNavigate: (tab: string) => void;
+}) {
+  const severity = activitySeverity(item);
+  const Icon = activityIcon(item.kind || '');
+  const msg = formatActivity(item);
+  const navTarget = activityNavTarget(item.kind || '');
+  const [expanded, setExpanded] = useState(false);
+
+  const borderColor =
+    severity === 'error' ? 'var(--error)' :
+    severity === 'warning' ? 'var(--warning)' :
+    severity === 'success' ? 'var(--success)' :
+    'var(--accent)';
+
+  return (
+    <div
+      className={cn('activity-card', expanded && 'activity-card-expanded')}
+      style={{ borderLeftColor: borderColor }}
+      onClick={() => {
+        if (navTarget) {
+          onNavigate(navTarget);
+        } else {
+          setExpanded((v) => !v);
+        }
+      }}
+      title={navTarget ? `Click to go to ${navTarget}` : 'Click to expand details'}
+    >
+      <div className="activity-card-icon" style={{ color: borderColor }}>
+        <Icon size={14} />
+      </div>
+      <div className="activity-card-body">
+        <div className="activity-card-kind text-xs">{item.kind}</div>
+        <div className="activity-card-msg text-sm">{msg}</div>
+        {expanded && (
+          <pre className="activity-card-detail text-xs muted">
+            {JSON.stringify(item, null, 2)}
+          </pre>
+        )}
+      </div>
+      <div className="activity-card-time text-xs muted tabular-nums">
+        {formatRelativeTime(item.ts)}
+      </div>
+    </div>
+  );
 }

@@ -28,6 +28,10 @@ import {
   Filter,
   Archive,
   ArchiveRestore,
+  Copy,
+  ArrowUp,
+  ArrowDown,
+  Layers,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -347,6 +351,8 @@ function PlanEditor({
   const [showComments, setShowComments] = useState(true);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [contextMenuWorldPos, setContextMenuWorldPos] = useState<{ x: number; y: number } | null>(null);
+  // v3.7.0 — Element-specific right-click context menu
+  const [elementContextMenu, setElementContextMenu] = useState<ContextMenuState>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -419,6 +425,36 @@ function PlanEditor({
       toast.success('Element deleted.');
     } catch (err) {
       toast.error(`Delete failed: ${(err as Error).message}`);
+    }
+  };
+
+  // v3.7.0 — Duplicate an element with a small position offset
+  const duplicateElement = async (id: string) => {
+    const el = canvas?.elements.find((e) => e.id === id);
+    if (!el) return;
+    try {
+      await api.post(`/plans/${encodeURIComponent(slug)}/elements`, {
+        type: el.type,
+        title: el.title ? `${el.title} (copy)` : 'Untitled',
+        content: el.content || '',
+        x: (el.x || 0) + 24,
+        y: (el.y || 0) + 24,
+      });
+      await reload();
+      toast.success('Element duplicated.');
+    } catch (err) {
+      toast.error(`Duplicate failed: ${(err as Error).message}`);
+    }
+  };
+
+  // v3.7.0 — Change element type
+  const changeElementType = async (id: string, newType: string) => {
+    try {
+      await api.put(`/plans/${encodeURIComponent(slug)}/elements/${encodeURIComponent(id)}`, { type: newType });
+      await reload();
+      toast.success(`Type changed to ${newType}.`);
+    } catch (err) {
+      toast.error(`Change type failed: ${(err as Error).message}`);
     }
   };
 
@@ -711,10 +747,34 @@ function PlanEditor({
                 ],
               });
             }}
+            onElementContextMenu={(e, elementId, _worldPos) => {
+              const el = canvas?.elements.find((x) => x.id === elementId);
+              if (!el) return;
+              setElementContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  { label: 'Edit', icon: Pencil, onClick: () => { editElementInline(modal, slug, el, updateElement, toast); } },
+                  { label: 'Duplicate', icon: Copy, onClick: () => duplicateElement(elementId) },
+                  { type: 'separator' },
+                  { label: 'Change type', icon: Layers, onClick: () => {
+                    // Cycle through types: task -> note -> decision -> question -> task
+                    const types = ['task', 'note', 'decision', 'question'];
+                    const currentIdx = types.indexOf(el.type);
+                    const nextType = types[(currentIdx + 1) % types.length];
+                    changeElementType(elementId, nextType);
+                  }},
+                  { type: 'separator' },
+                  { label: `Delete`, icon: Trash2, onClick: () => { if (confirm(`Delete "${el.title || el.type}"?`)) deleteElement(elementId); } },
+                ],
+              });
+            }}
           />
 
-          {/* Context menu */}
+          {/* Canvas-level context menu */}
           <CanvasContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+          {/* Element-level context menu */}
+          <CanvasContextMenu menu={elementContextMenu} onClose={() => setElementContextMenu(null)} />
         </div>
 
         {showComments && (
@@ -875,6 +935,8 @@ type ViewportProps = {
   onDeleteConnection: (id: string) => void;
   onEditElement: (el: CanvasElement) => void;
   onContextMenu?: (e: React.MouseEvent, worldPos: { x: number; y: number }) => void;
+  // v3.7.0 — Element-specific context menu (right-click on an element)
+  onElementContextMenu?: (e: React.MouseEvent, elementId: string, worldPos: { x: number; y: number }) => void;
   fitToView?: () => void;
 };
 
@@ -889,6 +951,7 @@ function CanvasViewport({
   onDeleteConnection,
   onEditElement,
   onContextMenu,
+  onElementContextMenu,
 }: ViewportProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -1089,7 +1152,7 @@ function CanvasViewport({
           <Circle size={14} />
         </button>
         <span className="muted text-sm" style={{ marginLeft: 'auto' }}>
-          Pan: drag empty · Zoom: scroll · Drag element header to move · Double-click to edit
+          Pan: drag empty · Zoom: scroll · Drag element header to move · Double-click to edit · Right-click element for actions
         </span>
       </div>
       <div className="canvas-root" ref={rootRef} onContextMenu={(e) => {
@@ -1125,6 +1188,14 @@ function CanvasViewport({
                   onSelect={() => onSelect(el.id)}
                   onEdit={() => onEditElement(el)}
                   onDelete={() => onDeleteElement(el.id)}
+                  onContextMenu={onElementContextMenu ? (e) => {
+                    e.preventDefault();
+                    const rect = innerRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    const s = stateRef.current;
+                    const worldPos = { x: (e.clientX - rect.left) / s.scale, y: (e.clientY - rect.top) / s.scale };
+                    onElementContextMenu(e, el.id, worldPos);
+                  } : undefined}
                 />
               ))}
             </>
@@ -1142,6 +1213,7 @@ function CanvasElementView({
   onSelect,
   onEdit,
   onDelete,
+  onContextMenu,
 }: {
   element: CanvasElement;
   selected: boolean;
@@ -1149,6 +1221,7 @@ function CanvasElementView({
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const x = element.x || 0;
   const y = element.y || 0;
@@ -1175,9 +1248,13 @@ function CanvasElementView({
         onEdit();
       }}
       onContextMenu={(e) => {
-        e.preventDefault();
-        if (confirm(`Delete element "${element.title || element.type}"?`)) {
-          onDelete();
+        if (onContextMenu) {
+          onContextMenu(e);
+        } else {
+          e.preventDefault();
+          if (confirm(`Delete element "${element.title || element.type}"?`)) {
+            onDelete();
+          }
         }
       }}
     >

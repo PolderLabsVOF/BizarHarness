@@ -1088,6 +1088,98 @@ export function createApiRouter({
     res.status(201).json(record);
   }));
 
+  // ── /api/activity/stream (v3.5.6) ─────────────────────────────────────
+  // Server-Sent Events stream of recent activity. Sends:
+  //   - 'snapshot' on connect with the current 30-entry window
+  //   - 'snapshot' again whenever a new entry is appended (polled at 1Hz)
+  //   - 'heartbeat' comment line every 25s so proxies don't drop the conn
+  // The frontend subscribes via `new EventSource('/api/activity/stream')`
+  // and replaces its array on each 'snapshot' event.
+  //
+  // We can't use `wrap()` here because SSE streams write plain text
+  // forever — a thrown error has to surface as a connection close, not
+  // a JSON 500. Errors are swallowed silently and the loop is torn
+  // down on req 'close'.
+  router.get('/activity/stream', (req, res) => {
+    // Tell Express / proxies this is an event stream
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
+    // CORS for SSE — echo origin so the Vite dev server can subscribe
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    // Flush headers immediately
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+    const writeSse = (event, data, id) => {
+      try {
+        if (id !== undefined && id !== null) res.write(`id: ${id}\n`);
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      } catch {
+        /* socket closed mid-write — the close handler will clean up */
+      }
+    };
+    const writeComment = (text) => {
+      try { res.write(`: ${text}\n\n`); } catch { /* ignore */ }
+    };
+
+    let lastFingerprint = '';
+    let closed = false;
+
+    const computeFingerprint = (entries) => {
+      if (!Array.isArray(entries) || entries.length === 0) return 'empty';
+      const first = entries[0];
+      return `${entries.length}:${first.ts || ''}:${first.kind || ''}:${first.id || ''}`;
+    };
+
+    const tick = () => {
+      if (closed) return;
+      try {
+        const overview = state.getOverview();
+        const recent = Array.isArray(overview.recentActivity) ? overview.recentActivity : [];
+        const fp = computeFingerprint(recent);
+        if (fp !== lastFingerprint) {
+          lastFingerprint = fp;
+          writeSse('snapshot', { events: recent, generatedAt: overview.generatedAt });
+        }
+      } catch {
+        /* best-effort — keep the stream alive */
+      }
+    };
+
+    // Initial snapshot
+    try {
+      const overview = state.getOverview();
+      const recent = Array.isArray(overview.recentActivity) ? overview.recentActivity : [];
+      lastFingerprint = computeFingerprint(recent);
+      writeSse('snapshot', { events: recent, generatedAt: overview.generatedAt });
+      writeComment('initial snapshot sent');
+    } catch {
+      /* initial write can fail on closed sockets; close handler will fire */
+    }
+
+    const pollInterval = setInterval(tick, 1000);
+    const hbInterval = setInterval(() => writeComment('heartbeat'), 25000);
+
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(pollInterval);
+      clearInterval(hbInterval);
+      try { res.end(); } catch { /* ignore */ }
+    };
+
+    req.on('close', cleanup);
+    req.on('error', cleanup);
+    res.on('error', cleanup);
+  });
+
   // ── /api/history (v3.4.0) ────────────────────────────────────────────
   // Cross-project history view: aggregates activity log events with
   // per-project task / plan counts. Supports date filtering.
@@ -1259,6 +1351,23 @@ export function createApiRouter({
       return;
     }
     res.status(204).end();
+  }));
+
+  // ── /api/providers (v3.5.6) ────────────────────────────────────────────
+  // Surface-everything endpoint the dashboard uses to populate the
+  // Providers card on the Overview tab. Reads from opencode.json +
+  // agent frontmatter + (best-effort) the running opencode serve HTTP
+  // API, so the list is non-empty even on installs that don't declare
+  // a top-level `provider` key in opencode.json.
+  router.get('/providers', wrap(async (_req, res) => {
+    const providers = await providersStore.listAll();
+    res.json({ providers, count: providers.length });
+  }));
+
+  // Active default provider + model. null when nothing is configured.
+  router.get('/providers/active', wrap(async (_req, res) => {
+    const active = await providersStore.getActive();
+    res.json(active || { providerId: null, modelId: null, source: null });
   }));
 
   // ── /api/config/mcps ───────────────────────────────────────────────────

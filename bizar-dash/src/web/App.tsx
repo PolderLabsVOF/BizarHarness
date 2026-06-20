@@ -33,6 +33,7 @@ import { Mods } from './views/Mods';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
 import { History } from './views/History';
+import { Providers } from './views/Providers';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
 import { AlertTriangle, X } from 'lucide-react';
@@ -62,6 +63,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   overview: Overview,
   chat: Chat,
   agents: Agents,
+  providers: Providers,
   plans: Plans,
   tasks: Tasks,
   activity: Activity,

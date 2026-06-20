@@ -667,6 +667,19 @@ function TaskCard({
       onClick={onFocus}
     >
       <div className="task-card-head">
+        {/* v3.7.0 — Visible checkbox for bulk select */}
+        <button
+          type="button"
+          className={cn('task-card-checkbox', focused && 'task-card-checkbox-on')}
+          aria-label={focused ? 'Deselect task' : 'Select task'}
+          title={focused ? 'Deselect' : 'Select'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFocus();
+          }}
+        >
+          {focused ? <CheckSquareIcon size={13} /> : <Square size={13} />}
+        </button>
         <span
           className="priority-dot"
           style={{ background: priorityColors[task.priority] || 'var(--info)' }}

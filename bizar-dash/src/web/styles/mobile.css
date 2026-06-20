@@ -781,6 +781,17 @@ code,
   --text-muted: #656d76;
   --text-dim: #8c959f;
   --text-strong: #1f2328;
+
+  /* v3.5.6 — Accent override. The :root block sets --accent: #8b5cf6
+     (a dark-mode violet) which looks harsh on a white background.
+     Match the desktop main.css light-mode value (#7c3aed) so the
+     mobile dashboard stays visually consistent with desktop. Without
+     this override, mobile light mode shows a too-bright purple accent
+     everywhere --accent is used (links, buttons, focus rings, etc.). */
+  --accent: #7c3aed;
+  --accent-2: #6d28d9;
+  --accent-bg: rgba(124, 58, 237, 0.08);
+  --accent-border: rgba(124, 58, 237, 0.3);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
