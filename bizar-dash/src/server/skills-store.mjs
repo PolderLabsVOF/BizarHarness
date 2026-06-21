@@ -15,6 +15,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   mkdirSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -25,6 +26,15 @@ import { promisify } from 'node:util';
 const execFileP = promisify(execFile);
 const HOME = homedir();
 const STATE_FILE = join(HOME, '.config', 'bizar', 'skills-state.json');
+
+// Atomic JSON write: serialize to a sibling temp file, then rename into
+// place. `rename` is atomic on POSIX (same filesystem), so a crash
+// between write and rename never leaves a half-written / corrupt file.
+function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
 
 /**
  * Categories surfaced in the Skills view. Matched against the
@@ -56,7 +66,7 @@ function loadState() {
 function saveState(state) {
   try {
     mkdirSync(dirname(STATE_FILE), { recursive: true });
-    writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n', 'utf8');
+    atomicWriteJson(STATE_FILE, state);
   } catch {
     /* best effort */
   }

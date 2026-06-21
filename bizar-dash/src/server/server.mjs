@@ -23,6 +23,16 @@ import { projectsStore } from './projects-store.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
 
+// Catch-all to prevent server crash on unhandled rejections
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+  // For uncaughtException, the process state is uncertain. Log and continue
+  // unless it's a fatal error. Don't exit.
+});
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // server.mjs lives at src/server/ — dist/ is at the package root
 const DIST_DIR = join(__dirname, '..', '..', 'dist');
@@ -237,6 +247,10 @@ export async function createServer({
           const f = logFile;
           if (!f || !existsSync(f)) return;
           const newSize = statSync(f).size;
+          // Reset if the file was rotated/truncated (size shrank).
+          if (newSize < fileSize) {
+            fileSize = 0;
+          }
           if (newSize > fileSize) {
             // Read only the new bytes
             const fd = openSync(f, 'r');

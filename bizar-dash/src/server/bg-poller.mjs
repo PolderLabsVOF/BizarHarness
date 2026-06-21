@@ -38,6 +38,43 @@ const ARTIFACT_SCAN_TIMEOUT_MS = 6_000;
 
 const trackedStatuses = new Map(); // bgInstanceId -> last known status
 const processedArtifacts = new Set(); // bgInstanceId -> "scanned once" guard
+// v3.5.8 — Failure counter per task. Bumps on every update error and
+// emits a WS `background:syncError` event at 3, 10, 20, 30, 40, 50, 60
+// … so the UI can surface a real badge instead of swallowing the
+// problem in console.error. After FAIL_GIVE_UP consecutive failures
+// we reset the counter — the poller will keep retrying each tick, but
+// we stop spamming the WS.
+const taskFailures = new Map(); // taskId -> failure count
+const FAIL_GIVE_UP = 50;
+
+function recordPollerFailure(scope, taskId, instanceId, err) {
+  const key = String(taskId || instanceId || 'unknown');
+  const fails = (taskFailures.get(key) || 0) + 1;
+  taskFailures.set(key, fails);
+  console.error(`[bg-poller] ${scope} failed for ${key}:`, err.message);
+  if (fails === 3 || fails === 10 || fails % 10 === 0) {
+    // Lazy import — same pattern as the broadcast calls already in
+    // this file. Avoids pulling server.mjs at module load time.
+    import('./server.mjs')
+      .then(({ broadcast }) => {
+        broadcast({
+          type: 'background:syncError',
+          taskId: taskId || null,
+          instanceId: instanceId || null,
+          scope,
+          failures: fails,
+          error: err && err.message ? err.message : String(err),
+        });
+      })
+      .catch(() => {
+        /* best effort */
+      });
+  }
+  if (fails > FAIL_GIVE_UP) {
+    // Reset so the next batch of failures can notify again.
+    taskFailures.set(key, 0);
+  }
+}
 
 let _interval = null;
 
@@ -150,7 +187,7 @@ async function tick() {
           } catch { /* best effort */ }
         }
       } catch (err) {
-        console.error(`[bg-poller] task update failed for ${taskId}:`, err.message);
+        recordPollerFailure('task-update', taskId, bg.instanceId, err);
       }
 
       // Best-effort: abort the opencode session. Idempotent — a
@@ -197,7 +234,7 @@ async function tick() {
               }
             }
           } catch (err) {
-            console.error(`[bg-poller] artifact scan failed for ${bg.instanceId}:`, err.message);
+            recordPollerFailure('artifact-scan', taskId, bg.instanceId, err);
           }
         }
       }

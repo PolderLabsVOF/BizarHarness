@@ -28,6 +28,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   appendFileSync,
   mkdirSync,
   statSync,
@@ -43,11 +44,33 @@ const LOG_FILE = join(HOME, '.config', 'opencode', 'activity.jsonl');
 const MAX_RETAINED = 5000;
 const MAX_LINES_PER_READ = 5000;
 
+// Atomic write: write to a sibling temp file, then rename into place.
+// `rename` is atomic on POSIX (same filesystem), so a crash between
+// read and write never leaves a partial / empty log file.
+function atomicWriteText(filePath, text) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, text, 'utf8');
+  renameSync(tmp, filePath);
+}
+
 function ensureFile() {
   mkdirSync(dirname(LOG_FILE), { recursive: true });
   if (!existsSync(LOG_FILE)) {
     writeFileSync(LOG_FILE, '', 'utf8');
   }
+}
+
+// Rotate the log when it exceeds the size cap. Atomic: write the
+// truncated contents to a temp file, then rename into place so a
+// crash between read and write can't lose the whole log.
+const ROTATE_MAX_BYTES = 5 * 1024 * 1024;
+function rotateIfNeeded(logFile) {
+  if (!existsSync(logFile)) return;
+  const st = statSync(logFile);
+  if (st.size < ROTATE_MAX_BYTES) return;
+  const lines = readFileSync(logFile, 'utf8').split(/\r?\n/).filter(Boolean);
+  const kept = lines.slice(-MAX_RETAINED);
+  atomicWriteText(logFile, kept.join('\n') + '\n');
 }
 
 function safeParse(line) {
@@ -71,15 +94,9 @@ export const activityLog = {
       appendFileSync(LOG_FILE, JSON.stringify(record) + '\n', 'utf8');
       // Best-effort rotate when the file gets large.
       try {
-        const st = statSync(LOG_FILE);
-        if (st.size > 5 * 1024 * 1024) {
-          // Truncate to last MAX_RETAINED lines.
-          const lines = readFileSync(LOG_FILE, 'utf8').split(/\r?\n/);
-          const kept = lines.slice(-MAX_RETAINED).join('\n') + '\n';
-          writeFileSync(LOG_FILE, kept, 'utf8');
-        }
-      } catch {
-        /* best-effort */
+        rotateIfNeeded(LOG_FILE);
+      } catch (err) {
+        console.error('[activity-log] rotation failed:', err.message);
       }
       return record;
     } catch (err) {

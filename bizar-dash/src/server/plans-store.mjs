@@ -18,6 +18,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   readdirSync,
   statSync,
   mkdirSync,
@@ -29,6 +30,15 @@ import { randomBytes } from 'node:crypto';
 
 const HOME = homedir();
 const GLOBAL_PLANS_DIR = join(HOME, '.config', 'opencode', 'plans');
+
+// Atomic JSON write: serialize to a sibling temp file, then rename into
+// place. `rename` is atomic on POSIX (same filesystem), so a crash
+// between write and rename never leaves a half-written / corrupt file.
+function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
 
 function safeReadJSON(file, fallback = null) {
   try {
@@ -465,8 +475,8 @@ export const plansStore = {
   // ── internal ────────────────────────────────────────────────────────
   _writePlan(dir, meta, canvas) {
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2) + '\n', 'utf8');
-    writeFileSync(join(dir, 'plan.json'), JSON.stringify(canvas, null, 2) + '\n', 'utf8');
+    atomicWriteJson(join(dir, 'meta.json'), meta);
+    atomicWriteJson(join(dir, 'plan.json'), canvas);
     if (!existsSync(join(dir, 'comments.json'))) {
       writeFileSync(join(dir, 'comments.json'), '[]\n', 'utf8');
     }

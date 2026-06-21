@@ -10,7 +10,7 @@
  * Backward compat: if no active project is set, fall back to the legacy
  * global location (`~/.config/bizar/tasks.json`).
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -18,6 +18,15 @@ import { projectsStore } from './projects-store.mjs';
 
 const HOME = homedir();
 const LEGACY_FILE = join(HOME, '.config', 'bizar', 'tasks.json');
+
+// Atomic JSON write: serialize to a sibling temp file, then rename into
+// place. `rename` is atomic on POSIX (same filesystem), so a crash
+// between write and rename never leaves a half-written / corrupt file.
+function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
 
 let _busy = false;
 const _waiters = [];
@@ -79,7 +88,7 @@ function loadStore(file) {
 
 function saveStore(file, store) {
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(store, null, 2) + '\n', 'utf8');
+  atomicWriteJson(file, store);
 }
 
 function appendActivity(task, type, data) {

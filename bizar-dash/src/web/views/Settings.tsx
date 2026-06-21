@@ -27,6 +27,7 @@ import { Card, CardTitle, CardMeta } from '../components/Card';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { Ws } from '../lib/ws';
 import {
   applyTheme,
   applyThemeTokens,
@@ -241,17 +242,10 @@ function UpdatesCard() {
     perPackage: {},
   });
 
-  // WebSocket subscription for live update progress
+  // WebSocket subscription for live update progress (auto-reconnect via Ws class)
   useEffect(() => {
-    const protocols = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocols}//${window.location.host}/ws`);
-    ws.onmessage = (e) => {
-      let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(e.data as string);
-      } catch {
-        return;
-      }
+    const ws = new Ws();
+    ws.on((msg: Record<string, unknown>) => {
       if (msg.type === 'update:progress' || msg.type === 'update:log' || msg.type === 'update:complete') {
         setStatus((s) => {
           if (msg.type === 'update:complete') {
@@ -291,7 +285,7 @@ function UpdatesCard() {
           };
         });
       }
-    };
+    });
     return () => ws.close();
   }, []);
 

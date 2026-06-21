@@ -30,7 +30,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const HOME = homedir();
 
@@ -66,12 +66,19 @@ function tmuxSessionFor(instanceId) {
 
 function tmuxHasSession(sessionName) {
   try {
-    execSync(`tmux has-session -t ${sessionName}`, { stdio: 'ignore' });
+    execFileSync('tmux', ['has-session', '-t', sessionName], { stdio: 'ignore' });
     return true;
   } catch {
     return false;
   }
 }
+
+// Reject any value that could break out of the `bash -lc '...'` wrapper
+// we build in `spawnTmuxFor`. The wrapper is needed so the user's login
+// shell env / aliases / paths resolve the same way they do in the CLI —
+// we just refuse to construct the wrapper when the inputs contain
+// characters that would let the user run arbitrary commands.
+const SHELL_META = /[';|&$`<>\\\n\r]/;
 
 export const backgroundStore = {
   BG_DIRS,
@@ -157,8 +164,15 @@ export const backgroundStore = {
       return { ok: false, error: 'no tmux session for instance', session };
     }
     try {
-      const safe = String(message || '').replace(/"/g, '\\"');
-      execSync(`tmux send-keys -t ${session} "${safe}" Enter`, { timeout: 5000 });
+      const msg = String(message || '');
+      // Use tmux's literal mode (`-l`) and pass the message as a single
+      // arg via execFileSync — no shell interpolation, so payloads like
+      // `"; cat /etc/passwd #` cannot break out.
+      execFileSync(
+        'tmux',
+        ['send-keys', '-l', '-t', session, msg, 'Enter'],
+        { stdio: 'pipe', timeout: 5_000 },
+      );
       return { ok: true, session };
     } catch (err) {
       return { ok: false, error: err.message, session };
@@ -177,7 +191,7 @@ export const backgroundStore = {
       return { ok: false, error: 'no tmux session for instance', session };
     }
     try {
-      execSync(`tmux kill-session -t ${session}`, { timeout: 5000 });
+      execFileSync('tmux', ['kill-session', '-t', session], { stdio: 'pipe', timeout: 5_000 });
       return { ok: true, session };
     } catch (err) {
       return { ok: false, error: err.message, session };
@@ -226,14 +240,27 @@ export const backgroundStore = {
     // v3.5.5 — Use the user's shell so paths / env / aliases resolve
     // the same way `opencode` does when invoked from the CLI. We wrap
     // the supplied command in `bash -lc` and switch into cwd first.
-    const safeCmd = String(command || '').replace(/"/g, '\\"');
-    const workdir = cwd && typeof cwd === 'string' ? cwd.replace(/"/g, '\\"') : '';
-    const wrapped = `bash -lc 'cd "${workdir}" 2>/dev/null || true; ${safeCmd}'`;
+    //
+    // Security: `bash -lc '<cmd>'` is a shell string, so we MUST refuse
+    // any value that contains shell metacharacters — otherwise an
+    // attacker who controls `command` or `cwd` could break out of the
+    // wrapper (e.g. `command = "x; cat /etc/passwd #"`).
+    const safeCmd = String(command || '');
+    const workdir = cwd && typeof cwd === 'string' ? cwd : '';
+    if (SHELL_META.test(safeCmd) || SHELL_META.test(workdir)) {
+      return {
+        ok: false,
+        session,
+        error: 'command or workdir contains disallowed shell metacharacters',
+      };
+    }
+    const wrapped = `bash -lc 'cd ${workdir} 2>/dev/null || true; ${safeCmd}'`;
     try {
-      execSync(`tmux new-session -d -s ${session} -x 220 -y 50 "${wrapped}"`, {
-        stdio: 'ignore',
-        timeout: 5_000,
-      });
+      execFileSync(
+        'tmux',
+        ['new-session', '-d', '-s', session, '-x', '220', '-y', '50', wrapped],
+        { stdio: 'ignore', timeout: 5_000 },
+      );
       return { ok: true, session };
     } catch (err) {
       return { ok: false, session, error: err instanceof Error ? err.message : String(err) };
@@ -249,9 +276,11 @@ export const backgroundStore = {
       return { ok: false, error: 'no tmux session for instance', session, output: '' };
     }
     try {
-      const out = execSync(
-        `tmux capture-pane -t ${session} -p -S -${Math.max(1, Math.min(500, lines))}`,
-        { encoding: 'utf8', timeout: 5000 },
+      const safeLines = String(Math.max(1, Math.min(500, lines)));
+      const out = execFileSync(
+        'tmux',
+        ['capture-pane', '-t', session, '-p', '-S', `-${safeLines}`],
+        { encoding: 'utf8', timeout: 5_000 },
       );
       return { ok: true, session, output: out };
     } catch (err) {

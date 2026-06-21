@@ -17,6 +17,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   mkdirSync,
   readdirSync,
 } from 'node:fs';
@@ -38,19 +39,30 @@ function safeReadJSON(file, fallback = {}) {
   }
 }
 
+// Atomic JSON write: serialize to a sibling temp file, then rename into
+// place. `rename` is atomic on POSIX (same filesystem), so a crash
+// between write and rename never leaves a half-written / corrupt file.
+function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
+
 function loadConfig() {
   return safeReadJSON(OPENCODE_JSON, {});
 }
 
 function saveConfig(data) {
   mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
-  writeFileSync(OPENCODE_JSON, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  atomicWriteJson(OPENCODE_JSON, data);
 }
 
 function mask(value) {
   if (typeof value !== 'string' || !value) return '';
-  if (value.length <= 8) return '***';
-  return value.slice(0, 4) + '***' + value.slice(-4);
+  // Short keys (≤8 chars) get a distinct indicator so the UI can show
+  // "***short***" instead of looking like the field is empty.
+  if (value.length <= 8) return '***short***';
+  return value.slice(0, 2) + '...' + value.slice(-2);
 }
 
 function unmask(stored, incoming) {
