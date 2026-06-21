@@ -1,7 +1,7 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "3.5.8",
-  "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing, per-project Hindsight memory, mods, schedules, and a background service daemon",
+  "version": "3.5.9",
+  "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware rout...
   "type": "module",
   "bin": {
     "bizar": "cli/bin.mjs"
@@ -38,24 +38,4 @@
   "peerDependenciesMeta": {
     "@polderlabs/bizar-dash": {
       "optional": true
-    }
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/DrB0rk/BizarHarness.git"
-  },
-  "homepage": "https://github.com/DrB0rk/BizarHarness",
-  "bugs": {
-    "url": "https://github.com/DrB0rk/BizarHarness/issues"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "devDependencies": {
-    "@types/node": "^22.19.21",
-    "typescript": "^5.9.3"
-  }
-}
+... (21 lines truncated)
