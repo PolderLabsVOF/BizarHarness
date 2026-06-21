@@ -20,6 +20,9 @@ import {
   Smartphone,
   CheckCircle,
   AlertCircle,
+  Shield,
+  Copy,
+  KeyRound,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '../components/Button';
@@ -565,6 +568,77 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
     license: 'MIT',
   };
 
+  // v3.6.0 — Auth token UI state. The Settings tab is the only place
+  // the operator can read the token back out. We default the input
+  // to whatever's already in localStorage so a page reload doesn't
+  // wipe the entry.
+  const [authToken, setAuthToken] = useState<string>(api.getToken());
+  const [authStatus, setAuthStatus] = useState<{ required: boolean } | null>(null);
+  const [revealedToken, setRevealedToken] = useState<string>('');
+
+  // Probe the server once on mount so we can show "auth required" vs
+  // "auth off" in the UI. If /api/auth/status itself 401s, the token
+  // we're using is bad — surface that distinctly.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.get<{ required: boolean }>('/auth/status');
+        if (!cancelled) setAuthStatus(r);
+      } catch (err) {
+        if (!cancelled) {
+          setAuthStatus({ required: true });
+          // Don't toast — the toast spam would be annoying on every
+          // Settings tab open. The Copy/Regenerate buttons themselves
+          // surface the real error if it happens there.
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const onCopyToken = async () => {
+    try {
+      const r = await api.get<{ token: string }>('/auth/reveal');
+      setRevealedToken(r.token);
+      setAuthToken(r.token);
+      api.setToken(r.token);
+      try {
+        await navigator.clipboard.writeText(r.token);
+        toast.success('Token copied to clipboard.');
+      } catch {
+        toast.success('Token revealed — copy from the field below.');
+      }
+    } catch (err) {
+      toast.error(`Reveal failed: ${(err as Error).message}`);
+    }
+  };
+
+  const onRegenerateToken = async () => {
+    if (!confirm('Regenerate the auth token? Anything still using the old token will start getting 401 errors immediately.')) {
+      return;
+    }
+    try {
+      const r = await api.post<{ token: string }>('/auth/regenerate');
+      setRevealedToken(r.token);
+      setAuthToken(r.token);
+      api.setToken(r.token);
+      try {
+        await navigator.clipboard.writeText(r.token);
+        toast.success('New token generated and copied to clipboard.');
+      } catch {
+        toast.success('New token generated — copy from the field below. Old token is now invalid.');
+      }
+    } catch (err) {
+      toast.error(`Regenerate failed: ${(err as Error).message}`);
+    }
+  };
+
+  const onSaveToken = () => {
+    api.setToken(authToken.trim());
+    toast.success('Token saved. The dashboard will use it on the next request.');
+  };
+
   return (
     <div className="view view-settings">
       <header className="view-header">
@@ -956,6 +1030,64 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Notify when a plan needs approval</span>
           </label>
+        </Card>
+
+        {/* v3.6.0 — Auth token management. The Settings tab is the
+            only place a human can read the token. The input + Save
+            button lets the operator paste a token they got from
+            server stderr or from another machine. Copy / Regenerate
+            buttons act via the authed /api/auth/* endpoints. */}
+        <Card>
+          <CardTitle><Shield size={14} /> Authentication</CardTitle>
+          <CardMeta>
+            Bearer token required for the dashboard API. Generated on
+            first boot and saved to <code>~/.config/bizar/dashboard-secret</code>{' '}
+            (mode 0600).
+          </CardMeta>
+          <div className="field" data-setting-id="auth.status">
+            <label className="field-label">Server status</label>
+            <p style={{ margin: '4px 0' }}>
+              Auth required:{' '}
+              <strong>{authStatus?.required ? 'yes' : 'probing…'}</strong>
+            </p>
+            <p className="muted" style={{ fontSize: 12, margin: '4px 0' }}>
+              Default bind is <code>127.0.0.1</code> (local-only). Set{' '}
+              <code>BIZAR_DASHBOARD_BIND=0.0.0.0</code> to expose on a LAN /
+              Tailscale — auth becomes mandatory to keep tailnet neighbors out.
+            </p>
+          </div>
+          <div className="field" data-setting-id="auth.token">
+            <label className="field-label">Token (this browser)</label>
+            <input
+              type="password"
+              className="input mono"
+              value={authToken}
+              onChange={(e) => setAuthToken(e.target.value)}
+              placeholder="Paste token from server stderr or another browser"
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <div className="task-form-row" style={{ marginTop: 8 }}>
+              <Button variant="secondary" size="sm" onClick={onSaveToken}>
+                <KeyRound size={14} /> Save token
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onCopyToken}>
+                <Copy size={14} /> Reveal &amp; copy server token
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onRegenerateToken}>
+                <RotateCcw size={14} /> Regenerate
+              </Button>
+            </div>
+            {revealedToken ? (
+              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Last revealed token (one-time): <code className="mono">{revealedToken}</code>
+              </p>
+            ) : null}
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              Regenerating invalidates the current token immediately. Anything
+              still using the old token will see 401 until it's updated.
+            </p>
+          </div>
         </Card>
 
         <Card>

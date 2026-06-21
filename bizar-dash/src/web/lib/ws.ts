@@ -1,8 +1,33 @@
 // src/lib/ws.ts — WebSocket with auto-reconnect + status + handlers.
+//
+// v3.6.0 — Bearer-token authentication. Browsers cannot set the
+// Authorization header on the native WebSocket constructor, so we
+// append the token as a `?token=<token>` query parameter on the
+// connection URL. The server (auth.mjs) accepts both forms.
 import type { WsMessage, WsStatus } from './types';
+import { TOKEN_KEY } from './api';
 
 type Handler = (msg: WsMessage) => void;
 type StatusHandler = (status: WsStatus) => void;
+
+/**
+ * Build the WS URL with the auth token query param appended.
+ * Returns just the bare /ws URL if no token is set (the server
+ * will 401 and the connection will fail fast — the UI surfaces
+ * "auth required" in that case).
+ */
+function buildWsUrl(): string {
+  if (typeof location === 'undefined') return 'ws://localhost/ws';
+  const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+  let tok = '';
+  try {
+    tok = localStorage.getItem(TOKEN_KEY) || '';
+  } catch {
+    /* localStorage unavailable */
+  }
+  if (!tok) return base;
+  return `${base}?token=${encodeURIComponent(tok)}`;
+}
 
 export class Ws {
   private url: string;
@@ -16,11 +41,7 @@ export class Ws {
   private closed = false;
 
   constructor(url?: string) {
-    this.url =
-      url ||
-      (typeof location !== 'undefined'
-        ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
-        : 'ws://localhost/ws');
+    this.url = url || buildWsUrl();
     this.connect();
   }
 
@@ -66,6 +87,8 @@ export class Ws {
   private connect(): void {
     this.setStatus('connecting');
     try {
+      // Re-resolve the URL on every (re)connect — the token may have
+      // changed since the last attempt (e.g. after Regenerate).
       this.ws = new WebSocket(this.url);
     } catch (err) {
       console.warn('[ws] construct failed:', err);

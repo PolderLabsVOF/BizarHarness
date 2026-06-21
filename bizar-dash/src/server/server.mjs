@@ -22,6 +22,7 @@ import { modsLoader } from './mods-loader.mjs';
 import { projectsStore } from './projects-store.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
+import { checkWebSocketAuth } from './auth.mjs';
 
 // Catch-all to prevent server crash on unhandled rejections
 process.on('unhandledRejection', (err) => {
@@ -118,7 +119,11 @@ export async function createServer({
   });
 
   const server = createHttpServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  // v3.6.0 — Bind the WS server's noServer mode so we can authenticate
+  // the upgrade ourselves instead of letting ws accept any TCP
+  // connection to /ws. The actual upgrade handling happens further
+  // down via server.on('upgrade', ...).
+  const wss = new WebSocketServer({ noServer: true });
 
   function broadcast(msg) {
     const payload = JSON.stringify(msg);
@@ -156,8 +161,43 @@ export async function createServer({
     }
   }
 
+  // v3.6.0 — Bearer-token authentication for /api/* (and /api/auth/status
+  // is the only exception — see routes/auth.mjs). The auth middleware
+  // wraps the entire /api mount, so /api/snapshot, /api/tasks, /api/ws,
+  // etc. all require the token. Mod routes mounted above stay unauthed
+  // because they're mounted at non-/api prefixes.
+  // Lazy-imported so we can fail the boot with a clear message if the
+  // token store isn't writable.
+  const { requireAuth } = await import('./auth.mjs');
+  app.use('/api', requireAuth({ skipPaths: ['/auth/status'] }));
+
   // All /api/* routes go through apiRouter (after mod routes are checked)
   app.use('/api', apiRouter);
+
+  // v3.6.0 — Authenticate WebSocket upgrades. The wss is in
+  // `noServer: true` mode above, so this handler is the gate. We
+  // reject with 401 if the token is missing/invalid; otherwise we
+  // hand off to ws.handleUpgrade so the existing wss.on('connection')
+  // listener below receives the new socket.
+  server.on('upgrade', (req, socket, head) => {
+    const url = req.url || '';
+    if (!url.startsWith('/ws')) {
+      socket.destroy();
+      return;
+    }
+    if (!checkWebSocketAuth(req)) {
+      try {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  });
 
   // ── Static frontend (React SPA in dist/) ─────────────────────────
   const distBuilt =

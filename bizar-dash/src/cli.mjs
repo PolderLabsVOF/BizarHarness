@@ -90,9 +90,14 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot 
     bizarRoot: bizarRoot || join(__dirname, '..', '..'),
   });
 
+  // v3.6.0 — Default bind is localhost (more secure). Operators
+  // exposing the dashboard over Tailscale or LAN can override with
+  // BIZAR_DASHBOARD_BIND=0.0.0.0 (the auth.mjs token will then gate
+  // the surface).
+  const bindHost = process.env.BIZAR_DASHBOARD_BIND || '127.0.0.1';
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(usePort, '127.0.0.1', () => {
+    server.listen(usePort, bindHost, () => {
       server.off('error', reject);
       resolve();
     });
@@ -102,9 +107,13 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot 
   writeFileSync(PORT_FILE, String(usePort), 'utf8');
   writeFileSync(PID_FILE, String(process.pid), 'utf8');
 
-  const url = `http://localhost:${usePort}/`;
+  // v3.6.0 — Surface the bind in the URL hint so the operator can see
+  // whether they're bound to localhost only or to all interfaces.
+  const url = bindHost === '127.0.0.1' || bindHost === 'localhost'
+    ? `http://localhost:${usePort}/`
+    : `http://${bindHost}:${usePort}/`;
   await launchBrowser(url);
-  console.log(`Bizar dashboard: ${url}`);
+  console.log(`Bizar dashboard: ${url} (bind: ${bindHost})`);
   console.log('Press Ctrl-C to stop the dashboard.');
 
   await new Promise(() => {});
@@ -178,9 +187,11 @@ async function runTui({ launchWeb } = {}) {
     opencodeConfigDir: join(homedir(), '.config', 'opencode'),
     bizarRoot: join(__dirname, '..', '..'),
   });
+  // v3.6.0 — Honor BIZAR_DASHBOARD_BIND same as startDashboard.
+  const bindHost = process.env.BIZAR_DASHBOARD_BIND || '127.0.0.1';
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, bindHost, () => {
       server.off('error', reject);
       resolve();
     });

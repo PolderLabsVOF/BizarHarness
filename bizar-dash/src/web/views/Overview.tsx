@@ -80,10 +80,16 @@ export function Overview({
   }, [snapshot.overview, snapshot.projects, snapshot.activeProject, snapshot.mods]);
 
   // v3.7.0 — Subscribe to SSE activity stream
+  // v3.6.0 — Append ?token=… for auth. EventSource can't set custom
+  // headers, so the server accepts the token via query string too.
   useEffect(() => {
     let es: EventSource;
     try {
-      es = new EventSource('/api/activity/stream');
+      const tok = api.getToken();
+      const url = tok
+        ? `/api/activity/stream?token=${encodeURIComponent(tok)}`
+        : '/api/activity/stream';
+      es = new EventSource(url);
       es.addEventListener('snapshot', (e) => {
         try {
           const parsed = JSON.parse((e as MessageEvent).data) as { events: ActivityItem[]; generatedAt?: string };

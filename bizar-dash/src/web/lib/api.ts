@@ -1,4 +1,19 @@
 // src/lib/api.ts — REST client. Single instance, type-safe wrappers.
+//
+// v3.6.0 — Bearer-token authentication. The token is read from
+// localStorage (key: `bizar-auth-token`). On first request the
+// client probes /api/auth/status to check whether the server
+// requires auth at all; if it does, the client must already have
+// a token (set by the Settings tab via "Copy token" / "Regenerate
+// token") or it surfaces 401s. We DO NOT silently redirect or
+// prompt — the operator must paste the token explicitly into the
+// Settings tab.
+//
+// For SSE routes, the token is also added as a `?token=...` query
+// parameter (see Overview.tsx's EventSource usage) because browsers
+// can't set custom headers on EventSource.
+
+const TOKEN_KEY = 'bizar-auth-token';
 
 export class ApiError extends Error {
   status: number;
@@ -13,6 +28,34 @@ export class ApiError extends Error {
 
 class ApiClient {
   base = '/api';
+
+  /** Get the cached bearer token from localStorage, or '' if none. */
+  getToken(): string {
+    try {
+      return localStorage.getItem(TOKEN_KEY) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  /** Persist the token. Called from the Settings tab after Reveal/Regenerate. */
+  setToken(token: string): void {
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* localStorage unavailable — token won't persist across reloads */
+    }
+  }
+
+  /** Build the URL with the token appended as ?token=… if present. */
+  urlWithToken(path: string): string {
+    const url = this.base + path;
+    const tok = this.getToken();
+    if (!tok) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}token=${encodeURIComponent(tok)}`;
+  }
 
   async get<T>(path: string): Promise<T> {
     return this.req<T>('GET', path);
@@ -31,10 +74,10 @@ class ApiClient {
   }
 
   private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const opts: RequestInit = {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-    };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const tok = this.getToken();
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+    const opts: RequestInit = { method, headers };
     if (body !== undefined && body !== null) {
       opts.body = typeof body === 'string' ? body : JSON.stringify(body);
     }
@@ -68,4 +111,4 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
-export { ApiClient };
+export { ApiClient, TOKEN_KEY };
