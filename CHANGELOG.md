@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.8.0 — 2026-06-22
+
+### Added — `bizar graph` subcommand for per-project knowledge graphs
+
+**`bizar graph`** (powered by [graphify](https://github.com/bretbthomas/graphify)) provides a structured, queryable map of every agent, skill, command, and rule in the BizarHarness project. Graph files live in `.bizar/graph/` and are git-trackable.
+
+#### New files
+- **`cli/graph.mjs`** — `bizar graph` subcommand implementing `build`, `update`, `query`, `path`, `explain`, `watch`, `status`, and `install` actions
+- **`cli/graph.test.mjs`** — 11 Node `node:test` cases, all passing
+
+#### Modified files
+- **`cli/bin.mjs`** — wired `graph` into the dispatcher, added `showGraphHelp()`, updated top-level help and `showInitHelp()`
+- **`cli/init.mjs`** (+35 lines) — soft graph build step after writing `.bizar/PROJECT.md`; fails open if `graphifyy` is missing
+- **`cli/install.mjs`** (+58 lines) — post-install `promptGraphifyInstall()` that offers to install or build the graph
+
+#### Config updates
+- **`config/commands/init.md`** — rewritten (1→23 lines) to teach the new graph flow, status verification, and retry instructions
+- **`config/AGENTS.md`** — new `## Graph Query (bizar graph)` section
+
+#### Agent parallel-execution coordination
+All 9 agent files (`baldr`, `forseti`, `heimdall`, `hermod`, `mimir`, `odin`, `thor`, `tyr`, `vidarr`) received a new `## Parallel Execution` section with:
+- Sibling-awareness rules for when agents run in the same working directory concurrently
+- Disjoint file-scoping discipline to prevent write collisions
+- Git operation boundaries (only `@hermod` performs write-level git)
+- Pre-write checklists and `.git/index.lock` handling
+- Mandatory end-of-session reporting (`Siblings: … Conflicts: … Git ops: …`)
+
+Odin's dispatch block now includes a full `## PARALLEL EXECUTION CONTEXT` template to prepend to every parallel subagent prompt.
+
+#### Dashboard
+- **`bizar-dash/src/web/views/Tasks.tsx`** — archived tasks (`status: "archived"` OR `archived: true`) now surface in the DONE kanban column so earlier-existing tasks are visible from a fresh dashboard load. `matchesColumn()` helper added.
+
+#### Requirements
+Graph features require **Python 3.10+** and **`graphifyy`** (`pip install graphifyy`). The `bizar graph` commands and the `bizar init` / `bizar install` integration fail open if the dependency is absent.
+
 ## v3.7.3 — 2026-06-22
 
 ### Fixed — `bizar update` rewritten for correctness
