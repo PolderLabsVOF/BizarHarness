@@ -1,5 +1,41 @@
 # Changelog
 
+## v3.7.2 — 2026-06-22
+
+### Added
+- **Comprehensive Always-On Behavior Baseline** in `config/AGENTS.md` ("General Agent Baseline — Always-On Behavior"). Translated from the upstream Claude Fable 5 system prompt — every Claude-specific tool, directory, and concept has been mapped to the BizarHarness equivalent. Single source of truth for every agent's behavior so the rules don't drift across the 13 agent files.
+
+  Sections covered:
+  - **Identity preamble** — Bizar Norse-pantheon identity, replace "Claude / Anthropic"
+  - **Tool translation table** — `view`→`read`, `str_replace`→`edit`, `create_file`→`write`, `bash_tool`→`bash`, `web_search`→`websearch`, `web_fetch`→`webfetch`, `ask_user_input_v0`→`question`, `skill`→`skill`, MCP registry→`skills` CLI. Lists which upstream tools **don't** exist in Bizar (`image_search`, `places_*`, `weather_fetch`, etc.) so agents don't assume them.
+  - **refusal_handling** — be open, attempt with stated assumptions rather than refuse
+  - **tone_and_formatting** — warm, direct, kind; never use bullets when declining
+  - **lists_and_bullets** — prose preferred; lists only when essential
+  - **user_wellbeing** — mental health, self-harm, disordered eating, crisis resources; NEDA → National Alliance for Eating Disorders helpline (NEDA is permanently disconnected)
+  - **evenhandedness** — best case for the position, not the agent's view; end advocacy with opposing perspectives
+  - **responding_to_mistakes_and_criticism** — own it, fix it, don't collapse
+  - **knowledge_cutoff_and_research_first** — no shared cutoff across models; search for fast-changing facts; project context via Hindsight
+  - **mcp_servers_and_skills** — Semble and Hindsight always-on; Skills CLI for domain packs; agent-browser for E2E
+  - **skills_mandatory_read** — read every plausibly-relevant SKILL.md before writing code
+  - **file_creation_advice** — standalone artifact vs conversational answer; tone/length don't change the bucket
+  - **file_handling_rules** — Bizar workspace paths, parser per file type, verify before claiming
+  - **search_instructions** — websearch/webfetch, copyright hard limits (15-word ceiling, one quote per source)
+  - **copyright_compliance** — non-negotiable, paraphrasing default, no lyrics/poems/article paragraphs
+  - **harmful_content_safety** — refuse to search for, reference, or cite extremist/harmful sources
+  - **citation_instructions** — claims in your own words, never quoted text
+  - **images_and_visual_content** — no `image_search`; use agent-browser for local screenshots
+  - **memory_privacy_and_user_data** — conservative retention, no secrets/PII
+  - **files_execution_and_data_handling** — preserve user content, real files when requested, scoped commands
+  - **clarification_and_ambiguity** — one high-value question; dispatch to Vör/Mimir
+  - **communication_and_final_responses** — match user register, brief progress updates
+
+### Changed
+- **All 13 agent files** (`config/agents/*.md`) now reference the global baseline instead of carrying a duplicated copy. The per-agent "General Operating Baseline" section is replaced by a one-liner pointer: *"Follow the global baseline in `config/AGENTS.md` → 'General Agent Baseline — Always-On Behavior'."* Net change: -716 lines of duplicated boilerplate, +286 lines of single-source-of-truth baseline.
+
+### Files
+- `config/AGENTS.md` — added comprehensive baseline (~325 lines)
+- `config/agents/*.md` — replaced duplicated local baseline with pointer (13 files)
+
 ## v3.7.1 — 2026-06-22
 
 ### Fixed
