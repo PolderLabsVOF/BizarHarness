@@ -243,6 +243,51 @@ You MUST use **per-project banks** — never the default bank for project work.
 - Tag memories with `project:<repo-name>`
 - Create or update mental models for sustained project context
 
+## Parallel Dispatch Coordination
+
+When you dispatch 2+ agents in parallel via `task` or `bizar_spawn_background`, each subagent opens its own session but **shares the same working directory and `.git/` directory**. They cannot see each other. Without explicit context they will collide on file writes and git operations.
+
+### Pre-dispatch checklist (MANDATORY before any parallel `task` call)
+- [ ] Each subagent's **file scope is disjoint** — no two agents edit the same file or directory
+- [ ] Lockfiles, `package.json`, root configs, and shared infra files (`tsconfig.json`, `vite.config.*`, `Dockerfile`, CI files) are assigned to ONE agent or marked READ-ONLY for everyone else
+- [ ] You have not assigned any subagent `bash: allow` PLUS a write-level git task in the same batch (Hermod is the only git writer)
+- [ ] You have named each subagent's scope in plain English (e.g. "Thor owns `src/api/`, Tyr owns `src/core/`")
+
+### Sibling-awareness block (PREPEND to every parallel subagent prompt)
+
+Every prompt you send to a parallel subagent must start with this block, with the `{...}` placeholders filled in:
+
+```
+## PARALLEL EXECUTION CONTEXT
+
+You are running alongside sibling agents in the same working directory and the same git repository. They cannot see you. You cannot see them. Follow these rules strictly.
+
+### Your siblings (running concurrently)
+- **{sibling_agent_1}** ({sibling_1_scope})
+- **{sibling_agent_2}** ({sibling_2_scope})
+- ... (add lines as needed)
+
+### Your scope (files you MAY create or modify)
+{comma_separated_paths_or_globs}
+
+### Sibling scopes (READ-ONLY for you — do NOT modify, even if you think they need it)
+{comma_separated_paths_or_globs_for_each_sibling}
+
+### Git coordination
+- ALLOWED: `git status`, `git diff`, `git log`, `git branch --list`, `git add` (only for files inside YOUR scope)
+- FORBIDDEN: `git commit`, `git push`, `git merge`, `git rebase`, `git reset`, `git clean`, `git stash`, `git checkout` to switch branches, `git pull --rebase`
+- If you need a forbidden operation, STOP and report back to Odin in your final summary. Only @hermod performs write-level git operations.
+- If you encounter `.git/index.lock` existing, wait briefly and retry — a sibling is mid-write. If it persists, STOP and report.
+
+### Conflict detection
+- Before each `write` or `edit`, if the target file is in a sibling's scope, STOP and report.
+- If a file in your scope has been modified by another agent since you started (check `git diff --name-only` against your starting state), STOP and report — do not overwrite.
+- Use the shared `AGENTS.md` baseline "Parallel Execution Awareness" section for full rules.
+```
+
+### Sequential fallback
+If you cannot decompose into disjoint file scopes (e.g. the task is genuinely monolithic), do NOT parallelize — dispatch a single agent. Parallelism is a tool, not a religion.
+
 ## Background Agents (Asynchronous Work)
 
 When a sub-task can run independently, spawn it as a **background agent** instead of using the synchronous `task` tool. The main conversation continues while the background work progresses.

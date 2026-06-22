@@ -292,6 +292,9 @@ export async function runInstaller() {
     }
   }
 
+  // ── Post-install: graphify ──
+  await promptGraphifyInstall();
+
   // ── Post-install ──
   console.log(chalk.dim('\n  Odin watches. The Pantheon awaits. ᛟ\n'));
 }
@@ -383,6 +386,61 @@ async function promptAndInstallOptional() {
     }
   } else {
     console.log('  ✓ @polderlabs/bizar-dash already installed');
+  }
+}
+
+async function promptGraphifyInstall() {
+  const { spawnSync } = await import('node:child_process');
+
+  console.log();
+  sectionHeading('Knowledge Graph (graphify)');
+
+  const detect = spawnSync('python3', ['-c', 'import graphify; print(graphify.__version__)'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  const graphifyInstalled = detect.status === 0 && (detect.stdout || '').trim().length > 0;
+
+  if (graphifyInstalled) {
+    console.log(chalk.green('  graphify already installed — skipping.'));
+    return;
+  }
+
+  // Non-interactive: no TTY means we can't ask, so just print the hint
+  if (!stdin.isTTY || !stdout.isTTY) {
+    console.log(chalk.dim('  graphify not detected. Install later with:'));
+    console.log(chalk.dim('    pip install graphifyy'));
+    console.log(chalk.dim('    pipx install graphifyy'));
+    console.log(chalk.dim('    uv tool install graphifyy'));
+    console.log(chalk.dim('  Then run `bizar graph build` to populate .bizar/graph/.'));
+    return;
+  }
+
+  console.log(chalk.dim('  graphify not detected. graphify powers per-project knowledge graphs (bizar graph build).'));
+  console.log(chalk.dim('  Install with one of:'));
+  console.log(chalk.dim('    pip install graphifyy       # user-site or venv'));
+  console.log(chalk.dim('    pipx install graphifyy      # isolated CLI tool (recommended on macOS)'));
+  console.log(chalk.dim('    uv tool install graphifyy   # via uv'));
+
+  const rl = createInterface({ input: stdin, output: stdout });
+  try {
+    const answer = (await rl.question('  Install graphify now via pip? [Y/n]: ')).trim().toLowerCase();
+    rl.close();
+
+    if (answer === '' || answer.startsWith('y')) {
+      const result = spawnSync('pip', ['install', 'graphifyy'], { stdio: 'inherit', timeout: 120000 });
+      if (result.status === 0) {
+        console.log(chalk.green('  graphify installed. Try: bizar graph build'));
+      } else {
+        console.log(chalk.yellow(`  pip install failed (exit ${result.status}). You can install manually later — see options above.`));
+      }
+    } else {
+      console.log(chalk.dim('  Skipped. Install manually with one of the commands above when ready.'));
+    }
+  } catch {
+    rl.close();
+    console.log(chalk.dim('  Skipped.'));
   }
 }
 

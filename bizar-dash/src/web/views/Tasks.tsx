@@ -65,6 +65,18 @@ const COLUMNS: Column[] = [
   { id: 'done', label: 'Done', kind: 'success' },
 ];
 
+/**
+ * v3.7.4 — Decide whether a task belongs in the given kanban column.
+ * Archived tasks (any prior session's "finished and tucked away" tasks)
+ * show up in the DONE column so a fresh dashboard load still surfaces
+ * everything that exists on disk.
+ */
+function matchesColumn(task: Task, colId: string): boolean {
+  const isArchived = task.status === 'archived' || task.archived === true;
+  if (colId === 'done') return task.status === 'done' || isArchived;
+  return !isArchived && task.status === colId;
+}
+
 const PRIORITIES = ['low', 'normal', 'high'] as const;
 type Priority = (typeof PRIORITIES)[number];
 type SortKey = 'priority' | 'due' | 'created' | 'updated';
@@ -475,11 +487,16 @@ export function Tasks({ snapshot, refreshSnapshot, setActiveTab }: Props) {
             <KanbanColumn
               key={col.id}
               column={col}
-              tasks={sorted.filter((t) => t.status === col.id)}
+              // v3.7.4 — Archived tasks (`status: "archived"` OR `archived: true`)
+              // surface in the DONE column so earlier-existing tasks are
+              // visible from a fresh dashboard load. The TaskCard itself
+              // shows an "Archived" badge so the user can distinguish them
+              // from completed tasks.
+              tasks={sorted.filter((t) => matchesColumn(t, col.id))}
               selected={selected}
               onToggleSelect={toggleSelect}
               onToggleSelectAll={toggleSelectAll}
-              allTaskIdsInCol={sorted.filter((t) => t.status === col.id).map((t) => t.id)}
+              allTaskIdsInCol={sorted.filter((t) => matchesColumn(t, col.id)).map((t) => t.id)}
               onMove={moveTask}
               onDelete={deleteTask}
               onArchive={archiveTask}

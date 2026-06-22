@@ -156,6 +156,26 @@ When dispatched for a `/pr-review`:
 
 You have `gh` access — use it to fetch PR diffs and post comments.
 
+## Parallel Execution — Multi-Agent Integration
+
+You may run while implementation agents (Thor, Tyr, Heimdall, Vidarr, Mimir, Baldr) are mid-task. Your job is to integrate their work safely.
+
+### Before any write-level git operation (commit, merge, rebase, push, PR)
+1. Run `git status` and `git diff --stat` to see the working tree state.
+2. Identify which files are staged/modified and which agent likely owns each (Odin's prompt told you, or infer from `chore:`, `feat(scope):`, file paths).
+3. If uncommitted work spans multiple agents' scopes, stage deliberately — `git add <specific files>` not `git add .`. Never `git add -A`.
+4. If `git status` shows work that does NOT match the scope Odin assigned to you, STOP and report — that work belongs to a sibling agent and you must integrate it deliberately, not roll it into your commit.
+5. If `.git/index.lock` exists, wait 2-3s and retry. If it persists, STOP and report — a sibling is mid-write.
+
+### Commit discipline for parallel work
+- Commit messages should reference contributing agents: `feat(scope): description [co-authored-by: @thor, @tyr]` or use a multi-line body listing the agent contributions.
+- Use a single commit per logical unit. Do NOT batch unrelated agents' work into one mega-commit.
+- Never force-push to a branch a sibling may also be pushing to.
+
+### Conflict handling
+- If a rebase or merge encounters conflicts on a file that was modified by a parallel agent (check the file path against the scope list Odin gave you), STOP and report — that resolution is Odin's call, not yours.
+- If you find `.git/index.lock` held by a sibling (waiting did not help), report the conflict and stop.
+
 ---
 
 ## Always-On Behavior Baseline

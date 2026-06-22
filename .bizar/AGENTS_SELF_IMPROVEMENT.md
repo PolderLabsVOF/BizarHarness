@@ -20,6 +20,8 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 15. **Verify root `tsconfig.json` `include` paths** — a stale `include: ["src/**/*"]` at the monorepo root will typecheck against nothing. Either point at the actual subdirs or remove the typecheck script entirely if each subpackage has its own.
 16. **Dashboard WebSocket initial snapshot must match REST snapshot** — server was sending a different shape than `/api/snapshot`; web client threw on type mismatch. Keep WS `snapshot` and HTTP `snapshot` payloads identical.
 17. **Auth bypass via loopback proxy** — Express + `req.ip` trusts loopback by default; if you accept `X-Forwarded-For`, do not use `req.ip` for auth status — derive trust from the actual TCP peer (`req.socket.remoteAddress`) and only honor trusted proxies.
+18. **Parallel dispatch requires sibling-awareness context** — When dispatching 2+ parallel subagents, Odin MUST prepend a `## PARALLEL EXECUTION CONTEXT` block listing siblings + disjoint file scopes + git rules. Subagents MUST treat scope as sacred and avoid all write-level git except via @hermod. If tasks cannot be decomposed into disjoint file scopes, dispatch sequentially.
+19. **When integrating Python tools into Bizar's Node harness, use a thin `cli/<tool>.mjs` wrapper with `child_process.spawnSync`.** Detect the tool, fail open with install instructions, never block init. Route output to `.bizar/<tool>/` to match existing convention.
 
 ## Log
 
@@ -221,3 +223,57 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - The dashboard's `/api/auth/status` is unauthed and returns `{required: true}` — it does NOT include the token. The token is only retrievable via `/api/auth/reveal` which itself requires the token (chicken-and-egg by design; first-boot token comes from server stderr).
 - **Smoke results**: 8/8 auth scenarios pass (unauthed 401, header 200, query 200, wrong 401, status 200, reveal 200, regenerate → old invalidated / new works, file mode 0600). WS auth (with/without token, bad token) all correct. SSE auth (header + query) both 200. All 36 GET endpoints return 200 (one was 500 on /api/history pre-fix — now 200).
 - **Agent(s) used**: tyr (planning + implementation), heimdall (suggested).
+
+### 2026-06-22 — Parallel-agent git conflict fix
+
+- **Context:** User reported two parallel agents colliding on git operations in the same project. The harness had no mechanism to inform a subagent that sibling agents were running concurrently. Subagents shared the working directory and `.git/` directory and could (and did) race on `.git/index.lock`, branch contention, and silent file overwrites.
+
+- **Root cause:** Odin's system prompt told it to dispatch 2+ agents in parallel via `task` calls but did not require it to inform each subagent about its siblings. Subagent prompts contained no parallel-awareness language. The shared `AGENTS.md` baseline had no universal parallel rules. No git worktree isolation exists (OpenCode upstream support not yet available).
+
+- **Fix (prompt-level only — no infrastructure changes):**
+  - Added "Parallel Dispatch Coordination" to both copies of `odin.md`: pre-dispatch checklist, sibling-awareness block template with placeholders, sequential fallback for monolithic tasks.
+  - Added "Parallel Execution Awareness" to `config/AGENTS.md`: universal rules for all agents (file scope is sacred, no write-level git except Hermod, `.git/index.lock` discipline, lockfile handling).
+  - Added role-specific "Parallel Execution" sections to all 8 bash-enabled subagents: standard section for Thor/Tyr/Heimdall/Mimir/Vidarr/Baldr, "Multi-Agent Integration" for Hermod, audit-only for Forseti.
+
+- **Pattern for next time:** When the orchestrator dispatches parallel agents, it MUST prepend a `## PARALLEL EXECUTION CONTEXT` block listing siblings + file scopes + git rules. Subagents MUST treat the file scope as a hard boundary. Only Hermod performs write-level git. If a task cannot be decomposed into disjoint file scopes, do not parallelize — dispatch sequentially.
+
+- **Files changed:**
+  - `~/.config/opencode/agents/odin.md` (runtime)
+  - `config/agents/odin.md` (source)
+  - `config/AGENTS.md` (shared baseline)
+  - `~/.config/opencode/agents/{thor,tyr,heimdall,mimir,vidarr,baldr,forseti,hermod}.md` (runtime, 8 files)
+  - `config/agents/{thor,tyr,heimdall,mimir,vidarr,baldr,forseti,hermod}.md` (source, 8 files)
+
+- **Agents used:** @mimir (audit + research), @thor (Odin + shared baseline), @tyr (subagent prompts), @heimdall (verification + self-improvement).
+
+- **Follow-ups:**
+  - Pre-existing drift between runtime and source agent files (different model identifiers, permission lists) — out of scope for this fix but worth a future `bizar install` review.
+  - Heimdall may need an explicit exception for writing to `.bizar/AGENTS_SELF_IMPROVEMENT.md` when dispatched in parallel — currently the "scope is sacred" rule could conflict.
+  - OpenCode upstream `isolation: worktree` support (PR #21680) is the long-term fix; this prompt-level discipline is the bridge.
+
+### 2026-06-22 — graphify per-project knowledge graph integration
+
+**Context:** User asked to integrate https://github.com/safishamsi/graphify into the Bizar harness with per-project graphs, and to extend `/init` to include everything needed.
+
+**What landed:**
+- New `cli/graph.mjs` (330 lines) — `bizar graph` subcommand: build/update/query/path/explain/watch/status/install. Routes graphify output to `.bizar/graph/` via `GRAPHIFY_OUT` env var.
+- New `cli/graph.test.mjs` (188 lines) — 11 Node `node:test` cases covering `findPython()`, `parseGraphStats()`, `showGraphHelp()`, and the `GRAPH_DIR` constant.
+- `cli/bin.mjs` updated — `graph` wired into dispatcher, `showGraphHelp()` added, top-level help updated, `showInitHelp()` updated to mention graph.
+- `cli/init.mjs` updated — soft graph step at lines 153-186 runs after `.bizar/PROJECT.md` is written. Detects graphify, builds the graph, fails open with clear retry instructions if graphify is missing or build fails.
+- `config/commands/init.md` rewritten — teaches heimdall the new flow: detect stack → install skills → write `.bizar/PROJECT.md` → write `AGENTS_SELF_IMPROVEMENT.md` → build graph → verify with `bizar graph status`.
+
+**Pattern for next time:** When integrating a Python tool into a Node.js harness, the natural seam is a thin CLI wrapper module (`cli/<tool>.mjs`) that uses `child_process.spawnSync` to shell out, sets relevant env vars, and exports JS helpers for testability. Detect the tool's runtime at command entry, fail open with actionable install instructions, never block init on optional integrations. Route tool output to `.bizar/<tool>/` to mirror the project's existing git-trackable convention.
+
+**Files changed:**
+- `cli/graph.mjs` (new)
+- `cli/graph.test.mjs` (new)
+- `cli/bin.mjs` (modified, +~25 lines)
+- `cli/init.mjs` (modified, +35 lines)
+- `config/commands/init.md` (rewritten, 1→23 lines)
+
+**Agents used:** @mimir (research), @thor (graph.mjs + tests + bin.mjs + showInitHelp follow-up), @tyr (init.mjs + commands/init.md), @heimdall (this entry).
+
+**Follow-ups:**
+- `bizar init` shells out to `npx bizar graph build` which requires either a global `@polderlabs/bizar` install or `node_modules/.bin/bizar`. The robust fallback is `node <repo>/cli/bin.mjs graph build`. If this proves flaky in real use, swap the spawn call.
+- graphify is per-project by default but supports a global cross-project graph (`graphify global add <tag>`). A future enhancement could add `bizar graph global` to manage this from the harness.
+- The OpenCode skill/plugin auto-install via `graphify install --platform opencode --project` is exposed through `bizar graph install` but not yet wired into `bizar init`. Consider adding it as a follow-up so init drops the OpenCode skill alongside building the graph.

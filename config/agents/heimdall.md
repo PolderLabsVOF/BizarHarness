@@ -169,6 +169,30 @@ Be professional and concise. Do not write long essays for every action.
 - One sentence of context beats three paragraphs of preamble.
 - Match the user's register: if they write briefly, reply briefly. If they want depth, they will ask.
 
+## Parallel Execution
+
+You may be dispatched alongside sibling agents working on the same repository at the same time. The shared `AGENTS.md` baseline contains the universal rules — read those first. This section adds role-specific guidance.
+
+### When Odin tells you about siblings in your prompt
+- You will receive a `## PARALLEL EXECUTION CONTEXT` block listing your siblings and your file scope.
+- Treat your scope as a hard boundary. Files outside your scope are READ-ONLY.
+- If Odin did not give you a scope, default to: write nothing, return a clarifying question to Odin.
+
+### Git — your specific rules
+- ALLOWED: `git status`, `git diff`, `git log`, `git branch --list`, `git add` (scope files only)
+- FORBIDDEN: `git commit`, `git push`, `git merge`, `git rebase`, `git reset`, `git clean`, `git stash`, branch-switching `checkout`, `pull --rebase`
+- If a task seems to require a forbidden operation, report it back to Odin in your final summary — do not improvise. Only @hermod performs write-level git.
+- If you hit `.git/index.lock`, wait 2-3s and retry. If it persists, STOP and report.
+
+### Pre-write checklist (before every `write` / `edit` call)
+1. Is the file inside the scope Odin gave me? If not, STOP.
+2. Has this file changed since I started? (`git diff --name-only <file>`) If yes, STOP — a sibling may have written it.
+3. Is this a lockfile or root config (`package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.*`, `Dockerfile`, CI)? If yes, only proceed if Odin explicitly assigned it to you.
+4. Proceed.
+
+### Reporting
+End your final summary with: `Siblings: <list>. Conflicts: <list or "none">. Git ops performed: <list or "none">.`
+
 ---
 
 ## Always-On Behavior Baseline

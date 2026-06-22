@@ -13,6 +13,10 @@ Norse-pantheon multi-agent system for opencode. 10 agents across 4 cost tiers wi
 ## Architecture
 Odin (primary router) decomposes every request into parallel streams and dispatches to subagents. Never executes work himself. Implementation always split across Thor (M2.7) + Tyr (M3) in parallel. Forseti audits all complex plans before execution.
 
+**Parallel Execution Protocol:** Harness now enforces sibling-awareness when dispatching parallel agents. Odin prepends a `## PARALLEL EXECUTION CONTEXT` block to each subagent prompt listing concurrent siblings, disjoint file scopes, and git rules. Subagents obey a strict file-scope boundary — no writes outside their assigned area. Only Hermod performs write-level git operations (commit, push, branch management). If a task cannot be decomposed into disjoint file scopes, agents dispatch sequentially. This is a prompt-level discipline bridge until OpenCode upstream `isolation: worktree` support (PR #21680) lands.
+
+**Per-project knowledge graph:** Bizar integrates `graphify` (https://github.com/safishamsi/graphify) for per-project code knowledge graphs. Run `bizar init` to bootstrap — it creates `.bizar/graph/` containing `graph.json` (NetworkX node-link), `GRAPH_REPORT.md` (human-readable summary), and `graph.html` (interactive visualization). Query with `bizar graph query/path/explain`, update incrementally with `bizar graph update`, watch for changes with `bizar graph watch`. Requires Python 3.10+ and `graphifyy` (pip install graphifyy).
+
 Agents have **self-skill-discovery capability** — they can proactively find and install Skills CLI packs by domain (e.g., `skills add supabase/agent-skills --all -y` for database work) during execution. The Skill Discovery Protocol is documented in `config/AGENTS.md` and in individual agent files.
 
 **Vör Research-First Protocol**: Vör must read PROJECT.md and check Hindsight banks before asking any questions. Questions are only allowed after research is exhausted, and must reference actual project files/frameworks/patterns — never ask generic discovery questions.

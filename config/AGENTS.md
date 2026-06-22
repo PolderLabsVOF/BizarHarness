@@ -283,6 +283,36 @@ The Hindsight MCP server is already configured. All agents interact with it thro
 
 ---
 
+## Graph Query (bizar graph)
+
+Bizar integrates [graphify](https://github.com/safishamsi/graphify) for per-project knowledge graphs. When investigating a Bizar project, **query the graph before grepping raw files** — it's faster and surfaces structural relationships grep can't see.
+
+### Where the graph lives
+`.bizar/graph/` inside the project (git-trackable JSON + Markdown; cache and per-machine interpreter path are gitignored).
+
+### How to query
+From the project root, the user (or heimdall via `/init` or any other agent prompted by Odin) can run:
+- `bizar graph status` — confirm the graph exists; print node/edge/community counts
+- `bizar graph query "<concept>"` — find nodes related to a concept (BFS traversal)
+- `bizar graph path "<A>" "<B>"` — shortest path between two concepts
+- `bizar graph explain "<X>"` — all nodes related to X
+- `bizar graph update` — incremental rebuild after editing source files
+- `bizar graph build` — full rebuild (overwrites existing graph)
+- `bizar graph watch` — foreground watcher (Ctrl-C to stop)
+
+### When to use the graph
+- Before reading a large file: `bizar graph explain "<module-name>"` to see what calls/uses it
+- When mapping unfamiliar code: `bizar graph query "<feature>"` to find related concepts
+- When debugging cross-module interactions: `bizar graph path "<symptom>" "<root-cause>"`
+- Before grep: `bizar graph query "<term>"` first — the graph may already point you to the right file
+
+### When NOT to use the graph
+- The graph is stale (run `bizar graph update` first)
+- graphify is not installed (init skipped graph step; user can install with `pip install graphifyy` then `bizar graph build`)
+- The question is about runtime behavior, not source structure
+
+---
+
 ---
 
 ## General Agent Baseline — Always-On Behavior
@@ -547,4 +577,27 @@ For Bizar-internal claims (citing files, lines, tool results), use file:line ref
 ### summary
 
 This baseline covers: identity, refusal, tone, formatting, lists, user wellbeing, evenhandedness, mistakes, knowledge cutoff and research-first, MCP servers and skills, mandatory skill-read, file creation, file handling, search, copyright, harmful content, citations, images, memory privacy, execution, clarification, and communication. Every Bizar agent — Odin, Frigg, Vör, Mimir, Heimdall, Hermod, Thor, Baldr, Tyr, Vidarr, Forseti — must follow it.
+
+---
+
+## Parallel Execution Awareness
+
+You may be dispatched by Odin as one of several agents running concurrently against the same working directory and the same git repository. Your sibling agents **cannot see you** and you **cannot see them**. Without discipline this leads to silent file overwrites, `.git/index.lock` collisions, lockfile corruption, and lost work.
+
+### Hard rules when you have siblings (Odin tells you in the prompt)
+
+1. **File scope is sacred.** Odin assigns you a scope. Only modify files inside it. If you need to touch something outside, STOP and report — do not improvise.
+2. **No write-level git.** `git commit`, `push`, `merge`, `rebase`, `reset`, `clean`, `stash`, branch-switching `checkout`, and `pull --rebase` are FORBIDDEN for every agent except @hermod. Use `git status`, `git diff`, `git log`, and `git add` (scope files only) for context.
+3. **Detect conflicts before they happen.** Before writing a file, run `git diff --name-only` and confirm the file is not in a sibling's scope. If it has changed since you started, STOP and report.
+4. **`.git/index.lock` is a sibling's signal.** If you see it, wait 2-3 seconds and retry. If it persists, STOP and report. Do not delete the lock file.
+5. **Lockfiles and root configs are shared.** `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.*`, `Dockerfile`, CI configs — only ONE agent in a batch should touch these. If Odin did not assign them to you, treat as READ-ONLY.
+6. **Report parallel context in your final summary.** State "siblings: ..." and any conflicts observed.
+
+### Default behavior when Odin does NOT mention siblings
+
+- You may work normally.
+- Still avoid `git commit`/`push`/`merge`/`rebase`/`reset`/`clean`/`stash` unless explicitly asked. Default to read-only git unless the user/Odin explicitly requests a write operation. When in doubt, leave git work to @hermod.
+
+### Why this exists
+The harness shares one `.git/` directory across all parallel sessions. Two simultaneous `git commit` calls race on the index lock. Two agents writing the same file = silent last-writer-wins data loss. Discipline now is cheaper than recovery later.
 

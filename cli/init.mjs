@@ -150,6 +150,41 @@ ${stack.runner ? `- Dev: \`${stack.runner}\`` : ''}
     console.log(chalk.green(`  ✓ Created ${siPath}`));
   }
 
+  // Build per-project knowledge graph (graphify -> .bizar/graph/)
+  // Soft step: never fails init. If graphify is missing or build errors,
+  // the user can retry manually with `bizar graph build`.
+  console.log(chalk.bold('\n--- Graph ---\n'));
+  const detectGraphify = spawnSync('python3', ['-c', 'import graphify; print(graphify.__version__)'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  const graphifyAvailable = detectGraphify.status === 0 && (detectGraphify.stdout || '').trim().length > 0;
+
+  if (!graphifyAvailable) {
+    console.log(chalk.yellow('  graphify not detected — skipping project graph build.'));
+    console.log(chalk.dim('  Install with: pip install graphifyy  (or pipx install graphifyy)'));
+    console.log(chalk.dim('  Then re-run:  bizar graph build'));
+    console.log(chalk.dim('  The graph will land in .bizar/graph/ inside this project.'));
+  } else {
+    console.log(chalk.dim('  Building project knowledge graph (.bizar/graph/)...'));
+    // npx resolves "bizar" via local package.json bin field (or global install).
+    // Fallback for environments without global bizar: node <repo>/cli/bin.mjs graph build
+    const buildResult = spawnSync('npx', ['bizar', 'graph', 'build'], {
+      cwd,
+      stdio: 'inherit',
+      timeout: 5 * 60 * 1000,
+    });
+    if (buildResult.status === 0) {
+      console.log(chalk.green('  ✓ Graph built at .bizar/graph/ — query with: bizar graph query "<concept>"'));
+    } else {
+      const code = buildResult.status !== null ? buildResult.status : (buildResult.signal || '?');
+      console.log(chalk.yellow(`  Graph build failed (exit ${code}). You can retry manually:`));
+      console.log(chalk.dim('    bizar graph build'));
+      console.log(chalk.dim('  The graph will land in .bizar/graph/ inside this project.'));
+    }
+  }
+
   console.log(chalk.dim('\n  Project initialized. Run `@frigg` to ask questions about the codebase.\n'));
   return true;
 }
