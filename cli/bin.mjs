@@ -157,18 +157,40 @@ function showInstallHelp() {
 
 function showUpdateHelp() {
   console.log(`
-  bizar update — Update opencode, bizar, and/or bizar-plugin
+  bizar update — Update opencode, bizar, bizar-dash, and/or bizar-plugin
 
   Usage:
-    bizar update
-    bizar update --all
-    bizar update opencode
-    bizar update bizar
-    bizar update plugin
+    bizar update                       Interactive prompt for components
+    bizar update --all                 Update every component
+    bizar update opencode bizar dash    Update specific components
+    bizar update --all --yes           Update everything + auto-kill running instances
+    bizar update --no-restart          Don't auto-restart the dashboard after update
+    bizar update --help                Show this help
 
-  Description:
-    Prompts interactively by default. Use --all for non-interactive
-    updates, or pass explicit component names.
+  Components:
+    opencode   the opencode CLI itself
+    bizar      @polderlabs/bizar (this CLI + installer + agents + rules)
+    dash       @polderlabs/bizar-dash (web dashboard + TUI)
+    plugin     @polderlabs/bizar-plugin (opencode plugin)
+
+  Behavior:
+    • Detects running Bizar instances (background service daemon, web
+      dashboard) by reading ~/.config/bizar/{service,dashboard}.pid and
+      cleaning up any stale or empty PID files.
+    • Warns the user explicitly before killing each instance. Pass
+      --yes / -y / --force to skip the confirmation (required for
+      non-interactive shells).
+    • Sends SIGTERM, waits up to 5s, escalates to SIGKILL if needed.
+    • Re-runs the install script so the deployed plugin source matches
+      the just-upgraded npm version (avoids the version-skew trap).
+    • If the dashboard was running and bizar / bizar-dash were updated,
+      spawns a fresh detached dashboard process with the new code
+      (skipped with --no-restart).
+
+  Examples:
+    bizar update --all --yes           Headless full update + restart
+    bizar update dash                  Update only the dashboard
+    bizar update plugin --no-restart   Plugin-only, leave dashboard alone
   `);
 }
 

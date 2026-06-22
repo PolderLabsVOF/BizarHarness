@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.7.3 — 2026-06-22
+
+### Fixed — `bizar update` rewritten for correctness
+The `bizar update` command previously had three critical gaps that could leave the install in a broken or partially-updated state. v3.7.3 fixes all of them.
+
+#### What was broken
+1. **Did not update `@polderlabs/bizar-dash`.** Only `bizar`, `plugin`, and `opencode` were updated — the dashboard package was invisible to the updater. After update, the dashboard ran stale code from `npm-global/lib/node_modules/@polderlabs/bizar-dash/`.
+2. **Did not kill running instances before installing.** `npm install -g @polderlabs/bizar@latest` could fail or leave the running dashboard service running old code in memory. On Linux the npm-global directory is locked by running processes.
+3. **Did not warn the user.** No prompt, no list, no chance to back out. Users had no way to know their dashboard session was about to be terminated.
+4. **Did not restart the dashboard after update.** Even if the install succeeded, the dashboard stayed on the old code until manually restarted.
+5. **PID files were never validated.** A stale `service.pid` containing the empty string (`0 bytes`) or a dead PID was reported as "running", preventing clean update flow.
+6. **CLI self-update was unreliable.** The `rerunInstallScript()` logic ran `npm install -g @polderlabs/bizar-plugin@latest` but never updated `bizar-dash`.
+
+#### What changed
+- **Full instance detection** — Reads `~/.config/bizar/{service,dashboard}.pid` and `~/.config/bizar/dashboard.port`. Validates each PID is actually alive (`process.kill(pid, 0)`), cleans up stale/empty/corrupt files automatically.
+- **Explicit warning before kill** — Lists every running instance by name, PID, and (for dashboard) port. Asks for confirmation via inquirer. Non-TTY shells refuse to proceed without `--yes`.
+- **Graceful then forced kill** — Sends `SIGTERM`, polls for exit (up to 5s), escalates to `SIGKILL` if needed. Cleans up the corresponding PID file on success.
+- **PID-recycle-safe kill verification** — `process.kill(pid, 0)` after a kill is unreliable on Linux (PIDs recycle immediately after death). The function now treats successful signal delivery as success, since `SIGKILL` is uncatchable.
+- **`@polderlabs/bizar-dash` is now a first-class component.** It shows in the version table, the interactive prompt, and the `--all` flag. Selection key is `dash` (e.g. `bizar update dash`).
+- **Auto-restart the dashboard after update** — If the dashboard was running and either `bizar` or `dash` was updated, spawns a fresh detached `bizar-dash start --bg` process using the same port. Skipped with `--no-restart`.
+- **New flags** — `--yes` / `-y` / `--force` (auto-confirm kill + `--all`), `--no-restart` (skip dashboard restart), `--all` (update every component without prompting).
+- **Exported `readLivePid` and `killAndWait`** for unit testing (also exported for future health-check tooling).
+- **Improved help text** with examples for headless / partial / no-restart flows.
+
+### Behavior
+```
+$ bizar update --all --yes     # headless full update + restart
+$ bizar update dash             # update only the dashboard
+$ bizar update plugin --no-restart   # plugin only, leave dashboard alone
+```
+
+### Files
+- `cli/update.mjs` — full rewrite (~290 → ~440 lines)
+- `cli/bin.mjs` — `showUpdateHelp()` updated with new flags and components
+
 ## v3.7.2 — 2026-06-22
 
 ### Added
