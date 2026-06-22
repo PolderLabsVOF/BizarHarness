@@ -77,3 +77,38 @@ export function hashText(s: string): string {
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
   return (h >>> 0).toString(36);
 }
+
+/**
+ * v3.7.1 — Auto-generate a task title from a prompt body when the user
+ * didn't provide one. Strips markdown headers, takes the first non-empty
+ * line, truncates to ~60 chars at a word boundary. Falls back to a
+ * timestamped placeholder if there's nothing to summarize.
+ */
+export function autoTitleFromContent(
+  body: string | undefined | null,
+  fallback = true,
+): string {
+  const raw = (body || '').replace(/\r\n?/g, '\n').trim();
+  if (!raw) {
+    if (!fallback) return '';
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `Untitled task — ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+  // Take first non-empty line; strip leading markdown heading hashes + quotes.
+  const firstLine = raw
+    .split('\n')
+    .map((l) => l.replace(/^[\s>#*\-]+/, '').trim())
+    .find((l) => l.length > 0) || '';
+  if (!firstLine) {
+    if (!fallback) return '';
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `Untitled task — ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+  if (firstLine.length <= 60) return firstLine;
+  // Truncate at last word boundary within 60 chars.
+  const cut = firstLine.slice(0, 60);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…';
+}

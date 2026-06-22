@@ -40,7 +40,7 @@ import { Tag } from '../components/Tag';
 import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
-import { cn, formatRelative, priorityColors } from '../lib/utils';
+import { cn, formatRelative, priorityColors, autoTitleFromContent } from '../lib/utils';
 import type { Agent, Settings, Snapshot, Task } from '../lib/types';
 import { openArtifactViewer } from '../components/ArtifactViewer';
 
@@ -1328,12 +1328,18 @@ function openSubmitTaskModal(
   const onSubmit = async (e?: React.SyntheticEvent) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-    const title = (titleEl?.value || '').trim();
+    const description = descEl?.value || '';
+    let title = (titleEl?.value || '').trim();
+    // v3.7.1 — Title is now optional. Auto-generate from the description
+    // when the user left it blank. Reject only if BOTH fields are empty.
+    if (!title && description.trim()) {
+      title = autoTitleFromContent(description);
+      if (titleEl) titleEl.value = title;
+    }
     if (!title) {
-      toast.warning('Title is required.');
+      toast.warning('Add a description so Odin knows what to do.');
       return;
     }
-    const description = descEl?.value || '';
     const priority = priorityEl?.value || 'normal';
     const tags = (tagsEl?.value || '')
       .split(',')
@@ -1388,13 +1394,13 @@ function openSubmitTaskModal(
     children: (
       <div className="submit-task-form">
         <label htmlFor="submit-task-title">
-          Title
+          Title <span className="field-hint">(optional — auto-generated from description)</span>
           <input
             id="submit-task-title"
             ref={(el) => { titleEl = el; }}
             className="input"
             type="text"
-            placeholder="What do you need done?"
+            placeholder="Leave blank to derive from description"
             autoFocus
             onKeyDown={onTitleKeyDown}
           />

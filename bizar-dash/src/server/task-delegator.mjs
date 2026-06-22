@@ -129,6 +129,37 @@ function pickBgDir() {
   return BG_DIRS[0];
 }
 
+/**
+ * v3.7.1 — Auto-generate a task title from a prompt body when the
+ * caller didn't supply one. Mirrors `autoTitleFromContent` in
+ * `src/web/lib/utils.ts`. Strips markdown headers, takes the first
+ * non-empty line, truncates to ~60 chars at a word boundary. Falls
+ * back to a timestamped placeholder if there's nothing to summarize.
+ */
+function autoTitleFromContent(body, fallback = true) {
+  const raw = (body || '').replace(/\r\n?/g, '\n').trim();
+  if (!raw) {
+    if (!fallback) return '';
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `Untitled task — ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+  const firstLine = raw
+    .split('\n')
+    .map((l) => l.replace(/^[\s>#*\-]+/, '').trim())
+    .find((l) => l.length > 0) || '';
+  if (!firstLine) {
+    if (!fallback) return '';
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `Untitled task — ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+  if (firstLine.length <= 60) return firstLine;
+  const cut = firstLine.slice(0, 60);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…';
+}
+
 export const taskDelegator = {
   /**
    * Submit a task to Odin. Odin analyzes, splits, and dispatches.
@@ -141,9 +172,17 @@ export const taskDelegator = {
     const broadcast = ctx.broadcast || (() => {});
     const projectId = ctx.projectId || null;
 
-    const title = (taskInput.title || '').trim();
+    // v3.7.1 — Title is now optional. Auto-generate from the description
+    // when the caller didn't supply one. Reject only when BOTH fields
+    // are empty (so curl/api callers without a description get a clear
+    // error).
+    const description = (taskInput.description || '').trim();
+    let title = (taskInput.title || '').trim();
+    if (!title && description) {
+      title = autoTitleFromContent(description);
+    }
     if (!title) {
-      throw new Error('title is required');
+      throw new Error('title or description is required');
     }
 
     // 1. Create the main task. Persisted via the regular store so it
