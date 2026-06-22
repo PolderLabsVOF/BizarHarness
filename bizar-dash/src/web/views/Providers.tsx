@@ -1,5 +1,5 @@
 // src/views/Providers.tsx — v3.7.0 provider management: list, add, edit, delete.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Cloud,
   Plus,
@@ -9,8 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   Server,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
@@ -184,7 +182,7 @@ export function Providers({ snapshot, settings, refreshSnapshot }: Props) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Button variant="ghost" size="sm" onClick={reload} title="Refresh">
+          <Button variant="ghost" size="sm" onClick={reload} title="Refresh" aria-label="Refresh providers">
             <RefreshCw size={14} className={loading ? 'spin' : ''} />
           </Button>
           <Button variant="accent" size="sm" onClick={openAddModal}>

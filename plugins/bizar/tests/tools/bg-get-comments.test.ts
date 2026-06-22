@@ -31,7 +31,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { readPlanComments } from "../../src/tools/bg-get-comments.ts";
+import { readPlanComments } from "../../src/tools/bg-get-comments.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures / helpers

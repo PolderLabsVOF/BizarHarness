@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useEffect,
   useCallback,
   useContext,
   useMemo,
@@ -79,6 +80,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     },
     [dismiss],
   );
+
+  useEffect(() => {
+    return () => {
+      for (const timer of timersRef.current.values()) clearTimeout(timer);
+      timersRef.current.clear();
+    };
+  }, []);
 
   const api = useMemo<ToastApi>(
     () => ({

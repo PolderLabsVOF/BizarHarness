@@ -1,5 +1,5 @@
 // src/views/Chat.tsx — v3 floating chat: messages, sessions, agent selector, slash autocomplete.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -89,12 +89,12 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const allCommands: SlashCommand[] = [
+  const allCommands = useMemo<SlashCommand[]>(() => [
     ...BUILTIN_COMMANDS,
     ...(snapshot.mods || []).flatMap((m: Mod) =>
       (m.entry?.command ? [{ cmd: `/${m.id}`, desc: m.description || m.name, mod: m.id }] : []),
     ),
-  ];
+  ], [snapshot.mods]);
 
   const loadChat = async (sid?: string) => {
     try {
@@ -202,7 +202,7 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
     } else {
       setSuggestions([]);
     }
-  }, [text, allCommands.length]);
+  }, [text, allCommands]);
 
   const onSend = async () => {
     const message = text.trim();
@@ -313,11 +313,15 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
   };
 
   // Newest at the bottom for chat feel
-  const ordered = [...messages].reverse();
-  const orderedWithPinned = [
-    ...ordered.filter((_, i) => pinned.has(messages.length - 1 - i)),
-    ...ordered.filter((_, i) => !pinned.has(messages.length - 1 - i)),
-  ];
+  const orderedWithPinned = useMemo(
+    () => {
+      const indexed = messages.map((message, index) => ({ message, index }));
+      const pinnedItems = indexed.filter(({ index }) => pinned.has(index));
+      const normalItems = indexed.filter(({ index }) => !pinned.has(index));
+      return [...pinnedItems, ...normalItems];
+    },
+    [messages, pinned],
+  );
 
   // Auto-grow the textarea up to 240px based on content.
   useLayoutEffect(() => {
@@ -457,17 +461,16 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
                 }
               />
             ) : (
-              orderedWithPinned.map((m, idx) => {
-                const originalIdx = messages.length - 1 - idx;
+              orderedWithPinned.map(({ message, index: originalIdx }) => {
                 return (
                   <ChatBubble
-                    key={`${originalIdx}-${m.ts ?? ''}`}
-                    message={m}
+                    key={`${originalIdx}-${message.ts ?? ''}`}
+                    message={message}
                     pinned={pinned.has(originalIdx)}
-                    onCopy={() => copyMessage(m)}
+                    onCopy={() => copyMessage(message)}
                     onDelete={() => deleteMessage(originalIdx)}
                     onTogglePin={() => togglePin(originalIdx)}
-                    onRegenerate={makeRegenerateHandler(String(m.ts) || String(originalIdx))}
+                    onRegenerate={makeRegenerateHandler(String(message.ts) || String(originalIdx))}
                   />
                 );
               })

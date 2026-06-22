@@ -1,8 +1,7 @@
 // src/mobile/views/MobilePlans.tsx — plan list with tap-to-open.
 import { useEffect, useState } from 'react';
-import { FileText, Plus, RefreshCw, Search } from 'lucide-react';
+import { FileText, Plus, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
-import { formatRelative } from '../../lib/utils';
 import type { Plan, Snapshot } from '../../lib/types';
 import { MobileModal } from '../components/MobileModal';
 
@@ -91,8 +90,9 @@ export function MobilePlans({ snapshot, onBack, onOpenPlan }: Props) {
       ) : (
         <div className="mobile-card-list">
           {filtered.map((p) => (
-            <div
+            <button
               key={p.slug}
+              type="button"
               className="mobile-list-item mobile-list-item-interactive"
               onClick={() => onOpenPlan(p.slug)}
             >
@@ -106,7 +106,7 @@ export function MobilePlans({ snapshot, onBack, onOpenPlan }: Props) {
                 </span>
               </div>
               <span className={`mobile-list-badge`} data-status={p.status}>{p.status}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}

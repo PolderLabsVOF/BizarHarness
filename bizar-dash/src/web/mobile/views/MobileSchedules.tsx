@@ -1,6 +1,6 @@
 // src/mobile/views/MobileSchedules.tsx — schedules list with detail sheet + new modal.
 import { useEffect, useState } from 'react';
-import { Clock, Plus, RefreshCw, Trash2, Search, Play } from 'lucide-react';
+import { Clock, Plus, RefreshCw, Trash2, Play } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { Schedule, Snapshot } from '../../lib/types';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
@@ -100,8 +100,9 @@ export function MobileSchedules({ snapshot, onBack }: Props) {
       ) : (
         <div className="mobile-card-list">
           {filtered.map((s) => (
-            <div
+            <button
               key={s.id}
+              type="button"
               className="mobile-list-item mobile-list-item-interactive"
               onClick={() => setDetailSchedule(s)}
             >
@@ -115,7 +116,7 @@ export function MobileSchedules({ snapshot, onBack }: Props) {
               <span className={`mobile-list-badge ${s.enabled ? 'badge-on' : 'badge-off'}`}>
                 {s.enabled ? 'on' : 'off'}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       )}

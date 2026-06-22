@@ -25,6 +25,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   readdirSync,
   statSync,
   mkdirSync,
@@ -84,7 +85,9 @@ function saveStatus() {
     mkdirSync(dirname(STATUS_FILE), { recursive: true });
     const obj = {};
     for (const [k, v] of _status.entries()) obj[k] = v;
-    writeFileSync(STATUS_FILE, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+    const tmp = `${STATUS_FILE}.tmp.${process.pid}`;
+    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+    renameSync(tmp, STATUS_FILE);
   } catch {
     /* best effort */
   }

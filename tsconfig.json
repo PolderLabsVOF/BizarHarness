@@ -18,6 +18,11 @@
     "useDefineForClassFields": true,
     "types": ["node"]
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "bizar-dash/src/**/*",
+    "plugins/bizar/index.ts",
+    "plugins/bizar/src/**/*",
+    "plugins/bizar/tests/**/*"
+  ],
+  "exclude": ["node_modules", "dist", "**/node_modules", "**/dist"]
 }

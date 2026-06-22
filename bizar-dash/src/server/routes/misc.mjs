@@ -70,7 +70,12 @@ export function createMiscRouter({ state, broadcast }) {
   }));
 
   router.post('/updates/apply', async (req, res) => {
-    const packages = req.body?.packages || ['bizar', 'bizar-dash', 'bizar-plugin'];
+    const requested = Array.isArray(req.body?.packages) ? req.body.packages : ['bizar', 'bizar-dash', 'bizar-plugin'];
+    const packages = requested.filter((pkg) => ['bizar', 'bizar-dash', 'bizar-plugin'].includes(String(pkg)));
+    if (packages.length === 0) {
+      res.status(400).json({ error: 'bad_request', message: 'packages must include at least one known package id' });
+      return;
+    }
     // Start the update in the background — return immediately so the client
     // can receive progress events over the WebSocket channel.
     updateStore.applyWithProgress({

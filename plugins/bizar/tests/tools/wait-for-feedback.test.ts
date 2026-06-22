@@ -28,7 +28,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { waitForFeedback } from "../../src/tools/wait-for-feedback.ts";
+import { waitForFeedback } from "../../src/tools/wait-for-feedback.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

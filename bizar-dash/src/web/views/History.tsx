@@ -78,6 +78,13 @@ export function History({ snapshot }: Props) {
       const q = since ? `?since=${encodeURIComponent(since)}&limit=1000` : '?limit=1000';
       const r = await api.get<HistoryResponse>(`/history${q}`);
       setData(r);
+      setExpanded(
+        new Set(
+          r.projects
+            .filter((project) => r.events.some((ev) => (ev as { projectId?: string }).projectId === project.id))
+            .map((project) => project.id),
+        ),
+      );
     } catch (err) {
       toast.error(`History load failed: ${(err as Error).message}`);
     } finally {
@@ -198,7 +205,7 @@ export function History({ snapshot }: Props) {
 
           {data.projects.map((p) => {
             const events = eventsByProject.get(p.id) || [];
-            const isOpen = expanded.has(p.id) || events.length > 0 && !expanded.has('__collapsed__');
+            const isOpen = expanded.has(p.id);
             return (
               <Card key={p.id} className="history-project">
                 <div className="history-project-head">

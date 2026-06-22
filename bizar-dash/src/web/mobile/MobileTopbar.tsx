@@ -10,7 +10,7 @@ type Props = {
   activeTab: string;
   snapshot: Snapshot | null;
   onSearch: () => void;
-  onNavigate: (type: string, id: string) => void;
+  onNavigate: (type: string, id: string, meta?: Record<string, unknown> | null) => void;
 };
 
 const TAB_LABELS: Record<string, string> = {
@@ -76,7 +76,11 @@ export function MobileTopbar({ activeTab, snapshot, onSearch, onNavigate }: Prop
           </svg>
         </button>
 
-        <MobileNotifications onSelect={(link) => { if (link) onNavigate('notification', link); }} />
+        <MobileNotifications
+          onSelect={(notification) => {
+            onNavigate('notification', notification.link || '', notification.meta ?? null);
+          }}
+        />
 
         {snapshot?.activeProject && (
           <MobileBottomSheet
@@ -86,8 +90,9 @@ export function MobileTopbar({ activeTab, snapshot, onSearch, onNavigate }: Prop
           >
             <div className="mobile-project-list">
               {(snapshot.projects || []).map((p) => (
-                <div
+                <button
                   key={p.id}
+                  type="button"
                   className={`mobile-project-item ${p.id === snapshot.activeProject?.id ? 'active' : ''}`}
                   onClick={() => handleProjectSelect(p.id)}
                 >
@@ -99,7 +104,7 @@ export function MobileTopbar({ activeTab, snapshot, onSearch, onNavigate }: Prop
                   {p.id === snapshot.activeProject?.id && (
                     <span className="mobile-active-badge">active</span>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           </MobileBottomSheet>

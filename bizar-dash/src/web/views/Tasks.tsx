@@ -279,10 +279,16 @@ export function Tasks({ snapshot, refreshSnapshot, setActiveTab }: Props) {
     });
   };
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = (ids: string[]) => {
     setSelected((cur) => {
-      if (cur.size === sorted.length) return new Set();
-      return new Set(sorted.map((t) => t.id));
+      const next = new Set(cur);
+      const allSelected = ids.length > 0 && ids.every((id) => next.has(id));
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+        return next;
+      }
+      ids.forEach((id) => next.add(id));
+      return next;
     });
   };
 
@@ -410,7 +416,7 @@ export function Tasks({ snapshot, refreshSnapshot, setActiveTab }: Props) {
             {showArchived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
             {showArchived ? 'Active' : 'Archived'}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => reload()} title="Refresh">
+          <Button variant="ghost" size="sm" onClick={() => reload()} title="Refresh" aria-label="Refresh tasks">
             <RefreshCw size={14} />
           </Button>
           <Button
@@ -516,7 +522,7 @@ function KanbanColumn({
   tasks: Task[];
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
-  onToggleSelectAll: () => void;
+  onToggleSelectAll: (ids: string[]) => void;
   allTaskIdsInCol: string[];
   onMove: (id: string, status: string) => void;
   onDelete: (id: string) => void;
@@ -552,7 +558,7 @@ function KanbanColumn({
         <button
           type="button"
           className="icon-btn"
-          onClick={onToggleSelectAll}
+          onClick={() => onToggleSelectAll(allTaskIdsInCol)}
           title={allSelected ? 'Deselect all' : 'Select all'}
           aria-label={allSelected ? 'Deselect all' : 'Select all'}
         >

@@ -798,7 +798,7 @@ function ProvidersPanel({
     let nameEl: HTMLInputElement | null = null;
     let baseEl: HTMLInputElement | null = null;
     let keyEl: HTMLInputElement | null = null;
-    let modelsEl: HTMLInputElement | null = null;
+    let modelsEl: HTMLTextAreaElement | null = null;
     let enabledEl: HTMLInputElement | null = null;
 
     const isEdit = !!existing;
@@ -858,9 +858,9 @@ function ProvidersPanel({
           </div>
           <div className="modal-form-row">
             <label>Models (comma-separated)</label>
-            <textarea
-              ref={(el) => (modelsEl = el as unknown as HTMLInputElement)}
-              className="textarea"
+              <textarea
+                ref={(el) => (modelsEl = el)}
+                className="textarea"
               defaultValue={initialModels}
               placeholder="claude-sonnet-4-5, claude-opus-4-1"
               rows={3}
@@ -1078,6 +1078,20 @@ function parseEnv(s: string): Record<string, string> {
   return out;
 }
 
+function parseHeaders(s: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of s.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const sep = trimmed.indexOf(':');
+    if (sep <= 0) continue;
+    const k = trimmed.slice(0, sep).trim();
+    const v = trimmed.slice(sep + 1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
+}
+
 function McpsPanel({
   mcps,
   onChange,
@@ -1248,7 +1262,7 @@ function McpsPanel({
               const args = argsStr ? argsStr.split(/\s+/) : [];
               const env = parseEnv(envEl?.value || '');
               const url = (urlEl?.value || '').trim();
-              const headers = parseEnv(headersEl?.value || '');
+              const headers = parseHeaders(headersEl?.value || '');
               const oauth = !!oauthEl?.checked;
               const enabled = !!enabledEl?.checked;
 

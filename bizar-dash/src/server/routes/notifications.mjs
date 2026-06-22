@@ -30,6 +30,7 @@ export function createNotificationsRouter({ broadcast }) {
 
   router.post('/notifications/:id/read', wrap(async (req, res) => {
     const ok = notificationsStore.markRead(req.params.id);
+    if (ok) broadcast({ type: 'notifications:change' });
     res.json({ ok });
   }));
 
@@ -45,6 +46,7 @@ export function createNotificationsRouter({ broadcast }) {
       res.status(404).json({ error: 'not_found' });
       return;
     }
+    broadcast({ type: 'notifications:change' });
     res.status(204).end();
   }));
 

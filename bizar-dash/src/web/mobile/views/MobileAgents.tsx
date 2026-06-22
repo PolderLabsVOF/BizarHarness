@@ -1,6 +1,6 @@
 // src/mobile/views/MobileAgents.tsx — agents list with detail bottom sheet.
 import { useEffect, useState } from 'react';
-import { Bot, Plus, RefreshCw, Play, Pencil, Trash2, RotateCw, X } from 'lucide-react';
+import { Bot, Plus, RefreshCw, Play, Trash2, RotateCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatRelative } from '../../lib/utils';
 import type { Agent, Snapshot } from '../../lib/types';
@@ -159,8 +159,9 @@ export function MobileAgents({ snapshot, onBack, onOpenAgent, selectedAgent, onR
       ) : (
         <div className="mobile-card-list">
           {filtered.map((a) => (
-            <div
+            <button
               key={a.name}
+              type="button"
               className="mobile-list-item mobile-list-item-interactive"
               onClick={() => { setDetailAgent(a); onOpenAgent(a.name); }}
             >
@@ -180,7 +181,7 @@ export function MobileAgents({ snapshot, onBack, onOpenAgent, selectedAgent, onR
               <span className="mobile-list-badge" data-status={a.status || 'idle'}>
                 {a.status || 'idle'}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       )}

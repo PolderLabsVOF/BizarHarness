@@ -121,16 +121,20 @@ describe("bizar_kill — POST /session/{id}/abort (HIGH-4)", () => {
     const instances = makeInstances();
     bizar_kill({ instanceId: "bgr_running" }, instances);
     expect(httpCalls).toHaveLength(1);
-    expect(httpCalls[0].method).toBe("POST");
-    expect(httpCalls[0].path).toContain("/abort");
+    const first = httpCalls[0];
+    expect(first).toBeDefined();
+    expect(first?.method).toBe("POST");
+    expect(first?.path).toContain("/abort");
   });
 
   it("calls POST /session/{id}/abort for pending instance", () => {
     const instances = makeInstances();
     bizar_kill({ instanceId: "bgr_pending" }, instances);
     expect(httpCalls).toHaveLength(1);
-    expect(httpCalls[0].method).toBe("POST");
-    expect(httpCalls[0].path).toContain("/abort");
+    const first = httpCalls[0];
+    expect(first).toBeDefined();
+    expect(first?.method).toBe("POST");
+    expect(first?.path).toContain("/abort");
   });
 
   it("does NOT call DELETE /session/{id} (HIGH-4)", () => {

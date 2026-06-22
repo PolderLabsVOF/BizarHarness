@@ -87,6 +87,7 @@ export function MobileConfig({ onBack }: Props) {
           <input
             className="mobile-input mobile-input-sm"
             type="number"
+            inputMode="numeric"
             value={String(value ?? '')}
             onChange={(e) => handleChange(entry.key, Number(e.target.value))}
           />

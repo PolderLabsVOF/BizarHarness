@@ -20,23 +20,70 @@ import { createState } from './state.mjs';
 import { createWatcher } from './watcher.mjs';
 import { modsLoader } from './mods-loader.mjs';
 import { projectsStore } from './projects-store.mjs';
+import { agentsStore } from './agents-store.mjs';
+import { tasksStore } from './tasks-store.mjs';
+import { schedulesStore } from './schedules-store.mjs';
+import { providersStore, mcpsStore } from './providers-store.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
-import { checkWebSocketAuth } from './auth.mjs';
+import {
+  checkWebSocketAuth,
+  isAllowedDashboardOrigin,
+  isAllowedDashboardOriginForRequest,
+} from './auth.mjs';
+import { readSettings } from './routes/_shared.mjs';
 
-// Catch-all to prevent server crash on unhandled rejections
-process.on('unhandledRejection', (err) => {
-  console.error('[unhandledRejection]', err);
-});
-process.on('uncaughtException', (err) => {
-  console.error('[uncaughtException]', err);
-  // For uncaughtException, the process state is uncertain. Log and continue
-  // unless it's a fatal error. Don't exit.
-});
+let processHandlersInstalled = false;
+
+function installProcessHandlers() {
+  if (processHandlersInstalled) return;
+  processHandlersInstalled = true;
+  // Catch-all to prevent server crash on unhandled rejections
+  process.on('unhandledRejection', (err) => {
+    console.error('[unhandledRejection]', err);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('[uncaughtException]', err);
+    // For uncaughtException, the process state is uncertain. Log and continue
+    // unless it's a fatal error. Don't exit.
+  });
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // server.mjs lives at src/server/ — dist/ is at the package root
 const DIST_DIR = join(__dirname, '..', '..', 'dist');
+const WS_BACKPRESSURE_LIMIT_BYTES = 1024 * 1024;
+const MOBILE_UA_RE = /Android.+Mobile|iPhone|iPod|Windows Phone|webOS|BlackBerry|Opera Mini|IEMobile/i;
+
+let currentBroadcast = () => {};
+
+export function broadcast(msg) {
+  return currentBroadcast(msg);
+}
+
+function shouldRedirectToMobile(req) {
+  if (req.method !== 'GET') return false;
+  if (req.path !== '/') return false;
+  if (req.query?.desktop === '1') return false;
+  const accept = req.headers.accept || '';
+  if (typeof accept === 'string' && !accept.includes('text/html')) return false;
+  const ua = req.headers['user-agent'] || '';
+  return typeof ua === 'string' && MOBILE_UA_RE.test(ua);
+}
+
+function mobileRedirectTarget(req) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(req.query || {})) {
+    if (key === 'desktop') continue;
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, String(item));
+    } else if (value != null) {
+      params.set(key, String(value));
+    }
+  }
+  const qs = params.toString();
+  return qs ? `/m?${qs}` : '/m';
+}
 
 /**
  * @param {object} opts
@@ -51,15 +98,33 @@ export async function createServer({
   opencodeConfigDir,
   bizarRoot,
 }) {
+  installProcessHandlers();
   const app = express();
+  app.disable('x-powered-by');
   // v3.5.4 (CORS) — Reflect the request Origin back as
   // Access-Control-Allow-Origin so the Vite dev server (5174), a tunneled
   // remote, or a localhost:4321 same-origin tab all work. We also allow
   // credentials so the dashboard can keep using cookie-style pair tokens.
   // This is a local tool — same-origin is the norm; reflection is the
   // simplest correct policy.
-  app.use(cors({ origin: true, credentials: true }));
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const allowed = isAllowedDashboardOrigin(origin);
+      callback(allowed ? null : new Error('origin_not_allowed'), allowed);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
   app.use(express.json({ limit: '2mb' }));
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
 
   app.use(
     (
@@ -107,36 +172,47 @@ export async function createServer({
     paths: watchPaths,
     onChange: (event, p) => {
       wss.clients.forEach((client) => {
-        if (client.readyState === 1) {
-          try {
-            client.send(JSON.stringify({ type: 'change', event, path: p, ts: Date.now() }));
-          } catch {
-            /* dropped */
-          }
-        }
+        safeSend(client, JSON.stringify({ type: 'change', event, path: p, ts: Date.now() }));
       });
     },
   });
 
   const server = createHttpServer(app);
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 35_000;
+  server.keepAliveTimeout = 5_000;
+  app.set('port', port);
   // v3.6.0 — Bind the WS server's noServer mode so we can authenticate
   // the upgrade ourselves instead of letting ws accept any TCP
   // connection to /ws. The actual upgrade handling happens further
   // down via server.on('upgrade', ...).
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 
-  function broadcast(msg) {
+  function safeSend(client, payload) {
+    if (client.readyState !== 1) return false;
+    if (client.bufferedAmount > WS_BACKPRESSURE_LIMIT_BYTES) {
+      try {
+        client.terminate();
+      } catch {
+        /* ignore */
+      }
+      return false;
+    }
+    try {
+      client.send(payload);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function localBroadcast(msg) {
     const payload = JSON.stringify(msg);
     wss.clients.forEach((client) => {
-      if (client.readyState === 1) {
-        try {
-          client.send(payload);
-        } catch {
-          /* dropped */
-        }
-      }
+      safeSend(client, payload);
     });
   }
+  currentBroadcast = localBroadcast;
 
   const apiRouter = createApiRouter({
     state,
@@ -144,15 +220,18 @@ export async function createServer({
     projectRoot,
     opencodeConfigDir,
     bizarRoot,
-    broadcast,
+    broadcast: localBroadcast,
   });
 
+  // v3.6.2 — Auth now wraps mod routes too. Previously mods mounted at
+  // `/api/mods/<id>` BEFORE `requireAuth`, which meant every mod route
+  // silently bypassed bearer-token checks.
+  const { requireAuth } = await import('./auth.mjs');
+  app.use('/api', requireAuth({ skipPaths: ['/auth/status', '/pair/verify'] }));
+
   // ── Mod route mounting ──────────────────────────────────────────────
-  // Mod routers are mounted BEFORE the apiRouter is registered with app.
-  // Mounting directly on app (outside /api prefix) so there are no
-  // conflicts with the apiRouter's catch-all handler.
   {
-    const modCtx = { broadcast, state, projectRoot, opencodeConfigDir };
+    const modCtx = { broadcast: localBroadcast, state, projectRoot, opencodeConfigDir };
     const modRouters = await modsLoader.loadModRouters(modCtx);
     for (const { id, router: modRouter, mountPath } of modRouters) {
       app.use(mountPath, modRouter);
@@ -160,16 +239,6 @@ export async function createServer({
       console.log(`[mod] mounted ${id} routes at ${mountPath}`);
     }
   }
-
-  // v3.6.0 — Bearer-token authentication for /api/* (and /api/auth/status
-  // is the only exception — see routes/auth.mjs). The auth middleware
-  // wraps the entire /api mount, so /api/snapshot, /api/tasks, /api/ws,
-  // etc. all require the token. Mod routes mounted above stay unauthed
-  // because they're mounted at non-/api prefixes.
-  // Lazy-imported so we can fail the boot with a clear message if the
-  // token store isn't writable.
-  const { requireAuth } = await import('./auth.mjs');
-  app.use('/api', requireAuth({ skipPaths: ['/auth/status'] }));
 
   // All /api/* routes go through apiRouter (after mod routes are checked)
   app.use('/api', apiRouter);
@@ -183,6 +252,15 @@ export async function createServer({
     const url = req.url || '';
     if (!url.startsWith('/ws')) {
       socket.destroy();
+      return;
+    }
+    if (!isAllowedDashboardOriginForRequest(req)) {
+      try {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
       return;
     }
     if (!checkWebSocketAuth(req)) {
@@ -199,6 +277,30 @@ export async function createServer({
     });
   });
 
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((client) => {
+      if (client.isAlive === false) {
+        try {
+          client.terminate();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      client.isAlive = false;
+      try {
+        client.ping();
+      } catch {
+        try {
+          client.terminate();
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }, 30_000);
+  if (typeof heartbeatInterval.unref === 'function') heartbeatInterval.unref();
+
   // ── Static frontend (React SPA in dist/) ─────────────────────────
   const distBuilt =
     existsSync(DIST_DIR) && existsSync(join(DIST_DIR, 'index.html'));
@@ -211,6 +313,13 @@ export async function createServer({
         express.static(assetsDir, { maxAge: '1y', immutable: true, index: false }),
       );
     }
+    app.get('/', (req, res, next) => {
+      if (!shouldRedirectToMobile(req)) {
+        next();
+        return;
+      }
+      res.redirect(302, mobileRedirectTarget(req));
+    });
     // v3.5.0 — Mobile dashboard at /m
     app.get('/m', (_req, res) => {
       res.sendFile(join(DIST_DIR, 'mobile.html'));
@@ -256,7 +365,19 @@ export async function createServer({
   }
 
   wss.on('connection', (ws, req) => {
-    const path = req.url || '';
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+    const path = req.url
+      ? (() => {
+          try {
+            return new URL(req.url, 'http://localhost').pathname;
+          } catch {
+            return req.url || '';
+          }
+        })()
+      : '';
 
     // /ws/logs — stream log file changes
     if (path === '/ws/logs') {
@@ -272,12 +393,12 @@ export async function createServer({
         try {
           const text = readFileSync(logFile, 'utf8');
           const lines = text.split(/\r?\n/).filter(Boolean).slice(-100);
-          ws.send(JSON.stringify({ type: 'log init', lines, file: logFile }));
+          safeSend(ws, JSON.stringify({ type: 'log init', lines, file: logFile }));
         } catch {
-          ws.send(JSON.stringify({ type: 'log init', lines: [], file: logFile }));
+          safeSend(ws, JSON.stringify({ type: 'log init', lines: [], file: logFile }));
         }
       } else {
-        ws.send(JSON.stringify({ type: 'log init', lines: [], file: null }));
+        safeSend(ws, JSON.stringify({ type: 'log init', lines: [], file: null }));
       }
 
       let destroying = false;
@@ -300,7 +421,7 @@ export async function createServer({
             const newText = buf.toString('utf8');
             const newLines = newText.split(/\r?\n/).filter(Boolean);
             for (const line of newLines) {
-              ws.send(JSON.stringify({ type: 'log line', line, ts: Date.now() }));
+              safeSend(ws, JSON.stringify({ type: 'log line', line, ts: Date.now() }));
             }
             fileSize = newSize;
           }
@@ -315,7 +436,7 @@ export async function createServer({
         try {
           const msg = JSON.parse(raw.toString());
           if (msg?.type === 'ping') {
-            ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+            safeSend(ws, JSON.stringify({ type: 'pong', ts: Date.now() }));
           }
         } catch {
           /* ignore */
@@ -336,7 +457,8 @@ export async function createServer({
 
     // Default /ws — snapshot + ping/pong
     try {
-      ws.send(
+      safeSend(
+        ws,
         JSON.stringify({
           type: 'snapshot',
           ts: Date.now(),
@@ -356,7 +478,7 @@ export async function createServer({
       }
       if (msg?.type === 'ping') {
         try {
-          ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+          safeSend(ws, JSON.stringify({ type: 'pong', ts: Date.now() }));
         } catch {
           /* ignore */
         }
@@ -395,10 +517,16 @@ export async function createServer({
       /* ignore */
     }
     try {
+      clearInterval(heartbeatInterval);
+    } catch {
+      /* ignore */
+    }
+    try {
       server.close();
     } catch {
       /* ignore */
     }
+    currentBroadcast = () => {};
   }
 
   return { app, server, wss, state, watcher, port, close };
@@ -422,17 +550,25 @@ function buildSnapshot(state, opencodeConfigDir) {
       cfg = null;
     }
   }
+  const activeProject = projectsStore.active();
   return {
     overview: state.getOverview(),
-    agents: state.getAgents(),
+    agents: agentsStore.list(),
     plans: state.getPlans(),
-    projects: state.getProjects(),
+    projects: projectsStore.list().projects,
+    activeProject,
     config: {
       path: cfgFile,
       data: cfg,
       raw: cfg ? JSON.stringify(cfg, null, 2) : '',
       exists: existsSync(cfgFile),
     },
+    settings: readSettings(),
+    tasks: activeProject ? tasksStore.loadTasks(activeProject.id) : [],
+    mods: modsLoader.list(),
+    schedules: activeProject ? schedulesStore.list(activeProject.id) : [],
+    providers: providersStore.list(),
+    mcps: mcpsStore.list(),
   };
 }
 

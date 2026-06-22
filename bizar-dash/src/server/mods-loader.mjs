@@ -34,7 +34,7 @@ import {
   cpSync,
   unlinkSync,
 } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
 
 const HOME = homedir();
@@ -226,8 +226,8 @@ export const modsLoader = {
   /** Read a file inside a mod (path relative to mod root). */
   readFile(id, relPath) {
     const dir = join(MODS_DIR, id);
-    const full = join(dir, relPath);
-    if (!full.startsWith(dir)) {
+    const full = resolveWithin(dir, relPath);
+    if (!full) {
       throw new Error('path escapes mod root');
     }
     if (!existsSync(full)) return null;
@@ -237,11 +237,11 @@ export const modsLoader = {
   /** Write a file inside a mod. */
   writeFile(id, relPath, content) {
     const dir = join(MODS_DIR, id);
-    const full = join(dir, relPath);
-    if (!full.startsWith(dir)) {
+    const full = resolveWithin(dir, relPath);
+    if (!full) {
       throw new Error('path escapes mod root');
     }
-    mkdirSync(dirnameSafe(full), { recursive: true });
+    mkdirSync(dirname(full), { recursive: true });
     writeFileSync(full, content, 'utf8');
     return true;
   },
@@ -376,7 +376,12 @@ export const modsLoader = {
   },
 };
 
-function dirnameSafe(p) {
-  const idx = p.lastIndexOf('/');
-  return idx === -1 ? '.' : p.slice(0, idx);
+function resolveWithin(root, relPath) {
+  const base = resolve(root);
+  const full = resolve(base, relPath || '');
+  const rel = relative(base, full);
+  if (rel.startsWith('..') || rel === '' || rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)) {
+    return null;
+  }
+  return full;
 }

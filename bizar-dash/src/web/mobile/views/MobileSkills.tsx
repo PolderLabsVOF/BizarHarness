@@ -1,6 +1,6 @@
 // src/mobile/views/MobileSkills.tsx — skills list with detail sheet.
 import { useEffect, useState } from 'react';
-import { Sparkles, RefreshCw, Power, Search } from 'lucide-react';
+import { Sparkles, RefreshCw, Power } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { Snapshot } from '../../lib/types';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
@@ -97,8 +97,9 @@ export function MobileSkills({ snapshot, onBack }: Props) {
       ) : (
         <div className="mobile-card-list">
           {filtered.map((s) => (
-            <div
+            <button
               key={s.id}
+              type="button"
               className="mobile-list-item mobile-list-item-interactive"
               onClick={() => setDetailSkill(s)}
             >
@@ -110,7 +111,7 @@ export function MobileSkills({ snapshot, onBack }: Props) {
               <span className={`mobile-list-badge ${s.enabled ? 'badge-on' : 'badge-off'}`}>
                 {s.enabled ? 'on' : 'off'}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       )}

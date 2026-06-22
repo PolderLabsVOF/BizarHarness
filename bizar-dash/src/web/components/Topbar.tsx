@@ -106,6 +106,7 @@ export function Topbar({
           className="topbar-search"
           onClick={onOpenSearch}
           title="Search (Ctrl/Cmd+K)"
+          aria-label="Open search"
         >
           <SearchIcon size={14} />
           <span className="muted">Search…</span>
@@ -185,6 +186,8 @@ function ProjectSelector({
         className="project-selector-btn"
         onClick={() => setOpen((v) => !v)}
         title="Switch active project"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <Folder size={14} />
         <span className="project-selector-name">
@@ -197,10 +200,10 @@ function ProjectSelector({
           <div className="project-selector-menu-head">
             <span className="muted">{projects.length} project{projects.length === 1 ? '' : 's'}</span>
             <div className="project-selector-menu-actions">
-              <button type="button" className="icon-btn" onClick={onRefresh} title="Refresh">
+              <button type="button" className="icon-btn" onClick={onRefresh} title="Refresh" aria-label="Refresh projects">
                 <RefreshCw size={12} />
               </button>
-              <button type="button" className="icon-btn" onClick={onAdd} title="Add project">
+              <button type="button" className="icon-btn" onClick={onAdd} title="Add project" aria-label="Add project">
                 <Plus size={12} />
               </button>
             </div>
@@ -210,16 +213,18 @@ function ProjectSelector({
               <li className="muted project-selector-empty">No projects. Add one to start.</li>
             )}
             {projects.map((p) => (
-              <li
-                key={p.id}
-                className={cn('project-selector-item', activeProject?.id === p.id && 'active')}
-                onClick={() => {
-                  onChange(p.id);
-                  setOpen(false);
-                }}
-              >
-                <span className="project-selector-item-name">{p.name}</span>
-                <span className="project-selector-item-status">{p.status}</span>
+              <li key={p.id}>
+                <button
+                  type="button"
+                  className={cn('project-selector-item', activeProject?.id === p.id && 'active')}
+                  onClick={() => {
+                    onChange(p.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="project-selector-item-name">{p.name}</span>
+                  <span className="project-selector-item-status">{p.status}</span>
+                </button>
               </li>
             ))}
           </ul>

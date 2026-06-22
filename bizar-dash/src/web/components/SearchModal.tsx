@@ -23,6 +23,17 @@ const SCOPES = [
   { id: 'settings', label: 'Settings' },
 ] as const;
 
+const RESULT_TYPE_BY_SCOPE: Record<(typeof SCOPES)[number]['id'], string | null> = {
+  all: null,
+  projects: 'project',
+  agents: 'agent',
+  tasks: 'task',
+  mods: 'mod',
+  schedules: 'schedule',
+  commands: 'command',
+  settings: 'setting',
+};
+
 export function SearchModal({ open, onClose, onSelect }: Props) {
   const toast = useToast();
   const [q, setQ] = useState('');
@@ -31,20 +42,32 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
   const [loading, setLoading] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    let focusTimer: number | undefined;
     if (open) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
       setQ('');
       setResults([]);
       setActiveIdx(0);
-      setTimeout(() => inputRef.current?.focus(), 30);
+      focusTimer = window.setTimeout(() => inputRef.current?.focus(), 30);
     }
+    return () => {
+      if (focusTimer) window.clearTimeout(focusTimer);
+      if (!open) return;
+      const previous = previousFocusRef.current;
+      if (previous && previous.isConnected) previous.focus();
+    };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     if (!q.trim()) {
       setResults([]);
+      setActiveIdx(0);
       return;
     }
     let cancelled = false;
@@ -73,13 +96,15 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
 
   const grouped: Record<string, SearchResult[]> = {};
   for (const r of results) {
-    grouped[r.type] = grouped[r.type] || [];
-    grouped[r.type].push(r);
+    const type = r.type.toLowerCase();
+    grouped[type] = grouped[type] || [];
+    grouped[type].push(r);
   }
 
   const flat: SearchResult[] = [];
   for (const scope of SCOPES.map((s) => s.id)) {
-    if (grouped[scope]) flat.push(...grouped[scope]);
+    const resultType = RESULT_TYPE_BY_SCOPE[scope];
+    if (resultType && grouped[resultType]) flat.push(...grouped[resultType]);
   }
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -87,9 +112,11 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
       onClose();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
+      if (flat.length === 0) return;
       setActiveIdx((i) => Math.min(i + 1, flat.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      if (flat.length === 0) return;
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter' && flat[activeIdx]) {
       e.preventDefault();
@@ -100,9 +127,10 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
 
   return (
     <div className="search-modal-backdrop" onClick={onClose}>
-      <div className="search-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="search-modal" role="dialog" aria-modal="true" aria-labelledby="search-modal-title" onClick={(e) => e.stopPropagation()}>
         <div className="search-modal-head">
           <Search size={14} />
+          <span id="search-modal-title" className="sr-only">Search</span>
           <input
             ref={inputRef}
             className="search-modal-input"
@@ -137,7 +165,9 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
           {!loading && q && flat.length === 0 && <div className="muted">No results.</div>}
           {!loading && !q && <div className="muted">Type to search…</div>}
           {SCOPES.map((s) => {
-            const list = grouped[s.id];
+            const resultType = RESULT_TYPE_BY_SCOPE[s.id];
+            if (!resultType) return null;
+            const list = grouped[resultType];
             if (!list || list.length === 0) return null;
             return (
               <div key={s.id} className="search-group">

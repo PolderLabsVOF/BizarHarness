@@ -11,10 +11,30 @@
  * Keeping these in one place (rather than duplicating per route file)
  * means a single change here propagates to every router.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { projectsStore } from '../projects-store.mjs';
+
+const DASH_PACKAGE_JSON = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'package.json',
+);
+
+function readDashboardVersion() {
+  try {
+    const raw = JSON.parse(readFileSync(DASH_PACKAGE_JSON, 'utf8'));
+    return raw?.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+const DASHBOARD_VERSION = readDashboardVersion();
 
 /** Home dir, cached at module load (homedir() doesn't change mid-process). */
 export const HOME = homedir();
@@ -64,6 +84,12 @@ export function safeReadText(file, fallback = '') {
   }
 }
 
+export function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
+
 /**
  * The v3 settings shape. Keep this in sync with the `DEFAULT_SETTINGS`
  * constant that used to live inline in api.mjs. The frontend mirrors
@@ -94,7 +120,7 @@ export const DEFAULT_SETTINGS = {
   dashboard: { autoLaunchWeb: true },
   service: { enabled: true, autostart: false },
   about: {
-    version: '3.5.9',
+    version: DASHBOARD_VERSION,
     homepage: 'https://github.com/DrB0rk/BizarHarness',
     license: 'MIT',
   },
@@ -156,7 +182,7 @@ export function readSettings() {
 export function writeSettings(data) {
   mkdirSync(dirname(SETTINGS_FILE), { recursive: true });
   const merged = mergeSettings(data);
-  writeFileSync(SETTINGS_FILE, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+  atomicWriteJson(SETTINGS_FILE, merged);
   return readSettings();
 }
 

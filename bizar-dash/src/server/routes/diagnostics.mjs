@@ -26,7 +26,8 @@ export function createDiagnosticsRouter() {
   }));
 
   router.get('/diagnostics/logs', wrap(async (req, res) => {
-    const tail = Math.min(Number(req.query.tail) || 100, 5000);
+    const requestedTail = parseInt(String(req.query.tail || '100'), 10);
+    const tail = Math.min(5000, Math.max(1, Number.isFinite(requestedTail) ? requestedTail : 100));
     const serviceLog = join(BIZAR_HOME, 'service.log');
     const dashboardLog = join(BIZAR_HOME, 'dashboard.log');
     // Prefer service.log, fall back to dashboard.log

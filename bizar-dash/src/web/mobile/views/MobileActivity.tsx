@@ -1,6 +1,6 @@
 // src/mobile/views/MobileActivity.tsx — enhanced activity with filters, event detail, and snapshot submit hero.
 import { useEffect, useState } from 'react';
-import { RefreshCw, CheckSquare, Bot, Activity as ActivityIcon, Pause, Play, Send, Plus, X } from 'lucide-react';
+import { RefreshCw, Bot, Activity as ActivityIcon, Pause, Play, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatRelative } from '../../lib/utils';
 import type { ActivityItem, Snapshot } from '../../lib/types';
@@ -29,7 +29,6 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
   const [filter, setFilter] = useState<EventKind>('all');
   const [paused, setPaused] = useState(false);
   const [detail, setDetail] = useState<ActivityItem | null>(null);
-  const [submitOpen, setSubmitOpen] = useState(false);
   const [submitText, setSubmitText] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -44,8 +43,8 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
 
   const loadEvents = async () => {
     try {
-      const data = await api.get<{ recentActivity: ActivityItem[] }>('/snapshot');
-      setEvents(data.recentActivity || []);
+      const data = await api.get<Snapshot>('/snapshot');
+      setEvents(data.overview?.recentActivity || []);
     } catch {
       // best-effort
     } finally {
@@ -73,12 +72,18 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
     try {
       await api.post('/chat', { message: submitText.trim(), agent: 'odin' });
       setSubmitText('');
-      setSubmitOpen(false);
+      await onRefresh().catch(() => undefined);
+      await loadEvents();
     } catch {
       // best-effort
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    await onRefresh().catch(() => undefined);
+    await loadEvents();
   };
 
   return (
@@ -136,6 +141,12 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
         </div>
       </div>
 
+      {loading && events.length === 0 && (
+        <div className="mobile-loading mobile-loading-inline">
+          <p>Loading activity…</p>
+        </div>
+      )}
+
       {/* Filter chips */}
       <div className="mobile-activity-header">
         <h3 className="mobile-section-title" style={{ margin: 0 }}>Recent Activity</h3>
@@ -148,7 +159,7 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
           >
             {paused ? <Play size={14} /> : <Pause size={14} />}
           </button>
-          <button type="button" className="mobile-icon-btn" onClick={() => loadEvents()} aria-label="Refresh">
+          <button type="button" className="mobile-icon-btn" onClick={handleRefresh} aria-label="Refresh">
             <RefreshCw size={14} />
           </button>
         </div>
@@ -190,8 +201,9 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
         <section className="mobile-section">
           <div className="mobile-card-list">
             {filtered.slice(0, 30).map((e, i) => (
-              <div
-                key={i}
+              <button
+                key={`${e.ts}-${e.kind}-${i}`}
+                type="button"
                 className="mobile-event-item"
                 onClick={() => setDetail(e)}
               >
@@ -200,10 +212,18 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
                   {renderEventMessage(e)}
                 </span>
                 <span className="mobile-event-time">{formatRelative(e.ts)}</span>
-              </div>
+              </button>
             ))}
           </div>
         </section>
+      )}
+
+      {!paused && filtered.length === 0 && events.length > 0 && (
+        <div className="mobile-empty">
+          <ActivityIcon size={40} />
+          <p>No matching activity.</p>
+          <p className="muted">Try a different filter.</p>
+        </div>
       )}
 
       {/* Event detail sheet */}

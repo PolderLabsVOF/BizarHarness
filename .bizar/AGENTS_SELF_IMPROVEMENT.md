@@ -6,15 +6,36 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 1. **Per-project Hindsight banks** — every project gets its own bank; default is for general/system knowledge only
 2. **Session start bank check** — always call `hindsight_list_banks` to discover and set the correct bank
 3. **Never use default for project work** — pass `bank_id: "<project-name>"` in all Hindsight calls
-4. **Create bank if missing** — if no bank exists for a project, create it with `hindsight_create_bank`
+4. **Create bank if missing** — if no bank exists for a project, create one with `hindsight_create_bank`
 5. **AMS Studio bank populated** — 40+ documents migrated from default to ams-studio bank
-6. **Config files with tokens go in .gitignore from day 1** — `config/opencode.json` leaked a Hindsight bearer token for 30+ commits. Use `.template` files for reference, never commit live config.
+6. **Config files with tokens go in .gitignore from day 1** — `config/opencode.json` leaked a Hindsight bearer token for 30+ commits. Use `.template` files for reference, never commit live config. `git rm --cached <file>` to fully untrack.
 7. **Pre-commit hook scans for secrets** — a token-scanning pre-commit hook (`scripts/git-hooks/pre-commit`) is mandatory for any project handling credentials. Install via `scripts/install-hooks.sh`.
 8. **Release audits check for Bearer tokens** — before publishing any release, grep for `Bearer [A-Za-z0-9+/=]{20,}` in every config file.
 9. **Forward-test new skills on a real task before shipping** — skills written in isolation are biased toward the author's mental model. Dispatch a fresh subagent on a real repo task, require explicit references to skill sections, and report whether the skill actually helped or was noise. The first forward-test of `$cpp-coding-standards` + `$cpp-testing` + `$embedded-esp-idf` on `feature_flags.cpp` found 9 real issues and identified 4 concrete skill improvements.
 10. **Skills should expose a task-to-reference index** — when a skill has 7+ references, agents waste context loading the wrong one. A small table mapping common tasks to the single best reference is worth more than perfect section ordering in SKILL.md.
+11. **Plugin command pass-through** — `plugins/bizar/src/commands.ts` `default` branch must `return null` (not `{ handled: true }`) so unknown commands fall through to other handlers (built-ins, other plugins). Returning `handled: true` swallowed every unknown command including `/explain`, `/init`, `/learn`, `/pr-review`, `/audit`.
+12. **Atomic file writes for plugin files too** — `plan-fs.ts` and `serve.ts` should use temp-file-then-rename, not direct `writeFile`. Partial writes corrupt state on crash.
+13. **Track plugin-owned signal handlers** — never call `process.removeAllListeners(SIGTERM|SIGINT)`; track handler refs and remove only the plugin's own.
+14. **Bundled agent .md frontmatter must match `config/opencode.json`** — drift between them causes routing to silently use the wrong model (the v3.7.0 audit found 11 files with `openai/gpt-5.4` while the actual model should have been M3/M2.7/deepseek).
+15. **Verify root `tsconfig.json` `include` paths** — a stale `include: ["src/**/*"]` at the monorepo root will typecheck against nothing. Either point at the actual subdirs or remove the typecheck script entirely if each subpackage has its own.
+16. **Dashboard WebSocket initial snapshot must match REST snapshot** — server was sending a different shape than `/api/snapshot`; web client threw on type mismatch. Keep WS `snapshot` and HTTP `snapshot` payloads identical.
+17. **Auth bypass via loopback proxy** — Express + `req.ip` trusts loopback by default; if you accept `X-Forwarded-For`, do not use `req.ip` for auth status — derive trust from the actual TCP peer (`req.socket.remoteAddress`) and only honor trusted proxies.
 
 ## Log
+
+### 2026-06-22: Full v3.7.0 audit pass — 116 files, +3154/−1334
+- **Task**: Extensive full pass on every component of the Bizar system (plugin, CLI, dashboard server, desktop web, mobile, agent configs, install scripts, templates). Fix every issue, push, release, publish.
+- **Files changed**: 116 files, 3154 insertions, 1334 deletions
+- **Agents used**: parallel dispatch — @thor (CLI, mobile, install/templates, plugin), @tyr (dashboard server, desktop web), @mimir (agent configs)
+- **Approach**: 7 parallel subagent dispatches from one Odin message; each scoped to a single component with explicit "do not touch other parts". Final integration (typecheck/build/tests) and E2E browser test done in this session after parallel work returned.
+- **Lessons learned**:
+  - Bulk-copy frontmatter errors propagate silently — `openai/gpt-5.4` ended up in 11 agent files even though routing docs said M3. Validate frontmatter against actual config on every release.
+  - `process.removeAllListeners` is a footgun in plugins — always track and remove only your own handlers.
+  - Server-side `dispose()` must clear all on-disk state it owns (`serve.json`, PID files, temp files). Otherwise re-init inherits stale config.
+  - `request.ip` is unsafe for auth when behind a proxy; use `request.socket.remoteAddress` and only honor trusted hops.
+  - WebSocket initial snapshot payload must exactly match the REST snapshot shape; type drift breaks the client.
+  - Mobile sheet/modal scroll lock must use `position: fixed` on body, not just `overflow: hidden` (iOS Safari ignores overflow locking).
+- **Pattern to follow next time**: For monorepo audit tasks, dispatch all component-level audits in parallel from one Odin message, then run integration + E2E + release from a single sequencer. This compressed 116 files of fixes + verification + publish into one Odin turn.
 
 ### 2026-06-17: Created bizar-remote repo from scaffold
 - **Context**: Scaffold had 1 TSX file with backticks in template literal causing parse error
@@ -182,3 +203,21 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - Forward-test on `/projects/ams7_esp32/main/runtime/feature_flags.cpp` found 9 real issues: VLA in `Configuration::GetString` (gcc extension), virtual destructor with no base class, unused `<fstream>`/`<list>` headers, hardcoded `"DEBUG"` log tag, missing `const` on query functions, swallowed `nvs_set_*` errors, `nvs_flash_init()` called on every operation, fragile `FeatureFlag::Count`-sized array, and a missing test file.
   - Skills improved post-test: added `references/nvs.md` to embedded-esp-idf (NVS init anti-patterns, error handling, AMS7 `"ams7cfg"` namespace); added task-to-reference index; added 2 quick-start checklist items to cpp-coding-standards (virtual destructor without base, unused standard-library headers).
   - BizarHarness installer now exposes all 3 as opt-in components (`skill-cpp-std`, `skill-cpp-test`, `skill-esp-idf`) plus the new `install.sh` skills loop that copies all 5 bundled skills to `~/.opencode/skills/`. `install.sh` previously did NOT copy any skills — this was a gap-fill.
+
+### 2026-06-21: API auth + api.mjs split (v3.6.0)
+- **Context**: Addressed two deferred audit items for `@polderlabs/bizar-dash`: (1) bearer-token auth on the dashboard API + secure defaults (localhost bind), and (2) split the 2,395-line `api.mjs` monolith into per-domain router modules under `src/server/routes/`.
+- **Files added**: `src/server/auth.mjs` (224 lines — token mgmt, middleware, WS upgrade check, timing-safe compare), `src/server/routes/_shared.mjs` (228 — settings/JSON helpers + `wrap` factory), 20 domain routers under `routes/` (tasks 467, chat 463, plans 241, activity 232, overview 87, etc.), plus `routes/auth.mjs` for the auth/status/reveal/regenerate endpoints.
+- **Files rewritten**: `src/server/api.mjs` 2,395 → 112 lines (composer only).
+- **Files modified**: `src/server/server.mjs` (noServer WS mode + upgrade-time auth check), `src/cli.mjs` (BIZAR_DASHBOARD_BIND), `src/web/lib/api.ts` (Bearer header), `src/web/lib/ws.ts` (token query param), `src/web/views/Overview.tsx` (EventSource token), `src/web/views/Settings.tsx` (Auth card with Copy/Regenerate).
+- **Patterns worth keeping**:
+  - **Lazy imports of large stores** — `background-store`, `activity-log`, `task-delegator` are imported inside route handlers (`await import('../...')`) so this module loads even when those subsystems are offline. Cuts the boot path and avoids forcing every router's transitive deps to be resolved.
+  - **Always use `.projects` off `projectsStore.list()`** — it returns `{projects, active}`, not a bare array. The original api.mjs had a latent bug in `/api/history` (line 1202) where it iterated the wrapper object directly; fixed while splitting.
+  - **Express ordering — declare literal paths BEFORE `:id` siblings** — `/tasks/bulk` and `/tasks/submit` must come before `/tasks/:id`, `/agents/stuck` and `/agents/hierarchy` before `/agents/:name`, `/mods/views` before `/mods/:id`. Each routes file's header documents which constraints it preserves.
+  - **Token timing-safe compare** — `auth.mjs` XORs over `Math.max(a.length, b.length)` so runtime depends only on the expected token's length, not the attacker's candidate. Avoids byte-by-byte timing leaks.
+  - **NoServer WS mode for auth** — switched `WebSocketServer({server, path:'/ws'})` to `{noServer: true}` so we can `server.on('upgrade')` ourselves and 401 before `wss.handleUpgrade`.
+- **Caveats**:
+  - The pre-existing broken `package.json` files (both root and `bizar-dash/`) had `... (30 lines truncated)` literal text instead of valid JSON. Fixed both as a side-effect of needing `npm run build` to work for verification. The fix preserves all listed deps and adds `typescript` + `vite` devDeps that were already installed in `node_modules/`.
+  - `BIZAR_DASHBOARD_BIND=0.0.0.0` does NOT skip auth — the token gates even when the operator opts into remote exposure. This is intentional (the auth is the only thing keeping tailnet neighbors out).
+  - The dashboard's `/api/auth/status` is unauthed and returns `{required: true}` — it does NOT include the token. The token is only retrievable via `/api/auth/reveal` which itself requires the token (chicken-and-egg by design; first-boot token comes from server stderr).
+- **Smoke results**: 8/8 auth scenarios pass (unauthed 401, header 200, query 200, wrong 401, status 200, reveal 200, regenerate → old invalidated / new works, file mode 0600). WS auth (with/without token, bad token) all correct. SSE auth (header + query) both 200. All 36 GET endpoints return 200 (one was 500 on /api/history pre-fix — now 200).
+- **Agent(s) used**: tyr (planning + implementation), heimdall (suggested).

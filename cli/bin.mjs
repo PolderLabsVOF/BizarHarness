@@ -18,9 +18,11 @@
  *   --web / --no-web / --web-only / --bg / --detach
  */
 import { existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
-import { runInstaller, runPostInstall } from './install.mjs';
+import { runInstaller } from './install.mjs';
 import { runAudit } from './audit.mjs';
 import { runInit } from './init.mjs';
 import { runExport } from './export.mjs';
@@ -29,19 +31,45 @@ import { runUpdate } from './update.mjs';
 import { ensureSetup, checkSetupStatus } from './bootstrap.mjs';
 
 const args = process.argv.slice(2);
+const isHelpRequest = args.includes('--help') || args.includes('-h');
+const isVersionRequest = args.includes('--version') || args.includes('-v');
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 // Every bin command checks setup status on first invocation.
 // Skip only when: --postinstall (manual trigger), --check (status only),
-// BIZAR_SKIP_INSTALL=1 (disabled), or already handled via npm script.
+// --help / --version (informational), BIZAR_SKIP_INSTALL=1 (disabled),
+// or already handled via npm script.
 if (
   !args.includes('--postinstall') &&
   !args.includes('--check') &&
+  !isHelpRequest &&
+  !isVersionRequest &&
   !process.env.BIZAR_SKIP_INSTALL
 ) {
   await ensureSetup({ silent: true });
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+function readCliVersion() {
+  try {
+    const packageJsonPath = fileURLToPath(new URL('../package.json', import.meta.url));
+    const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+    return pkg.version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function getBizarConfigDir() {
+  if (process.platform === 'win32') {
+    return process.env.APPDATA
+      ? join(process.env.APPDATA, 'bizar')
+      : join(process.env.HOME || process.cwd(), '.config', 'bizar');
+  }
+  return process.env.XDG_CONFIG_HOME
+    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
+    : join(process.env.HOME || process.cwd(), '.config', 'bizar');
+}
 
 function showHelp() {
   console.log(`
@@ -64,6 +92,7 @@ function showHelp() {
     bizar dashboard             Launch the web dashboard (uses bizar)
     bizar --setup               Re-run setup manually (agents, plugin, RTK, Semble, Skills CLI)
     bizar --check               Print setup status as JSON, exit 1 if setup needed
+    bizar --version             Show package version
     bizar --help                Show this help
 
   Install:
@@ -91,12 +120,55 @@ function showAuditHelp() {
 function showInitHelp() {
   console.log(`
   bizar init — Initialize .bizar/ in current project
+
+  Usage:
+    bizar init
+
+  Description:
+    Detects the project stack, creates .bizar/PROJECT.md and
+    .bizar/AGENTS_SELF_IMPROVEMENT.md, and installs relevant skills.
   `);
 }
 
 function showExportHelp() {
   console.log(`
   bizar export — Export agents/rules to another harness
+
+  Usage:
+    bizar export [claude|cursor|opencode]
+
+  Description:
+    Copies installed Bizar agents and rules into another harness format.
+  `);
+}
+
+function showInstallHelp() {
+  console.log(`
+  bizar install — Run the interactive installer
+
+  Usage:
+    bizar install
+
+  Description:
+    Installs agents, rules, commands, plugin support, RTK, Semble,
+    and the Skills CLI.
+  `);
+}
+
+function showUpdateHelp() {
+  console.log(`
+  bizar update — Update opencode, bizar, and/or bizar-plugin
+
+  Usage:
+    bizar update
+    bizar update --all
+    bizar update opencode
+    bizar update bizar
+    bizar update plugin
+
+  Description:
+    Prompts interactively by default. Use --all for non-interactive
+    updates, or pass explicit component names.
   `);
 }
 
@@ -107,6 +179,7 @@ function showTestGateHelp() {
 }
 
 function showServiceHelp() {
+  const bizarConfigDir = getBizarConfigDir();
   console.log(`
   bizar service — Manage the background service daemon
 
@@ -115,12 +188,13 @@ function showServiceHelp() {
     bizar service stop         Stop the running service
     bizar service status       Show whether the service is running
     bizar service logs         Tail the service log
+    bizar service follow       Follow the service log until Ctrl-C
 
   Description:
     The service watches per-project schedules (cron / interval / once)
     and runs them at the right time. It logs to
-    ~/.config/bizar/service.log and writes its PID to
-    ~/.config/bizar/service.pid.
+    ${bizarConfigDir}/service.log and writes its PID to
+    ${bizarConfigDir}/service.pid.
   `);
 }
 
@@ -155,8 +229,7 @@ async function findBizarDash() {
     /* fall through */
   }
   // Local fallback — node_modules of this package
-  const here = new URL('..', import.meta.url);
-  const localPath = join(here.pathname, '..', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'cli.mjs');
+  const localPath = fileURLToPath(new URL('../node_modules/@polderlabs/bizar-dash/src/cli.mjs', import.meta.url));
   if (existsSync(localPath)) return localPath;
   return null;
 }
@@ -179,7 +252,17 @@ async function delegateToDash(argsForDash) {
     env: process.env,
   });
   await new Promise((resolve, reject) => {
-    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
+    child.on('exit', (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      if (signal) {
+        reject(new Error(`dashboard exited via signal ${signal}`));
+        return;
+      }
+      reject(new Error(`dashboard exited with code ${code}`));
+    });
     child.on('error', reject);
   });
 }
@@ -195,7 +278,14 @@ async function readAutoLaunchWeb() {
     const fs = await import('node:fs');
     const os = await import('node:os');
     const path = await import('node:path');
-    const file = path.join(os.homedir(), '.config', 'bizar', 'settings.json');
+    const bizarConfigDir = process.platform === 'win32'
+      ? (process.env.APPDATA
+        ? path.join(process.env.APPDATA, 'bizar')
+        : path.join(os.homedir(), '.config', 'bizar'))
+      : (process.env.XDG_CONFIG_HOME
+        ? path.join(process.env.XDG_CONFIG_HOME, 'bizar')
+        : path.join(os.homedir(), '.config', 'bizar'));
+    const file = path.join(bizarConfigDir, 'settings.json');
     if (!fs.existsSync(file)) return true;
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (parsed && parsed.dashboard && typeof parsed.dashboard.autoLaunchWeb === 'boolean') {
@@ -244,68 +334,73 @@ async function runServiceCommand(sub) {
   await runService(sub || 'status', args.slice(2));
 }
 
-if (args.includes('--check')) {
-  const status = checkSetupStatus();
-  console.log(JSON.stringify(status, null, 2));
-  process.exit(status.needed ? 1 : 0);
-} else if (args.includes('--setup')) {
-  await ensureSetup({ silent: false });
-  process.exit(0);
-} else if (args.includes('--postinstall')) {
-  // Legacy manual trigger — now an alias for --setup
-  await ensureSetup({ silent: false });
-  process.exit(0);
-} else if (args[0] === 'audit') {
-  if (args.includes('--help') || args.includes('-h')) showAuditHelp();
-  else await runAudit();
-} else if (args[0] === 'init') {
-  if (args.includes('--help') || args.includes('-h')) showInitHelp();
-  else await runInit(process.cwd());
-} else if (args[0] === 'export') {
-  if (args.includes('--help') || args.includes('-h')) showExportHelp();
-  else await runExport(parseFlag('--target'));
-} else if (args[0] === 'test-gate') {
-  if (args.includes('--help') || args.includes('-h')) showTestGateHelp();
-  else await runTestGate();
-} else if (args[0] === 'update') {
-  if (args.includes('--help') || args.includes('-h')) {
-    console.log('Run bizar update [opencode|bizar|plugin]');
+async function main() {
+  if (args.includes('--check')) {
+    const status = checkSetupStatus();
+    console.log(JSON.stringify(status, null, 2));
+    process.exit(status.needed ? 1 : 0);
+  } else if (args.includes('--setup')) {
+    await ensureSetup({ silent: false });
+    process.exit(0);
+  } else if (args.includes('--postinstall')) {
+    // Legacy manual trigger — now an alias for --setup
+    await ensureSetup({ silent: false });
+    process.exit(0);
+  } else if (isVersionRequest) {
+    console.log(readCliVersion());
+  } else if (args[0] === 'audit') {
+    if (isHelpRequest) showAuditHelp();
+    else await runAudit();
+  } else if (args[0] === 'init') {
+    if (isHelpRequest) showInitHelp();
+    else await runInit(process.cwd());
+  } else if (args[0] === 'export') {
+    if (isHelpRequest) showExportHelp();
+    else await runExport(parseFlag('--target'));
+  } else if (args[0] === 'test-gate') {
+    if (isHelpRequest) showTestGateHelp();
+    else await runTestGate();
+  } else if (args[0] === 'update') {
+    if (isHelpRequest) showUpdateHelp();
+    else await runUpdate(args.slice(1));
+  } else if (args[0] === 'plan') {
+    await runPlan(args.slice(1), {});
+  } else if (args[0] === 'install') {
+    if (isHelpRequest) showInstallHelp();
+    else await runInstaller();
+  } else if (args[0] === 'service') {
+    if (isHelpRequest) showServiceHelp();
+    else await runServiceCommand(args[1]);
+  } else if (args[0] === 'dashboard' || args[0] === 'start' || args[0] === 'stop' || args[0] === 'status' || args[0] === 'tui') {
+    if (isHelpRequest) showDashboardHelp();
+    else await delegateToDash(args.slice(1));
+  } else if (args.includes('--bg') || args.includes('--detach')) {
+    // Delegate to bizar-dash
+    await delegateToDash(['--bg']);
+  } else if (args.includes('--web-only')) {
+    await delegateToDash(['--web-only']);
+  } else if (isHelpRequest) {
+    showHelp();
   } else {
-    await runUpdate(args.slice(1));
-  }
-} else if (args[0] === 'plan') {
-  await runPlan(args.slice(1), {});
-} else if (args[0] === 'install') {
-  await runInstaller();
-} else if (args[0] === 'service') {
-  if (args.includes('--help') || args.includes('-h')) showServiceHelp();
-  else await runServiceCommand(args[1]);
-} else if (args[0] === 'dashboard' || args[0] === 'start' || args[0] === 'stop' || args[0] === 'status' || args[0] === 'tui') {
-  if (args.includes('--help') || args.includes('-h')) showDashboardHelp();
-  else await delegateToDash(args.slice(1));
-} else if (args.includes('--bg') || args.includes('--detach')) {
-  // Delegate to bizarre-dash
-  await delegateToDash(['--bg']);
-} else if (args.includes('--web-only')) {
-  await delegateToDash(['--web-only']);
-} else if (args.includes('--help') || args.includes('-h')) {
-  showHelp();
-} else {
-  // Default: launch the TUI dashboard. The TUI lives in bizar-dash.
-  // We try to use the bizar-dash package's TUI, but we also support a
-  // bundled fallback that imports from this package's local copy.
-  const dashPath = await findBizarDash();
-  if (dashPath) {
-    const skipWeb = args.includes('--no-web');
-    const forceWeb = args.includes('--web');
-    const settingAuto = await readAutoLaunchWeb();
-    const launchWeb = !skipWeb && (forceWeb || settingAuto);
-    await delegateToDash(['tui', ...(launchWeb ? [] : ['--no-web'])]);
-  } else {
-    console.log('The Bizar dashboard is in a separate package:');
-    console.log(chalk.cyan('  npm install -g @polderlabs/bizar-dash'));
-    console.log('');
-    console.log('Or run the installer to set up everything:');
-    console.log(chalk.cyan('  npx -y @polderlabs/bizar install'));
+    // Default: launch the TUI dashboard. The TUI lives in bizar-dash.
+    const dashPath = await findBizarDash();
+    if (dashPath) {
+      const skipWeb = args.includes('--no-web');
+      const forceWeb = args.includes('--web');
+      const settingAuto = await readAutoLaunchWeb();
+      const launchWeb = !skipWeb && (forceWeb || settingAuto);
+      await delegateToDash(['tui', ...(launchWeb ? [] : ['--no-web'])]);
+    } else {
+      console.log('The Bizar dashboard is in a separate package:');
+      console.log(chalk.cyan('  npm install -g @polderlabs/bizar-dash'));
+      console.log('');
+      console.log('Or run the installer to set up everything:');
+      console.log(chalk.cyan('  npx -y @polderlabs/bizar install'));
+    }
   }
 }
+
+await main().catch((err) => {
+  console.error(chalk.red(`bizar: ${err && err.message ? err.message : String(err)}`));
+  process.exit(1);
+});

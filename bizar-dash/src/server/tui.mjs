@@ -56,8 +56,27 @@ process.title = 'bizar-tui';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const HOME = homedir();
+const DASHBOARD_SECRET_FILE = process.env.BIZAR_DASHBOARD_SECRET_PATH || join(HOME, '.config', 'bizar', 'dashboard-secret');
 
-const VERSION = '2.7.0';
+function readDashboardVersion() {
+  try {
+    return JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'))?.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+function readDashboardToken() {
+  try {
+    if (process.env.BIZAR_DASHBOARD_TOKEN) return process.env.BIZAR_DASHBOARD_TOKEN;
+    if (!existsSync(DASHBOARD_SECRET_FILE)) return '';
+    return readFileSync(DASHBOARD_SECRET_FILE, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+const VERSION = readDashboardVersion();
 
 // ── Tab definitions ─────────────────────────────────────────────────────────
 
@@ -216,9 +235,12 @@ function toast(screen, message, { color = 'cyan', ms = 2500 } = {}) {
 function makeApiClient(port) {
   const base = `http://127.0.0.1:${port}`;
   async function req(method, path, body) {
+    const token = readDashboardToken();
+    const headers = body ? { 'Content-Type': 'application/json' } : {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const r = await fetch(`${base}${path}`, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!r.ok) {
@@ -480,7 +502,9 @@ class DashboardSocket {
   connect() {
     if (this.stopped) return;
     try {
-      this.ws = new WebSocket(`ws://127.0.0.1:${this.port}/ws`);
+      const token = readDashboardToken();
+      const suffix = token ? `?token=${encodeURIComponent(token)}` : '';
+      this.ws = new WebSocket(`ws://127.0.0.1:${this.port}/ws${suffix}`);
     } catch (err) {
       this.scheduleReconnect();
       return;

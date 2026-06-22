@@ -1,7 +1,8 @@
 // src/mobile/views/MobileHistory.tsx — session history list.
 import { useEffect, useState } from 'react';
-import { History, RefreshCw, ChevronRight } from 'lucide-react';
+import { History, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { MobileBottomSheet } from '../components/MobileBottomSheet';
 
 type HistoryEntry = {
   id: string;
@@ -13,6 +14,29 @@ type HistoryEntry = {
   output?: string;
 };
 
+type HistoryEvent = {
+  ts: string;
+  kind: string;
+  text?: string;
+  projectId?: string;
+};
+
+type ProjectHistory = {
+  id: string;
+  name: string;
+  path: string;
+  status: string;
+  lastAccessed?: string | null;
+  tasks: { total: number; done: number; doing: number; blocked: number; queued: number };
+  plans: number;
+};
+
+type HistoryResponse = {
+  history?: HistoryEntry[];
+  events?: HistoryEvent[];
+  projects?: ProjectHistory[];
+};
+
 type Props = {
   onBack: () => void;
 };
@@ -21,11 +45,44 @@ export function MobileHistory({ onBack }: Props) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<HistoryEntry | null>(null);
+  const [query, setQuery] = useState('');
 
   const load = async () => {
     try {
-      const data = await api.get<{ history: HistoryEntry[] }>('/history');
-      setEntries(data.history || []);
+      const data = await api.get<HistoryResponse>('/history');
+      if (Array.isArray(data.history)) {
+        setEntries(data.history);
+        return;
+      }
+
+      if (Array.isArray(data.projects)) {
+        const latestEventByProject = new Map<string, HistoryEvent>();
+        for (const event of data.events || []) {
+          const pid = event.projectId;
+          if (!pid) continue;
+          const current = latestEventByProject.get(pid);
+          if (!current || new Date(event.ts).getTime() > new Date(current.ts).getTime()) {
+            latestEventByProject.set(pid, event);
+          }
+        }
+
+        setEntries(
+          data.projects.map((project) => {
+            const latestEvent = latestEventByProject.get(project.id);
+            return {
+              id: project.id,
+              ts: project.lastAccessed || latestEvent?.ts || new Date(0).toISOString(),
+              agent: project.name,
+              taskCount: project.tasks.total,
+              summary: `${project.path} · ${project.tasks.done}/${project.tasks.total} done · ${project.plans} plan${project.plans === 1 ? '' : 's'}`,
+              output: latestEvent ? `${latestEvent.kind}${latestEvent.text ? ` — ${latestEvent.text}` : ''}` : 'No recent events.',
+            } satisfies HistoryEntry;
+          }),
+        );
+        return;
+      }
+
+      setEntries([]);
     } catch {
       // best-effort
     } finally {
@@ -49,11 +106,26 @@ export function MobileHistory({ onBack }: Props) {
     return d.toLocaleString();
   };
 
+  const filtered = query.trim()
+    ? entries.filter((entry) => {
+        const q = query.toLowerCase();
+        return (entry.agent || 'session').toLowerCase().includes(q)
+          || (entry.summary || '').toLowerCase().includes(q)
+          || (entry.output || '').toLowerCase().includes(q);
+      })
+    : entries;
+
   return (
     <div className="mobile-view">
       <div className="mobile-tasks-toolbar">
-        <input className="mobile-search-input" type="text" placeholder="Search history…"
-          style={{ flex: 1 }} />
+        <input
+          className="mobile-search-input"
+          type="text"
+          placeholder="Search history…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ flex: 1 }}
+        />
         <button type="button" className="mobile-icon-btn" onClick={() => load()} aria-label="Refresh">
           <RefreshCw size={16} />
         </button>
@@ -61,16 +133,17 @@ export function MobileHistory({ onBack }: Props) {
 
       {loading ? (
         <div className="mobile-loading"><p>Loading…</p></div>
-      ) : entries.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="mobile-empty">
           <History size={40} />
-          <p>No history yet.</p>
+          <p>{entries.length === 0 ? 'No history yet.' : 'No matching sessions.'}</p>
         </div>
       ) : (
         <div className="mobile-card-list">
-          {entries.map((e) => (
-            <div
+          {filtered.map((e) => (
+            <button
               key={e.id}
+              type="button"
               className="mobile-list-item mobile-list-item-interactive"
               onClick={() => setDetail(e)}
             >
@@ -83,46 +156,35 @@ export function MobileHistory({ onBack }: Props) {
                   {e.taskCount ? ` · ${e.taskCount} tasks` : ''}
                 </span>
               </div>
-              <ChevronRight size={14} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
-            </div>
+            </button>
           ))}
         </div>
       )}
 
       {/* Detail sheet */}
       {detail && (
-        <div className="mobile-sheet-overlay" onClick={() => setDetail(null)}>
-          <div className="mobile-sheet" style={{ maxHeight: '85vh' }} onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-sheet-header">
-              <h3 className="mobile-sheet-title">Session Detail</h3>
-              <button type="button" className="mobile-icon-btn" onClick={() => setDetail(null)} aria-label="Close">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <div className="mobile-sheet-content">
-              <div className="mobile-agent-detail-meta">
-                <div className="mobile-task-detail-row"><span>Agent</span><span>{detail.agent || '—'}</span></div>
-                <div className="mobile-task-detail-row"><span>Started</span><span>{formatTime(detail.ts)}</span></div>
-                <div className="mobile-task-detail-row"><span>Duration</span><span>{formatDuration(detail.duration)}</span></div>
-                <div className="mobile-task-detail-row"><span>Tasks</span><span>{detail.taskCount || 0}</span></div>
-              </div>
-              {detail.summary && (
-                <div style={{ marginTop: 12 }}>
-                  <h4 style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Summary</h4>
-                  <p style={{ fontSize: 13 }}>{detail.summary}</p>
-                </div>
-              )}
-              {detail.output && (
-                <div style={{ marginTop: 12 }}>
-                  <h4 style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Output</h4>
-                  <pre className="mono" style={{ fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--bg-elev-2)', padding: 8, borderRadius: 6 }}>
-                    {detail.output.slice(0, 1000)}{detail.output.length > 1000 ? '…' : ''}
-                  </pre>
-                </div>
-              )}
-            </div>
+        <MobileBottomSheet open={true} onClose={() => setDetail(null)} title="Session Detail">
+          <div className="mobile-agent-detail-meta">
+            <div className="mobile-task-detail-row"><span>Agent</span><span>{detail.agent || '—'}</span></div>
+            <div className="mobile-task-detail-row"><span>Started</span><span>{formatTime(detail.ts)}</span></div>
+            <div className="mobile-task-detail-row"><span>Duration</span><span>{formatDuration(detail.duration)}</span></div>
+            <div className="mobile-task-detail-row"><span>Tasks</span><span>{detail.taskCount || 0}</span></div>
           </div>
-        </div>
+          {detail.summary && (
+            <div style={{ marginTop: 12 }}>
+              <h4 style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Summary</h4>
+              <p style={{ fontSize: 13 }}>{detail.summary}</p>
+            </div>
+          )}
+          {detail.output && (
+            <div style={{ marginTop: 12 }}>
+              <h4 style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Output</h4>
+              <pre className="mono" style={{ fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--bg-elev-2)', padding: 8, borderRadius: 6 }}>
+                {detail.output.slice(0, 1000)}{detail.output.length > 1000 ? '…' : ''}
+              </pre>
+            </div>
+          )}
+        </MobileBottomSheet>
       )}
     </div>
   );

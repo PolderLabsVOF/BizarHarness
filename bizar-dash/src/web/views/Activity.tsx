@@ -55,6 +55,8 @@ type BgInstance = {
   agent?: string;
   status?: string;
   startedAt?: number;
+  completedAt?: number;
+  lastEventAt?: number;
   promptPreview?: string;
   resultPreview?: string;
   error?: string;
@@ -151,7 +153,16 @@ function bgStartMs(b: BgInstance): number {
 }
 
 function bgEndMs(b: BgInstance, now: number): number {
-  if (b.status === 'done' || b.status === 'killed' || b.status === 'failed' || b.status === 'error') return now;
+  if (
+    b.status === 'done'
+    || b.status === 'success'
+    || b.status === 'killed'
+    || b.status === 'failed'
+    || b.status === 'error'
+    || b.status === 'timed_out'
+  ) {
+    return b.completedAt || b.lastEventAt || now;
+  }
   return now;
 }
 
@@ -220,7 +231,10 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
   // View state
   const [mode, setMode] = useState<'live' | 'pause'>('live');
   const [zoom, setZoom] = useState<ZoomKey>('5m');
-  const [streamOpen, setStreamOpen] = useState(true);
+  const [streamOpen, setStreamOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth > 900;
+  });
 
   // Data
   const [bgInstances, setBgInstances] = useState<BgInstance[]>([]);
@@ -341,14 +355,17 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
 
     // BG instances — one lane each, at the top.
     for (const bg of bgInstances) {
+      const start = bgStartMs(bg);
+      const end = bgEndMs(bg, nowTick);
+      if (end < rangeStart || start > rangeEnd) continue;
       out.push({
         kind: 'bg',
         id: `bg:${bg.instanceId}`,
         index: idx++,
         label: `BG ${shortLabel(bg.promptPreview, 20) || bg.instanceId.slice(0, 10)}`,
         sub: bg.status || 'pending',
-        start: bgStartMs(bg),
-        end: bgEndMs(bg, nowTick),
+        start,
+        end,
         data: bg,
       });
     }
@@ -359,6 +376,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
     for (const t of sorted) {
       const s = taskStartMs(t);
       const e = taskEndMs(t, nowTick);
+      if (e < rangeStart || s > rangeEnd) continue;
       let assigned = -1;
       for (let i = 0; i < taskLaneEnds.length; i++) {
         if (taskLaneEnds[i] <= s) {
@@ -384,7 +402,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
     }
 
     return out;
-  }, [bgInstances, tasks, nowTick]);
+  }, [bgInstances, tasks, nowTick, rangeStart, rangeEnd]);
 
   const laneById = useMemo(() => {
     const m = new Map<string, Lane>();
@@ -422,8 +440,11 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
     const out: TaskBar[] = [];
     for (const lane of lanes) {
       if (lane.kind === 'events') continue;
-      const x = timeToX(lane.start);
-      const xEnd = timeToX(lane.end);
+      const visibleStart = Math.max(lane.start, rangeStart);
+      const visibleEnd = Math.min(lane.end, rangeEnd);
+      if (visibleEnd < rangeStart || visibleStart > rangeEnd) continue;
+      const x = timeToX(visibleStart);
+      const xEnd = timeToX(visibleEnd);
       const w = Math.max(MIN_BAR_WIDTH, xEnd - x);
       const y = TIME_AXIS_HEIGHT + EVENTS_STRIP_HEIGHT + lane.index * LANE_HEIGHT + 8;
       const h = LANE_HEIGHT - 16;
@@ -464,7 +485,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
       });
     }
     return out;
-  }, [lanes, timeToX, selectedItem]);
+  }, [lanes, timeToX, selectedItem, rangeStart, rangeEnd]);
 
   // ─── Build event markers (placed on the lane of their related entity) ─
   const eventMarkers: EventMarker[] = useMemo(() => {
@@ -732,7 +753,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
         />
       ) : (
         <div className={cn('tl-view', selectedItem && 'tl-view-detail-open')}>
-          <div className="tl-body">
+          <div className={cn('tl-body', !streamOpen && 'tl-body-stream-collapsed')}>
             {/* Left column — event stream (sibling, not overlay) */}
             <aside className={cn('tl-stream', !streamOpen && 'tl-stream-collapsed')}>
               <div className="tl-stream-head">
@@ -759,11 +780,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                     const Icon =
                       ev.author ? Bot : ev.kind === 'task' ? CheckSquare : ev.kind === 'bg' ? Cpu : ActivityIcon;
                     return (
-                      <div
-                        key={`${ev.ts}-${i}`}
-                        className="tl-stream-event"
-                        style={{ borderLeftColor: statusColor(ev.kind) }}
-                      >
+                      <div key={`${ev.ts}-${i}`} className="tl-stream-event">
                         <span className="tl-stream-event-time">
                           {new Date(ev.ts).toLocaleTimeString('en-GB', { hour12: false })}
                         </span>
@@ -1019,6 +1036,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                       className="icon-btn"
                       onClick={() => setSelectedItem(null)}
                       title="Close"
+                      aria-label="Close activity detail"
                       style={{ marginLeft: 'auto' }}
                     >
                       <X size={14} />

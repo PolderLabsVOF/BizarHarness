@@ -16,6 +16,7 @@ interface BackgroundState {
   agent: string;
   status: "pending" | "running" | "done" | "failed" | "killed" | "timed_out";
   startedAt: number;
+  completedAt?: number;
   toolCallCount: number;
   promptPreview: string;
   resultPreview?: string;

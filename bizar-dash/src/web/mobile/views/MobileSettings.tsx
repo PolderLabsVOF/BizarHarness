@@ -1,6 +1,6 @@
 // src/mobile/views/MobileSettings.tsx — mobile settings with full desktop parity.
-import { useEffect, useState, useCallback } from 'react';
-import { QrCode, RefreshCw, Smartphone, Sun, Moon, Monitor, RotateCcw, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { QrCode, RefreshCw, Smartphone, Sun, Moon, Monitor, Save } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../../lib/api';
 import { applyTheme, applyThemeTokens, type Settings, type Snapshot, type ThemeName } from '../../lib/types';
@@ -61,6 +61,7 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
   const patchTheme = (patch: Partial<Settings['theme']>) => {
     setSettings((cur) => {
       const next = { ...cur, theme: { ...cur.theme, ...patch } };
+      applyTheme(next.theme);
       applyThemeTokens(next.theme);
       return next;
     });
@@ -227,10 +228,13 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
               <input
                 type="checkbox"
                 checked={!!settings.notifications.onAgentComplete}
-                onChange={(e) => setSettings((cur) => ({
-                  ...cur,
-                  notifications: { ...cur.notifications, onAgentComplete: e.target.checked },
-                }))}
+                onChange={(e) => {
+                  setSettings((cur) => ({
+                    ...cur,
+                    notifications: { ...cur.notifications, onAgentComplete: e.target.checked },
+                  }));
+                  setDirty(true);
+                }}
               />
               <span className="mobile-toggle-slider" />
             </label>
@@ -241,10 +245,13 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
               <input
                 type="checkbox"
                 checked={!!settings.notifications.onPlanApproval}
-                onChange={(e) => setSettings((cur) => ({
-                  ...cur,
-                  notifications: { ...cur.notifications, onPlanApproval: e.target.checked },
-                }))}
+                onChange={(e) => {
+                  setSettings((cur) => ({
+                    ...cur,
+                    notifications: { ...cur.notifications, onPlanApproval: e.target.checked },
+                  }));
+                  setDirty(true);
+                }}
               />
               <span className="mobile-toggle-slider" />
             </label>
@@ -260,26 +267,34 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
           <input
             className="mobile-input"
             type="number"
+            inputMode="numeric"
             min={1}
             max={20}
             value={settings.agents?.maxParallel ?? 6}
-            onChange={(e) => setSettings((cur) => ({
-              ...cur,
-              agents: { ...cur.agents!, maxParallel: Math.max(1, Math.min(20, parseInt(e.target.value) || 6)) },
-            }))}
+            onChange={(e) => {
+              setSettings((cur) => ({
+                ...cur,
+                agents: { ...cur.agents, maxParallel: Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 6)) },
+              }));
+              setDirty(true);
+            }}
           />
           <label className="mobile-field-label" style={{ marginTop: 8 }}>Stuck threshold (ms)</label>
           <input
             className="mobile-input"
             type="number"
+            inputMode="numeric"
             min={60000}
             max={3600000}
             step={60000}
             value={settings.agents?.stuckThresholdMs ?? 600000}
-            onChange={(e) => setSettings((cur) => ({
-              ...cur,
-              agents: { ...cur.agents!, stuckThresholdMs: Math.max(60000, parseInt(e.target.value) || 600000) },
-            }))}
+            onChange={(e) => {
+              setSettings((cur) => ({
+                ...cur,
+                agents: { ...cur.agents, stuckThresholdMs: Math.max(60000, parseInt(e.target.value, 10) || 600000) },
+              }));
+              setDirty(true);
+            }}
           />
           <div className="mobile-setting-row" style={{ marginTop: 8 }}>
             <span className="mobile-setting-label">Auto-restart stuck agents</span>
@@ -287,10 +302,13 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
               <input
                 type="checkbox"
                 checked={!!settings.agents?.autoRestart}
-                onChange={(e) => setSettings((cur) => ({
-                  ...cur,
-                  agents: { ...cur.agents!, autoRestart: e.target.checked },
-                }))}
+                onChange={(e) => {
+                  setSettings((cur) => ({
+                    ...cur,
+                    agents: { ...cur.agents, autoRestart: e.target.checked },
+                  }));
+                  setDirty(true);
+                }}
               />
               <span className="mobile-toggle-slider" />
             </label>

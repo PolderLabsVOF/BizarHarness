@@ -182,10 +182,10 @@ describe("readValidSessionIds — postmortem Layer 1 fix (v0.5.2)", () => {
       // no-op `.catch(() => undefined)` to suppress the unhandled-
       // rejection. We can't directly observe unhandled rejections in
       // bun:test, but we can verify the function returns cleanly.
-      let rejectFn: ((err: Error) => void) | null = null;
+      let rejectFn: ((err: Error) => void) | undefined;
       const input = makeInput({
         session: {
-          list: () => new Promise((_, reject) => {
+          list: () => new Promise((_, reject: (err: Error) => void) => {
             rejectFn = reject;
           }),
         },
@@ -195,7 +195,7 @@ describe("readValidSessionIds — postmortem Layer 1 fix (v0.5.2)", () => {
       // Now reject the hanging promise AFTER the function returned.
       // If the no-op catch is missing, this would be an unhandled
       // rejection. With it, the process keeps running.
-      if (rejectFn) rejectFn(new Error("late rejection"));
+      rejectFn?.(new Error("late rejection"));
       // Give the microtask queue a chance to run.
       await new Promise((r) => setTimeout(r, 10));
     },

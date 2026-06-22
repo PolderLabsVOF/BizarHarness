@@ -33,7 +33,7 @@ export function MobileSearchModal({ open, onClose, onNavigate }: Props) {
     if (open) {
       setQuery('');
       setResults([]);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
 
@@ -84,6 +84,7 @@ export function MobileSearchModal({ open, onClose, onNavigate }: Props) {
             placeholder="Search…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            enterKeyHint="search"
             onKeyDown={(e) => {
               if (e.key === 'Escape') onClose();
               if (e.key === 'Enter' && results.length > 0) {
@@ -144,8 +145,9 @@ export function MobileSearchModal({ open, onClose, onNavigate }: Props) {
                 {items.map((r, i) => {
                   const item = r.item as Record<string, string>;
                   return (
-                    <div
+                    <button
                       key={i}
+                      type="button"
                       className="mobile-search-result-item"
                       onClick={() => handleResultClick(r)}
                     >
@@ -157,7 +159,7 @@ export function MobileSearchModal({ open, onClose, onNavigate }: Props) {
                           {item.description.slice(0, 80)}
                         </span>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>

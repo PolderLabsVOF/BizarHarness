@@ -21,6 +21,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   readdirSync,
   statSync,
   mkdirSync,
@@ -50,6 +51,12 @@ function ensureProjectsDir() {
   mkdirSync(OPENCODE_DIR, { recursive: true });
 }
 
+function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
+
 function loadRegistry() {
   const data = safeReadJSON(PROJECTS_FILE, null);
   if (!data || typeof data !== 'object') {
@@ -61,7 +68,7 @@ function loadRegistry() {
 
 function saveRegistry(reg) {
   ensureProjectsDir();
-  writeFileSync(PROJECTS_FILE, JSON.stringify(reg, null, 2) + '\n', 'utf8');
+  atomicWriteJson(PROJECTS_FILE, reg);
 }
 
 function projectIdFromPath(path) {
@@ -82,7 +89,16 @@ function writeProjectFile(id, name, data) {
   ensureProjectsDir();
   const dir = projectDir(id);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, name), JSON.stringify(data, null, 2) + '\n', 'utf8');
+  atomicWriteJson(join(dir, name), data);
+}
+
+function uniqueProjectId(absPath, reg) {
+  const existingByPath = reg.projects.find((p) => p.path === absPath);
+  if (existingByPath?.id) return existingByPath.id;
+  const baseId = projectIdFromPath(absPath);
+  const same = reg.projects.find((p) => p.id === baseId);
+  if (!same || same.path === absPath) return baseId;
+  return `${baseId}-${randomBytes(3).toString('hex')}`;
 }
 
 /**
@@ -115,12 +131,13 @@ export const projectsStore = {
     if (!path || typeof path !== 'string') {
       throw new Error('path is required');
     }
-    const id = projectIdFromPath(path);
     const reg = loadRegistry();
+    const absPath = pathResolve(path);
+    const id = uniqueProjectId(absPath, reg);
     const existing = reg.projects.find((p) => p.id === id);
     const now = new Date().toISOString();
     if (existing) {
-      existing.path = path;
+      existing.path = absPath;
       existing.lastAccessed = now;
       saveRegistry(reg);
       return existing;
@@ -128,7 +145,7 @@ export const projectsStore = {
     const entry = {
       id,
       name: name || id,
-      path,
+      path: absPath,
       lastAccessed: now,
       status: 'inactive',
       summary: '',
@@ -191,8 +208,8 @@ export const projectsStore = {
   autoDetect({ cwd } = {}) {
     if (!cwd || typeof cwd !== 'string') return null;
     const abs = pathResolve(cwd);
-    const id = projectIdFromPath(abs);
     const reg = loadRegistry();
+    const id = uniqueProjectId(abs, reg);
     const existing = reg.projects.find((p) => p.id === id);
     const now = new Date().toISOString();
     if (existing) {

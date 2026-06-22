@@ -24,6 +24,7 @@ import {
   writeFileSync,
   existsSync,
   mkdirSync,
+  renameSync,
   readdirSync,
   rmSync,
 } from 'node:fs';
@@ -49,6 +50,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
 const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'plan');
 const PLANS_DIR = join(PROJECT_ROOT, 'plans');
+const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
 
 // ─── Flag parsing ────────────────────────────────────────────────────────────
 
@@ -129,10 +131,30 @@ async function readTemplate(name) {
   return readFile(path, 'utf-8');
 }
 
+function atomicWriteText(filePath, content) {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    writeFileSync(tmpPath, content, 'utf-8');
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    try {
+      rmSync(tmpPath, { force: true });
+    } catch {
+      // ignore cleanup failure
+    }
+    throw error;
+  }
+}
+
+function atomicWriteJson(filePath, value) {
+  atomicWriteText(filePath, JSON.stringify(value, null, 2));
+}
+
 function writePlanFile(slug, filename, content) {
   const dir = join(PLANS_DIR, slug);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, filename), content, 'utf-8');
+  atomicWriteText(join(dir, filename), content);
 }
 
 function readPlanFile(slug, filename) {
@@ -169,7 +191,7 @@ function readCanvasFile(planDir) {
 }
 
 function writeCanvasFile(planDir, canvas) {
-  writeFileSync(join(planDir, 'plan.json'), JSON.stringify(canvas, null, 2), 'utf-8');
+  atomicWriteJson(join(planDir, 'plan.json'), canvas);
 }
 
 /**
@@ -537,7 +559,7 @@ export async function regenerateHtml(slug) {
   };
 
   const htmlContent = replaceTemplate(htmlTemplate, vars);
-  writeFileSync(join(planDir, 'plan.html'), htmlContent, 'utf-8');
+  atomicWriteText(join(planDir, 'plan.html'), htmlContent);
 }
 
 // ─── open <slug> flow ────────────────────────────────────────────────────────
@@ -966,8 +988,20 @@ function renderCommentCountHtml(count) {
 function readRequestBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', (chunk) => { body += chunk; });
+    let bodySize = 0;
+    let tooLarge = false;
+    req.on('data', (chunk) => {
+      if (tooLarge) return;
+      bodySize += chunk.length;
+      if (bodySize > MAX_REQUEST_BODY_BYTES) {
+        tooLarge = true;
+        reject(new Error(`Request body too large (max ${MAX_REQUEST_BODY_BYTES} bytes)`));
+        return;
+      }
+      body += chunk;
+    });
     req.on('end', () => {
+      if (tooLarge) return;
       const ct = (req.headers['content-type'] || '').toLowerCase();
       try {
         if (ct.includes('application/x-www-form-urlencoded')) {
@@ -996,7 +1030,7 @@ function bumpLastEdited(planDir) {
   try {
     const meta = JSON.parse(readFileSync(metaPath, 'utf-8'));
     meta.lastEdited = new Date().toISOString();
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+    atomicWriteJson(metaPath, meta);
   } catch { /* swallow */ }
 }
 
@@ -1049,16 +1083,6 @@ export async function startServer(slug, planDir, startPort = 4321) {
       server.close(() => resolve());
     });
 
-  // Handle Ctrl-C to stop server
-  const cleanup = async () => {
-    console.log('\n  Shutting down server...');
-    await close();
-    process.exit(0);
-  };
-
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
-
   return { port: actualPort, close };
 }
 
@@ -1070,7 +1094,8 @@ export async function startServer(slug, planDir, startPort = 4321) {
 async function handleRequest(req, res, slug, planDir, serverPort) {
   const now = new Date().toISOString();
   // Use path-only URL parsing to avoid host-header injection
-  const pathname = req.url.split('?')[0].split('#')[0];
+  const requestUrl = typeof req.url === 'string' ? req.url : '/';
+  const pathname = requestUrl.split('?')[0].split('#')[0];
 
   // Log request to stderr
   console.error(`[${now}] ${req.method} ${pathname}`);
@@ -1448,7 +1473,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       //   v1 handler which reads from comments.json. This preserves
       //   backwards compat with the v1 viewer.
       if (subPath === 'comments' && req.method === 'GET') {
-        const query = req.url.split('?')[1] || '';
+        const query = requestUrl.split('?')[1] || '';
         const params = new URLSearchParams(query);
         const format = (params.get('format') || '').toLowerCase();
         const sectionId = params.get('sectionId');
@@ -1512,7 +1537,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
             timestamp: new Date().toISOString(),
           };
           comments.push(newComment);
-          writeFileSync(join(planDir, 'comments.json'), JSON.stringify(comments, null, 2), 'utf-8');
+          atomicWriteJson(join(planDir, 'comments.json'), comments);
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(renderCommentLi(newComment));
           return;
@@ -1654,7 +1679,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
           return;
         }
         try {
-          writeFileSync(join(planDir, 'plan.mdx'), content, 'utf-8');
+          atomicWriteText(join(planDir, 'plan.mdx'), content);
           bumpLastEdited(planDir);
           res.writeHead(200, { 'Content-Type': 'text/plain' });
           res.end('saved');
@@ -1670,7 +1695,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       // v1 fallback — runs only if the v2 GET handler above didn't match
       // (e.g. ?format=html or ?sectionId= query params).
       if (resource === 'comments' && req.method === 'GET') {
-        const query = req.url.split('?')[1] || '';
+        const query = requestUrl.split('?')[1] || '';
         const params = new URLSearchParams(query);
         const format = (params.get('format') || 'json').toLowerCase();
         const sectionId = params.get('sectionId') || '';
@@ -1706,7 +1731,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
           res.end('Expected a JSON array of comments');
           return;
         }
-        writeFileSync(join(planDir, 'comments.json'), JSON.stringify(arr, null, 2), 'utf-8');
+        atomicWriteJson(join(planDir, 'comments.json'), arr);
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('ok');
         return;
@@ -1714,7 +1739,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
 
       // GET /api/<slug>/count?sectionId=...  → HTML <span class="count">N</span>
       if (resource === 'count' && req.method === 'GET') {
-        const query = req.url.split('?')[1] || '';
+        const query = requestUrl.split('?')[1] || '';
         const params = new URLSearchParams(query);
         const sectionId = params.get('sectionId') || '';
         const comments = JSON.parse(readFileSync(join(planDir, 'comments.json'), 'utf-8'));
@@ -1740,11 +1765,11 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       req.on('data', (chunk) => { body += chunk; });
       req.on('end', () => {
         try {
-          writeFileSync(join(planDir, 'plan.mdx'), body, 'utf-8');
+          atomicWriteText(join(planDir, 'plan.mdx'), body);
           // Update lastEdited in meta.json
           const meta = JSON.parse(readFileSync(join(planDir, 'meta.json'), 'utf-8'));
           meta.lastEdited = new Date().toISOString();
-          writeFileSync(join(planDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
+          atomicWriteJson(join(planDir, 'meta.json'), meta);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
         } catch (err) {
@@ -1769,7 +1794,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
         try {
           // Validate JSON
           JSON.parse(body);
-          writeFileSync(join(planDir, 'comments.json'), body, 'utf-8');
+          atomicWriteText(join(planDir, 'comments.json'), body);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
         } catch (err) {
@@ -1799,7 +1824,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
             author: author || process.env.USER || 'anonymous',
             created: new Date().toISOString(),
           });
-          writeFileSync(join(planDir, 'comments.json'), JSON.stringify(comments, null, 2), 'utf-8');
+          atomicWriteJson(join(planDir, 'comments.json'), comments);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true, comments }));
         } catch (err) {
@@ -1837,7 +1862,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
         for (const [key, value] of Object.entries(vars)) {
           htmlContent = htmlContent.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
         }
-        writeFileSync(join(planDir, 'plan.html'), htmlContent, 'utf-8');
+        atomicWriteText(join(planDir, 'plan.html'), htmlContent);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -1875,8 +1900,10 @@ function openBrowser(url) {
   }
 
   // Check if the command exists
-  const which = spawnSync('which', [cmd], { stdio: 'ignore' });
-  if (which.status !== 0) {
+  const probe = platform === 'win32'
+    ? spawnSync('where', [cmd], { stdio: 'ignore' })
+    : spawnSync('which', [cmd], { stdio: 'ignore' });
+  if (probe.status !== 0) {
     console.log(`  ℹ Open ${url} in your browser (no ${cmd} available)`);
     return false;
   }
@@ -1909,14 +1936,14 @@ function question(prompt) {
 
 function waitForSignal(closeFn) {
   return new Promise((resolve) => {
-    process.on('SIGINT', async () => {
+    const finish = async () => {
       await closeFn();
+      process.off('SIGINT', finish);
+      process.off('SIGTERM', finish);
       resolve();
-    });
-    process.on('SIGTERM', async () => {
-      await closeFn();
-      resolve();
-    });
+    };
+    process.on('SIGINT', finish);
+    process.on('SIGTERM', finish);
   });
 }
 

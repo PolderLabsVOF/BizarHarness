@@ -43,7 +43,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { Logger } from "./logger.js";
 
@@ -146,7 +146,7 @@ function writeJsonAtomic(
 ): { ok: true } | { ok: false; error: string } {
   const tmp = `${filePath}.tmp`;
   try {
-    mkdirSync(join(filePath, ".."), { recursive: true });
+    mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(tmp, JSON.stringify(data, null, 2), "utf-8");
     renameSync(tmp, filePath);
     return { ok: true };

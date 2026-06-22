@@ -25,6 +25,8 @@
 
 import chalk from 'chalk';
 import { execSync, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const PKG_MAIN = '@polderlabs/bizar';
 const PKG_PLUGIN = '@polderlabs/bizar-plugin';
@@ -130,8 +132,22 @@ function rerunInstallScript() {
   } catch {
     return { ok: false, message: 'could not locate npm global root; skipping install-script rerun' };
   }
-  const pkgRoot = `${globalRoot}/${PKG_MAIN}`;
-  const installSh = `${pkgRoot}/install.sh`;
+  const pkgRoot = join(globalRoot, ...PKG_MAIN.split('/'));
+  const binPath = join(pkgRoot, 'cli', 'bin.mjs');
+  if (existsSync(binPath)) {
+    console.log(chalk.dim(`\n  Re-running setup via ${binPath} --setup...`));
+    const r = spawnSync(process.execPath, [binPath, '--setup'], { stdio: 'inherit' });
+    if (r.status === 0) {
+      return { ok: true, message: 'setup re-run' };
+    }
+    return { ok: false, message: 'setup rerun failed' };
+  }
+
+  const installSh = join(pkgRoot, 'install.sh');
+  if (process.platform === 'win32' || !existsSync(installSh)) {
+    return { ok: false, message: 'could not locate a compatible setup script to re-run' };
+  }
+
   console.log(chalk.dim(`\n  Re-running install script at ${installSh}...`));
   const r = spawnSync('bash', [installSh], { stdio: 'inherit' });
   if (r.status !== 0) {

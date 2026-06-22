@@ -217,6 +217,7 @@ let instanceManagerHandle: InstanceManager | null = null;
 let serveHandle: ServeLifecycle | null = null;
 let streamHandle: EventStream | null = null;
 let loggerHandle: Logger | null = null;
+const signalHandlerRefs = new Map<"SIGTERM" | "SIGINT", () => void>();
 
 // --- Plugin entry point ---------------------------------------------------
 
@@ -535,14 +536,19 @@ function installSignalHandlers(
   // duplicate handlers. Use `process.once` so each handler runs at most
   // once per signal; the `shuttingDown` guard catches reentry.
   for (const sig of ["SIGTERM", "SIGINT"] as const) {
-    try {
-      process.removeAllListeners(sig);
-    } catch {
-      // ignore
+    const previous = signalHandlerRefs.get(sig);
+    if (previous) {
+      try {
+        process.removeListener(sig, previous);
+      } catch {
+        // ignore
+      }
     }
-    process.on(sig, () => {
+    const handler = () => {
       void onSignal(sig);
-    });
+    };
+    signalHandlerRefs.set(sig, handler);
+    process.once(sig, handler);
   }
 }
 
@@ -1089,6 +1095,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
           );
         }
       }
+      clearServeInfo(ctx.options.stateDir, ctx.logger);
     },
   };
 }

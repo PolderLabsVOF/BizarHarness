@@ -12,11 +12,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { InstanceManager, type AddDraft } from "../src/background.ts";
+import { InstanceManager, type AddDraft } from "../src/background.js";
 import {
   BackgroundStateStore,
   type BackgroundState,
-} from "../src/background-state.ts";
+} from "../src/background-state.js";
 
 const TEST_DIRS: string[] = [];
 

@@ -23,8 +23,9 @@ import {
   writeFileSync,
   mkdirSync,
   appendFileSync,
+  rmSync,
 } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -32,7 +33,19 @@ import { spawn } from 'node:child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const HOME = homedir();
-const BIZAR_HOME = join(HOME, '.config', 'bizar');
+
+function bizarConfigDir() {
+  if (process.platform === 'win32') {
+    return process.env.APPDATA
+      ? join(process.env.APPDATA, 'bizar')
+      : join(HOME, '.config', 'bizar');
+  }
+  return process.env.XDG_CONFIG_HOME
+    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
+    : join(HOME, '.config', 'bizar');
+}
+
+const BIZAR_HOME = bizarConfigDir();
 const LOG_FILE = join(BIZAR_HOME, 'service.log');
 const PID_FILE = join(BIZAR_HOME, 'service.pid');
 const TICK_MS = 5_000; // 5s
@@ -43,6 +56,14 @@ function nowIso() {
 
 function ensureDir() {
   mkdirSync(BIZAR_HOME, { recursive: true });
+}
+
+function removePidFile() {
+  try {
+    rmSync(PID_FILE, { force: true });
+  } catch {
+    /* ignore */
+  }
 }
 
 function logLine(line) {
@@ -109,7 +130,7 @@ function stopService() {
   }
   if (!isAlive(pid)) {
     console.log(`Stale PID file (pid ${pid} not running). Cleaning up.`);
-    try { writeFileSync(PID_FILE, ''); } catch { /* ignore */ }
+    removePidFile();
     return;
   }
   try {
@@ -118,9 +139,7 @@ function stopService() {
   } catch (err) {
     console.log(`Could not stop service: ${err.message}`);
   }
-  try {
-    writeFileSync(PID_FILE, '');
-  } catch { /* ignore */ }
+  removePidFile();
 }
 
 function serviceStatus() {
@@ -131,6 +150,7 @@ function serviceStatus() {
   }
   if (!isAlive(pid)) {
     console.log(`Bizar service: stopped (stale PID file: ${pid})`);
+    removePidFile();
     return;
   }
   console.log(`Bizar service: running (pid ${pid})`);
@@ -171,6 +191,7 @@ function tailLogs(follow) {
  */
 async function daemonLoop() {
   try {
+    ensureDir();
     writeFileSync(PID_FILE, String(process.pid), 'utf8');
   } catch (err) {
     console.error(`Cannot write PID file ${PID_FILE}: ${err.message}`);
@@ -217,7 +238,7 @@ async function daemonLoop() {
   }
   if (!runner) {
     logLine('FATAL: could not locate @polderlabs/bizar-dash/schedules-runner. Service exiting.');
-    try { writeFileSync(PID_FILE, ''); } catch { /* ignore */ }
+    removePidFile();
     process.exit(2);
   }
 
@@ -226,7 +247,7 @@ async function daemonLoop() {
     if (stopping) return;
     stopping = true;
     logLine(`service stopping (pid ${process.pid})`);
-    try { writeFileSync(PID_FILE, ''); } catch { /* ignore */ }
+    removePidFile();
     process.exit(0);
   };
   process.on('SIGTERM', shutdown);
@@ -277,11 +298,12 @@ export async function runService(sub, _rest) {
     bizar service stop
     bizar service status
     bizar service logs
+    bizar service follow
   `);
 }
 
 // ── direct entry: when invoked as `node cli/service.mjs _daemon` ──────────
-const isMain = import.meta.url === `file://${process.argv[1]}`;
+const isMain = Boolean(process.argv[1]) && resolve(process.argv[1]) === __filename;
 if (isMain) {
   const sub = process.argv[2];
   if (sub === '_daemon') {
@@ -304,6 +326,7 @@ if (isMain) {
     node cli/service.mjs stop
     node cli/service.mjs status
     node cli/service.mjs logs
+    node cli/service.mjs follow
     `);
   }
 }

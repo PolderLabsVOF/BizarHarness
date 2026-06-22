@@ -25,13 +25,13 @@ export function MobileListItem({
   className,
   status,
 }: Props) {
+  const Tag = onClick ? 'button' : 'div';
+
   return (
-    <div
+    <Tag
+      {...(onClick ? { type: 'button' as const } : {})}
       className={cn('mobile-list-item', onClick && 'mobile-list-item-interactive', className)}
       onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
     >
       {Icon && (
         <div className="mobile-list-icon">
@@ -51,7 +51,7 @@ export function MobileListItem({
         </span>
       )}
       {arrow && <ChevronRight size={14} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />}
-    </div>
+    </Tag>
   );
 }
 

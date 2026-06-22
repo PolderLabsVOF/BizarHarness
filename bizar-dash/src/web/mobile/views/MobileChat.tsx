@@ -1,10 +1,12 @@
 // src/mobile/views/MobileChat.tsx — enhanced mobile chat with message actions, slash commands.
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Bot, Copy, RefreshCw, Trash2, ChevronDown, Paperclip } from 'lucide-react';
+import remarkGfm from 'remark-gfm';
+import { Send, Bot, Copy, RefreshCw, Trash2, ChevronDown } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatTime } from '../../lib/utils';
 import type { ChatMessage, Settings, Snapshot } from '../../lib/types';
+import { Ws } from '../../lib/ws';
 
 type Props = {
   snapshot: Snapshot;
@@ -36,11 +38,13 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
   const [modelOverride, setModelOverride] = useState(settings?.defaultModel || '');
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [retryIdx, setRetryIdx] = useState<number | null>(null);
+  const [wsEpoch, setWsEpoch] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeTaskIdRef = useRef(initialTaskId ?? null);
+  const didInitRef = useRef(false);
 
-  const loadChat = async () => {
+  const loadChat = useCallback(async () => {
     try {
       const data = await api.get<{ messages: ChatMessage[] }>('/chat?limit=100');
       setMessages(data.messages || []);
@@ -49,10 +53,10 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // v3.6.2 — Load chat messages for a specific task's opencode session.
-  const loadTaskChat = async (taskId: string) => {
+  const loadTaskChat = useCallback(async (taskId: string) => {
     setLoading(true);
     try {
       const data = await api.get<TaskChatSession>(`/tasks/${encodeURIComponent(taskId)}/chat`);
@@ -62,29 +66,64 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
     } finally {
       setLoading(false);
     }
-  };
-
-  // v3.6.2 — On mount, load either the task chat session or the default chat.
-  // Uses a mutable ref to track whether to load task chat so that the
-  // effect only fires once on mount (not on subsequent initialTaskId changes).
-  const initialTaskIdRef = useRef(initialTaskId);
-  useEffect(() => {
-    if (initialTaskIdRef.current) {
-      loadTaskChat(initialTaskIdRef.current).then(() => {
-        initialTaskIdRef.current = null;
-        onClearTaskId?.();
-      });
-    } else {
-      loadChat();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadCurrentChat = useCallback(async () => {
+    if (activeTaskIdRef.current) {
+      await loadTaskChat(activeTaskIdRef.current);
+      return;
+    }
+    await loadChat();
+  }, [loadChat, loadTaskChat]);
+
+  useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    loadCurrentChat().finally(() => onClearTaskId?.());
+  }, [loadCurrentChat, onClearTaskId]);
 
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    const reconnect = () => {
+      setWsEpoch((cur) => cur + 1);
+      loadCurrentChat().catch(() => undefined);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') reconnect();
+    };
+
+    window.addEventListener('online', reconnect);
+    window.addEventListener('pageshow', reconnect);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('online', reconnect);
+      window.removeEventListener('pageshow', reconnect);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [loadCurrentChat]);
+
+  useEffect(() => {
+    const ws = new Ws();
+    const offMessage = ws.on((msg) => {
+      if (msg.type !== 'chat:message') return;
+      const next = msg.message;
+      setMessages((cur) => {
+        const exists = cur.some((item) => item.ts === next.ts && (item.content || item.message) === (next.content || next.message));
+        return exists ? cur : [...cur, next];
+      });
+    });
+
+    return () => {
+      offMessage();
+      ws.close();
+    };
+  }, [wsEpoch]);
 
   const sendMessage = async (message: string, retryAgent?: string, retryModel?: string) => {
     const activeAgent = retryAgent || agent;
@@ -100,15 +139,27 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
     setText('');
     setShowSlashMenu(false);
     try {
-      await api.post('/chat', {
+      const response = await api.post<{ messages?: ChatMessage[] }>('/chat', {
         message,
         agent: activeAgent,
         model: activeModel || undefined,
       });
+      if (response?.messages) {
+        setMessages((cur) => {
+          const nextMessages = [...cur];
+          for (const next of response.messages || []) {
+            if (next.role !== 'assistant') continue;
+            const exists = nextMessages.some((item) => item.ts === next.ts && (item.content || item.message) === (next.content || next.message));
+            if (!exists) nextMessages.push(next);
+          }
+          return nextMessages;
+        });
+      }
     } catch {
       // optimistic — keep message even on failure
     } finally {
       setSending(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   };
 
@@ -139,8 +190,6 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
     navigator.clipboard.writeText(content).catch(() => {});
   };
 
-  const ordered = [...messages].reverse();
-
   if (loading) {
     return <div className="mobile-loading"><p>Loading…</p></div>;
   }
@@ -149,11 +198,13 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
     <div className="mobile-view mobile-view-chat">
       {/* Agent picker topbar */}
       <div className="mobile-chat-topbar">
-        <button
-          type="button"
-          className="mobile-chat-agent-btn"
-          onClick={() => setShowAgentPicker((v) => !v)}
-        >
+          <button
+            type="button"
+            className="mobile-chat-agent-btn"
+            onClick={() => setShowAgentPicker((v) => !v)}
+            aria-expanded={showAgentPicker}
+            aria-controls="mobile-chat-agent-picker"
+          >
           <Bot size={14} />
           <span>@{agent}</span>
           <ChevronDown size={12} />
@@ -165,8 +216,8 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
 
       {/* Agent picker dropdown */}
       {showAgentPicker && (
-        <div className="mobile-chat-agent-picker">
-          {(snapshot.agents || []).map((a) => (
+          <div className="mobile-chat-agent-picker" id="mobile-chat-agent-picker">
+            {(snapshot.agents || []).map((a) => (
             <button
               key={a.name}
               type="button"
@@ -181,45 +232,46 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
 
       {/* Messages */}
       <div className="mobile-messages" ref={listRef}>
-        {ordered.length === 0 && (
+        {messages.length === 0 && (
           <div className="mobile-empty">
             <Bot size={40} />
             <p>No messages yet.</p>
             <p className="muted">Type below to start a conversation.</p>
           </div>
         )}
-        {ordered.map((m, i) => {
+        {messages.map((m, i) => {
           const role = (m.role || 'assistant').toLowerCase();
           const isAgent = role !== 'user';
+          const content = m.content || m.message || '';
           return (
-            <div key={i} className={`mobile-message ${isAgent ? 'from-agent' : 'from-user'}`}>
+            <div key={m.ts || `${role}-${i}`} className={`mobile-message ${isAgent ? 'from-agent' : 'from-user'}`}>
               <div className="mobile-message-meta">
                 <span className="mobile-message-role">{role}</span>
                 {m.agent && <span className="mobile-message-agent">@{m.agent}</span>}
                 {m.ts && <span className="mobile-message-time">{formatTime(m.ts)}</span>}
               </div>
               <div className="mobile-message-body">
-                <ReactMarkdown>{m.content || m.message || ''}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
               </div>
               {/* Message actions */}
               <div className="mobile-message-actions">
                 {isAgent ? (
                   <button type="button" className="mobile-msg-action" onClick={() => {
-                    const userMsg = messages[messages.length - 1 - i];
+                    const userMsg = messages.slice(0, i).reverse().find((entry) => (entry.role || '').toLowerCase() === 'user');
                     if (userMsg) {
-                      setRetryIdx(messages.length - 1 - i);
                       setText(userMsg.content || '');
+                      inputRef.current?.focus();
                     }
                   }} title="Retry">
                     <RefreshCw size={12} />
                   </button>
                 ) : (
                   <>
-                    <button type="button" className="mobile-msg-action" onClick={() => copyMessage(m.content || '')} title="Copy">
+                    <button type="button" className="mobile-msg-action" onClick={() => copyMessage(content)} title="Copy">
                       <Copy size={12} />
                     </button>
                     <button type="button" className="mobile-msg-action" onClick={() => {
-                      setMessages((cur) => cur.filter((_, j) => j !== messages.length - 1 - i));
+                      setMessages((cur) => cur.filter((_, j) => j !== i));
                     }} title="Delete">
                       <Trash2 size={12} />
                     </button>
@@ -284,6 +336,7 @@ export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }:
           onKeyDown={onKeyDown}
           disabled={sending}
           aria-label="Message"
+          enterKeyHint="send"
         />
         <button
           type="button"

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
-import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
+import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, detectUv, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
 import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
 
 const AGENT_FILES = [
@@ -212,7 +212,9 @@ export async function runInstaller() {
 
   // Also try to install the plugin from the separate global npm package
   // `@polderlabs/bizar-plugin` (preferred path going forward).
-  await installPluginFromGlobal();
+  if (components.includes('plugin-bizar')) {
+    await installPluginFromGlobal();
+  }
 
   // ── Rules, hooks, commands (optional components) ──
   if (components.includes('rules')) {
@@ -325,8 +327,7 @@ async function promptYesNo(question, defaultYes = true) {
 async function isPackageInstalled(name) {
   try {
     const globalRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
-    require.resolve(name, { paths: [globalRoot] });
-    return true;
+    return existsSync(join(globalRoot, ...name.split('/'), 'package.json'));
   } catch {
     return false;
   }
@@ -409,7 +410,7 @@ export async function runPostInstall() {
   const env = await detectOpenCode();
   if (!env.exists) {
     mkdirSync(opencodeConfigDir(), { recursive: true });
-    console.log('BizarHarness: created ~/.config/opencode/');
+    console.log(`BizarHarness: created ${opencodeConfigDir()}/`);
   }
 
   mkdirSync(opencodeAgentsDir(), { recursive: true });

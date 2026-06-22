@@ -1,19 +1,24 @@
 // src/lib/api.ts — REST client. Single instance, type-safe wrappers.
 //
-// v3.6.0 — Bearer-token authentication. The token is read from
-// localStorage (key: `bizar-auth-token`). On first request the
-// client probes /api/auth/status to check whether the server
-// requires auth at all; if it does, the client must already have
-// a token (set by the Settings tab via "Copy token" / "Regenerate
-// token") or it surfaces 401s. We DO NOT silently redirect or
-// prompt — the operator must paste the token explicitly into the
-// Settings tab.
+// v3.6.1 — Authentication is now loopback-aware on the server side.
+// The browser makes API calls over 127.0.0.1 (or via Tailscale serve
+// proxying to 127.0.0.1), and the server auto-trusts loopback
+// connections. So a fresh browser tab "just works" — no token paste
+// required for the normal case.
+//
+// The token still exists for non-loopback clients (external API
+// consumers, scripts) and as a defense-in-depth option via the
+// BIZAR_DASHBOARD_REQUIRE_AUTH=1 env var. The localStorage flow
+// remains: probe /api/auth/status on load, send the token header
+// if one is set, fall back to none if not (the server will trust
+// us anyway because we're loopback).
 //
 // For SSE routes, the token is also added as a `?token=...` query
-// parameter (see Overview.tsx's EventSource usage) because browsers
-// can't set custom headers on EventSource.
+// parameter (browsers can't set custom headers on EventSource).
+// Again, loopback makes this optional but kept for safety.
 
 const TOKEN_KEY = 'bizar-auth-token';
+const LOOPBACK_KEY = 'bizar-loopback-trusted';
 
 export class ApiError extends Error {
   status: number;
@@ -55,6 +60,31 @@ class ApiClient {
     if (!tok) return url;
     const sep = url.includes('?') ? '&' : '?';
     return `${url}${sep}token=${encodeURIComponent(tok)}`;
+  }
+
+  /**
+   * v3.6.1 — Probe the server's /api/auth/status endpoint and cache
+   * whether the current browser is on a loopback-trusted connection.
+   * Called once on app mount so the rest of the client can decide
+   * whether to surface the "paste your token" UI in Settings or
+   * just let the dashboard work.
+   *
+   * Returns a snapshot of the status; result is also cached for
+   * subsequent calls to isLoopbackTrusted().
+   */
+  async probeAuthStatus(): Promise<{ required: boolean; loopback: boolean; peer: string }> {
+    try {
+      const r = await this.get<{ required: boolean; loopback: boolean; peer: string }>('/auth/status');
+      try { localStorage.setItem(LOOPBACK_KEY, r.loopback ? '1' : '0'); } catch { /* noop */ }
+      return r;
+    } catch {
+      return { required: false, loopback: true, peer: '' };
+    }
+  }
+
+  /** Cached result of the last /api/auth/status probe. */
+  isLoopbackTrusted(): boolean {
+    try { return localStorage.getItem(LOOPBACK_KEY) !== '0'; } catch { return true; }
   }
 
   async get<T>(path: string): Promise<T> {
@@ -105,7 +135,7 @@ class ApiClient {
     try {
       return JSON.parse(text) as T;
     } catch {
-      return text as unknown as T;
+      return text as T;
     }
   }
 }

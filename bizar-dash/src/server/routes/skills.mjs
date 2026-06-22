@@ -49,6 +49,10 @@ export function createSkillsRouter({ broadcast }) {
     }
     try {
       const result = await skillsStore.install(name, source);
+      if (!result.ok) {
+        res.status(502).json({ error: 'install_failed', message: result.error || 'skills CLI install failed' });
+        return;
+      }
       broadcast({ type: 'skills:change' });
       res.status(202).json(result);
     } catch (err) {

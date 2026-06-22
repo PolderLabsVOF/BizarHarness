@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 2,
+  "title": "debug",
+  "elements": [
+    {
+      "id": "el_8872b64e4",
+      "type": "task",
+      "title": "tab-jump-regression-test",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_11fb3a9ce",
+      "type": "task",
+      "title": "tab-jump-regression-test-2",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_c74691bf3",
+      "type": "task",
+      "title": "fix-verification-test",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_59f7c8db7",
+      "type": "task",
+      "title": "fix-validation-test",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_ff3f8f6f8",
+      "type": "task",
+      "title": "trace-test",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_561a6ba25",
+      "type": "task",
+      "title": "trace-test-2",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_b6bea2f48",
+      "type": "task",
+      "title": "test-element",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_2c47fafa7",
+      "type": "task",
+      "title": "Untitled",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_4ab1dd74d",
+      "type": "task",
+      "title": "test-element-3",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_87aeca41b",
+      "type": "task",
+      "title": "trace-test-final",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_0504eb262",
+      "type": "task",
+      "title": "root-cause-fix-validation",
+      "content": "",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    },
+    {
+      "id": "el_7db4ae1af",
+      "type": "task",
+      "title": "ff-validation-final",
+      "content": "",
+      "x": 82,
+      "y": 82,
+      "width": 240,
+      "height": 120,
+      "status": "open"
+    }
+  ],
+  "connections": [],
+  "comments": [
+    {
+      "id": "cmt_5d47c30f5",
+      "elementId": null,
+      "author": "drb0rk",
+      "text": "hello world",
+      "created": "2026-06-19T21:20:27.598Z",
+      "thread": []
+    },
+    {
+      "id": "cmt_cc542cf75",
+      "elementId": null,
+      "author": "drb0rk",
+      "text": "final validation comment",
+      "created": "2026-06-19T22:12:29.142Z",
+      "thread": [],
+      "x": 999,
+      "y": 111
+    },
+    {
+      "id": "cmt_45afbf69c",
+      "elementId": null,
+      "author": "drb0rk",
+      "text": "final-final-validation",
+      "created": "2026-06-20T09:00:29.991Z",
+      "thread": [],
+      "x": 555,
+      "y": 777
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

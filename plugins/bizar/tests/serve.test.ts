@@ -155,7 +155,7 @@ describe("ENOENT and EACCES handling", () => {
 describe("unexpected exit", () => {
   it("marks all running instances failed when serve child exits unexpectedly", async () => {
     // Simulate: proc.exited resolves with non-zero code (not intentional shutdown)
-    const exitCode = 1;
+    const exitCode: number = 1;
     const runningInstances = [
       { instanceId: "bgr_01", status: "running", error: undefined as string | undefined },
       { instanceId: "bgr_02", status: "pending", error: undefined as string | undefined },
@@ -171,14 +171,18 @@ describe("unexpected exit", () => {
       }
     }
 
-    expect(runningInstances[0].status).toBe("failed");
-    expect(runningInstances[0].error).toBe("serve child exited unexpectedly");
-    expect(runningInstances[1].status).toBe("failed");
-    expect(runningInstances[1].error).toBe("serve child exited unexpectedly");
+    const first = runningInstances[0];
+    const second = runningInstances[1];
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(first?.status).toBe("failed");
+    expect(first?.error).toBe("serve child exited unexpectedly");
+    expect(second?.status).toBe("failed");
+    expect(second?.error).toBe("serve child exited unexpectedly");
   });
 
   it("clean exit (code 0) does not mark instances failed", async () => {
-    const exitCode = 0;
+    const exitCode: number = 0;
     const runningInstances = [
       { instanceId: "bgr_01", status: "running" },
     ];
@@ -189,11 +193,11 @@ describe("unexpected exit", () => {
       }
     }
 
-    expect(runningInstances[0].status).toBe("running"); // unchanged
+    expect(runningInstances[0]?.status).toBe("running"); // unchanged
   });
 
   it("intentional shutdown does not trigger unexpected-exit path", async () => {
-    const exitCode = 1;
+    const exitCode: number = 1;
     const intentionalShutdown = true;
 
     const runningInstances = [{ instanceId: "bgr_01", status: "running" }];
@@ -204,7 +208,7 @@ describe("unexpected exit", () => {
       for (const inst of runningInstances) inst.status = "failed";
     }
 
-    expect(runningInstances[0].status).toBe("running");
+    expect(runningInstances[0]?.status).toBe("running");
   });
 
   it("servePID is cleared after unexpected exit", async () => {

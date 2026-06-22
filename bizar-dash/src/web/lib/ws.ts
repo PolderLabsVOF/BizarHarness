@@ -30,18 +30,19 @@ function buildWsUrl(): string {
 }
 
 export class Ws {
-  private url: string;
+  private readonly urlOverride?: string;
   private handlers = new Set<Handler>();
   private statusHandlers = new Set<StatusHandler>();
   private ws: WebSocket | null = null;
   private reconnectDelay = 1000;
   private readonly maxReconnectDelay = 15000;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _status: WsStatus = 'connecting';
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
 
   constructor(url?: string) {
-    this.url = url || buildWsUrl();
+    this.urlOverride = url;
     this.connect();
   }
 
@@ -75,6 +76,8 @@ export class Ws {
 
   close(): void {
     this.closed = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = null;
     try {
@@ -82,20 +85,31 @@ export class Ws {
     } catch {
       /* ignore */
     }
+    this.ws = null;
+    this.setStatus('disconnected');
   }
 
   private connect(): void {
+    if (this.closed) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.setStatus('connecting');
+    const url = this.urlOverride ?? buildWsUrl();
+    let socket: WebSocket;
     try {
       // Re-resolve the URL on every (re)connect — the token may have
       // changed since the last attempt (e.g. after Regenerate).
-      this.ws = new WebSocket(this.url);
+      socket = new WebSocket(url);
+      this.ws = socket;
     } catch (err) {
       console.warn('[ws] construct failed:', err);
       this.scheduleReconnect();
       return;
     }
-    this.ws.addEventListener('open', () => {
+    socket.addEventListener('open', () => {
+      if (this.ws !== socket || this.closed) return;
       this.reconnectDelay = 1000;
       this.setStatus('connected');
       // Keep-alive ping every 30s
@@ -104,7 +118,9 @@ export class Ws {
         if (this._status === 'connected') this.send({ type: 'ping' });
       }, 30_000);
     });
-    this.ws.addEventListener('close', () => {
+    socket.addEventListener('close', () => {
+      if (this.ws !== socket) return;
+      this.ws = null;
       this.setStatus('disconnected');
       if (this.pingTimer) {
         clearInterval(this.pingTimer);
@@ -112,11 +128,12 @@ export class Ws {
       }
       if (!this.closed) this.scheduleReconnect();
     });
-    this.ws.addEventListener('error', () => {
+    socket.addEventListener('error', () => {
+      if (this.ws !== socket) return;
       // 'close' will follow — keep this for logs
       console.warn('[ws] error');
     });
-    this.ws.addEventListener('message', (e) => {
+    socket.addEventListener('message', (e) => {
       let msg: WsMessage;
       try {
         msg = JSON.parse(e.data);
@@ -135,7 +152,11 @@ export class Ws {
   }
 
   private scheduleReconnect(): void {
-    setTimeout(() => this.connect(), this.reconnectDelay);
+    if (this.closed || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, this.reconnectDelay);
     this.reconnectDelay = Math.min(
       this.reconnectDelay * 1.6,
       this.maxReconnectDelay,

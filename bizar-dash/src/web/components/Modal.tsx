@@ -2,9 +2,11 @@
 
 import {
   createContext,
+  useId,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -27,6 +29,15 @@ export type ModalApi = {
 
 const ModalContext = createContext<ModalApi | null>(null);
 
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
 export function useModal(): ModalApi {
   const ctx = useContext(ModalContext);
   if (!ctx) {
@@ -42,7 +53,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 
   const close = useCallback((id?: string) => {
     setStack((cur) => {
-      if (!id) return [];
+      if (!id) return cur.slice(0, -1);
       const idx = cur.findIndex((m) => m.id === id);
       if (idx === -1) return cur;
       // close only the top-most matching
@@ -103,6 +114,60 @@ function ModalShell({
   onClose: () => void;
   depth: number;
 }) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
+  const getFocusableElements = (): HTMLElement[] => {
+    const root = modalRef.current;
+    if (!root) return [];
+    return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1,
+    );
+  };
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusable = getFocusableElements();
+    (focusable[0] ?? modalRef.current)?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        e.preventDefault();
+        modalRef.current?.focus();
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (e.shiftKey) {
+        if (!active || active === first || !modalRef.current?.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (!active || active === last || !modalRef.current?.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      const previous = previousFocusRef.current;
+      if (previous && previous.isConnected) previous.focus();
+    };
+  }, []);
+
   // v3.3.0 — Backdrop click stops propagation. This stops a click on
   // the dim area from bubbling to the document/App level where it
   // could otherwise be misread by the digit-key shortcut handler
@@ -120,15 +185,18 @@ function ModalShell({
       style={depth > 0 ? { background: 'rgba(0,0,0,0.4)' } : undefined}
     >
       <div
+        ref={modalRef}
         className="modal"
         role="dialog"
         aria-modal="true"
+        aria-labelledby={modal.title ? titleId : undefined}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={modal.width ? { maxWidth: modal.width } : undefined}
       >
         {modal.title && (
           <header className="modal-header">
-            <h2 className="modal-title">{modal.title}</h2>
+            <h2 id={titleId} className="modal-title">{modal.title}</h2>
             <button
               type="button"
               className="icon-btn"

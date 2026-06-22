@@ -86,32 +86,37 @@ export async function promptApiKeys() {
 
   const keys = await inquirer.prompt([
     {
-      type: 'input',
+      type: 'password',
       name: 'opencodeZen',
       message: 'OpenCode Zen API key (DeepSeek V4 Flash Free):',
+      mask: '*',
       validate: v => v.length > 0 || 'Required for free-tier agents (Mimir, Heimdall, Vör)',
     },
     {
-      type: 'input',
+      type: 'password',
       name: 'minimax',
       message: 'MiniMax API key (M2.7 + M3):',
+      mask: '*',
       validate: v => v.length > 0 || 'Required for Odin, Thor, Hermod, Baldr, Tyr, Forseti',
     },
     {
-      type: 'input',
+      type: 'password',
       name: 'openai',
       message: 'OpenAI API key (GPT-5.5 — optional for Vidarr):',
+      mask: '*',
     },
     {
-      type: 'input',
+      type: 'password',
       name: 'hindsight',
       message: 'Hindsight API key (memory persistence):',
+      mask: '*',
       validate: v => v.length > 0 || 'Required for cross-session memory',
     },
     {
-      type: 'input',
+      type: 'password',
       name: 'semble',
       message: 'Semble API key (code search — or leave blank for local only):',
+      mask: '*',
     },
   ]);
   return keys;

@@ -52,9 +52,9 @@
 *::before,
 *::after {
   box-sizing: border-box;
-  -webkit-tap-highlight-color: rgba(139, 92, 246, 0.1);
+  -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
-  user-select: none;
+  touch-action: manipulation;
 }
 
 html,
@@ -72,6 +72,16 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+button,
+[role="button"],
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
 }
 
 input,
@@ -186,6 +196,7 @@ code,
 
 .mobile-view {
   max-width: 100%;
+  min-width: 0;
 }
 
 .mobile-view-footer {
@@ -353,20 +364,24 @@ code,
 .mobile-agent-name {
   font-size: 14px;
   font-weight: 500;
-  display: block;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .mobile-agent-meta {
   font-size: 12px;
   color: var(--text-muted);
   display: block;
+  overflow-wrap: anywhere;
 }
 
 /* ─── Task card ──────────────────────────────────────────────────────── */
 .mobile-task-card {
+  width: 100%;
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -374,6 +389,7 @@ code,
   display: flex;
   align-items: center;
   gap: 10px;
+  text-align: left;
 }
 
 .mobile-task-actions {
@@ -397,16 +413,19 @@ code,
 .task-title {
   font-size: 14px;
   font-weight: 500;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .task-meta {
   font-size: 12px;
   color: var(--text-muted);
   display: block;
+  overflow-wrap: anywhere;
 }
 
 /* ─── Chat ────────────────────────────────────────────────────────────── */
@@ -501,6 +520,7 @@ code,
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: flex-end;
   z-index: 40;
@@ -566,6 +586,7 @@ code,
 /* ─── Tasks toolbar ───────────────────────────────────────────────────── */
 .mobile-tasks-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-bottom: 16px;
@@ -592,6 +613,10 @@ code,
   font-size: 13px;
   color: var(--text-muted);
   padding: 4px 0;
+}
+
+.mobile-empty-compact {
+  padding: 24px 16px;
 }
 
 /* ─── Settings ───────────────────────────────────────────────────────── */
@@ -642,16 +667,19 @@ code,
 .mobile-list-title {
   font-size: 14px;
   font-weight: 500;
-  display: block;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .mobile-list-meta {
   font-size: 12px;
   color: var(--text-muted);
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .mobile-list-badge {
@@ -759,6 +787,7 @@ code,
   color: var(--accent);
   font-size: 14px;
   text-decoration: none;
+  min-height: var(--mobile-tap-target);
   padding: 12px;
 }
 
@@ -959,7 +988,8 @@ code,
 }
 
 .mobile-scope-chip {
-  padding: 6px 14px;
+  min-height: var(--mobile-tap-target);
+  padding: 10px 14px;
   border-radius: 16px;
   font-size: 13px;
   font-weight: 500;
@@ -1010,15 +1040,14 @@ code,
   font-size: 14px;
   font-weight: 500;
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .mobile-search-result-meta {
   font-size: 12px;
   color: var(--text-muted);
   display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .mobile-search-loading {
@@ -1057,6 +1086,8 @@ code,
 }
 
 .mobile-notif-item {
+  width: 100%;
+  min-height: var(--mobile-tap-target);
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -1097,6 +1128,7 @@ code,
   font-size: 14px;
   font-weight: 500;
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .mobile-notif-text {
@@ -1131,7 +1163,9 @@ code,
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 8px;
+  min-height: var(--mobile-tap-target);
+  min-width: var(--mobile-tap-target);
+  padding: 10px 8px;
   border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
@@ -1144,9 +1178,11 @@ code,
 
 .mobile-project-name {
   max-width: 120px;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
 }
 
 .mobile-project-list {
@@ -1196,9 +1232,7 @@ code,
   font-size: 11px;
   color: var(--text-muted);
   display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
 }
 
@@ -1213,7 +1247,8 @@ code,
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
-  padding: 6px 14px;
+  min-height: var(--mobile-tap-target);
+  padding: 10px 14px;
   border-radius: 20px;
   cursor: pointer;
   display: flex;
@@ -1232,7 +1267,8 @@ code,
 }
 
 .mobile-kanban-tab {
-  padding: 8px 14px;
+  min-height: var(--mobile-tap-target);
+  padding: 10px 14px;
   border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
@@ -1253,12 +1289,13 @@ code,
 
 .mobile-tasks-filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
 
 .mobile-filter-select {
-  height: 36px;
+  min-height: var(--mobile-tap-target);
   padding: 0 10px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1272,7 +1309,7 @@ code,
 /* ─── FAB ─────────────────────────────────────────────────────────── */
 .mobile-fab {
   position: fixed;
-  bottom: calc(var(--mobile-nav-height) + 80px);
+  bottom: calc(var(--mobile-nav-height) + 80px + env(safe-area-inset-bottom, 0));
   right: 20px;
   width: 56px;
   height: 56px;
@@ -1350,6 +1387,7 @@ code,
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .mobile-task-detail-meta {
@@ -1416,7 +1454,7 @@ code,
 }
 
 .mobile-input-sm {
-  min-height: 36px;
+  min-height: var(--mobile-tap-target);
   padding: 8px 12px;
 }
 
@@ -1444,6 +1482,7 @@ code,
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ─── Canvas ──────────────────────────────────────────────────────── */
@@ -1663,10 +1702,11 @@ code,
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: var(--mobile-tap-target);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 6px 12px;
+  padding: 10px 12px;
   color: var(--text);
   font-size: 13px;
   font-family: inherit;
@@ -1692,6 +1732,7 @@ code,
 }
 
 .mobile-chat-agent-option {
+  min-height: var(--mobile-tap-target);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1721,8 +1762,8 @@ code,
 }
 
 .mobile-msg-action {
-  width: 32px;
-  height: 32px;
+  width: var(--mobile-tap-target);
+  height: var(--mobile-tap-target);
   border-radius: 8px;
   background: var(--bg-elev-2);
   border: none;
@@ -1748,6 +1789,7 @@ code,
 }
 
 .mobile-slash-item {
+  min-height: var(--mobile-tap-target);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1807,9 +1849,7 @@ code,
   flex: 1;
   font-size: 13px;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .mobile-event-time {
@@ -1858,7 +1898,8 @@ code,
 }
 
 .mobile-submit-chip {
-  padding: 6px 12px;
+  min-height: var(--mobile-tap-target);
+  padding: 10px 12px;
   border-radius: 16px;
   font-size: 12px;
   font-weight: 500;
@@ -1949,7 +1990,8 @@ code,
 
 .mobile-config-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
@@ -1960,7 +2002,7 @@ code,
 }
 
 .mobile-config-key {
-  flex: 0 0 120px;
+  flex: 0 0 104px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1985,7 +2027,7 @@ code,
 }
 
 .mobile-config-value .mobile-input {
-  min-height: 36px;
+  min-height: var(--mobile-tap-target);
   padding: 6px 10px;
   font-size: 13px;
 }
@@ -2045,7 +2087,8 @@ code,
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  min-height: var(--mobile-tap-target);
+  padding: 10px 12px;
   border-radius: 16px;
   font-size: 12px;
   font-weight: 500;
@@ -2070,8 +2113,8 @@ code,
 }
 
 .mobile-accent-swatch {
-  width: 28px;
-  height: 28px;
+  width: var(--mobile-tap-target);
+  height: var(--mobile-tap-target);
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
@@ -2092,6 +2135,8 @@ code,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 10px 16px;
   background: var(--warning);
   color: #000;
@@ -2155,6 +2200,31 @@ code,
 
 .mobile-btn-danger:active {
   opacity: 0.8;
+}
+
+.mobile-artifact-iframe {
+  width: 100%;
+  min-height: min(70dvh, 560px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+}
+
+@media (max-width: 420px) {
+  .mobile-config-key,
+  .mobile-config-value {
+    flex-basis: 100%;
+  }
+
+  .mobile-task-detail-row {
+    flex-direction: column;
+  }
+
+  .mobile-task-detail-row span:first-child,
+  .mobile-task-detail-row span:last-child {
+    flex: none;
+    text-align: left;
+  }
 }
 
 /* ─── Reduce motion ──────────────────────────────────────────────────── */

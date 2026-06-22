@@ -1,6 +1,6 @@
 // src/mobile/views/MobileMore.tsx — real navigation hub: Plans, Agents, Skills, Mods, Schedules, History, Config.
 import { useState } from 'react';
-import { Bot, FileText, Sliders, Clock, History, Settings, ChevronRight, Search } from 'lucide-react';
+import { Bot, FileText, Sliders, Clock, History, Settings, ChevronRight } from 'lucide-react';
 import type { Snapshot } from '../../lib/types';
 
 type Props = {
@@ -30,7 +30,7 @@ export function MobileMore({ snapshot, onNavigate }: Props) {
       id: 'skills',
       icon: Sliders,
       label: 'Skills',
-      count: snapshot.mods?.length || 0,
+      count: null,
       desc: 'Agent capabilities & tools',
     },
     {
@@ -86,8 +86,9 @@ export function MobileMore({ snapshot, onNavigate }: Props) {
         {filtered.map((entry) => {
           const Icon = entry.icon;
           return (
-            <div
+            <button
               key={entry.id}
+              type="button"
               className="mobile-more-nav-item"
               onClick={() => onNavigate(entry.id)}
             >
@@ -104,7 +105,7 @@ export function MobileMore({ snapshot, onNavigate }: Props) {
                 <span className="mobile-more-nav-desc">{entry.desc}</span>
               </div>
               <ChevronRight size={16} className="mobile-more-nav-arrow" />
-            </div>
+            </button>
           );
         })}
       </div>

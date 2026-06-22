@@ -1,5 +1,5 @@
-import { mkdir, writeFile, readFile, copyFile, access, constants } from 'node:fs/promises';
-import { join, dirname, basename } from 'node:path';
+import { mkdir, writeFile, readFile, copyFile, access, constants, rename, unlink } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import ora from 'ora';
 import chalk from 'chalk';
@@ -11,6 +11,22 @@ async function fileExists(path) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function atomicWriteText(filePath, content) {
+  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  await mkdir(dirname(filePath), { recursive: true });
+  try {
+    await writeFile(tmpPath, content, 'utf-8');
+    await rename(tmpPath, filePath);
+  } catch (error) {
+    try {
+      await unlink(tmpPath);
+    } catch {
+      // ignore cleanup failure
+    }
+    throw error;
   }
 }
 
@@ -112,7 +128,7 @@ export async function installOpencodeJson(mode) {
   }
 
   if (mode === 'fresh' || !(await fileExists(dest))) {
-    await writeFile(dest, JSON.stringify(templateObj, null, 2));
+    await atomicWriteText(dest, JSON.stringify(templateObj, null, 2) + '\n');
     spinner.succeed(chalk.green('opencode.json configured'));
     return true;
   }
@@ -122,14 +138,14 @@ export async function installOpencodeJson(mode) {
     const existingRaw = await readFile(dest, 'utf-8');
     const existing = JSON.parse(existingRaw);
     const merged = deepMerge(existing, templateObj);
-    await writeFile(dest, JSON.stringify(merged, null, 2));
+    await atomicWriteText(dest, JSON.stringify(merged, null, 2) + '\n');
     spinner.succeed(chalk.green('opencode.json merged (existing keys preserved)'));
     return true;
   } catch {
     // If existing is invalid JSON, backup and overwrite
     const backup = dest + '.bak';
     await copyFile(dest, backup);
-    await writeFile(dest, JSON.stringify(templateObj, null, 2));
+    await atomicWriteText(dest, JSON.stringify(templateObj, null, 2) + '\n');
     spinner.succeed(chalk.green('opencode.json written (backup at opencode.json.bak)'));
     return true;
   }
@@ -181,7 +197,7 @@ export async function mergeToolsIntoUserConfig() {
     }
 
     const merged = { ...existing, tools };
-    await writeFile(dest, JSON.stringify(merged, null, 2));
+    await atomicWriteText(dest, JSON.stringify(merged, null, 2) + '\n');
 
     console.log(chalk.dim(`  [tools] added: ${added.join(', ')}`));
     return { merged: true, added };
@@ -220,6 +236,7 @@ export async function installBizarFolder() {
   for (const file of files) {
     const src = join(srcDir, file);
     const dst = join(destDir, file);
+    await mkdir(dirname(dst), { recursive: true });
     await copyFile(src, dst);
   }
 

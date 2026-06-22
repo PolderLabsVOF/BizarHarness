@@ -1,6 +1,6 @@
 // src/App.tsx — root shell. Wires data + contexts + tab routing.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Topbar, TABS } from './components/Topbar';
 import { Sidebar } from './components/Sidebar';
 import { ModalProvider, useModal } from './components/Modal';
@@ -75,7 +75,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   history: History,
 };
 
-  const VERSION = 'v3.5.3';
+const VERSION = 'v3.6.1';
 
 export function App() {
   return (
@@ -100,6 +100,7 @@ function Shell() {
   const [stuckAgents, setStuckAgents] = useState<{ name: string }[]>([]);
   const [stuckBannerDismissed, setStuckBannerDismissed] = useState(false);
   const wsRef = useRef<Ws | null>(null);
+  const [ws, setWs] = useState<Ws | null>(null);
 
   // Apply theme tokens
   useEffect(() => {
@@ -130,24 +131,55 @@ function Shell() {
   // Initial fetch — runs once on mount
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      api.get<Snapshot>('/snapshot').catch(() => null),
-      api.get<SettingsResponse>('/settings').catch(() => null),
-      api.get<{ stuck: { name: string }[] }>('/agents/stuck').catch(() => null),
-    ])
-      .then(([snap, set, stuck]) => {
+    const loadBootData = () =>
+      Promise.all([
+        api.get<Snapshot>('/snapshot').catch(() => null),
+        api.get<SettingsResponse>('/settings').catch(() => null),
+        api.get<{ stuck: { name: string }[] }>('/agents/stuck').catch(() => null),
+      ]);
+
+    const applyBootData = (
+      snap: Snapshot | null,
+      set: SettingsResponse | null,
+      stuck: { stuck: { name: string }[] } | null,
+    ) => {
+      if (snap) setSnapshot(snap);
+      if (set?.data) setSettings(set.data);
+      if (stuck?.stuck) setStuckAgents(stuck.stuck);
+    };
+
+    (async () => {
+      try {
+        const auth = await api.probeAuthStatus();
+        const [snap, set, stuck] = await loadBootData();
         if (cancelled) return;
-        if (snap) setSnapshot(snap);
-        if (set?.data) setSettings(set.data);
-        if (stuck?.stuck) setStuckAgents(stuck.stuck);
-        if (!snap && !set) setBootError('Dashboard server unreachable.');
-      })
-      .catch((err) => {
+
+        applyBootData(snap, set, stuck);
+        if (snap || set) return;
+
+        if (!auth.loopback) {
+          setBootError('Dashboard server unreachable.');
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (cancelled) return;
+
+        const [retrySnap, retrySet, retryStuck] = await loadBootData();
+        if (cancelled) return;
+
+        applyBootData(retrySnap, retrySet, retryStuck);
+        if (!retrySnap && !retrySet) {
+          setBootError('Dashboard server unreachable.');
+        }
+      } catch (err) {
         if (cancelled) return;
         const msg = (err as Error)?.message ?? 'unknown error';
         setBootError(msg);
         toast.error(`Failed to load: ${msg}`);
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -202,6 +234,7 @@ function Shell() {
   useEffect(() => {
     const ws = new Ws();
     wsRef.current = ws;
+    setWs(ws);
     const offStatus = ws.onStatus((s) => setWsStatus(s));
     const offMsg = ws.on((msg: WsMessage) => {
       if (msg.type === 'snapshot' && 'data' in msg && msg.data) {
@@ -269,8 +302,14 @@ function Shell() {
       offStatus();
       offMsg();
       ws.close();
+      setWs(null);
     };
   }, [toast]);
+
+  const subscribeToWs = useCallback((cb: (msg: WsMessage) => void) => {
+    if (!ws) return () => undefined;
+    return ws.on(cb);
+  }, [ws]);
 
   // v3.3.1 — Track recent user interactions. After any mousedown/click/
   // focusin/keydown we set a 1500ms "safe" window during which digit-key
@@ -486,21 +525,25 @@ function Shell() {
   };
 
   const layout = settings?.ui?.layout || 'topnav';
+  const showHeader = settings?.ui?.showHeader !== false;
 
   return (
     <div className="app" data-layout={layout} data-active-tab={activeTab}>
-      <Topbar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        wsStatus={wsStatus}
-        version={VERSION}
-        activeProject={snapshot?.activeProject || null}
-        projects={snapshot?.projects || []}
-        onProjectChange={onActivateProject}
-        onProjectsRefresh={refreshProjects}
-        onOpenSearch={() => setSearchOpen(true)}
-        showTabs={layout === 'topnav'}
-      />
+      {showHeader && (
+        <Topbar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          wsStatus={wsStatus}
+          version={VERSION}
+          activeProject={snapshot?.activeProject || null}
+          projects={snapshot?.projects || []}
+          onProjectChange={onActivateProject}
+          onProjectsRefresh={refreshProjects}
+          onOpenSearch={() => setSearchOpen(true)}
+          notificationsSlot={<Notifications wsSubscribe={subscribeToWs} />}
+          showTabs={layout === 'topnav'}
+        />
+      )}
       {stuckAgents.length > 0 && !stuckBannerDismissed && (
         <div className="stuck-banner" role="alert">
           <AlertTriangle size={16} />

@@ -6,7 +6,7 @@ import type { Notification } from '../../lib/types';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
 
 type Props = {
-  onSelect: (id: string) => void;
+  onSelect: (notification: Notification) => void;
 };
 
 function notifIcon(severity: string) {
@@ -42,6 +42,10 @@ export function MobileNotifications({ onSelect }: Props) {
       // best-effort
     }
   };
+
+  useEffect(() => {
+    load();
+  }, []);
 
   useEffect(() => {
     if (open) load();
@@ -103,12 +107,13 @@ export function MobileNotifications({ onSelect }: Props) {
             </div>
           )}
           {notifications.map((n) => (
-            <div
+            <button
               key={n.id}
+              type="button"
               className={`mobile-notif-item ${n.read ? 'read' : 'unread'}`}
               onClick={() => {
                 if (!n.read) markRead(n.id);
-                if (n.link) onSelect(n.link);
+                onSelect(n);
                 setOpen(false);
               }}
             >
@@ -123,7 +128,7 @@ export function MobileNotifications({ onSelect }: Props) {
                 <span className="mobile-notif-time">{formatNotifTime(n.ts)}</span>
               </div>
               {!n.read && <span className="mobile-notif-dot" />}
-            </div>
+            </button>
           ))}
         </div>
       </MobileBottomSheet>

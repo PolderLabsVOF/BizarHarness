@@ -36,7 +36,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { planAction } from "../../src/tools/plan-action.ts";
+import { planAction } from "../../src/tools/plan-action.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

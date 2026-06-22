@@ -1,4 +1,5 @@
-import { access, constants } from 'node:fs/promises';
+import { access, constants, readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,11 +30,19 @@ export function opencodeAgentsDir() {
 
 async function tryReadVersion(filePath) {
   try {
-    const pkg = await import(filePath);
-    return pkg.version || '';
+    const raw = await readFile(filePath, 'utf8');
+    const pkg = JSON.parse(raw);
+    return typeof pkg.version === 'string' ? pkg.version : '';
   } catch {
     return '';
   }
+}
+
+function commandExists(command) {
+  const probe = process.platform === 'win32'
+    ? spawnSync('where', [command], { stdio: 'ignore' })
+    : spawnSync('which', [command], { stdio: 'ignore' });
+  return probe.status === 0;
 }
 
 export async function detectOpenCode() {
@@ -50,8 +59,11 @@ export async function detectOpenCode() {
     if (isWin) {
       const winPaths = [
         join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'opencode', 'package.json'),
+        join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'opencode-ai', 'package.json'),
         join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'opencode', 'package.json'),
+        join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'opencode-ai', 'package.json'),
         join(homedir(), 'node_modules', 'opencode', 'package.json'),
+        join(homedir(), 'node_modules', 'opencode-ai', 'package.json'),
       ];
       for (const p of winPaths) {
         version = await tryReadVersion(p);
@@ -60,10 +72,15 @@ export async function detectOpenCode() {
     } else {
       const posixPaths = [
         join(homedir(), '.local', 'share', 'opencode', 'package.json'),
+        join(homedir(), '.local', 'share', 'opencode-ai', 'package.json'),
         '/usr/local/lib/node_modules/opencode/package.json',
+        '/usr/local/lib/node_modules/opencode-ai/package.json',
         '/usr/lib/node_modules/opencode/package.json',
+        '/usr/lib/node_modules/opencode-ai/package.json',
         join(homedir(), '.npm-global', 'lib', 'node_modules', 'opencode', 'package.json'),
+        join(homedir(), '.npm-global', 'lib', 'node_modules', 'opencode-ai', 'package.json'),
         join(homedir(), 'node_modules', 'opencode', 'package.json'),
+        join(homedir(), 'node_modules', 'opencode-ai', 'package.json'),
       ];
       for (const p of posixPaths) {
         version = await tryReadVersion(p);
@@ -78,43 +95,25 @@ export async function detectOpenCode() {
 }
 
 export async function detectRtk() {
-  const { execSync } = await import('node:child_process');
-  try {
-    execSync('rtk --version', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  return commandExists('rtk');
 }
 
 export async function detectSemble() {
-  const { execSync } = await import('node:child_process');
-  try {
-    execSync('uvx --from "semble[mcp]" semble --help', { stdio: 'pipe', timeout: 15000 });
+  if (commandExists('semble')) {
     return true;
-  } catch {
-    return false;
   }
+  if (!commandExists('uv')) return false;
+  const probe = spawnSync('uv', ['tool', 'list'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  if (probe.status !== 0) return false;
+  return /(^|\s)semble(\s|@|$)/m.test(probe.stdout || '');
 }
 
 export async function detectUv() {
-  const { execSync } = await import('node:child_process');
-  try {
-    execSync('uv --version', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  return commandExists('uv');
 }
 
 export async function detectSkillsCli() {
-  const { execSync } = await import('node:child_process');
-  try {
-    execSync('npx --yes skills --help', { stdio: 'pipe', timeout: 30000 });
-    return true;
-  } catch {
-    return false;
-  }
+  return commandExists('skills');
 }
 
 export async function detectInstalledAgents() {

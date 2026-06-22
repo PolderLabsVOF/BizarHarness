@@ -1,9 +1,9 @@
 // src/mobile/views/MobilePlanCanvas.tsx — mobile plan canvas: read-only + edit mode.
 import { useEffect, useState } from 'react';
-import { Plus, MessageSquare, Settings, Pencil, Trash2, CheckSquare, StickyNote, HelpCircle, X } from 'lucide-react';
+import { Plus, MessageSquare, Pencil, Trash2, CheckSquare, StickyNote, HelpCircle, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatRelative } from '../../lib/utils';
-import type { Canvas, CanvasElement, CanvasComment } from '../../lib/types';
+import type { Canvas, CanvasElement } from '../../lib/types';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
 import { MobileModal } from '../components/MobileModal';
 
@@ -181,9 +181,10 @@ export function MobilePlanCanvas({ slug, onBack }: Props) {
             )}
           </div>
         )}
-        {canvas.elements.map((el) => (
-          <div
+          {canvas.elements.map((el) => (
+          <button
             key={el.id}
+            type="button"
             className={`mobile-canvas-element ${selectedEl?.id === el.id ? 'selected' : ''}`}
             style={{ borderColor: elementColor(el.type) }}
             onClick={() => {
@@ -191,6 +192,7 @@ export function MobilePlanCanvas({ slug, onBack }: Props) {
                 setSelectedEl(el);
               }
             }}
+            aria-pressed={selectedEl?.id === el.id}
           >
             <div className="mobile-canvas-el-header" style={{ background: `${elementColor(el.type)}18` }}>
               <ElementIcon type={el.type} size={12} />
@@ -209,7 +211,7 @@ export function MobilePlanCanvas({ slug, onBack }: Props) {
               <MessageSquare size={10} />
               {canvas.comments.filter((c) => c.elementId === el.id).length}
             </div>
-          </div>
+          </button>
         ))}
       </div>
 

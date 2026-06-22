@@ -1,12 +1,11 @@
 // src/mobile/MobileBottomNav.tsx — bottom tab bar for mobile.
-import type { ComponentType } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export type MobileTab = {
   id: string;
   label: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  icon: ComponentType<any>;
+  icon: LucideIcon;
 };
 
 type Props = {
@@ -23,6 +22,7 @@ export function MobileBottomNav({ tabs, activeTab, onChange }: Props) {
         return (
           <button
             key={t.id}
+            type="button"
             className={cn('mobile-nav-btn', activeTab === t.id && 'mobile-nav-btn-active')}
             onClick={() => onChange(t.id)}
             aria-label={t.label}

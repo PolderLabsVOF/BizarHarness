@@ -66,6 +66,7 @@ export function Overview({
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(
     snapshot.overview?.recentActivity ?? [],
   );
+  const [activityExpanded, setActivityExpanded] = useState(false);
 
   // v3.7.0 — Sync initial snapshot data
   useEffect(() => {
@@ -287,20 +288,30 @@ export function Overview({
       </div>
 
       <div className="overview-feed">
-        <h2>Recent activity</h2>
+        <div className="overview-feed-head">
+          <h2>Recent activity</h2>
+          {activityItems.length > 8 && (
+            <Button variant="ghost" size="sm" onClick={() => setActivityExpanded((v) => !v)}>
+              {activityExpanded ? 'Show less' : 'Show all'}
+            </Button>
+          )}
+        </div>
         {activityItems.length === 0 ? (
           <div className="muted" style={{ padding: '24px 0', fontSize: 13 }}>
             No activity yet. Use the chat above or invoke a Bizar command to start a feed.
           </div>
         ) : (
-          <div className="activity-card-grid">
-            {activityItems.slice(0, 30).map((it, idx) => (
-              <ActivityCard
-                key={`${it.ts}-${idx}`}
-                item={it}
-                onNavigate={setActiveTab}
-              />
-            ))}
+          <div className={cn('activity-feed-list-wrap', !activityExpanded && 'activity-feed-list-wrap-collapsed')}>
+            <div className="activity-feed-list">
+              {activityItems.slice(0, 30).map((it, idx) => (
+                <ActivityFeedItem
+                  key={`${it.ts}-${idx}`}
+                  item={it}
+                  onNavigate={setActiveTab}
+                />
+              ))}
+            </div>
+            {!activityExpanded && activityItems.length > 8 && <div className="activity-feed-fade" aria-hidden="true" />}
           </div>
         )}
       </div>
@@ -456,15 +467,69 @@ function ProjectCard({
   );
 }
 
-function formatActivity(it: ActivityItem): string {
-  if (typeof it.message === 'string') return it.message;
-  if (typeof it.prompt === 'string') return it.prompt;
-  if (typeof it.slug === 'string') {
-    const title = typeof it.title === 'string' ? ` title=${it.title}` : '';
-    return `slug=${it.slug}${title}`;
+function sentenceCase(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function humanizeKind(kind: string): string {
+  const normalized = (kind || 'activity').trim().toLowerCase().replace(/[:_]/g, '.');
+  const [scopeRaw, actionRaw = 'updated'] = normalized.split('.');
+  const scopeMap: Record<string, string> = {
+    settings: 'Settings',
+    task: 'Task',
+    tasks: 'Task',
+    agent: 'Agent',
+    agents: 'Agent',
+    plan: 'Plan',
+    plans: 'Plan',
+    bg: 'Background job',
+    background: 'Background job',
+    session: 'Session',
+    mod: 'Mod',
+    mods: 'Mod',
+    provider: 'Provider',
+    providers: 'Provider',
+  };
+  const actionMap: Record<string, string> = {
+    create: 'created', created: 'created',
+    add: 'added', added: 'added',
+    update: 'updated', updated: 'updated',
+    delegate: 'delegated', delegated: 'delegated',
+    invoke: 'invoked', invoked: 'invoked',
+    restart: 'restarted', restarted: 'restarted',
+    delete: 'deleted', deleted: 'deleted',
+    remove: 'removed', removed: 'removed',
+    archive: 'archived', archived: 'archived',
+    restore: 'restored', restored: 'restored',
+    complete: 'completed', completed: 'completed',
+    fail: 'failed', failed: 'failed',
+    error: 'errored', stuck: 'marked stuck',
+  };
+  const scope = scopeMap[scopeRaw] || sentenceCase(scopeRaw.replace(/-/g, ' '));
+  const action = actionMap[actionRaw] || actionRaw.replace(/-/g, ' ');
+  return `${scope} ${action}`.trim();
+}
+
+function firstString(it: ActivityItem, keys: string[]): string {
+  for (const key of keys) {
+    const value = it[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
   }
-  if (typeof it.name === 'string') return `name=${it.name}`;
-  return JSON.stringify(it);
+  return '';
+}
+
+function formatActivitySummary(it: ActivityItem): string {
+  const direct = firstString(it, ['message', 'text', 'prompt', 'title', 'name']);
+  if (direct) return direct;
+  const parts: string[] = [];
+  const slug = firstString(it, ['slug']);
+  const agent = firstString(it, ['agent', 'author']);
+  const status = firstString(it, ['status']);
+  if (slug) parts.push(`Plan ${slug}`);
+  if (agent) parts.push(agent);
+  if (status) parts.push(status);
+  return parts.length ? parts.join(' · ') : 'No additional details.';
 }
 
 // v3.7.0 — Format a timestamp as a relative string ("2m ago", "1h ago")
@@ -509,7 +574,7 @@ function activityNavTarget(kind: string): string | null {
 }
 
 // v3.7.0 — Activity card component
-function ActivityCard({
+function ActivityFeedItem({
   item,
   onNavigate,
 }: {
@@ -518,44 +583,33 @@ function ActivityCard({
 }) {
   const severity = activitySeverity(item);
   const Icon = activityIcon(item.kind || '');
-  const msg = formatActivity(item);
+  const title = humanizeKind(item.kind || 'activity');
+  const msg = formatActivitySummary(item);
   const navTarget = activityNavTarget(item.kind || '');
-  const [expanded, setExpanded] = useState(false);
 
-  const borderColor =
+  const accentColor =
     severity === 'error' ? 'var(--error)' :
     severity === 'warning' ? 'var(--warning)' :
     severity === 'success' ? 'var(--success)' :
     'var(--accent)';
 
   return (
-    <div
-      className={cn('activity-card', expanded && 'activity-card-expanded')}
-      style={{ borderLeftColor: borderColor }}
-      onClick={() => {
-        if (navTarget) {
-          onNavigate(navTarget);
-        } else {
-          setExpanded((v) => !v);
-        }
-      }}
-      title={navTarget ? `Click to go to ${navTarget}` : 'Click to expand details'}
+    <button
+      type="button"
+      className={cn('activity-feed-row', `activity-feed-row-${severity}`)}
+      onClick={() => { if (navTarget) onNavigate(navTarget); }}
+      title={navTarget ? `Open ${navTarget}` : title}
     >
-      <div className="activity-card-icon" style={{ color: borderColor }}>
+      <div className="activity-feed-icon" style={{ color: accentColor }}>
         <Icon size={14} />
       </div>
-      <div className="activity-card-body">
-        <div className="activity-card-kind text-xs">{item.kind}</div>
-        <div className="activity-card-msg text-sm">{msg}</div>
-        {expanded && (
-          <pre className="activity-card-detail text-xs muted">
-            {JSON.stringify(item, null, 2)}
-          </pre>
-        )}
+      <div className="activity-feed-body">
+        <div className="activity-feed-title-row">
+          <div className="activity-feed-title">{title}</div>
+          <div className="activity-feed-time text-xs muted tabular-nums">{formatRelativeTime(item.ts)}</div>
+        </div>
+        <div className="activity-feed-summary text-sm">{msg}</div>
       </div>
-      <div className="activity-card-time text-xs muted tabular-nums">
-        {formatRelativeTime(item.ts)}
-      </div>
-    </div>
+    </button>
   );
 }

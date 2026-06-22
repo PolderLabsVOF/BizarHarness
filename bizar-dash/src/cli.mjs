@@ -27,6 +27,15 @@ const PORT_FILE = join(BIZAR_HOME, 'dashboard.port');
 const PID_FILE = join(BIZAR_HOME, 'dashboard.pid');
 const DEFAULT_PORT = 4321;
 
+function readVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+    return pkg?.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 function showHelp() {
   console.log(`
   bizar — Web + TUI dashboard for the Bizar agent platform
@@ -115,6 +124,21 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot 
   await launchBrowser(url);
   console.log(`Bizar dashboard: ${url} (bind: ${bindHost})`);
   console.log('Press Ctrl-C to stop the dashboard.');
+
+  let shuttingDown = false;
+  const cleanup = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try { close(); } catch { /* ignore */ }
+    try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
+    try { unlinkSync(PID_FILE); } catch { /* ignore */ }
+  };
+  const handleSignal = () => {
+    cleanup();
+    process.exit(0);
+  };
+  process.once('SIGINT', handleSignal);
+  process.once('SIGTERM', handleSignal);
 
   await new Promise(() => {});
   // Caller keeps the process alive
@@ -219,6 +243,8 @@ const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
   showHelp();
+} else if (args.includes('--version') || args.includes('-v')) {
+  console.log(readVersion());
 } else if (args[0] === 'stop') {
   await stopDashboard();
 } else if (args[0] === 'status') {

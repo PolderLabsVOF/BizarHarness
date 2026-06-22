@@ -264,12 +264,23 @@ export const skillsStore = {
   /** Install a skill by name/source. */
   async install(name, source) {
     const target = source || name;
-    const out = await safeExec(['add', target], { timeoutMs: 60_000 });
-    return {
-      ok: true,
-      name: target,
-      output: typeof out === 'string' ? out : String(out || ''),
-    };
+    try {
+      const { stdout, stderr } = await execFileP('skills', ['add', target], {
+        timeout: 60_000,
+        maxBuffer: 4 * 1024 * 1024,
+      });
+      return {
+        ok: true,
+        name: target,
+        output: [stdout, stderr].filter(Boolean).join('\n').trim(),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        name: target,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   },
 
   /** Disable a skill (kept on disk, not loaded). */

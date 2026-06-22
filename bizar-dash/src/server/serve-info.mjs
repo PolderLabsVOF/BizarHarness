@@ -55,6 +55,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { isIP } from 'node:net';
 
 const HOME = homedir();
 
@@ -95,6 +96,7 @@ export function readServeInfo() {
         typeof parsed?.pid === 'number' &&
         typeof parsed?.startedAt === 'number'
       ) {
+        if (!isSafeServeBaseUrl(parsed.baseUrl)) continue;
         return parsed;
       }
     } catch {
@@ -102,6 +104,28 @@ export function readServeInfo() {
     }
   }
   return null;
+}
+
+function isSafeServeBaseUrl(baseUrl) {
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackHostname(hostname) {
+  const host = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host) return false;
+  if (host === 'localhost' || host === '::1') return true;
+  if (host.startsWith('127.')) return true;
+  if (host === '::ffff:127.0.0.1' || host === '::ffff:7f00:1') return true;
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) return host.startsWith('127.');
+  if (ipVersion === 6) return host === '::1';
+  return false;
 }
 
 /**

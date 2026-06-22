@@ -20,6 +20,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   appendFileSync,
   mkdirSync,
   statSync,
@@ -35,6 +36,16 @@ const READ_FILE = join(BIZAR_HOME, 'notifications.read.json');
 
 const VALID_SEVERITY = ['info', 'success', 'warning', 'error'];
 const MAX_KEPT = 1000;
+
+function atomicWriteText(filePath, text) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, text, 'utf8');
+  renameSync(tmp, filePath);
+}
+
+function atomicWriteJson(filePath, data) {
+  atomicWriteText(filePath, JSON.stringify(data, null, 2) + '\n');
+}
 
 function genId() {
   return `n_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
@@ -69,7 +80,7 @@ function loadReadSet() {
 function saveReadSet(set) {
   try {
     mkdirSync(dirname(READ_FILE), { recursive: true });
-    writeFileSync(READ_FILE, JSON.stringify(Array.from(set), null, 2) + '\n', 'utf8');
+    atomicWriteJson(READ_FILE, Array.from(set));
   } catch {
     /* best-effort */
   }
@@ -114,7 +125,7 @@ export const notificationsStore = {
         if (st.size > 2 * 1024 * 1024) {
           const lines = readFileSync(LOG_FILE, 'utf8').split(/\r?\n/);
           const kept = lines.slice(-MAX_KEPT).join('\n') + '\n';
-          writeFileSync(LOG_FILE, kept, 'utf8');
+          atomicWriteText(LOG_FILE, kept);
         }
       } catch {
         /* best-effort */
@@ -220,7 +231,7 @@ export const notificationsStore = {
         return p && p.id !== id;
       });
       if (kept.length === lines.length) return false;
-      writeFileSync(LOG_FILE, kept.join('\n') + (kept.length ? '\n' : ''), 'utf8');
+      atomicWriteText(LOG_FILE, kept.join('\n') + (kept.length ? '\n' : ''));
       const set = getReadSet();
       set.delete(id);
       saveReadSet(set);

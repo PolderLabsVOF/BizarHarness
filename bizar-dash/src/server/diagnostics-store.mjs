@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { projectsStore } from './projects-store.mjs';
 import { modsLoader } from './mods-loader.mjs';
 import { agentsStore } from './agents-store.mjs';
@@ -18,8 +19,17 @@ import { schedulesStore } from './schedules-store.mjs';
 const HOME = homedir();
 const SERVICE_LOG = join(HOME, '.config', 'bizar', 'service.log');
 const SERVICE_PID = join(HOME, '.config', 'bizar', 'service.pid');
+const DASH_PACKAGE_JSON = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
 
 const startedAt = Date.now();
+
+function dashboardVersion() {
+  try {
+    return JSON.parse(readFileSync(DASH_PACKAGE_JSON, 'utf8'))?.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 function readRecentErrors() {
   if (!existsSync(SERVICE_LOG)) return [];
@@ -75,7 +85,7 @@ export const diagnosticsStore = {
     const tasks = active ? tasksStore.loadTasks(active.id) : [];
     const schedules = active ? schedulesStore.list(active.id) : [];
     return {
-      version: '3.5.3',
+      version: dashboardVersion(),
       uptimeMs: Date.now() - startedAt,
       uptime: Math.floor((Date.now() - startedAt) / 1000),
       nodeVersion: process.version,

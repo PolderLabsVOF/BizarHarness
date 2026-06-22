@@ -16,7 +16,13 @@
  *                      it client-side.
  */
 import { Router } from 'express';
-import { getSecret, regenerateSecret } from '../auth.mjs';
+import {
+  getDirectPeerAddress,
+  getOrCreateSecret,
+  isAuthRequired,
+  isLoopback,
+  regenerateSecret,
+} from '../auth.mjs';
 import { wrap } from './_shared.mjs';
 
 /**
@@ -25,23 +31,30 @@ import { wrap } from './_shared.mjs';
 export function createAuthRouter() {
   const router = Router();
 
-  // Unauthed status probe. Mounted by the server as an explicit
-  // skipPath in requireAuth — so even this endpoint doesn't need its
-  // own auth check.
-  router.get('/auth/status', (_req, res) => {
-    res.json({ required: true });
+  // Unauthed status probe. Tells the client whether auth is required
+  // and whether the current connection is loopback (in which case
+  // the server is auto-trusting it and the client doesn't need to
+  // send a token). This is how the dashboard "just works" in a
+  // browser on the same machine as the server. Reverse-proxy access
+  // still reports the direct peer so operators can tell whether a
+  // bearer token will be required.
+  router.get('/auth/status', (req, res) => {
+    const trusted = isLoopback(req);
+    res.json({
+      required: isAuthRequired(req),
+      loopback: trusted,
+      // Surface the direct peer for the Settings UI to display
+      // (helps the operator debug if the auto-trust isn't kicking
+      // in as expected — e.g. they're hitting a different bind).
+      peer: getDirectPeerAddress(req),
+    });
   });
 
   // AUTHED — returns the current token. The caller is presumed to
   // already have it (that's why the auth middleware let them in);
   // we just hand it back so the UI can render a "Copy token" button.
   router.get('/auth/reveal', wrap((_req, res) => {
-    const token = getSecret();
-    if (!token) {
-      res.status(500).json({ error: 'no_secret', message: 'token not initialized' });
-      return;
-    }
-    res.json({ token });
+    res.json({ token: getOrCreateSecret() });
   }));
 
   // AUTHED — rotate the token. Anything still holding the old token

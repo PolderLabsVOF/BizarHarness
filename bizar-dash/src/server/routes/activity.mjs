@@ -14,6 +14,7 @@
  * the loop dies on socket close.
  */
 import { Router } from 'express';
+import { isAllowedDashboardOriginForRequest } from '../auth.mjs';
 import { wrap } from './_shared.mjs';
 
 /**
@@ -55,6 +56,11 @@ export function createActivityRouter({ state }) {
   // The frontend subscribes via `new EventSource('/api/activity/stream')`
   // and replaces its array on each 'snapshot' event.
   router.get('/activity/stream', (req, res) => {
+    const origin = req.headers.origin;
+    if (!isAllowedDashboardOriginForRequest(req)) {
+      res.status(403).json({ error: 'forbidden', message: 'origin not allowed' });
+      return;
+    }
     // Tell Express / proxies this is an event stream
     res.status(200);
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -62,7 +68,6 @@ export function createActivityRouter({ state }) {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
     // CORS for SSE — echo origin so the Vite dev server can subscribe
-    const origin = req.headers.origin;
     if (origin) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');

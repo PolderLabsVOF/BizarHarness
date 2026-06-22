@@ -19,7 +19,7 @@
  */
 import { Router } from 'express';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { resolve, relative } from 'node:path';
 import { modsLoader } from '../mods-loader.mjs';
 import { wrap } from './_shared.mjs';
 
@@ -111,8 +111,10 @@ export function createModsRouter() {
       return;
     }
     const rel = req.params[0] || '';
-    const filePath = join(mod.path, 'web', rel);
-    if (!filePath.startsWith(mod.path)) {
+    const webRoot = resolve(mod.path, 'web');
+    const filePath = resolve(webRoot, rel);
+    const relPath = relative(webRoot, filePath);
+    if (relPath.startsWith('..') || relPath === '') {
       res.status(403).json({ error: 'forbidden' });
       return;
     }

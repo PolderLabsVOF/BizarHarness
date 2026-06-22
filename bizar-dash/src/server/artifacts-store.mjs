@@ -35,7 +35,7 @@ import {
   statSync,
   renameSync,
 } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
@@ -63,6 +63,38 @@ function pickExtension(contentType) {
   if (contentType.includes('xml')) return '.xml';
   if (contentType.includes('text')) return '.txt';
   return '.bin';
+}
+
+function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
+
+function isWithinArtifactsDir(filePath) {
+  const base = resolve(ARTIFACTS_DIR);
+  const full = resolve(filePath);
+  const rel = relative(base, full);
+  return rel !== '' && !rel.startsWith('..') && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`);
+}
+
+function resolveBodyPath(id, metaPath) {
+  if (typeof metaPath === 'string' && metaPath && isWithinArtifactsDir(metaPath) && existsSync(metaPath)) {
+    return resolve(metaPath);
+  }
+  try {
+    const match = readdirSync(ARTIFACTS_DIR).find((name) => name.startsWith(`${id}.`) && !name.endsWith('.meta.json'));
+    return match ? join(ARTIFACTS_DIR, match) : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeMeta(meta) {
+  if (!meta || typeof meta !== 'object' || typeof meta.id !== 'string') return null;
+  const bodyPath = resolveBodyPath(meta.id, meta.path);
+  if (!bodyPath) return null;
+  return { ...meta, path: bodyPath };
 }
 
 export const artifactsStore = {
@@ -109,7 +141,7 @@ export const artifactsStore = {
       size: Buffer.byteLength(input.content, 'utf8'),
       createdAt: Date.now(),
     };
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n', 'utf8');
+    atomicWriteJson(metaPath, meta);
     return meta;
   },
 
@@ -122,7 +154,7 @@ export const artifactsStore = {
     const metaPath = join(ARTIFACTS_DIR, `${id}.meta.json`);
     if (!existsSync(metaPath)) return null;
     try {
-      return JSON.parse(readFileSync(metaPath, 'utf8'));
+      return sanitizeMeta(JSON.parse(readFileSync(metaPath, 'utf8')));
     } catch {
       return null;
     }
@@ -164,15 +196,13 @@ export const artifactsStore = {
       const full = join(ARTIFACTS_DIR, f);
       try {
         const raw = readFileSync(full, 'utf8');
-        const meta = JSON.parse(raw);
+        const meta = sanitizeMeta(JSON.parse(raw));
+        if (!meta) continue;
         if (wantedTask && meta.taskId !== wantedTask) continue;
         if (wantedProject && meta.projectId && meta.projectId !== wantedProject) continue;
-        // Drop entries whose body was deleted (orphaned sidecar).
-        if (meta.path && existsSync(meta.path)) {
-          try {
-            meta.size = statSync(meta.path).size;
-          } catch { /* keep original size */ }
-        }
+        try {
+          meta.size = statSync(meta.path).size;
+        } catch { /* keep original size */ }
         out.push(meta);
       } catch {
         // skip corrupt sidecar

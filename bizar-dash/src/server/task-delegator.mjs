@@ -41,10 +41,9 @@ import { tasksStore } from './tasks-store.mjs';
 import { agentsStore } from './agents-store.mjs';
 import { notificationsStore } from './notifications-store.mjs';
 import { backgroundStore } from './background-store.mjs';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
 const HOME = homedir();
@@ -108,10 +107,8 @@ function writeBgStateFile(instanceId, payload) {
   try {
     writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
     try {
-      execSync(`mv "${tmp}" "${file}"`, { stdio: 'ignore' });
+      renameSync(tmp, file);
     } catch {
-      // Node 20 fallback: writeFileSync below is also acceptable if
-      // rename fails for some odd FS reason.
       writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
     }
     return file;
@@ -561,10 +558,9 @@ export const taskDelegator = {
               // dispatch itself succeeded; tmux is a nice-to-have.
               try {
                 const logFile = join(serveInfo.worktree || process.cwd(), '.bizar', 'opencode.log');
-                const tailCmd = `mkdir -p "$(dirname "${logFile}")" 2>/dev/null; touch "${logFile}"; tail -n 200 -f "${logFile}" 2>/dev/null || sleep 86400`;
                 const tmuxRes = backgroundStore.spawnTmuxFor(
                   `bg_${sessionId.slice(0, 16)}`,
-                  tailCmd,
+                  { command: 'tail', args: ['-n', '200', '-F', logFile] },
                   serveInfo.worktree,
                 );
                 if (tmuxRes.ok) {
@@ -601,6 +597,8 @@ export const taskDelegator = {
       writeBgStateFile(bgInstanceId, {
         instanceId: bgInstanceId,
         sessionId: sessionId || null,
+        projectId,
+        worktree: serveInfo?.worktree || projectRoot || null,
         agent: sub.assignee || 'tyr',
         parentAgent: 'odin',
         status: dispatchError ? 'failed' : 'pending',

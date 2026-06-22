@@ -8,9 +8,9 @@ plans/*/comments.json
 # Per-user opencode config (contains API tokens, do not commit)
 # Use config/opencode.json.template as a starting point
 config/opencode.json
-dist/
 
 # Vite build output (compiled React SPA)
+dist/
 
 # Per-user state (activity logs, internal investigation notes)
 .bizar/activity.log

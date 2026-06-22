@@ -20,10 +20,10 @@
  * dashboard's aggregated provider list and lives in providers.mjs.
  */
 import { Router } from 'express';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { providersStore, mcpsStore } from '../providers-store.mjs';
-import { OPENCODE_JSON, safeReadJSON, wrap } from './_shared.mjs';
+import { OPENCODE_JSON, atomicWriteJson, safeReadJSON, wrap } from './_shared.mjs';
 
 /**
  * @param {object} deps
@@ -61,7 +61,7 @@ export function createConfigRouter({ state, watcher }) {
       return;
     }
     mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
-    writeFileSync(OPENCODE_JSON, JSON.stringify(parsed, null, 2) + '\n', 'utf8');
+    atomicWriteJson(OPENCODE_JSON, parsed);
     state.appendActivity({ kind: 'config.update' });
     watcher.poke('change', OPENCODE_JSON);
     res.json({ path: OPENCODE_JSON, data: parsed, exists: true, raw: JSON.stringify(parsed, null, 2) });

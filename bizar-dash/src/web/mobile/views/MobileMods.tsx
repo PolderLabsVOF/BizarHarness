@@ -1,6 +1,6 @@
 // src/mobile/views/MobileMods.tsx — mods list with detail sheet.
 import { useEffect, useState } from 'react';
-import { Sliders, RefreshCw, Power, Search, RotateCw } from 'lucide-react';
+import { Sliders, RefreshCw, Power } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { Mod, Snapshot } from '../../lib/types';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
@@ -92,8 +92,9 @@ export function MobileMods({ snapshot, onBack }: Props) {
       ) : (
         <div className="mobile-card-list">
           {filtered.map((m) => (
-            <div
+            <button
               key={m.id}
+              type="button"
               className="mobile-list-item mobile-list-item-interactive"
               onClick={() => setDetailMod(m)}
             >
@@ -105,7 +106,7 @@ export function MobileMods({ snapshot, onBack }: Props) {
               <span className={`mobile-list-badge ${m.enabled ? 'badge-on' : 'badge-off'}`}>
                 {m.enabled ? 'on' : 'off'}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       )}

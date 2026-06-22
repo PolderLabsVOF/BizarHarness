@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { join, basename } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { detectSkillsCli } from './utils.mjs';
 
 function detectStack(cwd) {
   const stack = { language: null, framework: null, database: null, tools: [], build: null, test: null, runner: null };
@@ -34,7 +35,7 @@ function detectStack(cwd) {
     stack.language = 'Python';
     const content = readFileSync(join(cwd, 'pyproject.toml'), 'utf-8');
     if (content.includes('django')) stack.framework = 'Django';
-    else if (content.includes('fastapi') || content.includes('fastapi')) stack.framework = 'FastAPI';
+    else if (content.includes('fastapi')) stack.framework = 'FastAPI';
     else if (content.includes('flask')) stack.framework = 'Flask';
   }
 
@@ -72,33 +73,40 @@ export async function runInit(cwd) {
 
   // Install relevant skills via Skills CLI
   console.log(chalk.dim('  Installing relevant skills...'));
-  const skillRepos = [];
+  const skillCommands = [];
   if (stack.language?.toLowerCase().includes('typescript') || stack.framework?.toLowerCase().includes('next') || stack.framework?.toLowerCase().includes('react')) {
-    skillRepos.push('skills add vercel-labs/agent-skills --all -y');
-    skillRepos.push('skills add shadcn/ui --all -y');
+    skillCommands.push(['add', 'vercel-labs/agent-skills', '--all', '-y']);
+    skillCommands.push(['add', 'shadcn/ui', '--all', '-y']);
   }
   if (stack.framework?.toLowerCase().includes('django') || stack.framework?.toLowerCase().includes('fastapi') || stack.framework?.toLowerCase().includes('flask')) {
-    skillRepos.push('skills add supabase/agent-skills --all -y');
+    skillCommands.push(['add', 'supabase/agent-skills', '--all', '-y']);
   }
   if (stack.language?.toLowerCase().includes('python')) {
-    skillRepos.push('skills add mattpocock/skills -y');
+    skillCommands.push(['add', 'mattpocock/skills', '-y']);
   }
   if (stack.language?.toLowerCase().includes('rust')) {
-    skillRepos.push('skills add supabase/agent-skills --all -y');
+    skillCommands.push(['add', 'supabase/agent-skills', '--all', '-y']);
   }
 
-  for (const cmd of skillRepos) {
-    try {
-      execSync(cmd, { stdio: 'pipe', timeout: 30000 });
-      console.log(chalk.green(`  ✓ ${cmd}`));
-    } catch {
-      console.log(chalk.dim(`  - ${cmd} (skipped)`));
+  if (!(await detectSkillsCli())) {
+    console.log(chalk.dim('  - skills CLI not detected (skipped)'));
+  } else {
+    for (const args of skillCommands) {
+      const result = spawnSync('skills', args, {
+        stdio: 'pipe',
+        timeout: 30000,
+      });
+      if (result.status === 0) {
+        console.log(chalk.green(`  ✓ skills ${args.join(' ')}`));
+      } else {
+        console.log(chalk.dim(`  - skills ${args.join(' ')} (skipped)`));
+      }
     }
   }
   console.log();
 
   // Generate PROJECT.md
-  const projectName = cwd.split('/').pop() || 'my-project';
+  const projectName = basename(cwd) || 'my-project';
   const projectMd = `# ${projectName}
 
 ${stack.framework ? `${stack.framework} ` : ''}${stack.language || ''} project.

@@ -34,6 +34,8 @@ import {
 } from '../serve-info.mjs';
 import { wrap } from './_shared.mjs';
 
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
+
 /**
  * @param {object} deps
  * @param {object} deps.state
@@ -45,7 +47,8 @@ export function createChatRouter({ state, broadcast }) {
 
   router.get('/chat', wrap(async (req, res) => {
     const sessionId = req.query.session ? String(req.query.session) : null;
-    const limit = req.query.limit ? Number(req.query.limit) : 200;
+    const requestedLimit = req.query.limit ? Number(req.query.limit) : 200;
+    const limit = Math.min(500, Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 200));
     res.json(state.getChat({ sessionId, limit }));
   }));
 
@@ -95,7 +98,10 @@ export function createChatRouter({ state, broadcast }) {
       const dir = projectsStore.ensureProjectDir(active.id);
       const sessionsDir = join(dir, 'sessions');
       mkdirSync(sessionsDir, { recursive: true });
-      chatSessionId = body.session || `sess_${Date.now().toString(36)}`;
+      const requestedSessionId = typeof body.session === 'string' ? body.session.trim() : '';
+      chatSessionId = SESSION_ID_RE.test(requestedSessionId)
+        ? requestedSessionId
+        : `sess_${Date.now().toString(36)}`;
       file = join(sessionsDir, `${chatSessionId}.jsonl`);
       record = {
         id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
@@ -113,7 +119,10 @@ export function createChatRouter({ state, broadcast }) {
       }
     } else {
       // No project — synthesize an id so the response shape is consistent.
-      chatSessionId = body.session || `sess_${Date.now().toString(36)}`;
+      const requestedSessionId = typeof body.session === 'string' ? body.session.trim() : '';
+      chatSessionId = SESSION_ID_RE.test(requestedSessionId)
+        ? requestedSessionId
+        : `sess_${Date.now().toString(36)}`;
       record = {
         id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
         ts: new Date().toISOString(),

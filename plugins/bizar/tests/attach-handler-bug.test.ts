@@ -76,8 +76,8 @@ class InMemoryStateStore {
 
 // We import the real InstanceManager after the stubs are defined so the
 // test file fails fast if the real signature changes.
-import { InstanceManager } from "../src/background.ts";
-import type { BackgroundState } from "../src/background-state.ts";
+import { InstanceManager } from "../src/background.js";
+import type { BackgroundState } from "../src/background-state.js";
 
 function makeDraft(overrides: Partial<BackgroundState> = {}): BackgroundState {
   return {

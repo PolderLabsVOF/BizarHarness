@@ -27,6 +27,7 @@ import {
   existsSync,
   readdirSync,
   statSync,
+  unlinkSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -72,13 +73,6 @@ function tmuxHasSession(sessionName) {
     return false;
   }
 }
-
-// Reject any value that could break out of the `bash -lc '...'` wrapper
-// we build in `spawnTmuxFor`. The wrapper is needed so the user's login
-// shell env / aliases / paths resolve the same way they do in the CLI —
-// we just refuse to construct the wrapper when the inputs contain
-// characters that would let the user run arbitrary commands.
-const SHELL_META = /[';|&$`<>\\\n\r]/;
 
 export const backgroundStore = {
   BG_DIRS,
@@ -145,6 +139,7 @@ export const backgroundStore = {
           return {
             ...data,
             _bgDir: dir,
+            _file: file,
             tmuxSession: sessionName,
             tmuxActive: tmuxHasSession(sessionName),
           };
@@ -185,17 +180,65 @@ export const backgroundStore = {
    * terminal attach; the underlying opencode session continues
    * unless the operator also aborts it.
    */
-  kill(instanceId) {
+  async kill(instanceId) {
+    const steps = [];
+    const inst = this.get(instanceId);
+    if (!inst) {
+      return { ok: false, error: 'instance not found', instanceId, steps };
+    }
+
+    let ok = true;
     const session = tmuxSessionFor(instanceId);
-    if (!tmuxHasSession(session)) {
-      return { ok: false, error: 'no tmux session for instance', session };
+
+    if (inst.sessionId) {
+      try {
+        const { readServeInfo, abortSession } = await import('./serve-info.mjs');
+        const serveInfo = readServeInfo();
+        if (!serveInfo) {
+          ok = false;
+          steps.push({ step: 'abort-session', ok: false, note: 'serve-info unavailable' });
+        } else {
+          const aborted = await abortSession(
+            serveInfo,
+            inst.sessionId,
+            inst.worktree || serveInfo.worktree,
+          );
+          steps.push({ step: 'abort-session', ...aborted });
+          if (!aborted.ok) ok = false;
+        }
+      } catch (err) {
+        ok = false;
+        steps.push({ step: 'abort-session', ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    } else {
+      steps.push({ step: 'abort-session', ok: true, note: 'no opencode session id present' });
     }
-    try {
-      execFileSync('tmux', ['kill-session', '-t', session], { stdio: 'pipe', timeout: 5_000 });
-      return { ok: true, session };
-    } catch (err) {
-      return { ok: false, error: err.message, session };
+
+    if (inst._file && existsSync(inst._file)) {
+      try {
+        unlinkSync(inst._file);
+        steps.push({ step: 'delete-state-file', ok: true, file: inst._file });
+      } catch (err) {
+        ok = false;
+        steps.push({ step: 'delete-state-file', ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    } else {
+      steps.push({ step: 'delete-state-file', ok: true, note: 'state file already absent' });
     }
+
+    if (tmuxHasSession(session)) {
+      try {
+        execFileSync('tmux', ['kill-session', '-t', session], { stdio: 'pipe', timeout: 5_000 });
+        steps.push({ step: 'kill-tmux', ok: true, session });
+      } catch (err) {
+        ok = false;
+        steps.push({ step: 'kill-tmux', ok: false, session, error: err instanceof Error ? err.message : String(err) });
+      }
+    } else {
+      steps.push({ step: 'kill-tmux', ok: true, session, note: 'no tmux session present' });
+    }
+
+    return { ok, instanceId, session, steps };
   },
 
   /**
@@ -237,28 +280,27 @@ export const backgroundStore = {
     if (tmuxHasSession(session)) {
       return { ok: true, session, note: 'session already existed' };
     }
-    // v3.5.5 — Use the user's shell so paths / env / aliases resolve
-    // the same way `opencode` does when invoked from the CLI. We wrap
-    // the supplied command in `bash -lc` and switch into cwd first.
-    //
-    // Security: `bash -lc '<cmd>'` is a shell string, so we MUST refuse
-    // any value that contains shell metacharacters — otherwise an
-    // attacker who controls `command` or `cwd` could break out of the
-    // wrapper (e.g. `command = "x; cat /etc/passwd #"`).
-    const safeCmd = String(command || '');
+    const spec =
+      command && typeof command === 'object' && !Array.isArray(command)
+        ? command
+        : { command, args: [] };
+    const executable = typeof spec.command === 'string' ? spec.command.trim() : '';
+    const args = Array.isArray(spec.args) ? spec.args.map((arg) => String(arg)) : [];
     const workdir = cwd && typeof cwd === 'string' ? cwd : '';
-    if (SHELL_META.test(safeCmd) || SHELL_META.test(workdir)) {
+    if (!executable) {
       return {
         ok: false,
         session,
-        error: 'command or workdir contains disallowed shell metacharacters',
+        error: 'command is required',
       };
     }
-    const wrapped = `bash -lc 'cd ${workdir} 2>/dev/null || true; ${safeCmd}'`;
     try {
+      const tmuxArgs = ['new-session', '-d', '-s', session, '-x', '220', '-y', '50'];
+      if (workdir) tmuxArgs.push('-c', workdir);
+      tmuxArgs.push(executable, ...args);
       execFileSync(
         'tmux',
-        ['new-session', '-d', '-s', session, '-x', '220', '-y', '50', wrapped],
+        tmuxArgs,
         { stdio: 'ignore', timeout: 5_000 },
       );
       return { ok: true, session };

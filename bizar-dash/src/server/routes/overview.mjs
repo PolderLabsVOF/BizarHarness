@@ -55,6 +55,9 @@ export function createOverviewRouter({ state }) {
           env: { ...process.env, BIZAR_AUTO_RESPAWN: '1' },
         },
       );
+      child.on('error', (err) => {
+        console.error('[dashboard] restart spawn failed:', err.message);
+      });
       child.unref();
       process.exit(0);
     }, 500);

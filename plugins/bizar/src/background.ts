@@ -139,6 +139,7 @@ const STALL_CHECK_INTERVAL_MS = 15_000;
  */
 export class InstanceManager {
   private instances = new Map<string, BackgroundState>();
+  private eventUnsubscribers = new Map<string, () => void>();
   private addLock: Promise<unknown> = Promise.resolve();
   private stateStore: BackgroundStateStore;
   private maxConcurrent: number;
@@ -193,6 +194,7 @@ export class InstanceManager {
       () => void this.runStallAndLoopChecks(),
       STALL_CHECK_INTERVAL_MS,
     );
+    this.stallCheckerTimer.unref?.();
   }
 
   // --- Getters ------------------------------------------------------------
@@ -375,6 +377,9 @@ export class InstanceManager {
       Object.assign(current, patch);
       if (TERMINAL_STATUSES.has(patch.status ?? current.status) && !current.completedAt) {
         current.completedAt = Date.now();
+      }
+      if (TERMINAL_STATUSES.has(current.status)) {
+        this.detachEventHandler(instanceId);
       }
       try {
         await this.stateStore.saveUnlocked(current);
@@ -704,11 +709,24 @@ export class InstanceManager {
   // --- Internal: per-session event handler -------------------------------
 
   public attachEventHandler(inst: BackgroundState): () => void {
+    this.detachEventHandler(inst.instanceId);
     const handler: SessionEventHandler = (ev: StreamEvent) => {
       void this.handleInstanceEvent(inst.instanceId, ev);
     };
     const unsubscribe = this.stream.onSessionEvent(inst.sessionId, handler);
+    this.eventUnsubscribers.set(inst.instanceId, unsubscribe);
     return unsubscribe;
+  }
+
+  private detachEventHandler(instanceId: string): void {
+    const unsubscribe = this.eventUnsubscribers.get(instanceId);
+    if (!unsubscribe) return;
+    try {
+      unsubscribe();
+    } catch {
+      // ignore
+    }
+    this.eventUnsubscribers.delete(instanceId);
   }
 
   private async handleInstanceEvent(

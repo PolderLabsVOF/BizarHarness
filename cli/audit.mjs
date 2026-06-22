@@ -1,11 +1,9 @@
 import chalk from 'chalk';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { opencodeConfigDir } from './utils.mjs';
 
-const HOME = process.env.HOME || '/home/drb0rk';
-const CONFIG_DIR = process.env.XDG_CONFIG_HOME
-  ? join(process.env.XDG_CONFIG_HOME, 'opencode')
-  : join(HOME, '.config/opencode');
+const CONFIG_DIR = opencodeConfigDir();
 
 export async function runAudit() {
   console.log(chalk.bold.hex('#ef4444')('\n  ⚔  BIZARHARNESS AUDIT ⚔\n'));

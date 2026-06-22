@@ -56,6 +56,9 @@ export interface ServeInfo {
   pid: number;
   port: number;
   password: string;
+  baseUrl: string;
+  worktree: string;
+  startedAt: number;
 }
 
 /**
@@ -207,11 +210,19 @@ export class ServeLifecycle {
     }
 
     this.attachExitHandler();
+    const startedAt = Date.now();
     this._logger.info(
       `bizar: opencode serve ready on http://127.0.0.1:${boundPort} (pid=${proc.pid})`,
     );
 
-    return { pid: proc.pid, port: boundPort, password };
+    return {
+      pid: proc.pid,
+      port: boundPort,
+      password,
+      baseUrl: `http://127.0.0.1:${boundPort}`,
+      worktree: this._worktree,
+      startedAt,
+    };
   }
 
   // --- Stop ---------------------------------------------------------------

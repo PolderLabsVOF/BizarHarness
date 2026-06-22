@@ -1,11 +1,11 @@
 import chalk from 'chalk';
 import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { opencodeConfigDir } from './utils.mjs';
 
-const HOME = process.env.HOME || '/home/drb0rk';
-const CONFIG_DIR = process.env.XDG_CONFIG_HOME
-  ? join(process.env.XDG_CONFIG_HOME, 'opencode')
-  : join(HOME, '.config/opencode');
+const HOME = homedir();
+const CONFIG_DIR = opencodeConfigDir();
 
 export async function runExport(target) {
   const validTargets = ['claude', 'cursor', 'opencode'];
@@ -18,12 +18,20 @@ export async function runExport(target) {
 
   for (const t of targets) {
     console.log(chalk.bold.hex('#6366f1')(`\n  Exporting to ${t}...\n`));
-    await exportTo(t);
+    try {
+      await exportTo(t);
+    } catch (error) {
+      console.log(chalk.red(`  Export failed: ${error.message}`));
+    }
   }
 }
 
 async function exportTo(target) {
-  const agentFiles = readdirSync(join(CONFIG_DIR, 'agents')).filter(f => f.endsWith('.md'));
+  const agentsDir = join(CONFIG_DIR, 'agents');
+  if (!existsSync(agentsDir)) {
+    throw new Error(`No installed agents found at ${agentsDir}. Run \`bizar install\` first.`);
+  }
+  const agentFiles = readdirSync(agentsDir).filter(f => f.endsWith('.md'));
 
   switch (target) {
     case 'claude': {

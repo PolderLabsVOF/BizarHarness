@@ -92,34 +92,54 @@ fi
 
 # ── Merge opencode.json ────────────────────────────────────────────
 echo -e "  ${GREEN}→${NC} Configuring opencode.json..."
-TEMPLATE="$REPO_DIR/config/opencode.json"
+# Prefer the .template copy (non-tracked); fall back to the legacy tracked file
+if [ -f "$REPO_DIR/config/opencode.json.template" ]; then
+  TEMPLATE="$REPO_DIR/config/opencode.json.template"
+elif [ -f "$REPO_DIR/config/opencode.json" ]; then
+  TEMPLATE="$REPO_DIR/config/opencode.json"
+else
+  echo -e "    ${YELLOW}⚠${NC} No opencode template found — skipping config merge"
+  TEMPLATE=""
+fi
 
-if [ -f "$CONFIG_DIR/opencode.json" ]; then
+if [ -n "$TEMPLATE" ] && [ -f "$CONFIG_DIR/opencode.json" ]; then
   echo -e "    ${YELLOW}⚠${NC} Existing opencode.json found — backing up to opencode.json.bak"
   cp "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.json.bak"
 fi
 
-if command -v jq &>/dev/null; then
-  jq -s '.[0] * .[1]' "$TEMPLATE" "$CONFIG_DIR/opencode.json" 2>/dev/null ||
+if [ -n "$TEMPLATE" ]; then
+  if command -v jq &>/dev/null; then
+    MERGE_TMP="$CONFIG_DIR/opencode.json.merge.$$"
+    if [ -f "$CONFIG_DIR/opencode.json" ] && jq -s '.[0] * .[1]' "$TEMPLATE" "$CONFIG_DIR/opencode.json" > "$MERGE_TMP" 2>/dev/null; then
+      mv "$MERGE_TMP" "$CONFIG_DIR/opencode.json"
+    else
+      rm -f "$MERGE_TMP"
+      cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"
+    fi
+    # Ensure the bizar plugin entry exists in the plugin array (idempotent)
+    PLUGIN_TMP="$CONFIG_DIR/opencode.json.tmp.$$"
+    jq '
+      if (.plugin // []) | map(.[0] == "./plugins/bizar/index.ts") | any then .
+      else .plugin = (.plugin // []) + [["./plugins/bizar/index.ts", {
+        "loopThresholdWarn": 5,
+        "loopThresholdEscalate": 8,
+        "loopThresholdBlock": 12,
+        "loopWindowSize": 10
+      }]]
+      end
+    ' "$CONFIG_DIR/opencode.json" > "$PLUGIN_TMP" \
+      && mv "$PLUGIN_TMP" "$CONFIG_DIR/opencode.json" \
+      || rm -f "$PLUGIN_TMP"
+    echo -e "    ${GREEN}✓${NC} opencode.json"
+    echo -e "    ${GREEN}✓${NC} Bizar plugin (loop guard)"
+  else
     cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"
-  # Ensure the bizar plugin entry exists in the plugin array (idempotent)
-  jq '
-    if (.plugin // []) | map(.[0] == "./plugins/bizar/index.ts") | any then .
-    else .plugin = (.plugin // []) + [["./plugins/bizar/index.ts", {
-      "loopThresholdWarn": 5,
-      "loopThresholdEscalate": 8,
-      "loopThresholdBlock": 12,
-      "loopWindowSize": 10
-    }]]
-    end
-  ' "$CONFIG_DIR/opencode.json" > "$CONFIG_DIR/opencode.json.tmp" \
-    && mv "$CONFIG_DIR/opencode.json.tmp" "$CONFIG_DIR/opencode.json" \
-    || rm -f "$CONFIG_DIR/opencode.json.tmp"
+    echo -e "    ${YELLOW}⚠${NC} jq not found — copied template directly. Install jq for safe config merge."
+    echo -e "    ${YELLOW}⚠${NC}   Existing opencode.json is backed up at opencode.json.bak"
+  fi
 else
-  cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"
+  echo -e "    ${YELLOW}⚠${NC} No opencode.json template found — skipping config"
 fi
-echo -e "    ${GREEN}✓${NC} opencode.json"
-echo -e "    ${GREEN}✓${NC} Bizar plugin (loop guard)"
 
 # ── Post-install instructions ──────────────────────────────────────
 echo ""

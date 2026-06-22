@@ -1,5 +1,116 @@
 # Changelog
 
+## v3.7.0 — 2026-06-22
+
+Full audit pass across all Bizar components — plugin, CLI, dashboard (server + desktop web + mobile), agent configs, install scripts, and templates. **116 files changed, 3154 insertions, 1334 deletions.** Every component was security-reviewed, code-reviewed, tested, and fixed in parallel.
+
+### Plugin (`@polderlabs/bizar-plugin` 0.5.4 → 0.6.0)
+- **Signal-handler leak fixed.** Plugin was calling `process.removeAllListeners(SIGTERM|SIGINT)` which stripped unrelated host signal handlers. Now uses plugin-owned handler tracking with proper remove-on-dispose.
+- **`dispose()` now clears `serve.json`** after shutdown so stale endpoint/password data isn't left behind for dashboard/out-of-process consumers.
+- **Background agent leaks fixed.** Tracked SSE unsubscription per instance and `unref()` on the periodic checker timer — fixes event-listener and open-handle leaks for terminal background instances.
+- **`plan-fs.ts`** atomic-write parent dir creation switched from `join(filePath, "..")` to `dirname(filePath)` for correctness.
+- **`serve.ts`** `ServeInfo` type extended with `baseUrl`, `worktree`, `startedAt` to match actual usage.
+- **Test suite aligned with strict TypeScript** — fixed breakages in 11 test files (attach-handler-bug, update-deadlock, bg-get-comments, plan-action, wait-for-feedback, http-client, serve, event-stream, bg-kill, bg-status, init-helpers).
+- **Test results:** 212/212 pass (npm test), 504/504 pass (bun test). Typecheck PASS. `check:imports` PASS.
+
+### CLI (`@polderlabs/bizar` 3.6.1 → 3.7.0)
+- **`--version` / `--help` no longer trigger first-run setup.** Added informational-flag bootstrap bypass and centralized error handling in `bin.mjs`.
+- **Version detection rewritten.** Replaced broken ESM `import(package.json)` with safe JSON reads; tool detection for Skills/Semble no longer performs network installs (`npx --yes`, `uvx ...`).
+- **`install.mjs`** missing `detectUv` import fixed; ESM-safe `require.resolve` removed.
+- **`install.sh`** `jq` merge now writes to a temp file and uses atomic `mv` (previous version printed merged JSON to stdout and never wrote it back).
+- **`plan.mjs`** plan/config writes now atomic; request body size guarded; `startServer()` no longer leaks signal listeners across tests.
+- **`service.mjs`** config-dir handling fixed (no fail-before-mkdir); stale PID cleanup; cross-platform main-module detection.
+- **`update.mjs`** path string concat replaced with `node cli/bin.mjs --setup` cross-platform rerun.
+- **`prompts.mjs`** API key prompts now use masked password inputs.
+- **Help text expanded** for `install`, `update`, `init`, `export`, `service`, `dashboard`, `test-gate`.
+- **Banner agent count fixed** from 11 → 13.
+- **`init.mjs`** Windows-unsafe `cwd.split('/')` replaced; skills install skips cleanly when CLI is absent.
+- **`copy.mjs`** atomic writes for `opencode.json` merges; nested `.bizar/` file copying fixed.
+- **`export.mjs`** hardcoded home-path assumptions removed; clear guard when no installed agents exist.
+- **Test results:** 140/140 pass (cli/plan.test.mjs). All subcommands (`init`, `plan`, `update`, `export`, `audit`, `service`, `install`, `test-gate`, `dashboard`) accept `--help` and return sensible output. `--version` prints `3.7.0`.
+
+### Dashboard server (`@polderlabs/bizar-dash` 3.6.1 → 3.7.0)
+- **Auth bypass on proxied loopback traffic fixed.** Remote clients arriving through a local proxy could inherit loopback trust. Loopback/original-peer evaluation and auth-status reporting fixed.
+- **Artifact metadata trusted arbitrary `meta.path`** enabling arbitrary file read/delete if sidecars were tampered. Constrained artifact body paths to the artifact directory; metadata sanitized before read/list/delete.
+- **Schedule webhook SSRF hardened.** Reject credentialed URLs, block redirects, constrain methods.
+- **Secret file permissions** re-harden to `0600` on read/create.
+- **WebSocket initial `snapshot` payload** now matches `/api/snapshot` and the web `Snapshot` expectations — includes active project, settings, tasks, mods, schedules, providers, and MCPs.
+- **Project registry** could duplicate the same path under new IDs after name collisions — fixed path-first ID reuse.
+- **Skills install API** could report success even when `skills` CLI failed — fixed store result reporting and route status handling.
+- **Service scheduler** ignored `"default"` schedules unless tied to a registered project — fixed global/default schedule execution.
+- **Diagnostics log tail** accepted invalid/negative values — clamped.
+- **Notifications** read-state and destructive log rewrites made atomic; single read/delete actions now broadcast UI updates.
+- **Hardcoded/stale dashboard versions** in settings/diagnostics/CLI/TUI now resolve from `package.json`.
+- **Activity append paths** allowed caller-supplied `ts` to override server timestamps — server-side timestamp ownership enforced.
+- **`/api/updates/apply`** now validates package IDs instead of accepting arbitrary strings.
+- **`/api/chat`** clamps `limit` sanely.
+- **Restart endpoint** handles spawn errors explicitly.
+- **TUI** supports bearer-token auth when local auth is forced.
+
+### Dashboard — desktop web
+- **WebSocket stale-close reconnect race fixed** in `lib/ws.ts`.
+- **Artifact viewer auth breakage fixed** — content/open/download routed through tokenized URLs.
+- **Tasks column "select all" bug** fixed — only toggles that column's cards, not the whole board.
+- **Chat ordering fixed** — no longer reverses conversation against "newest at bottom" intent.
+- **Fullscreen plan cleanup fixed** — exits browser fullscreen on teardown.
+- **Modal focus trap + focus restore added** across all modals and search.
+- **Missing aria labels added** to icon-only controls in Plans, Activity, Tasks, Providers, Artifact viewer.
+- **Dead duplicate artifact modal** removed.
+- **Broken updates card heading** misuse (`<Card title=...>`) replaced with real visible header.
+- **Unused imports cleaned** in Providers.
+- **Repeated duplicated CSS blocks removed** from `main.css`.
+
+### Dashboard — mobile
+- **BottomSheet** fixed: focus entry/restore, guaranteed close button, drag-dismiss, dialog semantics, iOS-safe scroll lock.
+- **Modal** fixed: focus trap/restore, overlay dismissal, safe-area padding, fixed-body scroll lock.
+- **Sticky chat composer overlap** with bottom nav fixed — message space reserved, composer wraps on small widths.
+- **44px touch targets** brought up across multiple mobile controls; `touch-action: manipulation` enforced.
+- **Online / pageshow / visibility resume rebinds** added so mobile WS sessions recover after network/app resume.
+- **Stable list/message keys** + assistant-message merge fixes reduce unnecessary remounts/duplicates.
+- **iOS tap highlight reset** + `dvh`/safe-area-aware sizing for sheets and modals.
+- **Routing verification:** server already correctly handles `/ → /m` and `?desktop=1` (no change needed).
+
+### Agent configs (`config/`)
+- **Critical fix:** 11 agent `.md` files had wrong model `openai/gpt-5.4` (bulk copy-paste error). Each agent now has its correct model:
+  - Odin, Tyr, Forseti → `minimax/MiniMax-M3`
+  - Hermod, Thor, Baldr, Quick → `minimax/MiniMax-M2.7`
+  - Vidarr → `openai/gpt-5.5`
+  - Vör, Frigg, Mimir, Heimdall → `opencode/deepseek-v4-flash-free` (free tier)
+- **`config/opencode.json`** had the same model errors for 4 free-tier agents (costing $0.30/M instead of free).
+- **`config/opencode.json`** command template paths fixed from `commands-bizar/` → `commands/`.
+- **`config/opencode.json`** `bizar` command had malformed template field (template + arguments on one line) — split into proper `template` + `arguments` fields.
+- **`semble-search` agent** was missing `model`, `color`, and permissions — added.
+- **Hindsight permissions** added to all 11 agents that were missing `hindsight_recall`/`hindsight_retain`. Odin got `hindsight_list_banks` and `hindsight_create_bank`.
+- **`plugins/bizar/src/commands.ts`** `default` branch was blocking all unknown commands — now passes through to let other handlers (built-ins, other agents) process them. This fixes `/explain`, `/init`, `/learn`, `/pr-review`, `/audit`, etc.
+- **Typo** `competito → competitors` in `config/agents/baldr.md`.
+- **Secrets:** verified no live secrets in `config/`; placeholder `__HINDSIGHT_BEARER_TOKEN__` retained.
+- **Created `config/opencode.json.template`** so users have a safe reference copy. **`config/opencode.json`** is gitignored.
+
+### Install scripts / templates
+- **`install.sh`** prefers `opencode.json.template` over `opencode.json` for new installs; graceful skip when neither exists.
+- **`install.sh`** `jq` fallback now warns user explicitly when merging is unsafe.
+- **`scripts/git-hooks/pre-commit`** pre-commit token scanner verified present and working (Bearer tokens, `sk-ant-`, `sk-`, `ghp_`, `AIza` patterns).
+- **`.gitignore`** cosmetic comment alignment; `config/opencode.json` already listed (file is git-tracked from prior commits — recommended `git rm --cached` done in this release).
+- **All shell scripts pass `bash -n` syntax check.**
+- **`templates/plan/`** fields match `buildVars()` in `cli/plan-templates.mjs` and `regenerateHtml()` in `cli/plan.mjs`.
+
+### Build / typecheck / tests (all green)
+- Root typecheck: PASS (after fixing `include` paths to cover `bizar-dash/src/`, `plugins/bizar/{index.ts,src/,tests/}`)
+- Dashboard typecheck: PASS
+- Dashboard build: PASS — 1884 modules, 1.56s, `index-*.js` 339.11 kB / 106.36 kB gzip, `main-*.css` 99.02 kB / 16.04 kB gzip, `mobile-*.js` 91.16 kB / 21.02 kB gzip
+- Plugin typecheck: PASS
+- Plugin tests: 212/212 pass (607 expects)
+- CLI tests: 140/140 pass
+
+### Files (116 changed, +3154 / −1334)
+CLI: bin, audit, banner, bootstrap, copy, export, init, install, plan, plan-templates, prompts, service, update, utils, install.sh
+Plugin: index.ts, src/{background, plan-fs, serve, commands}, 11 test files
+Dashboard server: cli.mjs + 21 server modules and route files
+Dashboard desktop web: App.tsx, 4 components, 8 views, lib/ws.ts, main.css
+Dashboard mobile: MobileApp.tsx, 3 mobile components, 4 mobile views, mobile.css
+Agent configs: opencode.json, 9 agent .md files, plugins/bizar/src/commands.ts
+Install/templates: install.sh, .gitignore, config/opencode.json.template (new)
+
 ## v3.5.4 — 2026-06-19
 
 ### Changed

@@ -90,7 +90,7 @@ export const activityLog = {
   append(event) {
     try {
       ensureFile();
-      const record = { ts: new Date().toISOString(), ...event };
+      const record = { ...(event || {}), ts: new Date().toISOString() };
       appendFileSync(LOG_FILE, JSON.stringify(record) + '\n', 'utf8');
       // Best-effort rotate when the file gets large.
       try {

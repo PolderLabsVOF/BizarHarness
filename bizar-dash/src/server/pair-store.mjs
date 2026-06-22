@@ -18,6 +18,9 @@
  * to open the app, scan, and verify.
  */
 import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 /** @typedef {{ token: string, expiresAt: number, publicUrl: string }} PairToken */
 
@@ -100,9 +103,6 @@ export function pairTokenMiddleware(req, _res, next) {
 export function detectPublicUrl(req, port) {
   // 1. Tailscale config (best for phone-over-WiFi)
   try {
-    const { existsSync, readFileSync } = require('node:fs');
-    const { join } = require('node:path');
-    const { homedir } = require('node:os');
     const cfgPath = join(homedir(), '.config', 'bizar', 'tailscale.json');
     if (existsSync(cfgPath)) {
       const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
@@ -117,8 +117,9 @@ export function detectPublicUrl(req, port) {
 
   // 2. Host header from the current request
   const host = (req?.headers?.host || '').toString().trim();
-  if (host && !host.startsWith('127.0.0.1') && !host.startsWith('localhost')) {
-    const proto = (req?.headers?.['x-forwarded-proto'] || req?.protocol || 'http').toString();
+  if (host && /^[A-Za-z0-9.:[\]-]+$/.test(host) && !host.startsWith('127.0.0.1') && !host.startsWith('localhost')) {
+    const rawProto = (req?.headers?.['x-forwarded-proto'] || req?.protocol || 'http').toString().split(',')[0].trim().toLowerCase();
+    const proto = rawProto === 'https' ? 'https' : 'http';
     return `${proto}://${host}`;
   }
 

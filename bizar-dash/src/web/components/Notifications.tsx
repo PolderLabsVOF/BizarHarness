@@ -29,6 +29,7 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
   const [stats, setStats] = useState<NotificationStats | null>(null);
   const [loading, setLoading] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const unreadRef = useRef(0);
 
   const reload = async () => {
     try {
@@ -38,7 +39,8 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
       );
       setItems(r.notifications || []);
       setStats(r.stats || null);
-      onCountChange?.(r.stats?.unread || 0);
+      unreadRef.current = r.stats?.unread || 0;
+      onCountChange?.(unreadRef.current);
     } catch (err) {
       // Soft-fail: the bell just shows no items.
       // eslint-disable-next-line no-console
@@ -62,10 +64,11 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
         setItems((cur) => [incoming, ...cur.filter((n) => n.id !== incoming.id)]);
         // Bump unread count.
         if (!incoming.read) {
+          unreadRef.current += 1;
           setStats((cur) =>
             cur ? { ...cur, unread: (cur.unread || 0) + 1 } : { total: 1, unread: 1, lastTs: incoming.ts, counts: { [incoming.severity || 'info']: 1 } },
           );
-          onCountChange?.((stats?.unread || 0) + 1);
+          onCountChange?.(unreadRef.current);
         }
       } else if (msg.type === 'notifications:change') {
         // External change (mark-all-read, etc.) — refresh from server.
@@ -85,8 +88,15 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
         setOpen(false);
       }
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [open]);
 
   const onMarkAllRead = async () => {
@@ -94,6 +104,7 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
       await api.post('/notifications/read-all', {});
       setItems((cur) => cur.map((n) => ({ ...n, read: true })));
       setStats((cur) => (cur ? { ...cur, unread: 0 } : cur));
+      unreadRef.current = 0;
       onCountChange?.(0);
       toast.success('All notifications marked as read.', 1500);
     } catch (err) {
@@ -106,7 +117,8 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
       await api.post(`/notifications/${encodeURIComponent(id)}/read`, {});
       setItems((cur) => cur.map((n) => (n.id === id ? { ...n, read: true } : n)));
       setStats((cur) => (cur ? { ...cur, unread: Math.max(0, (cur.unread || 1) - 1) } : cur));
-      onCountChange?.(Math.max(0, (stats?.unread || 1) - 1));
+      unreadRef.current = Math.max(0, unreadRef.current - 1);
+      onCountChange?.(unreadRef.current);
     } catch (err) {
       toast.error(`Failed: ${(err as Error).message}`);
     }
@@ -115,7 +127,15 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
   const onRemove = async (id: string) => {
     try {
       await api.del(`/notifications/${encodeURIComponent(id)}`);
-      setItems((cur) => cur.filter((n) => n.id !== id));
+      setItems((cur) => {
+        const removed = cur.find((n) => n.id === id);
+        if (removed && !removed.read) {
+          unreadRef.current = Math.max(0, unreadRef.current - 1);
+          setStats((statsCur) => (statsCur ? { ...statsCur, unread: Math.max(0, statsCur.unread - 1) } : statsCur));
+          onCountChange?.(unreadRef.current);
+        }
+        return cur.filter((n) => n.id !== id);
+      });
     } catch (err) {
       toast.error(`Failed: ${(err as Error).message}`);
     }

@@ -1,6 +1,6 @@
 // src/mobile/views/MobileTasks.tsx — kanban-style task board with task detail.
 import { useEffect, useState } from 'react';
-import { CheckSquare, RefreshCw, Plus, Trash2, Archive, X, Clock, MessageSquare, Link2, FileText } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Archive, MessageSquare, FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatRelative, priorityColors } from '../../lib/utils';
 import type { Snapshot, Task } from '../../lib/types';
@@ -30,6 +30,19 @@ const NEXT_STATUS: Record<string, string> = {
   blocked: 'queued',
   done: 'queued',
 };
+
+type TaskChatMeta = { sessionId?: string; bgInstanceId?: string };
+type TaskArtifactMeta = { artifactIds?: string[]; artifactId?: string };
+
+function hasTaskChat(task: Task): boolean {
+  const metadata = (task.metadata ?? {}) as TaskChatMeta;
+  return Boolean(metadata.sessionId || metadata.bgInstanceId);
+}
+
+function hasTaskArtifacts(task: Task): boolean {
+  const metadata = (task.metadata ?? {}) as TaskArtifactMeta;
+  return Boolean(metadata.artifactIds?.length || metadata.artifactId);
+}
 
 export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail, onOpenChat, onOpenArtifact }: Props) {
   const [tasks, setTasks] = useState<Task[]>(snapshot.tasks || []);
@@ -119,7 +132,10 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
       }
     }
     if (assigneeFilter.trim()) {
-      if (!t.assignee?.toLowerCase().includes(assigneeFilter.toLowerCase())) return false;
+      const targetAssignee = assigneeFilter === 'mine'
+        ? snapshot.settings?.data?.defaultAgent || settingsDefaultAgent(snapshot)
+        : assigneeFilter.replace(/^@/, '');
+      if ((t.assignee || '').toLowerCase() !== targetAssignee.toLowerCase()) return false;
     }
     return true;
   });
@@ -165,7 +181,7 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
       if (ids.length > 0) {
         const [meta, content] = await Promise.all([
           api.get<{ name?: string; contentType?: string; size?: number }>(`/artifacts/${encodeURIComponent(ids[0])}`),
-          fetch(`/api/artifacts/${encodeURIComponent(ids[0])}/content`).then((r) => r.text()),
+          fetch(api.urlWithToken(`/artifacts/${encodeURIComponent(ids[0])}/content`)).then((r) => r.text()),
         ]);
         setArtifactMeta(meta);
         setArtifactContent(content);
@@ -240,13 +256,17 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
       </div>
 
       {/* Task list */}
-      <div className="mobile-card-list">
-        {activeTasks.length === 0 && (
-          <p className="mobile-empty-inline">No tasks</p>
-        )}
+        <div className="mobile-card-list">
+          {activeTasks.length === 0 && (
+            <div className="mobile-empty mobile-empty-compact">
+              <p>No {STATUS_LABELS[activeStatus].toLowerCase()} tasks.</p>
+              <p className="muted">Create one or switch columns.</p>
+            </div>
+          )}
         {activeTasks.map((t) => (
-          <div
+          <button
             key={t.id}
+            type="button"
             className="mobile-task-card"
             onClick={() => setDetailTask(t)}
           >
@@ -263,7 +283,7 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
                 {t.dependencies?.length ? ` · ${t.dependencies.length} deps` : ''}
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -307,7 +327,7 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
                 <Archive size={14} /> Archive
               </button>
               {/* v3.6.2 — Pipeline: Chat button */}
-              {!!((detailTask.metadata as { sessionId?: string; bgInstanceId?: string })?.sessionId || (detailTask.metadata as { sessionId?: string; bgInstanceId?: string })?.bgInstanceId) && (
+              {hasTaskChat(detailTask) && (
                 <button
                   type="button"
                   className="mobile-btn mobile-btn-secondary"
@@ -317,7 +337,7 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
                 </button>
               )}
               {/* v3.6.2 — Pipeline: Artifact button */}
-              {!!((detailTask.metadata as { artifactIds?: string[]; artifactId?: string })?.artifactIds?.length || (detailTask.metadata as { artifactIds?: string[]; artifactId?: string })?.artifactId) && (
+              {hasTaskArtifacts(detailTask) && (
                 <button
                   type="button"
                   className="mobile-btn mobile-btn-secondary"
@@ -421,13 +441,13 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
                   style={{ flex: 1 }}
                   onClick={() => {
                     // Reload for the selected artifact
-                    setArtifactLoading(true);
-                    Promise.all([
-                      api.get<{ name?: string; contentType?: string; size?: number }>(`/artifacts/${encodeURIComponent(id)}`),
-                      fetch(`/api/artifacts/${encodeURIComponent(id)}/content`).then((r) => r.text()),
-                    ]).then(([meta, content]) => {
-                      setArtifactMeta(meta);
-                      setArtifactContent(content);
+                       setArtifactLoading(true);
+                       Promise.all([
+                         api.get<{ name?: string; contentType?: string; size?: number }>(`/artifacts/${encodeURIComponent(id)}`),
+                          fetch(api.urlWithToken(`/artifacts/${encodeURIComponent(id)}/content`)).then((r) => r.text()),
+                       ]).then(([meta, content]) => {
+                         setArtifactMeta(meta);
+                         setArtifactContent(content);
                       setArtifactLoading(false);
                     }).catch(() => setArtifactLoading(false));
                   }}
@@ -448,6 +468,7 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
               className="mobile-artifact-iframe"
               sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
               title={artifactMeta?.name || 'Artifact'}
+              loading="lazy"
             />
           ) : (
             <div className="mobile-empty">
@@ -459,6 +480,10 @@ export function MobileTasks({ snapshot, onRefresh, selectedTaskId, onCloseDetail
       </MobileBottomSheet>
     </div>
   );
+}
+
+function settingsDefaultAgent(snapshot: Snapshot): string {
+  return snapshot.settings?.data?.defaultAgent || 'odin';
 }
 
 function NewTaskModal({

@@ -20,6 +20,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   mkdirSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -127,9 +128,15 @@ function loadSchedules(projectId) {
   return data;
 }
 
+function atomicWriteJson(filePath, data) {
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  renameSync(tmp, filePath);
+}
+
 function saveSchedules(projectId, data) {
   const dir = projectsStore.ensureProjectDir(projectId);
-  writeFileSync(join(dir, 'schedules.json'), JSON.stringify(data, null, 2) + '\n', 'utf8');
+  atomicWriteJson(join(dir, 'schedules.json'), data);
 }
 
 export const schedulesStore = {

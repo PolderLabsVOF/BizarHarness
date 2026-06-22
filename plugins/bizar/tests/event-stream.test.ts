@@ -65,7 +65,7 @@ type Event = EventSessionIdle | EventSessionError | EventMessagePartUpdated;
 class FakeEventStream {
   private handlers = new Map<string, Array<(event: Event) => void>>();
   private sessions = new Map<string, string>(); // instanceId → sessionId
-  private instances = new Map<string, BackgroundState>();
+  public instances = new Map<string, BackgroundState>();
   private closed = false;
 
   /** Register an instance's sessionId for event routing */

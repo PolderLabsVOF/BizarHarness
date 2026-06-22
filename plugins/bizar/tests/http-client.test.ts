@@ -33,10 +33,7 @@ interface Message {
   parts: MessagePart[];
 }
 
-interface CollectedMessage {
-  info: Message;
-  parts: MessagePart[];
-}
+type CollectedMessage = Message;
 
 // ---------------------------------------------------------------------------
 // Fake HttpClient matching the expected interface
@@ -185,8 +182,10 @@ describe("HttpClient.sendPrompt", () => {
     const msgs = await client.listMessages(session.id, "/tmp");
     const userMsg = msgs.find((m) => m.info.role === "user");
     expect(userMsg).toBeDefined();
-    expect(userMsg!.parts[0].type).toBe("text");
-    expect(userMsg!.parts[0].text).toBe("Do the research on X");
+    const firstPart = userMsg?.parts[0];
+    expect(firstPart).toBeDefined();
+    expect(firstPart?.type).toBe("text");
+    expect(firstPart?.text).toBe("Do the research on X");
   });
 
   it("generates a unique messageID per call (HIGH-2)", async () => {

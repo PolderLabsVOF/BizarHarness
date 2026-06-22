@@ -356,7 +356,9 @@ function UpdatesCard() {
   const isBusy = status.checking || status.updating;
 
   return (
-    <Card title="Updates">
+    <Card>
+      <CardTitle><Download size={14} /> Updates</CardTitle>
+      <CardMeta>Check installed Bizar packages and apply dashboard updates.</CardMeta>
       {/* Current versions */}
       <div className="updates-current">
         <h4>Installed versions</h4>
@@ -467,12 +469,22 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tailscale, setTailscale] = useState<TailscaleStatus | null>(null);
+  const [tailscaleDraft, setTailscaleDraft] = useState({ port: 4321, https: true, hostname: '' });
 
   useEffect(() => {
     setSettings(initial);
     setDirty(false);
     if (initial.theme) applyThemeTokens(initial.theme);
   }, [initial]);
+
+  useEffect(() => {
+    if (!tailscale) return;
+    setTailscaleDraft({
+      port: tailscale.settings.port,
+      https: tailscale.settings.https !== false,
+      hostname: tailscale.settings.hostname || '',
+    });
+  }, [tailscale]);
 
   useEffect(() => {
     api.get<TailscaleStatus>('/tailscale/status').then(setTailscale).catch(() => undefined);
@@ -494,6 +506,21 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
 
   const patchTop = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((cur) => ({ ...cur, [key]: value }));
+    setDirty(true);
+  };
+
+  const patchNotifications = (patch: Partial<Settings['notifications']>) => {
+    setSettings((cur) => ({ ...cur, notifications: { ...cur.notifications, ...patch } }));
+    setDirty(true);
+  };
+
+  const patchAgents = (patch: Partial<Settings['agents']>) => {
+    setSettings((cur) => ({ ...cur, agents: { ...cur.agents, ...patch } }));
+    setDirty(true);
+  };
+
+  const patchDashboard = (patch: Partial<Settings['dashboard']>) => {
+    setSettings((cur) => ({ ...cur, dashboard: { ...cur.dashboard, ...patch } }));
     setDirty(true);
   };
 
@@ -549,9 +576,9 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         toast.success('Tailscale serve disabled.');
       } else {
         await api.post('/tailscale/enable', {
-          port: tailscale?.settings.port || 4321,
-          https: tailscale?.settings.https !== false,
-          hostname: tailscale?.settings.hostname || '',
+          port: tailscaleDraft.port || 4321,
+          https: tailscaleDraft.https,
+          hostname: tailscaleDraft.hostname || '',
         });
         toast.success('Tailscale serve enabled.');
       }
@@ -573,7 +600,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   // to whatever's already in localStorage so a page reload doesn't
   // wipe the entry.
   const [authToken, setAuthToken] = useState<string>(api.getToken());
-  const [authStatus, setAuthStatus] = useState<{ required: boolean } | null>(null);
+  const [authStatus, setAuthStatus] = useState<{ required: boolean; loopback: boolean; peer: string } | null>(null);
   const [revealedToken, setRevealedToken] = useState<string>('');
 
   // Probe the server once on mount so we can show "auth required" vs
@@ -583,11 +610,11 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const r = await api.get<{ required: boolean }>('/auth/status');
+        const r = await api.probeAuthStatus();
         if (!cancelled) setAuthStatus(r);
-      } catch (err) {
+      } catch {
         if (!cancelled) {
-          setAuthStatus({ required: true });
+          setAuthStatus({ required: true, loopback: false, peer: '' });
           // Don't toast — the toast spam would be annoying on every
           // Settings tab open. The Copy/Regenerate buttons themselves
           // surface the real error if it happens there.
@@ -735,6 +762,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                   className="input color-input"
                   value={settings.theme.accent}
                   onChange={(e) => patchTheme({ accent: e.target.value })}
+                  aria-label="Accent color"
                 />
                 <input
                   type="text"
@@ -752,6 +780,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                   className="input color-input"
                   value={settings.theme.success}
                   onChange={(e) => patchTheme({ success: e.target.value })}
+                  aria-label="Success color"
                 />
                 <input
                   type="text"
@@ -769,6 +798,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                   className="input color-input"
                   value={settings.theme.warning}
                   onChange={(e) => patchTheme({ warning: e.target.value })}
+                  aria-label="Warning color"
                 />
                 <input
                   type="text"
@@ -786,6 +816,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                   className="input color-input"
                   value={settings.theme.error}
                   onChange={(e) => patchTheme({ error: e.target.value })}
+                  aria-label="Error color"
                 />
                 <input
                   type="text"
@@ -803,6 +834,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                   className="input color-input"
                   value={settings.theme.info}
                   onChange={(e) => patchTheme({ info: e.target.value })}
+                  aria-label="Info color"
                 />
                 <input
                   type="text"
@@ -978,17 +1010,16 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                   <input
                     type="number"
                     className="input"
-                    defaultValue={tailscale.settings.port}
-                    onChange={(e) => {
-                      // Update local state via patchUi is unrelated; just inform
-                    }}
+                    value={tailscaleDraft.port}
+                    onChange={(e) => setTailscaleDraft((cur) => ({ ...cur, port: Number(e.target.value) || 4321 }))}
                   />
                 </div>
                 <div className="task-form-field">
                   <label className="field-label">Use HTTPS</label>
                   <input
                     type="checkbox"
-                    defaultChecked={tailscale.settings.https === true}
+                    checked={tailscaleDraft.https}
+                    onChange={(e) => setTailscaleDraft((cur) => ({ ...cur, https: e.target.checked }))}
                   />
                 </div>
               </div>
@@ -1008,12 +1039,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <input
               type="checkbox"
               checked={!!settings.notifications.onAgentComplete}
-              onChange={(e) =>
-                setSettings((cur) => ({
-                  ...cur,
-                  notifications: { ...cur.notifications, onAgentComplete: e.target.checked },
-                }))
-              }
+              onChange={(e) => patchNotifications({ onAgentComplete: e.target.checked })}
             />
             <span>Notify when an agent invocation completes</span>
           </label>
@@ -1021,12 +1047,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <input
               type="checkbox"
               checked={!!settings.notifications.onPlanApproval}
-              onChange={(e) =>
-                setSettings((cur) => ({
-                  ...cur,
-                  notifications: { ...cur.notifications, onPlanApproval: e.target.checked },
-                }))
-              }
+              onChange={(e) => patchNotifications({ onPlanApproval: e.target.checked })}
             />
             <span>Notify when a plan needs approval</span>
           </label>
@@ -1040,20 +1061,37 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         <Card>
           <CardTitle><Shield size={14} /> Authentication</CardTitle>
           <CardMeta>
-            Bearer token required for the dashboard API. Generated on
-            first boot and saved to <code>~/.config/bizar/dashboard-secret</code>{' '}
-            (mode 0600).
+            Localhost and Tailscale browser access are auto-trusted via loopback.
+            A bearer token is still available for non-loopback clients and
+            forced-auth mode.
           </CardMeta>
           <div className="field" data-setting-id="auth.status">
             <label className="field-label">Server status</label>
             <p style={{ margin: '4px 0' }}>
               Auth required:{' '}
-              <strong>{authStatus?.required ? 'yes' : 'probing…'}</strong>
+              <strong>{authStatus ? (authStatus.required ? 'yes' : 'no') : 'probing…'}</strong>
+            </p>
+            <p style={{ margin: '4px 0' }}>
+              Connection:{' '}
+              <strong>
+                {authStatus
+                  ? (authStatus.loopback ? 'loopback (auto-trusted)' : 'remote')
+                  : 'probing…'}
+              </strong>
+            </p>
+            <p style={{ margin: '4px 0' }}>
+              Peer address:{' '}
+              {authStatus?.peer ? <code>{authStatus.peer}</code> : <span className="muted">probing…</span>}
             </p>
             <p className="muted" style={{ fontSize: 12, margin: '4px 0' }}>
-              Default bind is <code>127.0.0.1</code> (local-only). Set{' '}
-              <code>BIZAR_DASHBOARD_BIND=0.0.0.0</code> to expose on a LAN /
-              Tailscale — auth becomes mandatory to keep tailnet neighbors out.
+              Localhost and Tailscale browser access are auto-trusted because the
+              dashboard sees a loopback peer. Paste a token only for non-loopback
+              API clients/scripts, or if you force auth for every connection with{' '}
+              <code>BIZAR_DASHBOARD_REQUIRE_AUTH=1</code>.
+            </p>
+            <p className="muted" style={{ fontSize: 12, margin: '4px 0' }}>
+              Dashboard tokens are generated on first boot and saved to{' '}
+              <code>~/.config/bizar/dashboard-secret</code> (mode 0600).
             </p>
           </div>
           <div className="field" data-setting-id="auth.token">
@@ -1104,15 +1142,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               min={1}
               max={20}
               value={settings.agents?.maxParallel ?? 6}
-              onChange={(e) =>
-                setSettings((cur) => ({
-                  ...cur,
-                  agents: {
-                    ...cur.agents,
-                    maxParallel: Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 6)),
-                  },
-                }))
-              }
+              onChange={(e) => patchAgents({ maxParallel: Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 6)) })}
             />
           </div>
           <div className="form-row">
@@ -1127,27 +1157,14 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               max={3600000}
               step={60000}
               value={settings.agents?.stuckThresholdMs ?? 600000}
-              onChange={(e) =>
-                setSettings((cur) => ({
-                  ...cur,
-                  agents: {
-                    ...cur.agents,
-                    stuckThresholdMs: Math.max(60000, Math.min(3600000, parseInt(e.target.value, 10) || 600000)),
-                  },
-                }))
-              }
+              onChange={(e) => patchAgents({ stuckThresholdMs: Math.max(60000, Math.min(3600000, parseInt(e.target.value, 10) || 600000)) })}
             />
           </div>
           <label className="checkbox-row" data-setting-id="agents.autoRestart">
             <input
               type="checkbox"
               checked={!!settings.agents?.autoRestart}
-              onChange={(e) =>
-                setSettings((cur) => ({
-                  ...cur,
-                  agents: { ...cur.agents, autoRestart: e.target.checked },
-                }))
-              }
+              onChange={(e) => patchAgents({ autoRestart: e.target.checked })}
             />
             <span>Auto-restart stuck agents</span>
           </label>
@@ -1160,12 +1177,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <input
               type="checkbox"
               checked={settings.dashboard.autoLaunchWeb !== false}
-              onChange={(e) =>
-                setSettings((cur) => ({
-                  ...cur,
-                  dashboard: { ...cur.dashboard, autoLaunchWeb: e.target.checked },
-                }))
-              }
+              onChange={(e) => patchDashboard({ autoLaunchWeb: e.target.checked })}
             />
             <span>Auto-launch web UI alongside TUI</span>
           </label>

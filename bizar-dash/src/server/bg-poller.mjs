@@ -31,7 +31,7 @@ import { tasksStore } from './tasks-store.mjs';
 import { projectsStore } from './projects-store.mjs';
 import { artifactsStore, extractArtifactFromMessage } from './artifacts-store.mjs';
 import { readServeInfo, listOpencodeMessages, extractContentFromOpencodeMessage, abortSession } from './serve-info.mjs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const POLL_INTERVAL_MS = 3_000;
 const ARTIFACT_SCAN_TIMEOUT_MS = 6_000;
@@ -95,7 +95,7 @@ async function scanForArtifact(bg) {
   // the opencode session was created in. Fall back to the plugin's
   // recorded worktree when the active project has been removed.
   const active = projectsStore.active();
-  const directory = (active && active.path) || serveInfo.worktree || '';
+  const directory = bg.worktree || (active && active.path) || serveInfo.worktree || '';
   const list = await listOpencodeMessages(serveInfo, bg.sessionId, directory, ARTIFACT_SCAN_TIMEOUT_MS);
   if (!list.ok || !Array.isArray(list.messages) || list.messages.length === 0) {
     return null;
@@ -124,7 +124,7 @@ function killTmuxFor(instanceId) {
   if (!instanceId) return false;
   const session = `bizar-bg-${instanceId}`;
   try {
-    execSync(`tmux kill-session -t ${session}`, { stdio: 'ignore', timeout: 4_000 });
+    execFileSync('tmux', ['kill-session', '-t', session], { stdio: 'ignore', timeout: 4_000 });
     return true;
   } catch {
     return false;
@@ -149,7 +149,8 @@ async function tick() {
     trackedStatuses.set(bg.instanceId, curr);
 
     const active = projectsStore.active();
-    if (!active) continue;
+    const projectId = bg.projectId || active?.id || null;
+    if (!projectId) continue;
     const taskId = bg.taskId;
     if (!taskId) continue;
 
@@ -170,7 +171,7 @@ async function tick() {
           ? 'Killed by operator'
           : `Timed out`;
       try {
-        const updated = await tasksStore.update(active.id, taskId, {
+        const updated = await tasksStore.update(projectId, taskId, {
           status: newStatus,
           metadata: {
             ...(bg || {}),
@@ -211,15 +212,15 @@ async function tick() {
             if (found) {
               const meta = artifactsStore.save({
                 taskId,
-                projectId: active.id,
-                name: found.name || `${active.id} artifact`,
+                projectId,
+                name: found.name || `${projectId} artifact`,
                 contentType: 'text/html',
                 content: found.html,
               });
               // Link the artifact back to the task. The UI looks for
               // `metadata.artifactId` (single) first, then falls back
               // to listing all artifacts by task id.
-              const updated2 = await tasksStore.update(active.id, taskId, {
+              const updated2 = await tasksStore.update(projectId, taskId, {
                 metadata: {
                   artifactId: meta.id,
                   artifactName: meta.name,
@@ -245,7 +246,7 @@ async function tick() {
     } else if (curr === 'running' && (prev === 'pending' || !prev)) {
       // First transition into running — push a status sync.
       try {
-        const updated = await tasksStore.update(active.id, taskId, {
+        const updated = await tasksStore.update(projectId, taskId, {
           status: 'doing',
           metadata: {
             ...(bg || {}),

@@ -19,6 +19,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  renameSync,
   readdirSync,
   statSync,
   mkdirSync,
@@ -69,6 +70,12 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     } catch {
       return fallback;
     }
+  }
+
+  function atomicWriteText(filePath, text) {
+    const tmp = `${filePath}.tmp.${process.pid}`;
+    writeFileSync(tmp, text, 'utf8');
+    renameSync(tmp, filePath);
   }
 
   function safeStat(p) {
@@ -353,7 +360,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
         : paths.bizarDir;
       const logFile = join(targetDir, 'activity.log');
       mkdirSync(targetDir, { recursive: true });
-      const record = { ts: new Date().toISOString(), ...event };
+      const record = { ...(event || {}), ts: new Date().toISOString() };
       writeFileSync(logFile, JSON.stringify(record) + '\n', { flag: 'a', encoding: 'utf8' });
     } catch (err) {
       console.error('[dashboard state] appendActivity failed:', err);
@@ -392,7 +399,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     const cleaned = themes
       .filter((t) => t && typeof t === 'object' && typeof t.name === 'string' && t.colors)
       .map((t) => ({ name: t.name, colors: t.colors, createdAt: t.createdAt || new Date().toISOString() }));
-    writeFileSync(THEMES_FILE, JSON.stringify({ themes: cleaned }, null, 2) + '\n', 'utf8');
+    atomicWriteText(THEMES_FILE, JSON.stringify({ themes: cleaned }, null, 2) + '\n');
     return { themes: cleaned };
   }
 

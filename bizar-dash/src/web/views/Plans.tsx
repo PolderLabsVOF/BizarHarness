@@ -354,6 +354,16 @@ function PlanEditor({
   // v3.7.0 — Element-specific right-click context menu
   const [elementContextMenu, setElementContextMenu] = useState<ContextMenuState>(null);
 
+  const moveElementLocally = (id: string, x: number, y: number) => {
+    setCanvas((cur) => {
+      if (!cur) return cur;
+      return {
+        ...cur,
+        elements: cur.elements.map((el) => (el.id === id ? { ...el, x, y } : el)),
+      };
+    });
+  };
+
   const reload = async () => {
     setLoading(true);
     try {
@@ -391,7 +401,12 @@ function PlanEditor({
     document.addEventListener('fullscreenchange', onFullscreenChange);
     // Attempt to enter fullscreen (fails silently if unsupported or blocked)
     document.documentElement.requestFullscreen().catch(() => {});
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullscreen]);
 
@@ -716,7 +731,7 @@ function PlanEditor({
             <Button variant="secondary" size="sm" onClick={() => onCanvasComment()}>
               <MessageCircle size={14} /> Comment
             </Button>
-            <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan">
+            <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan" aria-label="Configure plan">
               <SettingsIcon size={14} />
             </Button>
             </div>
@@ -726,7 +741,7 @@ function PlanEditor({
             canvas={canvas}
             selectedElId={selectedElId}
             onSelect={setSelectedElId}
-            onMoveElement={(id, x, y) => updateElement(id, { x, y })}
+            onMoveElement={moveElementLocally}
             onMoveEnd={updatePositions}
             onDeleteElement={deleteElement}
             onConnect={(from, to) => addConnection(from, to)}
@@ -734,6 +749,7 @@ function PlanEditor({
             onEditElement={(el) => editElementInline(modal, slug, el, updateElement, toast)}
             onContextMenu={(e, worldPos) => {
               e.preventDefault();
+              setElementContextMenu(null);
               setContextMenuWorldPos(worldPos);
               setContextMenu({
                 x: e.clientX,
@@ -750,6 +766,7 @@ function PlanEditor({
             onElementContextMenu={(e, elementId, _worldPos) => {
               const el = canvas?.elements.find((x) => x.id === elementId);
               if (!el) return;
+              setContextMenu(null);
               setElementContextMenu({
                 x: e.clientX,
                 y: e.clientY,
@@ -843,10 +860,10 @@ function PlanEditorHeader({
         <Button variant="secondary" size="sm" onClick={onCanvasComment}>
           <MessageCircle size={14} /> Comment
         </Button>
-        <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan">
+        <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan" aria-label="Configure plan">
           <SettingsIcon size={14} />
         </Button>
-        <Button variant="ghost" size="sm" onClick={onRefresh} title="Refresh canvas">
+        <Button variant="ghost" size="sm" onClick={onRefresh} title="Refresh canvas" aria-label="Refresh canvas">
           <RefreshCw size={14} />
         </Button>
         <Button
@@ -854,10 +871,11 @@ function PlanEditorHeader({
           size="sm"
           onClick={() => setFullscreen(!fullscreen)}
           title={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
         >
           {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </Button>
-        <Button variant="ghost" size="sm" onClick={onDelete} title="Delete plan">
+        <Button variant="ghost" size="sm" onClick={onDelete} title="Delete plan" aria-label="Delete plan">
           <Trash2 size={14} />
         </Button>
       </div>
@@ -955,6 +973,7 @@ function CanvasViewport({
 }: ViewportProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  const elementsRef = useRef(canvas.elements);
   const stateRef = useRef({
     panning: false,
     startX: 0,
@@ -965,6 +984,10 @@ function CanvasViewport({
     dragging: null as null | { id: string; offsetX: number; offsetY: number; moved: boolean; origX: number; origY: number },
     connecting: null as null | { fromId: string; x: number; y: number },
   });
+
+  useEffect(() => {
+    elementsRef.current = canvas.elements;
+  }, [canvas.elements]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -986,6 +1009,7 @@ function CanvasViewport({
     };
 
     const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) return;
       const t = e.target as HTMLElement;
       if (
         t === root ||
@@ -1002,9 +1026,11 @@ function CanvasViewport({
       if (elCard) {
         const id = elCard.dataset.elementId;
         if (!id) return;
-        if (t.classList.contains('canvas-element-handle') || t.classList.contains('canvas-element')) {
+        const headerHit = !!t.closest('.canvas-element-head');
+        const handleHit = !!t.closest('.canvas-element-handle');
+        if (headerHit || handleHit) {
           const world = screenToWorld(e.clientX, e.clientY);
-          const el = canvas.elements.find((x) => x.id === id);
+          const el = elementsRef.current.find((x) => x.id === id);
           if (!el) return;
           stateRef.current.dragging = {
             id,
@@ -1031,6 +1057,11 @@ function CanvasViewport({
         const world = screenToWorld(e.clientX, e.clientY);
         const newX = Math.max(0, world.x - s.dragging.offsetX);
         const newY = Math.max(0, world.y - s.dragging.offsetY);
+        if (!s.dragging.moved) {
+          const dx = Math.abs(newX - s.dragging.origX);
+          const dy = Math.abs(newY - s.dragging.origY);
+          if (dx < 2 && dy < 2) return;
+        }
         s.dragging.moved = true;
         onMoveElement(s.dragging.id, newX, newY);
         return;
@@ -1053,7 +1084,7 @@ function CanvasViewport({
       }
       if (s.dragging) {
         if (s.dragging.moved) {
-          const el = canvas.elements.find((x) => x.id === s.dragging?.id);
+          const el = elementsRef.current.find((x) => x.id === s.dragging?.id);
           if (el) {
             onMoveEnd([{ id: el.id, x: el.x || 0, y: el.y || 0 }]);
           }
@@ -1085,7 +1116,7 @@ function CanvasViewport({
       window.removeEventListener('mouseup', onMouseUp);
       root.removeEventListener('wheel', onWheel);
     };
-  }, [canvas.elements, onMoveElement, onMoveEnd, onSelect]);
+  }, [onMoveElement, onMoveEnd, onSelect]);
 
   const fitToView = () => {
     if (!rootRef.current || canvas.elements.length === 0) {
@@ -1134,13 +1165,14 @@ function CanvasViewport({
   return (
     <div className="plans-canvas-wrap">
       <div className="canvas-toolbar">
-        <button type="button" className="icon-btn" title="Fit to view" onClick={fitToView}>
+        <button type="button" className="icon-btn" title="Fit to view" aria-label="Fit canvas to view" onClick={fitToView}>
           <Maximize2 size={14} />
         </button>
         <button
           type="button"
           className="icon-btn"
           title="Reset zoom"
+          aria-label="Reset canvas zoom"
           onClick={() => {
             stateRef.current.ox = 0;
             stateRef.current.oy = 0;
@@ -1188,10 +1220,11 @@ function CanvasViewport({
                   onSelect={() => onSelect(el.id)}
                   onEdit={() => onEditElement(el)}
                   onDelete={() => onDeleteElement(el.id)}
-                  onContextMenu={onElementContextMenu ? (e) => {
-                    e.preventDefault();
-                    const rect = innerRef.current?.getBoundingClientRect();
-                    if (!rect) return;
+                   onContextMenu={onElementContextMenu ? (e) => {
+                     e.preventDefault();
+                     e.stopPropagation();
+                     const rect = innerRef.current?.getBoundingClientRect();
+                     if (!rect) return;
                     const s = stateRef.current;
                     const worldPos = { x: (e.clientX - rect.left) / s.scale, y: (e.clientY - rect.top) / s.scale };
                     onElementContextMenu(e, el.id, worldPos);
@@ -1249,6 +1282,7 @@ function CanvasElementView({
       }}
       onContextMenu={(e) => {
         if (onContextMenu) {
+          e.stopPropagation();
           onContextMenu(e);
         } else {
           e.preventDefault();

@@ -108,7 +108,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
   const sorted = useMemo(() => {
     let out = [...agents];
     if (categoryFilter) {
-      out = out.filter((a) => (a.category || '') === categoryFilter);
+      out = out.filter((a) => categoryFilter === '__none__' ? !(a.category || '') : (a.category || '') === categoryFilter);
     }
     if (search) {
       const q = search.toLowerCase();
@@ -130,7 +130,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
 
   const onCreate = () => {
     let nameEl: HTMLInputElement | null = null;
-    let descEl: HTMLTextAreaElement | null = null;
+    let descEl: HTMLInputElement | null = null;
     let modelEl: HTMLSelectElement | null = null;
     let modeEl: HTMLSelectElement | null = null;
     let colorEl: HTMLInputElement | null = null;
@@ -154,7 +154,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
           />
           <label className="field-label">Description</label>
           <input
-            ref={(el) => { descEl = el as unknown as HTMLTextAreaElement | null; }}
+            ref={(el) => { descEl = el; }}
             className="input"
             type="text"
             placeholder="What does this agent do?"
@@ -262,7 +262,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
   };
 
   const onEdit = async (a: Agent) => {
-    let descEl: HTMLTextAreaElement | null = null;
+    let descEl: HTMLInputElement | null = null;
     let modelEl: HTMLSelectElement | null = null;
     let modeEl: HTMLSelectElement | null = null;
     let colorEl: HTMLInputElement | null = null;
@@ -282,7 +282,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
             </div>
             <label className="field-label">Description</label>
             <input
-              ref={(el) => { descEl = el as unknown as HTMLTextAreaElement | null; }}
+              ref={(el) => { descEl = el; }}
               className="input"
               type="text"
               defaultValue={full.description}

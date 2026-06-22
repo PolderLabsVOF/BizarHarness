@@ -64,18 +64,20 @@ export function ArtifactViewer({ artifactId, onClose }: Props) {
             {meta && (
               <>
                 <a
-                  href={`/api/artifacts/${encodeURIComponent(artifactId)}/content`}
+                  href={getArtifactContentUrl(artifactId)}
                   target="_blank"
                   rel="noreferrer"
                   className="icon-btn"
+                  aria-label="Open artifact in new tab"
                   title="Open in new tab"
                 >
                   <ExternalLink size={16} />
                 </a>
                 <a
-                  href={`/api/artifacts/${encodeURIComponent(artifactId)}/content`}
+                  href={getArtifactContentUrl(artifactId)}
                   download={meta.name || 'artifact.html'}
                   className="icon-btn"
+                  aria-label="Download artifact"
                   title="Download"
                 >
                   <Download size={16} />
@@ -120,9 +122,13 @@ function formatBytes(bytes: number): string {
 
 // Fetch raw text content — bypasses the JSON api wrapper.
 async function fetchRawContent(artifactId: string): Promise<string> {
-  const r = await fetch(`/api/artifacts/${encodeURIComponent(artifactId)}/content`);
+  const r = await fetch(getArtifactContentUrl(artifactId));
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.text();
+}
+
+function getArtifactContentUrl(artifactId: string): string {
+  return api.urlWithToken(`/artifacts/${encodeURIComponent(artifactId)}/content`);
 }
 
 // v3.5.7 — Open the artifact in a new browser tab at full window size.
@@ -131,57 +137,7 @@ async function fetchRawContent(artifactId: string): Promise<string> {
 export function openArtifactViewer(
   _modal: ReturnType<typeof useModal>,
   artifactId: string,
-) {
-  const url = `/api/artifacts/${encodeURIComponent(artifactId)}/content`;
+): void {
+  const url = getArtifactContentUrl(artifactId);
   window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-function ArtifactViewerModal({ artifactId }: { artifactId: string }) {
-  const [meta, setMeta] = useState<ArtifactMeta | null>(null);
-  const [content, setContent] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [metaData, contentData] = await Promise.all([
-          api.get<ArtifactMeta>(`/artifacts/${encodeURIComponent(artifactId)}`),
-          fetchRawContent(artifactId),
-        ]);
-        if (!cancelled) {
-          setMeta(metaData);
-          setContent(contentData);
-        }
-      } catch {
-        /* best-effort */
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [artifactId]);
-
-  return (
-    <div className="artifact-viewer-embedded">
-      {loading ? (
-        <div className="artifact-viewer-loading">
-          <Spinner />
-          <span className="muted">Loading artifact…</span>
-        </div>
-      ) : content ? (
-        <iframe
-          srcDoc={content}
-          className="artifact-viewer-iframe"
-          sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
-          title={meta?.name || 'Artifact'}
-        />
-      ) : (
-        <div className="artifact-viewer-empty muted">
-          <FileText size={32} />
-          <p>No content available.</p>
-        </div>
-      )}
-    </div>
-  );
 }
