@@ -26,14 +26,14 @@ All subagents use Hindsight memory with **per-project banks**. Call `hindsight_l
 
 | Agent | Model | Tier | Cost | When to Route |
 |---|---|---|---|---|
-| **Odin** ᛟ | MiniMax-M3 | Router | $0.30/M · $1.20/M out | Primary entry point. Decomposes and dispatches. |
+| **Odin** ᛟ | OpenRouter minimax-m3 | Router | $0.30/M · $1.20/M out | Primary entry point. Decomposes and dispatches. |
 | **Mimir** ᛗ | DeepSeek V4 Flash | Free | **$0** | Deep codebase research, Semble-first exploration, docs analysis |
 | **Heimdall** ᚹ | DeepSeek V4 Flash | Free | **$0** | Simple edits, file ops, mechanical CRUD, quick answers |
-| **Hermod** ᚱ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI |
-| **Thor** ᚦ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Moderate implementation, tests, debugging, refactoring |
-| **Tyr** ᛏ | MiniMax-M3 | High | $0.30/M · $1.20/M out | Complex features, architecture, deep debugging, cross-cutting refactor |
+| **Hermod** ᚱ | OpenRouter minimax-m2.7 | Mid | $0.30/M · $1.20/M out | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI |
+| **Thor** ᚦ | OpenRouter minimax-m2.7 | Mid | $0.30/M · $1.20/M out | Moderate implementation, tests, debugging, refactoring |
+| **Tyr** ᛏ | OpenRouter minimax-m3 | High | $0.30/M · $1.20/M out | Complex features, architecture, deep debugging, cross-cutting refactor |
 | **Vidarr** ᛉ | GPT-5.5 | Ultra | ChatGPT sub | Last resort when Tyr fails or debugging is stuck |
-| **Forseti** ᚨ | MiniMax-M3 | Gate | $0.30/M · $1.20/M out | Plan auditor — reviews Tyr/Vidarr plans before execution. `edit: deny`. |
+| **Forseti** ᚨ | OpenRouter minimax-m3 | Gate | $0.30/M · $1.20/M out | Plan auditor — reviews Tyr/Vidarr plans before execution. `edit: deny`. |
 | **Semble** | — | — | **$0** | MCP search tool, not an agent. Semble-first code search. |
 
 ## Odin Routing Rules
@@ -98,19 +98,19 @@ permission:
 
 **Fix:** Check `~/.config/opencode/agents/<name>.md` for the `model:` field. Valid models:
 - `opencode/deepseek-v4-flash-free` — free
-- `minimax/MiniMax-M2.7` — M2.7 (capital M in model ID)
-- `minimax/MiniMax-M3` — M3 (capital M in model ID)
+- `openrouter/minimax-m2.7` — M2.7
+- `openrouter/minimax-m3` — M3
 - `openai/gpt-5.5` — GPT-5.5
 
-### Minimax 404 Errors
+### OpenRouter 404 Errors
 
-**Symptoms:** 404 errors when calling minimax models.
+**Symptoms:** 404 errors when calling the OpenRouter-hosted MiniMax models.
 
-**Cause:** A `baseURL: "https://api.minimax.io/v1"` was set in the provider config, which conflicts with the ai-sdk minimax provider's internal URL construction.
+**Cause:** A `baseURL` was set on the `openrouter` provider in `opencode.json`, which conflicts with the `@openrouter/ai-sdk-provider`'s built-in URL construction.
 
-**Fix:** Remove any `baseURL` from the minimax provider section. The minimax API key in `auth.json` is sufficient. Example fix:
+**Fix:** Remove any `baseURL` from the openrouter provider section. OpenRouter's URL is built into the SDK. Example fix:
 ```diff
-- "baseURL": "https://api.minimax.io/v1"
+- "baseURL": "https://openrouter.ai/api/v1"
 ```
 The provider uses the correct default URL internally.
 
@@ -132,7 +132,7 @@ The provider uses the correct default URL internally.
 
 | File | Purpose |
 |---|---|
-| `~/.config/opencode/opencode.json` | Main config (no minimax baseURL) |
+| `~/.config/opencode/opencode.json` | Main config (no openrouter baseURL) |
 | `~/.config/opencode/AGENTS.md` | Routing table and conventions |
 | `~/.config/opencode/agents/odin.md` | Primary router agent |
 | `~/.config/opencode/agents/mimir.md` | Research agent |

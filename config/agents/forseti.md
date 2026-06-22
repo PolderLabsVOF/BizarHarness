@@ -1,7 +1,7 @@
 ---
 description: Forseti — Audits, criticizes, and corrects implementation plans before execution using MiniMax M3. No write permissions — review only.
 mode: subagent
-model: minimax/MiniMax-M3
+model: openrouter/minimax-m3
 color: "#ef4444"
 permission:
   read: allow

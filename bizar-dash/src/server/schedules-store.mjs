@@ -1,7 +1,7 @@
 /**
  * src/server/schedules-store.mjs
  *
- * v3.0.0 — Schedules registry.
+ * v3.9.0 — Schedules registry.
  *
  * Each project has its own schedules.json at
  *   ~/.config/opencode/projects/<id>/schedules.json
@@ -9,12 +9,18 @@
  * A schedule is a recurring task: { name, type, schedule, action, enabled, ... }.
  * Supported types:
  *   - interval  ("30m", "2h", "1d")
- *   - cron      ("0 0 * * *")  — best-effort: we evaluate on each tick
- *                                to detect the next minute boundary
+ *   - cron      ("0 0 * * *")  — full cron via the `croner` package, with
+ *                                optional IANA `timezone` (default "UTC")
  *   - once      (ISO timestamp)
  *
  * The dashboard reads / writes schedules here. The bizar service daemon
  * (cli/service.mjs) calls evaluateAndRun() on a tick to fire due actions.
+ *
+ * v3.9.0 changes vs v3.x:
+ *   - Cron parsing is now delegated to `croner` (proper 5-field + 6-field
+ *     + IANA TZ support). The old hand-rolled `nextCronMinute` walker is
+ *     gone.
+ *   - New Schedule fields: `timezone`, `budgetCheck`, `action.prompt`.
  */
 import {
   existsSync,
@@ -25,6 +31,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { Cron } from 'croner';
 import { projectsStore } from './projects-store.mjs';
 
 function safeReadJSON(file, fallback = null) {
@@ -72,50 +79,19 @@ export function computeNextRun(schedule, fromMs = Date.now()) {
     return new Date(Math.max(when, fromMs)).toISOString();
   }
   if (type === 'cron') {
-    // Minimal cron — we only support "* * * * *" patterns for v3.
-    // Compute the next minute that matches.
-    return nextCronMinute(schedule.schedule, fromMs);
+    if (typeof schedule.schedule !== 'string' || !schedule.schedule.trim()) return null;
+    try {
+      const tz = schedule.timezone || 'UTC';
+      // croner takes IANA tz names ("America/New_York", "Europe/Berlin",
+      // "UTC", etc.) and falls back to the system zone on invalid input.
+      const job = new Cron(schedule.schedule, { timezone: tz });
+      const next = job.nextRun(new Date(fromMs));
+      return next ? next.toISOString() : null;
+    } catch {
+      return null;
+    }
   }
   return null;
-}
-
-/** Very minimal cron: supports star, integers, and slash-N. Returns next match. */
-function nextCronMinute(expr, fromMs) {
-  if (typeof expr !== 'string') return null;
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) return null;
-  const [m, h, dom, mon, dow] = parts;
-  // For v3 we only support minute precision and very simple patterns.
-  // Iterate minute-by-minute up to 7 days to find the next match.
-  const start = new Date(fromMs);
-  start.setSeconds(0, 0);
-  const end = start.getTime() + 7 * 24 * 60 * 60 * 1000;
-  for (let t = start.getTime(); t <= end; t += 60 * 1000) {
-    const d = new Date(t);
-    if (!matchField(m, d.getMinutes())) continue;
-    if (!matchField(h, d.getHours())) continue;
-    if (!matchField(dom, d.getDate())) continue;
-    if (!matchField(mon, d.getMonth() + 1)) continue;
-    if (!matchField(dow, d.getDay())) continue;
-    return new Date(t).toISOString();
-  }
-  return null;
-}
-
-function matchField(field, value) {
-  if (field === '*') return true;
-  if (field.startsWith('*/')) {
-    const n = parseInt(field.slice(2), 10);
-    return n > 0 && value % n === 0;
-  }
-  if (field.includes(',')) {
-    return field.split(',').some((p) => matchField(p.trim(), value));
-  }
-  if (field.includes('-')) {
-    const [a, b] = field.split('-').map((p) => parseInt(p, 10));
-    return value >= a && value <= b;
-  }
-  return parseInt(field, 10) === value;
 }
 
 function loadSchedules(projectId) {
@@ -167,13 +143,29 @@ export const schedulesStore = {
       name: input.name,
       type: input.type,
       schedule: input.schedule,
+      timezone: typeof input.timezone === 'string' && input.timezone.trim()
+        ? input.timezone.trim()
+        : 'UTC',
       action: input.action,
+      budgetCheck: input.budgetCheck && typeof input.budgetCheck === 'object'
+        ? {
+            maxConcurrent: Number.isFinite(input.budgetCheck.maxConcurrent)
+              ? input.budgetCheck.maxConcurrent
+              : 6,
+            skipIfBudgetLow: !!input.budgetCheck.skipIfBudgetLow,
+          }
+        : { maxConcurrent: 6, skipIfBudgetLow: false },
       enabled: input.enabled !== false,
       createdAt: now,
       updatedAt: now,
       lastRun: null,
       lastResult: null,
-      nextRun: computeNextRun({ type: input.type, schedule: input.schedule }),
+      lastError: null,
+      nextRun: computeNextRun({
+        type: input.type,
+        schedule: input.schedule,
+        timezone: input.timezone || 'UTC',
+      }),
       history: [],
     };
     data.schedules.push(sched);
@@ -192,8 +184,40 @@ export const schedulesStore = {
       id: cur.id,
       updatedAt: new Date().toISOString(),
     };
-    if (patch.type || patch.schedule) {
-      next.nextRun = computeNextRun({ type: next.type, schedule: next.schedule });
+    // Sanitize nested budgetCheck so callers can't smuggle in extra keys
+    // (matches the shape validation in `add`).
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'budgetCheck')) {
+      const bc = patch.budgetCheck && typeof patch.budgetCheck === 'object'
+        ? patch.budgetCheck
+        : {};
+      next.budgetCheck = {
+        maxConcurrent: Number.isFinite(bc.maxConcurrent) ? bc.maxConcurrent : 6,
+        skipIfBudgetLow: !!bc.skipIfBudgetLow,
+      };
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'timezone')) {
+      next.timezone = typeof patch.timezone === 'string' && patch.timezone.trim()
+        ? patch.timezone.trim()
+        : 'UTC';
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'action') && patch.action) {
+      // Preserve the existing action shape; only the listed keys are merged.
+      next.action = {
+        type: patch.action.type || cur.action.type,
+        target: patch.action.target ?? cur.action.target,
+        prompt: patch.action.prompt ?? cur.action.prompt,
+        method: patch.action.method ?? cur.action.method,
+        body: patch.action.body ?? cur.action.body,
+        title: patch.action.title ?? cur.action.title,
+        name: patch.action.name ?? cur.action.name,
+      };
+    }
+    if (patch.type || patch.schedule || patch.timezone) {
+      next.nextRun = computeNextRun({
+        type: next.type,
+        schedule: next.schedule,
+        timezone: next.timezone || 'UTC',
+      });
     }
     data.schedules[idx] = next;
     saveSchedules(projectId, data);
@@ -216,14 +240,18 @@ export const schedulesStore = {
     if (!sched) return null;
     const now = new Date().toISOString();
     sched.lastRun = now;
-    sched.lastResult = result;
+    // `result` is one of: 'success' | 'error' | 'skipped'. Pass through
+    // whatever the runner reports — null is also legal for backwards
+    // compat with old callers, but the new runner always passes a value.
+    sched.lastResult = result || null;
+    sched.lastError = error || null;
     if (sched.type === 'once') {
       sched.enabled = false;
     } else {
       sched.nextRun = computeNextRun(sched, Date.now());
     }
     sched.history = sched.history || [];
-    sched.history.push({ ts: now, result, error: error || null });
+    sched.history.push({ ts: now, result: result || 'unknown', error: error || null });
     if (sched.history.length > 50) sched.history = sched.history.slice(-50);
     saveSchedules(projectId, data);
     return sched;

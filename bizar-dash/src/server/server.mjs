@@ -26,6 +26,7 @@ import { schedulesStore } from './schedules-store.mjs';
 import { providersStore, mcpsStore } from './providers-store.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
+import { startDialogPoller } from './dialog-poller.mjs';
 import {
   checkWebSocketAuth,
   isAllowedDashboardOrigin,
@@ -497,6 +498,16 @@ export async function createServer({
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[bizar-dash] failed to start bg-poller:', err.message);
+  }
+
+  // v0.5.1 — Poll for dialog descriptors written by the plugin and
+  // broadcast them to connected dashboard clients via WS.
+  // Idempotent — calling startDialogPoller twice is a no-op.
+  try {
+    startDialogPoller();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[bizar-dash] failed to start dialog-poller:', err.message);
   }
 
   function close() {

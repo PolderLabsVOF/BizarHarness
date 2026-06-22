@@ -22,7 +22,7 @@ function makeBgState(overrides: Partial<BackgroundState> = {}): BackgroundState 
     agent: "mimir",
     status: "pending",
     startedAt: Date.now(),
-    model: "minimax/MiniMax-M3",
+    model: "openrouter/minimax-m3",
     promptPreview: "Do the thing",
     resultPreview: undefined,
     resultMessageIds: [],

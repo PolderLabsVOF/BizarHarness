@@ -1,7 +1,7 @@
 ---
 description: Baldr — UI/UX design system specialist. Creates DESIGN.md files using Google's design.md standard (alpha). Focuses on visual consistency, usability, accessibility, and design tokens.
 mode: subagent
-model: minimax/MiniMax-M2.7
+model: openrouter/minimax-m2.7
 color: "#ec4899"
 permission:
   read: allow

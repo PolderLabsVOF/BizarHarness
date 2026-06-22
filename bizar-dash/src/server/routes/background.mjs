@@ -85,5 +85,23 @@ export function createBackgroundRouter({ broadcast }) {
     res.json(result);
   }));
 
+  // v0.5.5 — Cleanup old terminal instances. The UI calls this from
+  // the Settings "Background Agents" card.
+  router.post('/background/cleanup', wrap(async (req, res) => {
+    const { backgroundStore } = await import('../background-store.mjs');
+    const maxAgeDays = Number(req.body?.maxAgeDays) || 7;
+    const result = backgroundStore.cleanup(maxAgeDays);
+    broadcast({ type: 'background:cleanup', deleted: result.deleted });
+    res.json(result);
+  }));
+
+  // v0.5.5 — Summary with status counts. The UI calls this for the
+  // Background Agents overview in Settings.
+  router.get('/background/summary', wrap(async (_req, res) => {
+    const { backgroundStore } = await import('../background-store.mjs');
+    const summary = backgroundStore.listWithStatusCounts();
+    res.json(summary);
+  }));
+
   return router;
 }

@@ -3,9 +3,15 @@
  *
  * /api/schedules                          — list
  * /api/schedules (POST)                   — add
- * /api/schedules/:id (PUT)                — update
+ * /api/schedules/:id (PUT)                — full update
+ * /api/schedules/:id (PATCH)              — partial update (toggle fields)
  * /api/schedules/:id/run (POST)           — run once now
+ * /api/schedules/:id/trigger (POST)       — alias for /run (mobile uses this)
  * /api/schedules/:id (DELETE)             — remove
+ *
+ * PATCH exists because the desktop UI's "toggle enabled" and the mobile
+ * UI's edit flow both want to send partial payloads without losing the
+ * rest of the schedule.
  */
 import { Router } from 'express';
 import { schedulesStore } from '../schedules-store.mjs';
@@ -43,7 +49,35 @@ export function createSchedulesRouter({ broadcast }) {
     res.json(sched);
   }));
 
+  // v3.9.0 — Partial update. The mobile UI PATCHes a single field at a
+  // time (toggle enabled, rename, etc.) so a PUT that required the full
+  // shape was impractical. PATCH is semantically correct here.
+  router.patch('/schedules/:id', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId() || 'default';
+    const sched = schedulesStore.update(projectId, req.params.id, req.body || {});
+    if (!sched) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'schedules:change' });
+    res.json(sched);
+  }));
+
   router.post('/schedules/:id/run', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId() || 'default';
+    const sched = schedulesStore.get(projectId, req.params.id);
+    if (!sched) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const result = await schedulesRunner.runOne(projectId, sched);
+    broadcast({ type: 'schedules:change' });
+    res.json(result);
+  }));
+
+  // v3.9.0 — Mobile uses /trigger; keep it as an alias of /run so
+  // desktop and mobile share the same handler.
+  router.post('/schedules/:id/trigger', wrap(async (req, res) => {
     const projectId = req.body?.projectId || readActiveProjectId() || 'default';
     const sched = schedulesStore.get(projectId, req.params.id);
     if (!sched) {

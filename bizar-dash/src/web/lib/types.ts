@@ -1,6 +1,31 @@
 // src/lib/types.ts — TypeScript types for the Bizar dashboard.
 // All shapes here mirror the JSON returned by src/server/api.mjs.
 
+/**
+ * Dialog component types that can be rendered in the dashboard.
+ * Aligned with `DialogComponent` in plugins/bizar/src/commands.ts.
+ * If you add a new component here, mirror it there and in
+ * dialog-store.mjs KNOWN_COMPONENTS.
+ */
+export type DialogComponent = 'visual-plan' | 'plan-create' | 'plan-list' | 'help' | 'audit' | 'generic';
+
+/**
+ * A modal dialog request emitted by the slash-command plugin and
+ * delivered to the dashboard via the `dialog:show` WS message.
+ * Thor's plugin code emits these; the desktop Chat view (sibling scope)
+ * mounts a component keyed by `component` and seeds it with `data`.
+ */
+export type DialogDescriptor = {
+  id: string;
+  title: string;
+  /** Original slash command, e.g. "/visual-plan on". */
+  command: string;
+  /** Component key the Chat view mounts. One of: 'visual-plan' | 'plan-create' | 'plan-list' | 'help' | 'audit' | 'generic' */
+  component: DialogComponent;
+  /** Component-specific payload. Shape depends on `component`. */
+  data?: Record<string, unknown>;
+};
+
 export type ThemeName = 'dark' | 'light' | 'system';
 
 export type ThemeSettings = {
@@ -275,22 +300,45 @@ export type CustomTheme = {
   createdAt?: string | null;
 };
 
+export type BudgetCheck = {
+  /** Skip the run if at least this many bg tasks are already running or pending. */
+  maxConcurrent?: number;
+  /** When true, the runner consults `maxConcurrent` and skips the run if the budget is exceeded. */
+  skipIfBudgetLow?: boolean;
+};
+
+export type ScheduleAction = {
+  type: 'command' | 'agent' | 'webhook';
+  target: string;
+  /** Free-form prompt for `agent` actions — the text the agent will work from. */
+  prompt?: string;
+  /** Optional webhook method override (defaults to POST). */
+  method?: string;
+  /** Webhook body. May also carry `prompt` for an agent dispatch. */
+  body?: unknown;
+  /** Title used when this action dispatches an agent task. */
+  title?: string;
+  /** Display name override when dispatching. */
+  name?: string;
+};
+
 export type Schedule = {
   id: string;
   name: string;
   type: 'cron' | 'interval' | 'once';
+  /** For `cron`: a 5-field cron expression. For `interval`: a "30m" / "2h" / "1d" string. For `once`: an ISO datetime. */
   schedule: string;
-  action: {
-    type: 'command' | 'agent' | 'webhook';
-    target: string;
-    method?: string;
-    body?: unknown;
-  };
+  /** IANA timezone for `cron` schedules. Defaults to "UTC" when absent. */
+  timezone?: string;
+  action: ScheduleAction;
+  /** Optional budget pre-flight: skip the run when too many bg tasks are already in flight. */
+  budgetCheck?: BudgetCheck;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
   lastRun: string | null;
-  lastResult: string | null;
+  lastResult: 'success' | 'error' | 'skipped' | null;
+  lastError: string | null;
   nextRun: string | null;
   history: { ts: string; result: string; error: string | null }[];
 };
@@ -408,6 +456,7 @@ export type WsMessage =
   | { type: 'chat:message'; message: ChatMessage }
   | { type: 'notification:new'; notification: Notification }
   | { type: 'notifications:change' }
+  | { type: 'dialog:show'; dialog: DialogDescriptor }
   | { type: 'pong'; ts: number }
   | { type: 'ping' }
   | { type: 'refresh' };

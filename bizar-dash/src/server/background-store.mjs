@@ -349,4 +349,54 @@ export const backgroundStore = {
     }
     return { dir, exists, count };
   },
+
+  /**
+   * v0.5.5 — Delete state files for terminal instances older than
+   * `maxAgeDays`. Iterates all BG_DIRS. Non-terminal instances are
+   * NEVER removed. Returns the total deleted count.
+   */
+  cleanup(maxAgeDays = 7) {
+    let deleted = 0;
+    const cutoff = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
+    const TERMINAL = new Set(['done', 'failed', 'killed', 'timed_out']);
+    for (const dir of BG_DIRS) {
+      if (!existsSync(dir)) continue;
+      let files;
+      try {
+        files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+      } catch {
+        continue;
+      }
+      for (const f of files) {
+        const full = join(dir, f);
+        const data = safeReadJSON(full, null);
+        if (!data) continue;
+        if (!TERMINAL.has(data.status)) continue;
+        const ts = new Date(data.updatedAt || data.completedAt || 0).getTime();
+        if (ts < cutoff) {
+          try {
+            unlinkSync(full);
+            deleted += 1;
+          } catch {
+            // race — file already gone, skip
+          }
+        }
+      }
+    }
+    return { deleted };
+  },
+
+  /**
+   * v0.5.5 — List all instances with summary status counts. Wraps
+   * `list()` and computes a breakdown.
+   */
+  listWithStatusCounts() {
+    const instances = this.list();
+    const counts = { pending: 0, running: 0, done: 0, failed: 0, killed: 0, timed_out: 0 };
+    for (const inst of instances) {
+      const s = inst.status;
+      if (s in counts) counts[s] += 1;
+    }
+    return { instances, counts, total: instances.length };
+  },
 };

@@ -39,6 +39,34 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - Mobile sheet/modal scroll lock must use `position: fixed` on body, not just `overflow: hidden` (iOS Safari ignores overflow locking).
 - **Pattern to follow next time**: For monorepo audit tasks, dispatch all component-level audits in parallel from one Odin message, then run integration + E2E + release from a single sequencer. This compressed 116 files of fixes + verification + publish into one Odin turn.
 
+### 2026-06-23 — v3.9.0 four-stream release
+
+- **Context:** User requested five changes in one turn: (1) update the graphify installer to use `uv` by default (PEP 668 workaround on Arch); (2) migrate the MiniMax default provider from `minimax.io` to OpenRouter across every config + wiki page; (3) deep-dive the slash-command system and make every `/command` open an actual dialog instead of printing usage text as a chat bubble; (4) deep-dive the schedule feature and make "Sunday 1pm weekly code review" actually work end-to-end (currently 6 critical bugs); (5) audit + improve the always-on / background-agent dashboard so status is clear and configuration is reachable in the UI.
+
+- **Approach:** Three parallel research streams (@mimir for slash commands, schedules, background system) → four parallel implementation streams (@thor for installer + slash-command dialogs, @tyr for OpenRouter migration + schedules overhaul, @heimdall for background UX) → @forseti audit → fix dispatch for 3 CRITICAL + 4 HIGH findings → @thor test gate → Odin does housekeeping inline (version bump, CHANGELOG entry, this entry) → @hermod release commit + push + tag.
+
+- **Lessons learned:**
+  - **The plugin `chat.message` hook silently hijacks every `/`-prefixed message** including commands that opencode would have dispatched natively. The "Unknown command" branch in `commands.ts` returned `handled: true`, swallowing `/audit`, `/explain`, `/init`, `/learn`, `/pr-review`, `/tailscale-serve` — the agent files referenced by `command:` in `opencode.json` were never reached. Fix: only intercept commands that need plugin-side effects (`/visual-plan`, `/plan`, `/bizar`); let the rest fall through.
+  - **`throw new Error(text)` from `chat.message` is a footgun.** It looks like an error, but opencode treats it as the assistant response — the user sees the thrown string as a chat bubble. Any plugin that wants to communicate something to the UI without producing a chat reply must write to a side channel (file bus or WS), not throw.
+  - **A "deferred to vX.Y" comment is technical debt that ages into a bug.** `schedules-runner.mjs:107-111` had `"agent dispatch (deferred to v3.1)"` — three minor versions later it was still a stub logging success for a no-op. Audit cycles need to specifically flag TODO comments with version numbers and either ship them or remove them.
+  - **Cron libraries are worth the dependency.** The hand-rolled 5-field cron evaluator (`nextCronMinute`) worked for simple patterns but had no timezone support and would have been wrong on the very feature the user asked for (Sunday 1pm ET). `croner` (10KB gzipped, built-in IANA TZ, single `.nextRun()` API) replaced 40 lines and added timezone, validation, and iterator support. Don't roll your own cron.
+  - **`restartCount` on the child instance is not enough.** When persistent instances auto-restart, each child has its own counter starting fresh — a chain can exceed `maxRestarts` indefinitely. The fix is to walk the `parentInstanceId` chain and sum all counters, cycle-safe.
+  - **Dead "Settings" UIs are worse than no UI.** The first Background Agents card had inputs with `defaultValue={N}` and no `value`/`onChange`/Save. The CardMeta said "Tune plugin options" — pure deception. Either implement it (the second pass did) or remove it; never ship a card that looks editable but isn't.
+  - **Cross-package type duplication needs a "kept in sync" comment.** `DialogComponent` was defined in `plugins/bizar/src/commands.ts` (the source) and `bizar-dash/src/web/lib/types.ts` (the consumer). They're literal unions, easy to drift. Solution: a comment in both files pointing at the other.
+  - **`api.mjs` vs `server.mjs` router mount style matters.** Forseti found that `createDialogsRouter` was exported but never registered — the implementation assumed `server.mjs` mounts routers but the actual mount point was `api.mjs`. Always check both files when adding a new route.
+  - **TypeScript `import type` erasure hides bad imports.** `CommandDialog.tsx:10` had `import type { DialogDescriptor } from './types'` referencing a nonexistent file. Project-wide `tsc --noEmit` passed because the import was type-only and erased at runtime; Vite's bundler would have failed at build. Lesson: typecheck the file in isolation, not just as part of the project.
+
+- **Patterns for next time:**
+  - For UI that emits dialogs from the plugin, use a file-based message bus (`~/.cache/bizar/dialogs/<id>.json`) polled every 1s by a dashboard worker. Easier than threading WS through the plugin's process boundary.
+  - For multi-stream releases, dispatch implementation in parallel with explicit `WIRING` comments for cross-cutting glue (the dialog router mount, the audit endpoint). One agent creates the artifact; another wires it. The comments make the contract explicit.
+  - Always run `@forseti` audit after multi-stream implementation. Three of the seven findings would have shipped as silent no-ops (Settings card, AuditDialog 404, dialog router unmounted). The audit catches what the implementation agents cannot self-verify.
+
+- **Files changed:**
+  - 44 modified, 9 new (full list in `CHANGELOG.md` v3.9.0)
+  - Net: +2,372/-481 lines
+
+- **Agents used:** @mimir (3 deep-dive research streams), @thor (installer, slash-command dialogs, fix stream), @tyr (OpenRouter migration, schedules overhaul), @heimdall (background UX, fix stream), @forseti (audit), @hermod (release pending).
+
 ### 2026-06-17: Created bizar-remote repo from scaffold
 - **Context**: Scaffold had 1 TSX file with backticks in template literal causing parse error
 - **Lesson**: Template literals with inner backticks fail at compile time. Use string concatenation for help text containing backticks.

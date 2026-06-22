@@ -27,13 +27,13 @@ function parseModel(model: string | undefined): { providerID: string; modelID: s
   const parts = model.split("/");
   if (parts.length !== 2) {
     throw new Error(
-      `model must be in "providerID/modelID" format (e.g. "minimax/MiniMax-M3"). Omit to use the agent's default.`,
+      `model must be in "providerID/modelID" format (e.g. "openrouter/minimax-m3"). Omit to use the agent's default.`,
     );
   }
   const [providerID, modelID] = parts;
   if (!providerID || !modelID) {
     throw new Error(
-      `model must be in "providerID/modelID" format (e.g. "minimax/MiniMax-M3"). Omit to use the agent's default.`,
+      `model must be in "providerID/modelID" format (e.g. "openrouter/minimax-m3"). Omit to use the agent's default.`,
     );
   }
   return { providerID, modelID };
@@ -132,9 +132,9 @@ describe("bizar_spawn_background — Odin-only", () => {
 // ---------------------------------------------------------------------------
 
 describe("bizar_spawn_background — model parsing (HIGH-3, LOW-34)", () => {
-  it('"minimax/MiniMax-M3" parses to { providerID: "minimax", modelID: "MiniMax-M3" }', () => {
-    const result = parseModel("minimax/MiniMax-M3");
-    expect(result).toEqual({ providerID: "minimax", modelID: "MiniMax-M3" });
+  it('"openrouter/minimax-m3" parses to { providerID: "openrouter", modelID: "minimax-m3" }', () => {
+    const result = parseModel("openrouter/minimax-m3");
+    expect(result).toEqual({ providerID: "openrouter", modelID: "minimax-m3" });
   });
 
   it('"opencode/deepseek-v4-flash-free" parses correctly', () => {
@@ -142,20 +142,20 @@ describe("bizar_spawn_background — model parsing (HIGH-3, LOW-34)", () => {
     expect(result).toEqual({ providerID: "opencode", modelID: "deepseek-v4-flash-free" });
   });
 
-  it('"MiniMax-M3" (no /) is rejected', () => {
-    expect(() => parseModel("MiniMax-M3")).toThrow();
+  it('"minimax-m3" (no /) is rejected', () => {
+    expect(() => parseModel("minimax-m3")).toThrow();
   });
 
   it('"a/b/c" (multiple /) is rejected', () => {
     expect(() => parseModel("a/b/c")).toThrow();
   });
 
-  it('"minimax/" (empty modelID) is rejected', () => {
-    expect(() => parseModel("minimax/")).toThrow();
+  it('"openrouter/" (empty modelID) is rejected', () => {
+    expect(() => parseModel("openrouter/")).toThrow();
   });
 
-  it('"/MiniMax-M3" (empty providerID) is rejected', () => {
-    expect(() => parseModel("/MiniMax-M3")).toThrow();
+  it('"/minimax-m3" (empty providerID) is rejected', () => {
+    expect(() => parseModel("/minimax-m3")).toThrow();
   });
 
   it("undefined model returns undefined (agent uses its default)", () => {
@@ -168,7 +168,7 @@ describe("bizar_spawn_background — model parsing (HIGH-3, LOW-34)", () => {
 
   it("spawn tool includes parsed model in POST /session body", () => {
     const result = bizarre_spawn_background(
-      { agent: "mimir", prompt: "Do X", model: "minimax/MiniMax-M3" },
+      { agent: "mimir", prompt: "Do X", model: "openrouter/minimax-m3" },
       { agent: "odin", sessionID: "sess_parent", worktree: "/tmp" },
     );
     expect(result).not.toHaveProperty("error");

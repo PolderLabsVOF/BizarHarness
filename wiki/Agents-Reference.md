@@ -22,7 +22,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Odin (orchestrator)
 
 - **Rune:** ᛟ
-- **Model:** `minimax/MiniMax-M3`
+- **Model:** `openrouter/minimax-m3`
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Primary router. The default agent. Decomposes every request into parallel work streams and dispatches to subagents. **Never executes work itself.**
 - **Tools:** `task`, `todowrite`, Hindsight MCP tools, Semble MCP tools. No `bash`, `glob`, `grep`, `edit`, `write`, or `question`.
@@ -88,7 +88,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Hermod (git)
 
 - **Rune:** ᚱ
-- **Model:** `minimax/MiniMax-M2.7`
+- **Model:** `openrouter/minimax-m2.7`
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Git and GitHub operations. Commits, pushes, merges, rebase, branch management, pull requests, GitHub issue and release management.
 - **Tools:** `bash`, `read`, `glob`, `grep`, `gh` CLI. No `edit` or `write` (modifies the working tree via git, not via direct file writes).
@@ -99,7 +99,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Thor (medium)
 
 - **Rune:** ᚦ
-- **Model:** `minimax/MiniMax-M2.7`
+- **Model:** `openrouter/minimax-m2.7`
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Moderate-complexity implementation. Features that span a few files, debugging tasks, code review, refactoring of contained scopes.
 - **Tools:** Full read/write tool surface plus all MCP tools.
@@ -110,7 +110,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Baldr (design)
 
 - **Rune:** ᛒ
-- **Model:** `minimax/MiniMax-M2.7`
+- **Model:** `openrouter/minimax-m2.7`
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Design system creation, DESIGN.md authoring, visual audits, usability planning. **Plans only — does not implement.** A Baldr plan is the design contract; Thor or Tyr executes it later.
 - **Tools:** `read`, `glob`, `grep`, `write` (to DESIGN.md and design files), MCP tools. Limited `bash`.
@@ -121,7 +121,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Tyr (complex)
 
 - **Rune:** ᛏ
-- **Model:** `minimax/MiniMax-M3`
+- **Model:** `openrouter/minimax-m3`
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Highest-complexity implementation. Architecture decisions, cross-cutting refactors, deep debugging, multi-step engineering. Always run in parallel with Thor on Tier 4 work.
 - **Tools:** Full read/write tool surface plus all MCP tools.
@@ -143,7 +143,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Forseti (audit)
 
 - **Rune:** ᚨ
-- **Model:** `minimax/MiniMax-M3`
+- **Model:** `openrouter/minimax-m3`
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Adversarial plan reviewer. Audits completeness, correctness, consistency, feasibility, and security of plans from Tyr and Vidarr. **Edit permission: denied** — runs in audit-only mode.
 - **Tools:** `read`, `glob`, `grep`, MCP tools. No `edit`, `write`, or `bash`.

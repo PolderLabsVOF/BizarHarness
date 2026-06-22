@@ -33,6 +33,7 @@ import { createConfigRouter } from './routes/config.mjs';
 import { createProvidersRouter } from './routes/providers.mjs';
 import { createSettingsRouter } from './routes/settings.mjs';
 import { createChatRouter } from './routes/chat.mjs';
+import { createDialogsRouter } from './routes/dialogs.mjs';
 import { createSkillsRouter } from './routes/skills.mjs';
 import { createDiagnosticsRouter } from './routes/diagnostics.mjs';
 import { createPairRouter } from './routes/pair.mjs';
@@ -85,6 +86,7 @@ export function createApiRouter({
   router.use(createProvidersRouter());
   router.use(createSettingsRouter({ state, broadcast }));
   router.use(createChatRouter({ state, broadcast }));
+  router.use(createDialogsRouter({ broadcast }));
   router.use(createSkillsRouter({ broadcast }));
   router.use(createDiagnosticsRouter());
   router.use(createPairRouter({ state, broadcast }));

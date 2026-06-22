@@ -470,6 +470,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   const [saving, setSaving] = useState(false);
   const [tailscale, setTailscale] = useState<TailscaleStatus | null>(null);
   const [tailscaleDraft, setTailscaleDraft] = useState({ port: 4321, https: true, hostname: '' });
+  const [pluginOptions, setPluginOptions] = useState<Record<string, number>>({});
 
   useEffect(() => {
     setSettings(initial);
@@ -488,6 +489,12 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
 
   useEffect(() => {
     api.get<TailscaleStatus>('/tailscale/status').then(setTailscale).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    api.get<Record<string, number>>('/settings/plugin-options')
+      .then(setPluginOptions)
+      .catch(() => { /* not persisted yet — use defaults */ });
   }, []);
 
   const patchTheme = (patch: Partial<Settings['theme']>) => {
@@ -1181,6 +1188,126 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Auto-launch web UI alongside TUI</span>
           </label>
+        </Card>
+
+        <Card>
+          <CardTitle><ServerIcon size={14} /> Background Agents</CardTitle>
+          <CardMeta>Tune plugin options. Changes take effect on next plugin restart.</CardMeta>
+
+          <div className="form-row">
+            <label htmlFor="bg-maxConcurrent">
+              Max concurrent instances
+              <span className="meta-badge">default: 8</span>
+            </label>
+            <input
+              id="bg-maxConcurrent"
+              type="number"
+              min={1}
+              max={32}
+              value={pluginOptions.maxConcurrentInstances ?? 8}
+              onChange={(e) => setPluginOptions((cur) => ({ ...cur, maxConcurrentInstances: Math.max(1, Math.min(32, parseInt(e.target.value, 10) || 8)) }))}
+            />
+            <small className="muted">Plugin option: <code>maxConcurrentInstances</code></small>
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="bg-toolCallCap">
+              Tool-call cap
+              <span className="meta-badge">default: 500</span>
+            </label>
+            <input
+              id="bg-toolCallCap"
+              type="number"
+              min={1}
+              max={5000}
+              value={pluginOptions.backgroundToolCallCap ?? 500}
+              onChange={(e) => setPluginOptions((cur) => ({ ...cur, backgroundToolCallCap: Math.max(1, Math.min(5000, parseInt(e.target.value, 10) || 500)) }))}
+            />
+            <small className="muted">Plugin option: <code>backgroundToolCallCap</code></small>
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="bg-stallTimeout">
+              Stall timeout (ms)
+              <span className="meta-badge">default: 180000</span>
+            </label>
+            <input
+              id="bg-stallTimeout"
+              type="number"
+              min={10000}
+              max={600000}
+              step={1000}
+              value={pluginOptions.backgroundStallTimeoutMs ?? 180000}
+              onChange={(e) => setPluginOptions((cur) => ({ ...cur, backgroundStallTimeoutMs: Math.max(10000, Math.min(600000, parseInt(e.target.value, 10) || 180000)) }))}
+            />
+            <small className="muted">Plugin option: <code>backgroundStallTimeoutMs</code></small>
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="bg-thinkingLoopTimeout">
+              Thinking-loop timeout (ms)
+              <span className="meta-badge">default: 300000</span>
+            </label>
+            <input
+              id="bg-thinkingLoopTimeout"
+              type="number"
+              min={30000}
+              max={900000}
+              step={1000}
+              value={pluginOptions.backgroundThinkingLoopTimeoutMs ?? 300000}
+              onChange={(e) => setPluginOptions((cur) => ({ ...cur, backgroundThinkingLoopTimeoutMs: Math.max(30000, Math.min(900000, parseInt(e.target.value, 10) || 300000)) }))}
+            />
+            <small className="muted">Plugin option: <code>backgroundThinkingLoopTimeoutMs</code></small>
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="bg-maxInterventions">
+              Max interventions
+              <span className="meta-badge">default: 1</span>
+            </label>
+            <input
+              id="bg-maxInterventions"
+              type="number"
+              min={1}
+              max={3}
+              value={pluginOptions.backgroundMaxInterventions ?? 1}
+              onChange={(e) => setPluginOptions((cur) => ({ ...cur, backgroundMaxInterventions: Math.max(1, Math.min(3, parseInt(e.target.value, 10) || 1)) }))}
+            />
+            <small className="muted">Plugin option: <code>backgroundMaxInterventions</code></small>
+          </div>
+
+          <div className="form-row">
+            <Button variant="secondary" size="sm" onClick={async () => {
+              try {
+                await api.put('/settings/plugin-options', pluginOptions);
+                toast.success('Saved — restart opencode for changes to take effect.');
+              } catch (err) {
+                toast.error(`Save failed: ${(err as Error).message}`);
+              }
+            }}>
+              <Save size={14} /> Save plugin options
+            </Button>
+
+            <Button variant="secondary" size="sm" onClick={async () => {
+              try {
+                const r = await fetch('/api/background/cleanup', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ maxAgeDays: 7 }),
+                });
+                const result = await r.json();
+                toast.success(`Cleaned up ${result.deleted} old instances.`);
+              } catch (err) {
+                toast.error(`Cleanup failed: ${(err as Error).message}`);
+              }
+            }}>
+              Cleanup old instances (&gt;7 days)
+            </Button>
+          </div>
+
+          <div className="form-row">
+            <small>Plugin options are read at startup. Save changes and run <code>bizar update</code> to apply.</small>
+          </div>
         </Card>
       </div>
 

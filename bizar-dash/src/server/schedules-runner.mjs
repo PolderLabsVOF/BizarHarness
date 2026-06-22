@@ -1,7 +1,7 @@
 /**
  * src/server/schedules-runner.mjs
  *
- * v3.0.0 — Executes due schedules.
+ * v3.9.0 — Executes due schedules.
  *
  * Called by the service daemon (cli/service.mjs) on a tick. For each due
  * schedule, this module runs the action and records the result via
@@ -9,12 +9,12 @@
  *
  * Action types:
  *   - command  → spawn a child process
- *   - agent    → log + append activity (we don't dispatch live agents from
- *               the service yet — that's wired in v3.1)
+ *   - agent    → submit via taskDelegator (Odin split-and-dispatch).
+ *               Honors `budgetCheck.skipIfBudgetLow` to skip when too
+ *               many bg tasks are already running.
  *   - webhook  → POST JSON to the URL
  *
- * v3 keeps the runner minimal. Errors are caught and recorded; the loop
- * never throws.
+ * Errors are caught and recorded; the loop never throws.
  */
 import { spawn } from 'node:child_process';
 import { writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
@@ -94,7 +94,7 @@ function validateWebhookTarget(rawUrl) {
   }
 }
 
-async function runAction(action) {
+async function runAction(action, ctx = {}) {
   if (!action || typeof action !== 'object') {
     throw new Error('invalid action');
   }
@@ -105,11 +105,119 @@ async function runAction(action) {
     return runWebhook(action);
   }
   if (action.type === 'agent') {
-    // For v3 we just log; real agent dispatch lives in v3.1+
-    logLine(`[schedule] agent dispatch (deferred to v3.1): ${action.target || '?'}`);
-    return { ok: true, note: 'agent dispatch deferred to v3.1' };
+    return runAgentAction(action, ctx);
   }
   throw new Error(`unknown action type: ${action.type}`);
+}
+
+/**
+ * Dispatch an `agent` schedule action via the dashboard's task delegator.
+ * Mirrors the contract used by /api/tasks/submit: Odin analyzes the prompt,
+ * splits into subtasks, and dispatches each to a matched agent.
+ *
+ * The delegator's `submit()` returns `{ main, subtasks, dispatch }`. We
+ * treat the call as successful when `main` was persisted AND Odin
+ * produced at least one subtask. Subtask dispatch errors are surfaced as
+ * the `error` field of the returned shape so the schedule's `lastError`
+ * reflects the dispatch outcome, not just "the task was created".
+ *
+ * Lazy import keeps this module loadable when the task delegator is not
+ * yet initialised (e.g. during unit tests).
+ *
+ * @param {object} action
+ * @param {object} [ctx]  Optional ctx (projectId, broadcast). Passed through.
+ * @returns {Promise<{ ok: boolean, taskId?: string, subtaskCount?: number, error?: string }>}
+ */
+async function runAgentAction(action, ctx = {}) {
+  const title =
+    action.title ||
+    action.name ||
+    (typeof action.target === 'string' && action.target.trim()) ||
+    'Scheduled task';
+  const prompt =
+    action.prompt ||
+    (action.body && typeof action.body === 'object' && action.body.prompt) ||
+    (typeof action.target === 'string' ? action.target.trim() : '') ||
+    'Run scheduled task.';
+  const projectId = ctx.projectId || null;
+  try {
+    const { taskDelegator } = await import('./task-delegator.mjs');
+    const result = await taskDelegator.submit(
+      {
+        title,
+        description: prompt,
+        tags: ['scheduled'],
+        priority: 'normal',
+      },
+      {
+        projectId,
+        broadcast: ctx.broadcast || (() => {}),
+      },
+    );
+    const mainOk = !!(result && result.main && result.main.id);
+    const subtaskCount = (result && Array.isArray(result.subtasks)) ? result.subtasks.length : 0;
+    const dispatchErrors = result && result.dispatch && Array.isArray(result.dispatch.errors)
+      ? result.dispatch.errors
+      : [];
+    const dispatchErrMsg = dispatchErrors.length > 0
+      ? dispatchErrors.map((e) => e && e.message).filter(Boolean).join('; ') || 'dispatch error'
+      : null;
+    if (!mainOk) {
+      return { ok: false, error: 'task delegator did not persist a main task' };
+    }
+    if (subtaskCount === 0) {
+      return { ok: false, taskId: result.main.id, error: 'no subtasks produced' };
+    }
+    return {
+      ok: dispatchErrors.length === 0,
+      taskId: result.main.id,
+      subtaskCount,
+      error: dispatchErrMsg || undefined,
+    };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
+}
+
+/**
+ * Budget pre-flight: count in-flight bg tasks (running + pending) and
+ * skip the schedule if the count meets or exceeds `maxConcurrent`.
+ * Returns `{ skip: true, reason }` to skip, or `{ skip: false }` to
+ * continue with the run.
+ *
+ * Lazy-imports backgroundStore so this module can be loaded even when
+ * the bg subsystem hasn't booted yet.
+ *
+ * @param {{ skipIfBudgetLow?: boolean, maxConcurrent?: number }|undefined} budgetCheck
+ * @returns {Promise<{ skip: boolean, reason?: string, running?: number, cap?: number }>}
+ */
+async function checkBudget(budgetCheck) {
+  if (!budgetCheck || !budgetCheck.skipIfBudgetLow) {
+    return { skip: false };
+  }
+  const cap = Number.isFinite(budgetCheck.maxConcurrent) ? budgetCheck.maxConcurrent : 6;
+  let running = 0;
+  try {
+    const { backgroundStore } = await import('./background-store.mjs');
+    const list = backgroundStore.list();
+    running = list.filter(
+      (b) => b && (b.status === 'running' || b.status === 'pending'),
+    ).length;
+  } catch (err) {
+    // If the bg subsystem is unreachable we treat that as "no tasks
+    // running" — better to over-fire a schedule than to silently skip.
+    logLine(`[schedule] budget check failed: ${err.message || err}`);
+    return { skip: false };
+  }
+  if (running >= cap) {
+    return {
+      skip: true,
+      reason: `budget: ${running} concurrent >= ${cap}`,
+      running,
+      cap,
+    };
+  }
+  return { skip: false, running, cap };
 }
 
 function runCommand(action) {
@@ -183,12 +291,17 @@ export const schedulesRunner = {
     } catch {
       /* ignore */
     }
+    let skipped = 0;
     for (const projectId of projectIds) {
       const due = schedulesStore.due(projectId, Date.now());
       for (const sched of due) {
         const result = await this.runOne(projectId, sched);
+        if (result && result.skipped) skipped += 1;
         fired.push({ projectId, scheduleId: sched.id, ...result });
       }
+    }
+    if (skipped > 0) {
+      logLine(`[schedule] tick: ${skipped} skipped by budget pre-flight`);
     }
     return fired;
   },
@@ -199,16 +312,49 @@ export const schedulesRunner = {
     logLine(
       `[${startedAt}] run ${projectId}/${sched.id} (${sched.type}: ${sched.schedule})`,
     );
+    // Budget pre-flight — only applies to agent actions with a budget
+    // gate. A skip records a `skipped` result and does NOT advance
+    // `nextRun` (the schedule keeps firing on the same cadence).
+    if (sched && sched.action && sched.action.type === 'agent') {
+      try {
+        const budget = await checkBudget(sched.budgetCheck);
+        if (budget.skip) {
+          logLine(`[schedule] budget check: ${budget.reason}, skipping ${sched.id}`);
+          const updated = schedulesStore.recordRun(projectId, sched.id, {
+            result: 'skipped',
+            error: budget.reason || 'budget exhausted',
+          });
+          return { ok: true, skipped: true, schedule: updated, runResult: { skipped: true, ...budget } };
+        }
+      } catch (err) {
+        // A failing budget check must NOT block the schedule — log and
+        // proceed with the action.
+        logLine(`[schedule] budget check threw: ${err.message || err}`);
+      }
+    }
     try {
-      const res = await runAction(sched.action);
+      const res = await runAction(sched.action, { projectId });
+      // The runner distinguishes "ran but skipped by budget" (ok:true,
+      // skipped:true) from "ran successfully" (ok:true, no skip) and
+      // "ran and errored" (ok:false).
+      const result = res && res.skipped
+        ? 'skipped'
+        : res.ok
+          ? 'success'
+          : 'error';
       const updated = schedulesStore.recordRun(projectId, sched.id, {
-        result: res.ok ? 'success' : 'error',
+        result,
         error: res.error || null,
       });
+      const suffix = result === 'success'
+        ? 'success'
+        : result === 'skipped'
+          ? `skipped: ${res.error || 'budget'}`
+          : `error: ${res.error}`;
       logLine(
-        `[${new Date().toISOString()}] done ${projectId}/${sched.id} → ${res.ok ? 'success' : 'error: ' + res.error}`,
+        `[${new Date().toISOString()}] done ${projectId}/${sched.id} → ${suffix}`,
       );
-      return { ok: res.ok, schedule: updated, runResult: res };
+      return { ok: res.ok, skipped: result === 'skipped', schedule: updated, runResult: res };
     } catch (err) {
       const updated = schedulesStore.recordRun(projectId, sched.id, {
         result: 'error',

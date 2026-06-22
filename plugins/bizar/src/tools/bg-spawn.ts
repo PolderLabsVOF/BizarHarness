@@ -92,6 +92,19 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         .positive()
         .optional()
         .describe("Collect-time timeout in ms (1s..30min, default 5min)."),
+      persistent: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("When true, auto-restart on terminal failure (up to maxRestarts)."),
+      maxRestarts: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .optional()
+        .default(3)
+        .describe("Number of auto-restart attempts before giving up."),
     },
     execute: async (rawArgs, ctx) => {
       // 1. Odin-only (MEDIUM-26).
@@ -109,6 +122,8 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         prompt: string;
         model?: string;
         timeoutMs?: number;
+        persistent?: boolean;
+        maxRestarts?: number;
       };
 
       // 2. Validate the model parameter (LOW-34 / §1.4).
@@ -118,7 +133,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         if (m === null) {
           return {
             output: JSON.stringify({
-              error: `model must be in "providerID/modelID" format (e.g. "minimax/MiniMax-M3"). Omit to use the agent's default.`,
+              error: `model must be in "providerID/modelID" format (e.g. "openrouter/minimax-m3"). Omit to use the agent's default.`,
             }),
           };
         }
@@ -146,10 +161,15 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
           ? `${modelOverride.providerID}/${modelOverride.modelID}`
           : "agent-default",
         promptPreview: args.prompt.slice(0, 200),
+        prompt: args.prompt, // store full prompt for restart support
         parentAgent: ctx.agent,
         logPath: buildLogPath(deps.worktree, instanceId),
         timeoutMs,
         toolCallCount: 0,
+        // v0.5.5 — persistent auto-restart
+        persistent: args.persistent ?? false,
+        maxRestarts: args.maxRestarts ?? 3,
+        restartCount: 0,
       };
       const addRes = await deps.instanceManager.add(draft);
       if (addRes === "cap_reached") {

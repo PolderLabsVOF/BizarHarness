@@ -1,7 +1,7 @@
 ---
-description: Tyr — Handles the most complex implementation, debugging, and architectural work using MiniMax M3 via minimax.io. Unmatched wisdom for the hardest problems.
+description: Tyr — Handles the most complex implementation, debugging, and architectural work using MiniMax M3 via OpenRouter. Unmatched wisdom for the hardest problems.
 mode: subagent
-model: minimax/MiniMax-M3
+model: openrouter/minimax-m3
 color: "#f59e0b"
 permission:
   read: allow

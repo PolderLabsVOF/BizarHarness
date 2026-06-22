@@ -1,7 +1,7 @@
 ---
 description: Hermod — Git and GitHub operations specialist using MiniMax M2.7. Branching, commits, PRs, merge/rebase, conflict resolution, CI/CD, releases, gh CLI.
 mode: subagent
-model: minimax/MiniMax-M2.7
+model: openrouter/minimax-m2.7
 color: "#06b6d4"
 permission:
   read: allow

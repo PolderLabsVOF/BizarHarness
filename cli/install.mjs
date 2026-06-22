@@ -390,11 +390,12 @@ async function promptAndInstallOptional() {
 }
 
 async function promptGraphifyInstall() {
-  const { spawnSync } = await import('node:child_process');
+  const { spawnSync, execSync } = await import('node:child_process');
 
   console.log();
   sectionHeading('Knowledge Graph (graphify)');
 
+  // 1. Detect graphify already installed
   const detect = spawnSync('python3', ['-c', 'import graphify; print(graphify.__version__)'], {
     cwd: process.cwd(),
     encoding: 'utf8',
@@ -407,40 +408,130 @@ async function promptGraphifyInstall() {
     return;
   }
 
-  // Non-interactive: no TTY means we can't ask, so just print the hint
+  // 2. Non-interactive: print hint and exit
   if (!stdin.isTTY || !stdout.isTTY) {
     console.log(chalk.dim('  graphify not detected. Install later with:'));
+    console.log(chalk.dim('    uv tool install graphifyy   # recommended'));
     console.log(chalk.dim('    pip install graphifyy'));
     console.log(chalk.dim('    pipx install graphifyy'));
-    console.log(chalk.dim('    uv tool install graphifyy'));
     console.log(chalk.dim('  Then run `bizar graph build` to populate .bizar/graph/.'));
     return;
   }
 
+  // 3. Interactive: show options with uv first
   console.log(chalk.dim('  graphify not detected. graphify powers per-project knowledge graphs (bizar graph build).'));
   console.log(chalk.dim('  Install with one of:'));
-  console.log(chalk.dim('    pip install graphifyy       # user-site or venv'));
-  console.log(chalk.dim('    pipx install graphifyy      # isolated CLI tool (recommended on macOS)'));
-  console.log(chalk.dim('    uv tool install graphifyy   # via uv'));
+  console.log(chalk.dim('    uv tool install graphifyy   # recommended'));
+  console.log(chalk.dim('    pip install graphifyy'));
+  console.log(chalk.dim('    pipx install graphifyy'));
 
-  const rl = createInterface({ input: stdin, output: stdout });
-  try {
-    const answer = (await rl.question('  Install graphify now via pip? [Y/n]: ')).trim().toLowerCase();
-    rl.close();
+  const hasUv = await detectUv();
 
-    if (answer === '' || answer.startsWith('y')) {
-      const result = spawnSync('pip', ['install', 'graphifyy'], { stdio: 'inherit', timeout: 120000 });
-      if (result.status === 0) {
-        console.log(chalk.green('  graphify installed. Try: bizar graph build'));
+  if (hasUv) {
+    // 3a. uv is available — ask to install via uv directly
+    const rl = createInterface({ input: stdin, output: stdout });
+    try {
+      const answer = (await rl.question('  Install graphify now via uv? [Y/n]: ')).trim().toLowerCase();
+      rl.close();
+
+      if (answer === '' || answer.startsWith('y')) {
+        console.log('  Installing graphify via uv...');
+        try {
+          execSync('uv tool install graphifyy', { stdio: 'inherit', timeout: 120000 });
+          console.log(chalk.green('  graphify installed. Run `bizar graph build` to populate .bizar/graph/.'));
+        } catch (err) {
+          console.log(chalk.red(`  uv tool install failed: ${err.message}`));
+          console.log(chalk.dim('  Install manually: uv tool install graphifyy'));
+        }
       } else {
-        console.log(chalk.yellow(`  pip install failed (exit ${result.status}). You can install manually later — see options above.`));
+        console.log(chalk.dim('  Skipped. Install manually with one of the commands above when ready.'));
       }
-    } else {
-      console.log(chalk.dim('  Skipped. Install manually with one of the commands above when ready.'));
+    } catch {
+      rl.close();
+      console.log(chalk.dim('  Skipped.'));
     }
-  } catch {
-    rl.close();
-    console.log(chalk.dim('  Skipped.'));
+  } else {
+    // 3b. uv not available — ask if we should install uv first
+    console.log();
+    console.log(chalk.dim('  uv not detected. uv is recommended on Arch/Fedora/macOS (avoids PEP 668).'));
+
+    const rl = createInterface({ input: stdin, output: stdout });
+    try {
+      const answer = (await rl.question('  Install uv first, then graphify? [Y/n]: ')).trim().toLowerCase();
+      rl.close();
+
+      if (answer === '' || answer.startsWith('y')) {
+        if (process.platform === 'win32') {
+          console.log(chalk.yellow('  Automatic uv install not supported on Windows.'));
+          console.log(chalk.dim('  Install from https://docs.astral.sh/uv then run: uv tool install graphifyy'));
+          return;
+        }
+
+        console.log('  Installing uv...');
+        try {
+          execSync('curl -LsSf https://astral.sh/uv/install.sh | sh', { stdio: 'inherit', timeout: 60000 });
+        } catch (err) {
+          console.log(chalk.red(`  uv install failed: ${err.message}`));
+          console.log(chalk.dim('  Install manually from https://docs.astral.sh/uv'));
+          // Fall back to pip
+          const rl2 = createInterface({ input: stdin, output: stdout });
+          try {
+            const pipAnswer = (await rl2.question('  Install graphify via pip instead? [Y/n]: ')).trim().toLowerCase();
+            rl2.close();
+            if (pipAnswer === '' || pipAnswer.startsWith('y')) {
+              console.log('  Installing graphify via pip...');
+              const result = spawnSync('pip', ['install', 'graphifyy'], { stdio: 'inherit', timeout: 120000 });
+              if (result.status === 0) {
+                console.log(chalk.green('  graphify installed. Run `bizar graph build` to populate .bizar/graph/.'));
+              } else {
+                console.log(chalk.red(`  pip install failed (exit ${result.status}).`));
+                console.log(chalk.dim('  Install manually: pip install graphifyy'));
+              }
+            } else {
+              console.log(chalk.dim('  Skipped.'));
+            }
+          } catch {
+            rl2.close();
+            console.log(chalk.dim('  Skipped.'));
+          }
+          return;
+        }
+
+        console.log('  Installing graphify via uv...');
+        try {
+          execSync('uv tool install graphifyy', { stdio: 'inherit', timeout: 120000 });
+          console.log(chalk.green('  graphify installed. Run `bizar graph build` to populate .bizar/graph/.'));
+        } catch (err) {
+          console.log(chalk.red(`  uv tool install failed: ${err.message}`));
+          console.log(chalk.dim('  Install manually: uv tool install graphifyy'));
+        }
+      } else {
+        // User declined uv — fall back to pip
+        const rl2 = createInterface({ input: stdin, output: stdout });
+        try {
+          const pipAnswer = (await rl2.question('  Install graphify via pip instead? [Y/n]: ')).trim().toLowerCase();
+          rl2.close();
+          if (pipAnswer === '' || pipAnswer.startsWith('y')) {
+            console.log('  Installing graphify via pip...');
+            const result = spawnSync('pip', ['install', 'graphifyy'], { stdio: 'inherit', timeout: 120000 });
+            if (result.status === 0) {
+              console.log(chalk.green('  graphify installed. Run `bizar graph build` to populate .bizar/graph/.'));
+            } else {
+              console.log(chalk.red(`  pip install failed (exit ${result.status}).`));
+              console.log(chalk.dim('  Install manually: pip install graphifyy'));
+            }
+          } else {
+            console.log(chalk.dim('  Skipped.'));
+          }
+        } catch {
+          rl2.close();
+          console.log(chalk.dim('  Skipped.'));
+        }
+      }
+    } catch {
+      rl.close();
+      console.log(chalk.dim('  Skipped.'));
+    }
   }
 }
 

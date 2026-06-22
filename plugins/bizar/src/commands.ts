@@ -70,6 +70,27 @@ export type SideEffect =
       args: unknown;
     };
 
+/** Dialog component types that can be rendered in the dashboard. */
+export type DialogComponent =
+  | "visual-plan"
+  | "plan-create"
+  | "plan-list"
+  | "help"
+  | "audit"
+  | "generic";
+
+export interface DialogDescriptor {
+  id: string;
+  title: string;
+  command: string;
+  component: DialogComponent;
+  data?: Record<string, unknown>;
+}
+
+function generateId(): string {
+  return `dlg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export interface SlashCommandResult {
   handled: true;
   /** Text shown to the user / LLM. */
@@ -78,6 +99,8 @@ export interface SlashCommandResult {
   settingsPatch?: Partial<PlanSettings>;
   /** Optional side-effect to perform (file I/O lives in the hook, not here). */
   sideEffect?: SideEffect;
+  /** Optional dialog to open in the dashboard instead of showing text. */
+  dialog?: DialogDescriptor;
 }
 
 /**
@@ -285,43 +308,82 @@ export function parseSlashCommand(
 
 function handleVisualPlan(arg: string, ctx: ParseContext): SlashCommandResult {
   const lc = arg.toLowerCase();
+  const currentEnabled = ctx.currentSettings.visualPlanEnabled;
 
   if (lc === "") {
-    // No argument — return current state
-    const on = ctx.currentSettings.visualPlanEnabled ? "on" : "off";
+    // No argument — return current state as a dialog
     return {
       handled: true,
-      response:
-        `Visual plan mode is **${on}**.\n` +
-        `Default template: ${ctx.currentSettings.defaultTemplate}\n` +
-        (ctx.currentSettings.lastUsedSlug
-          ? `Last used plan: ${ctx.currentSettings.lastUsedSlug}\n`
-          : "") +
-        `\nUsage: /visual-plan on | off`,
+      response: "",
+      dialog: {
+        id: generateId(),
+        title: "Visual Plan",
+        command: "/visual-plan",
+        component: "visual-plan",
+        data: {
+          enabled: currentEnabled,
+          previousEnabled: currentEnabled,
+          defaultTemplate: ctx.currentSettings.defaultTemplate,
+          lastUsedSlug: ctx.currentSettings.lastUsedSlug ?? null,
+          mode: "status",
+        },
+      },
     };
   }
 
   if (lc === "on" || lc === "true" || lc === "1" || lc === "enable") {
     return {
       handled: true,
-      response: "Visual plan mode is now **on**. The agent will create a plan and wait for feedback on complex tasks.",
+      response: "",
       settingsPatch: { visualPlanEnabled: true },
+      dialog: {
+        id: generateId(),
+        title: "Visual Plan",
+        command: "/visual-plan on",
+        component: "visual-plan",
+        data: {
+          enabled: true,
+          previousEnabled: currentEnabled,
+          mode: "toggle",
+        },
+      },
     };
   }
 
   if (lc === "off" || lc === "false" || lc === "0" || lc === "disable") {
     return {
       handled: true,
-      response: "Visual plan mode is now **off**.",
+      response: "",
       settingsPatch: { visualPlanEnabled: false },
+      dialog: {
+        id: generateId(),
+        title: "Visual Plan",
+        command: "/visual-plan off",
+        component: "visual-plan",
+        data: {
+          enabled: false,
+          previousEnabled: currentEnabled,
+          mode: "toggle",
+        },
+      },
     };
   }
 
   if (lc === "status" || lc === "state" || lc === "?") {
-    const on = ctx.currentSettings.visualPlanEnabled ? "on" : "off";
     return {
       handled: true,
-      response: `Visual plan mode: ${on}`,
+      response: "",
+      dialog: {
+        id: generateId(),
+        title: "Visual Plan",
+        command: "/visual-plan status",
+        component: "visual-plan",
+        data: {
+          enabled: currentEnabled,
+          previousEnabled: currentEnabled,
+          mode: "status",
+        },
+      },
     };
   }
 
@@ -382,21 +444,30 @@ function handlePlan(arg: string, ctx: ParseContext): SlashCommandResult {
 function helpPlan(): SlashCommandResult {
   return {
     handled: true,
-    response:
-      `Plan commands:\n` +
-      `  /plan new <slug> [template]                — Create a new plan\n` +
-      `  /plan list                                — List all plans in the worktree\n` +
-      `  /plan open <slug>                         — Return the URL for a plan\n` +
-      `  /plan get <slug>                          — Fetch the full canvas\n` +
-      `  /plan add <slug> --title T --type kind    — Add an element to a plan\n` +
-      `  /plan update <slug> <id> [--x N --y N …]  — Patch an existing element\n` +
-      `  /plan delete <slug> <id>                  — Remove an element\n` +
-      `  /plan comment <slug> [id] "text"          — Add a comment (canvas-pinned if no id)\n` +
-      `  /plan comments <slug> [id]                — Read comments on a plan\n` +
-      `  /plan status <slug> <status>              — Set the plan's status\n` +
-      `  /plan wait <slug> [--timeout N]           — Wait for feedback (deferred — see note)\n` +
-      `\nAvailable templates: ${KNOWN_TEMPLATES.join(", ")}\n` +
-      `Available statuses: ${PLAN_STATUSES.join(", ")}`,
+    response: "",
+    dialog: {
+      id: generateId(),
+      title: "Plan Commands",
+      command: "/plan",
+      component: "help",
+      data: {
+        commands: [
+          { cmd: "/plan new <slug> [template]", desc: "Create a new plan" },
+          { cmd: "/plan list", desc: "List all plans in the worktree" },
+          { cmd: "/plan open <slug>", desc: "Open a plan in the viewer" },
+          { cmd: "/plan get <slug>", desc: "Fetch the full canvas" },
+          { cmd: "/plan add <slug> --title T --type kind", desc: "Add an element to a plan" },
+          { cmd: "/plan update <slug> <id> [--x N --y N …]", desc: "Patch an existing element" },
+          { cmd: "/plan delete <slug> <id>", desc: "Remove an element" },
+          { cmd: "/plan comment <slug> [id] \"text\"", desc: "Add a comment" },
+          { cmd: "/plan comments <slug> [id]", desc: "Read comments on a plan" },
+          { cmd: "/plan status <slug> <status>", desc: "Set the plan's status" },
+          { cmd: "/plan wait <slug> [--timeout N]", desc: "Wait for feedback (deferred)" },
+        ],
+        templates: KNOWN_TEMPLATES,
+        statuses: PLAN_STATUSES,
+      },
+    },
   };
 }
 
@@ -406,7 +477,18 @@ function handlePlanNew(args: string[], ctx: ParseContext): SlashCommandResult {
   if (args.length === 0 || args[0] === "") {
     return {
       handled: true,
-      response: "Usage: /plan new <slug> [template]",
+      response: "",
+      dialog: {
+        id: generateId(),
+        title: "Create New Plan",
+        command: "/plan new",
+        component: "plan-create",
+        data: {
+          templates: [...KNOWN_TEMPLATES],
+          defaultTemplate: ctx.currentSettings.defaultTemplate,
+          suggestedSlug: "",
+        },
+      },
     };
   }
 
@@ -434,24 +516,27 @@ function handlePlanNew(args: string[], ctx: ParseContext): SlashCommandResult {
     template = candidate;
   }
 
-  // The response surfaces the resolved template name (the user-supplied
-  // argument, or the user's current default). The sideEffect carries
-  // the explicit `null` so the executor knows to fall back to
-  // `currentSettings.defaultTemplate` at write time.
   const resolvedTemplate = template ?? ctx.currentSettings.defaultTemplate;
 
   return {
     handled: true,
-    response:
-      `Plan "${titleCase(slug)}" (slug: ${slug}) will be created with the ` +
-      `"${resolvedTemplate}" template.\n` +
-      `After creation, use /plan open ${slug} to get the URL.`,
+    response: "",
     sideEffect: {
       kind: "create_plan",
       slug,
       template,
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Plan Created",
+      command: `/plan new ${slug}`,
+      component: "generic",
+      data: {
+        message: `Plan "${titleCase(slug)}" created with the "${resolvedTemplate}" template.`,
+        detail: `Use /plan open ${slug} to open it.`,
+      },
+    },
   };
 }
 
@@ -459,19 +544,20 @@ function handlePlanNew(args: string[], ctx: ParseContext): SlashCommandResult {
 
 function handlePlanList(ctx: ParseContext): SlashCommandResult {
   const slugs = ctx.availablePlanSlugs ?? [];
-  if (slugs.length === 0) {
-    return {
-      handled: true,
-      response:
-        "No plans found in this worktree. Use /plan new <slug> to create one.",
-      sideEffect: { kind: "list_plans" },
-    };
-  }
-  const lines = slugs.map((s) => `  - ${s}`);
   return {
     handled: true,
-    response: `Plans in this worktree (${slugs.length}):\n${lines.join("\n")}`,
+    response: "",
     sideEffect: { kind: "list_plans" },
+    dialog: {
+      id: generateId(),
+      title: "Plans",
+      command: "/plan list",
+      component: "plan-list",
+      data: {
+        plans: slugs,
+        count: slugs.length,
+      },
+    },
   };
 }
 
@@ -498,15 +584,21 @@ function handlePlanOpen(args: string[], ctx: ParseContext): SlashCommandResult {
 
   return {
     handled: true,
-    response:
-      `Plan URL: ${url}\n` +
-      `(v0.5.0 MVP — server startup is a future enhancement; the URL is ` +
-      `informational. Use "bizar plan open ${slug}" in the terminal to ` +
-      `start the local viewer.)`,
+    response: "",
     settingsPatch: { lastUsedSlug: slug },
     sideEffect: {
       kind: "open_plan_url",
       slug,
+    },
+    dialog: {
+      id: generateId(),
+      title: "Opening Plan",
+      command: `/plan open ${slug}`,
+      component: "generic",
+      data: {
+        message: `Opening plan: ${slug}`,
+        url,
+      },
     },
   };
 }
@@ -526,13 +618,22 @@ function handlePlanGet(args: string[]): SlashCommandResult {
   }
   return {
     handled: true,
-    response: `Fetching canvas for plan "${slug}"…`,
+    response: "",
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_plan_action",
       args: { action: "get_canvas", planSlug: slug },
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Plan Canvas",
+      command: `/plan get ${slug}`,
+      component: "generic",
+      data: {
+        message: `Fetching canvas for plan "${slug}"…`,
+      },
+    },
   };
 }
 
@@ -591,13 +692,22 @@ function handlePlanAdd(args: string[]): SlashCommandResult {
   }
   return {
     handled: true,
-    response: `Adding element to plan "${slug}"…`,
+    response: "",
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_plan_action",
       args: { action: "add_element", planSlug: slug, element },
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Element Added",
+      command: `/plan add ${slug}`,
+      component: "generic",
+      data: {
+        message: `Adding element to plan "${slug}"…`,
+      },
+    },
   };
 }
 
@@ -637,13 +747,22 @@ function handlePlanUpdate(args: string[]): SlashCommandResult {
   }
   return {
     handled: true,
-    response: `Updating element ${elementId} in plan "${slug}"…`,
+    response: "",
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_plan_action",
       args: { action: "update_element", planSlug: slug, elementId, element },
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Element Updated",
+      command: `/plan update ${slug}`,
+      component: "generic",
+      data: {
+        message: `Updating element ${elementId} in plan "${slug}"…`,
+      },
+    },
   };
 }
 
@@ -666,13 +785,22 @@ function handlePlanDelete(args: string[]): SlashCommandResult {
   }
   return {
     handled: true,
-    response: `Deleting element ${elementId} from plan "${slug}"…`,
+    response: "",
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_plan_action",
       args: { action: "delete_element", planSlug: slug, elementId },
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Element Deleted",
+      command: `/plan delete ${slug}`,
+      component: "generic",
+      data: {
+        message: `Deleting element ${elementId} from plan "${slug}"…`,
+      },
+    },
   };
 }
 
@@ -734,10 +862,7 @@ function commentSideEffect(
 ): SlashCommandResult {
   return {
     handled: true,
-    response:
-      elementId === null
-        ? `Adding canvas-pinned comment to plan "${slug}"…`
-        : `Adding comment to element ${elementId} on plan "${slug}"…`,
+    response: "",
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_plan_action",
@@ -752,6 +877,18 @@ function commentSideEffect(
       },
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Comment Added",
+      command: `/plan comment ${slug}`,
+      component: "generic",
+      data: {
+        message:
+          elementId === null
+            ? `Adding canvas-pinned comment to plan "${slug}"…`
+            : `Adding comment to element ${elementId} on plan "${slug}"…`,
+      },
+    },
   };
 }
 
@@ -771,16 +908,25 @@ function handlePlanComments(args: string[]): SlashCommandResult {
   const elementId = args.length >= 2 ? args[1]! : undefined;
   return {
     handled: true,
-    response:
-      elementId === undefined
-        ? `Reading comments on plan "${slug}"…`
-        : `Reading comments on element ${elementId} of plan "${slug}"…`,
+    response: "",
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_get_plan_comments",
       args: elementId === undefined ? { planSlug: slug } : { planSlug: slug, elementId },
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Comments",
+      command: `/plan comments ${slug}`,
+      component: "generic",
+      data: {
+        message:
+          elementId === undefined
+            ? `Reading comments on plan "${slug}"…`
+            : `Reading comments on element ${elementId} of plan "${slug}"…`,
+      },
+    },
   };
 }
 
@@ -809,13 +955,22 @@ function handlePlanStatus(args: string[]): SlashCommandResult {
   }
   return {
     handled: true,
-    response: `Setting plan "${slug}" status to "${status}"…`,
+    response: "",
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_plan_action",
       args: { action: "set_status", planSlug: slug, status },
     },
     settingsPatch: { lastUsedSlug: slug },
+    dialog: {
+      id: generateId(),
+      title: "Status Updated",
+      command: `/plan status ${slug}`,
+      component: "generic",
+      data: {
+        message: `Setting plan "${slug}" status to "${status}"…`,
+      },
+    },
   };
 }
 
@@ -876,13 +1031,20 @@ function handleBizar(arg: string, ctx: ParseContext): SlashCommandResult {
     const port = ctx.defaultPort ?? 4321;
     return {
       handled: true,
-      response:
-        `🪩 Bizar dashboard launching in the background.\n` +
-        `Visit http://localhost:${port}/ once the server is ready.\n` +
-        `(If the browser did not open automatically, click the URL above.)`,
+      response: "",
       sideEffect: {
         kind: "launch_dashboard",
         defaultPort: port,
+      },
+      dialog: {
+        id: generateId(),
+        title: "Dashboard",
+        command: "/bizar",
+        component: "generic",
+        data: {
+          message: "Dashboard launching in the background…",
+          url: `http://localhost:${port}/`,
+        },
       },
     };
   }
@@ -890,11 +1052,24 @@ function handleBizar(arg: string, ctx: ParseContext): SlashCommandResult {
   // With args, defer to the menu command file shipped with the CLI.
   return {
     handled: true,
-    response:
-      `🪩 Bizar routing your request: "${trimmed}"\n` +
-      `The menu command file (config/commands/bizar.md) maps intents like\n` +
-      `"explain X", "plan Y", "review PR", "audit", "learn", and "init"\n` +
-      `to the right Bizar action. For the dashboard, use \`/bizar\` with no args.`,
+    response: "",
+    dialog: {
+      id: generateId(),
+      title: "Bizar Commands",
+      command: `/bizar ${trimmed}`,
+      component: "help",
+      data: {
+        commands: [
+          { cmd: "/bizar", desc: "Launch the Bizar dashboard" },
+          { cmd: "/bizar explain <question>", desc: "Read-only code Q&A" },
+          { cmd: "/bizar plan <args>", desc: "Manage plans" },
+          { cmd: "/bizar audit", desc: "Run security audit" },
+          { cmd: "/bizar learn", desc: "Extract patterns from session" },
+          { cmd: "/bizar init", desc: "Initialize .bizar/ in this project" },
+          { cmd: "/bizar pr-review", desc: "PR review" },
+        ],
+      },
+    },
   };
 }
 
@@ -903,31 +1078,33 @@ function handleBizar(arg: string, ctx: ParseContext): SlashCommandResult {
 function helpResult(): SlashCommandResult {
   return {
     handled: true,
-    response:
-      `Available commands:\n` +
-      `  /visual-plan on | off         — Toggle visual plan mode\n` +
-      `  /visual-plan                  — Show current visual plan state\n` +
-      `\n` +
-      `  /plan new <slug> [template]   — Create a new plan\n` +
-      `  /plan list                    — List all plans in the worktree\n` +
-      `  /plan open <slug>             — Return the URL for a plan\n` +
-      `\n` +
-      `  /plan get <slug>              — Fetch the full canvas (via bizar_plan_action)\n` +
-      `  /plan add <slug> --title T --type kind [--x N --y N …]\n` +
-      `                                — Add an element to a plan (via bizar_plan_action)\n` +
-      `  /plan update <slug> <id> [--x N --y N --title T --content C …]\n` +
-      `                                — Patch an existing element (via bizar_plan_action)\n` +
-      `  /plan delete <slug> <id>      — Remove an element (via bizar_plan_action)\n` +
-      `  /plan comment <slug> [id] "text"\n` +
-      `                                — Add a comment (via bizar_plan_action)\n` +
-      `  /plan comments <slug> [id]    — Read comments (via bizar_get_plan_comments)\n` +
-      `  /plan status <slug> <status>  — Set the plan's status (via bizar_plan_action)\n` +
-      `  /plan wait <slug> [--timeout N]\n` +
-      `                                — Wait for feedback (deferred — see /plan wait)\n` +
-      `\n` +
-      `  /help | /commands             — Show this help\n` +
-      `\n` +
-      `Available templates: ${KNOWN_TEMPLATES.join(", ")}\n` +
-      `Available statuses: ${PLAN_STATUSES.join(", ")}`,
+    response: "",
+    dialog: {
+      id: generateId(),
+      title: "Bizar Commands",
+      command: "/help",
+      component: "help",
+      data: {
+        commands: [
+          { cmd: "/visual-plan [on|off|status]", desc: "Toggle or view visual plan mode" },
+          { cmd: "/plan new <slug> [template]", desc: "Create a new plan" },
+          { cmd: "/plan list", desc: "List all plans in the worktree" },
+          { cmd: "/plan open <slug>", desc: "Open a plan in the viewer" },
+          { cmd: "/plan get <slug>", desc: "Fetch the full canvas" },
+          { cmd: "/plan add <slug> --title T --type kind", desc: "Add an element to a plan" },
+          { cmd: "/plan update <slug> <id> [flags]", desc: "Patch an existing element" },
+          { cmd: "/plan delete <slug> <id>", desc: "Remove an element" },
+          { cmd: "/plan comment <slug> [id] \"text\"", desc: "Add a comment" },
+          { cmd: "/plan comments <slug> [id]", desc: "Read comments on a plan" },
+          { cmd: "/plan status <slug> <status>", desc: "Set the plan's status" },
+          { cmd: "/plan wait <slug> [--timeout N]", desc: "Wait for feedback (deferred)" },
+          { cmd: "/bizar", desc: "Launch the Bizar dashboard" },
+          { cmd: "/bizar <args>", desc: "Route a request via the menu" },
+          { cmd: "/help | /commands", desc: "Show this help" },
+        ],
+        templates: [...KNOWN_TEMPLATES],
+        statuses: [...PLAN_STATUSES],
+      },
+    },
   };
 }

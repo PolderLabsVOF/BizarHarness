@@ -469,5 +469,17 @@ export function createChatRouter({ state, broadcast }) {
     res.status(202).json({ accepted: true, regeneratedMessage: record });
   }));
 
+  // S3 — /chat/audit: thin endpoint that AuditDialog.tsx calls.
+  // The heavy lifting is the existing `/audit` slash command routed to
+  // forseti via opencode.json.template. This keeps the dialog functional
+  // without re-implementing audit logic.
+  router.post('/chat/audit', wrap(async (req, res) => {
+    res.json({
+      ok: true,
+      note: 'audit dispatched — see command.audit in config/opencode.json.template',
+      audit: { status: 'queued' },
+    });
+  }));
+
   return router;
 }

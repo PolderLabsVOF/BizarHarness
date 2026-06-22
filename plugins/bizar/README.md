@@ -155,7 +155,7 @@ The plugin starts one `opencode serve` process on init (single-serve, multi-sess
 const result = await bizarre_spawn_background({
   agent: "mimir",                  // which agent to run
   prompt: "Research X and return findings",  // what to do
-  model: "minimax/MiniMax-M3",     // optional: override model
+  model: "openrouter/minimax-m3",  // optional: override model
   timeoutMs: 300_000,              // optional: default 5 min, max 30 min
 }, ctx);
 console.log(result.instanceId);    // "bgr_01ARSH3J5V..."

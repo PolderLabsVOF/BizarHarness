@@ -7,6 +7,7 @@ import { ModalProvider, useModal } from './components/Modal';
 import { ToastProvider, useToast } from './components/Toast';
 import { SearchModal } from './components/SearchModal';
 import { Notifications } from './components/Notifications';
+import { CommandDialog, type DialogDescriptor } from './components/CommandDialog';
 import { api } from './lib/api';
 import { Ws } from './lib/ws';
 import {
@@ -89,7 +90,8 @@ export function App() {
 
 function Shell() {
   const toast = useToast();
-  const { isModalOpen } = useModal();
+  const modalApi = useModal();
+  const { isModalOpen } = modalApi;
   const isModalOpenRef = useRef(false);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -296,6 +298,16 @@ function Shell() {
       } else if (msg.type === 'agent:stuck') {
         const m = msg;
         setStuckAgents(m.agents || []);
+      } else if (msg.type === 'dialog:show') {
+        // v0.5.1: Open a command dialog received from the plugin via WS broadcast.
+        const m = msg as { type: 'dialog:show'; dialog: DialogDescriptor };
+        if (m.dialog) {
+          modalApi.open({
+            title: m.dialog.title,
+            width: 520,
+            children: <CommandDialog dialog={m.dialog} onClose={() => modalApi.close()} />,
+          });
+        }
       }
     });
     return () => {

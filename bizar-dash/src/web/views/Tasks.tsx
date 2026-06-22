@@ -39,6 +39,8 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Tag } from '../components/Tag';
 import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { BgStatusBadge } from '../components/BgStatusBadge';
+import { openKillConfirmDialog } from '../components/KillConfirmDialog';
 import { api } from '../lib/api';
 import { cn, formatRelative, priorityColors, autoTitleFromContent } from '../lib/utils';
 import type { Agent, Settings, Snapshot, Task } from '../lib/types';
@@ -657,6 +659,8 @@ function TaskCard({
   onOpenArtifact: (artifactId: string) => void;
   isArchivedView: boolean;
 }) {
+  const toast = useToast();
+  const modal = useModal();
   const isTimer = task._timerStart;
   const isWorking = (task.workedBy || task.status === 'doing') && !isArchivedView;
 
@@ -664,6 +668,7 @@ function TaskCard({
   type TaskPipelineMeta = {
     sessionId?: string;
     bgInstanceId?: string;
+    status?: string;
     artifactIds?: string[];
     artifactId?: string;
   };
@@ -730,6 +735,11 @@ function TaskCard({
         {task.recurring ? <span className="task-card-badge"><Calendar size={10} /> {task.recurring.cron || task.recurring.freq || 'recurring'}</span> : null}
         {task.comments?.length ? <span className="task-card-badge"><MessageSquare size={10} /> {task.comments.length}</span> : null}
         {task.attachments?.length ? <span className="task-card-badge"><Paperclip size={10} /> {task.attachments.length}</span> : null}
+        {metadata.bgInstanceId ? (
+          <span className="task-card-badge">
+            <Activity size={10} /> <BgStatusBadge status={metadata.status || 'pending'} />
+          </span>
+        ) : null}
       </div>
       {task.tags && task.tags.length > 0 && (
         <div className="task-card-tags">
@@ -813,6 +823,25 @@ function TaskCard({
                   onClick={onArchive}
                 >
                   <Archive size={14} />
+                </button>
+              )}
+              {metadata.bgInstanceId && (
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-danger"
+                  aria-label="Kill background instance"
+                  title="Kill background instance"
+                  onClick={() => {
+                    openKillConfirmDialog(modal, toast, metadata.bgInstanceId!, task.title, () => {
+                      // Optimistically mark task as blocked after kill.
+                      const event = new CustomEvent('bizar:taskKilled', {
+                        detail: { taskId: task.id, bgInstanceId: metadata.bgInstanceId },
+                      });
+                      window.dispatchEvent(event);
+                    });
+                  }}
+                >
+                  <Activity size={14} />
                 </button>
               )}
               <button

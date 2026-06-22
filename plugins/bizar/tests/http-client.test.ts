@@ -260,7 +260,7 @@ describe("HttpClient.sendPrompt", () => {
       messageID: "msg_model_test",
       prompt: "Use a specific model",
       agent: "mimir",
-      model: { providerID: "minimax", modelID: "MiniMax-M3" },
+      model: { providerID: "openrouter", modelID: "minimax-m3" },
       directory: "/tmp",
     });
 

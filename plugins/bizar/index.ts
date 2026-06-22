@@ -128,6 +128,8 @@ import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
 
 // v0.5.0 — visual plan wiring: side-effect executor + plan-fs
 import { executeSideEffect, type ExecuteOptions } from "./src/commands-impl.js";
+import { join as pathJoin } from "node:path";
+import { homedir } from "node:os";
 
 // --- Env-var constants (per spec §8) -------------------------------------
 
@@ -861,6 +863,29 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
                 ctx.logger.warn(`bizar: side-effect crashed: ${msg}`);
                 finalResponse = `Command failed: ${msg}`;
               }
+            }
+            // --- v0.5.1: dialog support.
+            // If the command emitted a dialog descriptor, persist it to disk
+            // so Tyr's dialog-poller can broadcast it to the dashboard.
+            // We return without throwing so no chat bubble is shown.
+            if (result.dialog) {
+              // S4 — defense-in-depth: validate ID shape before touching disk.
+              if (!/^dlg_[a-zA-Z0-9_-]{1,64}$/.test(result.dialog.id)) {
+                return; // silently drop malformed dialog IDs
+              }
+              try {
+                const { mkdir, writeFile } = await import("node:fs/promises");
+                const dialogDir = pathJoin(homedir(), ".cache", "bizar", "dialogs");
+                await mkdir(dialogDir, { recursive: true });
+                await writeFile(
+                  pathJoin(dialogDir, `${result.dialog.id}.json`),
+                  JSON.stringify({ ...result.dialog, createdAt: new Date().toISOString() }, null, 2),
+                );
+              } catch (dialogErr: unknown) {
+                const msg = dialogErr instanceof Error ? dialogErr.message : String(dialogErr);
+                ctx.logger.warn(`bizar: failed to write dialog file: ${msg}`);
+              }
+              return;
             }
             // Surface the response to the user/host. We throw so the
             // message is treated as handled; the LLM does not process

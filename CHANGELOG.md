@@ -1,5 +1,73 @@
 # Changelog
 
+## v3.9.0 — 2026-06-23
+
+### Added — Slash commands open real dialogs
+
+Slash commands used to print their usage text as a chat bubble. v3.9.0 makes them open interactive dialogs in the dashboard.
+
+- **`plugins/bizar/src/commands.ts`** — every command handler (`/visual-plan`, `/plan new|list|open|...`, `/bizar`, `/help`, `/audit`) now returns a `DialogDescriptor` instead of a text string.
+- **`plugins/bizar/index.ts`** — the `chat.message` hook writes the descriptor to `~/.cache/bizar/dialogs/<id>.json` (validated against `dlg_[a-zA-Z0-9_-]{1,64}`) and returns silently instead of throwing.
+- **`bizar-dash/src/server/dialog-store.mjs`** (NEW) — persists dialog requests to disk.
+- **`bizar-dash/src/server/dialog-poller.mjs`** (NEW) — ticks every 1s, broadcasts `dialog:show` over WebSocket.
+- **`bizar-dash/src/server/routes/dialogs.mjs`** (NEW) — mounted in `api.mjs`. Provides `GET /api/dialogs` for inspection.
+- **`bizar-dash/src/web/components/CommandDialog.tsx`** (NEW) — generic dispatcher. Mounts the right specific dialog.
+- **`bizar-dash/src/web/components/{VisualPlanDialog,PlanCreateDialog,PlanListDialog,HelpDialog,AuditDialog}.tsx`** (NEW) — one component per command.
+- **`bizar-dash/src/web/lib/types.ts`** — added `DialogDescriptor` and `DialogComponent` types; extended `WsMessage` union with `{ type: 'dialog:show'; dialog: DialogDescriptor }`.
+
+### Added — Schedules overhaul (Sunday 1pm code review actually works now)
+
+The schedule feature was 6 critical bugs deep. v3.9.0 fixes all of them.
+
+- **Agent dispatch is no longer a stub.** `schedules-runner.mjs:97-113` now calls `taskDelegator.submit()` so a cron-scheduled `agent` action actually runs the named agent with the prompt text. Previously it just logged `"deferred to v3.1"` and marked the run successful — silent no-op.
+- **Timezones work.** Replaced the hand-rolled 5-field cron evaluator with the `croner` library (10.0.1). Schedules can now carry `timezone: "America/New_York"` and fire at 1pm ET, not 1pm UTC. Added `croner ^10.0.1` to `bizar-dash/package.json`.
+- **Structured pickers in the UI.** Day-of-week dropdown, hour dropdown (with 12h labels), minute select — composes into `"M H * * DOW"`. Timezone selector with 6 IANA presets plus an "Other…" input. Raw cron still available behind an "Advanced" toggle.
+- **Edit modal on desktop and mobile.** Both `Schedules.tsx` and `MobileSchedules.tsx` now have an Edit button that pre-populates the form.
+- **Mobile toggle fixed.** `MobileSchedules.tsx:41-49` called `api.patch()` but the server only had `PUT`. Added `PATCH /api/schedules/:id` (line 35-44 of `routes/schedules.mjs`) that does a partial update.
+- **Mobile `/trigger` alias.** Mobile called `/schedules/:id/trigger` but server had `/run`. Added an alias route.
+- **Budget-aware pre-flight.** Schedules can now carry `budgetCheck: { skipIfBudgetLow: boolean, maxConcurrent: number }`. The runner checks `backgroundStore.list()` for running+pending count; if over the cap, it records `result: "skipped"` (a new third terminal state alongside `success`/`error`) and moves on. The user's "Sunday 1pm before the weekly token reset" scenario is now expressible as a schedule config.
+
+### Added — Background agents: persistent mode + live status UI
+
+- **Persistent background tasks.** `background-state.ts` now tracks `persistent`, `restartCount`, `maxRestarts`, `restartError`, `lastRestartAt`. `bg-spawn.ts` accepts a `persistent: boolean` arg. When a persistent instance reaches a terminal `failed` state (session error, tool-cap, loop-guard, stall timeout, or thinking-loop), the plugin auto-restarts it up to `maxRestarts` (default 3) times via the new `InstanceManager.restart()` method. `restartCount` is summed across the parent chain (cycle-safe via a `visited` set) so a chain cannot exceed the cap. Explicit kills are never auto-restarted.
+- **Background Agents status card.** New reusable `BgStatusBadge` component surfaces pending/running/done/failed/killed/timed_out with distinct colors and a pulse animation for `running`. `Tasks.tsx` shows the badge and a kill button on every task card that has `metadata.bgInstanceId`.
+- **Kill confirmation dialog.** `KillConfirmDialog` requires the user to confirm before `DELETE /api/background/:id` is called.
+- **Background Agents Settings card.** 5 plugin options (`maxConcurrentInstances`, `backgroundToolCallCap`, `backgroundStallTimeoutMs`, `backgroundThinkingLoopTimeoutMs`, `backgroundMaxInterventions`) are now configurable from the dashboard. Saves to `~/.config/bizar/plugin-options.json` via `PUT /api/settings/plugin-options`. Plugin reads it on next start.
+- **`POST /api/background/cleanup`** — deletes terminal instances older than N days (default 7).
+- **`GET /api/background/summary`** — returns `{ instances, counts, total }` for the Overview widget.
+
+### Added — Installer uses `uv` by default
+
+`cli/install.mjs` `promptGraphifyInstall()` was trying `pip install graphifyy` first, which fails on Arch/Fedora/macOS due to PEP 668. Now:
+- Detects `uv` first.
+- If uv is installed: asks to `uv tool install graphifyy`.
+- If uv is missing: asks to install uv via the astral installer (`curl -LsSf https://astral.sh/uv/install.sh | sh`) and then run `uv tool install graphifyy`.
+- Falls back to `pip install graphifyy` only if the user declines uv.
+
+Matches the pattern already used for Semble install.
+
+### Changed — MiniMax models default to OpenRouter provider
+
+OpenRouter now serves the MiniMax M2.7 and M3 tiers. Verified via the OpenRouter `/api/v1/models` endpoint:
+- `minimax/minimax-m2.7` — `MiniMax: MiniMax M2.7`
+- `minimax/minimax-m3` — `MiniMax: MiniMax M3`
+
+The default opencode provider is now `openrouter`. Model strings changed across:
+- `config/opencode.json.template` — top-level `model`/`small_model`, all 12 agent `model:` fields, and a new `provider.openrouter` block that declares the two model IDs and reads `OPENROUTER_API_KEY` from env.
+- `config/agents/*.md` (7 files: odin, thor, tyr, hermod, forseti, baldr, quick) — frontmatter `model:`.
+- `config/AGENTS.md` — routing table + 4 section headers.
+- `config/skills/bizar/SKILL.md` — troubleshooting section rewritten for the new provider.
+- `cli/audit.mjs` — `validModels` list updated.
+- `README.md` — provider setup table.
+- All 5 wiki pages that reference the old strings.
+- Plugin source, plugin tests (67 fixtures updated), and the `bg-spawn.ts` error message example.
+
+API key setup: users now set `OPENROUTER_API_KEY` instead of `MINIMAX_API_KEY`.
+
+### Files changed
+- **44 modified**: `cli/install.mjs`, `cli/audit.mjs`, `config/opencode.json.template`, all 7 `config/agents/*.md`, `config/AGENTS.md`, `config/skills/bizar/SKILL.md`, `plugins/bizar/index.ts`, `plugins/bizar/src/{background-state,background,commands,bg-spawn}.ts`, 6 plugin test files, `plugins/bizar/README.md`, `bizar-dash/package.json`, `bizar-dash/src/server/{background-store,schedules-store,schedules-runner,server,api}.mjs`, `bizar-dash/src/server/routes/{background,schedules,chat}.mjs`, `bizar-dash/src/web/{App.tsx,lib/types.ts}`, `bizar-dash/src/web/views/{Chat,Tasks,Settings,Schedules}.tsx`, `bizar-dash/src/web/mobile/views/MobileSchedules.tsx`, `README.md`, 5 wiki pages.
+- **9 new**: `bizar-dash/src/server/{dialog-store,dialog-poller}.mjs`, `bizar-dash/src/server/routes/dialogs.mjs`, `bizar-dash/src/server/settings-store.mjs`, `bizar-dash/src/server/routes/settings.mjs`, 6 dialog components under `bizar-dash/src/web/components/`.
+
 ## v3.8.0 — 2026-06-22
 
 ### Added — `bizar graph` subcommand for per-project knowledge graphs

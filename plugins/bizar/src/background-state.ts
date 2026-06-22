@@ -99,6 +99,15 @@ export type BackgroundStatus =
  *   - `interventionAt` — epoch ms of the most recent intervention.
  *   - `interventionReason` — short human-readable description of the
  *     intervention, e.g. `"thinking loop (5m 12s without tool/text)"`.
+ *
+ * v0.5.5 — persistent auto-restart. These are typed as optional so
+ * existing state files on disk remain valid after upgrade.
+ *   - `persistent` — when true, the manager auto-restarts on terminal
+ *     failure (up to maxRestarts). Default false.
+ *   - `restartCount` — number of times this instance has been
+ *     auto-restarted (not including the original spawn). Default 0.
+ *   - `maxRestarts` — cap; default 3.
+ *   - `lastRestartAt` — epoch ms of the most recent auto-restart.
  */
 export interface BackgroundState {
   instanceId: string;
@@ -127,6 +136,23 @@ export interface BackgroundState {
   interventionCount?: number;
   interventionAt?: number;
   interventionReason?: string;
+  // v0.5.5 — persistent auto-restart
+  persistent?: boolean;
+  restartCount?: number;
+  maxRestarts?: number;
+  lastRestartAt?: string;
+  /**
+   * Full original prompt text, stored so the instance can be restarted
+   * with the same input. Optional for backward compat; always set on
+   * new spawns from v0.5.5+.
+   */
+  prompt?: string;
+  /**
+   * Human-readable error from the last failed restart attempt.
+   * Set only when `_maybeAutoRestart` calls `restart()` and it returns
+   * `{ ok: false }`. Cleared on a successful restart.
+   */
+  restartError?: string;
 }
 
 /**
@@ -159,6 +185,10 @@ export const EMPTY_BACKGROUND_STATE: Omit<
   lastEventAt: 0,
   lastToolOrTextAt: 0,
   interventionCount: 0,
+  // v0.5.5 — persistent auto-restart defaults
+  persistent: false,
+  restartCount: 0,
+  maxRestarts: 3,
 };
 
 /**
@@ -313,6 +343,17 @@ function readState(
     }
     if (typeof parsed.interventionCount !== "number") {
       parsed.interventionCount = 0;
+    }
+    // v0.5.5 — backfill persistent/restart fields for files written by
+    // older versions. These are optional but the restarter needs them.
+    if (typeof parsed.persistent !== "boolean") {
+      parsed.persistent = false;
+    }
+    if (typeof parsed.restartCount !== "number") {
+      parsed.restartCount = 0;
+    }
+    if (typeof parsed.maxRestarts !== "number") {
+      parsed.maxRestarts = 3;
     }
     return parsed;
   } catch (err: unknown) {

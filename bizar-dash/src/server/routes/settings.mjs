@@ -7,6 +7,7 @@
  */
 import { Router } from 'express';
 import { DEFAULT_SETTINGS, readSettings, writeSettings, wrap } from './_shared.mjs';
+import { readPluginOptions, writePluginOptions } from '../settings-store.mjs';
 
 /**
  * @param {object} deps
@@ -32,6 +33,18 @@ export function createSettingsRouter({ state, broadcast }) {
     const updated = writeSettings(DEFAULT_SETTINGS);
     broadcast({ type: 'settings:change', settings: updated.data });
     res.json(updated);
+  }));
+
+  // --- Plugin-options persistence for the Background Agents card ----------
+
+  router.get('/settings/plugin-options', wrap(async (_req, res) => {
+    res.json(readPluginOptions() || {});
+  }));
+
+  router.put('/settings/plugin-options', wrap(async (req, res) => {
+    const result = writePluginOptions(req.body || {});
+    if (broadcast) broadcast({ type: 'settings:plugin-options:changed' });
+    res.json(result);
   }));
 
   return router;

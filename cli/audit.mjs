@@ -78,8 +78,8 @@ export async function runAudit() {
       const model = modelMatch[1].trim();
       const validModels = [
         'opencode/deepseek-v4-flash-free',
-        'minimax/MiniMax-M2.7',
-        'minimax/MiniMax-M3',
+        'openrouter/minimax-m2.7',
+        'openrouter/minimax-m3',
         'openai/gpt-5.5',
       ];
       if (!validModels.includes(model)) {

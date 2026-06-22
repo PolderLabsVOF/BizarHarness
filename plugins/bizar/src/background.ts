@@ -278,6 +278,30 @@ export class InstanceManager {
     }
   }
 
+  // --- Internal dispatch (shared by add() and restart()) ------------------
+
+  /**
+   * Insert a fully-constructed BackgroundState into the in-memory map
+   * and persist to disk asynchronously. Does NOT check the concurrency
+   * cap — the caller handles that.
+   *
+   * This is extracted from `add()` so `restart()` can reuse the same
+   * insert-and-persist path without duplicating the logic.
+   */
+  private dispatchInternal(full: BackgroundState): BackgroundState {
+    this.instances.set(full.instanceId, full);
+    // Persist asynchronously; failure is logged but does not roll back
+    // the in-memory insert (the instance is "tracked" either way).
+    this.stateStore.save(full).catch((err: unknown) => {
+      this.logger.warn(
+        `bizar: failed to persist new instance ${full.instanceId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
+    return full;
+  }
+
   // --- Atomic add (spec §2.2) ---------------------------------------------
 
   /**
@@ -315,16 +339,7 @@ export class InstanceManager {
         lastToolOrTextAt: now,
         interventionCount: 0,
       };
-      this.instances.set(draft.instanceId, full);
-      // Persist asynchronously; failure is logged but does not roll back
-      // the in-memory insert (the instance is "tracked" either way).
-      this.stateStore.save(full).catch((err: unknown) => {
-        this.logger.warn(
-          `bizar: failed to persist new instance ${draft.instanceId}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      });
+      this.dispatchInternal(full);
       // BUGFIX (v0.5.1): Do NOT call attachEventHandler() here. The
       // instance was just added with sessionId="" (filled in later by
       // POST /session). EventStream.onSessionEvent rejects empty strings,
@@ -426,6 +441,86 @@ export class InstanceManager {
     });
     this.logger.info(`bizar: killed background instance ${instanceId}`);
   }
+
+  // --- Restart (v0.5.5 — persistent auto-restart) ------------------------
+
+  /**
+   * Re-spawn a failed persistent instance with the same prompt, agent,
+   * and model config. The new instance gets a fresh `instanceId` and is
+   * linked to the original via `parentInstanceId`.
+   *
+   * Returns `{ ok: true, newInstanceId }` on success, or
+   * `{ ok: false, error: "..." }` on failure. Does NOT check the
+   * concurrency cap — the original instance is terminal, so its slot
+   * is already freed.
+   */
+  async restart(instanceId: string): Promise<{
+    ok: boolean;
+    newInstanceId?: string;
+    error?: string;
+  }> {
+    const existing = this.instances.get(instanceId);
+    if (!existing) return { ok: false, error: "instance_not_found" };
+    const totalRestarts = this.getTotalRestartCount(instanceId);
+    if (totalRestarts >= (existing.maxRestarts ?? 3)) {
+      return { ok: false, error: "max_restarts_reached" };
+    }
+
+    const now = Date.now();
+    const newInstanceId = generateInstanceId();
+    const full: BackgroundState = {
+      instanceId: newInstanceId,
+      sessionId: "",
+      agent: existing.agent,
+      model: existing.model,
+      promptPreview: (existing.prompt ?? existing.promptPreview ?? "").slice(0, PROMPT_PREVIEW_MAX),
+      prompt: existing.prompt,
+      parentAgent: existing.parentAgent,
+      parentInstanceId: instanceId,
+      logPath: `${this.worktree}/.opencode/log/${newInstanceId}.log`,
+      timeoutMs: existing.timeoutMs,
+      toolCallCount: 0,
+      // v0.5.5 — persist the auto-restart fields
+      persistent: existing.persistent,
+      maxRestarts: existing.maxRestarts,
+      restartCount: (existing.restartCount ?? 0) + 1,
+      status: "pending",
+      startedAt: now,
+      lastEventAt: now,
+      lastToolOrTextAt: now,
+      interventionCount: 0,
+    };
+
+    this.dispatchInternal(full);
+    this.logger.info(
+      `bizar: restarted instance ${instanceId} as ${newInstanceId} (restart #${full.restartCount})`,
+    );
+    return { ok: true, newInstanceId };
+  }
+
+  /**
+   * Walk the parent chain to compute the true restart count for this
+   * instance (Forseti C4). `restartCount` alone only reflects the child's
+   * own counter, so a chain of restarts can exceed `maxRestarts`. This
+   * helper sums the counters across the entire chain (parent + all
+   * descendants) and returns the total.
+   */
+  private getTotalRestartCount(instanceId: string): number {
+    let current = this.instances.get(instanceId);
+    if (!current) return 0;
+    let count = current.restartCount ?? 0;
+    let parentId = current.parentInstanceId;
+    const visited = new Set<string>([instanceId]);
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      const parent = this.instances.get(parentId);
+      if (!parent) break;
+      count += parent.restartCount ?? 0;
+      parentId = parent.parentInstanceId;
+    }
+    return count;
+  }
+
   // --- Collect ------------------------------------------------------------
 
   /**
@@ -634,6 +729,8 @@ export class InstanceManager {
       error: `No activity for ${this.stallTimeoutMs}ms — LLM appears stalled`,
       completedAt: Date.now(),
     });
+    // v0.5.5 — persistent auto-restart on stall
+    await this._maybeAutoRestart(inst.instanceId);
   }
 
   /**
@@ -704,6 +801,8 @@ export class InstanceManager {
       error: `Thinking loop detected: ${formatDuration(sinceMs)} of thinking without tool calls or output. Spawn a Mimir agent for research.`,
       completedAt: Date.now(),
     });
+    // v0.5.5 — persistent auto-restart on thinking-loop exhaustion
+    await this._maybeAutoRestart(inst.instanceId);
   }
 
   // --- Internal: per-session event handler -------------------------------
@@ -759,6 +858,37 @@ export class InstanceManager {
         error: errMsg,
         completedAt: Date.now(),
       });
+      // v0.5.5 — persistent auto-restart. If the instance is persistent
+      // and was not explicitly killed, try to restart.
+      if (inst.persistent && inst.status !== "killed") {
+        await this._maybeAutoRestart(instanceId);
+      }
+    }
+  }
+
+  /** v0.5.5 — Attempt an auto-restart for a persistent failed instance. */
+  private async _maybeAutoRestart(instanceId: string): Promise<void> {
+    const inst = this.instances.get(instanceId);
+    if (!inst || !inst.persistent) return;
+    if (inst.status === "killed") return; // user killed it — do not restart
+    this.logger.info(
+      `bizar: persistent instance ${instanceId} failed; auto-restarting`,
+    );
+    const result = await this.restart(instanceId);
+    if (result.ok) {
+      // Clear any previous restartError on the parent so the operator
+      // sees a clean state.
+      await this.update(instanceId, { restartError: undefined });
+      this.logger.info(
+        `bizar: auto-restart complete: ${instanceId} -> ${result.newInstanceId}`,
+      );
+    } else {
+      // Persist a human-readable error so the operator can see why the
+      // restart was rejected (e.g. max_restarts_reached).
+      await this.update(instanceId, { restartError: result.error || "unknown" });
+      this.logger.warn(
+        `bizar: auto-restart failed for ${instanceId}: ${result.error}`,
+      );
     }
   }
 
@@ -800,7 +930,11 @@ export class InstanceManager {
         patch.completedAt = Date.now();
       }
       await this.update(instanceId, patch);
-      if (patch.status === "failed") return;
+      // v0.5.5 — persistent auto-restart on tool-call cap
+      if (patch.status === "failed") {
+        await this._maybeAutoRestart(instanceId);
+        return;
+      }
     }
 
     // --- Loop-guard threshold-12 detection (spec §4.1) ---
@@ -816,6 +950,8 @@ export class InstanceManager {
             loopGuardTool: tool,
             completedAt: Date.now(),
           });
+          // v0.5.5 — persistent auto-restart on loop-guard
+          await this._maybeAutoRestart(instanceId);
           return;
         }
       }
