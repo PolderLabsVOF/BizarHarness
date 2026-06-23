@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "3.11.0",
+  "version": "3.11.1",
   "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness.",
   "type": "module",
   "bin": {
@@ -45,7 +45,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:DrB0rk/BizarHarness.git"
+    "url": "git+ssh://git@github.com/DrB0rk/BizarHarness.git"
   },
   "bugs": {
     "url": "https://github.com/DrB0rk/BizarHarness/issues"
