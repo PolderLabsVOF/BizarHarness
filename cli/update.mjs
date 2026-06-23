@@ -121,23 +121,30 @@ export function readLivePid(pidFile) {
  * We treat any successful signal delivery as success; if SIGKILL is
  * sent, the original process is certainly dead (uncatchable).
  *
+ * Cross-platform note: Node.js 14+ maps `process.kill(pid)` without an
+ * explicit signal to the platform-appropriate default (`SIGTERM` on
+ * POSIX, `TerminateProcess` on Windows). We drop the signal argument so
+ * the same code works on both platforms. For the forced-kill phase on
+ * Windows we use `taskkill /F /PID <pid>` because `SIGKILL` is not
+ * delivered the same way there.
+ *
  * Exported for testability.
  */
-export function killAndWait(pid, { timeoutMs = 5000, label = 'process' } = {}) {
+export async function killAndWait(pid, { timeoutMs = 5000, label = 'process' } = {}) {
   if (!pid) return true;
 
-  // Phase 1: graceful SIGTERM
+  // Phase 1: graceful SIGTERM (or platform default on Windows)
   let sigtermOk = false;
   try {
-    process.kill(pid, 'SIGTERM');
+    process.kill(pid);
     sigtermOk = true;
   } catch (err) {
     if (err.code === 'ESRCH') return true; // already dead
-    console.log(chalk.yellow(`    ! could not SIGTERM ${label} (pid ${pid}): ${err.message}`));
+    console.log(chalk.yellow(`    ! could not signal ${label} (pid ${pid}): ${err.message}`));
     return false;
   }
 
-  // Best-effort poll for graceful exit. Note: a SIGTERM-handling process
+  // Best-effort poll for graceful exit. Note: a signal-handling process
   // (Express dashboard, Node sleeper) usually exits within ~100ms. We
   // poll for up to `timeoutMs`; if anything responds to kill -0 it may be
   // a recycled PID, so we don't treat that as "still our process".
@@ -149,7 +156,7 @@ export function killAndWait(pid, { timeoutMs = 5000, label = 'process' } = {}) {
     } catch (err) {
       if (err.code === 'ESRCH') { sawExit = true; break; }
     }
-    spawnSync('sleep', ['0.1']);
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   if (sawExit) {
@@ -157,20 +164,26 @@ export function killAndWait(pid, { timeoutMs = 5000, label = 'process' } = {}) {
     return true;
   }
 
-  // Phase 2: escalate to SIGKILL. Even if `kill -0` still succeeds (PID
-  // recycled or process truly stuck), SIGKILL is uncatchable and the
-  // original process — if it was still our PID — is now dead.
+  // Phase 2: escalate to forced kill. Even if `kill -0` still succeeds
+  // (PID recycled or process truly stuck), SIGKILL is uncatchable and
+  // the original process — if it was still our PID — is now dead.
+  // On Windows, use `taskkill /F` because POSIX SIGKILL semantics don't
+  // exist there.
   try {
-    process.kill(pid, 'SIGKILL');
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGKILL');
+    }
     if (sigtermOk) {
-      console.log(chalk.yellow(`    ! ${label} (pid ${pid}) did not exit gracefully; sent SIGKILL`));
+      console.log(chalk.yellow(`    ! ${label} (pid ${pid}) did not exit gracefully; sent forced kill`));
     }
     // Brief settle for the kernel.
-    spawnSync('sleep', ['0.2']);
+    await new Promise((resolve) => setTimeout(resolve, 200));
     return true;
   } catch (err) {
     if (err.code === 'ESRCH') return true;
-    console.log(chalk.red(`    ✗ could not SIGKILL ${label} (pid ${pid}): ${err.message}`));
+    console.log(chalk.red(`    ✗ could not force-kill ${label} (pid ${pid}): ${err.message}`));
     return false;
   }
 }
@@ -272,8 +285,15 @@ function rerunInstallScript() {
     return { ok: false, message: 'setup rerun failed' };
   }
   const installSh = join(pkgRoot, 'install.sh');
-  if (process.platform === 'win32' || !existsSync(installSh)) {
+  if (!existsSync(installSh)) {
     return { ok: false, message: 'could not locate a compatible setup script to re-run' };
+  }
+  if (process.platform === 'win32') {
+    // On Windows, the bash install path doesn't apply. The plugin is
+    // already installed globally via the npm install
+    // (see cli/install.mjs:installPluginFromGlobal).
+    console.log(chalk.dim('  Skipping install.sh (Windows uses npm-based plugin install)'));
+    return { ok: true, message: 'install.sh skipped on Windows' };
   }
   console.log(chalk.dim(`\n  Re-running install script at ${installSh}...`));
   const r = spawnSync('bash', [installSh], { stdio: 'inherit' });
@@ -349,17 +369,17 @@ async function confirmKill(instances, { assumeYes } = {}) {
   }
 }
 
-function killInstances(instances) {
+async function killInstances(instances) {
   const out = [];
   if (instances.service) {
-    const ok = killAndWait(instances.service.pid, { label: 'bizar service' });
+    const ok = await killAndWait(instances.service.pid, { label: 'bizar service' });
     out.push({ name: 'service', ok });
     if (ok) {
       try { rmSync(SERVICE_PID_FILE, { force: true }); } catch { /* ignore */ }
     }
   }
   if (instances.dashboard) {
-    const ok = killAndWait(instances.dashboard.pid, { label: 'bizar-dash' });
+    const ok = await killAndWait(instances.dashboard.pid, { label: 'bizar-dash' });
     out.push({ name: 'dashboard', ok });
     if (ok) {
       try { rmSync(DASHBOARD_PID_FILE, { force: true }); } catch { /* ignore */ }
@@ -428,7 +448,7 @@ async function promptForUpdates(forceAll) {
       choices: [
         { name: 'opencode (the opencode CLI itself)', value: 'opencode', checked: true },
         { name: `bizar (${PKG_MAIN})`, value: 'bizar', checked: true },
-        { name: `bizar-dash (${PKG_DASH}) — web dashboard`, value: 'dash', checked: true },
+        { name: `bizar dash (${PKG_DASH}) — web dashboard`, value: 'dash', checked: true },
         { name: `plugin (${PKG_PLUGIN})`, value: 'plugin', checked: true },
       ],
     },
@@ -460,14 +480,14 @@ export async function runUpdate(subargs = []) {
       process.exit(1);
     }
     console.log(chalk.cyan('\n  Stopping running instances...'));
-    const kills = killInstances(instances);
+    const kills = await killInstances(instances);
     for (const k of kills) {
       const marker = k.ok ? chalk.green('✓') : chalk.red('✗');
       console.log(`    ${marker} ${k.name} stopped`);
     }
     // Give the kernel a moment to release any open file handles on the
     // npm-global directory before npm tries to replace files.
-    spawnSync('sleep', ['0.5']);
+    await new Promise((resolve) => setTimeout(resolve, 500));
   } else {
     console.log(chalk.dim('  No running Bizar instances detected.'));
   }
@@ -565,7 +585,7 @@ export async function runUpdate(subargs = []) {
       console.log(chalk.green(`  ✓ ${res.message}`));
     } else {
       console.log(chalk.yellow(`  ⚠ ${res.message}`));
-      console.log(chalk.dim('    Start it manually with `bizar-dash start --bg`.'));
+      console.log(chalk.dim('    Start it manually with `bizar dash start --bg`.'));
     }
   }
 

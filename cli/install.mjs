@@ -395,8 +395,12 @@ async function promptGraphifyInstall() {
   console.log();
   sectionHeading('Knowledge Graph (graphify)');
 
-  // 1. Detect graphify already installed
-  const detect = spawnSync('python3', ['-c', 'import graphify; print(graphify.__version__)'], {
+  // 1. Detect graphify already installed. Windows users typically have
+  // `py` on PATH (the Python launcher) rather than `python3`, so probe
+  // the right binary per platform. A failed probe just means we will
+  // prompt to install below.
+  const pythonBin = process.platform === 'win32' ? 'py' : 'python3';
+  const detect = spawnSync(pythonBin, ['-c', 'import graphify; print(graphify.__version__)'], {
     cwd: process.cwd(),
     encoding: 'utf8',
     timeout: 5000,
@@ -407,6 +411,26 @@ async function promptGraphifyInstall() {
     console.log(chalk.green('  graphify already installed — skipping.'));
     return;
   }
+
+  // Install graphify via pip as a fallback when uv is unavailable or the
+  // user declined the uv-based install. On Windows, `pip` is often not
+  // on PATH, so we invoke it as a `py -m pip` module instead. Returns
+  // the spawn result so the caller can log success/failure.
+  const installGraphifyWithPip = () => {
+    if (process.platform === 'win32') {
+      return spawnSync('py', ['-m', 'pip', 'install', 'graphifyy'], {
+        stdio: 'inherit',
+        timeout: 120000,
+      });
+    }
+    return spawnSync('pip', ['install', 'graphifyy'], {
+      stdio: 'inherit',
+      timeout: 120000,
+    });
+  };
+  const pipManualHint = process.platform === 'win32'
+    ? 'py -m pip install graphifyy'
+    : 'pip install graphifyy';
 
   // 2. Non-interactive: print hint and exit
   if (!stdin.isTTY || !stdout.isTTY) {
@@ -469,7 +493,12 @@ async function promptGraphifyInstall() {
 
         console.log('  Installing uv...');
         try {
-          execSync('curl -LsSf https://astral.sh/uv/install.sh | sh', { stdio: 'inherit', timeout: 60000 });
+          if (process.platform === 'win32') {
+            // Windows: use the official PowerShell installer
+            execSync('powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"', { stdio: 'inherit', timeout: 60000 });
+          } else {
+            execSync('curl -LsSf https://astral.sh/uv/install.sh | sh', { stdio: 'inherit', timeout: 60000 });
+          }
         } catch (err) {
           console.log(chalk.red(`  uv install failed: ${err.message}`));
           console.log(chalk.dim('  Install manually from https://docs.astral.sh/uv'));
@@ -480,12 +509,12 @@ async function promptGraphifyInstall() {
             rl2.close();
             if (pipAnswer === '' || pipAnswer.startsWith('y')) {
               console.log('  Installing graphify via pip...');
-              const result = spawnSync('pip', ['install', 'graphifyy'], { stdio: 'inherit', timeout: 120000 });
+              const result = installGraphifyWithPip();
               if (result.status === 0) {
                 console.log(chalk.green('  graphify installed. Run `bizar graph build` to populate .bizar/graph/.'));
               } else {
                 console.log(chalk.red(`  pip install failed (exit ${result.status}).`));
-                console.log(chalk.dim('  Install manually: pip install graphifyy'));
+                console.log(chalk.dim(`  Install manually: ${pipManualHint}`));
               }
             } else {
               console.log(chalk.dim('  Skipped.'));
@@ -513,12 +542,12 @@ async function promptGraphifyInstall() {
           rl2.close();
           if (pipAnswer === '' || pipAnswer.startsWith('y')) {
             console.log('  Installing graphify via pip...');
-            const result = spawnSync('pip', ['install', 'graphifyy'], { stdio: 'inherit', timeout: 120000 });
+            const result = installGraphifyWithPip();
             if (result.status === 0) {
               console.log(chalk.green('  graphify installed. Run `bizar graph build` to populate .bizar/graph/.'));
             } else {
               console.log(chalk.red(`  pip install failed (exit ${result.status}).`));
-              console.log(chalk.dim('  Install manually: pip install graphifyy'));
+              console.log(chalk.dim(`  Install manually: ${pipManualHint}`));
             }
           } else {
             console.log(chalk.dim('  Skipped.'));
@@ -578,12 +607,18 @@ export async function runPostInstall() {
   if (!rtkPresent) {
     console.log('BizarHarness: installing RTK (token optimizer)...');
     try {
-      execSync(
-        'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
-        { stdio: 'pipe', timeout: 60000 },
-      );
-      execSync('rtk init -g --opencode', { stdio: 'pipe' });
-      console.log('BizarHarness: RTK installed and configured.');
+      if (process.platform === 'win32') {
+        // RTK ships a bash-only installer; on Windows the user installs it
+        // manually (e.g. `cargo install --git https://github.com/rtk-ai/rtk`).
+        console.log('BizarHarness: RTK bash installer does not run on Windows. Install manually from https://github.com/rtk-ai/rtk');
+      } else {
+        execSync(
+          'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+          { stdio: 'pipe', timeout: 60000 },
+        );
+        execSync('rtk init -g --opencode', { stdio: 'pipe' });
+        console.log('BizarHarness: RTK installed and configured.');
+      }
     } catch {
       console.log('BizarHarness: RTK install failed. Install manually from https://github.com/rtk-ai/rtk');
     }
@@ -601,13 +636,21 @@ export async function runPostInstall() {
   if (!semblePresent) {
     console.log('BizarHarness: installing Semble (code search)...');
     try {
-      const hasUv = await detectUv();
-      if (!hasUv) {
+    const hasUv = await detectUv();
+    if (!hasUv) {
+      if (process.platform === 'win32') {
+        // Windows: use the official PowerShell installer
+        execSync(
+          'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"',
+          { stdio: 'pipe', timeout: 60000 },
+        );
+      } else {
         execSync(
           'curl -LsSf https://astral.sh/uv/install.sh | sh',
           { stdio: 'pipe', timeout: 60000 },
         );
       }
+    }
       execSync('uv tool install "semble[mcp]"', { stdio: 'pipe', timeout: 60000 });
       console.log('BizarHarness: Semble installed.');
     } catch {

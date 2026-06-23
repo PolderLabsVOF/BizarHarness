@@ -1013,7 +1013,7 @@ function handlePlanWait(args: string[]): SlashCommandResult {
  *
  * Behavior:
  *   - `/bizar` (no args) — emits a `launch_dashboard` side-effect. The
- *     executor spawns `bizar dashboard start` as a detached child
+ *     executor spawns `bizar dash start` as a detached child
  *     process, then the host surfaces the URL in the response.
  *   - `/bizar <args>` — passes the args to the menu command file. Today
  *     the menu routes intent (`/explain`, `/plan`, `/audit`, etc.); the

@@ -6,6 +6,8 @@
  */
 
 import { describe, it, expect } from "bun:test";
+import os from "node:os";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Types that mirror the expected HttpClient API from §1 / §2
@@ -126,12 +128,12 @@ describe("HttpClient.createSession", () => {
       parentID: "parent_sess",
       title: "bgr:mimir:bgr_01",
       agent: "mimir",
-      directory: "/tmp/worktree",
+      directory: path.join(os.tmpdir(), "worktree"),
     });
 
     expect(session.id).toBeTruthy();
     expect(session.projectID).toBe("proj_test");
-    expect(session.directory).toBe("/tmp/worktree");
+    expect(session.directory).toBe(path.join(os.tmpdir(), "worktree"));
     expect(session.parentID).toBe("parent_sess");
     expect(session.title).toBe("bgr:mimir:bgr_01");
   });

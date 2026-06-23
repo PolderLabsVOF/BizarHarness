@@ -905,7 +905,9 @@ if (isMain) {
   const { server, close } = await createServer({
     port,
     projectRoot: process.cwd(),
-    opencodeConfigDir: join(HOME, '.config', 'opencode'),
+    opencodeConfigDir: process.platform === 'win32'
+      ? join(process.env.APPDATA || HOME, 'opencode')
+      : join(HOME, '.config', 'opencode'),
     bizarRoot: dirname(__dirname),
   });
   await new Promise((resolve, reject) => {

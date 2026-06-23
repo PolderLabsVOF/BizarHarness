@@ -8,10 +8,11 @@ import { describe, test, expect } from "bun:test";
 import { fingerprint } from "../src/fingerprint";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
 /** Use a real temp directory as the worktree for path normalization tests */
-const WORKTREE = "/tmp/bizar-fingerprint-test-worktree";
-const OUTSIDE_TREE = "/tmp/bizar-outside-worktree";
+const WORKTREE = path.join(os.tmpdir(), "bizar-fingerprint-test-worktree");
+const OUTSIDE_TREE = path.join(os.tmpdir(), "bizar-outside-worktree");
 
 function setupWorktree() {
   try {
@@ -33,22 +34,22 @@ setupWorktree();
 
 describe("fingerprint — stable hash", () => {
   test("same args produce the same fingerprint", () => {
-    const args = { path: "/tmp/foo.ts", recursive: false };
+      const args = { path: path.join(os.tmpdir(), "foo.ts"), recursive: false };
     const a = fingerprint("read", args, WORKTREE);
     const b = fingerprint("read", args, WORKTREE);
     expect(a).toBe(b);
   });
 
   test("different tool name produces different fingerprint", () => {
-    const args = { path: "/tmp/foo.ts" };
+      const args = { path: path.join(os.tmpdir(), "foo.ts") };
     const a = fingerprint("read", args, WORKTREE);
     const b = fingerprint("edit", args, WORKTREE);
     expect(a).not.toBe(b);
   });
 
   test("different args produce different fingerprint", () => {
-    const a = fingerprint("read", { path: "/tmp/foo.ts" }, WORKTREE);
-    const b = fingerprint("read", { path: "/tmp/bar.ts" }, WORKTREE);
+    const a = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts") }, WORKTREE);
+    const b = fingerprint("read", { path: path.join(os.tmpdir(), "bar.ts") }, WORKTREE);
     expect(a).not.toBe(b);
   });
 
@@ -74,7 +75,7 @@ describe("fingerprint — path normalization", () => {
     const fp2 = fingerprint("read", { path: outside }, WORKTREE);
     expect(fp1).toBe(fp2);
     // Must NOT collide with a different outside path
-    const different = "/tmp/different/path/file.txt";
+    const different = path.join(os.tmpdir(), "different/path/file.txt");
     const fp3 = fingerprint("read", { path: different }, WORKTREE);
     expect(fp1).not.toBe(fp3);
   });
@@ -90,38 +91,38 @@ describe("fingerprint — path normalization", () => {
 
 describe("fingerprint — noise field stripping", () => {
   test("strips timestamp fields", () => {
-    const a = fingerprint("read", { path: "/tmp/foo.ts", createdAt: 1234567890 }, WORKTREE);
-    const b = fingerprint("read", { path: "/tmp/foo.ts", createdAt: 9999999999 }, WORKTREE);
+    const a = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), createdAt: 1234567890 }, WORKTREE);
+    const b = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), createdAt: 9999999999 }, WORKTREE);
     expect(a).toBe(b);
   });
 
   test("strips updatedAt timestamp fields", () => {
-    const a = fingerprint("read", { path: "/tmp/foo.ts", updatedAt: "2024-01-01T00:00:00Z" }, WORKTREE);
-    const b = fingerprint("read", { path: "/tmp/foo.ts", updatedAt: "2025-12-31T23:59:59Z" }, WORKTREE);
+    const a = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), updatedAt: "2024-01-01T00:00:00Z" }, WORKTREE);
+    const b = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), updatedAt: "2025-12-31T23:59:59Z" }, WORKTREE);
     expect(a).toBe(b);
   });
 
   test("strips id field", () => {
-    const a = fingerprint("read", { path: "/tmp/foo.ts", id: "abc123" }, WORKTREE);
-    const b = fingerprint("read", { path: "/tmp/foo.ts", id: "xyz789" }, WORKTREE);
+    const a = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), id: "abc123" }, WORKTREE);
+    const b = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), id: "xyz789" }, WORKTREE);
     expect(a).toBe(b);
   });
 
   test("strips uuid field", () => {
-    const a = fingerprint("read", { path: "/tmp/foo.ts", uuid: "550e8400-e29b-41d4-a716-446655440000" }, WORKTREE);
-    const b = fingerprint("read", { path: "/tmp/foo.ts", uuid: "6ba7b810-9dad-11d1-80b4-00c04fd430c8" }, WORKTREE);
+    const a = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), uuid: "550e8400-e29b-41d4-a716-446655440000" }, WORKTREE);
+    const b = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), uuid: "6ba7b810-9dad-11d1-80b4-00c04fd430c8" }, WORKTREE);
     expect(a).toBe(b);
   });
 
   test("strips nonce field", () => {
-    const a = fingerprint("read", { path: "/tmp/foo.ts", nonce: "random1" }, WORKTREE);
-    const b = fingerprint("read", { path: "/tmp/foo.ts", nonce: "random2" }, WORKTREE);
+    const a = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), nonce: "random1" }, WORKTREE);
+    const b = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), nonce: "random2" }, WORKTREE);
     expect(a).toBe(b);
   });
 
   test("strips cwd field entirely", () => {
-    const a = fingerprint("read", { path: "/tmp/foo.ts", cwd: "/home/user" }, WORKTREE);
-    const b = fingerprint("read", { path: "/tmp/foo.ts", cwd: "/completely/different" }, WORKTREE);
+    const a = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), cwd: "/home/user" }, WORKTREE);
+    const b = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), cwd: "/completely/different" }, WORKTREE);
     expect(a).toBe(b);
   });
 });
@@ -130,10 +131,10 @@ describe("fingerprint — nested objects", () => {
   test("nested objects are normalized recursively", () => {
     const a = fingerprint("edit", {
       meta: { author: "Alice", timestamp: 1000 },
-      path: "/tmp/foo.ts",
+      path: path.join(os.tmpdir(), "foo.ts"),
     }, WORKTREE);
     const b = fingerprint("edit", {
-      path: "/tmp/foo.ts",
+      path: path.join(os.tmpdir(), "foo.ts"),
       meta: { timestamp: 9999, author: "Alice" },
     }, WORKTREE);
     expect(a).toBe(b);

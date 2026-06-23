@@ -2,20 +2,17 @@
 /**
  * cli/bin.mjs
  *
- * v3.0.0 — `bizar` runtime CLI.
+ * v3.10.0 — `bizar` runtime CLI.
  *
  * Architecture:
  *   - `bizar` is the core runtime + installer + audit/init/export/update/plan
- *     + service commands.
- *   - The dashboard lives in a separate package, `@polderlabs/bizar-dash`.
- *     If it's installed, `bizar dashboard` / `bizar --web*` will defer to it.
- *     If not, the user is told to install it.
+ *     + service + dash commands.
+ *   - The dashboard lives in `@polderlabs/bizar-dash` as a library.
+ *     Commands live under `bizar dash <subcommand>` (new canonical form).
+ *     `bizar dashboard` is a deprecated alias (still works, prints warning).
  *
- * Subcommands (unchanged from v2.7.0):
- *   install, audit, init, export, plan, update, test-gate, service
- *
- * Flags (unchanged):
- *   --web / --no-web / --web-only / --bg / --detach
+ * Subcommands:
+ *   install, audit, init, export, plan, update, test-gate, service, dash
  */
 import { existsSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
@@ -77,36 +74,34 @@ function showHelp() {
   Bizar — Norse Pantheon Agent System for opencode
 
   Usage:
-    bizar                       Launch the TUI dashboard (auto-runs first-time setup if needed)
-    bizar --web                 Launch TUI + auto-open web dashboard
-    bizar --no-web              Launch TUI only (no browser)
-    bizar --web-only            Web dashboard only (no TUI, in browser)
-    bizar --bg, --detach        Launch web dashboard in background, return to shell
-    bizar install               Run the interactive installer
-    bizar audit                 Run security audit on agent configuration
-    bizar init                  Initialize .bizar/ in current project
-    bizar export [target]       Export agents/rules to another harness
-    bizar plan <subcommand>     Manage visual plans
-    bizar graph                 Per-project knowledge graph (powered by graphify)
-    bizar test-gate             Detect & run the project's test suite
-    bizar update                Update opencode, bizar, and/or bizar-plugin
-    bizar service               Manage the background service daemon
-    bizar dashboard             Launch the web dashboard (uses bizar)
-    bizar --setup               Re-run setup manually (agents, plugin, RTK, Semble, Skills CLI)
-    bizar --check               Print setup status as JSON, exit 1 if setup needed
-    bizar --version             Show package version
-    bizar --help                Show this help
+    bizar <command> [options]
+
+  Commands:
+    install             Run the interactive installer
+    audit               Run security audit on agent configuration
+    init                Initialize .bizar/ in current project
+    export [target]     Export agents/rules to another harness
+    plan <subcommand>  Manage visual plans
+    graph               Per-project knowledge graph (powered by graphify)
+    test-gate           Detect & run the project's test suite
+    update              Update opencode, bizar, and/or bizar-plugin
+    service             Manage the background service daemon
+    dash <subcommand>   Manage the dashboard (start/stop/status/tui)
+
+  Examples:
+    bizar install
+    bizar audit
+    bizar dash start
+    bizar dash start --bg
+    bizar dash stop
+    bizar dash status
+
+  Run \`bizar <command> --help\` for per-command help.
 
   Install:
     npm install -g @polderlabs/bizar          Install globally
-    npm install -g @polderlabs/bizar-dash     Optional companion dashboard
+    npm install -g @polderlabs/bizar-dash     Optional dashboard package
     npm install -g @polderlabs/bizar-plugin   Bizar opencode plugin
-
-  Notes:
-    The TUI is the default command — press 1-8 for tabs, q to quit.
-    \`bizar --bg\` launches the dashboard detached; \`bizar dashboard stop\`
-    terminates it. The web dashboard lives in the \`@polderlabs/bizar-dash\`
-    package — if it's not installed, you'll be prompted to install it.
   `);
 }
 
@@ -181,7 +176,7 @@ function showInstallHelp() {
 
 function showUpdateHelp() {
   console.log(`
-  bizar update — Update opencode, bizar, bizar-dash, and/or bizar-plugin
+  bizar update — Update opencode, bizar, and/or bizar-plugin
 
   Usage:
     bizar update                       Interactive prompt for components
@@ -207,7 +202,7 @@ function showUpdateHelp() {
     • Sends SIGTERM, waits up to 5s, escalates to SIGKILL if needed.
     • Re-runs the install script so the deployed plugin source matches
       the just-upgraded npm version (avoids the version-skew trap).
-    • If the dashboard was running and bizar / bizar-dash were updated,
+    • If the dashboard was running and bizar or dash was updated,
       spawns a fresh detached dashboard process with the new code
       (skipped with --no-restart).
 
@@ -244,19 +239,35 @@ function showServiceHelp() {
   `);
 }
 
-function showDashboardHelp() {
+function showDashHelp() {
   console.log(`
-  bizar dashboard — Launch the web dashboard (uses @polderlabs/bizar-dash)
+  bizar dash — Manage the Bizar dashboard
 
   Usage:
-    bizar dashboard             Start the dashboard
-    bizar dashboard start       Same
-    bizar dashboard stop        Kill the running dashboard
-    bizar dashboard status      Show port + URL
+    bizar dash <subcommand> [options]
 
-  Description:
-    The dashboard lives in a separate package. If it's not installed,
-    you'll see an install hint pointing at @polderlabs/bizar-dash.
+  Subcommands:
+    start [--bg] [--port N]   Start the dashboard (default port 4321)
+    stop                       Stop the running dashboard
+    status                     Show dashboard port and URL
+    tui [--no-web]             Launch the TUI
+
+  Options:
+    --bg                       Detach and run in background (for start)
+    --port N                   Override the default port
+    --no-web                   Skip launching the web UI (for tui)
+
+  Examples:
+    bizar dash start
+    bizar dash start --bg
+    bizar dash stop
+    bizar dash status
+    bizar dash tui
+    bizar dash tui --no-web
+
+  Note:
+    \`bizar dashboard\` is a deprecated alias for \`bizar dash\` and still
+    works, but new code should use \`bizar dash\`.
   `);
 }
 
@@ -420,34 +431,130 @@ async function main() {
   } else if (args[0] === 'service') {
     if (isHelpRequest) showServiceHelp();
     else await runServiceCommand(args[1]);
-  } else if (args[0] === 'dashboard' || args[0] === 'start' || args[0] === 'stop' || args[0] === 'status' || args[0] === 'tui') {
-    if (isHelpRequest) showDashboardHelp();
-    else await delegateToDash(args.slice(1));
-  } else if (args.includes('--bg') || args.includes('--detach')) {
-    // Delegate to bizar-dash
-    await delegateToDash(['--bg']);
-  } else if (args.includes('--web-only')) {
-    await delegateToDash(['--web-only']);
+  } else if (args[0] === 'dash' || args[0] === 'dashboard') {
+    // `bizar dashboard` is a deprecated alias for `bizar dash`
+    if (args[0] === 'dashboard') {
+      console.warn(chalk.yellow('  ⚠ `bizar dashboard` is deprecated, use `bizar dash` instead.'));
+    }
+    const dashArgs = args.slice(1); // everything after 'dash' or 'dashboard'
+    if (dashArgs.length === 0 || isHelpRequest) {
+      showDashHelp();
+    } else {
+      await runDash(dashArgs);
+    }
   } else if (isHelpRequest) {
     showHelp();
   } else {
-    // Default: launch the TUI dashboard. The TUI lives in bizar-dash.
-    const dashPath = await findBizarDash();
-    if (dashPath) {
-      const skipWeb = args.includes('--no-web');
-      const forceWeb = args.includes('--web');
-      const settingAuto = await readAutoLaunchWeb();
-      const launchWeb = !skipWeb && (forceWeb || settingAuto);
-      await delegateToDash(['tui', ...(launchWeb ? [] : ['--no-web'])]);
-    } else {
-      console.log('The Bizar dashboard is in a separate package:');
-      console.log(chalk.cyan('  npm install -g @polderlabs/bizar-dash'));
-      console.log('');
-      console.log('Or run the installer to set up everything:');
-      console.log(chalk.cyan('  npx -y @polderlabs/bizar install'));
-    }
+    // No args — show help (breaking: previously launched TUI)
+    showHelp();
+    process.exit(1);
   }
 }
+
+// ── Dashboard subcommand ───────────────────────────────────────────────────────
+
+/**
+ * Parse dash-specific options from an array of args.
+ * Returns { opts, remaining } where opts have --bg / --port stripped.
+ */
+function parseDashOpts(dashArgs) {
+  const opts = { bg: false, port: null, noWeb: false };
+  const remaining = [];
+  for (let i = 0; i < dashArgs.length; i++) {
+    const a = dashArgs[i];
+    if (a === '--bg') {
+      opts.bg = true;
+    } else if (a === '--no-web') {
+      opts.noWeb = true;
+    } else if (a === '--port' && i + 1 < dashArgs.length) {
+      opts.port = Number(dashArgs[i + 1]);
+      i++;
+    } else {
+      remaining.push(a);
+    }
+  }
+  return { opts, remaining };
+}
+
+/**
+ * Try to load the dashboard CLI module.
+ * Try 1: import via the package exports map (@polderlabs/bizar-dash/dash-cli)
+ * Try 2: file path probing for older installs or dev trees
+ */
+async function loadDashCli() {
+  // Try 1: import via exports map (requires Tyr's package.json changes)
+  try {
+    const mod = await import('@polderlabs/bizar-dash/dash-cli');
+    return mod;
+  } catch (_e) {
+    // fall through to file probing
+  }
+
+  // Try 2: file path probing
+  const { join } = await import('node:path');
+  const { homedir } = await import('node:os');
+  const candidates = [
+    // npm global install
+    join(homedir(), '.npm-global', 'lib', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'cli.mjs'),
+    // nvm
+    join(homedir(), '.nvm', 'versions', 'node'),
+    // relative to current process
+    join(process.execPath, '..', '..', 'lib', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'cli.mjs'),
+    // local node_modules
+    join(process.cwd(), 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'cli.mjs'),
+  ];
+
+  const { pathToFileURL } = await import('node:url');
+  for (const p of candidates) {
+    try {
+      const url = pathToFileURL(p).href;
+      const mod = await import(url);
+      return mod;
+    } catch (_e) {
+      // try next
+    }
+  }
+  return null;
+}
+
+/**
+ * Dispatch a dashboard subcommand by loading the dashboard module and
+ * calling the appropriate exported function.
+ */
+async function runDash(dashArgs) {
+  const { opts, remaining } = parseDashOpts(dashArgs);
+  const sub = remaining[0];
+  const subOpts = { ...opts, subArgs: remaining.slice(1) };
+
+  const dashModule = await loadDashCli();
+  if (!dashModule) {
+    console.error(chalk.red('  ✗ Dashboard not installed.'));
+    console.error(chalk.dim('  Run: npm install -g @polderlabs/bizar-dash'));
+    console.error(chalk.dim('  Or: npx -y @polderlabs/bizar install'));
+    process.exit(1);
+  }
+
+  switch (sub) {
+    case 'start':
+      await dashModule.start(subOpts);
+      break;
+    case 'stop':
+      await dashModule.stop(subOpts);
+      break;
+    case 'status':
+      await dashModule.status(subOpts);
+      break;
+    case 'tui':
+      await dashModule.tui(subOpts);
+      break;
+    default:
+      console.error(chalk.red(`  ✗ Unknown subcommand: ${sub}`));
+      showDashHelp();
+      process.exit(1);
+  }
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 await main().catch((err) => {
   console.error(chalk.red(`bizar: ${err && err.message ? err.message : String(err)}`));

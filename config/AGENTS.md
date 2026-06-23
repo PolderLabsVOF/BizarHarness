@@ -334,7 +334,7 @@ This section is the single source of truth for every Bizar agent's behavior. It 
 > | `bash_tool` | `bash` |
 > | `web_search` | `websearch` (opencode built-in) |
 > | `web_fetch` | `webfetch` (opencode built-in) |
-> | `present_files` | not applicable — Bizar delivers files via the dashboard (`bizar-dash/src/server/routes/artifacts.mjs`) or by writing to the workspace |
+> | `present_files` | not applicable — Bizar delivers files via the dashboard (`@polderlabs/bizar-dash/src/server/routes/artifacts.mjs`) or by writing to the workspace |
 > | `image_search` / `places_*` / `weather_fetch` / `recipe_display_v0` / `fetch_sports_data` / `message_compose_v1` / `recommend_claude_apps` | not available in Bizar — do not assume these exist |
 > | `search_mcp_registry` / `suggest_connectors` | use the `skills` CLI (`skills add <owner/repo> -s <name>`) to discover and install skills instead |
 > | `ask_user_input_v0` | Bizar has a `question` tool — same shape, single high-value question |

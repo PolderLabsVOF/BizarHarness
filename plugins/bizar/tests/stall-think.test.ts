@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { writeFileSync, mkdirSync, unlinkSync, rmSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
 // ---------------------------------------------------------------------------
 // Group 1 — researchInterventionPrompt
@@ -130,7 +131,7 @@ const silentLogger = {
 };
 
 function makeTempDir(prefix: string): string {
-  const dir = `/tmp/bizar-stall-test-${prefix}-${process.pid}`;
+  const dir = path.join(os.tmpdir(), `bizar-stall-test-${prefix}-${process.pid}`);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -165,7 +166,7 @@ describe("BackgroundState schema backfill", () => {
       promptPreview: "Do the thing",
       toolCallCount: 0,
       parentAgent: "odin",
-      logPath: "/tmp/test.log",
+      logPath: path.join(os.tmpdir(), "test.log"),
       timeoutMs: 300_000,
       // lastEventAt is intentionally absent
       lastToolOrTextAt: startedAt,
@@ -192,7 +193,7 @@ describe("BackgroundState schema backfill", () => {
       promptPreview: "Do the thing",
       toolCallCount: 0,
       parentAgent: "odin",
-      logPath: "/tmp/test.log",
+      logPath: path.join(os.tmpdir(), "test.log"),
       timeoutMs: 300_000,
       lastEventAt: startedAt,
       // lastToolOrTextAt is intentionally absent
@@ -219,7 +220,7 @@ describe("BackgroundState schema backfill", () => {
       promptPreview: "Do the thing",
       toolCallCount: 0,
       parentAgent: "odin",
-      logPath: "/tmp/test.log",
+      logPath: path.join(os.tmpdir(), "test.log"),
       timeoutMs: 300_000,
       lastEventAt: startedAt,
       lastToolOrTextAt: startedAt,
@@ -703,7 +704,7 @@ describe("bg-status toView — v0.3.0 fields", () => {
       promptPreview: "Research X",
       toolCallCount: 0,
       parentAgent: "odin",
-      logPath: "/tmp/test.log",
+      logPath: path.join(os.tmpdir(), "test.log"),
       timeoutMs: 300_000,
       lastEventAt: now - 60_000,
       lastToolOrTextAt: now - 60_000,
@@ -732,7 +733,7 @@ describe("bg-status toView — v0.3.0 fields", () => {
       promptPreview: "Research Y",
       toolCallCount: 0,
       parentAgent: "odin",
-      logPath: "/tmp/test.log",
+      logPath: path.join(os.tmpdir(), "test.log"),
       timeoutMs: 300_000,
       // v0.3.0 fields are absent (no intervention yet)
     };

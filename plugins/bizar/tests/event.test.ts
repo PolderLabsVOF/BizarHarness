@@ -125,7 +125,7 @@ class MockPlugin {
 
 // ── Test setup ───────────────────────────────────────────────────────────────
 
-const TEST_DIR = "/tmp/bizar-event-test";
+const TEST_DIR = path.join(os.tmpdir(), "bizar-event-test");
 const TEST_SESSION = "session-evt-001";
 const TEST_SESSION_2 = "session-evt-002";
 

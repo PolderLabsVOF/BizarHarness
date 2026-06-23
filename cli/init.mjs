@@ -154,12 +154,22 @@ ${stack.runner ? `- Dev: \`${stack.runner}\`` : ''}
   // Soft step: never fails init. If graphify is missing or build errors,
   // the user can retry manually with `bizar graph build`.
   console.log(chalk.bold('\n--- Graph ---\n'));
-  const detectGraphify = spawnSync('python3', ['-c', 'import graphify; print(graphify.__version__)'], {
-    cwd,
-    encoding: 'utf8',
-    timeout: 5000,
-  });
-  const graphifyAvailable = detectGraphify.status === 0 && (detectGraphify.stdout || '').trim().length > 0;
+
+  // Check for the graphify binary on PATH first (uv tool install shim).
+  // Falls back to python -m for pip/pipx installs.
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+  const whichCheck = spawnSync(whichCmd, ['graphify'], { encoding: 'utf8', timeout: 5000 });
+  let graphifyAvailable = whichCheck.status === 0 && (whichCheck.stdout || '').trim().length > 0;
+
+  if (!graphifyAvailable) {
+    const python = process.platform === 'win32' ? 'py' : 'python3';
+    const detectGraphify = spawnSync(python, ['-c', 'import graphify; print(graphify.__version__)'], {
+      cwd,
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    graphifyAvailable = detectGraphify.status === 0 && (detectGraphify.stdout || '').trim().length > 0;
+  }
 
   if (!graphifyAvailable) {
     console.log(chalk.yellow('  graphify not detected — skipping project graph build.'));

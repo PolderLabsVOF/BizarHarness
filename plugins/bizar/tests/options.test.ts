@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import os from "node:os";
+import path from "node:path";
 import {
   DEFAULT_OPTIONS,
   expandHome,
@@ -126,9 +128,9 @@ describe("normalizeOptions", () => {
   });
 
   test("custom logDir and stateDir are preserved", () => {
-    const { options } = normalizeOptions({ logDir: "/tmp/my-logs", stateDir: "/tmp/my-state" });
-    expect(options.logDir).toBe("/tmp/my-logs");
-    expect(options.stateDir).toBe("/tmp/my-state");
+    const { options } = normalizeOptions({ logDir: path.join(os.tmpdir(), "my-logs"), stateDir: path.join(os.tmpdir(), "my-state") });
+    expect(options.logDir).toBe(path.join(os.tmpdir(), "my-logs"));
+    expect(options.stateDir).toBe(path.join(os.tmpdir(), "my-state"));
   });
 });
 
@@ -138,7 +140,7 @@ describe("findSecretDirMatch", () => {
   const home = process.env.HOME ?? "/home/test";
 
   test("returns null for safe paths", () => {
-    expect(findSecretDirMatch("/tmp/foo")).toBeNull();
+    expect(findSecretDirMatch(path.join(os.tmpdir(), "foo"))).toBeNull();
     expect(findSecretDirMatch("/home/user/project")).toBeNull();
   });
 
@@ -181,8 +183,8 @@ describe("findOffendingPath", () => {
   test("returns null when both paths are safe", () => {
     const opts: NormalizedOptions = {
       ...D,
-      logDir: "/tmp/bizar-logs",
-      stateDir: "/tmp/bizar-state",
+      logDir: path.join(os.tmpdir(), "bizar-logs"),
+      stateDir: path.join(os.tmpdir(), "bizar-state"),
     };
     expect(findOffendingPath(opts)).toBeNull();
   });
@@ -192,7 +194,7 @@ describe("findOffendingPath", () => {
     const opts: NormalizedOptions = {
       ...D,
       logDir: `${home}/.ssh/evil`,
-      stateDir: "/tmp/bizar-state",
+      stateDir: path.join(os.tmpdir(), "bizar-state"),
     };
     const result = findOffendingPath(opts);
     expect(result).not.toBeNull();
@@ -204,7 +206,7 @@ describe("findOffendingPath", () => {
     const home = process.env.HOME ?? "/home/test";
     const opts: NormalizedOptions = {
       ...D,
-      logDir: "/tmp/bizar-logs",
+      logDir: path.join(os.tmpdir(), "bizar-logs"),
       stateDir: `${home}/.aws/creds`,
     };
     const result = findOffendingPath(opts);

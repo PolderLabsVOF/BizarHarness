@@ -13,6 +13,6 @@ If the user invoked `/bizar` with arguments, treat them as a request and route a
 - "dashboard" or "open dashboard" → `/bizar` (no args, will launch the dashboard)
 - Otherwise: ask one clarifying question
 
-If the user invoked `/bizar` with no arguments, the dashboard is launching in the background. Visit `http://localhost:<port>/` to access it. The plugin's `chat.message` hook spawns `bizar dashboard start` as a detached child process and surfaces the live URL in its response.
+If the user invoked `/bizar` with no arguments, the dashboard is launching in the background. Visit `http://localhost:<port>/` to access it. The plugin's `chat.message` hook spawns `bizar dash start` as a detached child process and surfaces the live URL in its response.
 
-Common ports: 4321 is preferred; if it's taken, the launcher walks upward and picks the next free port. The PID and port are recorded under `~/.config/bizar/dashboard.{pid,port}` so `bizar dashboard stop` and `bizar dashboard status` can find the running instance.
+Common ports: 4321 is preferred; if it's taken, the launcher walks upward and picks the next free port. The PID and port are recorded under `~/.config/bizar/dashboard.{pid,port}` so `bizar dash stop` and `bizar dash status` can find the running instance.

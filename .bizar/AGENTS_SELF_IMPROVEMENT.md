@@ -13,6 +13,10 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 8. **Bundled agent .md frontmatter must match `config/opencode.json`** — drift between them causes routing to silently use the wrong model (the v3.7.0 audit found 11 files with `openai/gpt-5.4` while the actual model should have been M3/M2.7/deepseek).
 9. **Parallel dispatch requires sibling-awareness context** — When dispatching 2+ parallel subagents, Odin MUST prepend a `## PARALLEL EXECUTION CONTEXT` block listing siblings + disjoint file scopes + git rules. Subagents MUST treat scope as sacred and avoid all write-level git except via @hermod. If tasks cannot be decomposed into disjoint file scopes, dispatch sequentially.
 10. **Thinking/interleaved config is a hard requirement for MiniMax models** — All agent .md files must include a "## Thinking style" section referencing `config/rules/thinking.md`. Always add `interleaved: { field: "reasoning_details" }` and `reasoning: true` for MiniMax models on openrouter. Avoid `variant: "high"` for Odin/Tyr/Forseti unless deep reasoning is explicitly requested.
+11. **Dashboard commands go under `bizar dash <subcommand>`** — not as top-level `bizar` commands. The dashboard npm package is a library, not a CLI; no `bin` field.
+12. **All cross-CLI integration uses in-process imports, not subprocess spawn** — when one CLI needs another's functionality, expose it as a named export and import directly. Reserve subprocess `spawn` for true process isolation needs (e.g., backgrounded/daemonized children).
+13. **Signal handlers in dual-purpose files (CLI + library) must be gated by `isMainEntry()` checks** — otherwise they affect the parent process when the file is imported in-process. Compare `import.meta.url` to `pathToFileURL(process.argv[1]).href` to detect main-entry.
+14. **Verify subagent file changes persisted before proceeding** — when delegating a refactor, re-read the file at the end of the delegated step. The previous Tyr task claimed a `write` that didn't take effect; never trust a subagent's "done" report without reading.
 
 ## Log
 
@@ -324,3 +328,38 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - When adding a new model to `config/opencode.json.template`, also add it to `provider.<providerID>.models` with the correct `interleaved` field for that model's thinking stream.
 - Use `interleaved: { field: "reasoning_details" }` for MiniMax models on openrouter.
 - Install script should warn about `variant: "high"` being a verbosity multiplier.
+
+### 2026-06-23 — CLI consolidation: eliminate `bizar-dash` binary
+
+**Context:** User reported that having two separate CLIs (`bizar` and `bizar-dash`) was confusing. User asked: "overhaul and make the bizar cli commands consistent so no separate bizar-dash commands. make everything 'bizar' with options".
+
+**Root cause:** The dashboard was a separate npm package (`@polderlabs/bizar-dash`) with its own binary. Dashboard commands were reachable under 3 different paths (`bizar dashboard X`, `bizar X`, `bizar-dash X`), and `bizar` with no args would launch the TUI.
+
+**Files changed:**
+- `bizar-dash/src/cli.mjs` — refactored to export functions (start, stop, status, tui) with `isMainEntry()` guard so signal handlers only register when run as a CLI
+- `bizar-dash/package.json` — added `"exports": { "./dash-cli": "./src/cli.mjs" }`, removed `bin` field
+- `cli/bin.mjs` — added `bizar dash <subcommand>` dispatch with in-process import
+- `cli/update.mjs` — updated user-facing strings (e.g., "bizar dash start --bg")
+- `cli/install.mjs` — updated install prompts
+- `cli/copy.mjs` — references updated
+- `plugins/bizar/src/commands-impl.ts` — spawn uses `bizar dash start`
+- `plugins/bizar/src/commands.ts` — doc comments updated
+- `README.md`, `CHANGELOG.md`, `config/AGENTS.md`, `config/commands/bizar.md` — updated command examples
+
+**Breaking changes (v3.10.0):**
+- `bizar-dash` binary REMOVED (clean up: `rm $(which bizar-dash)`)
+- `bizar start`, `bizar stop`, `bizar status` REMOVED (use `bizar dash X`)
+- `bizar --bg`, `--web`, etc. REMOVED (use `bizar dash start --bg`)
+- `bizar` (no args) no longer launches TUI (shows help)
+- `bizar dashboard X` and `bizar tui` still work (deprecated, with warning)
+
+**Lessons learned:**
+- When in-process imports happen, signal handlers must be gated by `isMainEntry()` checks — otherwise they affect the parent process.
+- npm package `exports` map is the right way to expose library subpaths; bare subpath imports are fragile.
+- Backward compat via deprecation warnings is a smoother migration than hard removal.
+- When delegating a refactor to a subagent, verify file changes persisted BEFORE proceeding — the previous Tyr task claimed a write that didn't take effect.
+
+**Pattern to follow next time:**
+- New dashboard-related subcommands go under `bizar dash X`, not as top-level `bizar` commands
+- The dashboard npm package (`@polderlabs/bizar-dash`) is a LIBRARY, not a CLI. It has no `bin` field.
+- The single `bizar` binary is the only user-facing entry point.

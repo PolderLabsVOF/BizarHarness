@@ -44,7 +44,7 @@ class MockLogger {
   error(m: string) { this.messages.push({ level: "error", message: m }); }
 }
 
-const TEST_DIR = "/tmp/bizar-settings-test";
+const TEST_DIR = path.join(os.tmpdir(), "bizar-settings-test");
 
 beforeEach(() => {
   try { rmSync(TEST_DIR, { recursive: true, force: true }); } catch { /* ok */ }
@@ -252,7 +252,7 @@ describe("SettingsStore — file path", () => {
   });
 
   test("settings written with ~ path land in the expanded location", async () => {
-    const tmp = "/tmp/bizar-settings-expansion-test";
+    const tmp = path.join(os.tmpdir(), "bizar-settings-expansion-test");
     rmSync(tmp, { recursive: true, force: true });
     try {
       const logger = makeLogger();

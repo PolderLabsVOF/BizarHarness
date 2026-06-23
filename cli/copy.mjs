@@ -356,6 +356,9 @@ export async function installRtk() {
   const spinner = ora({ text: 'Installing RTK (Rust Token Killer)...', color: 'magenta' }).start();
 
   if (process.platform === 'win32') {
+    // RTK ships a bash-only installer; no PowerShell equivalent. On
+    // Windows the user must install RTK manually (e.g. via Cargo or
+    // prebuilt binary) and re-run `rtk init -g --opencode`.
     spinner.fail(chalk.red('Automatic RTK install not supported on Windows. Install manually from https://github.com/rtk-ai/rtk'));
     return false;
   }
@@ -392,13 +395,17 @@ export async function installSemble() {
     spinner.text = 'Installing uv (Python package manager)...';
     try {
       if (process.platform === 'win32') {
-        spinner.fail(chalk.red('Automatic uv install not supported on Windows. Install from https://docs.astral.sh/uv'));
-        return false;
+        // Windows: use the official PowerShell installer
+        execSync(
+          'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"',
+          { stdio: 'pipe', timeout: 60000 },
+        );
+      } else {
+        execSync(
+          'curl -LsSf https://astral.sh/uv/install.sh | sh',
+          { stdio: 'pipe', timeout: 60000 },
+        );
       }
-      execSync(
-        'curl -LsSf https://astral.sh/uv/install.sh | sh',
-        { stdio: 'pipe', timeout: 60000 },
-      );
       spinner.text = 'Setting up Semble...';
     } catch {
       spinner.fail(chalk.red('uv install failed. Install manually from https://docs.astral.sh/uv'));

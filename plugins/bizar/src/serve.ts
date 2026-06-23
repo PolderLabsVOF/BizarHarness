@@ -229,13 +229,19 @@ export class ServeLifecycle {
 
   /**
    * Graceful stop: SIGTERM, wait up to 5s, then SIGKILL. Idempotent.
+   *
+   * Cross-platform note: Bun's `Subprocess.kill()` without an explicit
+   * signal maps to the platform-appropriate default (`SIGTERM` on
+   * POSIX, `TerminateProcess` on Windows). The forced-kill phase drops
+   * the signal argument for the same reason, so the same code works
+   * on both Windows and Linux/macOS without a platform branch.
    */
   async stop(): Promise<void> {
     const proc = this._proc;
     if (proc === null) return;
     this._intentionalShutdown = true;
     try {
-      proc.kill("SIGTERM");
+      proc.kill();
     } catch {
       // already dead
     }
@@ -243,7 +249,7 @@ export class ServeLifecycle {
       await withTimeout(proc.exited, 5_000);
     } catch {
       try {
-        proc.kill("SIGKILL");
+        proc.kill();
       } catch {
         // ignore
       }
@@ -344,7 +350,10 @@ export class ServeLifecycle {
     const proc = this._proc;
     if (proc !== null) {
       try {
-        proc.kill("SIGKILL");
+        // No signal — Bun maps the default to the platform-appropriate
+        // forced termination (SIGKILL on POSIX, TerminateProcess on
+        // Windows).
+        proc.kill();
       } catch {
         // ignore
       }

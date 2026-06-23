@@ -17,12 +17,15 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from '
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const BIZAR_HOME = join(homedir(), '.config', 'bizar');
+// Use %APPDATA%\bizar on Windows, ~/.config/bizar on Unix.
+const BIZAR_HOME = process.platform === 'win32'
+  ? join(process.env.APPDATA || homedir(), 'bizar')
+  : join(homedir(), '.config', 'bizar');
 const PORT_FILE = join(BIZAR_HOME, 'dashboard.port');
 const PID_FILE = join(BIZAR_HOME, 'dashboard.pid');
 const DEFAULT_PORT = 4321;
@@ -95,7 +98,11 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot 
   const { server, close } = await createServer({
     port: usePort,
     projectRoot: projectRoot || process.cwd(),
-    opencodeConfigDir: opencodeConfigDir || join(homedir(), '.config', 'opencode'),
+    opencodeConfigDir: opencodeConfigDir || (
+      process.platform === 'win32'
+        ? join(process.env.APPDATA || homedir(), 'opencode')
+        : join(homedir(), '.config', 'opencode')
+    ),
     bizarRoot: bizarRoot || join(__dirname, '..', '..'),
   });
 
@@ -208,7 +215,11 @@ async function runTui({ launchWeb } = {}) {
   const { server, close: closeServer } = await createServer({
     port,
     projectRoot: process.cwd(),
-    opencodeConfigDir: join(homedir(), '.config', 'opencode'),
+    opencodeConfigDir: (
+      process.platform === 'win32'
+        ? join(process.env.APPDATA || homedir(), 'opencode')
+        : join(homedir(), '.config', 'opencode')
+    ),
     bizarRoot: join(__dirname, '..', '..'),
   });
   // v3.6.0 — Honor BIZAR_DASHBOARD_BIND same as startDashboard.
@@ -239,27 +250,61 @@ async function runTui({ launchWeb } = {}) {
   }
 }
 
-const args = process.argv.slice(2);
+// ── Exports (in-process use by `bizar` via @polderlabs/bizar-dash/dash-cli) ──
+export { startDashboard as start, stopDashboard as stop, showStatus as status, runTui as tui };
+export { startDashboard, stopDashboard, showStatus, runTui, startInBackground };
 
-if (args.includes('--help') || args.includes('-h')) {
-  showHelp();
-} else if (args.includes('--version') || args.includes('-v')) {
-  console.log(readVersion());
-} else if (args[0] === 'stop') {
-  await stopDashboard();
-} else if (args[0] === 'status') {
-  showStatus();
-} else if (args[0] === 'tui') {
-  const rest = args.slice(1);
-  const skipWeb = rest.includes('--no-web');
-  await runTui({ launchWeb: !skipWeb });
-} else if (args.includes('--bg') || args.includes('--detach')) {
-  await startInBackground(['start']);
-} else if (args.includes('--web-only')) {
-  await startDashboard();
-} else if (args[0] === 'start' || args.length === 0) {
-  await startDashboard();
-} else {
-  // Default: show help if we don't understand
-  showHelp();
+function isMainEntry() {
+  try {
+    const entry = process.argv[1];
+    if (!entry) return false;
+    return import.meta.url === pathToFileURL(entry).href;
+  } catch {
+    return false;
+  }
+}
+
+// ── CLI dispatch (only when this file is the entry point) ────────────────────
+// When `bizar` imports this file in-process, import.meta.url does not match
+// process.argv[1], so none of the code below runs.
+async function main() {
+  const args = process.argv.slice(2);
+
+  // Install CLI-level signal handlers ONLY when running as a CLI entry point.
+  // When imported in-process, the parent process owns its signals.
+  process.on('SIGINT', () => {
+    stopDashboard().finally(() => process.exit(0));
+  });
+  process.on('SIGTERM', () => {
+    stopDashboard().finally(() => process.exit(0));
+  });
+
+  if (args.includes('--help') || args.includes('-h')) {
+    showHelp();
+  } else if (args.includes('--version') || args.includes('-v')) {
+    console.log(readVersion());
+  } else if (args[0] === 'stop') {
+    await stopDashboard();
+  } else if (args[0] === 'status') {
+    showStatus();
+  } else if (args[0] === 'tui') {
+    const rest = args.slice(1);
+    const skipWeb = rest.includes('--no-web');
+    await runTui({ launchWeb: !skipWeb });
+  } else if (args.includes('--bg') || args.includes('--detach')) {
+    await startInBackground(['start']);
+  } else if (args.includes('--web-only')) {
+    await startDashboard();
+  } else if (args[0] === 'start' || args.length === 0) {
+    await startDashboard();
+  } else {
+    showHelp();
+  }
+}
+
+if (isMainEntry()) {
+  main().catch((err) => {
+    console.error(err && err.message ? err.message : err);
+    process.exit(1);
+  });
 }

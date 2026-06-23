@@ -14,6 +14,8 @@
  */
 
 import { describe, it, expect, beforeEach } from "bun:test";
+import os from "node:os";
+import path from "node:path";
 
 // --- Real InstanceManager (the one under test) ----------------------------
 
@@ -93,7 +95,7 @@ function makeDraft(overrides: Partial<BackgroundState> = {}): BackgroundState {
     error: undefined,
     parentAgent: "odin",
     parentInstanceId: undefined,
-    logPath: "/tmp/test.log",
+    logPath: path.join(os.tmpdir(), "test.log"),
     timeoutMs: 300_000,
     toolCallCount: 0,
     loopGuardTool: undefined,
@@ -122,7 +124,7 @@ describe("InstanceManager.add — empty sessionId (BUGFIX v0.5.1)", () => {
         warn: () => {},
         error: () => {},
       } as never,
-      serve: { worktree: "/tmp" } as never,
+      serve: { worktree: os.tmpdir() } as never,
       http: {} as never,
       stream: stream as never,
       stallTimeoutMs: 180_000,

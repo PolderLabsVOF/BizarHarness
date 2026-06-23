@@ -112,7 +112,7 @@ export interface ExecuteResult {
  *                    list so we can include status + lastEdited).
  * `open_plan_url` — just returns the parser's response (the parser
  *                    already built the URL). No I/O.
- * `launch_dashboard` — spawns `bizar dashboard start` as a detached
+ * `launch_dashboard` — spawns `bizar dash start` as a detached
  *                    child process. Reads the port file back and
  *                    appends the URL to the parser's response.
  * `tool_invocation` — delegates to `executeToolInvocation`.
@@ -196,7 +196,7 @@ async function executeListPlans(
 /**
  * Launch the Bizar dashboard as a detached child process.
  *
- * We spawn `bizar dashboard start` with `detached: true` and `unref()`
+  * We spawn `bizar dash start` with `detached: true` and `unref()`
  * so the child's lifetime is independent of the plugin host. We then
  * poll the port file (written by the child) for up to ~3s and append
  * the URL to the parser's response. If anything goes wrong we surface
@@ -234,7 +234,7 @@ async function executeLaunchDashboard(
     // `bizar` is on $PATH for global installs; for npx / local installs
     // we'd want to resolve to the package's bin. Spawn `bizar` directly
     // for now — the user's $PATH is the source of truth.
-    const child = spawn("bizar", ["dashboard", "start"], {
+    const child = spawn("bizar", ["dash", "start"], {
       detached: true,
       stdio: "ignore",
       cwd: ctx.worktree,
@@ -248,7 +248,7 @@ async function executeLaunchDashboard(
     return {
       responseOverride:
         `Could not launch the Bizar dashboard: ${msg}\n` +
-        `Try running \`bizar dashboard start\` in your terminal.`,
+        `Try running \`bizar dash start\` in your terminal.`,
     };
   }
 

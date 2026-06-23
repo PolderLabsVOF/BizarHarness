@@ -52,7 +52,7 @@ function makeDraft(overrides: Partial<AddDraft> = {}): AddDraft {
     error: undefined,
     parentAgent: "odin",
     parentInstanceId: undefined,
-    logPath: "/tmp/bgr_deadlock_test.log",
+    logPath: path.join(os.tmpdir(), "bgr_deadlock_test.log"),
     timeoutMs: 30_000,
     toolCallCount: 0,
     loopGuardTool: undefined,

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# NOTE: This installer is for Linux/macOS only. On Windows, run:
+#   npm install -g @polderlabs/bizar
+# ...which triggers the cross-platform Node.js installer.
+# This script will fail on Windows cmd/PowerShell.
+
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'

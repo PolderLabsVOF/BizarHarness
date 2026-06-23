@@ -36,6 +36,8 @@ Agents have **self-skill-discovery capability** — they can proactively find an
 - Self-improvement entries appended at every task completion
 - Memory setup: per-project Hindsight bank with `bank_id: "<project-name>"` — default bank reserved for general/system knowledge only
 - MiniMax models require `interleaved: { field: "reasoning_details" }` and `reasoning: true` in opencode.json provider config — without it, thinking tokens leak into visible output
+- CLI structure: single `bizar` binary, no `bizar-dash` binary. Dashboard commands under `bizar dash <sub>`.
+- In-process imports: cross-package integration uses named exports and direct imports, not subprocess spawn. See `bizar-dash/package.json#exports` for the `dash-cli` subpath.
 
 ## Entry Points
 - Install: `./install.sh`

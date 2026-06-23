@@ -143,7 +143,9 @@ npx bizar
 
 The interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts opencode.
 
-### Source — git clone (contributors)
+> **Windows users:** the `npm install -g @polderlabs/bizar` command above is the recommended path on Windows. The installer uses `irm | iex` for uv, `py -m pip` for the pip fallback, `taskkill` for forced kills, and JS `setTimeout` instead of `sleep` — so it works on both Windows PowerShell and POSIX shells. See the [Windows](#-windows) section below for prerequisites, known limitations, and the optional graph feature install.
+
+### Source — git clone (Linux/macOS contributors)
 
 ```bash
 git clone git@github.com:DrB0rk/BizarHarness.git
@@ -153,6 +155,50 @@ chmod +x install.sh
 ```
 
 Copies agent definitions and config to `~/.config/opencode/`, merges `opencode.json`, and prints next steps. Use this if you want to hack on BizarHarness itself.
+
+> This `install.sh` script is bash-only and does **not** run on Windows natively. Windows contributors should use the npm path above instead.
+
+### Windows
+
+The `bizar` CLI is cross-platform — the npm install runs a Node.js installer that handles `curl | sh` redirects, signal handling, and temp paths on Windows PowerShell automatically.
+
+**Prerequisites**
+
+- [Node.js 18+](https://nodejs.org/) on `PATH`
+- [Python 3.10+](https://www.python.org/downloads/windows/) (only required for the optional `bizar graph` knowledge-graph feature)
+- [Git for Windows](https://git-scm.com/download/win) — only needed if you want to run the bash `install.sh` from a Git Bash shell
+
+**Install**
+
+```powershell
+npm install -g @polderlabs/bizar
+bizar
+```
+
+**Optional: graph feature (knowledge graph + per-project .bizar/)**
+
+The `bizar graph build` subcommand uses [graphify](https://github.com/bretbhomas/graphify). Install uv and graphify from PowerShell:
+
+```powershell
+# Install uv (Python package manager) — Windows-native PowerShell installer
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Install graphify
+uv tool install graphifyy
+```
+
+Then build the project graph from any repo:
+
+```powershell
+bizar graph build
+```
+
+**Known Windows limitations**
+
+- The `blessed` TUI library may render with quirks inside Windows Terminal; if you see garbled output in the TUI, use the browser UI via `bizar dash start --bg` and open http://localhost:4321 instead.
+- Some shell scripts under `config/skills/embedded-esp-idf/` are bash-only and require Git Bash (or WSL).
+- The bash `install.sh` does not run on Windows cmd/PowerShell; use the `npm install -g` path above.
+- RTK (Rust Token Killer) ships a bash-only installer. On Windows, install it manually via [Cargo](https://github.com/rtk-ai/rtk#installation) or a [prebuilt binary](https://github.com/rtk-ai/rtk/releases), then run `rtk init -g --opencode`.
 
 ### Prerequisites
 

@@ -3,10 +3,11 @@
   "version": "3.7.1",
   "description": "Web + TUI dashboard for the Bizar agent platform (optional companion to @polderlabs/bizar)",
   "type": "module",
-  "bin": {
-    "bizar-dash": "src/cli.mjs"
-  },
   "main": "src/server/server.mjs",
+  "exports": {
+    ".": "./src/server/server.mjs",
+    "./dash-cli": "./src/cli.mjs"
+  },
   "files": [
     "src/",
     "dist/",

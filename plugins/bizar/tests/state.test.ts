@@ -9,6 +9,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { StateStore, SessionState, EMPTY_STATE } from "../src/state";
 import { mkdirSync, rmSync, writeFileSync, existsSync, utimesSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
 // Minimal mock logger that collects all messages
 class MockLogger {
@@ -18,7 +19,7 @@ class MockLogger {
   }
 }
 
-const TEST_DIR = "/tmp/bizar-state-test";
+const TEST_DIR = path.join(os.tmpdir(), "bizar-state-test");
 const TEST_SESSION_A = "session-a-123";
 const TEST_SESSION_B = "session-b-456";
 

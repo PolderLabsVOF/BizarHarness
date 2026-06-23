@@ -17,6 +17,8 @@
  */
 
 import { describe, test, expect } from "bun:test";
+import os from "node:os";
+import path from "node:path";
 
 import { decide } from "../src/loop.js";
 import {
@@ -58,7 +60,7 @@ function emptyState(): SessionState {
 
 const FP = "fp:read:loop";
 const TOOL = "read";
-const ARGS = { path: "/tmp/example.txt" };
+const ARGS = { path: path.join(os.tmpdir(), "example.txt") };
 const NOW = 1_700_000_500_000;
 
 // For the block tests we need a window size that is at least as large as

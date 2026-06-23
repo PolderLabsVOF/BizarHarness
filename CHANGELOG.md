@@ -1,5 +1,64 @@
 # Changelog
 
+## v3.10.0 — 2026-06-23 — Windows compat + CLI consolidation
+
+### Highlights
+- **CLI consolidation**: the `bizar-dash` binary is removed. All dashboard commands now live under `bizar dash <sub>`. The internal `@polderlabs/bizar-dash` npm package is still published (as a library) but no longer installs a `bizar-dash` binary.
+- **Windows compatibility**: install, Python detection, signals, and shell helpers now work on Windows out of the box.
+- **Concise thinking rule**: agents are now constrained to 2-4 sentence thinking with hard bans on informal self-talk. No more 15-minute ramble loops.
+- **MiniMax interleaved fix**: `<thinking>...</thinking>` tags no longer leak into visible output for MiniMax on openrouter.
+
+### Migration
+| Old | New |
+|---|---|
+| `bizar-dash start` | `bizar dash start` |
+| `bizar-dash stop` | `bizar dash stop` |
+| `bizar-dash status` | `bizar dash status` |
+| `bizar-dash tui` | `bizar dash tui` |
+| `bizar dashboard X` | `bizar dash X` (still works, prints deprecation warning) |
+| `bizar tui` | `bizar dash tui` (still works, prints deprecation warning) |
+| `bizar start` | `bizar dash start` (REMOVED) |
+| `bizar stop` | `bizar dash stop` (REMOVED) |
+| `bizar status` | `bizar dash status` (REMOVED) |
+| `bizar --bg` | `bizar dash start --bg` (REMOVED) |
+| `bizar` (no args) | shows help (was: launch TUI) |
+| `bizar-dash` binary | REMOVED — `rm $(which bizar-dash)` |
+
+### Concise thinking rule
+- Add `config/rules/thinking.md` (56 lines): caps thinking at 2-4 sentences, bans informal self-talk ("oh but what if", "actually", "let me think", "wait", "hmm", "I wonder", "on second thought", "alternatively"), requires one-shot decision pattern
+- Add `## Thinking style` section to all 12 agent files referencing the new rule
+- Update `install.sh` with post-install warning about `variant: "high"` on Odin/Tyr/Forseti
+
+### MiniMax interleaved fix
+- Add `provider.<minimax|openrouter>.models` config with `interleaved: { field: "reasoning_details" }` and `reasoning: true` for MiniMax-M3, MiniMax-M2.7, minimax-m3, minimax-m2.7, owl-alpha
+- Fixes `<thinking>...</thinking>` tags being shown as raw text instead of rendered as native thinking blocks in opencode
+
+### Windows compatibility
+- `install.sh` is bash-only; Windows users use `npm install -g @polderlabs/bizar` (documented in README)
+- `curl | sh` patterns (5 sites) wrapped in `process.platform === 'win32'` with PowerShell `irm | iex` alternative
+- `python3` → `py` launcher on Windows (`cli/graph.mjs`, `cli/init.mjs`)
+- `pip` → `py -m pip` on Windows (`cli/install.mjs`, `cli/graph.mjs`)
+- `SIGTERM`/`SIGKILL` → no-arg `process.kill()` / `taskkill /F` on Windows (`cli/update.mjs`, `plugins/bizar/src/serve.ts`)
+- `sleep` command → `setTimeout` (3 sites in `cli/update.mjs`)
+- `bizar-dash` `~/.config/opencode` → `%APPDATA%\opencode` (4 places: `bizar-dash/src/cli.mjs`, `bizar-dash/src/server/tui.mjs`, `bizar-dash/src/server/tui.mjs` runTui)
+- `.gitattributes` forces LF for shell/script files (prevents CRLF breaking shebangs)
+- Hardcoded `/tmp/` in 12 test files → `os.tmpdir()`
+- `killAndWait` made async (no external callers, internal-only breaking change)
+
+### CLI consolidation
+- `bizar-dash` binary REMOVED. `rm $(which bizar-dash)` to clean up old symlink.
+- `bizar dash <subcommand>` is the new canonical form (start, stop, status, tui)
+- `bizar dashboard X` and `bizar tui` are deprecated aliases (still work, with warning)
+- `bizar start`, `bizar stop`, `bizar status`, `bizar --bg`, `--web`, `--web-only`, `--no-web`, `--detach` REMOVED
+- `bizar` (no args) no longer launches TUI (shows help)
+- `bizar-dash/src/cli.mjs` refactored to export functions (`start`, `stop`, `status`, `tui`) with `isMainEntry()` guard so signal handlers only register when run as a CLI (for legacy `cli/update.mjs#spawnFreshDashboard` path)
+- `bizar-dash/package.json` got `exports` map: `{ ".": "./src/server/server.mjs", "./dash-cli": "./src/cli.mjs" }`. Removed `bin` field. The package is now a LIBRARY, not a CLI.
+- In-process imports replace subprocess spawn: `cli/bin.mjs` calls `import('@polderlabs/bizar-dash/dash-cli')` and uses the exported functions directly
+- The plugin's `commands-impl.ts` spawns `bizar dash start` instead of `bizar dashboard start`
+
+### Environment variables
+- Unchanged. `BIZAR_DASHBOARD_*` env vars still work.
+
 ## v3.9.1 — 2026-06-23
 
 ### Fixed — Concise thinking rule + MiniMax interleaved output

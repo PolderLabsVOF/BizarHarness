@@ -20,13 +20,18 @@ export const GRAPHIFY_OUT_ENV = 'GRAPHIFY_OUT';
 /**
  * Find a Python 3 interpreter on PATH.
  * Returns the absolute path string, or null if none found.
+ *
+ * On Windows the `py` launcher is the most reliable option; on Unix
+ * we prefer python3 then python.
  */
 export function findPython() {
-  // Prefer python3, fall back to python
-  for (const name of ['python3', 'python']) {
+  const candidates = process.platform === 'win32'
+    ? ['py', 'python', 'python3']
+    : ['python3', 'python'];
+  for (const name of candidates) {
     try {
       const result = spawnSync(name, ['--version'], { encoding: 'utf8', timeout: 5000 });
-      if (result.status === 0 && result.stdout.includes('Python 3')) {
+      if (result.status === 0 && result.stdout.includes('Python')) {
         return name;
       }
     } catch {
@@ -37,10 +42,33 @@ export function findPython() {
 }
 
 /**
- * Check whether graphify is available via `python3 -m graphify --version`.
+ * Check whether graphify is available.
+ *
+ * Strategy:
+ *  1. Probe PATH for the `graphify` binary (uv tool install puts a shim at
+ *     ~/.local/bin/graphify — invisible to the isolated python -m lookup).
+ *  2. Fall back to `python -m graphify --version` for pip/pipx installs.
+ *
  * Returns true if available, false otherwise.
  */
 function checkGraphify(python) {
+  // Try 1: check for the graphify binary on PATH (uv tool install shim).
+  // On Windows the Python launcher `py` is not on PATH by default, but the
+  // graphify shim is placed next to pip/pipx so a plain `where` works.
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    const whichResult = spawnSync(whichCmd, ['graphify'], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    if (whichResult.status === 0 && (whichResult.stdout || '').trim().length > 0) {
+      return true;
+    }
+  } catch {
+    // fall through to python -m check
+  }
+
+  // Try 2: check via python -m (catches pip/pipx installs into system python)
   try {
     const result = spawnSync(python, ['-m', 'graphify', '--version'], {
       encoding: 'utf8',
@@ -219,19 +247,33 @@ async function cmdInstall() {
     return 1;
   }
 
-  console.log(chalk.dim('  Installing graphify via pip...\n'));
+  // Prefer uv (handles PEP 668 isolated installs cleanly); fall back to pip.
+  const { detectUv } = await import('./utils.mjs');
+  const hasUv = await detectUv();
 
-  // pip install graphifyy
-  console.log(chalk.dim('  $ pip install graphifyy'));
-  let result = spawnSync('pip', ['install', 'graphifyy'], { stdio: 'inherit' });
-  if (result.status !== 0) {
-    console.log(chalk.red('  ✗ pip install graphifyy failed.\n'));
-    return 1;
+  if (hasUv) {
+    console.log(chalk.dim('  Installing graphify via uv...\n'));
+    const result = spawnSync('uv', ['tool', 'install', 'graphifyy'], { stdio: 'inherit' });
+    if (result.status !== 0) {
+      console.log(chalk.red('  ✗ uv tool install graphifyy failed.\n'));
+      return 1;
+    }
+  } else {
+    console.log(chalk.dim('  Installing graphify via pip...\n'));
+    // On Windows `pip` may not be on PATH; use `py -m pip` as the fallback.
+    const pipCmd = process.platform === 'win32'
+      ? [python, '-m', 'pip']
+      : ['pip'];
+    const result = spawnSync(pipCmd[0], pipCmd.slice(1).concat(['install', 'graphifyy']), { stdio: 'inherit' });
+    if (result.status !== 0) {
+      console.log(chalk.red('  ✗ pip install graphifyy failed.\n'));
+      return 1;
+    }
   }
 
   // graphify install --platform opencode --project
   console.log(chalk.dim('\n  $ graphify install --platform opencode --project'));
-  result = spawnSync('graphify', ['install', '--platform', 'opencode', '--project'], {
+  const result = spawnSync('graphify', ['install', '--platform', 'opencode', '--project'], {
     stdio: 'inherit',
   });
   if (result.status !== 0) {
