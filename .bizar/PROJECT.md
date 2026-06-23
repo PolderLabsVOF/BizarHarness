@@ -35,6 +35,7 @@ Agents have **self-skill-discovery capability** — they can proactively find an
 - Project data lives in `.bizar/` folder
 - Self-improvement entries appended at every task completion
 - Memory setup: per-project Hindsight bank with `bank_id: "<project-name>"` — default bank reserved for general/system knowledge only
+- MiniMax models require `interleaved: { field: "reasoning_details" }` and `reasoning: true` in opencode.json provider config — without it, thinking tokens leak into visible output
 
 ## Entry Points
 - Install: `./install.sh`

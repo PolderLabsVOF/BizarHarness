@@ -144,6 +144,9 @@ Be professional and concise. Do not write long essays for every action.
 - One sentence of context beats three paragraphs of preamble.
 - Match the user's register: if they write briefly, reply briefly. If they want depth, they will ask.
 
+## Thinking style
+Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
+
 ## PR Review Mode
 
 When dispatched for a `/pr-review`:

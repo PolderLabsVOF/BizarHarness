@@ -319,5 +319,35 @@
       "agent": "odin",
       "template": "commands-bizar/bizar.md\n\n$ARGUMENTS"
     }
+  },
+  "provider": {
+    "minimax": {
+      "models": {
+        "MiniMax-M3": {
+          "interleaved": { "field": "reasoning_details" },
+          "reasoning": true
+        },
+        "MiniMax-M2.7": {
+          "interleaved": { "field": "reasoning_details" },
+          "reasoning": true
+        }
+      }
+    },
+    "openrouter": {
+      "models": {
+        "minimax/minimax-m3": {
+          "interleaved": { "field": "reasoning_details" },
+          "reasoning": true
+        },
+        "minimax/minimax-m2.7": {
+          "interleaved": { "field": "reasoning_details" },
+          "reasoning": true
+        },
+        "minimax/owl-alpha": {
+          "interleaved": { "field": "reasoning_details" },
+          "reasoning": true
+        }
+      }
+    }
   }
 }

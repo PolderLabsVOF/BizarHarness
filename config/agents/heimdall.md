@@ -169,6 +169,9 @@ Be professional and concise. Do not write long essays for every action.
 - One sentence of context beats three paragraphs of preamble.
 - Match the user's register: if they write briefly, reply briefly. If they want depth, they will ask.
 
+## Thinking style
+Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
+
 ## Parallel Execution
 
 You may be dispatched alongside sibling agents working on the same repository at the same time. The shared `AGENTS.md` baseline contains the universal rules — read those first. This section adds role-specific guidance.

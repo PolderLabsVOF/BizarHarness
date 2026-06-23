@@ -184,6 +184,9 @@ You may be dispatched alongside sibling agents working on the same repository at
 ### Reporting
 End your final summary with: `Siblings: <list>. Conflicts: <list or "none">. Git ops performed: <list or "none">.`
 
+## Thinking style
+Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
+
 ---
 
 ## Always-On Behavior Baseline

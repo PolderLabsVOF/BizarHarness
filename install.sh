@@ -153,6 +153,8 @@ echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}Next steps:${NC}                      
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
 echo -e "${BOLD}${CYAN}│${NC}  1. Edit ${CONFIG_DIR}/opencode.json                         │"
 echo -e "${BOLD}${CYAN}│${NC}     → Replace YOUR_HINDSIGHT_API_KEY with your key          │"
+echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}⚠ If thinking is too verbose, remove or lower variant: \"high\"${NC}     │"
+echo -e "${BOLD}${CYAN}│${NC}     ${YELLOW}on odin/tyr/forseti in ${CONFIG_DIR}/opencode.json${NC}                │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
 echo -e "${BOLD}${CYAN}│${NC}  2. Restart opencode                                        │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"

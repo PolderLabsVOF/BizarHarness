@@ -90,6 +90,10 @@ The injected message you will see is exactly one of:
 - `[loop guard: 8 identical calls to <tool>]. Consider using the task tool to report back to your parent with what you've learned and what you need.`
 - An error containing: `Loop protection: 12 identical calls to <tool>. Use task to escalate.`
 
+
+## Thinking style
+Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
+
 ---
 
 ## Always-On Behavior Baseline

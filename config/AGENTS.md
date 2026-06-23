@@ -102,6 +102,7 @@ BizarHarness ships always-on coding rules organized by language and concern. All
 | `rules/python.md` | Python conventions |
 | `rules/git.md` | Git and commit conventions |
 | `rules/testing.md` | Test methodology and coverage |
+| `rules/thinking.md` | All agents — concise thinking behavior |
 
 ### How to Use
 
@@ -109,6 +110,10 @@ BizarHarness ships always-on coding rules organized by language and concern. All
 2. Rules are injected into subagent prompts as behavioral constraints
 3. All implementation agents (Heimdall, Thor, Tyr, Vidarr) MUST follow these rules
 4. Agents MAY propose additions to the rule files when patterns are discovered
+
+### Thinking Rule
+
+For agents with `reasoning: true` + `variant: "high"`, follow `rules/thinking.md` strictly. Cap reasoning at 2–4 sentences. No informal self-talk, no "what if" loops, no mid-thought self-correction. Think once, decide, act.
 
 ---
 

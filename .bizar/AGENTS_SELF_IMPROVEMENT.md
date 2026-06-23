@@ -6,22 +6,13 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 1. **Per-project Hindsight banks** — every project gets its own bank; default is for general/system knowledge only
 2. **Session start bank check** — always call `hindsight_list_banks` to discover and set the correct bank
 3. **Never use default for project work** — pass `bank_id: "<project-name>"` in all Hindsight calls
-4. **Create bank if missing** — if no bank exists for a project, create one with `hindsight_create_bank`
-5. **AMS Studio bank populated** — 40+ documents migrated from default to ams-studio bank
-6. **Config files with tokens go in .gitignore from day 1** — `config/opencode.json` leaked a Hindsight bearer token for 30+ commits. Use `.template` files for reference, never commit live config. `git rm --cached <file>` to fully untrack.
-7. **Pre-commit hook scans for secrets** — a token-scanning pre-commit hook (`scripts/git-hooks/pre-commit`) is mandatory for any project handling credentials. Install via `scripts/install-hooks.sh`.
-8. **Release audits check for Bearer tokens** — before publishing any release, grep for `Bearer [A-Za-z0-9+/=]{20,}` in every config file.
-9. **Forward-test new skills on a real task before shipping** — skills written in isolation are biased toward the author's mental model. Dispatch a fresh subagent on a real repo task, require explicit references to skill sections, and report whether the skill actually helped or was noise. The first forward-test of `$cpp-coding-standards` + `$cpp-testing` + `$embedded-esp-idf` on `feature_flags.cpp` found 9 real issues and identified 4 concrete skill improvements.
-10. **Skills should expose a task-to-reference index** — when a skill has 7+ references, agents waste context loading the wrong one. A small table mapping common tasks to the single best reference is worth more than perfect section ordering in SKILL.md.
-11. **Plugin command pass-through** — `plugins/bizar/src/commands.ts` `default` branch must `return null` (not `{ handled: true }`) so unknown commands fall through to other handlers (built-ins, other plugins). Returning `handled: true` swallowed every unknown command including `/explain`, `/init`, `/learn`, `/pr-review`, `/audit`.
-12. **Atomic file writes for plugin files too** — `plan-fs.ts` and `serve.ts` should use temp-file-then-rename, not direct `writeFile`. Partial writes corrupt state on crash.
-13. **Track plugin-owned signal handlers** — never call `process.removeAllListeners(SIGTERM|SIGINT)`; track handler refs and remove only the plugin's own.
-14. **Bundled agent .md frontmatter must match `config/opencode.json`** — drift between them causes routing to silently use the wrong model (the v3.7.0 audit found 11 files with `openai/gpt-5.4` while the actual model should have been M3/M2.7/deepseek).
-15. **Verify root `tsconfig.json` `include` paths** — a stale `include: ["src/**/*"]` at the monorepo root will typecheck against nothing. Either point at the actual subdirs or remove the typecheck script entirely if each subpackage has its own.
-16. **Dashboard WebSocket initial snapshot must match REST snapshot** — server was sending a different shape than `/api/snapshot`; web client threw on type mismatch. Keep WS `snapshot` and HTTP `snapshot` payloads identical.
-17. **Auth bypass via loopback proxy** — Express + `req.ip` trusts loopback by default; if you accept `X-Forwarded-For`, do not use `req.ip` for auth status — derive trust from the actual TCP peer (`req.socket.remoteAddress`) and only honor trusted proxies.
-18. **Parallel dispatch requires sibling-awareness context** — When dispatching 2+ parallel subagents, Odin MUST prepend a `## PARALLEL EXECUTION CONTEXT` block listing siblings + disjoint file scopes + git rules. Subagents MUST treat scope as sacred and avoid all write-level git except via @hermod. If tasks cannot be decomposed into disjoint file scopes, dispatch sequentially.
-19. **When integrating Python tools into Bizar's Node harness, use a thin `cli/<tool>.mjs` wrapper with `child_process.spawnSync`.** Detect the tool, fail open with install instructions, never block init. Route output to `.bizar/<tool>/` to match existing convention.
+4. **Config files with tokens go in .gitignore from day 1** — `config/opencode.json` leaked a Hindsight bearer token for 30+ commits. Use `.template` files for reference, never commit live config. `git rm --cached <file>` to fully untrack.
+5. **Pre-commit hook scans for secrets** — a token-scanning pre-commit hook (`scripts/git-hooks/pre-commit`) is mandatory for any project handling credentials. Install via `scripts/install-hooks.sh`.
+6. **Release audits check for Bearer tokens** — before publishing any release, grep for `Bearer [A-Za-z0-9+/=]{20,}` in every config file.
+7. **Plugin command pass-through** — `plugins/bizar/src/commands.ts` `default` branch must `return null` (not `{ handled: true }`) so unknown commands fall through to other handlers (built-ins, other plugins). Returning `handled: true` swallowed every unknown command including `/explain`, `/init`, `/learn`, `/pr-review`, `/audit`.
+8. **Bundled agent .md frontmatter must match `config/opencode.json`** — drift between them causes routing to silently use the wrong model (the v3.7.0 audit found 11 files with `openai/gpt-5.4` while the actual model should have been M3/M2.7/deepseek).
+9. **Parallel dispatch requires sibling-awareness context** — When dispatching 2+ parallel subagents, Odin MUST prepend a `## PARALLEL EXECUTION CONTEXT` block listing siblings + disjoint file scopes + git rules. Subagents MUST treat scope as sacred and avoid all write-level git except via @hermod. If tasks cannot be decomposed into disjoint file scopes, dispatch sequentially.
+10. **Thinking/interleaved config is a hard requirement for MiniMax models** — All agent .md files must include a "## Thinking style" section referencing `config/rules/thinking.md`. Always add `interleaved: { field: "reasoning_details" }` and `reasoning: true` for MiniMax models on openrouter. Avoid `variant: "high"` for Odin/Tyr/Forseti unless deep reasoning is explicitly requested.
 
 ## Log
 
@@ -305,3 +296,31 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - `bizar init` shells out to `npx bizar graph build` which requires either a global `@polderlabs/bizar` install or `node_modules/.bin/bizar`. The robust fallback is `node <repo>/cli/bin.mjs graph build`. If this proves flaky in real use, swap the spawn call.
 - graphify is per-project by default but supports a global cross-project graph (`graphify global add <tag>`). A future enhancement could add `bizar graph global` to manage this from the harness.
 - The OpenCode skill/plugin auto-install via `graphify install --platform opencode --project` is exposed through `bizar graph install` but not yet wired into `bizar init`. Consider adding it as a follow-up so init drops the OpenCode skill alongside building the graph.
+
+### 2026-06-23 — Concise thinking rule + MiniMax interleaved fix
+
+**Context:** User reported two issues: (1) agents ramble for 15+ minutes with informal self-talk ("oh but what if", "actually this is better"), (2) thinking output shows up as raw `<thinking>...</thinking>` text instead of native thinking blocks in opencode, mostly when using MiniMax via openrouter.
+
+**Root causes:**
+- (1) Agent .md files described themselves as "reasoning engines" with no concision constraints. Combined with `variant: "high"` + `reasoning: true` on the model, thinking was unbounded.
+- (2) opencode's `interleaved` provider config was missing. Without it, opencode does not extract thinking from MiniMax's `reasoning_details` field on openrouter, so the raw tokens leak into the visible response.
+
+**Files changed:**
+- `config/rules/thinking.md` (NEW, 56 lines) — concise thinking rule with hard bans on informal self-talk, 80-word cap, one-shot decision pattern, BAD/GOOD examples
+- `config/AGENTS.md` — added thinking rule to the rule files table + new "Thinking Rule" subsection
+- `config/agents/*.md` (12 files) — added "## Thinking style" section that references the new rule
+- `config/opencode.json.template` — added `provider.minimax.models` and `provider.openrouter.models` blocks with `interleaved: { field: "reasoning_details" }` and `reasoning: true` for MiniMax-M3, MiniMax-M2.7, minimax-m3, minimax-m2.7, owl-alpha (live `config/opencode.json` is gitignored — regenerated by `install.sh` on next run)
+- `install.sh` — added post-install warning about lowering `variant: "high"` on odin/tyr/forseti
+
+**Agents used:** Thor (concise thinking rules) + Tyr (provider config)
+
+**Lessons learned:**
+- When a model has `reasoning: true` and `variant: "high"`, the prompt must explicitly cap thinking length and ban informal phrases — otherwise the model interprets "be a reasoning engine" as license to ramble.
+- opencode's `interleaved` field is required for any model that streams thinking in a non-standard field (MiniMax uses `reasoning_details`, DeepSeek uses `reasoning_content`). Without it, the raw tokens leak into output.
+- The project's `minimax/MiniMax-M3` model ID format differs from the user's actual `openrouter/minimax-m3` setup. Provider config must cover BOTH to work for fresh installs and existing user setups.
+
+**Pattern to follow next time:**
+- Every agent .md file should reference `config/rules/thinking.md` in a "## Thinking style" section, not duplicate the rule text.
+- When adding a new model to `config/opencode.json.template`, also add it to `provider.<providerID>.models` with the correct `interleaved` field for that model's thinking stream.
+- Use `interleaved: { field: "reasoning_details" }` for MiniMax models on openrouter.
+- Install script should warn about `variant: "high"` being a verbosity multiplier.

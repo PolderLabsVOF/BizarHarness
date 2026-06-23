@@ -42,5 +42,13 @@
   },
   "devDependencies": {
     "typescript": "^5.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:DrB0rk/BizarHarness.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DrB0rk/BizarHarness/issues"
+  },
+  "homepage": "https://github.com/DrB0rk/BizarHarness#readme"
 }
