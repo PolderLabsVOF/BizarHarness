@@ -24,6 +24,10 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 17. **Health probes must not depend on auth** — "is X alive" checks must use TCP-connect (`net.createConnection`, 1.5s timeout), not an authenticated HTTP GET. Auth-gated endpoints can return 401 even when the service is healthy. TCP handshake is auth-free, transport-only, and produces zero false negatives for liveness.
 
 18. **npm publish order matters for interdependent packages** — when package B imports package A at runtime, publish A first, wait for registry propagation, then publish B. Always run dry-runs and registry verification — they catch packaging errors and confirm the publish landed.
+19. **HTTP 204/205/304 responses MUST NOT have a body** — `new Response("", { status: 204 })` throws in Node 24+ (strict Fetch spec enforcement). Use `new Response(null, { status: 204 })`. SDK test fixtures and mocks must mirror real fetch semantics or the request path never gets exercised (the catch block converts the throw to a confusing ConnectionError).
+20. **npm workspaces need root `package.json` config + symlinks** — `"workspaces": ["packages/*"]` at root + `"@scope/pkg": "workspace:*"` in dependent packages. `npm install` at root creates symlinks at `node_modules/@scope/pkg -> ../../packages/pkg`. Bun also reads workspaces from root package.json.
+21. **Vitest captures `console.error` in test output** — debug logging inside the SDK doesn't surface during tests. Use `process.env.MY_DEBUG` to gate verbose debug logs OR write to `/tmp/*.log` from inside the SDK when investigating tricky issues.
+22. **`bun test <path>` treats path as a name filter** — must use `./<path>` (or run from the dir) to ensure it's treated as a path. Otherwise bun reports "Tests need `.test` in the filename" and silently filters everything out.
 
 ## Log
 
@@ -426,3 +430,27 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - **Live E2E testing against the user's actual state catches what typecheck + build + unit tests cannot.** Thor's test gate ran `readServeInfo()` against the user's actual 99-byte `serve.json` — that's the only way to catch "the strict schema doesn't match the real world." Unit tests with a different-shaped fixture would have passed.
 
 - **Pattern to follow next time**: For state-machine bugs, the test gate MUST include a live E2E against the user's actual data files, not just unit tests with synthetic fixtures. The user's `serve.json` had 3 fields, our schema expected 6. The unit test used 6 fields so the bug would have shipped. The live E2E caught it in 5 seconds. Also: commit each turn before starting the next — Odin had uncommitted v3.11.0 follow-up work when the user reported this bug, and two turns landed in one commit.
+
+### 2026-06-24: Plugin↔Dashboard v2 Protocol — HTTP+SSE via @bizarharness/sdk
+- **Task**: Rebuild plugin↔dashboard communication per three target sources (zenobi-us/bun-module, opencode SDK, opencode server). Full implementation + tests + iterations + push + publish. Tyr/Thor task-tool routing was broken this session, so Odin executed end-to-end directly.
+- **Files changed**: 42 files, +5300 lines (new: `packages/sdk/*`, `bizar-dash/src/server/routes-v2/*`, `bizar-dash/src/server/v2-*`, `.bizar/research/*`, plugin dashboard-client + tests; modified: CHANGELOG, root + plugin package.json, dashboard server.mjs)
+- **Agents used**: Direct execution (Odin), research by @mimir + @vor + @general
+- **Approach**: 5-phase: research (parallel @mimir) → plan (synthesized by Odin after Tyr background was killed per user request) → SDK foundation → dashboard v2 routes → plugin client. Each phase ended with a test gate.
+- **Test results**: 41 new tests, all passing. Zero regressions.
+  - SDK: 28/28 vitest pass + typecheck + build + pack dry-run
+  - Dashboard v2: 7/7 smoke pass
+  - Plugin dashboard-client: 6/6 bun pass
+  - Existing plugin tests: 152 pass (verified same as baseline by stashing my changes)
+- **Lessons learned**:
+  - **HTTP 204/205/304 responses MUST NOT have a body** — Node 24 strictly enforces this per the Fetch spec. `new Response("", { status: 204 })` throws. Use `new Response(null, { status: 204 })`. Without this fix, every SDK test calling a 204 endpoint hit a confusing "ConnectionError" via the catch block. **Mock fixtures must mirror real fetch spec semantics or you debug for 30 minutes wondering why the request path isn't even reached.**
+  - **Vitest captures `console.error` in stderr** — debug logging inside the SDK didn't surface in test output. Workaround: write to a file. Better: use `--silent=false` or a debug logger injected via the test.
+  - **`bun test tests/foo.test.ts` treats the path as a name filter** — must use `./tests/foo.test.ts` (or run from the dir) to ensure it's treated as a path. Adds 5 minutes of confusion otherwise.
+  - **Path resolution under routes-v2/ is fragile** — `__dirname/../../..` from `src/server/routes-v2/` gives `bizar-dash/`, then `..` (one up) gives the repo root, NOT `..` twice. Always enumerate candidate paths explicitly rather than computing "the right number of `..`". Search paths made the smoke test pass on the first try after the bug.
+  - **Background agents and direct execution are NOT mutually exclusive on infrastructure failure** — when task-tool subagent routing silently fails (Tyr/Thor's OpenRouter routing was 500ing), the user said "continue" which meant: take it yourself. Odin can execute end-to-end with `read/write/edit/bash` when the agent tier is unavailable, but loses the parallel-dispatch advantage.
+  - **Opencode v1 session routes are broken upstream** (`/session`, `/session/{id}/prompt_async` etc. all hang indefinitely per `.bizar/opencode-sse-investigation.md`) — the plugin's v0.4.1 background-agent spec calls them. Pinning to v2 (`/api/session/*`) is mandatory. The plugin refactor for this is still pending (deferred to v0.8.0).
+- **Pattern to follow next time**:
+  1. When `task` tool fails for tier-3/tier-4 agents, **verify** with a minimal prompt first (`task thor "say hi"`) before assuming the issue is prompt-size. If minimal works, escalate to larger prompts via background agents (`bizar_spawn_background`).
+  2. For every SDK design, **smoke-test the 204 path explicitly** in the first test pass. Fetch spec gotchas (no body for 204/205/304) only surface at runtime.
+  3. When refactoring an existing communication protocol, **leave the old bridge in place for one full release cycle**. The new SDK-backed bridge is additive; consumers (TUI, hooks) migrate in follow-up PRs. The file-based `serve.json` bridge stays.
+  4. **Persist test outputs to /tmp** when vitest eats stderr — saves 5+ minutes of debug confusion.
+  5. **Smoke tests that spin up real HTTP servers** catch integration issues (path resolution, header handling, error mapping) that unit tests with mocks miss. Always include at least one end-to-end smoke alongside unit tests for any HTTP/SSE code.
