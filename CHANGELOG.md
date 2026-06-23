@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.9.1 — 2026-06-23
+
+### Fixed — Concise thinking rule + MiniMax interleaved output
+
+- **`config/rules/thinking.md`** (NEW) — caps agent thinking at 2-4 sentences, bans informal self-talk, requires one-shot decision pattern.
+- **`config/agents/*.md`** — added `## Thinking style` section to all 12 agent files referencing the new rule.
+- **`config/opencode.json.template`** — added `interleaved: { field: "reasoning_details" }` and `reasoning: true` for MiniMax models (both `minimax` and `openrouter` providers), fixing `<thinking>` tags leaking as raw text into visible output.
+- **`install.sh`** — added post-install warning about `variant: "high"` multiplying thinking verbosity.
+
 ## v3.9.0 — 2026-06-23
 
 ### Added — Slash commands open real dialogs
