@@ -2,7 +2,7 @@
  * dashboard-client.ts
  *
  * v0.7.0-alpha.1 — Plugin-side bridge to the Bizar dashboard via the
- * @bizarharness/sdk. Replaces (does not remove) the file-based
+ * @polderlabs/bizar-sdk. Replaces (does not remove) the file-based
  * `serve-info.ts` bridge.
  *
  * Usage:
@@ -35,7 +35,7 @@ import {
   isBizarError,
   type BizarClient,
   type DashboardEvent,
-} from "@bizarharness/sdk";
+} from "@polderlabs/bizar-sdk";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";

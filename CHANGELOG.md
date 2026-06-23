@@ -2,11 +2,11 @@
 
 ## v0.7.0-alpha.1 — Plugin ↔ Dashboard v2 Protocol
 
-> **Breaking / additive:** New package `@bizarharness/sdk` (additive). New dashboard `/api/v2/*` namespace (additive; existing `/api/*` endpoints unchanged). New plugin `dashboard-client.ts` module (additive; existing tools unchanged). Opencode v2 routes only (v1 routes are broken upstream — see `.bizar/opencode-sse-investigation.md`).
+> **Breaking / additive:** New package `@polderlabs/bizar-sdk` (additive). New dashboard `/api/v2/*` namespace (additive; existing `/api/*` endpoints unchanged). New plugin `dashboard-client.ts` module (additive; existing tools unchanged). Opencode v2 routes only (v1 routes are broken upstream — see `.bizar/opencode-sse-investigation.md`).
 
 ### Highlights
 
-- **New package `@bizarharness/sdk`** (`packages/sdk/`) — TypeScript SDK with auto-generated-style types, resource-grouped client (`createBizarClient()`), discriminated `BizarError` union, async-iterable SSE subscriber. Follows the bun-module layout (ESM, exports map, Vitest). Source-of-truth for the wire format is `.bizar/research/OPENAPI_SPEC.yaml`.
+- **New package `@polderlabs/bizar-sdk`** (`packages/sdk/`) — TypeScript SDK with auto-generated-style types, resource-grouped client (`createBizarClient()`), discriminated `BizarError` union, async-iterable SSE subscriber. Follows the bun-module layout (ESM, exports map, Vitest). Source-of-truth for the wire format is `.bizar/research/OPENAPI_SPEC.yaml`.
 - **Dashboard `/api/v2/*` namespace** — New routes for sessions (CRUD), events (SSE subscribe + publish), health, and the OpenAPI spec itself at `/doc`. HTTP basic auth via a 32-byte password generated on first start and persisted to `~/.cache/bizarharness/dash-auth.json` (mode 0600). Existing `/api/*` endpoints untouched.
 - **Plugin `dashboard-client.ts`** — New module in `plugins/bizar/src/` that wraps the SDK and forwards events from the plugin to the dashboard. Reads dashboard URL + password from `BIZAR_DASHBOARD_URL` / `BIZAR_DASHBOARD_PASSWORD` env vars or the auth file. Graceful degradation: drops events if the dashboard is unreachable; never throws into the plugin.
 
@@ -18,7 +18,7 @@
 
 ### Files
 
-- `packages/sdk/package.json` (NEW) — `@bizarharness/sdk` v0.7.0-alpha.1
+- `packages/sdk/package.json` (NEW) — `@polderlabs/bizar-sdk` v0.7.0-alpha.1
 - `packages/sdk/tsconfig.json` (NEW) — strict TypeScript, ES2022, declaration emit
 - `packages/sdk/vitest.config.ts` (NEW)
 - `packages/sdk/.gitignore` (NEW)
@@ -46,7 +46,7 @@
 - `bizar-dash/src/server/server.mjs` — mounts `/api/v2` router after existing `/api`
 - `plugins/bizar/src/dashboard-client.ts` (NEW) — SDK-backed publisher
 - `plugins/bizar/tests/dashboard-client.test.ts` (NEW) — 6 cases
-- `plugins/bizar/package.json` — adds `@bizarharness/sdk: *` to dependencies
+- `plugins/bizar/package.json` — adds `@polderlabs/bizar-sdk: *` to dependencies
 - `package.json` (root) — adds `"workspaces": ["packages/*"]` + `build:sdk` / `test:sdk` scripts
 - `.bizar/research/IMPLEMENTATION_PLAN.md` (NEW) — full plan with phasing, file map, parallel split, risk register
 - `.bizar/research/OPENAPI_SPEC.yaml` (NEW) — OpenAPI 3.1 source of truth (~280 lines)
@@ -56,7 +56,7 @@
 
 ### Test results
 
-- `@bizarharness/sdk`: **28/28** pass (vitest)
+- `@polderlabs/bizar-sdk`: **28/28** pass (vitest)
 - Dashboard v2 routes: **7/7** pass (`node tests/smoke-v2.mjs`)
 - Plugin `dashboard-client`: **6/6** pass (`bun test`)
 - Existing plugin tests: **152 pass, 18 pre-existing failures** (unrelated to this change; verified by stashing my changes and re-running — same numbers)
@@ -70,7 +70,7 @@
 - Wire `dashboard-client.publish()` into `event-stream.ts` so every opencode SSE event flows to the dashboard.
 - Add full CRUD for the rest of the OpenAPI spec (`/projects`, `/plans`, etc.).
 - Replace the file-based `serve.json` bridge with SDK-based event publishing once all consumers migrate.
-- npm Trusted Publishing via OIDC for `@bizarharness/sdk` (the SDK is published with `--tag alpha`).
+- npm Trusted Publishing via OIDC for `@polderlabs/bizar-sdk` (the SDK is published with `--tag alpha`).
 
 ## v3.11.1 — Unreleased — Stop and research rule
 

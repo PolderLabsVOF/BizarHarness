@@ -147,22 +147,22 @@ The dashboard server should follow the same REST endpoints pattern. The BizarHar
 **RECOMMENDATION: OpenAPI 3.1 (auto-generate types)**
 - Define server endpoints in an OpenAPI 3.1 spec at `GET /doc`
 - Generate TypeScript types using `@hey-api/openapi-ts` → `types.gen.ts`
-- Import types into both plugin (client) and dashboard (server) from a shared `@bizarharness/sdk` package
+- Import types into both plugin (client) and dashboard (server) from a shared `@polderlabs/bizar-sdk` package
 - This ensures the plugin and dashboard are always in sync
 - Follow opencode's type conventions: discriminated unions, `export type` not `interface`, dotted event type strings
 
 ### Module Structure
 **RECOMMENDATION: Split into 3 npm packages under a monorepo**
-1. `@bizarharness/sdk` — shared SDK with types + client (following bun-module layout)
+1. `@polderlabs/bizar-sdk` — shared SDK with types + client (following bun-module layout)
    - `src/index.ts` re-exports client + types
    - Types in `src/gen/types.gen.ts` (auto-generated)
    - Client in `src/client/` (typed resource methods)
 2. `@bizarharness/plugin` — the opencode plugin that hooks into opencode events
-   - Depends on `@opencode-ai/plugin` and `@bizarharness/sdk`
+   - Depends on `@opencode-ai/plugin` and `@polderlabs/bizar-sdk`
    - Exports a `Plugin` function: `async (ctx) => { return { event hooks } }`
 3. `@bizarharness/dashboard` — the dashboard server application
    - Express/Hono server with REST + SSE endpoints
-   - Depends on `@bizarharness/sdk` for shared types
+   - Depends on `@polderlabs/bizar-sdk` for shared types
 
 All 3 follow bun-module conventions: ESM, `exports` map, Vitest, ESLint, Prettier.
 
@@ -174,7 +174,7 @@ opencode Server
     ↓ Plugin system loads @bizarharness/plugin
     ↓ Plugin creates SSE + HTTP connection to dashboard
 Dashboard Server (Express/Hono)
-    ↓ Uses @bizarharness/sdk types
+    ↓ Uses @polderlabs/bizar-sdk types
 Dashboard Web UI (React)
 ```
 
@@ -202,7 +202,7 @@ export type BizarError =
 ### Event / SSE Specifics
 **RECOMMENDATION: Dot-separated event types with discriminated payloads**
 ```ts
-// Event type definitions (in @bizarharness/sdk)
+// Event type definitions (in @polderlabs/bizar-sdk)
 export type EventPluginConnected = {
   type: "plugin.connected"
   properties: { version: string }
@@ -256,7 +256,7 @@ for await (const event of events.stream) {
 
 9. **First publish** — The bun-module workflow requires manual first publish to npm, then OIDC trusted publishing. Who does the first `npm publish`?
 
-10. **Bun-only or Node-compatible?** — The bun-module template targets Bun (all types assume Bun runtime). The SDK package could target Node too (use `@types/node`). The opencode SDK works in Node. Decision needed for `@bizarharness/sdk`.
+10. **Bun-only or Node-compatible?** — The bun-module template targets Bun (all types assume Bun runtime). The SDK package could target Node too (use `@types/node`). The opencode SDK works in Node. Decision needed for `@polderlabs/bizar-sdk`.
 
 ---
 

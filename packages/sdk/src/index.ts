@@ -1,5 +1,5 @@
 /**
- * Public API for @bizarharness/sdk.
+ * Public API for @polderlabs/bizar-sdk.
  */
 
 export { createBizarClient } from "./client.js";

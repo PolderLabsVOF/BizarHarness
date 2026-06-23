@@ -1,9 +1,9 @@
-# @bizarharness/sdk
+# @polderlabs/bizar-sdk
 
 Typed SDK for the BizarHarness plugin ↔ dashboard communication protocol.
 
 This package is the **shared types + client library** used by both:
-- The Bizar opencode plugin (`@bizarharness/plugin`) — publishes events to the dashboard.
+- The Bizar opencode plugin (`@polderlabs/bizar-plugin`) — publishes events to the dashboard.
 - The Bizar dashboard (`@polderlabs/bizar-dash`) — exposes REST + SSE endpoints and consumes events.
 
 It replaces the legacy file-based `serve.json` bridge with a typed HTTP + SSE protocol sourced from an OpenAPI 3.1 spec.
@@ -11,13 +11,13 @@ It replaces the legacy file-based `serve.json` bridge with a typed HTTP + SSE pr
 ## Install
 
 ```bash
-npm install @bizarharness/sdk
+npm install @polderlabs/bizar-sdk
 ```
 
 ## Usage
 
 ```ts
-import { createBizarClient, SDK_VERSION } from "@bizarharness/sdk";
+import { createBizarClient, SDK_VERSION } from "@polderlabs/bizar-sdk";
 
 const client = createBizarClient({
   baseUrl: process.env.BIZAR_DASHBOARD_URL ?? "http://127.0.0.1:4098",

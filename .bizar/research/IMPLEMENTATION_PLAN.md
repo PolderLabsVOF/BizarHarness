@@ -1,14 +1,14 @@
 # BizarHarness Plugin ↔ Dashboard Communication Rebuild
 
 > **Status:** Implementation plan. Authored by Odin (direct execution — Tyr/Thor routing unavailable this session).
-> **Goal:** Replace the file-based `serve.json` bridge between the Bizar plugin and the dashboard with an HTTP+SSE protocol, sourced from an OpenAPI 3.1 spec, generated into a shared `@bizarharness/sdk` package, consumed by both the plugin (publishes events) and the dashboard (subscribes + exposes REST).
+> **Goal:** Replace the file-based `serve.json` bridge between the Bizar plugin and the dashboard with an HTTP+SSE protocol, sourced from an OpenAPI 3.1 spec, generated into a shared `@polderlabs/bizar-sdk` package, consumed by both the plugin (publishes events) and the dashboard (subscribes + exposes REST).
 > **Reference sources:** `https://github.com/zenobi-us/bun-module`, `https://opencode.ai/docs/sdk/`, `https://opencode.ai/docs/server/`.
 
 ---
 
 ## §0. TL;DR
 
-- Build `@bizarharness/sdk` — typed SDK with auto-generated types from OpenAPI spec.
+- Build `@polderlabs/bizar-sdk` — typed SDK with auto-generated types from OpenAPI spec.
 - Move `plugins/bizar/` → `packages/plugin/` (monorepo); refactor to use SDK for dashboard-bound calls.
 - Refactor `bizar-dash/` in place (no file move) — add `/api/v2/*` namespace, `GET /doc`, `GET /api/v2/event` SSE.
 - Existing endpoints at `/api/*` stay untouched (backward compat).
@@ -60,7 +60,7 @@
                                           │
                                           ▼
                                 ┌──────────────────────────────────────────────┐
-                                │ @bizarharness/sdk (NEW — packages/sdk/)      │
+                                │ @polderlabs/bizar-sdk (NEW — packages/sdk/)      │
                                 │   - createBizarClient({baseUrl, password})  │
                                 │   - auto-generated types from OPENAPI_SPEC   │
                                 │   - resource-grouped methods (sessions,      │
@@ -126,8 +126,8 @@ This phased approach de-risks the refactor: the foundation (SDK) is established 
 {
   "workspaces": ["packages/*"],
   "scripts": {
-    "build:sdk": "npm run build -w @bizarharness/sdk",
-    "test:sdk": "npm run test -w @bizarharness/sdk"
+    "build:sdk": "npm run build -w @polderlabs/bizar-sdk",
+    "test:sdk": "npm run test -w @polderlabs/bizar-sdk"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.65.0"  // for codegen in v0.7.1
@@ -139,7 +139,7 @@ This phased approach de-risks the refactor: the foundation (SDK) is established 
 
 ```json
 {
-  "name": "@bizarharness/sdk",
+  "name": "@polderlabs/bizar-sdk",
   "version": "0.7.0-alpha.1",
   "description": "Typed SDK for the BizarHarness plugin ↔ dashboard protocol",
   "type": "module",
@@ -176,7 +176,7 @@ This phased approach de-risks the refactor: the foundation (SDK) is established 
 
 ---
 
-## §3. `@bizarharness/sdk` Package Design
+## §3. `@polderlabs/bizar-sdk` Package Design
 
 ### Layout
 ```
@@ -290,7 +290,7 @@ export interface EventsResource {
 ### What changes in this session
 
 Add ONE new module: `plugins/bizar/src/dashboard-client.ts`. This module:
-1. Imports `createBizarClient` from `@bizarharness/sdk`.
+1. Imports `createBizarClient` from `@polderlabs/bizar-sdk`.
 2. Provides a `publishEvent(event: DashboardEvent)` function that POSTs to the dashboard.
 3. Reads `BIZAR_DASHBOARD_URL` + `BIZAR_DASHBOARD_PASSWORD` from env / auth file.
 4. Falls back gracefully if dashboard is unreachable (logs warn, returns; never throws).
@@ -362,7 +362,7 @@ Written atomically (tmp+rename). Mode 0600. Idempotent across restarts (existing
 ## §6. Test Strategy
 
 ### Iteration 1 — SDK unit tests (Vitest)
-- `npm run test -w @bizarharness/sdk` — all pass
+- `npm run test -w @polderlabs/bizar-sdk` — all pass
 - `npx tsc --noEmit -p packages/sdk/tsconfig.json` — clean
 
 ### Iteration 2 — Plugin integration (bun test)
@@ -424,7 +424,7 @@ This session (with only Odin executing directly — no parallel agents available
 
 | Iteration | Owner | Output | Test gate |
 |---|---|---|---|
-| A | Odin | SDK package files | `npm test -w @bizarharness/sdk` |
+| A | Odin | SDK package files | `npm test -w @polderlabs/bizar-sdk` |
 | B | Odin | SDK green | tsc clean |
 | C | Odin | Dashboard v2 routes | curl smoke + node --test |
 | D | Odin | Plugin dashboard-client | bun test |
@@ -442,7 +442,7 @@ This session (with only Odin executing directly — no parallel agents available
 | 2 | Dashboard auth file permissions wrong | Low | Medium | Explicit `chmod 0600` after write. Document in README. |
 | 3 | SDK types drift from server | Medium | Medium | Hand-written types match OPENAPI_SPEC exactly. Add codegen (v0.7.1). |
 | 4 | SSE buffer unbounded | Low | Medium | Cap buffer at 100 events; subscribers can use `?since=<seq>` for replay. |
-| 5 | Plugin import of `@bizarharness/sdk` fails | Low | High | Use workspaces; SDK built before plugin runs; verify `npm ls @bizarharness/sdk` in plugin dir. |
+| 5 | Plugin import of `@polderlabs/bizar-sdk` fails | Low | High | Use workspaces; SDK built before plugin runs; verify `npm ls @polderlabs/bizar-sdk` in plugin dir. |
 | 6 | Bun vs Node typecheck differences | Medium | Medium | SDK targets both. Plugin uses Bun. Dashboard uses Node. Hand-written types avoid edge cases. |
 | 7 | install.sh breaks after restructure | Low | Medium | install.sh copies `plugins/bizar/` — that path is unchanged. No update needed this session. |
 
@@ -469,11 +469,11 @@ This session (with only Odin executing directly — no parallel agents available
 - [ ] `packages/sdk/LICENSE` (MIT) in place
 - [ ] `packages/sdk/dist/` built (gitignored, but `npm pack` includes it)
 - [ ] `cd packages/sdk && npm pack --dry-run` shows expected files
-- [ ] Root `CHANGELOG.md` entry: "v0.7.0-alpha.1 — adds @bizarharness/sdk with HTTP+SSE plugin↔dashboard bridge"
+- [ ] Root `CHANGELOG.md` entry: "v0.7.0-alpha.1 — adds @polderlabs/bizar-sdk with HTTP+SSE plugin↔dashboard bridge"
 - [ ] Root `package.json` workspace config added
 - [ ] Root `tsconfig.json` includes SDK paths
 - [ ] Root `.gitignore` excludes `packages/*/dist/`
-- [ ] Commit with conventional message: `feat(sdk): add @bizarharness/sdk v0.7.0-alpha.1 with HTTP+SSE plugin↔dashboard bridge`
+- [ ] Commit with conventional message: `feat(sdk): add @polderlabs/bizar-sdk v0.7.0-alpha.1 with HTTP+SSE plugin↔dashboard bridge`
 - [ ] Push to `origin master`
 - [ ] (Optional, manual) `cd packages/sdk && npm publish --tag alpha` — user can run this with their own npm creds
 

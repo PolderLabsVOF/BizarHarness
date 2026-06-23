@@ -431,9 +431,10 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 - **Pattern to follow next time**: For state-machine bugs, the test gate MUST include a live E2E against the user's actual data files, not just unit tests with synthetic fixtures. The user's `serve.json` had 3 fields, our schema expected 6. The unit test used 6 fields so the bug would have shipped. The live E2E caught it in 5 seconds. Also: commit each turn before starting the next — Odin had uncommitted v3.11.0 follow-up work when the user reported this bug, and two turns landed in one commit.
 
-### 2026-06-24: Plugin↔Dashboard v2 Protocol — HTTP+SSE via @bizarharness/sdk
+### 2026-06-24: Plugin↔Dashboard v2 Protocol — HTTP+SSE via @polderlabs/bizar-sdk
 - **Task**: Rebuild plugin↔dashboard communication per three target sources (zenobi-us/bun-module, opencode SDK, opencode server). Full implementation + tests + iterations + push + publish. Tyr/Thor task-tool routing was broken this session, so Odin executed end-to-end directly.
 - **Files changed**: 42 files, +5300 lines (new: `packages/sdk/*`, `bizar-dash/src/server/routes-v2/*`, `bizar-dash/src/server/v2-*`, `.bizar/research/*`, plugin dashboard-client + tests; modified: CHANGELOG, root + plugin package.json, dashboard server.mjs)
+- **Scope change**: Initial draft was `@bizarharness/sdk`. User corrected to `@polderlabs/bizar-sdk` to match the existing `@polderlabs/{bizar,bizar-dash,bizar-plugin}` naming. Renamed across all files and re-ran all tests.
 - **Agents used**: Direct execution (Odin), research by @mimir + @vor + @general
 - **Approach**: 5-phase: research (parallel @mimir) → plan (synthesized by Odin after Tyr background was killed per user request) → SDK foundation → dashboard v2 routes → plugin client. Each phase ended with a test gate.
 - **Test results**: 41 new tests, all passing. Zero regressions.
