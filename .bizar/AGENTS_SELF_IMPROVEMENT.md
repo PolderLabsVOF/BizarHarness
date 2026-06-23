@@ -17,6 +17,11 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 12. **All cross-CLI integration uses in-process imports, not subprocess spawn** — when one CLI needs another's functionality, expose it as a named export and import directly. Reserve subprocess `spawn` for true process isolation needs (e.g., backgrounded/daemonized children).
 13. **Signal handlers in dual-purpose files (CLI + library) must be gated by `isMainEntry()` checks** — otherwise they affect the parent process when the file is imported in-process. Compare `import.meta.url` to `pathToFileURL(process.argv[1]).href` to detect main-entry.
 14. **Verify subagent file changes persisted before proceeding** — when delegating a refactor, re-read the file at the end of the delegated step. The previous Tyr task claimed a `write` that didn't take effect; never trust a subagent's "done" report without reading.
+ 15. **Filesystem-listing endpoints must use segment-aware allow-lists, not just `path.resolve()`** — endpoints that list directory contents MUST resolve paths against an allow-list using segment-by-segment comparison (the `resolveSafePath` pattern), not a single `path.resolve()` call. A prefix check after `path.resolve()` is vulnerable to `../` traversal at intermediate segments. The `resolveSafePath` helper in `lib/path-safe.mjs` also rejects first-level dotdirs as roots. Without this, one slipped bug in a read endpoint can expose the entire filesystem.
+
+16. **Schema tolerance for external state files** — files written by sibling processes (the opencode plugin writes `serve.json`) MUST be parsed defensively. The strict pre-v3.11.0 schema required all 6 fields but only 2 (`password`, `port`) are truly required. When reading external state, use an additive schema: require only the fields you need, derive the rest from them (e.g., derive `baseUrl` from `port` when missing). A strict schema on external, evolving files creates silent null-return cascades.
+
+17. **Health probes must not depend on auth** — "is X alive" checks must use TCP-connect (`net.createConnection`, 1.5s timeout), not an authenticated HTTP GET. Auth-gated endpoints can return 401 even when the service is healthy. TCP handshake is auth-free, transport-only, and produces zero false negatives for liveness.
 
 ## Log
 
@@ -363,3 +368,50 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - New dashboard-related subcommands go under `bizar dash X`, not as top-level `bizar` commands
 - The dashboard npm package (`@polderlabs/bizar-dash`) is a LIBRARY, not a CLI. It has no `bin` field.
 - The single `bizar` binary is the only user-facing entry point.
+
+### 2026-06-23 — Interactive file browser + dashboard.projectsDirectory setting
+
+- **Context**: User wanted two dashboard UX improvements: (1) replace the manual path text input in the Add project dialog with an interactive file browser, and (2) add a `dashboard.projectsDirectory` setting that becomes the default new-project location and is auto-scanned on server startup.
+
+- **Approach**: Two parallel implementation streams → test gate → commit. @tyr (M3) built the backend (filesystem listing endpoint, scan logic, `resolveSafePath` security helpers, server startup integration). @thor (M2.7) built the frontend (FileBrowser component, modal replacement, Topbar fix for `prompt()`/`alert()` removal, Settings UI field, types updates). @thor also ran the test gate (typecheck + vite build + node --check + integration sanity) — all clean. @hermod handled the commit/push.
+
+- **Files changed**:
+  - New: `bizar-dash/src/server/lib/path-safe.mjs` (128 lines), `bizar-dash/src/server/routes/fs.mjs` (190 lines), `bizar-dash/src/web/components/FileBrowser.tsx` (493 lines)
+  - Modified (12): `_shared.mjs`, `api.mjs`, `server.mjs`, `projects.mjs`, `projects-store.mjs`, `App.tsx`, `Topbar.tsx`, `Overview.tsx`, `Settings.tsx`, `types.ts`, `main.css`, `CHANGELOG.md`
+  - Net: +833/−53
+
+- **Agents used**: @tyr (M3, backend), @thor (M2.7, frontend + test gate), @hermod (commit/push)
+
+- **Lessons learned**:
+  - The `api.get/post` wrapper auto-prefixes `/api`, so frontend routes must omit the prefix. The test gate's sanity check caught this implicitly, but a comment in `api.ts` documenting the convention would prevent future agents from writing double-prefixed routes.
+  - The shared types file (`types.ts`) was the contract between parallel agents. @thor owned it as the API consumer; @tyr read it as the API provider. Keeping it single-owner prevented drift.
+  - Filesystem-listing endpoints that serve directory contents MUST enforce a segment-aware allow-list, not just `path.resolve()` against a fixed root. The `resolveSafePath` helper in `lib/path-safe.mjs` matches absolute paths segment-by-segment against the allowed root and rejects first-level dotdirs. Without this, a directory traversal bug in a read endpoint exposes the entire filesystem.
+  - LRU caching the filesystem listing responses (200 entries, 5-min TTL, drop-oldest-50 eviction) makes back-navigation through the browser instant without unbounded memory growth.
+
+- **Pattern to follow next time**: For multi-layer features (UI + backend + settings), split by layer — Thor owns the frontend (React components + CSS + types), Tyr owns the backend (Express routes + security + startup wiring). The types file belongs to the frontend agent (the consumer). Test gate always goes to a third run or back to Thor — never self-verified.
+
+### 2026-06-23 — Background agent dispatch fix (3-root-cause)
+
+- **Context**: User reported 7 background instances in their "home folder project" (the active project at `/home/drb0rk`) stuck in `dispatchPending: true` with no tmux session. Instances had been stuck for 4+ days. User asked to investigate and fix.
+
+- **Approach**: @mimir researched the background agent + tmux + activities architecture; identified the queue gap at `task-delegator.mjs:532-546` and the serve-reachable guard at line 563. @heimdall confirmed environment state (tmux 3.6b installed, 2 running sessions — neither bg-related, dashboard on port 45451 returning 401, 6 stale E2E fixture bg files from Jun 19 + 1 bgr file from today's vLLM task all with `dispatchPending: true`). @tyr (M3) built the fix: relaxed serve-info schema, TCP-based health probe, logPath repair, new bg-retry.mjs retry loop, new retry endpoint, task-delegator worktree fallback, smoke tests. @thor (M2.7) ran the test gate: 0 TS errors, clean Vite build, 10/10 `node --check`, 8/8 smoke tests, plus a live E2E against the user's actual `serve.json` confirming `readServeInfo()` returns valid ServeInfo and `pingOpencodeServe` true on port 45451. @hermod committed as v3.11.0.
+
+- **Root causes** (all three contributed to the same failure):
+  1. **Strict serve-info schema** — `readServeInfo()` required 6 fields (`baseUrl`, `port`, `password`, `worktree`, `pid`, `startedAt`) but the user's `serve.json` only had 3 (`password`, `pid`, `port`). Returned `null`, which cascaded into the dispatch path's `if (serveInfo && serveReachable)` guard short-circuiting. Every new bg instance was marked `dispatchPending: true` forever.
+  2. **Auth-dependent health probe** — `pingOpencodeServe()` did `HTTP GET /health` with Basic auth. Even after fixing the schema, the probe would have returned 401 in many configurations.
+  3. **Broken logPath** — `path.join(worktree, '.opencode', 'log', id)` with empty `worktree` produced `//.opencode/log/...` (double slash, missing homedir).
+
+- **Fix**: Relaxed `serve-info.mjs` schema — `readServeInfo()` now requires only `password` (string) + `port` (number); derives `baseUrl` from port when missing; defaults `worktree` and `startedAt` to empty/zero when missing. Replaced HTTP probe with TCP-connect via `net.createConnection` (1.5s timeout) — no auth dependency, no false negatives. New `deriveAbsoluteBgLogPath()` always returns an absolute path with sensible fallback to `~/.cache/bizar/logs/`. New `bg-retry.mjs` (569 lines) — periodic 30s retry loop that walks `~/.cache/bizar/bg/`, finds stuck instances, repairs broken logPath atomically, re-issues the dispatch. First tick fires on `setImmediate` so existing stuck instances recover immediately on next dashboard boot. Caps at `MAX_DISPATCH_RETRIES=10`. New `POST /api/background/:id/retry` endpoint for manual unstick. `task-delegator.mjs` falls back to `projectRoot` when `serveInfo.worktree` is empty.
+
+- **Files changed**: 18 modified, 2 new (`bg-retry.mjs` + `scripts/smoke-bg-retry.mjs`). +1284 / −139.
+
+- **Agents used**: @mimir (research), @heimdall (environment check), @tyr (M3, fix), @thor (M2.7, test gate + live E2E), @hermod (commit).
+
+- **Lessons learned**:
+  - **External state files need defensive schemas.** Files written by sibling processes (opencode plugin → `serve.json`) evolve independently. Strict schemas create silent failures. Always require only what you need, derive the rest.
+  - **Health probes must not depend on auth.** Use `net.createConnection` for "is this process alive?" — not an authenticated HTTP GET. Auth-gated endpoints can return 401 even when the service is healthy.
+  - **State machines need a recovery story, not just a happy path.** The Jun 19 E2E test fixtures were the canary — 6 instances in `dispatchPending: true` for 4+ days told us no one was watching this transition. Recovery mechanisms belong in the same PR as the state machine, not as a follow-up.
+  - **Log every transition failure with enough context to diagnose from the file alone.** The user had no way to know WHY their instances were stuck. The bg file just said `dispatchPending: true` — no error, no log line, no broadcast. The new retry loop logs every attempt with instance id, retry count, and failure reason.
+  - **Live E2E testing against the user's actual state catches what typecheck + build + unit tests cannot.** Thor's test gate ran `readServeInfo()` against the user's actual 99-byte `serve.json` — that's the only way to catch "the strict schema doesn't match the real world." Unit tests with a different-shaped fixture would have passed.
+
+- **Pattern to follow next time**: For state-machine bugs, the test gate MUST include a live E2E against the user's actual data files, not just unit tests with synthetic fixtures. The user's `serve.json` had 3 fields, our schema expected 6. The unit test used 6 fields so the bug would have shipped. The live E2E caught it in 5 seconds. Also: commit each turn before starting the next — Odin had uncommitted v3.11.0 follow-up work when the user reported this bug, and two turns landed in one commit.
