@@ -1,6 +1,6 @@
 # @polderlabs/bizar-dash — Changelog
 
-## v3.11.0 — Unreleased
+## v3.11.0 — 2026-06-23
 
 ### Added
 - **Interactive file browser in the Add Project dialog.** New `GET /api/fs?path=<absolute>` endpoint returns a structured listing (`{ path, parent, entries[] }`) for the file picker. Server-side allow-list enforces `os.homedir()` + the configured `dashboard.projectsDirectory`; first-level dotdirs under home (`.ssh`, `.aws`, …) are blocked as roots and silently filtered from listings. All filesystem errors map to structured JSON (`not_found` / `permission_denied` / `not_a_directory` / `forbidden`).

@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.11.0 — 2026-06-23 — Dashboard v3.11.0 sync
+
+### Highlights
+- **Dashboard v3.11.0** ships as a single coordinated release with the CLI. New features: interactive file browser in Add Project dialog, `dashboard.projectsDirectory` setting with auto-scan, in-browser `New folder` button (`POST /api/fs/mkdir`), `dashboard.allowedRoots` for additional filesystem roots, and a critical fix for background-agent dispatch that was silently leaving every spawned instance stuck in `dispatchPending: true` (no tmux session, no worktree dispatch). See the dashboard package's CHANGELOG for full details.
+
+### Changed
+- `@polderlabs/bizar-dash` peer dep constraint unchanged (`^3.10.0`); 3.11.0 satisfies it.
+
+### Files
+- `package.json` — version bump 3.10.0 → 3.11.0
+- `bizar-dash/package.json` — version bump 3.10.0 → 3.11.0
+- `bizar-dash/CHANGELOG.md` — v3.11.0 entry finalized (Unreleased → dated)
+- `CHANGELOG.md` (this file) — v3.11.0 entry added
+
 ## v3.10.0 — 2026-06-23 — Windows compat + CLI consolidation
 
 ### Highlights
