@@ -109,7 +109,17 @@ export type DirectoryListing = {
   path: string;
   parent: string | null;
   entries: DirectoryEntry[];
+  /** True when the directory had more than 500 entries (capped). */
+  truncated?: boolean;
+  /** Actual entry count when truncated. */
+  totalEntries?: number;
 };
+
+/** Request shape for POST /api/fs/mkdir */
+export type MkdirRequest = { parent: string; name: string };
+
+/** Response shape for POST /api/fs/mkdir */
+export type MkdirResponse = { path: string; parent: string; name: string };
 
 /** Response shape for POST /api/projects/scan */
 export type ScanResult = {
@@ -190,6 +200,7 @@ export type Settings = {
   dashboard: {
     autoLaunchWeb: boolean;
     projectsDirectory?: string;
+    allowedRoots?: string[];
   };
   service: {
     enabled: boolean;

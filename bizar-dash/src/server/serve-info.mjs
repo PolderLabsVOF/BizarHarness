@@ -55,7 +55,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { isIP } from 'node:net';
+import { createConnection, isIP } from 'node:net';
 
 const HOME = homedir();
 
@@ -80,6 +80,23 @@ const SERVE_INFO_FILES = [
  * Read the serve-info file from any of the candidate paths.
  * Returns null when no usable file exists. Never throws.
  *
+ * v3.11.0 — schema relaxed to derive missing fields. The plugin's
+ * `writeServeInfo` is supposed to write `{baseUrl, port, password,
+ * worktree, pid, startedAt}`, but older builds (and the version
+ * currently shipping on the user's install) wrote only
+ * `{password, pid, port}`. The strict pre-v3.11.0 schema then caused
+ * `readServeInfo()` to return `null`, which cascaded into
+ * `dispatchToBackground` marking every subtask as `dispatchPending: true`
+ * (see `task-delegator.mjs:563`). We now:
+ *   - Require only `password` (string) and `port` (number)
+ *   - Derive `baseUrl` from `port` (`http://127.0.0.1:<port>`)
+ *     when the on-disk file omits it
+ *   - Treat `worktree` and `startedAt` as optional, defaulting to `''`
+ *     and `0` respectively when missing. Callers that need a real
+ *     worktree (the bg-retry loop) must fill it in from their own
+ *     state — never assume the value here.
+ *   - Still validate that the derived `baseUrl` is loopback-safe.
+ *
  * @returns {ServeInfo|null}
  */
 export function readServeInfo() {
@@ -89,16 +106,25 @@ export function readServeInfo() {
       const raw = readFileSync(file, 'utf8');
       const parsed = JSON.parse(raw);
       if (
-        typeof parsed?.baseUrl === 'string' &&
-        typeof parsed?.port === 'number' &&
-        typeof parsed?.password === 'string' &&
-        typeof parsed?.worktree === 'string' &&
-        typeof parsed?.pid === 'number' &&
-        typeof parsed?.startedAt === 'number'
+        typeof parsed?.password !== 'string' ||
+        typeof parsed?.port !== 'number'
       ) {
-        if (!isSafeServeBaseUrl(parsed.baseUrl)) continue;
-        return parsed;
+        continue;
       }
+      // Derive baseUrl from port when the file omits it (older plugin
+      // builds write `{password, pid, port}` only).
+      let baseUrl = typeof parsed.baseUrl === 'string' && parsed.baseUrl.length > 0
+        ? parsed.baseUrl
+        : `http://127.0.0.1:${parsed.port}`;
+      if (!isSafeServeBaseUrl(baseUrl)) continue;
+      return {
+        baseUrl,
+        port: parsed.port,
+        password: parsed.password,
+        worktree: typeof parsed.worktree === 'string' ? parsed.worktree : '',
+        pid: typeof parsed.pid === 'number' ? parsed.pid : 0,
+        startedAt: typeof parsed.startedAt === 'number' ? parsed.startedAt : 0,
+      };
     } catch {
       // try next candidate
     }
@@ -563,24 +589,63 @@ export function normalizeOpencodeMessage(msg) {
  * `GET /health` — used by the dispatcher startup check to verify the
  * serve child is actually reachable before we try to enqueue work.
  *
+ * v3.11.0 — Replaced the HTTP `GET /health` probe with a TCP-connect
+ * port-open check via `net.createConnection`. Rationale:
+ *   - The pre-v3.11.0 implementation sent `GET /health` with the
+ *     Basic-auth header from `serve.json`. If the opencode serve
+ *     instance rejected the auth (e.g. a stale password file, a
+ *     plugin version mismatch, or a 401 from a different auth realm),
+ *     the probe returned `false` even when the opencode process was
+ *     perfectly healthy and answering other requests. That cascaded
+ *     into every background dispatch short-circuiting on the
+ *     `if (serveInfo && serveReachable)` guard at
+ *     `task-delegator.mjs:563` and being marked `dispatchPending: true`.
+ *   - TCP-connect is the standard "is this port alive" check. It does
+ *     not depend on HTTP auth, the opencode version's endpoint shape,
+ *     or the path being correct. If the opencode process is bound to
+ *     the port, we can talk to it (auth on the actual endpoints will
+ *     still be validated when we issue those calls).
+ *   - 1.5s default timeout — long enough to survive a slow CI host,
+ *     short enough that the dispatch path doesn't stall the user
+ *     when the plugin is genuinely down.
+ *
  * @param {ServeInfo} info
  * @param {number} [timeoutMs]
  * @returns {Promise<boolean>}
  */
-export async function pingOpencodeServe(info, timeoutMs = 3_000) {
-  if (!info) return false;
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  try {
-    const res = await fetch(`${info.baseUrl}/health`, {
-      method: 'GET',
-      headers: { Authorization: buildAuthHeader(info) },
-      signal: ac.signal,
+export function pingOpencodeServe(info, timeoutMs = 1_500) {
+  return new Promise((resolve) => {
+    if (!info || typeof info.port !== 'number') {
+      resolve(false);
+      return;
+    }
+    // We connect to 127.0.0.1 explicitly — the TCP probe must not
+    // accidentally hit a remote host if the baseUrl were ever wrong.
+    const host = '127.0.0.1';
+    const port = info.port;
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch { /* ignore */ }
+      resolve(ok);
+    };
+    const socket = createConnection({ host, port });
+    const timer = setTimeout(() => finish(false), Math.max(50, timeoutMs));
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      finish(true);
     });
-    return res.ok;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
+    socket.once('error', () => {
+      clearTimeout(timer);
+      finish(false);
+    });
+    // Surface any unexpected socket-level error so it doesn't crash
+    // the process. `error` is already handled above, but `close`
+    // can fire after `connect`/`error` without indicating failure.
+    socket.once('close', () => {
+      clearTimeout(timer);
+      finish(settled ? false : false);
+    });
+  });
 }

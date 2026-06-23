@@ -19,7 +19,7 @@ import { projectsStore } from '../projects-store.mjs';
 import { tasksStore } from '../tasks-store.mjs';
 import { schedulesStore } from '../schedules-store.mjs';
 import { readActiveProjectId, safeReadJSON, wrap, readSettings } from './_shared.mjs';
-import { resolveSafePath } from '../lib/path-safe.mjs';
+import { buildAllowedRootsFromSettings, resolveSafePath } from '../lib/path-safe.mjs';
 
 /**
  * @param {object} deps
@@ -83,8 +83,12 @@ export function createProjectsRouter({ state, broadcast, projectRoot }) {
   // v3.6.0 — Scan a configured `dashboard.projectsDirectory` for
   // project roots and add any newly-detected ones to the registry.
   // Idempotent: already-registered paths are skipped silently.
-  // The configured directory must itself live under the user's home
-  // directory — re-validated here before scanning.
+  //
+  // v3.11.0 — The allow-list now also includes every entry in
+  // `dashboard.allowedRoots` (in addition to home and
+  // `projectsDirectory`). The configured `projectsDirectory` is
+  // re-validated against the full allow-list before scanning — a
+  // tampered settings file can't widen the boundary.
   router.post('/projects/scan', wrap(async (_req, res) => {
     const settings = readSettings().data || {};
     const configured = settings.dashboard?.projectsDirectory;
@@ -95,7 +99,8 @@ export function createProjectsRouter({ state, broadcast, projectRoot }) {
       });
       return;
     }
-    const safeRoot = resolveSafePath(configured, [homedir()]);
+    const allowedRoots = buildAllowedRootsFromSettings({ settings, home: homedir() });
+    const safeRoot = resolveSafePath(configured, allowedRoots);
     if (!safeRoot) {
       res.status(403).json({
         error: 'forbidden',

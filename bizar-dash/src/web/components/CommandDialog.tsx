@@ -11,21 +11,34 @@ import type { DialogDescriptor } from '../lib/types';
 export type { DialogDescriptor };
 
 function GenericDialog({ dialog, onClose }: { dialog: DialogDescriptor; onClose: () => void }) {
+  if (!dialog.data) {
+    return (
+      <div>
+        <p style={{ marginBottom: 16, lineHeight: 1.6 }}>
+          {`Command: ${dialog.command}`}
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button type="button" className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  const { message, detail, url } = dialog.data as { message?: string; detail?: string; url?: string };
+
   return (
     <div>
       <p style={{ marginBottom: 16, lineHeight: 1.6 }}>
-        {(dialog.data?.message as string) ?? `Command: ${dialog.command}`}
+        {message ?? `Command: ${dialog.command}`}
       </p>
-      {(dialog.data?.detail as string) && (
+      {detail && (
         <p style={{ marginBottom: 16, color: 'var(--color-muted)', fontSize: 13 }}>
-          {dialog.data.detail as string}
+          {detail}
         </p>
       )}
-      {(dialog.data?.url as string) && (
+      {url && (
         <p style={{ marginBottom: 16 }}>
-          <a href={dialog.data.url as string} target="_blank" rel="noopener noreferrer">
-            {dialog.data.url as string}
-          </a>
+          <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
         </p>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

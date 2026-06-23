@@ -563,11 +563,17 @@ export const taskDelegator = {
       if (serveInfo && serveReachable) {
         try {
           const { createOpencodeSession, sendOpencodePrompt } = await import('./serve-info.mjs');
+          // v3.11.0 — Fall back to projectRoot when serve-info is missing
+          // `worktree` (older plugin builds only wrote
+          // `{password, pid, port}`). opencode serve treats `?directory=`
+          // as the per-session worktree; passing the dashboard's cwd is
+          // a sane fallback that keeps the spawn path alive.
+          const dispatchWorktree = serveInfo.worktree || projectRoot || '';
           // 1. Create the opencode session owned by the requested agent.
           const create = await createOpencodeSession(
             serveInfo,
             { title: sub.title || 'subtask', agent: sub.assignee || 'tyr', parentID: sub.parent || undefined },
-            serveInfo.worktree,
+            dispatchWorktree,
           );
           if (!create.ok) {
             dispatchError = create.error || 'createOpencodeSession failed';
@@ -582,7 +588,7 @@ export const taskDelegator = {
                 agent: sub.assignee || 'tyr',
                 text: promptText,
               },
-              serveInfo.worktree,
+              dispatchWorktree,
             );
             if (!send.ok) {
               dispatchError = send.error || 'sendOpencodePrompt failed';
@@ -596,11 +602,11 @@ export const taskDelegator = {
               // a redundant runner. Failures are silent — the agent
               // dispatch itself succeeded; tmux is a nice-to-have.
               try {
-                const logFile = join(serveInfo.worktree || process.cwd(), '.bizar', 'opencode.log');
+                const logFile = join(dispatchWorktree || process.cwd(), '.bizar', 'opencode.log');
                 const tmuxRes = backgroundStore.spawnTmuxFor(
                   `bg_${sessionId.slice(0, 16)}`,
                   { command: 'tail', args: ['-n', '200', '-F', logFile] },
-                  serveInfo.worktree,
+                  dispatchWorktree,
                 );
                 if (tmuxRes.ok) {
                   // We do not fail the dispatch when tmux is missing.

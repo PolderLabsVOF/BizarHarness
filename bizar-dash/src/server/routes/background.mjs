@@ -6,6 +6,7 @@
  * /api/background/:id/output               — tail captured output
  * /api/background/:id/tmux                 — tmux attach metadata
  * /api/background/:id/message (POST)       — send a follow-up message
+ * /api/background/:id/retry (POST)         — manual unstick (v3.11.0)
  * /api/background/:id (DELETE)             — kill
  *
  * Backed by the opencode-plugin's bg instance store. Imports the
@@ -65,6 +66,63 @@ export function createBackgroundRouter({ broadcast }) {
     }
     const result = backgroundStore.sendMessage(req.params.id, message);
     res.json(result);
+  }));
+
+  // v3.11.0 — Manual unstick for a bg instance stuck in
+  // `dispatchPending: true`. The periodic retry loop covers most
+  // cases, but operators (and the UI) sometimes want to recover a
+  // specific instance immediately without waiting for the next tick.
+  //
+  // Behavior:
+  //   - Resets `dispatchPending: true`, `retryCount: 0` so the
+  //     instance qualifies for a fresh retry.
+  //   - Calls `retryDispatchOnce(instanceId)` synchronously.
+  //   - Returns the same shape the periodic loop logs:
+  //     `{ ok, reason?, retryCount?, sessionId?, logPath? }`.
+  //
+  // This endpoint NEVER deletes the bg state file. A failed retry
+  // leaves the instance in a recoverable state.
+  router.post('/background/:id/retry', wrap(async (req, res) => {
+    const id = req.params.id;
+    const { readBgInstance, listBgInstances } = await import('../task-delegator.mjs');
+    const inst = readBgInstance(id);
+    if (!inst) {
+      res.status(404).json({ ok: false, error: 'not_found', message: `bg instance ${id} not found` });
+      return;
+    }
+    // Reset retry bookkeeping so a manual retry starts from a clean
+    // slate. The atomic rewrite goes through the same path the
+    // periodic loop uses; failures here are reported back to the
+    // caller.
+    try {
+      const fs = await import('node:fs');
+      const file = inst._file;
+      if (file && fs.existsSync(file)) {
+        const fresh = { ...inst, dispatchPending: true, retryCount: 0, lastRetryAt: Date.now() };
+        delete fresh._file;
+        delete fresh._bgDir;
+        delete fresh._mtime;
+        const tmp = `${file}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify(fresh, null, 2), 'utf8');
+        try {
+          fs.renameSync(tmp, file);
+        } catch {
+          fs.writeFileSync(file, JSON.stringify(fresh, null, 2), 'utf8');
+        }
+      }
+    } catch {
+      /* best-effort reset; retryDispatchOnce still runs */
+    }
+    const { retryDispatchOnce } = await import('../bg-retry.mjs');
+    const result = await retryDispatchOnce(id);
+    if (result.ok) {
+      broadcast({ type: 'background:change', action: 'retry', id, sessionId: result.sessionId });
+      // Re-list so the UI snapshot picks up the new sessionId.
+      const refreshed = (listBgInstances() || []).find((i) => i.instanceId === id) || null;
+      res.json({ ...result, instance: refreshed });
+      return;
+    }
+    res.json({ ...result, instance: inst });
   }));
 
   router.delete('/background/:id', wrap(async (req, res) => {

@@ -87,18 +87,57 @@ class ApiClient {
     try { return localStorage.getItem(LOOPBACK_KEY) !== '0'; } catch { return true; }
   }
 
+  /**
+   * Perform an authenticated GET against the dashboard server.
+   *
+   * IMPORTANT: do NOT include the `/api` prefix in `path` — the
+   * wrapper adds it for you. Calling `api.get('/api/projects')` will
+   * 404 because the server sees `/api/api/projects`. Use the
+   * unprefixed form: `api.get('/projects')`.
+   *
+   * @example
+   *   const r = await api.get<ProjectList>('/projects');
+   */
   async get<T>(path: string): Promise<T> {
     return this.req<T>('GET', path);
   }
+
+  /**
+   * Perform an authenticated POST against the dashboard server.
+   *
+   * IMPORTANT: do NOT include the `/api` prefix in `path` — the
+   * wrapper adds it. Use the unprefixed form: `api.post('/fs/mkdir', body)`.
+   */
   async post<T>(path: string, body?: unknown): Promise<T> {
     return this.req<T>('POST', path, body);
   }
+
+  /**
+   * Perform an authenticated PUT against the dashboard server.
+   *
+   * IMPORTANT: do NOT include the `/api` prefix in `path` — the
+   * wrapper adds it. Use the unprefixed form: `api.put('/settings', body)`.
+   */
   async put<T>(path: string, body?: unknown): Promise<T> {
     return this.req<T>('PUT', path, body);
   }
+
+  /**
+   * Perform an authenticated PATCH against the dashboard server.
+   *
+   * IMPORTANT: do NOT include the `/api` prefix in `path` — the
+   * wrapper adds it. Use the unprefixed form: `api.patch('/settings', body)`.
+   */
   async patch<T>(path: string, body?: unknown): Promise<T> {
     return this.req<T>('PATCH', path, body);
   }
+
+  /**
+   * Perform an authenticated DELETE against the dashboard server.
+   *
+   * IMPORTANT: do NOT include the `/api` prefix in `path` — the
+   * wrapper adds it. Use the unprefixed form: `api.del('/projects/123')`.
+   */
   async del<T = unknown>(path: string): Promise<T> {
     return this.req<T>('DELETE', path);
   }

@@ -12,7 +12,7 @@
  * means a single change here propagates to every router.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { projectsStore } from '../projects-store.mjs';
@@ -117,7 +117,7 @@ export const DEFAULT_SETTINGS = {
   defaultAgent: 'odin',
   defaultModel: '',
   notifications: { onAgentComplete: true, onPlanApproval: true },
-  dashboard: { autoLaunchWeb: true, projectsDirectory: '' },
+  dashboard: { autoLaunchWeb: true, projectsDirectory: '', allowedRoots: [] },
   service: { enabled: true, autostart: false },
   about: {
     version: DASHBOARD_VERSION,
@@ -176,14 +176,168 @@ export function readSettings() {
  * Write settings.json (merged with defaults). Returns the new
  * readSettings() shape so callers can broadcast the canonical data.
  *
+ * Validates the merged `dashboard` sub-object via
+ * `validateDashboardSettings` before persisting. Invalid payloads
+ * throw a structured `Error` (`.status = 400`, `.code`,
+ * `.message`) which the route's `wrap()` translates into a 400 JSON
+ * response.
+ *
  * @param {Record<string, unknown>} data
  * @returns {{ path: string, data: Record<string, unknown>, exists: boolean }}
  */
 export function writeSettings(data) {
   mkdirSync(dirname(SETTINGS_FILE), { recursive: true });
   const merged = mergeSettings(data);
+  // Validate BEFORE atomic write so a bad payload never lands on disk.
+  validateDashboardSettings(merged.dashboard);
   atomicWriteJson(SETTINGS_FILE, merged);
   return readSettings();
+}
+
+/**
+ * Maximum number of entries permitted in `dashboard.allowedRoots`.
+ * Prevents a malicious or accidental payload from widening the
+ * filesystem boundary to thousands of roots, which would make the
+ * allow-list itself a DoS vector at request time.
+ */
+const MAX_ALLOWED_ROOTS = 50;
+
+/**
+ * Validate one path string in the dashboard sub-object. Returns the
+ * trimmed path if it is safe, or throws a structured Error.
+ *
+ * Rules applied:
+ *   - must be a non-empty string
+ *   - must NOT contain NUL (`\0`)
+ *   - must NOT contain a backslash (POSIX paths have no backslash;
+ *     a backslash is a strong signal of a path-escape attempt)
+ *   - must be an absolute path (starts with `/` on POSIX)
+ *   - must resolve under `os.homedir()` — the dashboard's filesystem
+ *     boundary. A configured path that escapes home is rejected
+ *     outright so a typo can't silently widen the boundary.
+ *
+ * @param {unknown} value
+ * @param {string} fieldName  — used in the error message
+ * @returns {string}          — the trimmed path
+ */
+function validateDashboardPath(value, fieldName) {
+  if (typeof value !== 'string') {
+    const err = new Error(`${fieldName} must be a string`);
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    // Empty is allowed for `projectsDirectory` (means "unset");
+    // higher-level validation already decided whether empty is OK
+    // for the calling field. Here we just hand back the trimmed
+    // empty string so the caller can short-circuit.
+    return trimmed;
+  }
+  if (trimmed.includes('\0')) {
+    const err = new Error(`${fieldName} must not contain NUL bytes`);
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  }
+  if (trimmed.includes('\\')) {
+    const err = new Error(`${fieldName} must not contain backslashes`);
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  }
+  if (!trimmed.startsWith('/')) {
+    const err = new Error(`${fieldName} must be an absolute path (start with /)`);
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  }
+  const home = homedir();
+  const homeResolved = pathResolve(home);
+  const candidateResolved = pathResolve(trimmed);
+  if (candidateResolved !== homeResolved &&
+      !candidateResolved.startsWith(homeResolved + pathSep)) {
+    const err = new Error(
+      `${fieldName} must live under the user's home directory (${home})`,
+    );
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  }
+  return trimmed;
+}
+
+/**
+ * Validate the `dashboard.*` sub-object on PUT /api/settings. Throws
+ * a structured Error (`.status = 400`, `.code = 'bad_request'`,
+ * `.message`) when the payload is unsafe. Returns normally on
+ * success.
+ *
+ * Rules:
+ *   - `dashboard.projectsDirectory` must be empty, OR a non-empty
+ *     string path that is absolute and lives under `os.homedir()`.
+ *     Rationale: the projects scanner is gated to home, so a
+ *     `projectsDirectory` that escapes home would be silently
+ *     unusable; rejecting at write time surfaces the mistake
+ *     instead of letting it rot in settings.json.
+ *   - `dashboard.allowedRoots` must be an array of strings. Each
+ *     entry must be an absolute path under `os.homedir()`. An empty
+ *     array is allowed (means "no extras"). Entries that fail
+ *     validation are rejected here (NOT silently dropped) so the
+ *     operator sees the bad value. Runtime allow-list building
+ *     (`buildAllowedRootsFromSettings`) drops silently for the
+ *     "tampered-settings" defense-in-depth path.
+ *   - No path may contain NUL bytes or backslashes (POSIX-path
+ *     escape attempts).
+ *   - The total number of allowedRoots entries is capped at
+ *     `MAX_ALLOWED_ROOTS` to keep the per-request allow-list
+ *     bounded.
+ *
+ * @param {Record<string, unknown> | null | undefined} dashboard
+ */
+export function validateDashboardSettings(dashboard) {
+  if (dashboard == null) return;
+  if (typeof dashboard !== 'object' || Array.isArray(dashboard)) {
+    const err = new Error('dashboard settings must be an object');
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  }
+
+  // projectsDirectory
+  const proj = dashboard.projectsDirectory;
+  if (proj !== undefined && proj !== null && proj !== '') {
+    validateDashboardPath(proj, 'dashboard.projectsDirectory');
+  } else if (proj !== undefined && proj !== null && typeof proj !== 'string') {
+    const err = new Error('dashboard.projectsDirectory must be a string');
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  }
+
+  // allowedRoots
+  const roots = dashboard.allowedRoots;
+  if (roots === undefined || roots === null) {
+    // Field omitted — mergeSettings fills in the default `[]`. Fine.
+  } else if (!Array.isArray(roots)) {
+    const err = new Error('dashboard.allowedRoots must be an array');
+    err.status = 400;
+    err.code = 'bad_request';
+    throw err;
+  } else {
+    if (roots.length > MAX_ALLOWED_ROOTS) {
+      const err = new Error(
+        `dashboard.allowedRoots may not exceed ${MAX_ALLOWED_ROOTS} entries`,
+      );
+      err.status = 400;
+      err.code = 'bad_request';
+      throw err;
+    }
+    roots.forEach((entry, i) => {
+      validateDashboardPath(entry, `dashboard.allowedRoots[${i}]`);
+    });
+  }
 }
 
 /**

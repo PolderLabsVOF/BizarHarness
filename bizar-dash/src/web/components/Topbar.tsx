@@ -24,7 +24,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { ProjectRecord, WsStatus, WsMessage, Settings } from '../lib/types';
+import type { ProjectRecord, WsStatus, WsMessage, Settings, DirectoryListing } from '../lib/types';
 import { api } from '../lib/api';
 import { useModal } from './Modal';
 import { FileBrowser } from './FileBrowser';
@@ -269,16 +269,48 @@ function TopbarAddProjectDialog({
 }) {
   const [path, setPath] = useState(settings?.dashboard?.projectsDirectory ?? '');
   const [name, setName] = useState('');
+  const [preflighting, setPreflighting] = useState(false);
+  const [preflightError, setPreflightError] = useState<string | null>(null);
+
+  const handleAdd = async () => {
+    if (!path) return;
+    setPreflighting(true);
+    setPreflightError(null);
+    try {
+      // Pre-flight: verify the path still exists
+      await api.get<DirectoryListing>('/fs?path=' + encodeURIComponent(path));
+      onAdd(path, name || null);
+    } catch (err) {
+      const apiErr = err as { status?: number; data?: { message?: string } };
+      if (apiErr.status === 404) {
+        setPreflightError('That folder no longer exists. Pick another.');
+      } else {
+        setPreflightError(
+          apiErr.data?.message ?? (err as Error).message ?? 'Validation failed.',
+        );
+      }
+    } finally {
+      setPreflighting(false);
+    }
+  };
 
   return (
     <div>
       <label className="field-label">Folder</label>
       <FileBrowser
         value={path}
-        onChange={setPath}
+        onChange={(p) => {
+          setPath(p);
+          setPreflightError(null);
+        }}
         projectsDirectory={settings?.dashboard?.projectsDirectory}
         height={320}
       />
+      {preflightError && (
+        <p className="field-help" style={{ color: 'var(--error)', marginTop: 4 }}>
+          {preflightError}
+        </p>
+      )}
       <div style={{ marginTop: 'var(--space-3)' }}>
         <label className="field-label" htmlFor="topbar-add-project-name">Name (optional)</label>
         <input
@@ -293,10 +325,11 @@ function TopbarAddProjectDialog({
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           variant="primary"
-          onClick={() => onAdd(path, name || null)}
-          disabled={!path}
+          onClick={handleAdd}
+          disabled={!path || preflighting}
         >
-          Add
+          {preflighting ? <span className="btn-spinner" /> : null}
+          {preflighting ? 'Checking…' : 'Add'}
         </Button>
       </div>
     </div>

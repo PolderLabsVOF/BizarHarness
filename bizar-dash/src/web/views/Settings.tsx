@@ -1,5 +1,5 @@
 // src/views/Settings.tsx — v3 settings: theme colors, UI layout, defaults, Tailscale, service.
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Sliders,
   Save,
@@ -1217,6 +1217,60 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
                 )}
               </>
             )}
+          </div>
+
+          {/* allowedRoots textarea */}
+          <div className="field" data-setting-id="dashboard.allowedRoots" style={{ marginTop: 'var(--space-4)' }}>
+            <label className="field-label" htmlFor="set-allowed-roots">
+              Additional allowed roots <span className="muted">(advanced)</span>
+            </label>
+            <textarea
+              id="set-allowed-roots"
+              className="textarea"
+              rows={4}
+              placeholder="/workspace&#10;/srv/projects"
+              value={(settings.dashboard.allowedRoots ?? []).join('\n')}
+              onChange={(e) => {
+                const lines = e.target.value
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .filter(Boolean);
+                patchDashboard({ allowedRoots: lines });
+              }}
+            />
+            <p className="field-help">
+              Optional. Add filesystem roots beyond your home directory that the file
+              browser and project scanner can access. Each path must be inside your
+              home directory. One per line.
+            </p>
+            {(() => {
+              const rawLines = (settings.dashboard.allowedRoots ?? []).join('\n').split('\n');
+              const warnings: { key: string; msg: React.ReactNode }[] = [];
+              rawLines.forEach((line, i) => {
+                if (!line.trim()) return;
+                if (!/^\/|^[A-Za-z]:/.test(line)) {
+                  warnings.push({
+                    key: `noabs-${i}`,
+                    msg: (
+                      <p style={{ color: 'var(--warning)', fontSize: 11, marginTop: 2 }}>
+                        Line {i + 1}: "{line}" — should be absolute (start with / or a drive letter).
+                      </p>
+                    ),
+                  });
+                }
+                if (line.includes('..')) {
+                  warnings.push({
+                    key: `dots-${i}`,
+                    msg: (
+                      <p style={{ color: 'var(--error)', fontSize: 11, marginTop: 2 }}>
+                        Line {i + 1}: "{line}" — contains '..' (server will reject this).
+                      </p>
+                    ),
+                  });
+                }
+              });
+              return warnings.map((w) => w.msg);
+            })()}
           </div>
         </Card>
 

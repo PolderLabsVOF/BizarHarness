@@ -21,6 +21,74 @@
 - `node --check` passes for every modified/new server file.
 - TypeScript (no server-side changes affect frontend types).
 
+### Security hardening
+
+- Added `dashboard.allowedRoots: string[]` setting — operators can
+  declare additional filesystem roots (e.g., `/workspace`,
+  `/srv/projects`) beyond `os.homedir()` for the file browser and
+  project scanner. Each entry must itself be inside home; entries
+  that escape are silently dropped server-side.
+- Added `POST /api/fs/mkdir` to allow creating project directories
+  from the file browser. Parent must be in the allow-list; name is
+  validated against a denylist of unsafe characters; returns 409 if
+  the entry already exists.
+- `GET /api/fs` now caps responses at 500 entries and reports a
+  `truncated` flag plus `totalEntries` so huge directories
+  (`node_modules`, Go module cache) don't OOM the browser.
+- `PUT /api/settings` now validates `dashboard.projectsDirectory`
+  and `dashboard.allowedRoots` server-side, rejecting unsafe values
+  with a structured 400 instead of writing them to disk.
+- **Frontend:** live warnings on the `allowedRoots` textarea mirror the server's validation; pre-flight path check in the Add Project dialog prevents 404s on stale selections.
+
+### Background agent dispatch fix
+
+- Fixed root cause: `pingOpencodeServe` was returning false for a
+  live opencode serve instance because (a) it pings an HTTP
+  endpoint that requires Basic auth and any auth-quirk (stale
+  password file, version mismatch, wrong realm) made the probe
+  fail with 401 even though the opencode process was perfectly
+  healthy and answering other requests, AND (b) `readServeInfo`
+  had a strict 6-field schema that returned `null` when the
+  on-disk `serve.json` only contained `{password, pid, port}` —
+  which is what the current plugin build actually writes. The
+  null then cascaded into `dispatchToBackground` short-circuiting
+  on the `if (serveInfo && serveReachable)` guard at
+  `task-delegator.mjs:563`, marking every new bg instance as
+  `dispatchPending: true` and never creating a tmux session.
+  Now uses a TCP-connect port-open check via
+  `net.createConnection` (so the probe does not depend on HTTP
+  auth or endpoint shape) and the read schema derives `baseUrl`
+  from `port` when missing, with `worktree`/`startedAt`
+  defaulting to empty/`0` rather than failing the read.
+- Fixed path-concatenation fragility for the bg `worktree`
+  fallback: `task-delegator.mjs` now uses `projectRoot` as a
+  fallback for the opencode serve's `?directory=` query param
+  when serve-info omits `worktree`, so spawns succeed even on
+  installs where the plugin has not yet written a full serve.json.
+- Added `lib/path-safe.mjs` helpers (`deriveAbsoluteBgLogPath`,
+  `isBrokenBgLogPath`) that always produce an absolute path
+  (falling back to `~/.cache/bizar/logs/<id>.log`) and detect the
+  `//.opencode/log/...` shape produced when an older plugin build
+  concatenated an empty `worktree` to the logPath.
+- Added a periodic retry loop (`bg-retry.mjs`, every 30s, started
+  by `server.mjs` on boot) that re-runs dispatch for any bg
+  instance stuck in `dispatchPending: true` with
+  `toolCallCount === 0` for more than 30 seconds. Caps each
+  instance at 10 retries before marking it as `failed` with
+  `error: "exceeded max dispatch retries"`. Repairs broken
+  logPath values atomically before re-dispatching.
+- Added `POST /api/background/:id/retry` for manual unstick —
+  resets `retryCount: 0`, `dispatchPending: true`, and calls
+  `retryDispatchOnce` immediately without waiting for the next
+  periodic tick.
+
+### Files
+- `bizar-dash/src/server/routes/_shared.mjs` — `DEFAULT_SETTINGS.dashboard` gains `allowedRoots: []`; new `validateDashboardSettings()` + `writeSettings()` now validates before persisting.
+- `bizar-dash/src/server/lib/path-safe.mjs` — new `buildAllowedRootsFromSettings({ settings, home })` helper.
+- `bizar-dash/src/server/routes/fs.mjs` — `POST /api/fs/mkdir`; `GET /api/fs` now caps at 500 entries and reports `truncated` / `totalEntries`; switched to the new `buildAllowedRootsFromSettings` helper.
+- `bizar-dash/src/server/routes/projects.mjs` — `POST /api/projects/scan` uses the expanded allow-list.
+- `bizar-dash/src/server/server.mjs` — startup scan rebuilds and logs the allow-list, re-validates the configured `projectsDirectory`.
+
 ## v3.5.4 — 2026-06-19
 
 ### Changed

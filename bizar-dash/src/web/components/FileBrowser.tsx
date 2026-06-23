@@ -2,9 +2,9 @@
 // Replaces raw path text inputs in Add Project dialogs.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronRight, ChevronDown, FolderOpen, Folder, File, RefreshCw, ArrowLeft, Home, AlertCircle } from 'lucide-react';
+import { ChevronRight, ChevronDown, FolderOpen, Folder, File, RefreshCw, ArrowLeft, Home, AlertCircle, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
-import type { DirectoryEntry, DirectoryListing } from '../lib/types';
+import type { DirectoryEntry, DirectoryListing, MkdirRequest, MkdirResponse } from '../lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +72,25 @@ function sortEntries(entries: DirectoryEntry[]): DirectoryEntry[] {
   });
 }
 
+/**
+ * Validates a directory name against the same denylist the server enforces.
+ * Returns an ok object or { ok: false, reason }.
+ * Mirrors the validation in POST /api/fs/mkdir on the server side.
+ */
+export function validateDirName(name: string): { ok: true } | { ok: false; reason: string } {
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, reason: 'Name cannot be empty.' };
+  if (trimmed !== name) return { ok: false, reason: 'Name cannot have leading or trailing whitespace.' };
+  if (trimmed === '.') return { ok: false, reason: "Name cannot be '.'." };
+  if (trimmed === '..') return { ok: false, reason: "Name cannot be '..'." };
+  if (trimmed.startsWith('-')) return { ok: false, reason: "Name cannot start with '-'." };
+  if (trimmed.length > 255) return { ok: false, reason: 'Name cannot be longer than 255 characters.' };
+  if (/[/\0:*?"<>|]/.test(trimmed)) {
+    return { ok: false, reason: "Name cannot contain / \\ : * ? \" < > |" };
+  }
+  return { ok: true };
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function FileBrowser({
@@ -91,6 +110,11 @@ export function FileBrowser({
   const [childrenMap, setChildrenMap] = useState<Record<string, DirectoryEntry[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mkdirOpen, setMkdirOpen] = useState(false);
+  const [mkdirName, setMkdirName] = useState('');
+  const [mkdirError, setMkdirError] = useState<string | null>(null);
+  const [mkdirLoading, setMkdirLoading] = useState(false);
+  const mkdirInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchListing = useCallback(async (path: string): Promise<DirectoryListing | null> => {
     try {
@@ -190,6 +214,69 @@ export function FileBrowser({
     }
   };
 
+  // ─── New folder ────────────────────────────────────────────────────────────
+
+  // Open the inline mkdir input, focusing it on the next tick
+  const openMkdir = () => {
+    setMkdirOpen(true);
+    setMkdirName('');
+    setMkdirError(null);
+    // Autofocus after the input renders
+    setTimeout(() => mkdirInputRef.current?.focus(), 0);
+  };
+
+  const cancelMkdir = () => {
+    setMkdirOpen(false);
+    setMkdirName('');
+    setMkdirError(null);
+  };
+
+  const submitMkdir = async () => {
+    const v = validateDirName(mkdirName);
+    if (!v.ok) {
+      setMkdirError(v.reason);
+      return;
+    }
+    setMkdirLoading(true);
+    setMkdirError(null);
+    try {
+      const result = await api.post<MkdirResponse>('/fs/mkdir', {
+        parent: currentPath,
+        name: mkdirName.trim(),
+      } as MkdirRequest);
+      // Invalidate cache for the current path so the new folder appears
+      _cache.delete(currentPath);
+      await load(currentPath);
+      // Select the new directory
+      onChange(result.path);
+      setMkdirOpen(false);
+      setMkdirName('');
+    } catch (err) {
+      const apiErr = err as { data?: { message?: string }; status?: number };
+      if (apiErr.status === 409) {
+        setMkdirError(`A folder named "${mkdirName.trim()}" already exists.`);
+      } else {
+        setMkdirError(
+          apiErr.data?.message ??
+          (err as Error).message ??
+          'Failed to create folder.',
+        );
+      }
+    } finally {
+      setMkdirLoading(false);
+    }
+  };
+
+  const handleMkdirKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitMkdir();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelMkdir();
+    }
+  };
+
   const toggleExpand = (path: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -285,6 +372,16 @@ export function FileBrowser({
             <RefreshCw size={13} className={loading ? 'spin' : ''} />
           </button>
 
+          <button
+            type="button"
+            className="file-browser-tool-btn"
+            onClick={openMkdir}
+            title="New folder"
+            aria-label="Create new folder"
+          >
+            <FolderPlus size={13} />
+          </button>
+
           <div className="file-browser-chips">
             <button type="button" className="file-browser-chip" onClick={goHome}>
               <Home size={11} /> {rootLabel}
@@ -297,9 +394,40 @@ export function FileBrowser({
           </div>
         </div>
 
-        <span className="file-browser-count-hint">
-          {loading ? '…' : `${entries.length} in ${basename}`}
-        </span>
+        {mkdirOpen ? (
+          <div className="file-browser-mkdir">
+            <input
+              ref={mkdirInputRef}
+              type="text"
+              className="file-browser-mkdir-input"
+              placeholder="Folder name"
+              value={mkdirName}
+              onChange={(e) => {
+                setMkdirName(e.target.value);
+                setMkdirError(null);
+              }}
+              onKeyDown={handleMkdirKeyDown}
+              aria-label="New folder name"
+              aria-invalid={mkdirError ? 'true' : undefined}
+              aria-describedby={mkdirError ? 'mkdir-error' : undefined}
+              disabled={mkdirLoading}
+              maxLength={255}
+            />
+            {mkdirError ? (
+              <span id="mkdir-error" className="file-browser-mkdir-error" role="alert">
+                {mkdirError}
+              </span>
+            ) : (
+              <span className="file-browser-mkdir-hint">
+                Enter to create, Esc to cancel
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="file-browser-count-hint">
+            {loading ? '…' : `${entries.length} in ${basename}`}
+          </span>
+        )}
       </div>
 
       {/* Error banner */}
@@ -341,48 +469,60 @@ export function FileBrowser({
 
           {loading && !listing ? (
             <FlatSkeleton />
-          ) : allEntries.length === 0 ? (
-            <div className="file-browser-empty">This folder is empty</div>
           ) : (
-            <div className="file-browser-flat-list">
-              {allEntries.map((entry, idx) => {
-                const isDir = entry.isDir;
-                const isSelected = idx === selectedRow;
-                const isActive = entry.path === value;
-                return (
-                  <div
-                    key={entry.path}
-                    role="option"
-                    aria-selected={isActive}
-                    className={[
-                      'file-browser-row',
-                      isDir ? 'file-browser-row--dir' : 'file-browser-row--file',
-                      isSelected && 'file-browser-row--selected',
-                      isActive && isDir && 'file-browser-row--active',
-                      !isDir && 'file-browser-row--disabled',
-                    ].filter(Boolean).join(' ')}
-                    onClick={() => {
-                      if (isDir) {
-                        setSelectedRow(idx);
-                        onChange(entry.path);
-                      }
-                    }}
-                    onDoubleClick={() => {
-                      if (isDir) navigateInto(entry);
-                    }}
-                    title={entry.path}
-                  >
-                    <span className="file-browser-row-icon">
-                      {isDir ? <Folder size={13} /> : <File size={13} />}
-                    </span>
-                    <span className="file-browser-row-name">{entry.name}</span>
-                    <span className="file-browser-row-type">
-                      {isDir ? 'Folder' : ''}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            <>
+              {/* Truncation notice */}
+              {listing?.truncated && (
+                <div className="file-browser-truncated-banner" role="status">
+                  Showing first 500 of {listing.totalEntries} entries.
+                  Navigate into a subfolder to see more.
+                </div>
+              )}
+
+              {allEntries.length === 0 ? (
+                <div className="file-browser-empty">This folder is empty</div>
+              ) : (
+                <div className="file-browser-flat-list">
+                  {allEntries.map((entry, idx) => {
+                    const isDir = entry.isDir;
+                    const isSelected = idx === selectedRow;
+                    const isActive = entry.path === value;
+                    return (
+                      <div
+                        key={entry.path}
+                        role="option"
+                        aria-selected={isActive}
+                        className={[
+                          'file-browser-row',
+                          isDir ? 'file-browser-row--dir' : 'file-browser-row--file',
+                          isSelected && 'file-browser-row--selected',
+                          isActive && isDir && 'file-browser-row--active',
+                          !isDir && 'file-browser-row--disabled',
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => {
+                          if (isDir) {
+                            setSelectedRow(idx);
+                            onChange(entry.path);
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (isDir) navigateInto(entry);
+                        }}
+                        title={entry.path}
+                      >
+                        <span className="file-browser-row-icon">
+                          {isDir ? <Folder size={13} /> : <File size={13} />}
+                        </span>
+                        <span className="file-browser-row-name">{entry.name}</span>
+                        <span className="file-browser-row-type">
+                          {isDir ? 'Folder' : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

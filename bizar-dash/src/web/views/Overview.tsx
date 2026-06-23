@@ -34,7 +34,7 @@ import { useModal } from '../components/Modal';
 import { FileBrowser } from '../components/FileBrowser';
 import { api } from '../lib/api';
 import { formatRelative, formatTime } from '../lib/utils';
-import type { Overview, Settings, Snapshot, ActivityItem, ProjectRecord, Mod, ScanResult } from '../lib/types';
+import type { Overview, Settings, Snapshot, ActivityItem, ProjectRecord, Mod, ScanResult, DirectoryListing } from '../lib/types';
 import { cn } from '../lib/utils';
 
 type Props = {
@@ -416,6 +416,11 @@ export function Overview({
 
 // ─── AddProjectDialog ─────────────────────────────────────────────────────────
 
+/**
+ * Pre-flight approach: before POST /projects we verify the selected path
+ * still exists (GET /fs?path=...). This avoids the ugly 404 toast when a
+ * directory is deleted between selection and submit.
+ */
 function AddProjectDialog({
   settings,
   onAdd,
@@ -425,16 +430,49 @@ function AddProjectDialog({
 }) {
   const [path, setPath] = useState(settings?.dashboard?.projectsDirectory ?? '');
   const [name, setName] = useState('');
+  const [preflighting, setPreflighting] = useState(false);
+  const [preflightError, setPreflightError] = useState<string | null>(null);
+
+  const handleAdd = async () => {
+    if (!path) return;
+    setPreflighting(true);
+    setPreflightError(null);
+    try {
+      // Pre-flight: verify the path still exists
+      await api.get<DirectoryListing>('/fs?path=' + encodeURIComponent(path));
+      // Path is valid — proceed with the POST
+      onAdd(path, name || null);
+    } catch (err) {
+      const apiErr = err as { status?: number; data?: { message?: string } };
+      if (apiErr.status === 404) {
+        setPreflightError('That folder no longer exists. Pick another.');
+      } else {
+        setPreflightError(
+          apiErr.data?.message ?? (err as Error).message ?? 'Validation failed.',
+        );
+      }
+    } finally {
+      setPreflighting(false);
+    }
+  };
 
   return (
     <div>
       <label className="field-label">Folder</label>
       <FileBrowser
         value={path}
-        onChange={setPath}
+        onChange={(p) => {
+          setPath(p);
+          setPreflightError(null);
+        }}
         projectsDirectory={settings?.dashboard?.projectsDirectory}
         height={320}
       />
+      {preflightError && (
+        <p className="field-help" style={{ color: 'var(--error)', marginTop: 4 }}>
+          {preflightError}
+        </p>
+      )}
       <div style={{ marginTop: 'var(--space-3)' }}>
         <label className="field-label" htmlFor="add-project-name">Name (optional)</label>
         <input
@@ -452,10 +490,11 @@ function AddProjectDialog({
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           variant="primary"
-          onClick={() => onAdd(path, name || null)}
-          disabled={!path}
+          onClick={handleAdd}
+          disabled={!path || preflighting}
         >
-          Add
+          {preflighting ? <span className="btn-spinner" /> : null}
+          {preflighting ? 'Checking…' : 'Add'}
         </Button>
       </div>
     </div>

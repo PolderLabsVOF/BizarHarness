@@ -26,6 +26,7 @@ import { schedulesStore } from './schedules-store.mjs';
 import { providersStore, mcpsStore } from './providers-store.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
+import { startBgRetryLoop, stopBgRetryLoop } from './bg-retry.mjs';
 import { startDialogPoller } from './dialog-poller.mjs';
 import {
   checkWebSocketAuth,
@@ -33,6 +34,7 @@ import {
   isAllowedDashboardOriginForRequest,
 } from './auth.mjs';
 import { readSettings } from './routes/_shared.mjs';
+import { buildAllowedRootsFromSettings, resolveSafePath } from './lib/path-safe.mjs';
 
 let processHandlersInstalled = false;
 
@@ -162,28 +164,51 @@ export async function createServer({
   // v3.6.0 — If the operator has configured a `dashboard.projectsDirectory`,
   // also scan it for project roots on startup. Fire-and-forget: a slow
   // scan or a missing directory must not block the server from booting.
+  //
+  // v3.11.0 — Rebuild the allow-list from settings (home +
+  // projectsDirectory + dashboard.allowedRoots), log it once for
+  // debuggability, and re-validate the configured `projectsDirectory`
+  // against the allow-list before scanning. A tampered settings file
+  // cannot widen the boundary.
   try {
     const settings = readSettings();
+    const allowedRoots = buildAllowedRootsFromSettings({
+      settings: settings.data,
+      home: homedir(),
+    });
+    // eslint-disable-next-line no-console
+    console.log(
+      `[bizar-dash] projects-directory scan: rebuilt allow-list (${allowedRoots.length} root(s))`,
+    );
     const configured = settings.data?.dashboard?.projectsDirectory;
     if (typeof configured === 'string' && configured.trim()) {
-      projectsStore.scanDirectory(configured).then(
-        (result) => {
-          if (result.error) {
+      const safeRoot = resolveSafePath(configured, allowedRoots);
+      if (!safeRoot) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[bizar-dash] projects-directory scan: skipping — ` +
+            `"${configured}" is outside the allow-list`,
+        );
+      } else {
+        projectsStore.scanDirectory(safeRoot).then(
+          (result) => {
+            if (result.error) {
+              // eslint-disable-next-line no-console
+              console.warn(`[bizar-dash] projects-directory scan: ${result.error}`);
+            } else if (result.added && result.added.length > 0) {
+              // eslint-disable-next-line no-console
+              console.log(
+                `[bizar-dash] projects-directory scan: added ${result.added.length} ` +
+                  `project(s) (skipped ${result.skipped}, scanned ${result.scanned})`,
+              );
+            }
+          },
+          (err) => {
             // eslint-disable-next-line no-console
-            console.warn(`[bizar-dash] projects-directory scan: ${result.error}`);
-          } else if (result.added && result.added.length > 0) {
-            // eslint-disable-next-line no-console
-            console.log(
-              `[bizar-dash] projects-directory scan: added ${result.added.length} ` +
-                `project(s) (skipped ${result.skipped}, scanned ${result.scanned})`,
-            );
-          }
-        },
-        (err) => {
-          // eslint-disable-next-line no-console
-          console.warn(`[bizar-dash] projects-directory scan failed: ${err?.message || err}`);
-        },
-      );
+            console.warn(`[bizar-dash] projects-directory scan failed: ${err?.message || err}`);
+          },
+        );
+      }
     }
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -531,6 +556,20 @@ export async function createServer({
     console.error('[bizar-dash] failed to start bg-poller:', err.message);
   }
 
+  // v3.11.0 — Periodic recovery for bg instances stuck in
+  // `dispatchPending: true` with `toolCallCount === 0`. Before this
+  // existed, the only unstick path was the user manually hitting
+  // `POST /api/tasks/:id/start`. The retry loop walks every bg
+  // state file every 30s, attempts to re-dispatch via the opencode
+  // serve child, and caps each instance at MAX_DISPATCH_RETRIES
+  // (10) before marking it `failed`.
+  try {
+    startBgRetryLoop();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[bizar-dash] failed to start bg-retry loop:', err.message);
+  }
+
   // v0.5.1 — Poll for dialog descriptors written by the plugin and
   // broadcast them to connected dashboard clients via WS.
   // Idempotent — calling startDialogPoller twice is a no-op.
@@ -544,6 +583,11 @@ export async function createServer({
   function close() {
     try {
       stopBgPoller();
+    } catch {
+      /* ignore */
+    }
+    try {
+      stopBgRetryLoop();
     } catch {
       /* ignore */
     }

@@ -13,8 +13,9 @@
  * No `..` traversal escapes — `path.resolve` normalizes first, then
  * we check the resolved string against the allow-list.
  */
-import { resolve as pathResolve, sep } from 'node:path';
+import { resolve as pathResolve, sep, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 
 /**
  * Normalize an arbitrary list of root paths and dedupe them. Empty /
@@ -53,6 +54,46 @@ function normalizeRoots(roots) {
  */
 export function defaultAllowedRoots({ home, extras } = {}) {
   return normalizeRoots([home || homedir(), ...(extras || [])]);
+}
+
+/**
+ * Build the per-request allow-list straight from a settings object.
+ * Each configured entry is re-validated against home; entries that
+ * fail validation (escape home, empty, non-string, NUL/backslash,
+ * …) are silently dropped. The intent is to survive a tampered
+ * settings.json: the writer (`validateDashboardSettings`) catches
+ * the bad values, but the reader has to be robust against anything
+ * on disk.
+ *
+ * Includes both:
+ *   - `dashboard.allowedRoots[]` (operator-declared extras)
+ *   - `dashboard.projectsDirectory` (single legacy extra)
+ *
+ * @param {object} opts
+ * @param {Record<string, unknown> | null | undefined} opts.settings
+ * @param {string} [opts.home]             — override for `os.homedir()`
+ * @returns {string[]}
+ */
+export function buildAllowedRootsFromSettings({ settings, home } = {}) {
+  const homeResolved = home || homedir();
+  const extras = [];
+  const configured = settings?.dashboard?.allowedRoots;
+  if (Array.isArray(configured)) {
+    for (const candidate of configured) {
+      if (typeof candidate !== 'string' || !candidate.trim()) continue;
+      const safe = resolveSafePath(candidate, [homeResolved]);
+      if (safe) extras.push(safe);
+      // Silently skip entries that fail validation. The Settings UI
+      // (frontend) is responsible for surfacing a warning when a
+      // user-typed root is silently dropped.
+    }
+  }
+  const proj = settings?.dashboard?.projectsDirectory;
+  if (typeof proj === 'string' && proj.trim()) {
+    const safe = resolveSafePath(proj, [homeResolved]);
+    if (safe) extras.push(safe);
+  }
+  return defaultAllowedRoots({ home: homeResolved, extras });
 }
 
 /**
@@ -125,4 +166,63 @@ export function isDotRoot(resolvedPath, home = homedir()) {
   // Only first-level dotdirs under home are blocked.
   const first = tail.split(sep)[0];
   return first.startsWith('.') && first.length > 1;
+}
+
+// --- Background-agent logPath reconstruction ------------------------------
+//
+// The plugin's `bgr_<id>.json` state files include a `logPath` field
+// built as `${worktree}/.opencode/log/${id}.log`. If `worktree` was
+// empty or `/` when the bg instance was spawned, the resulting
+// `logPath` is broken (e.g. `//.opencode/log/...`) and no log file
+// can ever be written. The bg-retry loop calls into this helper to
+// repair the field before re-dispatching.
+//
+// `deriveAbsoluteBgLogPath(worktree, instanceId)` always returns an
+// absolute path. It falls back to the user's home directory when
+// `worktree` is missing or non-absolute. Never throws — a bad input
+// produces a synthetic `~/.cache/bizar/logs/<id>.log` rather than
+// crashing the retry loop.
+
+const FALLBACK_LOG_DIR = pathResolve(homedir(), '.cache', 'bizar', 'logs');
+
+/**
+ * @param {unknown} worktree
+ * @param {string} instanceId
+ * @returns {string}
+ */
+export function deriveAbsoluteBgLogPath(worktree, instanceId) {
+  const safeId = typeof instanceId === 'string' && instanceId.length > 0
+    ? instanceId.replace(/[^a-zA-Z0-9_.-]/g, '_')
+    : `unknown_${randomBytes(4).toString('hex')}`;
+  const base = typeof worktree === 'string' && worktree.length > 0 && isAbsolute(worktree)
+    ? pathResolve(worktree)
+    : FALLBACK_LOG_DIR;
+  return pathResolve(base, '.opencode', 'log', `${safeId}.log`);
+}
+
+/**
+ * Decide whether a `logPath` value stored on a bg instance needs to
+ * be repaired. A path is considered broken when it is:
+ *   - not a string
+ *   - empty
+ *   - not absolute
+ *   - contains a literal double-slash sequence (`//` outside of the
+ *     protocol prefix) — a tell-tale sign of `${empty}/${...}`
+ *     concatenation
+ *
+ * @param {unknown} logPath
+ * @returns {boolean}
+ */
+export function isBrokenBgLogPath(logPath) {
+  if (typeof logPath !== 'string' || logPath.length === 0) return true;
+  if (!isAbsolute(logPath)) return true;
+  // Look for `//` not at the protocol position. Cheap heuristic that
+  // catches the user's `//.opencode/log/...` case without requiring
+  // a full URL parser.
+  const idx = logPath.indexOf('//');
+  if (idx === -1) return false;
+  // Allow a leading `//` only on Windows-style UNC paths like `\\server\share`.
+  // On POSIX, a leading `/` followed by another `/` is always broken.
+  if (idx === 0) return true;
+  return false;
 }

@@ -3773,6 +3773,61 @@ details[open] .skills-category-summary::before {
   white-space: nowrap;
 }
 
+/* Inline new-folder input */
+.file-browser-mkdir {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-browser-mkdir-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 12px;
+  height: 24px;
+  box-shadow: 0 0 0 2px var(--accent-bg);
+  width: 100%;
+  font-family: var(--font-sans);
+}
+
+.file-browser-mkdir-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.file-browser-mkdir-input:disabled {
+  opacity: 0.5;
+}
+
+.file-browser-mkdir-error {
+  font-size: 10px;
+  color: var(--error);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-browser-mkdir-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Truncation banner */
+.file-browser-truncated-banner {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-bottom: 1px solid rgba(251, 191, 36, 0.2);
+  line-height: 1.4;
+}
+
 /* Error */
 .file-browser-error {
   display: flex;
