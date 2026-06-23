@@ -14,10 +14,12 @@
  */
 import { Router } from 'express';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { projectsStore } from '../projects-store.mjs';
 import { tasksStore } from '../tasks-store.mjs';
 import { schedulesStore } from '../schedules-store.mjs';
-import { readActiveProjectId, safeReadJSON, wrap } from './_shared.mjs';
+import { readActiveProjectId, safeReadJSON, wrap, readSettings } from './_shared.mjs';
+import { resolveSafePath } from '../lib/path-safe.mjs';
 
 /**
  * @param {object} deps
@@ -76,6 +78,54 @@ export function createProjectsRouter({ state, broadcast, projectRoot }) {
       broadcast({ type: 'project:change', project: detected });
     }
     res.json(projectsStore.list());
+  }));
+
+  // v3.6.0 — Scan a configured `dashboard.projectsDirectory` for
+  // project roots and add any newly-detected ones to the registry.
+  // Idempotent: already-registered paths are skipped silently.
+  // The configured directory must itself live under the user's home
+  // directory — re-validated here before scanning.
+  router.post('/projects/scan', wrap(async (_req, res) => {
+    const settings = readSettings().data || {};
+    const configured = settings.dashboard?.projectsDirectory;
+    if (typeof configured !== 'string' || !configured.trim()) {
+      res.status(400).json({
+        error: 'bad_request',
+        message: 'dashboard.projectsDirectory is not configured',
+      });
+      return;
+    }
+    const safeRoot = resolveSafePath(configured, [homedir()]);
+    if (!safeRoot) {
+      res.status(403).json({
+        error: 'forbidden',
+        message: 'projectsDirectory is outside the allowed roots',
+      });
+      return;
+    }
+    let result;
+    try {
+      result = await projectsStore.scanDirectory(safeRoot);
+    } catch (err) {
+      res.status(500).json({ error: 'scan_failed', message: err?.message || String(err) });
+      return;
+    }
+    if (result.error) {
+      // scanDirectory returns `{ error }` on a soft failure (bad
+      // root, etc.). Surface as 400 so the client can show it.
+      res.status(400).json({ error: 'scan_failed', message: result.error });
+      return;
+    }
+    // Broadcast each newly added project so connected clients refresh.
+    for (const p of result.added) {
+      state.appendActivity({ kind: 'project.scan', id: p.id, path: p.path });
+      broadcast({ type: 'project:change', kind: 'added', project: p });
+    }
+    res.json({
+      added: result.added,
+      skipped: result.skipped,
+      scanned: result.scanned,
+    });
   }));
 
   // ── /api/projects/active/<entity> ──────────────────────────────────────

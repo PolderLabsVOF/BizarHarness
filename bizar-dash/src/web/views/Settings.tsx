@@ -1188,6 +1188,36 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
             <span>Auto-launch web UI alongside TUI</span>
           </label>
+
+          <div className="field" data-setting-id="dashboard.projectsDirectory" style={{ marginTop: 'var(--space-4)' }}>
+            <label className="field-label" htmlFor="set-projects-directory">Projects directory</label>
+            <input
+              id="set-projects-directory"
+              className="input"
+              type="text"
+              placeholder="/home/user/projects"
+              value={settings.dashboard.projectsDirectory ?? ''}
+              onChange={(e) => patchDashboard({ projectsDirectory: e.target.value })}
+            />
+            <p className="field-help">
+              New projects created via the dashboard will land here, and existing project
+              directories inside this folder are auto-recognized on startup.
+            </p>
+            {settings.dashboard.projectsDirectory && (
+              <>
+                {!/^\/|^[A-Za-z]:/.test(settings.dashboard.projectsDirectory) && (
+                  <p style={{ color: 'var(--warning)', fontSize: 11, marginTop: 4 }}>
+                    Path should be absolute (start with / on Linux/Mac, or a drive letter on Windows).
+                  </p>
+                )}
+                {settings.dashboard.projectsDirectory.includes('..') && (
+                  <p style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>
+                    Path traversal not allowed — this will be rejected server-side.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         </Card>
 
         <Card>

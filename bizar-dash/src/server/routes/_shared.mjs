@@ -117,7 +117,7 @@ export const DEFAULT_SETTINGS = {
   defaultAgent: 'odin',
   defaultModel: '',
   notifications: { onAgentComplete: true, onPlanApproval: true },
-  dashboard: { autoLaunchWeb: true },
+  dashboard: { autoLaunchWeb: true, projectsDirectory: '' },
   service: { enabled: true, autostart: false },
   about: {
     version: DASHBOARD_VERSION,

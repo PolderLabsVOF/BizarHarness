@@ -1,5 +1,26 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.11.0 — Unreleased
+
+### Added
+- **Interactive file browser in the Add Project dialog.** New `GET /api/fs?path=<absolute>` endpoint returns a structured listing (`{ path, parent, entries[] }`) for the file picker. Server-side allow-list enforces `os.homedir()` + the configured `dashboard.projectsDirectory`; first-level dotdirs under home (`.ssh`, `.aws`, …) are blocked as roots and silently filtered from listings. All filesystem errors map to structured JSON (`not_found` / `permission_denied` / `not_a_directory` / `forbidden`).
+- **New setting: `dashboard.projectsDirectory`** (string, default `''`). When set, the server will scan it for project roots on startup and the `POST /api/projects/scan` endpoint will rescan on demand. Detection: a directory counts as a project if it contains any of `.git/`, `.bizar/`, `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `pom.xml`, `build.gradle`, `build.gradle.kts`. One-level scan only — won't recurse into detected projects.
+- **`projectsStore.scanDirectory(rootDir)`** — public method that walks one level deep, stats each marker per child (catching per-file errors), and adds detected projects via the existing `add()` path. Idempotent. Returns `{ added, skipped, scanned, error? }`.
+- **`POST /api/projects/scan`** — validates that the configured `projectsDirectory` lives under home (rejects with `forbidden` otherwise), runs `scanDirectory()`, and broadcasts a `project:change` event with `kind: 'added'` for each newly registered project so connected clients refresh immediately.
+
+### Files
+- `bizar-dash/src/server/routes/fs.mjs` — **new** — `createFsRouter({ state })` factory; `GET /api/fs` handler.
+- `bizar-dash/src/server/lib/path-safe.mjs` — **new** — `resolveSafePath`, `defaultAllowedRoots`, `isDotRoot` helpers shared between `fs.mjs` and the scan route.
+- `bizar-dash/src/server/routes/_shared.mjs` — `DEFAULT_SETTINGS.dashboard` gains `projectsDirectory: ''` (default value is empty so existing installs see no change).
+- `bizar-dash/src/server/routes/projects.mjs` — adds `POST /api/projects/scan`.
+- `bizar-dash/src/server/projects-store.mjs` — adds `PROJECT_ROOT_MARKERS` const + `scanDirectory(rootDir, { maxDepth })` method; adds `node:fs/promises` import.
+- `bizar-dash/src/server/api.mjs` — mounts `createFsRouter` immediately after the projects router.
+- `bizar-dash/src/server/server.mjs` — fires a one-shot `scanDirectory()` on startup when the setting is set; logs added/skipped/scanned counts; never blocks boot.
+
+### Verified
+- `node --check` passes for every modified/new server file.
+- TypeScript (no server-side changes affect frontend types).
+
 ## v3.5.4 — 2026-06-19
 
 ### Changed

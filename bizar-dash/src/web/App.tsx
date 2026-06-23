@@ -552,6 +552,7 @@ function Shell() {
           onProjectChange={onActivateProject}
           onProjectsRefresh={refreshProjects}
           onOpenSearch={() => setSearchOpen(true)}
+          settings={settings}
           notificationsSlot={<Notifications wsSubscribe={subscribeToWs} />}
           showTabs={layout === 'topnav'}
         />

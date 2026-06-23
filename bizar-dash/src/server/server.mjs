@@ -159,6 +159,37 @@ export async function createServer({
     console.error('[bizar-dash] autoDetect failed:', err.message);
   }
 
+  // v3.6.0 — If the operator has configured a `dashboard.projectsDirectory`,
+  // also scan it for project roots on startup. Fire-and-forget: a slow
+  // scan or a missing directory must not block the server from booting.
+  try {
+    const settings = readSettings();
+    const configured = settings.data?.dashboard?.projectsDirectory;
+    if (typeof configured === 'string' && configured.trim()) {
+      projectsStore.scanDirectory(configured).then(
+        (result) => {
+          if (result.error) {
+            // eslint-disable-next-line no-console
+            console.warn(`[bizar-dash] projects-directory scan: ${result.error}`);
+          } else if (result.added && result.added.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log(
+              `[bizar-dash] projects-directory scan: added ${result.added.length} ` +
+                `project(s) (skipped ${result.skipped}, scanned ${result.scanned})`,
+            );
+          }
+        },
+        (err) => {
+          // eslint-disable-next-line no-console
+          console.warn(`[bizar-dash] projects-directory scan failed: ${err?.message || err}`);
+        },
+      );
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[bizar-dash] startup scan setup failed:', err?.message || err);
+  }
+
   const watchPaths = [
     state.paths.opencodeJson,
     state.paths.agentsDir,

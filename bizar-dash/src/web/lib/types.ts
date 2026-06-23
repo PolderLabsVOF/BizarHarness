@@ -96,6 +96,29 @@ export type ProjectsResponse = {
   active: string | null;
 };
 
+/** A single entry returned by GET /api/fs */
+export type DirectoryEntry = {
+  name: string;
+  path: string;
+  isDir: boolean;
+  isSymlink: boolean;
+};
+
+/** Response shape for GET /api/fs */
+export type DirectoryListing = {
+  path: string;
+  parent: string | null;
+  entries: DirectoryEntry[];
+};
+
+/** Response shape for POST /api/projects/scan */
+export type ScanResult = {
+  added: Array<{ id: string; path: string; name: string }>;
+  skipped: number;
+  scanned: number;
+  error?: string;
+};
+
 export type Plan = {
   slug: string;
   title: string;
@@ -166,6 +189,7 @@ export type Settings = {
   };
   dashboard: {
     autoLaunchWeb: boolean;
+    projectsDirectory?: string;
   };
   service: {
     enabled: boolean;

@@ -21,6 +21,7 @@ import { pairStore } from './pair-store.mjs';
 import { createAuthRouter } from './routes/auth.mjs';
 import { createOverviewRouter } from './routes/overview.mjs';
 import { createProjectsRouter } from './routes/projects.mjs';
+import { createFsRouter } from './routes/fs.mjs';
 import { createTasksRouter } from './routes/tasks.mjs';
 import { createArtifactsRouter } from './routes/artifacts.mjs';
 import { createSchedulesRouter } from './routes/schedules.mjs';
@@ -74,6 +75,10 @@ export function createApiRouter({
   // grep-able by anyone familiar with the original file.
   router.use(createOverviewRouter({ state }));
   router.use(createProjectsRouter({ state, broadcast, projectRoot }));
+  // v3.6.0 — Mounted right after projects so the file-browser endpoint
+  // is logically grouped with the project-management surface. Reads
+  // settings via the shared helper; needs no broadcast/projectRoot.
+  router.use(createFsRouter({ state }));
   router.use(createTasksRouter({ state, broadcast, projectRoot }));
   router.use(createArtifactsRouter({ broadcast }));
   router.use(createSchedulesRouter({ broadcast }));

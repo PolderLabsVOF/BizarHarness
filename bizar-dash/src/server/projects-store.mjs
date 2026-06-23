@@ -26,6 +26,7 @@ import {
   statSync,
   mkdirSync,
 } from 'node:fs';
+import { readdir as readdirAsync, stat as statAsync } from 'node:fs/promises';
 import { join, basename, dirname, resolve as pathResolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -34,6 +35,25 @@ const HOME = homedir();
 const OPENCODE_DIR = join(HOME, '.config', 'opencode');
 const PROJECTS_FILE = join(OPENCODE_DIR, 'projects.json');
 const PROJECTS_DIR = join(OPENCODE_DIR, 'projects');
+
+/**
+ * v3.6.0 — Markers that identify a directory as a "project root".
+ *
+ * If a directory contains any of these (or the dotdir form of them),
+ * the scan treats it as a project and registers it. Kept in sync with
+ * the documentation shown in the Add Project dialog.
+ */
+export const PROJECT_ROOT_MARKERS = [
+  '.git',
+  '.bizar',
+  'package.json',
+  'Cargo.toml',
+  'pyproject.toml',
+  'go.mod',
+  'pom.xml',
+  'build.gradle',
+  'build.gradle.kts',
+];
 
 function safeReadJSON(file, fallback = null) {
   try {
@@ -237,6 +257,91 @@ export const projectsStore = {
     ensureProjectsDir();
     mkdirSync(projectDir(id), { recursive: true });
     return entry;
+  },
+
+  /**
+   * v3.6.0 — Walk a directory and add any subdirectory that looks
+   * like a project root as a registered project. Idempotent: paths
+   * already in the registry are skipped silently.
+   *
+   * Detection: a directory is a "project root" if it contains any
+   * of `PROJECT_ROOT_MARKERS` (see the exported list at the top of
+   * this file). We do NOT recurse into a detected project — the
+   * scan is intentionally one level deep so a checked-out `node_modules`
+   * inside a project doesn't get re-registered.
+   *
+   * @param {string} rootDir
+   * @param {object} [opts]
+   * @param {number} [opts.maxDepth=1]   — currently unused; reserved for future two-level scans.
+   * @returns {Promise<{ added: Array<{id: string, path: string, name: string}>, skipped: number, scanned: number, error?: string }>}
+   */
+  async scanDirectory(rootDir, { maxDepth = 1 } = {}) {
+    const result = { added: [], skipped: 0, scanned: 0 };
+    if (!rootDir || typeof rootDir !== 'string') {
+      result.error = 'rootDir must be a non-empty string';
+      return result;
+    }
+    void maxDepth; // Reserved for future two-level scans.
+    const absRoot = pathResolve(rootDir);
+
+    try {
+      // Confirm the root is a directory before reading its children.
+      const rootStat = await statAsync(absRoot);
+      if (!rootStat || !rootStat.isDirectory()) {
+        result.error = 'rootDir is not a directory';
+        return result;
+      }
+
+      const children = await readdirAsync(absRoot, { withFileTypes: true });
+      for (const child of children) {
+        // Only descend into directories. Skip symlinks so we don't
+        // accidentally pull in something outside the configured root.
+        if (!child.isDirectory() || child.isSymbolicLink()) continue;
+        result.scanned += 1;
+        const childPath = pathResolve(absRoot, child.name);
+
+        // Check for any project-root marker. Stat each one in a
+        // try/catch so a single permission error doesn't sink the
+        // entire scan.
+        let isProject = false;
+        for (const marker of PROJECT_ROOT_MARKERS) {
+          try {
+            const s = await statAsync(pathResolve(childPath, marker));
+            if (s && (s.isDirectory() || s.isFile())) {
+              isProject = true;
+              break;
+            }
+          } catch {
+            // ENOENT / EACCES / EPERM on the marker — keep looking.
+          }
+        }
+        if (!isProject) continue;
+
+        try {
+          // Snapshot the registry *before* `add()` so we can tell
+          // whether the entry already existed. The existing add()
+          // doesn't expose this distinction (it always bumps
+          // lastAccessed), so we have to peek.
+          const before = loadRegistry();
+          const existed = before.projects.some(
+            (p) => p.path === childPath || p.id === basename(childPath),
+          );
+          const entry = this.add(childPath);
+          if (existed) {
+            result.skipped += 1;
+          } else {
+            result.added.push({ id: entry.id, path: entry.path, name: entry.name });
+          }
+        } catch {
+          // `add()` throws only on truly invalid input. Don't fail
+          // the whole scan — count and continue.
+          result.skipped += 1;
+        }
+      }
+    } catch (err) {
+      result.error = (err && err.message) || String(err);
+    }
+    return result;
   },
 
   /** Per-project file helpers. */

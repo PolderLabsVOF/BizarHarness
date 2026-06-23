@@ -24,8 +24,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { ProjectRecord, WsStatus, WsMessage } from '../lib/types';
+import type { ProjectRecord, WsStatus, WsMessage, Settings } from '../lib/types';
 import { api } from '../lib/api';
+import { useModal } from './Modal';
+import { FileBrowser } from './FileBrowser';
+import { Button } from './Button';
 
 export type TabDef = {
   id: string;
@@ -59,6 +62,7 @@ export type TopbarProps = {
   onProjectChange: (id: string) => void;
   onProjectsRefresh: () => void;
   onOpenSearch: () => void;
+  settings?: Settings | null;
   rightSlot?: ReactNode;
   /**
    * v3.3.0 — Optional slot for the notifications bell. The host
@@ -83,6 +87,7 @@ export function Topbar({
   onProjectChange,
   onProjectsRefresh,
   onOpenSearch,
+  settings,
   rightSlot,
   notificationsSlot,
   showTabs = true,
@@ -100,6 +105,7 @@ export function Topbar({
           projects={projects}
           onChange={onProjectChange}
           onRefresh={onProjectsRefresh}
+          settings={settings ?? null}
         />
         <button
           type="button"
@@ -153,13 +159,16 @@ function ProjectSelector({
   projects,
   onChange,
   onRefresh,
+  settings,
 }: {
   activeProject: ProjectRecord | null;
   projects: ProjectRecord[];
   onChange: (id: string) => void;
   onRefresh: () => void;
+  settings: Settings | null;
 }) {
   const [open, setOpen] = useState(false);
+  const modal = useModal();
 
   useEffect(() => {
     if (!open) return;
@@ -168,15 +177,30 @@ function ProjectSelector({
     return () => document.removeEventListener('click', onClick);
   }, [open]);
 
-  const onAdd = async () => {
-    const path = (prompt('Project path:') || '').trim();
-    if (!path) return;
-    try {
-      await api.post('/projects', { path });
-      onRefresh();
-    } catch (err) {
-      alert(`Add failed: ${(err as Error).message}`);
-    }
+  const onAdd = () => {
+    modal.open({
+      title: 'Add project',
+      children: (
+        <TopbarAddProjectDialog
+          settings={settings}
+          onAdd={async (path: string, name: string | null) => {
+            try {
+              await api.post('/projects', { path, name });
+              onRefresh();
+              setOpen(false);
+              modal.close();
+            } catch (err) {
+              alert(`Add failed: ${(err as Error).message}`);
+            }
+          }}
+        />
+      ),
+      footer: (
+        <div className="modal-footer-actions">
+          <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
+        </div>
+      ),
+    });
   };
 
   return (
@@ -230,6 +254,51 @@ function ProjectSelector({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── TopbarAddProjectDialog ───────────────────────────────────────────────────
+
+function TopbarAddProjectDialog({
+  settings,
+  onAdd,
+}: {
+  settings: Settings | null;
+  onAdd: (path: string, name: string | null) => void;
+}) {
+  const [path, setPath] = useState(settings?.dashboard?.projectsDirectory ?? '');
+  const [name, setName] = useState('');
+
+  return (
+    <div>
+      <label className="field-label">Folder</label>
+      <FileBrowser
+        value={path}
+        onChange={setPath}
+        projectsDirectory={settings?.dashboard?.projectsDirectory}
+        height={320}
+      />
+      <div style={{ marginTop: 'var(--space-3)' }}>
+        <label className="field-label" htmlFor="topbar-add-project-name">Name (optional)</label>
+        <input
+          id="topbar-add-project-name"
+          className="input"
+          type="text"
+          placeholder="My App"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div style={{ marginTop: 'var(--space-3)', display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          variant="primary"
+          onClick={() => onAdd(path, name || null)}
+          disabled={!path}
+        >
+          Add
+        </Button>
+      </div>
     </div>
   );
 }

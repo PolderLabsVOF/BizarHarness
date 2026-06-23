@@ -23,6 +23,7 @@ import {
   Activity,
   Puzzle,
   Clock,
+  FolderSearch,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -30,9 +31,10 @@ import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
+import { FileBrowser } from '../components/FileBrowser';
 import { api } from '../lib/api';
 import { formatRelative, formatTime } from '../lib/utils';
-import type { Overview, Settings, Snapshot, ActivityItem, ProjectRecord, Mod } from '../lib/types';
+import type { Overview, Settings, Snapshot, ActivityItem, ProjectRecord, Mod, ScanResult } from '../lib/types';
 import { cn } from '../lib/utils';
 
 type Props = {
@@ -118,53 +120,26 @@ export function Overview({
   };
 
   const onAddProject = () => {
-    let pathEl: HTMLInputElement | null = null;
-    let nameEl: HTMLInputElement | null = null;
     modal.open({
       title: 'Add project',
       children: (
-        <div>
-          <label className="field-label">Path (absolute)</label>
-          <input
-            ref={(el) => (pathEl = el)}
-            className="input"
-            type="text"
-            placeholder="/home/user/projects/myapp"
-            autoFocus
-          />
-          <label className="field-label" style={{ marginTop: 12 }}>Name (optional)</label>
-          <input
-            ref={(el) => (nameEl = el)}
-            className="input"
-            type="text"
-            placeholder="My App"
-          />
-        </div>
+        <AddProjectDialog
+          settings={settings}
+          onAdd={async (path: string, name: string | null) => {
+            try {
+              const r = await api.post<ProjectRecord>('/projects', { path, name });
+              setProjects((cur) => [...cur.filter((p) => p.id !== r.id), r]);
+              toast.success('Project added.');
+              modal.close();
+            } catch (err) {
+              toast.error(`Add failed: ${(err as Error).message}`);
+            }
+          }}
+        />
       ),
       footer: (
         <div className="modal-footer-actions">
           <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
-          <Button
-            variant="primary"
-            onClick={async () => {
-              const path = (pathEl?.value || '').trim();
-              const name = (nameEl?.value || '').trim() || null;
-              if (!path) {
-                toast.warning('Path is required.');
-                return;
-              }
-              try {
-                const r = await api.post<ProjectRecord>('/projects', { path, name });
-                setProjects((cur) => [...cur.filter((p) => p.id !== r.id), r]);
-                toast.success('Project added.');
-                modal.close();
-              } catch (err) {
-                toast.error(`Add failed: ${(err as Error).message}`);
-              }
-            }}
-          >
-            Add
-          </Button>
         </div>
       ),
     });
@@ -326,6 +301,31 @@ export function Overview({
           <Button variant="ghost" size="sm" onClick={onUseCurrentDir} title="Use the server's working directory">
             <Plus size={12} /> Auto-detect
           </Button>
+          {settings?.dashboard?.projectsDirectory && (
+            <Button
+              variant="ghost"
+              size="sm"
+              title={`Scan ${settings.dashboard.projectsDirectory} for projects`}
+              onClick={async () => {
+                try {
+                  const r = await api.post<ScanResult>('/projects/scan');
+                  if (r.error) {
+                    toast.error(r.error);
+                  } else {
+                    toast.success(`Added ${r.added.length}, skipped ${r.skipped}.`);
+                  }
+                  await refreshSnapshot();
+                  const data = await api.get<{ projects: ProjectRecord[]; active: string | null }>('/projects');
+                  setProjects(data.projects || []);
+                  setActiveId(data.active || null);
+                } catch (err) {
+                  toast.error(`Scan failed: ${(err as Error).message}`);
+                }
+              }}
+            >
+              <FolderSearch size={12} /> Scan
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={onRefresh} title="Refresh">
             <RefreshCw size={12} />
           </Button>
@@ -409,6 +409,54 @@ export function Overview({
             </dd>
           </dl>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─── AddProjectDialog ─────────────────────────────────────────────────────────
+
+function AddProjectDialog({
+  settings,
+  onAdd,
+}: {
+  settings: Settings;
+  onAdd: (path: string, name: string | null) => void;
+}) {
+  const [path, setPath] = useState(settings?.dashboard?.projectsDirectory ?? '');
+  const [name, setName] = useState('');
+
+  return (
+    <div>
+      <label className="field-label">Folder</label>
+      <FileBrowser
+        value={path}
+        onChange={setPath}
+        projectsDirectory={settings?.dashboard?.projectsDirectory}
+        height={320}
+      />
+      <div style={{ marginTop: 'var(--space-3)' }}>
+        <label className="field-label" htmlFor="add-project-name">Name (optional)</label>
+        <input
+          id="add-project-name"
+          className="input"
+          type="text"
+          placeholder="My App"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <p className="field-help" style={{ marginTop: 4 }}>
+          Display name for this project. Defaults to the folder name.
+        </p>
+      </div>
+      <div style={{ marginTop: 'var(--space-3)', display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          variant="primary"
+          onClick={() => onAdd(path, name || null)}
+          disabled={!path}
+        >
+          Add
+        </Button>
       </div>
     </div>
   );
