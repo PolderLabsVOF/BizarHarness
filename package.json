@@ -33,7 +33,7 @@
     "ora": "^8.1.0"
   },
   "peerDependencies": {
-    "@polderlabs/bizar-dash": ">=3.0.0"
+    "@polderlabs/bizar-dash": "^3.10.0"
   },
   "peerDependenciesMeta": {
     "@polderlabs/bizar-dash": {
