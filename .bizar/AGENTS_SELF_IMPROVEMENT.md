@@ -23,7 +23,18 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 17. **Health probes must not depend on auth** — "is X alive" checks must use TCP-connect (`net.createConnection`, 1.5s timeout), not an authenticated HTTP GET. Auth-gated endpoints can return 401 even when the service is healthy. TCP handshake is auth-free, transport-only, and produces zero false negatives for liveness.
 
+18. **npm publish order matters for interdependent packages** — when package B imports package A at runtime, publish A first, wait for registry propagation, then publish B. Always run dry-runs and registry verification — they catch packaging errors and confirm the publish landed.
+
 ## Log
+
+### 2026-06-23: Published v3.11.0 to npm (dash + CLI)
+- **Task**: Publish `@polderlabs/bizar-dash@3.11.0` then `@polderlabs/bizar@3.11.0` to npm
+- **Lesson**: Dry-run + verify cycle caught nothing unexpected, but the 5-second safety check is well worth it for public publishes
+- **Pattern**: npm publish checklist: whoami → git status/tags → dry-run both → publish dash → npm view dash → publish CLI → npm view CLI → verify peerDeps + exports
+- **Files**: `bizar-dash/package.json`, `package.json`
+- **Agent**: heimdall
+
+### 2026-06-22: Full v3.7.0 audit pass — 116 files, +3154/−1334
 
 ### 2026-06-22: Full v3.7.0 audit pass — 116 files, +3154/−1334
 - **Task**: Extensive full pass on every component of the Bizar system (plugin, CLI, dashboard server, desktop web, mobile, agent configs, install scripts, templates). Fix every issue, push, release, publish.

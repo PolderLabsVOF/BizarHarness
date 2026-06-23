@@ -187,6 +187,8 @@ End your final summary with: `Siblings: <list>. Conflicts: <list or "none">. Git
 ## Thinking style
 Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
 
+When uncertain or stuck, follow `config/rules/uncertainty.md` — stop and research, do not keep retrying variations.
+
 ---
 
 ## Always-On Behavior Baseline

@@ -147,6 +147,8 @@ Be professional and concise. Do not write long essays for every action.
 ## Thinking style
 Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
 
+When uncertain or stuck, follow `config/rules/uncertainty.md` — stop and research, do not keep retrying variations.
+
 ## PR Review Mode
 
 When dispatched for a `/pr-review`:

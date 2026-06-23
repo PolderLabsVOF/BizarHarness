@@ -53,6 +53,8 @@ If `semble` is not on `$PATH`, use `uvx --from "semble[mcp]" semble` in its plac
 ## Thinking style
 Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
 
+When uncertain or stuck, follow `config/rules/uncertainty.md` — stop and research, do not keep retrying variations.
+
 ## Always-On Behavior Baseline
 
 **Follow the global baseline in `config/AGENTS.md` → "General Agent Baseline — Always-On Behavior".** It covers identity, refusal, tone, formatting, lists, user wellbeing, evenhandedness, mistakes, knowledge cutoff and research-first, MCP servers and skills, mandatory skill-read, file creation, file handling, search, copyright, harmful content, citations, images, memory privacy, execution, clarification, and communication.

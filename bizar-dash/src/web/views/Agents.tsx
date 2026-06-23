@@ -45,8 +45,8 @@ const MODELS = [
   'anthropic/claude-3-5-haiku',
   'openai/gpt-4o',
   'openai/gpt-4o-mini',
-  'minimax/MiniMax-M3',
-  'minimax/MiniMax-M2.7',
+  'openrouter/minimax/minimax-m3',
+  'openrouter/minimax/minimax-m2.7',
 ];
 
 const CATEGORIES = [

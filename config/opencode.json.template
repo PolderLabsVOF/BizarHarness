@@ -342,10 +342,6 @@
         "minimax/minimax-m2.7": {
           "interleaved": { "field": "reasoning_details" },
           "reasoning": true
-        },
-        "minimax/owl-alpha": {
-          "interleaved": { "field": "reasoning_details" },
-          "reasoning": true
         }
       }
     }

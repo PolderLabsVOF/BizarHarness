@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.11.1 — Unreleased — Stop and research rule
+
+### Changed — Agent behavior under uncertainty
+
+All 13 agent prompts now reference a new rule, `config/rules/uncertainty.md`, that codifies the **"stop and research"** behavior:
+
+- When an agent is uncertain or stuck (e.g. about to retry a failed tool call with a slight variation, or guessing at a file path / API signature / config key), it must STOP.
+- Stopping means using the available research tools before retrying: `semble search` for codebase patterns, `webfetch` for documentation, `read` for related files, `hindsight_recall` for prior project context, `skill` for domain guidance, or asking the user.
+- After research, the agent acts with confidence. If the new attempt also fails, it updates its model — it does not loop back to the variation-spawning behavior.
+
+The 5/8/12 runtime loop guard in the plugin remains a safety net but is now explicitly described as a last resort. Agents should self-correct **before** the guard fires, not after.
+
+### Files
+- `config/rules/uncertainty.md` (NEW, 70 lines) — the rule.
+- `config/agents/{odin,vor,frigg,quick,mimir,heimdall,hermod,thor,baldr,tyr,vidarr,forseti,semble-search}.md` — `## Thinking style` sections now point to the new rule.
+
 ## v3.11.0 — 2026-06-23 — Dashboard v3.11.0 sync
 
 ### Highlights

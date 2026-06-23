@@ -150,13 +150,39 @@ function ensureGitignore(graphDir) {
 /**
  * Spawn a graphify command with GRAPHIFY_OUT set to GRAPH_DIR.
  * Streams stdout/stderr to the terminal. Returns the exit code.
+ *
+ * Resolution order:
+ *   1. If the `graphify` binary is on PATH (the uv-tool shim), invoke it
+ *      directly. This is what `checkGraphify` already verified — we don't
+ *      need to know about its venv.
+ *   2. Otherwise fall back to `python -m graphify` for pip/pipx installs.
  */
 function runGraphify(python, subArgs, extraEnv = {}) {
-  const env = { ...process.env, [GRAPHIFY_OUT_ENV]: GRAPH_DIR };
+  const env = { ...process.env, [GRAPHIFY_OUT_ENV]: GRAPH_DIR, ...extraEnv };
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+  let bin = null;
+  try {
+    const r = spawnSync(whichCmd, ['graphify'], { encoding: 'utf8', timeout: 5000 });
+    if (r.status === 0 && (r.stdout || '').trim().length > 0) {
+      bin = 'graphify';
+    }
+  } catch {
+    // ignore — fall through to python -m
+  }
+
+  if (bin) {
+    const result = spawnSync(bin, subArgs, {
+      stdio: 'inherit',
+      env,
+      timeout: 0, // no timeout — user may run long builds
+    });
+    return result.status ?? 1;
+  }
+
   const result = spawnSync(python, ['-m', 'graphify', ...subArgs], {
     stdio: 'inherit',
     env,
-    timeout: 0, // no timeout — user may run long builds
+    timeout: 0,
   });
   return result.status ?? 1;
 }

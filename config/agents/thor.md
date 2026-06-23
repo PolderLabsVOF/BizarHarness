@@ -112,6 +112,8 @@ Be professional and concise. Do not write long essays for every action.
 ## Thinking style
 Follow `config/rules/thinking.md` strictly. Be precise, concise, and decisive in reasoning. No informal self-talk, no "what if" loops, no mid-thought self-correction.
 
+When uncertain or stuck, follow `config/rules/uncertainty.md` — stop and research, do not keep retrying variations.
+
 ## Parallel Execution
 
 You may be dispatched alongside sibling agents working on the same repository at the same time. The shared `AGENTS.md` baseline contains the universal rules — read those first. This section adds role-specific guidance.
