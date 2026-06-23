@@ -1,0 +1,731 @@
+openapi: 3.1.0
+info:
+  title: BizarHarness Dashboard API
+  description: |
+    HTTP + SSE protocol between the Bizar opencode plugin and the Bizar
+    dashboard. The plugin publishes events (opencode session lifecycle,
+    background agent status, plan updates, tool executions). The dashboard
+    exposes REST endpoints for the React UI + TUI to query and mutate
+    state, and a single SSE endpoint for live event streaming.
+
+    **Transport:** REST (JSON) for request/response. SSE (text/event-stream)
+    for live events. No WebSocket.
+
+    **Auth:** HTTP Basic. The dashboard generates a 32-byte random password
+    on first start and persists it to `~/.cache/bizarharness/dash-auth.json`
+    (mode 0600). The plugin reads this file (or accepts BIZAR_DASHBOARD_PASSWORD
+    env var override) and sends `Authorization: Basic base64("opencode:<password>")`.
+
+    **Versioning:** This is v2. Existing v1 endpoints live under `/api/*`
+    (artifacts, plans, chat, sessions, agents, mcp-proxy). New v2 endpoints
+    live under `/api/v2/*` with this spec as source of truth.
+  version: 0.7.0-alpha.1
+  contact:
+    name: BizarHarness
+    url: https://github.com/DrB0rk/BizarHarness
+  license:
+    name: MIT
+    url: https://github.com/DrB0rk/BizarHarness/blob/master/LICENSE
+
+servers:
+  - url: http://127.0.0.1:4098
+    description: Default localhost (configurable via BIZAR_DASHBOARD_URL)
+
+security:
+  - basicAuth: []
+
+tags:
+  - name: health
+    description: Liveness + readiness
+  - name: events
+    description: SSE event stream (plugin publishes, dashboard broadcasts)
+  - name: sessions
+    description: Background agent sessions
+  - name: projects
+    description: Project discovery + metadata
+  - name: plans
+    description: Bizar Plan canvases (CRUD)
+  - name: doc
+    description: This OpenAPI spec (YAML)
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: health.check
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              example:
+                status: ok
+                uptime: 12345
+                version: 0.7.0-alpha.1
+
+  /doc:
+    get:
+      tags: [doc]
+      operationId: doc.get
+      summary: This OpenAPI spec (YAML)
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 spec
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /event:
+    get:
+      tags: [events]
+      operationId: events.subscribe
+      summary: Subscribe to live dashboard events (SSE)
+      description: |
+        Long-lived Server-Sent Events connection. The first event is
+        always `dashboard.connected` with empty properties, sent
+        immediately on connect. Subsequent events are broadcast to all
+        subscribers. Each event uses the opencode SSE format:
+
+        ```
+        event: <type>
+        data: {"type": "<type>", "properties": { ... }}
+
+        ```
+
+        The connection auto-reconnects on disconnect (browser-side
+        EventSource handles this). Use the `since` query parameter to
+        replay events from the in-memory buffer (last 100 events).
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Sequence number to replay from (last 100 events buffered)
+      responses:
+        "200":
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                dashboard.connected:
+                  value: |
+                    event: dashboard.connected
+                    data: {"type":"dashboard.connected","properties":{}}
+
+                    event: session.created
+                    data: {"type":"session.created","properties":{"sessionId":"ses_abc123","agent":"mimir"}}
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /event:
+    post:
+      tags: [events]
+      operationId: events.publish
+      summary: Publish an event to all subscribers (plugin → dashboard)
+      description: |
+        Internal endpoint used by the plugin to publish events. Requires
+        HTTP basic auth. The event is broadcast to all SSE subscribers
+        and appended to the in-memory buffer (last 100).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Event"
+      responses:
+        "204":
+          description: Event published
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /sessions:
+    get:
+      tags: [sessions]
+      operationId: sessions.list
+      summary: List background agent sessions
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/SessionStatus"
+        - name: agent
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [sessions]
+      operationId: sessions.create
+      summary: Create a background agent session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreate"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [sessions]
+      operationId: sessions.get
+      summary: Get session details
+      responses:
+        "200":
+          description: Session found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [sessions]
+      operationId: sessions.abort
+      summary: Abort a running session
+      responses:
+        "204":
+          description: Aborted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects:
+    get:
+      tags: [projects]
+      operationId: projects.list
+      summary: List discovered projects
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /plans:
+    get:
+      tags: [plans]
+      operationId: plans.list
+      summary: List plan canvases
+      responses:
+        "200":
+          description: List of plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: |
+        HTTP Basic auth. Username is `opencode`. Password is the value
+        of `OPENCODE_DASHBOARD_PASSWORD` (generated by the dashboard on
+        first start and persisted to `~/.cache/bizarharness/dash-auth.json`).
+
+  parameters:
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Session identifier (e.g., `ses_abc123` or `bgr_<ulid>`)
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid auth
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            name: DashboardError
+            data:
+              statusCode: 401
+              message: Invalid or missing auth header
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Health:
+      type: object
+      required: [status, uptime, version]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        uptime:
+          type: integer
+          description: Seconds since dashboard start
+        version:
+          type: string
+          example: 0.7.0-alpha.1
+
+    SessionStatus:
+      type: string
+      enum: [pending, running, done, failed, killed, timed_out]
+      description: |
+        - `pending` — created in plugin, awaiting first opencode response
+        - `running` — opencode is processing
+        - `done` — completed successfully (EventSessionIdle)
+        - `failed` — error (EventSessionError or threshold-12 loop guard)
+        - `killed` — aborted via bizar_kill
+        - `timed_out` — exceeded timeoutMs without terminal event
+
+    Session:
+      type: object
+      required: [id, agent, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          description: Plugin-generated instance ID (`bgr_<ulid>`)
+        opencodeSessionId:
+          type: string
+          description: Underlying opencode session ID (`ses_<ulid>`), null if pending
+        agent:
+          type: string
+          description: Agent name (e.g., `mimir`, `thor`, `tyr`)
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        parentId:
+          type: string
+          nullable: true
+          description: ID of the spawning session, if any
+        model:
+          type: string
+          nullable: true
+          description: Model override in `providerID/modelID` format
+        error:
+          type: string
+          nullable: true
+          description: Error message if status is `failed` or `timed_out`
+        toolCallCount:
+          type: integer
+          description: Number of tool calls made in this session
+        resultPreview:
+          type: string
+          nullable: true
+          description: Last 200 chars of the assistant result (truncated)
+        worktree:
+          type: string
+          description: Absolute path to the working directory
+        createdAt:
+          type: integer
+          format: int64
+          description: Epoch ms when the session was created
+        updatedAt:
+          type: integer
+          format: int64
+          description: Epoch ms when the session last changed status
+
+    SessionCreate:
+      type: object
+      required: [agent, prompt]
+      properties:
+        agent:
+          type: string
+          description: Agent name (e.g., `mimir`, `thor`)
+        prompt:
+          type: string
+          minLength: 1
+          description: User prompt (will be wrapped in `parts: [{type:"text",text:prompt}]`)
+        model:
+          type: string
+          nullable: true
+          description: |
+            Model override in `providerID/modelID` format. If omitted, the
+            agent's default model is used.
+        parentId:
+          type: string
+          nullable: true
+          description: ID of the spawning session
+        timeoutMs:
+          type: integer
+          minimum: 1000
+          maximum: 1800000
+          default: 600000
+          description: Timeout in milliseconds (1s to 30min)
+
+    Project:
+      type: object
+      required: [id, name, path]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        path:
+          type: string
+          description: Absolute path to project root
+        bankId:
+          type: string
+          nullable: true
+          description: Hindsight bank ID, if any
+
+    Plan:
+      type: object
+      required: [slug, title, status]
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, approved, rejected, in-progress, done]
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    Event:
+      oneOf:
+        - $ref: "#/components/schemas/DashboardConnectedEvent"
+        - $ref: "#/components/schemas/SessionCreatedEvent"
+        - $ref: "#/components/schemas/SessionUpdatedEvent"
+        - $ref: "#/components/schemas/SessionIdleEvent"
+        - $ref: "#/components/schemas/SessionErrorEvent"
+        - $ref: "#/components/schemas/MessagePartUpdatedEvent"
+        - $ref: "#/components/schemas/ToolExecutedEvent"
+        - $ref: "#/components/schemas/PlanUpdatedEvent"
+      discriminator:
+        propertyName: type
+        mapping:
+          dashboard.connected: "#/components/schemas/DashboardConnectedEvent"
+          session.created: "#/components/schemas/SessionCreatedEvent"
+          session.updated: "#/components/schemas/SessionUpdatedEvent"
+          session.idle: "#/components/schemas/SessionIdleEvent"
+          session.error: "#/components/schemas/SessionErrorEvent"
+          message.part.updated: "#/components/schemas/MessagePartUpdatedEvent"
+          tool.executed: "#/components/schemas/ToolExecutedEvent"
+          plan.updated: "#/components/schemas/PlanUpdatedEvent"
+
+    DashboardConnectedEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [dashboard.connected]
+        properties:
+          type: object
+          additionalProperties: false
+
+    SessionCreatedEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [session.created]
+        properties:
+          type: object
+          required: [sessionId, agent]
+          properties:
+            sessionId:
+              type: string
+            agent:
+              type: string
+
+    SessionUpdatedEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [session.updated]
+        properties:
+          type: object
+          required: [sessionId, status]
+          properties:
+            sessionId:
+              type: string
+            status:
+              $ref: "#/components/schemas/SessionStatus"
+
+    SessionIdleEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [session.idle]
+        properties:
+          type: object
+          required: [sessionId]
+          properties:
+            sessionId:
+              type: string
+
+    SessionErrorEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [session.error]
+        properties:
+          type: object
+          required: [sessionId, error]
+          properties:
+            sessionId:
+              type: string
+            error:
+              type: string
+
+    MessagePartUpdatedEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [message.part.updated]
+        properties:
+          type: object
+          required: [sessionId, messageId, part]
+          properties:
+            sessionId:
+              type: string
+            messageId:
+              type: string
+            part:
+              $ref: "#/components/schemas/Part"
+
+    ToolExecutedEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [tool.executed]
+        properties:
+          type: object
+          required: [sessionId, toolName]
+          properties:
+            sessionId:
+              type: string
+            toolName:
+              type: string
+            durationMs:
+              type: integer
+
+    PlanUpdatedEvent:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          enum: [plan.updated]
+        properties:
+          type: object
+          required: [slug, status]
+          properties:
+            slug:
+              type: string
+            status:
+              type: string
+              enum: [draft, approved, rejected, in-progress, done]
+
+    Part:
+      oneOf:
+        - $ref: "#/components/schemas/TextPart"
+        - $ref: "#/components/schemas/ToolCallPart"
+        - $ref: "#/components/schemas/ToolResultPart"
+        - $ref: "#/components/schemas/ReasoningPart"
+      discriminator:
+        propertyName: type
+
+    TextPart:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          enum: [text]
+        text:
+          type: string
+
+    ToolCallPart:
+      type: object
+      required: [type, toolName, args]
+      properties:
+        type:
+          type: string
+          enum: [tool_call]
+        toolName:
+          type: string
+        args:
+          type: object
+          additionalProperties: true
+
+    ToolResultPart:
+      type: object
+      required: [type, toolName, result]
+      properties:
+        type:
+          type: string
+          enum: [tool_result]
+        toolName:
+          type: string
+        result:
+          type: object
+          additionalProperties: true
+        isError:
+          type: boolean
+
+    ReasoningPart:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          enum: [reasoning]
+        text:
+          type: string
+
+    Error:
+      oneOf:
+        - $ref: "#/components/schemas/PluginError"
+        - $ref: "#/components/schemas/DashboardError"
+        - $ref: "#/components/schemas/ConnectionError"
+        - $ref: "#/components/schemas/APIError"
+      discriminator:
+        propertyName: name
+
+    PluginError:
+      type: object
+      required: [name, data]
+      properties:
+        name:
+          type: string
+          enum: [PluginError]
+        data:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    DashboardError:
+      type: object
+      required: [name, data]
+      properties:
+        name:
+          type: string
+          enum: [DashboardError]
+        data:
+          type: object
+          required: [statusCode, message]
+          properties:
+            statusCode:
+              type: integer
+            message:
+              type: string
+
+    ConnectionError:
+      type: object
+      required: [name, data]
+      properties:
+        name:
+          type: string
+          enum: [ConnectionError]
+        data:
+          type: object
+          required: [message]
+          properties:
+            message:
+              type: string
+            cause:
+              nullable: true
+
+    APIError:
+      type: object
+      required: [name, data]
+      properties:
+        name:
+          type: string
+          enum: [APIError]
+        data:
+          type: object
+          required: [statusCode, isRetryable, message]
+          properties:
+            statusCode:
+              type: integer
+            isRetryable:
+              type: boolean
+            message:
+              type: string
+            responseBody:
+              type: string
+              nullable: true

@@ -1,5 +1,77 @@
 # Changelog
 
+## v0.7.0-alpha.1 — Plugin ↔ Dashboard v2 Protocol
+
+> **Breaking / additive:** New package `@bizarharness/sdk` (additive). New dashboard `/api/v2/*` namespace (additive; existing `/api/*` endpoints unchanged). New plugin `dashboard-client.ts` module (additive; existing tools unchanged). Opencode v2 routes only (v1 routes are broken upstream — see `.bizar/opencode-sse-investigation.md`).
+
+### Highlights
+
+- **New package `@bizarharness/sdk`** (`packages/sdk/`) — TypeScript SDK with auto-generated-style types, resource-grouped client (`createBizarClient()`), discriminated `BizarError` union, async-iterable SSE subscriber. Follows the bun-module layout (ESM, exports map, Vitest). Source-of-truth for the wire format is `.bizar/research/OPENAPI_SPEC.yaml`.
+- **Dashboard `/api/v2/*` namespace** — New routes for sessions (CRUD), events (SSE subscribe + publish), health, and the OpenAPI spec itself at `/doc`. HTTP basic auth via a 32-byte password generated on first start and persisted to `~/.cache/bizarharness/dash-auth.json` (mode 0600). Existing `/api/*` endpoints untouched.
+- **Plugin `dashboard-client.ts`** — New module in `plugins/bizar/src/` that wraps the SDK and forwards events from the plugin to the dashboard. Reads dashboard URL + password from `BIZAR_DASHBOARD_URL` / `BIZAR_DASHBOARD_PASSWORD` env vars or the auth file. Graceful degradation: drops events if the dashboard is unreachable; never throws into the plugin.
+
+### Architecture
+
+- **Transport:** HTTP + SSE hybrid (REST for CRUD, SSE for events). Matches the opencode SDK pattern; no WebSocket.
+- **Auth:** HTTP basic with `opencode:<password>`. Same password every dashboard restart.
+- **Source of truth:** `.bizar/research/OPENAPI_SPEC.yaml` (OpenAPI 3.1). SDK types are hand-written to match exactly; in v0.7.1 they'll be generated via `@hey-api/openapi-ts`.
+
+### Files
+
+- `packages/sdk/package.json` (NEW) — `@bizarharness/sdk` v0.7.0-alpha.1
+- `packages/sdk/tsconfig.json` (NEW) — strict TypeScript, ES2022, declaration emit
+- `packages/sdk/vitest.config.ts` (NEW)
+- `packages/sdk/.gitignore` (NEW)
+- `packages/sdk/LICENSE` (NEW) — MIT
+- `packages/sdk/README.md` (NEW) — usage docs
+- `packages/sdk/src/index.ts` (NEW) — public API barrel
+- `packages/sdk/src/client.ts` (NEW) — `createBizarClient()` factory
+- `packages/sdk/src/types.ts` (NEW) — discriminated unions for `Event`, `Part`, `Error`
+- `packages/sdk/src/errors.ts` (NEW) — `BizarError` discriminated union
+- `packages/sdk/src/events.ts` (NEW) — async-iterable SSE subscriber
+- `packages/sdk/src/version.ts` (NEW)
+- `packages/sdk/tests/client.test.ts` (NEW) — 10 cases
+- `packages/sdk/tests/events.test.ts` (NEW) — 6 cases
+- `packages/sdk/tests/errors.test.ts` (NEW) — 12 cases
+- `packages/sdk/tests/fixtures/fetch-mock.ts` (NEW)
+- `packages/sdk/tests/fixtures/sse-mock.ts` (NEW)
+- `bizar-dash/src/server/v2-event-bus.mjs` (NEW) — in-memory event bus with replay buffer
+- `bizar-dash/src/server/v2-auth-file.mjs` (NEW) — password file management
+- `bizar-dash/src/server/routes-v2/auth.mjs` (NEW) — HTTP basic middleware
+- `bizar-dash/src/server/routes-v2/health.mjs` (NEW) — public `/health`
+- `bizar-dash/src/server/routes-v2/events.mjs` (NEW) — SSE subscribe + publish
+- `bizar-dash/src/server/routes-v2/sessions.mjs` (NEW) — session CRUD
+- `bizar-dash/src/server/routes-v2/index.mjs` (NEW) — router + `/doc`
+- `bizar-dash/tests/smoke-v2.mjs` (NEW) — 7-case end-to-end smoke
+- `bizar-dash/src/server/server.mjs` — mounts `/api/v2` router after existing `/api`
+- `plugins/bizar/src/dashboard-client.ts` (NEW) — SDK-backed publisher
+- `plugins/bizar/tests/dashboard-client.test.ts` (NEW) — 6 cases
+- `plugins/bizar/package.json` — adds `@bizarharness/sdk: *` to dependencies
+- `package.json` (root) — adds `"workspaces": ["packages/*"]` + `build:sdk` / `test:sdk` scripts
+- `.bizar/research/IMPLEMENTATION_PLAN.md` (NEW) — full plan with phasing, file map, parallel split, risk register
+- `.bizar/research/OPENAPI_SPEC.yaml` (NEW) — OpenAPI 3.1 source of truth (~280 lines)
+- `.bizar/research/target-patterns.md` (NEW) — research notes from the three target sources
+- `.bizar/research/current-architecture.md` (NEW) — pre-refactor architecture map
+- `.bizar/research/plugin-source-locator.md` (NEW) — file-by-file plugin map
+
+### Test results
+
+- `@bizarharness/sdk`: **28/28** pass (vitest)
+- Dashboard v2 routes: **7/7** pass (`node tests/smoke-v2.mjs`)
+- Plugin `dashboard-client`: **6/6** pass (`bun test`)
+- Existing plugin tests: **152 pass, 18 pre-existing failures** (unrelated to this change; verified by stashing my changes and re-running — same numbers)
+- Existing dashboard server tests: unaffected (no changes to existing routes)
+
+### Next steps (v0.7.1+)
+
+- Auto-generate `types.gen.ts` from `OPENAPI_SPEC.yaml` via `@hey-api/openapi-ts` (replaces hand-written `types.ts`).
+- Move `plugins/bizar/` → `packages/plugin/` (delete root copy).
+- Move `bizar-dash/` → `packages/dashboard/` (delete root copy).
+- Wire `dashboard-client.publish()` into `event-stream.ts` so every opencode SSE event flows to the dashboard.
+- Add full CRUD for the rest of the OpenAPI spec (`/projects`, `/plans`, etc.).
+- Replace the file-based `serve.json` bridge with SDK-based event publishing once all consumers migrate.
+- npm Trusted Publishing via OIDC for `@bizarharness/sdk` (the SDK is published with `--tag alpha`).
+
 ## v3.11.1 — Unreleased — Stop and research rule
 
 ### Changed — Agent behavior under uncertainty

@@ -1,0 +1,61 @@
+{
+  "name": "@bizarharness/sdk",
+  "version": "0.7.0-alpha.1",
+  "description": "Typed SDK for the BizarHarness plugin ↔ dashboard protocol. HTTP + SSE bridge, generated from the OpenAPI 3.1 spec at .bizar/research/OPENAPI_SPEC.yaml.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/version.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:clean": "rm -rf dist && tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "pack:dry-run": "npm pack --dry-run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "keywords": [
+    "bizarharness",
+    "opencode",
+    "sdk",
+    "sse",
+    "http",
+    "plugin",
+    "dashboard",
+    "multi-agent"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/DrB0rk/BizarHarness.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/DrB0rk/BizarHarness/issues"
+  },
+  "homepage": "https://github.com/DrB0rk/BizarHarness/tree/master/packages/sdk#readme"
+}

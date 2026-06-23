@@ -11,8 +11,13 @@
     "config/",
     "templates/"
   ],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:sdk": "npm run build -w @bizarharness/sdk",
+    "test:sdk": "npm run test -w @bizarharness/sdk"
   },
   "keywords": [
     "opencode",

@@ -35,8 +35,13 @@ import {
 } from './auth.mjs';
 import { readSettings } from './routes/_shared.mjs';
 import { buildAllowedRootsFromSettings, resolveSafePath } from './lib/path-safe.mjs';
+import { V2EventBus } from './v2-event-bus.mjs';
+import { loadOrCreateAuth, V2_DEFAULT_PORT } from './v2-auth-file.mjs';
+import { createV2Router } from './routes-v2/index.mjs';
 
 let processHandlersInstalled = false;
+let v2Bus = null;
+let v2Auth = null;
 
 function installProcessHandlers() {
   if (processHandlersInstalled) return;
@@ -62,6 +67,32 @@ let currentBroadcast = () => {};
 
 export function broadcast(msg) {
   return currentBroadcast(msg);
+}
+
+/**
+ * Publish an event on the v2 event bus (if initialized). Exposed for
+ * other parts of the dashboard server (e.g. bg-poller, dialog-poller)
+ * to push events into the v2 SSE stream without taking a direct
+ * dependency on the bus module.
+ */
+export function publishV2Event(event) {
+  if (!v2Bus) return -1;
+  return v2Bus.publish(event);
+}
+
+/**
+ * Return v2 auth info for the plugin to consume (e.g. via a startup
+ * handshake or env var). Password is the same one persisted to the
+ * auth file.
+ */
+export function getV2Auth() {
+  if (!v2Auth) return null;
+  return {
+    baseUrl: v2Auth.baseUrl,
+    port: v2Auth.port,
+    password: v2Auth.password,
+    file: v2Auth.file,
+  };
 }
 
 function shouldRedirectToMobile(req) {
@@ -299,6 +330,32 @@ export async function createServer({
 
   // All /api/* routes go through apiRouter (after mod routes are checked)
   app.use('/api', apiRouter);
+
+  // ── v2 plugin↔dashboard protocol (v0.7.0-alpha.1) ──────────────────
+  // HTTP+SSE bridge sourced from .bizar/research/OPENAPI_SPEC.yaml.
+  // Mounted at /api/v2/* to avoid colliding with existing /api/* routes.
+  // Auth: HTTP Basic (see v2-auth-file.mjs). Password persisted at
+  // ~/.cache/bizarharness/dash-auth.json (mode 0600).
+  try {
+    v2Auth = loadOrCreateAuth({ port: V2_DEFAULT_PORT });
+    v2Bus = new V2EventBus({ logger: console });
+    // eslint-disable-next-line no-console
+    console.log(
+      `[v2] auth file: ${v2Auth.file} (port ${v2Auth.port}, password len ${v2Auth.password.length})`,
+    );
+    app.use(
+      '/api/v2',
+      createV2Router({
+        eventBus: v2Bus,
+        getPassword: () => v2Auth.password,
+        version: '0.7.0-alpha.1',
+        startedAt: Date.now(),
+      }),
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[v2] failed to initialize:', err?.message || err);
+  }
 
   // v3.6.0 — Authenticate WebSocket upgrades. The wss is in
   // `noServer: true` mode above, so this handler is the gate. We
