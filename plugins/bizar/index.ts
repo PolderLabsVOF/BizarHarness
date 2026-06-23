@@ -125,7 +125,7 @@ import { SettingsStore } from "./src/settings.js";
 import { parseSlashCommand } from "./src/commands.js";
 import { createPlanActionTool } from "./src/tools/plan-action.js";
 import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
-import { wrapFetchForReasoningCleanup } from "./src/reasoning-clean.js";
+import { stripInlineThinkBlocks } from "./src/reasoning-clean.js";
 
 // v0.5.0 — visual plan wiring: side-effect executor + plan-fs
 import { executeSideEffect, type ExecuteOptions } from "./src/commands-impl.js";
@@ -700,6 +700,47 @@ async function listPlanSlugs(worktree: string, logger: Logger): Promise<string[]
  * delegates to the runtime context and the supporting modules.
  */
 function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
+  // ────────────────────────────────────────────────────────────────────
+  // v0.6.2 — Reasoning directive
+  // ────────────────────────────────────────────────────────────────────
+  // Some reasoning models (notably MiniMax M3 via OpenRouter) emit
+  // their chain-of-thought in BOTH the structured `reasoning` /
+  // `reasoning_details` field AND inline as `` blocks inside
+  // `message.content`. opencode's openrouter SDK extracts the structured
+  // reasoning correctly and renders it as a separate "Thought" panel,
+  // but it does NOT strip the inline blocks from `content`, so the user
+  // sees the same thinking text twice — once in the proper panel and
+  // again as visible message text below it.
+  //
+  // The opencode plugin API in this version does NOT trigger a
+  // `config` hook (the `wrap-fetch` workaround from v0.6.1 is dead
+  // code in current builds), so we cannot post-process the response
+  // stream. The only working hooks that can help are:
+  //
+  //   1. `experimental.chat.system.transform` — runs every turn; we
+  //      push a directive telling the model to put thinking in the
+  //      structured field only.
+  //   2. `experimental.chat.messages.transform` — runs before each
+  //      request; we strip `` blocks from previous assistant
+  //      messages so the model sees clean history and is less likely
+  //      to keep emitting inline ``.
+  //
+  // Neither fixes the CURRENT response (the model has already
+  // returned), but together they strongly reduce — and in many cases
+  // eliminate — the duplication on subsequent turns.
+  const REASONING_DIRECTIVE_MARKER = "BIZAR_REASONING_DIRECTIVE_v0.6.2";
+  const REASONING_DIRECTIVE = [
+    REASONING_DIRECTIVE_MARKER,
+    "",
+    "When reasoning is enabled for this conversation, output your thinking",
+    "ONLY in the model's structured reasoning field. Do NOT emit `` blocks",
+    "inline inside your message content — the opencode host extracts the",
+    "reasoning field and renders it as a separate, collapsable \"Thought\"",
+    "panel. If you also emit the same text inline, the user will see your",
+    "thinking twice (once in the panel and once as visible message body).",
+    "Keep the actual response text in the normal content stream.",
+  ].join(" ");
+
   // Build the 7 tools. We always register them; if the serve child is
   // not available, the background tools return a clear error. The
   // bizar_get_plan_comments, bizar_plan_action, and
@@ -707,7 +748,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   // work regardless of the serve child's state.
   //
   // v0.4.0 — added `bizar_plan_action` (CRUD on the v2 canvas) and
-  // `bizar_wait_for_feedback` (poll until feedback). Both are pure
+  // bizar_wait_for_feedback (poll until feedback). Both are pure
   // file I/O — no serve child required.
   //
   // v0.5.0 — renamed `bizarre_*` → `bizar_*` (single `r`) to match
@@ -756,36 +797,57 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       };
 
   return {
-    // §3.1 — config: wrap provider fetches to strip duplicated inline
-    // think blocks from responses of reasoning models that emit BOTH a
-    // structured reasoning field (rendered as a thought) AND an inline
-    // `` block (which would otherwise leak into the visible message).
-    // See plugins/bizar/src/reasoning-clean.ts for the full rationale.
-    config: async (cfg) => {
+    // Push a persistent system-prompt directive that tells reasoning
+    // models to put their thinking in the structured reasoning field
+    // (rendered as a separate "Thought" panel by opencode) rather than
+    // also emitting it inline as `` blocks in the content. The openrouter
+    // SDK does not strip the inline `` blocks, so without this
+    // directive the user sees the reasoning twice — once in the proper
+    // panel and once as visible message text.
+    //
+    // We push the directive only when the marker is absent so we don't
+    // append it on every turn.
+    "experimental.chat.system.transform": async (input, output) => {
+      const sessionID = input.sessionID;
+      if (!sessionID) return;
+      if (!output.system.some((s) => s.includes(REASONING_DIRECTIVE_MARKER))) {
+        output.system.push(REASONING_DIRECTIVE);
+      }
+      // §3.1, §5.4 — handoff injection point. We push a single string
+      // onto `output.system` if a pending injection is queued for this
+      // session.
+      const pending = ctx.pendingInjections.get(sessionID);
+      if (pending) {
+        output.system.push(pending);
+        ctx.pendingInjections.delete(sessionID);
+      }
+    },
+
+    // Before the model is called, strip `` blocks from
+    // any text content in previous assistant messages. This keeps the
+    // model's view of its own history clean of the duplicated thinking
+    // it emitted earlier, reducing the chance it will keep emitting
+    // inline `` on subsequent turns.
+    "experimental.chat.messages.transform": async (_input, output) => {
       try {
-        const providers = (cfg as { provider?: Record<string, unknown> } | undefined)?.provider;
-        if (!providers || typeof providers !== "object") return;
-        const debug = (msg: string) => ctx.logger.debug(`bizar: ${msg}`);
-        for (const [name, provider] of Object.entries(providers)) {
-          if (!provider || typeof provider !== "object") continue;
-          const prov = provider as { options?: Record<string, unknown> };
-          if (!prov.options || typeof prov.options !== "object") continue;
-          const original = prov.options.fetch;
-          if (typeof original !== "function") continue;
-          // Only wrap once — detect by stamping a sentinel.
-          const wrapped = (original as { __bizarReasoningClean?: boolean })
-            .__bizarReasoningClean;
-          if (wrapped) continue;
-          prov.options.fetch = wrapFetchForReasoningCleanup(
-            original as Parameters<typeof wrapFetchForReasoningCleanup>[0],
-            { debug, providers: [name] },
-          );
-          (prov.options.fetch as { __bizarReasoningClean?: boolean }).__bizarReasoningClean = true;
-          debug(`wrapped provider.fetch for ${name}`);
+        const messages = (output as { messages?: unknown }).messages;
+        if (!Array.isArray(messages)) return;
+        for (const msg of messages) {
+          if (!msg || typeof msg !== "object") continue;
+          const m = msg as { role?: unknown; parts?: unknown };
+          if (m.role !== "assistant") continue;
+          if (!Array.isArray(m.parts)) continue;
+          for (const part of m.parts) {
+            if (!part || typeof part !== "object") continue;
+            const p = part as { type?: unknown; text?: unknown };
+            if (p.type === "text" && typeof p.text === "string" && p.text.includes("<think>")) {
+              p.text = stripInlineThinkBlocks(p.text);
+            }
+          }
         }
       } catch (err) {
         ctx.logger.warn(
-          `bizar: config hook failed (passing through): ${
+          `bizar: messages.transform failed (passing through): ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
@@ -1099,18 +1161,6 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
             `bizar: log write failed: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
-      }
-    },
-
-    // §3.1, §5.4 — handoff injection point. We push a single string onto
-    // `output.system` if a pending injection is queued for this session.
-    "experimental.chat.system.transform": async (input, output) => {
-      const sessionID = input.sessionID;
-      if (!sessionID) return;
-      const pending = ctx.pendingInjections.get(sessionID);
-      if (pending) {
-        output.system.push(pending);
-        ctx.pendingInjections.delete(sessionID);
       }
     },
 
