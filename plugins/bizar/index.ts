@@ -125,6 +125,7 @@ import { SettingsStore } from "./src/settings.js";
 import { parseSlashCommand } from "./src/commands.js";
 import { createPlanActionTool } from "./src/tools/plan-action.js";
 import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
+import { wrapFetchForReasoningCleanup } from "./src/reasoning-clean.js";
 
 // v0.5.0 — visual plan wiring: side-effect executor + plan-fs
 import { executeSideEffect, type ExecuteOptions } from "./src/commands-impl.js";
@@ -755,9 +756,40 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       };
 
   return {
-    // §3.1 — config: no mutation. We already resolved options in init().
-    config: async () => {
-      // intentionally empty — options are resolved at init time
+    // §3.1 — config: wrap provider fetches to strip duplicated inline
+    // think blocks from responses of reasoning models that emit BOTH a
+    // structured reasoning field (rendered as a thought) AND an inline
+    // `` block (which would otherwise leak into the visible message).
+    // See plugins/bizar/src/reasoning-clean.ts for the full rationale.
+    config: async (cfg) => {
+      try {
+        const providers = (cfg as { provider?: Record<string, unknown> } | undefined)?.provider;
+        if (!providers || typeof providers !== "object") return;
+        const debug = (msg: string) => ctx.logger.debug(`bizar: ${msg}`);
+        for (const [name, provider] of Object.entries(providers)) {
+          if (!provider || typeof provider !== "object") continue;
+          const prov = provider as { options?: Record<string, unknown> };
+          if (!prov.options || typeof prov.options !== "object") continue;
+          const original = prov.options.fetch;
+          if (typeof original !== "function") continue;
+          // Only wrap once — detect by stamping a sentinel.
+          const wrapped = (original as { __bizarReasoningClean?: boolean })
+            .__bizarReasoningClean;
+          if (wrapped) continue;
+          prov.options.fetch = wrapFetchForReasoningCleanup(
+            original as Parameters<typeof wrapFetchForReasoningCleanup>[0],
+            { debug, providers: [name] },
+          );
+          (prov.options.fetch as { __bizarReasoningClean?: boolean }).__bizarReasoningClean = true;
+          debug(`wrapped provider.fetch for ${name}`);
+        }
+      } catch (err) {
+        ctx.logger.warn(
+          `bizar: config hook failed (passing through): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
     },
 
     // §3.1, §4.5.1 — event: track session boundaries. We do NOT create
