@@ -1,3 +1,7 @@
+---
+description: Open the Bizar visual plan canvas or manage existing plans.
+agent: odin
+---
 Open or manage a Bizar visual plan. Plans are collaborative canvases for structuring work across agents.
 
 ## Usage

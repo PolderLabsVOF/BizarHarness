@@ -72,6 +72,14 @@
 - Replace the file-based `serve.json` bridge with SDK-based event publishing once all consumers migrate.
 - npm Trusted Publishing via OIDC for `@polderlabs/bizar-sdk` (the SDK is published with `--tag alpha`).
 
+## v3.12.4 — 2026-06-24
+
+### Fixed
+- **`/bizar` slash command was treated as plain text** — opencode's command loader requires YAML frontmatter (`description`, `agent`) on each `config/commands/*.md` file, and `opencode.json`'s `command.bizar.arguments` field is not in the schema. Added proper frontmatter to all 9 command files and removed the invalid `arguments` field from the template. Typing `/bizar` in the opencode TUI now opens the menu instead of sending the text to the model.
+
+### Added
+- **Simplicity Rule for all agents** — a new section at the top of `config/AGENTS.md`'s "Always-On Behavior" baseline that overrides the agents' tendency to overcomplicate simple tasks. Key points: match the work to the ask, no speculative features or questions, no over-explanation, short replies are good replies, subagents are expensive. Verified with smoke tests: "What's 2+2?" → "4.", "List files" → directory listing.
+
 ## v3.12.3 — 2026-06-24
 
 ### Fixed

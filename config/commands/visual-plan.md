@@ -1,3 +1,7 @@
+---
+description: Toggle the Bizar visual plan canvas or check its current status.
+agent: odin
+---
 Toggle the Bizar visual plan canvas or check its current status.
 
 ## Usage

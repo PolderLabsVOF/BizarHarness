@@ -1,3 +1,7 @@
+---
+description: Run bizar init to detect project stack, install relevant skills, and create .bizar/PROJECT.md.
+agent: heimdall
+---
 Run `bizar init` from the project root to:
 1. Detect the project stack (language, framework, database, tools)
 2. Install relevant skills from the opencode skills registry

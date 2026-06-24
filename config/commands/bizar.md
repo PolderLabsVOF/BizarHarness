@@ -1,3 +1,7 @@
+---
+description: Bizar Plugin Menu — route to the right Bizar action based on the user's request.
+agent: odin
+---
 # Bizar Dashboard
 
 The `/bizar` command launches the Bizar dashboard in your browser — a fully integrated workspace with Overview, Chat, Agents, Plans, Projects, Config, and Settings panels. The dashboard binds to `127.0.0.1` only and runs as a local Express + WebSocket server on a free port (preferred: 4321).

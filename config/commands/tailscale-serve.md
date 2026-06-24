@@ -1,5 +1,6 @@
 ---
 description: Authenticate Tailscale Serve and expose a local port on your tailnet
+agent: heimdall
 ---
 
 # Tailscale Serve Command
