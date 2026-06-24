@@ -88,6 +88,9 @@ function showHelp() {
     service             Manage the background service daemon
     bg <subcommand>     Manage background agents (list/view/kill/logs)
     dash <subcommand>   Manage the dashboard (start/stop/status/tui)
+    dev-link [src]      Symlink the local plugin source into opencode's plugin dir
+    dev-unlink          Remove the dev symlink and restore the deployed copy
+    doctor              Check the BizarHarness install for health issues
 
   Examples:
     bizar install
@@ -96,6 +99,8 @@ function showHelp() {
     bizar dash start --bg
     bizar dash stop
     bizar dash status
+    bizar doctor
+    bizar update --all --dry-run
 
   Run \`bizar <command> --help\` for per-command help.
 
@@ -185,6 +190,7 @@ function showUpdateHelp() {
     bizar update opencode bizar dash    Update specific components
     bizar update --all --yes           Update everything + auto-kill running instances
     bizar update --no-restart          Don't auto-restart the dashboard after update
+    bizar update --dry-run             Print what would happen, change nothing
     bizar update --help                Show this help
 
   Components:
@@ -206,17 +212,86 @@ function showUpdateHelp() {
     • If the dashboard was running and bizar or dash was updated,
       spawns a fresh detached dashboard process with the new code
       (skipped with --no-restart).
+    • Runs \`bizar doctor\` after a successful update to catch config
+      regressions before opencode tries to start.
+    • If ~/.config/opencode/plugins/bizar is a dev symlink (created
+      by \`bizar dev-link\`), the copy step is skipped to preserve the
+      link. Use \`bizar dev-unlink\` first, or pass --force.
 
   Examples:
     bizar update --all --yes           Headless full update + restart
     bizar update dash                  Update only the dashboard
     bizar update plugin --no-restart   Plugin-only, leave dashboard alone
+    bizar update --all --dry-run       See what would change without doing it
   `);
 }
 
 function showTestGateHelp() {
   console.log(`
   bizar test-gate — Detect & run the project's test suite
+  `);
+}
+
+function showDevLinkHelp() {
+  console.log(`
+  bizar dev-link / dev-unlink — Manage a symlink from the opencode plugin dir
+  to a local source checkout, so edits propagate to opencode on next session.
+
+  Usage:
+    bizar dev-link [source-dir]    Symlink source-dir (default: ./plugins/bizar)
+                                   to ~/.config/opencode/plugins/bizar
+    bizar dev-link --force         Replace an existing deployed copy
+    bizar dev-unlink               Remove the dev symlink + restore from npm
+    bizar dev-unlink --force       Remove even if not a symlink (destructive)
+
+  Description:
+    By default, opencode loads the Bizar plugin from
+    ~/.config/opencode/plugins/bizar, which is a real directory copied
+    from the npm package. Edits to plugins/bizar/ in the BizarHarness
+    repo don't propagate until you re-run the installer.
+
+    \`bizar dev-link\` replaces that directory with a symlink pointing
+    at your local checkout, so source edits are picked up immediately.
+    \`bizar dev-unlink\` reverses the change by removing the symlink
+    and re-installing the deployed copy from the npm package.
+
+    While the dev link is in place, \`bizar update\` will skip the
+    plugin-copy step (and print a warning) so it doesn't clobber the
+    link. Run \`bizar dev-unlink\` first, or pass --force to overwrite.
+
+  Examples:
+    bizar dev-link
+    bizar dev-link /home/me/projects/bizar/plugins/bizar
+    bizar dev-link --force
+    bizar dev-unlink
+  `);
+}
+
+function showDoctorHelp() {
+  console.log(`
+  bizar doctor — Check the BizarHarness install for health issues
+
+  Usage:
+    bizar doctor
+
+  Description:
+    Runs a battery of health checks against the local install:
+      • opencode CLI reachable
+      • ~/.config/opencode/opencode.json parses as JSON
+      • the Bizar plugin is registered
+      • plugin path resolves
+      • @polderlabs/bizar-plugin is installed globally
+      • core agent files are installed (odin, quick, thor, tyr)
+      • rtk / semble / skills on PATH (lenient — at least one)
+      • dashboard reachable (skipped if no port file)
+      • provider.openrouter block + MiniMax model flags are sane
+
+    Prints ✓/✗ for each check and a final summary. Exits non-zero
+    if any check fails. Use \`bizar doctor\` after a manual config
+    edit or to diagnose "why is opencode misbehaving?" questions.
+
+  Related:
+    bizar update              Update + auto-run doctor on success
   `);
 }
 
@@ -424,6 +499,32 @@ async function main() {
   } else if (args[0] === 'update') {
     if (isHelpRequest) showUpdateHelp();
     else await runUpdate(args.slice(1));
+  } else if (args[0] === 'dev-link') {
+    if (isHelpRequest) showDevLinkHelp();
+    else {
+      const { createDevLink } = await import('./dev-link.mjs');
+      const positional = args.slice(1).filter((a) => !a.startsWith('-'));
+      const flags = args.slice(1).filter((a) => a.startsWith('-'));
+      const sourceDir = positional[0] ?? null;
+      const force = flags.includes('--force') || flags.includes('-f');
+      const ok = createDevLink(sourceDir, { force });
+      if (!ok) process.exit(1);
+    }
+  } else if (args[0] === 'dev-unlink') {
+    if (isHelpRequest) showDevLinkHelp();
+    else {
+      const { removeDevLink } = await import('./dev-link.mjs');
+      const force = args.includes('--force') || args.includes('-f');
+      const ok = await removeDevLink({ force });
+      if (!ok) process.exit(1);
+    }
+  } else if (args[0] === 'doctor') {
+    if (isHelpRequest) showDoctorHelp();
+    else {
+      const { runDoctor } = await import('./doctor.mjs');
+      const result = await runDoctor();
+      if (result.failed > 0) process.exit(1);
+    }
   } else if (args[0] === 'plan') {
     await runPlan(args.slice(1), {});
   } else if (args[0] === 'install') {

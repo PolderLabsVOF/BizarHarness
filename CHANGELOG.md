@@ -72,6 +72,21 @@
 - Replace the file-based `serve.json` bridge with SDK-based event publishing once all consumers migrate.
 - npm Trusted Publishing via OIDC for `@polderlabs/bizar-sdk` (the SDK is published with `--tag alpha`).
 
+## v3.12.2 — 2026-06-24
+
+### Fixed
+- **M3 `<think>` blocks leaked as visible inline text** — the MiniMax M3 model via OpenRouter was double-emitting reasoning, once in the structured `reasoning_details` field and again as raw `<think>...</think>` text inside the message content. The plugin now strips any of the four inline think-tag variants (`<think>`, `<thinking>`, `<reasoning>`, `<ant_thinking>`) from completed text parts via the `experimental.text.complete` hook. Reasoning still routes to the structured field as before.
+- **The Bizar plugin loaded the wrong source on disk** — opencode loaded the plugin from `~/.config/opencode/plugins/bizar/index.ts` (the deployed copy), and the source-of-truth at `plugins/bizar/` was drifting. The CLI now ships a `bizar dev-link` / `bizar dev-unlink` pair so the user can symlink the local source for instant propagation during development. `bizar update` refuses to clobber a dev symlink unless `--force` is passed.
+
+### Added
+- **`bizar doctor`** — runs nine health checks on the BizarHarness install (opencode reachable, config valid, plugin entry present, plugin path resolves, deployed plugin matches npm, agent files installed, tools on PATH, dashboard reachable, provider config sane). Returns non-zero on any failure. Runs automatically at the end of `bizar update` and prints a warning if anything regressed.
+- **`bizar update --dry-run`** — previews which packages would be installed, which processes would be killed, and whether the install script would rerun, without actually doing any of it.
+- **Symlink-aware `installPluginFromGlobal`** — `bizar update` now detects a `~/.config/opencode/plugins/bizar` symlink and skips the npm copy unless `--force` is passed. The dev workflow no longer silently breaks after every update.
+
+### Tests
+- 243 plugin tests pass (21 new for `reasoning-clean.ts`).
+- 180 CLI tests pass (13 new for `dev-link`, 16 new for `doctor`).
+
 ## v3.12.1 — 2026-06-24
 
 ### Fixed

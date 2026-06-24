@@ -233,9 +233,18 @@ function latestVersion(pkg) {
 /**
  * Update opencode. Tries `opencode upgrade` first (the upstream installer's
  * own command); falls back to `npm install -g opencode-ai@latest`.
+ * Pass `{ dryRun: true }` to print what would run without executing.
  * Returns `{ ok: boolean, message: string }`.
  */
-function updateOpencode() {
+function updateOpencode({ dryRun = false } = {}) {
+  if (dryRun) {
+    console.log(
+      chalk.dim(
+        '  [dry-run] would run: opencode upgrade (fallback: npm install -g opencode-ai@latest)',
+      ),
+    );
+    return { ok: true, message: '[dry-run] opencode' };
+  }
   const r1 = spawnSync('opencode', ['upgrade'], { stdio: 'inherit' });
   if (r1.status === 0) {
     return { ok: true, message: 'opencode updated via `opencode upgrade`' };
@@ -248,7 +257,13 @@ function updateOpencode() {
   return { ok: false, message: 'opencode update failed — try `opencode upgrade` manually' };
 }
 
-function updatePackage(pkg) {
+function updatePackage(pkg, { dryRun = false } = {}) {
+  if (dryRun) {
+    console.log(
+      chalk.dim(`  [dry-run] would run: npm install -g ${pkg}@latest`),
+    );
+    return { ok: true, message: `[dry-run] ${pkg}` };
+  }
   const r = spawnSync('npm', ['install', '-g', `${pkg}@latest`], { stdio: 'inherit' });
   if (r.status !== 0) {
     return { ok: false, message: `${pkg} update failed` };
@@ -467,27 +482,43 @@ export async function runUpdate(subargs = []) {
   const assumeYes = subargs.includes('--yes') || subargs.includes('-y') || subargs.includes('--force');
   const restartAfter = !subargs.includes('--no-restart');
   const forceAll = subargs.includes('--all');
+  const dryRun = subargs.includes('--dry-run');
+
+  if (dryRun) {
+    console.log(
+      chalk.dim('  --dry-run set: no installs, kills, or restarts will be performed.\n'),
+    );
+  }
 
   // 1. Detect running instances BEFORE doing anything else.
   const instances = detectInstances();
   const runningCount = (instances.service ? 1 : 0) + (instances.dashboard ? 1 : 0);
 
   if (runningCount > 0) {
-    const ok = await confirmKill(instances, { assumeYes });
-    if (!ok) {
-      console.log(chalk.yellow('\n  Update cancelled — instances still running.'));
-      console.log(chalk.dim('  Stop them with `bizar service stop` and `bizar dashboard stop`, then retry.'));
-      process.exit(1);
+    if (dryRun) {
+      const labels = [];
+      if (instances.service) labels.push(instances.service.label);
+      if (instances.dashboard) labels.push(instances.dashboard.label);
+      console.log(
+        chalk.dim(`  [dry-run] would stop running instances: ${labels.join(', ')}`),
+      );
+    } else {
+      const ok = await confirmKill(instances, { assumeYes });
+      if (!ok) {
+        console.log(chalk.yellow('\n  Update cancelled — instances still running.'));
+        console.log(chalk.dim('  Stop them with `bizar service stop` and `bizar dashboard stop`, then retry.'));
+        process.exit(1);
+      }
+      console.log(chalk.cyan('\n  Stopping running instances...'));
+      const kills = await killInstances(instances);
+      for (const k of kills) {
+        const marker = k.ok ? chalk.green('✓') : chalk.red('✗');
+        console.log(`    ${marker} ${k.name} stopped`);
+      }
+      // Give the kernel a moment to release any open file handles on the
+      // npm-global directory before npm tries to replace files.
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    console.log(chalk.cyan('\n  Stopping running instances...'));
-    const kills = await killInstances(instances);
-    for (const k of kills) {
-      const marker = k.ok ? chalk.green('✓') : chalk.red('✗');
-      console.log(`    ${marker} ${k.name} stopped`);
-    }
-    // Give the kernel a moment to release any open file handles on the
-    // npm-global directory before npm tries to replace files.
-    await new Promise((resolve) => setTimeout(resolve, 500));
   } else {
     console.log(chalk.dim('  No running Bizar instances detected.'));
   }
@@ -523,8 +554,19 @@ export async function runUpdate(subargs = []) {
 
   // 3. Decide what to update.
   let selected;
-  if (forceAll || assumeYes) {
+  if (forceAll || assumeYes || dryRun) {
+    // dryRun defaults to showing everything (the whole point is to see
+    // what *would* change across the board). Pass a positional list to
+    // narrow the preview.
     selected = new Set(COMPONENTS);
+    // If the user passed positional component names alongside --dry-run,
+    // narrow the selection to those.
+    const positional = subargs.filter((a) => !a.startsWith('-'));
+    if (positional.length > 0) {
+      const valid = new Set(COMPONENTS);
+      const narrowed = positional.filter((a) => valid.has(a));
+      if (narrowed.length > 0) selected = new Set(narrowed);
+    }
   } else if (subargs.length === 0) {
     selected = await promptForUpdates(false);
   } else {
@@ -548,44 +590,57 @@ export async function runUpdate(subargs = []) {
   const results = [];
   if (selected.has('opencode')) {
     console.log(chalk.bold('  → opencode'));
-    results.push(['opencode', updateOpencode()]);
+    results.push(['opencode', updateOpencode({ dryRun })]);
   }
   if (selected.has('bizar')) {
     console.log(chalk.bold(`  → ${PKG_MAIN}`));
-    results.push(['bizar', updatePackage(PKG_MAIN)]);
+    results.push(['bizar', updatePackage(PKG_MAIN, { dryRun })]);
   }
   if (selected.has('dash')) {
     console.log(chalk.bold(`  → ${PKG_DASH}`));
-    results.push(['dash', updatePackage(PKG_DASH)]);
+    results.push(['dash', updatePackage(PKG_DASH, { dryRun })]);
   }
   if (selected.has('plugin')) {
     console.log(chalk.bold(`  → ${PKG_PLUGIN}`));
-    results.push(['plugin', updatePackage(PKG_PLUGIN)]);
+    results.push(['plugin', updatePackage(PKG_PLUGIN, { dryRun })]);
   }
 
   // 4. Re-run the install script if anything relevant changed.
   const anySuccess = results.some(([, r]) => r.ok);
   if (anySuccess && (selected.has('bizar') || selected.has('plugin'))) {
     console.log('');
-    const rerun = rerunInstallScript();
-    if (rerun.ok) {
-      console.log(chalk.green(`\n  ✓ ${rerun.message}`));
+    if (dryRun) {
+      console.log(
+        chalk.dim(
+          '  [dry-run] would re-run install script (bin.mjs --setup or install.sh)',
+        ),
+      );
     } else {
-      console.log(chalk.yellow(`\n  ⚠ ${rerun.message}`));
-      console.log(chalk.dim('    Run `bash install.sh` from the Bizar repo manually.'));
+      const rerun = rerunInstallScript();
+      if (rerun.ok) {
+        console.log(chalk.green(`\n  ✓ ${rerun.message}`));
+      } else {
+        console.log(chalk.yellow(`\n  ⚠ ${rerun.message}`));
+        console.log(chalk.dim('    Run `bash install.sh` from the Bizar repo manually.'));
+      }
     }
   }
 
   // 5. Restart the dashboard if it was running before the update.
   if (restartAfter && instances.dashboard && (selected.has('bizar') || selected.has('dash'))) {
-    console.log('');
-    console.log(chalk.cyan('  Restarting dashboard with the new code...'));
-    const res = spawnFreshDashboard({ port: instances.dashboard.port || undefined });
-    if (res.ok) {
-      console.log(chalk.green(`  ✓ ${res.message}`));
+    if (dryRun) {
+      console.log('');
+      console.log(chalk.dim('  [dry-run] would restart dashboard with the new code'));
     } else {
-      console.log(chalk.yellow(`  ⚠ ${res.message}`));
-      console.log(chalk.dim('    Start it manually with `bizar dash start --bg`.'));
+      console.log('');
+      console.log(chalk.cyan('  Restarting dashboard with the new code...'));
+      const res = spawnFreshDashboard({ port: instances.dashboard.port || undefined });
+      if (res.ok) {
+        console.log(chalk.green(`  ✓ ${res.message}`));
+      } else {
+        console.log(chalk.yellow(`  ⚠ ${res.message}`));
+        console.log(chalk.dim('    Start it manually with `bizar dash start --bg`.'));
+      }
     }
   }
 
@@ -602,5 +657,40 @@ export async function runUpdate(subargs = []) {
     console.log(chalk.yellow('\n  Some updates failed. See messages above.'));
     process.exit(1);
   }
+  if (dryRun) {
+    console.log(
+      chalk.green('\n  ✓ Dry-run complete (no installs, kills, or restarts performed)\n'),
+    );
+    return;
+  }
   console.log(chalk.green('\n  ✓ Update complete\n'));
+
+  // 7. Post-update health check (v3.12.2). Catches a bad config merge or
+  // missing files before the user discovers it via a broken opencode session.
+  try {
+    const { runDoctor } = await import('./doctor.mjs');
+    const result = await runDoctor({ silent: true });
+    if (result.failed > 0) {
+      console.log('');
+      console.log(
+        chalk.yellow('  ⚠ Post-update health check found issues:'),
+      );
+      for (const r of result.results) {
+        if (!r.ok) {
+          console.log(chalk.red(`    ✗ ${r.name}: ${r.message}`));
+        }
+      }
+      console.log(chalk.dim('  Run `bizar doctor` for details.'));
+      process.exit(1);
+    }
+  } catch (err) {
+    // Doctor import or runtime failure shouldn't crash the update —
+    // log a hint and let the user run `bizar doctor` themselves.
+    console.log(
+      chalk.yellow(
+        `  ⚠ Post-update health check could not run: ${err.message}`,
+      ),
+    );
+    console.log(chalk.dim('  Run `bizar doctor` manually to verify the install.'));
+  }
 }

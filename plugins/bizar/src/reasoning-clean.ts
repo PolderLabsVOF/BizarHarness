@@ -37,10 +37,35 @@
  *   is forwarded unchanged — this wrapper must never break a chat.
  */
 
-const THINK_OPEN = "<think>" as const;
-const THINK_CLOSE = "</think>" as const;
+// All known inline think-style tag names. Each name pairs with itself
+// for the close tag (e.g. `` matches ``, `<thinking>` matches
+// `</thinking>`, etc.). The order does not matter for matching — we
+// search for the earliest occurrence of any of them.
+//
+// The model emits `` (most common) and `<thinking>` (the original
+// dashboard fix targeted this one). `<reasoning>` and `<ant_thinking>`
+// are included for forward compatibility with other providers that use
+// the same anti-slop pattern.
+const THINK_TAG_NAMES = ["think", "thinking", "reasoning", "ant_thinking"] as const;
+type ThinkTagName = (typeof THINK_TAG_NAMES)[number];
 
-type FetchLike = (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>;
+/** Map from open-tag prefix (without `>`) to its matching close tag. */
+const THINK_OPEN_TO_CLOSE: ReadonlyMap<string, string> = new Map(
+  THINK_TAG_NAMES.map((n) => [`<${n}`, `</${n}>`] as const),
+);
+/** All open-tag prefixes — used by the streaming state machine. */
+const ALL_OPENS: readonly string[] = Array.from(THINK_OPEN_TO_CLOSE.keys());
+/** Regex form, used by the non-streaming strip. Backreference matches
+ *  the open-tag name to the close tag. */
+const THINK_TAG_RE = new RegExp(
+  `<(${THINK_TAG_NAMES.join("|")})\\b[^>]*>[\\s\\S]*?</\\1>\\s*`,
+  "gi",
+);
+
+export type FetchLike = (
+  input: Parameters<typeof fetch>[0],
+  init?: RequestInit,
+) => Promise<Response>;
 
 export interface ReasoningCleanOptions {
   /** Extra logger for debug lines; defaults to no-op. */
@@ -55,14 +80,16 @@ export interface ReasoningCleanOptions {
 const DEFAULT_PROVIDERS = new Set(["openrouter", "minimax"]);
 
 /**
- * Strip ``...</think>`` blocks from a plain string. Used for
+ * Strip inline think-style blocks (`<think>…</think>`,
+ * `<thinking>…</thinking>`, `<reasoning>…</reasoning>`,
+ * `<ant_thinking>…</ant_thinking>`) from a plain string. Used for
  * non-streaming responses (or for accumulated streamed content).
  *
- * The trailing whitespace after `</think>` is also consumed so the
+ * The trailing whitespace after the close tag is also consumed so the
  * cleaned content does not start with an extra blank line.
  */
 export function stripInlineThinkBlocks(content: string): string {
-  return content.replace(/<think>[\s\S]*?<\/think>\s*/g, "");
+  return content.replace(THINK_TAG_RE, "");
 }
 
 /**
@@ -72,9 +99,46 @@ export function stripInlineThinkBlocks(content: string): string {
 class ThinkStripper {
   private state: "NORMAL" | "IN_THINK" = "NORMAL";
   // Buffer of characters that may be the start of a marker but are not
-  // yet complete. Holds at most max(THINK_OPEN.length, THINK_CLOSE.length)
-  // characters from a chunk boundary.
+  // yet complete. Holds at most max(open.length, close.length) chars
+  // from a chunk boundary.
   private pending = "";
+  // The close tag we are looking for while IN_THINK. Set when we find
+  // an open, cleared when we find the matching close. Each open tag
+  // has its own close tag (e.g. `` pairs with ``, not ``).
+  private activeClose: string | null = null;
+
+  /**
+   * Find the earliest valid open-tag prefix in `input`. A valid match
+   * is `<tagname` followed by `>`, whitespace, or end-of-string — so we
+   * don't accidentally match `` as a substring of `<thinking>`.
+   */
+  private findOpen(input: string): { idx: number; open: string } | null {
+    let best: { idx: number; open: string } | null = null;
+    for (const open of ALL_OPENS) {
+      let from = 0;
+      while (from < input.length) {
+        const idx = input.indexOf(open, from);
+        if (idx === -1) break;
+        const nextPos = idx + open.length;
+        const nextCh = nextPos < input.length ? input.charAt(nextPos) : "";
+        const isBoundary =
+          nextCh === ">" ||
+          nextCh === " " ||
+          nextCh === "\t" ||
+          nextCh === "\n" ||
+          nextCh === "\r" ||
+          nextCh === "";
+        if (isBoundary) {
+          if (best === null || idx < best.idx) {
+            best = { idx, open };
+          }
+          break;
+        }
+        from = idx + 1;
+      }
+    }
+    return best;
+  }
 
   push(chunk: string): string {
     if (chunk.length === 0) return "";
@@ -84,31 +148,39 @@ class ThinkStripper {
 
     while (input.length > 0) {
       if (this.state === "NORMAL") {
-        const idx = input.indexOf(THINK_OPEN);
-        if (idx === -1) {
+        const found = this.findOpen(input);
+        if (found === null) {
           // No open marker; might have a partial at the tail.
-          const tail = keepPartialTail(input, [THINK_OPEN]);
+          const tail = keepPartialTail(input, ALL_OPENS);
           out += input.slice(0, input.length - tail.length);
           this.pending = tail;
           input = "";
           break;
         }
-        out += input.slice(0, idx);
-        input = input.slice(idx + THINK_OPEN.length);
+        out += input.slice(0, found.idx);
+        input = input.slice(found.idx + found.open.length);
+        this.activeClose = THINK_OPEN_TO_CLOSE.get(found.open) ?? null;
         this.state = "IN_THINK";
       } else {
         // IN_THINK
-        const idx = input.indexOf(THINK_CLOSE);
+        const closeTag = this.activeClose;
+        if (closeTag === null) {
+          // Defensive: should never happen, but recover gracefully.
+          this.state = "NORMAL";
+          break;
+        }
+        const idx = input.indexOf(closeTag);
         if (idx === -1) {
           // Still inside a think block; might have a partial close at tail.
-          const tail = keepPartialTail(input, [THINK_CLOSE]);
+          const tail = keepPartialTail(input, [closeTag]);
           // Discard everything except the possible partial tail.
           this.pending = tail;
           input = "";
           break;
         }
-        input = input.slice(idx + THINK_CLOSE.length);
+        input = input.slice(idx + closeTag.length);
         this.state = "NORMAL";
+        this.activeClose = null;
         // Drop any whitespace that immediately follows the close tag so
         // the next emitted content does not start with extra blank lines.
         const wsMatch = input.match(/^\s*/);
@@ -126,6 +198,7 @@ class ThinkStripper {
     this.pending = "";
     if (this.state === "IN_THINK") {
       this.state = "NORMAL";
+      this.activeClose = null;
       return tail;
     }
     return tail;
@@ -185,7 +258,7 @@ function cleanNonStreamingJson(text: string): string {
   let touched = false;
   for (const choice of choices) {
     const msg = choice?.message;
-    if (msg && typeof msg.content === "string" && msg.content.includes(THINK_OPEN)) {
+    if (msg && typeof msg.content === "string" && contentHasAnyThinkOpen(msg.content)) {
       const cleaned = stripInlineThinkBlocks(msg.content);
       if (cleaned !== msg.content) {
         msg.content = cleaned;
@@ -194,6 +267,16 @@ function cleanNonStreamingJson(text: string): string {
     }
   }
   return touched ? JSON.stringify(data) : text;
+}
+
+/** Cheap fast-path check: does `content` contain any of the known
+ *  think-tag open prefixes? Avoids invoking the (more expensive) full
+ *  regex on responses that obviously don't need cleaning. */
+function contentHasAnyThinkOpen(content: string): boolean {
+  for (const open of ALL_OPENS) {
+    if (content.includes(open)) return true;
+  }
+  return false;
 }
 
 /**
@@ -343,18 +426,29 @@ export function wrapFetchForReasoningCleanup(
       });
     }
     // Non-streaming JSON.
+    let text: string;
     try {
-      const text = await response.text();
-      const cleaned = cleanNonStreamingJson(text);
-      if (cleaned === text) return response;
-      return new Response(cleaned, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
+      text = await response.text();
     } catch (err) {
-      debug?.(`reasoning-clean: clean failed, passing through: ${(err as Error).message}`);
+      debug?.(`reasoning-clean: read body failed, passing through: ${(err as Error).message}`);
       return response;
     }
+    let cleaned: string;
+    try {
+      cleaned = cleanNonStreamingJson(text);
+    } catch (err) {
+      debug?.(`reasoning-clean: parse failed, passing through original body: ${(err as Error).message}`);
+      // Re-wrap the original text in a fresh Response so the caller
+      // can read the body (we already consumed the original via
+      // .text()). The status/headers are preserved.
+      cleaned = text;
+    }
+    // Always return a fresh Response so the caller can read the body
+    // (the original `response` was consumed by `.text()`).
+    return new Response(cleaned, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   };
 }

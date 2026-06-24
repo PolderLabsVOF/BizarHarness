@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import boxen from 'boxen';
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
@@ -26,12 +26,55 @@ const AGENT_FILES = [
  * `opencodeConfigDir()`). Otherwise, prints a hint directing the user to run
  * `npm install -g @polderlabs/bizar-plugin`.
  *
- * Returns `true` if the plugin was installed, `false` otherwise. Never throws.
+ * Symlink guard (v3.12.2): if the dest is a symlink (e.g. created by
+ * `bizar dev-link`), do NOT overwrite it. The copy below would otherwise
+ * dereference the symlink and silently turn it back into a real directory,
+ * breaking the dev workflow. Pass `{ force: true }` to override (after
+ * confirming the user really wants the deployed copy back).
+ *
+ * Pass `{ silent: true }` to suppress the warning prints; the function
+ * still returns `true` if the dest is already in the desired state.
+ *
+ * Returns `true` if the plugin was installed (or already in place),
+ * `false` otherwise. Never throws.
  */
-export async function installPluginFromGlobal() {
+export async function installPluginFromGlobal(opts = {}) {
   const { execSync } = await import('node:child_process');
   const { mkdir, readdir, copyFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
+
+  // ── Symlink guard ───────────────────────────────────────────────────────────
+  // If dest is a symlink (created by `bizar dev-link`), don't overwrite it.
+  // A plain copy would dereference the symlink and silently break the
+  // dev workflow. Print a hint unless silent, or honour an explicit
+  // --force from the caller.
+  const destDir = join(opencodeConfigDir(), 'plugins', 'bizar');
+  let destIsSymlink = false;
+  try {
+    destIsSymlink = lstatSync(destDir).isSymbolicLink();
+  } catch {
+    // doesn't exist yet — fine
+  }
+
+  if (destIsSymlink) {
+    if (opts.silent) {
+      // Called from dev-unlink, which has already removed the symlink.
+      // If we somehow still see one here, treat as "already restored".
+      return true;
+    }
+    console.log(
+      chalk.yellow(
+        '  ⚠ ~/.config/opencode/plugins/bizar is a dev symlink — skipping npm copy.',
+      ),
+    );
+    console.log(
+      chalk.dim(
+        '    Run `bizar dev-unlink` to restore the deployed copy, or pass --force to overwrite.',
+      ),
+    );
+    if (!opts.force) return false;
+    rmSync(destDir, { force: true });
+  }
 
   let globalRoot;
   try {
@@ -50,7 +93,6 @@ export async function installPluginFromGlobal() {
     return false;
   }
 
-  const destDir = join(opencodeConfigDir(), 'plugins', 'bizar');
   await mkdir(destDir, { recursive: true });
 
   async function copyRecursive(srcDir, dstDir) {

@@ -126,7 +126,11 @@ import { SettingsStore } from "./src/settings.js";
 import { parseSlashCommand } from "./src/commands.js";
 import { createPlanActionTool } from "./src/tools/plan-action.js";
 import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
-import { stripInlineThinkBlocks } from "./src/reasoning-clean.js";
+import {
+  stripInlineThinkBlocks,
+  wrapFetchForReasoningCleanup,
+  type FetchLike,
+} from "./src/reasoning-clean.js";
 
 // v0.5.0 — visual plan wiring: side-effect executor + plan-fs
 import { executeSideEffect, type ExecuteOptions } from "./src/commands-impl.js";
@@ -223,6 +227,45 @@ let streamHandle: EventStream | null = null;
 let loggerHandle: Logger | null = null;
 const signalHandlerRefs = new Map<"SIGTERM" | "SIGINT", () => void>();
 
+/** v0.6.2 — Set to `true` after the first time we wrap `globalThis.fetch`
+ *  with the reasoning-clean wrapper. Subsequent calls in the same process
+ *  are no-ops, so a plugin reload cannot double-wrap. */
+let fetchWrapInstalled = false;
+
+/**
+ * v0.6.2 — Reasoning directive. Install the reasoning-clean fetch wrap
+ * on `globalThis.fetch`. The wrap strips inline ``...</think>` (and the
+ * other recognised variants — see `src/reasoning-clean.ts`) from
+ * chat-completions responses targeting `openrouter`/`minimax`, while
+ * leaving the structured `reasoning` / `reasoning_details` fields
+ * intact.
+ *
+ * This is the workaround for the fact that opencode 1.17.9 does not
+ * fire the `config` hook in this runtime (the SDK type declares it, but
+ * the host never calls it). By the time the host would call `config`,
+ * the plugin would already be past init — and the AI SDK is already
+ * using the unwrapped fetch. So we wrap fetch once, globally, as the
+ * plugin initialises. Subsequent reloads in the same process are a
+ * no-op thanks to the `fetchWrapInstalled` flag.
+ */
+function installFetchReasoningCleanup(logger: Logger): void {
+  if (fetchWrapInstalled) return;
+  const original = globalThis.fetch;
+  if (typeof original !== "function") {
+    logger.warn("bizar: globalThis.fetch is not a function; reasoning-clean wrap skipped");
+    return;
+  }
+  const wrapped = wrapFetchForReasoningCleanup(
+    original.bind(globalThis) as FetchLike,
+    {
+      debug: (msg) => logger.debug(msg),
+    },
+  );
+  globalThis.fetch = wrapped as typeof globalThis.fetch;
+  fetchWrapInstalled = true;
+  logger.info("bizar: reasoning-clean fetch wrap installed (openrouter/minimax)");
+}
+
 // --- Plugin entry point ---------------------------------------------------
 
 /**
@@ -318,6 +361,16 @@ async function init(
   for (const note of notes) {
     logger.warn(`bizar: ${note}`);
   }
+
+  // v0.6.2 — Reasoning directive. Wrap globalThis.fetch so that inline
+  // ``...</think>` blocks in chat completions responses
+  // from openrouter/minimax providers are stripped from `content` even
+  // when the model also emits structured reasoning. The `config` hook
+  // in the opencode plugin API is declared in the SDK type but does NOT
+  // fire in 1.17.9 (confirmed via debug probe 2026-06-24), so we wrap
+  // fetch globally as a fallback. Idempotent — only the first call in
+  // this process actually wraps.
+  installFetchReasoningCleanup(logger);
 
   const stateStore = new StateStore(options.stateDir, logger);
   const settingsStore = new SettingsStore(options.stateDir, logger);
@@ -758,22 +811,30 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   // sees the same thinking text twice — once in the proper panel and
   // again as visible message text below it.
   //
-  // The opencode plugin API in this version does NOT trigger a
-  // `config` hook (the `wrap-fetch` workaround from v0.6.1 is dead
-  // code in current builds), so we cannot post-process the response
-  // stream. The only working hooks that can help are:
+  // Defence in depth (three layers, in order of impact):
   //
-  //   1. `experimental.chat.system.transform` — runs every turn; we
+  //   1. `installFetchReasoningCleanup` (init-time) — wraps
+  //      `globalThis.fetch` with `wrapFetchForReasoningCleanup` from
+  //      `src/reasoning-clean.ts`. The wrap strips the inline ``
+  //      blocks from chat-completions responses to `openrouter` /
+  //      `minimax` while leaving the structured reasoning fields
+  //      alone. This is the only layer that fixes the CURRENT
+  //      response in-flight. The opencode plugin API in 1.17.9 declares
+  //      a `config` hook in the SDK type but does not actually fire it
+  //      (confirmed via debug probe 2026-06-24), so we wrap fetch
+  //      globally instead.
+  //
+  //   2. `experimental.chat.system.transform` — runs every turn; we
   //      push a directive telling the model to put thinking in the
   //      structured field only.
-  //   2. `experimental.chat.messages.transform` — runs before each
+  //
+  //   3. `experimental.chat.messages.transform` — runs before each
   //      request; we strip `` blocks from previous assistant
   //      messages so the model sees clean history and is less likely
   //      to keep emitting inline ``.
   //
-  // Neither fixes the CURRENT response (the model has already
-  // returned), but together they strongly reduce — and in many cases
-  // eliminate — the duplication on subsequent turns.
+  // Layers 2 and 3 reduce the frequency of the leak; layer 1 strips
+  // any leak that still slips through.
   const REASONING_DIRECTIVE_MARKER = "BIZAR_REASONING_DIRECTIVE_v0.6.2";
   const REASONING_DIRECTIVE = [
     REASONING_DIRECTIVE_MARKER,
@@ -898,6 +959,40 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       } catch (err) {
         ctx.logger.warn(
           `bizar: messages.transform failed (passing through): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    },
+
+    // v0.6.2 — Reasoning directive. Strip inline `` blocks
+    // from the FINAL text of each completed assistant text part. This is
+    // the post-processing layer that fixes the CURRENT response in cases
+    // where the model emits its chain-of-thought in BOTH the structured
+    // `reasoning` field AND inline in `content` (the M3-via-OpenRouter
+    // leak). opencode's openrouter SDK does not strip the inline blocks,
+    // so we do it here at the boundary between the SDK output and the
+    // UI rendering. The `config` hook that the SDK type declares for
+    // fetch-level wrapping does NOT fire in 1.17.9, and the AI SDK
+    // uses `Bun.fetch` (read-only) rather than `globalThis.fetch`, so a
+    // fetch wrap is a no-op in this runtime. `experimental.text.complete`
+    // is the working alternative — it runs on every completed text
+    // part, with mutable `output.text`. Idempotent: stripping already-
+    // cleaned text is a no-op.
+    "experimental.text.complete": async (input, output) => {
+      try {
+        const original = output.text;
+        if (typeof original !== "string" || !original.includes("<think>")) return;
+        const cleaned = stripInlineThinkBlocks(original);
+        if (cleaned !== original) {
+          output.text = cleaned;
+          ctx.logger.debug(
+            `bizar: text.complete stripped think blocks (session=${input.sessionID} message=${input.messageID} part=${input.partID} ${original.length}→${cleaned.length}B)`,
+          );
+        }
+      } catch (err) {
+        ctx.logger.warn(
+          `bizar: text.complete failed (passing through): ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
