@@ -107,8 +107,32 @@ export type BackgroundStatus =
  *   - `restartCount` — number of times this instance has been
  *     auto-restarted (not including the original spawn). Default 0.
  *   - `maxRestarts` — cap; default 3.
- *   - `lastRestartAt` — epoch ms of the most recent auto-restart.
- */
+   * - `lastRestartAt` — epoch ms of the most recent auto-restart.
+   * - `processId` (v0.8.0) — PID of the opencode run subprocess. Set
+   *   by the opencode-runner after `Bun.spawn` returns. Optional
+   *   for backward compat.
+   * - `exitCode` (v0.8.0) — exit code of the opencode run
+   *   subprocess. Populated when the process exits.
+   * - `runnerState` (v0.8.0) — free-form status from the runner
+   *   ("starting" | "running" | "done" | "failed" | "killed").
+   *   Allows the dashboard to show runner-level state separately
+   *   from the higher-level `status`.
+   * - `runnerError` (v0.8.0) — opencode run subprocess error (e.g.
+   *   "opencode run exited with code 1").
+   * - `spawnMessage` (v0.8.0) — "you can continue" message returned
+   *   to the LLM by the spawn tool. Surfaces in the dashboard.
+   * - `spawnNextSteps` (v0.8.0) — list of next-step hints returned
+   *   to the LLM by the spawn tool.
+   * - `sessionIdAt` (v0.8.0) — when the opencode sessionId was
+   *   first observed in the subprocess stderr.
+   * - `runnerStartedAt` / `runnerEndedAt` — when the subprocess
+   *   started / ended (subset of `startedAt`/`completedAt`).
+   * - `spawnedAt` — when the bg-spawn tool recorded the instance.
+   *   Distinct from `startedAt` because the runner starts a
+   *   tick or two later.
+   * - `exitSignal` — exit signal name (e.g. "SIGTERM",
+   *   "SIGKILL") if the subprocess was killed.
+   */
 export interface BackgroundState {
   instanceId: string;
   sessionId: string;
@@ -153,6 +177,18 @@ export interface BackgroundState {
    * `{ ok: false }`. Cleared on a successful restart.
    */
   restartError?: string;
+  // v0.8.0 — process tracking (see opencode-runner.ts).
+  processId?: number;
+  exitCode?: number;
+  runnerState?: string;
+  runnerError?: string;
+  spawnMessage?: string;
+  spawnNextSteps?: string[];
+  sessionIdAt?: number;
+  runnerStartedAt?: number;
+  runnerEndedAt?: number;
+  spawnedAt?: number;
+  exitSignal?: string;
 }
 
 /**

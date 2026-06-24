@@ -817,9 +817,13 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   const tools = bg.instanceManager
     ? {
         ...basePlanTools,
+        // v0.8.0 — bg-spawn no longer needs the HTTP client. It
+        // spawns an `opencode run` subprocess per agent (see
+        // src/opencode-runner.ts). The serve child is still
+        // available for the dashboard's v2 protocol and for any
+        // TUI/web client that wants to attach to it.
         bizar_spawn_background: createBgSpawnTool({
           instanceManager: bg.instanceManager,
-          http: (bg.instanceManager as unknown as { http: HttpClient }).http,
           worktree: ctx.worktree,
           logger: ctx.logger,
         }),

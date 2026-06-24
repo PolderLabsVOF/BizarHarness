@@ -86,6 +86,7 @@ function showHelp() {
     test-gate           Detect & run the project's test suite
     update              Update opencode, bizar, and/or bizar-plugin
     service             Manage the background service daemon
+    bg <subcommand>     Manage background agents (list/view/kill/logs)
     dash <subcommand>   Manage the dashboard (start/stop/status/tui)
 
   Examples:
@@ -431,6 +432,10 @@ async function main() {
   } else if (args[0] === 'service') {
     if (isHelpRequest) showServiceHelp();
     else await runServiceCommand(args[1]);
+  } else if (args[0] === 'bg') {
+    // v3.11.1 — Background agent manager (list / view / kill / logs).
+    const { runBg } = await import('./bg.mjs');
+    await runBg(args[1], args.slice(2));
   } else if (args[0] === 'dash' || args[0] === 'dashboard') {
     // `bizar dashboard` is a deprecated alias for `bizar dash`
     if (args[0] === 'dashboard') {

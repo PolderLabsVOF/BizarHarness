@@ -1,84 +1,86 @@
 /**
- * bg-spawn.ts
+ * plugins/bizar/src/tools/bg-spawn.ts
  *
- * `bizar_spawn_background` tool (v0.4.2 spec §1, §6.3, §7.1).
+ * v0.8.0 — `bizar_spawn_background` tool, refactored to spawn one
+ * `opencode run` subprocess per agent (instead of POSTing to a
+ * passive `opencode serve` HTTP API). See opencode-runner.ts for the
+ * spawning implementation; see ../opencode-runner.ts for the
+ * rationale and the wire format we parse.
  *
- * Odin-only — any other agent calling this tool receives a clear error
- * (MEDIUM-26). The caller's `ctx.agent` is the source of truth.
- *
- * Args:
- *   - `agent: string` — the agent to spawn (e.g. "mimir", "thor", "tyr").
- *   - `prompt: string` — the user prompt; sent verbatim via
- *     `parts: [{ type: "text", text: prompt }]`.
- *   - `model?: string` — `"<providerID>/<modelID>"` override (LOW-34).
- *   - `timeoutMs?: number` — collect-time timeout, clamped to [1000, 1800000].
- *
- * Returns on success:
- *   `{ instanceId, sessionId, status: "pending" }`
- *
- * The "Track BEFORE HTTP" invariant (spec §2.2 / HIGH-21):
- *   1. Validate inputs.
- *   2. Generate `instanceId` and `messageID`.
- *   3. `InstanceManager.add()` — atomic cap check + insert; map entry
- *      exists BEFORE any HTTP call.
- *   4. `POST /session` — returns the opencode `sessionId`.
- *   5. `POST /session/{id}/prompt_async` — fire the prompt.
- *   6. On either HTTP failure, mark the instance `failed` and return the
- *      error. The map is never left in a half-state.
+ * Spec §1, §6.3, §7.1.
  */
-
 import { tool } from "@opencode-ai/plugin";
 import { z } from "zod";
 
-import type { InstanceManager } from "../background.js";
 import { generateInstanceId, generateMessageId } from "../background.js";
-import type { HttpClient, ModelOverride } from "../http-client.js";
+import type { InstanceManager } from "../background.js";
 import type { Logger } from "../logger.js";
-
-// --- Spec §1.4 / LOW-34: model parameter parsing -------------------------
-
-/**
- * Parse the `model?: string` argument.
- *   - "provider/model"  → { providerID, modelID }
- *   - "model"           → null (no slash)
- *   - "a/b/c"           → null (multiple slashes)
- *   - "provider/"       → null (empty half)
- *   - "/model"          → null (empty half)
- */
-function parseModel(raw: string): ModelOverride | null {
-  if (raw === "") return null;
-  const parts = raw.split("/");
-  if (parts.length !== 2) return null;
-  const providerID = parts[0];
-  const modelID = parts[1];
-  if (!providerID || !modelID) return null;
-  return { providerID, modelID };
-}
-
-// --- Tool factory ---------------------------------------------------------
+import { spawnAgent } from "../opencode-runner.js";
+import { resolve as pathResolve } from "node:path";
+import { homedir } from "node:os";
 
 /** Spec §7.3: `timeoutMs` clamped to [1000, 1800000] (1s..30min). */
 const TIMEOUT_MIN_MS = 1000;
 const TIMEOUT_MAX_MS = 1_800_000;
 const TIMEOUT_DEFAULT_MS = 300_000;
 
+/** Mirrors plugins/bizar/src/http-client.ts ModelOverride. */
+export interface ModelOverride {
+  providerID: string;
+  modelID: string;
+}
+
+/**
+ * Parse "providerID/modelID" into a ModelOverride. Returns null when
+ * the input is empty (use the agent's default) or malformed.
+ */
+function parseModel(raw: string | undefined): ModelOverride | null {
+  if (raw === undefined || raw === null) return null;
+  const trimmed = String(raw).trim();
+  if (trimmed === "") return null;
+  const idx = trimmed.indexOf("/");
+  if (idx <= 0 || idx === trimmed.length - 1) return null;
+  const providerID = trimmed.slice(0, idx).trim();
+  const modelID = trimmed.slice(idx + 1).trim();
+  if (!providerID || !modelID) return null;
+  return { providerID, modelID };
+}
+
 export interface BgSpawnDeps {
   instanceManager: InstanceManager;
-  http: HttpClient;
   worktree: string;
   logger: Logger;
 }
 
 /**
- * Build the `bizar_spawn_background` tool. The plugin wires the result
- * into `Hooks.tool`. The `deps` closure carries the per-process state
- * (InstanceManager, HttpClient, worktree, logger).
+ * Compute the LogWriter's actual log path for a given instanceId.
+ * The plugin's `LogWriter` (../report.ts:147) writes to
+ * `${logDir}/${sessionId}.log` where `logDir` defaults to
+ * `~/.cache/bizar/logs` (overridable via the `BIZAR_LOG_DIR` env
+ * var). The instanceId is what we know at spawn time — the opencode
+ * sessionId is generated later by the subprocess and we don't
+ * pre-allocate it. We therefore use the instanceId as the log file
+ * name and let the runner append to it.
+ */
+function buildLogPath(instanceId: string): string {
+  const logDir = process.env.BIZAR_LOG_DIR || pathResolve(homedir(), ".cache", "bizar", "logs");
+  return pathResolve(logDir, `${instanceId}.log`);
+}
+
+/**
+ * Build the `bizar_spawn_background` tool. The plugin wires the
+ * result into `Hooks.tool`. The `deps` closure carries the
+ * per-process state (InstanceManager, worktree, logger).
  */
 export function createBgSpawnTool(deps: BgSpawnDeps) {
   return tool({
     description:
-      "Spawn a background agent that runs asynchronously. Only Odin may call this tool. " +
-      "Returns an instanceId; use bizar_status / bizar_collect / bizar_kill to manage the instance.",
+      "Spawn a background agent that runs asynchronously as a separate `opencode run` subprocess. " +
+      "Only Odin may call this tool. " +
+      "Returns an instanceId immediately (sub-second), then the agent runs to completion in the background. " +
+      "Use `bizar_status` / `bizar_collect` / `bizar_kill` to manage the instance. " +
+      "Use `bizar_bg_view` (CLI) to watch all running agents in a tmux split window. " +
+      "IMPORTANT: do NOT block waiting for the agent. Return control to the user right after spawning.",
     args: {
       agent: z.string().min(1).describe("Agent name to spawn (e.g. 'mimir', 'thor', 'tyr')."),
       prompt: z.string().min(1).describe("User prompt for the background session."),
@@ -133,7 +135,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         if (m === null) {
           return {
             output: JSON.stringify({
-              error: `model must be in "providerID/modelID" format (e.g. "openrouter/minimax-m3"). Omit to use the agent's default.`,
+              error: `model must be in "providerID/modelID" format (e.g. "opencode/deepseek-v4-flash-free"). Omit to use the agent's default.`,
             }),
           };
         }
@@ -151,11 +153,14 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       }
       const timeoutMs = requested;
 
-      // 4. Generate the instanceId and seed the manager (track BEFORE HTTP).
+      // 4. Generate the instanceId and seed the manager (track BEFORE
+      //    the subprocess starts, so a fast-exiting agent is still
+      //    queryable via bizar_status).
       const instanceId = generateInstanceId();
+      const logPath = buildLogPath(instanceId);
       const draft = {
         instanceId,
-        sessionId: "", // filled in by POST /session response
+        sessionId: "", // filled in once the opencode run reports it
         agent: args.agent,
         model: modelOverride
           ? `${modelOverride.providerID}/${modelOverride.modelID}`
@@ -163,7 +168,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         promptPreview: args.prompt.slice(0, 200),
         prompt: args.prompt, // store full prompt for restart support
         parentAgent: ctx.agent,
-        logPath: buildLogPath(deps.worktree, instanceId),
+        logPath,
         timeoutMs,
         toolCallCount: 0,
         // v0.5.5 — persistent auto-restart
@@ -180,25 +185,30 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         };
       }
 
-      // 5. POST /session. The in-memory entry already exists.
-      const sessionRes = await deps.http.createSession(
-        {
-          parentID: ctx.sessionID,
-          title: `bgr:${args.agent}:${instanceId}`,
+      // 5. Spawn the opencode run subprocess. The runner returns
+      //    when the opencode child has reported its session id in
+      //    the structured log stream (typically <500ms).
+      const messageID = generateMessageId();
+      let spawnRes: Awaited<ReturnType<typeof spawnAgent>>;
+      try {
+        spawnRes = await spawnAgent({
+          prompt: args.prompt,
           agent: args.agent,
-          ...(modelOverride ? { model: modelOverride } : {}),
-        },
-        deps.worktree,
-      );
-      if (!sessionRes.ok) {
+          model: modelOverride,
+          worktree: deps.worktree,
+          logPath,
+          title: `bgr:${args.agent}:${instanceId}:${messageID}`,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         await deps.instanceManager.update(instanceId, {
           status: "failed",
-          error: `POST /session failed: ${sessionRes.error}`,
+          error: `spawnAgent threw: ${msg}`,
           completedAt: Date.now(),
         });
         return {
           output: JSON.stringify({
-            error: `spawn failed: ${sessionRes.error}`,
+            error: `spawn crashed: ${msg}`,
             instanceId,
             sessionId: null,
             status: "failed",
@@ -206,78 +216,105 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         };
       }
 
-      // 6. Persist the sessionId in the in-memory state.
-      await deps.instanceManager.update(instanceId, {
-        sessionId: sessionRes.value.id,
-        status: "running",
-      });
-
-      // 6b. BUGFIX (v0.5.1): Now that the real sessionId is known,
-      // attach the SSE event handler for this instance. The track-BEFORE-
-      // HTTP invariant is preserved (instance is in the map from step 4),
-      // but the per-session event subscription is deferred to here so it
-      // can be registered against the real sessionId rather than "".
-      // Re-read the instance so the SSE handler sees the updated sessionId.
-      const freshInstance = await deps.instanceManager.get(instanceId);
-      if (freshInstance) {
-        try {
-          deps.instanceManager.attachEventHandler(freshInstance);
-        } catch (err: unknown) {
-          // Event handler attachment is best-effort. If it fails (e.g. the
-          // SSE stream is disconnected) the instance is still tracked and
-          // can be re-attached later via a reconnect.
-          deps.logger.warn(
-            `bizar: attachEventHandler failed for ${instanceId}: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-        }
-      }
-
-      // 7. POST /session/{id}/prompt_async.
-      const messageID = generateMessageId();
-      const sendRes = await deps.http.sendPrompt(
-        {
-          sessionId: sessionRes.value.id,
-          messageID,
-          agent: args.agent,
-          ...(modelOverride ? { model: modelOverride } : {}),
-          parts: [{ type: "text", text: args.prompt }],
-        },
-        deps.worktree,
-      );
-      if (!sendRes.ok) {
+      if (!spawnRes.ok || !spawnRes.sessionId) {
         await deps.instanceManager.update(instanceId, {
           status: "failed",
-          error: `POST /session/{id}/prompt_async failed: ${sendRes.error}`,
+          error: spawnRes.error || "opencode run failed before reporting session id",
           completedAt: Date.now(),
         });
         return {
           output: JSON.stringify({
-            error: `spawn failed: ${sendRes.error}`,
+            error: `spawn failed: ${spawnRes.error || "no session id"}`,
             instanceId,
-            sessionId: sessionRes.value.id,
+            sessionId: null,
             status: "failed",
           }),
         };
       }
 
+      // 6. Persist the sessionId in the instance state. The high-level
+      //    `status` stays "pending" until the runner reports a terminal
+      //    state; we record the processId and the runner's
+      //    intermediate states in the dedicated fields.
+      await deps.instanceManager.update(instanceId, {
+        sessionId: spawnRes.sessionId,
+        status: "running",
+        processId: spawnRes.processId,
+        runnerState: "running",
+        sessionIdAt: Date.now(),
+      });
+
+      // 7. Wire the runner's exit event to the instance state. When
+      //    the opencode run subprocess exits, the runner updates
+      //    the status (done / failed / killed) and triggers the
+      //    persistent auto-restart flow if appropriate.
+      if (spawnRes.processId !== undefined) {
+        const { onExit } = await import("../opencode-runner.js");
+        onExit(spawnRes.processId, (status) => {
+          // Map runner states to BackgroundStatus. The runner reports
+          // "starting" | "running" | "done" | "failed" | "killed";
+          // BackgroundStatus has "pending" | "running" | "done" |
+          // "failed" | "killed" | "timed_out". "starting" maps to
+          // "running" (in-flight, no terminal state).
+          const mapped: "pending" | "running" | "done" | "failed" | "killed" =
+            status.state === "starting" || status.state === "running"
+              ? "running"
+              : status.state;
+
+          const update: Parameters<InstanceManager["update"]>[1] = {
+            status: mapped,
+            runnerState: status.state,
+            completedAt: status.endedAt ?? Date.now(),
+          };
+          if (status.exitCode !== undefined) update.exitCode = status.exitCode;
+          if (status.error) {
+            update.runnerError = status.error;
+            update.error = status.error;
+          }
+          if (status.endedAt !== undefined) update.runnerEndedAt = status.endedAt;
+          // Best-effort: if the InstanceManager has gone away (e.g.
+          // the plugin restarted), the update silently no-ops.
+          deps.instanceManager
+            .update(instanceId, update)
+            .then(() => {
+              // Persistent auto-restart: only for natural failures,
+              // not for explicit kills or successes.
+              if (status.state === "failed") {
+                return deps.instanceManager.maybeAutoRestart(instanceId);
+              }
+              return undefined;
+            })
+            .catch((err: unknown) => {
+              deps.logger.warn(
+                `bizar: bg-spawn exit update failed for ${instanceId}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            });
+        });
+      }
+
+      // 8. Return the spawn result. v0.8.0 message: the agent is
+      //    running in the background; Odin should return control to
+      //    the user immediately and not block waiting.
       return {
         output: JSON.stringify({
           instanceId,
-          sessionId: sessionRes.value.id,
-          status: "pending",
+          sessionId: spawnRes.sessionId,
+          processId: spawnRes.processId,
+          status: "running",
+          message:
+            "Background agent started. It will run to completion in a separate `opencode run` subprocess. " +
+            "Use `bizar_status <instanceId>` to check progress, `bizar_collect <instanceId>` to wait for the result, " +
+            "or `bizar_kill <instanceId>` to stop it. Run `bizar bg view` in another terminal to watch all running agents live.",
+          nextSteps: [
+            "Tell the user the agent is running and approximately how long they should expect to wait",
+            "If the user wants the result now, call `bizar_collect <instanceId>` (with a reasonable timeout)",
+            "If the user wants to stop the agent, call `bizar_kill <instanceId>`",
+            "Do NOT block waiting for the result unless the user explicitly asked for it",
+          ],
         }),
       };
     },
   });
-}
-
-// --- Helpers --------------------------------------------------------------
-
-function buildLogPath(worktree: string, instanceId: string): string {
-  // The log file is owned by the opencode serve child (not by us). The
-  // plugin doesn't write to it. We still record the conventional path so
-  // the user can `cat` the per-session log for diagnostics.
-  return `${worktree}/.opencode/log/${instanceId}.log`;
 }

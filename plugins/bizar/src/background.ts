@@ -866,6 +866,19 @@ export class InstanceManager {
     }
   }
 
+  /**
+   * v0.8.0 — Public version of `_maybeAutoRestart`. The opencode-runner
+   * (see src/opencode-runner.ts) calls this from its onExit callback
+   * when a `bizar_spawn_background` subprocess exits. Without this,
+   * persistent instances would never auto-restart under the new
+   * subprocess-based path (the SSE event handler that previously
+   * triggered auto-restart is no longer wired up because we don't
+   * subscribe to per-session events anymore).
+   */
+  async maybeAutoRestart(instanceId: string): Promise<void> {
+    await this._maybeAutoRestart(instanceId);
+  }
+
   /** v0.5.5 — Attempt an auto-restart for a persistent failed instance. */
   private async _maybeAutoRestart(instanceId: string): Promise<void> {
     const inst = this.instances.get(instanceId);

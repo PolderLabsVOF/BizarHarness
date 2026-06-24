@@ -143,12 +143,59 @@ This is documented inline in `task-delegator.mjs:596-624` so future maintainers 
 - **Pass 4 (Dashboard)**: 10/13 routes work end-to-end (3 false-fails = test bugs, not framework bugs)
 - **Pass 5 (Plan system)**: 3/4 ✅ (`plan new` hangs because it opens a server; behavior is correct, the test needs to background it)
 - **Pass 6 (Graph system)**: 6/6 ✅ CLI infrastructure works; full `graph build` needs `OPENAI_API_KEY` for semantic extraction of docs
-- **Pass 7 (Skills)**: 9/9 ✅ all 5 bundled skills have valid frontmatter
+- **Pass 7 (Skills)**: 9/9 ✅ all 5 bundled skills with valid frontmatter
 - **Pass 8 (Self-improvement)**: 8/8 ✅ append/restore cycle works
 - **Pass 9 (MCP integration)**: 3/3 ✅ (Hindsight sandbox-disabled by design)
 - **Pass 10 (Full integration)**: 19/19 ✅
 - **Pass 11 (Background spawn)**: 7/7 ✅ phantom-log fix verified end-to-end with real tmux in the container
-- **Total**: 510 plugin tests + 28 SDK tests + 7 dashboard v2 smoke + 12 new path-safe/tmux-wrap tests + 116 root typecheck — all green, zero regressions.
+- **Pass 12 (Background architecture)**: 4/4 ✅ active `opencode run` subprocess path verified end-to-end
+- **Total**: 510 plugin tests + 28 SDK tests + 7 dashboard v2 smoke + 19 new path-safe/tmux-wrap/opencode-runner tests + 116 root typecheck — all green, zero regressions.
+
+### v0.8.0 — Background agent architecture rewrite (FIX 3)
+
+User-reported: "it spawns a lot of sessions but doesn't do anything." Empirical reproduction in the dev container found the architectural issue documented inline in `task-delegator.mjs:596-624` and the plugin's `bg-spawn.ts`:
+
+> "opencode serve is a passive HTTP server. The agent loop is driven by a TUI/web client. The plugin POSTs the prompt via the HTTP API; the prompt is admitted but no agent processes it unless a TUI is connected."
+
+**Root cause:** Pre-v0.8.0, the plugin's `bizar_spawn_background` tool POSTed to `POST /api/session/{id}/prompt` on the opencode serve child. The server admitted the prompt (`session.next.prompt.admitted` event) but no agent loop processed it. Result: sessions created, tmux panes spawned, nothing happened. The user was right.
+
+**Fix:** Replace the passive HTTP path with an **active subprocess path** via the new `opencode-runner` module (Bun.spawn for the plugin, child_process.spawn for the dashboard). Each background agent now spawns one `opencode run <prompt>` subprocess that drives the agent loop to completion.
+
+**Files changed:**
+
+- `plugins/bizar/src/opencode-runner.ts` (NEW) — Bun.spawn-based runner. Tracks PIDs in an in-memory map. Captures stdout+stderr to the LogWriter's log file. Parses the sessionId from the structured stderr log stream. Exposes `spawnAgent`, `getStatus`, `onExit`, `killAgent`, `list`, `_resetForTests`.
+- `plugins/bizar/src/tools/bg-spawn.ts` — refactored to use the runner. The HTTP client and SSE event handler are gone; the runner's `onExit` callback now drives instance state transitions and triggers `maybeAutoRestart` for persistent instances. Returns immediately with `{ instanceId, sessionId, processId, status: "running", message, nextSteps }` so the calling agent can go idle.
+- `plugins/bizar/src/background-state.ts` — `BackgroundState` now carries `processId`, `exitCode`, `runnerState`, `runnerError`, `spawnMessage`, `spawnNextSteps`, `sessionIdAt`, `runnerStartedAt`, `runnerEndedAt`, `spawnedAt`, `exitSignal` (all optional for backward compat).
+- `plugins/bizar/src/background.ts` — `InstanceManager` now exposes a public `maybeAutoRestart(instanceId)` method (was private). The runner's onExit calls this for failed persistent instances.
+- `plugins/bizar/index.ts` — `BgSpawnDeps` no longer requires `http`; the bg-spawn tool wires only `instanceManager`, `worktree`, and `logger`.
+- `bizar-dash/src/server/opencode-runner.mjs` (NEW) — Node child_process version of the plugin runner. Same surface, same wire format.
+- `bizar-dash/src/server/task-delegator.mjs` — `dispatchToBackground` now uses the runner instead of the passive HTTP API. Same wire format, same log path.
+- `cli/bg.mjs` (NEW) — `bizar bg` CLI for managing background agents:
+  - `bizar bg list` — one-line summary of every background instance (status, agent, prompt preview, tmux session).
+  - `bizar bg status <id>` — full detail view of one instance.
+  - `bizar bg view` — **the headline feature**: opens a desktop window with a tmux control session that splits into N panes, each `tail -F` of one running agent's log. Cross-platform: macOS (osascript + Terminal.app), Linux (gnome-terminal / konsole / xterm), Windows (wt.exe / cmd).
+  - `bizar bg logs <id>` — `tail -F` the agent's log file.
+  - `bizar bg kill <id>` — `SIGTERM` (then `SIGKILL` after 5s) to the subprocess and kill its tmux session.
+- `cli/bin.mjs` — wires `bizar bg` into the CLI.
+- `config/agents/odin.md` — explicit "go idle after spawning" guidance. The previous "stops and does nothing" trap was caused by the LLM calling `bizar_collect` immediately after spawn and waiting. The new prompt tells Odin: "acknowledge the spawn, return control to the user, do NOT call `bizar_collect` unless the user explicitly asked for the result. Suggest `bizar bg view` for live monitoring."
+
+**Tests added (7 new, all pass):**
+
+- `bizar-dash/tests/opencode-runner.test.mjs` (NEW, 7 tests) — covers the dashboard runner's API surface: `_resetForTests`, `getStatus` for unknown PIDs, `killAgent` no-ops on unknown PIDs, `spawnAgent` with non-existent worktree (still returns a processId), `spawnAgent` creates log dir if missing, `spawnAgent` captures stdout+stderr to logPath, `onExit` fires when the process exits.
+- Total dashboard tests: 28 (path-safe: 9, tmux-wrap: 3, opencode-runner: 7, smoke-v2: 7, plus the original 2).
+
+**Empirical end-to-end verification (scripts/pass12-bg-architecture.sh, 4/4 PASS):**
+
+- `opencode serve` starts.
+- Dashboard starts.
+- Task submitted to `/api/tasks/submit`.
+- Dashboard's `task-delegator` spawns an `opencode run` subprocess via the new runner.
+- BG state file is written with `instanceId`, `sessionId`, `runnerState`, etc.
+- Log file is written by the runner with structured `[stderr] timestamp=... level=... message=...` lines from opencode.
+- `bizar bg list` correctly shows the agent with its tmux session name.
+- `opencode-runner.mjs` directly: spawns an `opencode run`, gets a sessionId, and the `onExit` callback fires when the subprocess exits.
+
+**Backward compatibility:** Old state files (pre-v0.8.0) load cleanly — all new fields are optional. The HTTP API path (`createOpencodeSession` + `sendPrompt`) is no longer called by the plugin or the dashboard, but the dashboard's `serve-info.mjs` still exports it for any external consumer (e.g. a custom dashboard plugin). The plugin's `opencode serve` child still starts and listens on its port — the v2 dashboard protocol uses it.
 
 ### Changed — Agent behavior under uncertainty
 
