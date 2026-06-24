@@ -487,3 +487,45 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   3. When refactoring an existing communication protocol, **leave the old bridge in place for one full release cycle**. The new SDK-backed bridge is additive; consumers (TUI, hooks) migrate in follow-up PRs. The file-based `serve.json` bridge stays.
   4. **Persist test outputs to /tmp** when vitest eats stderr — saves 5+ minutes of debug confusion.
   5. **Smoke tests that spin up real HTTP servers** catch integration issues (path resolution, header handling, error mapping) that unit tests with mocks miss. Always include at least one end-to-end smoke alongside unit tests for any HTTP/SSE code.
+
+### 2026-06-24b: Multi-pass dev-container simulation (passes 1-10)
+- **Task**: Run multiple test passes across the entire BizarHarness framework inside the `BizarHarness-dev` Docker container, fix any issues found, and document findings.
+- **Files changed**: 8 new scripts in `scripts/pass[1-10]-*.sh`; BizarHarness-dev/Dockerfile (added python3); plugins/bizar/src/commands.ts (added meaningful `response` strings to 13 slash-command handlers); plugins/bizar/tests/config.test.ts (stale 0.5.4 → 0.6.2)
+- **Scope**: 10 passes — CLI commands, plugin, agent defs, dashboard routes, plan system, graph system, skills, self-improvement, MCP integration, full integration
+- **Agents used**: Direct execution (Odin) — task-tool routing still broken
+- **Test results before fixes**:
+  - Pass 1 (CLI): 11/11 ✅
+  - Pass 2 (Plugin): All 7 tools exist, plugin loads ✅
+  - Pass 3 (Agents): 13 agent defs valid ✅
+  - Pass 4 (Dashboard): 10/13 — 3 false-fails (test bugs: wrong HTTP method, non-existent session ID)
+  - Pass 5 (Plan): 3/4 — `plan new` opens a server that hangs (test bug, not framework bug)
+  - Pass 6 (Graph): 6/6 — but graphify build needs an LLM key for semantic extraction
+  - Pass 7 (Skills): 9/9 ✅ (after fixing path to `config/skills/`)
+  - Pass 8 (Self-improvement): 8/8 ✅
+  - Pass 9 (MCP): 3/3 (rest are warnings, Hindsight sandbox-disabled)
+  - Pass 10 (Full integration): 19/19 ✅ — but **found 19 failing plugin tests** in `parseSlashCommand`
+- **Test results after fixes**:
+  - All 510 plugin tests pass (up from 491)
+  - All 28 SDK tests pass
+  - All 7 dashboard v2 smoke tests pass
+  - All 116 root typecheck pass
+- **Real bugs found and fixed**:
+  1. **`handleVisualPlan` returned `response: ""` for all 5 cases** — dialog handled UI but text response was empty. Tests expected non-empty response matching `/on/i`, `/off/i`, etc. Fixed by adding human-readable text alongside each dialog.
+  2. **`helpPlan`, `handlePlanNew`, `handlePlanList`, `handlePlanOpen`, `handlePlanGet`, `helpResult`** — same pattern, 8 more empty-response cases. Fixed.
+  3. **Stale version assertion in `plugins/bizar/tests/config.test.ts`** — expected `0.5.4` but the plugin was at `0.6.2`. Test was out of sync with the package. Updated to `0.6.2`.
+  4. **Dev container missing Python3** — Dockerfile only installed `git`, `jq`, `ca-certificates`, `curl`. Graph system needs Python 3.10+ for graphify. Added `python3 python3-pip` to apt-get install.
+- **Lessons learned**:
+  - **Each `docker compose run --rm dev` is a fresh container** — only `/home/dev/.cache/` is persisted (per the volume in docker-compose.yml). `/home/dev/.local/` resets every run. This means:
+    - `npm install -g --prefix=...` must happen INSIDE every test script
+    - `pip install --user` doesn't work; use `--target=/home/dev/.cache/python-packages` and set `PYTHONPATH`
+    - The path for the global binary is `node_modules/.bin/`, NOT `bin/` (npm's `--prefix` puts bin in `node_modules/.bin/`, not at the prefix root)
+  - **Test scripts must be self-contained** — don't assume any package is installed from a previous run. Always check + install at the start of the script.
+  - **The full plugin test suite includes 19 `parseSlashCommand` tests** that verify text responses from slash commands. When refactoring the dialog-vs-response split, leave the response field non-empty for testability.
+  - **BizarHarness publish v0.7.0-alpha.1 to npm** was a real config/version bump from 0.5.4 → 0.6.2. The test in `config.test.ts` was hard-coded to the old version — a reminder that **version-bump PRs must also update version assertions in tests**.
+  - **Graphify needs an LLM key for semantic extraction** of docs (not for code-only corpora). The BizarHarness repo has 1090 docs + 2 papers + 51 images, so any `bizar graph build` will fail without `OPENAI_API_KEY`/`GEMINI_API_KEY`/etc. This is environmental, not a framework bug — but **the dev container should document this requirement** (could add a one-liner to DOCKER_DEV.md).
+- **Pattern to follow next time**:
+  1. **Always make the test pass itself self-contained** — install dependencies inside the script (using a persistent cache volume for the install target), set PATH/PYTHONPATH at the top, never assume previous state.
+  2. **When fixing a "test fails" outcome, check the test first** — sometimes it's a test bug (wrong method, non-existent ID), not a framework bug. Read the test expectation before touching production code.
+  3. **For UI dialog + text response fields, always populate the text response** even if the dialog handles the rich UI. Tests and accessibility tools rely on the text version.
+  4. **Hard-coded version strings in tests are tech debt** — if you bump a version, search for the old version in `tests/` and update each instance, or use a single source of truth (e.g., `import { VERSION } from '../package.json' assert { type: 'json' }`).
+  5. **For framework multi-pass testing in containers**: layer the passes (1=CLI, 2=Plugin, 3=Agents, 4=Dashboard, 5=Plan, 6=Graph, 7=Skills, 8=Self-imp, 9=MCP, 10=Full integration). Each pass exercises a slice; pass 10 catches cross-slice regressions. Pass 6 (graph) is the only one needing LLM key — pass others can run offline.

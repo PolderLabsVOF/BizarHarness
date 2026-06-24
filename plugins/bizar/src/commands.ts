@@ -314,7 +314,7 @@ function handleVisualPlan(arg: string, ctx: ParseContext): SlashCommandResult {
     // No argument — return current state as a dialog
     return {
       handled: true,
-      response: "",
+      response: `Visual plan mode is currently ${currentEnabled ? "on" : "off"}.`,
       dialog: {
         id: generateId(),
         title: "Visual Plan",
@@ -334,7 +334,7 @@ function handleVisualPlan(arg: string, ctx: ParseContext): SlashCommandResult {
   if (lc === "on" || lc === "true" || lc === "1" || lc === "enable") {
     return {
       handled: true,
-      response: "",
+      response: `Visual plan mode is now on.`,
       settingsPatch: { visualPlanEnabled: true },
       dialog: {
         id: generateId(),
@@ -353,7 +353,7 @@ function handleVisualPlan(arg: string, ctx: ParseContext): SlashCommandResult {
   if (lc === "off" || lc === "false" || lc === "0" || lc === "disable") {
     return {
       handled: true,
-      response: "",
+      response: `Visual plan mode is now off.`,
       settingsPatch: { visualPlanEnabled: false },
       dialog: {
         id: generateId(),
@@ -372,7 +372,7 @@ function handleVisualPlan(arg: string, ctx: ParseContext): SlashCommandResult {
   if (lc === "status" || lc === "state" || lc === "?") {
     return {
       handled: true,
-      response: "",
+      response: `Visual plan mode is currently ${currentEnabled ? "on" : "off"}.`,
       dialog: {
         id: generateId(),
         title: "Visual Plan",
@@ -444,7 +444,7 @@ function handlePlan(arg: string, ctx: ParseContext): SlashCommandResult {
 function helpPlan(): SlashCommandResult {
   return {
     handled: true,
-    response: "",
+    response: "Plan commands: /plan new <slug> [template] | /plan list | /plan open <slug> | /plan get <slug> | /plan add <slug> | /plan update <slug> <id> | /plan delete <slug> <id> | /plan comment <slug> [id] \"text\" | /plan comments <slug> [id] | /plan status <slug> <status> | /plan wait <slug> [--timeout N]. Run /plan <subcommand> for details.",
     dialog: {
       id: generateId(),
       title: "Plan Commands",
@@ -477,7 +477,7 @@ function handlePlanNew(args: string[], ctx: ParseContext): SlashCommandResult {
   if (args.length === 0 || args[0] === "") {
     return {
       handled: true,
-      response: "",
+      response: "Usage: /plan new <slug> [template]. Available templates: " + KNOWN_TEMPLATES.join(", ") + ".",
       dialog: {
         id: generateId(),
         title: "Create New Plan",
@@ -520,7 +520,7 @@ function handlePlanNew(args: string[], ctx: ParseContext): SlashCommandResult {
 
   return {
     handled: true,
-    response: "",
+    response: `Created plan "${titleCase(slug)}" with the "${resolvedTemplate}" template. Use /plan open ${slug} to open it.`,
     sideEffect: {
       kind: "create_plan",
       slug,
@@ -544,9 +544,26 @@ function handlePlanNew(args: string[], ctx: ParseContext): SlashCommandResult {
 
 function handlePlanList(ctx: ParseContext): SlashCommandResult {
   const slugs = ctx.availablePlanSlugs ?? [];
+  if (slugs.length === 0) {
+    return {
+      handled: true,
+      response: "No plans found in the current worktree. Use /plan new <slug> to create one.",
+      sideEffect: { kind: "list_plans" },
+      dialog: {
+        id: generateId(),
+        title: "Plans",
+        command: "/plan list",
+        component: "plan-list",
+        data: {
+          plans: slugs,
+          count: slugs.length,
+        },
+      },
+    };
+  }
   return {
     handled: true,
-    response: "",
+    response: `Found ${slugs.length} plan(s) (${slugs.length}): ${slugs.join(", ")}.`,
     sideEffect: { kind: "list_plans" },
     dialog: {
       id: generateId(),
@@ -584,7 +601,7 @@ function handlePlanOpen(args: string[], ctx: ParseContext): SlashCommandResult {
 
   return {
     handled: true,
-    response: "",
+    response: `Opening plan "${slug}" at ${url}.`,
     settingsPatch: { lastUsedSlug: slug },
     sideEffect: {
       kind: "open_plan_url",
@@ -618,7 +635,7 @@ function handlePlanGet(args: string[]): SlashCommandResult {
   }
   return {
     handled: true,
-    response: "",
+    response: `Fetching canvas for plan "${slug}"…`,
     sideEffect: {
       kind: "tool_invocation",
       toolName: "bizar_plan_action",
@@ -1078,7 +1095,7 @@ function handleBizar(arg: string, ctx: ParseContext): SlashCommandResult {
 function helpResult(): SlashCommandResult {
   return {
     handled: true,
-    response: "",
+    response: "Available commands: /visual-plan [on|off|status], /plan new <slug> [template], /plan list, /plan open <slug>, /plan get <slug>, /plan add <slug>, /plan update <slug> <id>, /plan delete <slug> <id>, /plan comment <slug> [id] \"text\", /plan comments <slug> [id], /plan status <slug> <status>, /plan wait <slug> [--timeout N], /bizar, /bizar <args>, /help. See the dialog for full descriptions.",
     dialog: {
       id: generateId(),
       title: "Bizar Commands",

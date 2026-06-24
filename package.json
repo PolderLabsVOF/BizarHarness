@@ -17,7 +17,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build:sdk": "npm run build -w @polderlabs/bizar-sdk",
-    "test:sdk": "npm run test -w @polderlabs/bizar-sdk"
+    "test:sdk": "npm run test -w @polderlabs/bizar-sdk",
+    "test:sdk:watch": "npm run test:watch -w @polderlabs/bizar-sdk",
+    "test": "npm run typecheck && npm run test:sdk && (cd plugins/bizar && bun test tests/loop.test.ts tests/block.test.ts tests/tools/bg-get-comments.test.ts tests/settings.test.ts tests/tools/plan-action.test.ts tests/tools/wait-for-feedback.test.ts) && node bizar-dash/tests/smoke-v2.mjs",
+    "build": "npm run build:sdk"
   },
   "keywords": [
     "opencode",
