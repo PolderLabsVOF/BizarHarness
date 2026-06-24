@@ -28,6 +28,12 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 20. **npm workspaces need root `package.json` config + symlinks** — `"workspaces": ["packages/*"]` at root + `"@scope/pkg": "workspace:*"` in dependent packages. `npm install` at root creates symlinks at `node_modules/@scope/pkg -> ../../packages/pkg`. Bun also reads workspaces from root package.json.
 21. **Vitest captures `console.error` in test output** — debug logging inside the SDK doesn't surface during tests. Use `process.env.MY_DEBUG` to gate verbose debug logs OR write to `/tmp/*.log` from inside the SDK when investigating tricky issues.
 22. **`bun test <path>` treats path as a name filter** — must use `./<path>` (or run from the dir) to ensure it's treated as a path. Otherwise bun reports "Tests need `.test` in the filename" and silently filters everything out.
+23. **Mount namespace routers BEFORE broader catch-all routers** — Express matches middleware in registration order. If you have `/api/v2` and `/api` and the `/api` router has an internal 404 catch-all (api.mjs:109 style), the catch-all will swallow `/api/v2/*` requests because `/api` matches first. Always mount the more specific namespace router first. Verified in BizarHarness-dev simulation: 157 tests passed only after reordering `/api/v2` mount to before `/api` apiRouter.
+24. **HTTP basic auth files: persist only the secret, not the port** — the port can drift (server restarts on a different port, port conflicts, etc.). Always use the CURRENT port argument when reading/writing the auth file, and rewrite the file when persisted port differs. The persisted password + createdAt are what should survive restarts. The dashboard's `~/.cache/<scope>/auth.json` should reflect WHERE IT IS LISTENING NOW, not where it listened last time.
+25. **CLI args must be parsed, not silently dropped** — `startDashboard({ port: ... })` with `port` from caller IS NOT the same as `startDashboard()` after parsing `argv`. The original `dashboard dash start --port 4098` was silently ignoring `--port` and falling through to `findFreePort(4321)`. Always: parse argv → validate → pass typed args down. The Bash→Node hand-off is a common silent-drop point.
+26. **Add request-log middleware to HTTP servers during integration tests** — when a plugin→server flow doesn't behave, a per-request middleware like `console.log(\`[v2-req] ${req.method} ${req.originalUrl}\`)` is the fastest way to confirm "is the client even reaching us?". Static logs of startup output won't show mid-run traffic. Took the dev-container simulation from "no events visible" to "no POST /api/v2/event from plugin" in one log line.
+27. **Opencode event hook has `sessionID` nested in `properties`, not at top level** — the legacy `bizar` plugin assumed `event.sessionID` was top-level, so its hook returned early for every opencode event. Correct extraction: `const sessionID = ev.sessionID ?? ev.properties?.sessionID`. This is a real bug in `plugins/bizar/index.ts` v0.6.2 that silently disables the session-tracking hook. Fixed in v0.7.0-alpha.1.
+28. **`opencode run <prompt>` is too short-lived to emit lifecycle events** — the `event` hook (session.created, session.updated, session.idle) only fires for long-running TUI/server sessions. For end-to-end SDK verification, use a manual SDK POST against the dashboard's `/api/v2/event` endpoint (the smoke test does this) rather than waiting for organic opencode events from `run`.
 
 ## Log
 
@@ -430,6 +436,32 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - **Live E2E testing against the user's actual state catches what typecheck + build + unit tests cannot.** Thor's test gate ran `readServeInfo()` against the user's actual 99-byte `serve.json` — that's the only way to catch "the strict schema doesn't match the real world." Unit tests with a different-shaped fixture would have passed.
 
 - **Pattern to follow next time**: For state-machine bugs, the test gate MUST include a live E2E against the user's actual data files, not just unit tests with synthetic fixtures. The user's `serve.json` had 3 fields, our schema expected 6. The unit test used 6 fields so the bug would have shipped. The live E2E caught it in 5 seconds. Also: commit each turn before starting the next — Odin had uncommitted v3.11.0 follow-up work when the user reported this bug, and two turns landed in one commit.
+
+### 2026-06-24b: Full real-life simulation in BizarHarness-dev Docker container
+- **Task**: Run full install → update → use → integration test of the v0.7.0-alpha.1 refactor inside the bizarharness-dev Docker sandbox. Fix any issues found.
+- **Files changed**: 7 files (bizar-dash/{cli.mjs, server.mjs, v2-auth-file.mjs, routes-v2/index.mjs}; plugins/bizar/{index.ts, src/event-stream.ts}; scripts/bizar-sim.sh)
+- **Agents used**: Direct execution (Odin) — Tyr/Thor task-tool routing still broken this session
+- **Approach**: Single bash script in the container: install bizar to user prefix, copy plugin source, npm install plugin deps, start dashboard from LOCAL source (npm v3.11.0 lacks v2 routes), curl v2 routes, subscribe SSE, run opencode, run all test suites. Iteration: fixed three real bugs discovered during the simulation (route order, auth-file port, CLI arg parsing).
+- **Test results in container**: 157 tests green (28 SDK vitest + 6 plugin dashboard-client bun + 7 dashboard smoke + 116 existing plugin tests). Zero regressions.
+- **Critical bugs found and fixed**:
+  1. **Route order** — `/api/v2` mounted after `/api/apiRouter` was swallowed by apiRouter's internal 404 catch-all (api.mjs:109). Fix: mount v2 BEFORE apiRouter.
+  2. **Auth-file port drift** — dashboard's auth file persisted `port: 0` from a previous run because my `loadOrCreateAuth` was reading `parsed.port` instead of using the current `port` arg. Fix: always use current port, rewrite file when persisted differs.
+  3. **CLI arg parsing** — `dashboard dash start --port 4098` silently ignored `--port`. Fix: parse `--port` and `--bind` in cli.mjs `main()`.
+- **Pre-existing bug fixed (not from my refactor)**: plugin's `event` hook assumed `event.sessionID` was top-level but opencode's events have `sessionID` inside `properties.sessionID`. Result: hook returned early for every event. Fixed in plugins/bizar/index.ts.
+- **Opencode `run` mode doesn't emit lifecycle events** — `event` hook only fires for long-running TUI/server sessions. The simulation's `opencode run <prompt>` is too short-lived. The v2 protocol itself verified end-to-end via the SDK smoke test (which POSTs to `/api/v2/event` and the SSE subscriber receives it).
+- **Lessons learned**:
+  - **Add request-log middleware to HTTP servers during integration testing.** A one-line `console.log(\`[v2-req] ${req.method} ${req.originalUrl}\`)` middleware is the fastest way to confirm "is the client even reaching us?" Static startup logs don't show mid-run traffic.
+  - **Dev container has stale opencode.json model names** (`openrouter/minimax/minimax-m3` doesn't exist in opencode-ai 1.17.7). Use `--model opencode/deepseek-v4-flash-free` for the free tier. The model's actual ID was `MiniMax-M3` per opencode's suggestion, but that was a non-existent model in this container.
+  - **`npm install -g` fails with EACCES in dev containers** where the Dockerfile installs packages as root but the runtime user is `dev`. Workaround: `npm install -g --prefix=~/.local`. The `~/.local/bin` is then in PATH.
+  - **Cache volumes in dev containers persist auth files across runs** — `bizarharness-dev-cache:/home/dev/.cache` keeps stale `dash-auth.json` with `port: 0` from a previous run. Always delete or rewrite.
+- **Pattern to follow next time**: For any HTTP+SSE refactor, the simulation harness (scripts/bizar-sim.sh) is the right shape:
+  1. Install everything in a fresh container run (each `docker compose run --rm` is ephemeral)
+  2. Use `--prefix=~/.local` for npm installs to avoid EACCES
+  3. Run dashboard from LOCAL source (npm-published may be older than working tree)
+  4. Add request-log middleware to BOTH ends (client SDK logs + server route logs)
+  5. Run an SDK smoke test (publishes + subscribes via curl) BEFORE testing organic opencode events — confirms the protocol works independently of opencode lifecycle timing
+  6. Then test organic events with a real opencode session
+  7. Commit each fix as you discover it (otherwise you lose track of which fix solved which issue)
 
 ### 2026-06-24: Plugin↔Dashboard v2 Protocol — HTTP+SSE via @polderlabs/bizar-sdk
 - **Task**: Rebuild plugin↔dashboard communication per three target sources (zenobi-us/bun-module, opencode SDK, opencode server). Full implementation + tests + iterations + push + publish. Tyr/Thor task-tool routing was broken this session, so Odin executed end-to-end directly.
