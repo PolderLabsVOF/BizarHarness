@@ -330,6 +330,34 @@ export const backgroundStore = {
     }
   },
 
+  /**
+   * v3.11.1 — Kill the tmux session for an instance if one exists.
+   * No-op when the session is absent or tmux is not installed. Returns
+   * `{ ok, session, killed, error? }` so callers can log a structured
+   * result. Used by the bg-retry janitor and `cleanup()` to ensure
+   * terminal instances don't leave dangling tmux panes.
+   *
+   * @param {string} instanceId
+   * @returns {{ ok: boolean, session: string, killed: boolean, error?: string }}
+   */
+  killTmuxFor(instanceId) {
+    const session = tmuxSessionFor(instanceId);
+    if (!tmuxHasSession(session)) {
+      return { ok: true, session, killed: false, note: 'no session present' };
+    }
+    try {
+      execFileSync('tmux', ['kill-session', '-t', session], { stdio: 'pipe', timeout: 5_000 });
+      return { ok: true, session, killed: true };
+    } catch (err) {
+      return {
+        ok: false,
+        session,
+        killed: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
+
   /** The attach command (for the UI to display). */
   attachCommand(instanceId) {
     return `tmux attach -t ${tmuxSessionFor(instanceId)}`;
@@ -354,11 +382,18 @@ export const backgroundStore = {
    * v0.5.5 — Delete state files for terminal instances older than
    * `maxAgeDays`. Iterates all BG_DIRS. Non-terminal instances are
    * NEVER removed. Returns the total deleted count.
+   *
+   * v3.11.1 — Also kills the tmux session for each terminal instance
+   * (even those NOT yet old enough for state-file deletion) so the
+   * operator's `tmux ls` doesn't grow unboundedly. Returns
+   * `{ deleted, tmuxKilled }`.
    */
   cleanup(maxAgeDays = 7) {
     let deleted = 0;
+    let tmuxKilled = 0;
     const cutoff = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
     const TERMINAL = new Set(['done', 'failed', 'killed', 'timed_out']);
+    const seen = new Set();
     for (const dir of BG_DIRS) {
       if (!existsSync(dir)) continue;
       let files;
@@ -372,6 +407,16 @@ export const backgroundStore = {
         const data = safeReadJSON(full, null);
         if (!data) continue;
         if (!TERMINAL.has(data.status)) continue;
+
+        // Kill the tmux session for every terminal instance, regardless
+        // of age — prevents tmux-session pile-up in long-running hosts.
+        const instanceId = data.instanceId || f.replace(/\.json$/, '');
+        if (!seen.has(instanceId)) {
+          seen.add(instanceId);
+          const tmuxRes = this.killTmuxFor(instanceId);
+          if (tmuxRes.killed) tmuxKilled += 1;
+        }
+
         const ts = new Date(data.updatedAt || data.completedAt || 0).getTime();
         if (ts < cutoff) {
           try {
@@ -383,7 +428,7 @@ export const backgroundStore = {
         }
       }
     }
-    return { deleted };
+    return { deleted, tmuxKilled };
   },
 
   /**

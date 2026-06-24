@@ -595,14 +595,31 @@ export const taskDelegator = {
             } else {
               // v3.5.5 — Wrap the agent run in a tmux session so
               // operators can `tmux attach -t bizar-bg-<id>` and watch
-              // the opencode process in real time. We shell out a
-              // `tail -f` against the opencode log file; opencode
-              // serves its session on the plugin's opencode serve
-              // child, so the tail is a passive monitor rather than
-              // a redundant runner. Failures are silent — the agent
-              // dispatch itself succeeded; tmux is a nice-to-have.
+              // the opencode process in real time.
+              //
+              // v3.11.1 — Bug fix: the previous implementation tailed
+              // a PHANTOM file at `<worktree>/.bizar/opencode.log` —
+              // nothing in the system writes to that path. The plugin's
+              // `LogWriter` (plugins/bizar/src/report.ts:147) writes
+              // per-tool-call metadata to `${logDir}/${sessionId}.log`
+              // where `logDir` defaults to `~/.cache/bizar/logs`. We
+              // now tail that real path so the operator sees actual
+              // activity, not a `tail: cannot open … for reading`
+              // loop.
+              //
+              // KNOWN LIMITATION: `opencode serve` is a passive HTTP
+              // server. The agent loop is driven by a TUI/web client
+              // (per opencode docs: "When you run opencode it starts
+              // a TUI and a server. Where the TUI is the client that
+              // talks to the server."). The plugin POSTs the prompt
+              // via the HTTP API; the prompt is admitted but no agent
+              // processes it unless a TUI is connected. To actually
+              // drive work, the user must run `opencode` (the TUI)
+              // in a separate terminal and connect it to the same
+              // `opencode serve` child, OR the plugin must spawn
+              // `opencode run` per spawn (planned for v0.8.0).
               try {
-                const logFile = join(dispatchWorktree || process.cwd(), '.bizar', 'opencode.log');
+                const logFile = getActualBgLogPath({ sessionId: sessionId });
                 const tmuxRes = backgroundStore.spawnTmuxFor(
                   `bg_${sessionId.slice(0, 16)}`,
                   { command: 'tail', args: ['-n', '200', '-F', logFile] },

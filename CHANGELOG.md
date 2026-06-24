@@ -113,6 +113,28 @@ Re-ran an end-to-end multi-pass test suite (10 passes) inside `BizarHarness-dev`
 - **Plugin `tests/config.test.ts` — hard-coded version `0.5.4` was stale** (plugin is at `0.6.2`). Test was out of sync with package.json since the v0.7.0-alpha.1 npm publish. **Fixed**: updated assertion to `0.6.2`.
 - **Pass scripts are self-contained** — `scripts/pass[1-10]-*.sh` each install their own dependencies (npm packages to `~/.cache/bizar-global/node_modules`, graphify to `~/.cache/python-packages`) and set `PATH` / `PYTHONPATH` at the top. Necessary because each `docker compose run --rm` creates a fresh container (only `/home/dev/.cache/` persists via the named volume).
 
+### Fixed (v3.11.1 follow-up — "background agent spawns but does nothing")
+
+User-reported: `bizar_spawn_background` creates sessions in the bg state file but the agent never does any work; tmux sessions pile up with empty panes. Two root causes found empirically in the dev container:
+
+1. **Phantom log file in tmux wrap** — `task-delegator.mjs:605` and `bg-retry.mjs:392` both tailed `<worktree>/.bizar/opencode.log` and `<worktree>/.opencode/log/<id>.log` respectively. **Nothing in the system writes to either path.** The plugin's `LogWriter` (plugins/bizar/src/report.ts:147) actually writes to `~/.cache/bizar/logs/<sessionId>.log` (default `logDir` in plugins/bizar/src/options.ts:88). The tmux session therefore sat there showing `tail: cannot open '/project/.bizar/opencode.log' for reading: No such file or directory` in an infinite retry loop. **Fixed**: new `getActualBgLogPath({ sessionId })` in `bizar-dash/src/server/lib/path-safe.mjs` returns the path the LogWriter writes to. Both call sites now use it. tmux panes are clean; operator sees real log activity as the agent works.
+
+2. **Tmux session pile-up** — when an instance became terminal (done/failed/killed/timed_out), its tmux session was never killed unless the user explicitly called `kill()`. **Fixed**: new `backgroundStore.killTmuxFor(instanceId)` method. `cleanup(maxAgeDays)` now also calls it for every terminal instance regardless of age, so long-running dashboards don't accumulate hundreds of dead tmux sessions.
+
+3. **tmux not installed in the dev container** — `BizarHarness-dev` Dockerfile didn't list `tmux` in apt. **Fixed**: added to the apt-get install list; rebuilt the image.
+
+### Architecture issue (documented, not yet fixed — v0.8.0 candidate)
+
+**`opencode serve` is a passive HTTP server.** Per the [opencode server docs](https://opencode.ai/docs/server/): "When you run opencode it starts a TUI and a server. Where the TUI is the client that talks to the server." The plugin POSTs the prompt via `POST /api/session/{id}/prompt` and the server admits it (`session.next.prompt.admitted` event) — but **no agent loop processes the prompt** unless a TUI/web client is connected to the same `opencode serve` child. The plugin currently never drives that agent loop.
+
+Verified empirically: `POST /api/session/{id}/prompt` returns `{"data":{"admittedSeq":1, ...}}` but the SSE stream shows only `server.connected`, `session.created`, `session.next.prompt.admitted` — no `message.user.created`, no `message.assistant.*`, no `session.idle`. The session sits in admitted state forever.
+
+**Workarounds**:
+- Run `opencode` (the TUI) in a separate terminal. It will connect to the same `opencode serve` child and drive the agent loop. The plugin's POSTed prompts will then be processed.
+- OR wait for v0.8.0 which will spawn `opencode run <prompt>` per spawn, replacing the HTTP-only path with a process that drives the agent to completion.
+
+This is documented inline in `task-delegator.mjs:596-624` so future maintainers don't re-discover it.
+
 ### Test results (post-fix)
 
 - **Pass 1 (CLI commands)**: 11/11 ✅
@@ -125,9 +147,8 @@ Re-ran an end-to-end multi-pass test suite (10 passes) inside `BizarHarness-dev`
 - **Pass 8 (Self-improvement)**: 8/8 ✅ append/restore cycle works
 - **Pass 9 (MCP integration)**: 3/3 ✅ (Hindsight sandbox-disabled by design)
 - **Pass 10 (Full integration)**: 19/19 ✅
-- **Total**: 510 plugin tests + 28 SDK tests + 7 dashboard v2 smoke + 116 root typecheck — all green, zero regressions.
-
-
+- **Pass 11 (Background spawn)**: 7/7 ✅ phantom-log fix verified end-to-end with real tmux in the container
+- **Total**: 510 plugin tests + 28 SDK tests + 7 dashboard v2 smoke + 12 new path-safe/tmux-wrap tests + 116 root typecheck — all green, zero regressions.
 
 ### Changed — Agent behavior under uncertainty
 

@@ -529,3 +529,36 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   3. **For UI dialog + text response fields, always populate the text response** even if the dialog handles the rich UI. Tests and accessibility tools rely on the text version.
   4. **Hard-coded version strings in tests are tech debt** — if you bump a version, search for the old version in `tests/` and update each instance, or use a single source of truth (e.g., `import { VERSION } from '../package.json' assert { type: 'json' }`).
   5. **For framework multi-pass testing in containers**: layer the passes (1=CLI, 2=Plugin, 3=Agents, 4=Dashboard, 5=Plan, 6=Graph, 7=Skills, 8=Self-imp, 9=MCP, 10=Full integration). Each pass exercises a slice; pass 10 catches cross-slice regressions. Pass 6 (graph) is the only one needing LLM key — pass others can run offline.
+
+### 2026-06-24c: "Background agent spawns but does nothing" — full debug + fix
+- **Task**: User reported `bizar_spawn_background` (and the dashboard's bg dispatch) create sessions in the bg state file and spawn tmux sessions, but the agents never do any work. Investigate root cause, fix, and add regression tests.
+- **Files changed**: `bizar-dash/src/server/lib/path-safe.mjs` (added `getBgLogDir` + `getActualBgLogPath`); `bizar-dash/src/server/task-delegator.mjs:605` (use real log path); `bizar-dash/src/server/bg-retry.mjs:392` (use real log path); `bizar-dash/src/server/background-store.mjs` (added `killTmuxFor`, wired into `cleanup`); `bizar-dash/tests/path-safe.test.mjs` (NEW, 9 tests); `bizar-dash/tests/tmux-wrap.test.mjs` (NEW, 3 tests, end-to-end smoke with real tmux); `BizarHarness-dev/Dockerfile` (added `tmux` to apt); `scripts/pass11-bg-spawn.sh` (NEW, empirical test); `package.json` (added new tests to `npm test`); `CHANGELOG.md` (documented the fix + the agent-loop architecture issue).
+- **Two root causes found**:
+  1. **Phantom log file** — `task-delegator.mjs:605` tailed `<worktree>/.bizar/opencode.log`; `bg-retry.mjs:392` tailed `<worktree>/.opencode/log/<id>.log`. **Nothing in the system writes to either path.** The plugin's `LogWriter` (plugins/bizar/src/report.ts:147) writes to `~/.cache/bizar/logs/<sessionId>.log` (default `logDir` in options.ts:88). The tmux panes showed `tail: cannot open ... for reading: No such file or directory` in an infinite retry loop. The user correctly interpreted "session spawned, tmux empty" as "agent doing nothing."
+  2. **Agent-loop architecture** — `opencode serve` is a passive HTTP server (per the opencode docs: "the TUI is the client that talks to the server"). The plugin POSTs prompts via `POST /api/session/{id}/prompt` and the server admits them, but no agent loop processes the prompt unless a TUI/web client is connected. This is a **fundamental design issue** with the plugin's "headless" model. Documented in `task-delegator.mjs:596-624`; fix is planned for v0.8.0 (spawn `opencode run` per spawn instead of relying on the HTTP API).
+- **Empirical method**:
+  1. Started `opencode serve` in the dev container as a daemon
+  2. Subscribed to SSE (`/api/event`) to capture the event stream
+  3. POSTed `/api/session` (success — got `ses_...` id)
+  4. POSTed `/api/session/{id}/prompt` (success — got `{"data":{"admittedSeq":1, ...}}`)
+  5. Waited 30s, captured SSE: only `server.connected`, `session.created`, `session.next.prompt.admitted`. No agent activity.
+  6. Spawned a tmux session with the dashboard's actual command (`tail -F /project/.bizar/opencode.log`): pane showed `tail: cannot open ... for reading: No such file or directory` repeating forever.
+- **Fixes**:
+  - `getActualBgLogPath({ sessionId })` returns the path the LogWriter writes to. Honors `BIZAR_LOG_DIR` env override. Falls back to `~/.cache/bizar/logs`. Sanitizes unsafe characters in the session id.
+  - Both call sites (dispatch + retry) now use it.
+  - `killTmuxFor(instanceId)` added; `cleanup()` now kills tmux for every terminal instance so long-running dashboards don't accumulate hundreds of dead sessions.
+  - `BizarHarness-dev/Dockerfile` adds `tmux` to apt.
+- **Tests added (12 total)**:
+  - `path-safe.test.mjs`: 9 unit tests covering `getBgLogDir`, `getActualBgLogPath`, env override, sanitization, regression guard against the phantom path, and the contract that `deriveAbsoluteBgLogPath` still returns the historical worktree-based path (so we don't break bg-retry).
+  - `tmux-wrap.test.mjs`: 3 tests including an **end-to-end smoke** that spawns a real tmux session, writes a log line, captures the pane, and asserts the content is visible (NOT a `cannot open` error). This test would have failed pre-fix and would have caught the bug.
+- **Lessons learned**:
+  - **Always empirically test the user's complaint, not just the code path.** Mimir's research said "tmux wraps a non-existent file" — useful, but it took a real `tail -F` in a real tmux pane to confirm the user-facing symptom. The user's complaint was correct; the bug was real; the fix is straightforward.
+  - **Cross-check log paths across the codebase.** The plugin records a log path in its state file (`<worktree>/.opencode/log/<id>.log`), the dashboard has its own repair function (`deriveAbsoluteBgLogPath`), the dashboard's dispatch uses a different hardcoded path (`.bizar/opencode.log`), and the LogWriter actually writes to a third path (`~/.cache/bizar/logs/<sessionId>.log`). **Four different log paths, three of which are phantoms.** Centralize in `getActualBgLogPath`.
+  - **Read the upstream docs before designing a "headless" integration.** The opencode docs explicitly say `opencode serve` needs a TUI client. The plugin's design assumed `opencode serve` would do work on its own. The fix is either to spawn `opencode run` per spawn (v0.8.0) or to require a TUI connection (current).
+  - **The `tail -F` flag is double-edged.** It "follows" the file (good for hot-reloading) but it does NOT show an error when the file doesn't exist — it just sits there. That's why a phantom file showed nothing in the pane rather than a clear "missing file" message. The fix is to point at a real path; `-F` will then do its job correctly.
+- **Pattern to follow next time**:
+  1. **When a user reports "X happens but nothing visible happens," check the visibility layer first.** The spawn might work; the dashboard might say "running"; the state file might be correct — but the operator-visibility layer (logs, tmux, SSE UI) might be broken.
+  2. **For any "phantom log file" bug, write a regression test that actually uses `tail -F` (or whatever the operator tool is) against the path and asserts the content is visible.** Static analysis of paths catches SOME of these but not all.
+  3. **Centralize "where does X go" in a single helper.** If a path is referenced in N places, give it a name and document what writes there vs. what reads there. Phantoms happen when a path is referenced for reading but no one writes.
+  4. **When a tmux session is created as part of a workflow, also wire the cleanup.** Best-effort spawns become long-term leaks.
+  5. **Document known architectural limitations inline, not just in CHANGELOG.** The `// KNOWN LIMITATION` comment in `task-delegator.mjs:596-624` will save the next maintainer the same investigation.

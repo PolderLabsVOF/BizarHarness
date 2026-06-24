@@ -76,6 +76,7 @@ import { tasksStore } from './tasks-store.mjs';
 import {
   deriveAbsoluteBgLogPath,
   isBrokenBgLogPath,
+  getActualBgLogPath,
 } from './lib/path-safe.mjs';
 
 const HOME = homedir();
@@ -389,7 +390,11 @@ export async function retryDispatchOnce(instanceId) {
 
   try {
     const tmuxName = `bg_${(sessionId || instanceId).slice(0, 16)}`;
-    const logFile = logPath;
+    // v3.11.1 — Bug fix: the previous code tailed `${worktree}/.opencode/log/<id>.log`,
+    // a path nothing writes to. The plugin's `LogWriter` writes to
+    // `${logDir}/${sessionId}.log` (default `~/.cache/bizar/logs`).
+    // Use the real path so the operator sees activity.
+    const logFile = getActualBgLogPath({ sessionId: sessionId || instanceId });
     backgroundStore.spawnTmuxFor(
       tmuxName,
       { command: 'tail', args: ['-n', '200', '-F', logFile] },

@@ -182,8 +182,63 @@ export function isDotRoot(resolvedPath, home = homedir()) {
 // `worktree` is missing or non-absolute. Never throws — a bad input
 // produces a synthetic `~/.cache/bizar/logs/<id>.log` rather than
 // crashing the retry loop.
+//
+// v3.11.1 — Note on log path correctness:
+//   The plugin's `LogWriter` (plugins/bizar/src/report.ts:147) writes
+//   to `${logDir}/${sessionId}.log` where `logDir` defaults to
+//   `~/.cache/bizar/logs` (plugins/bizar/src/options.ts:88). The
+//   bg-spawn tool records a DIFFERENT path —
+//   `${worktree}/.opencode/log/${instanceId}.log` — in the state
+//   file. Nothing ever writes to that path. This module's
+//   `deriveAbsoluteBgLogPath` historically returned the same broken
+//   path; the new `getActualBgLogPath` below returns the path the
+//   LogWriter actually writes to. Use that for any operator-facing
+//   `tail -F` (e.g. the tmux wrap in task-delegator.mjs).
 
 const FALLBACK_LOG_DIR = pathResolve(homedir(), '.cache', 'bizar', 'logs');
+
+/**
+ * Resolve the per-session log directory used by the plugin's
+ * `LogWriter`. The plugin's default is `~/.cache/bizar/logs`
+ * (configurable via the `logDir` option in `opencode.json`). We
+ * honor the `BIZAR_LOG_DIR` env var first, fall back to the
+ * plugin's default, and never throw.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.env]  — env-var bag to read (defaults to process.env)
+ * @returns {string}
+ */
+export function getBgLogDir({ env } = {}) {
+  const source = env || process.env;
+  const fromEnv = source?.BIZAR_LOG_DIR;
+  if (typeof fromEnv === 'string' && fromEnv.trim()) {
+    const resolved = pathResolve(fromEnv);
+    return resolved;
+  }
+  return FALLBACK_LOG_DIR;
+}
+
+/**
+ * Resolve the per-session log path the plugin's `LogWriter` actually
+ * writes to. Use this for any operator-facing `tail -F` so the user
+ * sees real activity rather than a phantom-file error.
+ *
+ * Important: the LogWriter keys files by SESSION id (not instance
+ * id). When you only have an `instanceId` (e.g. `bg_<sessionId16>`),
+ * pass it as `sessionId` — the function will accept any non-empty
+ * string and sanitize it.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.sessionId]  — the opencode session id (or any unique key)
+ * @param {string} [opts.env]        — env-var bag to read
+ * @returns {string} absolute path that exists or will exist once the plugin writes
+ */
+export function getActualBgLogPath({ sessionId, env } = {}) {
+  const safeId = typeof sessionId === 'string' && sessionId.length > 0
+    ? sessionId.replace(/[^a-zA-Z0-9_.-]/g, '_')
+    : `unknown_${randomBytes(4).toString('hex')}`;
+  return pathResolve(getBgLogDir({ env }), `${safeId}.log`);
+}
 
 /**
  * @param {unknown} worktree
