@@ -83,9 +83,9 @@ describe("config drift detection", () => {
     ).toEqual([]);
   });
 
-  test("plugins/bizar/package.json version is 0.6.2", () => {
+  test("plugins/bizar/package.json version is 0.8.0", () => {
     const pkg = JSON.parse(readFileSync(PKG_JSON, "utf-8")) as { version?: string };
-    expect(pkg.version).toBe("0.6.2");
+    expect(pkg.version).toBe("0.8.0");
   });
 });
 

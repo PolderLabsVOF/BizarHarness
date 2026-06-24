@@ -72,9 +72,9 @@
 - Replace the file-based `serve.json` bridge with SDK-based event publishing once all consumers migrate.
 - npm Trusted Publishing via OIDC for `@polderlabs/bizar-sdk` (the SDK is published with `--tag alpha`).
 
-## v3.11.1 — Unreleased — Stop and research rule
+## v3.12.0 — 2026-06-24 — Background agent architecture rewrite (v0.8.0)
 
-### Fixed (v0.7.0-alpha.1 follow-up — from full dev-container simulation)
+### Fixed (vv3.12.0 follow-up — from full dev-container simulation)
 
 End-to-end simulation in `BizarHarness-dev` (Docker) revealed three bugs in the dashboard + plugin wiring that would silently break the v2 protocol in production. All fixed and verified inside the container:
 
@@ -105,12 +105,12 @@ End-to-end simulation in `BizarHarness-dev` (Docker) revealed three bugs in the 
 - **Dev container's opencode.json has stale model names** (`openrouter/minimax/minimax-m3`). Use `--model opencode/deepseek-v4-flash-free` for the free tier.
 - **Dev container missing Python3** — Dockerfile only installed `git`, `jq`, `ca-certificates`, `curl`. Graph system needs Python 3.10+ for graphify. **Fixed**: `python3 python3-pip` added to `apt-get install` in `BizarHarness-dev/Dockerfile`. After rebuild, `pip3 install --target=/home/dev/.cache/python-packages graphifyy` + `PYTHONPATH=/home/dev/.cache/python-packages` makes graphify importable across container restarts.
 
-### Fixed (v0.7.0-alpha.1 follow-up #2 — multi-pass simulation, 10 passes)
+### Fixed (vv3.12.0 follow-up #2 — multi-pass simulation, 10 passes)
 
 Re-ran an end-to-end multi-pass test suite (10 passes) inside `BizarHarness-dev` and found/fixed additional bugs:
 
 - **Plugin `src/commands.ts` — `parseSlashCommand` returned `response: ""` for 13 slash-command handlers** (`/visual-plan on|off|status`, `/plan new|list|open|get`, `/help`, `/plan` (no subcommand), and others). Dialog component handled UI feedback, but the `response` text field was empty — broke 19 of 510 plugin tests. **Fixed**: added meaningful human-readable text alongside each dialog (e.g. `"Visual plan mode is now on."`, `"Found 3 plan(s) (3): alpha, beta, gamma."`, `"Created plan \"My Feature\" with the \"blank\" template…"`). All 510 plugin tests now pass.
-- **Plugin `tests/config.test.ts` — hard-coded version `0.5.4` was stale** (plugin is at `0.6.2`). Test was out of sync with package.json since the v0.7.0-alpha.1 npm publish. **Fixed**: updated assertion to `0.6.2`.
+- **Plugin `tests/config.test.ts` — hard-coded version `0.5.4` was stale** (plugin is at `0.8.0`). Test was out of sync with package.json since the v0.8.0 npm publish. **Fixed**: updated assertion to `0.8.0`.
 - **Pass scripts are self-contained** — `scripts/pass[1-10]-*.sh` each install their own dependencies (npm packages to `~/.cache/bizar-global/node_modules`, graphify to `~/.cache/python-packages`) and set `PATH` / `PYTHONPATH` at the top. Necessary because each `docker compose run --rm` creates a fresh container (only `/home/dev/.cache/` persists via the named volume).
 
 ### Fixed (v3.11.1 follow-up — "background agent spawns but does nothing")
