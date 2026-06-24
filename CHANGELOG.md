@@ -75,7 +75,7 @@
 ## v3.12.3 — 2026-06-24
 
 ### Fixed
-- **`bizar update` silently broke the plugin** — the deployed plugin at `~/.config/opencode/plugins/bizar/` had no `node_modules`, so Bun couldn't resolve the plugin's import of `@polderlabs/bizar-sdk` (a workspace-internal package not on the public registry). The plugin failed to load on every opencode session after an update, leaving `think` strips and all other hook behavior disabled with zero visible error. `installPluginFromGlobal` now copies the npm package's bundled `node_modules/` to the deployed location automatically, so the SDK resolves correctly after every update.
+- **`bizar update` silently broke the plugin** — the deployed plugin at `~/.config/opencode/plugins/bizar/` had no `node_modules`, so Bun couldn't resolve the plugin's import of `@polderlabs/bizar-sdk` (a workspace-internal package not on the public registry). The plugin failed to load on every opencode session after an update, leaving `<think>` strips and all other hook behavior disabled with zero visible error. `installPluginFromGlobal` now copies the npm package's bundled `node_modules/` to the deployed location automatically, so the SDK resolves correctly after every update.
 - **`bizar doctor` false negative on plugin entry** — the `plugin-entry-present` and `plugin-path-resolves` checks didn't handle the `[path, options]` tuple shape that `opencode.json` uses. Added `Array.isArray(p)` branches and three new tests. Doctor now reports 9/9 on a healthy install.
 
 ### Tests
