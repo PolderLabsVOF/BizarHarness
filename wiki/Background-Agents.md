@@ -80,7 +80,7 @@ Inside Odin's task decomposition, the call looks like:
 const result = await bizarre_spawn_background({
   agent: "mimir",                  // which agent to run
   prompt: "Research X and return findings",
-  model: "openrouter/minimax-m3",  // optional — overrides the agent default
+  model: "openrouter/minimax/minimax-m3",  // optional — overrides the agent default
   timeoutMs: 300_000,              // optional — default 5 min, max 30 min
 }, ctx);
 
@@ -89,7 +89,7 @@ console.log(result.sessionId);     // opencode session ID
 console.log(result.status);        // "pending"
 ```
 
-The `model` parameter is parsed on the first `/`: `"openrouter/minimax-m3"` → `{ providerID: "openrouter", modelID: "minimax-m3" }`. Anything other than exactly two parts is rejected with a clear error.
+The `model` parameter is parsed on the first `/`: `"openrouter/minimax/minimax-m3"` → `{ providerID: "openrouter", modelID: "minimax/minimax-m3" }`. Anything other than exactly two parts is rejected with a clear error.
 
 The `timeoutMs` parameter is clamped to `[1000, 1800000]` (1 second to 30 minutes). Out-of-range values are rejected.
 

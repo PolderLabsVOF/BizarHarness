@@ -1,7 +1,7 @@
 ---
 description: Odin — Pure router that delegates all work to subagents. Routes across Frigg (DeepSeek/Q&A), Vör (DeepSeek/clarify), Mimir (DeepSeek/research), Heimdall (DeepSeek/simple), Hermod (M2.7/git), Thor (M2.7/mid), Baldr (M2.7/design), Tyr (M3/top), Vidarr (GPT-5.5/ultra), Forseti (verifier/M3).
 mode: primary
-model: openrouter/minimax-m3
+model: openrouter/minimax/minimax-m3
 color: "#6366f1"
 permission:
   task: allow
@@ -306,7 +306,7 @@ Call `bizar_spawn_background` with:
 
 - `agent`: the agent name (e.g., "mimir", "thor", "tyr")
 - `prompt`: what to do (specific, with context)
-- `model`: optional, `"<providerID>/<modelID>"` format (e.g., `"openrouter/minimax-m3"`)
+- `model`: optional, `"<providerID>/<modelID>"` format (e.g., `"openrouter/minimax/minimax-m3"`)
 - `timeoutMs`: optional, default 5 min, max 30 min, min 1s
 
 You get an `instanceId` back immediately.

@@ -145,9 +145,16 @@ export class InstanceManager {
   private maxConcurrent: number;
   private toolCallCap: number;
   private logger: Logger;
-  private serve: ServeLifecycle;
-  private http: HttpClient;
-  private stream: EventStream;
+  // v0.8.0 — `serve`, `http`, `stream` are nullable to support the
+  // bg-only mode used when the opencode serve child is unavailable
+  // (BIZAR_SERVE_DISABLE=1, startup failure) or when this process IS a
+  // bg-spawned `opencode run` subprocess. In bg-only mode, every method
+  // that would otherwise call `this.http.X` or `this.stream.X` is a
+  // no-op; state transitions still happen via the runner's `onExit`
+  // callback (see src/tools/bg-spawn.ts).
+  private serve: ServeLifecycle | null;
+  private http: HttpClient | null;
+  private stream: EventStream | null;
   private worktree: string;
   // v0.3.0 — stall and thinking-loop protection
   private stallTimeoutMs: number;
@@ -163,9 +170,13 @@ export class InstanceManager {
     maxConcurrent: number;
     toolCallCap: number;
     logger: Logger;
-    serve: ServeLifecycle;
-    http: HttpClient;
-    stream: EventStream;
+    // v0.8.0 — `worktree` is now an explicit param (was previously
+    // derived from `opts.serve.worktree`, which is impossible when
+    // `serve` is null in bg-only mode).
+    worktree: string;
+    serve: ServeLifecycle | null;
+    http: HttpClient | null;
+    stream: EventStream | null;
     // v0.3.0
     stallTimeoutMs?: number;
     thinkingLoopTimeoutMs?: number;
@@ -178,7 +189,7 @@ export class InstanceManager {
     this.serve = opts.serve;
     this.http = opts.http;
     this.stream = opts.stream;
-    this.worktree = opts.serve.worktree;
+    this.worktree = opts.worktree;
     this.stallTimeoutMs = Math.max(
       1_000,
       Math.floor(opts.stallTimeoutMs ?? 180_000),
@@ -188,13 +199,23 @@ export class InstanceManager {
       Math.floor(opts.thinkingLoopTimeoutMs ?? 300_000),
     );
     this.maxInterventions = Math.max(1, Math.floor(opts.maxInterventions ?? 1));
-    // Schedule the periodic stall + thinking-loop checker. The interval
-    // reference is stored so `shutdownAll` / `dispose` can clear it.
-    this.stallCheckerTimer = setInterval(
-      () => void this.runStallAndLoopChecks(),
-      STALL_CHECK_INTERVAL_MS,
-    );
-    this.stallCheckerTimer.unref?.();
+    // Schedule the periodic stall + thinking-loop checker ONLY when we
+    // have a working HTTP client. In bg-only mode the runner owns the
+    // subprocess lifecycle, so the checker has nothing to do.
+    if (this.http !== null) {
+      this.stallCheckerTimer = setInterval(
+        () => void this.runStallAndLoopChecks(),
+        STALL_CHECK_INTERVAL_MS,
+      );
+      this.stallCheckerTimer.unref?.();
+    }
+  }
+
+  /** True iff the manager was constructed without an HTTP client (no
+   *  opencode serve child reachable). HTTP-dependent operations are
+   *  no-ops in this mode. */
+  get isBgOnly(): boolean {
+    return this.http === null;
   }
 
   // --- Getters ------------------------------------------------------------
@@ -238,6 +259,11 @@ export class InstanceManager {
    */
   async runStallAndLoopChecks(): Promise<void> {
     if (this.stallCheckerDisabled) return;
+    // v0.8.0 — bg-only mode has no HTTP client, so stall and
+    // intervention are no-ops. The constructor also skips registering
+    // the interval in this mode, but a stray call from a test or future
+    // caller must still be safe.
+    if (this.http === null) return;
     // Snapshot the instance ids so we do not iterate while the map mutates.
     const ids: string[] = [];
     for (const inst of this.instances.values()) {
@@ -424,6 +450,23 @@ export class InstanceManager {
       );
       return;
     }
+    // v0.8.0 — bg-only mode has no HTTP client. The subprocess is
+    // already owned by opencode-runner.ts (see src/tools/bg-spawn.ts);
+    // mark the instance killed in-memory and let the runner notice the
+    // status change when the process eventually exits. We do NOT try
+    // to kill the OS process from here — that's the runner's job and
+    // we don't have a clean processId reference in bg-only mode
+    // (the runner does, but it lives in a separate module).
+    if (this.http === null) {
+      this.logger.warn(
+        `bizar: kill(${instanceId}) in bg-only mode: marking killed; subprocess will be reaped by opencode-runner.ts on exit`,
+      );
+      await this.update(instanceId, {
+        status: "killed",
+        completedAt: Date.now(),
+      });
+      return;
+    }
     // Abort the opencode session. The next SSE event for this session
     // (EventSessionIdle or EventSessionError) will finalize the status.
     const abort = await this.http.abortSession(inst.sessionId, this.worktree);
@@ -524,6 +567,80 @@ export class InstanceManager {
   // --- Collect ------------------------------------------------------------
 
   /**
+   * Wait for an instance to reach a terminal status, or until `deadline`
+   * (ms epoch) is reached. Returns `true` on terminal, `false` on
+   * timeout.
+   *
+   * Two implementations:
+   *   - **With HTTP+stream** (full mode): subscribe to the SSE session
+   *     event stream AND poll the in-memory map. SSE gives sub-second
+   *     resolution; the in-memory check covers terminal states we set
+   *     ourselves (tool-call cap, loop guard, intervention abort).
+   *   - **Bg-only mode** (no HTTP, no SSE): poll the in-memory map
+   *     every 500 ms. Terminal transitions come from the runner's
+   *     `onExit` callback (see src/tools/bg-spawn.ts) which updates
+   *     the instance state directly.
+   */
+  private async waitForTerminal(
+    instanceId: string,
+    deadline: number,
+  ): Promise<boolean> {
+    // Already terminal?
+    const initial = this.instances.get(instanceId);
+    if (initial && TERMINAL_STATUSES.has(initial.status)) return true;
+
+    if (this.stream === null || initial === undefined) {
+      // Bg-only path: poll the in-memory map.
+      const POLL_MS = 500;
+      while (Date.now() < deadline) {
+        await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS));
+        const cur = this.instances.get(instanceId);
+        if (!cur) return false;
+        if (TERMINAL_STATUSES.has(cur.status)) return true;
+      }
+      return false;
+    }
+
+    // Full path: subscribe to the session event stream AND observe our
+    // own in-memory state changes for terminal transitions we set
+    // ourselves (tool-cap, loop guard, intervention abort).
+    return await new Promise<boolean>((resolve) => {
+      const remaining = Math.max(0, deadline - Date.now());
+      if (remaining === 0) {
+        resolve(false);
+        return;
+      }
+      const timer = setTimeout(() => {
+        unsubscribe();
+        resolve(false);
+      }, remaining);
+      const unsubscribe = this.stream!.onSessionEvent(
+        initial.sessionId,
+        (ev) => {
+          if (ev.type === "session.idle" || ev.type === "session.error") {
+            clearTimeout(timer);
+            unsubscribe();
+            resolve(true);
+            return;
+          }
+          const cur = this.instances.get(instanceId);
+          if (cur && TERMINAL_STATUSES.has(cur.status)) {
+            clearTimeout(timer);
+            unsubscribe();
+            resolve(true);
+          }
+        },
+      );
+      const cur = this.instances.get(instanceId);
+      if (cur && TERMINAL_STATUSES.has(cur.status)) {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(true);
+      }
+    });
+  }
+
+  /**
    * Wait for the instance to reach a terminal state (or until
    * `timeoutMs` elapses), then build the result string per spec §4.4.
    *
@@ -540,42 +657,7 @@ export class InstanceManager {
 
     // 1. Wait for terminal state.
     if (!TERMINAL_STATUSES.has(inst.status)) {
-      const reachedTerminal = await new Promise<boolean>((resolve) => {
-        const remaining = Math.max(0, deadline - Date.now());
-        if (remaining === 0) {
-          resolve(false);
-          return;
-        }
-        const timer = setTimeout(() => {
-          unsubscribe();
-          resolve(false);
-        }, remaining);
-        const unsubscribe = this.stream.onSessionEvent(inst.sessionId, (ev) => {
-          if (
-            ev.type === "session.idle" ||
-            ev.type === "session.error"
-          ) {
-            clearTimeout(timer);
-            unsubscribe();
-            resolve(true);
-            return;
-          }
-          // Also resolve on tool-cap / loop-guard (which we set ourselves).
-          const cur = this.instances.get(instanceId);
-          if (cur && TERMINAL_STATUSES.has(cur.status)) {
-            clearTimeout(timer);
-            unsubscribe();
-            resolve(true);
-          }
-        });
-        // Re-check after subscribing in case the state already changed.
-        const cur = this.instances.get(instanceId);
-        if (cur && TERMINAL_STATUSES.has(cur.status)) {
-          clearTimeout(timer);
-          unsubscribe();
-          resolve(true);
-        }
-      });
+      const reachedTerminal = await this.waitForTerminal(instanceId, deadline);
       if (!reachedTerminal) {
         // Timed out. Return what we have.
         const final = this.instances.get(instanceId);
@@ -599,7 +681,11 @@ export class InstanceManager {
     }
 
     // 2. Build the result. Fetch messages from the opencode server and
-    //    concatenate the assistant text parts.
+    //    concatenate the assistant text parts. In bg-only mode there is
+    //    no HTTP client to ask, so we fall back to whatever
+    //    `resultPreview` was captured during the run (often empty
+    //    because there is no SSE stream in bg-only mode — the runner
+    //    writes the raw output to the log file instead).
     const final = this.instances.get(instanceId);
     if (!final) {
       throw new Error(`collect: instance ${instanceId} disappeared`);
@@ -695,13 +781,19 @@ export class InstanceManager {
         completedAt: Date.now(),
       });
     }
-    // Phase 2: best-effort aborts in parallel, 5s per call.
-    const abortPromises = live.map((inst) =>
-      withTimeout(this.http.abortSession(inst.sessionId, this.worktree), 5_000).catch(
-        () => undefined,
-      ),
-    );
-    await Promise.allSettled(abortPromises);
+    // Phase 2: best-effort aborts in parallel, 5s per call. In bg-only
+    // mode there is no HTTP client to ask — the runner owns the
+    // subprocess lifecycle, so the in-memory status flip is the only
+    // signal we can emit. Skipped cleanly when http is null.
+    if (this.http !== null) {
+      const abortPromises = live.map((inst) =>
+        withTimeout(
+          this.http!.abortSession(inst.sessionId, this.worktree),
+          5_000,
+        ).catch(() => undefined),
+      );
+      await Promise.allSettled(abortPromises);
+    }
     this.logger.info(`bizar: shutdownAll complete (${live.length} instances aborted)`);
   }
 
@@ -721,9 +813,13 @@ export class InstanceManager {
     );
     // Fire-and-forget. If the serve child is dead, this returns a
     // failure result but we still mark the instance failed in-memory.
-    this.http
-      .abortSession(inst.sessionId, this.worktree)
-      .catch(() => undefined);
+    // v0.8.0 — bg-only mode has no HTTP client; the abort is a no-op
+    // there (the runner owns the subprocess).
+    if (this.http !== null) {
+      this.http
+        .abortSession(inst.sessionId, this.worktree)
+        .catch(() => undefined);
+    }
     await this.update(inst.instanceId, {
       status: "failed",
       error: `No activity for ${this.stallTimeoutMs}ms — LLM appears stalled`,
@@ -751,15 +847,25 @@ export class InstanceManager {
       `bizar: instance ${inst.instanceId} thinking loop (${sinceMs}ms without tool/text); sending intervention #${currentCount + 1}/${this.maxInterventions}`,
     );
     try {
-      await this.http.sendPrompt(
-        {
-          sessionId: inst.sessionId,
-          messageID,
-          agent: inst.agent,
-          parts: [{ type: "text", text: prompt }],
-        },
-        this.worktree,
-      );
+      // v0.8.0 — bg-only mode has no HTTP client; interventions are a
+      // no-op there (the runner doesn't expose a "send a user message
+      // mid-run" hook). Logged as a debug so the operator can see why
+      // no intervention went out.
+      if (this.http === null) {
+        this.logger.debug(
+          `bizar: skipping intervention for ${inst.sessionId} (bg-only mode; no HTTP client)`,
+        );
+      } else {
+        await this.http.sendPrompt(
+          {
+            sessionId: inst.sessionId,
+            messageID,
+            agent: inst.agent,
+            parts: [{ type: "text", text: prompt }],
+          },
+          this.worktree,
+        );
+      }
     } catch (err: unknown) {
       // We swallow the error: the periodic checker will try again next
       // tick. The intervention counter is still incremented below so
@@ -793,9 +899,13 @@ export class InstanceManager {
     this.logger.warn(
       `bizar: instance ${inst.instanceId} thinking loop exhausted ${this.maxInterventions} intervention(s) over ${sinceMs}ms; aborting`,
     );
-    this.http
-      .abortSession(inst.sessionId, this.worktree)
-      .catch(() => undefined);
+    // v0.8.0 — bg-only mode has no HTTP client; the abort is a no-op
+    // there (the runner owns the subprocess).
+    if (this.http !== null) {
+      this.http
+        .abortSession(inst.sessionId, this.worktree)
+        .catch(() => undefined);
+    }
     await this.update(inst.instanceId, {
       status: "failed",
       error: `Thinking loop detected: ${formatDuration(sinceMs)} of thinking without tool calls or output. Spawn a Mimir agent for research.`,
@@ -809,6 +919,8 @@ export class InstanceManager {
 
   public attachEventHandler(inst: BackgroundState): () => void {
     this.detachEventHandler(inst.instanceId);
+    // v0.8.0 — bg-only mode has no EventStream; return a no-op unsubscriber.
+    if (!this.stream) return () => {};
     const handler: SessionEventHandler = (ev: StreamEvent) => {
       void this.handleInstanceEvent(inst.instanceId, ev);
     };
@@ -935,9 +1047,13 @@ export class InstanceManager {
       if (nextCount >= this.toolCallCap) {
         // Abort and mark failed. Use a fire-and-forget abort because we
         // do not want to block the handler on a network call.
-        this.http
-          .abortSession(inst.sessionId, this.worktree)
-          .catch(() => undefined);
+        // v0.8.0 — bg-only mode has no HTTP client; the abort is a
+        // no-op there (the runner owns the subprocess).
+        if (this.http !== null) {
+          this.http
+            .abortSession(inst.sessionId, this.worktree)
+            .catch(() => undefined);
+        }
         patch.status = "failed";
         patch.error = `Tool-call cap reached (${nextCount}). Aborted to prevent cost runaway.`;
         patch.completedAt = Date.now();
@@ -995,6 +1111,9 @@ export class InstanceManager {
    *   - If `loopGuardTool` is set, prepend the marker.
    */
   private async buildResultText(inst: BackgroundState): Promise<string> {
+    // v0.8.0 — bg-only mode has no HTTP client; fall back to whatever
+    // text-part preview we've already accumulated.
+    if (!this.http) return inst.resultPreview ?? "";
     const res = await this.http.listMessages(inst.sessionId, this.worktree);
     if (!res.ok) {
       this.logger.warn(`bizar: collect: listMessages failed: ${res.error}`);

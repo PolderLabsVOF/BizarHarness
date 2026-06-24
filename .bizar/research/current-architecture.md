@@ -57,8 +57,8 @@ BizarHarness/
 
 **Key constants:**
 - Tier 1 (free): `opencode/deepseek-v4-flash-free`
-- Tier 2 ($0.30/M in, $1.20/M out): `openrouter/minimax-m2.7` (Heimdall, Baldr, Thor, Hermod)
-- Tier 3 ($0.50/M in, $2.00/M out): `openrouter/minimax-m3` (Tyr, Forseti, Odin)
+- Tier 2 ($0.30/M in, $1.20/M out): `openrouter/minimax/minimax-m2.7` (Heimdall, Baldr, Thor, Hermod)
+- Tier 3 ($0.50/M in, $2.00/M out): `openrouter/minimax/minimax-m3` (Tyr, Forseti, Odin)
 - Tier 4/5: Fallback to `openai/gpt-5.5` (Vidarr — highest cost, last resort)
 
 ### 2.3 Commands

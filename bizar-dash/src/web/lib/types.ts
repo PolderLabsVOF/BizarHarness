@@ -457,6 +457,66 @@ export type SearchResult = {
   item: Record<string, unknown>;
 };
 
+/**
+ * One background-agent instance. Mirrors the JSON shape returned by
+ * GET /api/background (src/server/routes/background.mjs). Status values:
+ *   - 'pending'    — accepted by the runner, dispatch not yet started
+ *   - 'running'    — actively executing in a tmux session
+ *   - 'done'       — finished with success
+ *   - 'failed'     — terminated with an error
+ *   - 'killed'     — user-requested kill
+ *   - 'timed_out'  — exceeded plugin stall/dispatch timeout
+ */
+export type BgInstance = {
+  instanceId: string;
+  status?: 'pending' | 'running' | 'done' | 'failed' | 'killed' | 'timed_out' | string;
+  agent?: string;
+  prompt?: string;
+  startedAt?: number;
+  completedAt?: number;
+  currentStep?: string | null;
+  progress?: number;
+  toolCallCount?: number;
+  tmuxSession?: string;
+  tmuxActive?: boolean;
+  sessionId?: string;
+  error?: string;
+  // Optional fields the activity timeline tracks — not required for this view.
+  parentAgent?: string;
+  parentInstanceId?: string;
+  promptPreview?: string;
+  resultPreview?: string;
+  lastEventAt?: number;
+  taskId?: string;
+};
+
+export type BackgroundListResponse = {
+  instances: BgInstance[];
+  status: { dir: string; exists: boolean; count: number };
+};
+
+export type BackgroundOutputResponse = {
+  /** Captured stdout/stderr text (tail). */
+  output?: string;
+  /** True when the underlying log file is gone (e.g. after cleanup). */
+  available?: boolean;
+  /** Total captured bytes — useful for the modal header. */
+  bytes?: number;
+  /** Truncation flag set by the server when output was capped. */
+  truncated?: boolean;
+};
+
+export type BackgroundTmuxResponse = {
+  /** Computed tmux session name (e.g. "bg-r2u9q8"). */
+  session?: string;
+  /** Local command the user can paste to attach. */
+  attachCommand?: string;
+  /** Whether the session exists in tmux right now. */
+  exists?: boolean;
+  /** Optional reason when exists === false. */
+  reason?: string;
+};
+
 export type Snapshot = {
   overview: Overview;
   agents: Agent[];
@@ -482,6 +542,8 @@ export type WsMessage =
   | { type: 'task:progress'; taskId: string; progress?: number; step?: string | null; agent?: string | null }
   | { type: 'settings:change'; settings: Settings }
   | { type: 'agents:change' }
+  | { type: 'background:change'; action?: string; id?: string; sessionId?: string }
+  | { type: 'background:cleanup'; deleted?: number }
   | { type: 'agent:status'; agent: Agent }
   | { type: 'agent:restarted'; agent: Agent }
   | { type: 'agent:stuck'; agents: { name: string }[] }

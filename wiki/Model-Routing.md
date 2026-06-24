@@ -40,27 +40,27 @@ The model for each agent is set in its Markdown frontmatter. The full list:
 
 | Agent | Model string in frontmatter |
 |---|---|
-| Odin | `openrouter/minimax-m3` |
+| Odin | `openrouter/minimax/minimax-m3` |
 | Frigg | `opencode/deepseek-v4-flash-free` |
 | Vör | `opencode/deepseek-v4-flash-free` |
 | Quick | `opencode/deepseek-v4-flash-free` |
 | Mimir | `opencode/deepseek-v4-flash-free` |
 | Heimdall | `opencode/deepseek-v4-flash-free` |
-| Hermod | `openrouter/minimax-m2.7` |
-| Thor | `openrouter/minimax-m2.7` |
-| Baldr | `openrouter/minimax-m2.7` |
-| Tyr | `openrouter/minimax-m3` |
+| Hermod | `openrouter/minimax/minimax-m2.7` |
+| Thor | `openrouter/minimax/minimax-m2.7` |
+| Baldr | `openrouter/minimax/minimax-m2.7` |
+| Tyr | `openrouter/minimax/minimax-m3` |
 | Vidarr | `openai/gpt-5.5` |
-| Forseti | `openrouter/minimax-m3` |
+| Forseti | `openrouter/minimax/minimax-m3` |
 
-The format is `<provider>/<model>` (e.g., `openrouter/minimax-m3`). This is the opencode model identifier. To change an agent's model, edit its `.md` file in `config/agents/` and re-run the installer.
+The format is `<provider>/<model>` (e.g., `openrouter/minimax/minimax-m3`). This is the opencode model identifier. To change an agent's model, edit its `.md` file in `config/agents/` and re-run the installer.
 
 ## Override model per task
 
 To run a single task with a different model, pass `--model` to the subagent dispatch (the `task` tool) when invoking it from Odin. The syntax is opencode-native:
 
 ```
-@odin:task --model openrouter/minimax-m3 research the auth module
+@odin:task --model openrouter/minimax/minimax-m3 research the auth module
 ```
 
 In practice, most users don't override — Odin's routing is already cost-aware. The override is for the case where you know the work needs a specific model.
@@ -96,7 +96,7 @@ To disable a tier entirely, remove the agent definitions that use it. For exampl
 
 Odin will skip Vidarr in its routing table. The escape hatch is gone — Tier 4 work will simply fail rather than escalate to GPT-5.5.
 
-To temporarily disable Vidarr without removing the file, set its `model:` to a less expensive model in its frontmatter (e.g., `openrouter/minimax-m3`).
+To temporarily disable Vidarr without removing the file, set its `model:` to a less expensive model in its frontmatter (e.g., `openrouter/minimax/minimax-m3`).
 
 ## Next steps
 

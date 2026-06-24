@@ -98,8 +98,8 @@ permission:
 
 **Fix:** Check `~/.config/opencode/agents/<name>.md` for the `model:` field. Valid models:
 - `opencode/deepseek-v4-flash-free` — free
-- `openrouter/minimax-m2.7` — M2.7
-- `openrouter/minimax-m3` — M3
+- `openrouter/minimax/minimax-m2.7` — M2.7
+- `openrouter/minimax/minimax-m3` — M3
 - `openai/gpt-5.5` — GPT-5.5
 
 ### OpenRouter 404 Errors

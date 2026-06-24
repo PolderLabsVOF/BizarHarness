@@ -103,6 +103,7 @@ BizarHarness ships always-on coding rules organized by language and concern. All
 | `rules/git.md` | Git and commit conventions |
 | `rules/testing.md` | Test methodology and coverage |
 | `rules/thinking.md` | All agents — concise thinking behavior |
+| `rules/uncertainty.md` | All agents — stop-and-research rule; reach for `websearch` / `webfetch` when uncertain or stuck; self-catch loops before the plugin loop-guard fires |
 
 ### How to Use
 
@@ -114,6 +115,10 @@ BizarHarness ships always-on coding rules organized by language and concern. All
 ### Thinking Rule
 
 For agents with `reasoning: true` + `variant: "high"`, follow `rules/thinking.md` strictly. Cap reasoning at 2–4 sentences. No informal self-talk, no "what if" loops, no mid-thought self-correction. Think once, decide, act.
+
+### Research-Loop Rule
+
+Follow `rules/uncertainty.md` strictly. When uncertain or stuck, the next move is a research tool call (`websearch` for outside-the-repo facts, `webfetch` for official docs, `semble search` for codebase patterns, `hindsight_recall` for project memory) — not a third variation of the same edit. If you catch yourself about to retry the same failed command with slightly different arguments, stop and search first. The plugin's loop-guard (`loopThresholdWarn: 5`) is the safety net; self-correct at attempt 2.
 
 ---
 
@@ -166,25 +171,25 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 ### Hermod
 
-- **Model**: `openrouter/minimax-m2.7` (via OpenRouter)
+- **Model**: `openrouter/minimax/minimax-m2.7` (via OpenRouter)
 - **Use for**: Git and GitHub operations — commit, push, merge, PRs, branches, conflict resolution. The swift messenger.
 - **Cost**: $0.30/M input, $1.20/M output
 
 ### Thor
 
-- **Model**: `openrouter/minimax-m2.7` (via OpenRouter)
+- **Model**: `openrouter/minimax/minimax-m2.7` (via OpenRouter)
 - **Use for**: Moderate complexity features, debugging, code review, refactoring
 - **Cost**: $0.30/M input, $1.20/M output — cheaper than Tyr, more capable than Heimdall
 
 ### Baldr
 
-- **Model**: `openrouter/minimax-m2.7` (via OpenRouter)
+- **Model**: `openrouter/minimax/minimax-m2.7` (via OpenRouter)
 - **Use for**: Design system creation, DESIGN.md, visual audit, usability planning. Creates design plans — does not implement.
 - **Cost**: $0.30/M input, $1.20/M output
 
 ### Tyr
 
-- **Model**: `openrouter/minimax-m3` (via OpenRouter)
+- **Model**: `openrouter/minimax/minimax-m3` (via OpenRouter)
 - **Use for**: Highest complexity implementation, debugging, architecture, multi-step engineering
 - **Cost**: Higher — reserved for the hardest problems
 
@@ -196,7 +201,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 ### Forseti
 
-- **Model**: `openrouter/minimax-m3` (via OpenRouter, audit-only, no edit permissions)
+- **Model**: `openrouter/minimax/minimax-m3` (via OpenRouter, audit-only, no edit permissions)
 - **Use for**: Adversarial plan review — audits completeness, correctness, consistency, feasibility, security
 - **Always runs before any Tier 4 or Tier 5 implementation begins**
 

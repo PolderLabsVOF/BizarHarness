@@ -72,6 +72,21 @@
 - Replace the file-based `serve.json` bridge with SDK-based event publishing once all consumers migrate.
 - npm Trusted Publishing via OIDC for `@polderlabs/bizar-sdk` (the SDK is published with `--tag alpha`).
 
+## v3.12.1 — 2026-06-24
+
+### Fixed
+- **`bizar_spawn_background` was silently broken** — the spawned `opencode run` subprocess was missing the `--agent` flag and pointed at stale OpenRouter model IDs, so every background agent session crashed immediately after creation. Extracted `buildOpencodeRunArgs()` for testability, added the agent flag, and migrated all model IDs to the new `openrouter/minimax/minimax-{m3,m2.7}` form.
+- **OpenRouter `thinking: "adaptive"` was silently ignored** — the OpenRouter provider uses `reasoning` as the parameter name and does not support an adaptive effort level for MiniMax. Switched the openrouter provider entries to the correct `reasoning: { enabled: true }` shape.
+- **Plugin init hard-failed spawn when `opencode serve` was unavailable** — the v0.8.0 active-subprocess path does not need a serve child. Made `InstanceManager.http` and `stream` nullable, guarded the call sites, and added a `isBizarBackgroundChild()` check so bg-spawned children skip the serve-start block cleanly.
+- **`<thinking>` tags were rendered inline in chat output** — the MiniMax M3 model emits reasoning as `<thinking>...</thinking>` markup. Added server-side stripping in `serve-info.mjs` so the tags never reach the React markdown renderer.
+
+### Added
+- **Active Background Agents tab in the dashboard** — new view at `bizar-dash/src/web/views/BackgroundAgents.tsx` listing running and pending bg agents with live status, kill button, output viewer, and tmux attach helper. Polls every 5s and subscribes to the `background:change` WebSocket event.
+- **Research-Loop Rule for agents** — wired `config/rules/uncertainty.md` into the loader table at `config/AGENTS.md` and added a short paragraph so agents reach for `websearch` / `webfetch` when uncertain or stuck, rather than retrying the same edit.
+
+### Changed
+- **Removed dead `provider` block at top of `config/opencode.json.template`** — it was overridden by a later `provider` key, so it was dead code.
+
 ## v3.12.0 — 2026-06-24 — Background agent architecture rewrite (v0.8.0)
 
 ### Fixed (vv3.12.0 follow-up — from full dev-container simulation)

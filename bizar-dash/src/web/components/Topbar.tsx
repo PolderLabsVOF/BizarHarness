@@ -20,6 +20,7 @@ import {
   Power,
   Sparkles,
   Activity,
+  Radio,
   Cloud,
   type LucideIcon,
 } from 'lucide-react';
@@ -44,6 +45,7 @@ export const TABS: TabDef[] = [
   { id: 'plans', label: 'Plans', icon: Map },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'activity', label: 'Activity', icon: Activity },
+  { id: 'background', label: 'Active', icon: Radio },
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'mods', label: 'Mods', icon: Puzzle },
   { id: 'schedules', label: 'Schedules', icon: Clock },

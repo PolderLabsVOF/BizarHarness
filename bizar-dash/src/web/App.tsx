@@ -35,6 +35,7 @@ import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
 import { History } from './views/History';
 import { Providers } from './views/Providers';
+import { BackgroundAgents } from './views/BackgroundAgents';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
 import { AlertTriangle, X } from 'lucide-react';
@@ -68,6 +69,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   plans: Plans,
   tasks: Tasks,
   activity: Activity,
+  background: BackgroundAgents,
   config: Config,
   settings: SettingsView,
   mods: Mods,

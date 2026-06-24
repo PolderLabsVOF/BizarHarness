@@ -1,23 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/minimax-m3",
-  "small_model": "openrouter/minimax-m2.7",
+  "model": "openrouter/minimax/minimax-m3",
+  "small_model": "openrouter/minimax/minimax-m2.7",
   "default_agent": "odin",
   "permission": "allow",
   "snapshot": false,
-  "provider": {
-    "openrouter": {
-      "npm": "@openrouter/ai-sdk-provider",
-      "name": "OpenRouter",
-      "options": {
-        "apiKey": "{env:OPENROUTER_API_KEY}"
-      },
-      "models": {
-        "minimax-m2.7": {},
-        "minimax-m3": {}
-      }
-    }
-  },
   "mcp": {
     "supabase": {
       "type": "remote",
@@ -66,7 +53,7 @@
     "odin": {
       "description": "Odin — Pure router that delegates all work to subagents.",
       "mode": "primary",
-      "model": "openrouter/minimax-m3",
+      "model": "openrouter/minimax/minimax-m3",
       "color": "#6366f1",
       "permission": {
         "task": "allow",
@@ -80,7 +67,7 @@
     "vor": {
       "description": "Vör — The Questioning One.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#8b5cf6",
       "permission": {
         "read": "allow",
@@ -93,7 +80,7 @@
     "frigg": {
       "description": "Frigg — All-knowing Q&A agent.",
       "mode": "primary",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#06b6d4",
       "permission": {
         "read": "allow",
@@ -111,7 +98,7 @@
     "quick": {
       "description": "Quick — Fast single-shot tasks.",
       "mode": "primary",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#22d3ee",
       "permission": {
         "read": "allow",
@@ -130,7 +117,7 @@
     "mimir": {
       "description": "Mimir — Research and codebase exploration agent.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#0ea5e9",
       "permission": {
         "read": "allow",
@@ -148,7 +135,7 @@
     "heimdall": {
       "description": "Heimdall — Simple, routine, deterministic tasks.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#10b981",
       "permission": {
         "read": "allow",
@@ -165,7 +152,7 @@
     "hermod": {
       "description": "Hermod — Git and GitHub operations specialist.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#06b6d4",
       "permission": {
         "read": "allow",
@@ -181,7 +168,7 @@
     "thor": {
       "description": "Thor — Medium-complexity tasks, strong and reliable.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#a855f7",
       "permission": {
         "read": "allow",
@@ -198,7 +185,7 @@
     "baldr": {
       "description": "Baldr — UI/UX design system specialist.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m2.7",
+      "model": "openrouter/minimax/minimax-m2.7",
       "color": "#ec4899",
       "permission": {
         "read": "allow",
@@ -215,7 +202,7 @@
     "tyr": {
       "description": "Tyr — Complex implementation, debugging, architecture.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m3",
+      "model": "openrouter/minimax/minimax-m3",
       "color": "#f59e0b",
       "permission": {
         "read": "allow",
@@ -249,7 +236,7 @@
     "forseti": {
       "description": "Forseti — Audits and corrects plans before execution.",
       "mode": "subagent",
-      "model": "openrouter/minimax-m3",
+      "model": "openrouter/minimax/minimax-m3",
       "color": "#ef4444",
       "permission": {
         "read": "allow",
@@ -325,11 +312,17 @@
       "models": {
         "MiniMax-M3": {
           "interleaved": { "field": "reasoning_details" },
-          "reasoning": true
+          "reasoning": true,
+          "options": {
+            "thinking": "adaptive"
+          }
         },
         "MiniMax-M2.7": {
           "interleaved": { "field": "reasoning_details" },
-          "reasoning": true
+          "reasoning": true,
+          "options": {
+            "thinking": "adaptive"
+          }
         }
       }
     },
@@ -337,11 +330,17 @@
       "models": {
         "minimax/minimax-m3": {
           "interleaved": { "field": "reasoning_details" },
-          "reasoning": true
+          "reasoning": true,
+          "options": {
+            "reasoning": { "enabled": true }
+          }
         },
         "minimax/minimax-m2.7": {
           "interleaved": { "field": "reasoning_details" },
-          "reasoning": true
+          "reasoning": true,
+          "options": {
+            "reasoning": { "enabled": true }
+          }
         }
       }
     }

@@ -74,7 +74,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 1. **Reduce parallelism.** If Odin is firing 5+ parallel tasks, narrow the request. Opencode is rate-limited per provider; 5 parallel M2.7 calls is fine, 5 parallel M3 calls can hit limits.
 2. **Use the background-agent tool-call cap.** Set `BIZAR_BACKGROUND_TOOL_CALL_CAP=200` to abort background instances that have run too long.
 3. **Use the test gate.** After implementation, run `bizar test-gate` instead of asking Odin to keep iterating.
-4. **Temporarily disable high-cost tiers.** Edit `config/agents/tyr.md` and change the model to `openrouter/minimax-m2.7` (one tier down). Re-run the installer.
+4. **Temporarily disable high-cost tiers.** Edit `config/agents/tyr.md` and change the model to `minimax/minimax-m2.7` (one tier down). Re-run the installer.
 5. **For emergency stop,** Ctrl-C the opencode session. The Bizar plugin will mark all in-flight background instances as failed and abort the serve child.
 
 ## "Hindsight not working" or memory errors

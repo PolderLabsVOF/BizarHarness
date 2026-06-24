@@ -549,14 +549,47 @@ export async function listOpencodeMessages(info, sessionId, directory, timeoutMs
 export function extractContentFromOpencodeMessage(msg) {
   if (!msg) return '';
   // Some opencode v1 builds put text directly on the message itself.
-  if (typeof msg.text === 'string') return msg.text;
-  if (typeof msg.content === 'string') return msg.content;
+  if (typeof msg.text === 'string') return finalizeText(msg.text);
+  if (typeof msg.content === 'string') return finalizeText(msg.content);
   const parts = Array.isArray(msg.parts) ? msg.parts : [];
   const textParts = parts
     .filter((p) => p && (p.type === 'text' || typeof p.text === 'string'))
     .map((p) => (typeof p.text === 'string' ? p.text : ''))
     .filter(Boolean);
-  return textParts.join('\n\n');
+  return finalizeText(textParts.join('\n\n'));
+}
+
+/**
+ * Strip `<thinking>...</thinking>` blocks from model output.
+ *
+ * Some opencode builds (and the M3 model specifically) emit inline
+ * `<thinking>` reasoning tags directly in the assistant text content.
+ * React-markdown renders those as visible escaped HTML, so the chat UI
+ * ends up showing the raw tag. The reasoning itself is also captured
+ * separately as `reasoning_details` parts — we are not losing data by
+ * hiding the inline tag from the rendered text.
+ *
+ * Handles:
+ *   - `<thinking>...</thinking>` blocks (case-insensitive, multiline)
+ *   - `<thinking ...attrs>` and `<thinking/>` self-closing variants
+ *   - Stray closing tags like `</thinking>` with no matching opener
+ *   - Multiple blocks in the same string
+ *   - Empty input → empty output
+ *
+ * After stripping, collapses runs of 3+ newlines to 2 so we don't
+ * leave huge blank gaps in the rendered output.
+ */
+export function stripThinkingTags(text) {
+  if (typeof text !== 'string') return '';
+  const cleaned = text
+    .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<thinking\b[^>]*\/?>/gi, '')
+    .replace(/<\/thinking>/gi, '');
+  return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function finalizeText(text) {
+  return stripThinkingTags(text);
 }
 
 /**

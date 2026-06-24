@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-plugin",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Bizar opencode plugin — loop detection, status reporting, handoff signal, background agents, and slash commands + visual plan flow for subagent activity",
   "type": "module",
   "main": "./index.ts",
@@ -11,7 +11,7 @@
   "scripts": {
     "check:imports": "bash scripts/check-forbidden-imports.sh",
     "typecheck": "tsc --noEmit",
-    "test": "npm run check:imports && bun test tests/loop.test.ts tests/block.test.ts tests/stall-think.test.ts tests/tools/bg-get-comments.test.ts tests/settings.test.ts tests/commands.test.ts tests/commands-impl.test.ts tests/tools/plan-action.test.ts tests/tools/wait-for-feedback.test.ts"
+    "test": "npm run check:imports && bun test tests/loop.test.ts tests/block.test.ts tests/stall-think.test.ts tests/tools/bg-get-comments.test.ts tests/tools/opencode-runner.test.ts tests/settings.test.ts tests/commands.test.ts tests/commands-impl.test.ts tests/tools/plan-action.test.ts tests/tools/wait-for-feedback.test.ts"
   },
   "keywords": [
     "opencode",

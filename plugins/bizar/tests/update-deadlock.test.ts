@@ -75,6 +75,7 @@ function createManager(stateDir: string): {
     maxConcurrent: 8,
     toolCallCap: 250,
     logger,
+    worktree: "/tmp",
     serve: { worktree: "/tmp" } as never,
     http: {} as never,
     stream: new FakeEventStream() as never,

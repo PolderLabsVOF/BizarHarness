@@ -106,6 +106,47 @@ const agents = new Map<number, AgentRecord>();
 // --- Public API -----------------------------------------------------------
 
 /**
+ * Pure: build the argv array for `opencode run` from SpawnAgentOptions.
+ *
+ * Extracted from spawnAgent so it can be unit-tested without spawning
+ * a real process. Throws when opts.agent is empty — `opencode run`
+ * requires a known agent name; passing an empty string would silently
+ * fall back to opencode's default agent and break session attribution
+ * (the title prefix `bgr:<agent>:...` would also degrade to `bgr::...`).
+ *
+ * Arg layout (matches `opencode run --help`):
+ *   opencode run
+ *     --dir <worktree>
+ *     --print-logs
+ *     --log-level INFO
+ *     --title <title>
+ *     --agent <agent>          ← REQUIRED; was missing pre-v0.8.1
+ *     [--model <providerID>/<modelID>]   ← optional override
+ *     -- <prompt>
+ */
+export function buildOpencodeRunArgs(opts: SpawnAgentOptions): string[] {
+  if (!opts.agent) {
+    throw new Error("bizar_spawn_background: agent is required");
+  }
+  const args: string[] = [
+    "opencode",
+    "run",
+    "--dir", opts.worktree,
+    "--print-logs",
+    "--log-level", "INFO",
+    "--title", opts.title || `bgr:${opts.agent}:${Date.now()}`,
+    "--agent", opts.agent,
+  ];
+  if (opts.model) {
+    args.push("--model", `${opts.model.providerID}/${opts.model.modelID}`);
+  }
+  // `--` separates flags from positional so a prompt starting with
+  // `-` is treated as a message.
+  args.push("--", opts.prompt);
+  return args;
+}
+
+/**
  * Spawn a single `opencode run` process. The promise resolves once
  * the opencode child has reported its session id in the structured
  * log stream (or once the process exits before that — typically
@@ -128,23 +169,10 @@ export async function spawnAgent(opts: SpawnAgentOptions): Promise<SpawnAgentRes
     }
   }
 
-  // 2. Build argv. Note: opencode run takes the prompt as a positional
-  // arg. `--dir` sets the worktree. `--print-logs` ensures the
-  // structured log stream goes to stderr.
-  const args: string[] = [
-    "opencode",
-    "run",
-    "--dir", opts.worktree,
-    "--print-logs",
-    "--log-level", "INFO",
-    "--title", opts.title || `bgr:${opts.agent}:${Date.now()}`,
-  ];
-  if (opts.model) {
-    args.push("--model", `${opts.model.providerID}/${opts.model.modelID}`);
-  }
-  // `--` separates flags from positional so a prompt starting with
-  // `-` is treated as a message.
-  args.push("--", opts.prompt);
+  // 2. Build argv. Pulled into a pure function so tests can assert the
+  //    flag layout (notably the `--agent` flag and the migrated model
+  //    ID format) without spawning a real `opencode run` process.
+  const args = buildOpencodeRunArgs(opts);
 
   // 3. Spawn the process.
   let proc: Subprocess;
@@ -227,8 +255,8 @@ export async function spawnAgent(opts: SpawnAgentOptions): Promise<SpawnAgentRes
   // 6. Stream readers + exit handler — install BEFORE returning the
   //    promise so a fast-exiting process still produces a clean
   //    resolution.
-  const stderrReader = (proc.stderr as ReadableStream<Uint8Array>).getReader();
-  const stdoutReader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+  const stderrReader = (proc.stderr as ReadableStream<Uint8Array>).getReader() as unknown as ReadableStreamDefaultReader<Uint8Array<ArrayBufferLike>>;
+  const stdoutReader = (proc.stdout as ReadableStream<Uint8Array>).getReader() as unknown as ReadableStreamDefaultReader<Uint8Array<ArrayBufferLike>>;
   void readStream(stderrReader, "stderr");
   void readStream(stdoutReader, "stdout");
 

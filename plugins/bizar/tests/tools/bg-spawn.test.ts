@@ -27,13 +27,13 @@ function parseModel(model: string | undefined): { providerID: string; modelID: s
   const parts = model.split("/");
   if (parts.length !== 2) {
     throw new Error(
-      `model must be in "providerID/modelID" format (e.g. "openrouter/minimax-m3"). Omit to use the agent's default.`,
+      `model must be in "providerID/modelID" format (e.g. "minimax/minimax-m3"). Omit to use the agent's default.`,
     );
   }
   const [providerID, modelID] = parts;
   if (!providerID || !modelID) {
     throw new Error(
-      `model must be in "providerID/modelID" format (e.g. "openrouter/minimax-m3"). Omit to use the agent's default.`,
+      `model must be in "providerID/modelID" format (e.g. "minimax/minimax-m3"). Omit to use the agent's default.`,
     );
   }
   return { providerID, modelID };
@@ -132,9 +132,9 @@ describe("bizar_spawn_background — Odin-only", () => {
 // ---------------------------------------------------------------------------
 
 describe("bizar_spawn_background — model parsing (HIGH-3, LOW-34)", () => {
-  it('"openrouter/minimax-m3" parses to { providerID: "openrouter", modelID: "minimax-m3" }', () => {
-    const result = parseModel("openrouter/minimax-m3");
-    expect(result).toEqual({ providerID: "openrouter", modelID: "minimax-m3" });
+  it('"minimax/minimax-m3" parses to { providerID: "minimax", modelID: "minimax-m3" }', () => {
+    const result = parseModel("minimax/minimax-m3");
+    expect(result).toEqual({ providerID: "minimax", modelID: "minimax-m3" });
   });
 
   it('"opencode/deepseek-v4-flash-free" parses correctly', () => {
@@ -168,7 +168,7 @@ describe("bizar_spawn_background — model parsing (HIGH-3, LOW-34)", () => {
 
   it("spawn tool includes parsed model in POST /session body", () => {
     const result = bizarre_spawn_background(
-      { agent: "mimir", prompt: "Do X", model: "openrouter/minimax-m3" },
+      { agent: "mimir", prompt: "Do X", model: "minimax/minimax-m3" },
       { agent: "odin", sessionID: "sess_parent", worktree: "/tmp" },
     );
     expect(result).not.toHaveProperty("error");

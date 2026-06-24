@@ -443,6 +443,7 @@ let bgAvailable = false;
         maxConcurrent,
         toolCallCap,
         logger,
+        worktree: input.worktree,
         serve,
         http,
         stream,

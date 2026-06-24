@@ -6947,3 +6947,307 @@ select:focus-visible,
     animation: none;
   }
 }
+
+/* ─── Background Agents view (v3.x — Active tab) ─────────────────────────── */
+
+.bg-active-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.bg-active-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) 0;
+  color: var(--text-dim);
+}
+
+.bg-active-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.bg-active-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bg-active-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.bg-active-subtitle {
+  margin: 0;
+  font-size: 12px;
+}
+
+.bg-active-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.bg-active-card {
+  gap: var(--space-3);
+}
+
+.bg-active-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.bg-active-card-id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--text-dim);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.bg-active-card-id code {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.bg-active-card-agent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+}
+
+.bg-active-card-agent-label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.bg-active-card-agent-name {
+  font-weight: 600;
+  color: var(--accent);
+  font-family: var(--font-sans, inherit);
+}
+
+.bg-active-prompt {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-elev-2, var(--bg-elev));
+  border-left: 3px solid var(--accent-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bg-active-step {
+  display: flex;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.bg-active-step-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.bg-active-step-value {
+  color: var(--text);
+  font-family: var(--font-sans, inherit);
+}
+
+.bg-active-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.bg-active-meta strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.bg-active-meta-tmux-live {
+  color: var(--success);
+}
+
+.bg-active-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+/* ─── Progress bar ──────────────────────────────────────────────────────── */
+
+.progress-bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: var(--bg-elev-2, var(--bg-elev));
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2, var(--accent)) 100%);
+  transition: width var(--motion-base, 200ms) var(--ease, ease-out);
+}
+
+.progress-label {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text);
+  font-weight: 600;
+  text-shadow: 0 0 4px var(--bg-elev);
+}
+
+/* ─── Output modal (live capture) ───────────────────────────────────────── */
+
+.bg-output-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 320px;
+}
+
+.bg-output-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.bg-output-toolbar-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.bg-output-loading,
+.bg-output-empty,
+.bg-output-error {
+  padding: var(--space-6);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.bg-output-error {
+  color: var(--error);
+}
+
+.bg-output-scroll {
+  max-height: 50vh;
+  min-height: 240px;
+  overflow: auto;
+  background: var(--bg, var(--bg-elev));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.bg-output-pre {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Tmux attach modal ─────────────────────────────────────────────────── */
+
+.bg-tmux-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.bg-tmux-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 12px;
+}
+
+.bg-tmux-meta .badge {
+  display: inline-flex;
+}
+
+.bg-tmux-session {
+  font-size: 12px;
+}
+
+.bg-tmux-command-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.bg-tmux-command {
+  flex: 1;
+  display: block;
+  padding: var(--space-3);
+  background: var(--bg-elev-2, var(--bg-elev));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: pre-wrap;
+  user-select: all;
+}
+
+.bg-tmux-hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Reusable spin utility — kept local to this view to avoid renaming existing
+   .spin / .spinning rules elsewhere in the file. */
+@keyframes bg-active-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bg-active-view .spin {
+  animation: bg-active-spin 0.9s linear infinite;
+}
