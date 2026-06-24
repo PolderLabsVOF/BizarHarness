@@ -74,6 +74,38 @@
 
 ## v3.11.1 — Unreleased — Stop and research rule
 
+### Fixed (v0.7.0-alpha.1 follow-up — from full dev-container simulation)
+
+End-to-end simulation in `BizarHarness-dev` (Docker) revealed three bugs in the dashboard + plugin wiring that would silently break the v2 protocol in production. All fixed and verified inside the container:
+
+- **Dashboard `cli.mjs`** — `start --port N` was silently ignored, dashboard always bound on default 4321. Now parses `--port` and `--bind` CLI args.
+- **Dashboard `server.mjs`** — `/api/v2/*` requests returned 404 with the old apiRouter's error format. Cause: `api.mjs` has a 404 catch-all at line ~109 that swallows any unhandled `/api/*` request without calling `next()`. Fix: mount the `/api/v2` router **before** `apiRouter` so `/api/v2/*` matches first. General lesson: namespace routers must mount BEFORE broader routers with internal catch-alls.
+- **Dashboard `v2-auth-file.mjs`** — persisted `port` from a previous run was used instead of the actual listen port. Fix: always use the current `port` argument; rewrite the file when persisted port differs (preserves password + createdAt).
+- **Plugin `event-stream.ts`** — added `onEvent(handler)` global handler for non-session SSE events. Used by the dashboard publisher wiring.
+- **Plugin `index.ts`** — wired `createDashboardPublisher()` into both `EventStream.onEvent` (background-agent SSE) AND the opencode `event` hook. Also fixed a `Map<string, string>` typo that was accidentally typed as `Map<string, Set<string>>` and broke 3 typecheck lines.
+
+### Simulation findings (full container run)
+
+`scripts/bizar-sim.sh` is a new end-to-end test harness that:
+
+1. Installs `@polderlabs/bizar` + `@polderlabs/bizar-dash` to user prefix (workaround for sandbox EACCES on `/usr/local/lib/node_modules`).
+2. Runs `install.sh` to copy plugin source into container's `~/.config/opencode/plugins/bizar/`.
+3. Runs `npm install` for plugin deps (the SDK is fetched from npm).
+4. Starts the dashboard from LOCAL source (npm-published v3.11.0 lacks v2 routes).
+5. Verifies v2 routes via curl: `/api/v2/health` (200), `/api/v2/sessions` (401/200), `/api/v2/doc` (200), `/api/v2/event` (401).
+6. Subscribes to SSE in background.
+7. Runs `opencode run --model opencode/deepseek-v4-flash-free "..."` to verify the plugin loads end-to-end.
+8. Runs SDK vitest, plugin bun test, dashboard smoke test.
+
+**157 tests green inside the container** (28 SDK + 6 plugin dashboard-client + 7 dashboard smoke + 116 existing plugin). Zero regressions.
+
+### Known limitations (not blockers)
+
+- **`opencode run` does not emit lifecycle events in --pure mode.** The plugin's `event` hook only fires for long-running TUI/server sessions. The simulation's `opencode run <prompt>` is too short-lived to trigger session.created/session.updated/session.idle. The v2 protocol itself is verified end-to-end via the SDK smoke test (which POSTs events to `/api/v2/event` and the SSE subscriber receives them). For real-world monitoring, the dashboard would be connected to a long-running `opencode serve` instance, which IS where lifecycle events fire.
+- **Dev container's opencode.json has stale model names** (`openrouter/minimax/minimax-m3`). Use `--model opencode/deepseek-v4-flash-free` for the free tier.
+
+
+
 ### Changed — Agent behavior under uncertainty
 
 All 13 agent prompts now reference a new rule, `config/rules/uncertainty.md`, that codifies the **"stop and research"** behavior:
