@@ -120,6 +120,8 @@ export class EventStream {
   private _logger: Logger;
   private _http: HttpClient;
   private _handlers = new Map<string, Set<SessionEventHandler>>();
+  /** Global handler invoked for every event regardless of session (v0.7.0). */
+  private _globalHandler: SessionEventHandler | null = null;
   private _connected = false;
   private _aborted = false;
   private _abortController: AbortController | null = null;
@@ -127,6 +129,21 @@ export class EventStream {
   private _reconnectAttempt = 0;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _connectPromise: Promise<void> | null = null;
+
+  /**
+   * Register a global handler invoked for every event (regardless of
+   * session). Used to forward events to the dashboard publisher. Returns
+   * an unsubscribe function. (v0.7.0-alpha.1 — wired into the v2
+   * SDK dashboard-client.ts bridge.)
+   */
+  onEvent(handler: SessionEventHandler): () => void {
+    this._globalHandler = handler;
+    return () => {
+      if (this._globalHandler === handler) {
+        this._globalHandler = null;
+      }
+    };
+  }
 
   constructor(opts: {
     baseUrl: string;
@@ -439,6 +456,21 @@ export class EventStream {
   }
 
   private dispatchToHandlers(sessionID: string, event: StreamEvent): void {
+    // v0.7.0-alpha.1 — Forward every event to the global handler
+    // (typically the dashboard publisher) BEFORE the per-session dispatch.
+    // Failures here are isolated so one bad handler doesn't break the
+    // dispatch chain for other subscribers.
+    if (this._globalHandler) {
+      try {
+        this._globalHandler(event);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this._logger.warn(
+          `bizar: SSE global handler threw for session ${sessionID} (type=${event.type}): ${msg}`,
+        );
+      }
+    }
+
     const set = this._handlers.get(sessionID);
     if (!set || set.size === 0) {
       this._logger.debug(

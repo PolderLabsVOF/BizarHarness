@@ -279,6 +279,15 @@ async function main() {
     stopDashboard().finally(() => process.exit(0));
   });
 
+  // Parse --port and --bind from CLI args (v3.11.1 — was missing)
+  const portArgIdx = args.indexOf('--port');
+  const portArg = portArgIdx >= 0 ? parseInt(args[portArgIdx + 1], 10) : undefined;
+  const bindArgIdx = args.indexOf('--bind');
+  const bindArg = bindArgIdx >= 0 ? args[bindArgIdx + 1] : undefined;
+  const portOpts = {};
+  if (Number.isFinite(portArg)) portOpts.port = portArg;
+  if (bindArg) process.env.BIZAR_DASHBOARD_BIND = bindArg;
+
   if (args.includes('--help') || args.includes('-h')) {
     showHelp();
   } else if (args.includes('--version') || args.includes('-v')) {
@@ -294,9 +303,9 @@ async function main() {
   } else if (args.includes('--bg') || args.includes('--detach')) {
     await startInBackground(['start']);
   } else if (args.includes('--web-only')) {
-    await startDashboard();
+    await startDashboard(portOpts);
   } else if (args[0] === 'start' || args.length === 0) {
-    await startDashboard();
+    await startDashboard(portOpts);
   } else {
     showHelp();
   }

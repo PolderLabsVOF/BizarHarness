@@ -45,14 +45,26 @@ export function loadOrCreateAuth({ file = DEFAULT_FILE, port = V2_DEFAULT_PORT }
         const raw = readFileSync(candidate, 'utf8');
         const parsed = JSON.parse(raw);
         if (typeof parsed.password === 'string' && parsed.password.length >= 16) {
-          const p = typeof parsed.port === 'number' ? parsed.port : port;
-          return {
+          // Reuse the persisted PASSWORD (idempotent auth), but always
+          // use the CURRENT port — the persisted port may be wrong
+          // (from an earlier bug or a different listen port).
+          const result = {
             password: parsed.password,
-            port: p,
-            baseUrl: parsed.baseUrl ?? `http://127.0.0.1:${p}`,
+            port,
+            baseUrl: `http://127.0.0.1:${port}`,
             file: candidate,
             createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : 0,
           };
+          // Re-write the file to update the port (atomic). The persisted
+          // password and createdAt are preserved.
+          if (typeof parsed.port !== 'number' || parsed.port !== port) {
+            try {
+              writeAuthFile(candidate, result);
+            } catch {
+              // non-fatal — return the in-memory record even if rewrite fails
+            }
+          }
+          return result;
         }
       } catch {
         // fall through to regeneration
@@ -65,18 +77,23 @@ export function loadOrCreateAuth({ file = DEFAULT_FILE, port = V2_DEFAULT_PORT }
   const createdAt = Date.now();
   const record = { password, port, baseUrl: `http://127.0.0.1:${port}`, createdAt };
 
-  // Atomic write with mode 0600.
+  writeAuthFile(file, record);
+
+  return { ...record, file };
+}
+
+/**
+ * Atomically write the auth file with mode 0600.
+ */
+function writeAuthFile(file, record) {
   mkdirSync(dirname(file), { recursive: true });
   const tmpFile = `${file}.tmp`;
   writeFileSync(tmpFile, JSON.stringify(record, null, 2), { mode: 0o600 });
   chmodSync(tmpFile, 0o600);
   renameSync(tmpFile, file);
-  // Enforce mode on the final path too (rename preserves mode on some FSes).
   try {
     chmodSync(file, 0o600);
   } catch {
     // non-fatal
   }
-
-  return { ...record, file };
 }

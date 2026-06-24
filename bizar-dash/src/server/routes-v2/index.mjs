@@ -48,6 +48,15 @@ export function createV2Router({ eventBus, getPassword, version, startedAt }) {
   const router = express.Router();
   const auth = v2BasicAuth(getPassword);
 
+  // v0.7.0-alpha.1 — debug request logger (logs every v2 hit). Comment
+  // out for production. Useful for verifying SDK publish calls land.
+  router.use((req, _res, next) => {
+    console.log(
+      `[v2-req] ${req.method} ${req.originalUrl} auth=${req.headers.authorization ? 'yes' : 'no'}`,
+    );
+    next();
+  });
+
   // Public health endpoint.
   router.use(createV2HealthRouter({ version, startedAt }));
 

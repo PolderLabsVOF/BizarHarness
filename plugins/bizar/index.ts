@@ -98,6 +98,7 @@ import type { Plugin, Hooks, PluginInput, PluginOptions } from "@opencode-ai/plu
 import { createLogger, type Logger } from "./src/logger.js";
 import { decide, isLogOnlyWarn } from "./src/loop.js";
 import { fingerprint } from "./src/fingerprint.js";
+import { createDashboardPublisher, type DashboardPublisher } from "./src/dashboard-client.js";
 import { StateStore, type SessionState } from "./src/state.js";
 import { LogWriter } from "./src/report.js";
 import {
@@ -244,6 +245,10 @@ interface RuntimeContext {
   seenMessageIds: Map<string, Set<string>>;
   /** sessionID → pending system-transform message, set at warn/escalate. */
   pendingInjections: Map<string, string>;
+  /** v0.7.0-alpha.1 — Dashboard publisher (or null if disabled/not started).
+   *  Used by the `event` hook to forward opencode session lifecycle
+   *  events to the v2 dashboard via the @polderlabs/bizar-sdk. */
+  dashboardPublisher: DashboardPublisher | null;
 }
 
 /**
@@ -333,10 +338,11 @@ async function init(
 
   // --- Background agents (v0.4.2) -----------------------------------------
 
-  let instanceManager: InstanceManager | null = null;
-  let serve: ServeLifecycle | null = null;
-  let stream: EventStream | null = null;
-  let bgAvailable = false;
+let instanceManager: InstanceManager | null = null;
+let serve: ServeLifecycle | null = null;
+let stream: EventStream | null = null;
+let dashboardPublisher: DashboardPublisher | null = null;
+let bgAvailable = false;
 
   if (readServeDisabled()) {
     logger.info("bizar: background agents disabled via BIZAR_SERVE_DISABLE=1");
@@ -393,6 +399,44 @@ async function init(
         http,
       });
       streamHandle = stream;
+
+      // v0.7.0-alpha.1 — Wire dashboard publisher to the EventStream so
+      // every opencode SSE event is also published to the v2 dashboard.
+      // The publisher gracefully degrades if the dashboard is unreachable
+      // (queues, retries, warns; never throws into the plugin).
+      try {
+        const pub = createDashboardPublisher({
+          logger,
+        });
+        await pub.start();
+        dashboardPublisher = pub;
+        stream.onEvent((event) => {
+          // Translate opencode StreamEvent → DashboardEvent shape.
+          // The dashboard only cares about the wire-level (type, properties)
+          // so we forward { type, properties } directly. Cast through
+          // `unknown` because the opencode event shape doesn't exactly
+          // match the SDK's discriminated DashboardEvent — it's a
+          // forward-compatible passthrough.
+          const dashEvent = {
+            type: event.type,
+            properties: { ...event },
+          } as unknown as Parameters<DashboardPublisher["publish"]>[0];
+          void pub.publish(dashEvent);
+        });
+        // Stop the publisher when the stream is disposed.
+        const origDisconnect = stream.disconnect.bind(stream);
+        stream.disconnect = async () => {
+          await origDisconnect();
+          pub.stop();
+        };
+        logger.info("bizar: dashboard publisher wired to EventStream (v2 protocol)");
+      } catch (err) {
+        logger.warn(
+          `bizar: dashboard publisher failed to start: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
 
       instanceManager = new InstanceManager({
         stateStore: bgStateStore,
@@ -469,6 +513,7 @@ async function init(
     directory: input.directory,
     seenMessageIds: new Map(),
     pendingInjections: new Map(),
+    dashboardPublisher,
   };
 
   return buildHooks(ctx, { instanceManager, bgAvailable });
@@ -859,10 +904,37 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // `chat.message` seed, per spec §4.5.1).
     event: async ({ event }) => {
       try {
-        const ev = event as { type?: string; sessionID?: string };
+        // v0.7.0-alpha.1 — opencode's event object has { type: string,
+        // properties: { sessionID: string, ... } }. The legacy plugin
+        // assumed `event.sessionID` was top-level (which is wrong), so
+        // the hook returned early for every event. We extract from
+        // BOTH locations to be robust across opencode versions, and
+        // publish to the dashboard regardless.
+        const ev = event as {
+          type?: string;
+          sessionID?: string;
+          properties?: { sessionID?: string; [k: string]: unknown };
+        };
         const type = ev.type;
-        const sessionID = ev.sessionID;
-        if (!type || !sessionID) return;
+        const sessionID = ev.sessionID ?? ev.properties?.sessionID;
+        if (!type) return;
+
+        // v0.7.0-alpha.1 — Forward every opencode event to the dashboard.
+        // The plugin SDK does NOT translate opencode events to the SDK's
+        // discriminated DashboardEvent shape (it's a forward-compatible
+        // passthrough — the dashboard is happy with any {type, properties}
+        // event object). The publish is fire-and-forget; failures are
+        // logged and swallowed inside the publisher.
+        if (ctx.dashboardPublisher !== null) {
+          const dashEvent = {
+            type,
+            properties: { ...ev },
+          } as unknown as Parameters<DashboardPublisher["publish"]>[0];
+          void ctx.dashboardPublisher.publish(dashEvent);
+        }
+
+        // Legacy logic below: only runs when we have a sessionID.
+        if (!sessionID) return;
 
         if (type === "session.deleted") {
           await ctx.stateStore.withLock(sessionID, async () => {

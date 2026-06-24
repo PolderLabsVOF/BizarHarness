@@ -311,27 +311,11 @@ export async function createServer({
     broadcast: localBroadcast,
   });
 
-  // v3.6.2 — Auth now wraps mod routes too. Previously mods mounted at
-  // `/api/mods/<id>` BEFORE `requireAuth`, which meant every mod route
-  // silently bypassed bearer-token checks.
-  const { requireAuth } = await import('./auth.mjs');
-  app.use('/api', requireAuth({ skipPaths: ['/auth/status', '/pair/verify'] }));
-
-  // ── Mod route mounting ──────────────────────────────────────────────
-  {
-    const modCtx = { broadcast: localBroadcast, state, projectRoot, opencodeConfigDir };
-    const modRouters = await modsLoader.loadModRouters(modCtx);
-    for (const { id, router: modRouter, mountPath } of modRouters) {
-      app.use(mountPath, modRouter);
-      // eslint-disable-next-line no-console
-      console.log(`[mod] mounted ${id} routes at ${mountPath}`);
-    }
-  }
-
-  // All /api/* routes go through apiRouter (after mod routes are checked)
-  app.use('/api', apiRouter);
-
-  // ── v2 plugin↔dashboard protocol (v0.7.0-alpha.1) ──────────────────
+  // All /api/* routes go through apiRouter (after mod routes are checked).
+  // IMPORTANT: mount v2 router FIRST so `/api/v2/*` matches before
+  // apiRouter's internal 404 catch-all (api.mjs line ~109) can swallow it.
+  // v2 plugin protocol
+  // ──────────────────────────────────────────────────────────────────
   // HTTP+SSE bridge sourced from .bizar/research/OPENAPI_SPEC.yaml.
   // Mounted at /api/v2/* to avoid colliding with existing /api/* routes.
   // Auth: HTTP Basic (see v2-auth-file.mjs). Password persisted at
@@ -356,6 +340,26 @@ export async function createServer({
     // eslint-disable-next-line no-console
     console.warn('[v2] failed to initialize:', err?.message || err);
   }
+
+  // v3.6.2 — Auth now wraps mod routes too. Previously mods mounted at
+  // `/api/mods/<id>` BEFORE `requireAuth`, which meant every mod route
+  // silently bypassed bearer-token checks.
+  const { requireAuth } = await import('./auth.mjs');
+  app.use('/api', requireAuth({ skipPaths: ['/auth/status', '/pair/verify', '/v2/health', '/v2/doc'] }));
+
+  // ── Mod route mounting ──────────────────────────────────────────────
+  {
+    const modCtx = { broadcast: localBroadcast, state, projectRoot, opencodeConfigDir };
+    const modRouters = await modsLoader.loadModRouters(modCtx);
+    for (const { id, router: modRouter, mountPath } of modRouters) {
+      app.use(mountPath, modRouter);
+      // eslint-disable-next-line no-console
+      console.log(`[mod] mounted ${id} routes at ${mountPath}`);
+    }
+  }
+
+  // All /api/* routes go through apiRouter (after mod routes are checked)
+  app.use('/api', apiRouter);
 
   // v3.6.0 — Authenticate WebSocket upgrades. The wss is in
   // `noServer: true` mode above, so this handler is the gate. We
