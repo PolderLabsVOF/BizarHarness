@@ -32,8 +32,21 @@ const AGENT_FILES = [
  * breaking the dev workflow. Pass `{ force: true }` to override (after
  * confirming the user really wants the deployed copy back).
  *
+ * node_modules copy: the plugin imports `@polderlabs/bizar-sdk`, a
+ * workspace-internal package not on the public registry. The npm source
+ * bundles the SDK into its own `node_modules/`. After copying the plugin
+ * files, this function ALSO copies the source's `node_modules/` to the
+ * deployed `node_modules/` so Bun can resolve the import when the plugin
+ * is loaded from `~/.config/opencode/plugins/bizar/`. Without this, the
+ * plugin silently fails to load.
+ *
  * Pass `{ silent: true }` to suppress the warning prints; the function
  * still returns `true` if the dest is already in the desired state.
+ *
+ * Pass `{ sourceDir: '/path/to/fake' }` (test seam) to bypass the
+ * `npm root -g` lookup and use a caller-supplied source path. Used by
+ * cli/install.test.mjs to drive the function against a controlled
+ * filesystem without touching the real global npm root.
  *
  * Returns `true` if the plugin was installed (or already in place),
  * `false` otherwise. Never throws.
@@ -76,17 +89,24 @@ export async function installPluginFromGlobal(opts = {}) {
     rmSync(destDir, { force: true });
   }
 
-  let globalRoot;
-  try {
-    globalRoot = execSync('npm root -g', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString()
-      .trim();
-  } catch {
-    console.log(chalk.yellow('  ⚠ Could not determine npm global root — skipping plugin install'));
-    return false;
+  // ── Resolve source path ─────────────────────────────────────────────────────
+  // Production: `npm root -g` + `@polderlabs/bizar-plugin`. Tests can pass
+  // `opts.sourceDir` to bypass the lookup entirely.
+  let pluginPath;
+  if (opts.sourceDir) {
+    pluginPath = opts.sourceDir;
+  } else {
+    let globalRoot;
+    try {
+      globalRoot = execSync('npm root -g', { stdio: ['ignore', 'pipe', 'ignore'] })
+        .toString()
+        .trim();
+    } catch {
+      console.log(chalk.yellow('  ⚠ Could not determine npm global root — skipping plugin install'));
+      return false;
+    }
+    pluginPath = join(globalRoot, '@polderlabs', 'bizar-plugin');
   }
-
-  const pluginPath = join(globalRoot, '@polderlabs', 'bizar-plugin');
   if (!existsSync(pluginPath)) {
     console.log(chalk.dim('  ℹ Bizar plugin not installed globally. To install it:'));
     console.log(chalk.dim('    npm install -g @polderlabs/bizar-plugin'));
@@ -115,11 +135,75 @@ export async function installPluginFromGlobal(opts = {}) {
     await copyRecursive(pluginPath, destDir);
     console.log(chalk.green(`  ✓ Bizar plugin installed from global package`));
     console.log(chalk.dim(`    ${pluginPath} → ${destDir}`));
-    return true;
   } catch (err) {
     console.log(chalk.yellow(`  ⚠ Failed to copy Bizar plugin: ${err.message}`));
     return false;
   }
+
+  // ── node_modules copy ───────────────────────────────────────────────────────
+  // The plugin imports `@polderlabs/bizar-sdk`, a workspace-internal package
+  // not on the public registry. The npm source bundles the SDK into its
+  // own `node_modules/`, so loading from `$(npm root -g)/...` resolves
+  // correctly. The deployed copy at `~/.config/opencode/plugins/bizar/`
+  // has no `node_modules`, so Bun can't resolve the import — without this
+  // copy the plugin silently fails to load. This used to be papered over
+  // by a manual `cp -r $(npm root -g)/.../node_modules ~/.config/...` step
+  // that got wiped every time `bizar update` re-ran the outer copy. Doing
+  // it here makes the fix durable across updates.
+  //
+  // Semantics: mirror `cp -r` — merge into dest if it exists as a real
+  // directory (overwrite same-named files, don't delete extras), error
+  // if dest is a symlink (don't dereference through it). Idempotent —
+  // running twice never breaks; files whose contents already match are
+  // rewritten byte-identically.
+  try {
+    const srcNmDir = join(pluginPath, 'node_modules');
+    if (existsSync(srcNmDir)) {
+      const dstNmDir = join(destDir, 'node_modules');
+      let dstIsSymlink = false;
+      try {
+        dstIsSymlink = lstatSync(dstNmDir).isSymbolicLink();
+      } catch {
+        // doesn't exist — fine, we'll create it below
+      }
+      if (dstIsSymlink) {
+        console.log(
+          chalk.yellow(
+            `  ⚠ ${dstNmDir} is a symlink — refusing to copy node_modules (remove manually).`,
+          ),
+        );
+      } else {
+        // Top-level entry count (matches `npm ls --depth=0`) — gives the
+        // user a sense of what was bundled. e.g. "copied node_modules
+        // (25 packages) to deployed plugin".
+        const srcEntries = await readdir(srcNmDir, { withFileTypes: true });
+        await mkdir(dstNmDir, { recursive: true });
+        async function copyNodeModules(srcDir, dstDir) {
+          const entries = await readdir(srcDir, { withFileTypes: true });
+          for (const entry of entries) {
+            const src = join(srcDir, entry.name);
+            const dst = join(dstDir, entry.name);
+            if (entry.isDirectory()) {
+              await mkdir(dst, { recursive: true });
+              await copyNodeModules(src, dst);
+            } else {
+              await copyFile(src, dst);
+            }
+          }
+        }
+        await copyNodeModules(srcNmDir, dstNmDir);
+        console.log(
+          chalk.green(
+            `  ✓ copied node_modules (${srcEntries.length} packages) to deployed plugin`,
+          ),
+        );
+      }
+    }
+  } catch (err) {
+    console.log(chalk.yellow(`  ⚠ Failed to copy node_modules: ${err.message}`));
+  }
+
+  return true;
 }
 
 export async function runInstaller() {

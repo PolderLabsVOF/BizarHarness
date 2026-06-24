@@ -254,6 +254,31 @@ describe('runDoctor() with fixture HOME', () => {
     assert.equal(r.ok, true, r.message);
   });
 
+  test('plugin-entry-present passes when plugin[] has [path, options] tuple', async () => {
+    writeOpencodeConfig({ plugin: [['./plugins/bizar/index.ts', { loopThresholdWarn: 5 }]] });
+    const result = await runDoctor({ silent: true });
+    const r = findCheck(result, 'plugin-entry-present');
+    assert.equal(r.ok, true, r.message);
+  });
+
+  test('plugin-entry-present fails when tuple path does not contain "bizar"', async () => {
+    writeOpencodeConfig({ plugin: [['./plugins/other/index.ts', {}]] });
+    const result = await runDoctor({ silent: true });
+    const r = findCheck(result, 'plugin-entry-present');
+    assert.equal(r.ok, false);
+  });
+
+  test('plugin-path-resolves passes when tuple path resolves', async () => {
+    const home = process.env.HOME;
+    const pluginsDir = join(home, '.config', 'opencode', 'plugins', 'bizar');
+    mkdirSync(pluginsDir, { recursive: true });
+    writeFileSync(join(pluginsDir, 'index.ts'), '// fake plugin\n', 'utf8');
+    writeOpencodeConfig({ plugin: [['./plugins/bizar/index.ts', {}]] });
+    const result = await runDoctor({ silent: true });
+    const r = findCheck(result, 'plugin-path-resolves');
+    assert.equal(r.ok, true, r.message);
+  });
+
   test('agent-files-installed fails when core agents missing', async () => {
     writeOpencodeConfig({});
     writeAgents('odin.md'); // missing quick, thor, tyr

@@ -5,7 +5,7 @@
  *   1. Every `bizar_*` tool registered in `plugins/bizar/index.ts`
  *      is also present in `config/opencode.json` `tools: { ... }`.
  *   2. No `bizarre_*` (double-r) typos remain in `plugins/bizar/src/`.
- *   3. `plugins/bizar/package.json` version is `0.5.0`.
+ *   3. `plugins/bizar/package.json` version is `0.8.3`.
  */
 
 import { describe, test, expect } from "bun:test";
@@ -83,9 +83,9 @@ describe("config drift detection", () => {
     ).toEqual([]);
   });
 
-  test("plugins/bizar/package.json version is 0.8.0", () => {
+  test("plugins/bizar/package.json version is 0.8.3", () => {
     const pkg = JSON.parse(readFileSync(PKG_JSON, "utf-8")) as { version?: string };
-    expect(pkg.version).toBe("0.8.0");
+    expect(pkg.version).toBe("0.8.3");
   });
 });
 

@@ -92,6 +92,10 @@ async function checkPluginEntryPresent() {
   }
   const hasBizar = plugins.some((p) => {
     if (typeof p === 'string') return p.includes('bizar');
+    if (Array.isArray(p)) {
+      const [path] = p;
+      return typeof path === 'string' && path.includes('bizar');
+    }
     if (p && typeof p === 'object') {
       return (
         (p.name || '').includes('bizar') ||
@@ -112,8 +116,14 @@ async function checkPluginPathResolves() {
   const plugins = Array.isArray(cfg.plugin) ? cfg.plugin : [];
   let lastChecked = null;
   for (const p of plugins) {
-    if (!p || typeof p !== 'object' || !p.path) continue;
-    const entryPath = p.path;
+    let entryPath = null;
+    if (Array.isArray(p)) {
+      const [path] = p;
+      if (typeof path === 'string') entryPath = path;
+    } else if (p && typeof p === 'object' && p.path) {
+      entryPath = p.path;
+    }
+    if (!entryPath) continue;
     const isAbs = entryPath.startsWith('/') || /^[a-z]:[\\/]/i.test(entryPath);
     const resolved = isAbs ? entryPath : join(opencodeConfigDir(), entryPath);
     lastChecked = resolved;
