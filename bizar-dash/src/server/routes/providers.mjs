@@ -34,5 +34,14 @@ export function createProvidersRouter() {
     res.json(active || { providerId: null, modelId: null, source: null });
   }));
 
+  // v3.16.0 — Auto-detect providers from env + config. Best-effort;
+  // a timeout/failure on one provider does not block the others.
+  // Query: ?probe=0 to skip the /models probe (faster, less informative).
+  router.get('/providers/auto-detect', wrap(async (req, res) => {
+    const probe = req.query.probe !== '0';
+    const results = await providersStore.autoDetect({ probe });
+    res.json({ providers: results, count: results.length });
+  }));
+
   return router;
 }

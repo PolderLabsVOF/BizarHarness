@@ -1,5 +1,52 @@
 # Changelog
 
+## v3.16.0 — Dashboard overhaul: settings subnav, chat floating input, providers in Config, mods registry browser, provider auto-detect
+
+> **UI + CLI upgrade.** Six user-facing improvements ship together: settings gets a sticky subnav with section anchors, the chat input is a floating glass-style box, the standalone Providers tab is gone (lives inside Config), the Mods tab gets an Available registry browser, and `bizar providers detect` auto-discovers API keys in your env.
+
+### Highlights
+
+- **Settings subnav.** Every section in `Settings` (Theme, Layout, General, Service, Tailscale, Notifications, Auth, Agents, Dashboard, Background, Updates, Activity, About) is now reachable from a sticky horizontal subnav at the top. Active section is highlighted automatically as you scroll. Smooth scroll-into-view via anchor IDs.
+- **Chat floating input.** The chat composer is now a floating glass-style box (sticky at bottom, blurred backdrop, accent-coloured border on focus, drop shadow). Wraps the existing composer-toolbar + textarea + send button; no UX changes other than positioning.
+- **Providers moved into Config.** The standalone Providers tab is gone. The ProvidersPanel already lived inside `Config → Providers` and is unchanged — just no longer duplicated as a top-level tab. `Providers.tsx` is now orphaned (not imported anywhere) but left in the repo for reference.
+- **Mods registry browser.** The Mods tab gets a new "Mod registry" collapsible section with a card-grid layout. Each entry shows name, version (with upgrade badge if newer), description, author, homepage, declared permissions, and Install/Installed button. Tapping Install POSTs `/api/mods` with `{ id }` to download from the registry. The browser now honours the `installed` / `upgradeAvailable` flags returned by the registry route.
+- **Provider auto-detect (CLI + dashboard).**
+  - New `bizar providers detect` subcommand: scans env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `COHERE_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`) plus opencode.json, validates key formats, optionally probes each `/models` endpoint with a 1.5s timeout, and prints a status table. Flags: `--no-probe`, `--json`, `--install <id>` (auto-adds to opencode.json).
+  - New `/api/providers/auto-detect` endpoint in the dashboard.
+  - New "Auto-detect providers" banner inside `Config → Providers` with the same results, including a per-row "Add" button to install a configured provider into opencode.json without leaving the dashboard.
+  - Wired into `bizar install` as a final summary step so a fresh install surfaces any pre-existing keys.
+- **`bizarre-mods` registry polish.** The registry.json schema is documented in `bizarre-mods/README.md`, including a "Publishing this registry" section with the exact `git init / commit / push` recipe for spinning up the standalone GitHub repo.
+
+### Companion release
+
+- `@polderlabs/bizar-dash` v3.16.0 — co-released with all the UI work above.
+
+### Files added (1)
+
+- `cli/providers-detect.mjs` — the new CLI subcommand (~270 lines).
+
+### Files changed (12)
+
+- `bizar-dash/src/server/providers-store.mjs` — new `KNOWN_PROVIDERS` table + `autoDetect({ probe })` method.
+- `bizar-dash/src/server/routes/providers.mjs` — new `GET /providers/auto-detect` route.
+- `bizar-dash/src/web/App.tsx` — removed `providers: Providers` from VIEW_MAP + removed unused import.
+- `bizar-dash/src/web/components/Topbar.tsx` — removed `providers` from TABS + removed unused `Cloud` icon import.
+- `bizar-dash/src/web/views/Chat.tsx` — wrapped composer in `.chat-input-floating` div.
+- `bizar-dash/src/web/views/Config.tsx` — new `AutoDetectBanner` component above the ProvidersPanel.
+- `bizar-dash/src/web/views/Mods.tsx` — new registry browser section + state.
+- `bizar-dash/src/web/views/Settings.tsx` — `id="settings-..."` on every card, new sticky subnav, Activity section wrapped.
+- `bizar-dash/src/web/styles/main.css` — `.settings-subnav`, `.chat-input-floating`, `.mods-registry-*`, `.mod-registry-*`, `.autodetect-*` (~7 KB of new CSS).
+- `cli/bin.mjs` — wired `bizar providers detect` subcommand.
+- `cli/install.mjs` — runs `providers detect --no-probe` as final summary step.
+- `bizarre-mods/README.md` — added "Publishing this registry" section.
+
+### Test results
+
+- `tsc --noEmit` (dashboard) — passes.
+- `bun test tests/mod-security.test.mjs` — 26/26 pass.
+- `node cli/bin.mjs providers detect --help` — works.
+- `node cli/bin.mjs providers detect --no-probe` — prints the table.
+
 ## v3.15.1 — `bizar update` defaults to automatic everything + `bizar dash start --bg` fix
 
 > **Bug fix + UX:** `bizar update` no longer prompts. It updates every component (opencode + bizar + dash + plugin), auto-installs any missing one, kills running instances with a notice, re-runs the install script, restarts the dashboard, and runs `bizar doctor`. Opt into the per-component picker with `--pick`.

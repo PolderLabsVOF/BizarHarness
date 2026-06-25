@@ -15,7 +15,12 @@ import {
   Database,
   History as HistoryIcon,
   X,
+  ShieldCheck,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
+import { Spinner } from '../components/Spinner';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { useToast } from '../components/Toast';
@@ -954,6 +959,9 @@ function ProvidersPanel({
         AI providers configured under <code>opencode.json#provider</code>.
         Each provider has a base URL, API key, and a list of model IDs.
       </CardMeta>
+      <AutoDetectBanner onAdd={(id, name, baseURL, key) => {
+        openProviderModal({ id, name, baseURL, apiKey: key } as Provider);
+      }} />
       <div className="view-actions" style={{ marginBottom: 12 }}>
         <Button variant="primary" size="sm" onClick={() => openProviderModal()}>
           <Plus size={14} /> Add provider
@@ -1456,6 +1464,140 @@ function ExportPanel({ onDownload }: { onDownload: () => void }) {
         opencode.json snapshot, providers list (with masked API keys), MCP list, recent
         service log errors, and active project metadata.
       </div>
+    </Card>
+  );
+}
+
+// ─── AutoDetectBanner (v3.16.0) ────────────────────────────────────
+// Scans env vars + opencode.json for known provider API keys
+// (Anthropic, OpenAI, Google, Mistral, Groq, Cohere, OpenRouter,
+// DeepSeek, MiniMax). Surfaces status: configured / unknown / no-key.
+type AutoDetectResult = {
+  id: string;
+  name: string;
+  baseURL?: string;
+  status: 'configured' | 'unknown' | 'no-key';
+  keySource: string;
+  hasKey: boolean;
+  probed?: { ok: boolean; status?: number; reason?: string; modelCount?: number } | null;
+};
+
+function AutoDetectBanner({
+  onAdd,
+}: {
+  onAdd: (id: string, name: string, baseURL: string, apiKey?: string) => void;
+}) {
+  const toast = useToast();
+  const [results, setResults] = useState<AutoDetectResult[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const run = async (probe: boolean) => {
+    setLoading(true);
+    try {
+      const r = await api.get<{ providers: AutoDetectResult[] }>(
+        `/providers/auto-detect${probe ? '' : '?probe=0'}`,
+      );
+      setResults(r.providers || []);
+      const configured = (r.providers || []).filter((p) => p.status === 'configured');
+      if (configured.length > 0) {
+        toast.success(`Detected ${configured.length} configured provider${configured.length === 1 ? '' : 's'}.`);
+      } else {
+        toast.info('No configured providers detected in env or config.');
+      }
+    } catch (err) {
+      toast.error(`Auto-detect failed: ${(err as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statusIcon = (s: string) => {
+    if (s === 'configured') return <ShieldCheck size={12} style={{ color: 'var(--success)' }} />;
+    if (s === 'unknown') return <AlertTriangle size={12} style={{ color: 'var(--warning)' }} />;
+    return <X size={12} style={{ color: 'var(--text-dim)' }} />;
+  };
+
+  const configured = (results || []).filter((p) => p.status === 'configured');
+  const other = (results || []).filter((p) => p.status !== 'configured');
+
+  return (
+    <Card className="autodetect-banner">
+      <div className="autodetect-head" onClick={() => setExpanded((v) => !v)}>
+        <ShieldCheck size={14} />
+        <span className="autodetect-title">Auto-detect providers</span>
+        <span className="muted" style={{ fontSize: 11 }}>
+          {results
+            ? `${configured.length} configured · ${other.length} other`
+            : 'scan env vars + opencode.json for known keys'}
+        </span>
+        <span className="autodetect-spacer" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            run(true);
+          }}
+          disabled={loading}
+          title="Probe each provider's /models endpoint"
+        >
+          {loading ? <Spinner size="sm" /> : <RefreshCw size={12} />} Detect
+        </Button>
+        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </div>
+      {expanded && (
+        <div className="autodetect-body">
+          {!results ? (
+            <div className="muted" style={{ padding: 12, fontSize: 12 }}>
+              Click <strong>Detect</strong> to scan env vars and opencode.json for known provider keys.
+              Probes each provider's <code>/models</code> endpoint with a 1.5s timeout.
+            </div>
+          ) : (
+            <table className="autodetect-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Source</th>
+                  <th>Probe</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={r.id}>
+                    <td>{statusIcon(r.status)} <span className="autodetect-status">{r.status}</span></td>
+                    <td><strong>{r.name}</strong> <span className="muted mono">{r.id}</span></td>
+                    <td className="muted">{r.keySource || '—'}</td>
+                    <td className="muted">
+                      {r.probed?.modelCount != null
+                        ? `${r.probed.modelCount} models`
+                        : r.probed?.reason
+                          ? r.probed.reason
+                          : r.probed?.ok
+                            ? 'ok'
+                            : '—'}
+                    </td>
+                    <td>
+                      {r.status === 'configured' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onAdd(r.id, r.name, r.baseURL || '')}
+                          title="Add this provider to opencode.json"
+                        >
+                          <Plus size={10} /> Add
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

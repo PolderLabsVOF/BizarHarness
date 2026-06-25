@@ -535,6 +535,10 @@ async function main() {
     // v3.11.1 — Background agent manager (list / view / kill / logs).
     const { runBg } = await import('./bg.mjs');
     await runBg(args[1], args.slice(2));
+  } else if (args[0] === 'providers' && args[1] === 'detect') {
+    // v3.16.0 — Auto-detect provider API keys from env + opencode.json.
+    const { runProvidersDetect } = await import('./providers-detect.mjs');
+    await runProvidersDetect(args.slice(2));
   } else if (args[0] === 'dash' || args[0] === 'dashboard') {
     // `bizar dashboard` is a deprecated alias for `bizar dash`
     if (args[0] === 'dashboard') {

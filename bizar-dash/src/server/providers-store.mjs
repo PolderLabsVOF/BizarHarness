@@ -414,6 +414,113 @@ export const providersStore = {
     saveConfig(cfg);
     return true;
   },
+
+  /**
+   * v3.16.0 — Auto-detect providers from environment variables.
+   *
+   * Recognised API keys: ANTHROPIC_API_KEY, OPENAI_API_KEY,
+   * GEMINI_API_KEY / GOOGLE_API_KEY, MISTRAL_API_KEY, GROQ_API_KEY,
+   * COHERE_API_KEY, OPENROUTER_API_KEY, DEEPSEEK_API_KEY,
+   * MINIMAX_API_KEY.
+   *
+   * Each entry has a status:
+   *   - 'configured' — key present AND format checks out
+   *   - 'unknown'    — env var set but format doesn't match known patterns
+   *   - 'no-key'     — provider known but no key in env or config
+   *
+   * Probes the canonical /models endpoint with a 1.5s timeout to confirm
+   * the key actually works. Probes are best-effort — failures don't
+   * downgrade status from 'configured' to 'no-key'.
+   */
+  KNOWN_PROVIDERS: [
+    { id: 'anthropic', name: 'Anthropic', envKeys: ['ANTHROPIC_API_KEY'], baseURL: 'https://api.anthropic.com/v1', keyPattern: /^sk-ant-[A-Za-z0-9_-]{20,}$/ },
+    { id: 'openai', name: 'OpenAI', envKeys: ['OPENAI_API_KEY'], baseURL: 'https://api.openai.com/v1', keyPattern: /^sk-[A-Za-z0-9]{20,}$/ },
+    { id: 'google', name: 'Google AI', envKeys: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'], baseURL: 'https://generativelanguage.googleapis.com/v1beta', keyPattern: /^AIza[A-Za-z0-9_-]{30,}$/ },
+    { id: 'mistral', name: 'Mistral', envKeys: ['MISTRAL_API_KEY'], baseURL: 'https://api.mistral.ai/v1', keyPattern: /^[A-Za-z0-9]{20,}$/ },
+    { id: 'groq', name: 'Groq', envKeys: ['GROQ_API_KEY'], baseURL: 'https://api.groq.com/openai/v1', keyPattern: /^gsk_[A-Za-z0-9]{20,}$/ },
+    { id: 'cohere', name: 'Cohere', envKeys: ['COHERE_API_KEY'], baseURL: 'https://api.cohere.com/v1', keyPattern: /^[A-Za-z0-9]{20,}$/ },
+    { id: 'openrouter', name: 'OpenRouter', envKeys: ['OPENROUTER_API_KEY'], baseURL: 'https://openrouter.ai/api/v1', keyPattern: /^sk-or-[A-Za-z0-9_-]{20,}$/ },
+    { id: 'deepseek', name: 'DeepSeek', envKeys: ['DEEPSEEK_API_KEY'], baseURL: 'https://api.deepseek.com/v1', keyPattern: /^sk-[A-Za-z0-9]{20,}$/ },
+    { id: 'minimax', name: 'MiniMax', envKeys: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'], baseURL: 'https://api.minimax.chat/v1', keyPattern: /^[A-Za-z0-9]{20,}$/ },
+  ],
+
+  async autoDetect({ probe = true } = {}) {
+    const result = [];
+    for (const spec of this.KNOWN_PROVIDERS) {
+      let apiKey = '';
+      let keySource = '';
+      // 1. Check config
+      try {
+        const cfg = loadConfig();
+        const cfgProvider = cfg.provider?.[spec.id];
+        if (cfgProvider?.apiKey) {
+          apiKey = cfgProvider.apiKey;
+          keySource = 'config';
+        } else if (cfgProvider?.options?.apiKey) {
+          apiKey = cfgProvider.options.apiKey;
+          keySource = 'config';
+        }
+      } catch { /* ignore */ }
+      // 2. Check env (overrides config because env is fresher in most cases)
+      for (const k of spec.envKeys) {
+        const v = process.env[k];
+        if (typeof v === 'string' && v.length > 0) {
+          apiKey = v;
+          keySource = 'env';
+          break;
+        }
+      }
+      let status;
+      if (!apiKey) {
+        status = 'no-key';
+      } else if (spec.keyPattern && !spec.keyPattern.test(apiKey)) {
+        status = 'unknown';
+      } else {
+        status = 'configured';
+      }
+
+      // Optional probe
+      let probeResult = null;
+      if (probe && status === 'configured' && spec.baseURL) {
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 1500);
+          const url = `${spec.baseURL}/models`;
+          const resp = await fetch(url, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: ctrl.signal,
+          });
+          clearTimeout(timer);
+          probeResult = { ok: resp.ok, status: resp.status };
+          if (resp.ok) {
+            try {
+              const body = await resp.json();
+              if (Array.isArray(body?.data)) probeResult.modelCount = body.data.length;
+              else if (Array.isArray(body)) probeResult.modelCount = body.length;
+            } catch { /* ignore parse */ }
+          } else {
+            // Server responded but rejected the key — downgrade to unknown
+            status = 'unknown';
+            probeResult.reason = `HTTP ${resp.status}`;
+          }
+        } catch (err) {
+          probeResult = { ok: false, reason: (err && err.name === 'AbortError') ? 'timeout' : 'network' };
+          // Don't downgrade — network failure shouldn't erase a valid key
+        }
+      }
+
+      result.push({
+        id: spec.id,
+        name: spec.name,
+        baseURL: spec.baseURL,
+        status,
+        keySource,
+        hasKey: !!apiKey,
+        probed: probeResult,
+      });
+    }
+    return result;
+  },
 };
 
 export const mcpsStore = {

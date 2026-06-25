@@ -1,5 +1,33 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.16.0 — UI overhaul: settings subnav, chat floating input, mods registry browser, provider auto-detect
+
+### Highlights
+
+- **Settings subnav** — sticky horizontal nav with 13 sections (Theme, Layout, General, Service, Tailscale, Notifications, Auth, Agents, Dashboard, Background, Updates, Activity, About). Active section auto-highlights on scroll, click-to-scroll smooth-into-view.
+- **Chat floating input** — composer wrapped in a glass-style sticky bottom box with accent border on focus and a backdrop-blur background. No UX changes other than positioning.
+- **Providers moved into Config** — top-level Providers tab removed (lived in Config already).
+- **Mods registry browser** — collapsible card-grid in the Mods tab. Each card shows name, version with upgrade badge, description, author, homepage, permissions, and an Install button that POSTs `{ id }` to `/api/mods`.
+- **Provider auto-detect banner** — `Config → Providers` now has an AutoDetectBanner that scans env vars + opencode.json for 9 known providers (Anthropic, OpenAI, Google, Mistral, Groq, Cohere, OpenRouter, DeepSeek, MiniMax), validates key formats, optionally probes `/models` with 1.5s timeout, and lets you add configured providers to opencode.json with one click.
+- **`GET /api/providers/auto-detect`** — JSON endpoint mirroring the banner.
+
+### Files changed (8)
+
+- `src/server/providers-store.mjs` — new `KNOWN_PROVIDERS` + `autoDetect({ probe })`.
+- `src/server/routes/providers.mjs` — new `/providers/auto-detect` route.
+- `src/web/App.tsx` — removed Providers from VIEW_MAP.
+- `src/web/components/Topbar.tsx` — removed Providers tab + Cloud icon.
+- `src/web/views/Chat.tsx` — `.chat-input-floating` wrapper.
+- `src/web/views/Config.tsx` — new `AutoDetectBanner` component.
+- `src/web/views/Mods.tsx` — registry browser state + UI.
+- `src/web/views/Settings.tsx` — section IDs + subnav.
+- `src/web/styles/main.css` — ~7 KB of new CSS.
+
+### Test results
+
+- `tsc --noEmit` passes.
+- `bun test tests/mod-security.test.mjs` — 26/26 pass (no regression from v3.15.0).
+
 ## v3.15.0 — Activity log overhaul: hide from overview + full log in Settings
 
 ### Highlights

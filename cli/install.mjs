@@ -406,6 +406,14 @@ export async function runInstaller() {
   ));
   console.log();
 
+  // ── Provider auto-detect (v3.16.0) — best-effort, doesn't block install
+  const { runProvidersDetect } = await import('./providers-detect.mjs');
+  try {
+    await runProvidersDetect(['--no-probe']);
+  } catch {
+    // best-effort
+  }
+
   // ── Restart prompt ──
   const shouldRestart = await promptRestartOpenCode();
   if (shouldRestart) {

@@ -12,6 +12,10 @@ import {
   ExternalLink,
   Globe,
   LayoutTemplate,
+  Download,
+  ChevronDown,
+  ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -53,6 +57,75 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [modViews, setModViews] = useState<ModView[]>([]);
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  // v3.16.0 — Registry browser
+  const [registryOpen, setRegistryOpen] = useState(false);
+  const [registry, setRegistry] = useState<{
+    source: string;
+    version?: number;
+    updatedAt?: string;
+    mods: Array<{
+      id: string;
+      name: string;
+      latest?: string;
+      description?: string;
+      author?: string;
+      tags?: string[];
+      permissions?: string[];
+      homepage?: string;
+      installed?: boolean;
+      installedVersion?: string | null;
+      upgradeAvailable?: string | null;
+    }>;
+    error?: string;
+  } | null>(null);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [installing, setInstalling] = useState<Record<string, boolean>>({});
+
+  const loadRegistry = async () => {
+    setRegistryLoading(true);
+    try {
+      const r = await api.get<{
+        registry?: { source?: string; version?: number; updatedAt?: string };
+        mods?: Array<{
+          id: string;
+          name: string;
+          latest?: string;
+          description?: string;
+          author?: string;
+          tags?: string[];
+          permissions?: string[];
+          homepage?: string;
+          installed?: boolean;
+          installedVersion?: string | null;
+          upgradeAvailable?: string | null;
+        }>;
+      }>('/mods/registry');
+      setRegistry({
+        source: r.registry?.source || '',
+        version: r.registry?.version,
+        updatedAt: r.registry?.updatedAt,
+        mods: r.mods || [],
+      });
+    } catch (err) {
+      setRegistry({ source: '', mods: [], error: (err as Error).message });
+    } finally {
+      setRegistryLoading(false);
+    }
+  };
+
+  const onInstallFromRegistry = async (id: string) => {
+    setInstalling((cur) => ({ ...cur, [id]: true }));
+    try {
+      const m = await api.post<Mod>('/mods', { id });
+      setMods((cur) => [...cur.filter((x) => x.id !== m.id), m]);
+      toast.success(`Mod "${m.id}" installed from registry.`);
+      await refreshSnapshot();
+    } catch (err) {
+      toast.error(`Install failed: ${(err as Error).message}`);
+    } finally {
+      setInstalling((cur) => ({ ...cur, [id]: false }));
+    }
+  };
 
   const reload = async () => {
     try {
@@ -251,6 +324,102 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
           {sel && <ModDetails mod={sel} />}
         </div>
       )}
+
+      {/* v3.16.0 — Registry browser */}
+      <Card className="mods-registry-card">
+        <div className="mods-registry-head" onClick={() => {
+          if (!registry && !registryLoading) loadRegistry();
+          setRegistryOpen((v) => !v);
+        }}>
+          <Globe size={14} />
+          <span className="mods-registry-title">Mod registry</span>
+          <span className="muted" style={{ fontSize: 11 }}>
+            {registry?.mods ? `${registry.mods.length} available` : 'click to browse'}
+          </span>
+          <span className="mods-registry-spacer" />
+          {registryOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </div>
+        {registryOpen && (
+          <div className="mods-registry-body">
+            {registryLoading ? (
+              <div className="muted" style={{ padding: 12, fontSize: 12 }}>Loading registry…</div>
+            ) : registry?.error ? (
+              <div className="mods-registry-error">
+                <ShieldCheck size={12} /> Could not load registry: {registry.error}
+              </div>
+            ) : !registry || registry.mods.length === 0 ? (
+              <div className="muted" style={{ padding: 12, fontSize: 12 }}>
+                No mods listed in the registry yet.
+              </div>
+            ) : (
+              <>
+                {registry.source && (
+                  <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
+                    Source: <code>{registry.source}</code>
+                  </div>
+                )}
+                <div className="mods-registry-grid">
+                  {registry.mods.map((rm) => {
+                    const installed = mods.some((m) => m.id === rm.id);
+                    const isInstalling = !!installing[rm.id];
+                    return (
+                      <div key={rm.id} className="mod-registry-card">
+                        <div className="mod-registry-card-head">
+                          <div className="mod-registry-card-name">{rm.name}</div>
+                          {rm.latest && (
+                            <span className={cn('mod-registry-version', rm.upgradeAvailable && 'mod-registry-version-upgrade')}>
+                              v{rm.latest}{rm.upgradeAvailable ? ' ↑' : ''}
+                            </span>
+                          )}
+                        </div>
+                        {rm.description && (
+                          <div className="mod-registry-card-desc">{rm.description}</div>
+                        )}
+                        <div className="mod-registry-card-meta">
+                          {rm.author && <span className="muted">by {rm.author}</span>}
+                          {rm.homepage && (
+                            <a href={rm.homepage} target="_blank" rel="noopener noreferrer" className="mod-registry-link">
+                              homepage
+                            </a>
+                          )}
+                        </div>
+                        {(rm.permissions || []).length > 0 && (
+                          <div className="mod-registry-perms">
+                            <ShieldCheck size={10} />
+                            {(rm.permissions || []).slice(0, 4).map((p) => (
+                              <span key={p} className="mod-registry-perm">{p}</span>
+                            ))}
+                            {(rm.permissions || []).length > 4 && (
+                              <span className="mod-registry-perm-more">+{rm.permissions!.length - 4}</span>
+                            )}
+                          </div>
+                        )}
+                        <div className="mod-registry-card-actions">
+                          <Button
+                            variant={installed ? 'ghost' : 'primary'}
+                            size="sm"
+                            disabled={installed || isInstalling}
+                            onClick={() => onInstallFromRegistry(rm.id)}
+                            title={
+                              installed
+                                ? `Installed v${rm.installedVersion || '?'}`
+                                : rm.upgradeAvailable
+                                  ? `Upgrade to v${rm.upgradeAvailable}`
+                                  : 'Install from registry'
+                            }
+                          >
+                            {isInstalling ? <Spinner size="sm" /> : installed ? `Installed${rm.upgradeAvailable ? ` — upgrade` : ''}` : (<><Download size={12} /> Install</>)}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* Mod views section — web/index.html and registered tabs */}
       {modViews.length > 0 && (

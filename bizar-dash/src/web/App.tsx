@@ -34,7 +34,7 @@ import { Mods } from './views/Mods';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
 import { History } from './views/History';
-import { Providers } from './views/Providers';
+
 import { Graph } from './views/Graph';
 import { BackgroundAgents } from './views/BackgroundAgents';
 import { Spinner } from './components/Spinner';
@@ -66,7 +66,6 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   overview: Overview,
   chat: Chat,
   agents: Agents,
-  providers: Providers,
   plans: Plans,
   tasks: Tasks,
   activity: Activity,

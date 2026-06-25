@@ -485,7 +485,8 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
             )}
           </div>
 
-          <div className="chat-composer">
+          <div className="chat-input-floating">
+        <div className="chat-composer">
             {suggestions.length > 0 && (
               <div className="chat-suggestions">
                 {suggestions.map((s) => (
@@ -589,6 +590,7 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
               </button>
             </div>
           </div>
+        </div>
         </div>
 
         <aside className="chat-info">

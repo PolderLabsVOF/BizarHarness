@@ -22,7 +22,6 @@ import {
   Sparkles,
   Activity,
   Radio,
-  Cloud,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -42,7 +41,6 @@ export const TABS: TabDef[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'agents', label: 'Agents', icon: Bot },
-  { id: 'providers', label: 'Providers', icon: Cloud },
   { id: 'plans', label: 'Plans', icon: Map },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'activity', label: 'Activity', icon: Activity },
