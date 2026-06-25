@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.14.1 — bg-spawn subagent delegation fix + minimax thinking-config fix
+
+> **Bug fix:** Two opencode 1.17.x compat issues that caused `bizar_spawn_background` to silently fail. Plugin: `@polderlabs/bizar-plugin` v0.9.0.
+
+### Highlights
+
+- **bg-spawn now correctly invokes subagents** — opencode 1.17.x rejects `opencode run --agent <subagent>` for any agent whose `mode` is `subagent` (8 of BizarHarness's 11 agents), printing "Falling back to default agent" and running odin instead. The bg-spawn tool now routes subagent requests through a primary wrapper (odin) with a directive delegation prompt that calls opencode's native `task` tool. The bg instance record still attributes the work to the requested agent.
+- **minimax provider config: `thinking` option shape** — opencode's anthropic-compatible SDK rejects the string form `"thinking": "adaptive"` with `AI_TypeValidationError → invalid anthropic provider options` on every MiniMax model load. Changed to the documented object form `"thinking": { "type": "enabled" }` in `config/opencode.json.template` for both `MiniMax-M3` and `MiniMax-M2.7`.
+
+### Plugin: `@polderlabs/bizar-plugin` v0.9.0
+
+- `plugins/bizar/src/tools/bg-spawn.ts` — exports `PRIMARY_AGENTS`, `needsDelegationWrapper`, `buildDelegationPrompt`. The spawn call branches: primary agents get `--agent <name>` + original prompt; subagents get `--agent odin` + delegation prompt. The bg instance record keeps the requested agent name.
+- `plugins/bizar/tests/tools/bg-spawn-delegation.test.ts` (new) — 13 tests covering set membership, the drift check against `config/agents/*.md`, and the prompt's directive properties.
+
+### Main package: `@polderlabs/bizar` v3.14.1
+
+- `config/opencode.json.template` — `provider.minimax.models.*.options.thinking`: string `"adaptive"` → object `{ "type": "enabled" }`.
+- Tests updated to include the new delegation test file.
+
+### Verification
+
+End-to-end test in the BizarHarness dev container with deepseek (so MiniMax auth wasn't needed): `bizar_spawn_background(agent="mimir")` produced a real mimir subagent session (`agent=mimir mode=subagent parentID=<odin's session>`) after Odin received the delegation directive and called its `task` tool. Full transcript captured in `/tmp/bg-spawn-e2e/verify-delegation.ts`.
+
+### Known upstream issue (NOT fixed by this release)
+
+opencode's built-in MiniMax provider in 1.17.x sends requests with Anthropic-style `x-api-key` auth and reads `ANTHROPIC_API_KEY` (or the `/connect` auth file). Users on direct MiniMax need either `export ANTHROPIC_API_KEY="<minimax-key>"` in their shell, or to run `/connect` once in the opencode TUI to populate `~/.local/share/opencode/auth.json`. OpenRouter users are unaffected.
+
 ## v3.14.0 — MiniMax multi-key rotation (fallback)
 
 > **Additive:** New plugin-level wrapper that rotates MiniMax API keys on 429 / 402 / 5xx responses. Configure via `MINIMAX_API_KEYS` (comma list) or `MINIMAX_API_KEY` + `MINIMAX_API_KEY_2`, `_3`, ... Single-key mode is unchanged.
