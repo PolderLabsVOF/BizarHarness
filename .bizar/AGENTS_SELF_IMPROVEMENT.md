@@ -655,3 +655,22 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - `node cli/bin.mjs providers detect --no-probe`: prints status table for 9 providers.
   - `node cli/bin.mjs providers detect --no-probe --json`: prints JSON array.
 - **Published**: `@polderlabs/bizar@3.16.0` (commit 25ec19f, tag v3.16.0) and `@polderlabs/bizar-dash@3.16.0` (tag v3.16.0-dash).
+
+## 2026-06-25 — Hotfix: activity route crashed dashboard on startup (v3.16.1 dash)
+
+- **Lesson**: I shipped v3.15.0 + v3.16.0 with a broken `routes/activity.mjs`. The file did `import { state } from '../state.mjs';` but `state` is NEVER a module-level export — it's created per-server-instance via `createState()` in `server.mjs:178` and threaded through `api.mjs` as a dependency. Every other router reads state from its factory function's argument; I wrote `import { state }` as if it were a singleton, breaking the entire dashboard boot. The user's `bizar dash start` failed with a cryptic module-not-found error.
+
+- **Lesson**: When adding a new router, ALWAYS look at how 3+ sibling routers get their state. The pattern is `export function createXRouter({ state }) { ... }` — not module-level imports. My initial draft was wrong because I was thinking of `state.mjs` as the "module that owns state" rather than "the factory that creates a state instance." The factory name was the hint: `createState` returns an instance, it doesn't expose one.
+
+- **Lesson**: TS typecheck (`tsc --noEmit`) didn't catch this because the TS path doesn't exercise the .mjs route files — those are server-side ESM, not in the TS project. The dashboard's existing test suite (`bun test tests/mod-security.test.mjs`) only covers mod-security.mjs. The boot path is unverified by any automated test. Need to add a smoke test that imports `routes/activity.mjs` at minimum to catch this class of bug.
+
+- **Pattern to follow**:
+  - When adding a new route file under `bizar-dash/src/server/routes/`, copy the import block + factory signature from an existing sibling file. The router factory signature MUST accept `{ state, broadcast, projectRoot, ... }` as deps — never import server-singletons as named exports.
+  - Add a smoke-test that does `node --eval "import('./src/server/api.mjs')"` to catch module-resolution errors before publishing. This is fast (< 1s) and would have caught this regression.
+  - When in doubt about the import shape, grep for the symbol first: `rg "^export.*\\bstate\\b" src/server/state.mjs` returns nothing — that's the signal to use a factory parameter instead.
+
+- **Files changed**: 1 (`bizar-dash/src/server/routes/activity.mjs`). Bumped dashboard to v3.16.1 and re-published.
+
+- **Published**: `@polderlabs/bizar-dash@3.16.1` (commit d34e0d3, tag v3.16.1-dash).
+
+- **Action item**: Add a `bizar-dash/tests/routes-smoke.test.mjs` that imports every router file (activity, mods, providers, settings, etc.) to catch module-resolution regressions. Should take < 100 lines and run in < 1s.
