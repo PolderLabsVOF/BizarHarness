@@ -713,3 +713,33 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - For any sub-repo split: (1) add path to parent `.gitignore`, (2) `git rm -r --cached <path>`, (3) commit parent cleanup, (4) `cd <path> && gh repo create Org/<name> --public --source . --push`.
   - Always verify the raw URL is reachable AFTER the push — GitHub raw.githubusercontent.com has different caching than the API.
   - Run a real fetch from the consuming code (the mods-loader here) to prove the contract works, not just the static URL.
+
+## 2026-06-25 — v3.17.0: settings filter + graphify-as-mod-only + repo rename
+
+- **Lesson**: "Settings subnav scrolls to section" vs "Settings subnav filters sections" looks like a small UX choice but required a different implementation. v3.16.0 used anchor-scroll + active-highlight. v3.17.0 uses `data-section` attributes on each Card + CSS attribute selectors on a `data-active-section` parent. Pure CSS, no JS gymnastics. 14 line-edits + 30 lines of CSS, no file split. The CSS attribute selector `parent[data-active-section="X"] > child[data-section="X"] { display: block }` is the right pattern when N items need to filter by parent state.
+
+- **Lesson**: When a user says "remove X from Bizar entirely — make it a mod", the work isn't just "delete files". The mod needs to be SELF-SUFFICIENT — including any helper scripts the deleted code depended on. Here: `cli/graph-build-from-cache.mjs` was 124 lines of fallback logic that `bizar graph build` spawned as a subprocess. I had to inline that into the mod's route.mjs. Net effect: ~430 lines in the mod, ~125 lines deleted, ~0 net code change but cleaner architecture.
+
+- **Lesson**: `gh repo rename` doesn't take positional args the way most `gh` subcommands do. The correct invocation is `gh repo rename --repo OWNER/OLD NEW`, not `gh repo rename OWNER/OLD NEW`. Easy to get wrong.
+
+- **Pattern to follow**:
+  - For "extract feature to mod": identify every dependency of the feature (CLI helper scripts, build steps, API routes, views), then for each: (1) inline into the mod if it's small + self-contained, (2) keep as a Bizar-side library if it's general-purpose, (3) delete if no other consumer exists. Graphify's case: inline the cache-fallback script (124 lines is fine in a mod), delete the dispatcher + tests (no other consumer).
+  - For settings/subnav-style filters: use `data-section` on items + `data-active-section` on parent + CSS attribute selectors. Avoid per-id CSS rules (don't scale) and avoid JS conditional rendering (creates churn every time a section is added).
+  - For mod web UIs: a single `web/index.html` with vanilla JS + CSS is enough for most dashboards. The existing `mod-web/*` route already serves it. No need to build a SPA framework inside a mod.
+
+- **Files changed**: 21 modified, 1 added (`mods-examples/graphify/web/index.html`). Deleted: `cli/graph.mjs`, `cli/graph-build-from-cache.mjs`, `cli/graph.test.mjs`, `bizar-dash/src/server/routes/graph.mjs`, `bizar-dash/src/web/views/Graph.tsx`.
+
+- **Verification**:
+  - `tsc --noEmit`: passes
+  - `bun test tests/mod-security.test.mjs`: 26/26 pass
+  - `vite build`: completes; new CSS+JS present in dist
+  - `node --eval "import('mods-examples/graphify/route.mjs')"`: imports cleanly
+  - `npm view @polderlabs/bizar version`: 3.17.0
+  - `npm view @polderlabs/bizar-dash version`: 3.17.0
+  - `curl https://raw.githubusercontent.com/DrB0rk/bizar-mods/main/registry.json`: returns graphify v1.1.0
+
+- **Published**:
+  - `@polderlabs/bizar@3.17.0` (commit 26bfc4d, tag v3.17.0)
+  - `@polderlabs/bizar-dash@3.17.0` (tag v3.17.0-dash)
+  - `graphify` mod v1.1.0 in `github.com/DrB0rk/bizar-mods`
+  - Repo renamed: `github.com/DrB0rk/bizarre-mods` → `github.com/DrB0rk/bizar-mods`
