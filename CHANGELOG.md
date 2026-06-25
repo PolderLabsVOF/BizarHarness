@@ -1,5 +1,61 @@
 # Changelog
 
+## v3.17.0 — Settings section filter + graphify extracted as a true mod
+
+> **Two clean-ups.** Settings gets a real section filter (not just scroll-to), and graphify is removed from BizarHarness entirely — it's now a standalone mod that ships its own build pipeline + self-contained web UI.
+
+### Highlights
+
+- **Settings section filter.** The v3.16.0 subnav scrolled to sections; v3.17.0 actually **filters** — clicking a subnav button shows ONLY that section, hiding all others with a "Showing only X" banner and a one-click "Show all sections" escape hatch. URL hash deep-links (`#settings-theme`) still work and respect the filter. Every Card in Settings gained a `data-section="…"` attribute; CSS attribute selectors drive the visibility — no JS gymnastics.
+- **graphify is now a true mod.** Everything BizarHarness knew about graphify is gone:
+  - Deleted `cli/graph.mjs`, `cli/graph-build-from-cache.mjs`, `cli/graph.test.mjs`
+  - Deleted `bizar graph` subcommand and its help text
+  - Deleted `bizar-dash/src/server/routes/graph.mjs` (the built-in `/api/graph/*` route)
+  - Deleted `bizar-dash/src/web/views/Graph.tsx` (the built-in Graph tab UI)
+  - Removed `graph` tab from TABS and `Graph` entry from VIEW_MAP
+  - Removed the `runGraph` import + `showGraphHelp` from `cli/bin.mjs`
+- **graphify mod v1.1.0** in `mods-examples/graphify/` and `bizar-mods/mods/graphify/`:
+  - `route.mjs` (~430 lines) inlines the full build pipeline (formerly `bizar graph build`): LLM-key detection → code-only `.graphifyignore` → `graphify extract` → AST-cache fallback reconstruction → `cluster-only` → output hoisting. No more `bizar graph build` subprocess spawn.
+  - **`web/index.html`** — self-contained dark-theme UI with toolbar (Build / Refresh / View Report), live status polling, log streaming, and graph.html iframe. Surfaced via the existing `web/index.html` mechanism in the Mods tab.
+  - Updated permissions: `fs:read:.bizar/graph`, `fs:write:.bizar/graph`, `fs:write:.graphifyignore`, `process:spawn:graphify`, `process:spawn:python3`, `process:spawn:which` (was `process:spawn:bizar`).
+- **Mod registry renamed** `bizarre-mods` → `bizar-mods` (matches the package name and is shorter). The default registry URL the dashboard uses now resolves at `github.com/DrB0rk/bizar-mods`.
+
+### Files added (1)
+
+- `mods-examples/graphify/web/index.html` — self-contained dark-theme view UI.
+
+### Files deleted (5)
+
+- `cli/graph.mjs` — the `bizar graph` dispatcher.
+- `cli/graph-build-from-cache.mjs` — its offline fallback helper.
+- `cli/graph.test.mjs` — its tests.
+- `bizar-dash/src/server/routes/graph.mjs` — the built-in graph HTTP route.
+- `bizar-dash/src/web/views/Graph.tsx` — the built-in Graph tab UI.
+
+### Files changed (8)
+
+- `cli/bin.mjs` — removed `runGraph` import, `showGraphHelp`, the `bizar graph` dispatch case, and the graphify mention from `showInitHelp`.
+- `bizar-dash/src/server/api.mjs` — removed `createGraphRouter` import + mount.
+- `bizar-dash/src/web/App.tsx` — removed `Graph` import + VIEW_MAP entry.
+- `bizar-dash/src/web/components/Topbar.tsx` — removed `graph` tab + `Network` icon import.
+- `bizar-dash/src/web/views/Settings.tsx` — added `data-section="…"` to every section Card; subnav now filters (not scrolls); "Showing only X" banner + "Show all sections" escape; URL hash deep-links respected on mount.
+- `bizar-dash/src/web/styles/main.css` — `.settings-grid-filtered` + per-section attribute-selector rules, `.settings-filter-banner`, `.settings-filter-clear`.
+- `mods-examples/graphify/route.mjs` — fully rewritten (~430 lines): inlines runGraphify, hasLlmKey, buildGraphFromCache, promoteFromDir, runBuild; calls `graphify` directly (not `bizar graph build`).
+- `mods-examples/graphify/mod.json` — version bumped to 1.1.0, permissions updated.
+- `bizar-dash/src/server/mods-loader.mjs` — `DEFAULT_REGISTRY_URL` now points at `DrB0rk/bizar-mods` (renamed from `bizarre-mods`).
+
+### Test results
+
+- `tsc --noEmit` (dashboard): passes.
+- `bun test tests/mod-security.test.mjs`: 26/26 pass (no regression).
+- `node --eval "import('mods-examples/graphify/route.mjs')"`: imports cleanly, register() runs without error.
+
+### Companion release
+
+- `@polderlabs/bizar-dash` v3.17.0 — co-released with the graph removal + settings filter.
+- `@polderlabs/bizar` v3.17.0 — co-released (CLI subcommand removal).
+- `graphify` mod v1.1.0 — published to the registry (`github.com/DrB0rk/bizar-mods`).
+
 ## v3.16.0 — Dashboard overhaul: settings subnav, chat floating input, providers in Config, mods registry browser, provider auto-detect
 
 > **UI + CLI upgrade.** Six user-facing improvements ship together: settings gets a sticky subnav with section anchors, the chat input is a floating glass-style box, the standalone Providers tab is gone (lives inside Config), the Mods tab gets an Available registry browser, and `bizar providers detect` auto-discovers API keys in your env.

@@ -31,5 +31,5 @@ dist/
 # bizarre-mods lives in this directory for development convenience but is
 # tracked as its own standalone repo at github.com/DrB0rk/bizarre-mods.
 # It's untracked here so the parent repo doesn't see duplicate history.
-bizarre-mods/
+bizar-mods/
 

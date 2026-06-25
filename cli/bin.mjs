@@ -25,7 +25,6 @@ import { runInit } from './init.mjs';
 import { runExport } from './export.mjs';
 import runPlan from './plan.mjs';
 import { runUpdate } from './update.mjs';
-import { runGraph } from './graph.mjs';
 import { ensureSetup, checkSetupStatus } from './bootstrap.mjs';
 
 const args = process.argv.slice(2);
@@ -82,7 +81,6 @@ function showHelp() {
     init                Initialize .bizar/ in current project
     export [target]     Export agents/rules to another harness
     plan <subcommand>  Manage visual plans
-    graph               Per-project knowledge graph (powered by graphify)
     test-gate           Detect & run the project's test suite
     update              Auto-update everything (opencode + bizar + dash + plugin)
     service             Manage the background service daemon
@@ -129,29 +127,10 @@ function showInitHelp() {
 
   Description:
     Detects the project stack, creates .bizar/PROJECT.md and
-    .bizar/AGENTS_SELF_IMPROVEMENT.md, installs relevant skills,
-    and builds the per-project knowledge graph in .bizar/graph/
-    (requires graphify — pip install graphifyy — otherwise the
-    graph step is skipped gracefully).
-  `);
-}
-
-function showGraphHelp() {
-  console.log(`
-  bizar graph — Per-project knowledge graph (powered by graphify)
-
-  Usage:
-    bizar graph build              # full build of the project graph
-    bizar graph update             # incremental rebuild
-    bizar graph query "<text>"     # query the graph
-    bizar graph path "<A>" "<B>"   # shortest path between concepts
-    bizar graph explain "<X>"      # all nodes related to a concept
-    bizar graph watch              # watch for changes and rebuild
-    bizar graph status             # show graph path, size, node/edge/community counts
-    bizar graph install            # install graphify + drop OpenCode skill/plugin
-
-  Requires Python 3.10+ and \`graphify\` (pip install graphifyy).
-  Graph data lives in .bizar/graph/ inside this project.
+    .bizar/AGENTS_SELF_IMPROVEMENT.md and installs relevant skills.
+    The per-project knowledge graph (in .bizar/graph/) is provided
+    by the graphify mod — install it from the mod registry for
+    that feature.
   `);
 }
 
@@ -485,9 +464,6 @@ async function main() {
   } else if (args[0] === 'init') {
     if (isHelpRequest) showInitHelp();
     else await runInit(process.cwd());
-  } else if (args[0] === 'graph') {
-    if (isHelpRequest) showGraphHelp();
-    else await runGraph(args.slice(1));
   } else if (args[0] === 'export') {
     if (isHelpRequest) showExportHelp();
     else await runExport(parseFlag('--target'));

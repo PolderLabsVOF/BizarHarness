@@ -41,7 +41,6 @@ import { createPairRouter } from './routes/pair.mjs';
 import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
 import { createPlansRouter } from './routes/plans.mjs';
-import { createGraphRouter } from './routes/graph.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
 
 /**
@@ -99,7 +98,6 @@ export function createApiRouter({
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createPlansRouter({ state, broadcast, projectRoot }));
-  router.use(createGraphRouter({ projectRoot, broadcast }));
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

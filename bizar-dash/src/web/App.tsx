@@ -34,8 +34,6 @@ import { Mods } from './views/Mods';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
 import { History } from './views/History';
-
-import { Graph } from './views/Graph';
 import { BackgroundAgents } from './views/BackgroundAgents';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
@@ -70,7 +68,6 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   tasks: Tasks,
   activity: Activity,
   background: BackgroundAgents,
-  graph: Graph,
   config: Config,
   settings: SettingsView,
   mods: Mods,

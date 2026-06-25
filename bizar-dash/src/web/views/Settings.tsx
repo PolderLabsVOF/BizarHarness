@@ -129,7 +129,7 @@ function PairDeviceCard() {
   const expired = pair != null && remaining <= 0;
 
   return (
-    <Card id="settings-updates">
+    <Card id="settings-updates" data-section="updates">
       <CardTitle>
         <Smartphone size={14} /> Companion App
       </CardTitle>
@@ -361,7 +361,7 @@ function UpdatesCard() {
   const isBusy = status.checking || status.updating;
 
   return (
-    <Card id="settings-updates">
+    <Card id="settings-updates" data-section="updates">
       <CardTitle><Download size={14} /> Updates</CardTitle>
       <CardMeta>Check installed Bizar packages and apply dashboard updates.</CardMeta>
       {/* Current versions */}
@@ -531,7 +531,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
     setDirty(true);
   };
 
-  // v3.16.0 — Settings subnav. Each entry scrolls to a section anchor.
+  // v3.17.0 — Settings subnav as a filter (not just scroll-to).
+  // Clicking a subnav button shows ONLY that section; clicking "All"
+  // restores the full layout. Anchors still work for deep-links but
+  // the visible content is filtered, not just scrolled.
   const SECTION_LINKS: Array<{ id: string; label: string }> = [
     { id: 'settings-theme', label: 'Theme' },
     { id: 'settings-layout', label: 'Layout' },
@@ -547,15 +550,29 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
     { id: 'settings-activity-log', label: 'Activity' },
     { id: 'settings-about', label: 'About' },
   ];
-  const onJumpSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    try { history.replaceState(null, '', `#${id}`); } catch { /* ignore */ }
+  const [activeSection, setActiveSection] = useState<string | null>(() => {
+    // Honour #settings-... deep-link on initial mount, otherwise null = All.
+    if (typeof window === 'undefined') return null;
+    const hash = window.location.hash.replace(/^#/, '');
+    return SECTION_LINKS.some((s) => s.id === hash) ? hash : null;
+  });
+  const onJumpSection = (id: string | null) => {
+    setActiveSection(id);
+    try {
+      const url = id ? `#${id}` : window.location.pathname;
+      history.replaceState(null, '', url);
+      if (id) {
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch { /* ignore */ }
   };
-  const [activeSection, setActiveSection] = useState<string>(SECTION_LINKS[0]?.id ?? '');
-  // Highlight subnav based on scroll position
+  // Sync active section when the user manually scrolls (only when filter
+  // is active, otherwise the visible section is ambiguous).
   useEffect(() => {
+    if (activeSection === null) return;
     const onScroll = () => {
       let bestId = '';
       let bestTop = Number.POSITIVE_INFINITY;
@@ -568,12 +585,11 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           bestId = id;
         }
       }
-      if (bestId) setActiveSection(bestId);
+      if (bestId && bestId !== activeSection) setActiveSection(bestId);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [activeSection]);
 
   const patchDashboard = (patch: Partial<Settings['dashboard']>) => {
     setSettings((cur) => ({ ...cur, dashboard: { ...cur.dashboard, ...patch } }));
@@ -754,6 +770,14 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
       </header>
 
       <nav className="settings-subnav" aria-label="Settings sections">
+        <button
+          type="button"
+          className={cn('settings-subnav-button', 'settings-subnav-button-all', activeSection === null && 'settings-subnav-button-active')}
+          onClick={() => onJumpSection(null)}
+          title="Show all settings sections"
+        >
+          All
+        </button>
         {SECTION_LINKS.map((s) => (
           <button
             key={s.id}
@@ -766,8 +790,27 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         ))}
       </nav>
 
-      <div className="settings-grid">
-        <Card id="settings-theme">
+      <div
+        className={cn('settings-grid', activeSection && 'settings-grid-filtered')}
+        data-active-section={activeSection || undefined}
+      >
+        {/* When a section is active, render a banner above the grid so
+            the user knows they're seeing a filtered view. */}
+        {activeSection && (
+          <div className="settings-filter-banner">
+            <span>
+              Showing only <strong>{SECTION_LINKS.find((s) => s.id === activeSection)?.label}</strong>.
+            </span>
+            <button
+              type="button"
+              className="settings-filter-clear"
+              onClick={() => onJumpSection(null)}
+            >
+              Show all sections
+            </button>
+          </div>
+        )}
+        <Card id="settings-theme" data-section="theme">
           <CardTitle><Palette size={14} /> Theme</CardTitle>
           <CardMeta>Mode, accent, and colors. Live preview as you tweak.</CardMeta>
 
@@ -957,7 +1000,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
 
         <UpdatesCard />
 
-        <Card id="settings-layout">
+        <Card id="settings-layout" data-section="layout">
           <CardTitle><LayoutIcon size={14} /> UI layout</CardTitle>
           <CardMeta>Choose how the dashboard's navigation is presented.</CardMeta>
           <div className="layout-row" data-setting-id="ui.layout">
@@ -1009,7 +1052,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </div>
         </Card>
 
-        <Card id="settings-general">
+        <Card id="settings-general" data-section="general">
           <CardTitle>General</CardTitle>
           <CardMeta>Default agent + model override.</CardMeta>
           <div className="field" data-setting-id="defaultAgent">
@@ -1036,7 +1079,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </div>
         </Card>
 
-        <Card id="settings-service">
+        <Card id="settings-service" data-section="service">
           <CardTitle><ServerIcon size={14} /> Service</CardTitle>
           <CardMeta>Background daemon that runs schedules.</CardMeta>
           <div data-setting-id="service.enabled">
@@ -1058,7 +1101,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </div>
         </Card>
 
-        <Card id="settings-tailscale">
+        <Card id="settings-tailscale" data-section="tailscale">
           <CardTitle><Plug size={14} /> Tailscale serve</CardTitle>
           <CardMeta>Expose the dashboard over your Tailscale network.</CardMeta>
           {tailscale ? (
@@ -1101,7 +1144,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           )}
         </Card>
 
-        <Card id="settings-notifications">
+        <Card id="settings-notifications" data-section="notifications">
           <CardTitle>Notifications</CardTitle>
           <CardMeta>Toast triggers inside the dashboard.</CardMeta>
           <label className="checkbox-row" data-setting-id="notifications.onAgentComplete">
@@ -1127,7 +1170,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             button lets the operator paste a token they got from
             server stderr or from another machine. Copy / Regenerate
             buttons act via the authed /api/auth/* endpoints. */}
-        <Card id="settings-auth">
+        <Card id="settings-auth" data-section="auth">
           <CardTitle><Shield size={14} /> Authentication</CardTitle>
           <CardMeta>
             Localhost and Tailscale browser access are auto-trusted via loopback.
@@ -1197,7 +1240,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </div>
         </Card>
 
-        <Card id="settings-agents">
+        <Card id="settings-agents" data-section="agents">
           <CardTitle><ServerIcon size={14} /> Agent Behavior</CardTitle>
           <CardMeta>Limits and timeouts for background agent dispatch.</CardMeta>
           <div className="form-row">
@@ -1239,7 +1282,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </label>
         </Card>
 
-        <Card id="settings-dashboard">
+        <Card id="settings-dashboard" data-section="dashboard">
           <CardTitle><Globe size={14} /> Dashboard</CardTitle>
           <CardMeta>Controls how <code>bizar</code> starts up.</CardMeta>
           <label className="checkbox-row" data-setting-id="dashboard.autoLaunchWeb">
@@ -1336,7 +1379,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </div>
         </Card>
 
-        <Card id="settings-background">
+        <Card id="settings-background" data-section="background">
           <CardTitle><ServerIcon size={14} /> Background Agents</CardTitle>
           <CardMeta>Tune plugin options. Changes take effect on next plugin restart.</CardMeta>
 
@@ -1459,11 +1502,11 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
 
       <PairDeviceCard />
 
-      <section id="settings-activity-log" className="settings-section-wrap">
+      <section id="settings-activity-log" data-section="activity-log" className="settings-section-wrap">
         <ActivityLogCard />
       </section>
 
-      <Card id="settings-about">
+      <Card id="settings-about" data-section="about">
         <CardTitle><Info size={14} /> About</CardTitle>
         <CardMeta>Build metadata.</CardMeta>
         <dl className="about-table">
@@ -1556,7 +1599,7 @@ function ActivityLogCard() {
   });
 
   return (
-    <Card id="settings-diagnostics">
+    <Card id="settings-diagnostics" data-section="diagnostics">
       <CardTitle>
         <Activity size={14} /> Activity log
         <span className="muted" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>

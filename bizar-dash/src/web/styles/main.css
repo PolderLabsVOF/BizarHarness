@@ -3497,6 +3497,72 @@ pre,
   background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
+
+
+/* ─── Settings section filter (v3.17.0) ───────────────────────────── */
+/* When `.settings-grid-filtered` is set on the parent, every direct
+   child without the matching data-section attribute is hidden. The
+   `data-active-section` attribute on the grid tells CSS which section
+   is currently active. */
+/* When the grid has data-active-section set, hide every child
+   whose data-section attribute doesn't match. Pure CSS, no JS needed. */
+.settings-grid[data-active-section] > [data-section]:not([data-section=""]) {
+  display: none;
+}
+.settings-grid[data-active-section="theme"] > [data-section="theme"] { display: block; }
+.settings-grid[data-active-section="layout"] > [data-section="layout"] { display: block; }
+.settings-grid[data-active-section="general"] > [data-section="general"] { display: block; }
+.settings-grid[data-active-section="service"] > [data-section="service"] { display: block; }
+.settings-grid[data-active-section="tailscale"] > [data-section="tailscale"] { display: block; }
+.settings-grid[data-active-section="notifications"] > [data-section="notifications"] { display: block; }
+.settings-grid[data-active-section="auth"] > [data-section="auth"] { display: block; }
+.settings-grid[data-active-section="agents"] > [data-section="agents"] { display: block; }
+.settings-grid[data-active-section="dashboard"] > [data-section="dashboard"] { display: block; }
+.settings-grid[data-active-section="background"] > [data-section="background"] { display: block; }
+.settings-grid[data-active-section="updates"] > [data-section="updates"] { display: block; }
+.settings-grid[data-active-section="activity-log"] > [data-section="activity-log"] { display: block; }
+.settings-grid[data-active-section="about"] > [data-section="about"] { display: block; }
+.settings-grid[data-active-section="diagnostics"] > [data-section="diagnostics"] { display: block; }
+
+.settings-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  grid-column: 1 / -1;
+  margin: 0 0 var(--space-3);
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev-2));
+  font-size: 12px;
+  color: var(--text);
+}
+
+.settings-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease);
+}
+
+.settings-filter-clear:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.settings-subnav-button-all {
+  font-weight: 600;
+  border-right: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px) 0 0 calc(var(--radius) - 2px);
+}
 .settings-section-wrap {
   scroll-margin-top: 100px;
 }

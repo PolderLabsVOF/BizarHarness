@@ -254,7 +254,7 @@ export const modsLoader = {
    * For air-gapped / offline installs, the URL can also be a `file://`
    * path or a local directory.
    */
-  DEFAULT_REGISTRY_URL: 'https://raw.githubusercontent.com/DrB0rk/bizarre-mods/main/registry.json',
+  DEFAULT_REGISTRY_URL: 'https://raw.githubusercontent.com/DrB0rk/bizar-mods/main/registry.json',
 
   /** Read the configured registry URL from settings.json. */
   getRegistryUrl() {

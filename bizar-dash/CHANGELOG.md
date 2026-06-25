@@ -1,5 +1,13 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.17.0 — Settings section filter + graphify removed
+
+### Highlights
+
+- **Settings section filter.** v3.16.0's subnav scrolled to sections; v3.17.0 actually filters — clicking a subnav button shows ONLY that section, with a "Showing only X" banner and a one-click escape. URL hash deep-links (`#settings-theme`) still work.
+- **graphify removed.** Deleted `src/server/routes/graph.mjs`, `src/web/views/Graph.tsx`, and the Graph tab from TABS + VIEW_MAP. Graph is now provided exclusively by the graphify mod (installable from the registry).
+- **`dist/` rebuilt.** This version's UI features (settings filter) are present in the published `dist/` (v3.17.0 fixes the v3.16.0 invisibility regression from v3.16.2).
+
 ## v3.16.2 — Rebuild `dist/` so the v3.16.0 UI changes are actually served
 
 > **Critical**: v3.15.0 through v3.16.1 all shipped `src/` changes but the `dist/` build was never regenerated. The dashboard's web UI is served from `dist/` (Vite output), not `src/`. Result: every UI change from v3.15.0 onward (activity log overhaul, settings subnav, chat floating input, mods registry browser, provider auto-detect banner) was invisible in the running dashboard — only the new server-side API routes were live. Fixed by running `vite build` and bumping to v3.16.2.

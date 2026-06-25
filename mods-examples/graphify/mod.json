@@ -1,7 +1,7 @@
 {
   "id": "graphify",
   "name": "Graphify",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "BizarHarness",
   "description": "Knowledge-graph view of your project — code-only AST build works offline, full LLM-powered build with API key. Embeds graphify's interactive vis-network visualization directly in the dashboard.",
   "kind": "view",
@@ -11,22 +11,23 @@
       "id": "graph",
       "label": "Graph",
       "icon": "Network",
-      "description": "Interactive knowledge graph of the project.",
-      "mountPath": "/api/mods/graphify",
-      "tabId": "graph",
-      "viewComponent": "Graph"
+      "description": "Interactive knowledge graph of the project."
     }
   },
   "permissions": [
     "fs:read:.bizar/graph",
-    "process:spawn:bizar"
+    "fs:write:.bizar/graph",
+    "fs:write:.graphifyignore",
+    "process:spawn:graphify",
+    "process:spawn:python3",
+    "process:spawn:which"
   ],
   "configSchema": {
     "autoBuildOnOpen": {
       "type": "boolean",
       "default": false,
-      "description": "If true, run `bizar graph build` automatically when the dashboard opens."
+      "description": "If true, run a build automatically when the dashboard opens."
     }
   },
-  "bizar": ">=3.15.0"
+  "bizar": ">=3.17.0"
 }
