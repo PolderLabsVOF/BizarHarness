@@ -620,3 +620,17 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Files changed**: `config/AGENTS.md` (+row in always-on rules table, +new "Research-Loop Rule" subsection near the Thinking Rule), `config/rules/general.md` (+one bullet for cross-cutting visibility). No per-agent files needed editing — every agent already allows `websearch`/`webfetch` and already references `config/rules/uncertainty.md`. The fix was wiring, not content.
 - **Sibling awareness**: A sibling was concurrently editing `config/AGENTS.md` to rename model IDs (`openrouter/minimax-m2.7` → `openrouter/minimax/minimax-m2.7`) at lines 166–201. My insertions landed at lines 103–121 (always-on table + Research-Loop subsection). Zero overlap, safe to merge.
 - **Surgical rule of thumb**: Before adding prose to `config/AGENTS.md`, grep for an existing rule file that covers the intent (`config/rules/uncertainty.md` was the answer for "loop-guard" and "use websearch when stuck"). If one exists, just wire it in. If not, write the rule AND wire it in.
+
+## 2026-06-25 — Activity log overhaul + mod system v3.15.0 dashboard
+
+- **Lesson**: When iterating on UI shipping-style ("ship the work"), a single big turn is fine IF you batch the edits by file. Splitting Overview into "one edit per state change" explodes the round-trip cost. Approach that worked: one edit for imports, one for state, one for render, one for CSS, then verify with `tsc --noEmit` + `bun test`.
+- **Lesson**: `edit` tool fails on UTF-8 em-dash boundaries but works fine on ASCII anchors. When a multi-line `edit` fails, grep for a unique ASCII anchor inside the target region and rewrite the edit to use that anchor. For bulk CSS insertions where the anchor doesn't fit cleanly, fall back to a one-line Python heredoc via `bash` — it's reliable and lets you embed the new CSS as a string literal.
+- **Lesson**: `bun test <path>` treats `<path>` as a name filter, not a file path. The error message "Tests need `.test` in the filename" is misleading — it actually filtered everything out because no test name matched. Use `./<path>` or run from inside `bizar-dash/` to ensure path semantics.
+- **Lesson**: `node tests/x.test.mjs` against ESM that imports `bun:sqlite` fails with `ERR_UNSUPPORTED_ESM_URL_SCHEME`. Always run dashboard tests with `bun`, not `node`.
+- **Pattern to follow**:
+  - Stable client-side keys for "hide" state derive from event content: hash `kind|ts|slug|idx` to a 16-char hex. Avoids needing server-issued IDs for ephemeral UI state.
+  - Hide-not-delete is the right model for "hide from overview": the entry stays in the full log under Settings, and a one-click restore is always available. Files on disk: `~/.cache/bizar/activity-hidden.json` (Set<string> serialized as array).
+  - Mount new routers in `api.mjs` in registration order alongside the most-similar existing one (overview → activity is a natural pair).
+- **Files changed**: 7 dashboard files (`CHANGELOG.md`, `package.json`, `routes/activity.mjs`, `styles/main.css`, `views/Overview.tsx`, `views/Settings.tsx`, `components/CollapsibleSection.tsx`). New: `routes/activity.mjs` (1 file, ~120 lines).
+- **Agents used**: none — `task` tool broken (`no such column: replacement_seq`) and `bizar_spawn_background` returns an instance ID but the opencode subprocess exits with code 1 (opencode CLI not wired up in this Odin environment). Work proceeded directly with `edit`/`write`/`bash` (rtk).
+- **Sibling awareness**: No siblings active this turn — direct-edit mode.
