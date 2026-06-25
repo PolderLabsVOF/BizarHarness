@@ -126,7 +126,7 @@ Follow `rules/uncertainty.md` strictly. When uncertain or stuck, the next move i
 
 This system uses a 5-tier model architecture with a verification gate:
 
-### Odin (default agent, OpenRouter minimax-m3)
+### Odin (default agent, MiniMax M3 direct)
 
 Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each request and **decomposes it into independent work streams** — **he never executes work himself**:
 - **Identifies parallelizable work** and launches multiple subagent `task` calls in a **single message** (always 2+)
@@ -171,25 +171,25 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 ### Hermod
 
-- **Model**: `openrouter/minimax/minimax-m2.7` (via OpenRouter)
+- **Model**: `minimax/MiniMax-M2.7` (via MiniMax (direct))
 - **Use for**: Git and GitHub operations — commit, push, merge, PRs, branches, conflict resolution. The swift messenger.
 - **Cost**: $0.30/M input, $1.20/M output
 
 ### Thor
 
-- **Model**: `openrouter/minimax/minimax-m2.7` (via OpenRouter)
+- **Model**: `minimax/MiniMax-M2.7` (via MiniMax (direct))
 - **Use for**: Moderate complexity features, debugging, code review, refactoring
 - **Cost**: $0.30/M input, $1.20/M output — cheaper than Tyr, more capable than Heimdall
 
 ### Baldr
 
-- **Model**: `openrouter/minimax/minimax-m2.7` (via OpenRouter)
+- **Model**: `minimax/MiniMax-M2.7` (via MiniMax (direct))
 - **Use for**: Design system creation, DESIGN.md, visual audit, usability planning. Creates design plans — does not implement.
 - **Cost**: $0.30/M input, $1.20/M output
 
 ### Tyr
 
-- **Model**: `openrouter/minimax/minimax-m3` (via OpenRouter)
+- **Model**: `minimax/MiniMax-M3` (via MiniMax (direct))
 - **Use for**: Highest complexity implementation, debugging, architecture, multi-step engineering
 - **Cost**: Higher — reserved for the hardest problems
 
@@ -201,7 +201,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 ### Forseti
 
-- **Model**: `openrouter/minimax/minimax-m3` (via OpenRouter, audit-only, no edit permissions)
+- **Model**: `minimax/MiniMax-M3` (via MiniMax (direct), audit-only, no edit permissions)
 - **Use for**: Adversarial plan review — audits completeness, correctness, consistency, feasibility, security
 - **Always runs before any Tier 4 or Tier 5 implementation begins**
 

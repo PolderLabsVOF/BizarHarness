@@ -66,17 +66,17 @@
 
 | Agent | Rune | Model | Cost | Role |
 |---|---|---|---|---|
-| **Odin** | ᛟ | OpenRouter minimax-m3 | $0.30/M · $1.20/M out | Primary router — never executes, only delegates |
+| **Odin** | ᛟ | MiniMax M3 | $0.30/M · $1.20/M out | Primary router — never executes, only delegates |
 | **Frigg** | ᚠ | DeepSeek V4 Flash | **Free** | Read-only Q&A — ask questions, get answers, never modifies |
 | **Vör** | ᛢ | DeepSeek V4 Flash | **Free** | Clarifies ambiguous requests — asks questions until task is well-defined |
 | **Mimir** | ᛗ | DeepSeek V4 Flash | **Free** | Research & codebase exploration (Semble-first) |
 | **Heimdall** | ᚹ | DeepSeek V4 Flash | **Free** | Simple tasks, quick edits, file operations |
-| **Hermod** | ᚱ | OpenRouter minimax-m2.7 | $0.30/M · $1.20/M out | Git & GitHub operations (commit, PR, merge, rebase) |
-| **Thor** | ᚦ | OpenRouter minimax-m2.7 | $0.30/M · $1.20/M out | Moderate implementation, debugging, refactoring |
-| **Baldr** | ᛒ | OpenRouter minimax-m2.7 | $0.30/M · $1.20/M out | UI/UX design system (DESIGN.md plans, visual audits) |
-| **Tyr** | ᛏ | OpenRouter minimax-m3 | $0.30/M · $1.20/M out | Complex implementation, architecture, deep debugging |
+| **Hermod** | ᚱ | MiniMax M2.7 | $0.30/M · $1.20/M out | Git & GitHub operations (commit, PR, merge, rebase) |
+| **Thor** | ᚦ | MiniMax M2.7 | $0.30/M · $1.20/M out | Moderate implementation, debugging, refactoring |
+| **Baldr** | ᛒ | MiniMax M2.7 | $0.30/M · $1.20/M out | UI/UX design system (DESIGN.md plans, visual audits) |
+| **Tyr** | ᛏ | MiniMax M3 | $0.30/M · $1.20/M out | Complex implementation, architecture, deep debugging |
 | **Vidarr** | ᛉ | GPT-5.5 | Subscription | Last resort — GPT-5.5 |
-| **Forseti** | ᚨ | OpenRouter minimax-m3 | $0.30/M · $1.20/M out | Adversarial plan reviewer (edit: deny, audit-only) |
+| **Forseti** | ᚨ | MiniMax M3 | $0.30/M · $1.20/M out | Adversarial plan reviewer (edit: deny, audit-only) |
 
 ---
 
@@ -303,7 +303,7 @@ After installation, run `/connect` in opencode to add API keys:
 | Provider | Models | Auth |
 |---|---|---|
 | **OpenCode Zen** | `opencode/deepseek-v4-flash-free` | Free API key from [opencode.ai](https://opencode.ai) — create account, get key, no charges |
-| **OpenRouter** | `openrouter/minimax/minimax-m2.7`, `openrouter/minimax/minimax-m3` | API key from [openrouter.ai](https://openrouter.ai) |
+| **MiniMax (direct)** | `minimax/MiniMax-M2.7`, `minimax/MiniMax-M3` | API key from [MiniMax](https://platform.minimaxi.com) |
 | **OpenAI** | `openai/gpt-5.5` | ChatGPT subscription (OAuth) |
 
 Then run `/models` to verify connectivity.

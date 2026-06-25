@@ -211,11 +211,11 @@ async function checkProviderConfigSanity() {
     throw new Error('opencode.json missing');
   }
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-  const openrouter = cfg.provider && cfg.provider.openrouter;
-  if (!openrouter) {
-    throw new Error('provider.openrouter block missing');
+  const minimax = cfg.provider && cfg.provider.minimax;
+  if (!minimax) {
+    throw new Error('provider.minimax block missing');
   }
-  const models = openrouter.models || {};
+  const models = minimax.models || {};
   const saneNames = Object.entries(models).filter(([, m]) => {
     return (
       m &&
@@ -229,7 +229,7 @@ async function checkProviderConfigSanity() {
       'no MiniMax-style model with interleaved + reasoning flags',
     );
   }
-  return `provider.openrouter + ${saneNames.length} model(s) sane`;
+  return `provider.minimax + ${saneNames.length} model(s) sane`;
 }
 
 const CHECKS = [

@@ -284,7 +284,7 @@ function showDoctorHelp() {
       • core agent files are installed (odin, quick, thor, tyr)
       • rtk / semble / skills on PATH (lenient — at least one)
       • dashboard reachable (skipped if no port file)
-      • provider.openrouter block + MiniMax model flags are sane
+      • provider.minimax block + MiniMax model flags are sane
 
     Prints ✓/✗ for each check and a final summary. Exits non-zero
     if any check fails. Use \`bizar doctor\` after a manual config

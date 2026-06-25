@@ -2,10 +2,10 @@
  * reasoning-clean unit tests (v0.6.2).
  *
  * Covers the inline-think-block stripper used by the global fetch
- * wrapper. The wrapper exists to defeat the M3-via-OpenRouter pattern
+ * wrapper. The wrapper exists to defeat the M3-via-MiniMax pattern
  * where the model emits its chain-of-thought in BOTH the structured
  * `reasoning` field AND inline in `message.content`. opencode's
- * openrouter SDK renders the structured field as a separate "Thought"
+ * MiniMax-compatible SDK renders the structured field as a separate "Thought"
  * panel, but it does NOT strip the inline blocks — so the user sees
  * the same thinking twice. The wrapper post-processes the response
  * stream to drop the inline blocks.
@@ -124,7 +124,7 @@ describe("wrapFetchForReasoningCleanup — provider routing", () => {
         new Response("not a chat completion", { status: 200, headers: { "content-type": "text/plain" } }),
     );
     const wrapped = wrapFetchForReasoningCleanup(fake, {
-      providers: ["openrouter"],
+      providers: ["minimax"],
     });
     const res = await wrapped("https://example.com/some/other/endpoint");
     expect(await res.text()).toBe("not a chat completion");
@@ -139,7 +139,7 @@ describe("wrapFetchForReasoningCleanup — provider routing", () => {
         }),
     );
     const wrapped = wrapFetchForReasoningCleanup(fake, {
-      providers: ["openrouter"],
+      providers: ["minimax"],
     });
     // Anthropic endpoint — not in the providers list, so no cleaning.
     const res = await wrapped("https://api.anthropic.com/v1/chat/completions", { method: "POST" });
@@ -147,7 +147,7 @@ describe("wrapFetchForReasoningCleanup — provider routing", () => {
     expect(body).toContain("<think>x</think>"); // unchanged
   });
 
-  test("intercepts chat-completions to the targeted provider (openrouter)", async () => {
+  test("intercepts chat-completions to the targeted provider (minimax)", async () => {
     const fake = makeFakeFetch(
       () =>
         new Response('{"choices":[{"message":{"content":"<think>x</think>hi"}}]}', {
@@ -156,10 +156,10 @@ describe("wrapFetchForReasoningCleanup — provider routing", () => {
         }),
     );
     const wrapped = wrapFetchForReasoningCleanup(fake, {
-      providers: ["openrouter"],
+      providers: ["minimax"],
     });
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     const body = await res.text();
@@ -211,7 +211,7 @@ describe("wrapFetchForReasoningCleanup — non-streaming JSON", () => {
     );
     const wrapped = wrapFetchForReasoningCleanup(fake);
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     const body = JSON.parse(await res.text());
@@ -239,7 +239,7 @@ describe("wrapFetchForReasoningCleanup — non-streaming JSON", () => {
     );
     const wrapped = wrapFetchForReasoningCleanup(fake);
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     const body = JSON.parse(await res.text());
@@ -263,7 +263,7 @@ describe("wrapFetchForReasoningCleanup — non-streaming JSON", () => {
     );
     const wrapped = wrapFetchForReasoningCleanup(fake);
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     expect(await res.text()).toBe(original);
@@ -279,7 +279,7 @@ describe("wrapFetchForReasoningCleanup — non-streaming JSON", () => {
     );
     const wrapped = wrapFetchForReasoningCleanup(fake);
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     expect(await res.text()).toBe("not json {{{");
@@ -342,7 +342,7 @@ describe("wrapFetchForReasoningCleanup — SSE streaming", () => {
     );
     const wrapped = wrapFetchForReasoningCleanup(fake);
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     const body = await readBodyText(res);
@@ -392,7 +392,7 @@ describe("wrapFetchForReasoningCleanup — SSE streaming", () => {
     );
     const wrapped = wrapFetchForReasoningCleanup(fake);
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     const body = await readBodyText(res);
@@ -411,7 +411,7 @@ describe("wrapFetchForReasoningCleanup — SSE streaming", () => {
     );
     const wrapped = wrapFetchForReasoningCleanup(fake);
     const res = await wrapped(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://minimax.io/v1/chat/completions",
       { method: "POST" },
     );
     const body = await readBodyText(res);

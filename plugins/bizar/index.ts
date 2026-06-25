@@ -236,7 +236,7 @@ let fetchWrapInstalled = false;
  * v0.6.2 — Reasoning directive. Install the reasoning-clean fetch wrap
  * on `globalThis.fetch`. The wrap strips inline ``...</think>` (and the
  * other recognised variants — see `src/reasoning-clean.ts`) from
- * chat-completions responses targeting `openrouter`/`minimax`, while
+ * chat-completions responses targeting `minimax`, while
  * leaving the structured `reasoning` / `reasoning_details` fields
  * intact.
  *
@@ -263,7 +263,7 @@ function installFetchReasoningCleanup(logger: Logger): void {
   );
   globalThis.fetch = wrapped as typeof globalThis.fetch;
   fetchWrapInstalled = true;
-  logger.info("bizar: reasoning-clean fetch wrap installed (openrouter/minimax)");
+  logger.info("bizar: reasoning-clean fetch wrap installed (minimax)");
 }
 
 // --- Plugin entry point ---------------------------------------------------
@@ -364,7 +364,7 @@ async function init(
 
   // v0.6.2 — Reasoning directive. Wrap globalThis.fetch so that inline
   // ``...</think>` blocks in chat completions responses
-  // from openrouter/minimax providers are stripped from `content` even
+  // from the minimax provider are stripped from `content` even
   // when the model also emits structured reasoning. The `config` hook
   // in the opencode plugin API is declared in the SDK type but does NOT
   // fire in 1.17.9 (confirmed via debug probe 2026-06-24), so we wrap
@@ -802,10 +802,10 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   // ────────────────────────────────────────────────────────────────────
   // v0.6.2 — Reasoning directive
   // ────────────────────────────────────────────────────────────────────
-  // Some reasoning models (notably MiniMax M3 via OpenRouter) emit
+  // Some reasoning models (notably MiniMax M-series models) emit
   // their chain-of-thought in BOTH the structured `reasoning` /
   // `reasoning_details` field AND inline as `` blocks inside
-  // `message.content`. opencode's openrouter SDK extracts the structured
+  // `message.content`. opencode's MiniMax provider SDK extracts the structured
   // reasoning correctly and renders it as a separate "Thought" panel,
   // but it does NOT strip the inline blocks from `content`, so the user
   // sees the same thinking text twice — once in the proper panel and
@@ -816,8 +816,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   //   1. `installFetchReasoningCleanup` (init-time) — wraps
   //      `globalThis.fetch` with `wrapFetchForReasoningCleanup` from
   //      `src/reasoning-clean.ts`. The wrap strips the inline ``
-  //      blocks from chat-completions responses to `openrouter` /
-  //      `minimax` while leaving the structured reasoning fields
+  //      blocks from chat-completions responses to the `minimax` provider while leaving the structured reasoning fields
   //      alone. This is the only layer that fixes the CURRENT
   //      response in-flight. The opencode plugin API in 1.17.9 declares
   //      a `config` hook in the SDK type but does not actually fire it
@@ -911,7 +910,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // Push a persistent system-prompt directive that tells reasoning
     // models to put their thinking in the structured reasoning field
     // (rendered as a separate "Thought" panel by opencode) rather than
-    // also emitting it inline as `` blocks in the content. The openrouter
+    // also emitting it inline as `` blocks in the content. The MiniMax direct
     // SDK does not strip the inline `` blocks, so without this
     // directive the user sees the reasoning twice — once in the proper
     // panel and once as visible message text.
@@ -969,8 +968,8 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // from the FINAL text of each completed assistant text part. This is
     // the post-processing layer that fixes the CURRENT response in cases
     // where the model emits its chain-of-thought in BOTH the structured
-    // `reasoning` field AND inline in `content` (the M3-via-OpenRouter
-    // leak). opencode's openrouter SDK does not strip the inline blocks,
+    // `reasoning` field AND inline in `content` (the MiniMax-direct
+    // leak). opencode's MiniMax provider SDK does not strip the inline blocks,
     // so we do it here at the boundary between the SDK output and the
     // UI rendering. The `config` hook that the SDK type declares for
     // fetch-level wrapping does NOT fire in 1.17.9, and the AI SDK

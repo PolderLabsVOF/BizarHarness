@@ -1,5 +1,46 @@
 # Changelog
 
+## v3.13.0 — Direct MiniMax provider (drop OpenRouter default)
+
+> **Breaking:** Removed OpenRouter as the default provider for MiniMax models. All BizarHarness agents now use the direct MiniMax provider. Users with custom configs referencing `openrouter/minimax/*` model IDs must update them to `minimax/MiniMax-M{2.7,3}`.
+
+### Highlights
+
+- **Default provider for MiniMax models is now the direct MiniMax provider**, not OpenRouter. Eliminates an extra hop and the OpenRouter fee layer.
+- **Model ID migration:** `openrouter/minimax/minimax-m3` → `minimax/MiniMax-M3` and `openrouter/minimax/minimax-m2.7` → `minimax/MiniMax-M2.7` across all 7 paid-tier agent definitions (Odin, Hermod, Thor, Baldr, Tyr, Forseti, Quick) plus the top-level default `model` / `small_model` in `config/opencode.json.template`.
+- **`provider.openrouter` block removed** from the default config template. Users who need OpenRouter can still add it manually.
+- **Reasoning-clean wrapper updated** — `DEFAULT_PROVIDERS` set now contains only `["minimax"]`. The MiniMax direct API endpoint (`https://minimax.io/v1/chat/completions`) is recognized by the same URL-substring matcher.
+- **CLI validation updated:** `cli/audit.mjs` `VALID_MODELS` now lists `minimax/MiniMax-M2.7` and `minimax/MiniMax-M3`. `cli/doctor.mjs` validates `provider.minimax` instead of `provider.openrouter`.
+
+### Migration for users
+
+```diff
+- "model": "openrouter/minimax/minimax-m3",
++ "model": "minimax/MiniMax-M3",
+
+- "model": "openrouter/minimax/minimax-m2.7",
++ "model": "minimax/MiniMax-M2.7",
+```
+
+### Files changed (22)
+
+```
+M .bizar/research/current-architecture.md
+M README.md
+M cli/audit.mjs
+M cli/bin.mjs
+M cli/doctor.mjs
+M cli/doctor.test.mjs
+M config/AGENTS.md
+M config/agents/{baldr,forseti,hermod,odin,quick,thor,tyr}.md
+M config/opencode.json.template
+M config/skills/bizar/SKILL.md
+M plugins/bizar/index.ts
+M plugins/bizar/src/reasoning-clean.ts
+M plugins/bizar/tests/reasoning-clean.test.ts
+M wiki/{Agents-Reference,Background-Agents,Getting-Started,Model-Routing}.md
+```
+
 ## v0.7.0-alpha.1 — Plugin ↔ Dashboard v2 Protocol
 
 > **Breaking / additive:** New package `@polderlabs/bizar-sdk` (additive). New dashboard `/api/v2/*` namespace (additive; existing `/api/*` endpoints unchanged). New plugin `dashboard-client.ts` module (additive; existing tools unchanged). Opencode v2 routes only (v1 routes are broken upstream — see `.bizar/opencode-sse-investigation.md`).

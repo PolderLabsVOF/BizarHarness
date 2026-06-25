@@ -296,18 +296,18 @@ describe('runDoctor() with fixture HOME', () => {
     assert.equal(r.ok, true, r.message);
   });
 
-  test('provider-config-sanity fails without openrouter block', async () => {
+  test('provider-config-sanity fails without minimax block', async () => {
     writeOpencodeConfig({ provider: {} });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'provider-config-sanity');
     assert.equal(r.ok, false);
-    assert.match(r.message, /openrouter/);
+    assert.match(r.message, /minimax/);
   });
 
   test('provider-config-sanity fails when models lack interleaved+reasoning', async () => {
     writeOpencodeConfig({
       provider: {
-        openrouter: {
+        minimax: {
           models: { 'some-model': { id: 'foo' } },
         },
       },
@@ -321,7 +321,7 @@ describe('runDoctor() with fixture HOME', () => {
   test('provider-config-sanity passes with interleaved+reasoning', async () => {
     writeOpencodeConfig({
       provider: {
-        openrouter: {
+        minimax: {
           models: {
             'MiniMax/MiniMax-M3': { interleaved: true, reasoning: true },
           },

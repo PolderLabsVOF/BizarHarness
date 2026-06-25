@@ -8,7 +8,7 @@
  *
  * Why this exists
  * ───────────────
- * Some reasoning models (e.g. MiniMax M3 via OpenRouter) emit their chain
+ * Some reasoning models (e.g. MiniMax M-series models) emit their chain
  * of thought BOTH:
  *   1. In the structured `reasoning` / `reasoning_details` field, which
  *      opencode already extracts and renders as a separate "thought"
@@ -17,7 +17,7 @@
  *      render as plain text — producing the duplicate "Thought: … + the
  *      same text in the assistant message" the user sees.
  *
- * opencode's openrouter-specific SDK does not strip the inline think
+ * opencode's openai-compatible SDK for MiniMax does not strip the inline think
  * blocks from `content`. The opencode-level `interleaved` config that
  * could solve this only applies to the `@ai-sdk/openai-compatible` SDK.
  * Wrapping `provider.options.fetch` in the `config` hook is the only
@@ -72,12 +72,12 @@ export interface ReasoningCleanOptions {
   debug?: (msg: string) => void;
   /**
    * Provider ids whose responses should be cleaned. Defaults to the set
-   * known to exhibit the duplicated-think pattern: openrouter and minimax.
+   * known to exhibit the duplicated-think pattern: minimax.
    */
   providers?: string[];
 }
 
-const DEFAULT_PROVIDERS = new Set(["openrouter", "minimax"]);
+const DEFAULT_PROVIDERS = new Set(["minimax"]);
 
 /**
  * Strip inline think-style blocks (`<think>…</think>`,
@@ -223,7 +223,7 @@ function keepPartialTail(input: string, markers: readonly string[]): string {
 
 /**
  * Decide whether the URL targets one of the providers we should clean.
- * The provider id may appear in the hostname (e.g. `openrouter.ai`)
+ * The provider id may appear in the hostname (e.g. `api.minimax.chat`)
  * rather than as a path segment, so we match against the full URL.
  */
 function targetsProvider(url: string, providers: Set<string>): string | null {

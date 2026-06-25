@@ -61,7 +61,7 @@ When the installer finishes, restart opencode so the new agents and plugin load.
 | Provider | Models | Auth |
 |---|---|---|
 | **OpenCode Zen** | `opencode/deepseek-v4-flash-free` | Free API key from [opencode.ai](https://opencode.ai) — no charges |
-| **OpenRouter** | `openrouter/minimax/minimax-m2.7`, `openrouter/minimax/minimax-m3` | API key from [openrouter.ai](https://openrouter.ai) |
+| **MiniMax (direct)** | `minimax/MiniMax-M2.7`, `minimax/MiniMax-M3` | API key from [MiniMax](https://platform.minimaxi.com) |
 | **OpenAI** | `openai/gpt-5.5` | ChatGPT subscription (OAuth) |
 
 After `/connect`, run `/models` to verify that every tier can reach its provider.
