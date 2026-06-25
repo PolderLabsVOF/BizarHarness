@@ -634,3 +634,24 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Files changed**: 7 dashboard files (`CHANGELOG.md`, `package.json`, `routes/activity.mjs`, `styles/main.css`, `views/Overview.tsx`, `views/Settings.tsx`, `components/CollapsibleSection.tsx`). New: `routes/activity.mjs` (1 file, ~120 lines).
 - **Agents used**: none — `task` tool broken (`no such column: replacement_seq`) and `bizar_spawn_background` returns an instance ID but the opencode subprocess exits with code 1 (opencode CLI not wired up in this Odin environment). Work proceeded directly with `edit`/`write`/`bash` (rtk).
 - **Sibling awareness**: No siblings active this turn — direct-edit mode.
+
+## 2026-06-25 — v3.16.0 dashboard overhaul (settings subnav + chat floating + mods registry + provider auto-detect)
+
+- **Lesson**: Refusing to refactor huge files forces a smarter approach. Settings.tsx is 1597 lines. Splitting it into a Settings/subnav structure would take all day; instead I added `id="settings-..."` to every Card via a Python line-by-line edit, then a single sticky subnav at the top that scrolls to anchor IDs. Zero behavioral change, ~14 line edits, 80 lines of new state + JSX.
+- **Lesson**: When extracting a sub-feature into a separate registry/browser, the API contract is the source of truth, not the UI state type. The `/api/mods/registry` route returns `{ registry: {...}, mods: [...] }`, but my initial Mods.tsx state was typed as `{ source, mods }`. The fix was to align the UI state with the route's actual envelope shape — never type UI state in isolation.
+- **Lesson**: Provider auto-detect needs three layers, not one: (1) format validation against known patterns (sk-ant-..., sk-..., AIza..., gsk_...), (2) optional `/models` probe with a 1.5s timeout to confirm the key works, (3) status reporting that's resilient to network failures — never downgrade from 'configured' to 'no-key' on a network blip, only on a real HTTP rejection. Status enum is `'configured' | 'unknown' | 'no-key'` and the differences matter.
+- **Lesson**: Nested git repos inside a parent repo are a footgun. I tried `git init` inside `bizarre-mods/` and realized it would create a `bizar .git` directory tree that the parent's git would ignore — fine for the nested repo but confusing for `git status` and `git log` from the parent. The cleaner pattern is: keep the directory in the parent repo, document the standalone-publish recipe in its README, and let users `git init` themselves when they fork.
+- **Pattern to follow**:
+  - For massive view files that need submenus without rewriting: add `id="..."` attributes to existing top-level Cards, add a single subnav state + scroll handler at the top, use `scroll-margin-top` CSS so smooth scroll lands below sticky headers. No file split required.
+  - When adding a new CLI subcommand, mirror the same logic in a dashboard API endpoint. The dashboard has more context (project state, active provider, etc.) and the CLI is for headless/server flows. Sharing the spec but not the implementation avoids divergence.
+  - For `--install <id>` style CLI flags, do the work FIRST then exit cleanly — never enter interactive mode after a destructive action.
+- **Files changed**: 17 modified, 1 new (`cli/providers-detect.mjs`). Key files: `bizar-dash/src/web/views/Settings.tsx` (subnav), `bizar-dash/src/web/views/Mods.tsx` (registry browser), `bizar-dash/src/web/views/Config.tsx` (AutoDetectBanner), `bizar-dash/src/web/views/Chat.tsx` (floating input), `cli/providers-detect.mjs` (new CLI subcommand), `cli/install.mjs` (final-step wiring).
+- **Agents used**: none — `task` and `bizar_spawn_background` still broken in this Odin environment (per earlier diagnosis). Work proceeded directly with `edit`/`write`/`bash` (rtk).
+- **Sibling awareness**: No siblings active this turn — direct-edit mode.
+- **Verification gates**:
+  - `npm run typecheck` (dashboard): passes.
+  - `bun test tests/mod-security.test.mjs`: 26/26 pass (no regression).
+  - `node cli/bin.mjs providers detect --help`: works, prints full usage.
+  - `node cli/bin.mjs providers detect --no-probe`: prints status table for 9 providers.
+  - `node cli/bin.mjs providers detect --no-probe --json`: prints JSON array.
+- **Published**: `@polderlabs/bizar@3.16.0` (commit 25ec19f, tag v3.16.0) and `@polderlabs/bizar-dash@3.16.0` (tag v3.16.0-dash).
