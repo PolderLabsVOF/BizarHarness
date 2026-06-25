@@ -22,7 +22,6 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { wrap } from './_shared.mjs';
-import { state } from '../state.mjs';
 
 const HIDDEN_PATH = join(homedir(), '.cache', 'bizar', 'activity-hidden.json');
 
@@ -52,15 +51,19 @@ export function activityKey(item) {
 }
 
 /**
- * @param {object} _deps
- * @param {object} _deps.state
+ * @param {object} deps
+ * @param {object} deps.state
  * @returns {import('express').Router}
  */
-export function createActivityRouter({ state: _state } = {}) {
+export function createActivityRouter({ state } = {}) {
   const router = Router();
 
   // GET /activity — full log (newest first)
   router.get('/activity', wrap(async (_req, res) => {
+    if (!state || typeof state.getOverview !== 'function') {
+      res.status(503).json({ error: 'unavailable', message: 'state not ready' });
+      return;
+    }
     const overview = state.getOverview();
     const items = Array.isArray(overview.recentActivity)
       ? [...overview.recentActivity]

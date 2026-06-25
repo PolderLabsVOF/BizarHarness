@@ -1,5 +1,13 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.16.1 — Hotfix: dashboard crash on `bizar dash start`
+
+> **Critical bug**: `bizar dash start` failed with `The requested module '../state.mjs' does not provide an export named 'state'`. v3.15.0 and v3.16.0 both shipped this regression because `routes/activity.mjs` did `import { state } from '../state.mjs'`. The `state` object is created per-server-instance via `createState()` in `server.mjs:178` and threaded through `api.mjs` as a dependency — it's never a module-level export. Fixed by removing the bogus import and reading `state` from the factory function's argument (matching every other router).
+
+### Files changed (1)
+
+- `src/server/routes/activity.mjs` — removed `import { state } from '../state.mjs'`; uses `{ state }` from the factory parameter; added defensive 503 if state is missing.
+
 ## v3.16.0 — UI overhaul: settings subnav, chat floating input, mods registry browser, provider auto-detect
 
 ### Highlights
