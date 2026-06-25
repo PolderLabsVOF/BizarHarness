@@ -1,5 +1,53 @@
 # Changelog
 
+## v3.15.0 — Knowledge graph in the dashboard (offline build + viewable HTML)
+
+> **Additive:** New dashboard tab "Graph" embeds the interactive graphify visualization (`graph.html`). `bizar graph build` now works end-to-end without an LLM key via a code-only AST cache fallback. Plugin: `@polderlabs/bizar-plugin` v0.9.0.
+
+### Highlights
+
+- **`bizar graph build` works offline.** When no LLM key is set, the build automatically:
+  1. Writes a comprehensive `.graphifyignore` (node_modules, agent configs, docs/papers/images) so graphify's pre-flight check passes.
+  2. Runs graphify once with a dummy `ANTHROPIC_API_KEY` to populate the AST cache (semantic step fails; that's intentional).
+  3. Reconstructs `graph.json` from the per-file AST cache via the new `cli/graph-build-from-cache.mjs` script.
+  4. Runs `cluster-only` to generate `graph.html` + `GRAPH_REPORT.md`.
+  The final graph.json is at `.bizar/graph/graph.json` (809 nodes / 1794 edges for BizarHarness proper) with no API key required.
+- **Dashboard "Graph" tab** — new view at `bizar-dash/src/web/views/Graph.tsx` embeds graph.html via an iframe, shows node/edge/community counts, and has a "Build / Rebuild" button that runs `bizar graph build` detached and polls the job status. New dashboard routes:
+  - `GET /api/graph/status` — graph stats + active build jobs
+  - `GET /api/graph/html` — serve `graph.html`
+  - `GET /api/graph/report` — serve `GRAPH_REPORT.md`
+  - `POST /api/graph/build` — kick off async build
+  - `GET /api/graph/build/:jobId/status` — poll build progress
+- **`cli/graph-build-from-cache.mjs`** (new) — merges graphify's per-file AST cache (`cache/ast/v0.8.46/*.json`) into a single `graph.json`. Used by the offline fallback when the semantic step fails.
+- **`.gitignore`** updated — `.bizar/graph/` is now gitignored. Run `bizar graph build` on first use to populate it. This avoids committing 1.4 MB of graph data on every change.
+
+### Plugin: `@polderlabs/bizar-plugin` v0.9.0
+
+(no changes — the bg-spawn fix from v3.14.1 is unchanged.)
+
+### Files changed
+
+```
+M .gitignore                                              (+3 lines)
+M cli/graph.mjs                                           (+241 lines: code-only auto-detect, dummy-key fallback, promote cluster-only output, runCacheFallbackBuild + promoteFromDir)
+A cli/graph-build-from-cache.mjs                          (NEW: merges per-file AST cache → graph.json)
+A bizar-dash/src/server/routes/graph.mjs                   (NEW: status + html + report + build + build-status endpoints)
+A bizar-dash/src/web/views/Graph.tsx                      (NEW: iframe-based view with stats + rebuild button + build-poll)
+M bizar-dash/src/server/api.mjs                            (+2 lines: wire createGraphRouter)
+M bizar-dash/src/web/App.tsx                               (+2 lines: Graph in VIEW_MAP)
+M bizar-dash/src/web/components/Topbar.tsx                 (+2 lines: Graph tab in TABS)
+M bizar-dash/src/web/styles/main.css                       (+60 lines: graph view + iframe + banner CSS)
+```
+
+### Verification
+
+`bizar graph build` end-to-end on a fresh checkout with no LLM key produces:
+- `.bizar/graph/graph.json` (778 KB, 809 nodes, 1794 edges for BizarHarness proper)
+- `.bizar/graph/graph.html` (578 KB, interactive vis-network visualization)
+- `.bizar/graph/GRAPH_REPORT.md` (14 KB)
+
+Dashboard `/api/graph/status` returns the stats; `/api/graph/html` serves the HTML; the Graph tab embeds it via iframe with a rebuild button. All 282 plugin tests + 19 dashboard smoke tests pass; typecheck clean.
+
 ## v3.14.1 — bg-spawn subagent delegation fix + minimax thinking-config fix
 
 > **Bug fix:** Two opencode 1.17.x compat issues that caused `bizar_spawn_background` to silently fail. Plugin: `@polderlabs/bizar-plugin` v0.9.0.
