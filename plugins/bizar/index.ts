@@ -131,6 +131,10 @@ import {
   wrapFetchForReasoningCleanup,
   type FetchLike,
 } from "./src/reasoning-clean.js";
+import {
+  wrapFetchForKeyRotation,
+  discoverMiniMaxKeys,
+} from "./src/key-rotation.js";
 
 // v0.5.0 — visual plan wiring: side-effect executor + plan-fs
 import { executeSideEffect, type ExecuteOptions } from "./src/commands-impl.js";
@@ -230,7 +234,11 @@ const signalHandlerRefs = new Map<"SIGTERM" | "SIGINT", () => void>();
 /** v0.6.2 — Set to `true` after the first time we wrap `globalThis.fetch`
  *  with the reasoning-clean wrapper. Subsequent calls in the same process
  *  are no-ops, so a plugin reload cannot double-wrap. */
-let fetchWrapInstalled = false;
+let reasoningCleanInstalled = false;
+
+/** v3.14.0 — Set to `true` after the first time we wrap `globalThis.fetch`
+ *  with the key-rotation wrapper. Same idempotency pattern as reasoning-clean. */
+let keyRotationInstalled = false;
 
 /**
  * v0.6.2 — Reasoning directive. Install the reasoning-clean fetch wrap
@@ -246,10 +254,15 @@ let fetchWrapInstalled = false;
  * the plugin would already be past init — and the AI SDK is already
  * using the unwrapped fetch. So we wrap fetch once, globally, as the
  * plugin initialises. Subsequent reloads in the same process are a
- * no-op thanks to the `fetchWrapInstalled` flag.
+ * no-op thanks to the `reasoningCleanInstalled` flag.
+ *
+ * MUST be installed BEFORE `installFetchKeyRotation` so the wrapper
+ * chain becomes: request → key-rotation → reasoning-clean → original.
+ * That way retries from key-rotation pass through reasoning-clean and
+ * the response body is transformed before being returned.
  */
 function installFetchReasoningCleanup(logger: Logger): void {
-  if (fetchWrapInstalled) return;
+  if (reasoningCleanInstalled) return;
   const original = globalThis.fetch;
   if (typeof original !== "function") {
     logger.warn("bizar: globalThis.fetch is not a function; reasoning-clean wrap skipped");
@@ -262,8 +275,53 @@ function installFetchReasoningCleanup(logger: Logger): void {
     },
   );
   globalThis.fetch = wrapped as typeof globalThis.fetch;
-  fetchWrapInstalled = true;
+  reasoningCleanInstalled = true;
   logger.info("bizar: reasoning-clean fetch wrap installed (minimax)");
+}
+
+/**
+ * v3.14.0 — Multi-key rotation for the MiniMax provider. opencode has
+ * no built-in support for multiple API keys per provider; this wrapper
+ * closes that gap by reading N keys from env vars and rotating through
+ * them on 429 / 402 / 5xx responses. See `src/key-rotation.ts` for the
+ * retry policy.
+ *
+ * Env var resolution (`discoverMiniMaxKeys`):
+ *   1. `MINIMAX_API_KEYS` — comma-separated list
+ *   2. `MINIMAX_API_KEY` + `MINIMAX_API_KEY_2`, `_3`, ..., `_16`
+ *
+ * If fewer than 2 keys are configured, the wrapper is a pass-through
+ * no-op — single-key mode still works exactly as before.
+ *
+ * Install AFTER `installFetchReasoningCleanup` so this wrapper is the
+ * outermost layer: retries here re-enter reasoning-clean, so each
+ * attempt's response body is still cleaned before being returned.
+ */
+function installFetchKeyRotation(logger: Logger): void {
+  if (keyRotationInstalled) return;
+  const original = globalThis.fetch;
+  if (typeof original !== "function") {
+    logger.warn("bizar: globalThis.fetch is not a function; key-rotation wrap skipped");
+    return;
+  }
+  const keys = discoverMiniMaxKeys();
+  if (keys.length < 2) {
+    keyRotationInstalled = true; // mark done so re-inits don't keep checking
+    logger.debug(
+      `bizar: ${keys.length} MiniMax key(s) found; key-rotation disabled (need >= 2)`,
+    );
+    return;
+  }
+  const wrapped = wrapFetchForKeyRotation(original.bind(globalThis) as FetchLike, {
+    providerId: "minimax",
+    apiKeys: keys,
+    debug: (msg) => logger.debug(msg),
+  });
+  globalThis.fetch = wrapped as typeof globalThis.fetch;
+  keyRotationInstalled = true;
+  logger.info(
+    `bizar: key-rotation fetch wrap installed (minimax, ${keys.length} keys)`,
+  );
 }
 
 // --- Plugin entry point ---------------------------------------------------
@@ -371,6 +429,7 @@ async function init(
   // fetch globally as a fallback. Idempotent — only the first call in
   // this process actually wraps.
   installFetchReasoningCleanup(logger);
+  installFetchKeyRotation(logger);
 
   const stateStore = new StateStore(options.stateDir, logger);
   const settingsStore = new SettingsStore(options.stateDir, logger);

@@ -106,6 +106,35 @@ permission:
 
 When using the `minimax/MiniMax-M3` or `minimax/MiniMax-M2.7` model ids, do NOT set a custom `baseURL` on the `minimax` provider — opencode ships a built-in MiniMax provider that resolves the correct API endpoint. Adding an explicit baseURL is a common cause of 404s.
 
+### MiniMax rate-limit / quota failures
+
+**Symptoms:** A session dies with HTTP 429, 402, or 5xx from the MiniMax API. The user has multiple MiniMax accounts and wants them to share the load.
+
+**Cause:** opencode has no built-in multi-key rotation; it reads one key from `auth.json` and uses it for the entire session. Hitting that key's rate limit or quota is fatal.
+
+**Fix:** Set additional keys via env vars. The `bizar` plugin rotates through them on 429/402/5xx automatically.
+
+```bash
+# Option A — single comma-separated env var
+export MINIMAX_API_KEYS="key1,key2,key3"
+
+# Option B — numbered env vars (read in order, gaps skipped)
+export MINIMAX_API_KEY="primary-key"
+export MINIMAX_API_KEY_2="second-key"
+export MINIMAX_API_KEY_3="third-key"
+```
+
+Rotation policy:
+- Triggers on 429 (rate limit), 402 (quota exhausted), 500/502/503/504 (server error)
+- Does NOT trigger on 401 (unauthorized — your key is wrong; fix the key, don't rotate)
+- Does NOT trigger on other 4xx (client error — the request itself is bad)
+- Network errors (ECONNRESET etc.) DO trigger rotation
+- Caps at N attempts where N = number of configured keys (try each once)
+- If all keys fail, the last error response is returned so opencode surfaces it normally
+- Round-robin on success: the next request starts on the next key, spreading load across accounts
+
+Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rotation env vars at all), the plugin works exactly as before.
+
 ### Forseti Rejects Every Plan
 
 **Symptoms:** Forseti always returns "CHANGES REQUIRED" or "REJECTED".

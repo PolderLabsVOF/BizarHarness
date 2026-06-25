@@ -19,7 +19,7 @@
     "build:sdk": "npm run build -w @polderlabs/bizar-sdk",
     "test:sdk": "npm run test -w @polderlabs/bizar-sdk",
     "test:sdk:watch": "npm run test:watch -w @polderlabs/bizar-sdk",
-    "test": "npm run typecheck && npm run test:sdk && (cd plugins/bizar && bun test tests/loop.test.ts tests/block.test.ts tests/tools/bg-get-comments.test.ts tests/settings.test.ts tests/tools/plan-action.test.ts tests/tools/wait-for-feedback.test.ts) && node bizar-dash/tests/smoke-v2.mjs && node --test bizar-dash/tests/path-safe.test.mjs bizar-dash/tests/tmux-wrap.test.mjs bizar-dash/tests/opencode-runner.test.mjs",
+    "test": "npm run typecheck && npm run test:sdk && (cd plugins/bizar && bun test tests/loop.test.ts tests/block.test.ts tests/stall-think.test.ts tests/tools/bg-get-comments.test.ts tests/tools/opencode-runner.test.ts tests/settings.test.ts tests/commands.test.ts tests/commands-impl.test.ts tests/tools/plan-action.test.ts tests/tools/wait-for-feedback.test.ts tests/reasoning-clean.test.ts tests/key-rotation.test.ts) && node bizar-dash/tests/smoke-v2.mjs && node --test bizar-dash/tests/path-safe.test.mjs bizar-dash/tests/tmux-wrap.test.mjs bizar-dash/tests/opencode-runner.test.mjs",
     "build": "npm run build:sdk"
   },
   "keywords": [

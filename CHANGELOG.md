@@ -1,5 +1,43 @@
 # Changelog
 
+## v3.14.0 — MiniMax multi-key rotation (fallback)
+
+> **Additive:** New plugin-level wrapper that rotates MiniMax API keys on 429 / 402 / 5xx responses. Configure via `MINIMAX_API_KEYS` (comma list) or `MINIMAX_API_KEY` + `MINIMAX_API_KEY_2`, `_3`, ... Single-key mode is unchanged.
+
+### Highlights
+
+- **New plugin module `src/key-rotation.ts`** — Exports `wrapFetchForKeyRotation()` and `discoverMiniMaxKeys()`. Wires in alongside the existing `reasoning-clean` wrapper in `plugins/bizar/index.ts`.
+- **Env-var driven config** — No secrets in `opencode.json`. The user sets `MINIMAX_API_KEYS` (comma-separated list, max 16 keys) or the numbered form (`MINIMAX_API_KEY`, `MINIMAX_API_KEY_2`, ...). The plugin reads them at init.
+- **Smart retry policy** — Retries on 429 (rate limit), 402 (quota exhausted), 500/502/503/504 (server errors), and network errors. Does NOT retry on 401 (unauthorized — the key is wrong, not exhausted) or other 4xx (client error). Caps retries at `apiKeys.length` so each key is tried at most once.
+- **Round-robin on success** — After a successful request, the next request starts on the next key. Spreads load across accounts.
+- **Single-key pass-through** — When only one key is configured, the wrapper is a no-op. Existing single-key setups are completely unaffected.
+- **All tests pass: 269/269 across the plugin suite** (was 162 before this feature; added 26 new tests in `tests/key-rotation.test.ts`).
+
+### How users configure it
+
+```bash
+# Option A — comma-separated list
+export MINIMAX_API_KEYS="eyJ...primary,eyJ...secondary,eyJ...tertiary"
+
+# Option B — numbered env vars
+export MINIMAX_API_KEY="eyJ...primary"
+export MINIMAX_API_KEY_2="eyJ...secondary"
+export MINIMAX_API_KEY_3="eyJ...tertiary"
+```
+
+When a session hits a rate-limit or quota error on one key, the plugin retries with the next key automatically. The user sees no interruption — the opencode session continues as if nothing happened.
+
+### Files changed
+
+```
+M  config/skills/bizar/SKILL.md      (+29 lines — documented the new env vars + retry policy)
+M  package.json                       (+1 line — added key-rotation.test.ts to npm test)
+M  plugins/bizar/index.ts            (+60 lines — added installFetchKeyRotation + import)
+M  plugins/bizar/package.json         (+1 line — added key-rotation.test.ts to bun test)
+A  plugins/bizar/src/key-rotation.ts        (new file, ~225 lines)
+A  plugins/bizar/tests/key-rotation.test.ts (new file, ~270 lines, 26 tests)
+```
+
 ## v3.13.0 — Direct MiniMax provider (drop OpenRouter default)
 
 > **Breaking:** Removed OpenRouter as the default provider for MiniMax models. All BizarHarness agents now use the direct MiniMax provider. Users with custom configs referencing `openrouter/minimax/*` model IDs must update them to `minimax/MiniMax-M{2.7,3}`.
