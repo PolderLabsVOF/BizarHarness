@@ -1,5 +1,13 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.16.2 — Rebuild `dist/` so the v3.16.0 UI changes are actually served
+
+> **Critical**: v3.15.0 through v3.16.1 all shipped `src/` changes but the `dist/` build was never regenerated. The dashboard's web UI is served from `dist/` (Vite output), not `src/`. Result: every UI change from v3.15.0 onward (activity log overhaul, settings subnav, chat floating input, mods registry browser, provider auto-detect banner) was invisible in the running dashboard — only the new server-side API routes were live. Fixed by running `vite build` and bumping to v3.16.2.
+
+### Verification
+
+`dist/assets/main-*.css` now contains: `settings-subnav`, `chat-input-floating`, `mods-registry`, `autodetect-banner`, `activity-hidden-banner`, `activity-log-table`. `dist/assets/main-*.js` contains `AutoDetect`, `ActivityLog`, etc.
+
 ## v3.16.1 — Hotfix: dashboard crash on `bizar dash start`
 
 > **Critical bug**: `bizar dash start` failed with `The requested module '../state.mjs' does not provide an export named 'state'`. v3.15.0 and v3.16.0 both shipped this regression because `routes/activity.mjs` did `import { state } from '../state.mjs'`. The `state` object is created per-server-instance via `createState()` in `server.mjs:178` and threaded through `api.mjs` as a dependency — it's never a module-level export. Fixed by removing the bogus import and reading `state` from the factory function's argument (matching every other router).
