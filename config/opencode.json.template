@@ -314,14 +314,14 @@
           "interleaved": { "field": "reasoning_details" },
           "reasoning": true,
           "options": {
-            "thinking": "adaptive"
+            "thinking": { "type": "enabled" }
           }
         },
         "MiniMax-M2.7": {
           "interleaved": { "field": "reasoning_details" },
           "reasoning": true,
           "options": {
-            "thinking": "adaptive"
+            "thinking": { "type": "enabled" }
           }
         }
       }

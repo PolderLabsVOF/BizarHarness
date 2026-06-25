@@ -24,6 +24,68 @@ const TIMEOUT_MIN_MS = 1000;
 const TIMEOUT_MAX_MS = 1_800_000;
 const TIMEOUT_DEFAULT_MS = 300_000;
 
+/**
+ * Agents whose `mode` is `primary` and therefore accepted by
+ * `opencode run --agent <name>`. opencode 1.17.x silently REJECTS
+ * any agent whose `mode` is `subagent` with a "Falling back to default
+ * agent" warning — the bg instance then runs odin regardless of what
+ * the caller asked for. See `wiki/Troubleshooting.md` for the full
+ * postmortem.
+ *
+ * To invoke a subagent cleanly, `spawnAgent` below routes the spawn
+ * through a primary agent (odin) with an explicit delegation prompt
+ * that tells odin to call its `task` tool to spawn the requested
+ * subagent. Subagent changes here MUST mirror `config/agents/*.md`.
+ *
+ * Exported for testability — the test asserts the set is in sync with
+ * the agent configs.
+ */
+export const PRIMARY_AGENTS: ReadonlySet<string> = new Set(["odin", "frigg", "quick"]);
+
+/**
+ * Decide whether a given agent name needs the delegation wrapper.
+ * Pure function, exported for testability.
+ */
+export function needsDelegationWrapper(agent: string): boolean {
+  return !PRIMARY_AGENTS.has(agent);
+}
+
+/**
+ * Build the delegation prompt that wraps a subagent request. The
+ * wrapper runs as odin; odin must call its `task` tool to spawn the
+ * requested subagent and report the subagent's final output verbatim.
+ *
+ * The prompt is intentionally directive — LLMs are non-deterministic,
+ * and a passive "please consider delegating" framing is too easily
+ * ignored. The explicit "do not interpret", "do not perform the work
+ * yourself", and "report only the subagent's output" constraints give
+ * the LLM no room to drift.
+ *
+ * Exported for testability — the test asserts the prompt is directive
+ * enough to override Odin's default routing behavior.
+ */
+export function buildDelegationPrompt(requestedAgent: string, userPrompt: string): string {
+  return [
+    "You are Odin, the BizarHarness router.",
+    "",
+    "A background agent session has been requested with a SPECIFIC subagent.",
+    "Your only job is to delegate to that subagent using the `task` tool. Do NOT",
+    "perform the work yourself. Do NOT interpret the user's prompt. Do NOT ask",
+    "clarifying questions. Do NOT route to any other agent.",
+    "",
+    `Requested subagent: ${requestedAgent}`,
+    "",
+    "Task prompt to pass verbatim to the subagent:",
+    "--- BEGIN USER PROMPT ---",
+    userPrompt,
+    "--- END USER PROMPT ---",
+    "",
+    `Use the task tool with agent="${requestedAgent}" and the exact prompt above.`,
+    "After the subagent finishes, report its final output VERBATIM.",
+    "Do not summarize, do not add commentary, do not run any other tools.",
+  ].join("\n");
+}
+
 /** Mirrors plugins/bizar/src/http-client.ts ModelOverride. */
 export interface ModelOverride {
   providerID: string;
@@ -188,12 +250,23 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       // 5. Spawn the opencode run subprocess. The runner returns
       //    when the opencode child has reported its session id in
       //    the structured log stream (typically <500ms).
+      //
+      //    opencode 1.17.x rejects `--agent <subagent>` with a silent
+      //    fallback to the default agent. To invoke a subagent we
+      //    route through a primary wrapper (odin) with a delegation
+      //    prompt. The instance record still attributes the work to
+      //    the requested agent — only the opencode process is odin's.
       const messageID = generateMessageId();
+      const isPrimary = PRIMARY_AGENTS.has(args.agent);
+      const wrapperAgent = isPrimary ? args.agent : "odin";
+      const wrapperPrompt = isPrimary
+        ? args.prompt
+        : buildDelegationPrompt(args.agent, args.prompt);
       let spawnRes: Awaited<ReturnType<typeof spawnAgent>>;
       try {
         spawnRes = await spawnAgent({
-          prompt: args.prompt,
-          agent: args.agent,
+          prompt: wrapperPrompt,
+          agent: wrapperAgent,
           model: modelOverride,
           worktree: deps.worktree,
           logPath,
