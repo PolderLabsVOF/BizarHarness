@@ -475,6 +475,22 @@ async function promptForUpdates(forceAll) {
 // Main entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * Default behavior policy for `bizar update`:
+ *   - Update EVERYTHING (opencode + bizar + dash + plugin) automatically.
+ *   - Auto-install any missing component without asking.
+ *   - Kill running instances without confirmation (with a brief notice).
+ *   - Re-run the install script to refresh the on-disk plugin.
+ *   - Restart the dashboard if it was running.
+ *
+ * The `--pick` / `-p` flag opts into the legacy per-component picker
+ * (checkbox UI) for users who want to update only some components.
+ *
+ * The `--dry-run` flag previews what would happen without touching
+ * anything.
+ *
+ * The `--no-restart` flag skips the dashboard restart step.
+ */
 export async function runUpdate(subargs = []) {
   console.log(chalk.bold.hex('#a855f7')('\n  ᚦ BIZAR UPDATE ᚦ\n'));
 
@@ -483,6 +499,11 @@ export async function runUpdate(subargs = []) {
   const restartAfter = !subargs.includes('--no-restart');
   const forceAll = subargs.includes('--all');
   const dryRun = subargs.includes('--dry-run');
+  // Opt-in interactive picker. Without `--pick`, we update everything
+  // automatically. This matches what the user actually wants 95% of
+  // the time ("update my install") and removes a prompt that
+  // interrupted the flow.
+  const interactivePick = subargs.includes('--pick') || subargs.includes('-p');
 
   if (dryRun) {
     console.log(
@@ -503,13 +524,16 @@ export async function runUpdate(subargs = []) {
         chalk.dim(`  [dry-run] would stop running instances: ${labels.join(', ')}`),
       );
     } else {
-      const ok = await confirmKill(instances, { assumeYes });
-      if (!ok) {
-        console.log(chalk.yellow('\n  Update cancelled — instances still running.'));
-        console.log(chalk.dim('  Stop them with `bizar service stop` and `bizar dashboard stop`, then retry.'));
-        process.exit(1);
-      }
-      console.log(chalk.cyan('\n  Stopping running instances...'));
+      // In automatic mode we still print what we're about to kill
+      // but don't prompt — the operator asked for a full update and
+      // these processes would block the npm replace anyway.
+      const labels = [];
+      if (instances.service) labels.push(instances.service.label);
+      if (instances.dashboard) labels.push(instances.dashboard.label);
+      console.log(chalk.yellow(`  ⚠ Stopping running instances: ${labels.join(', ')}`));
+      console.log(
+        chalk.dim('  (use `--pick` to be prompted before killing in future)'),
+      );
       const kills = await killInstances(instances);
       for (const k of kills) {
         const marker = k.ok ? chalk.green('✓') : chalk.red('✗');
@@ -552,31 +576,23 @@ export async function runUpdate(subargs = []) {
   }
   console.log('');
 
-  // 3. Decide what to update.
+  // 3. Decide what to update. Default = everything. Any missing package
+  // is automatically included so a partial install gets completed.
   let selected;
-  if (forceAll || assumeYes || dryRun) {
-    // dryRun defaults to showing everything (the whole point is to see
-    // what *would* change across the board). Pass a positional list to
-    // narrow the preview.
-    selected = new Set(COMPONENTS);
-    // If the user passed positional component names alongside --dry-run,
-    // narrow the selection to those.
-    const positional = subargs.filter((a) => !a.startsWith('-'));
-    if (positional.length > 0) {
-      const valid = new Set(COMPONENTS);
-      const narrowed = positional.filter((a) => valid.has(a));
-      if (narrowed.length > 0) selected = new Set(narrowed);
-    }
-  } else if (subargs.length === 0) {
+  if (interactivePick && !dryRun && !forceAll && !assumeYes) {
     selected = await promptForUpdates(false);
   } else {
-    const valid = new Set(COMPONENTS);
-    selected = new Set(subargs.filter((a) => !a.startsWith('-') && valid.has(a)));
-    if (selected.size === 0) {
-      console.log(chalk.yellow(`  No valid components selected from: ${subargs.join(' ')}`));
-      console.log(chalk.dim('  Valid components: opencode, bizar, dash, plugin'));
-      console.log(chalk.dim('  Run `bizar update --help` for usage.'));
-      process.exit(1);
+    // Auto-select: all components + any missing one (so a broken install
+    // gets repaired automatically).
+    selected = new Set(COMPONENTS);
+    for (const k of COMPONENTS) {
+      if (cur[k] === null && latest[k] !== null) selected.add(k);
+    }
+    if (interactivePick) {
+      // --pick + --dry-run / --all / --yes → still update everything
+      // but make the auto-selection visible so the dry-run output is
+      // informative.
+      console.log(chalk.dim(`  Auto-selecting all components (--pick ignored due to flags).`));
     }
   }
 

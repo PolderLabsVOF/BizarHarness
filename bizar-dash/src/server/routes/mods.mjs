@@ -2,8 +2,10 @@
  * src/server/routes/mods.mjs
  *
  * /api/mods                              — list
+ * /api/mods/registry                     — fetch available mods from public registry
+ * /api/mods/audit                        — tail the mod audit log
  * /api/mods/:id                          — metadata
- * /api/mods (POST)                       — install from path
+ * /api/mods (POST)                       — install from path OR registry id
  * /api/mods/:id (PUT)                    — enable/disable
  * /api/mods/:id (DELETE)                 — uninstall
  * /api/mods/:id/files                    — file tree
@@ -18,8 +20,9 @@
  * we declare it before /mods/:id to be safe.
  */
 import { Router } from 'express';
-import { existsSync } from 'node:fs';
-import { resolve, relative } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { resolve, relative, join } from 'node:path';
+import { homedir } from 'node:os';
 import { modsLoader } from '../mods-loader.mjs';
 import { wrap } from './_shared.mjs';
 
@@ -31,6 +34,72 @@ export function createModsRouter() {
 
   router.get('/mods', wrap(async (_req, res) => {
     res.json({ mods: modsLoader.list() });
+  }));
+
+  // /mods/registry MUST come before /mods/:id — otherwise Express would
+  // match "registry" as an :id value.
+  router.get('/mods/registry', wrap(async (_req, res) => {
+    const installed = new Set(modsLoader.list().map((m) => m.id));
+    try {
+      const registry = await modsLoader.fetchRegistry();
+      // Annotate each entry with installed flag and (if installed) the
+      // local version so the dashboard can show upgrade hints.
+      const mods = (registry.mods || []).map((m) => {
+        const local = installed.has(m.id) ? modsLoader.get(m.id) : null;
+        return {
+          ...m,
+          installed: local !== null,
+          installedVersion: local ? local.version : null,
+          upgradeAvailable:
+            local && local.version !== m.latest ? m.latest : null,
+        };
+      });
+      res.json({
+        registry: {
+          version: registry.version,
+          updatedAt: registry.updatedAt,
+          source: modsLoader.getRegistryUrl(),
+        },
+        mods,
+      });
+    } catch (err) {
+      res.status(502).json({
+        error: 'registry_unreachable',
+        message: err.message,
+        registryUrl: modsLoader.getRegistryUrl(),
+      });
+    }
+  }));
+
+  // /mods/audit — tail the mod audit log. Filters by mod id if provided.
+  router.get('/mods/audit', wrap(async (req, res) => {
+    const logPath = join(homedir(), '.cache', 'bizar', 'logs', 'mod-audit.log');
+    const modFilter = req.query?.mod;
+    const limit = Math.min(parseInt(req.query?.limit || '200', 10) || 200, 2000);
+    if (!existsSync(logPath)) {
+      res.json({ entries: [], logPath, modFilter });
+      return;
+    }
+    let text;
+    try {
+      text = readFileSync(logPath, 'utf8');
+    } catch (err) {
+      res.status(500).json({ error: 'read_failed', message: err.message });
+      return;
+    }
+    const lines = text.split(/\r?\n/).filter(Boolean).reverse();
+    const out = [];
+    for (const line of lines) {
+      if (out.length >= limit) break;
+      try {
+        const entry = JSON.parse(line);
+        if (modFilter && entry.mod !== modFilter) continue;
+        out.push(entry);
+      } catch {
+        /* skip malformed lines */
+      }
+    }
+    res.json({ entries: out.reverse(), logPath, modFilter });
   }));
 
   // /mods/views MUST come before /mods/:id — otherwise Express would
@@ -50,13 +119,32 @@ export function createModsRouter() {
   }));
 
   router.post('/mods', wrap(async (req, res) => {
-    const path = req.body?.path;
-    if (!path) {
-      res.status(400).json({ error: 'bad_request', message: 'path is required' });
+    // Two install paths:
+    //   { path: "/local/path" }       — install from a local directory
+    //   { id: "registry-id" }         — install from the public registry
+    if (req.body?.id) {
+      try {
+        const mod = await modsLoader.installFromRegistry(req.body.id);
+        res.status(201).json(mod);
+      } catch (err) {
+        res.status(500).json({ error: 'install_failed', message: err.message });
+      }
       return;
     }
-    const mod = modsLoader.installFromPath(path);
-    res.status(201).json(mod);
+    const path = req.body?.path;
+    if (!path) {
+      res.status(400).json({
+        error: 'bad_request',
+        message: 'either "id" (registry install) or "path" (local install) is required',
+      });
+      return;
+    }
+    try {
+      const mod = modsLoader.installFromPath(path);
+      res.status(201).json(mod);
+    } catch (err) {
+      res.status(500).json({ error: 'install_failed', message: err.message });
+    }
   }));
 
   router.put('/mods/:id', wrap(async (req, res) => {

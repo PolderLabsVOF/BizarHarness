@@ -90,7 +90,7 @@ function isPortFree(net, port) {
   });
 }
 
-async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot } = {}) {
+async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot, bg = false } = {}) {
   const { createServer } = await import('./server/server.mjs');
   const { launchBrowser } = await import('./server/browser.mjs');
 
@@ -128,28 +128,49 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot 
   const url = bindHost === '127.0.0.1' || bindHost === 'localhost'
     ? `http://localhost:${usePort}/`
     : `http://${bindHost}:${usePort}/`;
-  await launchBrowser(url);
   console.log(`Bizar dashboard: ${url} (bind: ${bindHost})`);
-  console.log('Press Ctrl-C to stop the dashboard.');
-
-  let shuttingDown = false;
-  const cleanup = () => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    try { close(); } catch { /* ignore */ }
-    try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
-    try { unlinkSync(PID_FILE); } catch { /* ignore */ }
-  };
-  const handleSignal = () => {
-    cleanup();
-    process.exit(0);
-  };
-  process.once('SIGINT', handleSignal);
-  process.once('SIGTERM', handleSignal);
-
-  await new Promise(() => {});
-  // Caller keeps the process alive
+  if (!bg) {
+    // Foreground mode: try to launch the browser; then block on a
+    // signal so the process keeps running until the operator hits
+    // Ctrl-C (or `bizar stop`).
+    launchBrowser(url).catch(() => {});
+    console.log('Press Ctrl-C to stop the dashboard.');
+    let shuttingDown = false;
+    const cleanup = () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      try { close(); } catch { /* ignore */ }
+      try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
+      try { unlinkSync(PID_FILE); } catch { /* ignore */ }
+    };
+    const handleSignal = () => {
+      cleanup();
+      process.exit(0);
+    };
+    process.once('SIGINT', handleSignal);
+    process.once('SIGTERM', handleSignal);
+    await new Promise(() => {});
+    return { url, port: usePort, close };
+  }
+  // Background mode: do NOT launch a browser (the caller already detached),
+  // do NOT block on a signal. The caller (detachAfterBoot) decides how to
+  // keep this process alive (or not) once we return.
   return { url, port: usePort, close };
+}
+
+/**
+ * Called after startDashboard returns in background mode. The server is
+ * listening and the PID/PORT files are written. We intentionally keep
+ * the process alive (a Node process with nothing keeping it busy exits
+ * once the event loop is empty), but detach stdio and ignore signals so
+ * the launching shell can exit cleanly while the dashboard keeps
+ * serving.
+ */
+function detachAfterBoot() {
+  console.log(`Detached. Use 'bizar dash stop' to terminate, 'bizar dash status' to check.`);
+  // Don't exit — the server keeps the event loop busy. But stop
+  // responding to stdin so the parent shell can close.
+  if (process.stdin && process.stdin.pause) process.stdin.pause();
 }
 
 async function startInBackground(args) {
@@ -300,8 +321,17 @@ async function main() {
     const rest = args.slice(1);
     const skipWeb = rest.includes('--no-web');
     await runTui({ launchWeb: !skipWeb });
+  } else if (args[0] === 'start' && (args.includes('--bg') || args.includes('--detach'))) {
+    // `bizar start --bg` (or --detach) — start in background and return.
+    // MUST be matched before the plain `start` branch or the --bg flag
+    // is ignored and we run the dashboard in the foreground.
+    const portIdx = args.indexOf('--port');
+    const bgPort = portIdx >= 0 ? parseInt(args[portIdx + 1], 10) : undefined;
+    const bgOpts = { bg: true, ...(Number.isFinite(bgPort) ? { port: bgPort } : {}) };
+    await startDashboard(bgOpts).then(() => detachAfterBoot());
   } else if (args.includes('--bg') || args.includes('--detach')) {
-    await startInBackground(['start']);
+    // Bare `bizar --bg` / `bizar --detach` — same intent.
+    await startDashboard({ bg: true }).then(() => detachAfterBoot());
   } else if (args.includes('--web-only')) {
     await startDashboard(portOpts);
   } else if (args[0] === 'start' || args.length === 0) {

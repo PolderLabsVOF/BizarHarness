@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.15.1 — `bizar update` defaults to automatic everything + `bizar dash start --bg` fix
+
+> **Bug fix + UX:** `bizar update` no longer prompts. It updates every component (opencode + bizar + dash + plugin), auto-installs any missing one, kills running instances with a notice, re-runs the install script, restarts the dashboard, and runs `bizar doctor`. Opt into the per-component picker with `--pick`.
+
+### Highlights
+
+- **`bizar update` is now automatic by default.** Running plain `bizar update` updates all 4 components in one shot with no prompts. Any missing package (e.g. dashboard never installed) is detected and installed automatically so a broken install gets repaired. Run `bizar update --pick` to get the legacy checkbox picker. `--dry-run` still previews everything without touching anything.
+- **Auto-kill without confirmation.** The legacy `--yes`/`-y`/`--force` flags are still respected, but they're no longer required to kill running instances — the update just kills them with a brief notice. Use `--pick` if you want to be prompted first.
+- **`bizar dash start --bg` fix.** v3.15.0 shipped the Graph tab and routes but the installed dashboard package (`@polderlabs/bizar-dash` v3.12.x) couldn't see them because the file order in `cli.mjs` matched `args[0] === 'start'` BEFORE checking `args.includes('--bg')`, so `--bg` was silently ignored and the dashboard ran in the foreground. v3.13.0 of the dashboard (co-released) fixes this by reordering the dispatch AND adding a `bg` option to `startDashboard` that returns after the PID/PORT files are written instead of blocking on a signal handler.
+
+### Companion release
+
+- `@polderlabs/bizar-dash` v3.13.0 — Graph tab + `--bg` fix. Co-released.
+- `@polderlabs/bizar-plugin` v0.9.0 — unchanged.
+
+### Files changed
+
+```
+M cli/update.mjs                      (default to all + auto-install missing + skip confirmation prompts)
+M cli/bin.mjs                          (refresh showUpdateHelp, main help line, --bg flow now reaches dashboard's bg-aware startDashboard)
+```
+
+### Migration
+
+- `bizar update` with no args now updates everything. If you want the old per-component picker, use `bizar update --pick`.
+- `bizar update --yes` / `-y` / `--force` still work as no-op (already automatic).
+- `bizar update --dry-run` still previews without installing.
+
 ## v3.15.0 — Knowledge graph in the dashboard (offline build + viewable HTML)
 
 > **Additive:** New dashboard tab "Graph" embeds the interactive graphify visualization (`graph.html`). `bizar graph build` now works end-to-end without an LLM key via a code-only AST cache fallback. Plugin: `@polderlabs/bizar-plugin` v0.9.0.

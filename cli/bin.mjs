@@ -84,7 +84,7 @@ function showHelp() {
     plan <subcommand>  Manage visual plans
     graph               Per-project knowledge graph (powered by graphify)
     test-gate           Detect & run the project's test suite
-    update              Update opencode, bizar, and/or bizar-plugin
+    update              Auto-update everything (opencode + bizar + dash + plugin)
     service             Manage the background service daemon
     bg <subcommand>     Manage background agents (list/view/kill/logs)
     dash <subcommand>   Manage the dashboard (start/stop/status/tui)
@@ -182,13 +182,12 @@ function showInstallHelp() {
 
 function showUpdateHelp() {
   console.log(`
-  bizar update — Update opencode, bizar, and/or bizar-plugin
+  bizar update — Update opencode, bizar, bizar-dash, and/or bizar-plugin
 
   Usage:
-    bizar update                       Interactive prompt for components
-    bizar update --all                 Update every component
+    bizar update                       Update EVERYTHING (default; auto-kills + restarts)
+    bizar update --pick                Interactive picker (legacy per-component UI)
     bizar update opencode bizar dash    Update specific components
-    bizar update --all --yes           Update everything + auto-kill running instances
     bizar update --no-restart          Don't auto-restart the dashboard after update
     bizar update --dry-run             Print what would happen, change nothing
     bizar update --help                Show this help
@@ -199,13 +198,15 @@ function showUpdateHelp() {
     dash       @polderlabs/bizar-dash (web dashboard + TUI)
     plugin     @polderlabs/bizar-plugin (opencode plugin)
 
-  Behavior:
+  Behavior (v3.15.0+):
+    • Default = automatic. Updates all 4 components without prompting.
+      Any missing package is auto-installed so a broken install gets
+      repaired in one shot.
     • Detects running Bizar instances (background service daemon, web
       dashboard) by reading ~/.config/bizar/{service,dashboard}.pid and
-      cleaning up any stale or empty PID files.
-    • Warns the user explicitly before killing each instance. Pass
-      --yes / -y / --force to skip the confirmation (required for
-      non-interactive shells).
+      cleans up any stale or empty PID files.
+    • Auto-kills running instances with a brief notice (use --pick to
+      be prompted first instead).
     • Sends SIGTERM, waits up to 5s, escalates to SIGKILL if needed.
     • Re-runs the install script so the deployed plugin source matches
       the just-upgraded npm version (avoids the version-skew trap).
@@ -214,15 +215,12 @@ function showUpdateHelp() {
       (skipped with --no-restart).
     • Runs \`bizar doctor\` after a successful update to catch config
       regressions before opencode tries to start.
-    • If ~/.config/opencode/plugins/bizar is a dev symlink (created
-      by \`bizar dev-link\`), the copy step is skipped to preserve the
-      link. Use \`bizar dev-unlink\` first, or pass --force.
 
   Examples:
-    bizar update --all --yes           Headless full update + restart
-    bizar update dash                  Update only the dashboard
+    bizar update                       Full auto-update (recommended)
+    bizar update --dry-run             Preview what would change
+    bizar update --pick                Pick specific components
     bizar update plugin --no-restart   Plugin-only, leave dashboard alone
-    bizar update --all --dry-run       See what would change without doing it
   `);
 }
 

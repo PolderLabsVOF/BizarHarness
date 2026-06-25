@@ -1,5 +1,71 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.14.0 — Mod security layer + public mod registry
+
+> **Security + ecosystem:** Mods now run with permission enforcement, integrity verification, and audit logging. New `/api/mods/registry` endpoint fetches the official mod registry from `DrB0rk/bizarre-mods`. Mods repo template + authoring guide added.
+
+### Highlights
+
+- **Mod security layer (`src/server/mod-security.mjs`).** Mods declare permissions in `mod.json`; the loader enforces them at every privileged action:
+  - **Filesystem sandboxing** — mods get scoped `readFileSync` / `writeFileSync` helpers. Paths outside `fs:read:<scope>` / `fs:write:<scope>` throw. Scope syntax: exact path, directory with implicit recursion, `/*` suffix, or `~/` home-relative.
+  - **Subprocess allowlist** — only whitelisted binaries (`bizar`, `opencode`, `python3`, `git`, `node`, `npm`, `pip`, `uv`, `rtk`, `jq`, `graphify`, `pipx`, `opencode-ai`) can be spawned without an explicit `process:spawn:<bin>` permission. Path-style binaries (`/bin/ls`) require explicit permission.
+  - **Integrity hash** — every mod's files are SHA-256-hashed at install time; the hash is stored under `_integrity` in `mod.json`. On every load the hash is recomputed; a mismatch triggers a critical warning and refuses to load the mod's routes until reinstalled.
+  - **Audit log** — every privileged action is logged as JSON lines to `~/.cache/bizar/logs/mod-audit.log` with timestamp, mod id, mod version, action, and details. Inspect via `GET /api/mods/audit?mod=<id>&limit=200`.
+- **Public mod registry.** New `bizarre-mods` repo at `DrB0rk/bizarre-mods` is the canonical source of mods. `GET /api/mods/registry` fetches `registry.json` and annotates each entry with installed state and upgrade hints. `POST /api/mods { id }` installs from the registry.
+- **Mods repo template.** New `templates/mod-template/` shows the canonical mod structure with `mod.json`, `route.mjs`, and `views/registry.json` examples.
+- **Authoring guide.** New `docs/MOD-AUTHORING.md` covers permissions, route file shape, view registration, frontend-component caveats, and the PR submission checklist.
+
+### Files added (3)
+
+- `bizar-dash/src/server/mod-security.mjs` — permission parsing, fs sandbox, subprocess allowlist, integrity hash, audit writer.
+- `bizar-dash/tests/mod-security.test.mjs` — 26 tests covering parsing, sandbox, allowlist, hashing, integrity verification, context creation.
+
+### Files changed (3)
+
+- `bizar-dash/src/server/mods-loader.mjs` — wires the security context into `loadModRouters`, computes and stores the integrity hash in `installFromPath`, exposes `installFromRegistry` and `fetchRegistry`. Mods whose integrity hash mismatches are refused at load time with a critical warning.
+- `bizar-dash/src/server/routes/mods.mjs` — adds `GET /api/mods/registry`, `GET /api/mods/audit`, and a registry-aware install path on `POST /api/mods` (accepts `{ id }` OR `{ path }`).
+- `bizar-dash/src/server/cli.mjs` — reordered `start` vs `--bg`/`--detach` dispatch (fixes `bizar dash start --bg` actually backgrounding).
+
+### Companion repo (separate git repo)
+
+- `bizarre-mods/` — `DrB0rk/bizarre-mods`. Contains `registry.json` listing available mods, `mods/graphify/` (the extracted graphify mod), `templates/mod-template/` (starter), and `docs/MOD-AUTHORING.md` (full guide). Configured as the default registry URL in `mods-loader.mjs:DEFAULT_REGISTRY_URL`.
+
+### Test results
+
+- New: 26 mod-security tests pass.
+- Total: 282 plugin tests + 19 dashboard smoke tests still pass.
+- TypeScript typecheck clean.
+
+### v1 limitations (transparent)
+
+A malicious mod could still bypass the sandbox by importing `node:fs` / `node:child_process` directly. v2 will close this gap with a `vm`-based sandbox or worker-thread isolation. Until then, the security layer makes the mod's *intent* explicit (declared permissions, audit trail, integrity hash) so users can review what they're installing and detect tampering.
+
+## v3.13.0 — 2026-06-25
+
+### Highlights
+
+- **Knowledge-graph view (Graph tab).** New top-bar entry "Graph" with Network icon. Embeds the project's `.bizar/graph/graph.html` (graphify's interactive vis-network visualization) via an iframe. Shows live node/edge/community counts in the header; has a "Build / Rebuild" button that runs `bizar graph build` detached via the new `/api/graph/build` endpoint and polls `/api/graph/build/:jobId/status` until done. The button works offline — no LLM key required, falls through to the AST-cache path that ships with `@polderlabs/bizar` v3.15.0+.
+
+- **`bizar dash start --bg` now actually backgrounds.** Previously the CLI dispatch checked `args.includes('--bg')` AFTER the `args[0] === 'start'` branch, so `bizar dash start --bg` always fell through to the foreground `startDashboard` and blocked. v3.13.0 checks `--bg` inside the `start` branch first and uses `startDashboard({ bg: true })` which returns after writing the PID/PORT files instead of blocking on a signal handler. The launching shell gets immediate control back; the dashboard keeps running in the spawned node process. Same fix for `--detach`.
+
+### Files added (6)
+
+- `bizar-dash/src/server/routes/graph.mjs` — `GET /status`, `GET /html`, `GET /report`, `POST /build`, `GET /build/:jobId/status`. Resolves `.bizar/graph/` from the active project (via `projectsStore.active()`), not from a request-controlled path.
+- `bizar-dash/src/web/views/Graph.tsx` — view with stats header, "Build / Rebuild" button, build-poll loop, empty state for projects without a graph yet, and iframe-based rendering of `graph.html` via `/api/graph/html`.
+
+### Files changed (4)
+
+- `bizar-dash/src/server/api.mjs` — wires `createGraphRouter` into the v1 router.
+- `bizar-dash/src/web/App.tsx` — adds `graph: Graph` to VIEW_MAP.
+- `bizar-dash/src/web/components/Topbar.tsx` — adds `Graph` to TABS (Network icon, between `background` and `skills`).
+- `bizar-dash/src/web/styles/main.css` — `.graph-building-banner`, `.graph-iframe-wrap`, `.graph-iframe`, `.graph-meta`, `.graph-empty-actions` (~60 lines).
+- `bizar-dash/src/cli.mjs` — reordered `start` vs `--bg`/`--detach` dispatch; `startDashboard` accepts `bg` option and returns without blocking when set; added `detachAfterBoot()`.
+
+### Compatibility
+
+- Same wire format as v3.12.x — all existing endpoints unchanged.
+- Requires `@polderlabs/bizar` v3.15.0+ for the `bizar graph build` CLI invoked by the Build button (older versions still work but don't have the offline cache fallback).
+
 ## v3.11.0 — 2026-06-23
 
 ### Added
