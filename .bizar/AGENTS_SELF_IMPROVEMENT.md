@@ -695,3 +695,21 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Files changed**: 2 (`package.json` bumped to 3.16.2, `CHANGELOG.md` added entry). The actual change is `dist/` being rebuilt.
 
 - **Published**: `@polderlabs/bizar-dash@3.16.2` (commit ccdb3cf, tag v3.16.2-dash).
+
+## 2026-06-25 — Created github.com/DrB0rk/bizarre-mods (public registry)
+
+- **Lesson**: When the user says "create a public repo on GitHub", use `gh repo create` if it's available — it does init + push in one shot. The alternative (manual GitHub UI click + git remote add + push) is slower and error-prone. `gh` is authenticated via `~/.config/gh/hosts.yml` and the active user is `DrB0rk`. Check `gh auth status` first to confirm.
+
+- **Lesson**: A sub-directory of a parent repo (e.g. `bizarre-mods/` inside `BizarHarness/`) can become its own standalone repo, but the parent needs to untrack it first (`git rm --cached -r bizarre-mods/`) and add it to `.gitignore` so future parent commits don't re-add it. Otherwise the same files exist in two histories.
+
+- **Lesson**: `gh repo create --push --source .` does the full sequence (create + add remote + push) in one command. It also creates the default branch matching whatever branch is currently checked out (here `main`). No need to manually `git init` first if the directory is already a git repo — the `--source` flag handles it.
+
+- **Verification**:
+  - `gh repo view DrB0rk/bizarre-mods --json visibility` → PUBLIC
+  - `curl https://raw.githubusercontent.com/DrB0rk/bizarre-mods/main/registry.json` → returns the JSON
+  - `node --eval "import('./src/server/mods-loader.mjs').then(...)"` → fetches and parses the registry end-to-end
+
+- **Pattern to follow**:
+  - For any sub-repo split: (1) add path to parent `.gitignore`, (2) `git rm -r --cached <path>`, (3) commit parent cleanup, (4) `cd <path> && gh repo create Org/<name> --public --source . --push`.
+  - Always verify the raw URL is reachable AFTER the push — GitHub raw.githubusercontent.com has different caching than the API.
+  - Run a real fetch from the consuming code (the mods-loader here) to prove the contract works, not just the static URL.
