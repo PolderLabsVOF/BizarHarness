@@ -1,5 +1,40 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.15.0 — Activity log overhaul: hide from overview + full log in Settings
+
+### Highlights
+
+- **Hide from overview** — every Recent Activity card now has an X button to hide
+  it from the Overview feed. Hiding is **non-destructive**: the entry stays in
+  the full activity log, just out of the feed. A persistent "X items hidden"
+  banner with a one-click "Show them again" link surfaces the hidden set.
+- **Hide all / Show all** — two new buttons in the activity header. "Hide all"
+  hides every currently-visible item; "Show all" restores everything.
+- **Settings → Activity Log** — a new full-history card in Settings with a
+  filter box, "show hidden" toggle, restore-one / restore-all actions, and a
+  tabular log (200 rows visible, scroll for more). Backed by
+  `~/.cache/bizar/activity-hidden.json` for persistence.
+- **New REST surface** — `/api/activity` (full log), `/api/activity/hidden`
+  (list), `/api/activity/hide` (POST + DELETE + DELETE/:key).
+
+### Files added (1)
+
+- `src/server/routes/activity.mjs`
+
+### Files changed (4)
+
+- `src/server/api.mjs` — mounts `createActivityRouter({ state })`.
+- `src/web/views/Overview.tsx` — per-item hide button + banner + hide-all.
+- `src/web/views/Settings.tsx` — new `ActivityLogCard` (filter + restore).
+- `src/web/styles/main.css` — `.overview-feed-head-actions`,
+  `.activity-hidden-banner`, `.activity-feed-row-main`, `.activity-feed-hide-btn`,
+  `.activity-log-toolbar`, `.activity-log-table`, etc.
+
+### Test results
+
+- TypeScript: `tsc --noEmit` passes.
+- Mod-security: 26/26 tests still pass (no regression from v3.14.0).
+
 ## v3.14.0 — Mod security layer + public mod registry
 
 > **Security + ecosystem:** Mods now run with permission enforcement, integrity verification, and audit logging. New `/api/mods/registry` endpoint fetches the official mod registry from `DrB0rk/bizarre-mods`. Mods repo template + authoring guide added.

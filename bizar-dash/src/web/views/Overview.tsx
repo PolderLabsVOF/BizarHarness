@@ -24,6 +24,9 @@ import {
   Puzzle,
   Clock,
   FolderSearch,
+  EyeOff,
+  Eye,
+  X,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -69,6 +72,69 @@ export function Overview({
     snapshot.overview?.recentActivity ?? [],
   );
   const [activityExpanded, setActivityExpanded] = useState(false);
+  // v3.15.0 — Hidden event keys are stored server-side; we just track
+  // the set in client state. Hiding does NOT delete — see Settings →
+  // Activity Log for the full feed.
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+
+  // v3.15.0 — Load hidden set once on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.get<{ hidden: string[] }>('/activity/hidden');
+        if (!cancelled) setHiddenKeys(new Set(r.hidden || []));
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // v3.15.0 — Helper: stable key per activity item
+  const itemKey = (it: ActivityItem, idx: number): string => {
+    const k = `${it.kind || ''}|${it.ts || ''}|${(it.slug as string) || (it.title as string) || ''}|${idx}`;
+    // hash to a short key (matches server-side activityKey derivation)
+    let h = 0;
+    for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
+    return Math.abs(h).toString(16).padStart(8, '0').slice(0, 16);
+  };
+
+  const onHide = async (key: string) => {
+    const next = new Set(hiddenKeys);
+    next.add(key);
+    setHiddenKeys(next);
+    try {
+      await api.post('/activity/hide', { keys: [key] });
+    } catch (err) {
+      // rollback on failure
+      const rollback = new Set(hiddenKeys);
+      setHiddenKeys(rollback);
+      toast.error(`Hide failed: ${(err as Error).message}`);
+    }
+  };
+
+  const onClearAll = async () => {
+    if (!confirm('Hide every recent activity item from the overview? The full log stays in Settings → Activity Log.')) return;
+    const all = activityItems.map((it, idx) => itemKey(it, idx));
+    const next = new Set(hiddenKeys);
+    all.forEach((k) => next.add(k));
+    setHiddenKeys(next);
+    try {
+      await api.post('/activity/hide', { keys: all });
+      toast.success(`Hidden ${all.length} item(s). Restore them in Settings → Activity Log.`);
+    } catch (err) {
+      toast.error(`Clear failed: ${(err as Error).message}`);
+    }
+  };
+
+  const onRestoreAll = async () => {
+    setHiddenKeys(new Set());
+    try {
+      await api.del('/activity/hide');
+      toast.success('All hidden activity restored to the overview.');
+    } catch (err) {
+      toast.error(`Restore failed: ${(err as Error).message}`);
+    }
+  };
 
   // v3.7.0 — Sync initial snapshot data
   useEffect(() => {
@@ -265,12 +331,35 @@ export function Overview({
       <div className="overview-feed">
         <div className="overview-feed-head">
           <h2>Recent activity</h2>
-          {activityItems.length > 8 && (
-            <Button variant="ghost" size="sm" onClick={() => setActivityExpanded((v) => !v)}>
-              {activityExpanded ? 'Show less' : 'Show all'}
-            </Button>
-          )}
+          <div className="overview-feed-head-actions">
+            {hiddenKeys.size > 0 && (
+              <Button variant="ghost" size="sm" onClick={onRestoreAll} title="Restore hidden items to this overview">
+                <Eye size={12} /> Show {hiddenKeys.size} hidden
+              </Button>
+            )}
+            {activityItems.length > 8 && (
+              <Button variant="ghost" size="sm" onClick={() => setActivityExpanded((v) => !v)}>
+                {activityExpanded ? 'Show less' : 'Show all'}
+              </Button>
+            )}
+            {activityItems.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={onClearAll} title="Hide every item from the overview (full log kept)">
+                <EyeOff size={12} /> Hide all
+              </Button>
+            )}
+          </div>
         </div>
+        {hiddenKeys.size > 0 && (
+          <div className="activity-hidden-banner" role="status">
+            <span>
+              <EyeOff size={12} style={{ verticalAlign: -2, marginRight: 6 }} />
+              {hiddenKeys.size} item{hiddenKeys.size === 1 ? '' : 's'} hidden from the overview.
+            </span>
+            <Button variant="ghost" size="sm" onClick={onRestoreAll}>
+              <Eye size={12} /> Show them again
+            </Button>
+          </div>
+        )}
         {activityItems.length === 0 ? (
           <div className="muted" style={{ padding: '24px 0', fontSize: 13 }}>
             No activity yet. Use the chat above or invoke a Bizar command to start a feed.
@@ -278,13 +367,19 @@ export function Overview({
         ) : (
           <div className={cn('activity-feed-list-wrap', !activityExpanded && 'activity-feed-list-wrap-collapsed')}>
             <div className="activity-feed-list">
-              {activityItems.slice(0, 30).map((it, idx) => (
-                <ActivityFeedItem
-                  key={`${it.ts}-${idx}`}
-                  item={it}
-                  onNavigate={setActiveTab}
-                />
-              ))}
+              {activityItems.slice(0, 30).map((it, idx) => {
+                const k = itemKey(it, idx);
+                if (hiddenKeys.has(k)) return null;
+                return (
+                  <ActivityFeedItem
+                    key={`${it.ts}-${idx}`}
+                    item={it}
+                    activityKey={k}
+                    onNavigate={setActiveTab}
+                    onHide={onHide}
+                  />
+                );
+              })}
             </div>
             {!activityExpanded && activityItems.length > 8 && <div className="activity-feed-fade" aria-hidden="true" />}
           </div>
@@ -663,10 +758,14 @@ function activityNavTarget(kind: string): string | null {
 // v3.7.0 — Activity card component
 function ActivityFeedItem({
   item,
+  activityKey,
   onNavigate,
+  onHide,
 }: {
   item: ActivityItem;
+  activityKey: string;
   onNavigate: (tab: string) => void;
+  onHide: (key: string) => void;
 }) {
   const severity = activitySeverity(item);
   const Icon = activityIcon(item.kind || '');
@@ -681,22 +780,33 @@ function ActivityFeedItem({
     'var(--accent)';
 
   return (
-    <button
-      type="button"
-      className={cn('activity-feed-row', `activity-feed-row-${severity}`)}
-      onClick={() => { if (navTarget) onNavigate(navTarget); }}
-      title={navTarget ? `Open ${navTarget}` : title}
-    >
-      <div className="activity-feed-icon" style={{ color: accentColor }}>
-        <Icon size={14} />
-      </div>
-      <div className="activity-feed-body">
-        <div className="activity-feed-title-row">
-          <div className="activity-feed-title">{title}</div>
-          <div className="activity-feed-time text-xs muted tabular-nums">{formatRelativeTime(item.ts)}</div>
+    <div className={cn('activity-feed-row', `activity-feed-row-${severity}`)}>
+      <button
+        type="button"
+        className="activity-feed-row-main"
+        onClick={() => { if (navTarget) onNavigate(navTarget); }}
+        title={navTarget ? `Open ${navTarget}` : title}
+      >
+        <div className="activity-feed-icon" style={{ color: accentColor }}>
+          <Icon size={14} />
         </div>
-        <div className="activity-feed-summary text-sm">{msg}</div>
-      </div>
-    </button>
+        <div className="activity-feed-body">
+          <div className="activity-feed-title-row">
+            <div className="activity-feed-title">{title}</div>
+            <div className="activity-feed-time text-xs muted tabular-nums">{formatRelativeTime(item.ts)}</div>
+          </div>
+          <div className="activity-feed-summary text-sm">{msg}</div>
+        </div>
+      </button>
+      <button
+        type="button"
+        className="activity-feed-hide-btn"
+        onClick={() => onHide(activityKey)}
+        title="Hide this from the overview (kept in Settings → Activity Log)"
+        aria-label="Hide from overview"
+      >
+        <X size={12} />
+      </button>
+    </div>
   );
 }

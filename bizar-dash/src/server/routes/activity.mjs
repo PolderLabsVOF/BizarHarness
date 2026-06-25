@@ -1,237 +1,106 @@
 /**
  * src/server/routes/activity.mjs
  *
- * /api/activity                          — recent events
- * /api/activity (POST)                   — append event
- * /api/activity/stream (GET, SSE)        — live snapshot stream
- * /api/activity/session                  — scoped to recent hour
- * /api/comments (POST)                   — generic node-scoped comment
- * /api/nodes/:nodeId/tasks (POST)        — create task from canvas node
+ * /api/activity                            — full activity log (newest first)
+ * /api/activity/hidden                     — list of hidden event keys (for overview hide)
+ * /api/activity/hide                      — POST { keys: [...] }  add to hidden
+ * /api/activity/hide                      — DELETE                  clear all hidden
+ * /api/activity/hide/:key                 — DELETE                  unhide one
  *
- * The SSE route is intentionally NOT wrapped in `wrap()` — a thrown
- * error inside a long-lived stream should tear down the connection,
- * not bubble back as a 500 JSON response. Errors are swallowed and
- * the loop dies on socket close.
+ * "Hidden" events are NOT deleted — they're just excluded from the
+ * Overview feed. The full log is still queryable at /api/activity.
+ *
+ * Storage: ~/.cache/bizar/activity-hidden.json
+ *   Shape: { hidden: string[] }
+ *
+ * Event key = sha1(kind|ts|slug) — stable across reloads because it's
+ * derived from event content, not a synthetic id.
  */
 import { Router } from 'express';
-import { isAllowedDashboardOriginForRequest } from '../auth.mjs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { wrap } from './_shared.mjs';
+import { state } from '../state.mjs';
+
+const HIDDEN_PATH = join(homedir(), '.cache', 'bizar', 'activity-hidden.json');
+
+function readHidden() {
+  if (!existsSync(HIDDEN_PATH)) return { hidden: [] };
+  try {
+    return JSON.parse(readFileSync(HIDDEN_PATH, 'utf8'));
+  } catch {
+    return { hidden: [] };
+  }
+}
+
+function writeHidden(data) {
+  mkdirSync(join(homedir(), '.cache', 'bizar'), { recursive: true });
+  writeFileSync(HIDDEN_PATH, JSON.stringify(data, null, 2), 'utf8');
+}
+
+/** Compute a stable key for an activity event. */
+export function activityKey(item) {
+  const h = createHash('sha1');
+  h.update(String(item.kind || ''));
+  h.update('|');
+  h.update(String(item.ts || ''));
+  h.update('|');
+  h.update(String(item.slug || item.title || ''));
+  return h.digest('hex').slice(0, 16);
+}
 
 /**
- * @param {object} deps
- * @param {object} deps.state
+ * @param {object} _deps
+ * @param {object} _deps.state
  * @returns {import('express').Router}
  */
-export function createActivityRouter({ state }) {
+export function createActivityRouter({ state: _state } = {}) {
   const router = Router();
 
-  router.get('/activity', wrap(async (req, res) => {
-    const { activityLog } = await import('../activity-log.mjs');
-    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '100', 10) || 100));
-    const kind = req.query.kind ? String(req.query.kind) : null;
-    const nodeId = req.query.nodeId ? String(req.query.nodeId) : null;
-    let events;
-    if (nodeId) events = activityLog.forNode(nodeId, limit);
-    else if (kind) events = activityLog.byKind(kind, limit);
-    else events = activityLog.recent(limit);
-    res.json({ events, stats: activityLog.stats() });
+  // GET /activity — full log (newest first)
+  router.get('/activity', wrap(async (_req, res) => {
+    const overview = state.getOverview();
+    const items = Array.isArray(overview.recentActivity)
+      ? [...overview.recentActivity]
+      : [];
+    items.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+    res.json({ items, total: items.length });
   }));
 
-  router.post('/activity', wrap(async (req, res) => {
-    const { activityLog } = await import('../activity-log.mjs');
-    const event = req.body || {};
-    if (!event.kind) {
-      res.status(400).json({ error: 'bad_request', message: 'kind required' });
-      return;
-    }
-    const record = activityLog.append(event);
-    res.status(201).json(record);
+  // GET /activity/hidden — list of hidden event keys
+  router.get('/activity/hidden', wrap(async (_req, res) => {
+    res.json(readHidden());
   }));
 
-  // ── /api/activity/stream (v3.5.6) ─────────────────────────────────────
-  // Server-Sent Events stream of recent activity. Sends:
-  //   - 'snapshot' on connect with the current 30-entry window
-  //   - 'snapshot' again whenever a new entry is appended (polled at 1Hz)
-  //   - 'heartbeat' comment line every 25s so proxies don't drop the conn
-  // The frontend subscribes via `new EventSource('/api/activity/stream')`
-  // and replaces its array on each 'snapshot' event.
-  router.get('/activity/stream', (req, res) => {
-    const origin = req.headers.origin;
-    if (!isAllowedDashboardOriginForRequest(req)) {
-      res.status(403).json({ error: 'forbidden', message: 'origin not allowed' });
+  // POST /activity/hide — add keys to hidden list
+  router.post('/activity/hide', wrap(async (req, res) => {
+    const keys = Array.isArray(req.body?.keys) ? req.body.keys : [];
+    if (keys.length === 0) {
+      res.status(400).json({ error: 'bad_request', message: 'keys[] required' });
       return;
     }
-    // Tell Express / proxies this is an event stream
-    res.status(200);
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
-    // CORS for SSE — echo origin so the Vite dev server can subscribe
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
-    // Flush headers immediately
-    if (typeof res.flushHeaders === 'function') res.flushHeaders();
-
-    const writeSse = (event, data, id) => {
-      try {
-        if (id !== undefined && id !== null) res.write(`id: ${id}\n`);
-        res.write(`event: ${event}\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      } catch {
-        /* socket closed mid-write — the close handler will clean up */
-      }
-    };
-    const writeComment = (text) => {
-      try { res.write(`: ${text}\n\n`); } catch { /* ignore */ }
-    };
-
-    let lastFingerprint = '';
-    let closed = false;
-
-    const computeFingerprint = (entries) => {
-      if (!Array.isArray(entries) || entries.length === 0) return 'empty';
-      const first = entries[0];
-      return `${entries.length}:${first.ts || ''}:${first.kind || ''}:${first.id || ''}`;
-    };
-
-    const tick = () => {
-      if (closed) return;
-      try {
-        const overview = state.getOverview();
-        const recent = Array.isArray(overview.recentActivity) ? overview.recentActivity : [];
-        const fp = computeFingerprint(recent);
-        if (fp !== lastFingerprint) {
-          lastFingerprint = fp;
-          writeSse('snapshot', { events: recent, generatedAt: overview.generatedAt });
-        }
-      } catch {
-        /* best-effort — keep the stream alive */
-      }
-    };
-
-    // Initial snapshot
-    try {
-      const overview = state.getOverview();
-      const recent = Array.isArray(overview.recentActivity) ? overview.recentActivity : [];
-      lastFingerprint = computeFingerprint(recent);
-      writeSse('snapshot', { events: recent, generatedAt: overview.generatedAt });
-      writeComment('initial snapshot sent');
-    } catch {
-      /* initial write can fail on closed sockets; close handler will fire */
-    }
-
-    const pollInterval = setInterval(tick, 1000);
-    const hbInterval = setInterval(() => writeComment('heartbeat'), 25000);
-
-    const cleanup = () => {
-      if (closed) return;
-      closed = true;
-      clearInterval(pollInterval);
-      clearInterval(hbInterval);
-      try { res.end(); } catch { /* ignore */ }
-    };
-
-    req.on('close', cleanup);
-    req.on('error', cleanup);
-    res.on('error', cleanup);
-  });
-
-  // ── /api/activity/session (v3.3.0) ────────────────────────────────
-  // Returns activity events scoped to the "current session". A
-  // session is the most recent hour of activity, or — if the
-  // caller provides `?since=<iso>` — the events since that
-  // timestamp. Used by the Activity tab to drive the new
-  // "session timeline" view.
-  router.get('/activity/session', wrap(async (req, res) => {
-    const { activityLog } = await import('../activity-log.mjs');
-    const sinceParam = req.query.since ? new Date(String(req.query.since)) : null;
-    const sinceTs = sinceParam && !Number.isNaN(sinceParam.getTime())
-      ? sinceParam.getTime()
-      : Date.now() - 60 * 60 * 1000; // 1h default
-    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '200', 10) || 200));
-    const recent = activityLog.recent(limit * 4);
-    const events = recent
-      .filter((e) => {
-        const t = e.ts ? new Date(e.ts).getTime() : 0;
-        return t >= sinceTs;
-      })
-      .slice(0, limit);
-    // Group events by "agent involved" — the agent name, when
-    // available, lives in `agent`, `actor`, `assignee`, or
-    // `nodeId="agent:<name>"`. The Activity canvas uses this to
-    // filter the graph down to session participants.
-    const agents = new Set();
-    for (const e of events) {
-      if (typeof e.agent === 'string') agents.add(e.agent);
-      if (typeof e.assignee === 'string') agents.add(e.assignee);
-      if (typeof e.actor === 'string') agents.add(e.actor);
-      if (typeof e.nodeId === 'string' && e.nodeId.startsWith('agent:')) {
-        agents.add(e.nodeId.slice('agent:'.length));
-      }
-      if (typeof e.taskId && e.subtaskIds) {
-        // task.delegated event — has subtaskIds
-      }
-    }
-    res.json({
-      events,
-      since: new Date(sinceTs).toISOString(),
-      agents: Array.from(agents),
-      stats: activityLog.stats(),
-    });
+    const data = readHidden();
+    const set = new Set(data.hidden);
+    for (const k of keys) if (typeof k === 'string') set.add(k);
+    data.hidden = Array.from(set);
+    writeHidden(data);
+    res.json(data);
   }));
 
-  // ── /api/comments (v3.2.0 — node-scoped, generic) ──────────────────
-  // Comments on any node (agent, task, bg instance, etc.). Stored in
-  // the activity log so they show up in the global stream and the
-  // per-node drilldown.
-  router.post('/comments', wrap(async (req, res) => {
-    const { activityLog } = await import('../activity-log.mjs');
-    const { nodeId, text, author } = req.body || {};
-    if (!nodeId || !text) {
-      res.status(400).json({ error: 'bad_request', message: 'nodeId and text required' });
-      return;
-    }
-    const record = activityLog.append({
-      kind: 'node.comment',
-      nodeId,
-      author: author || 'user',
-      text: String(text).slice(0, 4000),
-    });
-    res.status(201).json(record);
+  // DELETE /activity/hide — clear all hidden
+  router.delete('/activity/hide', wrap(async (_req, res) => {
+    writeHidden({ hidden: [] });
+    res.json({ hidden: [] });
   }));
 
-  // v3.2.0 — Create a task from a canvas node (used by the Activity
-  // tab to spin up follow-up tasks).
-  router.post('/nodes/:nodeId/tasks', wrap(async (req, res) => {
-    const { tasksStore } = await import('../tasks-store.mjs');
-    const { readActiveProjectId } = await import('./_shared.mjs');
-    const projectId = req.body?.projectId || readActiveProjectId();
-    const { title, description, priority, assignee } = req.body || {};
-    if (!title) {
-      res.status(400).json({ error: 'bad_request', message: 'title required' });
-      return;
-    }
-    const task = await tasksStore.create(projectId, {
-      title,
-      description: description || '',
-      priority: ['low', 'normal', 'high'].includes(priority) ? priority : 'normal',
-      assignee: assignee || null,
-      tags: [`node:${req.params.nodeId}`],
-    });
-    // Record in the activity log so it shows up under this node.
-    try {
-      const { activityLog } = await import('../activity-log.mjs');
-      activityLog.append({
-        kind: 'node.task',
-        nodeId: req.params.nodeId,
-        taskId: task.id,
-        title: task.title,
-      });
-    } catch { /* best-effort */ }
-    res.status(201).json(task);
+  // DELETE /activity/hide/:key — unhide one
+  router.delete('/activity/hide/:key', wrap(async (req, res) => {
+    const data = readHidden();
+    data.hidden = data.hidden.filter((k) => k !== req.params.key);
+    writeHidden(data);
+    res.json(data);
   }));
 
   return router;
