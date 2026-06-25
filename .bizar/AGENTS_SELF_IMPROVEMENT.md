@@ -674,3 +674,24 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Published**: `@polderlabs/bizar-dash@3.16.1` (commit d34e0d3, tag v3.16.1-dash).
 
 - **Action item**: Add a `bizar-dash/tests/routes-smoke.test.mjs` that imports every router file (activity, mods, providers, settings, etc.) to catch module-resolution regressions. Should take < 100 lines and run in < 1s.
+
+## 2026-06-25 — v3.16.2 rebuild dist/ so v3.16.0 UI actually renders
+
+- **Lesson**: This is a HUGE miss. v3.15.0 → v3.16.1 all shipped `src/` changes without rebuilding `dist/`. The dashboard's web UI is served from `dist/` (Vite output), NOT `src/`. So:
+  - v3.15.0 activity log overhaul: invisible (only the new /api routes were live)
+  - v3.16.0 settings subnav, chat floating input, mods registry, auto-detect banner: ALL invisible
+  - User reported "I don't see any of the dash UI changes" — exactly correct
+  - The user might have been seeing the old UI for 2 versions while I claimed everything was shipped
+
+- **Lesson**: For a Vite-based npm package, the publish step is `npm run build && npm publish`. The package.json `files` array includes `dist/` so the tarball picks up whatever's there. Editing `src/` without `vite build` is like editing source code in C without re-running the compiler. I never even thought about this — typecheck passed, mod-security tests passed, "ship it" felt safe. It wasn't.
+
+- **Lesson**: The dashboard's test suite (`bun test tests/mod-security.test.mjs`) does NOT exercise the build step or the served assets. So even if every test passes, the user can still see stale UI. The check should be: after `vite build`, grep `dist/assets/main-*.css` for a representative new class (e.g. `settings-subnav`). If the count is 0, the build didn't include the source. This takes < 1 second.
+
+- **Pattern to follow**:
+  - In `bizar-dash/`: `npm run typecheck && npm run build && verify dist contains new classes && npm publish`. The verify step is mandatory.
+  - Add a pre-publish hook or just a one-liner shell check: `grep -c "settings-subnav" dist/assets/main-*.css` must be > 0 if Settings.tsx has section IDs.
+  - When making UI changes, the user-visible feedback loop is `npm run build` → restart dashboard → visual check. Without that loop, even "obvious" changes can be invisible for a release.
+
+- **Files changed**: 2 (`package.json` bumped to 3.16.2, `CHANGELOG.md` added entry). The actual change is `dist/` being rebuilt.
+
+- **Published**: `@polderlabs/bizar-dash@3.16.2` (commit ccdb3cf, tag v3.16.2-dash).
