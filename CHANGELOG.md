@@ -1,5 +1,50 @@
 # Changelog
 
+## v3.20.8 — Remove agent-browser; ship browser-harness as canonical
+
+> **Cleanup + integration.** v3.20.7 integrated the browser-harness Python tool (https://github.com/browser-use/browser-harness) as the canonical browser-automation path. v3.20.8 removes every `agent-browser` reference (npm package + bin shim + shipped config + user's installed mirrors) so the dashboard ships with a single, working browser-automation path.
+
+### Highlights
+
+- **Uninstalled `agent-browser` (npm package).** `npm uninstall -g agent-browser` removes the package + bin shim; `which agent-browser` is now empty. The package was previously installed at `~/.local/npm/lib/node_modules/agent-browser@0.28.0`.
+- **`browser-harness` (Python via uv) is the sole browser-automation path.** The browser-harness Bizar agent now exclusively uses the Python tool. The `agent_browser_*` MCP fallback is gone from the agent's docs.
+- **Swept every config + doc + skill.** Updated 4 source files (`config/agents/browser-harness.md`, `config/agents/_shared/AGENT_BASELINE.md`, `config/AGENTS.md`, `install.sh`) + synced 3 user-installed mirrors (`~/.config/opencode/AGENTS.md`, `~/.config/opencode/agents/_shared/AGENT_BASELINE.md`, `~/.opencode/skills/agent-baseline/SKILL.md`).
+- **Drift test added** (`bizar-dash/tests/no-agent-browser.node.test.mjs`): walks `config/`, `cli/`, `bizar-dash/src/`, `install.sh` for any `agent-browser` / `agent_browser_*` reference and fails with the violating files. Historical mentions in `CHANGELOG.md` and `.bizar/AGENTS_SELF_IMPROVEMENT.md` are allow-listed.
+
+### Files affected
+
+- `config/agents/browser-harness.md` — full rewrite of Tools + Workflow sections (now uses `browser-harness <<'PY' ... PY` heredoc exclusively)
+- `config/agents/_shared/AGENT_BASELINE.md` — "Browser interaction" + "Images and visual content" sections updated
+- `config/AGENTS.md` — same
+- `install.sh` — `browser-harness` is required (was "opt-in (some users prefer agent-browser MCP)")
+- `bizar-dash/tests/no-agent-browser.node.test.mjs` (new) — drift test
+
+### Pattern
+
+When removing a tool from the system, sweep across source + shipped-skill + user-installed mirrors. The user's `~/.config/opencode/` doesn't auto-refresh when the source changes; the only safe cleanup is `cp` from source. Drift tests beat manual grep — future contributors who re-introduce `agent-browser` get an immediate, actionable error at test time.
+
+## v3.20.7 — Browser-harness integration + dashboard duplicate detection + vidarr model fix
+
+> **Integration + bug fix + model audit.** Three changes: (1) integrate https://github.com/browser-use/browser-harness as the canonical browser-automation tool, replacing the previous reliance on the agent-browser MCP; (2) detect and clean up duplicate dashboard processes that lingered across `bizar dash start --bg` invocations; (3) point vidarr at `minimax/MiniMax-M3` (was `openai/gpt-5.5`), eliminating the misleading "Anthropic API key missing" error.
+
+### Highlights
+
+- **Browser-harness integration** — `uv tool install --python 3.12 --upgrade --force browser-harness` (v0.1.3). Skill registered at `~/.opencode/skills/browser-harness/SKILL.md`. New `cli/browser-harness-up.sh` chrome lifecycle wrapper that survives shell exit via `setsid + nohup + disown` and uses `chrome-headless-shell` from the puppeteer cache (avoids the Arch Linux crashpad bug). `bizar browser-harness-up <start|stop|status|restart>` CLI subcommand. The browser-harness Bizar agent (in `config/agents/browser-harness.md` + `config/opencode.json.template`) is now wired into opencode as a primary agent (mode: primary, no edit/write permissions).
+- **Dashboard duplicate spawn detection** — `bizar-dash/src/cli/dashboard-ports.mjs` (382 lines) scans for every Bizar dashboard process and classifies each as `healthy | zombie | orphan | dead` via TCP + `/api/health` probes. `bizar dash cleanup` kills zombies + dead PIDs; leaves the canonical alone. `bizar dash start` now refuses duplicates unless `--force`. Solves the "zombie on port 4321 won't go away" class of bugs.
+- **Vidarr model fix** — `vidarr.md` model changed from `openai/gpt-5.5` to `minimax/MiniMax-M3` everywhere: agent .md, opencode.json.template, user's installed opencode.json (patched via jq), install.sh banner, AGENTS.md routing table, AGENT_BASELINE.md model list, cli/audit.mjs validModels, cli/prompts.mjs install label + key prompt. The install flow no longer asks for an OpenAI key.
+
+### Files affected
+
+- `cli/browser-harness-up.sh` (new, 193 lines)
+- `bizar-dash/src/cli/dashboard-ports.mjs` (new, 382 lines)
+- `bizar-dash/src/cli.mjs` — duplicate check + cleanupDashboards export
+- `cli/bin.mjs` — `bizar browser-harness-up` subcommand + `bizar dash cleanup` + `bizar mod <install|upgrade|list|registry>`
+- `config/agents/browser-harness.md` + `config/agents/_shared/AGENT_BASELINE.md` + `config/AGENTS.md` — browser-harness Python tool docs
+- `config/agents/vidarr.md` + `config/opencode.json.template` — vidarr model fix
+- `install.sh` — auto-install browser-harness + updated banner
+- `cli/audit.mjs` + `cli/prompts.mjs` — drop gpt-5.5 validModel + remove OpenAI key prompt
+- 4 test artifacts in `artifacts/`: `mod-upgrade-flow`, `vidarr-model-fix`, `dashboard-duplicate-detection`, `browser-harness-integration`
+
 ## v3.20.6 — Mobile typecheck baseline cleanup
 
 > **Patch.** v3.20.5 wired `tsc --noEmit` into `prepublishOnly` and surfaced three pre-existing mobile-app typecheck errors. This release fixes them so the publish pipeline is warning-free for future releases.
