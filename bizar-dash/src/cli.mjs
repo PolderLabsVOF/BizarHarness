@@ -248,27 +248,44 @@ async function cleanupDashboards({ force = false, signal = 'SIGTERM' } = {}) {
   console.log(summarize(instances));
   console.log('');
 
-  // Strategy:
-  //   - Always kill zombies (PID alive, port unreachable to /api/health)
-  //   - Always kill orphans (port responds but no PID file knows about it)
-  //   - Kill healthy non-canonical duplicates unless --force-with-canonical
-  //   - Never kill the canonical PID (the user can `bizar dash stop` it)
+  // Strategy (v3.20.14):
+  //   - Always kill zombies (PID alive + cmdline looks like dashboard,
+  //     but port doesn't respond to /api/health).
+  //   - Always kill orphans (port responds but no PID claimed it).
+  //   - Kill healthy non-canonical dashboards UNLESS the canonical PID
+  //     is alive and matches the canonical PID file. In that case the
+  //     user wants the canonical one running and the others are duplicates.
+  //   - Never kill the canonical PID.
+  //
+  // Previous bug: cleanup refused to kill `healthy` non-canonical
+  // dashboards even when the canonical PID file was dead or recycled.
+  // This left orphaned dashboards running that `bizar dash stop`
+  // couldn't reach (it only knows the canonical PID file).
   const canonical = instances.find((i) => i.isCanonical && i.pid);
+  const canonicalIsAlive = canonical && existsSync(`/proc/${canonical.pid}`);
   const targets = instances.filter((i) => {
     if (i.pid && i.pid === canonical?.pid) return false; // never kill canonical
     if (i.state === 'zombie' || i.state === 'orphan') return true;
     if (i.state === 'dead') return true; // dead PIDs just need their canonical files cleared
-    if (i.state === 'healthy' && !i.isCanonical && force) return true;
-    if (i.state === 'healthy' && !i.isCanonical) return false; // skip by default
+    if (i.state === 'healthy' && !i.isCanonical) {
+      // If the canonical PID is alive, this is a duplicate — only kill
+      // with --force (user confirmed they want to replace it).
+      // If the canonical PID is dead/recycled, the PID file is stale;
+      // there's no real "canonical" dashboard to preserve, so kill
+      // this one to unblock the user.
+      return force || !canonicalIsAlive;
+    }
     return false;
   });
 
   if (targets.length === 0) {
-    console.log('Nothing to clean up. Use --force to also kill healthy non-canonical duplicates.');
-    // Still clear canonical files if PID is dead
-    if (canonical && !existsSync(`/proc/${canonical.pid}`)) {
-      console.log(`Canonical PID ${canonical.pid} is dead — clearing stale port file.`);
+    if (canonical && !canonicalIsAlive) {
+      // The canonical PID is gone — clear the stale files even though
+      // there's nothing else to clean up.
+      console.log(`Canonical PID ${canonical.pid} is dead or recycled — clearing stale PID/port files.`);
       clearCanonicalFiles();
+    } else {
+      console.log('Nothing to clean up. Use --force to also kill healthy non-canonical duplicates.');
     }
     return 0;
   }
@@ -316,34 +333,63 @@ async function cleanupDashboards({ force = false, signal = 'SIGTERM' } = {}) {
 }
 
 async function stopDashboard() {
-  if (!existsSync(PID_FILE)) {
+  // v3.20.14: scan for any running dashboard, not just the one in
+  // the PID file. If the PID file points to a dead/recycled PID but
+  // ps-scan finds a real dashboard (started by a different user or
+  // after the PID file was deleted), kill it. Otherwise the user is
+  // stuck — `start` refuses because "another dashboard is running"
+  // but `stop` reports "no dashboard is running" because it only
+  // knows about the PID file.
+  const instances = await findAllDashboards();
+  const alive = instances.filter((i) => (i.state === 'healthy' || i.state === 'zombie') && i.pid);
+  if (alive.length === 0) {
+    // No live dashboard. Clear stale PID/port files if they exist.
+    if (existsSync(PID_FILE)) {
+      console.log(`Stale PID file at ${PID_FILE} — clearing.`);
+      try { unlinkSync(PID_FILE); } catch { /* ignore */ }
+    }
+    if (existsSync(PORT_FILE)) {
+      try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
+    }
     console.log('No Bizar dashboard is running.');
     return;
   }
-  const pid = parseInt(readFileSync(PID_FILE, 'utf8').trim(), 10);
-  if (!Number.isFinite(pid)) {
-    console.log(`Bad PID file: ${PID_FILE}`);
-    return;
+  for (const inst of alive) {
+    try {
+      process.kill(inst.pid, 'SIGTERM');
+      console.log(`Stopped Bizar dashboard (pid ${inst.pid}${inst.port ? `, port ${inst.port}` : ''}, ${inst.state}).`);
+    } catch (err) {
+      console.log(`Could not stop dashboard (pid ${inst.pid}): ${err.message}`);
+    }
   }
-  try {
-    process.kill(pid, 'SIGTERM');
-    console.log(`Stopped Bizar dashboard (pid ${pid}).`);
-  } catch (err) {
-    console.log(`Could not stop dashboard (pid ${pid}): ${err.message}`);
+  // Wait for graceful exit; escalate to SIGKILL for any stragglers.
+  for (const inst of alive) {
+    const exited = await waitForExit(inst.pid, 3000);
+    if (!exited) {
+      try {
+        process.kill(inst.pid, 'SIGKILL');
+        console.log(`  pid ${inst.pid} did not exit gracefully; sent SIGKILL.`);
+      } catch { /* ignore */ }
+    }
   }
   try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
   try { unlinkSync(PID_FILE); } catch { /* ignore */ }
 }
 
-function showStatus() {
-  if (existsSync(PORT_FILE)) {
-    const port = readFileSync(PORT_FILE, 'utf8').trim();
-    console.log(`Bizar dashboard is running at http://localhost:${port}/`);
-    if (existsSync(PID_FILE)) {
-      console.log(`PID: ${readFileSync(PID_FILE, 'utf8').trim()}`);
-    }
-  } else {
-    console.log('No Bizar dashboard is running. Use: bizar start');
+async function showStatus() {
+  // v3.20.14: scan ps + canonical PID file rather than only trusting
+  // the PID file. A dashboard started by another user/process without
+  // writing to our PID file would have been invisible here.
+  const instances = await findAllDashboards();
+  const alive = instances.filter((i) => i.state === 'healthy' && i.pid);
+  if (alive.length === 0) {
+    console.log('No Bizar dashboard is running. Use: bizar dash start');
+    return;
+  }
+  for (const inst of alive) {
+    const port = inst.port ? `:${inst.port}` : '';
+    const canonical = inst.isCanonical ? ' (canonical)' : '';
+    console.log(`Bizar dashboard is running at http://localhost:${inst.port}/ — pid ${inst.pid}${port}${canonical}`);
   }
 }
 

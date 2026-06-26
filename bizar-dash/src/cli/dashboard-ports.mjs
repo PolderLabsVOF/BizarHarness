@@ -170,6 +170,26 @@ export function pidListeningPort(pid) {
  * `ps`-based fallback to find every node process whose argv mentions
  * the Bizar dashboard CLI. Returns a list of { pid, cmdline }.
  *
+ * v3.20.14 — tightened the pattern + added an explicit cmdline
+ * re-verification step that the caller MUST do before trusting the
+ * match. The previous version matched anything containing the substring
+ * "bizar dash" or "@polderlabs/bizar-dash/src/cli.mjs" — which is fine
+ * for finding real dashboards but breaks when:
+ *   - The PID is recycled to a different process between ps-scan and
+ *     `pidAlive(pid)` (Linux recycles PIDs in milliseconds).
+ *   - A previous run wrote a stale `dashboard.pid` file referencing a
+ *     PID that's now owned by an unrelated process (chrome-headless-shell
+ *     renderer, ssh session, etc.).
+ *   - The cmdline contains a path that no longer exists on disk
+ *     (e.g. /home/drb0rk/.local/npm/bin/bizar after a clean npm install).
+ *
+ * The fix: only record a ps-scan match if the cmdline actually looks
+ * like a node-launched Bizar dashboard CLI. The `cmdlineLooksLikeDashboard`
+ * helper does the structural check (node binary + cli.mjs OR a known
+ * `bizar` bin path + `dash start`). Then the caller's `pidAlive`
+ * step re-reads /proc/<pid>/cmdline and calls the same helper to
+ * confirm the PID hasn't been recycled.
+ *
  * Skips our own process (the runner) so the CLI doesn't see itself.
  */
 export function psScanDashboards() {
@@ -182,8 +202,9 @@ export function psScanDashboards() {
   }
   try {
     const result = execSync(
-      // Match: `bizar dash` (CLI invocation) OR `@polderlabs/bizar-dash/src/cli.mjs`
-      // (when invoked directly from source). Exclude grep itself.
+      // Match `bizar dash` or `@polderlabs/bizar-dash/src/cli.mjs`. The
+      // pipe through grep -v grep is still needed to suppress grep's
+      // own argv from matching the regex.
       `ps -eo pid=,args= 2>/dev/null | grep -E '(bizar[ ]+dash|@polderlabs/bizar-dash/src/cli\\.mjs)' | grep -v grep || true`,
       { encoding: 'utf8', timeout: 5000 },
     );
@@ -196,12 +217,68 @@ export function psScanDashboards() {
       const pid = parseInt(m[1], 10);
       if (!Number.isFinite(pid)) continue;
       if (pid === process.pid) continue; // skip our own process
-      out.set(pid, m[2].trim());
+      const cmdline = m[2].trim();
+      // Structural check: only keep matches that look like a real
+      // dashboard launch. Anything else is a false positive (PID
+      // recycled, or a process whose argv happens to contain the
+      // words "bizar dash" — e.g. a stale node process or a shell
+      // command that includes the words in a comment).
+      if (!cmdlineLooksLikeDashboard(cmdline)) continue;
+      out.set(pid, cmdline);
     }
   } catch {
     // ps not available — fall back to canonical only
   }
   return out;
+}
+
+/**
+ * Structural check: does this cmdline look like a Bizar dashboard
+ * launch? We accept:
+ *   - `node <anything>/@polderlabs/bizar-dash/src/cli.mjs [start|tui|...]`
+ *   - `<path>/bizar dash <subcommand>` where `<path>` is a real-looking
+ *     filesystem path (contains `/` or starts with `.`).
+ *
+ * Reject anything that doesn't match those patterns (e.g. a `bash -c`
+ * shell command whose body mentions `bizar dash` in a comment).
+ *
+ * Implementation note: we anchor the `bizar` bin to a path-like prefix
+ * by requiring it to be preceded by either the start of the cmdline,
+ * a `/`, or a `\`. This rejects strings like
+ * `bash -c "echo I want to run bizar dash start"` where `bizar dash
+ * start` is mid-string inside a quoted argument — the `bizar` is
+ * preceded by a space, not by a path separator.
+ */
+export function cmdlineLooksLikeDashboard(cmdline) {
+  if (!cmdline || typeof cmdline !== 'string') return false;
+  // Direct CLI invocation: @polderlabs/bizar-dash/src/cli.mjs <verb>
+  if (/\/@polderlabs\/bizar-dash\/src\/cli\.mjs\b/.test(cmdline)) return true;
+  // Wrapped via the `bizar` bin: <path>/bizar dash <subcommand>.
+  // - The `bizar` token must be preceded by a path separator (so it's
+  //   a binary path, not an arbitrary word in a comment).
+  // - The `dash` and subcommand must be whitespace-delimited argv.
+  if (/(?:^|[\/\\])\S*bizar\s+dash\s+(?:start|tui|stop|status|cleanup)\b/.test(cmdline)) return true;
+  return false;
+}
+
+/**
+ * Re-read /proc/<pid>/cmdline and verify the cmdline still looks like
+ * a dashboard launch. Linux recycles PIDs aggressively — between
+ * `psScanDashboards` returning a PID and `pidAlive(pid)` succeeding,
+ * the PID may have been reassigned to an unrelated process. We catch
+ * that by reading /proc/<pid>/cmdline fresh and re-applying the
+ * structural check. Returns the cmdline string on success, null on
+ * failure (PID dead, /proc unreadable, or cmdline no longer matches).
+ */
+export function verifyCmdlineAtProbeTime(pid) {
+  if (!pid) return null;
+  try {
+    const cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim();
+    if (cmdlineLooksLikeDashboard(cmdline)) return cmdline;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -228,15 +305,27 @@ export async function findAllDashboards({
     let cmdline = '';
     try { cmdline = readFileSync(`/proc/${canonical.pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim(); } catch {}
     if (!cmdline) cmdline = '(no /proc entry — process likely exited)';
+    // v3.20.14 — only treat the canonical PID as canonical if the
+    // current cmdline still looks like a dashboard launch. A recycled
+    // PID (now owned by chrome, ssh, etc.) should NOT count as the
+    // canonical dashboard — the PID file is stale.
+    const cmdlineMatches = cmdlineLooksLikeDashboard(cmdline);
     byPid.set(canonical.pid, {
       pid: canonical.pid,
       port: canonical.port,
-      state: alive ? 'unknown' : 'dead',
+      // If PID is alive but cmdline is no longer a dashboard, the PID
+      // has been recycled. Mark as 'dead' so cleanup clears the
+      // stale PID file. Same if PID is genuinely dead.
+      state: alive && cmdlineMatches ? 'unknown' : 'dead',
       portReachable: false,
       healthOk: false,
       cmdline,
+      // Only canonical if PID file path AND cmdline both look real.
+      // This prevents the "Found 1 dashboard: [healthy] pid 938619
+      // from ps-scan" trap where the PID file's PID has been recycled
+      // to an unrelated process.
+      isCanonical: cmdlineMatches,
       source: 'pid-file',
-      isCanonical: true,
     });
   }
 
@@ -268,6 +357,23 @@ export async function findAllDashboards({
     if (!pidAlive(inst.pid)) {
       inst.state = 'dead';
       continue;
+    }
+    // v3.20.14 — re-read /proc/<pid>/cmdline fresh and re-verify it
+    // still looks like a dashboard launch. Linux recycles PIDs
+    // aggressively; a PID that matched ps-scan a moment ago may
+    // now belong to an unrelated process (chrome-headless-shell
+    // renderer, ssh session, etc.). If the cmdline no longer matches
+    // the dashboard pattern, the PID is recycled — mark it dead.
+    if (inst.source === 'ps-scan') {
+      const fresh = verifyCmdlineAtProbeTime(inst.pid);
+      if (fresh === null) {
+        inst.state = 'dead';
+        continue;
+      }
+      // Update cmdline in case it changed (the argv we saw at scan time
+      // might have been a stale /proc snapshot — extremely rare but
+      // possible during a process exec).
+      if (fresh !== inst.cmdline) inst.cmdline = fresh;
     }
     // Resolve port: prefer /proc fd walk; fall back to canonical port for PID file match.
     if (!inst.port) {

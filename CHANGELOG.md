@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.20.14 — Dashboard lifecycle: stale-PID-file false positives, recycled-PID races
+
+> **v3.20.14 fixes the dashboard state machine so it can't get stuck on a phantom dashboard.** The v3.20.13 dashboard used `ps`-scan to detect other dashboards and `pidAlive` to confirm they're real. On a busy machine, Linux recycles PIDs in milliseconds — a `bizar dash start --bg` process at PID 938619 dies, gets reassigned to a chrome-headless-shell renderer, and the dashboard sees a "healthy" PID whose cmdline is `/path/to/chrome --type=renderer`. The `bizar dash start`/`stop`/`cleanup` cycle then becomes unrecoverable: `start` refuses ("Another dashboard is running"), `stop` says ("No dashboard running"), `cleanup --force` says ("Nothing to clean up").
+
+### Highlights
+
+- **Structural cmdline check** — `cmdlineLooksLikeDashboard(cmdline)` rejects any process whose argv doesn't structurally look like a Bizar dashboard launch. Accepts `node <...>/@polderlabs/bizar-dash/src/cli.mjs <verb>` and `<path>/bizar dash <subcommand>` where `bizar` is preceded by `/` or `\`. Rejects `bash -c "echo I want to run bizar dash start"` (a shell command that mentions the words in a comment), chrome renderers, ssh sessions, and other false positives.
+- **Probe-time re-verification** — `verifyCmdlineAtProbeTime(pid)` re-reads `/proc/<pid>/cmdline` fresh at probe time and re-applies the structural check. Even if `ps` returns a recycled PID with a real dashboard cmdline from a moment ago, by the time we probe, the cmdline has changed to whatever the new owner runs. The probe-time check catches that race.
+- **Canonical PID file is now stale-aware** — `findAllDashboards()` now only marks the PID-file entry as `isCanonical` if the cmdline still structurally looks like a dashboard. If the PID has been recycled, the entry is marked `dead` (and the PID file will be cleaned up next time `cleanup`/`stop`/`start` runs).
+- **`bizar dash stop` uses `findAllDashboards`** — was only checking the canonical PID file. Now scans ps + canonical, kills every healthy/zombie dashboard found, escalates to SIGKILL for stragglers, and clears stale PID/port files.
+- **`bizar dash cleanup` kills orphaned dashboards** — was refusing to kill `healthy` non-canonical dashboards even when the canonical PID file was dead/recycled. Now: if the canonical PID is dead/recycled, there's no real canonical dashboard to preserve — kill the orphan to unblock the user. `--force` still required when the canonical PID is alive.
+- **`bizar dash status` uses `findAllDashboards`** — was only reading the PID file. Now scans ps + canonical and reports every healthy dashboard.
+
+### Files affected
+
+- `bizar-dash/src/cli/dashboard-ports.mjs` — added `cmdlineLooksLikeDashboard` + `verifyCmdlineAtProbeTime`; tightened `psScanDashboards` to filter out non-dashboard cmdlines at scan time; `findAllDashboards` re-verifies cmdlines at probe time and marks recycled-PID canonical entries as `dead`.
+- `bizar-dash/src/cli.mjs` — `stopDashboard` + `showStatus` use `findAllDashboards`; `cleanupDashboards` kills healthy non-canonical orphans when the canonical PID is dead/recycled.
+- `bizar-dash/tests/dashboard-ports.test.mjs` (new) — 10 regression tests covering structural cmdline check, recycled-PID probe, and the v3.20.13 false-positive scenarios.
+
+### Pattern
+
+When a state machine trusts `pidAlive(pid)` to mean "this process is what I think it is", you have a PID-recycling race. Linux PIDs are reused immediately after a process dies — `process.kill(pid, 0)` succeeds when `pid` belongs to a brand-new unrelated process. The fix is to verify the cmdline still matches what you expect at every decision point, not just at scan time. The structural check is cheap (regex on a few hundred chars of /proc/<pid>/cmdline) and catches the race window between ps and probe.
+
 ## v3.20.13 — Install reliability fixes: Chrome runtime libs, npm-package install.sh, plugin global fallback
 
 > **v3.20.11 → v3.20.13 is a three-release series of bug fixes that make `bizar install` and `bizar update` actually work for `npm install -g @polderlabs/bizar` users.** v3.20.10 shipped a beautiful installer that worked for `git clone` users but broke for everyone who installed via npm — the TUI prompted for API keys, chrome-headless-shell didn't include its system deps, `bizar update` couldn't find `install.sh` because it wasn't in the npm package, and the plugin source wasn't shipped. This release fixes all four.
