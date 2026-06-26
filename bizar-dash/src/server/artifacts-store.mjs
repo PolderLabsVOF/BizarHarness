@@ -172,7 +172,13 @@ export const artifactsStore = {
     if (!dir) return null;
     const meta = safeReadJSON(join(dir, 'meta.json'), null);
     const canvas = safeReadJSON(join(dir, 'plan.json'), null);
-    const planMdx = safeReadText(join(dir, 'plan.mdx'));
+    // v3.20.15 — read `artifact.mdx` (the CLI's source-of-truth name from
+    // cli/artifact.mjs:writePlanFile), with `plan.mdx` as a fallback for
+    // legacy v0 plans that still exist on disk. Without this fallback,
+    // every artifact opened in the dashboard showed empty content even
+    // though `artifact.mdx` was present and correct.
+    const planMdx = safeReadText(join(dir, 'artifact.mdx'))
+      || safeReadText(join(dir, 'plan.mdx'));
     return {
       slug,
       dir,

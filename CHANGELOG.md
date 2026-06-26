@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.20.16 — Artifact viewer reads `artifact.mdx` (CLI's source-of-truth filename)
+
+> **Bug:** Opening any artifact in the dashboard showed an empty page, even though the artifact's `artifact.mdx` file was on disk with thousands of chars of content. The CLI (`cli/artifact.mjs`) writes `artifact.mdx` as the source-of-truth filename, but the dashboard's `artifacts-store.get()` was reading `plan.mdx`. Two code paths, two filenames, every artifact looked empty.
+
+### Highlights
+
+- **Bug:** `bizar-dash/src/server/artifacts-store.mjs:get()` only read `plan.mdx`. The CLI writes `artifact.mdx`. The dashboard returned `planMdx: ''` for every artifact.
+- **Fix:** Read `artifact.mdx` first, fall back to `plan.mdx` for any v0 plans that still exist on disk.
+- **Why wasn't this caught?** The artifact preview HTML page (at `/{slug}/`) is generated separately by `cli/artifact.mjs` and reads `artifact.mdx` correctly. The dashboard's React viewer reads from the API endpoint, which read the wrong filename. Two viewers, two code paths, one of them silently broken.
+
+### Files affected
+
+- `bizar-dash/src/server/artifacts-store.mjs` — `get()` reads `artifact.mdx` first, falls back to `plan.mdx`
+
+### Pattern
+
+When two systems share a directory layout, don't let filenames drift. The CLI's `cli/artifact.mjs:writePlanFile()` writes `artifact.mdx`; the dashboard reads `plan.mdx`. The mismatch was only visible to the dashboard React viewer — the generated HTML (which the CLI renders separately) worked fine. Either pick one filename and stick to it, or write a one-time migration that renames `plan.mdx` → `artifact.mdx` on dashboard boot.
+
 ## v3.20.15 — Artifacts API fix: projectRoot passed to artifacts router
 
 > **The Artifacts page showed "0 artifacts" even when the dashboard snapshot had the full list.** Two artifacts routers were mounted in `api.mjs`, but the first one (which handles `GET /api/artifacts`) was missing `projectRoot`, so `artifactsStore.list(undefined)` only checked `~/.config/opencode/artifacts/` (always empty for projects with their own `artifacts/` folder). The snapshot used a different code path (`state.getArtifacts()`) and worked correctly — but the live API didn't.
