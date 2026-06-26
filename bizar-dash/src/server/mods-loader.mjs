@@ -337,8 +337,14 @@ export const modsLoader = {
       throw new Error(`mod "${id}" not found in registry`);
     }
 
-    // Try the registry's explicit downloadUrl first.
+    // v3.20.3 — Fix install-from-registry: `downloadUrl` is a URL, not
+    // a local path. installFromPath() expects statSync() to succeed
+    // on the argument, which fails for URLs. Detect URL schemes and
+    // route to installFromUrl() instead.
     if (entry.downloadUrl) {
+      if (/^https?:\/\//i.test(entry.downloadUrl) || /^file:\/\//i.test(entry.downloadUrl)) {
+        return this.installFromUrl(entry.downloadUrl.replace(/\/mod\.json$/, '').replace(/\/$/, ''));
+      }
       return this.installFromPath(entry.downloadUrl);
     }
 

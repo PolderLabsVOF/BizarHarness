@@ -425,46 +425,17 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
         )}
       </Card>
 
-      {/* Mod views section — web/index.html and registered tabs */}
+      {/* v3.20.3 — Mod views now appear in the sidebar nav as first-class
+          tabs (handled by App.tsx), so this section is a hint pointing
+          users to the sidebar. */}
       {modViews.length > 0 && (
-        <div className="mods-views-section">
-          <h3 className="view-subtitle">
-            <Globe size={14} /> Mod views
-          </h3>
-          <div className="mods-views-grid">
-            {modViews.map((v) => (
-              <Card key={v.id} className="mod-view-card">
-                <div className="mod-view-card-head">
-                  <div>
-                    <div className="mod-view-label">
-                      {v.kind === 'tab' ? <LayoutTemplate size={12} /> : <Globe size={12} />}
-                      {v.label}
-                    </div>
-                    <div className="mod-view-mod muted">by {v.modId}</div>
-                    {v.description && (
-                      <div className="mod-view-desc muted ellipsis-2">{v.description}</div>
-                    )}
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      if (v.kind === 'iframe' && v.path) {
-                        // Open the mod's web/index.html in an iframe panel
-                        setIframeUrl(`/api/mods/${v.modId}/web/index.html`);
-                      } else {
-                        // For registered tabs without web view, show placeholder
-                        toast.info(`Tab view for "${v.label}" — full TSX loading lands in v3.1.`, 2500);
-                      }
-                    }}
-                  >
-                    <ExternalLink size={12} /> Open
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+        <Card className="mod-views-hint">
+          <CardTitle><Globe size={14} /> Mod views</CardTitle>
+          <CardMeta>
+            {modViews.length} mod-supplied view{modViews.length === 1 ? '' : 's'} are now available in the sidebar navigation.
+            Look for the <strong>Mods</strong> section at the bottom of the sidebar.
+          </CardMeta>
+        </Card>
       )}
 
       {/* Iframe panel for mod web views */}

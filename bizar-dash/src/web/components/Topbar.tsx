@@ -75,6 +75,12 @@ export type TopbarProps = {
    * carries navigation, so we hide this row to keep the topbar slim.
    */
   showTabs?: boolean;
+  /**
+   * v3.20.3 — Optional extra tabs (mod views) appended after the built-in
+   * tabs. Each entry is the same shape as TabDef with an `id` matching
+   * the mod view id (e.g. 'graphify:web').
+   */
+  extraTabs?: TabDef[];
 };
 
 export function Topbar({
@@ -91,6 +97,7 @@ export function Topbar({
   rightSlot,
   notificationsSlot,
   showTabs = true,
+  extraTabs,
 }: TopbarProps) {
   return (
     <header className="topbar">
@@ -148,6 +155,30 @@ export function Topbar({
               </button>
             );
           })}
+          {extraTabs && extraTabs.length > 0 && (
+            <>
+              <span className="tab-separator" aria-hidden="true" />
+              {extraTabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = tab.id === activeTab;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={cn('tab', 'tab-mod', active && 'tab-active')}
+                    onClick={() => onTabChange(tab.id)}
+                    title={`${tab.label} (mod)`}
+                  >
+                    <Icon size={14} className="tab-icon" />
+                    <span className="tab-label">{tab.label}</span>
+                    <span className="tab-badge">mod</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
         </nav>
       )}
     </header>

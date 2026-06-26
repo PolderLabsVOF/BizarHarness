@@ -31,13 +31,14 @@ import { Activity } from './views/Activity';
 import { Config } from './views/Config';
 import { SettingsView } from './views/Settings';
 import { Mods } from './views/Mods';
+import { ModView, type ModView as ModViewType } from './views/ModView';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
 import { History } from './views/History';
 import { BackgroundAgents } from './views/BackgroundAgents';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Globe, LayoutTemplate, X } from 'lucide-react';
 import './styles/main.css';
 
 type ViewProps = {
@@ -76,7 +77,39 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   history: History,
 };
 
-const VERSION = 'v3.18.0';
+const VERSION = 'v3.20.3';
+
+/**
+ * Render the active view. If `activeTab` matches a built-in tab id,
+ * use VIEW_MAP. If it matches a mod view id (any id not in VIEW_MAP),
+ * render the ModView component with that view id.
+ */
+function renderActiveView(
+  activeTab: string,
+  viewProps: ViewProps,
+  modViews: ModViewType[],
+  reloadKey: number,
+): React.ReactNode {
+  if (VIEW_MAP[activeTab]) {
+    const V = VIEW_MAP[activeTab];
+    return <V {...viewProps} />;
+  }
+  // Mod view — find by id
+  const mv = modViews.find((v) => v.id === activeTab);
+  if (mv) {
+    return (
+      <ModView
+        viewId={mv.id}
+        reloadKey={reloadKey}
+        activeTab={viewProps.activeTab}
+        setActiveTab={viewProps.setActiveTab}
+      />
+    );
+  }
+  // Fallback to Overview
+  const V = VIEW_MAP.overview;
+  return <V {...viewProps} />;
+}
 
 export function App() {
   return (
@@ -101,8 +134,39 @@ function Shell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [stuckAgents, setStuckAgents] = useState<{ name: string }[]>([]);
   const [stuckBannerDismissed, setStuckBannerDismissed] = useState(false);
+  // v3.20.3 — Mod views become first-class nav entries. Fetched on mount
+  // and after every mod install/uninstall/enable toggle.
+  const [modViews, setModViews] = useState<ModViewType[]>([]);
+  const [modViewsReloadKey, setModViewsReloadKey] = useState(0);
   const wsRef = useRef<Ws | null>(null);
   const [ws, setWs] = useState<Ws | null>(null);
+
+  // Fetch installed mod views (any enabled mod with a web/index.html or
+  // a views/registry.json entry). These become top-level nav tabs.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.get<{ views: ModViewType[] }>('/mods/views');
+        if (cancelled) return;
+        setModViews(r.views || []);
+      } catch {
+        if (!cancelled) setModViews([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [modViewsReloadKey, snapshot?.mods]);
+
+  // Re-fetch mod views when ws events arrive about mod changes.
+  useEffect(() => {
+    if (!ws) return;
+    const off = ws.on((msg: { type?: string }) => {
+      if (msg?.type === 'mod:change' || msg?.type === 'mod:enabled' || msg?.type === 'mod:installed') {
+        setModViewsReloadKey((n) => n + 1);
+      }
+    });
+    return () => off();
+  }, [ws]);
 
   // Apply theme tokens
   useEffect(() => {
@@ -454,7 +518,34 @@ function Shell() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  const View = VIEW_MAP[activeTab];
+  // v3.20.3 — Merge built-in tabs with installed mod views. Mod views
+  // are appended after the built-in tabs and use the same rendering
+  // surface; their tab ids are mod view ids (e.g. 'graphify:web').
+  const mergedTabs = useMemo(() => {
+    const modTabs = modViews.map((v) => ({
+      id: v.id,
+      label: v.label,
+      icon: v.kind === 'iframe' ? Globe : LayoutTemplate,
+      isMod: true,
+      modId: v.modId,
+    }));
+    return [...TABS, ...modTabs];
+  }, [modViews]);
+
+  // Surface the underlying view id for the active tab (built-in or mod).
+  const renderedView = useMemo(() => {
+    if (snapshot && settings) {
+      const viewProps: ViewProps = {
+        snapshot,
+        settings,
+        activeTab,
+        setActiveTab: setActiveTab,
+        refreshSnapshot,
+      };
+      return renderActiveView(activeTab, viewProps, modViews, modViewsReloadKey);
+    }
+    return null;
+  }, [activeTab, snapshot, settings, modViews, modViewsReloadKey, refreshSnapshot]);
 
   const refreshSnapshot = useMemo(
     () => async () => {
@@ -555,6 +646,7 @@ function Shell() {
           settings={settings}
           notificationsSlot={<Notifications wsSubscribe={subscribeToWs} />}
           showTabs={layout === 'topnav'}
+          extraTabs={mergedTabs}
         />
       )}
       {stuckAgents.length > 0 && !stuckBannerDismissed && (
@@ -589,7 +681,7 @@ function Shell() {
       <div className="layout-body">
         {layout !== 'topnav' && (
           <Sidebar
-            tabs={TABS}
+            tabs={mergedTabs}
             activeTab={activeTab}
             onTabChange={setActiveTab}
           />
@@ -611,15 +703,7 @@ function Shell() {
               <p>Loading Bizar…</p>
             </div>
           )}
-          {snapshot && settings && View && (
-            <View
-              snapshot={snapshot}
-              settings={settings}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              refreshSnapshot={refreshSnapshot}
-            />
-          )}
+          {renderedView}
         </main>
       </div>
       <SearchModal
