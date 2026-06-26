@@ -20,7 +20,7 @@
     "build": "vite build",
     "prebuild": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck || (echo '\\n⚠ typecheck reported warnings above — review before tagging a release\\n' >&2); npm run build"
+    "prepublishOnly": "npm run typecheck || echo '⚠ typecheck reported warnings above — review before tagging a release'; npm run build"
   },
   "dependencies": {
     "blessed": "^0.1.81",
