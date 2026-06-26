@@ -1,7 +1,7 @@
 {
   "id": "ponytail",
   "name": "Ponytail",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "DietrichGebert",
   "description": "Lazy senior-dev mode for AI agents. Stops at the first rung that holds: existing? reuse. Stdlib? use it. Native? use it. Dependency? use it. One line? one line. The best code is the code you never wrote. ~54% less code, ~22% fewer tokens, ~20% cheaper.",
   "kind": "skill",

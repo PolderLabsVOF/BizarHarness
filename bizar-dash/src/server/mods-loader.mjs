@@ -7,18 +7,25 @@
  * `~/.config/bizar/mods/<mod-id>/` and exposes a list of valid mods.
  *
  * Mods can contribute:
- *   - agents    (markdown files with frontmatter)
- *   - commands  (markdown files with frontmatter)
+ *   - agents    (markdown files with frontmatter — installed to opencode config)
+ *   - commands  (markdown files with frontmatter — installed to opencode config)
+ *   - INSTRUCTIONS.md (top-level — installed as an opencode skill)
+ *   - skills/<name>/SKILL.md (installed as opencode skills)
  *   - routes    (Node.js modules that export `register({ app, state })`)
  *   - views     (declarative metadata — actual rendering done by host)
  *   - tui       (declarative metadata)
  *   - hooks     (declarative metadata)
  *
+ * Mod installation copies agent/command/skill instruction files into the
+ * user's opencode config (`~/.config/opencode/agents/`, `~/.config/opencode/commands/`,
+ * `~/.opencode/skills/`) so they are picked up at session start. Uninstall removes them.
+ *
  * For v3 MVP, the loader only:
  *   - Lists installed mods (manifest)
  *   - Enables / disables (writes enabled flag back to mod.json)
  *   - Installs a mod from a local path (copies files into the mods dir)
- *   - Uninstalls (removes the mod folder)
+ *   - Installs mod instructions into opencode config
+ *   - Uninstalls (removes the mod folder AND the opencode-config copies)
  *
  * The dashboard can render a "Hello" tab for any mod whose manifest type
  * is `view` and that registers a route. v3 keeps this minimal.
@@ -232,6 +239,10 @@ export const modsLoader = {
     fresh.id = fresh.id || id;
     fresh._integrity = computeModHash(target);
     writeFileSync(join(target, 'mod.json'), JSON.stringify(fresh, null, 2) + '\n', 'utf8');
+    // v3.20 — install mod instructions into the user's opencode config
+    // (agents/, commands/, skills/). This makes the mod's rules binding
+    // on every agent at session start.
+    installModInstructions(id, target);
     return loadMod({ id, dir: target });
   },
 
@@ -239,6 +250,9 @@ export const modsLoader = {
   uninstall(id) {
     const dir = join(MODS_DIR, id);
     if (!existsSync(dir)) return false;
+    // v3.20 — uninstall mod instructions from opencode config FIRST
+    // (so we know which files were installed by this mod).
+    uninstallModInstructions(id);
     rmSync(dir, { recursive: true, force: true });
     return true;
   },
@@ -374,7 +388,7 @@ export const modsLoader = {
     mkdirSync(target, { recursive: true });
     // Fetch known top-level files. Unknown files (e.g. views/, agents/)
     // are NOT fetched — mods that need them should publish a tarball.
-    const knownFiles = ['mod.json', 'route.mjs', 'README.md', 'CHANGELOG.md'];
+    const knownFiles = ['mod.json', 'route.mjs', 'README.md', 'CHANGELOG.md', 'INSTRUCTIONS.md'];
     for (const f of knownFiles) {
       try {
         const { fetch } = await import('node:undici').catch(() => ({ fetch: globalThis.fetch }));
@@ -387,6 +401,13 @@ export const modsLoader = {
         /* skip files that don't exist */
       }
     }
+    // v3.20 — Fetch `agents/`, `commands/`, and `skills/` subfolders.
+    // We discover the contents by trying common names (the registry
+    // doesn't list them explicitly). For each known category, we
+    // attempt to fetch a small set of likely filenames.
+    await fetchInstructionDir(`${cleanBase}/agents`, join(target, 'agents'));
+    await fetchInstructionDir(`${cleanBase}/commands`, join(target, 'commands'));
+    await fetchSkillsDir(`${cleanBase}/skills`, join(target, 'skills'));
     // Also try to fetch `web/index.html` if the mod ships a self-contained
     // web view (the dashboard exposes it via `/api/mods/<id>/mod-web/*`).
     try {
@@ -401,6 +422,9 @@ export const modsLoader = {
     } catch {
       /* optional — web view is mod-defined */
     }
+    // v3.20 — install mod instructions into the user's opencode config
+    // (agents/, commands/, skills/). Triggered on registry install too.
+    installModInstructions(id, target);
     return loadMod({ id, dir: target });
   },
 
@@ -634,6 +658,52 @@ export const modsLoader = {
       return [];
     }
   },
+
+  /**
+   * v3.20 — List the instruction files a mod installed into the user's
+   * opencode config. Returns paths grouped by category.
+   *
+   *   { agents: ['<id>__thor.md', ...],
+   *     commands: ['<id>__plan.md', ...],
+   *     skills: ['<id>-instructions', '<id>-my-skill', ...] }
+   */
+  listModInstructions(modId) {
+    if (!modId) return { agents: [], commands: [], skills: [] };
+    const prefix = `${modId}__`;
+    const skillPrefix = `${modId}-`;
+    const out = { agents: [], commands: [], skills: [] };
+    if (existsSync(OPENCODE_AGENTS_DIR)) {
+      try {
+        out.agents = readdirSync(OPENCODE_AGENTS_DIR)
+          .filter((f) => f.startsWith(prefix));
+      } catch { /* ignore */ }
+    }
+    if (existsSync(OPENCODE_COMMANDS_DIR)) {
+      try {
+        out.commands = readdirSync(OPENCODE_COMMANDS_DIR)
+          .filter((f) => f.startsWith(prefix));
+      } catch { /* ignore */ }
+    }
+    if (existsSync(OPENCODE_SKILLS_DIR)) {
+      try {
+        out.skills = readdirSync(OPENCODE_SKILLS_DIR, { withFileTypes: true })
+          .filter((e) => e.isDirectory() && e.name.startsWith(skillPrefix))
+          .map((e) => e.name);
+      } catch { /* ignore */ }
+    }
+    return out;
+  },
+
+  /**
+   * v3.20 — Reinstall instruction files for a mod already on disk
+   * (used after the user edits files inside the mod, or after a
+   * `bizar mod refresh`).
+   */
+  reinstallInstructions(modId) {
+    const dir = join(MODS_DIR, modId);
+    if (!existsSync(dir)) return null;
+    return installModInstructions(modId, dir);
+  },
 };
 
 function resolveWithin(root, relPath) {
@@ -644,4 +714,285 @@ function resolveWithin(root, relPath) {
     return null;
   }
   return full;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// v3.20 — fetchInstructionDir / fetchSkillsDir: pull a directory of
+// mod instruction files from a registry URL. The registry doesn't list
+// the contents of `agents/`, `commands/`, or `skills/`, so we probe for
+// a small set of likely filenames. Mods with many files should publish
+// a tarball instead.
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch a directory of `.md` files from `<baseUrl>` and write them into
+ * `<destDir>`. Probes a small set of likely names — mod authors who
+ * need more than this should publish a tarball and install via path.
+ */
+async function fetchInstructionDir(baseUrl, destDir) {
+  const candidates = [
+    'thor.md', 'tyr.md', 'odin.md', 'heimdall.md', 'mimir.md',
+    'frigg.md', 'vor.md', 'hermod.md', 'baldr.md', 'forseti.md',
+    'vidarr.md', 'quick.md', 'browser-harness.md', 'semble-search.md',
+    'plan.md', 'review.md', 'audit.md', 'init.md', 'learn.md',
+    'explain.md', 'visual-plan.md', 'tailscale-serve.md',
+    'README.md', 'AGENTS.md', 'COMMANDS.md', 'INSTRUCTIONS.md',
+  ];
+  mkdirSync(destDir, { recursive: true });
+  for (const f of candidates) {
+    try {
+      const { fetch } = await import('node:undici').catch(() => ({ fetch: globalThis.fetch }));
+      const res = await fetch(`${baseUrl}/${f}`);
+      if (res.ok) {
+        const content = await res.text();
+        writeFileSync(join(destDir, f), content, 'utf8');
+      }
+    } catch {
+      /* skip */
+    }
+  }
+}
+
+/**
+ * Fetch a `skills/<name>/SKILL.md` directory. Probes a small set of
+ * likely skill names. Same limitation as fetchInstructionDir — mod
+ * authors with custom names should publish a tarball.
+ */
+async function fetchSkillsDir(baseUrl, destDir) {
+  const candidates = [
+    'main', 'core', 'default', 'rules', 'style',
+    'review', 'audit', 'init', 'plan',
+  ];
+  mkdirSync(destDir, { recursive: true });
+  for (const name of candidates) {
+    try {
+      const { fetch } = await import('node:undici').catch(() => ({ fetch: globalThis.fetch }));
+      const res = await fetch(`${baseUrl}/${name}/SKILL.md`);
+      if (res.ok) {
+        const content = await res.text();
+        const skillDir = join(destDir, name);
+        mkdirSync(skillDir, { recursive: true });
+        writeFileSync(join(skillDir, 'SKILL.md'), content, 'utf8');
+      }
+    } catch {
+      /* skip */
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// v3.20 — Mod instructions: install/uninstall a mod's instruction files
+// into the user's opencode config so they auto-load at session start.
+//
+// Mapping (mod path → opencode config path):
+//
+//   <mod>/INSTRUCTIONS.md            → ~/.opencode/skills/<id>-instructions/SKILL.md
+//   <mod>/agents/<agent>.md          → ~/.config/opencode/agents/<id>__<agent>.md
+//   <mod>/commands/<cmd>.md          → ~/.config/opencode/commands/<id>__<cmd>.md
+//   <mod>/skills/<name>/SKILL.md     → ~/.opencode/skills/<id>-<name>/SKILL.md
+//
+// All installed files are prefixed with `<mod-id>__` (or `<mod-id>-` for skills)
+// so uninstall can find exactly what this mod installed and remove it without
+// touching files installed by other mods or by the base Bizar install.
+// ─────────────────────────────────────────────────────────────────────
+
+const OPENCODE_CONFIG_DIR = join(HOME, '.config', 'opencode');
+const OPENCODE_AGENTS_DIR = join(OPENCODE_CONFIG_DIR, 'agents');
+const OPENCODE_COMMANDS_DIR = join(OPENCODE_CONFIG_DIR, 'commands');
+const OPENCODE_SKILLS_DIR = join(HOME, '.opencode', 'skills');
+
+/**
+ * Copy a single file, creating the destination directory if needed.
+ * Returns the installed path or null on failure.
+ */
+function copyFileSafe(src, dest) {
+  try {
+    if (!existsSync(src)) return null;
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: false });
+    return dest;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Recursively copy a directory.
+ */
+function copyDirSafe(src, dest) {
+  try {
+    if (!existsSync(src)) return null;
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: true });
+    return dest;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove a file or directory, ignoring ENOENT.
+ */
+function removeSafe(path) {
+  try {
+    if (!existsSync(path)) return false;
+    rmSync(path, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Walk a directory recursively and return relative file paths.
+ */
+function walkFiles(dir, prefix = '') {
+  const out = [];
+  if (!existsSync(dir)) return out;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      out.push(...walkFiles(join(dir, e.name), rel));
+    } else if (e.isFile()) {
+      out.push(rel);
+    }
+  }
+  return out;
+}
+
+/**
+ * Install all instruction files from a mod folder into the user's
+ * opencode config. Idempotent — safe to call multiple times for the
+ * same mod (overwrites in place).
+ *
+ * Returns { agents, commands, skills, instructions } counts.
+ */
+function installModInstructions(modId, modDir) {
+  if (!modId || !modDir) return { agents: 0, commands: 0, skills: 0, instructions: 0 };
+  const counts = { agents: 0, commands: 0, skills: 0, instructions: 0 };
+
+  // 1. agents/ → ~/.config/opencode/agents/<id>__<agent>.md
+  const agentsDir = join(modDir, 'agents');
+  if (existsSync(agentsDir)) {
+    for (const f of readdirSync(agentsDir)) {
+      if (!f.endsWith('.md')) continue;
+      const src = join(agentsDir, f);
+      const dest = join(OPENCODE_AGENTS_DIR, `${modId}__${f}`);
+      if (copyFileSafe(src, dest)) counts.agents += 1;
+    }
+  }
+
+  // 2. commands/ → ~/.config/opencode/commands/<id>__<cmd>.md
+  const commandsDir = join(modDir, 'commands');
+  if (existsSync(commandsDir)) {
+    for (const f of readdirSync(commandsDir)) {
+      if (!f.endsWith('.md')) continue;
+      const src = join(commandsDir, f);
+      const dest = join(OPENCODE_COMMANDS_DIR, `${modId}__${f}`);
+      if (copyFileSafe(src, dest)) counts.commands += 1;
+    }
+  }
+
+  // 3. INSTRUCTIONS.md → ~/.opencode/skills/<id>-instructions/SKILL.md
+  const instructionsSrc = join(modDir, 'INSTRUCTIONS.md');
+  if (existsSync(instructionsSrc)) {
+    const destDir = join(OPENCODE_SKILLS_DIR, `${modId}-instructions`);
+    const dest = join(destDir, 'SKILL.md');
+    if (copyFileSafe(instructionsSrc, dest)) counts.instructions += 1;
+  }
+
+  // 4. skills/<name>/SKILL.md → ~/.opencode/skills/<id>-<name>/SKILL.md
+  const skillsDir = join(modDir, 'skills');
+  if (existsSync(skillsDir)) {
+    let entries;
+    try {
+      entries = readdirSync(skillsDir, { withFileTypes: true });
+    } catch {
+      entries = [];
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const skillMd = join(skillsDir, e.name, 'SKILL.md');
+      if (!existsSync(skillMd)) continue;
+      const destDir = join(OPENCODE_SKILLS_DIR, `${modId}-${e.name}`);
+      const dest = join(destDir, 'SKILL.md');
+      if (copyFileSafe(skillMd, dest)) counts.skills += 1;
+    }
+  }
+
+  return counts;
+}
+
+/**
+ * Remove all instruction files installed by a mod. Safe to call when
+ * the mod folder is already gone (uses the same `<id>__` / `<id>-` prefixes
+ * install used, so it only removes what this mod installed).
+ */
+function uninstallModInstructions(modId) {
+  if (!modId) return { agents: 0, commands: 0, skills: 0, instructions: 0 };
+  const counts = { agents: 0, commands: 0, skills: 0, instructions: 0 };
+
+  // 1. agents/ — remove every <id>__*.md
+  if (existsSync(OPENCODE_AGENTS_DIR)) {
+    let entries;
+    try {
+      entries = readdirSync(OPENCODE_AGENTS_DIR);
+    } catch {
+      entries = [];
+    }
+    for (const f of entries) {
+      if (f.startsWith(`${modId}__`) && f.endsWith('.md')) {
+        if (removeSafe(join(OPENCODE_AGENTS_DIR, f))) counts.agents += 1;
+      }
+    }
+  }
+
+  // 2. commands/ — remove every <id>__*.md
+  if (existsSync(OPENCODE_COMMANDS_DIR)) {
+    let entries;
+    try {
+      entries = readdirSync(OPENCODE_COMMANDS_DIR);
+    } catch {
+      entries = [];
+    }
+    for (const f of entries) {
+      if (f.startsWith(`${modId}__`) && f.endsWith('.md')) {
+        if (removeSafe(join(OPENCODE_COMMANDS_DIR, f))) counts.commands += 1;
+      }
+    }
+  }
+
+  // 3. INSTRUCTIONS.md — remove <id>-instructions/ skill
+  const instructionsDest = join(OPENCODE_SKILLS_DIR, `${modId}-instructions`);
+  if (removeSafe(instructionsDest)) counts.instructions += 1;
+
+  // 4. skills/ — remove every <id>-<name>/ skill dir that this mod installed.
+  // We only remove dirs that look like `<id>-*` and aren't the agent-baseline
+  // or other base-installed skills.
+  if (existsSync(OPENCODE_SKILLS_DIR)) {
+    let entries;
+    try {
+      entries = readdirSync(OPENCODE_SKILLS_DIR, { withFileTypes: true });
+    } catch {
+      entries = [];
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      // Match `<id>-<anything>`. Use the first hyphen as the split so mod
+      // ids that themselves contain hyphens still work (`<id>-<name>`).
+      const prefix = `${modId}-`;
+      if (e.name === `${modId}-instructions`) continue; // handled above
+      if (e.name.startsWith(prefix)) {
+        if (removeSafe(join(OPENCODE_SKILLS_DIR, e.name))) counts.skills += 1;
+      }
+    }
+  }
+
+  return counts;
 }

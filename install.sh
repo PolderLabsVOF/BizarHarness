@@ -28,6 +28,14 @@ for f in "$REPO_DIR/config/agents/"*.md; do
   cp "$f" "$CONFIG_DIR/agents/$name"
   echo -e "    ${GREEN}✓${NC} agents/$name"
 done
+# Also copy the _shared/ directory so the per-agent references resolve
+# on disk. The actual baseline content is also installed as a skill
+# (see below) so it auto-loads when any agent starts.
+if [ -d "$REPO_DIR/config/agents/_shared" ]; then
+  mkdir -p "$CONFIG_DIR/agents/_shared"
+  cp -R "$REPO_DIR/config/agents/_shared/." "$CONFIG_DIR/agents/_shared/"
+  echo -e "    ${GREEN}✓${NC} agents/_shared/"
+fi
 
 # ── Copy commands (slash commands) ──────────────────────────────────
 if [ -d "$REPO_DIR/config/commands/" ]; then
@@ -72,6 +80,18 @@ for skill in bizar self-improvement cpp-coding-standards cpp-testing embedded-es
 done
 # Make scripts executable for skills that bundle them
 chmod +x "$SKILLS_DIR"/embedded-esp-idf/scripts/*.sh 2>/dev/null || true
+
+# ── Install shared agent baseline skill (referenced by every agent) ─
+# All 14 Bizar agent files point to config/agents/_shared/AGENT_BASELINE.md.
+# Install it as a skill so it auto-loads when any agent starts.
+echo -e "  ${GREEN}→${NC} Installing shared agent baseline skill..."
+if [ -f "$REPO_DIR/config/agents/_shared/AGENT_BASELINE.md" ]; then
+  mkdir -p "$SKILLS_DIR/agent-baseline"
+  cp "$REPO_DIR/config/agents/_shared/AGENT_BASELINE.md" "$SKILLS_DIR/agent-baseline/SKILL.md"
+  echo -e "    ${GREEN}✓${NC} skills/agent-baseline (shared by all 14 agents)"
+else
+  echo -e "    ${YELLOW}⚠${NC} skills/agent-baseline — source not found, skipping"
+fi
 
 # ── Install domain skills via skills.sh (always-on rule discoverability) ──
 if command -v npx >/dev/null 2>&1; then

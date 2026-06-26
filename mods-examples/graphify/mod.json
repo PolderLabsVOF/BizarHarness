@@ -1,7 +1,7 @@
 {
   "id": "graphify",
   "name": "Graphify",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "BizarHarness",
   "description": "Knowledge-graph view of your project — code-only AST build works offline, full LLM-powered build with API key. Embeds graphify's interactive vis-network visualization directly in the dashboard.",
   "kind": "view",

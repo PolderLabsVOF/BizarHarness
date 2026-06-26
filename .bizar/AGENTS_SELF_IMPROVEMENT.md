@@ -757,3 +757,24 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - For browser-driven E2E testing — `browser-harness` agent drives chromium via CDP via `chrome-remote-interface`; parent agents call it for "screenshot X" / "verify Y" / "smoke test Z". It never edits source.
 - **Files changed**: 80 modified, 3 new mods (ponytail, impeccable, graphify already existed), 1 new server module (obsidian-store.mjs), 1 new route (obsidian.mjs), 1 new agent (browser-harness.md). Renamed `Plans` → `Artifacts` everywhere.
 - **Published**: `@polderlabs/bizar@3.19.0`, `@polderlabs/bizar-dash@3.19.1` (patch for extractArtifactFromMessage stub), 2 new mods on github.com/DrB0rk/bizar-mods (registry v2), browser-harness agent in config/agents/.
+
+## 2026-06-26 — v3.20.0: Mod instructions protocol + 14-agent modular refactor
+
+- **Lesson**: 14 Bizar agent files contained ~1500 lines of duplicated "always-on rules" content (Semble, Skills CLI, Obsidian vault, loop guard, communication, parallel execution, general baseline). Extracting them into a shared `_shared/AGENT_BASELINE.md` (508 lines) and reducing each agent to ~50-65 lines cut total content from 2023→1554 lines (23% reduction) with zero behavior change. The shared file gets installed as `~/.opencode/skills/agent-baseline/SKILL.md` by `install.sh`, so opencode auto-loads it for every agent.
+- **Lesson**: Mods were a closed world — they only contributed dashboard routes/views, never rules. v3.20 opens mods to also contribute instruction files: `INSTRUCTIONS.md` (top-level skill), `agents/<name>.md` (agent-specific overrides), `commands/<name>.md` (slash commands), `skills/<name>/SKILL.md` (additional skills). The loader copies these into the user's opencode config with `<mod-id>__` / `<mod-id>-` prefixes so uninstall removes exactly what each mod installed.
+- **Lesson**: `modScope` + `modPriority` frontmatter fields let a mod target a specific Bizar agent (`thor`, `tyr`, etc.) and choose its rule interaction (`replace`, `augment`, `guard`). This makes "Ponytail teaches Thor to be lazier" a one-line frontmatter addition, not a fork of Thor's prompt.
+- **Lesson**: `Bun` runtime caches `os.homedir()` at startup, so `process.env.HOME = sandbox` in `bun:test` doesn't sandbox the loader. Solution: use `node --test` for tests that need HOME redirection. Existing `bun:test` tests (mod-security) stay on Bun. Both runners are invoked separately.
+- **Lesson**: `await import()` at module top-level runs once — the loader captures `HOME`/`MODS_DIR` as `const` values at first import, so per-test env changes are ignored. Use a single import at file top with `beforeAll` for setup; don't re-import inside tests.
+- **Pattern to follow**:
+  - For shared agent content: put it in `_shared/<topic>.md` and install via `install.sh` as `~/.opencode/skills/<topic>/SKILL.md`. Each agent file ends with a one-liner pointer to the shared file. Single source of truth.
+  - For mod instructions: always ship a top-level `INSTRUCTIONS.md` with the SKILL.md frontmatter so opencode auto-loads it. Use `agents/<name>.md` with `modScope` + `modPriority` for agent-specific rules. Use the `<mod-id>__` prefix on agent/command files and `<mod-id>-` prefix on skills so uninstall can be precise.
+  - For test sandboxes: prefer `node --test` when you need HOME redirection or env-var-based sandboxing. Use `bun:test` only when testing Bun-specific behavior. Don't try to make one runner do both.
+  - For multi-target tests: write the test in the runner that supports the env-var behavior you need. Accept that you have 2 test files (one per runner), not one that runs everywhere.
+- **Files changed**: 14 agent files reduced from 2023→1046 lines + new `config/agents/_shared/AGENT_BASELINE.md` (508 lines), 1 new file `bizar-dash/tests/mod-instructions.node.test.mjs` (6 tests), 3 new INSTRUCTIONS.md files (graphify, ponytail, impeccable) + 1 mod agent file (ponytail/agents/thor.md). Mods loader gained `installModInstructions`/`uninstallModInstructions`/`listModInstructions`/`reinstallInstructions` and `fetchInstructionDir`/`fetchSkillsDir` for registry installs.
+- **Verification**:
+  - `node --test tests/mod-instructions.node.test.mjs`: 6/6 pass (install/uninstall round-trip, prefix isolation, listModInstructions, non-md filter)
+  - `bun test tests/mod-security.test.mjs`: 26/26 pass (existing, untouched)
+  - `bash install.sh`: installs 14 agents + `_shared/` + `agent-baseline` skill, plus 3 npm skills (impeccable, ponytail, obsidian-skills) — all green
+  - `node --check src/server/mods-loader.mjs`: syntax clean
+  - `npm view @polderlabs/bizar@3.20.0 version` (after publish)
+- **Published**: `@polderlabs/bizar@3.20.0`, `@polderlabs/bizar-dash@3.20.0`, registry v3 in `github.com/DrB0rk/bizar-mods` with graphify 1.2.0, ponytail 1.1.0, impeccable 1.1.0.

@@ -1,7 +1,7 @@
 {
   "id": "impeccable",
   "name": "Impeccable",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "paulbakaus",
   "description": "Detect UI anti-patterns and design quality issues. Scans HTML, CSS, JSX, TSX, Vue, and Svelte files for 44 deterministic rules including AI-generated UI tells, accessibility violations, and general design quality problems. Catches: side-tab accent borders, gradient text on headings, purple/violet gradients, cyan-on-dark palettes, monotonous spacing, nested cards, bounce easing, etc.",
   "kind": "skill",
