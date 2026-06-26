@@ -22,8 +22,8 @@ import {
 describe("PRIMARY_AGENTS — set of agents accepted by opencode run --agent", () => {
   it("contains the three primary agents from config/agents/*.md", () => {
     expect(PRIMARY_AGENTS.has("odin")).toBe(true);
-    expect(PRIMARY_AGENTS.has("frigg")).toBe(true);
     expect(PRIMARY_AGENTS.has("quick")).toBe(true);
+    expect(PRIMARY_AGENTS.has("browser-harness")).toBe(true);
   });
 
   it("does NOT contain any subagent", () => {
@@ -36,6 +36,7 @@ describe("PRIMARY_AGENTS — set of agents accepted by opencode run --agent", ()
       "tyr",
       "vidarr",
       "forseti",
+      "frigg",  // v3.20.11: frigg was demoted to subagent (mode: subagent)
       "vor",
       "semble-search",
     ]) {
@@ -68,8 +69,8 @@ describe("PRIMARY_AGENTS — set of agents accepted by opencode run --agent", ()
 describe("needsDelegationWrapper", () => {
   it("returns false for primary agents", () => {
     expect(needsDelegationWrapper("odin")).toBe(false);
-    expect(needsDelegationWrapper("frigg")).toBe(false);
     expect(needsDelegationWrapper("quick")).toBe(false);
+    expect(needsDelegationWrapper("browser-harness")).toBe(false);
   });
 
   it("returns true for subagents", () => {

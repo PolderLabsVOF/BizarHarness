@@ -290,32 +290,38 @@ function rerunInstallScript() {
     return { ok: false, message: 'could not locate npm global root; skipping install-script rerun' };
   }
   const pkgRoot = join(globalRoot, ...PKG_MAIN.split('/'));
-  const binPath = join(pkgRoot, 'cli', 'bin.mjs');
-  if (existsSync(binPath)) {
-    console.log(chalk.dim(`\n  Re-running setup via ${binPath} --setup...`));
-    const r = spawnSync(process.execPath, [binPath, '--setup'], { stdio: 'inherit' });
-    if (r.status === 0) {
-      return { ok: true, message: 'setup re-run' };
-    }
-    return { ok: false, message: 'setup rerun failed' };
-  }
+  // v3.20.11: prefer the canonical `install.sh` script over `cli/bin.mjs
+  // --setup`. The bash script is the single source of truth (it handles
+  // system deps, chrome-headless-shell runtime libs, browser-harness,
+  // opencode.json merging, etc.); the --setup path is a legacy fallback
+  // for environments where bash isn't on PATH.
   const installSh = join(pkgRoot, 'install.sh');
-  if (!existsSync(installSh)) {
+  if (process.platform === 'win32') {
+    // On Windows without WSL, bash isn't available. The bash script has
+    // a Windows fallback that uses npm-based install paths. Fall through
+    // to the bin.mjs --setup path, which still does the agent copy +
+    // plugin-from-global install on Windows.
+    console.log(chalk.dim('  Windows: using bin.mjs --setup path (bash not available)'));
+  } else if (existsSync(installSh)) {
+    console.log(chalk.dim(`\n  Re-running install script at ${installSh}...`));
+    const r = spawnSync('bash', [installSh], { stdio: 'inherit' });
+    if (r.status !== 0) {
+      return { ok: false, message: 'install script rerun failed' };
+    }
+    return { ok: true, message: 'install script re-run' };
+  } else {
+    console.log(chalk.dim('  install.sh not present — falling back to bin.mjs --setup'));
+  }
+  const binPath = join(pkgRoot, 'cli', 'bin.mjs');
+  if (!existsSync(binPath)) {
     return { ok: false, message: 'could not locate a compatible setup script to re-run' };
   }
-  if (process.platform === 'win32') {
-    // On Windows, the bash install path doesn't apply. The plugin is
-    // already installed globally via the npm install
-    // (see cli/install.mjs:installPluginFromGlobal).
-    console.log(chalk.dim('  Skipping install.sh (Windows uses npm-based plugin install)'));
-    return { ok: true, message: 'install.sh skipped on Windows' };
+  console.log(chalk.dim(`\n  Re-running setup via ${binPath} --setup...`));
+  const r = spawnSync(process.execPath, [binPath, '--setup'], { stdio: 'inherit' });
+  if (r.status === 0) {
+    return { ok: true, message: 'setup re-run' };
   }
-  console.log(chalk.dim(`\n  Re-running install script at ${installSh}...`));
-  const r = spawnSync('bash', [installSh], { stdio: 'inherit' });
-  if (r.status !== 0) {
-    return { ok: false, message: 'install script rerun failed' };
-  }
-  return { ok: true, message: 'install script re-run' };
+  return { ok: false, message: 'setup rerun failed' };
 }
 
 // ---------------------------------------------------------------------------

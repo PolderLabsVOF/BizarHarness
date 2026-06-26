@@ -25,7 +25,28 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { opencodeConfigDir, opencodeAgentsDir } from './utils.mjs';
 
-const REQUIRED_AGENTS = ['odin.md', 'quick.md', 'thor.md', 'tyr.md'];
+// v3.20.11: list every agent the install script is expected to deploy.
+// Adding a new agent to `config/agents/` without adding it here causes
+// doctor to silently under-count ("all 4 core agents present" when there
+// are actually 14). The list mirrors cli/install.mjs AGENT_FILES plus
+// `browser-harness.md` (added in v3.20.7) and `_shared/AGENT_BASELINE.md`
+// is intentionally excluded (it's a skill, not an agent).
+const REQUIRED_AGENTS = [
+  'odin.md',
+  'vor.md',
+  'frigg.md',
+  'quick.md',
+  'mimir.md',
+  'heimdall.md',
+  'hermod.md',
+  'thor.md',
+  'baldr.md',
+  'tyr.md',
+  'vidarr.md',
+  'forseti.md',
+  'semble-search.md',
+  'browser-harness.md',
+];
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 

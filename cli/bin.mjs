@@ -150,14 +150,22 @@ function showExportHelp() {
 
 function showInstallHelp() {
   console.log(`
-  bizar install — Run the interactive installer
+  bizar install — Run the canonical BizarHarness installer
 
   Usage:
     bizar install
 
   Description:
-    Installs agents, rules, commands, plugin support, RTK, Semble,
-    and the Skills CLI.
+    v3.20.11+ — thin wrapper around ./install.sh. The bash script
+    auto-installs every system dep (uv, python3.12, chrome-headless-shell
+    + runtime libs, jq), installs browser-harness via uv, syncs agents /
+    commands / hooks / skills into ~/.config/opencode/, configures
+    opencode.json + the Bizar plugin, and prints a single status banner.
+
+    No API key collection, no interactive prompts, no opencode restart —
+    the installer is safe to re-run anytime.
+
+    Run from a fresh git clone instead: \`cd BizarHarness && ./install.sh\`
   `);
 }
 

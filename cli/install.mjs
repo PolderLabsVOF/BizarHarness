@@ -206,231 +206,62 @@ export async function installPluginFromGlobal(opts = {}) {
   return true;
 }
 
+/**
+ * runInstaller — v3.20.11 thin wrapper.
+ *
+ * As of v3.20.11, `bizar install` is a thin wrapper around the canonical
+ * `install.sh` script at the repo root. The bash script handles all the
+ * heavy lifting: system-dep installation (uv, python3.12, chrome-headless-shell
+ * + runtime libs, jq), browser-harness via uv, Chrome lifecycle, agent /
+ * command / hook / skill sync, opencode.json merging, install-state.
+ *
+ * Why a thin wrapper instead of the old TUI:
+ *   - One source of truth. The bash script is also what `git clone` users
+ *     run (`./install.sh`), what `bizar update` re-runs, and what the npm
+ *     postinstall hook invokes. Keeping a parallel Node implementation
+ *     guarantees the two will diverge.
+ *   - No interactive prompts. The TUI asked for API keys, restart
+ *     confirmation, and component selection — none of which belong in a
+ *     `npm i -g @polderlabs/bizar` install (no TTY, secrets stay local).
+ *   - Cross-platform. The bash script already detects Windows and falls
+ *     back to the npm-based path; re-implementing that in Node is busywork.
+ *
+ * Returns the install.sh exit code (0 = success, 1 = partial failure).
+ * On platforms where bash isn't available (rare — Windows without WSL),
+ * falls back to running the npm-based path directly.
+ */
 export async function runInstaller() {
-  showBanner();
+  const { existsSync } = await import('node:fs');
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { spawnSync } = await import('node:child_process');
 
-  // ── Detect opencode ──
-  sectionHeading('Pre-flight');
-  const env = await detectOpenCode();
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  // cli/install.mjs → ../install.sh
+  const installSh = join(__dirname, '..', 'install.sh');
 
-  if (!env.exists) {
-    console.log(chalk.yellow('  ⚠ opencode config directory not found.'));
-    console.log(chalk.dim('  The installer will create it at:'));
-    console.log(chalk.dim(`  ${env.configDir}`));
-  } else {
-    console.log(chalk.green(`  ✓ opencode detected at ${env.configDir}`));
-    if (env.version) console.log(chalk.dim(`    version ${env.version}`));
+  if (!existsSync(installSh)) {
+    console.error(chalk.red('  ✗ install.sh not found at ' + installSh));
+    console.error(chalk.dim('    Run `git clone https://github.com/DrB0rk/BizarHarness` first, then `cd BizarHarness && ./install.sh`.'));
+    process.exit(1);
   }
 
-  const rtkInstalled = await detectRtk();
-  if (rtkInstalled) {
-    console.log(chalk.green('  ✓ RTK detected (token optimizer)'));
-  } else {
-    console.log(chalk.yellow('  ○ RTK not detected — will install'));
+  console.log(chalk.bold.hex('#6366f1')('\n  BizarHarness installer (delegating to install.sh)\n'));
+
+  const useBash = process.platform !== 'win32' || process.env.WSL_DISTRO_NAME;
+  if (useBash) {
+    const r = spawnSync('bash', [installSh], { stdio: 'inherit' });
+    process.exit(r.status ?? 1);
   }
 
-  const sembleInstalled = await detectSemble();
-  if (sembleInstalled) {
-    console.log(chalk.green('  ✓ Semble detected (code search)'));
-  } else {
-    console.log(chalk.yellow('  ○ Semble not detected — will install'));
-  }
-
-  const skillsCliInstalled = await detectSkillsCli();
-  if (skillsCliInstalled) {
-    console.log(chalk.green('  ✓ Skills CLI detected (skill discovery)'));
-  } else {
-    console.log(chalk.yellow('  ○ Skills CLI not detected — will install'));
-  }
-  console.log();
-
-  // ── Step 1: Component selection ──
-  sectionHeading('Component Selection');
-  const components = await promptComponents();
-
-  // ── Step 2: Agent selection (if agents component chosen) ──
-  let selectedAgents = [];
-  if (components.includes('agents')) {
-    sectionHeading('Agent Selection');
-    selectedAgents = await promptAgents();
-  }
-
-  // ── Step 3: Install mode ──
-  sectionHeading('Installation Mode');
-  const mode = await promptInstallMode();
-
-  // ── Step 4: Skill packs (via skills.sh) ──
-  sectionHeading('Skills from skills.sh');
-  const skillPacks = await promptSkillPacks();
-
-  // ── Step 5: Build summary & confirm ──
-  const summary = buildSummary(components, selectedAgents, env.configDir, skillPacks);
-  showPantheon();
-  console.log();
-  console.log(chalk.dim('  Summary:'));
-  console.log(chalk.dim(`  Components : ${summary.components}`));
-  console.log(chalk.dim(`  Agents     : ${summary.agents}`));
-  console.log(chalk.dim(`  Target     : ${summary.target}`));
-  console.log(chalk.dim(`  Mode       : ${mode}`));
-  console.log();
-
-  const confirmed = await promptConfirmInstall(summary);
-  if (!confirmed) {
-    console.log(chalk.yellow('\n  Installation cancelled.\n'));
-    process.exit(0);
-  }
-
-  // ── Step 5: Install ──
-  console.log();
-  sectionHeading('Installing');
-
-  if (components.includes('agents') && selectedAgents.length > 0) {
-    await installAgents(selectedAgents, mode);
-  }
-
-  if (components.includes('agents-md')) {
-    await installAgentsMd(mode);
-  }
-
-  if (components.includes('skill-bizar')) {
-    await installSkill('bizar');
-  }
-
-  if (components.includes('skill-improve')) {
-    await installSkill('self-improvement');
-  }
-
-  if (components.includes('skill-cpp-std')) {
-    await installSkill('cpp-coding-standards');
-  }
-
-  if (components.includes('skill-cpp-test')) {
-    await installSkill('cpp-testing');
-  }
-
-  if (components.includes('skill-esp-idf')) {
-    await installSkill('embedded-esp-idf');
-  }
-
-  if (components.includes('opencode-json')) {
-    await installOpencodeJson(mode);
-  }
-
-  // Always attempt to merge the 7 BizarHarness tool keys idempotently.
-  // Safe to call even if opencode-json wasn't selected — skips silently.
-  {
-    const result = await mergeToolsIntoUserConfig();
-    if (result.merged) {
-      console.log(chalk.green(`  ✓ ${result.added.length} BizarHarness tool key(s) merged into opencode.json`));
-    }
-  }
-
-  if (components.includes('bizar')) {
-    await installBizarFolder();
-  }
-
-  if (components.includes('plugin-bizar')) {
-    const result = await installPluginBizar();
-    if (result.errors.length > 0) {
-      console.log(chalk.yellow(`  ⚠ Plugin install: ${result.errors.length} error(s)`));
-    }
-  }
-
-  // Also try to install the plugin from the separate global npm package
-  // `@polderlabs/bizar-plugin` (preferred path going forward).
-  if (components.includes('plugin-bizar')) {
-    await installPluginFromGlobal();
-  }
-
-  // ── Rules, hooks, commands (optional components) ──
-  if (components.includes('rules')) {
-    const n = await installRules();
-    console.log(chalk.green(`  ✓ ${n} rules installed`));
-  }
-  if (components.includes('hooks')) {
-    const n = await installHooks();
-    console.log(chalk.green(`  ✓ ${n} hooks installed`));
-  }
-  if (components.includes('commands')) {
-    const n = await installCommands();
-    console.log(chalk.green(`  ✓ ${n} commands installed`));
-  }
-
-  // ── RTK (always installed — token optimization required) ──
-  await installRtk();
-
-  // ── Semble (always installed — code search required) ──
-  await installSemble();
-
-  // ── Skills CLI (always installed — skill discovery required) ──
-  await installSkillsCli();
-
-  // ── Skill packs (via skills.sh ecosystem) ──
-  for (const pack of skillPacks) {
-    await installCuratedSkills([pack]);
-  }
-
-  // ── Step 6: API keys ──
-  sectionHeading('API Keys');
-  console.log(chalk.dim('  You can configure API keys now or later via /connect in opencode.'));
-  const keys = await promptApiKeys();
-
-  if (keys.opencodeZen || keys.minimax || keys.openai) {
-    console.log(chalk.dim('\n  Keys noted. Add them to your opencode.json or run /connect in opencode.\n'));
-  }
-
-  // ── Summary ──
-  console.log();
-  console.log(boxen(
-    chalk.bold.hex('#6366f1')('  ⚡ BIZARHARNESS INSTALLED ⚡\n') +
-    '\n' +
-    chalk.dim('  Norse Pantheon active.\n') +
-    '\n' +
-    chalk.green(`  ✓ ${selectedAgents.length} agents installed`) + '\n' +
-    chalk.green(`  ✓ ${summary.parts.length} components configured`) + '\n' +
-    '\n' +
-    chalk.green('  ✓ RTK ') + chalk.dim(`(${rtkInstalled ? 'already configured' : 'installed & configured'})`) + '\n' +
-    chalk.green('  ✓ Semble ') + chalk.dim(`(${sembleInstalled ? 'ready' : 'installed'})`) + '\n' +
-    chalk.green('  ✓ Skills CLI ') + chalk.dim(`(${skillsCliInstalled ? 'ready' : 'installed'})`) + '\n' +
-    (skillPacks.length > 0 ? chalk.green(`  ✓ Skill packs: ${skillPacks.join(', ')}`) + '\n' : '') + '\n' +
-    chalk.hex('#a855f7')('  Next steps:') + '\n' +
-    chalk.hex('#a855f7')('  1. Restart opencode') + '\n' +
-    chalk.hex('#a855f7')('  2. Run /connect to add API keys') + '\n' +
-    chalk.hex('#a855f7')('  3. Run /models to verify agents'),
-    {
-      padding: 1,
-      margin: 0,
-      borderStyle: 'round',
-      borderColor: '#6366f1',
-    },
-  ));
-  console.log();
-
-  // ── Provider auto-detect (v3.16.0) — best-effort, doesn't block install
-  const { runProvidersDetect } = await import('./providers-detect.mjs');
-  try {
-    await runProvidersDetect(['--no-probe']);
-  } catch {
-    // best-effort
-  }
-
-  // ── Restart prompt ──
-  const shouldRestart = await promptRestartOpenCode();
-  if (shouldRestart) {
-    console.log(chalk.dim('  Restarting opencode...'));
-    try {
-      const { execSync } = await import('node:child_process');
-      execSync('opencode', { stdio: 'inherit' });
-    } catch {
-      console.log(chalk.yellow('  Could not restart automatically. Restart opencode manually.'));
-    }
-  }
-
-  // ── Post-install: graphify ──
-  await promptGraphifyInstall();
-
-  // ── Post-install ──
-  console.log(chalk.dim('\n  Odin watches. The Pantheon awaits. ᛟ\n'));
+  // Windows without WSL — bash isn't available. The bash script has a
+  // Windows fallback that uses npm-based install paths. Run the npm path
+  // directly: install the BizarHarness npm packages + copy plugin from
+  // global to ~/.config/opencode/plugins/bizar/. This is the same code
+  // path install.sh uses for `platform == win32`.
+  console.log(chalk.dim('  bash not available — running npm-based installer (Windows path)'));
+  console.log('');
+  await runPostInstall();
 }
 
 // ── Interactive prompts for optional packages ─────────────────────────────────

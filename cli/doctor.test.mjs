@@ -281,16 +281,22 @@ describe('runDoctor() with fixture HOME', () => {
 
   test('agent-files-installed fails when core agents missing', async () => {
     writeOpencodeConfig({});
-    writeAgents('odin.md'); // missing quick, thor, tyr
+    writeAgents('odin.md'); // missing the other 13
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'agent-files-installed');
     assert.equal(r.ok, false);
     assert.match(r.message, /missing/);
   });
 
-  test('agent-files-installed passes when all core agents present', async () => {
+  test('agent-files-installed passes when all 14 agents present', async () => {
     writeOpencodeConfig({});
-    writeAgents('odin.md', 'quick.md', 'thor.md', 'tyr.md');
+    // v3.20.11: doctor now expects all 14 agents (was 4 in v3.20.10).
+    writeAgents(
+      'odin.md', 'vor.md', 'frigg.md', 'quick.md',
+      'mimir.md', 'heimdall.md', 'hermod.md', 'thor.md', 'baldr.md',
+      'tyr.md', 'vidarr.md', 'forseti.md',
+      'semble-search.md', 'browser-harness.md',
+    );
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'agent-files-installed');
     assert.equal(r.ok, true, r.message);

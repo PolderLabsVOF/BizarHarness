@@ -40,7 +40,15 @@ const TIMEOUT_DEFAULT_MS = 300_000;
  * Exported for testability — the test asserts the set is in sync with
  * the agent configs.
  */
-export const PRIMARY_AGENTS: ReadonlySet<string> = new Set(["odin", "frigg", "quick"]);
+// v3.20.11 — kept in sync with config/agents/*.md via the
+// "is in sync with the on-disk agent configs" test below. The set
+// must equal exactly the agents whose frontmatter declares
+// `mode: primary` (currently odin, quick, browser-harness).
+export const PRIMARY_AGENTS: ReadonlySet<string> = new Set([
+  "odin",
+  "quick",
+  "browser-harness",
+]);
 
 /**
  * Decide whether a given agent name needs the delegation wrapper.

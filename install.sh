@@ -2,14 +2,20 @@
 #
 # install.sh — One-shot BizarHarness installer.
 #
-# v3.20.9 — Comprehensive auto-installer. Replaces the older "print
-# 4 manual next steps" flow with: (1) install every system dep we can
-# reasonably fetch (uv, python3.12, chrome-headless-shell, jq); (2)
-# install browser-harness + register its skill; (3) start Chrome for
-# browser-driven E2E; (4) install + configure all BizarHarness files
-# (agents, commands, opencode.json, plugin); (5) print a single
-# status banner that tells the operator what is ready and what (if
-# anything) they still need to do.
+# v3.20.11 — Comprehensive auto-installer with full dependency
+# resolution. Replaces the older "print 4 manual next steps" flow
+# with: (1) install every system dep we can reasonably fetch
+# (uv, python3.12, chrome-headless-shell, jq, Chrome runtime libs);
+# (2) install browser-harness + register its skill; (3) start Chrome
+# for browser-driven E2E; (4) install + configure all BizarHarness
+# files (agents, commands, opencode.json, plugin); (5) print a
+# single status banner that tells the operator what is ready and
+# what (if anything) they still need to do.
+#
+# Idempotent — every step checks for the existing install and
+# skips re-work. Re-running after a failed install picks up
+# where it left off. Same script can run from a fresh `git clone`
+# or via `bizar install` (which spawns this script under bash).
 #
 # What this script does NOT do (intentional):
 #   - Configure provider API keys (MINIMAX_API_KEY, etc.). The user
@@ -133,8 +139,8 @@ fi
 # is available — uv can fetch its own python.
 if ! have_cmd "$PYTHON_BIN"; then
   if have_cmd uv; then
-    echo -e "  ${CYAN}→${NC} uv will fetch Python 3.12 on first use"
-    note "python3.12 will be auto-fetched by uv"
+    echo -e "  ${CYAN}→${NC} python3.12 not on PATH — uv will fetch on first use"
+    note "python3.12 will be auto-fetched by uv (browser-harness will trigger first fetch)"
   else
     warn "no $PYTHON_BIN and no uv — install manually: sudo apt install python3.12 / brew install python@3.12"
   fi
@@ -183,7 +189,7 @@ if [ -z "$CHROME_BIN" ]; then
     if curl -fsSL "$CHROME_CT_URL" -o "$TMP_DIR/chrome-headless-shell.zip" 2>/dev/null; then
       TARGET_DIR="$PUPPETEER_CACHE_DIR/chrome-headless-shell"
       mkdir -p "$TARGET_DIR"
-      unzip -q "$TMP_DIR/chrome-headless-shell.zip" -d "$TARGET_DIR"
+      unzip -q -o "$TMP_DIR/chrome-headless-shell.zip" -d "$TARGET_DIR"
       CHROME_BIN=$(find "$TARGET_DIR" -name chrome-headless-shell -type f 2>/dev/null | head -1)
       [ -n "$CHROME_BIN" ] && [ -x "$CHROME_BIN" ] && note "chrome-headless-shell installed at $CHROME_BIN" || warn "chrome-headless-shell install failed"
       rm -rf "$TMP_DIR"
@@ -192,6 +198,41 @@ if [ -z "$CHROME_BIN" ]; then
     fi
   else
     warn "could not resolve latest chrome-for-testing URL — install Chrome manually"
+  fi
+fi
+
+# Chrome runtime libs (v3.20.11). chrome-headless-shell needs ~10 shared
+# libraries that Debian/Ubuntu don't ship by default. Without these,
+# chrome starts but immediately errors with `libnspr4.so: cannot open
+# shared object file`. We install them on apt-based systems; on others
+# we warn but continue (Chrome won't work, but the rest of the install
+# will).
+if [ -n "$CHROME_BIN" ] || [ -z "$CHROME_BIN" ]; then
+  # Check if chrome-headless-shell actually runs (libs satisfied)
+  if [ -n "$CHROME_BIN" ] && ! "$CHROME_BIN" --version >/dev/null 2>&1; then
+    case "$(uname -s 2>/dev/null || echo unknown)" in
+      Linux)
+        if have_cmd apt-get; then
+          echo -e "  ${CYAN}→${NC} chrome-headless-shell needs runtime libs — installing via apt..."
+          if sudo -n apt-get install -y --no-install-recommends \
+              libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
+              libxdamage1 libxkbcommon0 libasound2t64 libatspi2.0-0 \
+              2>/dev/null; then
+            note "chrome runtime libs installed (libnss3, libnspr4, libatk*, libxkbcommon, libasound, libatspi)"
+          else
+            warn "apt install of chrome runtime libs failed (needs sudo). run manually:"
+            warn "  sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \\"
+            warn "    libxdamage1 libxkbcommon0 libasound2t64 libatspi2.0-0"
+          fi
+        else
+          warn "chrome-headless-shell runtime libs missing — install libnss3, libnspr4, libatk* for your distro"
+        fi
+        ;;
+      Darwin)
+        warn "chrome-headless-shell runtime libs missing — on macOS: brew install --cask chromium"
+        ;;
+      *) warn "chrome-headless-shell runtime libs missing — install via your package manager";;
+    esac
   fi
 fi
 
