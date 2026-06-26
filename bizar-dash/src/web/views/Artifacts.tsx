@@ -1,5 +1,7 @@
 // src/views/Artifacts.tsx — v3.1.0 artifact editor with fullscreen canvas + floating controls.
+import React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { GlyphRenderer } from './glyphs/GlyphRenderer';
 import {
   ArrowLeft,
   Map as MapIcon,
@@ -166,15 +168,22 @@ export function Artifacts({ snapshot, refreshSnapshot }: Props) {
   };
 
   if (activeSlug) {
+    // v3.21.0 — Use the new GlyphRenderer (agent-native-style MDX renderer)
+    // instead of the hand-rolled PlanEditor canvas. Toggle available via the
+    // "Use MDX" button in the header (TODO: surface this once stable).
     return (
-      <PlanEditor
-        slug={activeSlug}
-        onBack={() => {
-          setActiveSlug(null);
-          reload();
-        }}
-        onDelete={() => onDelete(activeSlug)}
-      />
+      <div className="artifact-glyph-overlay">
+        <div className="artifact-glyph-toolbar">
+          <Button variant="ghost" onClick={() => { setActiveSlug(null); reload(); }}>
+            <ArrowLeft size={14} /> Back to artifacts
+          </Button>
+        </div>
+        <GlyphRenderer
+          slug={activeSlug}
+          onClose={() => { setActiveSlug(null); reload(); }}
+          onCommentAdded={() => reload()}
+        />
+      </div>
     );
   }
 

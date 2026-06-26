@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-dash",
-  "version": "3.20.17",
+  "version": "3.21.0",
   "description": "Web + TUI dashboard for the Bizar agent platform (optional companion to @polderlabs/bizar)",
   "type": "module",
   "main": "src/server/server.mjs",
@@ -23,6 +23,9 @@
     "prepublishOnly": "npm run typecheck || echo '⚠ typecheck reported warnings above — review before tagging a release'; npm run build"
   },
   "dependencies": {
+    "@mdx-js/mdx": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "@xyflow/react": "^12.11.1",
     "blessed": "^0.1.81",
     "chokidar": "^3.6.0",
     "cors": "^2.8.6",

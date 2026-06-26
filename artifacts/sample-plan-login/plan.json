@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "title": "Sample Plan — Login Redesign",
+  "elements": [],
+  "connections": [],
+  "comments": [
+    {
+      "id": "cmt_fdfe3fea1",
+      "elementId": null,
+      "author": "drb0rk",
+      "text": "Make this button say Send link instead of Continue",
+      "created": "2026-06-26T17:48:40.083Z",
+      "thread": [],
+      "x": 240,
+      "y": 120
+    },
+    {
+      "id": "cmt_784aa7f48",
+      "elementId": null,
+      "author": "drb0rk",
+      "text": "test",
+      "created": "2026-06-26T17:51:08.935Z",
+      "thread": [],
+      "x": 165,
+      "y": 2121.5
+    },
+    {
+      "id": "cmt_939761e93",
+      "elementId": null,
+      "author": "drb0rk",
+      "text": "Move the magic link form to be the only thing on this page",
+      "created": "2026-06-26T18:20:24.827Z",
+      "thread": [],
+      "x": 300,
+      "y": 400
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

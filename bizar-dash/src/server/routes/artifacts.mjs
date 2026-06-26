@@ -19,11 +19,14 @@
  * /api/artifacts/:slug/comments (POST)        — canvas-level comment
  * /api/artifacts/:slug/comments/:cid (DELETE) — remove canvas-level comment
  * /api/artifacts/:slug/questions/:qid/respond (POST) — agent answers a question element
+ * /api/artifacts/:slug/submit (POST)                — submit feedback for review (writes feedback.md, sets status=review)
+ * /api/artifacts/:slug/render (GET)              — compile MDX → JSON glyph blocks
  */
 import { Router } from 'express';
 import { artifactsStore } from '../artifacts-store.mjs';
 import { notificationsStore } from '../notifications-store.mjs';
 import { wrap } from './_shared.mjs';
+import { compileGlyphMdx } from '../glyphs/mdx-compiler.mjs';
 
 /**
  * @param {object} deps
@@ -46,6 +49,20 @@ export function createArtifactsRouter({ state, broadcast, projectRoot }) {
       return;
     }
     res.json(artifact);
+  }));
+
+  // v3.21.0 — Compile the artifact's MDX into a JSON-serializable
+  // glyph structure for the new Glyphs renderer. Returns frontmatter
+  // + a flat list of typed blocks, ready for the client-side block
+  // component map to render.
+  router.get('/artifacts/:slug/render', wrap(async (req, res) => {
+    const artifact = artifactsStore.get(req.params.slug, projectRoot);
+    if (!artifact) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const compiled = await compileGlyphMdx(artifact.planMdx || '');
+    res.json({ slug: req.params.slug, ...compiled });
   }));
 
   // v3.1.0 — Full artifact CRUD + canvas editing.
@@ -203,6 +220,26 @@ export function createArtifactsRouter({ state, broadcast, projectRoot }) {
     }
     broadcast({ type: 'artifact:change', slug: req.params.slug });
     res.status(204).end();
+  }));
+
+  // ── /api/artifacts/:slug/submit (v3.22.0) ─────────────────────────────
+  // "Submit to agent" — collect free-placed comments + OpenQuestion
+  // answers, write a structured `feedback.md` the agent can read,
+  // mark the artifact `status: review`, and return the summary.
+  router.post('/artifacts/:slug/submit', wrap(async (req, res) => {
+    const result = artifactsStore.submitFeedback(
+      req.params.slug,
+      req.body || {},
+      projectRoot,
+    );
+    if (!result.ok) {
+      res.status(result.error === 'invalid_slug' ? 400 : 404).json({
+        error: result.error || 'not_found',
+      });
+      return;
+    }
+    broadcast({ type: 'artifact:change', slug: req.params.slug });
+    res.json(result);
   }));
 
   // ── /api/artifacts/:slug/questions/:qid/respond (v3.3.0) ──────────────

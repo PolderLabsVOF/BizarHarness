@@ -8293,3 +8293,1046 @@ select:focus-visible,
   text-align: right;
   font-size: 11px;
 }
+/* ─────────────────────────────────────────────────────────────────────
+   Glyphs — Visual plan/recap artifact renderer (v3.22.0)
+   agent-native.com /visual-plan inspired, but POLISHED DARK DASHBOARD
+   (no sketch / rough.js / hand-drawn aesthetic).
+
+   Layout:
+     .glyph-canvas              ← outer wrapper, dotted background
+       .glyph-toolbar-floating  ← sticky top-right pill toolbar
+       .glyph-canvas-content    ← centered column with sections
+         .glyph-canvas-title    ← title + status + slug strip
+         .glyph-sections        ← vertical stack of section cards
+           .glyph-section       ← section card (with optional heading)
+   ───────────────────────────────────────────────────────────────────── */
+
+.glyph-canvas {
+  position: relative;
+  min-height: 100vh;
+  padding: 5.5rem 1.5rem 4rem;
+  /* Dotted "Figma canvas" background — subtle against dark bg */
+  background-color: var(--bg);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(255, 255, 255, 0.06) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+  background-attachment: local;
+  overflow: visible;
+}
+
+.glyph-canvas--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background-color: var(--bg);
+}
+
+.glyph-renderer--loading,
+.glyph-renderer--error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.glyph-renderer--error strong {
+  color: var(--error);
+  font-size: 1.1rem;
+}
+
+.glyph-renderer--error pre {
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-width: 600px;
+}
+
+.glyph-spinner {
+  display: inline-block;
+  animation: glyph-spin 1.2s linear infinite;
+  font-size: 1.5rem;
+  color: var(--accent);
+}
+
+@keyframes glyph-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Floating toolbar (sticky top-right pill) ───────────────────── */
+
+.glyph-toolbar-floating {
+  position: sticky;
+  top: 1rem;
+  z-index: 100;
+  margin-left: auto;
+  margin-bottom: 1rem;
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--bg-elev-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.glyph-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 0.25rem;
+  flex-shrink: 0;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────── */
+
+.glyph-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: background 120ms, border-color 120ms, transform 120ms;
+  font-family: inherit;
+}
+
+.glyph-btn:hover {
+  background: var(--bg-elev-3);
+  border-color: var(--border-strong);
+}
+
+.glyph-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.glyph-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  padding: 0.375rem 0.625rem;
+}
+
+.glyph-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.glyph-btn--primary:hover:not(:disabled) {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+.glyph-btn--send {
+  border-radius: 999px;
+  padding: 0.5rem 0.875rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.35);
+}
+
+.glyph-btn--send:hover:not(:disabled) {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.5);
+}
+
+.glyph-btn-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.glyph-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.glyph-icon-btn:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  color: var(--text-strong);
+}
+
+.glyph-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.glyph-icon-btn--close {
+  color: var(--text-dim);
+}
+
+.glyph-icon-btn-count {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Canvas content (centered column) ───────────────────────────── */
+
+.glyph-canvas-content {
+  max-width: 880px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.glyph-canvas-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.25rem 0.25rem 0.5rem;
+}
+
+.glyph-title {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.glyph-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+}
+
+.glyph-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.glyph-status--draft     { background: var(--warning-soft); color: var(--warning); }
+.glyph-status--shipped   { background: var(--success-soft); color: var(--success); }
+.glyph-status--archived  { background: var(--bg-elev-2); color: var(--text-dim); }
+.glyph-status--review    { background: var(--accent-soft); color: var(--accent-2); }
+
+.glyph-slug {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ─── Compiler warnings ──────────────────────────────────────────── */
+
+.glyph-errors {
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+
+.glyph-errors ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--text-dim);
+}
+
+/* ─── Sections stack ─────────────────────────────────────────────── */
+
+.glyph-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.glyph-section {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+}
+
+.glyph-section--plain {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.glyph-section-heading {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+}
+
+.glyph-section-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.glyph-block-placeholder {
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+}
+
+/* ─── Block components (RichText, Callout, etc.) ─────────────────── */
+
+.glyph-rich-text {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.glyph-rich-text h1,
+.glyph-rich-text h2,
+.glyph-rich-text h3 {
+  color: var(--text-strong);
+  font-weight: 700;
+  margin: 1.5rem 0 0.5rem;
+  line-height: 1.25;
+}
+
+.glyph-rich-text h1 { font-size: 1.5rem; }
+.glyph-rich-text h2 { font-size: 1.25rem; }
+.glyph-rich-text h3 { font-size: 1.0625rem; }
+
+.glyph-rich-text p {
+  margin: 0.5rem 0;
+}
+
+.glyph-rich-text code {
+  background: var(--bg-elev-3);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.85em;
+  color: var(--accent-2);
+}
+
+.glyph-rich-text pre {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+}
+
+.glyph-rich-text pre code {
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+}
+
+.glyph-rich-text ul,
+.glyph-rich-text ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.glyph-rich-text li {
+  margin: 0.25rem 0;
+}
+
+.glyph-rich-text a {
+  color: var(--accent-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.glyph-rich-text blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 0.75rem 0;
+  padding: 0.25rem 0 0.25rem 1rem;
+  color: var(--text-dim);
+}
+
+/* ─── Callout ────────────────────────────────────────────────────── */
+
+.glyph-callout {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-radius: 6px;
+  border-left: 3px solid;
+  background: var(--bg-elev-2);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.glyph-callout--info    { border-left-color: var(--info); background: rgba(96, 165, 250, 0.08); }
+.glyph-callout--warn    { border-left-color: var(--warning); background: var(--warning-soft); }
+.glyph-callout--success { border-left-color: var(--success); background: var(--success-soft); }
+.glyph-callout--danger  { border-left-color: var(--error); background: var(--error-soft); }
+
+.glyph-callout-icon {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 1rem;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.glyph-callout--info    .glyph-callout-icon { color: var(--info); }
+.glyph-callout--warn    .glyph-callout-icon { color: var(--warning); }
+.glyph-callout--success .glyph-callout-icon { color: var(--success); }
+.glyph-callout--danger  .glyph-callout-icon { color: var(--error); }
+
+.glyph-callout-body {
+  flex: 1;
+  color: var(--text);
+}
+
+.glyph-callout-body p {
+  margin: 0;
+}
+
+/* ─── Checklist ─────────────────────────────────────────────────── */
+
+.glyph-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.glyph-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.glyph-checklist-item--checked {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.glyph-checklist-mark {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.glyph-checklist-item--checked .glyph-checklist-mark {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+}
+
+/* ─── Table ──────────────────────────────────────────────────────── */
+
+.glyph-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.glyph-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.glyph-table th {
+  background: var(--bg-elev-2);
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.glyph-table td {
+  padding: 0.625rem 0.875rem;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+}
+
+.glyph-table tr:first-child td {
+  border-top: none;
+}
+
+/* ─── CodeTabs ──────────────────────────────────────────────────── */
+
+.glyph-codetabs {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.glyph-codetabs-tabs {
+  display: flex;
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.glyph-codetabs-tab {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.glyph-codetabs-tab--active {
+  color: var(--accent-2);
+  border-bottom-color: var(--accent);
+}
+
+.glyph-codetabs-panel {
+  background: var(--bg-elev);
+}
+
+.glyph-codetabs-caption {
+  padding: 0.375rem 1rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.glyph-codetabs-code {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+  color: var(--text);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ─── Decision ──────────────────────────────────────────────────── */
+
+.glyph-decision {
+  padding: 0.875rem 1rem;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.glyph-decision-title,
+.glyph-decision-question {
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--text-strong);
+}
+
+.glyph-decision-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.625rem;
+}
+
+.glyph-decision-option {
+  padding: 0.625rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  position: relative;
+}
+
+.glyph-decision-option--recommended {
+  border-color: var(--success);
+  background: var(--success-soft);
+}
+
+.glyph-decision-option-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-strong);
+}
+
+.glyph-decision-option-detail {
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.glyph-decision-option-badge {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  padding: 1px 6px;
+  background: var(--success);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+/* ─── OpenQuestions ─────────────────────────────────────────────── */
+
+.glyph-openquestions {
+  padding: 0.875rem 1rem;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.glyph-openquestions-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.glyph-openquestions-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.glyph-openquestions-input,
+.glyph-openquestions-select {
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-family: inherit;
+}
+
+/* ─── FileTree ──────────────────────────────────────────────────── */
+
+.glyph-filetree {
+  padding: 0.875rem 1rem;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.glyph-filetree-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.glyph-filetree-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+}
+
+.glyph-filetree-change {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.glyph-filetree-change--added    { background: var(--success-soft); color: var(--success); }
+.glyph-filetree-change--modified { background: rgba(96, 165, 250, 0.15); color: var(--info); }
+.glyph-filetree-change--removed  { background: var(--error-soft); color: var(--error); }
+.glyph-filetree-change--renamed  { background: rgba(167, 139, 250, 0.15); color: var(--accent-2); }
+
+.glyph-filetree-path {
+  color: var(--text);
+}
+
+.glyph-filetree-note {
+  color: var(--text-dim);
+  font-style: italic;
+  font-family: inherit;
+}
+
+/* ─── Diff ──────────────────────────────────────────────────────── */
+
+.glyph-diff {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.glyph-diff-header {
+  background: var(--bg-elev-2);
+  padding: 0.5rem 0.875rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.glyph-diff-lang {
+  background: var(--bg-elev-3);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.glyph-diff-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+}
+
+.glyph-diff--unified .glyph-diff-body {
+  display: block;
+}
+
+.glyph-diff-side {
+  border-right: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.glyph-diff-side:last-child {
+  border-right: none;
+}
+
+.glyph-diff-line {
+  display: flex;
+  padding: 0.0625rem 0.875rem;
+  white-space: pre;
+  line-height: 1.5;
+}
+
+.glyph-diff-line--add    { background: var(--success-soft); color: var(--success); }
+.glyph-diff-line--del    { background: var(--error-soft); color: var(--error); }
+.glyph-diff-line--ctx    { color: var(--text-dim); }
+.glyph-diff-mark {
+  width: 1.25rem;
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 700;
+  user-select: none;
+}
+
+/* ─── Stat ──────────────────────────────────────────────────────── */
+
+.glyph-stat {
+  display: inline-block;
+  padding: 0.75rem 1rem;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 120px;
+}
+
+.glyph-stat-label {
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.glyph-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+}
+
+.glyph-stat-trend {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.glyph-stat-trend--up   { color: var(--success); }
+.glyph-stat-trend--down { color: var(--error); }
+.glyph-stat-trend--flat { color: var(--text-dim); }
+
+.glyph-stat-hint {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* ─── Workflow (SVG) ───────────────────────────────────────────── */
+
+.glyph-workflow {
+  padding: 1rem;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.glyph-workflow-svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.glyph-workflow-node {
+  fill: var(--bg);
+  stroke: var(--info);
+  stroke-width: 1.5;
+}
+
+.glyph-workflow-node--decision {
+  fill: var(--bg);
+  stroke: var(--warning);
+}
+
+.glyph-workflow-node--note {
+  fill: var(--bg-elev-2);
+  stroke: var(--border-strong);
+  stroke-dasharray: 4 3;
+}
+
+.glyph-workflow-label {
+  fill: var(--text);
+  font-size: 12px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.glyph-workflow-edge {
+  stroke: var(--text-dim);
+  stroke-width: 1.5;
+  fill: none;
+  marker-end: url(#glyph-arrowhead);
+}
+
+.glyph-workflow-edge-label {
+  fill: var(--text-dim);
+  font-size: 11px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ─── Comment pins (overlay) — enhanced glow ───────────────────── */
+
+.glyph-pin {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  margin-top: -13px;
+  background: var(--accent);
+  color: white;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+  z-index: 10;
+  transition: transform 120ms, background 120ms, box-shadow 120ms;
+}
+
+.glyph-pin:hover {
+  transform: scale(1.2);
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.55);
+}
+
+.glyph-pin--active {
+  background: var(--accent-2);
+  transform: scale(1.2);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.65);
+}
+
+.glyph-pin-thread {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 220px;
+  max-width: 320px;
+  background: var(--bg-elev-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 0.625rem 0.75rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text);
+  z-index: 20;
+}
+
+.glyph-pin-text {
+  margin-bottom: 0.375rem;
+}
+
+.glyph-pin-meta {
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+}
+
+/* ─── Right-click context menu ──────────────────────────────────── */
+
+.glyph-ctx-menu {
+  position: fixed;
+  background: var(--bg-elev-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0.25rem;
+  min-width: 180px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.glyph-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  text-align: left;
+  font-family: inherit;
+}
+
+.glyph-ctx-item:hover {
+  background: var(--accent-soft);
+  color: var(--accent-2);
+}
+
+/* ─── Add-comment modal ─────────────────────────────────────────── */
+
+.glyph-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.glyph-modal {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.glyph-modal h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.glyph-modal-textarea {
+  width: 100%;
+  padding: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.glyph-modal-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.glyph-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

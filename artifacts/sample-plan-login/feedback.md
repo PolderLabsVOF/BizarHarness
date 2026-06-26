@@ -1,0 +1,172 @@
+---
+glyph: sample-plan-login
+submittedAt: 2026-06-26T18:16:28.147Z
+submittedBy: drb0rk
+commentCount: 2
+questionCount: 0
+---
+
+# Feedback for Sample Plan — Login Redesign
+
+## Free-placed comments
+- (240, 120) — drb0rk: Make this button say Send link instead of Continue
+- (165, 2121.5) — drb0rk: test
+
+## Open-question answers
+_no open-question answers_
+## Full MDX source
+
+```mdx
+---
+title: "Sample Plan — Login Redesign"
+brief: "A demo glyph using the full MDX block vocabulary (v3.21.0)."
+status: review
+kind: plan
+---
+
+<RichText id="overview">
+
+## Login Redesign — Overview
+
+A small, focused plan to replace the current email-only login with a passwordless email-link flow. The change touches three files and one shared component, and gives the team a way to evaluate the new design before we write any production code.
+
+### Why it exists
+
+The current email-password login has a 23% drop-off on mobile. Users forget passwords, mistype them, and churn. We want to make the entry frictionless while keeping the security bar high.
+
+**Goals:**
+- Replace password input with "send me a magic link" button
+- Keep the same backend session model (no auth changes)
+- Add a one-time-code fallback for accessibility
+
+**Non-goals:**
+- Social login (separate project)
+- 2FA changes (already shipped)
+
+</RichText>
+
+<Callout id="callout-scope" tone="info">
+
+The magic-link flow only changes the front-end forms and one route handler — no schema or session changes.
+
+</Callout>
+
+<Stat id="stat-mobile-churn" label="Current mobile churn" value="23%" trend="down" hint="login → home, last 30 days" />
+
+<Stat id="stat-time" label="Median login time" value="42s" trend="down" />
+
+<Checklist
+  id="checklist"
+  items={[
+    { id: "i1", label: "Backend sends a magic link on POST /api/login/request-link", checked: true },
+    { id: "i2", label: "Frontend renders a 'check your email' screen after request", checked: true },
+    { id: "i3", label: "Email link clicks land on /login/verify?token=… and complete the session", checked: false },
+    { id: "i4", label: "One-time-code fallback (6-digit, 5min TTL) is supported", checked: false },
+    { id: "i5", label: "Telemetry emits 'login.magic_link_requested' / 'login.magic_link_verified'", checked: false }
+  ]}
+/>
+
+<FileTree
+  id="tree-changes"
+  title="Files touched"
+  entries={[
+    { path: "apps/web/src/routes/login.tsx", change: "modified", note: "Replaces password input with magic-link form" },
+    { path: "apps/web/src/routes/login/verify.tsx", change: "added", note: "New route — lands from the email link" },
+    { path: "apps/api/src/routes/login.ts", change: "modified", note: "Adds /request-link and /verify endpoints" },
+    { path: "packages/ui/src/MagicLinkForm.tsx", change: "added", note: "New shared form component" }
+  ]}
+/>
+
+<Table
+  id="table-endpoints"
+  columns={["Method", "Path", "Body", "Returns"]}
+  rows={[
+    ["POST", "/api/login/request-link", "{ email }", "204 + email sent"],
+    ["POST", "/api/login/verify",     "{ token }",  "200 + Set-Cookie"],
+    ["POST", "/api/login/request-code", "{ email }", "204 + SMS sent (fallback)"]
+  ]}
+/>
+
+<CodeTabs
+  id="code-backend"
+  tabs={[
+    {
+      id: "t-route",
+      label: "route.ts",
+      language: "typescript",
+      code: "import { z } from 'zod';\nimport { sendMagicLink } from './mail';\n\nexport const requestLink = async (req, res) => {\n  const { email } = z.object({ email: z.string().email() }).parse(req.body);\n  await sendMagicLink(email);\n  res.status(204).end();\n};",
+      caption: "Magic-link request handler"
+    },
+    {
+      id: "t-verify",
+      label: "verify.ts",
+      language: "typescript",
+      code: "import { consumeToken } from './tokens';\n\nexport const verify = async (req, res) => {\n  const session = await consumeToken(req.body.token);\n  if (!session) return res.status(401).end();\n  res.setCookie('sid', session.id, { httpOnly: true });\n  res.json({ user: session.user });\n};"
+    }
+  ]}
+/>
+
+<Decision
+  id="decision-ttl"
+  title="Magic-link TTL"
+  question="How long should magic links remain valid?"
+  options={[
+    { id: "ttl-15",  label: "15 minutes",   detail: "Industry standard. Forces quick action but feels punishing for users on slow email.", recommended: true },
+    { id: "ttl-60",  label: "1 hour",       detail: "More forgiving. Slightly higher replay risk if a link leaks." },
+    { id: "ttl-day", label: "24 hours",     detail: "Same as password reset. Awkward UX for a 'login' verb." }
+  ]}
+/>
+
+<Workflow
+  id="workflow-flow"
+  steps={[
+    { id: "s1", label: "User enters email",        type: "task" },
+    { id: "s2", label: "POST /request-link",      type: "task" },
+    { id: "s3", label: "Email delivered?",         type: "decision" },
+    { id: "s4", label: "Show 'check your email'", type: "task" },
+    { id: "s5", label: "User clicks link",         type: "task" },
+    { id: "s6", label: "POST /verify",            type: "task" },
+    { id: "s7", label: "Redirect to home",         type: "task" }
+  ]}
+  connections={[
+    { from: "s1", to: "s2" },
+    { from: "s2", to: "s3" },
+    { from: "s3", to: "s4", label: "yes" },
+    { from: "s3", to: "s7", label: "timeout / error" },
+    { from: "s4", to: "s5" },
+    { from: "s5", to: "s6" },
+    { from: "s6", to: "s7" }
+  ]}
+/>
+
+<Callout id="callout-risk" tone="warn">
+
+Email-enumeration: the new endpoint must return the same response regardless of whether the email exists. Use a constant-time 204.
+
+</Callout>
+
+<OpenQuestions
+  id="questions"
+  questions={[
+    {
+      id: "q-ratelimit",
+      label: "Rate-limit per IP or per email?",
+      kind: "choice",
+      options: ["Per IP", "Per email", "Both"]
+    },
+    {
+      id: "q-logging",
+      label: "Which events do we log for security review?",
+      kind: "text"
+    }
+  ]}
+/>
+
+<RichText id="wrap">
+
+### Open questions for you
+
+The form above has two questions that affect the implementation — please answer them before we start. After your answers, I'll regenerate the plan with the chosen values.
+
+</RichText>
+```

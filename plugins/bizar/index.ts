@@ -126,6 +126,7 @@ import { SettingsStore } from "./src/settings.js";
 import { parseSlashCommand } from "./src/commands.js";
 import { createPlanActionTool } from "./src/tools/plan-action.js";
 import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
+import { createReadGlyphFeedbackTool } from "./src/tools/read-glyph-feedback.js";
 import {
   stripInlineThinkBlocks,
   wrapFetchForReasoningCleanup,
@@ -930,6 +931,13 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       logger: ctx.logger,
     }),
     bizar_wait_for_feedback: createWaitForFeedbackTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+    // v3.22.0 — read the structured feedback.md file the user writes
+    // when they click "Submit to agent" on a glyph. Available to all
+    // agents; read-only.
+    read_glyph_feedback: createReadGlyphFeedbackTool({
       worktree: ctx.worktree,
       logger: ctx.logger,
     }),

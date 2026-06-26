@@ -1,5 +1,45 @@
 # Changelog
 
+## v3.21.0 — Glyphs: agent-native.com-style visual plans (local-files mode)
+
+> **Major feature.** Adds a complete visual-plan system inspired by agent-native.com's `/visual-plan` and `/visual-recap`. Glyphs are MDX-based design docs with rich blocks (Callout, Checklist, Table, CodeTabs, Decision, OpenQuestions, FileTree, Diff, Stat, Workflow, Mockup, Diagram), free-placed comments, section grouping, and a "Submit to agent" workflow that writes structured feedback the agent can read.
+
+### Highlights
+
+- **Server-side MDX compile** at `bizar-dash/src/server/glyphs/mdx-compiler.mjs` — takes `artifact.mdx`, returns a JSON-serializable `{ frontmatter, blocks: [{id, type, data, childrenMarkdown}], errors }`. Custom walker that respects strings + braces (regex was wrong because `>` in JSX strings broke it). Validates via `@mdx-js/mdx` `compile()`.
+- **REST endpoint** `GET /api/artifacts/:slug/render` — returns the compiled glyph.
+- **11 MDX block components** in `bizar-dash/src/web/views/glyphs/components.tsx` — RichText, Callout, Checklist, Table, CodeTabs, Decision, OpenQuestions, FileTree, Diff, Stat, Workflow.
+- **GlyphRenderer.tsx** — clean dark dashboard styling with: dotted grid background, sticky floating top toolbar (Send to agent + share + undo/redo + fullscreen + close), section auto-detection from block ids (`overview`/`implementation`/`questions`/`comments`/`handoff`), purple free-placed comment pins with right-click context menu + add-comment modal, expandable pin threads.
+- **`POST /api/artifacts/:slug/submit`** — writes structured `feedback.md` with free-placed comments + open-question answers + original MDX source. Marks `meta.json` `status: review`.
+- **Agent-side tool** `read-glyph-feedback` in `plugins/bizar/src/tools/read-glyph-feedback.ts` — reads `feedback.md`, returns parsed frontmatter + body + counts. Wired into `basePlanTools` in the plugin.
+- **Agent guidance** in `config/skills/bizar/SKILL.md` — explicit "When to use Glyphs" rules: use for big decisions + UI changes, NOT for small questions or one-line edits.
+- **Auto-update Obsidian sync** — `.obsidian/scripts/sync-obsidian.mjs` reads project state (package.json, CHANGELOG, AGENTS_SELF_IMPROVEMENT, git, artifacts, npm view) and updates Versions.md / Home.md / handoff.md / daily log / artifacts-index.md idempotently. Run via `node .obsidian/scripts/sync-obsidian.mjs`.
+- **Browser-harness audit** — all 8 integration checks pass: CLI installed (0.1.3), Chrome daemon on :9222, SKILL.md registered, dashboard agent file exists with `model: openrouter/minimax/minimax-m2.7`. End-to-end test prints `Title: 🐴 Example Domain`.
+
+### Files added
+
+- `bizar-dash/src/server/glyphs/mdx-compiler.mjs` (580 lines)
+- `bizar-dash/src/web/views/glyphs/components.tsx` (1062 lines)
+- `bizar-dash/src/web/views/glyphs/GlyphRenderer.tsx` (485 lines)
+- `bizar-dash/tests/submit-feedback.test.mjs` (12 tests)
+- `plugins/bizar/src/tools/read-glyph-feedback.ts`
+- `plugins/bizar/tests/tools/read-glyph-feedback.test.ts` (10 tests)
+- `artifacts/sample-plan-login/{artifact.mdx, meta.json, comments.json}` (working demo)
+- `.obsidian/scripts/sync-obsidian.mjs` (412 lines)
+- `.obsidian/.sync-state.json` (gitignored)
+
+### Files removed
+
+- `templates/plan/plan.canvas.template` — legacy JSON-canvas template (replaced by MDX)
+- `templates/plan/plan.html.template` — legacy SSR HTML template (replaced by MDX render)
+- `artifacts/dashboard-duplicate-detection/` — covered by `.obsidian/index/Bugs & Postmortems.md`
+- `artifacts/browser-harness-integration/` — covered by `.obsidian/index/Tools.md`
+- `artifacts/vidarr-model-fix/` — covered by `.obsidian/index/Versions.md`
+
+### Pattern
+
+When designing visual artifact systems for AI agents, the data model must be **agent-readable first, then human-readable**. Store comments as JSON with `{x, y, text}` so the agent can `cat artifacts/<slug>/comments.json | jq '.[]'` and reason about spatial relationships. The MDX is human-editable, the comments.json is agent-parseable, and the two coexist without translation.
+
 ## v3.20.17 — Dashboard "Artifacts" tab renamed to "Glyphs"
 
 > Cosmetic rename. The user-facing label in the dashboard sidebar + page header changed from "Artifacts" to "Glyphs" to be more distinctive. The underlying route id, API path, file format, and on-disk directory layout are unchanged.

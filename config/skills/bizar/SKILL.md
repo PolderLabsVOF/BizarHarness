@@ -67,6 +67,48 @@ Free (Mimir, Heimdall) → $Mid (Thor, Hermod) → $$High (Tyr) → $$$Ultra (Vi
 
 Never use a paid agent for work a free agent can do. Never use Tyr for what Thor can handle.
 
+## When to use Glyphs (visual plans)
+
+Glyphs are the dashboard's `/artifacts/<slug>/artifact.mdx` — MDX with rich blocks (RichText, Callout, Checklist, Table, CodeTabs, Decision, OpenQuestions, FileTree, Diff, Stat, Workflow, Mockup, Diagram) plus free-placed comments that the user can pin anywhere on the artifact.
+
+**Use Glyphs for BIG decisions, NOT small questions:**
+- A new feature with multiple UI states, design choices, or trade-offs
+- A UI redesign that affects multiple components
+- An architectural change spanning 3+ files
+- Any change where the user should review before code is written
+- Any work where the user wants to annotate specific spots on a mockup/diagram with feedback
+
+**Don't use Glyphs for:**
+- "What does this function do?" — use `@frigg` or the `read` tool
+- A simple bug fix with one obvious cause — just fix it
+- Single-file changes with no design questions
+- Anything that can be answered in one sentence
+
+When the user says "show me a plan", "let's review the design", "I want to see the UI options", or "what should this look like" — that's a Glyph trigger. When they say "fix this bug", "what does X do", "rename this" — that's a direct edit, not a Glyph.
+
+## How to create a Glyph
+
+1. Write `artifacts/<slug>/artifact.mdx` with frontmatter (`title`, `status`, `kind: plan|recap`) and blocks
+2. Write `artifacts/<slug>/meta.json` with `{ title, slug, status, author, created, lastEdited }`
+3. Write `artifacts/<slug>/comments.json` as `[]` initially (comments added via the dashboard)
+4. Use the full block vocabulary — see `glyphs-research.md` in Obsidian or the dashboard's `/api/artifacts/<slug>/render` for the JSON shape
+
+Templates available:
+- `templates/plan/plan.mdx.template` — forward planning (before code)
+- `templates/plan/plan.canvas.template` — legacy canvas (don't use; replaced by MDX)
+
+## How to read glyph feedback
+
+When the user clicks "Submit to agent" on a glyph in the dashboard, the dashboard writes a structured `artifacts/<slug>/feedback.md` file and marks `meta.json` `status: review`. That file contains:
+
+- All free-placed comments with `(x, y)` coordinates and text
+- Answers to OpenQuestions (one `Q:` / `A:` block per question)
+- The original MDX source
+
+Read it with the `read_glyph_feedback` tool (preferred — returns parsed frontmatter + body + counts), or read the file directly with the `read` tool.
+
+After reading the feedback, regenerate the glyph's `artifact.mdx` to address every comment and apply every answer. Then write the regenerated MDX back to `artifacts/<slug>/artifact.mdx` (and update `meta.json` if the title/summary changes).
+
 ## Troubleshooting
 
 ### Odin Self-Handles Instead of Routing

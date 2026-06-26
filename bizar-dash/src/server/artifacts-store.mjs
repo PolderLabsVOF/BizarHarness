@@ -478,6 +478,155 @@ export const artifactsStore = {
     return { plan, canvas, element: next, response, comment };
   },
 
+  /**
+   * v3.22.0 — Submit user feedback for an artifact (glyph).
+   *
+   * Reads the on-disk comments + canvas question answers, writes a
+   * structured `feedback.md` file the agent can read, marks the
+   * artifact's `meta.json` status as `review`, and returns the
+   * feedback summary.
+   *
+   * `body.answers` is `{ questionId, value }[]` — the agent-side
+   * OpenQuestions answers. We persist them by writing them into the
+   * feedback file so a follow-up read finds them, and (best-effort)
+   * also by walking the canvas elements to mark question elements
+   * as resolved with the chosen value.
+   *
+   * Returns:
+   *   { ok: true, slug, feedbackFile, commentCount, questionCount }
+   *
+   * Returns:
+   *   { ok: false, error } — if the slug doesn't exist or is invalid.
+   */
+  submitFeedback(slug, body, projectRoot) {
+    if (!VALID_SLUG.test(slug || '')) {
+      return { ok: false, error: 'invalid_slug' };
+    }
+    const dir = this.resolveDir(slug, projectRoot);
+    if (!dir) return { ok: false, error: 'not_found' };
+
+    const meta = safeReadJSON(join(dir, 'meta.json'), defaultMeta(slug, slug));
+    const now = new Date().toISOString();
+
+    // Gather free-placed comments. Prefer the canvas.comments array
+    // (the v2 source of truth), fall back to comments.json if the
+    // canvas is empty.
+    const canvas = safeReadJSON(join(dir, 'plan.json'), emptyCanvas(meta.title || slug));
+    const commentsFromCanvas = Array.isArray(canvas.comments) ? canvas.comments : [];
+    const commentsFromFile = safeReadJSON(join(dir, 'comments.json'), []);
+    const comments = commentsFromCanvas.length > 0
+      ? commentsFromCanvas
+      : (Array.isArray(commentsFromFile) ? commentsFromFile : []);
+
+    // Gather OpenQuestions answers. The body may carry
+    // `[{ questionId, value }]` (preferred) or, for compatibility,
+    // already-resolved question elements on the canvas.
+    const rawAnswers = Array.isArray(body?.answers) ? body.answers : [];
+    const answers = [];
+    for (const a of rawAnswers) {
+      if (!a || typeof a !== 'object') continue;
+      const qid = typeof a.questionId === 'string' ? a.questionId : '';
+      const value = typeof a.value === 'string' || typeof a.value === 'number'
+        ? String(a.value)
+        : (a.value == null ? '' : String(a.value));
+      if (!qid) continue;
+      // Try to find the question's label from the canvas.
+      let label = qid;
+      let kind = null;
+      let options = null;
+      const el = Array.isArray(canvas.elements)
+        ? canvas.elements.find((e) => e && e.id === qid)
+        : null;
+      if (el && el.type === 'question') {
+        if (typeof el.title === 'string' && el.title) label = el.title;
+        if (typeof el.kind === 'string') kind = el.kind;
+        if (Array.isArray(el.options)) options = el.options;
+        // Persist the answer onto the question element so subsequent
+        // reads see the resolved state.
+        el.status = 'resolved';
+        el.response = {
+          choiceId: typeof a.choiceId === 'string' ? a.choiceId : null,
+          label: typeof a.label === 'string' ? a.label : null,
+          value,
+          respondedAt: now,
+        };
+      }
+      answers.push({ questionId: qid, label, kind, options, value });
+    }
+
+    // Build the markdown feedback file.
+    const submittedBy = (body && typeof body.submitter === 'string' && body.submitter)
+      ? body.submitter
+      : (process.env.USER || 'drb0rk');
+
+    const lines = [];
+    lines.push('---');
+    lines.push(`glyph: ${slug}`);
+    lines.push(`submittedAt: ${now}`);
+    lines.push(`submittedBy: ${submittedBy}`);
+    lines.push(`commentCount: ${comments.length}`);
+    lines.push(`questionCount: ${answers.length}`);
+    lines.push('---');
+    lines.push('');
+    lines.push(`# Feedback for ${meta.title || slug}`);
+    lines.push('');
+    lines.push('## Free-placed comments');
+    if (comments.length === 0) {
+      lines.push('_no free-placed comments_');
+    } else {
+      for (const c of comments) {
+        const x = Number.isFinite(c.x) ? c.x : null;
+        const y = Number.isFinite(c.y) ? c.y : null;
+        const author = typeof c.author === 'string' ? c.author : 'drb0rk';
+        const text = typeof c.text === 'string' ? c.text : '';
+        const coord = x !== null && y !== null ? `(${x}, ${y})` : '(canvas)';
+        lines.push(`- ${coord} — ${author}: ${text}`);
+      }
+    }
+    lines.push('');
+    lines.push('## Open-question answers');
+    if (answers.length === 0) {
+      lines.push('_no open-question answers_');
+    } else {
+      for (const qa of answers) {
+        lines.push(`### Q: ${qa.label}`);
+        lines.push(`A: ${qa.value}`);
+        if (qa.kind) lines.push(`(kind: ${qa.kind})`);
+        lines.push('');
+      }
+    }
+    lines.push('## Full MDX source');
+    lines.push('');
+    lines.push('```mdx');
+    const planMdx = safeReadText(join(dir, 'artifact.mdx'))
+      || safeReadText(join(dir, 'plan.mdx'))
+      || '';
+    lines.push(planMdx);
+    lines.push('```');
+    lines.push('');
+
+    const feedbackFile = join(dir, 'feedback.md');
+    writeFileSync(feedbackFile, lines.join('\n'), 'utf8');
+
+    // Update meta.json — mark status as `review` and bump lastEdited.
+    meta.status = 'review';
+    meta.lastEdited = now;
+    atomicWriteJson(join(dir, 'meta.json'), meta);
+
+    // Persist the updated canvas (so question responses survive).
+    if (Array.isArray(canvas.elements)) {
+      atomicWriteJson(join(dir, 'plan.json'), canvas);
+    }
+
+    return {
+      ok: true,
+      slug,
+      feedbackFile,
+      commentCount: comments.length,
+      questionCount: answers.length,
+    };
+  },
+
   // ── internal ────────────────────────────────────────────────────────
   _writePlan(dir, meta, canvas) {
     mkdirSync(dir, { recursive: true });
