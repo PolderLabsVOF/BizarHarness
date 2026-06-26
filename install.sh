@@ -419,23 +419,53 @@ fi
 # ── Bizar plugin (mirrored from npm package to ~/.config/opencode/plugins/) ─
 section "Install Bizar opencode plugin"
 
-PLUGIN_SRC="$REPO_DIR/plugins/bizar"
 PLUGIN_DST="$CONFIG_DIR/plugins/bizar"
-if [ -d "$PLUGIN_SRC" ]; then
+
+# v3.20.12: two sources, in priority order:
+#   1. Local repo's plugins/bizar/ (for `git clone` users)
+#   2. Globally installed @polderlabs/bizar-plugin (for `npm i -g` users)
+# The npm-installed plugin also needs its bundled node_modules/ copied
+# alongside (it depends on @polderlabs/bizar-sdk, which isn't on npm).
+# This previously lived in cli/install.mjs:installPluginFromGlobal();
+# duplicating the logic here makes install.sh the single source of truth.
+PLUGIN_SRC=""
+if [ -d "$REPO_DIR/plugins/bizar" ]; then
+  PLUGIN_SRC="$REPO_DIR/plugins/bizar"
+  PLUGIN_SRC_KIND="local repo"
+elif have_cmd npm; then
+  # Resolve the npm global plugin path. `npm root -g` gives us
+  # /usr/local/lib/node_modules; the plugin lives in @polderlabs/bizar-plugin/.
+  NPM_GLOBAL_ROOT=$(npm root -g 2>/dev/null || echo "")
+  if [ -n "$NPM_GLOBAL_ROOT" ] && [ -d "$NPM_GLOBAL_ROOT/@polderlabs/bizar-plugin" ]; then
+    PLUGIN_SRC="$NPM_GLOBAL_ROOT/@polderlabs/bizar-plugin"
+    PLUGIN_SRC_KIND="@polderlabs/bizar-plugin (global)"
+  fi
+fi
+
+if [ -n "$PLUGIN_SRC" ]; then
   mkdir -p "$PLUGIN_DST"
   while IFS= read -r -d '' f; do
     rel="${f#$PLUGIN_SRC/}"
+    case "$rel" in
+      node_modules/*|dist/*|*.log|.DS_Store) continue ;;
+    esac
     mkdir -p "$(dirname "$PLUGIN_DST/$rel")"
     cp "$f" "$PLUGIN_DST/$rel"
-  done < <(find "$PLUGIN_SRC" \
-    -not -path '*/node_modules/*' \
-    -not -path '*/dist/*' \
-    -not -name '*.log' \
-    -not -name '.DS_Store' \
-    -type f -print0)
-  note "plugins/bizar/ copied (excludes node_modules, dist, *.log)"
+  done < <(find "$PLUGIN_SRC" -type f -print0)
+  note "plugins/bizar/ copied from $PLUGIN_SRC_KIND"
+
+  # Copy node_modules from the npm plugin package (the plugin imports
+  # @polderlabs/bizar-sdk, which isn't on npm). Idempotent.
+  if [ "$PLUGIN_SRC_KIND" != "local repo" ] && [ -d "$PLUGIN_SRC/node_modules" ]; then
+    if cp -R "$PLUGIN_SRC/node_modules/." "$PLUGIN_DST/node_modules/" 2>/dev/null; then
+      N_PKG=$(find "$PLUGIN_SRC/node_modules" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
+      note "node_modules (~$N_PKG packages) bundled with deployed plugin"
+    else
+      warn "could not copy plugin node_modules (manual: cp -r $PLUGIN_SRC/node_modules $PLUGIN_DST/)"
+    fi
+  fi
 else
-  warn "Bizar plugin source not found at $PLUGIN_SRC — skipping"
+  warn "Bizar plugin source not found (install @polderlabs/bizar-plugin: npm i -g @polderlabs/bizar-plugin)"
 fi
 
 # ── Merge opencode.json (template + user's existing config) ────────────
