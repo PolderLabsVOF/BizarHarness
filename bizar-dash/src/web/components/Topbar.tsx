@@ -40,7 +40,7 @@ export const TABS: TabDef[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'agents', label: 'Agents', icon: Bot },
-  { id: 'artifacts', label: 'Artifacts', icon: Map },
+  { id: 'artifacts', label: 'Glyphs', icon: Map },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'background', label: 'Active', icon: Radio },

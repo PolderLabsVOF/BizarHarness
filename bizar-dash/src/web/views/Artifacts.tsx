@@ -183,7 +183,7 @@ export function Artifacts({ snapshot, refreshSnapshot }: Props) {
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
-            <MapIcon size={18} /> Artifacts ({artifacts.length})
+            <MapIcon size={18} /> Glyphs ({artifacts.length})
           </h2>
           <p className="view-subtitle">
             Visual artifacts with elements, connections, and threaded comments.
