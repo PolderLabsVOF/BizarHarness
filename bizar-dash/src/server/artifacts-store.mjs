@@ -553,3 +553,26 @@ function sanitizeElement(el) {
     status: typeof el.status === 'string' ? el.status : 'open',
   };
 }
+
+
+/**
+ * Best-effort artifact-slug extraction from a bg agent's assistant
+ * message. Looks for backtick-quoted paths under `artifacts/<slug>/`
+ * or for `<artifact-slug>` mentions. Returns the slug string or null.
+ *
+ * v3.19.0: New export so bg-poller.mjs compiles. The previous Plans
+ * store had a similar helper; this is a clean re-implementation.
+ */
+export function extractArtifactFromMessage(text) {
+  if (!text || typeof text !== 'string') return null;
+  // Match backtick-wrapped slugs first: `artifacts/foo` or `my-plan`
+  const backtick = text.match(/`([a-z0-9][a-z0-9_-]{1,40})`/i);
+  if (backtick) return backtick[1];
+  // Match <artifact-slug> style tags
+  const angle = text.match(/<\s*([a-z0-9][a-z0-9_-]{1,40})\s*>/i);
+  if (angle) return angle[1];
+  // Match `bizar artifact new <slug>` command-like lines
+  const cmd = text.match(/(?:artifact|plan)\s+(?:new|create)\s+([a-z0-9][a-z0-9_-]{1,40})/i);
+  if (cmd) return cmd[1];
+  return null;
+}

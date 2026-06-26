@@ -41,7 +41,6 @@ import { createDiagnosticsRouter } from './routes/diagnostics.mjs';
 import { createPairRouter } from './routes/pair.mjs';
 import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
-import { createArtifactsRouter } from './routes/artifacts.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
 
 /**
