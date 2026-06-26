@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.20.17 — Dashboard "Artifacts" tab renamed to "Glyphs"
+
+> Cosmetic rename. The user-facing label in the dashboard sidebar + page header changed from "Artifacts" to "Glyphs" to be more distinctive. The underlying route id, API path, file format, and on-disk directory layout are unchanged.
+
+### Files affected
+
+- `bizar-dash/src/web/components/Topbar.tsx` — sidebar label `Artifacts` → `Glyphs`
+- `bizar-dash/src/web/views/Artifacts.tsx` — page header `Artifacts (N)` → `Glyphs (N)`
+
+### What did NOT change
+
+- API path: still `/api/artifacts`
+- Route id: still `'artifacts'` (deep links + bookmarks work)
+- File format: still `artifact.mdx` + `meta.json` + `comments.json`
+- CLI subcommand: still `bizar artifact <subcommand>`
+- On-disk directory: still `artifacts/<slug>/`
+
 ## v3.20.16 — Artifact viewer reads `artifact.mdx` (CLI's source-of-truth filename)
 
 > **Bug:** Opening any artifact in the dashboard showed an empty page, even though the artifact's `artifact.mdx` file was on disk with thousands of chars of content. The CLI (`cli/artifact.mjs`) writes `artifact.mdx` as the source-of-truth filename, but the dashboard's `artifacts-store.get()` was reading `plan.mdx`. Two code paths, two filenames, every artifact looked empty.
