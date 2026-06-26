@@ -8,6 +8,10 @@ import {
   RefreshCw,
   Folder,
   FileText,
+  FileCode,
+  User,
+  Terminal,
+  BookOpen,
   X,
   ExternalLink,
   Globe,
@@ -490,6 +494,45 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
 }
 
 function ModDetails({ mod }: { mod: Mod }) {
+  const toast = useToast();
+  const [instructions, setInstructions] = useState<{
+    modId: string;
+    modName: string;
+    total: number;
+    agents: Array<{ filename: string; path: string; fullPath: string; content: string | null }>;
+    commands: Array<{ filename: string; path: string; fullPath: string; content: string | null }>;
+    skills: Array<{ name: string; fullPath: string; content: string | null }>;
+  } | null>(null);
+  const [instructionsLoading, setInstructionsLoading] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+
+  const loadInstructions = async () => {
+    setInstructionsLoading(true);
+    try {
+      const r = await api.get<typeof instructions>(`/mods/${mod.id}/instructions`);
+      setInstructions(r);
+      setInstructionsOpen(true);
+    } catch (err) {
+      toast.error(`Failed to load instructions: ${(err as Error).message}`);
+    } finally {
+      setInstructionsLoading(false);
+    }
+  };
+
+  const onReinstallInstructions = async () => {
+    try {
+      const r = await api.post<{ ok: boolean; counts: { agents: number; commands: number; skills: number; instructions: number } }>(
+        `/mods/${mod.id}/instructions/reinstall`,
+        {},
+      );
+      toast.success(`Reinstalled: ${r.counts.agents} agents, ${r.counts.commands} commands, ${r.counts.skills} skills, ${r.counts.instructions} instructions.`);
+      await loadInstructions();
+    } catch (err) {
+      toast.error(`Reinstall failed: ${(err as Error).message}`);
+    }
+  };
+
   return (
     <Card className="mod-details">
       <CardTitle><FileText size={14} /> Mod details — {mod.name}</CardTitle>
@@ -527,6 +570,111 @@ function ModDetails({ mod }: { mod: Mod }) {
             </li>
           ))}
         </ul>
+      </div>
+
+      {/* v3.20 — Installed instructions (agents / commands / skills) */}
+      <div className="mod-instructions">
+        <div className="mod-instructions-head" onClick={() => {
+          if (!instructions && !instructionsLoading) loadInstructions();
+          setInstructionsOpen((v) => !v);
+        }}>
+          <FileCode size={14} />
+          <span>Installed instructions</span>
+          <span className="muted" style={{ fontSize: 11 }}>
+            {instructions ? `${instructions.total} files` : 'click to view'}
+          </span>
+          <span className="mod-instructions-spacer" />
+          {instructionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </div>
+        {instructionsOpen && instructions && (
+          <div className="mod-instructions-body">
+            {instructions.agents.length > 0 && (
+              <div className="mod-instructions-section">
+                <div className="mod-instructions-section-title">
+                  <User size={11} /> Agents ({instructions.agents.length})
+                </div>
+                {instructions.agents.map((f) => (
+                  <div key={f.filename} className="mod-instructions-file">
+                    <div
+                      className="mod-instructions-file-head"
+                      onClick={() => setExpandedFile((cur) => cur === f.filename ? null : f.filename)}
+                    >
+                      <span className="mono">{f.filename}</span>
+                      <span className="muted" style={{ fontSize: 10 }}>
+                        installed at {f.fullPath}
+                      </span>
+                    </div>
+                    {expandedFile === f.filename && (
+                      <pre className="mod-instructions-content">
+                        {f.content || <em className="muted">(file missing on disk)</em>}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {instructions.commands.length > 0 && (
+              <div className="mod-instructions-section">
+                <div className="mod-instructions-section-title">
+                  <Terminal size={11} /> Commands ({instructions.commands.length})
+                </div>
+                {instructions.commands.map((f) => (
+                  <div key={f.filename} className="mod-instructions-file">
+                    <div
+                      className="mod-instructions-file-head"
+                      onClick={() => setExpandedFile((cur) => cur === f.filename ? null : f.filename)}
+                    >
+                      <span className="mono">{f.filename}</span>
+                      <span className="muted" style={{ fontSize: 10 }}>
+                        installed at {f.fullPath}
+                      </span>
+                    </div>
+                    {expandedFile === f.filename && (
+                      <pre className="mod-instructions-content">
+                        {f.content || <em className="muted">(file missing on disk)</em>}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {instructions.skills.length > 0 && (
+              <div className="mod-instructions-section">
+                <div className="mod-instructions-section-title">
+                  <BookOpen size={11} /> Skills ({instructions.skills.length})
+                </div>
+                {instructions.skills.map((s) => (
+                  <div key={s.name} className="mod-instructions-file">
+                    <div
+                      className="mod-instructions-file-head"
+                      onClick={() => setExpandedFile((cur) => cur === s.name ? null : s.name)}
+                    >
+                      <span className="mono">{s.name}</span>
+                      <span className="muted" style={{ fontSize: 10 }}>
+                        installed at {s.fullPath}
+                      </span>
+                    </div>
+                    {expandedFile === s.name && (
+                      <pre className="mod-instructions-content">
+                        {s.content || <em className="muted">(file missing on disk)</em>}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {instructions.total === 0 && (
+              <div className="muted" style={{ padding: 8, fontSize: 12 }}>
+                This mod did not install any instruction files. Mods install instructions by shipping a top-level <code>INSTRUCTIONS.md</code>, an <code>agents/</code> directory, a <code>commands/</code> directory, or a <code>skills/</code> directory.
+              </div>
+            )}
+            <div className="mod-instructions-actions">
+              <Button variant="ghost" size="sm" onClick={onReinstallInstructions}>
+                <RefreshCw size={11} /> Reinstall from mod folder
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   );

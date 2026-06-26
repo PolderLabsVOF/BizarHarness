@@ -13,6 +13,8 @@
  * /api/mods/:id/mod-file/* (PUT)         — write single file
  * /api/mods/views                        — mod view registry
  * /api/mods/:id/mod-web/*                — serve files from mod's web/ dir
+ * /api/mods/:id/instructions              — list installed instruction files (v3.20)
+ * /api/mods/:id/instructions/reinstall    — force-reinstall instructions (v3.20)
  *
  * Express-ordering note: /mods/views MUST come before /mods/:id/* —
  * actually only the literal /mods (without :id) takes precedence
@@ -25,6 +27,21 @@ import { resolve, relative, join } from 'node:path';
 import { homedir } from 'node:os';
 import { modsLoader } from '../mods-loader.mjs';
 import { wrap } from './_shared.mjs';
+
+/**
+ * Read a file at an absolute path or under $HOME. Returns null if
+ * the file doesn't exist or can't be read. The path argument may
+ * use `~` as a home-relative shortcut (resolved against homedir()).
+ */
+function tryRead(p) {
+  try {
+    const full = p.startsWith('~/') || p === '~' ? join(homedir(), p.slice(1)) : p;
+    if (!existsSync(full)) return null;
+    return readFileSync(full, 'utf8');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * @returns {import('express').Router}
@@ -187,6 +204,54 @@ export function createModsRouter() {
     const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body, null, 2);
     modsLoader.writeFile(req.params.id, rel, body);
     res.json({ ok: true });
+  }));
+
+  // ── v3.20 — Mod instructions (agents/commands/skills installed by this mod)
+  router.get('/mods/:id/instructions', wrap(async (req, res) => {
+    const mod = modsLoader.get(req.params.id);
+    if (!mod) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const installed = modsLoader.listModInstructions(req.params.id);
+    // For each installed file, try to read its content so the UI can
+    // preview it without an extra round-trip.
+    const annotated = {
+      agents: installed.agents.map((f) => ({
+        filename: f,
+        path: join('agents', f),
+        fullPath: `~/.config/opencode/agents/${f}`,
+        content: tryRead(`~/.config/opencode/agents/${f}`),
+      })),
+      commands: installed.commands.map((f) => ({
+        filename: f,
+        path: join('commands', f),
+        fullPath: `~/.config/opencode/commands/${f}`,
+        content: tryRead(`~/.config/opencode/commands/${f}`),
+      })),
+      skills: installed.skills.map((d) => ({
+        name: d,
+        fullPath: `~/.opencode/skills/${d}`,
+        content: tryRead(`~/.opencode/skills/${d}/SKILL.md`),
+      })),
+    };
+    res.json({
+      modId: req.params.id,
+      modName: mod.name,
+      total: annotated.agents.length + annotated.commands.length + annotated.skills.length,
+      ...annotated,
+    });
+  }));
+
+  // v3.20 — Force-reinstall the mod's instructions into opencode config
+  // (useful after editing files inside the mod's agents/commands/skills).
+  router.post('/mods/:id/instructions/reinstall', wrap(async (req, res) => {
+    const counts = modsLoader.reinstallInstructions(req.params.id);
+    if (counts === null) {
+      res.status(404).json({ error: 'not_found', message: `mod "${req.params.id}" not installed` });
+      return;
+    }
+    res.json({ ok: true, counts });
   }));
 
   // ── /api/mods/:id/mod-web/* and /api/mods/:id/web/* ────────────────
