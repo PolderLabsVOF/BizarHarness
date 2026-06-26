@@ -1,22 +1,24 @@
 # Changelog
 
-## v3.20.11 — Installer overhaul: Chrome runtime libs, thin wrapper, agent count fix
+## v3.20.13 — Install reliability fixes: Chrome runtime libs, npm-package install.sh, plugin global fallback
 
-> **Install reliability.** v3.20.11 fixes the installer's three biggest footguns: chrome-headless-shell now installs its runtime libs (no more `libnspr4.so: cannot open shared object file` after install), `bizar install` is now a thin wrapper around the canonical `install.sh` script (the old interactive TUI was asking for API keys and prompting to restart opencode, both of which break `npm i -g` flows), and `bizar doctor` finally counts all 14 agents instead of the original 4.
+> **v3.20.11 → v3.20.13 is a three-release series of bug fixes that make `bizar install` and `bizar update` actually work for `npm install -g @polderlabs/bizar` users.** v3.20.10 shipped a beautiful installer that worked for `git clone` users but broke for everyone who installed via npm — the TUI prompted for API keys, chrome-headless-shell didn't include its system deps, `bizar update` couldn't find `install.sh` because it wasn't in the npm package, and the plugin source wasn't shipped. This release fixes all four.
 
 ### Highlights
 
-- **Chrome runtime libs install** — `install.sh` now runs `sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libxdamage1 libxkbcommon0 libasound2t64 libatspi2.0-0` after downloading chrome-headless-shell. Without this, the binary downloads but immediately errors on first start. macOS + other distros get a warning with the package list to install manually.
-- **`unzip -o`** — `install.sh` previously used `unzip -q` which hung on a TTY prompt ("replace chrome-headless-shell-linux64/deb.deps?") when re-running the installer on a system that already had the chrome cache. Now silent + overwrite.
-- **`bizar install` is a thin wrapper** — `cli/install.mjs:runInstaller()` now spawns `bash ./install.sh` instead of running its own interactive TUI. One source of truth: `install.sh` is what `git clone` users run, what `bizar update` re-runs, and what the npm postinstall hook invokes. The TUI used to ask for API keys, restart confirmation, and component selection — none of which belong in `npm i -g` (no TTY, secrets stay local).
-- **`bizar update` prefers `install.sh`** — `cli/update.mjs:rerunInstallScript()` now tries `bash $(npm root -g)/@polderlabs/bizar/install.sh` first, falls back to `bin.mjs --setup` only on Windows without WSL or when install.sh is missing.
+- **`bizar install` is now a thin wrapper around `install.sh`** — `cli/install.mjs:runInstaller()` was a 280-line interactive TUI that asked for API keys, restart confirmation, and component selection. None of that belongs in a `npm i -g` install (no TTY, secrets stay local). The new `runInstaller()` is a 30-line wrapper that spawns `bash ./install.sh`. One source of truth: `install.sh` is what `git clone` users run, what `bizar update` re-runs, and what `bizar install` delegates to.
+- **`install.sh` ships in the npm package** — `package.json:files[]` previously listed only `cli/, config/, templates/`. Added `install.sh` + `cli/browser-harness-up.sh` so the npm-installed package can run itself. Without this, `bizar update` had to fall back to `bin.mjs --setup`, which uses the legacy Node install path (no auto-deps install).
+- **`install.sh` auto-installs Chrome runtime libs** — chrome-headless-shell needs libnss3, libnspr4, libatk*, libxdamage, libxkbcommon, libasound2, libatspi. Without them, the binary downloads but immediately errors on first start. New code: detect `chrome --version` failure → `sudo apt-get install -y` the missing libs. macOS + others get a printed hint.
+- **`install.sh` plugin install falls back to the npm-global plugin** — when there's no local `plugins/bizar/` (i.e. `npm install -g` users), it now resolves `$(npm root -g)/@polderlabs/bizar-plugin`, copies the source to `~/.config/opencode/plugins/bizar/`, and bundles the plugin's `node_modules/` (which contains @polderlabs/bizar-sdk — a workspace-internal package not on the public registry). Previously this only happened in `cli/install.mjs:installPluginFromGlobal()`.
+- **`unzip -q -o`** — `install.sh` previously used `unzip -q` which hung on a TTY prompt ("replace chrome-headless-shell-linux64/deb.deps?") when re-running on a system with the chrome cache present. Now silent + overwrite.
 - **`bizar doctor` checks all 14 agents** — `REQUIRED_AGENTS` was `[odin, quick, thor, tyr]` (the original 4 from v3.10.0). Now lists every agent the install script deploys: odin, vor, frigg, quick, mimir, heimdall, hermod, thor, baldr, tyr, vidarr, forseti, semble-search, browser-harness. The previous "all 4 core agents present" message was a lie when there were 14.
 - **`PRIMARY_AGENTS` fixed** — `plugins/bizar/src/tools/bg-spawn.ts` had `{odin, frigg, quick}` but the on-disk agents declare `mode: primary` for `{odin, quick, browser-harness}` (frigg.md was demoted to `mode: subagent` in v3.19.x). Drift was caught by the "is in sync with the on-disk agent configs" test. Now `PRIMARY_AGENTS = {odin, quick, browser-harness}` exactly.
+- **`bizar update` prefers `install.sh`** — `cli/update.mjs:rerunInstallScript()` now tries `bash $(npm root -g)/@polderlabs/bizar/install.sh` first, falls back to `bin.mjs --setup` only on Windows without WSL or when install.sh is missing.
 - **`.gitignore`** — `.obsidian/` (per-user Obsidian vault) and `.bizar/HANDOFF-*.md` (per-session notes) added so the installer + repo don't track them. Both still appear on disk and are first-class to the installer.
 
 ### Files affected
 
-- `install.sh` — auto-install of Chrome runtime libs (libnss3 + libnspr4 + libatk* + libxdamage + libxkbcommon + libasound + libatspi); `unzip -q -o` (silent overwrite)
+- `install.sh` — auto-install of Chrome runtime libs; `unzip -q -o`; plugin install falls back to `@polderlabs/bizar-plugin` (with node_modules/ bundle)
 - `cli/install.mjs` — `runInstaller()` rewritten as a 30-line thin wrapper around `install.sh` (replaces the 280-line TUI body)
 - `cli/update.mjs` — `rerunInstallScript()` now prefers `install.sh` over `bin.mjs --setup`
 - `cli/bin.mjs` — `bizar install --help` rewritten to reflect the new thin wrapper behavior
@@ -24,11 +26,20 @@
 - `cli/doctor.test.mjs` — "agent-files-installed passes when all 14 agents present" test
 - `plugins/bizar/src/tools/bg-spawn.ts` — `PRIMARY_AGENTS = {odin, quick, browser-harness}` (matches disk `mode: primary`)
 - `plugins/bizar/tests/tools/bg-spawn-delegation.test.ts` — assertions updated
+- `package.json` — `files[]` includes `install.sh` + `cli/browser-harness-up.sh` (so they're in the npm tarball)
 - `.gitignore` — `.obsidian/` + `.bizar/HANDOFF-*.md` added
 
 ### Pattern
 
-Three installer footguns, three single-line fixes. (1) The chrome-for-testing JSON API gives you a URL to a binary, not a working binary — system libs are platform-specific and not part of the download. (2) The TUI installer was designed for `git clone` users (who have a TTY) but the npm postinstall hook runs without one; making `bizar install` a thin wrapper around `install.sh` removes the TUI entirely. (3) When `REQUIRED_AGENTS` is hard-coded to a subset, the installer's "✓ all 4 core agents present" message becomes a silent bug — the right fix is the dynamic test that reads disk agents and asserts the code set equals the on-disk primary set.
+When the operator installs via npm (no TTY, no local repo), every "we'll find it in the repo" assumption breaks. The fix is to make every component discoverable from both the local repo AND the npm global path, with the npm path as fallback. The `install.sh` plugin-install block now reads:
+
+```bash
+if [ -d "$REPO_DIR/plugins/bizar" ]; then PLUGIN_SRC=$REPO_DIR/plugins/bizar  # git clone users
+elif have_cmd npm; then PLUGIN_SRC=$(npm root -g)/@polderlabs/bizar-plugin   # npm i -g users
+fi
+```
+
+Same pattern for `install.sh` itself — it ships in the npm package so it can run from either path.
 
 ## v3.20.10 — Comprehensive auto-installer + API provider backup keys
 
