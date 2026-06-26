@@ -50,6 +50,18 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 ## Log
 
+### 2026-06-26: v3.20.8 — Remove agent-browser (superseded by browser-harness)
+- **Task**: Uninstall `agent-browser` npm package + scrub every `agent_browser_*` reference from shipped config and the user's installed config. The browser-harness Python tool (v3.20.7) is now the canonical browser-automation path.
+- **Approach**: One Odin turn. `npm uninstall -g agent-browser` first (package + bin shim), then sweep 4 source files + sync to 2 user-installed mirrors + add a drift test that points at the violating files.
+- **Lessons learned**:
+  - **Sweep for tool-removals, not just one file.** `agent-browser` was referenced in 7 files: source (4) + shipped-skill (1) + user's installed config (2). Updating only `config/agents/browser-harness.md` would have left the agent-baseline skill and the user's `~/.config/opencode/AGENTS.md` pointing at the dead tool. Always grep across `config/`, `cli/`, `install.sh`, `*.md`, AND the user's `~/.config/` mirrors.
+  - **The shipped `~/.config/opencode/` mirrors the source tree.** opencode's installer copies the source files into the user's config dir at install time, but if the source changes later, the user's copy doesn't auto-sync. The fix is to manually re-`cp` on tool-removal — or have the installer re-run. Document this asymmetry in the user's release notes.
+  - **A drift test beats a manual grep.** `no-agent-browser.node.test.mjs` walks the source tree, fails with a clear "agent-browser references found in shipped code: <files>" message. Future contributors who re-introduce `agent-browser` (or any other deprecated tool) get an immediate, actionable error at test time — no more "huh, why is this still here?" archaeology.
+  - **NPM package uninstall + PATH check, both.** `npm uninstall -g agent-browser` removes the package + bin shim, but `which agent-browser` is the canonical "is it gone?" check. Run both — the test confirms the file system state, not the runtime PATH.
+- **Files changed**: 4 source files (config/agents/browser-harness.md, config/agents/_shared/AGENT_BASELINE.md, config/AGENTS.md, install.sh) + 1 sync (`cp` to user's installed configs) + 1 test (no-agent-browser.node.test.mjs) + 1 package.json script update + 1 npm uninstall.
+- **Agents used**: Odin (direct implementation; task tool + spawn_background still broken in this env).
+- **Published**: nothing — per user request, committed locally for testing.
+
 ### 2026-06-26: v3.20.5 — mod upgrade flow + dynamic TSX tab views + publish-time typecheck
 - **Task**: Finish the 4 in-progress items from the 2026-06-26 handoff — (1) commit v3.20.4 TDZ fix, (2) implement mod upgrade flow, (3) implement TSX tab support in ModView, (4) wire `tsc --noEmit` into publish pipeline. Plus tests + push + publish.
 - **Approach**: Single Odin turn, all implementation done directly (harness warnings about `task` / `bizar_spawn_background` being broken held up). Files touched in disjoint areas so no sibling-awareness block needed. Tests written alongside.

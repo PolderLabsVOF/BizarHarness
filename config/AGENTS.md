@@ -285,7 +285,7 @@ From the project root, the user (or heimdall via `/init` or any other agent prom
 
 ## General Agent Baseline — Always-On Behavior
 
-This section is the single source of truth for every Bizar agent's behavior. It is **adapted from the upstream system prompt and translated to Bizar**. Every Claude-specific reference has been mapped to the Bizar equivalent (BizarHarness, opencode, obsidian, Semble, Skills CLI, agent-browser, the opencode tool set). All agents **MUST** follow these rules at all times.
+This section is the single source of truth for every Bizar agent's behavior. It is **adapted from the upstream system prompt and translated to Bizar**. Every Claude-specific reference has been mapped to the Bizar equivalent (BizarHarness, opencode, obsidian, Semble, Skills CLI, browser-harness, the opencode tool set). All agents **MUST** follow these rules at all times.
 
 > **Tool name translation table** (used throughout this baseline):
 >
@@ -424,7 +424,17 @@ Load the SKILL.md via the `skill` tool before writing code or making changes cov
 
 #### Browser interaction
 
-For browser-driven E2E validation, use **agent-browser** (the `agent_browser_*` tools). Common operations: `open`, `snapshot`, `click`, `type`, `fill`, `press`, `screenshot`, `eval`, `wait_for_*`. Do **not** install headless Chrome via raw shell commands when agent-browser is available.
+For browser-driven E2E validation, use **browser-harness** (the Python tool from https://github.com/browser-use/browser-harness). Invoke via `bash` heredoc:
+
+```bash
+browser-harness <<'PY'
+new_tab("https://example.com")
+wait_for_load()
+print(page_info())
+PY
+```
+
+Common operations: `new_tab`, `goto_url`, `wait_for_load`, `page_info`, `click_at_xy`, `fill_input`, `press_key`, `scroll`, `capture_screenshot`, `js`, `cdp("Domain.method", ...)`. Read the SKILL.md at `~/.opencode/skills/browser-harness/SKILL.md` on first use. Do **not** install headless Chrome via raw shell commands when browser-harness is available.
 
 ### skills_mandatory_read
 
@@ -433,7 +443,7 @@ Before writing any code, creating any file, or running any computer tool, **scan
 Concrete triggers:
 - Frontend/React work → `frontend-design` or framework-specific skill
 - Backend/API work → framework-specific skill
-- Browser E2E → `agent-browser` SKILL.md
+- Browser E2E → `browser-harness` SKILL.md
 - Skill creation → `skill-creator` SKILL.md
 - BizarHarness-specific work → `~/.opencode/skills/bizar/` SKILL.md (always)
 - Self-improvement logging → `~/.opencode/skills/self-improvement/` SKILL.md (always)
@@ -516,7 +526,7 @@ For Bizar-internal claims (citing files, lines, tool results), use file:line ref
 ### images_and_visual_content
 
 - Bizar does not have an `image_search` tool. Do not assume one exists.
-- For local screenshots and image inspection, use `agent-browser` (`agent_browser_screenshot` + `agent_browser_eval`).
+- For local screenshots and image inspection, use `browser-harness` (`capture_screenshot(path="...")` + `js(...)` inside a `<<'PY' ... PY` heredoc).
 - For image generation, dispatch to `@baldr` (design) or use a user-supplied image-generation MCP server if connected.
 - Never claim to inspect or edit an image that isn't actually available.
 

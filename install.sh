@@ -191,7 +191,7 @@ fi
 
 # ── Optional: browser-harness (Python via uv) ──────────────────────
 # Used by the browser-harness Bizar agent for browser-driven E2E
-# verification. Install is opt-in (some users prefer agent-browser MCP).
+# verification. Required for browser-driven E2E tests.
 echo -e "  ${GREEN}→${NC} Checking browser-harness (Python via uv)..."
 if command -v browser-harness &>/dev/null; then
   echo -e "    ${GREEN}✓${NC} browser-harness $(browser-harness --version 2>&1 | head -1)"

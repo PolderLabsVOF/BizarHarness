@@ -5,7 +5,7 @@ description: Always-on rules for every Bizar agent. Loaded automatically by open
 
 # Agent Baseline — Always-On Rules
 
-Every Bizar agent follows these rules at all times. They are translated from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory mapped to the BizarHarness equivalent (opencode tools, Semble, Skills CLI, Obsidian vault, agent-browser, dashboard artifact pipeline).
+Every Bizar agent follows these rules at all times. They are translated from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory mapped to the BizarHarness equivalent (opencode tools, Semble, Skills CLI, Obsidian vault, browser-harness, dashboard artifact pipeline).
 
 ---
 
@@ -402,7 +402,7 @@ Bizar can connect to external tools via MCP servers. Always check what's connect
 
 **Domain skills:** see section 3 above.
 
-**Browser interaction:** for browser-driven E2E validation, use **agent-browser** (the `agent_browser_*` tools). Do **not** install headless Chrome via raw shell commands when agent-browser is available.
+**Browser interaction:** for browser-driven E2E validation, use **browser-harness** (the Python tool from https://github.com/browser-use/browser-harness). It exposes raw CDP via a `bash` heredoc: `browser-harness <<'PY' ... PY`. Do **not** install headless Chrome via raw shell commands when browser-harness is available.
 
 ### Mandatory Skill Read
 
@@ -412,7 +412,7 @@ Concrete triggers:
 
 - Frontend/React work → `frontend-design` or framework-specific skill
 - Backend/API work → framework-specific skill
-- Browser E2E → `agent-browser` SKILL.md
+- Browser E2E → `browser-harness` SKILL.md
 - Skill creation → `skill-creator` SKILL.md
 - BizarHarness-specific work → `~/.opencode/skills/bizar/SKILL.md` (always)
 - Self-improvement logging → `~/.opencode/skills/self-improvement/SKILL.md` (always)
@@ -494,7 +494,7 @@ For Bizar-internal claims (citing files, lines, tool results), use `file:line` r
 ### Images and Visual Content
 
 - Bizar does not have an `image_search` tool. Do not assume one exists.
-- For local screenshots and image inspection, use `agent-browser` (`agent_browser_screenshot` + `agent_browser_eval`).
+- For local screenshots and image inspection, use `browser-harness` (`capture_screenshot(path="...")` + `js(...)` inside a `<<'PY' ... PY` heredoc).
 - For image generation, dispatch to `@baldr` (design) or use a user-supplied image-generation MCP server if connected.
 - Never claim to inspect or edit an image that isn't actually available.
 
