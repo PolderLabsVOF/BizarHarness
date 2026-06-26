@@ -17,6 +17,7 @@ import {
   Plus,
   X,
   Folder,
+  Info,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -93,6 +94,7 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
   const [suggestions, setSuggestions] = useState<SlashCommand[]>([]);
   const [pinned, setPinned] = useState<Set<number>>(new Set());
   const [sessionPanelOpen, setSessionPanelOpen] = useState(true);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -366,6 +368,14 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
           >
             Sessions ({sessions.length})
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setInfoPanelOpen((v) => !v)}
+            title="Toggle info panel"
+          >
+            Info
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => loadChat(sessionId || undefined)}>
             <RefreshCw size={14} /> Refresh
           </Button>
@@ -593,7 +603,17 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId }: Props)
         </div>
         </div>
 
-        <aside className="chat-info">
+        <aside className={cn('chat-info', !infoPanelOpen && 'chat-info-hidden')}>
+          {!infoPanelOpen && (
+            <button
+              type="button"
+              className="chat-info-restore"
+              onClick={() => setInfoPanelOpen(true)}
+              title="Show info panel"
+            >
+              <Info size={12} /> Show info
+            </button>
+          )}
           <Card>
             <CardTitle><MessageSquare size={14} /> Session</CardTitle>
             <CardMeta>

@@ -535,61 +535,48 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
   // Clicking a subnav button shows ONLY that section; clicking "All"
   // restores the full layout. Anchors still work for deep-links but
   // the visible content is filtered, not just scrolled.
+  //
+  // v3.18.0 — IDs use the section NAME (not the `settings-X` element id)
+  // because the inline-style wrap compares against the section name, not
+  // the prefixed DOM id.
   const SECTION_LINKS: Array<{ id: string; label: string }> = [
-    { id: 'settings-theme', label: 'Theme' },
-    { id: 'settings-layout', label: 'Layout' },
-    { id: 'settings-general', label: 'General' },
-    { id: 'settings-service', label: 'Service' },
-    { id: 'settings-tailscale', label: 'Tailscale' },
-    { id: 'settings-notifications', label: 'Notifications' },
-    { id: 'settings-auth', label: 'Auth' },
-    { id: 'settings-agents', label: 'Agents' },
-    { id: 'settings-dashboard', label: 'Dashboard' },
-    { id: 'settings-background', label: 'Background' },
-    { id: 'settings-updates', label: 'Updates' },
-    { id: 'settings-activity-log', label: 'Activity' },
-    { id: 'settings-about', label: 'About' },
+    { id: 'theme', label: 'Theme' },
+    { id: 'layout', label: 'Layout' },
+    { id: 'general', label: 'General' },
+    { id: 'service', label: 'Service' },
+    { id: 'tailscale', label: 'Tailscale' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'auth', label: 'Auth' },
+    { id: 'agents', label: 'Agents' },
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'background', label: 'Background' },
+    { id: 'updates', label: 'Updates' },
+    { id: 'activity-log', label: 'Activity' },
+    { id: 'about', label: 'About' },
   ];
   const [activeSection, setActiveSection] = useState<string | null>(() => {
     // Honour #settings-... deep-link on initial mount, otherwise null = All.
     if (typeof window === 'undefined') return null;
-    const hash = window.location.hash.replace(/^#/, '');
+    const hash = window.location.hash.replace(/^#settings-/, '');
     return SECTION_LINKS.some((s) => s.id === hash) ? hash : null;
   });
   const onJumpSection = (id: string | null) => {
     setActiveSection(id);
     try {
-      const url = id ? `#${id}` : window.location.pathname;
+      const url = id ? `#settings-${id}` : window.location.pathname;
       history.replaceState(null, '', url);
       if (id) {
-        const el = document.getElementById(id);
+        const el = document.getElementById(`settings-${id}`);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch { /* ignore */ }
   };
-  // Sync active section when the user manually scrolls (only when filter
-  // is active, otherwise the visible section is ambiguous).
-  useEffect(() => {
-    if (activeSection === null) return;
-    const onScroll = () => {
-      let bestId = '';
-      let bestTop = Number.POSITIVE_INFINITY;
-      for (const { id } of SECTION_LINKS) {
-        const el = document.getElementById(id);
-        if (!el) continue;
-        const top = el.getBoundingClientRect().top;
-        if (top < 120 && top < bestTop) {
-          bestTop = top;
-          bestId = id;
-        }
-      }
-      if (bestId && bestId !== activeSection) setActiveSection(bestId);
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [activeSection]);
+  // The user picks a section via the subnav; their choice is respected.
+  // (v3.18.0 — Removed auto-scroll-based detection; with the inline-style
+  // filter approach, hidden sections still report bounding rects, so the
+  // detector would race the user's explicit selection and switch tabs back.)
 
   const patchDashboard = (patch: Partial<Settings['dashboard']>) => {
     setSettings((cur) => ({ ...cur, dashboard: { ...cur.dashboard, ...patch } }));
@@ -810,7 +797,8 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             </button>
           </div>
         )}
-        <Card id="settings-theme" data-section="theme">
+        <div data-section="theme" style={{display: (activeSection === null || activeSection === 'theme') ? 'block' : 'none'}}>
+<Card id="settings-theme" data-section="theme">
           <CardTitle><Palette size={14} /> Theme</CardTitle>
           <CardMeta>Mode, accent, and colors. Live preview as you tweak.</CardMeta>
 
@@ -997,10 +985,12 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <span>Enable animations</span>
           </label>
         </Card>
+</div>
 
         <UpdatesCard />
 
-        <Card id="settings-layout" data-section="layout">
+        <div data-section="layout" style={{display: (activeSection === null || activeSection === 'layout') ? 'block' : 'none'}}>
+<Card id="settings-layout" data-section="layout">
           <CardTitle><LayoutIcon size={14} /> UI layout</CardTitle>
           <CardMeta>Choose how the dashboard's navigation is presented.</CardMeta>
           <div className="layout-row" data-setting-id="ui.layout">
@@ -1051,8 +1041,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             </select>
           </div>
         </Card>
+</div>
 
-        <Card id="settings-general" data-section="general">
+        <div data-section="general" style={{display: (activeSection === null || activeSection === 'general') ? 'block' : 'none'}}>
+<Card id="settings-general" data-section="general">
           <CardTitle>General</CardTitle>
           <CardMeta>Default agent + model override.</CardMeta>
           <div className="field" data-setting-id="defaultAgent">
@@ -1078,8 +1070,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             />
           </div>
         </Card>
+</div>
 
-        <Card id="settings-service" data-section="service">
+        <div data-section="service" style={{display: (activeSection === null || activeSection === 'service') ? 'block' : 'none'}}>
+<Card id="settings-service" data-section="service">
           <CardTitle><ServerIcon size={14} /> Service</CardTitle>
           <CardMeta>Background daemon that runs schedules.</CardMeta>
           <div data-setting-id="service.enabled">
@@ -1100,8 +1094,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             )}
           </div>
         </Card>
+</div>
 
-        <Card id="settings-tailscale" data-section="tailscale">
+        <div data-section="tailscale" style={{display: (activeSection === null || activeSection === 'tailscale') ? 'block' : 'none'}}>
+<Card id="settings-tailscale" data-section="tailscale">
           <CardTitle><Plug size={14} /> Tailscale serve</CardTitle>
           <CardMeta>Expose the dashboard over your Tailscale network.</CardMeta>
           {tailscale ? (
@@ -1143,8 +1139,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <p className="muted">Loading Tailscale status…</p>
           )}
         </Card>
+</div>
 
-        <Card id="settings-notifications" data-section="notifications">
+        <div data-section="notifications" style={{display: (activeSection === null || activeSection === 'notifications') ? 'block' : 'none'}}>
+<Card id="settings-notifications" data-section="notifications">
           <CardTitle>Notifications</CardTitle>
           <CardMeta>Toast triggers inside the dashboard.</CardMeta>
           <label className="checkbox-row" data-setting-id="notifications.onAgentComplete">
@@ -1164,13 +1162,15 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <span>Notify when a plan needs approval</span>
           </label>
         </Card>
+</div>
 
         {/* v3.6.0 — Auth token management. The Settings tab is the
             only place a human can read the token. The input + Save
             button lets the operator paste a token they got from
             server stderr or from another machine. Copy / Regenerate
             buttons act via the authed /api/auth/* endpoints. */}
-        <Card id="settings-auth" data-section="auth">
+        <div data-section="auth" style={{display: (activeSection === null || activeSection === 'auth') ? 'block' : 'none'}}>
+<Card id="settings-auth" data-section="auth">
           <CardTitle><Shield size={14} /> Authentication</CardTitle>
           <CardMeta>
             Localhost and Tailscale browser access are auto-trusted via loopback.
@@ -1239,8 +1239,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             </p>
           </div>
         </Card>
+</div>
 
-        <Card id="settings-agents" data-section="agents">
+        <div data-section="agents" style={{display: (activeSection === null || activeSection === 'agents') ? 'block' : 'none'}}>
+<Card id="settings-agents" data-section="agents">
           <CardTitle><ServerIcon size={14} /> Agent Behavior</CardTitle>
           <CardMeta>Limits and timeouts for background agent dispatch.</CardMeta>
           <div className="form-row">
@@ -1281,8 +1283,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <span>Auto-restart stuck agents</span>
           </label>
         </Card>
+</div>
 
-        <Card id="settings-dashboard" data-section="dashboard">
+        <div data-section="dashboard" style={{display: (activeSection === null || activeSection === 'dashboard') ? 'block' : 'none'}}>
+<Card id="settings-dashboard" data-section="dashboard">
           <CardTitle><Globe size={14} /> Dashboard</CardTitle>
           <CardMeta>Controls how <code>bizar</code> starts up.</CardMeta>
           <label className="checkbox-row" data-setting-id="dashboard.autoLaunchWeb">
@@ -1378,8 +1382,10 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             })()}
           </div>
         </Card>
+</div>
 
-        <Card id="settings-background" data-section="background">
+        <div data-section="background" style={{display: (activeSection === null || activeSection === 'background') ? 'block' : 'none'}}>
+<Card id="settings-background" data-section="background">
           <CardTitle><ServerIcon size={14} /> Background Agents</CardTitle>
           <CardMeta>Tune plugin options. Changes take effect on next plugin restart.</CardMeta>
 
@@ -1498,30 +1504,39 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
             <small>Plugin options are read at startup. Save changes and run <code>bizar update</code> to apply.</small>
           </div>
         </Card>
+</div>
       </div>
 
       <PairDeviceCard />
 
+      <div style={{display: (activeSection === null || activeSection === 'activity-log') ? 'block' : 'none'}}>
+      <div data-section="activity-log" style={{display: (activeSection === null || activeSection === 'activity-log') ? 'block' : 'none'}}>
       <section id="settings-activity-log" data-section="activity-log" className="settings-section-wrap">
-        <ActivityLogCard />
-      </section>
+                    <ActivityLogCard />
+                  </section>
+</div>
+</div>
 
+      <div style={{display: (activeSection === null || activeSection === 'about') ? 'block' : 'none'}}>
+      <div data-section="about" style={{display: (activeSection === null || activeSection === 'about') ? 'block' : 'none'}}>
       <Card id="settings-about" data-section="about">
-        <CardTitle><Info size={14} /> About</CardTitle>
-        <CardMeta>Build metadata.</CardMeta>
-        <dl className="about-table">
-          <dt>Version</dt>
-          <dd className="mono">{about.version}</dd>
-          <dt>Homepage</dt>
-          <dd>
-            <a href={about.homepage} target="_blank" rel="noopener noreferrer">
-              {about.homepage}
-            </a>
-          </dd>
-          <dt>License</dt>
-          <dd>{about.license}</dd>
-        </dl>
-      </Card>
+                    <CardTitle><Info size={14} /> About</CardTitle>
+                    <CardMeta>Build metadata.</CardMeta>
+                    <dl className="about-table">
+                      <dt>Version</dt>
+                      <dd className="mono">{about.version}</dd>
+                      <dt>Homepage</dt>
+                      <dd>
+                        <a href={about.homepage} target="_blank" rel="noopener noreferrer">
+                          {about.homepage}
+                        </a>
+                      </dd>
+                      <dt>License</dt>
+                      <dd>{about.license}</dd>
+                    </dl>
+                  </Card>
+</div>
+</div>
     </div>
   );
 }

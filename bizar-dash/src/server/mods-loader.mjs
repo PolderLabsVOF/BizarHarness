@@ -328,15 +328,22 @@ export const modsLoader = {
       return this.installFromPath(entry.downloadUrl);
     }
 
-    // Fallback: reconstruct from the registry's URL pattern.
+    // Fallback: reconstruct from the registry's URL pattern. Try the
+    // versioned path first, then the flat path (mods/<id>/ without a
+    // version subdir) — the latter is what bizarre-mods uses today.
     const registryUrl = url || this.getRegistryUrl();
     const baseUrl = registryUrl.replace(/\/registry\.json$/, '').replace(/\/$/, '');
-    const modDir = `${baseUrl}/mods/${id}/${entry.latest || entry.version}`;
-    const fallback = await this.installFromUrl(modDir);
-    if (fallback) return fallback;
+    const candidates = [
+      `${baseUrl}/mods/${id}/${entry.latest || entry.version}`,
+      `${baseUrl}/mods/${id}`,
+    ];
+    for (const modDir of candidates) {
+      const result = await this.installFromUrl(modDir);
+      if (result) return result;
+    }
 
     throw new Error(
-      `mod "${id}" has no downloadUrl and the canonical URL ${modDir} is unreachable`,
+      `mod "${id}" has no downloadUrl and the canonical URLs are unreachable (tried ${candidates.join(', ')})`,
     );
   },
 
@@ -348,7 +355,8 @@ export const modsLoader = {
    * Returns the installed mod, or null if mod.json wasn't found.
    */
   async installFromUrl(baseUrl) {
-    const modJsonUrl = `${baseUrl.replace(/\/$/, '')}/mod.json`;
+    const cleanBase = baseUrl.replace(/\/$/, '');
+    const modJsonUrl = `${cleanBase}/mod.json`;
     let modJson;
     try {
       const { fetch } = await import('node:undici').catch(() => ({ fetch: globalThis.fetch }));
@@ -364,13 +372,13 @@ export const modsLoader = {
       throw new Error(`mod "${id}" already installed`);
     }
     mkdirSync(target, { recursive: true });
-    // Fetch known files. Unknown files (e.g. views/, agents/) are NOT
-    // fetched — mods that need them should publish a tarball instead.
-    const knownFiles = ['mod.json', 'route.mjs', 'README.md'];
+    // Fetch known top-level files. Unknown files (e.g. views/, agents/)
+    // are NOT fetched — mods that need them should publish a tarball.
+    const knownFiles = ['mod.json', 'route.mjs', 'README.md', 'CHANGELOG.md'];
     for (const f of knownFiles) {
       try {
         const { fetch } = await import('node:undici').catch(() => ({ fetch: globalThis.fetch }));
-        const fileRes = await fetch(`${baseUrl.replace(/\/$/, '')}/${f}`);
+        const fileRes = await fetch(`${cleanBase}/${f}`);
         if (fileRes.ok) {
           const content = await fileRes.text();
           writeFileSync(join(target, f), content, 'utf8');
@@ -378,6 +386,20 @@ export const modsLoader = {
       } catch {
         /* skip files that don't exist */
       }
+    }
+    // Also try to fetch `web/index.html` if the mod ships a self-contained
+    // web view (the dashboard exposes it via `/api/mods/<id>/mod-web/*`).
+    try {
+      const { fetch } = await import('node:undici').catch(() => ({ fetch: globalThis.fetch }));
+      const webRes = await fetch(`${cleanBase}/web/index.html`);
+      if (webRes.ok) {
+        const webDir = join(target, 'web');
+        mkdirSync(webDir, { recursive: true });
+        const content = await webRes.text();
+        writeFileSync(join(webDir, 'index.html'), content, 'utf8');
+      }
+    } catch {
+      /* optional — web view is mod-defined */
     }
     return loadMod({ id, dir: target });
   },

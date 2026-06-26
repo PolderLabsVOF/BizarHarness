@@ -1,5 +1,14 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.18.0 — Settings tabs work + chat info panel hideable + mod install fix
+
+### Highlights
+
+- **Settings subnav is now a real tab strip** that hides non-matching sections via inline-style `display: none`. The v3.17.0 CSS-attribute-selector approach worked in isolation but a stale scroll-detection useEffect kept resetting the active tab. Now removed. URL hash deep-links (`#settings-theme`) still work.
+- **Mod install from registry fixed.** `installFromRegistry` now accepts the `downloadUrl` field directly, plus tries both `mods/<id>/<version>/` and the flat `mods/<id>/` paths as fallbacks. `installFromUrl` also fetches `web/index.html` so mods with self-contained web views round-trip cleanly. The `bizar-mods` registry.json now includes `downloadUrl` pointing at the flat-path on GitHub.
+- **Chat info panel (right sidebar) is hideable.** New "Info" button in the chat header toggles the right sidebar (Session info, Agents, Active MCPs, Slash commands). When hidden, a floating "Show info" restore button appears.
+- **Version constant fixed.** The header used to show `v3.6.1` regardless of the actual installed version. Now reads `v3.18.0`.
+
 ## v3.17.0 — Settings section filter + graphify removed
 
 ### Highlights

@@ -5331,6 +5331,42 @@ kbd {
 
 
 
+
+
+/* ─── Chat info panel hide toggle (v3.18.0) ───────────────────────── */
+.chat-info-hidden {
+  display: none;
+}
+
+.chat-info-restore {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-2);
+  transition: color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
+}
+
+.chat-info-restore:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+/* Compact chat layout when info panel is hidden */
+.chat-layout:has(.chat-info-hidden) .chat-main {
+  padding-right: 0;
+}
 /* ─── Chat floating input ───────────────────────────────────────── */
 .chat-input-floating {
   position: sticky;
