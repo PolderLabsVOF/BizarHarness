@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.20.6 — Mobile typecheck baseline cleanup
+
+> **Patch.** v3.20.5 wired `tsc --noEmit` into `prepublishOnly` and surfaced three pre-existing mobile-app typecheck errors. This release fixes them so the publish pipeline is warning-free for future releases.
+
+### Highlights
+
+- **`MobileApp.tsx:210` — fixed `'artifacts?:change'` typo** (stray `?`). The valid WS event type is `'artifact:change'` (singular). Without this fix, the mobile dashboard never refreshes when an artifact (plan) is added/changed/deleted.
+- **Created `MobilePlans.tsx`** — the mobile stack router referenced a `MobilePlans` component that didn't exist, breaking the `plans` stack route. Thin wrapper that adapts `onOpenPlan(slug)` to `MobileArtifacts`'s `onOpenArtifact(slug)` — the underlying list view already existed and works; this just bridges the prop naming.
+
+### Files changed (4)
+
+- `bizar-dash/src/web/MobileApp.tsx` — fixed WS event type string
+- `bizar-dash/src/web/mobile/views/MobilePlans.tsx` — new wrapper (12 lines)
+- `bizar-dash/src/web/App.tsx` — VERSION constant to v3.20.6
+- `bizar-dash/package.json` — bumped to 3.20.6
+
+### Why
+
+v3.20.5's `prepublishOnly` typecheck now runs `tsc --noEmit` before publish. The three pre-existing mobile errors (`'artifacts?:change'` typo, missing `MobilePlans.tsx`, implicit `any` on `slug`) were printed but didn't block. v3.20.6 clears them so future publishes print a clean typecheck.
+
 ## v3.20.5 — Mod upgrade flow + dynamic TSX tab views + publish-time typecheck
 
 > **Mod lifecycle.** Mods installed from the registry can now be upgraded in place; mods that declare a `tab` view in `views/registry.json` are dynamically imported and rendered; `tsc --noEmit` is wired into the publish pipeline so future TDZ-style bugs surface before publishing.

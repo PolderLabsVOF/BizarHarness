@@ -207,7 +207,7 @@ export function MobileApp() {
         msg.type === 'project:change' ||
         msg.type === 'agents:change' ||
         msg.type === 'schedules:change' ||
-        msg.type === 'artifacts?:change'
+        msg.type === 'artifact:change'
       ) {
         refreshSnapshot().catch(() => undefined);
       } else if (msg.type === 'agent:status' || msg.type === 'agent:restarted') {
