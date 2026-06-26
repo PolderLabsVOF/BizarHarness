@@ -77,7 +77,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   history: History,
 };
 
-const VERSION = 'v3.20.10';
+const VERSION = 'v3.20.11';
 
 /**
  * Render the active view. If `activeTab` matches a built-in tab id,
