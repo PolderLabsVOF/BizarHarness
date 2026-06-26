@@ -743,3 +743,17 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - `@polderlabs/bizar-dash@3.17.0` (tag v3.17.0-dash)
   - `graphify` mod v1.1.0 in `github.com/DrB0rk/bizar-mods`
   - Repo renamed: `github.com/DrB0rk/bizarre-mods` → `github.com/DrB0rk/bizar-mods`
+
+## 2026-06-26 — v3.19.0: Obsidian vault + Plans→Artifacts + Hindsight removal + Ponytail/Impeccable mods + browser-harness agent
+
+- **Lesson**: When renaming a feature end-to-end, do it in one pass. Half-renames (file rename + import rename but not the function body rename) are the most common failure mode here — `Plans` → `Artifacts` rename caught `bizar-dash/src/web/components/CommandDialog.tsx` referencing the old `PlanCreateDialog`/`PlanListDialog` names even after the files were renamed.
+- **Lesson**: TypeScript column 9 of line 210 with a literal `'artifacts?:change'` that does not exist anywhere in source = TS phantom error from an HMR/optimization mismatch. The actual error is correct (the string isn't in any union), but the position is wrong. Vite build worked fine. When in doubt, `vite build` is the source of truth, not `tsc --noEmit`.
+- **Lesson**: `extractArtifactFromMessage` was imported by `bg-poller.mjs` but never defined anywhere — the function was always missing. The old `plans-store.mjs` didn't have it either. This was a latent bug that the rename exposed. Added a stub implementation to `artifacts-store.mjs`.
+- **Lesson**: When removing a feature like Hindsight that spans 11 agent configs, template, CLI prompts, install script, and MCP config — use Python `re.sub` to batch-strip patterns. Manual editing of 13 files is error-prone.
+- **Lesson**: Per-project Obsidian vault via `.obsidian/` directory in the worktree is the right pattern for long-term agent memory: git-trackable, human-browsable in Obsidian.app, plain markdown for tools, cross-linkable, plugins-ready.
+- **Pattern to follow**:
+  - For "mod wraps npm package" — mod stores its state in `.obsidian/<mod-name>/` inside the project vault. Agent reads the vault at session start, picks up the state. Mod is optional installation; the state lives in the project, not the package.
+  - For skill installation in install.sh — `npx --yes <skill> install --scope=user` with `if` check + fallback warning. Don't fail the whole install if a single skill can't be installed.
+  - For browser-driven E2E testing — `browser-harness` agent drives chromium via CDP via `chrome-remote-interface`; parent agents call it for "screenshot X" / "verify Y" / "smoke test Z". It never edits source.
+- **Files changed**: 80 modified, 3 new mods (ponytail, impeccable, graphify already existed), 1 new server module (obsidian-store.mjs), 1 new route (obsidian.mjs), 1 new agent (browser-harness.md). Renamed `Plans` → `Artifacts` everywhere.
+- **Published**: `@polderlabs/bizar@3.19.0`, `@polderlabs/bizar-dash@3.19.1` (patch for extractArtifactFromMessage stub), 2 new mods on github.com/DrB0rk/bizar-mods (registry v2), browser-harness agent in config/agents/.
