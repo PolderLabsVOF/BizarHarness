@@ -1,8 +1,8 @@
 ---
 glyph: sample-plan-login
-submittedAt: 2026-06-26T18:16:28.147Z
+submittedAt: 2026-06-26T18:26:24.686Z
 submittedBy: drb0rk
-commentCount: 2
+commentCount: 3
 questionCount: 0
 ---
 
@@ -11,6 +11,7 @@ questionCount: 0
 ## Free-placed comments
 - (240, 120) — drb0rk: Make this button say Send link instead of Continue
 - (165, 2121.5) — drb0rk: test
+- (300, 400) — drb0rk: Move the magic link form to be the only thing on this page
 
 ## Open-question answers
 _no open-question answers_

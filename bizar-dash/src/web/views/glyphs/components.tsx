@@ -1060,3 +1060,39 @@ const proseStyle: React.CSSProperties = {
   lineHeight: 1.6,
   color: 'var(--text)',
 };
+
+// ─── Mockup ─────────────────────────────────────────────────────────────────
+
+export interface MockupProps {
+  id: string;
+  title?: string;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  html: string;
+}
+
+export function Mockup({ id, title, x, y, w, h, html }: MockupProps) {
+  return (
+    <figure
+      id={id}
+      data-block-id={id}
+      className="glyph-mockup"
+      style={{ width: w, minHeight: h }}
+    >
+      {title && <figcaption className="glyph-mockup-title">{title}</figcaption>}
+      <div className="glyph-mockup-frame">
+        <div className="glyph-mockup-chrome">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div
+          className="glyph-mockup-body"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </div>
+    </figure>
+  );
+}

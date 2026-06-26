@@ -1,0 +1,386 @@
+---
+title: "Chat UI — Complete Rewrite (Gemini-Inspired)"
+brief: "Start from scratch. Rewrite all chat UI files. Make it user-friendly, adaptive, and good-looking at every window size."
+status: draft
+kind: plan
+---
+
+<RichText id="vision">
+
+## What we're building
+
+A **from-scratch rewrite** of the chat UI tab in `bizar-dash`. Inspired by the Gemini Advanced "Hello, [name]." first-run screen. Calm, dark, minimal. Every element earns its place. The composer is always one click away. Side panels slide in and out — they never vanish. The greeting and suggestion cards set the tone on first visit.
+
+## Why a complete rewrite
+
+Three prior iterations left the chat in a brittle state:
+
+1. **Structural refactor** — split 728-line `Chat.tsx` into 11+ components. Good bones, but no design vision.
+2. **Gemini-inspired pass** — added gradient greeting, suggestion cards, pill composer. Fixed critical bugs (dead CSS, missing classes, `window.confirm`).
+3. **Polish pass** — narrowed panels, fixed composer centering, derived theme gradients from `--accent`, added responsive breakpoints.
+
+The polish pass improved things but **band-aided inconsistencies** rather than designing a coherent whole. The composer was a single row that fought the toolbar. The agent `<select>` was replaced with a popover but the popover positioning was inconsistent. The topbar, sessions header, and info card titles all used different visual languages. The mobile breakpoint at `1024.98px` was a workaround.
+
+The user asked for a clean rewrite. **This plan delivers one.**
+
+</RichText>
+
+<Callout id="callout-scope" tone="info">
+
+Scope: TSX in `views/Chat.tsx` + `views/Chat.tsx` components and CSS in `styles/chat.css` + `styles/mobile-chat.css`. **Out of scope:** server routes, hooks (kept as-is), MobileChat.tsx (uses shared components, light adaptation only).
+
+</Callout>
+
+<Stat id="stat-tsx" label="TSX files" value="14" hint="3 kept + 11 rewritten/created" />
+<Stat id="stat-css" label="CSS files" value="2" hint="chat.css (rewritten) + mobile-chat.css (rewritten)" />
+<Stat id="stat-bugs" label="Carried-over bugs" value="0" hint="Full overwrite — no leftover defects" />
+
+<RichText id="layout">
+
+## Layout — desktop ≥1200px
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  [📁 BizarHarness ▼]              Sessions (4)  Info ⓘ         · · · │ ← topbar (48px)
+├────────┬─────────────────────────────────────────────┬──────────────┤
+│        │                                             │              │
+│ SESS.  │                                             │  SESSION     │
+│   4    │       Hello, BizarHarness.                   │  ─────────   │
+│        │       How can I help you today?             │  id  sess_…  │
+│ ┌────┐ │                                             │  msgs  12    │
+│ │ +  │ │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐         │  pinned  2   │
+│ │ New│ │  │suggest│ │suggest│ │suggest│ │suggest│       │  agent  odin │
+│ └────┘ │  └──────┘ └──────┘ └──────┘ └──────┘         │  model  —     │
+│        │                                             │              │
+│ ▸ sess_│                                             │  AGENTS  15  │
+│ ▸ sess_│                                             │  ─────────   │
+│ ▸ sess_│                                             │  @odin       │
+│ ▸ sess_│  ┌─────────────────────────────────────┐    │  @baldr      │
+│        │  │ [odin ▼]  Send a message…    [📎][➤] │    │  @browser-…  │
+│        │  └─────────────────────────────────────┘    │  + 11 more   │
+│        │           ↑ floating pill composer          │              │
+│        │              (anchored bottom-center)       │  MCPs    2   │
+│        │                                             │  ─────────   │
+│        │                                             │  supabase OFF│
+│        │                                             │  semble   ON │
+│        │                                             │              │
+│        │                                             │  ▸ COMMANDS  │
+│        │                                             │              │
+├────────┴─────────────────────────────────────────────┴──────────────┤
+│ 200px  │                flex-1                              │ 240px │
+└────────┴──────────────────────────────────────────────────────────┴──────────────┘
+```
+
+When `messages.length > 0`, the welcome screen is replaced by a vertical message list. Each message is a card with hover-revealed actions (copy / regenerate / pin / delete). The composer stays pinned at the bottom.
+
+</RichText>
+
+<RichText id="layout-tablet">
+
+## Layout — tablet 768-1024px
+
+Sessions becomes an **overlay sheet** that slides in from the left. Info stays inline (220px). Composer is full-width within the thread.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  [📁 BizarHarness ▼]      Sessions (4)  Info       │
+├──────────────────────┬──────────────────────────────┤
+│                      │                              │
+│     (thread)         │   (info, inline 220px)       │
+│                      │                              │
+│   ┌──────────────┐   │   SESSION                    │
+│   │ composer     │   │   ...                        │
+│   └──────────────┘   │                              │
+│                      │                              │
+└──────────────────────┴──────────────────────────────┘
+```
+
+When `sessionsOpen === false`, sessions hide off-screen via `transform: translateX(-100%)`. Tap "Sessions (4)" to slide them back in. The session toggle button stays in the topbar.
+
+</RichText>
+
+<RichText id="layout-mobile">
+
+## Layout — mobile (under 768px)
+
+Both side panels become overlay sheets. Thread takes the full width. Composer is full-width pill, no rounded corners (saves vertical space on phones).
+
+```
+┌──────────────────────────────────┐
+│  [📁 BizarHarness ▼]  Sessions  │ ← topbar (48px)
+├──────────────────────────────────┤
+│                                  │
+│        (thread, full)            │
+│                                  │
+│   Hello, BizarHarness.           │
+│                                  │
+│   ┌──────┐                       │
+│   │sugst │  (1-up grid)           │
+│   └──────┘                       │
+│                                  │
+│   ┌────────────────────────────┐ │
+│   │ [odin▼] [input] [📎] [➤]   │ │
+│   └────────────────────────────┘ │
+│                                  │
+└──────────────────────────────────┘
+```
+
+Overlay sheets (sessions left, info right) slide in via `transform: translateX(±100%)`. Topbar buttons toggle them.
+
+</RichText>
+
+<RichText id="design-system">
+
+## Design system
+
+### Color tokens (use existing from `main.css:100-220`)
+
+```
+--bg              page background        (#0e0e10)
+--bg-1            card surface           (#18181b)
+--bg-2            hover / active         (#27272a)
+--border          hairline               (rgba(255,255,255,0.08))
+--border-strong   hover border           (rgba(255,255,255,0.16))
+--text            primary text           (#ececf1)
+--text-muted      secondary text         (#8e8ea0)
+--accent          theme accent           (#8b5cf6 — purple)
+--success / --warning / --error / --info   (oklch semantic)
+--gradient-hello  light-accent → accent  (THEME-AWARE)
+--gradient-name   accent → warm          (THEME-AWARE)
+```
+
+**Gradient rule:** `color-mix(in oklab, var(--accent), ...)` so the hello text follows the theme. Change `--accent` → both gradients update automatically.
+
+### Typography
+
+- **UI text:** Inter (existing)
+- **Code/model IDs:** JetBrains Mono (existing)
+- **Greeting:** clamp(2.25rem, 5vw, 3.5rem), weight 700, line-height 1.1
+- **Subtitle:** clamp(1.125rem, 2vw, 1.5rem), weight 500, muted
+- **Message body:** 0.9375rem / line-height 1.6
+- **Eyebrow labels** (panel headers): 0.6875rem uppercase, weight 600, letter-spacing 0.08em, muted
+
+### Motion
+
+```
+--motion-fast   120ms   hover, focus
+--motion-base   200ms   state changes
+--motion-slow   320ms   panel slide, sheet overlay
+--motion-ease   cubic-bezier(0.2, 0, 0, 1)
+```
+
+Reduced-motion: `prefers-reduced-motion: reduce` zeros all transitions globally.
+
+### Radius scale
+
+```
+--radius-sm    6px     small chips, attachment tags
+--radius-md   10px     cards, buttons, agent chip
+--radius-lg   14px     message bubbles, composer pill
+--radius-pill 999px   pills, badges
+```
+
+</RichText>
+
+<Table
+  id="table-components"
+  columns={["Component", "File", "Status", "Lines"]}
+  rows={[
+    ["ChatTopBar",       "ChatTopBar.tsx",       "new",      "~60"],
+    ["ChatThread",       "ChatThread.tsx",       "new",      "~80"],
+    ["MessageBubble",    "MessageBubble.tsx",    "new",      "~110"],
+    ["WelcomeScreen",    "WelcomeScreen.tsx",    "new",      "~70"],
+    ["SuggestionCards",  "SuggestionCards.tsx",  "rewritten","~100"],
+    ["Composer",         "Composer.tsx",         "rewritten","~180"],
+    ["FloatingComposer", "FloatingComposer.tsx", "rewritten","~40"],
+    ["AgentChip",        "AgentChip.tsx",        "new",      "~80"],
+    ["SessionList",      "SessionList.tsx",      "rewritten","~120"],
+    ["InfoPanel",        "InfoPanel.tsx",        "rewritten","~140"],
+    ["EmptyState",       "EmptyState.tsx",       "rewritten","~40"],
+    ["LoadingSkeleton",  "LoadingSkeleton.tsx",  "rewritten","~50"],
+    ["StreamingIndicator","StreamingIndicator.tsx","kept",   "~30"],
+    ["ConfirmModal",     "ConfirmModal.tsx",     "rewritten","~80"],
+    ["Chat (view)",      "views/Chat.tsx",       "rewritten","~250"],
+    ["MobileChat",       "mobile/views/MobileChat.tsx","rewritten","~200"]
+  ]}
+/>
+
+<FileTree
+  id="tree-files"
+  title="Files touched"
+  entries={[
+    { path: "bizar-dash/src/web/views/Chat.tsx",                            change: "modified", note: "Orchestrator — uses all components below" },
+    { path: "bizar-dash/src/web/mobile/views/MobileChat.tsx",               change: "modified", note: "Reuses shared components" },
+    { path: "bizar-dash/src/web/components/chat/ChatTopBar.tsx",             change: "added",     note: "48px topbar with project chip + panel toggles" },
+    { path: "bizar-dash/src/web/components/chat/ChatThread.tsx",             change: "added",     note: "Message list + welcome screen + loading state" },
+    { path: "bizar-dash/src/web/components/chat/MessageBubble.tsx",          change: "added",     note: "User/assistant message with hover actions" },
+    { path: "bizar-dash/src/web/components/chat/WelcomeScreen.tsx",          change: "added",     note: "Gradient greeting + CTA when no project" },
+    { path: "bizar-dash/src/web/components/chat/SuggestionCards.tsx",        change: "modified", note: "4 cards in auto-fit grid" },
+    { path: "bizar-dash/src/web/components/chat/Composer.tsx",               change: "modified", note: "Pill composer, single row with AgentChip" },
+    { path: "bizar-dash/src/web/components/chat/FloatingComposer.tsx",       change: "modified", note: "Sticky bottom wrapper" },
+    { path: "bizar-dash/src/web/components/chat/AgentChip.tsx",              change: "added",     note: "Custom popover dropdown — replaces <select>" },
+    { path: "bizar-dash/src/web/components/chat/SessionList.tsx",            change: "modified", note: "Sessions sidebar with new-session button" },
+    { path: "bizar-dash/src/web/components/chat/InfoPanel.tsx",              change: "modified", note: "Compact info cards (4 max + collapsible commands)" },
+    { path: "bizar-dash/src/web/components/chat/EmptyState.tsx",             change: "modified", note: "Chat-local empty state (different from shared one)" },
+    { path: "bizar-dash/src/web/components/chat/LoadingSkeleton.tsx",        change: "modified", note: "Pulsing skeleton bubbles" },
+    { path: "bizar-dash/src/web/components/chat/ConfirmModal.tsx",           change: "modified", note: "Wraps existing useModal — replaces window.confirm" },
+    { path: "bizar-dash/src/web/components/chat/index.ts",                  change: "modified", note: "Barrel exports all components" },
+    { path: "bizar-dash/src/web/styles/chat.css",                            change: "modified", note: "Clean sheet, ~800-1000 lines" },
+    { path: "bizar-dash/src/web/styles/mobile-chat.css",                     change: "modified", note: "Minimal — most rules in chat.css @media" }
+  ]}
+/>
+
+<Callout id="callout-kept" tone="info">
+
+**Kept unchanged:** `useChat.ts`, `useSlashCommands.ts`, `useAutoGrowTextarea.ts`, `StreamingIndicator.tsx`. These were well-designed in the prior refactor.
+
+</Callout>
+
+<Decision
+  id="decision-pill-layout"
+  title="Composer pill: column or row?"
+  question="Inside the floating pill, should the agent chip + textarea + actions be one row or stacked?"
+  options={[
+    { id: "row",   label: "Single horizontal row",  detail: "Agent chip | textarea flex-1 | attach | send. Compact but the textarea gets squeezed when the agent name is long.", recommended: false },
+    { id: "col",   label: "Textarea on top, toolbar below", detail: "Textarea takes the full pill width. Agent chip + attach + send live in a 32px toolbar below. More vertical space, no squeezing. Matches the Gemini reference.", recommended: true }
+  ]}
+/>
+
+<Decision
+  id="decision-agent-chip"
+  title="Agent picker: custom popover or library?"
+  question="How should the user pick the agent?"
+  options={[
+    { id: "native", label: "Native <select>",       detail: "Renders a modal-style dropdown that overlaps the composer and breaks layout. Hard to theme.", recommended: false },
+    { id: "lib",    label: "Headless library (Radix)", detail: "Polished but adds a dependency. The popover is simple enough to build inline.", recommended: false },
+    { id: "custom", label: "Custom button + popover",   detail: "100-line component with useState + outside-click handler + keyboard support. No deps. Full theme control.", recommended: true }
+  ]}
+/>
+
+<Decision
+  id="decision-sidebar-default"
+  title="Side panels: open or collapsed by default?"
+  question="Should sessions and info panels be open or collapsed when the chat loads?"
+  options={[
+    { id: "open",   label: "Both open at ≥1200px",    detail: "Mirrors the current default. Power users get full context immediately.", recommended: true },
+    { id: "closed", label: "Both collapsed",           detail: "Maximum space for the thread. Mirrors Gemini Advanced. User has to discover the toggles.", recommended: false },
+    { id: "smart",  label: "Sessions open, info closed", detail: "Sessions are essential for navigation; info is reference. Info stays out of the way until needed.", recommended: false }
+  ]}
+/>
+
+<RichText id="phases">
+
+## Implementation phases
+
+### Phase 1 — Foundations (single file, no parallel)
+
+Rewrite `chat.css` and `mobile-chat.css` from scratch with the full token system and all component classes. This establishes the visual vocabulary before any TSX touches it.
+
+### Phase 2 — Atomic components (parallel-safe)
+
+Dispatch **Thor** to overwrite:
+- `useChat.ts` (kept — just verify exports)
+- `EmptyState.tsx` (chat-local, simple)
+- `StreamingIndicator.tsx` (kept)
+- `LoadingSkeleton.tsx` (rewritten, simple)
+
+Dispatch **Tyr** to wire up the CSS for these components (no-op if Phase 1 already covers them).
+
+### Phase 3 — Composite components (parallel-safe)
+
+Dispatch **Thor** in parallel for the bigger components:
+- `AgentChip.tsx`, `SuggestionCards.tsx`, `MessageBubble.tsx`, `WelcomeScreen.tsx`, `Composer.tsx`, `FloatingComposer.tsx`
+
+Tyr adds CSS for each as needed.
+
+### Phase 4 — Container components (sequential after Phase 3)
+
+`SessionList.tsx` and `InfoPanel.tsx` depend on shared `EmptyState`, so they come after Phase 2.
+
+### Phase 5 — Top-level orchestration
+
+`ChatTopBar.tsx`, `ChatThread.tsx`, then `Chat.tsx` and `MobileChat.tsx` last — these wire everything together.
+
+### Phase 6 — Verification
+
+- `npx tsc --noEmit`
+- `npx vite build`
+- `npx bizar test-gate`
+- Browser E2E at 5 viewport sizes: 1920, 1440, 1024, 768, 414
+
+</RichText>
+
+<Callout id="callout-risks" tone="warn">
+
+### Risks
+
+- **Use-chat hook signature drift:** If `useChat.ts` doesn't expose a method the new components need (e.g. `setPinned`, `setCreating`), the rewrite stalls. Mitigation: read `useChat.ts` before writing any component, document any gaps.
+- **App.tsx imports:** `App.tsx` imports `Chat` from `./views/Chat`. If the new `Chat` signature changes, App.tsx breaks. Mitigation: keep the same `Props` interface.
+- **CSS specificity wars:** New components using new classes might collide with existing classes that use the same names (e.g. `chat-suggestions`). Mitigation: scope-check before overwriting; prefer long specific names.
+- **MobileChat hooks mismatch:** MobileChat.tsx must use the same `useChat` hook. Mitigation: MobileChat uses the same shared components, just a different layout.
+
+</Callout>
+
+<Checklist
+  id="checklist-acceptance"
+  items={[
+    { id: "a1", label: "First-run greeting shows 'Hello, [project].' with gradient text that derives from --accent", checked: false },
+    { id: "a2", label: "4 suggestion cards below the greeting, click fills composer", checked: false },
+    { id: "a3", label: "Floating pill composer is sticky at bottom-center of thread", checked: false },
+    { id: "a4", label: "Agent picker is a custom popover (NOT native <select>)", checked: false },
+    { id: "a5", label: "Sessions panel: 200px wide, slides via transform/opacity (never display:none)", checked: false },
+    { id: "a6", label: "Info panel: 240px wide, compact modules, slash commands collapsed by default", checked: false },
+    { id: "a7", label: "Topbar is a single horizontal row, 48px tall, with project chip + spacer + toggle buttons", checked: false },
+    { id: "a8", label: "Mobile (<768px): both side panels are overlay sheets via transform", checked: false },
+    { id: "a9", label: "Reduced-motion: all transitions zeroed under prefers-reduced-motion", checked: false },
+    { id: "a10", label: "All keyboard shortcuts work: Enter send, Shift+Enter newline, Tab autocomplete, Cmd/Ctrl+Enter send", checked: false },
+    { id: "a11", label: "Test gate green, tsc clean, vite build no warnings", checked: false },
+    { id: "a12", label: "Browser E2E passes at 1920, 1440, 1024, 768, 414 viewports", checked: false }
+  ]}
+/>
+
+<RichText id="open-questions">
+
+## Open questions for you
+
+Before I dispatch the implementation, please confirm or adjust:
+
+</RichText>
+
+<OpenQuestions
+  id="questions"
+  questions={[
+    {
+      id: "q-default-panels",
+      label: "Side panels default state — both open (recommended), both collapsed, or smart (sessions open, info closed)?",
+      kind: "choice",
+      options: ["Both open", "Both collapsed", "Sessions open, info closed"]
+    },
+    {
+      id: "q-agent-chip",
+      label: "Agent chip — keep a 'no agent' option in the popover, or always require one?",
+      kind: "choice",
+      options: ["Keep 'no agent'", "Always require one"]
+    },
+    {
+      id: "q-mobile-default",
+      label: "On mobile, should the composer use the pill shape (rounded) or be full-width with squared corners to save vertical space?",
+      kind: "choice",
+      options: ["Pill on mobile", "Squared on mobile (saves ~12px)"]
+    }
+  ]}
+/>
+
+<RichText id="next">
+
+## After your answers
+
+I'll dispatch the parallel implementation:
+1. **Tyr** writes `chat.css` + `mobile-chat.css` from scratch
+2. **Thor** overwrites the 14 TSX files in phases
+3. **Forseti** audits the result against the acceptance checklist
+4. **Browser-harness** verifies at 5 viewport sizes
+
+No code is written until you answer the open questions above.
+
+</RichText>

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "title": "Chat UI — Complete Rewrite (Gemini-Inspired)",
+  "elements": [],
+  "connections": [],
+  "comments": [
+    {
+      "id": "cmt_86a0f6bcd",
+      "elementId": null,
+      "author": "drb0rk",
+      "text": "this one",
+      "created": "2026-06-26T21:47:28.412Z",
+      "thread": [],
+      "x": 1026,
+      "y": 6196.25
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

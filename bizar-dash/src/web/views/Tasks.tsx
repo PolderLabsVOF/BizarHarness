@@ -41,7 +41,7 @@ import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { BgStatusBadge } from '../components/BgStatusBadge';
 import { openKillConfirmDialog } from '../components/KillConfirmDialog';
-import { api } from '../lib/api';
+import { api, enhancePrompt } from '../lib/api';
 import { cn, formatRelative, priorityColors, autoTitleFromContent } from '../lib/utils';
 import type { Agent, Settings, Snapshot, Task } from '../lib/types';
 import { openArtifactViewer } from '../components/ArtifactViewer';
@@ -1456,13 +1456,29 @@ function openSubmitTaskModal(
         </label>
         <label htmlFor="submit-task-desc">
           Description
-          <textarea
-            id="submit-task-desc"
-            ref={(el) => { descEl = el; }}
-            className="textarea"
-            rows={5}
-            placeholder="Provide more detail (markdown ok)…"
-          />
+          <span style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+            <textarea
+              id="submit-task-desc"
+              ref={(el) => { descEl = el; }}
+              className="textarea"
+              rows={5}
+              placeholder="Provide more detail (markdown ok)…"
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon"
+              style={{ marginTop: 0, flexShrink: 0 }}
+              title="Enhance prompt with AI"
+              onClick={async () => {
+                if (!descEl?.value?.trim()) return;
+                const enhanced = await enhancePrompt(descEl.value);
+                if (enhanced !== descEl.value) descEl.value = enhanced;
+              }}
+            >
+              <Sparkles size={14} />
+            </button>
+          </span>
         </label>
         <div className="task-form-row">
           <label htmlFor="submit-task-priority" className="task-form-field">

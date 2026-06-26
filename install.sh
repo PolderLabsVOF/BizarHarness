@@ -77,6 +77,21 @@ section() {
   echo -e "${BOLD}${CYAN}── $1 ──${NC}"
 }
 
+# ── verify_dependencies: final check that all required tools are on PATH ─
+verify_dependencies() {
+  local missing=()
+  for cmd in node uv uvx bun jq sqlite3 gh opencode python3 make g++; do
+    if ! command -v "$cmd" &>/dev/null; then
+      missing+=("$cmd")
+    fi
+  done
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo -e "  ${RED}✗${NC} missing required commands: ${missing[*]}"
+    return 1
+  fi
+  return 0
+}
+
 # ── Pre-flight: which tools are missing? ───────────────────────────────
 section "Pre-flight: checking system tools"
 
@@ -84,11 +99,19 @@ have_cmd() { command -v "$1" >/dev/null 2>&1; }
 have_file() { [ -e "$1" ]; }
 
 MISSING=()
+have_cmd node || MISSING+=("node")
 have_cmd uv || MISSING+=("uv")
+have_cmd uvx || MISSING+=("uvx")
 have_cmd "$PYTHON_BIN" || MISSING+=("$PYTHON_BIN")
 have_cmd jq || MISSING+=("jq")
 have_cmd npx || MISSING+=("npx")
 have_cmd git || MISSING+=("git")
+have_cmd bun || MISSING+=("bun")
+have_cmd gh || MISSING+=("gh")
+have_cmd opencode || MISSING+=("opencode")
+have_cmd sqlite3 || MISSING+=("sqlite3")
+have_cmd make || MISSING+=("make")
+have_cmd g++ || MISSING+=("g++")
 
 # Chrome detection: prefer chrome-headless-shell from puppeteer cache, then
 # system chromium / chrome / google-chrome. We don't require Chrome — the
@@ -236,6 +259,122 @@ if [ -n "$CHROME_BIN" ] || [ -z "$CHROME_BIN" ]; then
   fi
 fi
 
+# ── Native build deps (better-sqlite3 compiles, etc.) ─────────────────
+section "Install native build dependencies"
+
+if [ "${NO_SUDO:-}" != "1" ] && have_cmd apt-get; then
+  echo -e "  ${CYAN}→${NC} Installing build-essential, python3, sqlite3-dev..."
+  if sudo -n apt-get install -y --no-install-recommends \
+    build-essential python3 sqlite3 libsqlite3-dev \
+    2>/dev/null; then
+    note "native build deps installed (build-essential, python3, sqlite3-dev)"
+  else
+    warn "apt install of native build deps failed (needs sudo). Install manually:"
+    warn "  sudo apt-get install -y build-essential python3 sqlite3 libsqlite3-dev"
+  fi
+else
+  note "native build deps check skipped (NO_SUDO=1 or non-apt system)"
+fi
+
+# ── Skills CLI (for skills.sh domain skills) ──────────────────────────
+section "Install skills CLI"
+
+if ! have_cmd skills; then
+  if have_cmd npm; then
+    echo -e "  ${CYAN}→${NC} Installing skills CLI via npm..."
+    if npm install -g skills >/dev/null 2>&1; then
+      note "skills CLI installed at $(command -v skills 2>/dev/null || echo 'npm global')"
+    else
+      warn "skills CLI install failed (run manually: npm install -g skills)"
+    fi
+  else
+    warn "npm not found — cannot install skills CLI"
+  fi
+else
+  note "skills CLI already installed"
+fi
+
+# ── Bun (JavaScript runtime, for plugin tests) ────────────────────────
+section "Install Bun"
+
+if ! have_cmd bun; then
+  echo -e "  ${CYAN}→${NC} Installing Bun..."
+  if have_cmd curl; then
+    if curl -fsSL https://bun.sh/install | bash >/dev/null 2>&1; then
+      export PATH="$HOME/.bun/bin:$PATH"
+      if have_cmd bun; then
+        note "Bun installed at $(command -v bun)"
+      else
+        warn "Bun installer ran but bun not on PATH — try 'export PATH=\$HOME/.bun/bin:\$PATH'"
+      fi
+    else
+      warn "Bun installer failed — install manually: https://bun.sh"
+    fi
+  else
+    warn "curl not found — install Bun manually: https://bun.sh"
+  fi
+else
+  note "Bun $(bun --version 2>/dev/null | head -1)"
+fi
+
+# ── GitHub CLI (gh, for PR/issue operations) ──────────────────────────
+section "Install GitHub CLI"
+
+if ! have_cmd gh; then
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    Linux)
+      if have_cmd apt-get; then
+        echo -e "  ${CYAN}→${NC} Installing gh via apt..."
+        if sudo -n apt-get install -y gh >/dev/null 2>&1; then
+          note "gh installed (apt)"
+        else
+          warn "apt install gh failed. Install manually: https://cli.github.com/"
+        fi
+      elif have_cmd dnf; then
+        sudo -n dnf install -y gh >/dev/null 2>&1 && note "gh installed (dnf)" || warn "dnf install gh failed"
+      elif have_cmd pacman; then
+        sudo -n pacman -S --noconfirm gh >/dev/null 2>&1 && note "gh installed (pacman)" || warn "pacman install gh failed"
+      else
+        warn "no known package manager — install gh manually: https://cli.github.com/"
+      fi
+      ;;
+    Darwin)
+      if have_cmd brew; then
+        brew install gh >/dev/null 2>&1 && note "gh installed (brew)" || warn "brew install gh failed"
+      else
+        warn "no brew — install gh manually: https://cli.github.com/"
+      fi
+      ;;
+    *)
+      warn "unknown OS — install gh manually: https://cli.github.com/"
+      ;;
+  esac
+else
+  note "gh $(gh --version 2>/dev/null | head -1)"
+fi
+
+# ── opencode CLI (via curl installer) ────────────────────────────────
+section "Install opencode CLI"
+
+if ! have_cmd opencode; then
+  echo -e "  ${CYAN}→${NC} Installing opencode CLI..."
+  if have_cmd curl; then
+    if curl -fsSL https://opencode.ai/install.sh | sh >/dev/null 2>&1; then
+      if have_cmd opencode; then
+        note "opencode CLI installed at $(command -v opencode)"
+      else
+        warn "opencode installer ran but binary not on PATH"
+      fi
+    else
+      warn "opencode installer failed — install manually: https://opencode.ai"
+    fi
+  else
+    warn "curl not found — install opencode manually: https://opencode.ai"
+  fi
+else
+  note "opencode CLI already installed"
+fi
+
 # ── npm packages (BizarHarness, optional @polderlabs/bizar-dash peer) ───
 section "Install BizarHarness npm packages"
 
@@ -368,13 +507,108 @@ fi
 section "Install bundled skills"
 
 mkdir -p "$SKILLS_DIR"
-for skill in bizar self-improvement cpp-coding-standards cpp-testing embedded-esp-idf; do
+# Core skills — bundled from config/skills/ in the repo.
+for skill in bizar self-improvement cpp-coding-standards cpp-testing embedded-esp-idf \
+             obsidian glyph read-the-damn-docs; do
   if [ -d "$REPO_DIR/config/skills/$skill" ]; then
     mkdir -p "$SKILLS_DIR/$skill"
     cp -R "$REPO_DIR/config/skills/$skill/." "$SKILLS_DIR/$skill/"
     note "skill: $skill"
   else
-    warn "skill source missing: $skill (skipping)"
+    # Fallback: write inline SKILL.md so install.sh remains self-contained.
+    mkdir -p "$SKILLS_DIR/$skill"
+    case "$skill" in
+      obsidian)
+        cat > "$SKILLS_DIR/$skill/SKILL.md" << 'OBSIDIAN_SKILL'
+---
+name: obsidian
+description: Interact with the Obsidian vault for persistent per-project memory. Use when searching notes, creating notes, writing wikilinks, using callouts, setting properties, or managing the project's obsidian knowledge bank.
+---
+
+# Obsidian Vault
+
+Per-project persistent memory for Bizar agents. Every project gets its own vault bank, keyed by project name.
+
+## Operations
+
+- **Search vault**: `obsidian_search` with `bank_id: "<project-name>"` — use before writing code that might have prior context
+- **Create/update notes**: `obsidian_write` with bank_id — store decisions, ADRs, architecture notes
+- **Append to notes**: `obsidian_append` — add to existing notes
+- **List notes**: `obsidian_list_notes` with optional directory prefix
+
+## Conventions
+
+- Use `bank_id: "<project-name>"` determined from the project root (the directory name)
+- Use wikilinks `[[Note Name]]` for cross-references within the vault
+- Use frontmatter for structured properties (tags, status, date)
+- Store ADRs under `adr/` prefix
+- Store implementation notes under `notes/` prefix
+OBSIDIAN_SKILL
+        note "skill: $skill (inline)"
+        ;;
+      glyph)
+        cat > "$SKILLS_DIR/$skill/SKILL.md" << 'GLYPH_SKILL'
+---
+name: glyph
+description: Work with the project knowledge graph (graphify). Query the graph before searching source files for structural and relationship questions. Use for architecture discovery, dependency mapping, and cross-module understanding.
+---
+
+# Glyph — Knowledge Graph
+
+Graph-based codebase navigation using graphify (`.bizar/graph/`). Maps source files, functions, types, and their relationships into a queryable graph with community detection.
+
+## Commands
+
+```bash
+bizar graph status          # node/edge/community counts
+bizar graph query <term>    # BFS traversal from a concept
+bizar graph path <A> <B>    # shortest path between two concepts
+bizar graph explain <X>     # all nodes related to X
+bizar graph update          # incremental rebuild
+bizar graph build           # full rebuild
+```
+
+## When to Use
+
+- Before reading a large file: `bizar graph explain "<module>"`
+- Mapping unfamiliar code: `bizar graph query "<feature>"`
+- Debugging cross-module: `bizar graph path "<symptom>" "<root-cause>"`
+- Before grep: check the graph first — may point directly to the file
+GLYPH_SKILL
+        note "skill: $skill (inline)"
+        ;;
+      read-the-damn-docs)
+        cat > "$SKILLS_DIR/$skill/SKILL.md" << 'RTDD_SKILL'
+---
+name: read-the-damn-docs
+description: Before writing code, read the official documentation. Use websearch/webfetch to find docs for any API, library, framework, or tool. Never guess API signatures, parameter names, or return types.
+---
+
+# Read the Damn Docs
+
+Discipline: always check official documentation before writing code against an unfamiliar API.
+
+## Rules
+
+1. **Search docs first**: Before using any function/API/component you haven't used recently, `websearch` or `webfetch` the official docs
+2. **No guessing**: Never invent parameter names, return types, or method signatures from training data alone
+3. **Read error messages**: When something fails, read the full error and search docs for the exact error text
+4. **Version matters**: Note the library/tool version and use docs matching that version
+5. **Check examples**: Most good docs have worked examples — find and follow them
+
+## When to Apply
+
+- Adding a new dependency — read its install/setup docs
+- Using an unfamiliar API method — check signature and return type
+- Debugging an error you don't understand — search docs + error message
+- Configuring a tool — read the official config reference
+RTDD_SKILL
+        note "skill: $skill (inline)"
+        ;;
+      *)
+        warn "skill source missing: $skill (no inline fallback)"
+        ;;
+    esac
   fi
 done
 
@@ -544,6 +778,15 @@ JSON
 )
 echo "$STATE_JSON" > "$BIZAR_STATE_FILE"
 note "install-state written to $BIZAR_STATE_FILE"
+
+# ── Final dependency verification ────────────────────────────────────
+section "Verify all dependencies"
+
+if verify_dependencies; then
+  note "all required tools available on PATH"
+else
+  err "some required tools are missing — see list above"
+fi
 
 # ── Final status banner ──────────────────────────────────────────────
 section "Install complete"

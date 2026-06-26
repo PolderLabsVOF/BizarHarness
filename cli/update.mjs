@@ -37,12 +37,15 @@
 import chalk from 'chalk';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { cp } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkHeadsUps, findBizarDir } from './heads-up.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const REPO_ROOT = join(__dirname, '..');
 
 const PKG_MAIN = '@polderlabs/bizar';
 const PKG_DASH = '@polderlabs/bizar-dash';
@@ -455,6 +458,111 @@ function spawnFreshDashboard({ port } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Repo-level update helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Pull the latest changes from the git origin. Exits the process if the
+ * pull fails (merge conflict etc.), matching the task flow — an update
+ * should not proceed when the working tree is dirty.
+ */
+function runGitPull({ dryRun = false } = {}) {
+  if (dryRun) {
+    console.log(chalk.dim('  [dry-run] would run: git pull --rebase'));
+    return { ok: true, message: '[dry-run] git pull --rebase' };
+  }
+  try {
+    execSync('git pull --rebase', { stdio: 'inherit', cwd: REPO_ROOT, timeout: 60000 });
+    return { ok: true, message: 'git pull --rebase succeeded' };
+  } catch {
+    return { ok: false, message: 'git pull --rebase failed — resolve conflicts manually' };
+  }
+}
+
+/**
+ * Copy bundled skills from config/skills/ to the user's .opencode/skills/
+ * directory. Currently installs: obsidian, glyph, read-the-damn-docs.
+ */
+async function installSkills({ dryRun = false } = {}) {
+  const skills = ['obsidian', 'glyph', 'read-the-damn-docs'];
+  const results = [];
+  for (const skill of skills) {
+    const src = join(REPO_ROOT, 'config', 'skills', skill);
+    const dst = join(homedir(), '.opencode', 'skills', skill);
+    if (dryRun) {
+      if (existsSync(src)) {
+        console.log(chalk.dim(`  [dry-run] would install skill: ${skill}`));
+      }
+    } else if (existsSync(src)) {
+      try {
+        await cp(src, dst, { recursive: true });
+        console.log(chalk.green(`  ✓ Installed skill: ${skill}`));
+        results.push({ skill, ok: true });
+      } catch (err) {
+        console.log(chalk.yellow(`  ⚠ Failed to install skill: ${skill} — ${err.message}`));
+        results.push({ skill, ok: false });
+      }
+    } else {
+      console.log(chalk.dim(`  — Source not found: config/skills/${skill} (skipping)`));
+    }
+  }
+  return results;
+}
+
+/**
+ * Rebuild the bizar-dash frontend with Vite.
+ */
+function rebuildDashboard({ dryRun = false } = {}) {
+  const dashDir = join(REPO_ROOT, 'bizar-dash');
+  const pkgJson = join(dashDir, 'package.json');
+  if (!existsSync(pkgJson)) {
+    return { ok: false, message: 'bizar-dash/package.json not found — is the dashboard cloned?' };
+  }
+  if (dryRun) {
+    console.log(chalk.dim('  [dry-run] would run: npx vite build (in bizar-dash/)'));
+    return { ok: true, message: '[dry-run] dashboard rebuild' };
+  }
+  console.log(chalk.dim('\n  Rebuilding dashboard...'));
+  const r = spawnSync('npx', ['vite', 'build'], {
+    stdio: 'inherit', cwd: dashDir, timeout: 120000,
+  });
+  if (r.status === 0) {
+    return { ok: true, message: 'dashboard rebuilt' };
+  }
+  return { ok: false, message: 'dashboard rebuild failed (try: cd bizar-dash && npx vite build)' };
+}
+
+/**
+ * Detect and run the project's test suite. Checks for common test runners
+ * (npm test, pytest, cargo test, go test) and runs the first one found.
+ */
+function runTestGate({ dryRun = false } = {}) {
+  if (dryRun) {
+    console.log(chalk.dim('  [dry-run] would detect and run local test suite'));
+    return { ok: true, message: '[dry-run] test gate' };
+  }
+  const cwd = process.cwd();
+  const suites = [
+    { cmd: 'npm test',           check: 'package.json' },
+    { cmd: 'pytest',             check: 'pyproject.toml' },
+    { cmd: 'cargo test',         check: 'Cargo.toml' },
+    { cmd: 'go test ./...',      check: 'go.mod' },
+  ];
+  for (const suite of suites) {
+    try {
+      if (existsSync(join(cwd, suite.check))) {
+        console.log(chalk.dim(`\n  Running test suite: ${suite.cmd}...`));
+        execSync(suite.cmd, { stdio: 'inherit', timeout: 120000, cwd });
+        return { ok: true, message: `test gate passed (${suite.cmd})` };
+      }
+    } catch {
+      return { ok: false, message: `test gate failed (${suite.cmd})` };
+    }
+  }
+  return { ok: true, message: 'no test suite detected (skipped)' };
+}
+
+// ---------------------------------------------------------------------------
 // Prompt helpers
 // ---------------------------------------------------------------------------
 
@@ -553,6 +661,22 @@ export async function runUpdate(subargs = []) {
     console.log(chalk.dim('  No running Bizar instances detected.'));
   }
 
+  // ── Git pull ──────────────────────────────────────────────────────────
+  if (dryRun) {
+    console.log(chalk.dim('\n  [dry-run] would pull latest from origin (git pull --rebase)'));
+  } else {
+    console.log(chalk.dim('\n  Pulling latest from origin...'));
+    const pull = runGitPull();
+    if (pull.ok) {
+      console.log(chalk.green(`  ✓ ${pull.message}`));
+    } else {
+      console.log(chalk.red(`  ✗ ${pull.message}`));
+      console.log(chalk.yellow('  Update aborted — resolve git conflicts and retry.'));
+      process.exit(1);
+    }
+  }
+  console.log('');
+
   // 2. Show installed vs. latest versions.
   const cur = {
     opencode: currentVersion('opencode-ai'),
@@ -579,6 +703,52 @@ export async function runUpdate(subargs = []) {
     const l = latest[k] ?? '(unknown)';
     const same = c === l;
     console.log(`    ${label.padEnd(28)} ${c.padEnd(15)} → ${l}${same ? '  ✓ up to date' : '  ⤵ update available'}`);
+  }
+  console.log('');
+
+  // ── Heads-up gate ───────────────────────────────────────────────────────
+  // Check .bizar/PRE_PUSH_NOTES.md for active blockers or warnings before
+  // allowing the update to proceed. Blocker entries require --force.
+  const bizarDir = findBizarDir(process.cwd());
+  if (bizarDir) {
+    const headsUp = await checkHeadsUps(bizarDir);
+    if (!headsUp.ok) {
+      if (dryRun) {
+        console.log(chalk.yellow('  Dry-run: found active blocker(s) — update would be blocked.'));
+      } else if (assumeYes || subargs.includes('--force')) {
+        console.log(chalk.yellow('  ⚠ Active blocker(s) present — proceeding due to --force.'));
+      } else {
+        console.error(chalk.red('  ✗ Active blocker(s) found in .bizar/PRE_PUSH_NOTES.md.'));
+        console.error(chalk.dim('    Archive them with `bizar heads-up archive` or'));
+        console.error(chalk.dim('    override with `--force`.'));
+        process.exit(1);
+      }
+    } else if (headsUp.warningCount > 0) {
+      console.log(chalk.yellow(`  ⚠ ${headsUp.warningCount} warning(s) in active heads-ups.`));
+      // In automatic mode, print the warning count and continue.
+      // In interactive mode, ask for confirmation.
+      if (!assumeYes && !forceAll && process.stdin.isTTY) {
+        try {
+          const inquirer = await import('inquirer');
+          const { proceed } = await inquirer.default.prompt([
+            {
+              type: 'confirm',
+              name: 'proceed',
+              message: 'Heads-up warnings exist. Continue with update?',
+              default: true,
+            },
+          ]);
+          if (!proceed) {
+            console.log(chalk.yellow('  Update cancelled by user.'));
+            process.exit(0);
+          }
+        } catch {
+          // inquirer unavailable — continue anyway
+        }
+      }
+    } else {
+      console.log(chalk.green('  ✓ Heads-ups: clear'));
+    }
   }
   console.log('');
 
@@ -648,15 +818,39 @@ export async function runUpdate(subargs = []) {
     }
   }
 
-  // 5. Restart the dashboard if it was running before the update.
-  if (restartAfter && instances.dashboard && (selected.has('bizar') || selected.has('dash'))) {
+  // ── Install bundled skills ──────────────────────────────────────────
+  console.log(chalk.bold('\n  → Installing bundled skills...'));
+  const skillResults = await installSkills({ dryRun });
+  const skillOk = skillResults.length === 0 || skillResults.every((r) => r.ok);
+
+  // ── Rebuild dashboard ───────────────────────────────────────────────
+  console.log(chalk.bold('\n  → Rebuilding dashboard...'));
+  const dashRebuild = rebuildDashboard({ dryRun });
+  if (dashRebuild.ok) {
+    console.log(chalk.green(`  ✓ ${dashRebuild.message}`));
+  } else {
+    console.log(chalk.yellow(`  ⚠ ${dashRebuild.message}`));
+  }
+
+  // ── Test gate ───────────────────────────────────────────────────────
+  console.log(chalk.bold('\n  → Running test gate...'));
+  const testResult = runTestGate({ dryRun });
+  if (testResult.ok) {
+    console.log(chalk.green(`  ✓ ${testResult.message}`));
+  } else {
+    console.log(chalk.red(`  ✗ ${testResult.message}`));
+  }
+
+  // ── Restart dashboard ─────────────────────────────────────────────
+  // Restart if it was running before, or if the dashboard was just rebuilt.
+  if (restartAfter && (instances.dashboard || dashRebuild.ok)) {
     if (dryRun) {
       console.log('');
       console.log(chalk.dim('  [dry-run] would restart dashboard with the new code'));
     } else {
       console.log('');
       console.log(chalk.cyan('  Restarting dashboard with the new code...'));
-      const res = spawnFreshDashboard({ port: instances.dashboard.port || undefined });
+      const res = spawnFreshDashboard({ port: instances.dashboard?.port || undefined });
       if (res.ok) {
         console.log(chalk.green(`  ✓ ${res.message}`));
       } else {
@@ -673,11 +867,29 @@ export async function runUpdate(subargs = []) {
     const marker = r.ok ? chalk.green('✓') : chalk.red('✗');
     console.log(`    ${marker} ${name.padEnd(10)} ${r.message}`);
   }
+  // Skills
+  for (const sr of skillResults) {
+    const marker = sr.ok ? chalk.green('✓') : chalk.red('✗');
+    console.log(`    ${marker} ${'skill/skills'.padEnd(10)} ${sr.ok ? 'installed' : `failed: ${sr.skill}`}`);
+  }
+  if (!dashRebuild.ok) {
+    console.log(`    ${chalk.yellow('⚠')} ${'dash'.padEnd(10)} ${dashRebuild.message}`);
+  }
+  const testMarker = testResult.ok ? chalk.green('✓') : chalk.red('✗');
+  console.log(`    ${testMarker} ${'test-gate'.padEnd(10)} ${testResult.message}`);
 
-  const anyFail = results.some(([, r]) => !r.ok);
+  const allResults = [
+    ...results.map(([, r]) => r),
+    ...skillResults,
+    dashRebuild,
+    testResult,
+  ];
+  const anyFail = allResults.some((r) => !r.ok);
   if (anyFail) {
-    console.log(chalk.yellow('\n  Some updates failed. See messages above.'));
-    process.exit(1);
+    console.log(chalk.yellow('\n  Some steps had issues. See messages above.'));
+    if (allResults.filter((r) => !r.ok).some((r) => r.message && r.message.includes('failed'))) {
+      process.exit(1);
+    }
   }
   if (dryRun) {
     console.log(

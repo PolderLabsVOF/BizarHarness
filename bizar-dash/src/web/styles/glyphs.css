@@ -894,3 +894,67 @@
   gap: 0.5rem;
   margin-top: 1rem;
 }
+
+/* ─── Mockup ─────────────────────────────────────────────────────── */
+
+.glyph-mockup {
+  margin: 1.5rem 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.glyph-mockup-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.glyph-mockup-frame {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.glyph-mockup-chrome {
+  display: flex;
+  gap: 6px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.glyph-mockup-chrome span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.glyph-mockup-body {
+  padding: 1.5rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.glyph-mockup-body .mockup-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  margin: 0.5rem 0;
+}
+
+.glyph-mockup-body button.mockup-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}

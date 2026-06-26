@@ -211,6 +211,13 @@ export type ConfigResponse = {
   exists: boolean;
 };
 
+export interface SystemLlmConfig {
+  enabled: boolean;
+  provider: string;     // e.g. "opencode"
+  model: string;        // e.g. "opencode/deepseek-v4-flash-free"
+  // api key is read from auth.json for the provider, not stored here
+}
+
 export type Settings = {
   theme: ThemeSettings;
   ui: UiSettings;
@@ -256,6 +263,8 @@ export type Settings = {
     /** Per-tab override for autonomy (chat input). */
     chatAutonomous: boolean;
   };
+  // v3.21.0 — System LLM calls (auto-title, enhance-prompt, summarization).
+  systemLlm?: SystemLlmConfig;
 };
 
 export type SettingsResponse = {
@@ -306,6 +315,12 @@ export type ChatSession = {
   file: string;
   mtime: number;
   size: number;
+  /** 'bizar' sessions come from the per-project .jsonl store; 'opencode' come from opencode.db */
+  source?: 'bizar' | 'opencode';
+  /** Filled when source === 'opencode' — the URL to open that session in the opencode web UI */
+  opencodeUrl?: string;
+  /** Display title; defaults to id when absent */
+  title?: string;
 };
 
 export type ChatResponse = {

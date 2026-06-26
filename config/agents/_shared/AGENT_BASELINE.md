@@ -616,3 +616,38 @@ Rules:
 - Keep it concise — 20-40 lines max.
 - Don't duplicate what's in `AGENTS_SELF_IMPROVEMENT.md`.
 - First creation is done by `@mimir` at Odin's request (explores codebase and writes it).
+
+---
+
+## 12. Obsidian Vault — Project Knowledge Is Your First Stop
+
+**Project knowledge lives in `.obsidian/`. Read it before you start, write to it when you learn.**
+
+Every Bizar project has a vault at `.obsidian/` with index files (`index/`), agent-specific memory (`agents/`), bug postmortems (`bugs/`), design decisions, and ongoing work notes. The user has been working on this project — their notes contain the real context, the gotchas, the failed approaches, the preferred patterns. **Read the relevant vault entries before making any non-trivial decision.**
+
+**When to read:**
+- At the start of every session (skim the index)
+- Before any non-trivial implementation decision
+- When you're about to suggest something the user has already tried
+- When the codebase feels like it's working around something you don't understand
+
+**When to write:**
+- After completing a meaningful piece of work
+- On discovering a bug or postmortem
+- When you find a pattern that should be reused
+- When the user corrects you
+- When you make a design decision that should be remembered
+
+**What to write:**
+- Date-stamped entry under the appropriate category (`index/`, `bugs/`, `agents/<name>/`, etc.)
+- The context: what was happening
+- The lesson: what you learned
+- The pattern: what to do next time
+- Link to related entries with `[[wikilinks]]`
+
+**What NOT to write:**
+- Secrets, API keys, tokens (use auth.json)
+- Temporary scratch
+- Anything already obvious from reading the code
+
+**The O in Odin stands for "oblige the system": Odin ALWAYS updates the vault after significant work, regardless of who did the work. The other agents read; Odin writes.**

@@ -46,6 +46,7 @@ import {
   Diff,
   Stat,
   Workflow,
+  Mockup,
 } from './components';
 
 // ---------------------------------------------------------------------------
@@ -354,12 +355,22 @@ export function GlyphRenderer({ slug, onClose, onCommentAdded }: Props) {
           />
         );
       case 'Mockup':
+        return (
+          <Mockup
+            key={id}
+            id={id}
+            title={data.title as string | undefined}
+            x={data.x as number | undefined}
+            y={data.y as number | undefined}
+            w={data.w as number | undefined}
+            h={data.h as number | undefined}
+            html={(data.html as string) ?? ''}
+          />
+        );
       case 'Diagram':
-      default:
-        // Render placeholder for not-yet-implemented block types
         return (
           <div key={id} id={id} className="glyph-block-placeholder">
-            <em>[{b.type}] {id}</em>
+            <em>[Diagram] {id}</em>
           </div>
         );
     }

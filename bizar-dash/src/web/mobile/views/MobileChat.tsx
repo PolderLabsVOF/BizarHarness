@@ -1,352 +1,179 @@
-// src/mobile/views/MobileChat.tsx — enhanced mobile chat with message actions, slash commands.
-import { useCallback, useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Send, Bot, Copy, RefreshCw, Trash2, ChevronDown } from 'lucide-react';
-import { api } from '../../lib/api';
-import { formatTime } from '../../lib/utils';
-import type { ChatMessage, Settings, Snapshot } from '../../lib/types';
-import { Ws } from '../../lib/ws';
+// src/web/mobile/views/MobileChat.tsx — mobile-adapted chat using shared components.
+// Composer state (agent, model, text, attachments) is local.
 
-type Props = {
+import { useEffect, useRef, useState } from 'react';
+import { ChatTopBar } from '../../components/chat/ChatTopBar';
+import { SessionList } from '../../components/chat/SessionList';
+import { ChatThread } from '../../components/chat/ChatThread';
+import { FloatingComposer } from '../../components/chat/FloatingComposer';
+import { InfoPanel } from '../../components/chat/InfoPanel';
+import { useChat } from '../../components/chat/useChat';
+import { useSlashCommands } from '../../components/chat/useSlashCommands';
+import { useToast } from '../../components/Toast';
+import { useModal } from '../../components/Modal';
+import { Button } from '../../components/Button';
+import type { Snapshot, Settings } from '../../lib/types';
+
+interface Props {
   snapshot: Snapshot;
-  settings: Settings | null;
-  // v3.6.2 — Optional taskId to load a specific task's chat session.
+  settings: Settings;
+  setActiveTab?: (id: string) => void;
   initialTaskId?: string | null;
   onClearTaskId?: () => void;
-};
+}
 
-// v3.6.2 — Response from GET /api/tasks/:id/chat
-type TaskChatSession = {
-  sessionId?: string;
-  messages: ChatMessage[];
-};
+export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, onClearTaskId }: Props) {
+  const toast = useToast();
+  const modal = useModal();
 
-const SLASH_COMMANDS = [
-  { cmd: '/agent', desc: 'Switch agent' },
-  { cmd: '/model', desc: 'Set model override' },
-  { cmd: '/task', desc: 'Create a task' },
-  { cmd: '/plan', desc: 'Create a plan' },
-];
+  const chat = useChat(snapshot, settings, initialTaskId ?? '');
 
-export function MobileChat({ snapshot, settings, initialTaskId, onClearTaskId }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [agent, setAgent] = useState(settings?.defaultAgent || 'odin');
-  const [modelOverride, setModelOverride] = useState(settings?.defaultModel || '');
-  const [showAgentPicker, setShowAgentPicker] = useState(false);
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [wsEpoch, setWsEpoch] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const activeTaskIdRef = useRef(initialTaskId ?? null);
-  const didInitRef = useRef(false);
+  const [agent, setAgent] = useState(settings.defaultAgent || 'odin');
+  const [model, setModel] = useState(settings.defaultModel || '');
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
 
-  const loadChat = useCallback(async () => {
-    try {
-      const data = await api.get<{ messages: ChatMessage[] }>('/chat?limit=100');
-      setMessages(data.messages || []);
-    } catch {
-      // best-effort
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // v3.6.2 — Load chat messages for a specific task's opencode session.
-  const loadTaskChat = useCallback(async (taskId: string) => {
-    setLoading(true);
-    try {
-      const data = await api.get<TaskChatSession>(`/tasks/${encodeURIComponent(taskId)}/chat`);
-      setMessages(data.messages || []);
-    } catch {
-      // best-effort
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { allCommands, suggestions, setQuery } = useSlashCommands(snapshot);
 
-  const loadCurrentChat = useCallback(async () => {
-    if (activeTaskIdRef.current) {
-      await loadTaskChat(activeTaskIdRef.current);
+  useEffect(() => { setQuery(text); }, [text, setQuery]);
+
+  const onAttach = () => fileInputRef.current?.click();
+
+  const onFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const next: string[] = [];
+    for (let i = 0; i < files.length; i++) next.push(files[i].name);
+    setAttachments((cur) => {
+      const newNames = next.filter((n) => !cur.includes(n));
+      return [...cur, ...newNames];
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleSend = () => {
+    const msg = text.trim();
+    if (!msg) return;
+    setText('');
+    setQuery('');
+    chat.onSend(msg, agent, model, attachments);
+  };
+
+  const handleCreateSession = async () => {
+    if (creating) return;
+    if (!snapshot.activeProject) {
+      toast.warning('Pick a project in Overview to scope chat sessions.', 4000);
       return;
     }
-    await loadChat();
-  }, [loadChat, loadTaskChat]);
-
-  useEffect(() => {
-    if (didInitRef.current) return;
-    didInitRef.current = true;
-    loadCurrentChat().finally(() => onClearTaskId?.());
-  }, [loadCurrentChat, onClearTaskId]);
-
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    const reconnect = () => {
-      setWsEpoch((cur) => cur + 1);
-      loadCurrentChat().catch(() => undefined);
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') reconnect();
-    };
-
-    window.addEventListener('online', reconnect);
-    window.addEventListener('pageshow', reconnect);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      window.removeEventListener('online', reconnect);
-      window.removeEventListener('pageshow', reconnect);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [loadCurrentChat]);
-
-  useEffect(() => {
-    const ws = new Ws();
-    const offMessage = ws.on((msg) => {
-      if (msg.type !== 'chat:message') return;
-      const next = msg.message;
-      setMessages((cur) => {
-        const exists = cur.some((item) => item.ts === next.ts && (item.content || item.message) === (next.content || next.message));
-        return exists ? cur : [...cur, next];
-      });
-    });
-
-    return () => {
-      offMessage();
-      ws.close();
-    };
-  }, [wsEpoch]);
-
-  const sendMessage = async (message: string, retryAgent?: string, retryModel?: string) => {
-    const activeAgent = retryAgent || agent;
-    const activeModel = retryModel || modelOverride;
-    setSending(true);
-    const optimistic: ChatMessage = {
-      role: 'user',
-      content: message,
-      agent: activeAgent,
-      ts: new Date().toISOString(),
-    };
-    setMessages((cur) => [...cur, optimistic]);
-    setText('');
-    setShowSlashMenu(false);
+    setCreating(true);
     try {
-      const response = await api.post<{ messages?: ChatMessage[] }>('/chat', {
-        message,
-        agent: activeAgent,
-        model: activeModel || undefined,
-      });
-      if (response?.messages) {
-        setMessages((cur) => {
-          const nextMessages = [...cur];
-          for (const next of response.messages || []) {
-            if (next.role !== 'assistant') continue;
-            const exists = nextMessages.some((item) => item.ts === next.ts && (item.content || item.message) === (next.content || next.message));
-            if (!exists) nextMessages.push(next);
-          }
-          return nextMessages;
-        });
-      }
-    } catch {
-      // optimistic — keep message even on failure
+      const created = await fetch('/chat/sessions', { method: 'POST' }).then((r) => r.json());
+      chat.loadChat(created.id);
+      toast.success(`Session ${created.id} created.`);
+    } catch (err) {
+      toast.error(`Create failed: ${(err as Error).message}`);
     } finally {
-      setSending(false);
-      requestAnimationFrame(() => inputRef.current?.focus());
+      setCreating(false);
     }
   };
 
-  const onSend = () => {
-    const message = text.trim();
-    if (!message || sending) return;
-    sendMessage(message);
+  const handleDelete = (idx: number) => {
+    modal.open({
+      title: 'Delete message?',
+      children: <p style={{ margin: 0 }}>This action cannot be undone.</p>,
+      footer: (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Button variant="secondary" size="sm" onClick={() => modal.close()}>Cancel</Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              modal.close();
+              chat.deleteMessage(idx);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    });
   };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onSend();
-    }
-    if (e.key === '/' && text === '') {
-      setShowSlashMenu(true);
-    }
-  };
-
-  const onTextChange = (value: string) => {
-    setText(value);
-    if (!value.startsWith('/')) {
-      setShowSlashMenu(false);
-    }
-  };
-
-  const copyMessage = (content: string) => {
-    navigator.clipboard.writeText(content).catch(() => {});
-  };
-
-  if (loading) {
-    return <div className="mobile-loading"><p>Loading…</p></div>;
-  }
 
   return (
-    <div className="mobile-view mobile-view-chat">
-      {/* Agent picker topbar */}
-      <div className="mobile-chat-topbar">
-          <button
-            type="button"
-            className="mobile-chat-agent-btn"
-            onClick={() => setShowAgentPicker((v) => !v)}
-            aria-expanded={showAgentPicker}
-            aria-controls="mobile-chat-agent-picker"
-          >
-          <Bot size={14} />
-          <span>@{agent}</span>
-          <ChevronDown size={12} />
-        </button>
-        {modelOverride && (
-          <span className="mobile-chat-model-badge mono">{modelOverride}</span>
-        )}
-      </div>
+    <div className="chat-shell">
+      <ChatTopBar
+        activeProject={snapshot.activeProject}
+        sessionCount={chat.sessions.length}
+        sessionsOpen={sessionsOpen}
+        infoOpen={infoOpen}
+        onToggleSessions={() => setSessionsOpen((v) => !v)}
+        onToggleInfo={() => setInfoOpen((v) => !v)}
+        onOpenOverview={() => setActiveTab?.('overview')}
+      />
+      <div className="chat-body">
+        <aside className={`chat-sessions ${!sessionsOpen ? 'chat-sessions-hidden' : ''}`}>
+          <SessionList
+            sessions={chat.sessions}
+            opencodeSessions={chat.opencodeSessions}
+            activeSessionId={chat.sessionId}
+            activeProject={snapshot.activeProject}
+            onCreateSession={handleCreateSession}
+            onSelectSession={chat.loadChat}
+            creating={creating}
+          />
+        </aside>
 
-      {/* Agent picker dropdown */}
-      {showAgentPicker && (
-          <div className="mobile-chat-agent-picker" id="mobile-chat-agent-picker">
-            {(snapshot.agents || []).map((a) => (
-            <button
-              key={a.name}
-              type="button"
-              className={`mobile-chat-agent-option ${agent === a.name ? 'active' : ''}`}
-              onClick={() => { setAgent(a.name); setShowAgentPicker(false); }}
-            >
-              <Bot size={12} /> @{a.name}
-            </button>
-          ))}
-        </div>
-      )}
+        <main className="chat-main">
+          <ChatThread
+            messages={chat.messages}
+            loading={chat.loading}
+            activeProject={snapshot.activeProject}
+            sessionId={chat.sessionId}
+            pinned={chat.pinned}
+            onPickSuggestion={(t) => setText(t)}
+            onCopy={(m) => chat.copyMessage(m as Parameters<typeof chat.copyMessage>[0])}
+            onDelete={handleDelete}
+            onTogglePin={chat.togglePin}
+            onRegenerate={chat.onRegenerate}
+          />
+          <FloatingComposer
+            agent={agent}
+            setAgent={setAgent}
+            model={model}
+            setModel={setModel}
+            text={text}
+            setText={setText}
+            sending={chat.sending}
+            onSend={handleSend}
+            attachments={attachments}
+            setAttachments={setAttachments}
+            suggestions={suggestions}
+            onPickSuggestion={(cmd) => setText(`${cmd.split(' ')[0]} `)}
+            agents={snapshot.agents || []}
+            onAttach={onAttach}
+            sessionsOpen={sessionsOpen}
+            infoOpen={infoOpen}
+          />
+          <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={onFiles} />
+        </main>
 
-      {/* Messages */}
-      <div className="mobile-messages" ref={listRef}>
-        {messages.length === 0 && (
-          <div className="mobile-empty">
-            <Bot size={40} />
-            <p>No messages yet.</p>
-            <p className="muted">Type below to start a conversation.</p>
-          </div>
-        )}
-        {messages.map((m, i) => {
-          const role = (m.role || 'assistant').toLowerCase();
-          const isAgent = role !== 'user';
-          const content = m.content || m.message || '';
-          return (
-            <div key={m.ts || `${role}-${i}`} className={`mobile-message ${isAgent ? 'from-agent' : 'from-user'}`}>
-              <div className="mobile-message-meta">
-                <span className="mobile-message-role">{role}</span>
-                {m.agent && <span className="mobile-message-agent">@{m.agent}</span>}
-                {m.ts && <span className="mobile-message-time">{formatTime(m.ts)}</span>}
-              </div>
-              <div className="mobile-message-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-              </div>
-              {/* Message actions */}
-              <div className="mobile-message-actions">
-                {isAgent ? (
-                  <button type="button" className="mobile-msg-action" onClick={() => {
-                    const userMsg = messages.slice(0, i).reverse().find((entry) => (entry.role || '').toLowerCase() === 'user');
-                    if (userMsg) {
-                      setText(userMsg.content || '');
-                      inputRef.current?.focus();
-                    }
-                  }} title="Retry">
-                    <RefreshCw size={12} />
-                  </button>
-                ) : (
-                  <>
-                    <button type="button" className="mobile-msg-action" onClick={() => copyMessage(content)} title="Copy">
-                      <Copy size={12} />
-                    </button>
-                    <button type="button" className="mobile-msg-action" onClick={() => {
-                      setMessages((cur) => cur.filter((_, j) => j !== i));
-                    }} title="Delete">
-                      <Trash2 size={12} />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Slash command menu */}
-      {showSlashMenu && (
-        <div className="mobile-slash-menu">
-          {SLASH_COMMANDS.map((sc) => (
-            <button
-              key={sc.cmd}
-              type="button"
-              className="mobile-slash-item"
-              onClick={() => {
-                setText(sc.cmd + ' ');
-                setShowSlashMenu(false);
-                inputRef.current?.focus();
-              }}
-            >
-              <span className="mono">{sc.cmd}</span>
-              <span className="muted">{sc.desc}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Sticky composer */}
-      <div className="mobile-chat-composer">
-        {modelOverride && (
-          <button
-            type="button"
-            className="mobile-icon-btn"
-            onClick={() => setModelOverride('')}
-            title="Clear model override"
-          >
-            <span className="mobile-chat-model-badge mono" style={{ fontSize: 10 }}>✕</span>
-          </button>
-        )}
-        <select
-          className="mobile-agent-select"
-          value={agent}
-          onChange={(e) => setAgent(e.target.value)}
-          aria-label="Agent"
-        >
-          {(snapshot.agents || []).map((a) => (
-            <option key={a.name} value={a.name}>@{a.name}</option>
-          ))}
-        </select>
-        <textarea
-          ref={inputRef}
-          className="mobile-chat-input"
-          placeholder="Message…"
-          rows={1}
-          value={text}
-          onChange={(e) => onTextChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          disabled={sending}
-          aria-label="Message"
-          enterKeyHint="send"
-        />
-        <button
-          type="button"
-          className="mobile-send-btn"
-          onClick={onSend}
-          disabled={sending || !text.trim()}
-          aria-label="Send"
-        >
-          <Send size={18} />
-        </button>
+        <aside className={`chat-info ${!infoOpen ? 'chat-info-hidden' : ''}`}>
+          <InfoPanel
+            sessionId={chat.sessionId}
+            messages={chat.messages}
+            pinned={chat.pinned}
+            agent={agent}
+            model={model}
+            agents={snapshot.agents || []}
+            mcps={snapshot.mcps || []}
+            allCommands={allCommands}
+          />
+        </aside>
       </div>
     </div>
   );

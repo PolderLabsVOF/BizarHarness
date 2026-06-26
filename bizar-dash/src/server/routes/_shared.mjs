@@ -129,6 +129,11 @@ export const DEFAULT_SETTINGS = {
     stuckThresholdMs: 600000,
     autoRestart: true,
   },
+  systemLlm: {
+    enabled: true,
+    provider: 'opencode',
+    model: 'opencode/deepseek-v4-flash-free',
+  },
 };
 
 /**
@@ -153,6 +158,7 @@ export function mergeSettings(existing) {
   merged.service = { ...DEFAULT_SETTINGS.service, ...(existing.service || {}) };
   merged.about = { ...DEFAULT_SETTINGS.about, ...(existing.about || {}) };
   merged.agents = { ...DEFAULT_SETTINGS.agents, ...(existing.agents || {}) };
+  merged.systemLlm = { ...DEFAULT_SETTINGS.systemLlm, ...(existing.systemLlm || {}) };
   // Always use the package version — never let user settings override it
   merged.about.version = DEFAULT_SETTINGS.about.version;
   return merged;

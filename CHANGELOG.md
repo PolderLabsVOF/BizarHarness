@@ -1,5 +1,69 @@
 # Changelog
 
+## v3.22.0 — Chat UI rewrite, agent knowledge system, system LLM, and pre-push heads-ups
+
+> **Major feature.** Complete from-scratch rewrite of the chat UI tab (Gemini-inspired), system-wide Obsidian knowledge protocol, configurable system LLM API for prompt enhancement and title generation, real HTML mockups in glyphs, and a pre-push heads-up system that catches gotchas before npm publish.
+
+### Highlights
+
+- **Chat UI rewrite** — `bizar-dash/src/web/views/Chat.tsx` rewritten from scratch. 3-column responsive layout (sessions 200/240px | thread | info 240/260px) with proper overlay-sheet transitions on tablet and mobile. First-run welcome screen with `Hello, [project].` gradient text (theme-aware via `color-mix` on `--accent`) + 4 suggestion cards. Floating pill composer with custom AgentChip popover (replaces broken native `<select>`). Compact InfoPanel (4 max + collapsible commands). 12 new components in `bizar-dash/src/web/components/chat/`.
+- **Agent knowledge system** — new global rule (section 12) in `config/agents/_shared/AGENT_BASELINE.md`: "Project knowledge lives in `.obsidian/`. Read it before you start, write to it when you learn." Odin is responsible for always updating the vault after significant work.
+- **3 new skills** installed to `~/.opencode/skills/`:
+  - `obsidian` — when/how to read and write the project's Obsidian vault
+  - `glyph` — when/how to create visual plan/recap artifacts
+  - `read-the-damn-docs` — BuilderIO's principle, BizarHarness-flavored: read the docs before guessing
+- **Sessions visibility** — new endpoint `GET /api/opencode-sessions` reads `~/.local/share/opencode/opencode.db` via `better-sqlite3`. SessionList now has a Bizar/All toggle so opencode sessions are visible in the dashboard.
+- **System LLM API** — new Settings → "System LLM API" section. Default: `opencode/deepseek-v4-flash-free`. Used for auto-title generation, prompt enhancement, and future summarization. `enhancePrompt()` stub in `api.ts` with TODO for the actual implementation.
+- **Enhance-prompt buttons** — ✨ Sparkles button in chat composer (between attach and send) and in task description textarea. Calls `enhancePrompt(currentText)` to improve the text via the system LLM.
+- **Real UI drafts in glyphs** — `<Mockup>` block now renders real HTML in a browser-chrome frame via `dangerouslySetInnerHTML`. CSS for `.glyph-mockup-frame`, `.glyph-mockup-chrome`, `.glyph-mockup-body` in `glyphs.css`. Sample artifact: `artifacts/mockup-test/`.
+- **Pre-push heads-up system** — new file `.bizar/PRE_PUSH_NOTES.md` created by `bizar init`. New CLI subcommand `bizar heads-up` with `list`, `check`, `archive` subcommands. `bizar update` gates on heads-ups: blockers → fail (require `--force`), warnings → confirm in TTY.
+- **Installer + updater** — `install.sh` adds verification for 14 tools (node, uv, uvx, bun, jq, sqlite3, gh, opencode, python3, make, g++, plus the original 4) and apt-installs native build deps. `cli/update.mjs` now: pulls → checks heads-ups → installs skills → rebuilds dashboard → runs test gate → restarts dashboard.
+- **Glyphs FileTree crash fix** — `components.tsx:609` crashed with `TypeError: can't access property 'bg', n is undefined` when `change` was not in the allowed set (`added|modified|removed|renamed`). TypeScript types didn't enforce this at runtime. Documented in `.obsidian/bugs/glyph-filetree-invalid-change.md`.
+
+### Files added
+
+- `bizar-dash/src/web/components/chat/{ChatTopBar,ChatThread,MessageBubble,WelcomeScreen,AgentChip,FloatingComposer}.tsx`
+- `bizar-dash/src/server/routes/opencode-sessions.mjs`
+- `bizar-dash/src/styles/chat.css`, `mobile-chat.css` (rewritten from scratch)
+- `cli/heads-up.mjs`
+- `config/skills/{obsidian,glyph,read-the-damn-docs}/SKILL.md`
+- `artifacts/chat-ui-rewrite/{artifact.mdx,meta.json}` (the plan that drove the rewrite)
+- `artifacts/mockup-test/`
+- `.obsidian/bugs/glyph-filetree-invalid-change.md`
+
+### Files modified (highlights)
+
+- `bizar-dash/src/web/views/Chat.tsx` — rewritten (~250 lines, was 728)
+- `bizar-dash/src/web/mobile/views/MobileChat.tsx` — rewritten
+- `bizar-dash/src/web/components/chat/*.tsx` — 11 files rewritten
+- `bizar-dash/src/web/views/glyphs/components.tsx` — Mockup block + browser-chrome frame
+- `bizar-dash/src/server/api.mjs` — opencode-sessions + system-llm routes mounted
+- `bizar-dash/src/web/lib/types.ts` — `SystemLlmConfig` + `opencodeUrl` on `ChatSession`
+- `bizar-dash/src/web/views/Settings.tsx` — System LLM API section
+- `bizar-dash/src/web/views/Tasks.tsx` — enhance-prompt button
+- `bizar-dash/package.json` — `better-sqlite3` + `@types/better-sqlite3` added
+- `config/agents/_shared/AGENT_BASELINE.md` — section 12 (Obsidian knowledge) added
+- `install.sh` — verification + native build deps + skills loop
+- `cli/init.mjs`, `cli/update.mjs` — heads-up integration
+- `~/.opencode/skills/{obsidian,glyph,read-the-damn-docs}/SKILL.md` — installed
+
+### Verification
+
+- `npx tsc --noEmit`: 0 errors
+- `npx vite build`: clean (1 pre-existing ws.ts warning, not from this release)
+- `npx bizar test-gate`: 79/79 pass
+- Browser E2E: 3 viewports (1920, 1024, 414) verified — chat layout, panels, composer, suggestion cards
+- `bizar install` syntax check: passes
+- `cli/update.mjs` syntax check: passes
+
+### Upgrade notes
+
+- New `better-sqlite3` dep requires native build tools. `install.sh` now installs `build-essential`, `python3`, `libsqlite3-dev` via apt. On non-Linux/macOS, ensure your C++ toolchain is set up.
+- The 3 new skills (`obsidian`, `glyph`, `read-the-damn-docs`) are installed automatically by `install.sh` and `cli/update.mjs` if not present.
+- `bizar init` now creates `.bizar/PRE_PUSH_NOTES.md`. Existing projects can run `bizar heads-up list` to see the current state (should be "No heads-ups found" if PRE_PUSH_NOTES.md hasn't been migrated).
+
+---
+
 ## v3.21.0 — Glyphs: agent-native.com-style visual plans (local-files mode)
 
 > **Major feature.** Adds a complete visual-plan system inspired by agent-native.com's `/visual-plan` and `/visual-recap`. Glyphs are MDX-based design docs with rich blocks (Callout, Checklist, Table, CodeTabs, Decision, OpenQuestions, FileTree, Diff, Stat, Workflow, Mockup, Diagram), free-placed comments, section grouping, and a "Submit to agent" workflow that writes structured feedback the agent can read.

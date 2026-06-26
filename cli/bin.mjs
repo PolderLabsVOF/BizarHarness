@@ -25,6 +25,7 @@ import { runInit } from './init.mjs';
 import { runExport } from './export.mjs';
 import runArtifact from './artifact.mjs';
 import { runUpdate } from './update.mjs';
+import { runHeadsUp } from './heads-up.mjs';
 import { ensureSetup, checkSetupStatus } from './bootstrap.mjs';
 
 const args = process.argv.slice(2);
@@ -90,6 +91,7 @@ function showHelp() {
     dev-link [src]      Symlink the local plugin source into opencode's plugin dir
     dev-unlink          Remove the dev symlink and restore the deployed copy
     doctor              Check the BizarHarness install for health issues
+    heads-up <subcommand>  Manage pre-push / pre-release heads-ups (list/check/archive)
     mod <subcommand>    Manage mods (install/upgrade/list via the dashboard API)
 
   Examples:
@@ -660,6 +662,9 @@ async function main() {
       const result = await runDoctor();
       if (result.failed > 0) process.exit(1);
     }
+  } else if (args[0] === 'heads-up') {
+    // v3.21.0 — Pre-push / pre-release heads-ups
+    await runHeadsUp(args[1], args.slice(2));
   } else if (args[0] === 'plan') {
     await runArtifact(args.slice(1), {});
   } else if (args[0] === 'install') {

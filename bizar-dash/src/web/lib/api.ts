@@ -181,3 +181,13 @@ class ApiClient {
 
 export const api = new ApiClient();
 export { ApiClient, TOKEN_KEY };
+
+/**
+ * Placeholder for the "Enhance prompt" feature.
+ * TODO: call system LLM API to improve the prompt
+ * Will use settings.systemLlm config
+ * Endpoint: POST /api/enhance-prompt with { text }
+ */
+export async function enhancePrompt(text: string): Promise<string> {
+  return text; // passthrough for now
+}
