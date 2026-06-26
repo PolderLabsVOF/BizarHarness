@@ -77,7 +77,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   history: History,
 };
 
-const VERSION = 'v3.20.3';
+const VERSION = 'v3.20.5';
 
 /**
  * Render the active view. If `activeTab` matches a built-in tab id,
@@ -518,9 +518,22 @@ function Shell() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  const refreshSnapshot = useMemo(
+    () => async () => {
+      try {
+        const s = await api.get<Snapshot>('/snapshot');
+        setSnapshot((cur) => ({ ...(cur ?? ({} as Snapshot)), ...s }));
+      } catch (err) {
+        toast.error(`Refresh failed: ${(err as Error).message}`);
+      }
+    },
+    [toast],
+  );
+
   // v3.20.3 — Merge built-in tabs with installed mod views. Mod views
   // are appended after the built-in tabs and use the same rendering
   // surface; their tab ids are mod view ids (e.g. 'graphify:web').
+  // Declared AFTER refreshSnapshot so the deps list has the right value.
   const mergedTabs = useMemo(() => {
     const modTabs = modViews.map((v) => ({
       id: v.id,
@@ -532,7 +545,8 @@ function Shell() {
     return [...TABS, ...modTabs];
   }, [modViews]);
 
-  // Surface the underlying view id for the active tab (built-in or mod).
+  // Surface the underlying view for the active tab (built-in or mod).
+  // Declared AFTER refreshSnapshot so its useMemo factory can capture it.
   const renderedView = useMemo(() => {
     if (snapshot && settings) {
       const viewProps: ViewProps = {
@@ -546,18 +560,6 @@ function Shell() {
     }
     return null;
   }, [activeTab, snapshot, settings, modViews, modViewsReloadKey, refreshSnapshot]);
-
-  const refreshSnapshot = useMemo(
-    () => async () => {
-      try {
-        const s = await api.get<Snapshot>('/snapshot');
-        setSnapshot((cur) => ({ ...(cur ?? ({} as Snapshot)), ...s }));
-      } catch (err) {
-        toast.error(`Refresh failed: ${(err as Error).message}`);
-      }
-    },
-    [toast],
-  );
 
   const refreshProjects = async () => {
     try {

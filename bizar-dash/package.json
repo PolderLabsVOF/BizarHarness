@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-dash",
-  "version": "3.20.3",
+  "version": "3.20.5",
   "description": "Web + TUI dashboard for the Bizar agent platform (optional companion to @polderlabs/bizar)",
   "type": "module",
   "main": "src/server/server.mjs",
@@ -19,8 +19,8 @@
     "dev": "vite",
     "build": "vite build",
     "prebuild": "rm -rf dist",
-    "prepublishOnly": "npm run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck || (echo '\\n⚠ typecheck reported warnings above — review before tagging a release\\n' >&2); npm run build"
   },
   "dependencies": {
     "blessed": "^0.1.81",

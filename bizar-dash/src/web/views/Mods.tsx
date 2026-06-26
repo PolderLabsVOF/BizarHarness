@@ -131,6 +131,30 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
+  // v3.20.5 — Upgrade handler. Calls the dedicated `/mods/:id/upgrade`
+  // endpoint (the install endpoint refuses if the mod is already on disk).
+  // Reports oldVersion → newVersion in the success toast.
+  const onUpgradeFromRegistry = async (id: string, backup = false) => {
+    setInstalling((cur) => ({ ...cur, [id]: true }));
+    try {
+      const r = await api.post<{
+        ok: boolean;
+        from: string;
+        to: string;
+        backupPath: string | null;
+        mod: Mod;
+      }>(`/mods/${encodeURIComponent(id)}/upgrade`, { backup });
+      setMods((cur) => [...cur.filter((x) => x.id !== r.mod.id), r.mod]);
+      const backupNote = r.backupPath ? ` (backup at ${r.backupPath})` : '';
+      toast.success(`Mod "${id}" upgraded v${r.from} → v${r.to}${backupNote}.`);
+      await refreshSnapshot();
+    } catch (err) {
+      toast.error(`Upgrade failed: ${(err as Error).message}`);
+    } finally {
+      setInstalling((cur) => ({ ...cur, [id]: false }));
+    }
+  };
+
   const reload = async () => {
     try {
       // Always pull fresh from the server. snapshot is fine for
@@ -399,21 +423,38 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
                           </div>
                         )}
                         <div className="mod-registry-card-actions">
-                          <Button
-                            variant={installed ? 'ghost' : 'primary'}
-                            size="sm"
-                            disabled={installed || isInstalling}
-                            onClick={() => onInstallFromRegistry(rm.id)}
-                            title={
-                              installed
-                                ? `Installed v${rm.installedVersion || '?'}`
-                                : rm.upgradeAvailable
-                                  ? `Upgrade to v${rm.upgradeAvailable}`
-                                  : 'Install from registry'
-                            }
-                          >
-                            {isInstalling ? <Spinner size="sm" /> : installed ? `Installed${rm.upgradeAvailable ? ` — upgrade` : ''}` : (<><Download size={12} /> Install</>)}
-                          </Button>
+                          {!installed && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              disabled={isInstalling}
+                              onClick={() => onInstallFromRegistry(rm.id)}
+                              title="Install from registry"
+                            >
+                              {isInstalling ? <Spinner size="sm" /> : (<><Download size={12} /> Install</>)}
+                            </Button>
+                          )}
+                          {installed && rm.upgradeAvailable && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              disabled={isInstalling}
+                              onClick={() => onUpgradeFromRegistry(rm.id)}
+                              title={`Upgrade from v${rm.installedVersion || '?'} to v${rm.upgradeAvailable}`}
+                            >
+                              {isInstalling ? <Spinner size="sm" /> : (<><Download size={12} /> Upgrade to v{rm.upgradeAvailable}</>)}
+                            </Button>
+                          )}
+                          {installed && !rm.upgradeAvailable && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled
+                              title={`Installed v${rm.installedVersion || '?'}`}
+                            >
+                              Installed v{rm.installedVersion || '?'}
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );

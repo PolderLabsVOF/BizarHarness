@@ -1,14 +1,15 @@
-// src/views/ModView.tsx — render an installed mod's view (iframe or placeholder).
+// src/views/ModView.tsx — render an installed mod's view (iframe or TSX tab).
 //
 // Mounted as a top-level tab in App.tsx when a mod contributes a view via
 // `entry.view` or `web/index.html`. Mods become first-class nav items
 // alongside Overview, Chat, Mods, etc.
 
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { Button } from '../components/Button';
-import { ExternalLink, Globe, LayoutTemplate, RefreshCw } from 'lucide-react';
+import { Spinner } from '../components/Spinner';
+import { ExternalLink, Globe, LayoutTemplate, RefreshCw, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/Toast';
 
@@ -20,6 +21,7 @@ export type ModView = {
   description?: string;
   path?: string;
   icon?: string;
+  component?: string | null;
 };
 
 type Props = {
@@ -27,6 +29,9 @@ type Props = {
   viewId: string;
   /** Force a refresh of the iframe key — bumped when the user clicks Reload. */
   reloadKey?: number;
+  /** Currently active tab id — kept on the Props surface so the parent
+   * (App.tsx) doesn't have to know which props the mod view consumes. */
+  activeTab?: string;
   setActiveTab: (id: string) => void;
 };
 
@@ -61,7 +66,7 @@ export function ModView({ viewId, reloadKey, setActiveTab }: Props) {
     return (
       <EmptyState
         title="Mod view not found"
-        description={`No view with id "${viewId}" is currently installed.`}
+        message={`No view with id "${viewId}" is currently installed.`}
         action={<Button onClick={() => setActiveTab('mods')} variant="primary" size="sm">
           Open Mods
         </Button>}
@@ -110,8 +115,42 @@ export function ModView({ viewId, reloadKey, setActiveTab }: Props) {
     );
   }
 
-  // Tab view (TSX component shipped with the mod) — fallback to
-  // placeholder. Future versions can dynamically import the component.
+  // v3.20.5 — Tab view (React component shipped with the mod). The
+  // component is dynamically imported from /api/mods/<id>/views/<file>.
+  // Mods ship a pre-built ES module (default export = React component).
+  // If the registry declared a component path, we lazy-load it.
+  if (view.component) {
+    // Capture the narrowed values into locals so the lazy() closure
+    // doesn't have to re-check nullability through `view`.
+    const componentPath: string = view.component;
+    const modId: string = view.modId;
+    const ModComponent = lazy(() =>
+      import(
+        /* @vite-ignore */
+        `/api/mods/${encodeURIComponent(modId)}/views/${encodeURIComponent(componentPath)}`
+      ).then((m) => ({ default: m.default ?? (() => null) })),
+    );
+    return (
+      <div className="mod-view-tab-pane">
+        <div className="mod-view-iframe-header">
+          <span className="mod-view-iframe-label">
+            <LayoutTemplate size={14} />
+            {view.label}
+            <span className="muted" style={{ fontSize: 11, fontWeight: 400 }}>by {view.modId}</span>
+          </span>
+        </div>
+        <div className="mod-view-tab-body">
+          <ErrorBoundary modId={view.modId} component={view.component}>
+            <Suspense fallback={<div style={{ padding: 24 }}><Spinner size="md" /> <span className="muted">Loading mod view…</span></div>}>
+              <ModComponent />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+      </div>
+    );
+  }
+
+  // Tab kind with no component path — show a placeholder.
   return (
     <Card>
       <CardTitle>
@@ -120,8 +159,8 @@ export function ModView({ viewId, reloadKey, setActiveTab }: Props) {
       <CardMeta>by {view.modId}</CardMeta>
       {view.description && <p className="muted" style={{ marginTop: 8 }}>{view.description}</p>}
       <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
-        This mod declared a TSX tab view but dynamic component loading from mods is not yet wired in v3.20.x.
-        See the mod's README for the manual way to access this surface, or open the Mods page to browse its files.
+        This mod declared a tab view but did not provide a component path in views/registry.json.
+        Add a <code>component</code> field (e.g. <code>"MyView.js"</code>) and ship the file under <code>views/</code>.
       </p>
       <div style={{ marginTop: 12 }}>
         <Button variant="secondary" size="sm" onClick={() => setActiveTab('mods')}>
@@ -130,4 +169,39 @@ export function ModView({ viewId, reloadKey, setActiveTab }: Props) {
       </div>
     </Card>
   );
+}
+
+/**
+ * Minimal error boundary for dynamically imported mod views. Catches
+ * a failure to load the module (404, syntax error in the mod's code,
+ * React.render-time throw) and renders a clean fallback instead of
+ * crashing the dashboard shell.
+ */
+import { Component as ReactComponent, type ReactNode } from 'react';
+
+class ErrorBoundary extends ReactComponent<
+  { children: ReactNode; modId: string; component: string },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  override componentDidCatch() {
+    /* swallow — error surfaced via state */
+  }
+  override render() {
+    if (this.state.error) {
+      return (
+        <div className="mod-view-error">
+          <AlertTriangle size={16} />
+          <strong>Failed to render mod view</strong>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            {this.props.modId} → {this.props.component}: {this.state.error.message}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }

@@ -368,6 +368,69 @@ export const modsLoader = {
   },
 
   /**
+   * v3.20.5 — Upgrade a mod already on disk to the latest version from
+   * the registry. The flow:
+   *   1. Read the existing installed mod's version (for the report).
+   *   2. Optionally back it up to ~/.config/bizar/mods/.backup/<id>-<ts>/
+   *      (off by default — pass { backup: true } to enable).
+   *   3. Uninstall the existing mod (removes opencode-config copies via
+   *      uninstallModInstructions so the new install can re-create them).
+   *   4. Install the latest version from the registry.
+   *   5. Return { from, to, backupPath?, mod } for the dashboard.
+   *
+   * If the registry install fails, we attempt to restore from the backup
+   * (if any) so the user isn't left without a working mod.
+   */
+  async upgradeFromRegistry(id, { url, backup = false } = {}) {
+    const dir = join(MODS_DIR, id);
+    const existing = existsSync(dir) ? this.get(id) : null;
+    if (!existing) {
+      throw new Error(`mod "${id}" is not installed; nothing to upgrade`);
+    }
+    const fromVersion = existing.version;
+
+    // 1. Back up the existing folder if requested.
+    let backupPath = null;
+    if (backup) {
+      const backupRoot = join(BIZAR_HOME, 'mods', '.backup');
+      mkdirSync(backupRoot, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      backupPath = join(backupRoot, `${id}-${stamp}`);
+      cpSync(dir, backupPath, { recursive: true });
+    }
+
+    // 2. Uninstall the existing copy (also removes its opencode instructions).
+    this.uninstall(id);
+
+    // 3. Install the latest from the registry.
+    let installed;
+    try {
+      installed = await this.installFromRegistry(id, { url });
+    } catch (err) {
+      // Attempt rollback so the user isn't left without a working mod.
+      if (backupPath) {
+        try {
+          mkdirSync(dir, { recursive: true });
+          cpSync(backupPath, dir, { recursive: true });
+          installModInstructions(id, dir);
+        } catch (rollbackErr) {
+          err.rollbackError = rollbackErr;
+        }
+      }
+      throw err;
+    }
+    if (!installed) {
+      throw new Error(`mod "${id}" not found in registry`);
+    }
+    return {
+      from: fromVersion,
+      to: installed.version,
+      backupPath,
+      mod: installed,
+    };
+  },
+
+  /**
    * Install a mod from a URL prefix (e.g. https://.../mods/graphify/1.0.0).
    * Fetches mod.json + each known file (mod.json, route.mjs, README.md)
    * and writes them into ~/.config/bizar/mods/<id>/.

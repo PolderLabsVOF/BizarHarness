@@ -15,6 +15,8 @@
  * /api/mods/:id/mod-web/*                — serve files from mod's web/ dir
  * /api/mods/:id/instructions              — list installed instruction files (v3.20)
  * /api/mods/:id/instructions/reinstall    — force-reinstall instructions (v3.20)
+ * /api/mods/:id/upgrade                   — upgrade an installed mod from the registry (v3.20.5)
+ * /api/mods/:id/views/*                   — serve a mod-shipped React view (v3.20.5)
  *
  * Express-ordering note: /mods/views MUST come before /mods/:id/* —
  * actually only the literal /mods (without :id) takes precedence
@@ -254,6 +256,32 @@ export function createModsRouter() {
     res.json({ ok: true, counts });
   }));
 
+  // v3.20.5 — Upgrade an installed mod from the registry. Body opts:
+  //   { backup?: boolean, url?: string }
+  // backup: if true, copy the existing mod folder into
+  //   ~/.config/bizar/mods/.backup/<id>-<timestamp>/ before replacing.
+  // url:    optional override for the registry URL.
+  // Returns { from, to, backupPath?, mod } on success.
+  router.post('/mods/:id/upgrade', wrap(async (req, res) => {
+    try {
+      const result = await modsLoader.upgradeFromRegistry(req.params.id, {
+        backup: !!req.body?.backup,
+        url: typeof req.body?.url === 'string' ? req.body.url : undefined,
+      });
+      res.json({
+        ok: true,
+        modId: req.params.id,
+        from: result.from,
+        to: result.to,
+        backupPath: result.backupPath,
+        mod: result.mod,
+      });
+    } catch (err) {
+      const code = /not installed/i.test(err.message) ? 404 : 500;
+      res.status(code).json({ error: 'upgrade_failed', message: err.message });
+    }
+  }));
+
   // ── /api/mods/:id/mod-web/* and /api/mods/:id/web/* ────────────────
   // Serve files from each mod's web/ directory (for iframe embedding).
   // Two aliases — `mod-web` (explicit, won't collide with mod routes) and
@@ -281,6 +309,51 @@ export function createModsRouter() {
   });
   router.get('/mods/:id/mod-web/*', webHandler);
   router.get('/mods/:id/web/*', webHandler);
+
+  // v3.20.5 — Serve a mod-shipped React view as an ES module. Mods
+  // declare view components in views/registry.json (e.g.
+  //   { id: "graph", component: "GraphView.js" }
+  // ) and ship the built file at views/<component>. The dashboard
+  // dynamically imports it on demand and renders it inside ModView.
+  //
+  // The file is served with Content-Type: application/javascript so
+  // the browser treats it as a real ES module. Mods are expected to
+  // ship pre-built code (no JSX) and use React.createElement (or htm
+  // with React.createElement) for composition. React itself is loaded
+  // as part of the dashboard bundle — see /assets/*.js on first load.
+  const viewsHandler = wrap(async (req, res) => {
+    const mod = modsLoader.get(req.params.id);
+    if (!mod || !mod.enabled) {
+      res.status(404).json({ error: 'not_found', message: `mod "${req.params.id}" not found or disabled` });
+      return;
+    }
+    const rel = req.params[0] || '';
+    if (!rel || rel.endsWith('/')) {
+      res.status(400).json({ error: 'bad_request', message: 'file path required' });
+      return;
+    }
+    // Allow only .js / .mjs / .jsx / .tsx files — anything else is
+    // a misconfiguration or attack attempt.
+    if (!/\.(js|mjs|jsx|tsx)$/i.test(rel)) {
+      res.status(403).json({ error: 'forbidden', message: 'only JS-family files may be served as views' });
+      return;
+    }
+    const viewsRoot = resolve(mod.path, 'views');
+    const filePath = resolve(viewsRoot, rel);
+    const relPath = relative(viewsRoot, filePath);
+    if (relPath.startsWith('..') || relPath === '') {
+      res.status(403).json({ error: 'forbidden' });
+      return;
+    }
+    if (!existsSync(filePath)) {
+      res.status(404).json({ error: 'not_found', message: `view not found: ${rel}` });
+      return;
+    }
+    res.set('Content-Type', 'application/javascript; charset=utf-8');
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(filePath);
+  });
+  router.get('/mods/:id/views/*', viewsHandler);
 
   return router;
 }

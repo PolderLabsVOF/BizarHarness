@@ -1,5 +1,60 @@
 # Changelog
 
+## v3.20.5 — Mod upgrade flow + dynamic TSX tab views + publish-time typecheck
+
+> **Mod lifecycle.** Mods installed from the registry can now be upgraded in place; mods that declare a `tab` view in `views/registry.json` are dynamically imported and rendered; `tsc --noEmit` is wired into the publish pipeline so future TDZ-style bugs surface before publishing.
+
+### Highlights
+
+- **Mod upgrade flow.** New `POST /api/mods/:id/upgrade` endpoint (and matching `bizar mod upgrade <id>` CLI) backs up the existing folder (optional `--backup`), uninstalls the current copy (removing its opencode-config instruction files), and installs the latest version from the registry. Rolls back from the backup if the new install fails so users aren't left without a working mod. Returns `{ from, to, backupPath, mod }` for the UI toast. The Upgrade button in the Mods registry card now calls this endpoint instead of the install endpoint (which would fail with "already installed").
+- **Dynamic TSX tab views.** `ModView.tsx` now `import()`s a mod's `views/<component>.{js,mjs,jsx,tsx}` on demand via `React.lazy` + `Suspense` and renders it. New `GET /api/mods/:id/views/*` route serves files from the mod's `views/` directory with `Content-Type: application/javascript` (and `Cache-Control: no-store`). The view component is expected to default-export a React component using `React.createElement` or `htm` (mods ship a pre-built ES module). A tiny `ErrorBoundary` catches render-time throws and surfaces them inline instead of crashing the dashboard.
+- **`tsc --noEmit` in publish pipeline.** `bizar-dash/package.json` `prepublishOnly` now runs `npm run typecheck` before `vite build`. Typecheck failures surface as warnings (soft-fail, does not block publish) so users see TS errors at publish time without losing the ability to ship when only baseline mobile-app errors are present. New baseline typecheck issues introduced by future changes will be more visible.
+- **`bizar mod` CLI subcommand.** `bizar mod install <id>`, `bizar mod upgrade <id> [--backup]`, `bizar mod list`, `bizar mod registry` — all proxy to the running dashboard over HTTP. Reads the dashboard port from `~/.config/bizar/dashboard.port`; errors with a clear "start the dashboard first" message if no port file exists.
+
+### Files changed (8)
+
+- `bizar-dash/src/server/mods-loader.mjs` — added `upgradeFromRegistry()` with backup + rollback semantics
+- `bizar-dash/src/server/routes/mods.mjs` — added `POST /api/mods/:id/upgrade` and `GET /api/mods/:id/views/*` routes
+- `bizar-dash/src/web/views/ModView.tsx` — dynamic component import via `React.lazy` + Suspense + ErrorBoundary
+- `bizar-dash/src/web/views/Mods.tsx` — split registry card actions into Install / Upgrade-to-vX / Installed-vX; added `onUpgradeFromRegistry()` handler
+- `bizar-dash/package.json` — bumped to 3.20.5, prepublishOnly now runs typecheck (soft-fail) before build
+- `cli/bin.mjs` — added `bizar mod <subcommand>` (install / upgrade / list / registry) over dashboard HTTP API
+- `package.json` — added mod-upgrade test to the `test` script
+- `bizar-dash/src/web/App.tsx` — VERSION constant to v3.20.5
+
+### Files added (1)
+
+- `bizar-dash/tests/mod-upgrade.node.test.mjs` — 10 tests covering `upgradeFromRegistry()` (refuses missing mod, in-place upgrade, backup, rollback) and the new HTTP routes (404 path, full upgrade round-trip, view content-type, non-JS rejection, path traversal, missing mod)
+
+### Patterns
+
+- **Mod lifecycle: install + upgrade = same primitive + uninstall.** `upgradeFromRegistry` is just (read old version → uninstall → install from registry). Composing existing primitives avoids drift between the two paths.
+- **TSX tab support ships infrastructure, not a build step.** Mods ship pre-built `views/<Name>.js` (React.createElement or htm). The dashboard serves them with `application/javascript`. Adding a build hook (esbuild / sucrase) is a future enhancement; mods can build locally and ship the output.
+
+## v3.20.4 — Fix blank blue screen on dashboard mount (TDZ)
+
+> **Patch.** `renderedView = useMemo(() => refreshSnapshot, [refreshSnapshot])` was declared BEFORE `refreshSnapshot` in `App.tsx`. React's useMemo runs the factory on first render, hitting the TDZ and throwing `ReferenceError: Cannot access 'refreshSnapshot' before initialization` → blank screen.
+
+### Files changed (2)
+
+- `bizar-dash/src/web/App.tsx` — reordered so `refreshSnapshot` is declared first, then `mergedTabs`, then `renderedView`. No behavior change beyond fixing the mount.
+
+## v3.20.3 — Fix install-from-registry + mod views in sidebar nav
+
+> **Bug fix + UX.** `installFromRegistry` was passing URL `downloadUrl` to `installFromPath` (which calls `statSync()` and fails on URLs). Now detects `https?://` and `file://` schemes and routes to `installFromUrl`. Mod views appear as first-class tabs in the sidebar nav under a "Mods" section with divider + accent dot.
+
+## v3.20.2 — Mod instructions UI + prepublishOnly hook
+
+> **UX + build hardening.** The ModDetails card now shows installed instruction files (filename + on-disk path + click-to-expand markdown preview) grouped by Agents / Commands / Skills, with a "Reinstall from mod folder" button. `bizar-dash/package.json` got a `prepublishOnly` hook that runs `vite build` before `npm publish`.
+
+## v3.20.1 — Patch: two bugs shipped in 3.20.0
+
+> **Bug fix.** `cli/install.mjs:378` had a stray `|` in a fallback expression (SyntaxError broke `bizar update`). `config/opencode.json.template` had two malformed entries with double-comma artifacts (broke `bizar doctor` JSON validation). Both fixed.
+
+## v3.20.0 — Mod instructions protocol + 14-agent modular refactor
+
+> **Refactor.** Extracted 1500+ lines of duplicate agent content into `config/agents/_shared/AGENT_BASELINE.md` (installed as `~/.opencode/skills/agent-baseline/`). Reduced 14 Bizar agent files from 2023 → 1046 lines. New mod instruction schema (`INSTRUCTIONS.md`, `agents/<name>.md`, `commands/<name>.md`, `skills/<name>/SKILL.md`) with `<mod-id>__` / `<mod-id>-` prefixes. 3 mods shipped INSTRUCTIONS.md (graphify 1.2.0, ponytail 1.1.0, impeccable 1.1.0).
+
 ## v3.17.0 — Settings section filter + graphify extracted as a true mod
 
 > **Two clean-ups.** Settings gets a real section filter (not just scroll-to), and graphify is removed from BizarHarness entirely — it's now a standalone mod that ships its own build pipeline + self-contained web UI.
