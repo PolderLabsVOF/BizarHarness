@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.20.15 — Artifacts API fix: projectRoot passed to artifacts router
+
+> **The Artifacts page showed "0 artifacts" even when the dashboard snapshot had the full list.** Two artifacts routers were mounted in `api.mjs`, but the first one (which handles `GET /api/artifacts`) was missing `projectRoot`, so `artifactsStore.list(undefined)` only checked `~/.config/opencode/artifacts/` (always empty for projects with their own `artifacts/` folder). The snapshot used a different code path (`state.getArtifacts()`) and worked correctly — but the live API didn't.
+
+### Highlights
+
+- **Bug:** `bizar-dash/src/server/api.mjs` mounted `createArtifactsRouter({ broadcast })` (no `projectRoot`) on line 83, before the second mount `createArtifactsRouter({ state, broadcast, projectRoot })` on line 101. Express uses the first matching router, so `/api/artifacts` was answered by the no-projectRoot version and returned `[]`.
+- **Fix:** Pass `projectRoot` to the first artifacts router mount so the route returns the worktree's `artifacts/` folder (plus the global fallback for cross-project artifacts).
+- **Why wasn't this caught?** The dashboard's snapshot endpoint (`/api/snapshot`) uses `state.getArtifacts()` which uses the state's `projectRoot` correctly — so the in-memory snapshot had the full list. The Artifacts view reads from `snapshot.artifacts` first (works) and falls back to `api.get('/artifacts')` only if snapshot is missing (the bug-triggered path was never tested). The test suite covers `artifactsStore.list()` but doesn't exercise the route mount wiring.
+- **Test artifacts added:** `artifacts/dashboard-stale-pid-fix/` documents the v3.20.14 stale-PID-file fix (the previous changelog).
+
+### Files affected
+
+- `bizar-dash/src/server/api.mjs` — pass `projectRoot` to the first `createArtifactsRouter` mount
+- `artifacts/dashboard-stale-pid-fix/{artifact.mdx,meta.json,comments.json}` (new) — design doc for the v3.20.14 dashboard lifecycle fix
+
+### Pattern
+
+When two routers mount the same path prefix, Express uses the first match. If the first mount has missing dependencies, the second mount is dead code — and there's no warning. Tests that exercise individual routers don't catch this. A small integration test (`bizar-dash/tests/api-routes.test.mjs`) that hits every `/api/*` endpoint via `supertest` would have caught this. (Not added in this release — backlog for v3.21.0.)
+
 ## v3.20.14 — Dashboard lifecycle: stale-PID-file false positives, recycled-PID races
 
 > **v3.20.14 fixes the dashboard state machine so it can't get stuck on a phantom dashboard.** The v3.20.13 dashboard used `ps`-scan to detect other dashboards and `pidAlive` to confirm they're real. On a busy machine, Linux recycles PIDs in milliseconds — a `bizar dash start --bg` process at PID 938619 dies, gets reassigned to a chrome-headless-shell renderer, and the dashboard sees a "healthy" PID whose cmdline is `/path/to/chrome --type=renderer`. The `bizar dash start`/`stop`/`cleanup` cycle then becomes unrecoverable: `start` refuses ("Another dashboard is running"), `stop` says ("No dashboard running"), `cleanup --force` says ("Nothing to clean up").

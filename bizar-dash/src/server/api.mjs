@@ -80,7 +80,13 @@ export function createApiRouter({
   // settings via the shared helper; needs no broadcast/projectRoot.
   router.use(createFsRouter({ state }));
   router.use(createTasksRouter({ state, broadcast, projectRoot }));
-  router.use(createArtifactsRouter({ broadcast }));
+  // v3.20.14 — pass projectRoot to the artifacts router so /api/artifacts
+  // returns the worktree artifacts (not just the global fallback).
+  // Previously this router was mounted without projectRoot, which meant
+  // artifactsStore.list(undefined) only checked ~/.config/opencode/artifacts
+  // (always empty for projects that have an artifacts/ folder) and the
+  // UI showed "0 artifacts" even though the snapshot had the full list.
+  router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
   router.use(createSchedulesRouter({ broadcast }));
   router.use(createModsRouter());
   router.use(createAgentsRouter({ state, broadcast }));
