@@ -73,6 +73,29 @@ function unmask(stored, incoming) {
   return incoming;
 }
 
+/**
+ * v3.20.10 — Three-way merge for fields that may be missing from a
+ * patch object. Used by `update()` so an operator who submits
+ * `{ backupApiKey: 'new-key' }` (without re-supplying `apiKey`)
+ * doesn't accidentally clear the stored `apiKey` to undefined.
+ *
+ *   stored       — current on-disk value (string)
+ *   incoming     — patch value (string | undefined)
+ *   Returns:
+ *     - `stored`   if `incoming` is undefined (field not in patch)
+ *     - `stored`   if `incoming` is the masked `***...***` placeholder
+ *     - `incoming` otherwise (real value to replace)
+ *
+ * Replaces the previous `unmask(stored, patch.apiKey)` which returned
+ * undefined whenever the patch didn't include apiKey — that lost the
+ * stored key on every partial-update. Same issue applied to the new
+ * `backupApiKey` field, so the helper covers both.
+ */
+function preserveOrReplace(stored, incoming) {
+  if (incoming === undefined) return stored;
+  return unmask(stored, incoming);
+}
+
 export const providersStore = {
   OPENCODE_JSON,
 
@@ -84,6 +107,7 @@ export const providersStore = {
       name: p.name || id,
       baseURL: p.baseURL || p.options?.baseURL || '',
       apiKey: mask(p.apiKey || p.options?.apiKey || ''),
+      backupApiKey: mask(p.backupApiKey || p.options?.backupApiKey || ''),
       models: Array.isArray(p.models) ? p.models : [],
       enabled: p.enabled !== false,
     }));
@@ -116,6 +140,7 @@ export const providersStore = {
         name: id,
         baseURL: '',
         apiKey: '',
+        backupApiKey: '',
         models: [],
         enabled: true,
         source: '',
@@ -149,6 +174,7 @@ export const providersStore = {
             name: p.name || id,
             baseURL: p.baseURL || p.options?.baseURL || '',
             apiKey: mask(p.apiKey || p.options?.apiKey || ''),
+            backupApiKey: mask(p.backupApiKey || p.options?.backupApiKey || ''),
             models: (Array.isArray(p.models) ? p.models : []).map((m) => ({
               id: typeof m === 'string' ? m : m.id || m.name || String(m),
               name: typeof m === 'string' ? m : m.name || m.id || String(m),
@@ -382,6 +408,11 @@ export const providersStore = {
       name: input.name || id,
       baseURL: input.baseURL || '',
       apiKey: input.apiKey || '',
+      // v3.20.10 — backup key slot. Optional. Stored verbatim; masked
+      // by list() / listAll(). If both keys are present, the operator
+      // can swap them manually via the dashboard if the primary hits
+      // a rate limit or quota.
+      backupApiKey: input.backupApiKey || '',
       models: Array.isArray(input.models) ? input.models : [],
       enabled: input.enabled !== false,
     };
@@ -399,7 +430,10 @@ export const providersStore = {
       ...cur,
       name: patch.name ?? cur.name,
       baseURL: patch.baseURL ?? cur.baseURL,
-      apiKey: unmask(cur.apiKey, patch.apiKey),
+      // v3.20.10 — preserveOrReplace: don't lose the stored key when
+      // the patch omits the field. See preserveOrReplace() above.
+      apiKey: preserveOrReplace(cur.apiKey, patch.apiKey),
+      backupApiKey: preserveOrReplace(cur.backupApiKey, patch.backupApiKey),
       models: Array.isArray(patch.models) ? patch.models : cur.models,
       enabled: patch.enabled ?? cur.enabled,
     };
@@ -423,6 +457,19 @@ export const providersStore = {
    * COHERE_API_KEY, OPENROUTER_API_KEY, DEEPSEEK_API_KEY,
    * MINIMAX_API_KEY.
    *
+   * v3.20.10 — Backup keys: every KNOWN_PROVIDER also accepts a
+   * `<NAME>_BACKUP_API_KEY` env var (e.g. `MINIMAX_API_KEY_BACKUP`)
+   * and a `backupApiKey` field in the config. autoDetect() returns
+   * both, and the dashboard UI surfaces them in the Providers page
+   * so the operator knows "if the primary hits a rate limit, swap in
+   * the backup manually" without having to dig through shell history.
+   *
+   * Detection order (highest priority first):
+   *   1. config.provider.<id>.apiKey
+   *   2. config.provider.<id>.backupApiKey
+   *   3. process.env[envKey]        (primary)
+   *   4. process.env[backupEnvKey]  (backup)
+   *
    * Each entry has a status:
    *   - 'configured' — key present AND format checks out
    *   - 'unknown'    — env var set but format doesn't match known patterns
@@ -433,93 +480,200 @@ export const providersStore = {
    * downgrade status from 'configured' to 'no-key'.
    */
   KNOWN_PROVIDERS: [
-    { id: 'anthropic', name: 'Anthropic', envKeys: ['ANTHROPIC_API_KEY'], baseURL: 'https://api.anthropic.com/v1', keyPattern: /^sk-ant-[A-Za-z0-9_-]{20,}$/ },
-    { id: 'openai', name: 'OpenAI', envKeys: ['OPENAI_API_KEY'], baseURL: 'https://api.openai.com/v1', keyPattern: /^sk-[A-Za-z0-9]{20,}$/ },
-    { id: 'google', name: 'Google AI', envKeys: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'], baseURL: 'https://generativelanguage.googleapis.com/v1beta', keyPattern: /^AIza[A-Za-z0-9_-]{30,}$/ },
-    { id: 'mistral', name: 'Mistral', envKeys: ['MISTRAL_API_KEY'], baseURL: 'https://api.mistral.ai/v1', keyPattern: /^[A-Za-z0-9]{20,}$/ },
-    { id: 'groq', name: 'Groq', envKeys: ['GROQ_API_KEY'], baseURL: 'https://api.groq.com/openai/v1', keyPattern: /^gsk_[A-Za-z0-9]{20,}$/ },
-    { id: 'cohere', name: 'Cohere', envKeys: ['COHERE_API_KEY'], baseURL: 'https://api.cohere.com/v1', keyPattern: /^[A-Za-z0-9]{20,}$/ },
-    { id: 'openrouter', name: 'OpenRouter', envKeys: ['OPENROUTER_API_KEY'], baseURL: 'https://openrouter.ai/api/v1', keyPattern: /^sk-or-[A-Za-z0-9_-]{20,}$/ },
-    { id: 'deepseek', name: 'DeepSeek', envKeys: ['DEEPSEEK_API_KEY'], baseURL: 'https://api.deepseek.com/v1', keyPattern: /^sk-[A-Za-z0-9]{20,}$/ },
-    { id: 'minimax', name: 'MiniMax', envKeys: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'], baseURL: 'https://api.minimax.chat/v1', keyPattern: /^[A-Za-z0-9]{20,}$/ },
+    {
+      id: 'anthropic',
+      name: 'Anthropic',
+      envKeys: ['ANTHROPIC_API_KEY'],
+      backupEnvKeys: ['ANTHROPIC_API_KEY_BACKUP', 'ANTHROPIC_BACKUP_API_KEY'],
+      baseURL: 'https://api.anthropic.com/v1',
+      keyPattern: /^sk-ant-[A-Za-z0-9_-]{20,}$/,
+    },
+    {
+      id: 'openai',
+      name: 'OpenAI',
+      envKeys: ['OPENAI_API_KEY'],
+      backupEnvKeys: ['OPENAI_API_KEY_BACKUP', 'OPENAI_BACKUP_API_KEY'],
+      baseURL: 'https://api.openai.com/v1',
+      keyPattern: /^sk-[A-Za-z0-9]{20,}$/,
+    },
+    {
+      id: 'google',
+      name: 'Google AI',
+      envKeys: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      backupEnvKeys: ['GEMINI_API_KEY_BACKUP', 'GOOGLE_API_KEY_BACKUP'],
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+      keyPattern: /^AIza[A-Za-z0-9_-]{30,}$/,
+    },
+    {
+      id: 'mistral',
+      name: 'Mistral',
+      envKeys: ['MISTRAL_API_KEY'],
+      backupEnvKeys: ['MISTRAL_API_KEY_BACKUP'],
+      baseURL: 'https://api.mistral.ai/v1',
+      keyPattern: /^[A-Za-z0-9]{20,}$/,
+    },
+    {
+      id: 'groq',
+      name: 'Groq',
+      envKeys: ['GROQ_API_KEY'],
+      backupEnvKeys: ['GROQ_API_KEY_BACKUP'],
+      baseURL: 'https://api.groq.com/openai/v1',
+      keyPattern: /^gsk_[A-Za-z0-9]{20,}$/,
+    },
+    {
+      id: 'cohere',
+      name: 'Cohere',
+      envKeys: ['COHERE_API_KEY'],
+      backupEnvKeys: ['COHERE_API_KEY_BACKUP'],
+      baseURL: 'https://api.cohere.com/v1',
+      keyPattern: /^[A-Za-z0-9]{20,}$/,
+    },
+    {
+      id: 'openrouter',
+      name: 'OpenRouter',
+      envKeys: ['OPENROUTER_API_KEY'],
+      backupEnvKeys: ['OPENROUTER_API_KEY_BACKUP'],
+      baseURL: 'https://openrouter.ai/api/v1',
+      keyPattern: /^sk-or-[A-Za-z0-9_-]{20,}$/,
+    },
+    {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      envKeys: ['DEEPSEEK_API_KEY'],
+      backupEnvKeys: ['DEEPSEEK_API_KEY_BACKUP'],
+      baseURL: 'https://api.deepseek.com/v1',
+      keyPattern: /^sk-[A-Za-z0-9]{20,}$/,
+    },
+    {
+      // MiniMax accepts ANTHROPIC_API_KEY as a fallback because
+      // MiniMax's API is Anthropic-format-compatible and many users
+      // already have an Anthropic key configured. The backup key
+      // is the second slot — keep both as the most-resilient config.
+      id: 'minimax',
+      name: 'MiniMax',
+      envKeys: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'],
+      backupEnvKeys: ['MINIMAX_API_KEY_BACKUP', 'MINIMAX_BACKUP_API_KEY', 'ANTHROPIC_API_KEY_BACKUP'],
+      baseURL: 'https://api.minimax.chat/v1',
+      keyPattern: /^[A-Za-z0-9]{20,}$/,
+    },
   ],
 
   async autoDetect({ probe = true } = {}) {
     const result = [];
     for (const spec of this.KNOWN_PROVIDERS) {
-      let apiKey = '';
-      let keySource = '';
-      // 1. Check config
-      try {
-        const cfg = loadConfig();
-        const cfgProvider = cfg.provider?.[spec.id];
-        if (cfgProvider?.apiKey) {
-          apiKey = cfgProvider.apiKey;
-          keySource = 'config';
-        } else if (cfgProvider?.options?.apiKey) {
-          apiKey = cfgProvider.options.apiKey;
-          keySource = 'config';
+      const cfgInfo = (() => {
+        try {
+          const cfg = loadConfig();
+          const cfgProvider = cfg.provider?.[spec.id];
+          if (!cfgProvider) return { apiKey: '', backupApiKey: '' };
+          return {
+            apiKey: cfgProvider.apiKey || cfgProvider.options?.apiKey || '',
+            backupApiKey: cfgProvider.backupApiKey || cfgProvider.options?.backupApiKey || '',
+          };
+        } catch {
+          return { apiKey: '', backupApiKey: '' };
         }
-      } catch { /* ignore */ }
-      // 2. Check env (overrides config because env is fresher in most cases)
-      for (const k of spec.envKeys) {
-        const v = process.env[k];
-        if (typeof v === 'string' && v.length > 0) {
-          apiKey = v;
-          keySource = 'env';
-          break;
-        }
-      }
-      let status;
+      })();
+
+      // Primary: config > env
+      let apiKey = cfgInfo.apiKey;
+      let keySource = cfgInfo.apiKey ? 'config' : '';
       if (!apiKey) {
-        status = 'no-key';
-      } else if (spec.keyPattern && !spec.keyPattern.test(apiKey)) {
-        status = 'unknown';
-      } else {
-        status = 'configured';
+        for (const k of spec.envKeys) {
+          const v = process.env[k];
+          if (typeof v === 'string' && v.length > 0) {
+            apiKey = v;
+            keySource = `env:${k}`;
+            break;
+          }
+        }
       }
 
-      // Optional probe
-      let probeResult = null;
-      if (probe && status === 'configured' && spec.baseURL) {
-        try {
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 1500);
-          const url = `${spec.baseURL}/models`;
-          const resp = await fetch(url, {
-            headers: { Authorization: `Bearer ${apiKey}` },
-            signal: ctrl.signal,
-          });
-          clearTimeout(timer);
-          probeResult = { ok: resp.ok, status: resp.status };
-          if (resp.ok) {
-            try {
-              const body = await resp.json();
-              if (Array.isArray(body?.data)) probeResult.modelCount = body.data.length;
-              else if (Array.isArray(body)) probeResult.modelCount = body.length;
-            } catch { /* ignore parse */ }
-          } else {
-            // Server responded but rejected the key — downgrade to unknown
-            status = 'unknown';
-            probeResult.reason = `HTTP ${resp.status}`;
+      // Backup: config > env (independent from primary; you can have
+      // a backup key without a primary, e.g. if you rotate).
+      let backupApiKey = cfgInfo.backupApiKey;
+      let backupSource = cfgInfo.backupApiKey ? 'config' : '';
+      if (!backupApiKey) {
+        for (const k of spec.backupEnvKeys || []) {
+          const v = process.env[k];
+          if (typeof v === 'string' && v.length > 0) {
+            backupApiKey = v;
+            backupSource = `env:${k}`;
+            break;
           }
-        } catch (err) {
-          probeResult = { ok: false, reason: (err && err.name === 'AbortError') ? 'timeout' : 'network' };
-          // Don't downgrade — network failure shouldn't erase a valid key
         }
       }
+
+      const status = !apiKey
+        ? 'no-key'
+        : spec.keyPattern && !spec.keyPattern.test(apiKey)
+        ? 'unknown'
+        : 'configured';
+      const backupStatus = !backupApiKey
+        ? 'no-key'
+        : spec.keyPattern && !spec.keyPattern.test(backupApiKey)
+        ? 'unknown'
+        : 'configured';
+
+      // Probe primary
+      const probeResult = await this._probeKey(spec, apiKey, probe && status === 'configured');
+      const backupProbe = await this._probeKey(spec, backupApiKey, probe && backupStatus === 'configured');
 
       result.push({
         id: spec.id,
         name: spec.name,
         baseURL: spec.baseURL,
+        envKeys: spec.envKeys,
+        backupEnvKeys: spec.backupEnvKeys || [],
         status,
         keySource,
         hasKey: !!apiKey,
         probed: probeResult,
+        backup: {
+          status: backupStatus,
+          source: backupSource,
+          hasKey: !!backupApiKey,
+          probed: backupProbe,
+        },
       });
     }
     return result;
+  },
+
+  /**
+   * v3.20.10 — Probe a single key against the provider's /models endpoint.
+   * Returns { ok, status, modelCount? } or { ok: false, reason }.
+   * Exposed as a separate helper so primary + backup keys can be
+   * probed independently (each gets its own timeout + result).
+   */
+  async _probeKey(spec, apiKey, shouldProbe) {
+    if (!shouldProbe || !apiKey || !spec.baseURL) return null;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 1500);
+      const url = `${spec.baseURL}/models`;
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const out = { ok: resp.ok, status: resp.status };
+      if (resp.ok) {
+        try {
+          const body = await resp.json();
+          if (Array.isArray(body?.data)) out.modelCount = body.data.length;
+          else if (Array.isArray(body)) out.modelCount = body.length;
+        } catch { /* ignore parse */ }
+      } else {
+        out.reason = `HTTP ${resp.status}`;
+      }
+      return out;
+    } catch (err) {
+      return {
+        ok: false,
+        reason: err && err.name === 'AbortError' ? 'timeout' : 'network',
+      };
+    }
   },
 };
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.20.10 — Comprehensive auto-installer + API provider backup keys
+
+> **Install + resilience.** v3.20.10 makes `install.sh` a complete one-shot installer that fetches every system dep it can (uv, Python 3.12, chrome-headless-shell, jq, browser-harness, Chrome, BizarHarness npm packages, mod registry) and writes an `install-state.json` so `bizar update` knows what was installed at which version. The API provider config gains a `backupApiKey` slot per provider so operators can keep a secondary key ready for manual swap when the primary hits a rate limit.
+
+### Highlights
+
+- **Comprehensive `install.sh`** — replaces the "print 4 manual next steps" flow with auto-install of uv + Python 3.12 + chrome-headless-shell (via chrome-for-testing JSON API) + jq + browser-harness + Chrome. Single status banner at the end shows what was installed, what was skipped, and what failed. **No API key prompts** (the installer never collects secrets — do that yourself via `/connect` so keys stay on your machine, not in any installer log). **No opencode reload** (the next session picks up the config automatically). **`.obsidian/` is not hidden** — it's a first-class part of the project tree.
+- **API provider backup keys** — `~/.config/opencode/opencode.json` provider entries now accept a `backupApiKey` field alongside `apiKey`. Every KNOWN_PROVIDER declares `backupEnvKeys` (e.g. `MINIMAX_API_KEY_BACKUP`, `ANTHROPIC_API_KEY_BACKUP`). `autoDetect()` returns both keys with independent status / source / probe. Dashboard's Providers page surfaces both so the operator knows "if the primary hits a rate limit, the backup is here".
+- **`install-state.json`** at `~/.config/bizar/install-state.json` records every component version + install timestamp. `bizar update` reads it to compute migrations between versions.
+- **14 new tests** in `bizar-dash/tests/providers-store-backup-keys.node.test.mjs` covering KNOWN_PROVIDERS shape, autoDetect priority chain, add/update/list/listAll persistence, mask-keep semantics.
+
+### Files affected
+
+- `install.sh` — rewritten (535 lines; auto-install + status banner)
+- `bizar-dash/src/server/providers-store.mjs` — added `backupEnvKeys` to all 9 KNOWN_PROVIDERS; `autoDetect()` returns `{ status, keySource, hasKey, probed, backup: {...} }`; `add()` / `update()` accept `backupApiKey`; `list()` / `listAll()` return masked backup keys; new `preserveOrReplace()` helper fixes pre-existing "patch without apiKey loses the stored key" bug
+- `bizar-dash/tests/providers-store-backup-keys.node.test.mjs` (new) — 14 tests
+
+### Pattern
+
+When the operator submits a partial provider update (`{ backupApiKey: 'new-key' }` without re-supplying `apiKey`), the old code lost `apiKey` because `unmask(stored, undefined)` returned `undefined`. The new `preserveOrReplace()` short-circuits undefined to keep the stored value — same pattern as the mask-keep for `***...***` placeholders. The dashboard form re-submits with the masked placeholders; we must keep the underlying real values.
+
 ## v3.20.8 — Remove agent-browser; ship browser-harness as canonical
 
 > **Cleanup + integration.** v3.20.7 integrated the browser-harness Python tool (https://github.com/browser-use/browser-harness) as the canonical browser-automation path. v3.20.8 removes every `agent-browser` reference (npm package + bin shim + shipped config + user's installed mirrors) so the dashboard ships with a single, working browser-automation path.

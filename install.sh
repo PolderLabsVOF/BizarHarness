@@ -1,128 +1,387 @@
 #!/usr/bin/env bash
+#
+# install.sh — One-shot BizarHarness installer.
+#
+# v3.20.9 — Comprehensive auto-installer. Replaces the older "print
+# 4 manual next steps" flow with: (1) install every system dep we can
+# reasonably fetch (uv, python3.12, chrome-headless-shell, jq); (2)
+# install browser-harness + register its skill; (3) start Chrome for
+# browser-driven E2E; (4) install + configure all BizarHarness files
+# (agents, commands, opencode.json, plugin); (5) print a single
+# status banner that tells the operator what is ready and what (if
+# anything) they still need to do.
+#
+# What this script does NOT do (intentional):
+#   - Configure provider API keys (MINIMAX_API_KEY, etc.). The user
+#     does that via `/connect` in opencode after install. We deliberately
+#     do not collect secrets here — the install is idempotent and safe
+#     to re-run, and asking for keys during install breaks CI / scripted
+#     deployments.
+#   - Reload opencode. The opencode session picks up the new config on
+#     next start. We print a status line at the end; we do not kill or
+#     restart the opencode process from here (it would interrupt
+#     in-flight agent sessions).
+#   - Hide `.obsidian/`. The Obsidian vault is a first-class part of
+#     the project tree. We do not add it to any .gitignore / .npmignore
+#     / IDE-exclusion list.
+#
+# Idempotent: every step checks for the existing install and skips
+# re-work. Re-running after a failed install picks up where it left off.
+#
+# Cross-platform: bash + curl work on Linux + macOS. On Windows run
+# `npm install -g @polderlabs/bizar` which triggers the npm postinstall
+# hook (cli/install.mjs → install.sh via git bash).
 set -euo pipefail
-
-# NOTE: This installer is for Linux/macOS only. On Windows, run:
-#   npm install -g @polderlabs/bizar
-# ...which triggers the cross-platform Node.js installer.
-# This script will fail on Windows cmd/PowerShell.
 
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+RED='\033[0;31m'
+DIM='\033[2m'
 NC='\033[0m'
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+SKILLS_DIR="$HOME/.opencode/skills"
+BIZAR_STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bizar"
+BIZAR_STATE_FILE="$BIZAR_STATE_DIR/install-state.json"
+PYTHON_BIN="${PYTHON_BIN:-python3.12}"
+CHROME_PORT="${CHROME_PORT:-9222}"
 
-echo -e "${BOLD}${CYAN}⚡ BizarHarness — Norse Pantheon Agent Installer${NC}"
-echo ""
+# Counters for the final summary.
+INSTALLED=()
+SKIPPED=()
+FAILED=()
 
-# ── Create config dir ──────────────────────────────────────────────
+note() {
+  echo -e "  ${GREEN}✓${NC} $1"
+  INSTALLED+=("$1")
+}
+warn() {
+  echo -e "  ${YELLOW}⚠${NC} $1"
+  SKIPPED+=("$1")
+}
+err() {
+  echo -e "  ${RED}✗${NC} $1"
+  FAILED+=("$1")
+}
+section() {
+  echo ""
+  echo -e "${BOLD}${CYAN}── $1 ──${NC}"
+}
+
+# ── Pre-flight: which tools are missing? ───────────────────────────────
+section "Pre-flight: checking system tools"
+
+have_cmd() { command -v "$1" >/dev/null 2>&1; }
+have_file() { [ -e "$1" ]; }
+
+MISSING=()
+have_cmd uv || MISSING+=("uv")
+have_cmd "$PYTHON_BIN" || MISSING+=("$PYTHON_BIN")
+have_cmd jq || MISSING+=("jq")
+have_cmd npx || MISSING+=("npx")
+have_cmd git || MISSING+=("git")
+
+# Chrome detection: prefer chrome-headless-shell from puppeteer cache, then
+# system chromium / chrome / google-chrome. We don't require Chrome — the
+# installer works without it — but we report it so the operator knows.
+CHROME_BIN=""
+for cand in \
+  "$HOME/.cache/puppeteer/chrome-headless-shell"*/chrome-headless-shell/chrome-headless-shell \
+  /usr/bin/chromium \
+  /usr/bin/chrome \
+  /usr/bin/google-chrome \
+  "$(command -v chromium 2>/dev/null || true)" \
+  "$(command -v chrome 2>/dev/null || true)" \
+  "$(command -v google-chrome 2>/dev/null || true)"; do
+  [ -n "$cand" ] && [ -x "$cand" ] && CHROME_BIN="$cand" && break
+done
+
+for t in "${MISSING[@]}"; do warn "missing system tool: $t"; done
+if [ -z "$CHROME_BIN" ]; then warn "no chrome / chromium found — browser-harness won't work until installed"; fi
+[ ${#MISSING[@]} -eq 0 ] && [ -n "$CHROME_BIN" ] && note "all system tools present"
+
+# ── Install missing system tools (best effort, never abort) ─────────────
+section "Install missing system tools"
+
+# uv (Python package manager — needed for browser-harness + Semble)
+if ! have_cmd uv; then
+  echo -e "  ${CYAN}→${NC} Installing uv (Python package manager)..."
+  if have_cmd curl; then
+    if curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1; then
+      # uv's installer drops the binary at ~/.local/bin/uv
+      export PATH="$HOME/.local/bin:$PATH"
+      if have_cmd uv; then
+        note "uv installed at $(command -v uv)"
+      else
+        warn "uv install ran but uv not on PATH — try 'export PATH=\$HOME/.local/bin:\$PATH'"
+      fi
+    else
+      warn "uv installer script failed — install manually: https://docs.astral.sh/uv/"
+    fi
+  else
+    warn "curl not found — install uv manually: https://docs.astral.sh/uv/"
+  fi
+else
+  note "uv $(uv --version 2>/dev/null | head -1)"
+fi
+
+# python3.12 (uv will manage its own python via --python 3.12, but
+# we also accept system python3.12 if present). Only install if uv
+# is available — uv can fetch its own python.
+if ! have_cmd "$PYTHON_BIN"; then
+  if have_cmd uv; then
+    echo -e "  ${CYAN}→${NC} uv will fetch Python 3.12 on first use"
+    note "python3.12 will be auto-fetched by uv"
+  else
+    warn "no $PYTHON_BIN and no uv — install manually: sudo apt install python3.12 / brew install python@3.12"
+  fi
+else
+  note "$PYTHON_BIN $($PYTHON_BIN --version 2>&1 | head -1)"
+fi
+
+# jq (for safe opencode.json merging)
+if ! have_cmd jq; then
+  echo -e "  ${CYAN}→${NC} Trying to install jq..."
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    Linux)
+      if have_cmd apt-get; then sudo apt-get install -y jq 2>/dev/null && note "jq installed (apt)" || warn "apt install jq failed — install manually"
+      elif have_cmd dnf; then sudo dnf install -y jq 2>/dev/null && note "jq installed (dnf)" || warn "dnf install jq failed — install manually"
+      elif have_cmd pacman; then sudo pacman -S --noconfirm jq 2>/dev/null && note "jq installed (pacman)" || warn "pacman install jq failed — install manually"
+      elif have_cmd apk; then sudo apk add jq 2>/dev/null && note "jq installed (apk)" || warn "apk install jq failed — install manually"
+      else warn "no known package manager — install jq manually"
+      fi
+      ;;
+    Darwin)
+      if have_cmd brew; then brew install jq 2>/dev/null && note "jq installed (brew)" || warn "brew install jq failed — install manually"
+      else warn "no brew — install jq manually"
+      fi
+      ;;
+    *) warn "unknown OS — install jq manually";;
+  esac
+else
+  note "jq $(jq --version)"
+fi
+
+# Chrome (best effort — install chrome-headless-shell from chrome-for-testing
+# or the puppeteer cache). The dashboard/browser-harness will work without
+# it (the user can install later), but we try.
+if [ -z "$CHROME_BIN" ]; then
+  echo -e "  ${CYAN}→${NC} Trying to install chrome-headless-shell..."
+  PUPPETEER_CACHE_DIR="$HOME/.cache/puppeteer"
+  mkdir -p "$PUPPETEER_CACHE_DIR"
+  # chrome-for-testing JSON API — find the latest stable chrome-headless-shell
+  # URL for linux64. Fall back to nothing if the request fails.
+  CHROME_CT_URL=$(curl -fsSL "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" 2>/dev/null \
+    | grep -o '"url": *"[^"]*chrome-headless-shell-linux64[^"]*"' \
+    | head -1 \
+    | sed 's/.*"url": *"\([^"]*\)".*/\1/')
+  if [ -n "$CHROME_CT_URL" ]; then
+    TMP_DIR=$(mktemp -d)
+    if curl -fsSL "$CHROME_CT_URL" -o "$TMP_DIR/chrome-headless-shell.zip" 2>/dev/null; then
+      TARGET_DIR="$PUPPETEER_CACHE_DIR/chrome-headless-shell"
+      mkdir -p "$TARGET_DIR"
+      unzip -q "$TMP_DIR/chrome-headless-shell.zip" -d "$TARGET_DIR"
+      CHROME_BIN=$(find "$TARGET_DIR" -name chrome-headless-shell -type f 2>/dev/null | head -1)
+      [ -n "$CHROME_BIN" ] && [ -x "$CHROME_BIN" ] && note "chrome-headless-shell installed at $CHROME_BIN" || warn "chrome-headless-shell install failed"
+      rm -rf "$TMP_DIR"
+    else
+      warn "download from chrome-for-testing failed — install Chrome manually"
+    fi
+  else
+    warn "could not resolve latest chrome-for-testing URL — install Chrome manually"
+  fi
+fi
+
+# ── npm packages (BizarHarness, optional @polderlabs/bizar-dash peer) ───
+section "Install BizarHarness npm packages"
+
+if have_cmd npm; then
+  for pkg in @polderlabs/bizar @polderlabs/bizar-dash; do
+    if npm ls -g "$pkg" --depth=0 >/dev/null 2>&1; then
+      cur=$(npm ls -g "$pkg" --depth=0 --json 2>/dev/null | grep -oE '"version":\s*"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
+      note "$pkg already installed (v$cur)"
+    else
+      echo -e "  ${CYAN}→${NC} Installing $pkg..."
+      if npm install -g "$pkg" >/dev/null 2>&1; then
+        note "$pkg installed"
+      else
+        err "$pkg install failed (run manually: npm install -g $pkg)"
+      fi
+    fi
+  done
+else
+  err "npm not found — install Node.js 20+ first: https://nodejs.org/"
+fi
+
+# ── browser-harness (Python tool via uv, requires Python 3.12) ─────────
+section "Install browser-harness (Python via uv)"
+
+if have_cmd browser-harness; then
+  note "browser-harness $(browser-harness --version 2>&1 | head -1) already installed"
+else
+  if have_cmd uv; then
+    echo -e "  ${CYAN}→${NC} uv tool install --python 3.12 --upgrade --force browser-harness"
+    if uv tool install --python 3.12 --upgrade --force browser-harness >/dev/null 2>&1; then
+      note "browser-harness installed"
+    else
+      err "browser-harness install failed (run manually: uv tool install --python 3.12 --upgrade --force browser-harness)"
+    fi
+  else
+    warn "uv not installed — skipping browser-harness (install uv first, then re-run this script)"
+  fi
+fi
+
+# Register the browser-harness skill so any agent that needs it picks it up.
+if have_cmd browser-harness; then
+  BH_SKILL_DIR="$SKILLS_DIR/browser-harness"
+  mkdir -p "$BH_SKILL_DIR"
+  if browser-harness skill > "$BH_SKILL_DIR/SKILL.md" 2>/dev/null; then
+    note "browser-harness skill registered at $BH_SKILL_DIR/SKILL.md"
+  else
+    warn "browser-harness skill registration failed (re-run: browser-harness skill > $BH_SKILL_DIR/SKILL.md)"
+  fi
+fi
+
+# ── Chrome lifecycle (start browser-harness-up.sh) ────────────────────
+section "Start Chrome for browser-harness"
+
+if [ -x "$REPO_DIR/cli/browser-harness-up.sh" ]; then
+  # The script knows how to find chrome-headless-shell from the
+  # puppeteer cache (or any system chrome).
+  if BH_OUTPUT=$("$REPO_DIR/cli/browser-harness-up.sh" start 2>&1); then
+    # Trim verbose output; just keep the success lines.
+    while IFS= read -r line; do
+      case "$line" in
+        *"✓"*|*"already"*|*"stopped"*|*"restarted"*) note "$line" ;;
+        *) ;;
+      esac
+    done <<< "$BH_OUTPUT"
+  else
+    warn "browser-harness-up.sh start failed (run manually: $REPO_DIR/cli/browser-harness-up.sh start)"
+  fi
+elif have_cmd "$REPO_DIR/../bin/bizar"; then
+  if "$REPO_DIR/../bin/bizar" browser-harness-up start 2>&1 | grep -E '✓|✗' | head -3; then
+    note "Chrome started via bizar browser-harness-up"
+  fi
+else
+  warn "cli/browser-harness-up.sh not found at $REPO_DIR — skipping Chrome auto-start"
+fi
+
+# ── BizarHarness config files ─────────────────────────────────────────
+section "Install BizarHarness config files"
+
 mkdir -p "$CONFIG_DIR/agents"
 
-# ── Copy agents ────────────────────────────────────────────────────
-echo -e "  ${GREEN}→${NC} Installing agent definitions..."
+# Agents — copy every .md except those already in place.
 for f in "$REPO_DIR/config/agents/"*.md; do
+  [ -f "$f" ] || continue
   name="$(basename "$f")"
-  cp "$f" "$CONFIG_DIR/agents/$name"
-  echo -e "    ${GREEN}✓${NC} agents/$name"
+  if [ -f "$CONFIG_DIR/agents/$name" ] && cmp -s "$f" "$CONFIG_DIR/agents/$name"; then
+    : # identical, skip silently
+  else
+    cp "$f" "$CONFIG_DIR/agents/$name"
+    INSTALLED+=("agents/$name")
+  fi
 done
-# Also copy the _shared/ directory so the per-agent references resolve
-# on disk. The actual baseline content is also installed as a skill
-# (see below) so it auto-loads when any agent starts.
+note "agents synced ($(ls "$CONFIG_DIR/agents/"*.md 2>/dev/null | wc -l) files)"
+
+# Shared baseline (used as a skill AND as the on-disk reference)
 if [ -d "$REPO_DIR/config/agents/_shared" ]; then
   mkdir -p "$CONFIG_DIR/agents/_shared"
   cp -R "$REPO_DIR/config/agents/_shared/." "$CONFIG_DIR/agents/_shared/"
-  echo -e "    ${GREEN}✓${NC} agents/_shared/"
+  note "agents/_shared/ synced"
 fi
 
-# ── Copy commands (slash commands) ──────────────────────────────────
+# Slash commands
 if [ -d "$REPO_DIR/config/commands/" ]; then
-  echo -e "  ${GREEN}→${NC} Installing slash commands..."
   mkdir -p "$CONFIG_DIR/commands"
   for f in "$REPO_DIR/config/commands/"*.md; do
     [ -f "$f" ] || continue
     name="$(basename "$f")"
     cp "$f" "$CONFIG_DIR/commands/$name"
-    echo -e "    ${GREEN}✓${NC} commands/$name"
   done
+  note "slash commands synced"
 fi
 
-# ── Copy hooks ─────────────────────────────────────────────────────
+# Hooks
 if [ -d "$REPO_DIR/config/hooks/" ]; then
-  echo -e "  ${GREEN}→${NC} Installing hooks..."
   mkdir -p "$CONFIG_DIR/hooks"
-  for f in "$REPO_DIR/config/hooks/"*; do
-    [ -e "$f" ] || continue
-    name="$(basename "$f")"
-    cp -R "$f" "$CONFIG_DIR/hooks/$name"
-    echo -e "    ${GREEN}✓${NC} hooks/$name"
+  for entry in "$REPO_DIR/config/hooks/"*; do
+    [ -e "$entry" ] || continue
+    name="$(basename "$entry")"
+    cp -R "$entry" "$CONFIG_DIR/hooks/$name"
   done
+  note "hooks synced"
 fi
 
-# ── Copy AGENTS.md ─────────────────────────────────────────────────
-echo -e "  ${GREEN}→${NC} Installing AGENTS.md..."
-cp "$REPO_DIR/config/AGENTS.md" "$CONFIG_DIR/AGENTS.md"
-echo -e "    ${GREEN}✓${NC} AGENTS.md"
+# AGENTS.md
+if [ -f "$REPO_DIR/config/AGENTS.md" ]; then
+  cp "$REPO_DIR/config/AGENTS.md" "$CONFIG_DIR/AGENTS.md"
+  note "AGENTS.md synced"
+fi
 
-# ── Copy bundled skills ────────────────────────────────────────────
-SKILLS_DIR="$HOME/.opencode/skills"
-echo -e "  ${GREEN}→${NC} Installing bundled skills..."
+# ── Bundled skills (bizar, self-improvement, agent-baseline, …) ───────
+section "Install bundled skills"
+
+mkdir -p "$SKILLS_DIR"
 for skill in bizar self-improvement cpp-coding-standards cpp-testing embedded-esp-idf; do
   if [ -d "$REPO_DIR/config/skills/$skill" ]; then
     mkdir -p "$SKILLS_DIR/$skill"
     cp -R "$REPO_DIR/config/skills/$skill/." "$SKILLS_DIR/$skill/"
-    echo -e "    ${GREEN}✓${NC} skills/$skill"
+    note "skill: $skill"
   else
-    echo -e "    ${YELLOW}⚠${NC} skills/$skill — source not found, skipping"
+    warn "skill source missing: $skill (skipping)"
   fi
 done
-# Make scripts executable for skills that bundle them
-chmod +x "$SKILLS_DIR"/embedded-esp-idf/scripts/*.sh 2>/dev/null || true
 
-# ── Install shared agent baseline skill (referenced by every agent) ─
-# All 14 Bizar agent files point to config/agents/_shared/AGENT_BASELINE.md.
-# Install it as a skill so it auto-loads when any agent starts.
-echo -e "  ${GREEN}→${NC} Installing shared agent baseline skill..."
+# Shared agent baseline skill — referenced by every agent file.
 if [ -f "$REPO_DIR/config/agents/_shared/AGENT_BASELINE.md" ]; then
   mkdir -p "$SKILLS_DIR/agent-baseline"
   cp "$REPO_DIR/config/agents/_shared/AGENT_BASELINE.md" "$SKILLS_DIR/agent-baseline/SKILL.md"
-  echo -e "    ${GREEN}✓${NC} skills/agent-baseline (shared by all 14 agents)"
-else
-  echo -e "    ${YELLOW}⚠${NC} skills/agent-baseline — source not found, skipping"
+  note "skill: agent-baseline (shared by all 14 agents)"
 fi
 
-# ── Install domain skills via skills.sh (always-on rule discoverability) ──
-if command -v npx >/dev/null 2>&1; then
-  echo -e "  ${GREEN}→${NC} Installing domain skills from skills.sh..."
+# Make bundled scripts executable.
+chmod +x "$SKILLS_DIR"/embedded-esp-idf/scripts/*.sh 2>/dev/null || true
+
+# ── Domain skills via skills.sh (impeccable, ponytail, obsidian-skills) ─
+section "Install domain skills from skills.sh"
+
+if have_cmd npx; then
   # Impeccable — UI anti-pattern detection (frontend quality)
   if npx --yes impeccable skills install -y --scope=user --providers=opencode >/dev/null 2>&1; then
-    echo -e "    ${GREEN}✓${NC} impeccable (UI anti-pattern detector)"
+    note "impeccable (UI anti-pattern detector)"
   else
-    echo -e "    ${YELLOW}⚠${NC} impeccable — install failed (run manually: npx impeccable skills install)"
+    warn "impeccable install failed (run: npx impeccable skills install)"
   fi
+
   # Ponytail — minimal-code skill for AI agents
   if npx --yes @dietrichgebert/ponytail install --scope=user >/dev/null 2>&1; then
-    echo -e "    ${GREEN}✓${NC} ponytail (minimal-code skill)"
+    note "ponytail (minimal-code skill)"
   else
-    echo -e "    ${YELLOW}⚠${NC} ponytail — install failed (run manually: npx @dietrichgebert/ponytail install)"
+    warn "ponytail install failed (run: npx @dietrichgebert/ponytail install)"
   fi
+
   # Obsidian skills — Obsidian Flavored Markdown, Bases, JSON Canvas, CLI
   if npx --yes skills add https://github.com/kepano/obsidian-skills --all -y >/dev/null 2>&1; then
-    echo -e "    ${GREEN}✓${NC} obsidian-skills (Obsidian Markdown/Bases/Canvas)"
+    note "obsidian-skills (Obsidian Markdown/Bases/Canvas)"
   else
-    echo -e "    ${YELLOW}⚠${NC} obsidian-skills — install failed (run manually: npx skills add kepano/obsidian-skills)"
+    warn "obsidian-skills install failed (run: npx skills add kepano/obsidian-skills)"
   fi
+else
+  warn "npx not found — skipping domain skill installation"
 fi
 
-# ── Copy Bizar plugin ──────────────────────────────────────────────
-echo -e "  ${GREEN}→${NC} Installing Bizar plugin..."
+# ── Bizar plugin (mirrored from npm package to ~/.config/opencode/plugins/) ─
+section "Install Bizar opencode plugin"
+
 PLUGIN_SRC="$REPO_DIR/plugins/bizar"
 PLUGIN_DST="$CONFIG_DIR/plugins/bizar"
 if [ -d "$PLUGIN_SRC" ]; then
   mkdir -p "$PLUGIN_DST"
-  # Copy files, excluding node_modules, dist, *.log, .DS_Store (spec §9.2)
   while IFS= read -r -d '' f; do
     rel="${f#$PLUGIN_SRC/}"
     mkdir -p "$(dirname "$PLUGIN_DST/$rel")"
@@ -133,38 +392,40 @@ if [ -d "$PLUGIN_SRC" ]; then
     -not -name '*.log' \
     -not -name '.DS_Store' \
     -type f -print0)
-  echo -e "    ${GREEN}✓${NC} plugins/bizar/"
+  note "plugins/bizar/ copied (excludes node_modules, dist, *.log)"
 else
-  echo -e "    ${YELLOW}⚠${NC} Bizar plugin source not found at $PLUGIN_SRC — skipping"
+  warn "Bizar plugin source not found at $PLUGIN_SRC — skipping"
 fi
 
-# ── Merge opencode.json ────────────────────────────────────────────
-echo -e "  ${GREEN}→${NC} Configuring opencode.json..."
-# Prefer the .template copy (non-tracked); fall back to the legacy tracked file
+# ── Merge opencode.json (template + user's existing config) ────────────
+section "Configure opencode.json"
+
+# Prefer the .template copy; fall back to the legacy tracked file.
 if [ -f "$REPO_DIR/config/opencode.json.template" ]; then
   TEMPLATE="$REPO_DIR/config/opencode.json.template"
 elif [ -f "$REPO_DIR/config/opencode.json" ]; then
   TEMPLATE="$REPO_DIR/config/opencode.json"
 else
-  echo -e "    ${YELLOW}⚠${NC} No opencode template found — skipping config merge"
+  warn "No opencode.json template found"
   TEMPLATE=""
 fi
 
-if [ -n "$TEMPLATE" ] && [ -f "$CONFIG_DIR/opencode.json" ]; then
-  echo -e "    ${YELLOW}⚠${NC} Existing opencode.json found — backing up to opencode.json.bak"
-  cp "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.json.bak"
-fi
-
 if [ -n "$TEMPLATE" ]; then
-  if command -v jq &>/dev/null; then
+  if [ -f "$CONFIG_DIR/opencode.json" ]; then
+    cp "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.json.bak"
+  fi
+
+  if have_cmd jq; then
     MERGE_TMP="$CONFIG_DIR/opencode.json.merge.$$"
-    if [ -f "$CONFIG_DIR/opencode.json" ] && jq -s '.[0] * .[1]' "$TEMPLATE" "$CONFIG_DIR/opencode.json" > "$MERGE_TMP" 2>/dev/null; then
-      mv "$MERGE_TMP" "$CONFIG_DIR/opencode.json"
+    if [ -f "$CONFIG_DIR/opencode.json" ]; then
+      jq -s '.[0] * .[1]' "$TEMPLATE" "$CONFIG_DIR/opencode.json" > "$MERGE_TMP" 2>/dev/null \
+        && mv "$MERGE_TMP" "$CONFIG_DIR/opencode.json" \
+        || { rm -f "$MERGE_TMP"; cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"; }
     else
-      rm -f "$MERGE_TMP"
       cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"
     fi
-    # Ensure the bizar plugin entry exists in the plugin array (idempotent)
+
+    # Ensure the Bizar plugin entry is registered (idempotent).
     PLUGIN_TMP="$CONFIG_DIR/opencode.json.tmp.$$"
     jq '
       if (.plugin // []) | map(.[0] == "./plugins/bizar/index.ts") | any then .
@@ -178,73 +439,83 @@ if [ -n "$TEMPLATE" ]; then
     ' "$CONFIG_DIR/opencode.json" > "$PLUGIN_TMP" \
       && mv "$PLUGIN_TMP" "$CONFIG_DIR/opencode.json" \
       || rm -f "$PLUGIN_TMP"
-    echo -e "    ${GREEN}✓${NC} opencode.json"
-    echo -e "    ${GREEN}✓${NC} Bizar plugin (loop guard)"
+    note "opencode.json (template merged with existing config; plugin entry ensured)"
   else
     cp "$TEMPLATE" "$CONFIG_DIR/opencode.json"
-    echo -e "    ${YELLOW}⚠${NC} jq not found — copied template directly. Install jq for safe config merge."
-    echo -e "    ${YELLOW}⚠${NC}   Existing opencode.json is backed up at opencode.json.bak"
-  fi
-else
-  echo -e "    ${YELLOW}⚠${NC} No opencode.json template found — skipping config"
-fi
-
-# ── Optional: browser-harness (Python via uv) ──────────────────────
-# Used by the browser-harness Bizar agent for browser-driven E2E
-# verification. Required for browser-driven E2E tests.
-echo -e "  ${GREEN}→${NC} Checking browser-harness (Python via uv)..."
-if command -v browser-harness &>/dev/null; then
-  echo -e "    ${GREEN}✓${NC} browser-harness $(browser-harness --version 2>&1 | head -1)"
-else
-  if command -v uv &>/dev/null && command -v python3.12 &>/dev/null; then
-    echo -e "    ${CYAN}→${NC} Installing browser-harness via uv (Python 3.12)..."
-    if uv tool install --python 3.12 --upgrade --force browser-harness &>/dev/null; then
-      echo -e "    ${GREEN}✓${NC} browser-harness installed"
-      # Register the skill to the opencode skills dir.
-      SKILL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/browser-harness"
-      mkdir -p "$SKILL_DIR"
-      browser-harness skill > "$SKILL_DIR/SKILL.md"
-      echo -e "    ${GREEN}✓${NC} skill registered at $SKILL_DIR/SKILL.md"
-    else
-      echo -e "    ${YELLOW}⚠${NC} browser-harness install failed (run manually: uv tool install --python 3.12 --upgrade --force browser-harness)"
-    fi
-  else
-    echo -e "    ${YELLOW}⚠${NC} browser-harness: uv or python3.12 not found — skip (install manually: uv tool install --python 3.12 browser-harness)"
+    warn "jq not available — copied template directly. Re-install jq for safe merging."
   fi
 fi
 
-# ── Post-install instructions ──────────────────────────────────────
+# ── Write install-state.json (used by `bizar update` for migrations) ───
+section "Write install-state"
+
+mkdir -p "$BIZAR_STATE_DIR"
+BH_VERSION=$(browser-harness --version 2>/dev/null | head -1 | sed 's/[^0-9.]//g' || echo "")
+BIZAR_VERSION=$(npm ls -g @polderlabs/bizar --depth=0 --json 2>/dev/null | grep -oE '"@polderlabs/bizar":\s*\{[^}]*"version":\s*"[^"]+"' | grep -oE '"version":\s*"[^"]+"' | grep -oE '"[^"]+"' | tail -1 | tr -d '"' || echo "")
+DASH_VERSION=$(npm ls -g @polderlabs/bizar-dash --depth=0 --json 2>/dev/null | grep -oE '"@polderlabs/bizar-dash":\s*\{[^}]*"version":\s*"[^"]+"' | grep -oE '"version":\s*"[^"]+"' | grep -oE '"[^"]+"' | tail -1 | tr -d '"' || echo "")
+PY_VERSION=$("$PYTHON_BIN" --version 2>/dev/null | head -1 | sed 's/[^0-9.]//g' || echo "")
+UV_VERSION=$(uv --version 2>/dev/null | head -1 | sed 's/[^0-9.]//g' || echo "")
+JQ_VERSION=$(jq --version 2>/dev/null | sed 's/[^0-9.]//g' || echo "")
+
+STATE_JSON=$(cat <<JSON
+{
+  "installedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%S.%NZ | sed 's/\.[0-9]*//')",
+  "components": {
+    "bizar": "${BIZAR_VERSION:-unknown}",
+    "bizar-dash": "${DASH_VERSION:-unknown}",
+    "browser-harness": "${BH_VERSION:-unknown}",
+    "uv": "${UV_VERSION:-unknown}",
+    "python3.12": "${PY_VERSION:-unknown}",
+    "jq": "${JQ_VERSION:-unknown}"
+  }
+}
+JSON
+)
+echo "$STATE_JSON" > "$BIZAR_STATE_FILE"
+note "install-state written to $BIZAR_STATE_FILE"
+
+# ── Final status banner ──────────────────────────────────────────────
+section "Install complete"
+
 echo ""
 echo -e "${BOLD}${CYAN}┌────────────────────────────────────────────────────────────┐${NC}"
-echo -e "${BOLD}${CYAN}│${NC}  ${BOLD}BizarHarness installed!${NC}                                         │"
+echo -e "${BOLD}${CYAN}│${NC}  ${BOLD}BizarHarness ready.${NC}                                             │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-echo -e "${BOLD}${CYAN}│${NC}  Bundled skills: C++ coding standards, C++ testing,        │"
-echo -e "${BOLD}${CYAN}│${NC}  Embedded ESP-IDF (plus BizarHarness, self-improvement)     │"
+
+if [ ${#INSTALLED[@]} -gt 0 ]; then
+  echo -e "${BOLD}${CYAN}│${NC}  ${GREEN}✓ Installed:${NC}                                                │"
+  for entry in "${INSTALLED[@]}"; do
+    short=$(echo "$entry" | head -c 56)
+    echo -e "${BOLD}${CYAN}│${NC}    • $short$(printf '%*s' $((56 - ${#short})) '') │"
+  done
+fi
+
+if [ ${#SKIPPED[@]} -gt 0 ]; then
+  echo -e "${BOLD}${CYAN}│${NC}                                                          │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}⚠ Skipped:${NC}                                                  │"
+  for entry in "${SKIPPED[@]}"; do
+    short=$(echo "$entry" | head -c 56)
+    echo -e "${BOLD}${CYAN}│${NC}    • $short$(printf '%*s' $((56 - ${#short})) '') │"
+  done
+fi
+
+if [ ${#FAILED[@]} -gt 0 ]; then
+  echo -e "${BOLD}${CYAN}│${NC}                                                          │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${RED}✗ Failed:${NC}                                                  │"
+  for entry in "${FAILED[@]}"; do
+    short=$(echo "$entry" | head -c 56)
+    echo -e "${BOLD}${CYAN}│${NC}    • $short$(printf '%*s' $((56 - ${#short})) '') │"
+  done
+fi
+
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}Next steps:${NC}                                                   │"
-echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-echo -e "${BOLD}${CYAN}│${NC}  1. Edit ${CONFIG_DIR}/opencode.json                         │"
-echo -e "${BOLD}${CYAN}│${NC}     → Configure Obsidian vault path with your key          │"
-echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}⚠ If thinking is too verbose, remove or lower variant: \"high\"${NC}     │"
-echo -e "${BOLD}${CYAN}│${NC}     ${YELLOW}on odin/tyr/forseti in ${CONFIG_DIR}/opencode.json${NC}                │"
-echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-echo -e "${BOLD}${CYAN}│${NC}  2. Restart opencode                                        │"
-echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-echo -e "${BOLD}${CYAN}│${NC}  3. Run ${BOLD}/connect${NC} to add API keys:                                │"
-echo -e "${BOLD}${CYAN}│${NC}     → OpenCode Zen (DeepSeek V4 Flash Free)                 │"
-echo -e "${BOLD}${CYAN}│${NC}     → minimax.io (MiniMax M2.7 + M3)                        │"
-echo -e "${BOLD}${CYAN}│${NC}     → OpenAI / opencode-zen (optional, non-default agents)   │"
-echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-echo -e "${BOLD}${CYAN}│${NC}  4. Verify with ${BOLD}/models${NC}                                          │"
-echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-echo -e "${BOLD}${CYAN}│${NC}  ── Pantheon Agents ──                                        │"
-echo -e "${BOLD}${CYAN}│${NC}  Odin     ᛟ  MiniMax-M3               Router                  │"
-echo -e "${BOLD}${CYAN}│${NC}  Mimir    ᛗ  DeepSeek Flash Free  Free (research)              │"
-echo -e "${BOLD}${CYAN}│${NC}  Heimdall ᚹ  DeepSeek Flash Free  Free (mechanical)             │"
-echo -e "${BOLD}${CYAN}│${NC}  Hermod   ᚱ  MiniMax-M2.7           \$0.30/\$1.20 (git ops)      │"
-echo -e "${BOLD}${CYAN}│${NC}  Thor     ᚦ  MiniMax-M2.7           \$0.30/\$1.20 (medium)       │"
-echo -e "${BOLD}${CYAN}│${NC}  Tyr      ᛏ  MiniMax-M3             Highest (complex work)      │"
-echo -e "${BOLD}${CYAN}│${NC}  Vidarr   ᛉ  MiniMax-M3             Highest (last resort)       │"
-echo -e "${BOLD}${CYAN}│${NC}  Forseti  ᚨ  MiniMax-M3 (audit)     Highest (plan review)       │"
-echo -e "${BOLD}${CYAN}│${NC}                                                          │"
+echo -e "${BOLD}${CYAN}│${NC}  ${DIM}Next: open /connect in your next opencode session${NC}        │"
+echo -e "${BOLD}${CYAN}│${NC}  ${DIM}       to add API keys (opencode-zen is free; MiniMax${NC}        │"
+echo -e "${BOLD}${CYAN}│${NC}  ${DIM}       is paid). The installer never asks for keys —${NC}         │"
+echo -e "${BOLD}${CYAN}│${NC}  ${DIM}       do that part yourself so secrets stay on your${NC}        │"
+echo -e "${BOLD}${CYAN}│${NC}  ${DIM}       machine, not in any installer log.${NC}                       │"
 echo -e "${BOLD}${CYAN}└────────────────────────────────────────────────────────────┘${NC}"
+echo ""
+
+[ ${#FAILED[@]} -gt 0 ] && exit 1
+exit 0

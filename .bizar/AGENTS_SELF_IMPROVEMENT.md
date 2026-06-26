@@ -50,6 +50,18 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 ## Log
 
+### 2026-06-26: v3.20.10 — Comprehensive auto-installer + API provider backup keys
+- **Task**: Make `install.sh` a complete one-shot installer that fetches every system dep (uv, Python 3.12, chrome-headless-shell, jq, browser-harness, BizarHarness npm packages, mod registry) + write install-state.json for migrations. Add `backupApiKey` slot per provider + `backupEnvKeys` env var detection. Fix pre-existing "patch without apiKey loses the stored key" bug.
+- **Approach**: One Odin turn. Rewrote install.sh (535 lines) as a comprehensive auto-installer with single status banner — no manual next steps, no API key collection, no opencode reload hint. Added `preserveOrReplace()` helper to providers-store so `update()` keeps the stored apiKey when the patch omits it. Added 14 tests covering the backup-keys contract.
+- **Lessons learned**:
+  - **Installer should never collect secrets.** Asking for API keys during install breaks CI / scripted deployments and leaks secrets into installer logs. The user can configure keys via `/connect` after install. The installer's job is "files + processes + chrome + skills"; secrets are the user's responsibility on their machine.
+  - **`unmask(stored, undefined) === undefined` is a footgun.** When a form re-submits with the masked `***short***` placeholder, the existing `unmask()` correctly preserves the stored value. But when the patch omits the field entirely, `unmask` returns `undefined` — losing the stored key on every partial-update. The fix: short-circuit undefined to keep the stored value, since "field not in patch" semantically means "don't touch this field". The `preserveOrReplace()` helper makes this explicit.
+  - **Backup keys, not automatic rotation.** Some "smart" APIs auto-failover between keys. opencode doesn't — it uses one key per provider. So `backupApiKey` is a manual swap, not a rotation: the operator sees both keys in the dashboard, and if the primary hits a rate limit, they edit opencode.json to swap them. The dashboard UI shows both with their respective status / source so the swap is one click.
+  - **MiniMax accepts 3 backup envKeys.** ANTHROPIC_API_KEY already serves as a fallback for MiniMax's Anthropic-format API (per providers-detect.mjs). For backup, MINIMAX_API_KEY_BACKUP, MINIMAX_BACKUP_API_KEY, and ANTHROPIC_API_KEY_BACKUP are all conventional. The naming-convention check accepts both `_API_KEY_BACKUP` and `_BACKUP_API_KEY` so the test doesn't lock out either spelling.
+- **Files changed**: `install.sh` (rewritten, 535 lines), `bizar-dash/src/server/providers-store.mjs` (+282 / -197), `bizar-dash/tests/providers-store-backup-keys.node.test.mjs` (new, 14 tests), `package.json` (test script entry).
+- **Agents used**: Odin (direct; task tool still broken in this env).
+- **Published**: nothing yet — per user request, devbox was cleaned and committed locally for clean-slate test before push.
+
 ### 2026-06-26: v3.20.8 — Remove agent-browser (superseded by browser-harness)
 - **Task**: Uninstall `agent-browser` npm package + scrub every `agent_browser_*` reference from shipped config and the user's installed config. The browser-harness Python tool (v3.20.7) is now the canonical browser-automation path.
 - **Approach**: One Odin turn. `npm uninstall -g agent-browser` first (package + bin shim), then sweep 4 source files + sync to 2 user-installed mirrors + add a drift test that points at the violating files.
