@@ -1,0 +1,147 @@
+# Feature: Mod upgrade flow
+
+**Status:** `[STATUS:shipped]` · **Author:** `drb0rk` · **Created:** `2026-06-26T10:30:00.000Z`
+
+> [INFO]
+> v3.20.5 ships the **mod upgrade flow** as a first-class mod lifecycle operation.
+> Before this, `bizar mod install <id>` from the registry would refuse if the
+> mod was already on disk (the loader raised "already installed"). Users had to
+> manually uninstall, then install — losing any local edits to the mod's
+> `agents/` / `commands/` files. The upgrade flow composes the existing
+> `uninstall` + `installFromRegistry` primitives, with optional backup +
+> rollback for safety.
+
+## Problem
+
+Before v3.20.5:
+
+- The registry card on the Mods page showed a green `Installed` badge but no
+  way to upgrade. Users who wanted the latest graphify 1.2.0 had to:
+  1. Uninstall graphify (loses the opencode-config copies of its agents).
+  2. Run `bizar mod install graphify` again.
+  3. Hope nothing broke in the re-install.
+- The CLI had `bizar mod upgrade <id>` in concept but no implementation.
+- The dashboard's Upgrade button called the install endpoint and silently
+  failed with "already installed" — the user clicked it, nothing happened.
+
+After v3.20.5, `bizar mod upgrade <id> [--backup]` is wired end-to-end:
+
+1. Reads the existing mod's version (for the report).
+2. Optionally backs up the folder to `~/.config/bizar/mods/.backup/<id>-<ts>/`.
+3. Uninstalls the existing copy (also removes its opencode-config instructions).
+4. Installs the latest from the registry.
+5. Re-installs the new mod's instruction files into opencode config.
+6. Returns `{ from, to, backupPath, mod }` for the dashboard's toast.
+
+If the install step fails, the backup is restored and the user is left with
+the original mod intact.
+
+## Goals
+
+- [x] Provide an end-to-end upgrade path that preserves user customizations via backup
+- [x] Wire the existing Upgrade button on the Mods registry card (was calling the install endpoint)
+- [x] Add a `bizar mod upgrade <id>` CLI subcommand that proxies the dashboard HTTP API
+- [x] Roll back from the backup if the new install fails
+- [x] Cover with tests in `bizar-dash/tests/mod-upgrade.node.test.mjs`
+
+## Non-goals
+
+- Atomic cross-process upgrade (we don't lock the mod folder; a concurrent
+  install/uninstall race is left to the user to avoid).
+- Automatic version-checking on dashboard boot (the registry card already
+  shows the upgrade badge — no polling needed).
+- Telemetry on upgrade failures (logged to the existing mod audit log).
+
+## Design
+
+The implementation composes three existing loader primitives:
+
+```js
+async upgradeFromRegistry(id, { url, backup = false } = {}) {
+  const dir = join(MODS_DIR, id);
+  const existing = existsSync(dir) ? this.get(id) : null;
+  if (!existing) throw new Error(`mod "${id}" is not installed`);
+
+  let backupPath = null;
+  if (backup) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    backupPath = join(BIZAR_HOME, 'mods', '.backup', `${id}-${stamp}`);
+    cpSync(dir, backupPath, { recursive: true });
+  }
+
+  this.uninstall(id);  // also removes opencode-config copies
+
+  let installed;
+  try {
+    installed = await this.installFromRegistry(id, { url });
+  } catch (err) {
+    if (backupPath) {
+      mkdirSync(dir, { recursive: true });
+      cpSync(backupPath, dir, { recursive: true });
+      installModInstructions(id, dir);  // re-apply instructions
+    }
+    throw err;
+  }
+
+  return { from: existing.version, to: installed.version, backupPath, mod: installed };
+}
+```
+
+### HTTP surface
+
+`POST /api/mods/:id/upgrade` with optional body `{ backup: boolean, url?: string }`.
+
+Returns 200 with `{ ok, from, to, backupPath, mod }` on success, 404 if the mod
+is not installed (distinct from the generic 500 install_failed), or 500 with
+`error: 'upgrade_failed'` on transport / registry errors.
+
+### CLI surface
+
+```bash
+bizar mod upgrade graphify              # upgrade to latest from registry
+bizar mod upgrade graphify --backup     # backup ~/.config/bizar/mods/.backup/graphify-<ts>/
+bizar mod upgrade my-mod --url <file:///path>  # upgrade from a local URL override
+```
+
+### Tradeoffs
+
+| Option | Pros | Cons |
+|--------|------|------|
+| A: Composition (uninstall + install) | Reuses audited primitives; no drift between upgrade and install | Two filesystem mutations; brief window where mod is absent |
+| B: In-place patch | Single mutation, no missing-mod window | Re-implements install logic → drift risk |
+| C: Symlink swap | Atomic | Requires the mod folder layout to support symlinks; breaks the file integrity hash |
+
+We chose **Option A** because the mod's absence window is < 100ms (typical) and
+the composition keeps the install/upgrade code paths in lockstep. If the new
+install fails, the backup restores the original. Tests verify both happy and
+rollback paths.
+
+## Files affected
+
+- `bizar-dash/src/server/mods-loader.mjs` — added `upgradeFromRegistry()`
+- `bizar-dash/src/server/routes/mods.mjs` — added `POST /api/mods/:id/upgrade`
+- `bizar-dash/src/web/views/Mods.tsx` — split registry card actions into Install / Upgrade / Installed; added `onUpgradeFromRegistry()` handler
+- `cli/bin.mjs` — added `bizar mod <install|upgrade|list|registry>` subcommand
+- `bizar-dash/tests/mod-upgrade.node.test.mjs` (new) — 10 tests
+- `package.json` — added the test to the `test` script
+
+## Edge cases
+
+- **Empty registry**: if the registry is unreachable, `installFromRegistry`
+  throws and the backup is restored. The user sees the original error.
+- **Backup directory exists**: timestamps use ISO 8601 with `:` and `.`
+  replaced by `-`, so collisions are practically impossible.
+- **Permissions**: the backup uses `cpSync({ recursive: true })` which
+  preserves permissions. The restore does the same.
+
+## Verification
+
+- [x] 10 new tests in `mod-upgrade.node.test.mjs` (all pass)
+- [x] Existing 31 tests still pass (path-safe, tmux-wrap, opencode-runner, mod-instructions, graphify-mod-spawn)
+- [x] Typecheck clean (only pre-existing baseline errors remain)
+- [x] Smoke-v2: 7/7 passing
+
+## Related
+
+- `.bizar/AGENTS_SELF_IMPROVEMENT.md` — entry for v3.20.5 (notes composition pattern)
+- `CHANGELOG.md` — release notes

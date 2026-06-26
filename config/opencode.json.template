@@ -203,9 +203,9 @@
       }
     },
     "vidarr": {
-      "description": "Vidarr — Ultimate fallback via GPT-5.5.",
+      "description": "Vidarr — Ultimate fallback via MiniMax M3.",
       "mode": "subagent",
-      "model": "openai/gpt-5.5",
+      "model": "minimax/MiniMax-M3",
       "color": "#dc2626",
       "permission": {
         "read": "allow",
@@ -235,6 +235,23 @@
         "question": "allow",
         "webfetch": "allow",
         "websearch": "allow"
+      }
+    },
+    "browser-harness": {
+      "description": "browser-harness — Primary agent for browser-driven E2E verification. No-edit permissions. Drives Chrome via CDP for end-to-end testing of web apps.",
+      "mode": "primary",
+      "model": "minimax/MiniMax-M2.7",
+      "color": "#84cc16",
+      "permission": {
+        "read": "allow",
+        "bash": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "edit": "deny",
+        "write": "deny"
       }
     },
     "semble-search": {

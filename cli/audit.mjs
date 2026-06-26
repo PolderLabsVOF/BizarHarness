@@ -80,7 +80,6 @@ export async function runAudit() {
         'opencode/deepseek-v4-flash-free',
         'minimax/MiniMax-M2.7',
         'minimax/MiniMax-M3',
-        'openai/gpt-5.5',
       ];
       if (!validModels.includes(model)) {
         warnings.push({ path, severity: 'WARN', msg: `Unknown model: ${model}` });

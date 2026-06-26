@@ -195,7 +195,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 ### Vidarr
 
-- **Model**: `openai/gpt-5.5` (via OpenAI ChatGPT subscription)
+- **Model**: `minimax/MiniMax-M3` (via MiniMax (direct), reasoning enabled)
 - **Use for**: The ultimate fallback — when Tyr stalls, debugging is stuck, or novel insight is needed
 - **Cost**: Highest — use very sparingly, last resort only
 

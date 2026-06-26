@@ -189,6 +189,30 @@ else
   echo -e "    ${YELLOW}⚠${NC} No opencode.json template found — skipping config"
 fi
 
+# ── Optional: browser-harness (Python via uv) ──────────────────────
+# Used by the browser-harness Bizar agent for browser-driven E2E
+# verification. Install is opt-in (some users prefer agent-browser MCP).
+echo -e "  ${GREEN}→${NC} Checking browser-harness (Python via uv)..."
+if command -v browser-harness &>/dev/null; then
+  echo -e "    ${GREEN}✓${NC} browser-harness $(browser-harness --version 2>&1 | head -1)"
+else
+  if command -v uv &>/dev/null && command -v python3.12 &>/dev/null; then
+    echo -e "    ${CYAN}→${NC} Installing browser-harness via uv (Python 3.12)..."
+    if uv tool install --python 3.12 --upgrade --force browser-harness &>/dev/null; then
+      echo -e "    ${GREEN}✓${NC} browser-harness installed"
+      # Register the skill to the opencode skills dir.
+      SKILL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/browser-harness"
+      mkdir -p "$SKILL_DIR"
+      browser-harness skill > "$SKILL_DIR/SKILL.md"
+      echo -e "    ${GREEN}✓${NC} skill registered at $SKILL_DIR/SKILL.md"
+    else
+      echo -e "    ${YELLOW}⚠${NC} browser-harness install failed (run manually: uv tool install --python 3.12 --upgrade --force browser-harness)"
+    fi
+  else
+    echo -e "    ${YELLOW}⚠${NC} browser-harness: uv or python3.12 not found — skip (install manually: uv tool install --python 3.12 browser-harness)"
+  fi
+fi
+
 # ── Post-install instructions ──────────────────────────────────────
 echo ""
 echo -e "${BOLD}${CYAN}┌────────────────────────────────────────────────────────────┐${NC}"
@@ -209,7 +233,7 @@ echo -e "${BOLD}${CYAN}│${NC}                                                 
 echo -e "${BOLD}${CYAN}│${NC}  3. Run ${BOLD}/connect${NC} to add API keys:                                │"
 echo -e "${BOLD}${CYAN}│${NC}     → OpenCode Zen (DeepSeek V4 Flash Free)                 │"
 echo -e "${BOLD}${CYAN}│${NC}     → minimax.io (MiniMax M2.7 + M3)                        │"
-echo -e "${BOLD}${CYAN}│${NC}     → OpenAI ChatGPT (GPT-5.5)                              │"
+echo -e "${BOLD}${CYAN}│${NC}     → OpenAI / opencode-zen (optional, non-default agents)   │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
 echo -e "${BOLD}${CYAN}│${NC}  4. Verify with ${BOLD}/models${NC}                                          │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
@@ -220,7 +244,7 @@ echo -e "${BOLD}${CYAN}│${NC}  Heimdall ᚹ  DeepSeek Flash Free  Free (mechan
 echo -e "${BOLD}${CYAN}│${NC}  Hermod   ᚱ  MiniMax-M2.7           \$0.30/\$1.20 (git ops)      │"
 echo -e "${BOLD}${CYAN}│${NC}  Thor     ᚦ  MiniMax-M2.7           \$0.30/\$1.20 (medium)       │"
 echo -e "${BOLD}${CYAN}│${NC}  Tyr      ᛏ  MiniMax-M3             Highest (complex work)      │"
-echo -e "${BOLD}${CYAN}│${NC}  Vidarr   ᛉ  GPT-5.5                Highest (last resort)       │"
+echo -e "${BOLD}${CYAN}│${NC}  Vidarr   ᛉ  MiniMax-M3             Highest (last resort)       │"
 echo -e "${BOLD}${CYAN}│${NC}  Forseti  ᚨ  MiniMax-M3 (audit)     Highest (plan review)       │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
 echo -e "${BOLD}${CYAN}└────────────────────────────────────────────────────────────┘${NC}"

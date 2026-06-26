@@ -1,7 +1,7 @@
 ---
 description: browser-harness — Primary agent for browser-driven E2E verification. No-edit permissions. Drives Chromium via CDP for end-to-end testing of web apps.
 mode: primary
-model: minimax/MiniMax-M2.7
+model: openrouter/minimax/minimax-m2.7
 color: "#84cc16"
 permission:
   read: allow

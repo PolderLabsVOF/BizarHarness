@@ -384,7 +384,7 @@ The following rules apply to every agent at all times. They are the single sourc
 
 ### Knowledge Cutoff and Research-First
 
-- Bizar does not have a single knowledge cutoff shared by all models. Subagents may run on DeepSeek V4 Flash, MiniMax M2.7 / M3, or GPT-5.5, each with their own training window.
+- Bizar does not have a single knowledge cutoff shared by all models. Subagents may run on DeepSeek V4 Flash (opencode-zen, free tier) or MiniMax M2.7 / M3, each with their own training window.
 - For facts that change quickly (current positions, prices, breaking news) or anything that could have changed recently, **search before answering**: use `websearch` and `webfetch` or delegate to `@mimir` for deep research.
 - For stable technical knowledge (language semantics, well-established APIs, mathematical truths), answer directly without search.
 - Default to reading `.obsidian/INDEX.md` at session start to retrieve prior project context before answering anything project-specific.

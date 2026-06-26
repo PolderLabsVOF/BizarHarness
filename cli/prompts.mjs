@@ -10,7 +10,7 @@ const AGENTS_LIST = [
   { name: 'Thor ᚦ  — MiniMax-M2.7 (Mid impl.)', value: 'thor.md', checked: true },
   { name: 'Baldr ᛒ  — MiniMax-M2.7 (Design)', value: 'baldr.md', checked: true },
   { name: 'Tyr ᛏ  — MiniMax-M3 (Complex impl.)', value: 'tyr.md', checked: true },
-  { name: 'Vidarr ᛉ — GPT-5.5 (Last resort)', value: 'vidarr.md', checked: false },
+  { name: 'Vidarr ᛉ — MiniMax-M3 (Last resort)', value: 'vidarr.md', checked: false },
   { name: 'Forseti ᚨ — MiniMax-M3 (Plan audit)', value: 'forseti.md', checked: true },
 ];
 
@@ -102,7 +102,7 @@ export async function promptApiKeys() {
     {
       type: 'password',
       name: 'openai',
-      message: 'OpenAI API key (GPT-5.5 — optional for Vidarr):',
+      message: 'OpenAI / opencode-zen API key (optional — for non-default agents):',
       mask: '*',
     },
     {

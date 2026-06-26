@@ -85,7 +85,8 @@ function showHelp() {
     update              Auto-update everything (opencode + bizar + dash + plugin)
     service             Manage the background service daemon
     bg <subcommand>     Manage background agents (list/view/kill/logs)
-    dash <subcommand>   Manage the dashboard (start/stop/status/tui)
+    dash <subcommand>   Manage the dashboard (start/stop/status/cleanup/tui)
+    browser-harness-up  Start Chromium for browser-harness (start/stop/status/restart)
     dev-link [src]      Symlink the local plugin source into opencode's plugin dir
     dev-unlink          Remove the dev symlink and restore the deployed copy
     doctor              Check the BizarHarness install for health issues
@@ -454,6 +455,7 @@ function showDashHelp() {
     start [--bg] [--port N]   Start the dashboard (default port 4321)
     stop                       Stop the running dashboard
     status                     Show dashboard port and URL
+    cleanup                    Find + kill zombie/orphan dashboards
     tui [--no-web]             Launch the TUI
 
   Options:
@@ -662,6 +664,23 @@ async function main() {
     // v3.11.1 — Background agent manager (list / view / kill / logs).
     const { runBg } = await import('./bg.mjs');
     await runBg(args[1], args.slice(2));
+  } else if (args[0] === 'browser-harness-up') {
+    // v3.20.7 — Browser-harness daemon: start / stop / status / restart
+    // Chromium with remote debugging so the browser-harness Python tool
+    // (from https://github.com/browser-use/browser-harness) can connect.
+    const { execFileSync } = await import('node:child_process');
+    const sub = args[1] || 'start';
+    const scriptPath = join(import.meta.dirname || process.cwd(), 'browser-harness-up.sh');
+    try {
+      const out = execFileSync('bash', [scriptPath, sub], {
+        encoding: 'utf8',
+        stdio: 'inherit',
+      });
+      if (out) process.stdout.write(out);
+    } catch (err) {
+      console.error(chalk.red(`  ✗ browser-harness-up ${sub} failed (exit ${err.status ?? 1})`));
+      process.exit(err.status || 1);
+    }
   } else if (args[0] === 'providers' && args[1] === 'detect') {
     // v3.16.0 — Auto-detect provider API keys from env + opencode.json.
     const { runProvidersDetect } = await import('./providers-detect.mjs');
@@ -783,6 +802,11 @@ async function runDash(dashArgs) {
       break;
     case 'status':
       await dashModule.status(subOpts);
+      break;
+    case 'cleanup':
+      // v3.20.7 — Find + kill zombie/orphan dashboards.
+      // Pass through --force and --kill flags to the dash module.
+      await dashModule.cleanup(subOpts);
       break;
     case 'tui':
       await dashModule.tui(subOpts);

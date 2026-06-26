@@ -1,7 +1,7 @@
 ---
-description: Vidarr — The ultimate fallback using GPT-5.5. For the hardest problems when Tyr stalls, debugging is stuck, or novel insight is needed. Use sparingly — highest cost.
+description: Vidarr — The ultimate fallback via MiniMax M3. For the hardest problems when Tyr stalls, debugging is stuck, or novel insight is needed. Use sparingly — highest cost.
 mode: subagent
-model: openai/gpt-5.5
+model: minimax/MiniMax-M3
 color: "#0ea5e9"
 permission:
   read: allow
