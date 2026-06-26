@@ -39,7 +39,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 
 const GRAPH_DIR_NAME = '.bizar/graph';
 const GRAPHIFY_OUT_ENV = 'GRAPHIFY_OUT';
@@ -225,7 +225,9 @@ async function runBuild(projectRoot, broadcast, jobId) {
   // Step 2: graphify extract
   log('[build] Running graphify extract...');
   const extractArgs = ['.'];
-  let code = runGraphify(['extract', ...extractArgs], projectRoot, graphDir);
+  // v1.2.1 — runGraphify is async + stdio-isolated; passing broadcast so
+  // the dashboard's existing log-streaming UI still gets live updates.
+  let code = await runGraphify(['extract', ...extractArgs], projectRoot, graphDir, {}, broadcast);
 
   // Step 3: offline cache fallback
   if (code !== 0 && !llmKeyPresent) {
@@ -247,9 +249,9 @@ async function runBuild(projectRoot, broadcast, jobId) {
       log('[fallback] No AST cache — populating with dummy-key graphify run');
       // Run graphify with a dummy key to populate the AST cache; semantic
       // step will fail but the per-file JSON we need is written.
-      runGraphify(['.'], projectRoot, graphDir, {
+      await runGraphify(['.'], projectRoot, graphDir, {
         ANTHROPIC_API_KEY: 'sk-bizar-graph-dummy',
-      });
+      }, broadcast);
     }
 
     // Reconstruct graph.json from cache
@@ -277,10 +279,12 @@ async function runBuild(projectRoot, broadcast, jobId) {
     const graphJson = path.join(graphDir, 'graph.json');
     if (fs.existsSync(graphJson)) {
       log('[cluster] Running cluster-only to generate graph.html + GRAPH_REPORT.md');
-      const clusterCode = runGraphify(
+      const clusterCode = await runGraphify(
         ['cluster-only', '.', '--graph', graphJson],
         projectRoot,
         graphDir,
+        {},
+        broadcast,
       );
       if (clusterCode !== 0) {
         log(`[cluster] ⚠ cluster-only returned ${clusterCode} — graph.json built but graph.html may be stale`);
@@ -305,27 +309,109 @@ async function runBuild(projectRoot, broadcast, jobId) {
  * Resolve and invoke the graphify CLI. Tries the bare `graphify` binary
  * first (the uv-tool shim lives on PATH), falls back to `python3 -m graphify`
  * for pip/pipx installs.
+ *
+ * v1.2.1 — Important: this used to call sync-spawn with stdio inheritance.
+ * That worked for the user's terminal, but the dashboard is launched as a
+ * background daemon with stdin=/dev/null and stdout/stderr redirected to a
+ * log file. With `stdio: 'inherit'`, the graphify child inherits those
+ * descriptors; if anything closes or rotates them mid-build, the child
+ * receives SIGPIPE and the kernel delivers the signal to the dashboard
+ * process — silently killing it. We've seen this take down the dashboard
+ * with no warning.
+ *
+ * The fix:
+ *   1. Use async `spawn` (not sync-spawn) so the dashboard's event loop
+ *      is never blocked, even on a multi-minute build.
+ *   2. Use `stdio: ['ignore', 'pipe', 'pipe']` so the child's stdio is
+ *      fully isolated from the dashboard's. No file descriptor is shared,
+ *      no SIGPIPE can propagate.
+ *   3. Forward each line of the child's stdout to `broadcast` so the
+ *      dashboard's existing log-streaming UI keeps working.
+ *   4. Resolve the binary with `which` via a separate (very short) sync
+ *      call — kept sync because it returns immediately and is wrapped in
+ *      try/catch.
  */
-function runGraphify(subArgs, cwd, graphDir, extraEnv = {}) {
+function resolveGraphifyBin() {
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    const out = execFileSync(whichCmd, ['graphify'], { encoding: 'utf8', timeout: 5000 }).trim();
+    if (out) return 'graphify';
+  } catch { /* fall through to python3 */ }
+  return null;
+}
+
+async function runGraphify(subArgs, cwd, graphDir, extraEnv = {}, broadcast = null) {
   const env = {
     ...process.env,
     [GRAPHIFY_OUT_ENV]: graphDir,
     ...extraEnv,
   };
-  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
-  let bin = null;
-  try {
-    const r = spawnSync(whichCmd, ['graphify'], { encoding: 'utf8', timeout: 5000 });
-    if (r.status === 0 && (r.stdout || '').trim().length > 0) bin = 'graphify';
-  } catch { /* fall through */ }
 
+  let bin = resolveGraphifyBin();
+  let cmd;
+  let args;
   if (bin) {
-    const result = spawnSync(bin, subArgs, { stdio: 'inherit', env, timeout: 0, cwd });
-    return result.status ?? 1;
+    cmd = bin;
+    args = subArgs;
+  } else {
+    const py = process.platform === 'win32' ? 'python' : 'python3';
+    cmd = py;
+    args = ['-m', 'graphify', ...subArgs];
   }
-  const py = process.platform === 'win32' ? 'python' : 'python3';
-  const result = spawnSync(py, ['-m', 'graphify', ...subArgs], { stdio: 'inherit', env, timeout: 0, cwd });
-  return result.status ?? 1;
+
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(cmd, args, {
+        cwd,
+        env,
+        // CRITICAL: isolate the child's stdio from the dashboard process.
+        // 'inherit' was the crash bug — replaced with piped + ignored stdin.
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (err) {
+      if (broadcast) broadcast({ type: 'graphify:build:log', line: `[spawn error] ${err.message}` });
+      resolve(1);
+      return;
+    }
+
+    // Buffer stdout/stderr line-by-line so the dashboard's log-streaming UI
+    // gets clean lines instead of arbitrary chunks. graphify prints both
+    // progress lines and warnings; we forward everything from both streams.
+    const lineEmitter = (stream, label) => {
+      let buf = '';
+      stream.setEncoding('utf8');
+      stream.on('data', (chunk) => {
+        buf += chunk;
+        let nl;
+        while ((nl = buf.indexOf('\n')) !== -1) {
+          const line = buf.slice(0, nl);
+          buf = buf.slice(nl + 1);
+          if (broadcast) broadcast({ type: 'graphify:build:log', line: label ? `${label} ${line}` : line });
+        }
+      });
+      stream.on('end', () => {
+        if (buf.length > 0 && broadcast) {
+          broadcast({ type: 'graphify:build:log', line: label ? `${label} ${buf}` : buf });
+        }
+      });
+    };
+    lineEmitter(child.stdout, '');
+    lineEmitter(child.stderr, '[stderr]');
+
+    child.on('error', (err) => {
+      if (broadcast) broadcast({ type: 'graphify:build:log', line: `[spawn error] ${err.message}` });
+      resolve(1);
+    });
+    child.on('close', (code, signal) => {
+      if (signal) {
+        if (broadcast) broadcast({ type: 'graphify:build:log', line: `[exit] killed by signal ${signal}` });
+        resolve(1);
+      } else {
+        resolve(code ?? 1);
+      }
+    });
+  });
 }
 
 // ── Mod router registration ─────────────────────────────────────────────
