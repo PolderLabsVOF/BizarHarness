@@ -62,7 +62,7 @@
       "permission": {
         "read": "allow",
         "list": "allow",
-        "question": "allow",,
+        "question": "allow"
       }
     },
     "frigg": {
@@ -77,7 +77,7 @@
         "grep": "allow",
         "bash": "allow",
         "webfetch": "allow",
-        "websearch": "allow",,,
+        "websearch": "allow",
         "question": "allow"
       }
     },
