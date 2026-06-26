@@ -11,16 +11,6 @@
       "url": "https://mcp.supabase.com/mcp",
       "enabled": false
     },
-    "hindsight": {
-      "type": "remote",
-      "url": "https://memory-api.polderlabs.io/mcp",
-      "enabled": false,
-      "oauth": false,
-      "headers": {
-        "Authorization": "Bearer __HINDSIGHT_BEARER_TOKEN__",
-        "Content-Type": "application/json"
-      }
-    },
     "semble": {
       "type": "local",
       "command": [
@@ -72,9 +62,7 @@
       "permission": {
         "read": "allow",
         "list": "allow",
-        "question": "allow",
-        "hindsight_recall": "allow",
-        "hindsight_retain": "allow"
+        "question": "allow",,
       }
     },
     "frigg": {
@@ -89,9 +77,7 @@
         "grep": "allow",
         "bash": "allow",
         "webfetch": "allow",
-        "websearch": "allow",
-        "hindsight_recall": "allow",
-        "hindsight_retain": "allow",
+        "websearch": "allow",,,
         "question": "allow"
       }
     },

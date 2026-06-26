@@ -715,7 +715,7 @@ export async function launchTui(opts = {}) {
     if (!slug.trim()) return;
     const title = (await prompt(screen, ' Plan title ')) || slug;
     try {
-      await api.post('/api/plans', { slug: slug.trim(), title: title.trim() });
+      await api.post('/api/artifacts', { slug: slug.trim(), title: title.trim() });
       toast(screen, `Plan "${slug}" created.`, { color: 'green' });
       loadSnapshot();
     } catch (err) {

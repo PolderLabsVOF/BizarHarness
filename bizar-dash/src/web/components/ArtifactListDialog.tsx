@@ -1,25 +1,25 @@
-// src/components/PlanListDialog.tsx — Dialog for /plan list command.
+// src/components/ArtifactListDialog.tsx — Dialog for /plan list command.
 
 import { Button } from './Button';
 
-type PlanListDialogProps = {
+type ArtifactListDialogProps = {
   data?: Record<string, unknown>;
   onClose: () => void;
 };
 
-export function PlanListDialog({ data, onClose }: PlanListDialogProps) {
+export function ArtifactListDialog({ data, onClose }: ArtifactListDialogProps) {
   const plans = (data?.plans as string[]) ?? [];
   const count = (data?.count as number) ?? plans.length;
 
   const handleOpen = (slug: string) => {
-    window.open(`/plans/${slug}/`, '_blank');
+    window.open(`/artifacts/${slug}/`, '_blank');
   };
 
   return (
     <div>
       {plans.length === 0 ? (
         <p style={{ marginBottom: 16, color: 'var(--color-muted)' }}>
-          No plans found in this worktree. Use <code>/plan new &lt;slug&gt;</code> to create one.
+          No plans found in this worktree. Use <code>/artifact new &lt;slug&gt;</code> to create one.
         </p>
       ) : (
         <div style={{ marginBottom: 16 }}>

@@ -1,15 +1,15 @@
 /**
- * bizar plan <subcommand>
+ * bizar artifact <subcommand>
  *
  * Subcommands:
- *   new <slug>                 Create a new plan
+ *   new <slug>                 Create a new artifact
  *                              Flags: --template <name> | --template <path>
- *   open <slug>                Open an existing plan in the browser
- *   list                       List all plans
- *   delete <slug>              Delete a plan (with confirmation)
- *   export <slug>              Export plan.mdx to stdout
- *   templates                  List available plan templates
- *   template save <name> <plan-slug>   Save a plan as a library template
+ *   open <slug>                Open an existing artifact in the browser
+ *   list                       List all artifacts
+ *   delete <slug>              Delete a artifact (with confirmation)
+ *   export <slug>              Export artifact.mdx to stdout
+ *   templates                  List available artifact templates
+ *   template save <name> <artifact-slug>   Save a artifact as a library template
  *   template delete <name>     Delete a user-added library template
  *   help                       Show this help
  *
@@ -44,12 +44,12 @@ import {
   buildVars,
   saveTemplate as saveTemplateToLibrary,
   deleteTemplate as deleteLibraryTemplate,
-} from './plan-templates.mjs';
+} from './artifact-templates.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
-const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'plan');
-const PLANS_DIR = join(PROJECT_ROOT, 'plans');
+const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'artifact');
+const PLANS_DIR = join(PROJECT_ROOT, 'artifacts');
 const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
 
 // ─── Flag parsing ────────────────────────────────────────────────────────────
@@ -165,14 +165,14 @@ function readPlanFile(slug, filename) {
 
 /**
  * The current canvas schema. v2 introduces elements, connections, viewport,
- * and threaded comments. The single source of truth for new plans.
+ * and threaded comments. The single source of truth for new artifacts.
  */
 const CANVAS_SCHEMA_VERSION = 2;
 
 function emptyCanvas(title) {
   return {
     schemaVersion: CANVAS_SCHEMA_VERSION,
-    title: title || 'Untitled plan',
+    title: title || 'Untitled artifact',
     elements: [],
     connections: [],
     comments: [],
@@ -181,7 +181,7 @@ function emptyCanvas(title) {
 }
 
 function readCanvasFile(planDir) {
-  const path = join(planDir, 'plan.json');
+  const path = join(planDir, 'artifact.json');
   if (!existsSync(path)) return null;
   try {
     return JSON.parse(readFileSync(path, 'utf-8'));
@@ -191,13 +191,13 @@ function readCanvasFile(planDir) {
 }
 
 function writeCanvasFile(planDir, canvas) {
-  atomicWriteJson(join(planDir, 'plan.json'), canvas);
+  atomicWriteJson(join(planDir, 'artifact.json'), canvas);
 }
 
 /**
- * Migration shim: if a v1 plan (plan.mdx) exists but no plan.json, build
+ * Migration shim: if a v1 artifact (artifact.mdx) exists but no artifact.json, build
  * a v2 canvas with the mdx content as a single "text" element on the
- * canvas. Idempotent — won't overwrite an existing plan.json.
+ * canvas. Idempotent — won't overwrite an existing artifact.json.
  *
  * Returns the resulting canvas.
  */
@@ -211,12 +211,12 @@ function loadOrMigrateCanvas(planDir, fallbackTitle) {
     if (!existing.viewport || typeof existing.viewport !== 'object') {
       existing.viewport = { x: 0, y: 0, zoom: 1 };
     }
-    if (typeof existing.title !== 'string') existing.title = fallbackTitle || 'Untitled plan';
+    if (typeof existing.title !== 'string') existing.title = fallbackTitle || 'Untitled artifact';
     if (existing.schemaVersion !== CANVAS_SCHEMA_VERSION) existing.schemaVersion = CANVAS_SCHEMA_VERSION;
     return existing;
   }
 
-  const mdxPath = join(planDir, 'plan.mdx');
+  const mdxPath = join(planDir, 'artifact.mdx');
   if (existsSync(mdxPath)) {
     const mdx = readFileSync(mdxPath, 'utf-8');
     // If the mdx is empty or just whitespace, return a blank canvas.
@@ -242,7 +242,7 @@ function loadOrMigrateCanvas(planDir, fallbackTitle) {
     return canvas;
   }
 
-  // No plan.json and no plan.mdx — start fresh.
+  // No artifact.json and no artifact.mdx — start fresh.
   const c = emptyCanvas(fallbackTitle);
   writeCanvasFile(planDir, c);
   return c;
@@ -252,7 +252,7 @@ function loadOrMigrateCanvas(planDir, fallbackTitle) {
  * Convert a v2 canvas state to a derived markdown document.
  * Used by:
  *   - the /api/<slug>/markdown-export endpoint
- *   - the `bizar plan export` subcommand (for backwards compat)
+ *   - the `bizar artifact export` subcommand (for backwards compat)
  *
  * Strategy: emit each element as a section, in a stable order (top-to-bottom
  * by y, then left-to-right by x). Connections are not represented in the
@@ -260,7 +260,7 @@ function loadOrMigrateCanvas(planDir, fallbackTitle) {
  */
 function canvasToMarkdown(canvas) {
   const lines = [];
-  const title = (canvas && canvas.title) || 'Untitled plan';
+  const title = (canvas && canvas.title) || 'Untitled artifact';
   lines.push('# ' + title);
   lines.push('');
   lines.push('*Exported from canvas on ' + new Date().toISOString() + '*');
@@ -373,8 +373,8 @@ function makeReplyId() {
   return 'r_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-/** Best-effort read of plans/<slug>/meta.json. Returns null on missing or
- *  invalid JSON. Used by the canvas endpoints to surface the plan title. */
+/** Best-effort read of artifacts/<slug>/meta.json. Returns null on missing or
+ *  invalid JSON. Used by the canvas endpoints to surface the artifact title. */
 function readPlanMeta(planDir) {
   const metaPath = join(planDir, 'meta.json');
   if (!existsSync(metaPath)) return null;
@@ -388,8 +388,8 @@ function readPlanMeta(planDir) {
 // ─── new <slug> flow ─────────────────────────────────────────────────────────
 
 /**
- * Resolve the content for a new plan from the template system.
- * - If template is the string "blank" or null → use plan.mdx.template (the v1 default)
+ * Resolve the content for a new artifact from the template system.
+ * - If template is the string "blank" or null → use artifact.mdx.template (the v1 default)
  * - If template is a built-in name (feature-design, etc.) → use that template
  * - If template is an absolute path to a .mdx file → use that file
  * - Otherwise → throw with a helpful error
@@ -398,7 +398,7 @@ function readPlanMeta(planDir) {
  */
 async function resolveTemplateContent(template, vars) {
   if (template == null || template === '' || template === 'blank') {
-    const tpl = await readTemplate('plan.mdx.template');
+    const tpl = await readTemplate('artifact.mdx.template');
     return { content: replaceTemplate(tpl, vars), templateName: 'blank', source: 'built-in' };
   }
 
@@ -429,14 +429,14 @@ async function resolveTemplateContent(template, vars) {
 
   if (tpl.content == null) {
     // "blank" via getTemplate — same as the default branch
-    const blankTpl = await readTemplate('plan.mdx.template');
+    const blankTpl = await readTemplate('artifact.mdx.template');
     return { content: replaceTemplate(blankTpl, vars), templateName: 'blank', source: 'built-in' };
   }
 
   return { content: substitute(tpl.content, vars), templateName: tpl.name, source: tpl.source };
 }
 
-async function createPlan(slug, { template = null } = {}) {
+async function createArtifact(slug, { template = null } = {}) {
   const planDir = join(PLANS_DIR, slug);
 
   // Step 1: validate
@@ -444,8 +444,8 @@ async function createPlan(slug, { template = null } = {}) {
 
   // Step 2: check existence
   if (existsSync(planDir)) {
-    console.error(`  ✗ Plan "${slug}" already exists at ${planDir}`);
-    console.error(`    Use "bizar plan open ${slug}" to open it.`);
+    console.error(`  ✗ Artifact "${slug}" already exists at ${planDir}`);
+    console.error(`    Use "bizar artifact open ${slug}" to open it.`);
     return false;
   }
 
@@ -464,7 +464,7 @@ async function createPlan(slug, { template = null } = {}) {
     lastEdited: now,
   };
 
-  // Step 5: plan.mdx (from template if --template was given)
+  // Step 5: artifact.mdx (from template if --template was given)
   let mdxContent;
   let templateName = 'blank';
   try {
@@ -473,11 +473,11 @@ async function createPlan(slug, { template = null } = {}) {
     templateName = resolved.templateName;
   } catch (err) {
     console.error(`  ✗ ${err.message}`);
-    // Clean up the empty plan directory we just created
+    // Clean up the empty artifact directory we just created
     rmSync(planDir, { recursive: true, force: true });
     return false;
   }
-  writePlanFile(slug, 'plan.mdx', mdxContent);
+  writePlanFile(slug, 'artifact.mdx', mdxContent);
 
   // Step 6: meta.json
   const metaTemplate = await readTemplate('meta.json.template');
@@ -487,10 +487,10 @@ async function createPlan(slug, { template = null } = {}) {
   // Step 7: comments.json (stored as empty array for comments)
   writePlanFile(slug, 'comments.json', JSON.stringify([], null, 2));
 
-  // Step 8: plan.html (regenerate from template)
+  // Step 8: artifact.html (regenerate from template)
   await regenerateHtml(slug);
 
-  console.log(`  ✓ Created plan "${title}" (slug: ${slug})`);
+  console.log(`  ✓ Created artifact "${title}" (slug: ${slug})`);
   if (templateName !== 'blank') {
     console.log(`    Template: ${templateName}`);
   }
@@ -506,23 +506,23 @@ export async function regenerateHtml(slug) {
   if (!existsSync(planDir)) return;
 
   // Prefer the v2 canvas template. Fall back to the v1 template (kept for
-  // backwards compat with plans that don't have plan.json).
+  // backwards compat with artifacts that don't have artifact.json).
   let htmlTemplate;
-  let templateName = 'plan.html.template';
+  let templateName = 'artifact.html.template';
   try {
-    htmlTemplate = await readTemplate('plan.canvas.template');
-    templateName = 'plan.canvas.template';
+    htmlTemplate = await readTemplate('artifact.canvas.template');
+    templateName = 'artifact.canvas.template';
   } catch {
     try {
-      htmlTemplate = await readTemplate('plan.html.template');
-      templateName = 'plan.html.template';
+      htmlTemplate = await readTemplate('artifact.html.template');
+      templateName = 'artifact.html.template';
     } catch {
       // No HTML template yet — Tyr is working on it in parallel
       return;
     }
   }
 
-  const planMdx = readFileSync(join(planDir, 'plan.mdx'), 'utf-8');
+  const planMdx = readFileSync(join(planDir, 'artifact.mdx'), 'utf-8');
   const metaJson = readFileSync(join(planDir, 'meta.json'), 'utf-8');
   const commentsJson = readFileSync(join(planDir, 'comments.json'), 'utf-8');
 
@@ -559,18 +559,18 @@ export async function regenerateHtml(slug) {
   };
 
   const htmlContent = replaceTemplate(htmlTemplate, vars);
-  atomicWriteText(join(planDir, 'plan.html'), htmlContent);
+  atomicWriteText(join(planDir, 'artifact.html'), htmlContent);
 }
 
 // ─── open <slug> flow ────────────────────────────────────────────────────────
 
-async function openPlan(slug) {
+async function openArtifact(slug) {
   if (!validateSlug(slug)) return false;
 
   const planDir = join(PLANS_DIR, slug);
   if (!existsSync(planDir)) {
-    console.error(`  ✗ Plan "${slug}" not found at ${planDir}`);
-    console.error(`    Use "bizar plan new ${slug}" to create it.`);
+    console.error(`  ✗ Artifact "${slug}" not found at ${planDir}`);
+    console.error(`    Use "bizar artifact new ${slug}" to create it.`);
     return false;
   }
 
@@ -581,7 +581,7 @@ async function openPlan(slug) {
   const { port, close } = await startServer(slug, planDir);
 
   const url = `http://localhost:${port}/${slug}/`;
-  console.log(`  ✓ Opening plan "${slug}" at ${url}`);
+  console.log(`  ✓ Opening artifact "${slug}" at ${url}`);
   openBrowser(url);
 
   // Keep process alive until Ctrl-C
@@ -594,7 +594,7 @@ async function openPlan(slug) {
 
 async function listPlans() {
   if (!existsSync(PLANS_DIR)) {
-    console.log('  No plans found. Run `bizar plan new <slug>` to create one.');
+    console.log('  No artifacts found. Run `bizar artifact new <slug>` to create one.');
     return true;
   }
 
@@ -603,34 +603,34 @@ async function listPlans() {
   });
 
   if (dirs.length === 0) {
-    console.log('  No plans found. Run `bizar plan new <slug>` to create one.');
+    console.log('  No artifacts found. Run `bizar artifact new <slug>` to create one.');
     return true;
   }
 
   // Read meta for each
-  const plans = [];
+  const artifacts = [];
   for (const dir of dirs) {
     try {
       const meta = JSON.parse(readFileSync(join(PLANS_DIR, dir, 'meta.json'), 'utf-8'));
-      plans.push(meta);
+      artifacts.push(meta);
     } catch {
       // Skip invalid meta.json
     }
   }
 
   // Sort by lastEdited newest first
-  plans.sort((a, b) => new Date(b.lastEdited) - new Date(a.lastEdited));
+  artifacts.sort((a, b) => new Date(b.lastEdited) - new Date(a.lastEdited));
 
   // Print table
   console.log('  Slug            Title                   Status    Last Edited              Author');
   console.log('  ──────────────  ──────────────────────  ────────  ────────────────────────  ───────────────');
 
-  for (const plan of plans) {
-    const slug = (plan.slug || '').padEnd(15);
-    const title = (plan.title || '').substring(0, 23).padEnd(23);
-    const status = (plan.status || 'draft').padEnd(9);
-    const lastEdited = (plan.lastEdited || '').substring(0, 27).padEnd(27);
-    const author = (plan.author || 'unknown').substring(0, 20);
+  for (const artifact of artifacts) {
+    const slug = (artifact.slug || '').padEnd(15);
+    const title = (artifact.title || '').substring(0, 23).padEnd(23);
+    const status = (artifact.status || 'draft').padEnd(9);
+    const lastEdited = (artifact.lastEdited || '').substring(0, 27).padEnd(27);
+    const author = (artifact.author || 'unknown').substring(0, 20);
     console.log(`  ${slug}  ${title}  ${status}  ${lastEdited}  ${author}`);
   }
   console.log();
@@ -640,12 +640,12 @@ async function listPlans() {
 
 // ─── delete <slug> flow ─────────────────────────────────────────────────────
 
-async function deletePlan(slug) {
+async function deleteArtifact(slug) {
   if (!validateSlug(slug)) return false;
 
   const planDir = join(PLANS_DIR, slug);
   if (!existsSync(planDir)) {
-    console.error(`  ✗ Plan "${slug}" not found.`);
+    console.error(`  ✗ Artifact "${slug}" not found.`);
     return false;
   }
 
@@ -656,11 +656,11 @@ async function deletePlan(slug) {
   } catch { /* use slug as fallback */ }
 
   // Read confirm from stdin
-  const answer = await question(`  Delete plan "${title}" (slug: ${slug})? This is irreversible. [y/N] `);
+  const answer = await question(`  Delete artifact "${title}" (slug: ${slug})? This is irreversible. [y/N] `);
 
   if (answer.trim().toLowerCase() === 'y') {
     rmSync(planDir, { recursive: true });
-    console.log(`  ✓ Deleted plan "${slug}".`);
+    console.log(`  ✓ Deleted artifact "${slug}".`);
     return true;
   } else {
     console.log('  Cancelled.');
@@ -670,18 +670,18 @@ async function deletePlan(slug) {
 
 // ─── export <slug> flow ──────────────────────────────────────────────────────
 
-async function exportPlan(slug) {
+async function exportArtifact(slug) {
   if (!validateSlug(slug)) return false;
 
   const planDir = join(PLANS_DIR, slug);
   if (!existsSync(planDir)) {
-    console.error(`  ✗ Plan "${slug}" not found.`);
+    console.error(`  ✗ Artifact "${slug}" not found.`);
     return false;
   }
 
-  // Prefer the v2 canvas-derived markdown when plan.json exists. Fall back
-  // to the raw mdx for v1 plans.
-  const canvasFile = join(planDir, 'plan.json');
+  // Prefer the v2 canvas-derived markdown when artifact.json exists. Fall back
+  // to the raw mdx for v1 artifacts.
+  const canvasFile = join(planDir, 'artifact.json');
   if (existsSync(canvasFile)) {
     try {
       const canvas = JSON.parse(readFileSync(canvasFile, 'utf-8'));
@@ -692,9 +692,9 @@ async function exportPlan(slug) {
     }
   }
 
-  const planFile = join(planDir, 'plan.mdx');
+  const planFile = join(planDir, 'artifact.mdx');
   if (!existsSync(planFile)) {
-    console.error(`  ✗ Plan "${slug}" not found.`);
+    console.error(`  ✗ Artifact "${slug}" not found.`);
     return false;
   }
 
@@ -707,22 +707,22 @@ async function exportPlan(slug) {
 
 function showHelp() {
   console.log(`
-  bizar plan <subcommand> [options]
+  bizar artifact <subcommand> [options]
 
   Subcommands:
-    new <slug> [--template <name>]   Create a new plan (default: blank template)
-    open <slug>                      Open an existing plan in the browser
-    list                             List all plans
-    delete <slug>                    Delete a plan (with confirmation)
-    export <slug>                    Export plan.mdx to stdout
-    templates                        List available plan templates
-    template save <name> <plan-slug> Save a plan as a library template
+    new <slug> [--template <name>]   Create a new artifact (default: blank template)
+    open <slug>                      Open an existing artifact in the browser
+    list                             List all artifacts
+    delete <slug>                    Delete a artifact (with confirmation)
+    export <slug>                    Export artifact.mdx to stdout
+    templates                        List available artifact templates
+    template save <name> <artifact-slug> Save a artifact as a library template
     template delete <name>           Delete a user-added library template
     help                             Show this help
 
-  Plans are stored in plans/<slug>/ as:
-    - plan.mdx         source content (in git)
-    - plan.html        viewer/editor (gitignored)
+  Plans are stored in artifacts/<slug>/ as:
+    - artifact.mdx         source content (in git)
+    - artifact.html        viewer/editor (gitignored)
     - comments.json    comments array (gitignored)
     - meta.json        metadata (in git)
 
@@ -733,13 +733,13 @@ function showHelp() {
     decision-record    Architecture Decision Record (ADR)
 
   Examples:
-    bizar plan new my-feature
-    bizar plan new auth-v2 --template feature-design
-    bizar plan new oops --template bug-investigation
-    bizar plan templates
-    bizar plan open my-feature
-    bizar plan list
-    bizar plan export my-feature > my-feature.mdx
+    bizar artifact new my-feature
+    bizar artifact new auth-v2 --template feature-design
+    bizar artifact new oops --template bug-investigation
+    bizar artifact templates
+    bizar artifact open my-feature
+    bizar artifact list
+    bizar artifact export my-feature > my-feature.mdx
   `);
 }
 
@@ -982,7 +982,7 @@ function renderCommentCountHtml(count) {
 /** Parse an HTTP request body. Supports:
  *   - application/x-www-form-urlencoded  (htmx default for <form>)
  *   - application/json                   (legacy / direct API)
- *   - text/plain                         (raw MDX for plan save)
+ *   - text/plain                         (raw MDX for artifact save)
  *   - anything else: returns raw string
  */
 function readRequestBody(req) {
@@ -1113,11 +1113,11 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
 
   try {
     if (pathname === `/${slug}/` || pathname === `/${slug}` || pathname === '/') {
-      // Serve plan.html
-      const htmlPath = join(planDir, 'plan.html');
+      // Serve artifact.html
+      const htmlPath = join(planDir, 'artifact.html');
       if (!existsSync(htmlPath)) {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('plan.html not found. Run `bizar plan new ${slug}` first.');
+        res.end('artifact.html not found. Run `bizar artifact new ${slug}` first.');
         return;
       }
       const html = readFileSync(htmlPath, 'utf-8');
@@ -1126,12 +1126,12 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       return;
     }
 
-    // ── Self-hosted htmx — served from templates/plan/htmx.min.js ────────────
+    // ── Self-hosted htmx — served from templates/artifact/htmx.min.js ────────────
     if (pathname === '/htmx.min.js' && req.method === 'GET') {
       const htmxPath = join(TEMPLATES_DIR, 'htmx.min.js');
       if (!existsSync(htmxPath)) {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('htmx.min.js not found in templates/plan/');
+        res.end('htmx.min.js not found in templates/artifact/');
         return;
       }
       const buf = readFileSync(htmxPath);
@@ -1144,14 +1144,14 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
     }
 
     // ── New RESTful, slug-scoped routes (preferred for htmx) ─────────────────
-    //   GET    /api/<slug>/plan         → MDX text/plain
-    //   PUT    /api/<slug>/plan         → save MDX, returns empty 200
+    //   GET    /api/<slug>/artifact         → MDX text/plain
+    //   PUT    /api/<slug>/artifact         → save MDX, returns empty 200
     //   GET    /api/<slug>/comments     → JSON (default) or HTML (?format=html or ?sectionId=)
     //   POST   /api/<slug>/comments     → add a comment, returns the new <li> HTML
     //   PUT    /api/<slug>/comments     → replace the whole comments array (JSON)
     //   GET    /api/<slug>/count        → comment count for a section (?sectionId=)
     // We validate the slug in the URL against the bound slug so the server can't
-    // be tricked into serving data for a different plan.
+    // be tricked into serving data for a different artifact.
 
     if (pathname.startsWith('/api/') && pathname.split('/').length >= 4) {
       const parts = pathname.split('/').filter(Boolean); // ['api', '<urlSlug>', '<resource>']
@@ -1160,7 +1160,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
 
       if (urlSlug !== slug) {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
-        res.end(`Forbidden: this server is bound to plan "${slug}"`);
+        res.end(`Forbidden: this server is bound to artifact "${slug}"`);
         return;
       }
 
@@ -1238,7 +1238,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
         if (!next.viewport || typeof next.viewport !== 'object') {
           next.viewport = { x: 0, y: 0, zoom: 1 };
         }
-        if (typeof next.title !== 'string') next.title = 'Untitled plan';
+        if (typeof next.title !== 'string') next.title = 'Untitled artifact';
         next.schemaVersion = CANVAS_SCHEMA_VERSION;
         writeCanvasFile(planDir, next);
         bumpLastEdited(planDir);
@@ -1503,7 +1503,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       }
 
       // POST /api/<slug>/comments
-      //   v2 path (canvas): JSON body with text + x/y/elementId, writes to plan.json
+      //   v2 path (canvas): JSON body with text + x/y/elementId, writes to artifact.json
       //   v1 path (legacy): body has sectionId (form OR JSON), writes to comments.json
       //   v1 returns HTML <li>; v2 returns JSON.
       // We dispatch on body shape: if sectionId is present, it's v1.
@@ -1654,23 +1654,23 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       }
 
       // ── v1 routes (legacy, kept for backwards compat) ───────────────
-      //   GET  /api/<slug>/plan         → MDX text/plain
-      //   PUT  /api/<slug>/plan         → save MDX
+      //   GET  /api/<slug>/artifact         → MDX text/plain
+      //   PUT  /api/<slug>/artifact         → save MDX
       //   GET  /api/<slug>/comments     → JSON (default) or HTML (?format=html)
       //   POST /api/<slug>/comments     → add a v1 comment (form data with sectionId)
       //   PUT  /api/<slug>/comments     → replace the whole v1 array (JSON)
       //   GET  /api/<slug>/count        → comment count for a section
 
-      // GET /api/<slug>/plan
-      if (resource === 'plan' && req.method === 'GET') {
-        const mdx = readFileSync(join(planDir, 'plan.mdx'), 'utf-8');
+      // GET /api/<slug>/artifact
+      if (resource === 'artifact' && req.method === 'GET') {
+        const mdx = readFileSync(join(planDir, 'artifact.mdx'), 'utf-8');
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(mdx);
         return;
       }
 
-      // PUT /api/<slug>/plan
-      if (resource === 'plan' && req.method === 'PUT') {
+      // PUT /api/<slug>/artifact
+      if (resource === 'artifact' && req.method === 'PUT') {
         const parsed = await readRequestBody(req);
         const content = parsed.kind === 'form' ? (parsed.data.content || '') : parsed.data;
         if (typeof content !== 'string') {
@@ -1679,7 +1679,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
           return;
         }
         try {
-          atomicWriteText(join(planDir, 'plan.mdx'), content);
+          atomicWriteText(join(planDir, 'artifact.mdx'), content);
           bumpLastEdited(planDir);
           res.writeHead(200, { 'Content-Type': 'text/plain' });
           res.end('saved');
@@ -1713,7 +1713,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
 
       // (v1 POST /api/<slug>/comments is now handled by the merged v2/v1
       //  handler above, which dispatches on body shape — sectionId → v1
-      //  writes to comments.json; otherwise v2 writes to plan.json.)
+      //  writes to comments.json; otherwise v2 writes to artifact.json.)
 
       // PUT /api/<slug>/comments  → v1: replace the whole array (JSON body)
       if (resource === 'comments' && req.method === 'PUT') {
@@ -1753,19 +1753,19 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
       //  the /api/<slug>/comments routes that didn't match a v2 discriminator.)
     }
 
-    if (pathname === '/api/plan' && req.method === 'GET') {
-      const mdx = readFileSync(join(planDir, 'plan.mdx'), 'utf-8');
+    if (pathname === '/api/artifact' && req.method === 'GET') {
+      const mdx = readFileSync(join(planDir, 'artifact.mdx'), 'utf-8');
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(mdx);
       return;
     }
 
-    if (pathname === '/api/plan' && req.method === 'PUT') {
+    if (pathname === '/api/artifact' && req.method === 'PUT') {
       let body = '';
       req.on('data', (chunk) => { body += chunk; });
       req.on('end', () => {
         try {
-          atomicWriteText(join(planDir, 'plan.mdx'), body);
+          atomicWriteText(join(planDir, 'artifact.mdx'), body);
           // Update lastEdited in meta.json
           const meta = JSON.parse(readFileSync(join(planDir, 'meta.json'), 'utf-8'));
           meta.lastEdited = new Date().toISOString();
@@ -1837,13 +1837,13 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
 
     if (pathname === '/api/regenerate' && req.method === 'POST') {
       try {
-        // Read current plan.mdx and regenerate HTML
-        const planMdx = readFileSync(join(planDir, 'plan.mdx'), 'utf-8');
+        // Read current artifact.mdx and regenerate HTML
+        const planMdx = readFileSync(join(planDir, 'artifact.mdx'), 'utf-8');
         const metaJson = readFileSync(join(planDir, 'meta.json'), 'utf-8');
         const commentsJson = readFileSync(join(planDir, 'comments.json'), 'utf-8');
         const meta = JSON.parse(metaJson);
 
-        const planHtmlTemplate = readFileSync(join(TEMPLATES_DIR, 'plan.html.template'), 'utf-8');
+        const planHtmlTemplate = readFileSync(join(TEMPLATES_DIR, 'artifact.html.template'), 'utf-8');
         const planJson = JSON.stringify(planMdx);
 
         const vars = {
@@ -1862,7 +1862,7 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
         for (const [key, value] of Object.entries(vars)) {
           htmlContent = htmlContent.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
         }
-        atomicWriteText(join(planDir, 'plan.html'), htmlContent);
+        atomicWriteText(join(planDir, 'artifact.html'), htmlContent);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -1960,11 +1960,11 @@ function waitForSignal(closeFn) {
  *   delete <slug>
  *   export <slug>
  *   templates
- *   template save <name> <plan-slug>
+ *   template save <name> <artifact-slug>
  *   template delete <name>
  *   help
  */
-export async function runPlan(argsOrPositional, legacyFlags) {
+export async function runArtifact(argsOrPositional, legacyFlags) {
   // Normalize the input — accept either a flat argv array (current bin.mjs
   // style) or an already-parsed { positional, flags } object (test style).
   let positional;
@@ -1981,14 +1981,14 @@ export async function runPlan(argsOrPositional, legacyFlags) {
     flags = legacyFlags || {};
   }
 
-  // Special-case: "template save <name> <plan-slug>" / "template delete <name>"
+  // Special-case: "template save <name> <artifact-slug>" / "template delete <name>"
   if (positional[0] === 'template') {
     const action = positional[1];
     if (action === 'save') {
       const name = positional[2];
       const planSlug = positional[3];
       if (!name || !planSlug) {
-        console.error('  ✗ Usage: bizar plan template save <name> <plan-slug>');
+        console.error('  ✗ Usage: bizar artifact template save <name> <artifact-slug>');
         return false;
       }
       try {
@@ -2003,7 +2003,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
     if (action === 'delete' || action === 'rm') {
       const name = positional[2];
       if (!name) {
-        console.error('  ✗ Usage: bizar plan template delete <name>');
+        console.error('  ✗ Usage: bizar artifact template delete <name>');
         return false;
       }
       try {
@@ -2020,7 +2020,7 @@ export async function runPlan(argsOrPositional, legacyFlags) {
       return true;
     }
     console.error(`  ✗ Unknown template action: "${action}"`);
-    console.error('    Use: save <name> <plan-slug>, delete <name>, or list');
+    console.error('    Use: save <name> <artifact-slug>, delete <name>, or list');
     return false;
   }
 
@@ -2029,21 +2029,21 @@ export async function runPlan(argsOrPositional, legacyFlags) {
   switch (subcommand) {
     case 'new': {
       if (!slug) {
-        console.error('  ✗ Usage: bizar plan new <slug> [--template <name>]');
+        console.error('  ✗ Usage: bizar artifact new <slug> [--template <name>]');
         return false;
       }
-      const created = await createPlan(slug, { template: flags.template || null });
+      const created = await createArtifact(slug, { template: flags.template || null });
       if (!created) return false;
       // Start server and open browser
-      return await openPlan(slug);
+      return await openArtifact(slug);
     }
 
     case 'open': {
       if (!slug) {
-        console.error('  ✗ Usage: bizar plan open <slug>');
+        console.error('  ✗ Usage: bizar artifact open <slug>');
         return false;
       }
-      return await openPlan(slug);
+      return await openArtifact(slug);
     }
 
     case 'list': {
@@ -2052,18 +2052,18 @@ export async function runPlan(argsOrPositional, legacyFlags) {
 
     case 'delete': {
       if (!slug) {
-        console.error('  ✗ Usage: bizar plan delete <slug>');
+        console.error('  ✗ Usage: bizar artifact delete <slug>');
         return false;
       }
-      return await deletePlan(slug);
+      return await deleteArtifact(slug);
     }
 
     case 'export': {
       if (!slug) {
-        console.error('  ✗ Usage: bizar plan export <slug>');
+        console.error('  ✗ Usage: bizar artifact export <slug>');
         return false;
       }
-      return await exportPlan(slug);
+      return await exportArtifact(slug);
     }
 
     case 'templates': {
@@ -2079,14 +2079,14 @@ export async function runPlan(argsOrPositional, legacyFlags) {
 
     default: {
       console.error(`  ✗ Unknown subcommand: "${subcommand}"`);
-      console.error(`    Run "bizar plan help" for usage.`);
+      console.error(`    Run "bizar artifact help" for usage.`);
       return false;
     }
   }
 }
 
 // Default export for CLI entrypoint
-export default runPlan;
+export default runArtifact;
 
 // Named exports for the v2 canvas helpers (used by tests and the AI tool).
 // These are the public surface of the canvas subsystem.

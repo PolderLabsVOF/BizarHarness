@@ -36,11 +36,12 @@ import { createSettingsRouter } from './routes/settings.mjs';
 import { createChatRouter } from './routes/chat.mjs';
 import { createDialogsRouter } from './routes/dialogs.mjs';
 import { createSkillsRouter } from './routes/skills.mjs';
+import { createObsidianRouter } from './routes/obsidian.mjs';
 import { createDiagnosticsRouter } from './routes/diagnostics.mjs';
 import { createPairRouter } from './routes/pair.mjs';
 import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
-import { createPlansRouter } from './routes/plans.mjs';
+import { createArtifactsRouter } from './routes/artifacts.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
 
 /**
@@ -93,11 +94,12 @@ export function createApiRouter({
   router.use(createChatRouter({ state, broadcast }));
   router.use(createDialogsRouter({ broadcast }));
   router.use(createSkillsRouter({ broadcast }));
+router.use(createObsidianRouter({ projectRoot }));
   router.use(createDiagnosticsRouter());
   router.use(createPairRouter({ state, broadcast }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
-  router.use(createPlansRouter({ state, broadcast, projectRoot }));
+  router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

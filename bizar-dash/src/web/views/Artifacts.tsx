@@ -1,4 +1,4 @@
-// src/views/Plans.tsx — v3.1.0 plan editor with fullscreen canvas + floating controls.
+// src/views/Artifacts.tsx — v3.1.0 artifact editor with fullscreen canvas + floating controls.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -48,7 +48,7 @@ import type {
   CanvasComment,
   CanvasConnection,
   CanvasElement,
-  Plan,
+  Artifact,
   Settings,
   Snapshot,
 } from '../lib/types';
@@ -100,34 +100,34 @@ function ElementIcon({ type, size = 12 }: { type: string; size?: number }) {
 
 // ── List view ──────────────────────────────────────────────────────────
 
-export function Plans({ snapshot, refreshSnapshot }: Props) {
+export function Artifacts({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
-  const [plans, setPlans] = useState<Plan[]>(snapshot.plans || []);
-  const [loading, setLoading] = useState(!snapshot.plans);
+  const [artifacts, setPlans] = useState<Artifact[]>(snapshot.artifacts || []);
+  const [loading, setLoading] = useState(!snapshot.artifacts);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
-    if (snapshot.plans) {
-      setPlans(snapshot.plans);
+    if (snapshot.artifacts) {
+      setPlans(snapshot.artifacts);
       setLoading(false);
     }
-  }, [snapshot.plans]);
+  }, [snapshot.artifacts]);
 
   const reload = async () => {
     try {
-      const d = await api.get<{ plans: Plan[] }>('/plans');
-      setPlans(d.plans || []);
+      const d = await api.get<{ artifacts: Artifact[] }>('/artifacts');
+      setPlans(d.artifacts || []);
       setLoading(false);
     } catch (err) {
-      toast.error(`Plans load failed: ${(err as Error).message}`);
+      toast.error(`Artifacts load failed: ${(err as Error).message}`);
       setLoading(false);
     }
   };
 
   const filtered = useMemo(() => {
-    let out = plans;
+    let out = artifacts;
     if (filter) {
       const q = filter.toLowerCase();
       out = out.filter(
@@ -140,13 +140,13 @@ export function Plans({ snapshot, refreshSnapshot }: Props) {
       out = out.filter((p) => p.status !== 'archived');
     }
     return out;
-  }, [plans, filter, showArchived]);
+  }, [artifacts, filter, showArchived]);
 
   const onCreate = async (slug: string, title?: string) => {
     try {
-      const plan = await api.post<{ slug: string }>('/plans', { slug, title });
-      toast.success(`Plan "${plan.slug}" created.`);
-      setActiveSlug(plan.slug);
+      const artifact = await api.post<{ slug: string }>('/artifacts', { slug, title });
+      toast.success(`Artifact "${artifact.slug}" created.`);
+      setActiveSlug(artifact.slug);
       await reload();
     } catch (err) {
       toast.error(`Create failed: ${(err as Error).message}`);
@@ -154,10 +154,10 @@ export function Plans({ snapshot, refreshSnapshot }: Props) {
   };
 
   const onDelete = async (slug: string) => {
-    if (!confirm(`Delete plan "${slug}"? This removes the directory permanently.`)) return;
+    if (!confirm(`Delete artifact "${slug}"? This removes the directory permanently.`)) return;
     try {
-      await api.del(`/plans/${encodeURIComponent(slug)}`);
-      toast.success('Plan deleted.');
+      await api.del(`/artifacts/${encodeURIComponent(slug)}`);
+      toast.success('Artifact deleted.');
       if (activeSlug === slug) setActiveSlug(null);
       await reload();
     } catch (err) {
@@ -179,14 +179,14 @@ export function Plans({ snapshot, refreshSnapshot }: Props) {
   }
 
   return (
-    <div className="view view-plans">
+    <div className="view view-artifacts">
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
-            <MapIcon size={18} /> Plans ({plans.length})
+            <MapIcon size={18} /> Artifacts ({artifacts.length})
           </h2>
           <p className="view-subtitle">
-            Visual plans with elements, connections, and threaded comments.
+            Visual artifacts with elements, connections, and threaded comments.
           </p>
         </div>
         <div className="view-actions">
@@ -224,19 +224,19 @@ export function Plans({ snapshot, refreshSnapshot }: Props) {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<MapIcon size={32} />}
-          title={showArchived ? 'No plans' : 'No plans yet'}
+          title={showArchived ? 'No artifacts' : 'No artifacts yet'}
           message={
             showArchived
-              ? 'No plans match your filter (try Show archived off).'
+              ? 'No artifacts match your filter (try Show archived off).'
               : 'Create one above to get started.'
           }
         />
       ) : (
-        <div className="plans-grid">
+        <div className="artifacts-grid">
           {filtered.map((p) => (
             <PlanCard
               key={p.slug}
-              plan={p}
+              artifact={p}
               onOpen={() => setActiveSlug(p.slug)}
               onDelete={() => onDelete(p.slug)}
             />
@@ -251,13 +251,13 @@ function NewPlanCard({ onCreate }: { onCreate: (slug: string, title?: string) =>
   const [slug, setSlug] = useState('');
   const [title, setTitle] = useState('');
   return (
-    <Card className="new-plan">
+    <Card className="new-artifact">
       <CardTitle>
-        <Plus size={14} /> New plan
+        <Plus size={14} /> New artifact
       </CardTitle>
       <CardMeta>Slug must be lowercase, may contain hyphens, 1–64 chars.</CardMeta>
       <form
-        className="new-plan-form"
+        className="new-artifact-form"
         onSubmit={(e) => {
           e.preventDefault();
           if (!slug.trim()) return;
@@ -291,33 +291,33 @@ function NewPlanCard({ onCreate }: { onCreate: (slug: string, title?: string) =>
 }
 
 function PlanCard({
-  plan,
+  artifact,
   onOpen,
   onDelete,
 }: {
-  plan: Plan;
+  artifact: Artifact;
   onOpen: () => void;
   onDelete: () => void;
 }) {
-  const kind = planStatusKind(plan.status || 'draft');
+  const kind = planStatusKind(artifact.status || 'draft');
   return (
     <Card
       variant="elevated"
       interactive
-      className="plan-card"
+      className="artifact-card"
       onClick={onOpen}
     >
-      <div className="plan-card-head">
-        <div className="plan-card-title">{plan.title || plan.slug}</div>
-        <StatusBadge kind={kind}>{plan.status || 'draft'}</StatusBadge>
+      <div className="artifact-card-head">
+        <div className="artifact-card-title">{artifact.title || artifact.slug}</div>
+        <StatusBadge kind={kind}>{artifact.status || 'draft'}</StatusBadge>
       </div>
-      <div className="plan-card-slug mono">{plan.slug} · {plan.source}</div>
-      <div className="plan-card-meta">
-        {plan.elementCount != null && <span>{plan.elementCount} elements</span>}
-        {plan.commentCount != null && <span> · {plan.commentCount} comments</span>}
-        <span> · edited {formatRelative(plan.mtime)}</span>
+      <div className="artifact-card-slug mono">{artifact.slug} · {artifact.source}</div>
+      <div className="artifact-card-meta">
+        {artifact.elementCount != null && <span>{artifact.elementCount} elements</span>}
+        {artifact.commentCount != null && <span> · {artifact.commentCount} comments</span>}
+        <span> · edited {formatRelative(artifact.mtime)}</span>
       </div>
-      <div className="plan-card-actions">
+      <div className="artifact-card-actions">
         <Button variant="primary" size="sm" onClick={(e) => { e.stopPropagation(); onOpen(); }}>
           Open
           <ChevronRight size={12} />
@@ -330,7 +330,7 @@ function PlanCard({
   );
 }
 
-// ── Plan editor (fullscreen) ──────────────────────────────────────────
+// ── Artifact editor (fullscreen) ──────────────────────────────────────────
 
 function PlanEditor({
   slug,
@@ -367,13 +367,13 @@ function PlanEditor({
   const reload = async () => {
     setLoading(true);
     try {
-      const plan = await api.get<{ meta: { title: string; status: string; tags: string[]; description?: string }; canvas: Canvas }>(
-        `/plans/${encodeURIComponent(slug)}`,
+      const artifact = await api.get<{ meta: { title: string; status: string; tags: string[]; description?: string }; canvas: Canvas }>(
+        `/artifacts/${encodeURIComponent(slug)}`,
       );
-      setCanvas(plan.canvas);
-      setMeta(plan.meta);
+      setCanvas(artifact.canvas);
+      setMeta(artifact.meta);
     } catch (err) {
-      toast.error(`Could not load plan: ${(err as Error).message}`);
+      toast.error(`Could not load artifact: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -415,7 +415,7 @@ function PlanEditor({
   const addElement = async (body: { type: string; title: string; content: string; x: number; y: number }, position?: { x: number; y: number }) => {
     try {
       const payload = position ? { ...body, x: position.x, y: position.y } : body;
-      await api.post(`/plans/${encodeURIComponent(slug)}/elements`, payload);
+      await api.post(`/artifacts/${encodeURIComponent(slug)}/elements`, payload);
       await reload();
       toast.success('Element added.');
     } catch (err) {
@@ -425,7 +425,7 @@ function PlanEditor({
 
   const updateElement = async (id: string, body: Partial<CanvasElement>) => {
     try {
-      await api.put(`/plans/${encodeURIComponent(slug)}/elements/${encodeURIComponent(id)}`, body);
+      await api.put(`/artifacts/${encodeURIComponent(slug)}/elements/${encodeURIComponent(id)}`, body);
       await reload();
     } catch (err) {
       toast.error(`Update failed: ${(err as Error).message}`);
@@ -434,7 +434,7 @@ function PlanEditor({
 
   const deleteElement = async (id: string) => {
     try {
-      await api.del(`/plans/${encodeURIComponent(slug)}/elements/${encodeURIComponent(id)}`);
+      await api.del(`/artifacts/${encodeURIComponent(slug)}/elements/${encodeURIComponent(id)}`);
       if (selectedElId === id) setSelectedElId(null);
       await reload();
       toast.success('Element deleted.');
@@ -448,7 +448,7 @@ function PlanEditor({
     const el = canvas?.elements.find((e) => e.id === id);
     if (!el) return;
     try {
-      await api.post(`/plans/${encodeURIComponent(slug)}/elements`, {
+      await api.post(`/artifacts/${encodeURIComponent(slug)}/elements`, {
         type: el.type,
         title: el.title ? `${el.title} (copy)` : 'Untitled',
         content: el.content || '',
@@ -465,7 +465,7 @@ function PlanEditor({
   // v3.7.0 — Change element type
   const changeElementType = async (id: string, newType: string) => {
     try {
-      await api.put(`/plans/${encodeURIComponent(slug)}/elements/${encodeURIComponent(id)}`, { type: newType });
+      await api.put(`/artifacts/${encodeURIComponent(slug)}/elements/${encodeURIComponent(id)}`, { type: newType });
       await reload();
       toast.success(`Type changed to ${newType}.`);
     } catch (err) {
@@ -475,7 +475,7 @@ function PlanEditor({
 
   const addConnection = async (from: string, to: string, label?: string) => {
     try {
-      await api.post(`/plans/${encodeURIComponent(slug)}/connections`, { from, to, label });
+      await api.post(`/artifacts/${encodeURIComponent(slug)}/connections`, { from, to, label });
       await reload();
       toast.success('Connection added.');
     } catch (err) {
@@ -485,7 +485,7 @@ function PlanEditor({
 
   const deleteConnection = async (id: string) => {
     try {
-      await api.del(`/plans/${encodeURIComponent(slug)}/connections/${encodeURIComponent(id)}`);
+      await api.del(`/artifacts/${encodeURIComponent(slug)}/connections/${encodeURIComponent(id)}`);
       await reload();
     } catch (err) {
       toast.error(`Delete failed: ${(err as Error).message}`);
@@ -495,8 +495,8 @@ function PlanEditor({
   const addComment = async (text: string, elementId: string | null, worldPos?: { x: number; y: number }) => {
     try {
       const path = elementId
-        ? `/plans/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}/comments`
-        : `/plans/${encodeURIComponent(slug)}/comments`;
+        ? `/artifacts/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}/comments`
+        : `/artifacts/${encodeURIComponent(slug)}/comments`;
       const body: { text: string; elementId: string | null; x?: number; y?: number } = { text, elementId };
       if (worldPos) { body.x = worldPos.x; body.y = worldPos.y; }
       await api.post(path, body);
@@ -509,7 +509,7 @@ function PlanEditor({
 
   const deleteComment = async (cid: string) => {
     try {
-      await api.del(`/plans/${encodeURIComponent(slug)}/comments/${encodeURIComponent(cid)}`);
+      await api.del(`/artifacts/${encodeURIComponent(slug)}/comments/${encodeURIComponent(cid)}`);
       await reload();
     } catch (err) {
       toast.error(`Delete failed: ${(err as Error).message}`);
@@ -518,7 +518,7 @@ function PlanEditor({
 
   const updatePositions = async (positions: { id: string; x: number; y: number }[]) => {
     try {
-      await api.put(`/plans/${encodeURIComponent(slug)}/position`, { positions });
+      await api.put(`/artifacts/${encodeURIComponent(slug)}/position`, { positions });
     } catch (err) {
       // non-fatal
       console.warn('Position update failed', err);
@@ -532,10 +532,10 @@ function PlanEditor({
     let tagsEl: HTMLInputElement | null = null;
     let statusEl: HTMLSelectElement | null = null;
     modal.open({
-      title: 'Configure plan',
+      title: 'Configure artifact',
       width: 560,
       children: (
-        <div className="plan-config-form">
+        <div className="artifact-config-form">
           <label className="field-label">Title</label>
           <input ref={(el) => { titleEl = el; }} className="input" type="text" defaultValue={meta.title} />
           <label className="field-label">Description (markdown)</label>
@@ -558,14 +558,14 @@ function PlanEditor({
             onClick={async () => {
               try {
                 const tags = (tagsEl?.value || '').split(',').map((t) => t.trim()).filter(Boolean);
-                await api.put(`/plans/${encodeURIComponent(slug)}`, {
+                await api.put(`/artifacts/${encodeURIComponent(slug)}`, {
                   title: (titleEl?.value || '').trim() || meta.title,
                   description: descEl?.value || '',
                   tags,
                   status: statusEl?.value || meta.status,
                 });
                 await reload();
-                toast.success('Plan updated.');
+                toast.success('Artifact updated.');
                 modal.close();
               } catch (err) {
                 toast.error(`Save failed: ${(err as Error).message}`);
@@ -587,7 +587,7 @@ function PlanEditor({
       title: 'Add element',
       width: 520,
       children: (
-        <div className="plan-element-form">
+        <div className="artifact-element-form">
           <label className="field-label">Type</label>
           <select ref={(el) => { typeEl = el; }} className="select" defaultValue="task">
             {ELEMENT_TYPES.map((t) => (
@@ -645,7 +645,7 @@ function PlanEditor({
       children: (
         <div>
           <label className="field-label">Comment</label>
-          <textarea ref={(el) => { textEl = el; }} className="textarea" rows={4} placeholder="Comment for the whole plan…" autoFocus />
+          <textarea ref={(el) => { textEl = el; }} className="textarea" rows={4} placeholder="Comment for the whole artifact…" autoFocus />
         </div>
       ),
       footer: (
@@ -671,7 +671,7 @@ function PlanEditor({
 
   if (loading || !canvas || !meta) {
     return (
-      <div className="view view-plans view-plans-fullscreen">
+      <div className="view view-artifacts view-artifacts-fullscreen">
         <PlanEditorHeader
           slug={slug}
           meta={meta || { title: slug, status: 'draft', tags: [] }}
@@ -698,7 +698,7 @@ function PlanEditor({
     : canvas.comments;
 
   return (
-    <div className={cn('view view-plans view-plans-fullscreen', !fullscreen && 'view-plans-embedded')}>
+    <div className={cn('view view-artifacts view-artifacts-fullscreen', !fullscreen && 'view-artifacts-embedded')}>
       {!fullscreen && (
         <PlanEditorHeader
           slug={slug}
@@ -715,12 +715,12 @@ function PlanEditor({
         />
       )}
 
-        <div className="plans-body">
+        <div className="artifacts-body">
           {/* Canvas wrapper with floating controls */}
-          <div className="plan-canvas-wrapper">
+          <div className="artifact-canvas-wrapper">
             {fullscreen && (
-            <div className="plan-canvas-floating-controls">
-            <Button variant="ghost" size="sm" onClick={onBack} title="Back to plans list">
+            <div className="artifact-canvas-floating-controls">
+            <Button variant="ghost" size="sm" onClick={onBack} title="Back to artifacts list">
               <ArrowLeft size={14} /> Back
             </Button>
             <h3>{meta?.title || slug}</h3>
@@ -731,7 +731,7 @@ function PlanEditor({
             <Button variant="secondary" size="sm" onClick={() => onCanvasComment()}>
               <MessageCircle size={14} /> Comment
             </Button>
-            <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan" aria-label="Configure plan">
+            <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure artifact" aria-label="Configure artifact">
               <SettingsIcon size={14} />
             </Button>
             </div>
@@ -758,8 +758,8 @@ function PlanEditor({
                   { label: 'Add element', icon: Plus, onClick: () => onAddElement(worldPos) },
                   { label: 'Add comment', icon: MessageSquare, onClick: () => onCanvasComment(worldPos) },
                   { type: 'separator' },
-                  { label: 'Configure plan', icon: SettingsIcon, onClick: onConfigure },
-                  { label: 'Delete plan', icon: Trash2, onClick: onDelete },
+                  { label: 'Configure artifact', icon: SettingsIcon, onClick: onConfigure },
+                  { label: 'Delete artifact', icon: Trash2, onClick: onDelete },
                 ],
               });
             }}
@@ -839,18 +839,18 @@ function PlanEditorHeader({
 }) {
   const kind = planStatusKind(meta.status);
   return (
-    <header className="plans-editor-bar">
-      <div className="plans-editor-bar-left">
-        <Button variant="ghost" size="sm" onClick={onBack} title="Back to plans list">
+    <header className="artifacts-editor-bar">
+      <div className="artifacts-editor-bar-left">
+        <Button variant="ghost" size="sm" onClick={onBack} title="Back to artifacts list">
           <ArrowLeft size={14} /> Back
         </Button>
-        <div className="plans-editor-meta">
-          <span className="plans-editor-title">{meta.title || slug}</span>
-          <span className="plans-editor-slug mono">{slug}</span>
+        <div className="artifacts-editor-meta">
+          <span className="artifacts-editor-title">{meta.title || slug}</span>
+          <span className="artifacts-editor-slug mono">{slug}</span>
           <StatusBadge kind={kind}>{meta.status}</StatusBadge>
         </div>
       </div>
-      <div className="plans-editor-bar-right">
+      <div className="artifacts-editor-bar-right">
         <span className="muted text-sm">
           {counts.elements} element{counts.elements === 1 ? '' : 's'} · {counts.comments} comment{counts.comments === 1 ? '' : 's'}
         </span>
@@ -860,7 +860,7 @@ function PlanEditorHeader({
         <Button variant="secondary" size="sm" onClick={onCanvasComment}>
           <MessageCircle size={14} /> Comment
         </Button>
-        <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure plan" aria-label="Configure plan">
+        <Button variant="ghost" size="sm" onClick={onConfigure} title="Configure artifact" aria-label="Configure artifact">
           <SettingsIcon size={14} />
         </Button>
         <Button variant="ghost" size="sm" onClick={onRefresh} title="Refresh canvas" aria-label="Refresh canvas">
@@ -875,7 +875,7 @@ function PlanEditorHeader({
         >
           {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </Button>
-        <Button variant="ghost" size="sm" onClick={onDelete} title="Delete plan" aria-label="Delete plan">
+        <Button variant="ghost" size="sm" onClick={onDelete} title="Delete artifact" aria-label="Delete artifact">
           <Trash2 size={14} />
         </Button>
       </div>
@@ -898,7 +898,7 @@ function editElementInline(
     title: `Edit ${el.title || el.type}`,
     width: 520,
     children: (
-      <div className="plan-element-form">
+      <div className="artifact-element-form">
         <label className="field-label">Type</label>
         <select ref={(el2) => { typeEl = el2; }} className="select" defaultValue={el.type}>
           {ELEMENT_TYPES.map((t) => (
@@ -1163,7 +1163,7 @@ function CanvasViewport({
   };
 
   return (
-    <div className="plans-canvas-wrap">
+    <div className="artifacts-canvas-wrap">
       <div className="canvas-toolbar">
         <button type="button" className="icon-btn" title="Fit to view" aria-label="Fit canvas to view" onClick={fitToView}>
           <Maximize2 size={14} />
@@ -1362,7 +1362,7 @@ function ConnectionsLayer({
       style={{ left: bbox.minX - pad, top: bbox.minY - pad }}
     >
       <defs>
-        <marker id="plan-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <marker id="artifact-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
         </marker>
       </defs>
@@ -1378,7 +1378,7 @@ function ConnectionsLayer({
         const midY = (y1 + y2) / 2;
         return (
           <g key={c.id} className="canvas-connection" onClick={() => onDeleteConnection(c.id)}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--accent)" strokeWidth={1.5} markerEnd="url(#plan-arrow)" />
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--accent)" strokeWidth={1.5} markerEnd="url(#artifact-arrow)" />
             {c.label && (
               <text x={midX} y={midY} className="canvas-connection-label" textAnchor="middle">
                 {c.label}
@@ -1410,8 +1410,8 @@ function CommentsPanel({
 }) {
   const [text, setText] = useState('');
   return (
-    <aside className="plans-comments-panel">
-      <header className="plans-comments-panel-head">
+    <aside className="artifacts-comments-panel">
+      <header className="artifacts-comments-panel-head">
         <h3 className="card-title">
           <MessageCircle size={14} />
           {selectedElId ? 'Element comments' : 'Canvas comments'}
@@ -1420,17 +1420,17 @@ function CommentsPanel({
           <X size={14} />
         </button>
       </header>
-      <div className="plans-comments-panel-list">
+      <div className="artifacts-comments-panel-list">
         {comments.length === 0 ? (
           <p className="muted text-sm" style={{ padding: 'var(--space-4)' }}>
-            {selectedElId ? 'No comments on this element yet.' : 'No comments on this plan yet.'}
+            {selectedElId ? 'No comments on this element yet.' : 'No comments on this artifact yet.'}
           </p>
         ) : (
           comments.map((c) => (
-            <div key={c.id} className="plan-comment">
-              <div className="plan-comment-head">
-                <span className="plan-comment-author mono">{c.author}</span>
-                <span className="plan-comment-time tabular-nums muted">{formatRelative(c.created)}</span>
+            <div key={c.id} className="artifact-comment">
+              <div className="artifact-comment-head">
+                <span className="artifact-comment-author mono">{c.author}</span>
+                <span className="artifact-comment-time tabular-nums muted">{formatRelative(c.created)}</span>
                 <button
                   type="button"
                   className="icon-btn icon-btn-danger"
@@ -1441,13 +1441,13 @@ function CommentsPanel({
                   <Trash2 size={10} />
                 </button>
               </div>
-              <div className="plan-comment-text">{c.text}</div>
+              <div className="artifact-comment-text">{c.text}</div>
             </div>
           ))
         )}
       </div>
       <form
-        className="plans-comments-panel-form"
+        className="artifacts-comments-panel-form"
         onSubmit={(e) => {
           e.preventDefault();
           if (!text.trim()) return;

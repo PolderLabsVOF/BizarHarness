@@ -1,8 +1,8 @@
 /**
- * plan.mjs tests — uses Node's built-in node:test (Node 20+)
+ * artifact.mjs tests — uses Node's built-in node:test (Node 20+)
  * Tests: slug validation, new, list, delete, export, server routes
  *
- * Note: These tests import from plan.mjs directly, so they test internal
+ * Note: These tests import from artifact.mjs directly, so they test internal
  * functions via their named exports. The server runs in the test process
  * but is shut down after each test.
  */
@@ -20,25 +20,25 @@ import {
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Resolve plan.mjs from this test file's location
+// Resolve artifact.mjs from this test file's location
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
-const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'plan');
-const PLANS_DIR = join(PROJECT_ROOT, 'plans');
+const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'artifact');
+const PLANS_DIR = join(PROJECT_ROOT, 'artifacts');
 
-// ── Named imports from plan.mjs ──────────────────────────────────────────────
-const { runPlan, startServer, regenerateHtml } = await import('./plan.mjs');
+// ── Named imports from artifact.mjs ──────────────────────────────────────────────
+const { runPlan, startServer, regenerateHtml } = await import('./artifact.mjs');
 
 // Suppress MaxListenersWarning (each server adds SIGINT+SIGTERM listeners)
 process.setMaxListeners(64);
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
-/** Slug validation regex (mirrors plan.mjs) */
-// Must match plan.mjs SLUG_REGEX: ^[a-z0-9][a-z0-9-]{0,63}$
+/** Slug validation regex (mirrors artifact.mjs) */
+// Must match artifact.mjs SLUG_REGEX: ^[a-z0-9][a-z0-9-]{0,63}$
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-/** Create a temp plan directory for testing */
+/** Create a temp artifact directory for testing */
 function createTempPlan(slug, overrides = {}) {
   const planDir = join(PLANS_DIR, slug);
   mkdirSync(planDir, { recursive: true });
@@ -56,35 +56,35 @@ function createTempPlan(slug, overrides = {}) {
 
   writeFileSync(join(planDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
   const mdxContent = overrides.mdx || `# ${meta.title}\n\nContent here.\n`;
-  writeFileSync(join(planDir, 'plan.mdx'), mdxContent, 'utf-8');
+  writeFileSync(join(planDir, 'artifact.mdx'), mdxContent, 'utf-8');
   writeFileSync(
     join(planDir, 'comments.json'),
     overrides.comments || '[]',
     'utf-8'
   );
 
-  // Generate plan.html
-  const planMdx = readFileSync(join(planDir, 'plan.mdx'), 'utf-8');
+  // Generate artifact.html
+  const planMdx = readFileSync(join(planDir, 'artifact.mdx'), 'utf-8');
   const commentsJson = readFileSync(join(planDir, 'comments.json'), 'utf-8');
   const metaJson = readFileSync(join(planDir, 'meta.json'), 'utf-8');
   const planJson = JSON.stringify(planMdx);
   const htmlContent = `<!doctype html>
 <html>
-<head><title>${meta.title} — Bizar Plan</title></head>
+<head><title>${meta.title} — Bizar Artifact</title></head>
 <body>
 <header><h1>${meta.title}</h1></header>
 <main><pre>${planMdx.replace(/</g, '&lt;')}</pre></main>
 <script>
-const INITIAL_STATE = { plan: ${planJson}, comments: ${commentsJson}, meta: ${metaJson} };
+const INITIAL_STATE = { artifact: ${planJson}, comments: ${commentsJson}, meta: ${metaJson} };
 </script>
 </body>
 </html>`;
-  writeFileSync(join(planDir, 'plan.html'), htmlContent, 'utf-8');
+  writeFileSync(join(planDir, 'artifact.html'), htmlContent, 'utf-8');
 
   return planDir;
 }
 
-/** Clean up a temp plan */
+/** Clean up a temp artifact */
 function cleanupPlan(slug) {
   const planDir = join(PLANS_DIR, slug);
   if (existsSync(planDir)) rmSync(planDir, { recursive: true });
@@ -129,18 +129,18 @@ describe('Slug validation', () => {
 
 // ── createPlan / new flow tests ───────────────────────────────────────────────
 // Note: runPlan(['new', slug]) starts a blocking server so can't be tested directly.
-// The file creation is tested in 'Plan file creation' suite below.
+// The file creation is tested in 'Artifact file creation' suite below.
 // Slug validation is tested independently above.
 
 // Test createPlan by checking the files it creates
-describe('Plan file creation', () => {
+describe('Artifact file creation', () => {
   const TEST_SLUG = 'test-files-' + Date.now();
 
   afterEach(() => {
     cleanupPlan(TEST_SLUG);
   });
 
-  test('runPlan new creates plan.mdx, meta.json, comments.json', async () => {
+  test('runPlan new creates artifact.mdx, meta.json, comments.json', async () => {
     // We'll use a subprocess to run just the file creation part
     // For unit testing, we directly verify the file operations work
     mkdirSync(join(PLANS_DIR, TEST_SLUG), { recursive: true });
@@ -150,11 +150,11 @@ describe('Plan file creation', () => {
     const meta = { title, slug: TEST_SLUG, status: 'draft', author: 'tester', created: now, lastEdited: now };
 
     writeFileSync(join(PLANS_DIR, TEST_SLUG, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
-    writeFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.mdx'), `# ${title}\n\nTest content.\n`, 'utf-8');
+    writeFileSync(join(PLANS_DIR, TEST_SLUG, 'artifact.mdx'), `# ${title}\n\nTest content.\n`, 'utf-8');
     writeFileSync(join(PLANS_DIR, TEST_SLUG, 'comments.json'), '[]', 'utf-8');
 
     // Verify files
-    assert.equal(existsSync(join(PLANS_DIR, TEST_SLUG, 'plan.mdx')), true);
+    assert.equal(existsSync(join(PLANS_DIR, TEST_SLUG, 'artifact.mdx')), true);
     assert.equal(existsSync(join(PLANS_DIR, TEST_SLUG, 'meta.json')), true);
     assert.equal(existsSync(join(PLANS_DIR, TEST_SLUG, 'comments.json')), true);
 
@@ -184,7 +184,7 @@ describe('list flow', () => {
     cleanupPlan(SLUG2);
   });
 
-  test('reads plans directory and meta.json correctly', async () => {
+  test('reads artifacts directory and meta.json correctly', async () => {
     const planDir1 = join(PLANS_DIR, SLUG1);
     const planDir2 = join(PLANS_DIR, SLUG2);
 
@@ -206,17 +206,17 @@ describe('list flow', () => {
 // ── delete flow tests ────────────────────────────────────────────────────────
 
 describe('delete flow', () => {
-  const TEST_SLUG = 'test-delete-plan-' + Date.now();
+  const TEST_SLUG = 'test-delete-artifact-' + Date.now();
 
   beforeEach(() => {
-    createTempPlan(TEST_SLUG, { title: 'Delete Test Plan' });
+    createTempPlan(TEST_SLUG, { title: 'Delete Test Artifact' });
   });
 
   afterEach(() => {
     cleanupPlan(TEST_SLUG);
   });
 
-  test('removes plan directory', async () => {
+  test('removes artifact directory', async () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
     assert.equal(existsSync(planDir), true);
 
@@ -234,8 +234,8 @@ describe('delete flow', () => {
 // ── export flow tests ───────────────────────────────────────────────────────
 
 describe('export flow', () => {
-  const TEST_SLUG = 'test-export-plan-' + Date.now();
-  const EXPECTED_CONTENT = '# Export Test Plan\n\nSome content here.\n';
+  const TEST_SLUG = 'test-export-artifact-' + Date.now();
+  const EXPECTED_CONTENT = '# Export Test Artifact\n\nSome content here.\n';
 
   beforeEach(() => {
     createTempPlan(TEST_SLUG, { mdx: EXPECTED_CONTENT });
@@ -245,9 +245,9 @@ describe('export flow', () => {
     cleanupPlan(TEST_SLUG);
   });
 
-  test('reads plan.mdx content', async () => {
+  test('reads artifact.mdx content', async () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
-    const content = readFileSync(join(planDir, 'plan.mdx'), 'utf-8');
+    const content = readFileSync(join(planDir, 'artifact.mdx'), 'utf-8');
     assert.equal(content, EXPECTED_CONTENT);
   });
 });
@@ -265,14 +265,14 @@ describe('help flow', () => {
 // These start a real HTTP server on a random port and make actual requests.
 
 describe('Local HTTP server', () => {
-  const TEST_SLUG = 'test-server-plan-' + Date.now();
+  const TEST_SLUG = 'test-server-artifact-' + Date.now();
   let serverInfo;
   let baseUrl;
 
   beforeEach(async () => {
-    // Create a plan for the server to serve
+    // Create a artifact for the server to serve
     createTempPlan(TEST_SLUG, {
-      mdx: '# Test Server Plan\n\nServer test content.\n',
+      mdx: '# Test Server Artifact\n\nServer test content.\n',
       comments: JSON.stringify([
         {
           id: '1',
@@ -299,15 +299,15 @@ describe('Local HTTP server', () => {
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type').includes('text/html'), true);
     const html = await res.text();
-    assert.equal(html.includes('Test Server Plan'), true);
+    assert.equal(html.includes('Test Server Artifact'), true);
   });
 
-  test('GET /api/plan returns MDX', async () => {
-    const res = await fetch(`${baseUrl}/api/plan`);
+  test('GET /api/artifact returns MDX', async () => {
+    const res = await fetch(`${baseUrl}/api/artifact`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type').includes('text/plain'), true);
     const text = await res.text();
-    assert.equal(text.includes('Test Server Plan'), true);
+    assert.equal(text.includes('Test Server Artifact'), true);
   });
 
   test('GET /api/comments returns JSON', async () => {
@@ -320,9 +320,9 @@ describe('Local HTTP server', () => {
     assert.equal(comments.length > 0, true);
   });
 
-  test('PUT /api/plan saves MDX', async () => {
-    const newContent = '# Updated Plan\n\nUpdated content.\n';
-    const res = await fetch(`${baseUrl}/api/plan`, {
+  test('PUT /api/artifact saves MDX', async () => {
+    const newContent = '# Updated Artifact\n\nUpdated content.\n';
+    const res = await fetch(`${baseUrl}/api/artifact`, {
       method: 'PUT',
       body: newContent,
       headers: { 'Content-Type': 'text/plain' },
@@ -330,7 +330,7 @@ describe('Local HTTP server', () => {
     assert.equal(res.status, 200);
 
     // Verify file was updated
-    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.mdx'), 'utf-8');
+    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'artifact.mdx'), 'utf-8');
     assert.equal(saved, newContent);
   });
 
@@ -386,7 +386,7 @@ describe('Local HTTP server', () => {
   });
 
   test('CORS headers are set', async () => {
-    const res = await fetch(`${baseUrl}/api/plan`, { method: 'OPTIONS' });
+    const res = await fetch(`${baseUrl}/api/artifact`, { method: 'OPTIONS' });
     assert.equal(res.headers.get('access-control-allow-origin'), '*');
     assert.equal(
       res.headers.get('access-control-allow-methods').includes('GET'),
@@ -417,7 +417,7 @@ describe('Local HTTP server', () => {
 });
 
 // ── Template library tests ─────────────────────────────────────────────────────
-// Tests for plan-templates.mjs — getTemplate, getTemplateNames, printTemplates, etc.
+// Tests for artifact-templates.mjs — getTemplate, getTemplateNames, printTemplates, etc.
 
 import {
   getTemplate,
@@ -426,7 +426,7 @@ import {
   printTemplates,
   substitute,
   buildVars,
-} from './plan-templates.mjs';
+} from './artifact-templates.mjs';
 
 describe('Template library — getTemplate', () => {
   test('getTemplate("feature-design") returns content', () => {
@@ -568,7 +568,7 @@ describe('Template library — buildVars', () => {
     assert.ok(vars.author, 'author should be set');
     assert.ok(vars.created, 'created should be set');
     assert.ok(vars.lastEdited, 'lastEdited should be set');
-    assert.equal(vars.lastEdited, vars.created, 'created and lastEdited should match for a new plan');
+    assert.equal(vars.lastEdited, vars.created, 'created and lastEdited should match for a new artifact');
   });
 
   test('auto-generates title from slug when not provided', () => {
@@ -587,7 +587,7 @@ describe('Template library — template content via runPlan', () => {
   const TEST_SLUG = 'test-tpl-new-' + Date.now();
 
   afterEach(() => {
-    // Clean up plan directory if created
+    // Clean up artifact directory if created
     const planDir = join(PLANS_DIR, TEST_SLUG);
     if (existsSync(planDir)) rmSync(planDir, { recursive: true, force: true });
   });
@@ -599,14 +599,14 @@ describe('Template library — template content via runPlan', () => {
     );
     assert.equal(result, false, 'should return false for invalid template');
 
-    // Verify no plan directory was left behind
+    // Verify no artifact directory was left behind
     const planDir = join(PLANS_DIR, TEST_SLUG);
     assert.equal(existsSync(planDir), false, 'should clean up on error');
   });
 });
 
 // ── Comment regression: createPlan → POST /api/comments ──────────────────────
-// This regression test ensures that a freshly created plan (with comments.json
+// This regression test ensures that a freshly created artifact (with comments.json
 // as an empty array []) can receive the first comment via POST without crashing.
 // Previously, createPlan wrote {schemaVersion: 2, threads: []} which caused
 // JSON.parse + .push() to fail on the first comment.
@@ -621,8 +621,8 @@ describe('Comment regression: createPlan → POST /api/comments', () => {
     cleanupPlan(TEST_SLUG);
   });
 
-  test('first comment on freshly created plan works (array shape)', async () => {
-    // Create a plan directory — replicating what createPlan() does after the fix
+  test('first comment on freshly created artifact works (array shape)', async () => {
+    // Create a artifact directory — replicating what createPlan() does after the fix
     const planDir = join(PLANS_DIR, TEST_SLUG);
     mkdirSync(planDir, { recursive: true });
 
@@ -636,7 +636,7 @@ describe('Comment regression: createPlan → POST /api/comments', () => {
       lastEdited: now,
     };
     writeFileSync(join(planDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
-    writeFileSync(join(planDir, 'plan.mdx'), '# Comment Regression Test\n\nTest.\n', 'utf-8');
+    writeFileSync(join(planDir, 'artifact.mdx'), '# Comment Regression Test\n\nTest.\n', 'utf-8');
     // Write as [] — same shape as the fixed createPlan() now produces
     writeFileSync(join(planDir, 'comments.json'), '[]', 'utf-8');
 
@@ -650,7 +650,7 @@ describe('Comment regression: createPlan → POST /api/comments', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sectionId: 'regression-test',
-        text: 'First comment on a fresh plan',
+        text: 'First comment on a fresh artifact',
         author: 'test-gate',
       }),
     });
@@ -661,7 +661,7 @@ describe('Comment regression: createPlan → POST /api/comments', () => {
     assert.equal(Array.isArray(updated), true, 'comments should be an array');
     assert.equal(updated.length, 1, 'should have exactly 1 comment');
     assert.equal(updated[0].sectionId, 'regression-test');
-    assert.equal(updated[0].text, 'First comment on a fresh plan');
+    assert.equal(updated[0].text, 'First comment on a fresh artifact');
     assert.equal(updated[0].author, 'test-gate');
 
     // Verify the file is still valid JSON
@@ -700,8 +700,8 @@ describe('Comment regression: createPlan → POST /api/comments', () => {
 
 // ── htmx-friendly RESTful routes ───────────────────────────────────────────────
 // New slug-scoped routes designed for htmx (and the new HTML template).
-//   GET    /api/<slug>/plan          → MDX text/plain
-//   PUT    /api/<slug>/plan          → save MDX (form data or raw body)
+//   GET    /api/<slug>/artifact          → MDX text/plain
+//   PUT    /api/<slug>/artifact          → save MDX (form data or raw body)
 //   GET    /api/<slug>/comments      → JSON (default) or HTML (?format=html)
 //   POST   /api/<slug>/comments      → add comment, returns <li> HTML
 //   PUT    /api/<slug>/comments      → replace comments array (JSON)
@@ -709,7 +709,7 @@ describe('Comment regression: createPlan → POST /api/comments', () => {
 //   GET    /htmx.min.js              → self-hosted htmx library
 // The cross-slug protection: any path with a different slug in the URL
 // returns 403 to prevent the server from being tricked into serving
-// data for a different plan.
+// data for a different artifact.
 
 describe('htmx-friendly RESTful routes', () => {
   const TEST_SLUG = 'test-htmx-routes-' + Date.now();
@@ -746,45 +746,45 @@ describe('htmx-friendly RESTful routes', () => {
     cleanupPlan(TEST_SLUG);
   });
 
-  // ── Plan routes ────────────────────────────────────────────────────
-  test('GET /api/<slug>/plan returns MDX as text/plain', async () => {
-    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`);
+  // ── Artifact routes ────────────────────────────────────────────────────
+  test('GET /api/<slug>/artifact returns MDX as text/plain', async () => {
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/artifact`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type').includes('text/plain'), true);
     const text = await res.text();
     assert.equal(text.includes('Htmx Routes Test'), true);
   });
 
-  test('PUT /api/<slug>/plan with form data saves MDX', async () => {
-    const newContent = '# Updated Htmx Plan\n\nNew content.\n';
-    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`, {
+  test('PUT /api/<slug>/artifact with form data saves MDX', async () => {
+    const newContent = '# Updated Htmx Artifact\n\nNew content.\n';
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/artifact`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'content=' + encodeURIComponent(newContent),
     });
     assert.equal(res.status, 200);
-    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.mdx'), 'utf-8');
+    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'artifact.mdx'), 'utf-8');
     assert.equal(saved, newContent);
   });
 
-  test('PUT /api/<slug>/plan with raw text body saves MDX', async () => {
-    const newContent = '# Raw Body Plan\n\nRaw body content.\n';
-    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`, {
+  test('PUT /api/<slug>/artifact with raw text body saves MDX', async () => {
+    const newContent = '# Raw Body Artifact\n\nRaw body content.\n';
+    const res = await fetch(`${baseUrl}/api/${TEST_SLUG}/artifact`, {
       method: 'PUT',
       headers: { 'Content-Type': 'text/plain' },
       body: newContent,
     });
     assert.equal(res.status, 200);
-    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.mdx'), 'utf-8');
+    const saved = readFileSync(join(PLANS_DIR, TEST_SLUG, 'artifact.mdx'), 'utf-8');
     assert.equal(saved, newContent);
   });
 
-  test('PUT /api/<slug>/plan updates lastEdited in meta.json', async () => {
+  test('PUT /api/<slug>/artifact updates lastEdited in meta.json', async () => {
     const metaPath = join(PLANS_DIR, TEST_SLUG, 'meta.json');
     const before = JSON.parse(readFileSync(metaPath, 'utf-8'));
     // Wait a tick so the timestamp actually advances
     await new Promise((r) => setTimeout(r, 10));
-    await fetch(`${baseUrl}/api/${TEST_SLUG}/plan`, {
+    await fetch(`${baseUrl}/api/${TEST_SLUG}/artifact`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'content=' + encodeURIComponent('# updated\n'),
@@ -825,7 +825,7 @@ describe('htmx-friendly RESTful routes', () => {
   });
 
   test('GET /api/<slug>/comments?format=html with no comments returns the empty marker', async () => {
-    // Make a fresh plan with no comments
+    // Make a fresh artifact with no comments
     cleanupPlan(TEST_SLUG);
     createTempPlan(TEST_SLUG + '-empty', { mdx: '# Empty\n', comments: '[]' });
     const info = await startServer(TEST_SLUG + '-empty', join(PLANS_DIR, TEST_SLUG + '-empty'), 0);
@@ -968,7 +968,7 @@ describe('htmx-friendly RESTful routes', () => {
   });
 
   test('cross-slug PUT also returns 403', async () => {
-    const res = await fetch(`${baseUrl}/api/wrong-slug/plan`, {
+    const res = await fetch(`${baseUrl}/api/wrong-slug/artifact`, {
       method: 'PUT',
       body: 'evil=true',
     });
@@ -983,7 +983,7 @@ describe('htmx-friendly RESTful routes', () => {
 });
 
 // ── HTML template smoke tests ─────────────────────────────────────────────────
-// These tests regenerate plan.html and verify the resulting HTML
+// These tests regenerate artifact.html and verify the resulting HTML
 // uses htmx attributes (and does NOT use fetch() in JS for the
 // save/comment flows). The script tag for htmx should reference
 // the local /htmx.min.js path.
@@ -995,11 +995,11 @@ describe('HTML template uses htmx', () => {
     cleanupPlan(TEST_SLUG);
   });
 
-  // Test the v1 template (plan.html.template) directly. The v1 template is
-  // htmx-based; the v2 canvas template (plan.canvas.template) is a separate
+  // Test the v1 template (artifact.html.template) directly. The v1 template is
+  // htmx-based; the v2 canvas template (artifact.canvas.template) is a separate
   // file with its own tests below.
-  test('v1 plan.html.template uses htmx (read directly)', () => {
-    const tplPath = join(TEMPLATES_DIR, 'plan.html.template');
+  test('v1 artifact.html.template uses htmx (read directly)', () => {
+    const tplPath = join(TEMPLATES_DIR, 'artifact.html.template');
     const tpl = readFileSync(tplPath, 'utf-8');
 
     // Should load htmx from the local path
@@ -1033,7 +1033,7 @@ describe('HTML template uses htmx', () => {
     assert.ok(!/fetch\s*\(/.test(noCommentFetch), 'v1 non-comment code should not call fetch() directly');
   });
 
-  test('regenerated plan.html uses the v2 canvas template by default', async () => {
+  test('regenerated artifact.html uses the v2 canvas template by default', async () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
     mkdirSync(planDir, { recursive: true });
     writeFileSync(
@@ -1047,17 +1047,17 @@ describe('HTML template uses htmx', () => {
         lastEdited: '2026-06-01T00:00:00.000Z',
       })
     );
-    writeFileSync(join(planDir, 'plan.mdx'), '# V2 Default Test\n\n## Section\n\nHello.\n');
+    writeFileSync(join(planDir, 'artifact.mdx'), '# V2 Default Test\n\n## Section\n\nHello.\n');
     writeFileSync(join(planDir, 'comments.json'), '[]');
 
     await regenerateHtml(TEST_SLUG);
 
-    const html = readFileSync(join(planDir, 'plan.html'), 'utf-8');
+    const html = readFileSync(join(planDir, 'artifact.html'), 'utf-8');
 
-    // The default regenerated plan.html should be the v2 canvas view
-    assert.ok(html.includes('id="canvas"'), 'default plan.html should be the v2 canvas view');
+    // The default regenerated artifact.html should be the v2 canvas view
+    assert.ok(html.includes('id="canvas"'), 'default artifact.html should be the v2 canvas view');
     assert.ok(html.includes('id="connections-layer"'),
-      'default plan.html should have the SVG connections layer');
+      'default artifact.html should have the SVG connections layer');
 
     // Should have all placeholders substituted
     assert.ok(!html.includes('{{slug}}'), 'slug placeholder should be substituted');
@@ -1073,7 +1073,7 @@ describe('HTML template uses htmx', () => {
   });
 
   test('template is smaller than the pre-htmx version (regression check)', () => {
-    const tplPath = join(TEMPLATES_DIR, 'plan.html.template');
+    const tplPath = join(TEMPLATES_DIR, 'artifact.html.template');
     const lines = readFileSync(tplPath, 'utf-8').split('\n').length;
     assert.ok(lines < 1039, `template should be smaller than the original 1039 lines, got ${lines}`);
   });
@@ -1105,7 +1105,7 @@ import {
   makeConnectionId,
   makeCommentId,
   makeReplyId,
-} from './plan.mjs';
+} from './artifact.mjs';
 
 describe('Canvas helpers (pure functions)', () => {
   test('emptyCanvas returns a v2 schema with empty arrays', () => {
@@ -1118,9 +1118,9 @@ describe('Canvas helpers (pure functions)', () => {
     assert.deepEqual(c.viewport, { x: 0, y: 0, zoom: 1 });
   });
 
-  test('emptyCanvas with no title uses "Untitled plan"', () => {
+  test('emptyCanvas with no title uses "Untitled artifact"', () => {
     const c = emptyCanvas();
-    assert.equal(c.title, 'Untitled plan');
+    assert.equal(c.title, 'Untitled artifact');
   });
 
   test('id generators produce namespaced ids', () => {
@@ -1209,24 +1209,24 @@ describe('loadOrMigrateCanvas', () => {
     cleanupPlan(TEST_SLUG);
   });
 
-  test('returns existing plan.json if present', () => {
+  test('returns existing artifact.json if present', () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
     mkdirSync(planDir, { recursive: true });
     const canvas = {
       schemaVersion: 2, title: 'Existing', elements: [], connections: [], comments: [],
       viewport: { x: 0, y: 0, zoom: 1 },
     };
-    writeFileSync(join(planDir, 'plan.json'), JSON.stringify(canvas));
+    writeFileSync(join(planDir, 'artifact.json'), JSON.stringify(canvas));
 
     const result = loadOrMigrateCanvas(planDir, 'Existing');
     assert.equal(result.title, 'Existing');
   });
 
-  test('migrates plan.mdx to canvas on first read', () => {
+  test('migrates artifact.mdx to canvas on first read', () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
     mkdirSync(planDir, { recursive: true });
     const mdx = '# Hello\n\n## World\n\nFoo bar\n';
-    writeFileSync(join(planDir, 'plan.mdx'), mdx);
+    writeFileSync(join(planDir, 'artifact.mdx'), mdx);
 
     const result = loadOrMigrateCanvas(planDir, 'Migrated');
     assert.equal(result.schemaVersion, 2);
@@ -1234,11 +1234,11 @@ describe('loadOrMigrateCanvas', () => {
     assert.equal(result.elements[0].type, 'text');
     assert.ok(result.elements[0].content.includes('Foo bar'));
 
-    // After migration, plan.json should be on disk.
-    assert.equal(existsSync(join(planDir, 'plan.json')), true);
+    // After migration, artifact.json should be on disk.
+    assert.equal(existsSync(join(planDir, 'artifact.json')), true);
   });
 
-  test('returns empty canvas if no plan.json and no plan.mdx', () => {
+  test('returns empty canvas if no artifact.json and no artifact.mdx', () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
     mkdirSync(planDir, { recursive: true });
 
@@ -1246,15 +1246,15 @@ describe('loadOrMigrateCanvas', () => {
     assert.equal(result.title, 'Brand New');
     assert.equal(result.elements.length, 0);
 
-    // Should have created plan.json.
-    assert.equal(existsSync(join(planDir, 'plan.json')), true);
+    // Should have created artifact.json.
+    assert.equal(existsSync(join(planDir, 'artifact.json')), true);
   });
 
   test('backfills missing arrays on a partial canvas', () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
     mkdirSync(planDir, { recursive: true });
     // Write a partial canvas (missing comments)
-    writeFileSync(join(planDir, 'plan.json'), JSON.stringify({
+    writeFileSync(join(planDir, 'artifact.json'), JSON.stringify({
       schemaVersion: 2, title: 'Partial',
       elements: [], connections: [],
     }));
@@ -1305,8 +1305,8 @@ describe('Canvas HTTP endpoints', () => {
 
   test('GET /api/<slug>/canvas auto-migrates from mdx on first call', async () => {
     const planDir = join(PLANS_DIR, TEST_SLUG);
-    // First, clear the auto-generated plan.json so we test the migration path
-    const jsonPath = join(planDir, 'plan.json');
+    // First, clear the auto-generated artifact.json so we test the migration path
+    const jsonPath = join(planDir, 'artifact.json');
     if (existsSync(jsonPath)) rmSync(jsonPath);
     assert.equal(existsSync(jsonPath), false);
 
@@ -1316,7 +1316,7 @@ describe('Canvas HTTP endpoints', () => {
     // The migration creates a text element from the mdx
     assert.equal(data.elements.length, 1);
     assert.equal(data.elements[0].type, 'text');
-    // After this call, plan.json should exist
+    // After this call, artifact.json should exist
     assert.equal(existsSync(jsonPath), true);
   });
 
@@ -1340,7 +1340,7 @@ describe('Canvas HTTP endpoints', () => {
     assert.equal(res.status, 200);
 
     // Verify the file was written
-    const saved = JSON.parse(readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.json'), 'utf-8'));
+    const saved = JSON.parse(readFileSync(join(PLANS_DIR, TEST_SLUG, 'artifact.json'), 'utf-8'));
     assert.equal(saved.title, 'Updated');
     assert.equal(saved.elements.length, 2);
     assert.equal(saved.viewport.zoom, 1.5);
@@ -1355,7 +1355,7 @@ describe('Canvas HTTP endpoints', () => {
       body: JSON.stringify(partial),
     });
     assert.equal(res.status, 200);
-    const saved = JSON.parse(readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.json'), 'utf-8'));
+    const saved = JSON.parse(readFileSync(join(PLANS_DIR, TEST_SLUG, 'artifact.json'), 'utf-8'));
     assert.deepEqual(saved.elements, []);
     assert.deepEqual(saved.connections, []);
     assert.deepEqual(saved.comments, []);
@@ -1738,7 +1738,7 @@ import {
   renderCommentPinHTML,
   renderCommentThreadHTML,
   renderReplyHTML,
-} from './plan.mjs';
+} from './artifact.mjs';
 
 describe('htmx content negotiation on canvas endpoints', () => {
   const TEST_SLUG = 'test-htmx-negotiate-' + Date.now();
@@ -2082,7 +2082,7 @@ describe('htmx content negotiation on canvas endpoints', () => {
     assert.equal(res.status, 200);
 
     // Verify the saved state has proper arrays/objects, not JSON strings
-    const saved = JSON.parse(readFileSync(join(PLANS_DIR, TEST_SLUG, 'plan.json'), 'utf-8'));
+    const saved = JSON.parse(readFileSync(join(PLANS_DIR, TEST_SLUG, 'artifact.json'), 'utf-8'));
     assert.equal(saved.title, 'Form Encoded');
     assert.ok(Array.isArray(saved.elements));
     assert.equal(saved.elements.length, 1);
@@ -2211,17 +2211,17 @@ describe('htmx content negotiation on canvas endpoints', () => {
 });
 
 // ── Canvas template structure tests ────────────────────────────────────────
-// Verify the new plan.canvas.template has the right shape:
+// Verify the new artifact.canvas.template has the right shape:
 //   - pan/zoom controls
 //   - SVG layer for connections
 //   - comment pins
 //   - toolbar with element-type buttons
 
-describe('plan.canvas.template structure', () => {
-  const tplPath = join(TEMPLATES_DIR, 'plan.canvas.template');
+describe('artifact.canvas.template structure', () => {
+  const tplPath = join(TEMPLATES_DIR, 'artifact.canvas.template');
 
   test('template file exists', () => {
-    assert.ok(existsSync(tplPath), 'plan.canvas.template should exist');
+    assert.ok(existsSync(tplPath), 'artifact.canvas.template should exist');
   });
 
   test('template declares {{canvasJson}} placeholder', () => {
@@ -2328,4 +2328,4 @@ describe('plan.canvas.template structure', () => {
 
 // ── End of template tests ──────────────────────────────────────────────────────
 
-console.log('  plan.mjs tests loaded — run with: node --test cli/plan.test.mjs');
+console.log('  artifact.mjs tests loaded — run with: node --test cli/artifact.test.mjs');

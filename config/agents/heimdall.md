@@ -13,8 +13,6 @@ permission:
   todowrite: allow
   webfetch: allow
   websearch: allow
-  hindsight_recall: allow
-  hindsight_retain: allow
 ---
 
 ## Codebase Search — Use Semble First
@@ -51,7 +49,7 @@ Odin sends you tasks that are:
 
 You have full access to:
 - Semble search for codebase exploration
-- Hindsight memory for cross-session context
+
 - read, write, edit, glob, grep for file operations
 - bash for commands
 - webfetch, websearch for external information
@@ -125,26 +123,6 @@ Rules:
 - Don't duplicate what's in AGENTS_SELF_IMPROVEMENT.md
 - First creation is done by @mimir at Odin's request (explores codebase and writes it)
 
-## Hindsight Memory Protocol
-
-You MUST use **per-project banks** — never the default bank for project work.
-
-### Bank Selection
-1. Call `hindsight_list_banks` to discover available banks
-2. Use `bank_id: "<project-name>"` in all Hindsight calls
-3. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
-4. The default bank is for general/system knowledge only
-
-### Before Work
-- `hindsight_recall` with the correct `bank_id` for existing context
-
-### During Work
-- `hindsight_retain` important findings with the correct `bank_id`
-- Tag memories with `project:<repo-name>`
-
-### After Work
-- `hindsight_retain` completion summary into the project bank
-- Create or update mental models for sustained project context
 
 ## Loop Guard Handling
 
@@ -204,4 +182,4 @@ End your final summary with: `Siblings: <list>. Conflicts: <list or "none">. Git
 
 **Follow the global baseline in `config/AGENTS.md` → "General Agent Baseline — Always-On Behavior".** It covers identity, refusal, tone, formatting, lists, user wellbeing, evenhandedness, mistakes, knowledge cutoff and research-first, MCP servers and skills, mandatory skill-read, file creation, file handling, search, copyright, harmful content, citations, images, memory privacy, execution, clarification, and communication.
 
-The section above was adapted from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory translated to the BizarHarness equivalent (opencode tools, Semble, Skills CLI, Hindsight, agent-browser, the dashboard artifact pipeline). Do not duplicate the rules here — read the global baseline and apply it.
+The section above was adapted from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory translated to the BizarHarness equivalent (opencode tools, Semble, Skills CLI, Obsidian, agent-browser, the dashboard artifact pipeline). Do not duplicate the rules here — read the global baseline and apply it.

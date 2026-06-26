@@ -8,7 +8,7 @@
  */
 import { Router } from 'express';
 import { tasksStore } from '../tasks-store.mjs';
-import { plansStore } from '../plans-store.mjs';
+import { artifactsStore } from '../artifacts-store.mjs';
 import { projectsStore } from '../projects-store.mjs';
 import { wrap } from './_shared.mjs';
 
@@ -55,7 +55,7 @@ export function createHistoryRouter({ projectRoot }) {
       }
     }
     try {
-      const plans = plansStore.list(projectRoot);
+      const plans = artifactsStore.list(projectRoot);
       for (const plan of plans) {
         const pid = plan.projectId || 'global';
         projectPlans[pid] = (projectPlans[pid] || 0) + 1;

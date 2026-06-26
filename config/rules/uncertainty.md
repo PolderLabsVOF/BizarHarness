@@ -17,7 +17,7 @@ Every stuck situation must move through these phases in order:
    - `semble search "<concept>"` for codebase patterns
    - `webfetch` for official documentation
    - `read` for related files in the repo
-   - `hindsight_recall` for prior project context
+   - `obsidian_search` for prior project context
    - `skill <name>` for domain-specific guidance
    - Ask the user if you are still uncertain after research
 3. **Act with confidence.** After research, make one decisive attempt. If it still fails, return to phase 2 with the new information. Never return to phase 1.

@@ -11,7 +11,7 @@ type Props = {
   onRefresh: () => Promise<void>;
 };
 
-const EVENT_KINDS = ['all', 'tasks', 'agents', 'bg', 'plans', 'mods'] as const;
+const EVENT_KINDS = ['all', 'tasks', 'agents', 'bg', 'artifacts', 'mods'] as const;
 type EventKind = typeof EVENT_KINDS[number];
 
 const KIND_LABELS: Record<string, string> = {
@@ -19,7 +19,7 @@ const KIND_LABELS: Record<string, string> = {
   tasks: 'Tasks',
   agents: 'Agents',
   bg: 'Background',
-  plans: 'Plans',
+  artifacts: 'Plans',
   mods: 'Mods',
 };
 
@@ -56,7 +56,7 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
     if (filter === 'tasks') return e.kind?.startsWith('task');
     if (filter === 'agents') return e.kind?.startsWith('agent');
     if (filter === 'bg') return e.kind?.includes('bg') || e.kind?.includes('schedule');
-    if (filter === 'plans') return e.kind?.includes('plan');
+    if (filter === 'artifacts') return e.kind?.includes('artifacts');
     if (filter === 'mods') return e.kind?.includes('mod');
     return true;
   });
@@ -92,7 +92,7 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
       <div className="mobile-submit-hero">
         <textarea
           className="mobile-submit-input"
-          placeholder="What needs to be done? Describe a task, bug, or refactor for Odin to plan…"
+          placeholder="What needs to be done? Describe a task, bug, or refactor for Odin to artifacts…"
           value={submitText}
           onChange={(e) => setSubmitText(e.target.value)}
           rows={2}
@@ -136,7 +136,7 @@ export function MobileActivity({ snapshot, onRefresh }: Props) {
           <div className="mobile-stat-label">Done</div>
         </div>
         <div className="mobile-stat">
-          <div className="mobile-stat-value">{snapshot.plans?.length || 0}</div>
+          <div className="mobile-stat-value">{snapshot.artifacts.length || 0}</div>
           <div className="mobile-stat-label">Plans</div>
         </div>
       </div>
@@ -266,7 +266,7 @@ function renderEventMessage(e: ActivityItem): string {
   const k = e.kind || '';
   if (k.includes('task')) return `Task: ${e.title || e.id || 'updated'}`;
   if (k.includes('agent')) return `Agent: ${e.name || 'status changed'}`;
-  if (k.includes('plan')) return `Plan: ${e.slug || 'changed'}`;
+  if (k.includes('artifacts')) return `Plan: ${e.slug || 'changed'}`;
   if (k.includes('mod')) return `Mod: ${e.name || 'changed'}`;
   if (k.includes('schedule')) return `Schedule: ${e.name || 'triggered'}`;
   return JSON.stringify(e).slice(0, 80);

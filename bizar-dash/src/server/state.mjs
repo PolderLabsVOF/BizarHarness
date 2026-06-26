@@ -3,7 +3,7 @@
  *
  * v3.0.0 — Server-side state aggregation.
  *
- * Holds the read-only legacy endpoints (overview, plans, chat-via-legacy,
+ * Holds the read-only legacy endpoints (overview, artifacts, chat-via-legacy,
  * etc.) used by both the dashboard and the TUI. New endpoints (per-project
  * tasks, schedules, mods, projects) live directly in api.mjs and use the
  * dedicated stores.
@@ -13,7 +13,7 @@
  *   - getChat:      per-project sessions/<id>.jsonl (preferred) — falls
  *                   back to legacy .bizar/sessions if no project is active
  *   - getAgents:    ~/.config/opencode/agents/*.md (frontmatter parse)
- *   - getPlans:     scans plans/ (worktree) and ~/.config/opencode/plans/
+ *   - getArtifacts:     scans artifacts/ (worktree) and ~/.config/opencode/artifacts/
  */
 import {
   existsSync,
@@ -47,8 +47,8 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     bizarDir: join(projectRoot, '.bizar'),
     sessionsDir: join(projectRoot, '.bizar', 'sessions'),
     activityLog: join(projectRoot, '.bizar', 'activity.log'),
-    plansDir: join(projectRoot, 'plans'),
-    globalPlansDir: join(opencodeConfigDir, 'plans'),
+    plansDir: join(projectRoot, 'artifacts'),
+    globalPlansDir: join(opencodeConfigDir, 'artifacts'),
     settingsFile: join(HOME, '.config', 'bizar', 'settings.json'),
   };
 
@@ -113,7 +113,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     // Use the new store for project count to keep the v3 view consistent.
     const projectsList = projectsStore.list();
     const agents = readAgents();
-    const plans = readPlans();
+    const artifacts = readPlans();
     const active = projectsStore.active();
 
     let sessionCount = 0;
@@ -159,7 +159,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     return {
       counts: {
         agents: agents.length,
-        plans: plans.length,
+        artifacts: artifacts.length,
         projects: projectsList.projects.length,
         sessions: sessionCount,
         activeProject: active?.id || null,
@@ -303,7 +303,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     return out;
   }
 
-  function getPlans() {
+  function getArtifacts() {
     return readPlans();
   }
 
@@ -425,7 +425,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     getOverview,
     getChat,
     getAgents,
-    getPlans,
+    getArtifacts,
     getProjects,
     appendActivity,
     // v3.3.0 — theme registry

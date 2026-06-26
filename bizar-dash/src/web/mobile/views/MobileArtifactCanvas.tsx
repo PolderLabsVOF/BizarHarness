@@ -1,4 +1,4 @@
-// src/mobile/views/MobilePlanCanvas.tsx — mobile plan canvas: read-only + edit mode.
+// src/mobile/views/MobileArtifactCanvas.tsx — mobile plan canvas: read-only + edit mode.
 import { useEffect, useState } from 'react';
 import { Plus, MessageSquare, Pencil, Trash2, CheckSquare, StickyNote, HelpCircle, X } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -33,7 +33,7 @@ function ElementIcon({ type, size = 12 }: { type: string; size?: number }) {
   }
 }
 
-export function MobilePlanCanvas({ slug, onBack }: Props) {
+export function MobileArtifactCanvas({ slug, onBack }: Props) {
   const [canvas, setCanvas] = useState<Canvas | null>(null);
   const [meta, setMeta] = useState<{ title: string; status: string; tags: string[]; description?: string } | null>(null);
   const [loading, setLoading] = useState(true);

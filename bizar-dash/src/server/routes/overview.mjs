@@ -69,7 +69,7 @@ export function createOverviewRouter({ state }) {
     return {
       overview: state.getOverview(),
       agents: agentsStore.list(),
-      plans: state.getPlans(),
+      artifacts: state.getArtifacts(),
       projects: projectsStore.list().projects,
       activeProject: active,
       config: {

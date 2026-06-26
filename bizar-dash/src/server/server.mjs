@@ -701,7 +701,7 @@ function buildSnapshot(state, opencodeConfigDir) {
   return {
     overview: state.getOverview(),
     agents: agentsStore.list(),
-    plans: state.getPlans(),
+    artifacts: state.getArtifacts(),
     projects: projectsStore.list().projects,
     activeProject,
     config: {

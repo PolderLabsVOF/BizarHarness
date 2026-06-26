@@ -987,7 +987,9 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
         </Card>
 </div>
 
-        <UpdatesCard />
+        <div data-section="updates" style={{display: (activeSection === null || activeSection === 'updates') ? 'block' : 'none'}}>
+          <UpdatesCard />
+        </div>
 
         <div data-section="layout" style={{display: (activeSection === null || activeSection === 'layout') ? 'block' : 'none'}}>
 <Card id="settings-layout" data-section="layout">
@@ -1031,7 +1033,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               <option value="overview">Overview</option>
               <option value="chat">Chat</option>
               <option value="agents">Agents</option>
-              <option value="plans">Plans</option>
+              <option value="artifacts">Plans</option>
               <option value="projects">Projects</option>
               <option value="tasks">Tasks</option>
               <option value="config">Config</option>

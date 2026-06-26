@@ -189,13 +189,15 @@ export function createModsRouter() {
     res.json({ ok: true });
   }));
 
-  // ── /api/mods/:id/mod-web/* ──────────────────────────────────────────
-  // Serve files from each mod's web/ directory (for iframe embedding)
-  // Named 'mod-web' to avoid conflict with mod route mounting at /:id/*
-  router.get('/mods/:id/mod-web/*', wrap(async (req, res) => {
+  // ── /api/mods/:id/mod-web/* and /api/mods/:id/web/* ────────────────
+  // Serve files from each mod's web/ directory (for iframe embedding).
+  // Two aliases — `mod-web` (explicit, won't collide with mod routes) and
+  // bare `web` (intuitive, what users actually type). They serve identical
+  // content so the mod author can use either.
+  const webHandler = wrap(async (req, res) => {
     const mod = modsLoader.get(req.params.id);
     if (!mod || !mod.enabled) {
-      res.status(404).json({ error: 'not_found' });
+      res.status(404).json({ error: 'not_found', message: `mod "${req.params.id}" not found or disabled` });
       return;
     }
     const rel = req.params[0] || '';
@@ -207,11 +209,13 @@ export function createModsRouter() {
       return;
     }
     if (!existsSync(filePath)) {
-      res.status(404).json({ error: 'not_found' });
+      res.status(404).json({ error: 'not_found', message: `file not found: ${rel}` });
       return;
     }
     res.sendFile(filePath);
-  }));
+  });
+  router.get('/mods/:id/mod-web/*', webHandler);
+  router.get('/mods/:id/web/*', webHandler);
 
   return router;
 }

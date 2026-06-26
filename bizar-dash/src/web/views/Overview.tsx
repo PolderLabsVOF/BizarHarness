@@ -748,7 +748,7 @@ function activityNavTarget(kind: string): string | null {
   const k = kind.toLowerCase();
   if (k === 'task') return 'tasks';
   if (k === 'agent') return 'agents';
-  if (k === 'plan') return 'plans';
+  if (k === 'plan') return 'artifacts';
   if (k.includes('bg') || k.includes('background')) return 'activity';
   if (k === 'mod') return 'mods';
   if (k === 'skill') return 'skills';

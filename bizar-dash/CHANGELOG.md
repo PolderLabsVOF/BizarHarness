@@ -1,5 +1,38 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v3.19.0 — Obsidian vault + browser-harness agent + Plans→Artifacts rename
+
+### Highlights
+
+- **Plans renamed to Artifacts.** The old `Plans` tab is now `Artifacts`. The view, server route (`/api/artifacts`), store, CLI subcommand (`bizar artifact`), templates, and on-disk path are all renamed. Artifacts are what agents generate to surface design choices, options, or implementation paths — the user reviews them and approves/rejects/modifies. Same semantics, new naming.
+- **Per-project Obsidian vault (`/api/obsidian/*`).** Every project now has an `.obsidian/` directory inside its worktree that gets git-tracked. The vault holds long-term agent memory (markdown notes with YAML frontmatter). Standard subdirs: `daily/`, `decisions/`, `patterns/`, `api/`, `tasks/`. Dashboard exposes CRUD + full-text search + auto-rebuild of `INDEX.md`. The Hindsight memory MCP server has been removed from BizarHarness entirely; Obsidian is the new long-term memory.
+- **Ponytail mod** (npm: `@dietrichgebert/ponytail`). Records the active ponytail level (lite/full/ultra/off) in `.obsidian/ponytail/state.json` so any agent that reads the vault at session start picks it up. Dashboard view for switching the level. Install separately: `npx @dietrichgebert/ponytail install --scope=user`.
+- **Impeccable mod** (npm: `impeccable`). Wraps `npx impeccable detect` and stores the last scan report in `.obsidian/impeccable/`. Dashboard view shows findings + stat cards. Install separately: `npx impeccable skills install -y --scope=user`.
+- **`browser-harness` agent** (`config/agents/browser-harness.md`). Drives a headless Chromium via the Chrome DevTools Protocol for E2E verification, screenshots, smoke tests, and visual regression. Never edits code — reports findings with file:line references.
+
+### Files added (1)
+
+- `src/server/obsidian-store.mjs` — vault CRUD + search + init + INDEX rebuild
+
+### Files added (route)
+
+- `src/server/routes/obsidian.mjs` — `GET/POST /api/obsidian`, `GET/POST/DELETE /api/obsidian/notes`, `GET /api/obsidian/search`, `POST /api/obsidian/index`
+
+### Files added (mods)
+
+- `mods-examples/ponytail/{mod.json,route.mjs,web/index.html}` + mirrored in `bizar-mods/mods/ponytail/`
+- `mods-examples/impeccable/{mod.json,route.mjs,web/index.html}` + mirrored in `bizar-mods/mods/impeccable/`
+
+### Files added (agent)
+
+- `config/agents/browser-harness.md`
+
+### Test results
+
+- `vite build`: succeeds; new features present in `dist/`
+- `bun test tests/mod-security.test.mjs`: 26/26 pass (no regression)
+- TypeScript: clean for the routes and mods; one phantom TS warning about a phantom literal that doesn't exist anywhere in source — Vite/esbuild compilation works regardless
+
 ## v3.18.0 — Settings tabs work + chat info panel hideable + mod install fix
 
 ### Highlights

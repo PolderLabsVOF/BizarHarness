@@ -5,7 +5,7 @@
  * here so we don't inflate the api.mjs composer with one-off
  * routers.
  *
- *   /api/search                            — fuzzy search across projects/tasks/plans/agents
+ *   /api/search                            — fuzzy search across projects/tasks/artifacts/agents
  *   /api/tailscale/status                  — tailscale state
  *   /api/tailscale/enable (POST)           — enable tailscale serve
  *   /api/tailscale/disable (POST)          — disable

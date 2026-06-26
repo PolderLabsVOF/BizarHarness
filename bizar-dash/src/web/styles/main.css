@@ -288,7 +288,7 @@ pre,
   overflow: hidden;
 }
 
-.app[data-active-tab="plans"] > .layout-body > .content,
+.app[data-active-tab="artifacts"] > .layout-body > .content,
 .app[data-active-tab="skills"] > .layout-body > .content {
   padding: 0;
   max-width: none;

@@ -7,7 +7,7 @@
  * If you add a new component here, mirror it there and in
  * dialog-store.mjs KNOWN_COMPONENTS.
  */
-export type DialogComponent = 'visual-plan' | 'plan-create' | 'plan-list' | 'help' | 'audit' | 'generic';
+export type DialogComponent = 'visual-artifact' | 'visual-plan' | 'plan-create' | 'plan-list' | 'artifact-create' | 'artifact-list' | 'help' | 'audit' | 'generic';
 
 /**
  * A modal dialog request emitted by the slash-command plugin and
@@ -129,15 +129,38 @@ export type ScanResult = {
   error?: string;
 };
 
-export type Plan = {
+// v3.19.0 — Artifact (formerly Plan). A user-facing proposal that an agent
+// creates to surface design choices, options, or implementation paths.
+// The user reviews it and either approves, rejects, or modifies.
+export type Artifact = {
+  /** Unique slug — used in the file path (`plans/<slug>/`) and URL. */
   slug: string;
+  /** Human-readable title shown in the artifacts list. */
   title: string;
-  status: string;
+  /** One-line summary shown under the title. */
+  description: string;
+  /** Lifecycle status. */
+  status: 'draft' | 'pending-review' | 'approved' | 'rejected' | 'archived';
+  /** What kind of artifact this is — drives the renderer. */
+  kind: 'design' | 'plan' | 'spec' | 'mockup' | 'report' | 'freeform' | string;
+  /** Agent or user that created this artifact. */
+  author: string;
+  /** User's decision on this artifact. */
+  decision: 'pending' | 'approved' | 'rejected' | 'modified' | null;
+  /** Optional user-supplied notes when approving/rejecting. */
+  decisionNote: string | null;
+  /** Filesystem source. */
   source: 'worktree' | 'global' | string;
+  /** Element count (visual elements) — for plan-like artifacts. */
   elementCount: number | null;
+  /** Comment count. */
   commentCount: number | null;
+  /** Last-modified time. */
   mtime: number;
-  planUrl: string | null;
+  /** Optional URL to the artifact's full view. */
+  artifactUrl: string | null;
+  /** Tags — free-form, used for filtering. */
+  tags: string[];
 };
 
 export type CanvasElement = {
@@ -215,6 +238,23 @@ export type Settings = {
     maxParallel: number;
     stuckThresholdMs: number;
     autoRestart: boolean;
+  };
+  // v3.19.0 — Personalization (free-form text shown to agents).
+  personalization: {
+    displayName: string;
+    role: string;
+    team: string;
+    aboutMe: string;
+    preferences: string;
+  };
+  // v3.19.0 — Workflow toggles.
+  workflow: {
+    /** Allow agents to create / mutate artifacts. */
+    artifactsEnabled: boolean;
+    /** When true, agents make decisions themselves instead of asking. */
+    agentsDecideAutonomously: boolean;
+    /** Per-tab override for autonomy (chat input). */
+    chatAutonomous: boolean;
   };
 };
 
@@ -520,7 +560,7 @@ export type BackgroundTmuxResponse = {
 export type Snapshot = {
   overview: Overview;
   agents: Agent[];
-  plans: Plan[];
+  artifacts: Artifact[];
   projects: ProjectRecord[];
   activeProject: ProjectRecord | null;
   config: ConfigResponse;
@@ -547,7 +587,7 @@ export type WsMessage =
   | { type: 'agent:status'; agent: Agent }
   | { type: 'agent:restarted'; agent: Agent }
   | { type: 'agent:stuck'; agents: { name: string }[] }
-  | { type: 'plan:change'; slug: string; deleted?: boolean }
+  | { type: 'artifact:change'; slug: string; deleted?: boolean }
   | { type: 'schedules:change' }
   | { type: 'project:change'; project?: ProjectRecord }
   | { type: 'chat:message'; message: ChatMessage }

@@ -25,7 +25,7 @@ export function showBanner() {
   console.log(chalk.hex('#6366f1').bold(RUNE_HELM));
   console.log(chalk.hex('#a855f7')('    Norse Pantheon Agent System for opencode'));
   console.log();
-  console.log(chalk.dim('    13 agents · 4 cost tiers · per-project Hindsight memory · RTK · Semble · Skills CLI'));
+  console.log(chalk.dim('    13 agents · 4 cost tiers · Obsidian vault long-term memory · RTK · Semble · Skills CLI · Mods'));
   console.log();
 }
 

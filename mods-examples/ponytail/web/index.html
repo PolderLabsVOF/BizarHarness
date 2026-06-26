@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ponytail</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0f1115;
+    color: #e6e8ec;
+    font-size: 14px;
+    padding: 28px;
+  }
+  h1 { margin: 0 0 8px; font-size: 22px; }
+  .lede { color: #8b92a1; max-width: 720px; line-height: 1.5; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; max-width: 980px; }
+  .card {
+    border: 1px solid var(--border, #2a2e36);
+    border-radius: 12px;
+    padding: 16px;
+    background: #181b21;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .card.active { border-color: #6366f1; background: #1f2230; }
+  .card h3 { margin: 0; font-size: 16px; }
+  .card p { margin: 0; color: #8b92a1; font-size: 13px; line-height: 1.45; }
+  .card button {
+    margin-top: auto;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #6366f1;
+    background: transparent;
+    color: #6366f1;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .card.active button { background: #6366f1; color: white; }
+  .card button:hover { background: rgba(99, 102, 241, 0.15); }
+  .status {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #181b21;
+    border: 1px solid #2a2e36;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: #8b92a1;
+    max-width: 980px;
+  }
+  .status.ok { color: #22c55e; }
+  code { background: #0f1115; padding: 2px 6px; border-radius: 4px; }
+  a { color: #6366f1; }
+</style>
+</head>
+<body>
+<h1>🐴 Ponytail</h1>
+<p class="lede">Lazy senior-dev mode for AI agents. He says nothing. He writes one line. It works. Levels control how aggressively the agent simplifies its own output.</p>
+<div class="grid" id="grid"></div>
+<div class="status" id="status">Loading…</div>
+
+<script>
+const LEVELS = [
+  { id: 'lite',  name: 'Lite',  desc: 'Small change. Touch the minimum number of files. One PR.' },
+  { id: 'full',  name: 'Full',  desc: 'New feature. Ladder applies: YAGNI, reuse, stdlib, native, dep, one-liner.' },
+  { id: 'ultra', name: 'Ultra', desc: 'Refactor / audit / over-build. Aggressive simplification. Cuts dependencies.' },
+  { id: 'off',   name: 'Off',   desc: 'Bypass ponytail. Agent writes code the normal way.' },
+];
+
+const grid = document.getElementById('grid');
+const status = document.getElementById('status');
+
+function render(active) {
+  grid.innerHTML = '';
+  for (const lvl of LEVELS) {
+    const card = document.createElement('div');
+    card.className = 'card' + (lvl.id === active ? ' active' : '');
+    card.innerHTML = `<h3>${lvl.name}</h3><p>${lvl.desc}</p>`;
+    const btn = document.createElement('button');
+    btn.textContent = lvl.id === active ? 'Active' : 'Activate';
+    btn.disabled = lvl.id === active;
+    btn.onclick = () => setLevel(lvl.id);
+    card.appendChild(btn);
+    grid.appendChild(card);
+  }
+}
+
+async function load() {
+  try {
+    const r = await fetch('/api/mods/ponytail/state');
+    const s = await r.json();
+    render(s.level);
+    status.classList.add('ok');
+    status.textContent = `Current level: ${s.level}${s.updatedAt ? ' · last changed ' + new Date(s.updatedAt).toLocaleString() : ''}`;
+  } catch (e) {
+    status.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+async function setLevel(level) {
+  status.classList.remove('ok');
+  status.textContent = 'Setting level…';
+  try {
+    const r = await fetch('/api/mods/ponytail/level', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await load();
+  } catch (e) {
+    status.textContent = 'Set failed: ' + e.message;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

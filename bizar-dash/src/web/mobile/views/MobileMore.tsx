@@ -13,11 +13,11 @@ export function MobileMore({ snapshot, onNavigate }: Props) {
 
   const entries = [
     {
-      id: 'plans',
+      id: 'artifacts',
       icon: FileText,
       label: 'Plans',
-      count: snapshot.plans?.length || 0,
-      desc: 'Visual plans with elements & comments',
+      count: snapshot.artifacts.length || 0,
+      desc: 'Visual artifacts with elements & comments',
     },
     {
       id: 'agents',

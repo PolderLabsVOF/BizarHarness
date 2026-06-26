@@ -73,6 +73,29 @@ done
 # Make scripts executable for skills that bundle them
 chmod +x "$SKILLS_DIR"/embedded-esp-idf/scripts/*.sh 2>/dev/null || true
 
+# ── Install domain skills via skills.sh (always-on rule discoverability) ──
+if command -v npx >/dev/null 2>&1; then
+  echo -e "  ${GREEN}→${NC} Installing domain skills from skills.sh..."
+  # Impeccable — UI anti-pattern detection (frontend quality)
+  if npx --yes impeccable skills install -y --scope=user --providers=opencode >/dev/null 2>&1; then
+    echo -e "    ${GREEN}✓${NC} impeccable (UI anti-pattern detector)"
+  else
+    echo -e "    ${YELLOW}⚠${NC} impeccable — install failed (run manually: npx impeccable skills install)"
+  fi
+  # Ponytail — minimal-code skill for AI agents
+  if npx --yes @dietrichgebert/ponytail install --scope=user >/dev/null 2>&1; then
+    echo -e "    ${GREEN}✓${NC} ponytail (minimal-code skill)"
+  else
+    echo -e "    ${YELLOW}⚠${NC} ponytail — install failed (run manually: npx @dietrichgebert/ponytail install)"
+  fi
+  # Obsidian skills — Obsidian Flavored Markdown, Bases, JSON Canvas, CLI
+  if npx --yes skills add https://github.com/kepano/obsidian-skills --all -y >/dev/null 2>&1; then
+    echo -e "    ${GREEN}✓${NC} obsidian-skills (Obsidian Markdown/Bases/Canvas)"
+  else
+    echo -e "    ${YELLOW}⚠${NC} obsidian-skills — install failed (run manually: npx skills add kepano/obsidian-skills)"
+  fi
+fi
+
 # ── Copy Bizar plugin ──────────────────────────────────────────────
 echo -e "  ${GREEN}→${NC} Installing Bizar plugin..."
 PLUGIN_SRC="$REPO_DIR/plugins/bizar"
@@ -157,7 +180,7 @@ echo -e "${BOLD}${CYAN}│${NC}                                                 
 echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}Next steps:${NC}                                                   │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"
 echo -e "${BOLD}${CYAN}│${NC}  1. Edit ${CONFIG_DIR}/opencode.json                         │"
-echo -e "${BOLD}${CYAN}│${NC}     → Replace YOUR_HINDSIGHT_API_KEY with your key          │"
+echo -e "${BOLD}${CYAN}│${NC}     → Configure Obsidian vault path with your key          │"
 echo -e "${BOLD}${CYAN}│${NC}  ${YELLOW}⚠ If thinking is too verbose, remove or lower variant: \"high\"${NC}     │"
 echo -e "${BOLD}${CYAN}│${NC}     ${YELLOW}on odin/tyr/forseti in ${CONFIG_DIR}/opencode.json${NC}                │"
 echo -e "${BOLD}${CYAN}│${NC}                                                          │"

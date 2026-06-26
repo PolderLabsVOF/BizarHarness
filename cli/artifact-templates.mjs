@@ -1,15 +1,15 @@
 /**
- * bizar plan-templates.mjs
+ * bizar artifact-templates.mjs
  *
  * Built-in template library for the visual planner v2.
  *
  * Templates are stored in two places:
  *   1. JS-embedded defaults (so the CLI works without filesystem reads)
- *   2. templates/plan/library/*.mdx (so users can edit/add templates)
+ *   2. templates/artifact/library/*.mdx (so users can edit/add templates)
  *
  * At lookup time we prefer the on-disk .mdx file (if present) and fall
  * back to the embedded string. The "blank" template is special: it
- * delegates to the existing plan.mdx.template file via the CLI caller.
+ * delegates to the existing artifact.mdx.template file via the CLI caller.
  *
  * Exports:
  *   - getTemplate(name)   → { name, description, content } | null
@@ -27,12 +27,12 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
-const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'plan');
+const TEMPLATES_DIR = join(PROJECT_ROOT, 'templates', 'artifact');
 const LIBRARY_DIR = join(TEMPLATES_DIR, 'library');
 
 // ─── Embedded defaults ──────────────────────────────────────────────────────
 //
-// These are kept in sync with templates/plan/library/*.mdx. If the
+// These are kept in sync with templates/artifact/library/*.mdx. If the
 // library directory is missing a file, the embedded version is used.
 // To change a built-in template, edit BOTH (or just the .mdx file if
 // the file is present — the loader prefers files).
@@ -40,7 +40,7 @@ const LIBRARY_DIR = join(TEMPLATES_DIR, 'library');
 const BUILT_IN_TEMPLATES = {
   'blank': {
     description: 'Empty starter — the same template the v1 planner used',
-    content: null, // signals: caller should use plan.mdx.template
+    content: null, // signals: caller should use artifact.mdx.template
   },
   'feature-design': {
     description: 'For designing a new feature (problem, goals, design, tradeoffs)',
@@ -49,7 +49,7 @@ const BUILT_IN_TEMPLATES = {
 **Status:** \`[STATUS:draft]\` · **Author:** {{author}} · **Created:** {{created}}
 
 > [!INFO]
-> This is a v2 plan with the **feature-design** template. It uses callouts
+> This is a v2 artifact with the **feature-design** template. It uses callouts
 > (\`> [!INFO]\`, \`> [!WARNING]\`, etc.), status badges, and GFM task lists.
 
 ## Problem
@@ -64,7 +64,7 @@ _What problem are we solving? Why now? What happens if we don't?_
 
 ## Non-goals
 
-- This feature does NOT do X (deferred to a future plan)
+- This feature does NOT do X (deferred to a future artifact)
 - This feature does NOT cover Y (out of scope for this iteration)
 
 ## Design
@@ -112,7 +112,7 @@ _Endpoints, request/response shapes, error handling._
 2. Question 2?
 3. Question 3?
 
-## Test plan
+## Test artifact
 
 - [ ] Unit tests for the new module
 - [ ] Integration tests for the API surface
@@ -134,7 +134,7 @@ _Endpoints, request/response shapes, error handling._
 ## References
 
 - [Design doc](https://example.com/design)
-- [Related plan](#)
+- [Related artifact](#)
 `,
   },
   'bug-investigation': {
@@ -202,14 +202,14 @@ _The underlying issue._
 
 _The proposed fix._
 
-## Test plan
+## Test artifact
 
 - [ ] Test that the bug is fixed (regression test on the failing case)
 - [ ] Test that the fix doesn't break anything (existing tests still pass)
 - [ ] Add a regression test to the suite
 - [ ] Manual verification in staging
 
-## Rollback plan
+## Rollback artifact
 
 _How do we revert if the fix makes things worse?_
 
@@ -347,7 +347,7 @@ function discoverCustomTemplates() {
 /**
  * Return the template record for a given name (case-insensitive).
  * For the "blank" template, content is null — the caller should use
- * plan.mdx.template as the source.
+ * artifact.mdx.template as the source.
  *
  * @param {string} name
  * @returns {{ name: string, description: string, content: string|null, source: 'built-in'|'library' } | null}
@@ -357,7 +357,7 @@ export function getTemplate(name) {
   const normalized = String(name).toLowerCase().trim();
   if (!BUILT_IN_TEMPLATES[normalized]) return null;
 
-  // "blank" is special: caller should use the standard plan.mdx.template
+  // "blank" is special: caller should use the standard artifact.mdx.template
   if (normalized === 'blank') {
     return {
       name: 'blank',
@@ -418,7 +418,7 @@ export function printTemplates() {
     console.log(`    ${t.name.padEnd(nameWidth)}  ${t.description}${tag}`);
   }
   console.log();
-  console.log('  Use: bizar plan new <slug> --template <name>');
+  console.log('  Use: bizar artifact new <slug> --template <name>');
   console.log('  Built-in: ' + Object.keys(BUILT_IN_TEMPLATES).join(', '));
 }
 
@@ -426,7 +426,7 @@ export function printTemplates() {
 
 /**
  * Substitute {{key}} placeholders in template content. Mirrors the
- * behavior of the existing plan.mjs replaceTemplate — kept here so
+ * behavior of the existing artifact.mjs replaceTemplate — kept here so
  * the templates module is self-contained.
  *
  * @param {string} content
@@ -456,10 +456,10 @@ export function buildVars({ slug, title }) {
   };
 }
 
-// ─── CLI helpers (for `plan template save/list/delete`) ──────────────────────
+// ─── CLI helpers (for `artifact template save/list/delete`) ──────────────────────
 //
 // These are minimal — the spec for v2 calls for full user-saved templates
-// in ~/.config/bizar/plan-templates/. v2.0 ships a stub for
+// in ~/.config/bizar/artifact-templates/. v2.0 ships a stub for
 // library-directory operations; the user-templates dir is deferred to
 // a follow-up.
 
@@ -467,16 +467,16 @@ const USER_TEMPLATES_DIR = join(
   process.env.HOME || process.env.USERPROFILE || '~',
   '.config',
   'bizar',
-  'plan-templates',
+  'artifact-templates',
 );
 
 /**
- * Save the content of an existing plan as a library template.
- * If a name is given, the file is written to templates/plan/library/.
- * The plan is read from plans/<planSlug>/plan.mdx.
+ * Save the content of an existing artifact as a library template.
+ * If a name is given, the file is written to templates/artifact/library/.
+ * The artifact is read from artifacts/<planSlug>/artifact.mdx.
  *
  * @param {string} name        template name (becomes the filename)
- * @param {string} planSlug    source plan to read content from
+ * @param {string} planSlug    source artifact to read content from
  * @returns {string} absolute path to the saved file
  */
 export function saveTemplate(name, planSlug) {
@@ -484,11 +484,11 @@ export function saveTemplate(name, planSlug) {
     throw new Error(`Invalid template name "${name}". Use lowercase letters, digits, and hyphens.`);
   }
   if (!planSlug || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(planSlug)) {
-    throw new Error(`Invalid plan slug "${planSlug}".`);
+    throw new Error(`Invalid artifact slug "${planSlug}".`);
   }
-  const sourcePath = join(PROJECT_ROOT, 'plans', planSlug, 'plan.mdx');
+  const sourcePath = join(PROJECT_ROOT, 'artifacts', planSlug, 'artifact.mdx');
   if (!existsSync(sourcePath)) {
-    throw new Error(`Plan "${planSlug}" not found at ${sourcePath}`);
+    throw new Error(`Artifact "${planSlug}" not found at ${sourcePath}`);
   }
   const content = readFileSync(sourcePath, 'utf-8');
   mkdirSync(LIBRARY_DIR, { recursive: true });

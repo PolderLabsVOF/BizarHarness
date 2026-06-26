@@ -5,14 +5,14 @@
  * v3.10.0 — `bizar` runtime CLI.
  *
  * Architecture:
- *   - `bizar` is the core runtime + installer + audit/init/export/update/plan
+ *   - `bizar` is the core runtime + installer + audit/init/export/update/artifact
  *     + service + dash commands.
  *   - The dashboard lives in `@polderlabs/bizar-dash` as a library.
  *     Commands live under `bizar dash <subcommand>` (new canonical form).
  *     `bizar dashboard` is a deprecated alias (still works, prints warning).
  *
  * Subcommands:
- *   install, audit, init, export, plan, update, test-gate, service, dash
+ *   install, audit, init, export, artifact, update, test-gate, service, dash
  */
 import { existsSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
@@ -23,7 +23,7 @@ import { runInstaller } from './install.mjs';
 import { runAudit } from './audit.mjs';
 import { runInit } from './init.mjs';
 import { runExport } from './export.mjs';
-import runPlan from './plan.mjs';
+import runArtifact from './artifact.mjs';
 import { runUpdate } from './update.mjs';
 import { ensureSetup, checkSetupStatus } from './bootstrap.mjs';
 
@@ -80,7 +80,7 @@ function showHelp() {
     audit               Run security audit on agent configuration
     init                Initialize .bizar/ in current project
     export [target]     Export agents/rules to another harness
-    plan <subcommand>  Manage visual plans
+    artifact <subcommand>  Manage visual artifacts
     test-gate           Detect & run the project's test suite
     update              Auto-update everything (opencode + bizar + dash + plugin)
     service             Manage the background service daemon
@@ -500,7 +500,7 @@ async function main() {
       if (result.failed > 0) process.exit(1);
     }
   } else if (args[0] === 'plan') {
-    await runPlan(args.slice(1), {});
+    await runArtifact(args.slice(1), {});
   } else if (args[0] === 'install') {
     if (isHelpRequest) showInstallHelp();
     else await runInstaller();

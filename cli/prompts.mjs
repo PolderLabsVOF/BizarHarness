@@ -107,8 +107,8 @@ export async function promptApiKeys() {
     },
     {
       type: 'password',
-      name: 'hindsight',
-      message: 'Hindsight API key (memory persistence):',
+      name: 'obsidian_vault',
+      message: 'Obsidian vault path (memory persistence):',
       mask: '*',
       validate: v => v.length > 0 || 'Required for cross-session memory',
     },

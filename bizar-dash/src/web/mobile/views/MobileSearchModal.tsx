@@ -11,7 +11,7 @@ type Props = {
   onNavigate: (type: string, id: string) => void;
 };
 
-const SCOPES = ['all', 'tasks', 'agents', 'plans', 'projects', 'settings'] as const;
+const SCOPES = ['all', 'tasks', 'agents', 'artifacts', 'projects', 'settings'] as const;
 type Scope = typeof SCOPES[number];
 
 const SCOPE_ICONS: Record<string, typeof FileText> = {

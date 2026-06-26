@@ -372,7 +372,7 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
           </div>
           <div className="mobile-setting-row">
             <span className="mobile-setting-label">Plans</span>
-            <span className="mobile-setting-value">{snapshot?.plans?.length || 0}</span>
+            <span className="mobile-setting-value">{snapshot?.artifacts.length || 0}</span>
           </div>
         </div>
       </section>

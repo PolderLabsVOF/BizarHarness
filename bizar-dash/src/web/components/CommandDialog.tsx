@@ -2,8 +2,8 @@
 // correct specific dialog component based on the DialogDescriptor's `component` field.
 
 import { VisualPlanDialog } from './VisualPlanDialog';
-import { PlanCreateDialog } from './PlanCreateDialog';
-import { PlanListDialog } from './PlanListDialog';
+import { ArtifactCreateDialog } from './ArtifactCreateDialog';
+import { ArtifactListDialog } from './ArtifactListDialog';
 import { HelpDialog } from './HelpDialog';
 import { AuditDialog } from './AuditDialog';
 import type { DialogDescriptor } from '../lib/types';
@@ -50,12 +50,12 @@ function GenericDialog({ dialog, onClose }: { dialog: DialogDescriptor; onClose:
 
 export function CommandDialog({ dialog, onClose }: { dialog: DialogDescriptor; onClose: () => void }) {
   switch (dialog.component) {
-    case 'visual-plan':
+    case 'visual-artifact':
       return <VisualPlanDialog data={dialog.data} onClose={onClose} />;
-    case 'plan-create':
-      return <PlanCreateDialog data={dialog.data} onClose={onClose} />;
-    case 'plan-list':
-      return <PlanListDialog data={dialog.data} onClose={onClose} />;
+    case 'artifact-create':
+      return <ArtifactCreateDialog data={dialog.data} onClose={onClose} />;
+    case 'artifact-list':
+      return <ArtifactListDialog data={dialog.data} onClose={onClose} />;
     case 'help':
       return <HelpDialog data={dialog.data} onClose={onClose} />;
     case 'audit':

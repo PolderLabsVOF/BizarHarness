@@ -375,7 +375,7 @@ export async function runInstaller() {
   console.log(chalk.dim('  You can configure API keys now or later via /connect in opencode.'));
   const keys = await promptApiKeys();
 
-  if (keys.opencodeZen || keys.minimax || keys.openai || keys.hindsight) {
+  if (keys.opencodeZen || keys.minimax || keys.openai |) {
     console.log(chalk.dim('\n  Keys noted. Add them to your opencode.json or run /connect in opencode.\n'));
   }
 

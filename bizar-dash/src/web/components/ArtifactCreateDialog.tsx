@@ -1,10 +1,10 @@
-// src/components/PlanCreateDialog.tsx — Dialog for /plan new command.
+// src/components/ArtifactCreateDialog.tsx — Dialog for /artifact new command.
 
 import { useState } from 'react';
 import { Button } from './Button';
 import { api } from '../lib/api';
 
-type PlanCreateDialogProps = {
+type ArtifactCreateDialogProps = {
   data?: Record<string, unknown>;
   onClose: () => void;
 };
@@ -18,7 +18,7 @@ const KNOWN_TEMPLATES = [
   'vertical',
 ];
 
-export function PlanCreateDialog({ data, onClose }: PlanCreateDialogProps) {
+export function ArtifactCreateDialog({ data, onClose }: ArtifactCreateDialogProps) {
   const templates = (data?.templates as string[]) ?? KNOWN_TEMPLATES;
   const defaultTemplate = (data?.defaultTemplate as string) ?? 'blank';
 
@@ -39,7 +39,7 @@ export function PlanCreateDialog({ data, onClose }: PlanCreateDialogProps) {
     setCreating(true);
     setError(null);
     try {
-      await api.post('/plans', { slug, template: selectedTemplate });
+      await api.post('/artifacts', { slug, template: selectedTemplate });
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -50,7 +50,7 @@ export function PlanCreateDialog({ data, onClose }: PlanCreateDialogProps) {
   return (
     <div>
       <p style={{ marginBottom: 16, color: 'var(--color-muted)', fontSize: 13 }}>
-        Create a new visual plan. Plans are stored in <code>plans/</code> in your worktree.
+        Create a new visual plan. Plans are stored in <code>artifacts/</code> in your worktree.
       </p>
 
       <div style={{ marginBottom: 12 }}>

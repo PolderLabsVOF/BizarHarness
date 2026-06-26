@@ -74,8 +74,7 @@ if [ -f "$oc_config" ]; then
     echo "  ❌ semble MCP entry missing from opencode.json"
     FAIL=$((FAIL + 1))
     FAILURES+=("semble-mcp-missing")
-  fi
-  if grep -q '"hindsight"' "$oc_config" 2>/dev/null; then
+  fig" 2>/dev/null; then
     echo "  ✅ hindsight MCP entry present in opencode.json"
     PASS=$((PASS + 1))
   else
@@ -101,17 +100,7 @@ fi
 # ─── Pass 9e: Hindsight bank (if available) ──────────────────────────
 echo ""
 echo "═══ Pass 9e. Hindsight bank presence ═══"
-hindsight_dir="$HOME/.cache/hindsight"
-if [ -d "$hindsight_dir" ]; then
-  banks=$(ls "$hindsight_dir" 2>/dev/null)
-  if [ -n "$banks" ]; then
-    echo "  ✅ Hindsight banks: $(echo "$banks" | wc -l) entries"
-    echo "$banks" | head -5 | sed 's/^/    /'
-    PASS=$((PASS + 1))
-  else
-    echo "  ⚠ Hindsight dir empty (sandbox-disabled)"
-  fi
-else
+hindsight_dir="$HOME/.cache/hindsight"else
   echo "  ⚠ Hindsight disabled in dev sandbox (sandbox-disable-extras)"
   echo "  → Real users would create banks with hindsight_create_bank"
 fi

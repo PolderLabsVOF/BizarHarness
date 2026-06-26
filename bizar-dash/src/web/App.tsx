@@ -13,7 +13,7 @@ import { Ws } from './lib/ws';
 import {
   applyTheme,
   applyThemeTokens,
-  type Plan,
+  type Artifact,
   type Settings,
   type SettingsResponse,
   type Snapshot,
@@ -25,7 +25,7 @@ import {
 import { Overview } from './views/Overview';
 import { Chat } from './views/Chat';
 import { Agents } from './views/Agents';
-import { Plans } from './views/Plans';
+import { Artifacts } from './views/Artifacts';
 import { Tasks } from './views/Tasks';
 import { Activity } from './views/Activity';
 import { Config } from './views/Config';
@@ -64,7 +64,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   overview: Overview,
   chat: Chat,
   agents: Agents,
-  plans: Plans,
+  artifacts: Artifacts,
   tasks: Tasks,
   activity: Activity,
   background: BackgroundAgents,
@@ -287,12 +287,12 @@ function Shell() {
           const agents = (cur.agents || []).map((a) => (a.name === m.agent.name ? m.agent : a));
           return { ...cur, agents };
         });
-      } else if (msg.type === 'plan:change') {
-        // Plans list refreshes after any plan mutation.
+      } else if (msg.type === 'artifact:change') {
+        // Artifacts list refreshes after any artifact mutation.
         api
-          .get<{ plans: Plan[] }>('/plans')
+          .get<{ artifacts: Artifact[] }>('/artifacts')
           .then((d) => {
-            setSnapshot((cur) => (cur ? { ...cur, plans: d.plans || [] } : cur));
+            setSnapshot((cur) => (cur ? { ...cur, artifacts: d.artifacts || [] } : cur));
           })
           .catch(() => undefined);
       } else if (msg.type === 'agent:stuck') {

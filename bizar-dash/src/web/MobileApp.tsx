@@ -21,8 +21,8 @@ import { MobileConfig } from './mobile/views/MobileConfig';
 import { MobileHistory } from './mobile/views/MobileHistory';
 import { MobileMods } from './mobile/views/MobileMods';
 import { MobileMore } from './mobile/views/MobileMore';
-import { MobilePlanCanvas } from './mobile/views/MobilePlanCanvas';
-import { MobilePlans } from './mobile/views/MobilePlans';
+import { MobileArtifactCanvas } from './mobile/views/MobileArtifactCanvas';
+import { MobileArtifacts } from './mobile/views/MobileArtifacts';
 import { MobileSchedules } from './mobile/views/MobileSchedules';
 import { MobileSearchModal } from './mobile/views/MobileSearchModal';
 import { MobileSettings } from './mobile/views/MobileSettings';
@@ -33,14 +33,14 @@ type MainTabId = 'activity' | 'chat' | 'tasks' | 'settings' | 'more';
 
 export type MobileView =
   | { id: MainTabId }
-  | { id: 'plans' }
+  | { id: 'artifacts?' }
   | { id: 'agents' }
   | { id: 'skills' }
   | { id: 'mods' }
   | { id: 'schedules' }
   | { id: 'history' }
   | { id: 'config' }
-  | { id: 'plan-detail'; slug: string }
+  | { id: 'artifacts?-detail'; slug: string }
   | { id: 'agent-detail'; name: string }
   | { id: 'task-detail'; taskId: string };
 
@@ -58,11 +58,11 @@ function parseNotificationTarget(notification: Notification): MobileView | null 
   const slug = typeof meta.slug === 'string' ? meta.slug : null;
   const agentName = typeof meta.agent === 'string' ? meta.agent : null;
   if (taskId) return { id: 'task-detail', taskId };
-  if (slug) return { id: 'plan-detail', slug };
+  if (slug) return { id: 'artifacts?-detail', slug };
   if (agentName) return { id: 'agent-detail', name: agentName };
 
   const link = notification.link ?? '';
-  if (link.startsWith('/plans/')) return { id: 'plan-detail', slug: decodeURIComponent(link.slice('/plans/'.length)) };
+  if (link.startsWith('/artifacts?/')) return { id: 'artifacts?-detail', slug: decodeURIComponent(link.slice('/artifacts?/'.length)) };
   if (link.startsWith('/tasks/')) return { id: 'task-detail', taskId: decodeURIComponent(link.slice('/tasks/'.length)) };
   if (link.startsWith('/agents/')) return { id: 'agent-detail', name: decodeURIComponent(link.slice('/agents/'.length)) };
 
@@ -207,7 +207,7 @@ export function MobileApp() {
         msg.type === 'project:change' ||
         msg.type === 'agents:change' ||
         msg.type === 'schedules:change' ||
-        msg.type === 'plan:change'
+        msg.type === 'artifacts?:change'
       ) {
         refreshSnapshot().catch(() => undefined);
       } else if (msg.type === 'agent:status' || msg.type === 'agent:restarted') {
@@ -254,8 +254,8 @@ export function MobileApp() {
       pushView({ id: 'task-detail', taskId: id });
       return;
     }
-    if (type === 'plan' && id) {
-      pushView({ id: 'plan-detail', slug: id });
+    if (type === 'artifacts?' && id) {
+      pushView({ id: 'artifacts?-detail', slug: id });
       return;
     }
     if (type === 'agent' && id) {
@@ -277,8 +277,8 @@ export function MobileApp() {
     if (stack.length > 0) {
       const stackedView = stack[stack.length - 1];
       switch (stackedView.id) {
-        case 'plans':
-          return <MobilePlans snapshot={snapshot} onBack={popView} onOpenPlan={(slug) => pushView({ id: 'plan-detail', slug })} />;
+        case 'artifacts?':
+          return <MobileArtifacts snapshot={snapshot} onBack={popView} onOpenArtifact={(slug) => pushView({ id: 'artifacts?-detail', slug })} />;
         case 'agents':
           return <MobileAgents snapshot={snapshot} onBack={popView} onOpenAgent={(name) => pushView({ id: 'agent-detail', name })} onRefresh={refreshSnapshot} />;
         case 'skills':
@@ -291,8 +291,8 @@ export function MobileApp() {
           return <MobileHistory onBack={popView} />;
         case 'config':
           return <MobileConfig onBack={popView} />;
-        case 'plan-detail':
-          return <MobilePlanCanvas slug={stackedView.slug} onBack={popView} />;
+        case 'artifacts?-detail':
+          return <MobileArtifactCanvas slug={stackedView.slug} onBack={popView} />;
         case 'agent-detail':
           return (
             <MobileAgents
@@ -351,7 +351,7 @@ export function MobileApp() {
           <MobileMore
             snapshot={snapshot}
             onNavigate={(id) => {
-              if (id === 'plans' || id === 'agents' || id === 'skills' || id === 'mods' || id === 'schedules' || id === 'history' || id === 'config') {
+              if (id === 'artifacts?' || id === 'agents' || id === 'skills' || id === 'mods' || id === 'schedules' || id === 'history' || id === 'config') {
                 pushView({ id });
               }
             }}

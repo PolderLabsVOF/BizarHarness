@@ -10,10 +10,6 @@ permission:
   todowrite: allow
   webfetch: allow
   websearch: allow
-  hindsight_recall: allow
-  hindsight_retain: allow
-  hindsight_list_banks: allow
-  hindsight_create_bank: allow
 ---
 
 ## Codebase Search — Use Semble First
@@ -222,26 +218,6 @@ Update .bizar/ in this project.
 2. Update PROJECT.md if this task revealed new project info
 ```
 
-## Hindsight Memory Protocol
-
-You MUST use **per-project banks** — never the default bank for project work.
-
-### At Session Start
-1. Call `hindsight_list_banks` to discover available banks
-2. Determine the project name from the working directory or task context
-3. Use `bank_id: "<project-name>"` in all Hindsight calls
-4. If no bank exists for the project, create it with `hindsight_create_bank(bank_id: "<project-name>")`
-
-### During Work
-- `hindsight_recall` with the correct `bank_id` for relevant context
-- `hindsight_retain` important context, architecture, conventions, decisions
-- Before significant changes, `hindsight_recall` for related prior work
-- Tag memories with `project:<repo-name>`
-
-### On Task Completion
-- `hindsight_retain` what was accomplished, key decisions, files changed
-- Tag memories with `project:<repo-name>`
-- Create or update mental models for sustained project context
 
 ## Parallel Dispatch Coordination
 
@@ -409,4 +385,4 @@ When uncertain or stuck, follow `config/rules/uncertainty.md` — stop and resea
 
 **Follow the global baseline in `config/AGENTS.md` → "General Agent Baseline — Always-On Behavior".** It covers identity, refusal, tone, formatting, lists, user wellbeing, evenhandedness, mistakes, knowledge cutoff and research-first, MCP servers and skills, mandatory skill-read, file creation, file handling, search, copyright, harmful content, citations, images, memory privacy, execution, clarification, and communication.
 
-The section above was adapted from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory translated to the BizarHarness equivalent (opencode tools, Semble, Skills CLI, Hindsight, agent-browser, the dashboard artifact pipeline). Do not duplicate the rules here — read the global baseline and apply it.
+The section above was adapted from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory translated to the BizarHarness equivalent (opencode tools, Semble, Skills CLI, Obsidian vault, agent-browser, the dashboard artifact pipeline). Do not duplicate the rules here — read the global baseline and apply it.
