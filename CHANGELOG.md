@@ -1,5 +1,74 @@
 # Changelog
 
+## v3.23.0 — LightRAG server mod + Obsidian/Graphify session bootstrap
+
+> **New mod + global rule.** Adds the LightRAG server integration (graph-based RAG for the dashboard) and a new global agent baseline rule that mandates Obsidian + Graphify context-gathering at the start of every new session.
+
+### New mod: LightRAG
+
+A self-contained mod that auto-starts a `lightrag-hku[api]` Python server and exposes it as a dashboard view at `/lightrag` with a full query/insert UI.
+
+**Files added (in `mods-examples/lightrag/`):**
+- `mod.json` — manifest (kind: server, view: lightrag, permissions for process:spawn, fs:read/write)
+- `route.mjs` — server lifecycle + REST proxy. Endpoints mounted at `/api/mods/lightrag/*`:
+  - `GET /status`, `GET /start`, `GET /stop`, `GET /restart`
+  - `GET /config`, `POST /config`
+  - `POST /insert/text`, `POST /insert/file`
+  - `POST /query`, `GET /entities`, `GET /relations`
+  - `ALL /proxy/*` — generic passthrough to the LightRAG server
+- `INSTRUCTIONS.md` — installed as a `~/.opencode/skills/lightrag/SKILL.md` skill. Teaches agents when to use LightRAG (semantic cross-document Q&A) vs grep vs Semble.
+- `web/index.html` — full self-contained dashboard view (dark, no external deps, ~12KB)
+
+**Auto-start:** if `autoStart: true` in mod config, the mod spawns the server on dashboard boot. Writes PID to `.bizar/lightrag/lightrag.pid` and logs to `.bizar/lightrag/lightrag.log`. Health-checks via `GET /health` for 30s before declaring success.
+
+**Config schema** (modifiable from `Settings → Mods → LightRAG` or `POST /api/mods/lightrag/config`):
+- `host` (default `127.0.0.1`)
+- `port` (default `9621`)
+- `autoStart` (default `true`)
+- `workingDir` (default `.bizar/lightrag`)
+- `llmModel` (default `minimax/MiniMax-M3`)
+- `embeddingModel` (default `text-embedding-3-small`)
+
+**Requirements:** the `lightrag-server` binary (install via `uv tool install "lightrag-hku[api]"`). The mod auto-installs on first start if `uv` is available.
+
+### New global agent rule: New sessions must bootstrap context
+
+Added as rule 13 in `config/agents/_shared/AGENT_BASELINE.md`. **Every new agent session starts blind** — before answering the user or doing work, gather context from:
+
+1. **Obsidian vault** at `.obsidian/index/` — `Home.md`, `Versions.md`, `Architecture.md`, `Dashboard.md`, `Patterns.md`, `Tools.md`, `Workflows.md` (only relevant ones)
+2. **Graphify graph** at `.bizar/graph/` (if graphify mod is installed) — `bizar graph query "<concept>"`, `bizar graph path <A> <B>`, `bizar graph explain <file>`
+3. **Agent memory** at `.obsidian/agents/<name>/` — past sessions, gotchas, corrections
+4. **Recent daily log** at `.obsidian/daily/` — last 3-7 days
+
+Re-bootstrap mid-session after long pauses, when the user references something you don't recognize, before any non-trivial decision, or when the conversation pivots.
+
+### Chat UI pagination
+
+Chat session list now caps at 30 visible sessions with a "Show all N sessions" toggle for the rest. Previously showed 200+ items unfiltered.
+
+### Verification
+
+- `bizar test-gate`: 79/79 pass
+- `tsc --noEmit`: 0 errors
+- `vite build`: clean
+- Dashboard mod route works: `curl http://127.0.0.1:4321/api/mods/lightrag/status` returns the mod status JSON
+- Tailscale still works: dashboard at `https://borkpc.tail2cdf4d.ts.net/`
+
+### Files added
+
+- `mods-examples/lightrag/{mod.json, route.mjs, INSTRUCTIONS.md, web/index.html}`
+- `~/.opencode/skills/lightrag/SKILL.md` (installed automatically by the mod loader)
+- `bizar-mods/registry.json` — added LightRAG entry
+
+### Files modified
+
+- `config/agents/_shared/AGENT_BASELINE.md` — added rule 13 (Obsidian + Graphify bootstrap)
+- `bizar-dash/src/web/components/chat/SessionList.tsx` — pagination
+- `bizar-dash/package.json` — bumped to 3.23.0
+- `package.json` — bumped to 3.23.0
+
+---
+
 ## v3.22.2 — Critical UI fixes (mobile app, settings contrast, artifact loading, sessions)
 
 > **Critical fix release.** Resolves 5 major issues found via UI audit at multiple viewport sizes (16:9 desktop, 20:9 mobile, 16:10, 21:9 ultrawide, tablet portrait/landscape).

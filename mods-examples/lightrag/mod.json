@@ -1,0 +1,61 @@
+{
+  "id": "lightrag",
+  "name": "LightRAG",
+  "version": "1.0.0",
+  "author": "BizarHarness",
+  "description": "LightRAG server integration — graph-based RAG for the Bizar dashboard. Auto-starts a LightRAG HTTP server (lightrag-hku[api] Python package) and exposes it as a dashboard view with document insert + query UI. v1.0.0 ships a mod instructions skill that teaches agents to query the knowledge graph for cross-document questions before re-reading source files.",
+  "kind": "server",
+  "entry": {
+    "route": "route.mjs",
+    "view": {
+      "id": "lightrag",
+      "label": "LightRAG",
+      "icon": "Brain",
+      "description": "Graph-based RAG server. Insert documents, query the knowledge graph."
+    }
+  },
+  "permissions": [
+    "process:spawn:lightrag-server",
+    "process:spawn:uv",
+    "process:spawn:uvx",
+    "process:spawn:python3",
+    "process:spawn:curl",
+    "fs:read:.bizar/lightrag",
+    "fs:write:.bizar/lightrag",
+    "fs:read:.obsidian",
+    "fs:write:.obsidian"
+  ],
+  "configSchema": {
+    "host": {
+      "type": "string",
+      "default": "127.0.0.1",
+      "description": "Host the LightRAG server binds to."
+    },
+    "port": {
+      "type": "number",
+      "default": 9621,
+      "description": "Port the LightRAG server binds to."
+    },
+    "autoStart": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, auto-start the LightRAG server when the mod loads."
+    },
+    "workingDir": {
+      "type": "string",
+      "default": ".bizar/lightrag",
+      "description": "Working directory for the LightRAG server (data persisted here)."
+    },
+    "llmModel": {
+      "type": "string",
+      "default": "minimax/MiniMax-M3",
+      "description": "LLM model to use for entity-relation extraction and query synthesis. Uses the opencode provider format."
+    },
+    "embeddingModel": {
+      "type": "string",
+      "default": "text-embedding-3-small",
+      "description": "Embedding model. Must be set before indexing."
+    }
+  },
+  "bizar": ">=3.22.0"
+}

@@ -651,3 +651,48 @@ Every Bizar project has a vault at `.obsidian/` with index files (`index/`), age
 - Anything already obvious from reading the code
 
 **The O in Odin stands for "oblige the system": Odin ALWAYS updates the vault after significant work, regardless of who did the work. The other agents read; Odin writes.**
+
+## 13. New Sessions Must Bootstrap Context from Obsidian + Graphify
+
+**Every new agent session starts blind. Before answering the user or doing any work, gather context from the project's two project-knowledge stores.**
+
+Both stores are git-tracked (`.obsidian/`, `.bizar/graph/`) and require no setup. The first minute of context-gathering saves an hour of wrong-direction work.
+
+**At the start of EVERY new session, do this in order:**
+
+1. **Skim the Obsidian vault index** at `.obsidian/index/`:
+   - `Home.md` (or whatever the entry doc is) — the project's high-level description, architecture, current state
+   - `Versions.md` — installed component versions
+   - `Architecture.md` — system structure
+   - `Dashboard.md` — dashboard conventions
+   - `Patterns.md`, `Tools.md`, `Workflows.md` — only if relevant to the current task
+   - Any `daily/` entries from the past week — what was being worked on
+
+2. **Check the Graphify graph** at `.bizar/graph/` (if the graphify mod is installed):
+   - `bizar graph query "<concept>"` — for cross-module code questions
+   - `bizar graph path <A> <B>` — for dependency tracing
+   - `bizar graph explain <file>` — for understanding an unfamiliar file
+
+3. **Read agent-specific memory** at `.obsidian/agents/<your-name>/`:
+   - Past sessions, gotchas, decisions
+   - Anything the user previously corrected you on
+
+4. **Skim recent context** at `.obsidian/daily/`:
+   - Last 3-7 days of running log entries
+   - What was in flight when the last session ended
+
+**When to re-bootstrap mid-session:**
+
+- After long pauses (>1 hour idle, the user's mental model may have shifted)
+- When the user references something you don't recognize ("the thing we did last week", "the migration")
+- Before any non-trivial decision
+- When the conversation pivots to a different subsystem
+
+**Anti-patterns:**
+
+- Don't ask the user "what is this project about?" — read the vault
+- Don't re-read the source tree top-to-bottom to get context — query the graph
+- Don't repeat work that was done in a previous session — the daily log has the outcome
+- Don't make assumptions about the user's preferences — check the vault and agent memory
+
+**The bootstrap is mandatory, not optional. A session that starts without checking Obsidian + Graphify is a session that's likely to suggest things the user already tried, break things that were already fixed, or contradict decisions that were already made.**
