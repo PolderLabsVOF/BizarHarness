@@ -13,7 +13,7 @@ import { WebSocketServer } from 'ws';
 import { createServer as createHttpServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { existsSync, readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, openSync, readSync, closeSync, readdirSync } from 'node:fs';
 import { dirname as pathDirname } from 'node:path';
 import { createApiRouter } from './api.mjs';
 import { createState } from './state.mjs';
@@ -430,7 +430,20 @@ export async function createServer({
         '/assets',
         express.static(assetsDir, { maxAge: '1y', immutable: true, index: false }),
       );
-    }
+      // v3.23.0 — Serve the mobile CSS at a stable /mobile.css URL so the
+      // desktop index.html can link to it without needing to know the hash.
+      // MobileApp renders the mobile shell; without its CSS the user sees
+      // unformatted HTML. The actual file is named mobile-<hash>.css; we
+      // resolve it at startup so the URL is stable.
+      try {
+        const mobileCss = readdirSync(assetsDir).find((f) => /^mobile-.*\.css$/.test(f));
+        if (mobileCss) {
+          app.get('/mobile.css', (_req, res) => {
+            res.setHeader('Cache-Control', 'no-cache');
+            res.sendFile(join(assetsDir, mobileCss));
+          });
+        }
+      } catch { /* ignore — mobile.css won't be served, fine */ }
     app.get('/', (req, res, next) => {
       if (!shouldRedirectToMobile(req)) {
         next();

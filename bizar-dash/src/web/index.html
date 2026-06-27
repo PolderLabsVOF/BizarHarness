@@ -9,12 +9,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <!-- v3.23.0 — Mobile app CSS at a stable URL so MobileApp renders with
+         styles even when the auto-redirect to /m is bypassed. -->
+    <link rel="stylesheet" href="/mobile.css" />
     <script>
-      // v3.5.0 — Auto-redirect to /m on mobile devices
+      // v3.5.0 — Auto-redirect to /m on mobile devices.
+      // v3.23.0 — Also redirect on width alone so emulators + desktop browsers resized
+      // to a narrow window still land on the mobile app. The `pointer: coarse`
+      // check is kept as one signal but not required.
       (function () {
-        var isMobile =
-          window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches ||
-          /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        var narrowViewport =
+          window.matchMedia('(max-width: 768px)').matches ||
+          window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
+        var touchDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        var isMobile = narrowViewport || touchDevice;
         var wantsDesktop = new URLSearchParams(window.location.search).has('desktop');
         if (isMobile && !wantsDesktop && !window.location.pathname.startsWith('/m')) {
           window.location.replace('/m' + window.location.pathname + window.location.search);

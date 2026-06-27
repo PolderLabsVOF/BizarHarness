@@ -3,6 +3,11 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { MobileApp } from './MobileApp';
+// Import mobile CSS so the MobileApp renders with styles when served
+// from index.html (e.g. when the auto-redirect to /m is bypassed).
+import './styles/main.css';
+import './styles/mobile.css';
+import './styles/glyphs.css';
 
 function Root() {
   const [isMobile, setIsMobile] = useState(() => {
