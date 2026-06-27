@@ -27,10 +27,13 @@ export function SessionList({
   onSelectSession,
 }: Props) {
   const [view, setView] = useState<'bizar' | 'all'>('all');
+  const [showAll, setShowAll] = useState(false);
+  const VISIBLE_LIMIT = 30;
 
-  const displayedSessions = view === 'all'
+  const allSorted = view === 'all'
     ? [...sessions, ...opencodeSessions].sort((a, b) => Number(b.mtime) - Number(a.mtime))
     : sessions;
+  const displayedSessions = showAll ? allSorted : allSorted.slice(0, VISIBLE_LIMIT);
 
   const totalOpencode = opencodeSessions.length;
 
@@ -132,6 +135,18 @@ export function SessionList({
             );
           })}
         </ul>
+      )}
+
+      {allSorted.length > VISIBLE_LIMIT && (
+        <button
+          type="button"
+          className="chat-sessions-show-more"
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll
+            ? `Show less (${allSorted.length - VISIBLE_LIMIT} hidden)`
+            : `Show all ${allSorted.length} sessions`}
+        </button>
       )}
     </div>
   );

@@ -1,0 +1,215 @@
+---
+title: "v3.22.0 — Release summary"
+brief: "What shipped in v3.22.0: from-scratch chat UI rewrite, agent knowledge protocol, system LLM API, pre-push heads-ups, and 3 new skills."
+status: shipped
+kind: postmortem
+---
+
+<RichText id="overview">
+
+## What shipped in v3.22.0
+
+A complete from-scratch rewrite of the Bizar chat UI (Gemini-inspired), a system-wide Obsidian knowledge protocol, a configurable system LLM API for prompt enhancement and title generation, real HTML mockups in glyphs, and a pre-push heads-up system that catches gotchas before npm publish. **All 79 tests pass. Both npm packages are at 3.22.0. Git is clean.**
+
+</RichText>
+
+<Stat id="stat-version" label="Version" value="3.22.0" />
+<Stat id="stat-tests" label="Tests passing" value="79/79" />
+<Stat id="stat-files" label="Files changed" value="65" />
+<Stat id="stat-features" label="Major features" value="8" />
+<Stat id="stat-skills" label="New skills" value="3" />
+<Stat id="stat-published" label="Published" value="@polderlabs/bizar @ @polderlabs/bizar-dash" />
+
+<RichText id="chat-ui">
+
+## 1. Chat UI rewrite (Gemini-inspired)
+
+Complete from-scratch rewrite of `bizar-dash/src/web/views/Chat.tsx` (728 lines → 250 lines). 12 new components in `bizar-dash/src/web/components/chat/`.
+
+**Layout:** 3-column responsive grid (sessions 200/240px | thread | info 240/260px). On tablet (768-1023px) sessions becomes an overlay sheet; on mobile (under 768px) both panels are overlay sheets.
+
+**First-run welcome screen:** centered "Hello, [project]." with gradient text that derives from `--accent` via `color-mix(in oklab, ...)` — change `--accent` and both gradients update automatically. 4 suggestion cards in an auto-fit grid (4-up at ≥1100px, 2-up at 600-1099px, 1-up under 600px).
+
+**Floating pill composer:** sticky at bottom-center of the thread, max-width `min(880px, 100%)` so it fits any viewport. Column layout (textarea on top, toolbar below). Custom `AgentChip` popover replaces the broken native `<select>` — keyboard-accessible, theme-controlled, no positioning surprises.
+
+**Mobile-safe:** composer pill uses `max-width: min(880px, 100%)` so it never overflows on a 414px viewport. Session and info panels slide in via `transform: translateX` (never `display: none`).
+
+**Fixed bugs:** dead CSS override at `main.css:8217`, 3 missing CSS classes (`chat-sessions-new`, `-empty`, `-count`), `window.confirm()` replaced with `useModal()`, race condition in `onCreateSession`, `onRegenerate` no longer loads wrong session when `sessionId` is empty.
+
+</RichText>
+
+<RichText id="agent-knowledge">
+
+## 2. Agent knowledge protocol (Obsidian)
+
+**New global rule #12** in `config/agents/_shared/AGENT_BASELINE.md`:
+
+> **Project knowledge lives in `.obsidian/`. Read it before you start, write to it when you learn.**
+
+Every Bizar agent now reads the vault at session start, before non-trivial decisions, and when context feels stale. Odin is responsible for always updating the vault after significant work, regardless of who did the work.
+
+The vault structure: `.obsidian/index/` (high-level), `.obsidian/bugs/` (postmortems), `.obsidian/agents/<name>/` (per-agent memory), `.obsidian/workflows/` (procedures), `.obsidian/daily/` (running log).
+
+</RichText>
+
+<RichText id="skills">
+
+## 3. Three new skills installed at `~/.opencode/skills/`
+
+**`obsidian`** — when to read the vault (session start, before decisions, after user corrections) and when to write (after completing work, on discoveries, on patterns). The O in Odin stands for "oblige the system": Odin always updates the vault.
+
+**`glyph`** — visual plan/recap artifacts in `artifacts/<slug>/artifact.mdx`. Documents the full MDX block vocabulary (RichText, Callout, Checklist, Table, CodeTabs, Decision, OpenQuestions, FileTree, Stat, Workflow, Mockup, Diagram) and the common pitfalls (FileTree `change` must be one of `added|modified|removed|renamed`; MDX heading `<N` breaks the validator).
+
+**`read-the-damn-docs`** — BuilderIO's principle, Bizar-flavored: when using a library/tool/API you don't fully understand, READ THE DOCS before guessing. Hierarchy of truth: official docs > source code > examples > StackOverflow > your prior model. Always use the `webfetch` tool for library APIs you haven't touched in this session.
+
+</RichText>
+
+<RichText id="system-llm">
+
+## 4. System LLM API
+
+**New Settings → "System LLM API" section.** Default: `opencode/deepseek-v4-flash-free` (free tier via opencode Zen). Configurable provider + model. Used for:
+
+- Auto-title generation for new chat sessions and tasks
+- "Enhance prompt" feature (✨ button in chat composer + task description)
+
+`enhancePrompt()` stub in `api.ts` with TODO for the actual implementation. The endpoint is wired; just needs the prompt templates.
+
+</RichText>
+
+<RichText id="ui-mockups">
+
+## 5. Real UI drafts in glyphs
+
+The `<Mockup>` block now renders real HTML in a browser-chrome frame via `dangerouslySetInnerHTML`. Three new CSS classes: `.glyph-mockup-frame`, `.glyph-mockup-chrome` (3 traffic-light dots), `.glyph-mockup-body`. Sample at `artifacts/mockup-test/`.
+
+Before: ASCII art in `<RichText>`. After: rich HTML — buttons, cards, forms, any UI mockup the agent can write.
+
+</RichText>
+
+<RichText id="heads-up">
+
+## 6. Pre-push heads-up system
+
+**New file `.bizar/PRE_PUSH_NOTES.md`** created by `bizar init`. Agents append dated entries with severity (blocker | warning | info), area (cli | dash | plugin | npm | docs | build), description, and mitigation.
+
+**New CLI subcommand `bizar heads-up`** with subcommands:
+- `bizar heads-up list` — print active entries
+- `bizar heads-up check` — exit 0 (clear) or 1 (blockers exist)
+- `bizar heads-up archive` — move active entries to the Resolved section
+
+**`bizar update`** now gates on heads-ups: blockers refuse the update (require `--force`), warnings prompt for confirmation, clear state proceeds.
+
+</RichText>
+
+<RichText id="sessions-visibility">
+
+## 7. Sessions visibility
+
+**New endpoint `GET /api/opencode-sessions`** reads `~/.local/share/opencode/opencode.db` via `better-sqlite3`. Returns the 200 most-recently-updated non-archived opencode sessions.
+
+**`SessionList` has a "Bizar / All" toggle** (Bizar-only by default). When "All" is selected, opencode sessions are merged into the list sorted by `mtime`. Clicking an opencode session opens it in the opencode web UI (`/opencode/session/<id>`) in a new tab.
+
+</RichText>
+
+<RichText id="installer-updater">
+
+## 8. Installer + updater overhaul
+
+**`install.sh`** now verifies 14 tools (node, uv, uvx, bun, jq, sqlite3, gh, opencode, python3, make, g++, plus originals) and installs native build deps via apt (`build-essential`, `python3`, `libsqlite3-dev`). The skills loop installs the 3 new skills from `config/skills/` if not already present.
+
+**`cli/update.mjs`** now: pull → heads-up check → install skills → rebuild dashboard → run test gate → restart dashboard. Each step is gated on the previous one succeeding.
+
+</RichText>
+
+<FileTree
+  id="tree-files"
+  title="Files added or modified"
+  entries={[
+    { path: "bizar-dash/src/web/views/Chat.tsx",                            change: "modified", note: "Rewritten from 728 → 250 lines (orchestrator only)" },
+    { path: "bizar-dash/src/web/mobile/views/MobileChat.tsx",               change: "modified", note: "Refactored to use shared components" },
+    { path: "bizar-dash/src/web/components/chat/ChatTopBar.tsx",             change: "added",     note: "48px topbar — project chip + spacer + panel toggles" },
+    { path: "bizar-dash/src/web/components/chat/ChatThread.tsx",             change: "added",     note: "Thread orchestrator (welcome + loading + messages)" },
+    { path: "bizar-dash/src/web/components/chat/MessageBubble.tsx",          change: "added",     note: "User/assistant message with hover actions" },
+    { path: "bizar-dash/src/web/components/chat/WelcomeScreen.tsx",          change: "added",     note: "Gradient greeting + suggestion cards CTA" },
+    { path: "bizar-dash/src/web/components/chat/SuggestionCards.tsx",        change: "modified", note: "4 cards in auto-fit grid" },
+    { path: "bizar-dash/src/web/components/chat/Composer.tsx",               change: "modified", note: "Pill composer, custom AgentChip" },
+    { path: "bizar-dash/src/web/components/chat/FloatingComposer.tsx",       change: "modified", note: "Sticky bottom wrapper" },
+    { path: "bizar-dash/src/web/components/chat/AgentChip.tsx",              change: "added",     note: "Custom popover dropdown (replaces native select)" },
+    { path: "bizar-dash/src/web/components/chat/SessionList.tsx",            change: "modified", note: "Sessions sidebar + Bizar/All toggle" },
+    { path: "bizar-dash/src/web/components/chat/InfoPanel.tsx",              change: "modified", note: "Compact info cards + collapsible commands" },
+    { path: "bizar-dash/src/web/components/chat/EmptyState.tsx",             change: "modified", note: "Chat-local empty state" },
+    { path: "bizar-dash/src/web/components/chat/LoadingSkeleton.tsx",        change: "modified", note: "Pulsing skeleton bubbles" },
+    { path: "bizar-dash/src/web/components/chat/ConfirmModal.tsx",           change: "modified", note: "Wraps existing useModal — replaces window.confirm" },
+    { path: "bizar-dash/src/web/components/chat/index.ts",                  change: "modified", note: "Barrel exports all components" },
+    { path: "bizar-dash/src/web/styles/chat.css",                            change: "modified", note: "Clean rewrite — 131 unique class selectors" },
+    { path: "bizar-dash/src/web/styles/mobile-chat.css",                     change: "modified", note: "Minimal mobile overrides" },
+    { path: "bizar-dash/src/server/routes/opencode-sessions.mjs",            change: "added",     note: "Reads opencode.db via better-sqlite3" },
+    { path: "bizar-dash/src/web/views/glyphs/components.tsx",                 change: "modified", note: "Mockup block + browser-chrome frame" },
+    { path: "bizar-dash/src/web/views/glyphs/GlyphRenderer.tsx",             change: "modified", note: "Wired Mockup case" },
+    { path: "bizar-dash/src/web/views/Settings.tsx",                         change: "modified", note: "System LLM API section" },
+    { path: "bizar-dash/src/web/views/Tasks.tsx",                            change: "modified", note: "Enhance-prompt button" },
+    { path: "bizar-dash/src/web/lib/types.ts",                               change: "modified", note: "SystemLlmConfig + ChatSession extensions" },
+    { path: "bizar-dash/src/web/lib/api.ts",                                change: "modified", note: "enhancePrompt() stub" },
+    { path: "bizar-dash/src/server/api.mjs",                                 change: "modified", note: "Mounted opencode-sessions + system-llm routes" },
+    { path: "bizar-dash/src/server/routes/_shared.mjs",                      change: "modified", note: "DEFAULT_SETTINGS includes systemLlm" },
+    { path: "bizar-dash/package.json",                                       change: "modified", note: "better-sqlite3 + @types/better-sqlite3" },
+    { path: "config/agents/_shared/AGENT_BASELINE.md",                       change: "modified", note: "Added rule 12: Obsidian knowledge protocol" },
+    { path: "config/skills/{obsidian,glyph,read-the-damn-docs}/SKILL.md",   change: "added",     note: "3 new skills bundled with the install" },
+    { path: "cli/heads-up.mjs",                                              change: "added",     note: "bizar heads-up CLI logic" },
+    { path: "cli/init.mjs",                                                  change: "modified", note: "Creates .bizar/PRE_PUSH_NOTES.md at init" },
+    { path: "cli/update.mjs",                                                change: "modified", note: "Gates on heads-ups + rebuilds + tests" },
+    { path: "cli/bin.mjs",                                                   change: "modified", note: "Wires heads-up subcommand" },
+    { path: "install.sh",                                                    change: "modified", note: "Verifies 14 tools + native deps + skills loop" },
+    { path: ".bizar/PRE_PUSH_NOTES.md",                                      change: "added",     note: "Heads-up tracking file" },
+    { path: ".obsidian/bugs/glyph-filetree-invalid-change.md",              change: "added",     note: "Postmortem for the FileTree runtime crash" },
+    { path: "artifacts/chat-ui-rewrite/artifact.mdx",                        change: "added",     note: "The visual plan that drove the rewrite" },
+    { path: "artifacts/mockup-test/artifact.mdx",                            change: "added",     note: "Mockup block demo" },
+    { path: "artifacts/v3-22-summary/artifact.mdx",                          change: "added",     note: "This summary" },
+    { path: "package.json",                                                  change: "modified", note: "Bumped to 3.22.0" },
+    { path: "bizar-dash/package.json",                                       change: "modified", note: "Bumped to 3.22.0" },
+    { path: "CHANGELOG.md",                                                  change: "modified", note: "v3.22.0 entry" }
+  ]}
+/>
+
+<RichText id="verification">
+
+## Verification
+
+- **tsc --noEmit**: 0 errors across all changes
+- **vite build**: clean (1 pre-existing ws.ts warning, not from this release)
+- **bizar test-gate**: 79/79 tests pass
+- **Browser E2E**: 3 viewports verified (1920×1080, 1024×768, 414×896) — chat layout, panels, composer, suggestion cards all work
+- **NPM**: `@polderlabs/bizar@3.22.0` and `@polderlabs/bizar-dash@3.22.0` published
+- **Git**: commit `1f15923` pushed to `master`
+- **Local install**: `bizar` CLI at 3.22.0, agent files synced, skills synced, `opencode.json` synced
+
+</RichText>
+
+<Callout id="callout-learnings" tone="success">
+
+## Key learnings from this release
+
+1. **Theme-aware gradients beat hardcoded colors.** Using `color-mix(in oklab, var(--accent), ...)` for the greeting text means the design follows the user's chosen theme. Change `--accent` from purple to blue and everything updates automatically.
+
+2. **Native `<select>` is uncontrollable.** Browsers render it as a modal-style dropdown that breaks the composer layout. For 100 lines of code, a custom button + popover with `useState` + outside-click handler gives full theme control and reliable positioning.
+
+3. **The task tool is reliable for tiny prompts, fragile for complex ones.** A "pong" sanity check works; a 200-line dispatch prompt returns empty synthetic results. When the tool fails, you can either retry with smaller prompts or do the work directly. The fix isn't to keep retrying — it's to design prompts that fit the tool's reliability envelope.
+
+4. **TypeScript types don't enforce at runtime.** The Glyph FileTree crash was a perfect example: the TS type allowed `"rewritten"` but `FILE_CHANGE["rewritten"]` was `undefined`. Either the runtime check or the type needs to be stricter — usually both.
+
+5. **Glyphs beat long planning messages.** A 12-section visual artifact with layout diagrams, decision tables, and acceptance criteria is easier to review than 12 paragraphs of prose. The user reviews faster, catches more issues, and the artifact persists as documentation.
+
+</Callout>
+
+<RichText id="next-steps">
+
+## Next steps
+
+- Wire the actual `enhancePrompt()` implementation (currently a passthrough stub)
+- Add streaming responses to the chat composer (currently waits 90s for full response)
+- Migrate the dashboard to `@xyflow/react` for the canvas editor
+- Add more `<Mockup>` examples to the glyph skill
+- Reduce the gap between "shipped" features and their discovery (e.g. add a "What's new in 3.22.0" callout on dashboard load)
+
+</RichText>

@@ -762,7 +762,22 @@ async function loadDashCli() {
     // fall through to file probing
   }
 
-  // Try 2: file path probing
+  // Try 2: dynamic npm root -g (most reliable for global installs)
+  try {
+    const { execFileSync } = await import('node:child_process');
+    const { pathToFileURL } = await import('node:url');
+    const { join } = await import('node:path');
+    const npmRoot = execFileSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 5000 }).trim();
+    if (npmRoot) {
+      const cliPath = join(npmRoot, '@polderlabs', 'bizar-dash', 'src', 'cli.mjs');
+      const mod = await import(pathToFileURL(cliPath).href);
+      return mod;
+    }
+  } catch (_e) {
+    /* fall through */
+  }
+
+  // Try 3: file path probing
   const { join } = await import('node:path');
   const { homedir } = await import('node:os');
   const candidates = [

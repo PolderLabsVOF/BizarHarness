@@ -149,6 +149,8 @@ export function GlyphRenderer({ slug, onClose, onCommentAdded }: Props) {
   const [comments, setComments] = useState<CommentPin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error caught during the loading phase — shown inline so the user knows why. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -171,22 +173,39 @@ export function GlyphRenderer({ slug, onClose, onCommentAdded }: Props) {
   // Load compiled glyph + comments
   useEffect(() => {
     let cancelled = false;
+    const TIMEOUT_MS = 5000;
+
     (async () => {
       setLoading(true);
       setError(null);
       try {
-        const [renderData, artifactData] = await Promise.all([
-          api.get<CompiledGlyph>(`/artifacts/${encodeURIComponent(slug)}/render`),
-          api.get<{ comments?: CommentPin[]; commentsJson?: { comments?: CommentPin[] } }>(
-            `/artifacts/${encodeURIComponent(slug)}`
-          ),
-        ]);
+        // Race the API calls against a 5-second timeout so the user
+        // sees an error rather than a perpetual spinner if the server
+        // hangs or the network drops.
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out after 5s')), TIMEOUT_MS)
+        );
+
+        const [renderData, artifactData] = await Promise.race([
+          Promise.all([
+            api.get<CompiledGlyph>(`/artifacts/${encodeURIComponent(slug)}/render`),
+            api.get<{ comments?: CommentPin[]; commentsJson?: { comments?: CommentPin[] } }>(
+              `/artifacts/${encodeURIComponent(slug)}`
+            ),
+          ]),
+          timeoutPromise,
+        ]) as [CompiledGlyph, { comments?: CommentPin[]; commentsJson?: { comments?: CommentPin[] } }];
+
         if (cancelled) return;
         setCompiled(renderData);
         const fromFile = (artifactData as any)?.comments ?? [];
         setComments(Array.isArray(fromFile) ? fromFile : []);
       } catch (err) {
-        if (!cancelled) setError((err as Error).message);
+        if (!cancelled) {
+          const msg = (err as Error).message;
+          setError(msg);
+          setLoadError(msg);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -379,7 +398,16 @@ export function GlyphRenderer({ slug, onClose, onCommentAdded }: Props) {
   if (loading) {
     return (
       <div className="glyph-renderer glyph-renderer--loading">
-        <Spinner /> Loading glyph…
+        {loadError ? (
+          <>
+            <strong>Failed to load glyph.</strong>
+            <pre>{loadError}</pre>
+          </>
+        ) : (
+          <>
+            <Spinner /> Loading glyph…
+          </>
+        )}
       </div>
     );
   }

@@ -116,7 +116,7 @@ pre,
 
   /* Text */
   --text: #c9d1d9;
-  --text-dim: #8b95a8;
+  --text-dim: #b4bcd0;
   --text-muted: var(--text-dim);
   --text-strong: #f0f6fc;
 
@@ -245,7 +245,7 @@ pre,
   --border-strong: #cbd5e1;
 
   --text: #1f2937;
-  --text-dim: #64748b;
+  --text-dim: #475569;
   --text-strong: #0f172a;
 
   --accent: #7c3aed;
@@ -3436,6 +3436,47 @@ pre,
 }
 
 
+/* ─── Settings view: contrast overrides (v3.17.x) ──────────────────── */
+/* The base tokens (--text-dim/--text-muted) are calibrated for the
+   global UI, where subtle text is appropriate. The Settings view is a
+   dense, label-heavy layout — labels and section tabs need to read
+   clearly against var(--bg-1) / var(--bg-elev-2). These rules lift the
+   contrast for Settings without changing the global baseline. */
+.view-settings .view-subtitle {
+  color: var(--text);
+}
+
+.view-settings .field-label {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.view-settings .field-help {
+  color: var(--text-muted);
+}
+
+.view-settings .card-title {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.view-settings .settings-subnav-button {
+  color: var(--text-muted);
+}
+
+.view-settings .settings-subnav-button:hover {
+  color: var(--text);
+}
+
+.view-settings .settings-subnav-button-active {
+  color: var(--accent-2);
+}
+
+.view-settings .settings-section-wrap > h2,
+.view-settings .settings-section-wrap > h3 {
+  color: var(--text-strong);
+  font-weight: 600;
+}
 
 /* ─── Settings section filter (v3.17.0) ───────────────────────────── */
 /* When `.settings-grid-filtered` is set on the parent, every direct

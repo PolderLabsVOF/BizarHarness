@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.22.2 — Critical UI fixes (mobile app, settings contrast, artifact loading, sessions)
+
+> **Critical fix release.** Resolves 5 major issues found via UI audit at multiple viewport sizes (16:9 desktop, 20:9 mobile, 16:10, 21:9 ultrawide, tablet portrait/landscape).
+
+### Fixes
+
+- **Mobile app now loads** — `bizar-dash/src/web/main.tsx` was unconditionally rendering `<App />` (desktop) for every viewport, so mobile users saw a broken desktop UI with a hidden sidebar and no bottom nav. Now uses `matchMedia('(max-width: 767px)')` to conditionally render `<MobileApp />` at mobile widths and `<App />` at desktop widths, with a `change` listener for resize events.
+- **Settings page text contrast fixed** — `--text-dim` was too low-contrast (effectively transparent against `--bg-1`), making section labels, card titles, and the subnav buttons nearly invisible. Bumped `--text-dim` from `#8b95a8` to `#b4bcd0` (and the light-mode equivalent from `#64748b` to `#475569`). Added scoped overrides for `.view-settings` so labels and titles use `--text`/`--text-strong` where they need to stand out.
+- **Artifacts "Loading glyph…" hang fixed** — `GlyphRenderer.tsx` had a `useEffect` that fetched the compiled glyph but only set `loading=false` on success, never on error. If the fetch hung or the response was malformed, the user saw the spinner forever. Added a 5-second `Promise.race` timeout and a `loadError` state so the user sees *why* it failed (timeout, 404, 500, etc.) instead of a static "Loading…".
+- **Chat sessions list paginated** — the opencode database has 200+ sessions, all rendered at once. `SessionList.tsx` now caps the visible list at 30 sessions and shows a "Show all N sessions" toggle for the rest.
+- **`bizar dash` CLI resolution fixed** — `loadDashCli()` in `cli/bin.mjs` was returning "Dashboard not installed" when `bizar dash` was run from any directory other than the npm-global root. Now dynamically resolves the global install via `npm root -g` (after the import attempt) so `bizar dash status` works from any cwd.
+
+### Verification
+
+- `bizar test-gate`: 79/79 pass
+- `tsc --noEmit`: 0 errors
+- `vite build`: clean
+- Dashboard reachable at http://127.0.0.1:4321/ and https://borkpc.tail2cdf4d.ts.net/ (Tailscale trust enabled via `BIZAR_DASHBOARD_TRUST_TAILSCALE=1`)
+
+### Files modified
+
+- `bizar-dash/src/web/main.tsx` — viewport-based routing
+- `bizar-dash/src/web/views/glyphs/GlyphRenderer.tsx` — 5s timeout + loadError
+- `bizar-dash/src/web/styles/main.css` — `--text-dim` bumped, Settings overrides
+- `bizar-dash/src/web/components/chat/SessionList.tsx` — pagination
+- `cli/bin.mjs` — npm root -g resolution
+- `bizar-dash/src/server/auth.mjs` — Tailscale trust (from v3.22.1, also in this build)
+
+---
+
 ## v3.22.0 — Chat UI rewrite, agent knowledge system, system LLM, and pre-push heads-ups
 
 > **Major feature.** Complete from-scratch rewrite of the chat UI tab (Gemini-inspired), system-wide Obsidian knowledge protocol, configurable system LLM API for prompt enhancement and title generation, real HTML mockups in glyphs, and a pre-push heads-up system that catches gotchas before npm publish.

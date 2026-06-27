@@ -258,14 +258,23 @@ export function isLoopback(req) {
   // loopback. This closes the previous auth bypass where a remote client
   // could arrive through a local proxy (for example Tailscale serve) and
   // inherit loopback trust.
+  //
+  // Tailscale Serve proxies to localhost and authenticates users on
+  // the tailnet before forwarding. Trust its XFF when opted in.
   if (isLoopbackAddr(direct) && forwarded) {
-    return isLoopbackAddr(forwarded);
+    if (isLoopbackAddr(forwarded)) return true;
+    if (process.env.BIZAR_DASHBOARD_TRUST_TAILSCALE === '1') {
+      if (isTailscaleIp(forwarded)) return true;
+    }
+    return false;
   }
 
   return false;
 }
 
 export function isAuthRequired(req) {
+  // Explicit operator opt-out: trust everyone, regardless of peer.
+  if (process.env.BIZAR_DASHBOARD_REQUIRE_AUTH === '0') return false;
   if (process.env.BIZAR_DASHBOARD_REQUIRE_AUTH === '1') return true;
   return !isLoopback(req);
 }
@@ -326,6 +335,12 @@ function isLoopbackAddr(addr) {
   if (isIP(normalized) === 4) return normalized.startsWith('127.');
   if (isIP(normalized) === 6) return normalized === '::1';
   return false;
+}
+
+function isTailscaleIp(addr) {
+  if (!addr) return false;
+  const s = String(addr).toLowerCase();
+  return s.startsWith('100.') || s.startsWith('fd7a:115c:a1e0::');
 }
 
 function stripPort(hostHeader) {
