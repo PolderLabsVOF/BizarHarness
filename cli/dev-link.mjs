@@ -51,7 +51,23 @@ function pluginDest() {
  * Returns true on success, false on refusal.
  */
 export function createDevLink(sourceDir = null, opts = {}) {
-  const resolvedSource = resolve(process.cwd(), sourceDir ?? 'plugins/bizar');
+  const defaultSource = 'plugins/bizar';
+  const resolvedSource = resolve(process.cwd(), sourceDir ?? defaultSource);
+
+  // Forward-compatibility: if the legacy path doesn't exist, fall back to the
+  // collapsed layout (plugins/bizar + bizar-dash + sdk collapsed into one pkg).
+  // When that restructure ships, the plugin entry point will be src/plugin/index.ts.
+  if (!existsSync(resolvedSource)) {
+    const collapsedSource = resolve(process.cwd(), 'src', 'plugin', 'index.ts');
+    // Only switch if the collapsed path actually exists — preserve the original
+    // error for genuinely missing sources.
+    if (existsSync(collapsedSource)) {
+      // sourceDir was not explicitly passed — use the collapsed path silently
+      // so `bizar dev-link` works without args in the new layout.
+      resolvedSource = resolve(process.cwd(), 'src', 'plugin');
+    }
+  }
+
   const dest = pluginDest();
   const parentDir = join(dest, '..');
 

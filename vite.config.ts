@@ -7,18 +7,21 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  root: 'src',
-  base: './',
+  root: resolve(__dirname, 'bizar-dash/src/web'),
+  base: '/',
   build: {
-    outDir: resolve(__dirname, 'dist'),
+    outDir: resolve(__dirname, 'bizar-dash/dist'),
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
-      input: resolve(__dirname, 'src/index.html'),
+      input: {
+        main: resolve(__dirname, 'bizar-dash/src/web/index.html'),
+        mobile: resolve(__dirname, 'bizar-dash/src/web/mobile.html'),
+      },
     },
   },
   server: {
-    port: 5173,
+    port: 5174,
     strictPort: false,
   },
 });

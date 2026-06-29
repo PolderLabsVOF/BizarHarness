@@ -289,6 +289,9 @@ export async function installPluginBizar(projectRoot) {
     // The Bizar plugin now lives in a separate npm package
     // (@polderlabs/bizar-plugin). The interactive installer copies it from
     // there; the source tree no longer carries plugins/bizar/.
+    // TODO (forward-compat): when plugins/bizar + bizar-dash + packages/sdk are
+    // collapsed into one package, the plugin entry point will be
+    // src/plugin/index.ts and the copy source should be updated here.
     spinner.info(chalk.dim('  ℹ No local plugins/bizar/ — using @polderlabs/bizar-plugin from npm'));
     return { copied: 0, errors: [] };
   }

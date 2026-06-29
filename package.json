@@ -1,27 +1,27 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "3.23.1",
-  "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness.",
+  "version": "4.0.0",
+  "description": "Norse-pantheon multi-agent system for opencode — 13 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness. v4 ships as a single npm package bundling the dashboard server, opencode plugin, and typed SDK.",
   "type": "module",
   "bin": {
     "bizar": "cli/bin.mjs"
   },
   "files": [
     "cli/",
+    "bizar-dash/",
+    "plugins/",
+    "packages/sdk/",
     "config/",
     "templates/",
     "install.sh",
     "cli/browser-harness-up.sh"
   ],
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build:sdk": "npm run build -w @polderlabs/bizar-sdk",
-    "test:sdk": "npm run test -w @polderlabs/bizar-sdk",
-    "test:sdk:watch": "npm run test:watch -w @polderlabs/bizar-sdk",
-    "test": "npm run typecheck && npm run test:sdk && (cd plugins/bizar && bun test tests/loop.test.ts tests/block.test.ts tests/stall-think.test.ts tests/tools/bg-get-comments.test.ts tests/tools/bg-spawn-delegation.test.ts tests/tools/opencode-runner.test.ts tests/settings.test.ts tests/commands.test.ts tests/commands-impl.test.ts tests/tools/plan-action.test.ts tests/tools/wait-for-feedback.test.ts tests/tools/read-glyph-feedback.test.ts tests/reasoning-clean.test.ts tests/key-rotation.test.ts) && node bizar-dash/tests/smoke-v2.mjs && node --test bizar-dash/tests/path-safe.test.mjs bizar-dash/tests/tmux-wrap.test.mjs bizar-dash/tests/opencode-runner.test.mjs bizar-dash/tests/mod-instructions.node.test.mjs bizar-dash/tests/mod-upgrade.node.test.mjs bizar-dash/tests/graphify-mod-spawn.node.test.mjs bizar-dash/tests/no-agent-browser.node.test.mjs bizar-dash/tests/providers-store-backup-keys.node.test.mjs bizar-dash/tests/dashboard-ports.test.mjs bizar-dash/tests/submit-feedback.test.mjs",
+    "build:sdk": "tsc -p packages/sdk/tsconfig.json",
+    "test:sdk": "npm test --prefix packages/sdk",
+    "test:sdk:watch": "npm run test:watch --prefix packages/sdk",
+    "test": "npm run typecheck && npm run test:sdk && bun test plugins/bizar/tests/loop.test.ts plugins/bizar/tests/block.test.ts plugins/bizar/tests/stall-think.test.ts plugins/bizar/tests/tools/bg-get-comments.test.ts plugins/bizar/tests/tools/bg-spawn-delegation.test.ts plugins/bizar/tests/tools/opencode-runner.test.ts plugins/bizar/tests/settings.test.ts plugins/bizar/tests/commands.test.ts plugins/bizar/tests/commands-impl.test.ts plugins/bizar/tests/tools/plan-action.test.ts plugins/bizar/tests/tools/wait-for-feedback.test.ts plugins/bizar/tests/tools/read-glyph-feedback.test.ts plugins/bizar/tests/reasoning-clean.test.ts plugins/bizar/tests/key-rotation.test.ts && node bizar-dash/tests/smoke-v2.mjs && node --test bizar-dash/tests/path-safe.test.mjs bizar-dash/tests/tmux-wrap.test.mjs bizar-dash/tests/opencode-runner.test.mjs bizar-dash/tests/mod-instructions.node.test.mjs bizar-dash/tests/mod-upgrade.node.test.mjs bizar-dash/tests/graphify-mod-spawn.node.test.mjs bizar-dash/tests/no-agent-browser.node.test.mjs bizar-dash/tests/providers-store-backup-keys.node.test.mjs bizar-dash/tests/dashboard-ports.test.mjs bizar-dash/tests/submit-feedback.test.mjs bizar-dash/tests/yaml.test.mjs bizar-dash/tests/memory-store.test.mjs bizar-dash/tests/memory-schema.test.mjs bizar-dash/tests/memory-secrets.test.mjs bizar-dash/tests/memory-git.test.mjs bizar-dash/tests/memory-sync.test.mjs bizar-dash/tests/obsidian-back-compat.test.mjs",
     "build": "npm run build:sdk"
   },
   "keywords": [
@@ -36,22 +36,57 @@
     "schedules"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.1.0"
+  },
   "dependencies": {
+    "@mdx-js/mdx": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "@xyflow/react": "^12.11.1",
+    "better-sqlite3": "^12.11.1",
+    "blessed": "^0.1.81",
     "boxen": "^8.0.0",
     "chalk": "^5.4.0",
+    "chokidar": "^3.6.0",
+    "cors": "^2.8.6",
+    "croner": "^10.0.1",
+    "express": "^4.22.0",
+    "fuse.js": "^7.0.0",
     "inquirer": "^12.0.0",
-    "ora": "^8.1.0"
+    "lucide-react": "^0.460.0",
+    "ora": "^8.1.0",
+    "qrcode-terminal": "^0.12.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-markdown": "^9.0.0",
+    "remark-gfm": "^4.0.0",
+    "ws": "^8.18.0",
+    "zod": "4.1.8"
   },
   "peerDependencies": {
-    "@polderlabs/bizar-dash": "^3.10.0"
+    "@opencode-ai/plugin": ">=1.17.0"
   },
   "peerDependenciesMeta": {
-    "@polderlabs/bizar-dash": {
+    "@opencode-ai/plugin": {
       "optional": true
     }
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "@opencode-ai/plugin": "^1.17.7",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/bun": "latest",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.0.0",
+    "vitest": "^2.1.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
   },
   "repository": {
     "type": "git",

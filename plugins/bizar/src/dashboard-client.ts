@@ -30,15 +30,13 @@
  *     drains the queue on reconnect (best-effort).
  */
 
-import {
-  createBizarClient,
-  isBizarError,
-  type BizarClient,
-  type DashboardEvent,
-} from "@polderlabs/bizar-sdk";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+// v4.0.0 — SDK is part of the same package at packages/sdk/.
+// The SDK must be built (npm run build:sdk) before the plugin is compiled.
+import { createBizarClient, isBizarError } from "../../../packages/sdk/dist/index.js";
+import type { BizarClient, DashboardEvent } from "../../../packages/sdk/dist/index.js";
 
 const DEFAULT_DASHBOARD_URL = "http://127.0.0.1:4098";
 const DEFAULT_AUTH_FILE_PATHS = [

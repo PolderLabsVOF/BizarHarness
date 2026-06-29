@@ -199,14 +199,13 @@ async function daemonLoop() {
   }
   logLine(`service started (pid ${process.pid})`);
 
-  // Resolve the runner module. The daemon lives in the bizar package;
-  // the runner lives in the bizarre-dash package. We try a few candidate
-  // paths so this works whether bizarre-dash is installed globally,
-  // locally, or alongside the source tree (development).
+  // Resolve the runner module. v4.0.0: the dashboard ships inside this package.
+  // We keep legacy fallbacks for users who still have @polderlabs/bizar-dash
+  // installed globally.
   const candidates = [
-    // dev: <repo>/bizar-dash/src/server/schedules-runner.mjs
+    // v4.0.0 primary: <repo>/bizar-dash/src/server/schedules-runner.mjs
     join(__dirname, '..', 'bizar-dash', 'src', 'server', 'schedules-runner.mjs'),
-    // npm-global fallback
+    // Legacy fallbacks — users with @polderlabs/bizar-dash still installed:
     join(HOME, '.npm-global', 'lib', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'server', 'schedules-runner.mjs'),
   ];
   // Probe $PWD and global node_modules

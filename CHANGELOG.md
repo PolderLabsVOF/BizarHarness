@@ -1,5 +1,28 @@
 # Changelog
 
+## v4.0.0 — Package consolidation (BREAKING)
+
+### What changed
+
+- Collapsed 4 npm packages into one: `@polderlabs/bizar` now includes the dashboard server, the opencode plugin, and the typed SDK.
+- `@polderlabs/bizar-dash`, `@polderlabs/bizar-plugin`, and `@polderlabs/bizar-sdk` are no longer separately published. The directories `bizar-dash/`, `plugins/bizar/`, and `packages/sdk/` remain in the repo as sub-directories of the unified package.
+- Removed `workspaces: ["packages/*"]` from root `package.json`.
+- Root `node_modules/` is now the single install target.
+- Added `engines: { node: ">=18", bun: ">=1.1.0" }` (bun required for plugin tests).
+- Memory Service (Phase 1) ships in this release.
+
+### Migration
+
+- Existing v3 users: `npm install -g @polderlabs/bizar@latest`. The dashboard, plugin, and SDK are now bundled — no separate install needed.
+- Internal: `bizar-dash/`, `plugins/bizar/`, `packages/sdk/` are now sub-directories, not separate npm packages. Imports use relative paths.
+- The plugin's `node_modules/` is no longer bundled on deploy (the SDK is part of the same package now).
+- `mods-examples/` is unaffected — stays as a separate conceptual unit within the repo.
+
+### Tests
+
+- 85 new tests added in v3.24.0 (Memory Service Phase 1) — all passing.
+- Plugin tests still require `bun` at runtime.
+
 ## v3.24.0 — Bizar Memory Service Phase 1 (local Markdown + Git-shared sync)
 
 > **Replaces Hindsight with local-first memory.** New `bizar memory` command family, dashboard `/api/memory/*` routes, schema validator, secret scanner, and Git-backed sync.

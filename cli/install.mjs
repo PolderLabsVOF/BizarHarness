@@ -327,30 +327,17 @@ async function promptAndInstallOptional() {
     console.log('  ✓ @polderlabs/bizar-plugin already installed');
   }
 
-  // Dashboard
-  const dashInstalled = await isPackageInstalled('@polderlabs/bizar-dash');
-  if (!dashInstalled) {
-    console.log('');
-    console.log('  The Bizar dashboard provides the web UI (React + Vite) and TUI (blessed).');
-    console.log('  It\'s optional — install it for the full experience, or use the CLI alone.');
-    const install = await promptYesNo(
-      'Install @polderlabs/bizar-dash?',
-      true,
-    );
-    if (install) {
-      try {
-        console.log('  Installing @polderlabs/bizar-dash...');
-        execSync('npm install -g @polderlabs/bizar-dash', { stdio: 'inherit' });
-        console.log('  ✓ @polderlabs/bizar-dash installed');
-      } catch (err) {
-        console.log(`  ✗ Failed to install @polderlabs/bizar-dash: ${err.message}`);
-        console.log('  You can install it later with: npm install -g @polderlabs/bizar-dash');
-      }
-    } else {
-      console.log('  Skipped. Install later with: npm install -g @polderlabs/bizar-dash');
-    }
+  // Dashboard — v4.0.0: ships inside this package at <repo>/bizar-dash/
+  // Verify the directory is present; it's a corrupted install if missing.
+  const dashDir = join(__dirname, '..', 'bizar-dash');
+  const dashPkgJson = join(dashDir, 'package.json');
+  if (!existsSync(dashPkgJson)) {
+    console.error('');
+    console.error('  ✗ Dashboard directory not found at bizar-dash/.');
+    console.error('    This looks like a corrupted install.');
+    console.error('    Please report at: github.com/DrB0rk/BizarHarness/issues');
   } else {
-    console.log('  ✓ @polderlabs/bizar-dash already installed');
+    console.log('  ✓ Dashboard directory present (bizar-dash/)');
   }
 }
 
