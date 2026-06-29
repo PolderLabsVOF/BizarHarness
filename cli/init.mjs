@@ -87,7 +87,17 @@ export function writePrePushNotesFile(bizarDir) {
   console.log(chalk.green(`  ✓ Created ${ppnPath}`));
 }
 
-export async function runInit(cwd) {
+export async function runInit(cwd, opts = {}) {
+  // Extract memory-related non-interactive flags from opts.
+  // Acceptable shapes:
+  //   opts = { skipMemory: true }
+  //   opts = { memoryMode: 'managed', memoryRepoName: 'my-repo' }
+  //   opts = { memoryMode: 'local-only' }
+  // (We also accept `args` for callers that pass raw argv — uncommon since
+  // bin.mjs only calls runInit(process.cwd()) today.)
+  const skipMemory = !!opts.skipMemory || process.env.BIZAR_SKIP_INSTALL;
+  const memoryModeOpt = opts.memoryMode || null;
+  const memoryRepoNameOpt = opts.memoryRepoName || null;
   console.log(chalk.bold.hex('#10b981')('\n  ᛗ BIZARHARNESS INIT ᛗ\n'));
 
   const bizarDir = join(cwd, '.bizar');
@@ -226,6 +236,130 @@ ${stack.runner ? `- Dev: \`${stack.runner}\`` : ''}
       console.log(chalk.yellow(`  Graph build failed (exit ${code}). You can retry manually:`));
       console.log(chalk.dim('    bizar graph build'));
       console.log(chalk.dim('  The graph will land in .bizar/graph/ inside this project.'));
+    }
+  }
+
+  // ── Memory configuration (Bizar Memory Service Phase 1) ──────────────────
+  // Writes `.bizar/memory.json` so the dashboard / API knows where the vault
+  // lives and which mode we're in. Gated on `BIZAR_SKIP_INSTALL` and the
+  // explicit `--skip-memory` opt (callers that pre-supply a config file pass
+  // `skipMemory: true` to avoid the interactive prompt).
+  console.log(chalk.bold('\n--- Memory ---\n'));
+  const memoryJsonPath = join(bizarDir, 'memory.json');
+  if (existsSync(memoryJsonPath)) {
+    console.log(chalk.dim(`  - memory config already exists at ${memoryJsonPath} (skipped)`));
+  } else if (skipMemory) {
+    console.log(chalk.dim('  - memory config: skipped (BIZAR_SKIP_INSTALL or skipMemory opt)'));
+  } else {
+    try {
+      const inquirer = (await import('inquirer')).default;
+      const initialMode = memoryModeOpt
+        ? memoryModeOpt
+        : (await inquirer.prompt([{
+            type: 'list',
+            name: 'memoryMode',
+            message: 'Memory backend',
+            choices: [
+              { name: 'local-only (vault stays in this project at .obsidian/)', value: 'local-only' },
+              { name: 'managed (shared user-level repo at ~/.local/share/bizar/memory/bizar-memory/)', value: 'managed' },
+            ],
+            default: 'local-only',
+          }])).memoryMode;
+      const memoryMode = initialMode === 'managed' ? 'managed' : 'local-only';
+
+      let repoName = memoryMode === 'managed'
+        ? (memoryRepoNameOpt || 'bizar-memory')
+        : null;
+      if (memoryMode === 'managed' && !memoryRepoNameOpt) {
+        const answer = await inquirer.prompt([{
+          type: 'input',
+          name: 'repoName',
+          message: 'Memory repo name',
+          default: 'bizar-memory',
+        }]);
+        repoName = answer.repoName || 'bizar-memory';
+      }
+
+      const projectId = basename(cwd) || 'project';
+      const home = process.env.HOME || process.env.USERPROFILE || process.cwd();
+      const managedPath = join(home, '.local', 'share', 'bizar', 'memory', repoName || 'bizar-memory');
+      const vaultPath = memoryMode === 'managed' ? managedPath : join(cwd, '.obsidian');
+
+      const { atomicWriteJson } = await import('./atomic.mjs');
+      const config = {
+        version: 1,
+        backend: 'bizar-local',
+        projectId,
+        memoryRepo: {
+          mode: memoryMode,
+          path: vaultPath,
+          remote: null,
+          branch: 'main',
+          namespace: memoryMode === 'managed' ? `projects/${projectId}` : null,
+        },
+        namespaces: {
+          project: `projects/${projectId}`,
+          global: 'global/bizar',
+          user: `users/${process.env.USER || process.env.USERNAME || 'local'}`,
+        },
+        lightrag: {
+          enabled: false,
+          host: '127.0.0.1',
+          port: 9621,
+          workingDir: join(cwd, '.bizar', 'lightrag'),
+        },
+        git: {
+          autoPullOnSessionStart: false,
+          autoCommitOnMemoryWrite: false,
+          autoPushOnSessionEnd: false,
+          commitAuthor: 'Bizar Memory <bizar-memory@local>',
+          commitMessageTemplate: `memory(${projectId}): {summary}`,
+        },
+      };
+      atomicWriteJson(memoryJsonPath, config);
+      console.log(chalk.green(`  ✓ Created ${memoryJsonPath} (mode: ${memoryMode})`));
+      if (memoryMode === 'managed') {
+        console.log(chalk.dim(`  Vault path: ${vaultPath} (shared user-level repo)`));
+      } else {
+        console.log(chalk.dim(`  Vault path: ${vaultPath} (local-only)`));
+      }
+    } catch (err) {
+      // Inquirer prompt can throw if stdin is not a TTY (CI). Fall back to
+      // a minimal local-only config so init still completes cleanly.
+      console.log(chalk.yellow(`  ⚠ Memory config prompt failed (${err.message || err}); defaulting to local-only.`));
+      try {
+        const projectId = basename(cwd) || 'project';
+        const { atomicWriteJson } = await import('./atomic.mjs');
+        const fallback = {
+          version: 1,
+          backend: 'bizar-local',
+          projectId,
+          memoryRepo: {
+            mode: 'local-only',
+            path: join(cwd, '.obsidian'),
+            remote: null,
+            branch: 'main',
+            namespace: null,
+          },
+          namespaces: {
+            project: `projects/${projectId}`,
+            global: 'global/bizar',
+            user: `users/${process.env.USER || process.env.USERNAME || 'local'}`,
+          },
+          lightrag: { enabled: false, host: '127.0.0.1', port: 9621, workingDir: join(cwd, '.bizar', 'lightrag') },
+          git: {
+            autoPullOnSessionStart: false,
+            autoCommitOnMemoryWrite: false,
+            autoPushOnSessionEnd: false,
+            commitAuthor: 'Bizar Memory <bizar-memory@local>',
+            commitMessageTemplate: `memory(${projectId}): {summary}`,
+          },
+        };
+        atomicWriteJson(memoryJsonPath, fallback);
+        console.log(chalk.green(`  ✓ Created ${memoryJsonPath} (mode: local-only — fallback)`));
+      } catch (innerErr) {
+        console.log(chalk.dim(`  - memory config write failed (${innerErr.message || innerErr}); skipping`));
+      }
     }
   }
 

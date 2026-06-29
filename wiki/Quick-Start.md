@@ -17,7 +17,7 @@ The opencode TUI loads. You'll see the agent list — Odin is the default, and t
 
 Type `@odin help` to ask the router agent what it can do. Odin will respond with a description of its decomposition strategy, the cost-tier routing table, and the principle that it never executes work itself — it always dispatches.
 
-This is a useful first invocation because it confirms the agent definitions loaded and the Hindsight MCP server (if configured) is reachable.
+This is a useful first invocation because it confirms the agent definitions loaded and the Memory Service is reachable.
 
 ## Try a read-only Q&A
 
@@ -140,6 +140,18 @@ npm run dev  # or any server
 If Tailscale Serve is already enabled on your tailnet, the command prints the `https://<magicdns>/` URL. If not, it prints the admin-enable URL — visit it once from any tailnet device, then re-run `/tailscale-serve`.
 
 For the HTTP fallback (no admin enable), bind your service to `0.0.0.0:<port>` and reach it at `http://<magicdns>:<port>/` (safe inside the tailnet because all traffic is WireGuard-encrypted).
+
+## Memory Service sanity check
+
+Once you've run `bizar init` on a project, the Memory Service is wired up. Verify with:
+
+```bash
+bizar memory status
+```
+
+You'll see the mode (`local-only` or `managed`), the link target, the count of dirty notes, and the timestamp of the last `git sync`. For deeper inspection, `bizar memory doctor` runs schema, secrets, and Git health checks in one pass.
+
+If you opted into `managed` mode, the shared vault lives at `~/.local/share/bizar/memory/<repoName>/` with three top-level namespaces: `projects/<id>/`, `global/bizar/`, `users/<id>/`. Notes are Obsidian-compatible Markdown — open them in Obsidian, grep them, or sync with plain `git`.
 
 ## Next steps
 

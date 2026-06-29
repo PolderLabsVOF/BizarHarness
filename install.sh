@@ -2,6 +2,9 @@
 #
 # install.sh — One-shot BizarHarness installer.
 #
+# v4.0.0 — Single-package layout. Dashboard, plugin, and SDK all ship
+# inside @polderlabs/bizar. No more separate npm packages.
+#
 # v3.20.11 — Comprehensive auto-installer with full dependency
 # resolution. Replaces the older "print 4 manual next steps" flow
 # with: (1) install every system dep we can reasonably fetch
@@ -375,11 +378,11 @@ else
   note "opencode CLI already installed"
 fi
 
-# ── npm packages (BizarHarness, optional @polderlabs/bizar-dash peer) ───
+# ── npm packages (BizarHarness — dashboard + plugin + SDK all in one) ──
 section "Install BizarHarness npm packages"
 
 if have_cmd npm; then
-  for pkg in @polderlabs/bizar @polderlabs/bizar-dash; do
+  for pkg in @polderlabs/bizar; do
     if npm ls -g "$pkg" --depth=0 >/dev/null 2>&1; then
       cur=$(npm ls -g "$pkg" --depth=0 --json 2>/dev/null | grep -oE '"version":\s*"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
       note "$pkg already installed (v$cur)"
@@ -519,7 +522,14 @@ for skill in bizar self-improvement cpp-coding-standards cpp-testing embedded-es
     mkdir -p "$SKILLS_DIR/$skill"
     case "$skill" in
       obsidian)
-        cat > "$SKILLS_DIR/$skill/SKILL.md" << 'OBSIDIAN_SKILL'
+        # v3.24.0 — Prefer the on-disk SKILL.md so the inline copy can't
+        # drift. Fall back to an inline heredoc ONLY when the repo source
+        # is missing (e.g. someone running install.sh outside a clone).
+        if [ -f "$REPO_DIR/config/skills/obsidian/SKILL.md" ]; then
+          cp "$REPO_DIR/config/skills/obsidian/SKILL.md" "$SKILLS_DIR/$skill/SKILL.md"
+          note "skill: $skill (from repo)"
+        else
+          cat > "$SKILLS_DIR/$skill/SKILL.md" << 'OBSIDIAN_SKILL'
 ---
 name: obsidian
 description: Interact with the Obsidian vault for persistent per-project memory. Use when searching notes, creating notes, writing wikilinks, using callouts, setting properties, or managing the project's obsidian knowledge bank.
@@ -544,7 +554,8 @@ Per-project persistent memory for Bizar agents. Every project gets its own vault
 - Store ADRs under `adr/` prefix
 - Store implementation notes under `notes/` prefix
 OBSIDIAN_SKILL
-        note "skill: $skill (inline)"
+          note "skill: $skill (inline)"
+        fi
         ;;
       glyph)
         cat > "$SKILLS_DIR/$skill/SKILL.md" << 'GLYPH_SKILL'
@@ -655,6 +666,13 @@ section "Install Bizar opencode plugin"
 
 PLUGIN_DST="$CONFIG_DIR/plugins/bizar"
 
+# v4.0.0: The plugin, dashboard, and SDK are all part of the same
+# @polderlabs/bizar npm package, so there is no separate
+# @polderlabs/bizar-plugin to resolve from the global node_modules.
+# The local-repo copy path is the only one we exercise now; the global
+# fallback is kept for users who still have a legacy install with the
+# old plugin on disk.
+#
 # v3.20.12: two sources, in priority order:
 #   1. Local repo's plugins/bizar/ (for `git clone` users)
 #   2. Globally installed @polderlabs/bizar-plugin (for `npm i -g` users)
@@ -687,19 +705,11 @@ if [ -n "$PLUGIN_SRC" ]; then
     cp "$f" "$PLUGIN_DST/$rel"
   done < <(find "$PLUGIN_SRC" -type f -print0)
   note "plugins/bizar/ copied from $PLUGIN_SRC_KIND"
-
-  # Copy node_modules from the npm plugin package (the plugin imports
-  # @polderlabs/bizar-sdk, which isn't on npm). Idempotent.
-  if [ "$PLUGIN_SRC_KIND" != "local repo" ] && [ -d "$PLUGIN_SRC/node_modules" ]; then
-    if cp -R "$PLUGIN_SRC/node_modules/." "$PLUGIN_DST/node_modules/" 2>/dev/null; then
-      N_PKG=$(find "$PLUGIN_SRC/node_modules" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
-      note "node_modules (~$N_PKG packages) bundled with deployed plugin"
-    else
-      warn "could not copy plugin node_modules (manual: cp -r $PLUGIN_SRC/node_modules $PLUGIN_DST/)"
-    fi
-  fi
+  # v4.0.0: No bundled node_modules copy. The SDK ships inside the same
+  # @polderlabs/bizar package, so plugin imports resolve from opencode's
+  # own node_modules at runtime.
 else
-  warn "Bizar plugin source not found (install @polderlabs/bizar-plugin: npm i -g @polderlabs/bizar-plugin)"
+  warn "Bizar plugin source not found (install @polderlabs/bizar: npm i -g @polderlabs/bizar)"
 fi
 
 # ── Merge opencode.json (template + user's existing config) ────────────
@@ -751,13 +761,34 @@ if [ -n "$TEMPLATE" ]; then
   fi
 fi
 
+# ── Bootstrap Bizar Memory Service ───────────────────────────────────
+section "Bootstrap Bizar Memory Service"
+
+if have_cmd node; then
+  MEMORY_REPO_NAME="${BIZAR_MEMORY_REPO_NAME:-bizar-memory}"
+  note "initializing local memory vault"
+  if node "$REPO_DIR/cli/bin.mjs" memory init \
+        --memory-mode managed \
+        --memory-repo-name "$MEMORY_REPO_NAME" \
+        --yes 2>/dev/null; then
+    note "memory service ready (mode: managed, repo: ~/.local/share/bizar/memory/$MEMORY_REPO_NAME)"
+    note "next steps:"
+    note "  bizar memory status    # check vault + git state"
+    note "  bizar memory sync      # pull, validate, scan, commit, push"
+    note "  bizar memory doctor    # health check"
+  else
+    warn "memory init skipped (run 'bizar memory init' manually later)"
+  fi
+else
+  warn "node not on PATH — skipping memory service bootstrap"
+fi
+
 # ── Write install-state.json (used by `bizar update` for migrations) ───
 section "Write install-state"
 
 mkdir -p "$BIZAR_STATE_DIR"
 BH_VERSION=$(browser-harness --version 2>/dev/null | head -1 | sed 's/[^0-9.]//g' || echo "")
 BIZAR_VERSION=$(npm ls -g @polderlabs/bizar --depth=0 --json 2>/dev/null | grep -oE '"@polderlabs/bizar":\s*\{[^}]*"version":\s*"[^"]+"' | grep -oE '"version":\s*"[^"]+"' | grep -oE '"[^"]+"' | tail -1 | tr -d '"' || echo "")
-DASH_VERSION=$(npm ls -g @polderlabs/bizar-dash --depth=0 --json 2>/dev/null | grep -oE '"@polderlabs/bizar-dash":\s*\{[^}]*"version":\s*"[^"]+"' | grep -oE '"version":\s*"[^"]+"' | grep -oE '"[^"]+"' | tail -1 | tr -d '"' || echo "")
 PY_VERSION=$("$PYTHON_BIN" --version 2>/dev/null | head -1 | sed 's/[^0-9.]//g' || echo "")
 UV_VERSION=$(uv --version 2>/dev/null | head -1 | sed 's/[^0-9.]//g' || echo "")
 JQ_VERSION=$(jq --version 2>/dev/null | sed 's/[^0-9.]//g' || echo "")
@@ -767,7 +798,6 @@ STATE_JSON=$(cat <<JSON
   "installedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%S.%NZ | sed 's/\.[0-9]*//')",
   "components": {
     "bizar": "${BIZAR_VERSION:-unknown}",
-    "bizar-dash": "${DASH_VERSION:-unknown}",
     "browser-harness": "${BH_VERSION:-unknown}",
     "uv": "${UV_VERSION:-unknown}",
     "python3.12": "${PY_VERSION:-unknown}",

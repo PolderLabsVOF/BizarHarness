@@ -43,3 +43,12 @@ Agents have **self-skill-discovery capability** — they can proactively find an
 - Install: `./install.sh`
 - Config: `~/.config/opencode/`
 - Repo: `github.com/DrB0rk/BizarHarness`
+
+## Memory
+
+- Backend: Bizar Memory Service (local Obsidian-compatible Markdown + Git-shared sync)
+- Default mode: `local-only` (vault at `.obsidian/`); opt into `managed` for cross-project sharing
+- Shared memory repo: `~/.local/share/bizar/memory/bizar-memory/` with namespaces `projects/<id>/`, `global/bizar/`, `users/<id>/`
+- Canonical truth: Markdown. LightRAG is a derived index (rebuildable from Markdown). Git is the collaboration layer.
+- Hindsight MCP is disabled by default. The Bizar Memory Service replaces it.
+- Agents use the dashboard REST API at `/api/memory/*` (canonical) or `/api/obsidian/*` (back-compat).

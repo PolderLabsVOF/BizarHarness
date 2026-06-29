@@ -27,12 +27,45 @@ It's especially useful if you:
   - **Plan canvas** — `/plan new|add|comment|status` writes to a local `plan.json` you can browse and comment on. No network.
   - **Background agents** — `bizar_spawn_background` runs subagents on a single `opencode serve` instance. State persists to disk; survives restart.
 - **40+ slash commands** — `/plan new`, `/tdd`, `/verify`, `/init`, `/learn`, `/tailscale-serve`, etc. See [Commands Reference](Commands-Reference) for the full list.
-- **Per-project Hindsight memory** — every project gets its own memory bank. The default bank is reserved for general system knowledge only.
+- **Local-first Memory Service** — every project gets a file-based Markdown vault (`.obsidian/` for local-only mode, or a shared Git repo at `~/.local/share/bizar/memory/<name>/` for managed mode). Three namespaces: `projects/<id>/`, `global/bizar/`, `users/<id>/`. No external memory service required. See the [Memory Service section](#-memory-service) below.
 - **Semble code search** — Mimir uses Semble for codebase exploration before falling back to grep, so research agents get semantically-ranked results.
 - **Skill discovery** — agents proactively install Skills CLI packs by domain (e.g., `skills add supabase/agent-skills --all -y` for database work) at task time. No manual configuration.
 - **MagicDNS hosting** — `/tailscale-serve` exposes any local port on your tailnet at `https://<machine>.<tailnet>.ts.net/`. See [Commands Reference → /tailscale-serve](Commands-Reference#tailscale-serve--magicdns-hosting).
 - **Self-improvement log** — every task appends a lesson to `.bizar/AGENTS_SELF_IMPROVEMENT.md`. The next session reads it before routing.
 - **Dev sandbox** — a Docker-based sibling repo lets you test changes to the harness and its plugin without touching your real `~/.config/opencode/`.
+
+## 🧠 Memory Service
+
+Memory is local-first. BizarHarness ships its own **Memory Service** — a self-contained, file-based memory subsystem that replaced the previously-disabled Hindsight MCP. No external API keys, no network calls, no vendor lock-in.
+
+**Three-layer model:**
+
+- **Markdown is truth.** Notes are Obsidian-compatible Markdown with strict YAML frontmatter (`memory_id`, `type`, `project_id`, `status`, `confidence`, `created`, `updated`, `tags`). Every memory note is a regular file you can grep, edit, or sync with `git`.
+- **Git is collaboration.** Sync happens with standard `git pull / commit / push`. Branches, conflict resolution, and audit history come for free.
+- **LightRAG is derived index (Phase 2).** Phase 1 ships a stub. Phase 2 will rebuild the semantic index from Markdown on demand — Markdown stays canonical.
+
+**Two modes:**
+
+| Mode | Vault location | Default? |
+|---|---|---|
+| `local-only` | `<project>/.obsidian/` | **Yes** — best for single-project use |
+| `managed` | `~/.local/share/bizar/memory/<repoName>/` (one shared repo, three namespaces) | Opt-in — best for sharing across projects |
+
+The `managed` repo splits into `projects/<id>/` (per-project notes), `global/bizar/` (cross-project patterns), and `users/<id>/` (personal scratch).
+
+**Quick command reference:**
+
+```bash
+bizar memory init              # create .bizar/memory.json + .obsidian/ vault
+bizar memory status            # mode, link target, dirty files, last sync
+bizar memory link <repo>       # opt into managed mode
+bizar memory sync              # pull → commit (with secret scan) → push
+bizar memory doctor            # schema + secrets + git health checks
+```
+
+The dashboard exposes 18 REST endpoints under `/api/memory/*` for note CRUD, search, schema validation, secret scanning, and Git sync. Legacy `/api/obsidian/*` routes are preserved for back-compat.
+
+Full reference: see [Commands Reference → Memory Commands](Commands-Reference#memory-commands) and [FAQ → Memory Service](FAQ#memory-service).
 
 ## Quick install
 

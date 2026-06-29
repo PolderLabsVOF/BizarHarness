@@ -86,6 +86,7 @@ function showHelp() {
     update              Auto-update everything (opencode + bizar + dash + plugin)
     service             Manage the background service daemon
     bg <subcommand>     Manage background agents (list/view/kill/logs)
+    memory <subcommand> Manage project memory (Bizar Memory Service)
     dash <subcommand>   Manage the dashboard (start/stop/status/cleanup/tui)
     browser-harness-up  Start Chromium for browser-harness (start/stop/status/restart)
     dev-link [src]      Symlink the local plugin source into opencode's plugin dir
@@ -487,12 +488,26 @@ function showDashHelp() {
   `);
 }
 
+function showMemoryHelp() {
+  console.log(`
+  memory <subcommand>   Manage project memory (local-only or Git-shared Obsidian vault)
+                        Subcommands: init, status, link, unlink, pull, commit, push,
+                        sync, reindex, conflicts, doctor
+  `);
+}
+
 /**
- * Detect whether @polderlabs/bizar-dash is installed locally.
- * We probe the global npm root, but also look in the local node_modules
- * of the bizar package itself.
+ * Detect whether the dashboard CLI is available.
+ * v4.0.0: primary path is the relative one (dashboard ships inside the
+ * same package at bizar-dash/src/cli.mjs). A global-npm fallback is
+ * kept for legacy users who still have @polderlabs/bizar-dash installed.
  */
 async function findBizarDash() {
+  // v4.0.0 — primary: relative import inside the same package
+  const primaryPath = join(import.meta.dirname, '..', 'bizar-dash', 'src', 'cli.mjs');
+  if (existsSync(primaryPath)) return primaryPath;
+
+  // Legacy fallback: global npm install of @polderlabs/bizar-dash
   const { execSync } = await import('node:child_process');
   try {
     const root = execSync('npm root -g', { encoding: 'utf8', timeout: 5000 }).trim();
@@ -513,9 +528,9 @@ async function findBizarDash() {
 async function delegateToDash(argsForDash) {
   const dashPath = await findBizarDash();
   if (!dashPath) {
-    console.log('The Bizar dashboard lives in a separate package.');
-    console.log('Install it with:');
-    console.log(chalk.cyan('  npm install -g @polderlabs/bizar-dash'));
+    console.log('The Bizar dashboard is part of this package.');
+    console.log('If you see this error, the install may be corrupted.');
+    console.log('Please report at: github.com/DrB0rk/BizarHarness/issues');
     return;
   }
   const { spawn } = await import('node:child_process');
@@ -627,6 +642,12 @@ async function main() {
   } else if (args[0] === 'init') {
     if (isHelpRequest) showInitHelp();
     else await runInit(process.cwd());
+  } else if (args[0] === 'memory') {
+    if (isHelpRequest) showMemoryHelp();
+    else {
+      const { runMemory } = await import('./memory.mjs');
+      await runMemory(args[1], args.slice(2));
+    }
   } else if (args[0] === 'export') {
     if (isHelpRequest) showExportHelp();
     else await runExport(parseFlag('--target'));
@@ -750,48 +771,25 @@ function parseDashOpts(dashArgs) {
 
 /**
  * Try to load the dashboard CLI module.
- * Try 1: import via the package exports map (@polderlabs/bizar-dash/dash-cli)
- * Try 2: file path probing for older installs or dev trees
+ * v4.0.0: the dashboard ships inside this package at bizar-dash/src/cli.mjs.
+ * A legacy npm-global fallback is kept for the transitional period.
  */
 async function loadDashCli() {
-  // Try 1: import via exports map (requires Tyr's package.json changes)
-  try {
-    const mod = await import('@polderlabs/bizar-dash/dash-cli');
-    return mod;
-  } catch (_e) {
-    // fall through to file probing
-  }
-
-  // Try 2: dynamic npm root -g (most reliable for global installs)
-  try {
-    const { execFileSync } = await import('node:child_process');
-    const { pathToFileURL } = await import('node:url');
-    const { join } = await import('node:path');
-    const npmRoot = execFileSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 5000 }).trim();
-    if (npmRoot) {
-      const cliPath = join(npmRoot, '@polderlabs', 'bizar-dash', 'src', 'cli.mjs');
-      const mod = await import(pathToFileURL(cliPath).href);
-      return mod;
-    }
-  } catch (_e) {
-    /* fall through */
-  }
-
-  // Try 3: file path probing
-  const { join } = await import('node:path');
-  const { homedir } = await import('node:os');
+  // v4.0.0 — primary: relative import inside the same package
+  const { pathToFileURL } = await import('node:url');
   const candidates = [
-    // npm global install
-    join(homedir(), '.npm-global', 'lib', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'cli.mjs'),
-    // nvm
-    join(homedir(), '.nvm', 'versions', 'node'),
-    // relative to current process
-    join(process.execPath, '..', '..', 'lib', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'cli.mjs'),
-    // local node_modules
-    join(process.cwd(), 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'cli.mjs'),
+    join(import.meta.dirname, '..', 'bizar-dash', 'src', 'cli.mjs'),
+    // Legacy fallbacks for users with @polderlabs/bizar-dash still installed:
+    ...(async () => {
+      const { execFileSync } = await import('node:child_process');
+      try {
+        const npmRoot = execFileSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 5000 }).trim();
+        if (npmRoot) return [join(npmRoot, '@polderlabs', 'bizar-dash', 'src', 'cli.mjs')];
+      } catch { /* ignore */ }
+      return [];
+    })(),
   ];
 
-  const { pathToFileURL } = await import('node:url');
   for (const p of candidates) {
     try {
       const url = pathToFileURL(p).href;
@@ -815,9 +813,8 @@ async function runDash(dashArgs) {
 
   const dashModule = await loadDashCli();
   if (!dashModule) {
-    console.error(chalk.red('  ✗ Dashboard not installed.'));
-    console.error(chalk.dim('  Run: npm install -g @polderlabs/bizar-dash'));
-    console.error(chalk.dim('  Or: npx -y @polderlabs/bizar install'));
+    console.error(chalk.red('  ✗ Dashboard not found.'));
+    console.error(chalk.dim('  this should not happen — please report a bug at github.com/DrB0rk/BizarHarness/issues'));
     process.exit(1);
   }
 

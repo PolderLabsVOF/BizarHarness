@@ -28,6 +28,7 @@
 - [Installation](#-installation)
 - [Provider Setup](#-provider-setup)
 - [Skill Discovery](#-skill-discovery)
+- [Memory Service](#-memory-service)
 - [Routing](#-routing)
 - [Self-Improvement](#-self-improvement)
 - [Contributing](#-contributing)
@@ -111,7 +112,7 @@
 - **Always parallel** — every request splits into 2+ simultaneous `task` calls
 - **Implementation splits across Thor + Tyr** frontend/backend, file split, impl+tests
 - **Forseti gates all Tier 4/5 work** — Tyr and Vidarr plans audited before execution
-- **Hindsight memory** — per-project banks with `bank_id: "<project-name>"`; default bank for general knowledge only
+- **Bizar Memory Service** — local Obsidian-compatible Markdown + Git-shared sync. Three namespaces: `projects/<id>/`, `global/bizar/`, `users/<id>/`. No external memory service required.
 
 ---
 
@@ -142,6 +143,8 @@ npx bizar
 ```
 
 The interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts opencode.
+
+> **v4.0.0:** `@polderlabs/bizar` is now a single package — the dashboard server, the opencode plugin, and the typed SDK all ship inside it. No more separate `@polderlabs/bizar-dash` install.
 
 > **Windows users:** the `npm install -g @polderlabs/bizar` command above is the recommended path on Windows. The installer uses `irm | iex` for uv, `py -m pip` for the pip fallback, `taskkill` for forced kills, and JS `setTimeout` instead of `sleep` — so it works on both Windows PowerShell and POSIX shells. See the [Windows](#-windows) section below for prerequisites, known limitations, and the optional graph feature install.
 
@@ -203,7 +206,6 @@ bizar graph build
 ### Prerequisites
 
 - [opencode CLI](https://opencode.ai) installed and on `$PATH`
-- A [Hindsight](https://memory-api.polderlabs.io) API key for persistent memory
 - Provider connections (via `/connect` in opencode TUI)
 - [RTK](https://github.com/rtk-ai/rtk) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
 - [Semble](https://github.com/semble-ai/semble) (recommended) — AI-powered code search (used by Mimir agent)
@@ -293,6 +295,74 @@ This happens automatically and on-demand — agents self-discover capabilities w
 ---
 
 
+
+---
+
+## 🧠 Memory Service
+
+The **Bizar Memory Service** is a local-first, file-based memory subsystem that replaces the previously-disabled Hindsight MCP. Notes are Obsidian-compatible Markdown with strict YAML frontmatter, stored in a Git-managed vault, and synced via standard `git pull/push/commit`. No external API keys, no external service, no network calls.
+
+### Architecture (three-layer model)
+
+```
+   ┌─────────────────────────────────────────────┐
+   │ Layer 1: Markdown is truth                  │  ← canonical store
+   │   .obsidian/  or  ~/.local/share/bizar/…    │     (frontmatter + body)
+   ├─────────────────────────────────────────────┤
+   │ Layer 2: Git is collaboration               │  ← sync + version control
+   │   bizar memory pull / commit / push / sync  │     (branches, conflict)
+   ├─────────────────────────────────────────────┤
+   │ Layer 3: LightRAG is derived index (P2)     │  ← semantic retrieval
+   │   bizar memory reindex                       │     (stub in Phase 1)
+   └─────────────────────────────────────────────┘
+```
+
+The LightRAG layer ships as a stub in Phase 1 (`bizar memory reindex` returns a "not yet implemented" notice) and will be wired into the existing `mods-examples/lightrag/` server in Phase 2. The Markdown layer is the canonical source of truth — reindexing rebuilds the index from Markdown at any time, never the other way around.
+
+### Modes
+
+| Mode | Vault location | Cross-project sharing | Default? |
+|---|---|---|---|
+| `local-only` | `<project>/.obsidian/` | No — per-project vault | **Yes** |
+| `managed` | `~/.local/share/bizar/memory/<repoName>/` | Yes — one shared repo with three namespaces | Opt-in |
+
+Pick `managed` at `bizar init` time, or run `bizar memory link ~/.local/share/bizar/memory/<repoName>/` to convert an existing project to managed mode.
+
+### Namespaces
+
+The `managed` repo is split into three top-level directories. Every note lives in exactly one:
+
+| Namespace | Purpose | Example path |
+|---|---|---|
+| `projects/<projectId>/` | Per-project memory — conventions, ADRs, bugs, commands | `projects/bizarharness/architecture_decision__lightrag-stub.md` |
+| `global/bizar/` | Cross-project knowledge — agent patterns, Bizar internals | `global/bizar/coding_convention__plan-then-forseti.md` |
+| `users/<userId>/` | Personal scratch — user preferences, todos, draft thoughts | `users/drb0rk/user_preference__tabs-not-spaces.md` |
+
+### CLI commands
+
+The `bizar memory <sub>` family has 11 subcommands:
+
+| Subcommand | Purpose | Example |
+|---|---|---|
+| `init` | Create `.bizar/memory.json` and the per-project vault | `bizar memory init --memory-mode local-only` |
+| `status` | Show mode, link target, dirty files, last sync | `bizar memory status` |
+| `link <path>` | Bind the project to a managed memory repo | `bizar memory link ~/.local/share/bizar/memory/work/` |
+| `unlink` | Detach from managed mode (vault stays on disk) | `bizar memory unlink` |
+| `pull` | `git pull` the linked memory repo | `bizar memory pull` |
+| `commit` | Stage dirty notes + run secret scan + `git commit` | `bizar memory commit -m "add auth ADR"` |
+| `push` | `git push` the linked memory repo | `bizar memory push` |
+| `sync` | pull → reindex → commit → push (the common path) | `bizar memory sync` |
+| `reindex` | Rebuild the derived LightRAG index (Phase 2 stub) | `bizar memory reindex` |
+| `conflicts` | List notes with merge conflicts awaiting resolution | `bizar memory conflicts` |
+| `doctor` | Run schema + secrets + Git health checks | `bizar memory doctor` |
+
+### Dashboard routes
+
+The dashboard exposes 18 REST endpoints under `/api/memory/*` for note CRUD, schema validation, secret scanning, Git sync, search, and health checks. The legacy `/api/obsidian/*` routes are preserved with back-compat response shapes.
+
+### Secrets and schema
+
+Every note passing through `bizar memory sync` is scanned against 12 secret patterns (HIGH/MEDIUM). HIGH-severity matches block the commit; MEDIUM matches warn but allow. Required frontmatter is 8 fields (`memory_id`, `type`, `project_id`, `status`, `confidence`, `created`, `updated`, `tags`); 11 memory types are recognized, 6 statuses, 3 confidence levels.
 
 ---
 

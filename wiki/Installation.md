@@ -2,6 +2,8 @@
 
 BizarHarness can be installed three ways: from npm, from source, or per-project. The npm install is right for almost everyone; the source install is for contributors; the per-project install is for CI or sandboxed environments.
 
+> **v4.0.0:** `@polderlabs/bizar` ships as a single package — the dashboard server, opencode plugin, and typed SDK are bundled inside. There is no separate `@polderlabs/bizar-dash` install step.
+
 ## npm (recommended)
 
 The package is published to npm at [`bizar`](https://www.npmjs.com/package/bizar).
@@ -91,8 +93,21 @@ bizar init
 - Installs relevant skill packs based on the detected stack.
 - Creates `.bizar/PROJECT.md` with stack, conventions, and entry points.
 - Creates `.bizar/AGENTS_SELF_IMPROVEMENT.md` with starter active rules.
+- Prompts for the memory backend mode (`local-only` is the default; pick `managed` if you want memory shared across projects).
+- Initializes project memory: `bizar memory init` creates `.bizar/memory.json` and the project's vault at `.obsidian/` (local-only) or links to `~/.local/share/bizar/memory/<repoName>/` (managed).
 
 `init` does **not** copy agent files into `~/.config/opencode/`. It assumes the global install already happened (so all the agents are available), and just configures the project for use with BizarHarness.
+
+### Memory bootstrap step
+
+After `init`, project memory is ready. The default mode is `local-only` — a per-project Obsidian vault at `.obsidian/` that holds conventions, ADRs, bug patterns, and command snippets. To opt into the managed mode (one shared user repo at `~/.local/share/bizar/memory/<repoName>/` with three namespaces — `projects/<id>/`, `global/bizar/`, `users/<id>/`), either pick `managed` at `init` time or run:
+
+```bash
+bizar memory link ~/.local/share/bizar/memory/<repoName>/
+bizar memory sync
+```
+
+The `sync` command runs `git pull → reindex → commit → push` and scans every note for HIGH/MEDIUM secrets before committing. See [Commands Reference → Memory Commands](Commands-Reference#memory-commands) for the full subcommand list.
 
 ## Uninstall
 

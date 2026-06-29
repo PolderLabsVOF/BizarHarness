@@ -1,6 +1,6 @@
 # Architecture
 
-BizarHarness is a thin orchestration layer on top of [opencode](https://opencode.ai). opencode provides the agent runtime; BizarHarness provides the router, the agent hierarchy, the cost-aware dispatch, the per-project memory banks, and the loop-guard plugin. This page describes how the pieces fit together.
+BizarHarness is a thin orchestration layer on top of [opencode](https://opencode.ai). opencode provides the agent runtime; BizarHarness provides the router, the agent hierarchy, the cost-aware dispatch, the Bizar Memory Service, and the loop-guard plugin. This page describes how the pieces fit together.
 
 ## The Norse-pantheon metaphor
 
@@ -71,18 +71,107 @@ Three key behaviors:
 2. **Always parallel.** Every request with 2+ work items fires them in the same message. Sequential `task` calls are an anti-pattern.
 3. **Forseti gates Tier 4 and Tier 5.** For Tyr and Vidarr work, Odin dispatches the plan to Forseti first. Forseti returns approve, request-changes, or reject. The plan only executes after approval.
 
-## Per-project Hindsight memory
+## Bizar Memory Service
 
-BizarHarness uses [Hindsight](https://memory-api.polderlabs.io) for persistent memory. Every project gets its own memory bank, named after the project directory. The default bank is reserved for general system knowledge only — it should never hold project-specific memories.
+BizarHarness ships the **Bizar Memory Service** — local Obsidian-compatible Markdown + Git-shared sync — as the per-project memory layer. The Hindsight MCP service is retired.
 
-The bank-selection protocol is enforced at session start:
+### Three layers, one canonical truth
 
-1. Call `hindsight_list_banks` to see what banks exist.
-2. Determine the project name from the working directory.
-3. Call `hindsight_recall` with the correct `bank_id`.
-4. If no bank exists for the project, create one with `hindsight_create_bank(bank_id: "<project-name>")`.
+| Layer | Role | Backed by |
+|---|---|---|
+| **Markdown** | Canonical truth | Obsidian-flavoured `.md` files on disk |
+| **Git** | Collaboration / history | The vault directory IS a Git repo |
+| **LightRAG** (Phase 2) | Derived search index | Always rebuildable from Markdown; never write to it directly |
 
-Every `hindsight_retain` and `hindsight_sync_retain` call must pass `bank_id`. The default bank is for cross-project knowledge only.
+Agents write Markdown. The `bizar memory sync` orchestrator handles Git (commit + optional push) and triggers a LightRAG reindex when enabled. There is exactly one canonical surface — Markdown on disk.
+
+### Vault location
+
+```
+.bizar/memory.json
+├── mode:  "local-only"  →  vault = .obsidian/
+└── mode:  "managed"     →  vault = ~/.local/share/bizar/memory/<repoName>/
+```
+
+Two modes:
+
+- **`local-only`** (default) — vault lives at `.obsidian/` inside this project. Single-machine. No remote. Use for solo work or private projects.
+- **`managed`** — vault lives at `~/.local/share/bizar/memory/<repoName>/`, a user-level shared Git repo. Use when you want cross-project search and a single source of truth across all your Bizar projects.
+
+### Three namespaces
+
+Namespaces live at the vault root. The resolution rule is **vault root + namespace**:
+
+| Namespace | Path | When to write here |
+|---|---|---|
+| **project** | `projects/<projectId>/` | Anything specific to THIS project |
+| **global** | `global/bizar/` | Anything that applies to Bizar AS A SYSTEM, across projects |
+| **user** | `users/<userId>/` | Anything purely personal |
+
+`projectId` is the basename of the project root; `userId` is the OS username. When in doubt, write to **project**. See `config/skills/obsidian/SKILL.md` for the full reading/writing protocol.
+
+### Agent-facing API surface
+
+Dashboard REST (canonical; lazy-imported):
+
+```
+GET    /api/memory/notes?namespace=projects/<id>          # list
+GET    /api/memory/notes/<path>                           # read (frontmatter + body)
+POST   /api/memory/notes                                  # write (rich shape)
+POST   /api/memory/search                                 # full-text search
+POST   /api/memory/reindex                                # rebuild LightRAG from Markdown
+POST   /api/memory/git/sync                               # git pull/commit/push orchestrator
+GET    /api/obsidian/notes                                # legacy back-compat — same data, older shape
+```
+
+CLI:
+
+```
+bizar memory init         # one-time vault bootstrap
+bizar memory status       # mode, paths, git state
+bizar memory search "<q>" # full-text search
+bizar memory write <path> # open $EDITOR for a new note
+bizar memory sync         # git add/commit/push (with secret scan + schema check)
+bizar memory reindex      # rebuild LightRAG (Phase 2)
+bizar memory conflicts    # list notes with status=conflict (human review surface)
+bizar memory doctor       # health check
+```
+
+`bizar memory commit` runs the secret scanner before `git commit` — **HIGH severity blocks the commit**; MEDIUM warns. Override with `--allow-secrets` (NOT recommended; see `AGENTS_SELF_IMPROVEMENT` rule #4 for the Hindsight token leak lesson).
+
+### Diagram
+
+```
+                ┌──────────────────────────────────────────┐
+                │  Agent (Odin / Tyr / Thor / Heimdall …)  │
+                └─────────────────────┬────────────────────┘
+                                      │  API call (or CLI)
+                                      ▼
+                ┌──────────────────────────────────────────┐
+                │  Dashboard REST                          │
+                │    POST /api/memory/notes                 │
+                │    POST /api/memory/git/sync              │
+                └─────────────────────┬────────────────────┘
+                                      │
+                                      ▼
+                ┌──────────────────────────────────────────┐
+                │  memory-store.mjs + memory-schema.mjs    │
+                │  (validates frontmatter, scans secrets)  │
+                └─────┬───────────────┬────────────┬───────┘
+                      │               │            │
+                      ▼               ▼            ▼
+         ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+         │  Markdown    │   │  Git         │   │  LightRAG    │
+         │  (TRUTH)     │   │  (history +  │   │  (derived    │
+         │              │   │  collab)     │   │  index,      │
+         │  .obsidian/  │   │              │   │  Phase 2)    │
+         │   or         │   │  commits     │   │              │
+         │  ~/…/        │   │  per write   │   │  rebuilt     │
+         │  memory/     │   │              │   │  on demand   │
+         └──────────────┘   └──────────────┘   └──────────────┘
+```
+
+Always write Markdown. Git follows. LightRAG is derived — never authoritative.
 
 ## Semble code search
 
@@ -164,9 +253,10 @@ v0.4 of the plugin adds **background agents** — asynchronous subagent executio
                                 │
                                 ▼
                     ┌──────────────────────┐
-                    │  Hindsight memory    │
-                    │  bank=<project>      │
-                    │  (per-project)       │
+                    │  Bizar Memory        │
+                    │  Service             │
+                    │  (Markdown + Git +   │
+                    │  LightRAG phase 2)   │
                     └──────────────────────┘
 ```
 

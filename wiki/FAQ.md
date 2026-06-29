@@ -26,7 +26,7 @@ See the [Bizar Plugin](Bizar-Plugin) page for details on disabling.
 
 ### Can I use this without Hindsight?
 
-Yes. Without `HINDSIGHT_API_KEY`, agents operate in stateless mode. They won't recall past sessions, won't retain new memories, and won't have a per-project bank. Routing still works, the plugin still works, and `.bizar/AGENTS_SELF_IMPROVEMENT.md` still records lessons. The Hindsight MCP is an additive feature, not a core dependency.
+Yes — and as of v3.24.0, Hindsight is **disabled by default**. The Memory Service replaces it. Without any extra setup, every project gets a local-first vault at `.obsidian/` (default `local-only` mode) that holds conventions, ADRs, bug patterns, and command snippets. No external service, no API key. Routing, the plugin, and `.bizar/AGENTS_SELF_IMPROVEMENT.md` all work the same way.
 
 ### Can I use this without Anthropic?
 
@@ -38,7 +38,7 @@ Yes. Drop a new `<name>.md` file in `config/agents/` (or in `~/.config/opencode/
 
 - A `## Role` section describing what the agent does.
 - A `## When to Use` section with example invocations.
-- A `## Hindsight Memory Protocol` section (copy the canonical text from another agent's file).
+- A `## Memory Service Protocol` section (copy the canonical text from another agent's file).
 - A `## Loop Guard Handling` section (copy the canonical text from another agent's file).
 
 Odin will pick up the new agent via the `task` tool with `subagent_type: <your-agent-name>`.
@@ -113,15 +113,16 @@ tail -f ~/.cache/bizar/logs/<sessionId>.log
 
 The log is metadata only (timestamp, session ID, tool name, fingerprint hash, outcome, duration) — no tool args or session content.
 
-### How do I clear Hindsight memory for a project?
+### How do I clear Memory Service notes for a project?
 
-To wipe a project's Hindsight bank:
+Memory notes are plain files — clearing them is just file deletion:
 
-1. Open opencode in the project.
-2. Run `@frigg` and ask it to clear the bank. (Frigg has read-only access by default; you may need to ask Odin to route this to an agent with write access.)
-3. Or, use the Hindsight dashboard at https://memory-api.polderlabs.io to manage banks manually.
+1. **Local-only mode:** delete the vault. `rm -rf .obsidian/` then re-run `bizar memory init` to start fresh.
+2. **Managed mode:** delete the project's namespace. `rm -rf ~/.local/share/bizar/memory/<repoName>/projects/<projectId>/` then run `bizar memory sync` to commit the deletion upstream.
 
-The default bank should **not** be cleared — it holds general system knowledge shared across projects.
+The `global/bizar/` namespace holds shared agent patterns and should **not** be cleared casually. The `users/<userId>/` namespace is personal scratch and is safe to wipe.
+
+For soft cleanup without deletion, `bizar memory doctor` reports stale and conflicting notes that you can resolve individually.
 
 ## Pricing
 
@@ -242,6 +243,33 @@ You asked for authentication, not a workaround. The HTTP fallback (binding to th
 ### How do I enable Tailscale Serve on my tailnet?
 
 Visit the URL the command prints, or go to https://login.tailscale.com/f/serve?node=<your-node-id> from any tailnet device. Confirm the enable once and it applies to the whole tailnet.
+
+## Memory Service
+
+### Where is my project memory stored?
+
+Depends on the mode:
+
+- **Local-only (default):** a per-project Obsidian vault at `<project>/.obsidian/`. Notes live as Markdown files; the path is relative to the project root, so the vault travels with the repo if you commit `.obsidian/`.
+- **Managed:** one shared user repo at `~/.local/share/bizar/memory/<repoName>/`. Each project's notes live under `projects/<projectId>/`, cross-project patterns under `global/bizar/`, and personal scratch under `users/<userId>/`.
+
+Run `bizar memory status` to see the current mode and link target.
+
+### How does Memory Service compare to Hindsight?
+
+Hindsight was an external MCP service (now disabled by default). It held notes in a hosted database, required an API key, and called out to `https://memory-api.polderlabs.io` on every read/write. The Memory Service is local-first: notes are files on disk, sync is `git`, and there is no network call between you and your memory. The trade-off is that semantic retrieval (LightRAG-derived) ships as a Phase 2 deliverable — until then, retrieval is grep and full-text search over Markdown.
+
+### Can I share memory across projects?
+
+Yes. Opt into managed mode at `bizar init` time, or run `bizar memory link ~/.local/share/bizar/memory/<repoName>/` on any existing project. Managed mode binds the project to a single shared Git repo with three namespaces — `projects/<id>/`, `global/bizar/`, `users/<id>/` — so cross-project patterns (e.g., "always run plan-then-forseti for Tier 4 work") can live in `global/bizar/` and be reused without copy-paste.
+
+To switch back to local-only, run `bizar memory unlink`. The vault stays on disk; only the link is removed.
+
+### Where do secrets get scanned?
+
+Every note passing through `bizar memory sync` (or `commit`) is scanned against 12 secret patterns defined in `bizar-dash/src/server/memory-secrets.mjs`. HIGH-severity matches (PEM private keys, AWS access keys, GitHub PATs, Stripe live keys, bearer tokens) **block the commit** — the sync aborts and prints the offending file and line. MEDIUM-severity matches (test API keys, absolute paths, private IPv4 addresses) **warn but allow** — the commit proceeds, but the warning is printed so you can clean it up before push.
+
+To scan a note on demand without committing, run `bizar memory scan-secrets <path>` (CLI) or `POST /api/memory/secrets/scan` with the note body (dashboard).
 
 ## Next steps
 

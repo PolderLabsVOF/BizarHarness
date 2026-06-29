@@ -12,8 +12,7 @@ Common issues you might hit when using BizarHarness, with concrete fixes.
 
 1. Run `opencode` once to trigger the auth setup prompt.
 2. If the TUI doesn't open, run `opencode /connect` to add an API key manually.
-3. If you have a Hindsight API key, set `HINDSIGHT_API_KEY` in your environment or `.env` file.
-4. Verify the file exists and is readable: `ls -la ~/.local/share/opencode/auth.json`.
+3. Verify the file exists and is readable: `ls -la ~/.local/share/opencode/auth.json`.
 
 For dev sandbox users: the same file is mounted read-only from your host into the container, so set it up on the host first.
 
@@ -77,21 +76,73 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 4. **Temporarily disable high-cost tiers.** Edit `config/agents/tyr.md` and change the model to `minimax/minimax-m2.7` (one tier down). Re-run the installer.
 5. **For emergency stop,** Ctrl-C the opencode session. The Bizar plugin will mark all in-flight background instances as failed and abort the serve child.
 
-## "Hindsight not working" or memory errors
+## "Memory Service" not working or memory errors
 
-**Symptom:** Agents report they can't recall past sessions, or `hindsight_recall` returns errors.
+**Symptom:** Agents report they can't recall past sessions, or `bizar memory status` shows unexpected state.
 
-**Cause:** Missing or invalid `HINDSIGHT_API_KEY`, or wrong bank ID.
+**Cause:** As of v3.24.0, the Hindsight MCP is disabled. Memory is now provided by the local **Memory Service** (file-based, Git-managed). If you're still seeing Hindsight references, the project hasn't been re-initialized against the new memory backend.
 
 **Fix:**
 
-1. **Verify the key.** Set `HINDSIGHT_API_KEY` in your environment or `.env` file. Run a test recall:
+1. **Verify the Memory Service is initialized.** Run `bizar memory status` from the project root. You should see the mode (`local-only` or `managed`), the link target, the dirty count, and the last sync timestamp.
+2. **If status reports "not initialized":** run `bizar memory init`. This creates `.bizar/memory.json` and the per-project vault (default `local-only`) or links to the managed repo you specify.
+3. **For a full health check:** run `bizar memory doctor`. It runs schema, secrets, and Git checks in one pass and prints per-check pass/fail with details.
+4. **For migration from a previous Hindsight-backed setup:** notes held in Hindsight are not auto-migrated. If you need to preserve them, export from the Hindsight dashboard (if available) and import as Markdown files into `<project>/.obsidian/`. The Memory Service schema requires the 8-field frontmatter; you may need to massage the imports with `bizar memory schema/validate` (or `POST /api/memory/schema/validate`).
+
+## "`bizar memory sync` blocks on secret detection"
+
+**Symptom:** `bizar memory sync` (or `commit`) aborts with `secret detected: <pattern-id> in <file>:<line>` and a non-zero exit code.
+
+**Cause:** A note body (or its YAML frontmatter) matches one of the 12 HIGH-severity secret patterns — PEM private keys, AWS access keys, GitHub PATs, Stripe live keys, or bearer tokens. The scanner blocks HIGH matches to prevent accidental secret commits to the memory repo.
+
+**Fix:**
+
+1. **Identify the offending note.** The error prints the path and line. Open the note, remove the secret, and replace with a reference (`<AWS_ACCESS_KEY>` or similar placeholder).
+2. **Re-scan before retrying:**
    ```bash
-   # In opencode, type:
-   @frigg /recall recent project work
+   bizar memory scan-secrets .obsidian/projects/<projectId>/<note>.md
    ```
-2. **Verify the bank.** At session start, every agent should call `hindsight_list_banks` to see what's available. If the project's bank doesn't exist, agents should create it.
-3. **Check that the agent passes `bank_id` correctly.** All `hindsight_retain`, `hindsight_sync_retain`, and `hindsight_recall` calls must pass `bank_id: "<project-name>"`. The default bank is for general knowledge only — never use it for project work.
+3. **Retry the sync:**
+   ```bash
+   bizar memory sync
+   ```
+4. **If the secret was a real production credential,** rotate it immediately at the issuing service — the secret scanner only blocks commits; it can't un-commit a previously pushed leak.
+
+Patterns are defined in `bizar-dash/src/server/memory-secrets.mjs`. To temporarily allow a MEDIUM-severity match (test API keys, absolute paths, private IPs), pass `--allow-medium` to `bizar memory commit`. HIGH-severity matches cannot be overridden.
+
+## "`bizar memory init` doesn't create `.bizar/memory.json`"
+
+**Symptom:** Running `bizar memory init` exits cleanly but `.bizar/memory.json` is missing, or the command prints "skipped — non-TTY".
+
+**Cause:** Two common causes — `BIZAR_SKIP_INSTALL=1` was set in the environment (CI / sandbox mode), or stdin isn't a TTY (the command prompts for memory mode and aborts if it can't read an answer).
+
+**Fix:**
+
+1. **Force the mode and skip the prompt:**
+   ```bash
+   bizar memory init --memory-mode local-only
+   ```
+   Other valid modes: `--memory-mode managed --memory-repo <path>`.
+2. **If running under CI**, set `BIZAR_SKIP_INSTALL=0` (or unset it). The `init` command checks this flag and bails early when it's set.
+3. **Verify the file was created:**
+   ```bash
+   ls -la .bizar/memory.json
+   jq . .bizar/memory.json
+   ```
+   You should see `{ "mode": "local-only", "vault": ".obsidian/", ... }` (or the managed-mode equivalent).
+
+## "Lock contention on shared memory repo"
+
+**Symptom:** `bizar memory sync` (or any git operation on the managed repo) fails with `fatal: Unable to create '.sync.lock': File exists` or hangs indefinitely.
+
+**Cause:** Another process is mid-sync against the same managed repo. The lock file at `~/.local/share/bizar/memory/<name>/.sync.lock` holds the PID of the holder.
+
+**Fix:**
+
+1. **Check the holder's PID.** `cat ~/.local/share/bizar/memory/<name>/.sync.lock` — note the PID.
+2. **If the PID is alive and busy:** wait for the other sync to finish (it should be quick — pull/commit/push is fast). Re-run after a few seconds.
+3. **If the PID is dead** (process exited without releasing the lock): the next `bizar memory sync` will detect the dead PID via liveness check and release the lock automatically. If you need to force-clear immediately, `rm ~/.local/share/bizar/memory/<name>/.sync.lock` (safe — the lock is advisory, not a `flock`).
+4. **To detect this proactively:** run `bizar memory doctor` — it checks for stale lock files alongside schema, secrets, and Git health.
 
 ## "Plugin not loading" (no Bizar in /plugins)
 
@@ -134,7 +185,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 **Fix:**
 
 1. **Fill in `.bizar/PROJECT.md`.** Vör reads this file before asking. If it's empty, Vör will ask generic questions. A good `PROJECT.md` lists the language, framework, database, conventions, and entry points.
-2. **Verify the Hindsight bank exists** for the project. Vör checks the bank before asking. If the bank is missing, Vör will ask more than necessary.
+2. **Verify the Memory Service vault exists** for the project. Vör checks the vault before asking. If the vault is missing, Vör will ask more than necessary — run `bizar memory init` and confirm `bizar memory status` reports a healthy vault.
 3. **If the Vör file is out of date,** re-run the installer. The current `vor.md` includes the research-first protocol.
 
 ## "Install says 'opencode not detected' but opencode is installed"

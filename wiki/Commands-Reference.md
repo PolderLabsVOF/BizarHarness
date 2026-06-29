@@ -226,6 +226,55 @@ Restart opencode to pick up new commands.
 
 ---
 
+## Memory Commands
+
+The `bizar memory <sub>` command family manages the local-first Memory Service vault. The default mode is `local-only` (per-project vault at `<project>/.obsidian/`); opt into `managed` mode to share memory across projects via a Git repo at `~/.local/share/bizar/memory/<repoName>/`.
+
+| Subcommand | Purpose | Example |
+|---|---|---|
+| `init` | Create `.bizar/memory.json` and the project's vault | `bizar memory init --memory-mode local-only` |
+| `status` | Show mode, link target, dirty files, last sync time | `bizar memory status` |
+| `link` | Bind the project to a managed memory repo | `bizar memory link ~/.local/share/bizar/memory/work/` |
+| `unlink` | Detach from managed mode (vault stays on disk) | `bizar memory unlink` |
+| `pull` | `git pull` the linked memory repo | `bizar memory pull` |
+| `commit` | Stage dirty notes, run secret scan, `git commit` | `bizar memory commit -m "add auth ADR"` |
+| `push` | `git push` the linked memory repo | `bizar memory push` |
+| `sync` | pull → reindex → commit → push (the common path) | `bizar memory sync` |
+| `reindex` | Rebuild the derived LightRAG index (Phase 2 stub) | `bizar memory reindex` |
+| `conflicts` | List notes with merge conflicts awaiting resolution | `bizar memory conflicts` |
+| `doctor` | Run schema + secrets + Git health checks | `bizar memory doctor` |
+
+All write operations run the secret scanner (12 patterns, HIGH/MEDIUM). HIGH-severity matches block the commit; MEDIUM matches warn but allow. Required frontmatter is 8 fields (`memory_id`, `type`, `project_id`, `status`, `confidence`, `created`, `updated`, `tags`); 11 memory types are recognized.
+
+### Dashboard REST endpoints
+
+The Bizar dashboard exposes 18 REST endpoints under `/api/memory/*` for programmatic note CRUD, search, schema validation, secret scanning, Git sync, and health checks. The legacy `/api/obsidian/*` routes are preserved with back-compat response shapes.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/memory/status` | GET | Mode, link target, dirty count, last sync |
+| `/api/memory/notes` | GET | List notes (filter by namespace, type, status) |
+| `/api/memory/notes` | POST | Create a new note (validates frontmatter, scans secrets) |
+| `/api/memory/notes/:id` | GET | Read a single note by `memory_id` |
+| `/api/memory/notes/:id` | PUT | Update a note (validates, scans, increments `updated`) |
+| `/api/memory/notes/:id` | DELETE | Archive a note (sets `status: archived`) |
+| `/api/memory/search` | GET | Search notes by tag, type, status, full-text body |
+| `/api/memory/schema/validate` | POST | Validate a note against the schema; return errors |
+| `/api/memory/secrets/scan` | POST | Scan a note body for HIGH/MEDIUM secrets; return matches |
+| `/api/memory/git/pull` | POST | `git pull` the linked memory repo |
+| `/api/memory/git/commit` | POST | Stage + secret scan + `git commit` |
+| `/api/memory/git/push` | POST | `git push` the linked memory repo |
+| `/api/memory/git/sync` | POST | Full sync: pull → commit → push |
+| `/api/memory/git/conflicts` | GET | List notes with unresolved merge conflicts |
+| `/api/memory/reindex` | POST | Rebuild the derived LightRAG index (Phase 2 stub) |
+| `/api/memory/link` | POST | Bind the project to a managed repo path |
+| `/api/memory/unlink` | POST | Detach from managed mode |
+| `/api/memory/doctor` | GET | Run all health checks; return pass/fail per check |
+
+Legacy back-compat routes (`/api/obsidian/*`) accept the same payloads but return response shapes matching the pre-v3.24.0 Obsidian API. New integrations should target `/api/memory/*` directly.
+
+---
+
 ## See also
 
 - [Plans Command](Plans-Command) — the original (pre-plugin) plan CLI

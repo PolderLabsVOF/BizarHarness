@@ -1,5 +1,41 @@
 # Changelog
 
+## v3.24.0 — Bizar Memory Service Phase 1 (local Markdown + Git-shared sync)
+
+> **Replaces Hindsight with local-first memory.** New `bizar memory` command family, dashboard `/api/memory/*` routes, schema validator, secret scanner, and Git-backed sync.
+
+### Highlights
+
+- **`bizar memory <sub>`** — 11 subcommands (`init`, `status`, `link`, `unlink`, `pull`, `commit`, `push`, `sync`, `reindex`, `conflicts`, `doctor`).
+- **Dashboard `/api/memory/*`** — 18 REST endpoints for note CRUD, search, schema validation, secret scanning, Git sync, reindex (stub), and health checks.
+- **Three-layer model** — Markdown is canonical truth, Git is collaboration layer, LightRAG is a derived index (Phase 2).
+- **Three namespaces** — `projects/<projectId>/`, `global/bizar/`, `users/<userId>/` under one shared user repo at `~/.local/share/bizar/memory/<name>/`.
+- **Schema validator** — 8 required frontmatter fields; 11 memory types; 6 statuses; 3 confidences.
+- **Secret scanner** — 12 patterns (HIGH/MEDIUM). HIGH blocks commit; MEDIUM warns.
+- **Back-compat** — `/api/obsidian/*` routes preserved with legacy response shapes.
+- **85 new tests** — YAML parser, schema, secrets, store, git ops, sync orchestrator, back-compat.
+
+### Files added (Phase 1)
+
+- `cli/memory.mjs`, `cli/memory-constants.mjs`, `cli/atomic.mjs`
+- `bizar-dash/src/server/yaml.mjs`, `memory-store.mjs`, `memory-schema.mjs`, `memory-secrets.mjs`, `memory-git.mjs`
+- `bizar-dash/src/server/routes/memory.mjs`
+- 7 new test files under `bizar-dash/tests/`
+
+### Files modified
+
+- `cli/bin.mjs` — new `memory` dispatch
+- `cli/init.mjs` — memory.json write + prompt
+- `bizar-dash/src/server/api.mjs` — lazy import + router registration
+- `bizar-dash/src/server/routes/obsidian.mjs` — back-compat rewrite
+- `install.sh` — memory service bootstrap step
+- `config/skills/obsidian/SKILL.md` — replaced with Memory Service guide
+- `.bizar/PROJECT.md`, `.bizar/AGENTS_SELF_IMPROVEMENT.md` — memory section + entry
+
+### LightRAG status
+
+`bizar memory reindex` is a STUB for Phase 1. Phase 2 will integrate the existing `mods-examples/lightrag/` server as the derived retrieval index, rebuildable from Markdown at any time.
+
 ## v3.23.0 — LightRAG server mod + Obsidian/Graphify session bootstrap
 
 > **New mod + global rule.** Adds the LightRAG server integration (graph-based RAG for the dashboard) and a new global agent baseline rule that mandates Obsidian + Graphify context-gathering at the start of every new session.

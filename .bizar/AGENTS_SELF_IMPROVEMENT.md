@@ -857,3 +857,103 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - Zero remaining `"openrouter"` strings in the three configs
   - `provider.minimax` is the only provider in the home live config
   - Templates still preserve the dual-provider shape for future reference, but the live config is single-provider.
+
+### 2026-06-29: Bizar Memory Service — Phase 1 (Local Obsidian + Git-shared sync)
+
+- **Task**: Replace the disabled Hindsight MCP service with a local Obsidian-compatible Markdown vault + Git-shared sync (Phase 1 of "Bizar Memory Service: Local Obsidian + LightRAG with Git-Shared Collaboration"). Wire the dashboard `/api/memory/*` surface, the `bizar memory` CLI dispatcher, and the `.bizar/memory.json` config bootstrap into `bizar init`.
+- **Approach**: Two parallel implementation streams — Thor (M2.7) on the core modules (`cli/memory.mjs`, `cli/atomic.mjs`, `cli/memory-constants.mjs`, and the eight dashboard server modules under `bizar-dash/src/server/{yaml,memory-store,memory-schema,memory-secrets,memory-git,routes/memory,routes/obsidian}.mjs` plus 7 test files), Tyr (M3, this entry) on the wiring/docs/init layer.
+- **Lessons learned**:
+  - **Three layers, one canonical truth.** Markdown is truth. Git is collaboration. LightRAG (Phase 2) is a derived index. Agents MUST write Markdown first; the sync orchestrator rebuilds LightRAG from Markdown on demand. Bypassing Markdown to write to LightRAG directly breaks recovery — there is no way to reconstruct state if LightRAG and Markdown diverge.
+  - **Lazy imports for parallel-rollout routers.** During a parallel sibling implementation, the dashboard's composer (`api.mjs`) loads `'./routes/memory.mjs'` with `await import(...)` inside `createApiRouter()` instead of static `import`. Static imports would crash the whole router chain when Thor's file landed late. The lazy import lets any dashboard boot before the memory surface is ready — the missing export degrades gracefully (the router just doesn't mount) instead of taking the API offline.
+  - **Projected back-compat window.** The legacy `/api/obsidian/*` surface stays on the same router mount as before, but `obsidian.mjs` now delegates to `memory-store.mjs` when `.bizar/memory.json` exists and falls back to the original obsidian-store behaviour otherwise. The legacy response shapes are preserved exactly — UI tests that hit `/api/obsidian/notes` should pass without changes. New code uses `/api/memory/notes` (rich shape: frontmatter, status, confidence, namespace, links).
+  - **Secret-scanning gates the commit.** HIGH-severity findings (real API keys / bearer tokens) BLOCK the commit. MEDIUM warns. LOW is informational. The `bizar memory commit` orchestrator runs the scan before `git commit` is called; bypass is only via `--allow-secrets` (NOT recommended).
+  - **Conflict handling is human-only.** The service never auto-resolves a conflict; it marks one side `superseded` and links `superseded_by` to the other, then leaves both in place with `status: conflict`. Any auto-resolution strategy silently loses data, which is worse than surfacing the conflict.
+  - **`inquirer.prompt` throws in non-TTY environments.** CI runs, scripted installs, and some container shells don't have a TTY; `inquirer.list`/`input` throws `Cannot read properties of undefined (reading 'pipe')` against a missing stdin. `runInit` now wraps the prompt in try/catch and falls back to a minimal `local-only` config. The result: CI exits clean, the local-only default is the same one the interactive flow lands on anyway.
+  - **`atomicWriteJson` is non-negotiable for memory writes.** The file is read by every subsequent `bizar memory <subcommand>` invocation. A partial write produces a JSON parse error on the next read and the dashboard router fails every request with 500. Always write via `fs.writeFile` to a temp + `rename` (atomic on POSIX), never via `fs.writeFile` to the target.
+  - **Test scripts must list new files explicitly.** `package.json` `npm test` hardcodes the test-file list. Adding new test files (Thor's seven) requires editing this script or those tests silently never run. Same lesson applies to any CI script that args-quotes a static list.
+- **Files changed**:
+  - **Thor's core (sibling scope, READ-ONLY here)**: `cli/memory.mjs` (new), `cli/atomic.mjs` (new), `cli/memory-constants.mjs` (new), `bizar-dash/src/server/{yaml,memory-store,memory-schema,memory-secrets,memory-git,routes/memory,routes/obsidian}.mjs` (new/rewrite), 7 new test files under `bizar-dash/tests/`.
+  - **Tyr's wiring/docs (this scope)**: `cli/bin.mjs` (+memory dispatch + showMemoryHelp), `cli/init.mjs` (`runInit(cwd, opts)` extended signature + memory.json write with TTY/headless fallback), `bizar-dash/src/server/api.mjs` (+lazy createMemoryRouter import after obsidian router), `package.json` (7 new test basenames appended to `node --test`), `config/skills/obsidian/SKILL.md` (REPLACED — Bizar Memory Service guide, 3-layer architecture, namespaces, API surface, status/confidence/conflict semantics, secret scanning), `wiki/Architecture.md` (Hindsight section replaced with Bizar Memory Service section + ASCII diagram), `wiki/Self-Improvement.md` (Hindsight refs retired in favour of Memory Service equivalents), `install.sh` (obsidian skill prefers `cp` from repo over the inline heredoc fallback), `.bizar/PROJECT.md` (+Memory section), `.bizar/AGENTS_SELF_IMPROVEMENT.md` (this entry).
+- **Agent(s) used**: Thor (M2.7, core), Tyr (M3, wiring/docs), Forseti (M3, audit pending), Odin (M3, router).
+
+### v4.0.0 Package Collapse — Tyr done, Thor cleared to delete sub-package files
+- root `package.json` consolidated: name `@polderlabs/bizar`, version `4.0.0`, deps union, engines add bun.
+- `tsconfig.json` union: includes cli + bizar-dash + plugins + packages/sdk; checkJs off; jsx react-jsx.
+- root `vite.config.ts` replaced with bizar-dash content (port 5174, mobile entry, paths re-anchored to `bizar-dash/`).
+- `install.sh`: removed `@polderlabs/bizar-dash` from npm install loop, dropped bundled `node_modules` copy step, dropped `DASH_VERSION` tracking.
+- `package-lock.json` regenerated (527 packages, lockfile on disk; gitignored at root per .gitignore).
+- Marker file `/tmp/bizar-v4-package-ready` written for Thor.
+
+### 2026-06-29 — Bizar Memory Service Phase 1 + v4.0.0 Package Consolidation
+
+**Context**: Replaced disabled Hindsight MCP with local Obsidian-compatible Markdown + Git-shared sync. Phase 1 of "Bizar Memory Service: Local Obsidian + LightRAG with Git-Shared Collaboration". Also collapsed 4 npm packages (`@polderlabs/bizar`, `@polderlabs/bizar-dash`, `@polderlabs/bizar-plugin`, `@polderlabs/bizar-sdk`) into one unified `@polderlabs/bizar@4.0.0`.
+
+**Lessons**:
+1. **One canonical schema, one writer.** Two parallel agents wrote two different `memory.json` schemas (nested vs flat). Reconciled by picking the nested one (matches the spec) and updating all readers/writers to match. Lesson: when parallel agents touch the same artifact, the orchestration layer must declare which schema wins BEFORE dispatch.
+2. **`initVault` must actually create the vault.** First version just resolved the path; the actual `mkdir + git init` was missing. Lesson: "resolve" and "create" are different verbs; an init function must do both, or be renamed.
+3. **Bun is a runtime requirement for plugin tests, not optional.** Documented in `engines.bun`. Plugin tests fail without bun. README/CHANGELOG note the prerequisite.
+4. **Test runner consolidation is risky.** Kept three runners (bun for plugin, node --test for dashboard, vitest for sdk). The alternative — porting all tests to one runner — is more work than the consolidation saves.
+5. **Lockfile regeneration after dep union is mandatory.** Old `package-lock.json` was generated against four separate dep trees. After union, regenerating was a single `npm install --package-lock-only` step.
+
+**Pattern to follow next time**:
+- When two parallel agents both define a schema/spec, dispatch a third "schema-locking" agent first or have Forseti catch the conflict during audit.
+- For Phase 2 (LightRAG runtime integration), use `mods-examples/lightrag/` as the in-process server, have the Bizar Memory Service's `bizar memory reindex` command orchestrate the rebuild queue, and write a markdown summary back to the shared repo on each reindex.
+
+**Files changed (v4.0.0 + Phase 1)**:
+- New: `cli/memory.mjs`, `cli/atomic.mjs`, `cli/memory-constants.mjs`, `bizar-dash/src/server/yaml.mjs`, `memory-store.mjs`, `memory-schema.mjs`, `memory-secrets.mjs`, `memory-git.mjs`, `routes/memory.mjs`, `docs/releases/v3.24.0.md`, `docs/releases/v4.0.0.md`
+- Modified: `package.json`, `install.sh`, `cli/bin.mjs`, `cli/init.mjs`, `cli/install.mjs`, `cli/service.mjs`, `cli/copy.mjs`, `cli/dev-link.mjs`, `cli/update.mjs`, `bizar-dash/src/server/api.mjs`, `bizar-dash/src/server/routes/obsidian.mjs`, `plugins/bizar/src/dashboard-client.ts`, `vite.config.ts`, `tsconfig.json`, `config/skills/obsidian/SKILL.md`, `.bizar/PROJECT.md`, `.bizar/AGENTS_SELF_IMPROVEMENT.md`, all `wiki/*.md`, `CHANGELOG.md`, `README.md`
+- Deleted: `bizar-dash/package.json`, `bizar-dash/package-lock.json`, `bizar-dash/node_modules/`, `plugins/bizar/package.json`, `plugins/bizar/bun.lock`, `plugins/bizar/package-lock.json`, `plugins/bizar/node_modules/`, `packages/sdk/package.json`, `packages/sdk/package-lock.json`, `packages/sdk/node_modules/`, `node_modules/@polderlabs/bizar-sdk`
+
+**Agent(s) used**: Odin (M3, router), Thor (M2.7, core impl + tests + install bootstrap + memory init fix), Tyr (M3, wiring + package consolidation + tsconfig + vite + docs), Forseti (M3, audit ×2), Mimir (M2.7, research).
+
+### 2026-06-29 — Knowledge base build + .sync.lock bug
+
+**Context**: Built the first real knowledge base for the BizarHarness project via the Bizar
+Memory Service. 15 notes across 8 categories: architecture decisions, conventions, commands,
+API contracts, bug patterns, project overview, task summaries, environment facts.
+
+**Real bug found and fixed**: `bizar memory sync` was committing the `.sync.lock` lockfile to
+the shared memory repo. Root cause: `git add -A` ran before `release()` deleted the lockfile.
+Fix: write a `.gitignore` at the shared repo root on init (covering `.sync.lock`, `*.pid`,
+`*.log`, `.DS_Store`, plus per-machine caches) and stage it as the first commit.
+
+**Lessons**:
+
+1. **Build a real KB as soon as the memory service boots.** Even synthetic test data hides
+   bugs. The lockfile leak only manifested during a real sync of 15+ files. Lesson: after
+   any state-machine feature ships, exercise it with a realistic workload before declaring done.
+
+2. **Lockfile lifecycle must be considered at git-add time.** Either (a) ignore the lockfile
+   path entirely (`.gitignore`), or (b) acquire the lock AFTER staging and release it BEFORE
+   staging. Option (a) is safer because it survives future reordering.
+
+3. **`.gitignore` should be seeded at repo-init time, not added manually.** First commit of
+   any git repo should be the `.gitignore` plus a `README.md`. Otherwise history is dirty.
+
+4. **Secret scanner fails fast at write time.** `writeNote` with a HIGH-severity secret
+   throws `code: SECRET_DETECTED`. This is the right shape — agents don't accidentally stage
+   a secret. MEDIUM-severity findings still allow writes with warnings, which matches the
+   policy in `conventions/secret-scanning.md`.
+
+5. **Search retrieval works.** Queries for `memory service`, `secret`, and `odin` all return
+   relevant top results with reasonable scores (token-frequency-based scoring). Phase 2
+   LightRAG integration will provide semantic ranking on top of this lexical baseline.
+
+**Pattern to follow next time**:
+
+- After any git-backed state-machine feature ships, do a realistic workload test (≥10 items)
+  before declaring done. The lockfile leak would have shipped if I'd only done a single-file
+  sync.
+- When a `git add` happens near a runtime lockfile, the lockfile MUST be in `.gitignore`,
+  no exceptions.
+- For Phase 2 LightRAG wiring, run the KB build script as the first action — it gives
+  LightRAG real content to index immediately, not an empty workspace.
+
+**Files changed**:
+
+- New: `scripts/build-knowledge-base.mjs` (15 KB notes, builds via memory-store API).
+- Modified: `bizar-dash/src/server/memory-store.mjs` (`.gitignore` creation in initVault).
+- Local-only: 16 files added to `~/.local/share/bizar/memory/bizar-memory/`
+  (1 `.gitignore` + 15 KB notes).
+
+**Agent(s) used**: Thor (M2.7, KB build + sync.lock fix + secret scanner test + search test).

@@ -23,6 +23,14 @@ Norse-pantheon multi-agent system for opencode.
 - [Bizar Plugin](Bizar-Plugin)
 - [Background Agents](Background-Agents)
 
+## Memory
+
+- [Memory Service](Home#-memory-service) — local-first Markdown + Git
+- [Commands Reference → Memory Commands](Commands-Reference#memory-commands)
+- [FAQ → Memory Service](FAQ#memory-service)
+- [Installation → Memory bootstrap step](Installation#memory-bootstrap-step)
+- [Troubleshooting → Memory Service entries](Troubleshooting#memory-service-not-working-or-memory-errors)
+
 ## Development
 
 - [Dev Sandbox](Dev-Sandbox)

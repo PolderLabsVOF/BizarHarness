@@ -25,7 +25,8 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Model:** `minimax/MiniMax-M3`
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Primary router. The default agent. Decomposes every request into parallel work streams and dispatches to subagents. **Never executes work itself.**
-- **Tools:** `task`, `todowrite`, Hindsight MCP tools, Semble MCP tools. No `bash`, `glob`, `grep`, `edit`, `write`, or `question`.
+- **Tools:** `task`, `todowrite`, Memory Service MCP tools, Semble MCP tools. No `bash`, `glob`, `grep`, `edit`, `write`, or `question`.
+- **Memory access via `.bizar/memory.json` config; writes go to `projects/<projectId>/` namespace.**
 - **When to use:** Any non-trivial request that isn't a single-shot question. The default for all free-form prompts.
 - **Example:** `@odin implement the /api/export endpoint with tests`
 - **Routing rule:** Always parallel. Fires 2+ `task` calls in a single message. Gates Tier 4/5 work via Forseti.
@@ -36,7 +37,8 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Model:** `opencode/deepseek-v4-flash-free`
 - **Cost:** Free
 - **Role:** Read-only Q&A. Answers questions about the project with file references. Never modifies any files.
-- **Tools:** `read`, `glob`, `grep`, Hindsight MCP tools, Semble MCP tools. No `edit`, `write`, or `bash`.
+- **Tools:** `read`, `glob`, `grep`, Memory Service MCP tools, Semble MCP tools. No `edit`, `write`, or `bash`.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces.**
 - **When to use:** "What does this project do?", "Where is X handled?", "How does Y work?"
 - **Example:** `@frigg what does this project do`
 - **Routing rule:** Direct invocation. No decomposition. Single-shot.
@@ -46,8 +48,9 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Rune:** ᛢ
 - **Model:** `opencode/deepseek-v4-flash-free`
 - **Cost:** Free
-- **Role:** Clarifies ambiguous or incomplete requests. Uses a **research-first protocol** — reads `.bizar/PROJECT.md` and the project's Hindsight bank before asking any questions. Asks only when research has been exhausted, and questions must reference actual project files, frameworks, or patterns.
-- **Tools:** `read`, `glob`, `grep`, Hindsight MCP tools, Semble MCP tools, `question`. No `edit`, `write`, or `bash`.
+- **Role:** Clarifies ambiguous or incomplete requests. Uses a **research-first protocol** — reads `.bizar/PROJECT.md` and the project's Memory Service vault before asking any questions. Asks only when research has been exhausted, and questions must reference actual project files, frameworks, or patterns.
+- **Tools:** `read`, `glob`, `grep`, Memory Service MCP tools, Semble MCP tools, `question`. No `edit`, `write`, or `bash`.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces.**
 - **When to use:** Open-ended requests that lack a clear target. Routes for you once the request is well-defined.
 - **Example:** `@vör build me a thing` (Vör will ask what the thing is)
 - **Routing rule:** Odin cannot ask questions. Ambiguous requests are routed here.
@@ -59,6 +62,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** Free
 - **Role:** Single-shot fast path. Skips decomposition and delegation. Good for trivial asks that don't need parallel work.
 - **Tools:** Full read/write tool surface, including `bash`, `edit`, `write`.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and writes to `projects/<projectId>/` namespace.**
 - **When to use:** One-line changes, single-file edits, "what's the answer to this specific question." Faster than Odin for tasks you know don't need decomposition.
 - **Example:** `@quick delete the unused import in src/main.ts`
 - **Routing rule:** Direct invocation. Does not dispatch to subagents.
@@ -69,7 +73,8 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Model:** `opencode/deepseek-v4-flash-free`
 - **Cost:** Free
 - **Role:** Deep codebase research. Uses Semble as its primary search tool and falls back to `grep` only when Semble is unavailable. Produces structured findings with file:line references.
-- **Tools:** `read`, `glob`, `grep`, Semble MCP tools, Hindsight MCP tools. No `edit` or `write`.
+- **Tools:** `read`, `glob`, `grep`, Semble MCP tools, Memory Service MCP tools. No `edit` or `write`.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces.**
 - **When to use:** "Research how X is implemented", "find every place that touches Y", "compare the auth flow across versions."
 - **Example:** `@mimir research how authentication flows through the request lifecycle`
 - **Routing rule:** Direct invocation or dispatched by Odin for the research leg of a larger task.
@@ -81,6 +86,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** Free
 - **Role:** File operations, mechanical edits, quick changes. The "do the boring thing fast" agent.
 - **Tools:** Full read/write tool surface.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and writes to `projects/<projectId>/` namespace.**
 - **When to use:** Renames, formatting fixes, simple CRUD, generating boilerplate, single-file edits.
 - **Example:** `@heimdall rename getUserById to findUserById across the repo`
 - **Routing rule:** Direct invocation or dispatched by Odin for mechanical work.
@@ -92,6 +98,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Git and GitHub operations. Commits, pushes, merges, rebase, branch management, pull requests, GitHub issue and release management.
 - **Tools:** `bash`, `read`, `glob`, `grep`, `gh` CLI. No `edit` or `write` (modifies the working tree via git, not via direct file writes).
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces (no writes — git operations only).**
 - **When to use:** Any git operation. Any GitHub API call (issues, PRs, releases, labels).
 - **Example:** `@hermod commit the staged changes with a conventional commit message`
 - **Routing rule:** Direct invocation or dispatched by Odin. PR review uses `/pr-review` mode with Mimir (research) and Forseti (audit).
@@ -103,6 +110,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Moderate-complexity implementation. Features that span a few files, debugging tasks, code review, refactoring of contained scopes.
 - **Tools:** Full read/write tool surface plus all MCP tools.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces; writes go to `projects/<projectId>/`.**
 - **When to use:** "Add a /healthz endpoint", "fix the bug in the rate limiter", "extract the validation logic into a separate module."
 - **Example:** `@thor add a /healthz endpoint that returns 200 OK`
 - **Routing rule:** Direct invocation or dispatched by Odin. Always run in parallel with Tyr on Tier 4 work.
@@ -114,6 +122,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Design system creation, DESIGN.md authoring, visual audits, usability planning. **Plans only — does not implement.** A Baldr plan is the design contract; Thor or Tyr executes it later.
 - **Tools:** `read`, `glob`, `grep`, `write` (to DESIGN.md and design files), MCP tools. Limited `bash`.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces; writes go to `projects/<projectId>/`.**
 - **When to use:** "Build out a design system for the marketing site", "audit the visual consistency of the dashboard", "plan the color tokens for dark mode."
 - **Example:** `@baldr plan a DESIGN.md for the marketing site`
 - **Routing rule:** Direct invocation. The plan is handed off to Thor or Tyr for execution.
@@ -125,6 +134,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Highest-complexity implementation. Architecture decisions, cross-cutting refactors, deep debugging, multi-step engineering. Always run in parallel with Thor on Tier 4 work.
 - **Tools:** Full read/write tool surface plus all MCP tools.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces; writes go to `projects/<projectId>/`.**
 - **When to use:** "Refactor the auth system to use a session token", "design the migration plan for the schema change", "trace the source of the memory leak."
 - **Example:** `@tyr plan the migration from REST to tRPC`
 - **Routing rule:** Direct invocation or dispatched by Odin for complex legs. **Always gated by Forseti** before execution.
@@ -136,6 +146,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** OpenAI ChatGPT subscription
 - **Role:** Last-resort fallback. Invoked when Tyr stalls, debugging is stuck, or the problem is genuinely novel and the opencode model tiers have all failed. **Default disabled** — must be explicitly enabled in `opencode.json`.
 - **Tools:** Full read/write tool surface.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces; writes go to `projects/<projectId>/`.**
 - **When to use:** When nothing else has worked. Postmortem of failed attempts. Novel problem domains.
 - **Example:** `@vidarr figure out why the binary segfaults under load`
 - **Routing rule:** Direct invocation or dispatched by Odin. **Always gated by Forseti** before execution.
@@ -147,6 +158,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Cost:** $0.30/M input, $1.20/M output
 - **Role:** Adversarial plan reviewer. Audits completeness, correctness, consistency, feasibility, and security of plans from Tyr and Vidarr. **Edit permission: denied** — runs in audit-only mode.
 - **Tools:** `read`, `glob`, `grep`, MCP tools. No `edit`, `write`, or `bash`.
+- **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces (read-only auditor).**
 - **When to use:** Never invoked directly. Auto-runs before any Tier 4 or Tier 5 implementation. Also runs `bizar audit` for a security review of agent config.
 - **Example:** Not directly invokable by users; auto-triggered by Odin.
 - **Routing rule:** Auto-dispatched by Odin for plans involving Tyr or Vidarr. Returns approve, request-changes, or reject.

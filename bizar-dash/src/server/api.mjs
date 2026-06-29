@@ -14,6 +14,11 @@
  * preserved (e.g. /tasks/bulk before /tasks/:id) and the composition
  * below mirrors the original monolith's top-level ordering so that
  * route precedence is unchanged.
+ *
+ * v3.24.0 — Exception: the memory router is lazy-imported with
+ * `await import('./routes/memory.mjs')` below instead of statically
+ * listed in the import block. This lets dashboards boot before the
+ * memory routes land during a parallel implementation rollout.
  */
 import express from 'express';
 import { pairStore } from './pair-store.mjs';
@@ -102,6 +107,10 @@ export function createApiRouter({
   router.use(createDialogsRouter({ broadcast }));
   router.use(createSkillsRouter({ broadcast }));
 router.use(createObsidianRouter({ projectRoot }));
+  // v3.24.0 — Bizar Memory Service (Phase 1). Lazy-imported so that if Thor's
+  // memory routes haven't landed yet, the dashboard still boots.
+  const { createMemoryRouter } = await import('./routes/memory.mjs');
+  router.use(createMemoryRouter({ projectRoot }));
   router.use(createDiagnosticsRouter());
   router.use(createPairRouter({ state, broadcast }));
   router.use(createThemesRouter({ state }));
