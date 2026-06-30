@@ -11,7 +11,7 @@
  * initVault time (F7 invariant).
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, lstatSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve as pathResolve, sep } from 'node:path';
 import { homedir } from 'node:os';
@@ -27,15 +27,51 @@ const BIZAR_MEMORY_ROOT = join(HOME, '.local', 'share', 'bizar', 'memory');
 /**
  * Path safety: reject any relPath that would escape the vault root.
  *
+ * Defenses (in order):
+ *   1. Empty / null-byte injection → reject.
+ *   2. Explicit segment check for `..` and absolute path prefixes → reject
+ *      before path.resolve normalizes them away. The check is on SEGMENTS
+ *      (`..` separated by `/` or `\`), so filenames like `my..note.md` are
+ *      still allowed.
+ *   3. Post-resolve check: the resulting absolute path must be inside
+ *      vaultRoot (relative path must not start with `..`).
+ *   4. Symlink guard: if the resolved path is a pre-existing symlink, refuse.
+ *      This blocks an attacker who placed a symlink inside the vault pointing
+ *      outside from writing/reading through it.
+ *
+ * Known limitation: the symlink guard is not TOCTOU-safe. A swap between
+ * lstatSync and the subsequent read/write/delete is still possible. For a
+ * full TOCTOU fix the read/write/delete would need to use O_NOFOLLOW and
+ * operate on an open fd, not a path. This is acceptable for the current
+ * threat model (the vault is a per-user directory, not a multi-tenant FS).
+ *
  * @param {string} vaultRoot
  * @param {string} relPath
  * @returns {string | null} — resolved absolute path, or null if unsafe
  */
 function resolveSafe(vaultRoot, relPath) {
   if (!relPath || relPath.includes('\0')) return null;
+  // Segment-level check: reject any `..` segment or absolute-path prefix
+  // BEFORE path.resolve normalizes them away. This explicitly rejects
+  // paths like `notes/../escape.md`, while still allowing filenames like
+  // `my..note.md` (the substring `..` inside a single segment is fine).
+  const segments = relPath.split(/[\\/]+/);
+  if (segments.includes('..') || segments[0] === '') return null;
   const abs = pathResolve(vaultRoot, relPath);
   const rel = relative(vaultRoot, abs);
   if (rel.startsWith('..') || abs !== pathResolve(abs)) return null;
+  // Symlink guard (see note above re: TOCTOU). Note: existsSync follows
+  // symlinks, so we MUST use lstatSync directly — existsSync + isSymbolicLink
+  // misses dangling symlinks (target doesn't exist). lstatSync returns a
+  // Stats object even for dangling symlinks; catch only unexpected errors
+  // (e.g. EACCES on the parent directory).
+  try {
+    if (lstatSync(abs).isSymbolicLink()) return null;
+  } catch {
+    // Path doesn't exist or parent dir inaccessible — not a symlink,
+    // proceed. (A fresh write won't traverse a symlink because the
+    // symlink itself doesn't exist yet at write time.)
+  }
   return abs;
 }
 
@@ -118,6 +154,31 @@ export function resolveVault(projectRoot) {
   };
 
   return { mode, projectId, vaultRoot, repoPath, configDir, gitRemote, branch, lightragDir, namespaces };
+}
+
+/**
+ * Resolve the absolute path of a namespace root.
+ *
+ * For `project`, returns vaultRoot (the existing default). For `global` and
+ * `user`, returns `<vaultRoot>/<namespaces.global|user>` in both modes —
+ * `writeNote('global/bizar/foo.md', …)` already places files there in both
+ * local-only and managed mode, so this matches the on-disk layout that
+ * existing callers rely on.
+ *
+ * (Note: an earlier draft distinguished local-only vs managed, putting
+ * global under `<repoPath>/global/bizar` in managed mode. That diverged from
+ * where writeNote actually creates the file, which is always under
+ * vaultRoot. This implementation matches the on-disk reality.)
+ *
+ * @param {{ mode: string, vaultRoot: string, namespaces: object }} vaultInfo
+ * @param {'project'|'global'|'user'} namespace
+ * @returns {string|null} absolute path, or null if the namespace is unknown
+ */
+export function resolveNamespaceRoot(vaultInfo, namespace) {
+  if (namespace === 'project') return vaultInfo.vaultRoot;
+  const ns = vaultInfo.namespaces?.[namespace];
+  if (!ns) return null;
+  return join(vaultInfo.vaultRoot, ns);
 }
 
 /**
@@ -226,15 +287,20 @@ export function initVault(projectRoot) {
  * List all notes in the vault. Returns enriched note metadata.
  *
  * @param {string} projectRoot
- * @param {{ namespace?: string }} [opts]
+ * @param {{ namespace?: string, root?: string }} [opts]
+ *   `namespace`: subdirectory under `root` to walk (e.g. `projects/<id>`).
+ *   `root`:      override the root used as the walking base. Defaults to
+ *                `vaultRoot` from resolveVault. Used by namespace helpers
+ *                in cli/memory.mjs to list global / user notes.
  * @returns {Array<{ relPath: string, mtime: number, size: number, frontmatter: Record<string, unknown>, body: string, schemaValid: boolean }>}
  */
 export function listNotes(projectRoot, opts = {}) {
   const { vaultRoot } = resolveVault(projectRoot);
-  if (!existsSync(vaultRoot)) return [];
+  const root = opts.root || vaultRoot;
+  if (!existsSync(root)) return [];
 
   const namespace = opts.namespace || '';
-  const searchRoot = namespace ? join(vaultRoot, namespace) : vaultRoot;
+  const searchRoot = namespace ? join(root, namespace) : root;
   if (!existsSync(searchRoot)) return [];
 
   const out = [];
@@ -268,11 +334,14 @@ export function listNotes(projectRoot, opts = {}) {
  *
  * @param {string} projectRoot
  * @param {string} relPath
+ * @param {{ root?: string }} [opts]  optional override for the root used by
+ *                                    resolveSafe; defaults to vaultRoot
  * @returns {{ relPath: string, frontmatter: Record<string, unknown>, body: string, raw: string, mtime: number, size: number, schemaValid: boolean } | null}
  */
-export function readNote(projectRoot, relPath) {
-  const { vaultRoot } = resolveVault(projectRoot);
-  const filePath = resolveSafe(vaultRoot, relPath);
+export function readNote(projectRoot, relPath, opts = {}) {
+  const vaultInfo = resolveVault(projectRoot);
+  const root = opts.root || vaultInfo.vaultRoot;
+  const filePath = resolveSafe(root, relPath);
   if (!filePath || !existsSync(filePath)) return null;
   try {
     const raw = readFileSync(filePath, 'utf8');
@@ -378,11 +447,14 @@ export function writeNote(projectRoot, relPath, { frontmatter, body }) {
  *
  * @param {string} projectRoot
  * @param {string} relPath
+ * @param {{ root?: string }} [opts]  optional override for the root used by
+ *                                    resolveSafe; defaults to vaultRoot
  * @returns {boolean}
  */
-export function deleteNote(projectRoot, relPath) {
-  const { vaultRoot } = resolveVault(projectRoot);
-  const filePath = resolveSafe(vaultRoot, relPath);
+export function deleteNote(projectRoot, relPath, opts = {}) {
+  const vaultInfo = resolveVault(projectRoot);
+  const root = opts.root || vaultInfo.vaultRoot;
+  const filePath = resolveSafe(root, relPath);
   if (!filePath || !existsSync(filePath)) return false;
   unlinkSync(filePath);
   return true;

@@ -975,3 +975,93 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 **Files changed (v4.1.0).** 17 source files: 3 server (`api.mjs`, `server.mjs`, `memory-store.mjs`, `memory-lightrag.mjs` new), 1 CLI (`cli/memory.mjs` write subcommand, `cli/bin.mjs` route), 1 config (`config/opencode.json` permission cleanup), 4 docs (`config/agents/_shared/AGENT_BASELINE.md`, `config/skills/obsidian/SKILL.md`, `~/.opencode/skills/obsidian/SKILL.md`, `config/AGENTS.md`), 4 release-meta (`package.json`, `CHANGELOG.md`, `wiki/Changelog.md`, `.bizar/PROJECT.md`), 2 self-meta (`.bizar/AGENTS_SELF_IMPROVEMENT.md`, `.bizar/PROJECT.md`). Plus 4 new test files (`memory-cli.test.mjs`, `memory-lightrag.test.mjs`, `memory-config.test.mjs`, `memory-protocol-drift.test.mjs`) and 1 new skill (`config/skills/memory-protocol/SKILL.md`).
 
 **Agents used.** mimir (research), thor (live round-trip test + verification), forseti (plan audit, caught 5 blockers), heimdall (config + docs), tyr (CLI write subcommand + tests).
+
+### 2026-06-30: Full memory-system test pass + 5 new test files (134 → 189 tests)
+
+**Context.** User asked to "fully test the whole memory system and the git memory repo." Ran the existing 10-file test suite as baseline (134/134 passing) and wrote 5 new test files targeting the highest-priority gaps in the memory-system map: round-trip, path safety, conflict detection, namespace isolation, and CLI setup/link/unlink.
+
+**Results.**
+- Baseline: **134/134 passing** in 30s.
+- New tests: **55 new assertions, all passing**, in 5 new files totaling 1,522 lines.
+- Final: **189/189 passing, 0 failures**.
+- Live smoke test against the real vault: round-trip succeeds for project namespace; schema validation rejects bogus types; secret scanner blocks GitHub PATs; vault git state returns to clean after smoke-test cleanup.
+
+**Bugs found (real, in code under test — not the tests).**
+1. **`cli/memory.mjs:1240` conflict-marker regex is broken.** `/^<{7}\s|^={7}\s|>{7}\s/` uses `^` without the `m` flag, so it only matches at the start of the string. Since every note file starts with `---\n`, conflict markers inside the body never fire. Needs `m` flag or frontmatter-strip preprocessing.
+2. **`memory-store.mjs:resolveSafe()` follows symlinks.** A symlink placed inside the vault (e.g. `escape.md → /tmp/outside`) will be followed by `writeFileSync` and `readFileSync`, allowing file creation/read outside the vault root. Requires pre-existing symlink placement, but a CRITICAL finding.
+3. **`memory-store.mjs:resolveSafe()` normalizes `..` away instead of rejecting.** `notes/../escape.md` becomes `.obsidian/escape.md` and is accepted. Low severity — file stays inside vault — but breaks the documented "reject path traversal" contract.
+4. **CLI is project-namespace-only.** No `--namespace` flag exists on `bizar memory {write,read,search,list,delete}`. The global and user namespaces are filesystem-only; the documented three-namespace model in the skill is half-built.
+5. **No upstream tracking branch on the vault.** `git -C ~/.local/share/bizar/memory/bizar-memory pull --rebase` fails because `main` doesn't track `origin/main`. `memory sync` swallows the failure as a warning, so it's invisible until a real conflict.
+6. **`memory init --help` exits 13** due to an unsettled top-level `await` in `cli/bin.mjs:848`. Broken help is bad UX.
+7. **CLI `read`/`list`/`delete` subcommands don't exist.** Only `write` and `search` are implemented. Users have to `cat`/`rm` the vault directly. Rule #42 round-trip requires all 5 — the smoke test had to fall back to filesystem operations.
+
+**Pattern to follow next time.**
+1. **Always run the existing test suite first to establish baseline.** Don't trust "tests pass" claims — count them.
+2. **For a "fully test" request, write tests that mirror real agent workflows**, not just unit tests of internal functions. Path safety, namespace isolation, and conflict detection are workflow-level concerns.
+3. **When writing tests for a CLI, follow the existing subprocess pattern.** Look at `memory-cli.test.mjs` first — it has the temp-dir + bare-remote + spawn dance figured out.
+4. **Run a live smoke test against the real vault in parallel with the unit tests.** Unit tests prove the parts; live tests prove the system. They will catch different bugs (e.g. the missing `--namespace` flag only surfaced in the live test).
+5. **Document real bugs in test assertions, don't fix them inline.** A test that documents "this attack vector is currently accepted" is more useful than silently working around the bug.
+
+**Files changed.**
+- New: `bizar-dash/tests/memory-roundtrip.test.mjs` (219 lines)
+- New: `bizar-dash/tests/memory-path-safety.test.mjs` (372 lines)
+- New: `bizar-dash/tests/memory-conflicts.test.mjs` (229 lines)
+- New: `bizar-dash/tests/memory-namespace.test.mjs` (328 lines)
+- New: `bizar-dash/tests/memory-cli-setup.test.mjs` (374 lines)
+- Updated: `.bizar/AGENTS_SELF_IMPROVEMENT.md` (this entry)
+
+**Agents used.** mimir (memory-system map), thor (5 new test files + baseline run), heimdall (live vault smoke test), odin (routing + synthesis).
+
+### 2026-06-30: Fixed all 7 memory-system bugs (189 → 205 tests)
+
+**Context.** User asked "fix all" after the prior test pass surfaced 7 real bugs. Mapped each fix to its file:line, ran the plan through Forseti (got CHANGES REQUIRED), revised per audit, then dispatched Thor + Tyr in parallel.
+
+**Fixes applied.**
+
+| # | Bug | File:Line | Fix |
+|---|---|---|---|
+| 1 | Conflict-marker regex `/^<…\|^=…\|>…/` lacked `m` flag AND third alt was unanchored | `cli/memory.mjs:1240` | Added `m` flag and `^` before `>{7}\s` |
+| 2 | Symlink traversal — `writeNote` followed pre-existing symlinks, leaking writes outside vault | `bizar-dash/src/server/memory-store.mjs:34-67` | `lstatSync(abs).isSymbolicLink()` check inside `resolveSafe`; uses lstatSync directly (NOT `existsSync && isSymbolicLink` — the latter misses dangling symlinks, caught by live smoke test) |
+| 3 | `path.resolve()` normalized `notes/../escape.md` to inside vault, accepting traversal | `bizar-dash/src/server/memory-store.mjs:51` | Added segment-aware `..` check BEFORE resolve; filenames like `my..note.md` still valid (segment, not substring) |
+| 4 | No `cmdRead`/`cmdList`/`cmdDelete` CLI subcommands (only `write` + `search`) | `cli/memory.mjs:1422-1569` (new functions); dispatcher 1605-1614; showHelp 1666-1668 | Added all three with `--help`, `--json`, and namespace routing |
+| 5 | `cmdWrite`/`cmdSearch` hardcoded project namespace; global/user unreachable | `bizar-dash/src/server/memory-store.mjs:151-172` (new `resolveNamespaceRoot`); `cli/memory.mjs:1391` (parseNamespaceFlag); `readNote`/`listNotes`/`deleteNote` got `opts.root` parameter | `--namespace <project\|global\|user>` flag (default `project`, backward-compatible) |
+| 6 | `cmdInit --help` ignored; prompted stdin instead | `cli/memory.mjs:257-272` (added help block); `:275` (added `--non-interactive` alias) | Help block + non-interactive alias for `--yes` |
+| 7 | `memory sync` ran `git pull --rebase` with no upstream tracking → silent failure | `bizar-dash/src/server/memory-git.mjs:331-385` (new `ensureUpstream`); `cli/memory.mjs:901-924, 1017-1029` | Idempotent upstream setter; pre-flight in cmdPull + cmdSync only when remote configured (NOT in cmdInit/install.sh per Forseti correction) |
+
+**Results.**
+- 7 fixes applied across 3 source files (memory-store.mjs, memory-git.mjs, cli/memory.mjs)
+- Tests: 189 → 205 (+16 net). 5 new in `memory-cli-readlistdelete.test.mjs` (read/list/delete CLI), 1 new regression test for dangling-symlink case, FINDING tests flipped to REGRESSION tests in 3 files
+- All 205/205 passing in 30s
+- Live CLI smoke: `init` → `write` → `read` → `list` (with `--json` and dir filter) → `delete` → `list empty` → `read missing` → all correct
+- Symlink attack via CLI rejected: dangling symlink test in `/tmp/opencode/final-smoke` confirmed no leak
+- Vault unchanged: 15 notes, clean git state
+
+**Bugs found DURING implementation (not in original list).**
+1. **`existsSync(abs) && lstatSync(abs).isSymbolicLink()` misses dangling symlinks.** `existsSync` follows the symlink and returns false when target doesn't exist. Live CLI smoke caught this — symlink write went through. Fixed by using `lstatSync(abs).isSymbolicLink()` directly in a try/catch. Added regression test for the dangling case.
+2. **Tyr's initial `resolveNamespaceRoot` was wrong for managed mode.** First draft put global/user under `<repoPath>/global/bizar`, but `writeNote('global/bizar/foo.md', …)` actually writes to `<vaultRoot>/global/bizar/foo.md`. Two failing tests caught it. Fixed by collapsing both modes to `<vaultRoot>/<namespaces.X>`. **Lesson: even with thorough planning, an end-to-end test against the actual data layout catches placement errors.**
+3. **`cmdList` with dir filter stripped the prefix.** `listNotes` returns relPaths relative to its search root. When user passed `decisions/`, the output was `0001-foo.md` instead of `decisions/0001-foo.md`. Fixed by prepending the dir arg in `cmdList`. Thor's regression test caught this.
+
+**Lessons.**
+1. **Forseti caught two real errors in my plan before code was written:** (a) the diagnosis of Fix 6 was fictional ("top-level await crash" — actual bug was stdin prompt), (b) Fix 7 belonged in `cmdSync` not `install.sh` because bootstrap never sets a remote. Always gate plan-then-execute work.
+2. **Tests-as-regressions, not tests-as-findings.** When a bug gets fixed, the test that documented the bug must be flipped from "this is a finding" to "this is a regression test for the fix". Otherwise the test file lies about the security posture.
+3. **Live CLI smoke after test pass catches what unit tests miss.** The dangling-symlink bypass was in the test file as a positive case (the symlink existed AND had a real target), but the actual attack vector is a DANGLING symlink whose target doesn't exist yet — `existsSync` returned false, bypassing the guard. Only CLI smoke against a real dangling symlink caught it.
+4. **Forseti's disjoint-scope check is non-negotiable.** Original Thor/Tyr split would have collided on `cli/memory.mjs` and `memory-path-safety.test.mjs`. Narrowing Thor to a single line + one new file eliminated the collision.
+5. **Segment-aware checks beat substring checks for path validation.** `relPath.split(/[\\/]/).includes('..')` rejects `notes/../escape.md` while allowing `my..note.md`. The substring `.includes('..')` would have rejected both — silently breaking any filename with double-dots.
+
+**Residual risks / known limitations.**
+- **TOCTOU on symlink guard** — between `lstatSync` and `writeFileSync`, an attacker could swap a regular file for a symlink. Documented inline. Full fix would need `O_NOFOLLOW` on open fds (not portable to `writeFileSync`). Acceptable threat model: per-user vault, not multi-tenant FS.
+- **`ensureUpstream` is best-effort** — if `git branch --set-upstream-to` fails, `cmdSync` logs and continues. Doesn't abort. Matches the "try to set it" semantics.
+- **CLI arg parser ambiguity** — `memory write --type convention …` was misinterpreted as `convention` being the relpath (because positional[0] is the first non-flag arg). Pre-existing UX wart, not introduced by these fixes. Workaround: put the relpath first, flags after (or just live with it — documented in the existing help text).
+- **REST API namespace support not added** — `routes/memory.mjs` still doesn't accept a `?namespace=` query param. CLI is fixed; REST would mirror the same pattern if needed (low priority, not in scope).
+
+**Files changed (this pass).**
+- Modified: `cli/memory.mjs` (+248 lines: new subcommands, dispatcher, help, namespace flag, init help, upstream pre-flight)
+- Modified: `bizar-dash/src/server/memory-store.mjs` (+84 lines: resolveSafe hardening, resolveNamespaceRoot, opts.root in read/list/delete)
+- Modified: `bizar-dash/src/server/memory-git.mjs` (+62 lines: ensureUpstream)
+- New: `bizar-dash/tests/memory-cli-readlistdelete.test.mjs` (405 lines, 9 tests)
+- Updated: `bizar-dash/tests/memory-path-safety.test.mjs` (+55 lines, 1 new test + 3 flipped)
+- Updated: `bizar-dash/tests/memory-namespace.test.mjs` (FINDING docstring removed, 4 regression tests)
+- Updated: `bizar-dash/tests/memory-cli-setup.test.mjs` (2 FINDING tests flipped to positive)
+- Updated: `.bizar/AGENTS_SELF_IMPROVEMENT.md` (this entry)
+
+**Agents used.** odin (routing + synthesis + final smoke), forseti (plan audit — caught 2 critical errors before code), thor (Fix 1 regex + 9 new CLI tests for read/list/delete), tyr (Fixes 2/3/4/5/6/7 — architectural work).

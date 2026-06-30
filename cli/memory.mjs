@@ -254,7 +254,25 @@ async function cmdInit(args) {
   const projectRoot = getProjectRoot();
   const { loadConfig, saveConfig } = memoryStore;
 
-  const yesFlag = args.includes('--yes');
+  // ── Help (must come before any work — fixes gap in cmdInit --help coverage) ─
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  Usage: bizar memory init [options]
+
+  Initialize memory config for this project.
+
+  Options:
+    --memory-mode <managed|local-only>   Vault mode (default: managed)
+    --memory-repo-name <name>            Vault directory name (managed mode)
+    --yes                                Skip prompts; non-interactive
+    --non-interactive                    Alias for --yes
+    --help, -h                           Show this help
+    `.trim());
+    return;
+  }
+
+  // --non-interactive is the canonical alias; --yes kept for backward compat.
+  const yesFlag = args.includes('--yes') || args.includes('--non-interactive');
 
   const existing = loadConfig(projectRoot);
   if (existing.exists) {
@@ -879,7 +897,7 @@ async function cmdUnlink(_args) {
 async function cmdPull(_args) {
   const projectRoot = getProjectRoot();
   const { loadConfig, resolveVault } = memoryStore;
-  const { pull, isGitInstalled } = memoryGit;
+  const { pull, isGitInstalled, ensureUpstream } = memoryGit;
 
   const { config } = loadConfig(projectRoot);
   if (config.mode === 'local-only') {
@@ -892,7 +910,18 @@ async function cmdPull(_args) {
     process.exit(1);
   }
 
-  const { vaultRoot } = resolveVault(projectRoot);
+  const { vaultRoot, branch } = resolveVault(projectRoot);
+  const remoteName = config.gitRemote ? 'origin' : 'origin';
+
+  // Pre-flight: ensure upstream is set. Without this, `git pull` fails with
+  // "no tracking information" on freshly-cloned or locally-initialized vaults.
+  const upstreamResult = ensureUpstream(vaultRoot, config.branch || branch || 'main', remoteName);
+  if (!upstreamResult.ok) {
+    info(`upstream not set (${upstreamResult.error}); pull may fail`);
+  } else if (upstreamResult.action === 'set') {
+    success(`set upstream to ${remoteName}/${config.branch || branch || 'main'}`);
+  }
+
   info(`pulling into ${vaultRoot}`);
   const result = pull(vaultRoot);
   if (!result.ok) {
@@ -985,7 +1014,7 @@ async function cmdPush(_args) {
 async function cmdSync(args) {
   const projectRoot = getProjectRoot();
   const { loadConfig, resolveVault, validateAll, scanForSecrets, listNotes } = memoryStore;
-  const { pull, addAll, commit: gitCommit, push: gitPush, status: gitStatus, acquireLock, isGitInstalled } = memoryGit;
+  const { pull, addAll, commit: gitCommit, push: gitPush, status: gitStatus, acquireLock, isGitInstalled, ensureUpstream } = memoryGit;
 
   const { config } = loadConfig(projectRoot);
   if (config.mode === 'local-only') {
@@ -998,7 +1027,19 @@ async function cmdSync(args) {
     process.exit(1);
   }
 
-  const { vaultRoot } = resolveVault(projectRoot);
+  const { vaultRoot, branch } = resolveVault(projectRoot);
+  const branchName = config.branch || branch || 'main';
+
+  // Pre-flight: ensure upstream is set. Some workflows create a vault before
+  // origin exists; without upstream, `git pull` fails with "no tracking".
+  if (config.gitRemote) {
+    const upstreamResult = ensureUpstream(vaultRoot, branchName, 'origin');
+    if (!upstreamResult.ok) {
+      info(`upstream not set (${upstreamResult.error}); pull may fail`);
+    } else if (upstreamResult.action === 'set') {
+      success(`set upstream to origin/${branchName}`);
+    }
+  }
 
   // Acquire lock
   const lock = acquireLock(vaultRoot);
@@ -1237,7 +1278,7 @@ async function cmdConflicts(_args) {
     const filePath = join(vaultRoot, note.relPath);
     try {
       const content = rf(filePath, 'utf8');
-      if (/^<{7}\s|^={7}\s|>{7}\s/.test(content)) {
+      if (/^<{7}\s|^={7}\s|^>{7}\s/m.test(content)) {
         conflicts.push({ relPath: note.relPath, reason: 'git conflict markers detected' });
       }
     } catch { /* skip */ }
@@ -1346,6 +1387,189 @@ async function cmdDoctor(_args) {
   console.log();
 }
 
+// ─── read / list / delete (Fix 4 + Fix 5 plumbing) ────────────────────────────
+
+/**
+ * Parse `--namespace <ns>` and return the chosen namespace plus the remaining
+ * positional args. Defaults to 'project' when the flag is absent.
+ */
+function parseNamespaceFlag(args) {
+  const idx = args.indexOf('--namespace');
+  if (idx === -1) return { namespace: 'project', rest: args };
+  const v = args[idx + 1];
+  if (!v || v.startsWith('-')) return { namespace: 'project', rest: args };
+  // Remove the flag and its value from the rest
+  const rest = args.filter((a, i) => i !== idx && i !== idx + 1);
+  return { namespace: v, rest };
+}
+
+/**
+ * `bizar memory read [--namespace <ns>] <relpath>`
+ *
+ * Read a single note and print its raw content (frontmatter + body) to stdout.
+ */
+async function cmdRead(args) {
+  const projectRoot = getProjectRoot();
+  const { resolveVault, resolveNamespaceRoot } = memoryStore;
+
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  Usage: bizar memory read [--namespace <ns>] <relpath>
+
+  Read a single note and print it to stdout (YAML frontmatter + body).
+
+  Options:
+    --namespace <project|global|user>   Namespace to read from (default: project)
+    --help, -h                          Show this help
+    `.trim());
+    return;
+  }
+
+  const { namespace, rest } = parseNamespaceFlag(args);
+  const relpath = rest.filter((a) => !a.startsWith('-'))[0];
+  if (!relpath) {
+    error('relpath is required: `bizar memory read <relpath>`');
+    info('run `bizar memory read --help` for usage');
+    process.exit(1);
+  }
+
+  let note;
+  if (namespace === 'project') {
+    note = memoryStore.readNote(projectRoot, relpath);
+  } else {
+    const vi = resolveVault(projectRoot);
+    const root = resolveNamespaceRoot(vi, namespace);
+    if (!root) {
+      error(`unknown namespace: ${namespace}`);
+      process.exit(1);
+    }
+    note = memoryStore.readNote(projectRoot, relpath, { root });
+  }
+
+  if (!note) {
+    error(`note not found: ${relpath}`);
+    process.exit(1);
+  }
+  process.stdout.write(note.raw);
+  if (!note.raw.endsWith('\n')) process.stdout.write('\n');
+}
+
+/**
+ * `bizar memory list [--namespace <ns>] [--json] [dir]`
+ *
+ * List notes under a directory. Default: walk the project namespace root.
+ * Pass `dir` (e.g. `decisions/`) to scope to a subdirectory. The dir is
+ * resolved RELATIVE TO the namespace root.
+ */
+async function cmdList(args) {
+  const projectRoot = getProjectRoot();
+  const { resolveVault, resolveNamespaceRoot } = memoryStore;
+
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  Usage: bizar memory list [--namespace <ns>] [dir]
+
+  List notes under a directory. Default: the project namespace root.
+
+  Options:
+    --namespace <project|global|user>   Namespace to list (default: project)
+    --json                              Emit JSON array
+    [dir]                               Subdirectory under the namespace (e.g. decisions/)
+    --help, -h                          Show this help
+    `.trim());
+    return;
+  }
+
+  const { namespace, rest } = parseNamespaceFlag(args);
+  const asJson = rest.includes('--json');
+  const dir = rest.filter((a) => !a.startsWith('-'))[0] || '';
+
+  let notes;
+  if (namespace === 'project') {
+    notes = memoryStore.listNotes(projectRoot, dir ? { namespace: dir } : {});
+  } else {
+    const vi = resolveVault(projectRoot);
+    const root = resolveNamespaceRoot(vi, namespace);
+    if (!root) {
+      error(`unknown namespace: ${namespace}`);
+      process.exit(1);
+    }
+    notes = memoryStore.listNotes(projectRoot, dir ? { root, namespace: dir } : { root });
+  }
+
+  // listNotes returns relPaths RELATIVE to the search root, so when we
+  // filter by `dir` we need to re-attach the dir prefix for display —
+  // otherwise the user sees `0001-foo.md` instead of the more useful
+  // `decisions/0001-foo.md`. Strip a trailing slash for cleanliness.
+  const displayPrefix = dir ? dir.replace(/\/+$/, '') + '/' : '';
+
+  if (asJson) {
+    console.log(JSON.stringify(notes.map((n) => ({
+      relPath: displayPrefix + n.relPath,
+      size: n.size,
+      mtime: n.mtime,
+    })), null, 2));
+    return;
+  }
+  if (notes.length === 0) {
+    console.log(chalk.dim('  (no notes)'));
+    return;
+  }
+  for (const n of notes) {
+    console.log(`  ${displayPrefix}${n.relPath}`);
+  }
+}
+
+/**
+ * `bizar memory delete [--namespace <ns>] <relpath>`
+ *
+ * Delete a single note from the vault.
+ */
+async function cmdDelete(args) {
+  const projectRoot = getProjectRoot();
+  const { resolveVault, resolveNamespaceRoot } = memoryStore;
+
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  Usage: bizar memory delete [--namespace <ns>] <relpath>
+
+  Delete a single note from the vault.
+
+  Options:
+    --namespace <project|global|user>   Namespace to delete from (default: project)
+    --help, -h                          Show this help
+    `.trim());
+    return;
+  }
+
+  const { namespace, rest } = parseNamespaceFlag(args);
+  const relpath = rest.filter((a) => !a.startsWith('-'))[0];
+  if (!relpath) {
+    error('relpath is required: `bizar memory delete <relpath>`');
+    info('run `bizar memory delete --help` for usage');
+    process.exit(1);
+  }
+
+  let ok;
+  if (namespace === 'project') {
+    ok = memoryStore.deleteNote(projectRoot, relpath);
+  } else {
+    const vi = resolveVault(projectRoot);
+    const root = resolveNamespaceRoot(vi, namespace);
+    if (!root) {
+      error(`unknown namespace: ${namespace}`);
+      process.exit(1);
+    }
+    ok = memoryStore.deleteNote(projectRoot, relpath, { root });
+  }
+
+  if (!ok) {
+    error(`note not found: ${relpath}`);
+    process.exit(1);
+  }
+  success(`deleted ${relpath}`);
+}
+
 // ─── Dispatcher ──────────────────────────────────────────────────────────────
 
 /**
@@ -1371,6 +1595,15 @@ export async function runMemory(subcommand, args) {
       break;
     case 'write':
       await cmdWrite(args);
+      break;
+    case 'read':
+      await cmdRead(args);
+      break;
+    case 'list':
+      await cmdList(args);
+      break;
+    case 'delete':
+      await cmdDelete(args);
       break;
     case 'pull':
       await cmdPull(args);
@@ -1422,6 +1655,9 @@ function showHelp() {
     link <path>   Link to a shared memory repo (clone if URL)
     unlink        Revert to local-only mode
     write         Write a single note to the vault
+    read          Read a single note and print it to stdout
+    list          List notes (optionally filtered by namespace + dir)
+    delete        Delete a single note from the vault
     pull          Git pull from the shared repo
     commit [-m]   Git commit staged changes
     push          Git push to the shared repo

@@ -327,3 +327,65 @@ export function lsRemote(repoDir, remoteName, { timeoutMs = 5000 } = {}) {
     return '';
   }
 }
+
+/**
+ * Ensure the current branch tracks `<remote>/<branch>`. Idempotent.
+ *
+ * Some workflows create a managed vault before `origin` exists (or before
+ * the user pushes for the first time). Without an upstream, `git pull`
+ * fails with "There is no tracking information for the current branch."
+ * This helper detects that case and sets the upstream, or returns a
+ * structured result if it can't.
+ *
+ * Behaviour:
+ *   - Upstream already set to <remote>/<branch>  → { ok: true, action: 'unchanged' }
+ *   - Upstream missing                           → set it, return { ok: true, action: 'set' }
+ *   - Upstream set to a DIFFERENT remote/branch  → set it to the requested one,
+ *                                                  return { ok: true, action: 'set' }
+ *   - <remote> does not exist                    → { ok: false, error: 'remote "<remote>" does not exist' }
+ *   - git not installed                          → { ok: false, error: 'git not installed' }
+ *
+ * @param {string} cwd — git working directory
+ * @param {string} branch — local branch name (e.g. 'main')
+ * @param {string} [remote='origin'] — remote name
+ * @returns {{ ok: boolean, action?: 'unchanged'|'set', error?: string }}
+ */
+export function ensureUpstream(cwd, branch, remote = 'origin') {
+  if (!isGitInstalled()) return { ok: false, error: 'git not installed' };
+
+  // Current upstream — empty string means none configured.
+  let current = '';
+  try {
+    current = execFileSync('git', ['rev-parse', '--abbrev-ref', '@{upstream}'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    // No upstream set — fall through.
+  }
+
+  if (current && current === `${remote}/${branch}`) {
+    return { ok: true, action: 'unchanged' };
+  }
+
+  // Verify the remote exists before trying to set upstream to it.
+  try {
+    execFileSync('git', ['rev-parse', '--verify', remote], {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch {
+    return { ok: false, error: `remote '${remote}' does not exist` };
+  }
+
+  try {
+    execFileSync('git', ['branch', '--set-upstream-to', `${remote}/${branch}`], {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return { ok: true, action: 'set' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
