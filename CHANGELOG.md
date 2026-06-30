@@ -1,5 +1,28 @@
 # Changelog
 
+## v4.2.2 — `bizar memory write` custom frontmatter flags
+
+### What changed
+
+- **NEW FLAGS** on `bizar memory write` (`cli/memory.mjs:cmdWrite`):
+  - `--memory-id <id>` — override the default `<type>_<timestamp>` memory_id. Validated against `[a-zA-Z0-9._-]+` (kebab/snake-case). Invalid input exits 1 with an error message naming the constraint.
+  - `--scope <scope>` — set the frontmatter `scope` field (e.g. `project`, `team`, `user`). Free-form string; omitted (not defaulted) when not provided so frontmatter stays clean.
+  - `--source-agent <name>` — set the frontmatter `source_agent` field. Same pattern as `--scope`.
+- **Schema doc updated** at `~/.local/share/bizar/memory/bizar-memory/projects/BizarHarness/api/memory-schema.md` to match the observed `mem_<path>` convention (was incorrectly documented as `mem_<type>_<date>_<slug>`). Added a "CLI flags (since v4.2.2)" section showing the new flags with an example.
+- **Tests added** in `bizar-dash/tests/memory-cli.test.mjs`:
+  - `--memory-id flag sets a custom memory_id in frontmatter`
+  - `--scope and --source-agent flags pass through to frontmatter`
+  - `invalid --memory-id format is rejected with kebab/snake-case error`
+
+### Why
+
+The CLI used to derive `memory_id` from `<type>_<timestamp>` and never exposed the optional `scope` / `source_agent` fields. Agents writing memory notes wanted deterministic ids (`mem_<path>` is the vault's actual convention) and the ability to tag notes with the agent that produced them — both are first-class fields in the schema but had no CLI surface.
+
+### Tests
+
+- 208/208 passing across the 16-file memory suite (up from 205 in v4.2.1).
+- 3 new tests in `memory-cli.test.mjs` cover the flag round-trip and the validation error.
+
 ## v4.2.1 — fix all 7 memory-system bugs
 
 ### What changed

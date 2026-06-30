@@ -244,6 +244,60 @@ describe('bizar memory write CLI', () => {
     assert.strictEqual(r.code, 0, `expected exit 0, got ${r.code}; stderr=${r.stderr}`);
     assert.ok(existsSync(join(projectRoot, '.obsidian', 'med.md')), 'medium-severity note should be written');
   });
+
+  // ─── v4.2.2 — custom frontmatter flags ─────────────────────────────────
+  test('--memory-id flag sets a custom memory_id in frontmatter', () => {
+    const relPath = 'flags/custom-id.md';
+    const r = runBizarMemoryWrite(projectRoot, [
+      relPath,
+      '--type', 'coding_convention',
+      '--memory-id', 'mem_test_custom_id',
+      '--body', 'custom id test',
+    ]);
+    assert.strictEqual(r.code, 0, `expected exit 0, got ${r.code}; stderr=${r.stderr}; stdout=${r.stdout}`);
+    const filePath = join(projectRoot, '.obsidian', relPath);
+    assert.ok(existsSync(filePath), `note file should exist at ${filePath}`);
+    const raw = readFileSync(filePath, 'utf8');
+    assert.ok(/memory_id:\s*mem_test_custom_id\b/.test(raw),
+      `frontmatter should contain memory_id: mem_test_custom_id; got:\n${raw}`);
+  });
+
+  test('--scope and --source-agent flags pass through to frontmatter', () => {
+    const relPath = 'flags/scope-and-agent.md';
+    const r = runBizarMemoryWrite(projectRoot, [
+      relPath,
+      '--type', 'coding_convention',
+      '--scope', 'project',
+      '--source-agent', 'mimir',
+      '--body', 'scope/agent test',
+    ]);
+    assert.strictEqual(r.code, 0, `expected exit 0, got ${r.code}; stderr=${r.stderr}; stdout=${r.stdout}`);
+    const filePath = join(projectRoot, '.obsidian', relPath);
+    assert.ok(existsSync(filePath), `note file should exist at ${filePath}`);
+    const raw = readFileSync(filePath, 'utf8');
+    assert.ok(/scope:\s*project\b/.test(raw),
+      `frontmatter should contain scope: project; got:\n${raw}`);
+    assert.ok(/source_agent:\s*mimir\b/.test(raw),
+      `frontmatter should contain source_agent: mimir; got:\n${raw}`);
+  });
+
+  test('invalid --memory-id format is rejected with kebab/snake-case error', () => {
+    const r = runBizarMemoryWrite(projectRoot, [
+      'flags/bad-id.md',
+      '--type', 'coding_convention',
+      '--memory-id', 'has spaces and !@#',
+      '--body', 'should fail',
+    ]);
+    assert.strictEqual(r.code, 1, `expected exit 1, got ${r.code}; stderr=${r.stderr}`);
+    const out = `${r.stdout}\n${r.stderr}`;
+    assert.ok(/invalid --memory-id/i.test(out),
+      `expected invalid --memory-id error, got: ${out}`);
+    assert.ok(/kebab|snake/i.test(out),
+      `expected error to mention kebab/snake-case, got: ${out}`);
+    // File should NOT exist
+    assert.ok(!existsSync(join(projectRoot, '.obsidian', 'flags', 'bad-id.md')),
+      'note file must not be written when --memory-id is invalid');
+  });
 });
 
 // ─── bizar memory setup ──────────────────────────────────────────────────────

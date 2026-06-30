@@ -104,6 +104,10 @@ async function cmdWrite(args) {
                              (default: verified)
     --tag <tag>              Tag to attach (may be passed multiple times)
     --title <title>          Frontmatter title field
+    --memory-id <id>         Custom memory_id (default: <type>_<timestamp>)
+                             Must match [a-zA-Z0-9._-]+
+    --scope <scope>          Frontmatter scope field (e.g. project, team)
+    --source-agent <name>    Frontmatter source_agent field
     --body <text>            Note body as a string
     --body-file <path>       Path to a file containing the body
                              (exactly one of --body / --body-file is allowed)
@@ -177,6 +181,30 @@ async function cmdWrite(args) {
     process.exit(1);
   }
 
+  // --memory-id (kebab/snake-case only)
+  const memoryId = optVal('--memory-id');
+  if (memoryId !== undefined) {
+    if (!/^[a-zA-Z0-9._-]+$/.test(memoryId)) {
+      error(`invalid --memory-id: '${memoryId}' (must be kebab/snake-case)`);
+      info('expected pattern: mem_<path>, e.g. mem_api_memory_schema_md');
+      process.exit(1);
+    }
+  }
+
+  // --scope (free-form, but non-empty when provided)
+  const scope = optVal('--scope');
+  if (scope !== undefined && scope.length === 0) {
+    error('--scope must be a non-empty string');
+    process.exit(1);
+  }
+
+  // --source-agent (free-form, but non-empty when provided)
+  const sourceAgent = optVal('--source-agent');
+  if (sourceAgent !== undefined && sourceAgent.length === 0) {
+    error('--source-agent must be a non-empty string');
+    process.exit(1);
+  }
+
   let body = '';
   if (bodyFile) {
     try {
@@ -201,6 +229,9 @@ async function cmdWrite(args) {
     tags,
   });
   if (title) frontmatter.title = title;
+  if (memoryId) frontmatter.memory_id = memoryId;
+  if (scope) frontmatter.scope = scope;
+  if (sourceAgent) frontmatter.source_agent = sourceAgent;
 
   // ── Write ───────────────────────────────────────────────────────────────
   let result;
