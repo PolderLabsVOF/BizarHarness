@@ -2,8 +2,8 @@
  * cli/memory.mjs
  *
  * `bizar memory` subcommands. Delegates to memory-store.mjs and memory-git.mjs.
- * Supports: init, status, link, unlink, pull, commit, push, sync, reindex,
- * conflicts, doctor.
+ * Supports: init, status, link, unlink, write, pull, commit, push, sync,
+ * reindex, conflicts, doctor.
  */
 
 import chalk from 'chalk';
@@ -18,6 +18,7 @@ const memoryStore = await import(`${SERVER_ROOT}/memory-store.mjs`).then((m) => 
 const memorySchema = await import(`${SERVER_ROOT}/memory-schema.mjs`).then((m) => m);
 const memorySecrets = await import(`${SERVER_ROOT}/memory-secrets.mjs`).then((m) => m);
 const memoryGit = await import(`${SERVER_ROOT}/memory-git.mjs`).then((m) => m);
+const memoryLightrag = await import(`${SERVER_ROOT}/memory-lightrag.mjs`).then((m) => m);
 
 /**
  * Get the project root. Assumes CWD is the project root.
@@ -43,6 +44,174 @@ function kv(key, value) {
 }
 
 // ─── Subcommand implementations ───────────────────────────────────────────────
+
+/**
+ * `bizar memory write <relpath> [--type …] [--status …] [--confidence …]`
+ *                          `[--tag <tag>]… [--body <body>|--body-file <file>]`
+ *                          `[--title <title>] [--json]`
+ *
+ * Write a single note to the vault. Validates the path, type, status, and
+ * confidence against the schema, builds frontmatter via `defaultFrontmatter`,
+ * then delegates to `memoryStore.writeNote`. Designed for agents (and humans)
+ * that want to write memory notes without going through the dashboard UI.
+ */
+async function cmdWrite(args) {
+  const projectRoot = getProjectRoot();
+  const { writeNote, loadConfig } = memoryStore;
+  const { defaultFrontmatter, VALID_TYPES, VALID_STATUSES, VALID_CONFIDENCES } = memorySchema;
+
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  Usage: bizar memory write <relpath> [options]
+
+  Write a single note to the vault. <relpath> must end in .md and is
+  resolved relative to the project namespace root (e.g.
+  decisions/0001-foo.md), NOT prefixed with the namespace.
+
+  Options:
+    --type <type>            One of: ${VALID_TYPES.join(', ')}
+                             (default: project_overview)
+    --status <status>        One of: ${VALID_STATUSES.join(', ')}
+                             (default: active)
+    --confidence <conf>      One of: ${VALID_CONFIDENCES.join(', ')}
+                             (default: verified)
+    --tag <tag>              Tag to attach (may be passed multiple times)
+    --title <title>          Frontmatter title field
+    --body <text>            Note body as a string
+    --body-file <path>       Path to a file containing the body
+                             (exactly one of --body / --body-file is allowed)
+    --json                   Emit the full returned note as JSON
+    --help, -h               Show this help
+
+  Exactly one of --body or --body-file is required, unless you intend
+  to write an empty body (in which case omit both).
+  `.trim());
+    return;
+  }
+
+  // Parse positional relpath (first non-flag arg)
+  const positional = args.filter((a) => !a.startsWith('-'));
+  const relpath = positional[0];
+  if (!relpath) {
+    error('relpath is required: `bizar memory write <relpath>`');
+    info('run `bizar memory write --help` for usage');
+    process.exit(1);
+  }
+  if (!relpath.endsWith('.md')) {
+    error(`relpath must end in .md: ${relpath}`);
+    process.exit(1);
+  }
+
+  // ── Parse flags ──────────────────────────────────────────────────────────
+  const optVal = (name) => {
+    const i = args.indexOf(name);
+    if (i === -1) return undefined;
+    const v = args[i + 1];
+    if (!v || v.startsWith('-')) return undefined;
+    return v;
+  };
+
+  const type = optVal('--type') ?? 'project_overview';
+  if (!VALID_TYPES.includes(type)) {
+    error(`invalid --type: '${type}'`);
+    info(`must be one of: ${VALID_TYPES.join(', ')}`);
+    process.exit(1);
+  }
+
+  const status = optVal('--status') ?? 'active';
+  if (!VALID_STATUSES.includes(status)) {
+    error(`invalid --status: '${status}'`);
+    info(`must be one of: ${VALID_STATUSES.join(', ')}`);
+    process.exit(1);
+  }
+
+  const confidence = optVal('--confidence') ?? 'verified';
+  if (!VALID_CONFIDENCES.includes(confidence)) {
+    error(`invalid --confidence: '${confidence}'`);
+    info(`must be one of: ${VALID_CONFIDENCES.join(', ')}`);
+    process.exit(1);
+  }
+
+  const title = optVal('--title');
+
+  // Multi-value --tag
+  const tags = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--tag' && args[i + 1] && !args[i + 1].startsWith('-')) {
+      tags.push(args[i + 1]);
+      i++;
+    }
+  }
+
+  const inlineBody = optVal('--body');
+  const bodyFile = optVal('--body-file');
+  if (inlineBody !== undefined && bodyFile !== undefined) {
+    error('use either --body or --body-file, not both');
+    process.exit(1);
+  }
+
+  let body = '';
+  if (bodyFile) {
+    try {
+      body = readFileSync(bodyFile, 'utf8');
+    } catch (err) {
+      error(`failed to read --body-file ${bodyFile}: ${err.message}`);
+      process.exit(1);
+    }
+  } else if (inlineBody !== undefined) {
+    body = inlineBody;
+  }
+
+  // ── Build frontmatter ───────────────────────────────────────────────────
+  const { config } = loadConfig(projectRoot);
+  const projectId = config.projectId || projectRoot.split('/').pop() || 'unknown';
+
+  const frontmatter = defaultFrontmatter({
+    type,
+    project_id: projectId,
+    status,
+    confidence,
+    tags,
+  });
+  if (title) frontmatter.title = title;
+
+  // ── Write ───────────────────────────────────────────────────────────────
+  let result;
+  try {
+    result = writeNote(projectRoot, relpath, { frontmatter, body });
+  } catch (err) {
+    if (err.code === 'SCHEMA_VALIDATION_FAILED') {
+      error(`schema validation failed: ${err.message.replace(/^schema validation failed: /, '')}`);
+    } else if (err.code === 'SECRET_DETECTED') {
+      error(err.message);
+    } else {
+      error(err.message);
+    }
+    process.exit(1);
+  }
+
+  // ── Output ──────────────────────────────────────────────────────────────
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  success(`wrote ${result.relPath}`);
+  console.log();
+  console.log(chalk.bold('  Note'));
+  console.log('  ─────────────────────────────');
+  kv('relpath', result.relPath);
+  kv('type', String(result.frontmatter.type));
+  kv('status', String(result.frontmatter.status));
+  kv('confidence', String(result.frontmatter.confidence));
+  kv('memory_id', String(result.frontmatter.memory_id));
+  if (Array.isArray(result.frontmatter.tags) && result.frontmatter.tags.length > 0) {
+    kv('tags', result.frontmatter.tags.join(', '));
+  }
+  if (title) kv('title', title);
+  kv('size', `${result.size} bytes`);
+  console.log();
+}
 
 /**
  * `bizar memory init`
@@ -204,15 +373,28 @@ async function cmdStatus(_args) {
     }
   }
 
-  // LightRAG stub
-  kv('lightrag', chalk.gray('stub (Phase 2)'));
+  // LightRAG status
+  try {
+    const { isLightRAGRunning, isLightRAGInstalled, resolveLightRAGConfig } = memoryStore;
+    const cfg = resolveLightRAGConfig(projectRoot);
+    if (!cfg.enabled) {
+      kv('lightrag', chalk.gray('disabled'));
+    } else if (!(await isLightRAGInstalled())) {
+      kv('lightrag', chalk.yellow('not installed — `uv tool install "lightrag-hku[api]"`'));
+    } else {
+      const running = await isLightRAGRunning(cfg);
+      kv('lightrag', running ? chalk.green(`${cfg.host}:${cfg.port} (running)`) : chalk.yellow(`${cfg.host}:${cfg.port} (not running — run \`bizar memory reindex\`)`));
+    }
+  } catch (err) {
+    kv('lightrag', chalk.gray(`status unavailable (${err.message})`));
+  }
 
   // Last reindex attempt
-  const reindexMarker = join(projectRoot, '.bizar', 'memory-cache', 'last-reindex-attempt.json');
+  const reindexMarker = join(projectRoot, '.bizar', 'memory-cache', 'last-reindex.json');
   if (existsSync(reindexMarker)) {
     try {
-      const { attemptedAt, ok } = JSON.parse(readFileSync(reindexMarker, 'utf8'));
-      kv('lastReindex', `${new Date(attemptedAt).toLocaleString()} — ${ok ? chalk.green('ok') : chalk.red('failed')}`);
+      const { finishedAt, ok, inserted, failed, noteCount } = JSON.parse(readFileSync(reindexMarker, 'utf8'));
+      kv('lastReindex', `${new Date(finishedAt).toLocaleString()} — ${ok ? chalk.green(`${inserted}/${noteCount} ok`) : chalk.red(`${failed} failed`)}`);
     } catch { /* ignore */ }
   }
 
@@ -543,24 +725,115 @@ async function cmdSync(args) {
 
 /**
  * `bizar memory reindex`
- * STUB — Phase 2 will implement LightRAG integration.
+ * v4.1.0 — populates the LightRAG server with every note in the vault.
+ *
+ * Steps:
+ *   1. Resolve LightRAG config from `.bizar/memory.json`.
+ *   2. Ensure `lightrag-server` is installed (searches common paths).
+ *   3. Ensure server is running (auto-starts if not).
+ *   4. List all notes from the vault.
+ *   5. Insert each note via `POST /documents` with stable id
+ *      `bizar://<projectId>/<relPath>`.
+ *   6. Write marker file with stats.
+ *
+ * The reindex is idempotent — re-running re-inserts the same notes under
+ * the same ids; LightRAG's id-keyed storage handles this gracefully.
  */
-async function cmdReindex(_args) {
+async function cmdReindex(args) {
   const projectRoot = getProjectRoot();
-  const { atomicWriteJson } = await import('./atomic.mjs').then((m) => m);
+  const _atomic = await import('./atomic.mjs').then((m) => m);
   const cacheDir = join(projectRoot, '.bizar', 'memory-cache');
-  if (!existsSync(cacheDir)) {
-    mkdirSync(cacheDir, { recursive: true });
+  mkdirSync(cacheDir, { recursive: true });
+
+  const { isLightRAGInstalled, reindexVault, resolveLightRAGConfig } = memoryStore;
+
+  // Preflight: is lightrag-server installed?
+  if (!(await isLightRAGInstalled())) {
+    error('lightrag-server not installed');
+    info('install it with: uv tool install "lightrag-hku[api]"');
+    info('then run `bizar memory reindex` again');
+    process.exit(1);
   }
-  const marker = join(cacheDir, 'last-reindex-attempt.json');
-  const result = {
-    attemptedAt: new Date().toISOString(),
-    ok: false,
-    reason: 'lightrag-not-implemented',
-  };
-  atomicWriteJson(marker, result);
-  console.log(chalk.yellow('reindex: LightRAG runtime not yet implemented — Phase 2'));
-  console.log(`  marker written to ${marker}`);
+
+  // Preflight: is lightrag enabled in config?
+  const config = resolveLightRAGConfig(projectRoot);
+  if (!config.enabled) {
+    warn('lightrag is disabled in .bizar/memory.json (lightrag.enabled = false)');
+    info('set lightrag.enabled = true and run `bizar memory reindex` again');
+    return;
+  }
+
+  info(`reindexing vault into LightRAG at http://${config.host}:${config.port}…`);
+  const result = await reindexVault(projectRoot, { logger: console });
+
+  if (!result.ok && result.inserted === 0) {
+    error(`reindex failed: ${result.error || 'unknown'}`);
+    if (result.failures?.length > 0) {
+      info(`first failure: ${result.failures[0].relPath} — ${result.failures[0].error}`);
+    }
+    process.exit(1);
+  }
+
+  if (result.started) {
+    success(`started LightRAG server (pid ${result.pid})`);
+  }
+  success(`reindexed ${result.inserted}/${result.noteCount} notes in ${result.durationMs}ms`);
+  if (result.failed > 0) {
+    warn(`${result.failed} notes failed — see marker for details`);
+  }
+  info(`marker: ${result.markerPath}`);
+}
+
+/**
+ * `bizar memory search <query>`
+ * v4.1.0 — merged lexical + semantic search.
+ *
+ * - Lexical: token-frequency matching against vault notes (instant, free).
+ * - Semantic: LightRAG `/query` with `mode: 'mix'` (combines local entity
+ *   graph + global relation graph). Skipped if LightRAG isn't running.
+ */
+async function cmdSearch(args) {
+  const query = args.join(' ').trim();
+  if (!query) {
+    error('search requires a query: `bizar memory search <query>`');
+    process.exit(1);
+  }
+  const projectRoot = getProjectRoot();
+  const { searchVault } = memoryStore;
+
+  // Lexical
+  const lexical = searchVault(projectRoot, query, { limit: 10 });
+  console.log(chalk.bold('\n  Lexical results (token-frequency):'));
+  if (lexical.length === 0) {
+    console.log(chalk.dim('    (no matches)'));
+  } else {
+    for (const r of lexical.slice(0, 5)) {
+      console.log(`  ${chalk.cyan(r.relPath)} ${chalk.dim(`(score ${r.score})`)}`);
+      console.log(chalk.dim(`    ${r.snippet}`));
+    }
+  }
+
+  // Semantic (best-effort)
+  console.log(chalk.bold('\n  Semantic answer (LightRAG):'));
+  try {
+    const cfg = memoryStore.resolveLightRAGConfig(projectRoot);
+    const semantic = await memoryLightrag.query(cfg, query, { topK: 10 });
+    if (!semantic.ok) {
+      console.log(chalk.dim(`    ${semantic.error || 'unavailable'}`));
+      if (semantic.error?.includes('not running')) {
+        console.log(chalk.dim('    tip: run `bizar memory reindex` to start + populate LightRAG'));
+      }
+    } else {
+      const response = semantic.response?.response || semantic.response?.answer || '';
+      if (response) {
+        console.log(`  ${response.split('\n').join('\n  ')}`);
+      } else {
+        console.log(chalk.dim('    (no answer returned)'));
+      }
+    }
+  } catch (err) {
+    console.log(chalk.dim(`    ${err.message}`));
+  }
 }
 
 /**
@@ -655,17 +928,35 @@ async function cmdDoctor(_args) {
       allPassed = false;
     }
 
-    // Check 7: last secret scan
-    const reindexMarker = join(projectRoot, '.bizar', 'memory-cache', 'last-reindex-attempt.json');
+    // Check 7: last reindex
+    const reindexMarker = join(projectRoot, '.bizar', 'memory-cache', 'last-reindex.json');
     if (existsSync(reindexMarker)) {
       try {
-        const { attemptedAt } = JSON.parse(readFileSync(reindexMarker, 'utf8'));
-        const ageMs = Date.now() - new Date(attemptedAt).getTime();
+        const { finishedAt, ok, inserted, failed, noteCount } = JSON.parse(readFileSync(reindexMarker, 'utf8'));
+        const ageMs = Date.now() - new Date(finishedAt).getTime();
         const ageH = ageMs / 3600000;
-        kv('lastReindex', ageH < 24 ? chalk.green(`${Math.round(ageH)}h ago`) : chalk.yellow(`${Math.round(ageH)}h ago`));
+        const summary = `${inserted}/${noteCount} inserted${failed > 0 ? `, ${failed} failed` : ''}`;
+        const status = ok ? chalk.green(summary) : chalk.red(summary);
+        kv('lastReindex', ageH < 24 ? `${status} ${chalk.dim(`(${Math.round(ageH)}h ago)`)}` : `${status} ${chalk.yellow(`(${Math.round(ageH)}h ago)`)}`);
       } catch { /* ignore */ }
     } else {
-      kv('lastReindex', chalk.yellow('never'));
+      kv('lastReindex', chalk.yellow('never — run `bizar memory reindex`'));
+    }
+
+    // Check 8: LightRAG status
+    try {
+      const { isLightRAGInstalled, isLightRAGRunning, resolveLightRAGConfig } = memoryStore;
+      const cfg = resolveLightRAGConfig(projectRoot);
+      if (!cfg.enabled) {
+        kv('lightrag', chalk.gray('disabled'));
+      } else if (!(await isLightRAGInstalled())) {
+        kv('lightrag', chalk.yellow('not installed — `uv tool install "lightrag-hku[api]"`'));
+      } else {
+        const running = await isLightRAGRunning(cfg);
+        kv('lightrag', running ? chalk.green(`${cfg.host}:${cfg.port} running`) : chalk.yellow(`not running — run \`bizar memory reindex\``));
+      }
+    } catch (err) {
+      kv('lightrag', chalk.gray(`status check failed: ${err.message}`));
     }
   }
 
@@ -698,6 +989,9 @@ export async function runMemory(subcommand, args) {
     case 'unlink':
       await cmdUnlink(args);
       break;
+    case 'write':
+      await cmdWrite(args);
+      break;
     case 'pull':
       await cmdPull(args);
       break;
@@ -712,6 +1006,9 @@ export async function runMemory(subcommand, args) {
       break;
     case 'reindex':
       await cmdReindex(args);
+      break;
+    case 'search':
+      await cmdSearch(args);
       break;
     case 'conflicts':
       await cmdConflicts(args);
@@ -743,6 +1040,7 @@ function showHelp() {
     status        Show current memory configuration
     link <path>   Link to a shared memory repo (clone if URL)
     unlink        Revert to local-only mode
+    write         Write a single note to the vault
     pull          Git pull from the shared repo
     commit [-m]   Git commit staged changes
     push          Git push to the shared repo

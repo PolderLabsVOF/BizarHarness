@@ -4,6 +4,18 @@ All notable changes to BizarHarness are documented here. The format is based on 
 
 For npm releases, see https://www.npmjs.com/package/@polderlabs/bizar. For GitHub releases, see https://github.com/DrB0rk/BizarHarness/releases.
 
+## v4.1.0 — Memory Service Phase 2 + Mandatory session-start memory check
+
+New `bizar memory write` CLI; dashboard boot fix (async `createApiRouter`); wired `autoCommitOnMemoryWrite`; LightRAG integration scaffold; removed dead Hindsight permissions; rewrote memory docs; new `memory-protocol` skill codifying the mandatory session-start memory check.
+
+Full entry: see top-level [`CHANGELOG.md`](../CHANGELOG.md). **107 memory tests pass / 0 fail.**
+
+## v4.0.0 — Package consolidation (BREAKING)
+
+Collapsed 4 npm packages (`@polderlabs/bizar`, `-dash`, `-plugin`, `-sdk`) into one. Single CLI, single install, single bin. Migration: re-install globally with `npm install -g @polderlabs/bizar` and remove the old packages. **463 tests pass / 0 fail.**
+
+Full entry: see top-level [`CHANGELOG.md`](../CHANGELOG.md).
+
 ## v3.24.0 — Bizar Memory Service Phase 1 (Markdown + Git)
 
 > **Replaces Hindsight with local-first memory.** New `bizar memory` command family, dashboard `/api/memory/*` routes, schema validator, secret scanner, and Git-backed sync.
@@ -173,7 +185,7 @@ The "expansion" release series. Adds Frigg, Vör, and the research-first protoco
 - **Vör agent with research-first protocol.** Reads `.bizar/PROJECT.md` and Hindsight bank before asking.
 - **Mimir agent with Semble-first search.** Uses Semble MCP for codebase exploration.
 - **Hindsight memory MCP integration.** Per-project banks with `bank_id` parameter.
-- **RTK integration.** Token optimization for shell commands.
+- **Headroom integration.** Token optimization for shell commands (replaces RTK).
 - **Semble integration.** AI-powered code search.
 
 ## 1.0.x — 2026-04

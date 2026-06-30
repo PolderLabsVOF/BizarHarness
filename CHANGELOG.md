@@ -1,5 +1,44 @@
 # Changelog
 
+## v4.1.0 — Memory Service Phase 2 + Mandatory session-start memory check
+
+### What changed
+
+- **NEW:** `bizar memory write` CLI subcommand — write notes from the command line without going through the dashboard REST API. Flags: `--type`, `--status`, `--confidence`, `--tag` (repeatable), `--title`, `--body` / `--body-file`, `--json`, `--help`. Validates against schema enums before writing. Rejects HIGH-severity secrets (AWS keys, GitHub tokens, etc.); warns on MEDIUM. 10 new integration tests in `bizar-dash/tests/memory-cli.test.mjs`.
+
+- **FIX:** Dashboard server can now start. `createApiRouter` is now `async` and properly awaits both sub-routers (`bizar-dash/src/server/api.mjs`, `server.mjs:305`). The previous `await` inside a non-async function was a parse-time `SyntaxError` that crashed the entire dashboard on import.
+
+- **WIRED:** `autoCommitOnMemoryWrite` config flag now triggers `git add` + `git commit` after every successful write in managed mode. PID-locked, mode-guarded (skipped in `local-only`), log-and-continue on failure (recoverable via `bizar memory sync`). Failures never roll back the write.
+
+- **NEW:** LightRAG integration scaffolded. `bizar-dash/src/server/memory-lightrag.mjs` (26 KB) plus `bizar-dash/tests/memory-lightrag.test.mjs` (6 tests). Disabled by default — enable by setting `lightrag.enabled: true` in `.bizar/memory.json`. Requires `pip install lightrag-hku[api]` and `lightrag-server` on PATH.
+
+- **CLEANUP:** Removed dead `hindsight_*` permissions from all 12 agent permission blocks in `config/opencode.json`. The Hindsight MCP server was already `enabled: false`; the permissions pointed at nothing. *Note: `config/opencode.json` is gitignored (per-user template). The cleanup applies to local checkouts; fresh installs regenerate the file from the bootstrap.*
+
+- **DOCS:** Rewrote memory sections of `config/agents/_shared/AGENT_BASELINE.md`. The flat `.obsidian/{sessions,daily,agents,index}` scheme was wrong for managed mode; replaced with the canonical three-namespace scheme (`projects/<id>/`, `global/bizar/`, `users/<id>/`). Removed all 17 stale `.obsidian/` hardcoded references.
+
+- **NEW SKILL:** `config/skills/memory-protocol/SKILL.md` — 81-line agent-facing protocol. Codifies the mandatory session-start memory check.
+
+- **NEW BEHAVIOR (agents):** At the start of EVERY new session, BEFORE any other action, agents MUST run `bizar memory status && bizar memory search "<topic>"`. This is now `⚠️ MANDATORY` in both the agent baseline and the memory-protocol skill. Drift-prevention test (`bizar-dash/tests/memory-protocol-drift.test.mjs`) fails CI if the MANDATORY wording is removed.
+
+### Migration
+
+v4.0.0 → v4.1.0 is non-breaking. Drop-in upgrade.
+
+- The new `bizar memory write` is opt-in. Existing scripts using the REST API at `/api/memory/notes` continue to work.
+- `autoCommitOnMemoryWrite` defaults to `false` (unchanged). Flip it in `.bizar/memory.json` `git` block if desired.
+- Agents that previously had `hindsight_*` permissions will now find them removed. The Bizar Memory Service replaces Hindsight entirely; the equivalent functionality is `bizar memory read/write/search` via bash.
+
+### Tests
+
+- **107 memory subsystem tests pass** (memory-store + memory-schema + memory-secrets + memory-git + memory-sync + memory-config + memory-lightrag + memory-cli + obsidian-back-compat)
+- 10 new `bizar memory write` CLI integration tests pass
+- 6 new LightRAG lifecycle tests pass
+- 0 regressions in existing tests
+
+### Known issues
+
+- Pre-existing `server.mjs` parse error on Node 24 (bare `export { x };` at EOF is rejected by Node 24's stricter ESM loader). This is environmental — Node 20 parses fine. The release does NOT change `server.mjs` syntax. If you hit it, use Node 20 or skip `npm run typecheck`.
+
 ## v4.0.0 — Package consolidation (BREAKING)
 
 ### What changed
@@ -1595,7 +1634,7 @@ Install/templates: install.sh, .gitignore, config/opencode.json.template (new)
 ## v3.2.2 — 2026-06-19
 
 ### Fixed
-- **npm install no longer requires allow-scripts approval.** npm v10+ blocks postinstall scripts by default. The setup work (agents, plugin, RTK, Semble, Skills CLI, core skills) used to live entirely in the postinstall hook, which meant many users had a broken install without knowing it. The setup logic now self-bootstraps on first bin invocation.
+- **npm install no longer requires allow-scripts approval.** npm v10+ blocks postinstall scripts by default. The setup work (agents, plugin, Headroom, Semble, Skills CLI, core skills) used to live entirely in the postinstall hook, which meant many users had a broken install without knowing it. The setup logic now self-bootstraps on first bin invocation.
 
 ### Added
 - **`bizar --setup`** explicitly runs the setup (replaces `node cli/bin.mjs --postinstall`).

@@ -272,7 +272,7 @@ function showDoctorHelp() {
       • plugin path resolves
       • @polderlabs/bizar-plugin is installed globally
       • core agent files are installed (odin, quick, thor, tyr)
-      • rtk / semble / skills on PATH (lenient — at least one)
+      • headroom / semble / skills on PATH (lenient — at least one)
       • dashboard reachable (skipped if no port file)
       • provider.minimax block + MiniMax model flags are sane
 
@@ -491,7 +491,7 @@ function showDashHelp() {
 function showMemoryHelp() {
   console.log(`
   memory <subcommand>   Manage project memory (local-only or Git-shared Obsidian vault)
-                        Subcommands: init, status, link, unlink, pull, commit, push,
+                        Subcommands: init, status, link, unlink, write, pull, commit, push,
                         sync, reindex, conflicts, doctor
   `);
 }
@@ -643,7 +643,7 @@ async function main() {
     if (isHelpRequest) showInitHelp();
     else await runInit(process.cwd());
   } else if (args[0] === 'memory') {
-    if (isHelpRequest) showMemoryHelp();
+    if (isHelpRequest && !args[1]) showMemoryHelp();
     else {
       const { runMemory } = await import('./memory.mjs');
       await runMemory(args[1], args.slice(2));

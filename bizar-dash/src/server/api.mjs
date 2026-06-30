@@ -59,7 +59,7 @@ import { createMiscRouter } from './routes/misc.mjs';
  * @param {Function} [deps.broadcast]
  * @returns {import('express').Router}
  */
-export function createApiRouter({
+export async function createApiRouter({
   state,
   watcher,
   projectRoot,
@@ -106,7 +106,7 @@ export function createApiRouter({
   router.use(createOpencodeSessionsRouter());
   router.use(createDialogsRouter({ broadcast }));
   router.use(createSkillsRouter({ broadcast }));
-router.use(createObsidianRouter({ projectRoot }));
+  router.use(await createObsidianRouter({ projectRoot }));
   // v3.24.0 — Bizar Memory Service (Phase 1). Lazy-imported so that if Thor's
   // memory routes haven't landed yet, the dashboard still boots.
   const { createMemoryRouter } = await import('./routes/memory.mjs');

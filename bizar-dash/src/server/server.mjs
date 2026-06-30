@@ -302,7 +302,7 @@ export async function createServer({
   }
   currentBroadcast = localBroadcast;
 
-  const apiRouter = createApiRouter({
+  const apiRouter = await createApiRouter({
     state,
     watcher,
     projectRoot,

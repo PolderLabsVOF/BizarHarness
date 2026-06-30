@@ -48,6 +48,8 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
  40. **Background process detection: TCP probe, not auth-gated HTTP** — when discovering dashboards (or any HTTP service), check liveness via `net.createConnection` with a 1.5s timeout. An auth-gated `/api/health` returns 401 even when the process is healthy; the TCP handshake is auth-free, transport-only, and produces zero false negatives for liveness checks. Pair this with the auth-gated HTTP check for "is it actually serving responses".
  41. **The user's "it should just be X and Y" usually means a config drift** — when the user complained about "Anthropic key not found" and said "it should just be MiniMax and opencode-zen", the answer wasn't a code rewrite — it was a config audit that found `vidarr.md` configured with `model: openai/gpt-5.5`, `cli/audit.mjs` validating gpt-5.5 as legal, `cli/prompts.mjs` asking for an OpenAI key, and `install.sh` showing GPT-5.5 in the banner. Fix the model everywhere it leaks, not just in one file. Same pattern for "should use X provider" complaints: sweep the whole codebase, not just the obvious config.
 
+42. **Before declaring a subsystem "done," exercise a full write/read/search/delete round-trip through the interfaces agents will actually use (CLI, REST, MCP).** Unit tests prove the parts work; round-trip proves the system works. **Non-negotiable.**
+
 ## Log
 
 ### 2026-06-26: v3.20.10 — Comprehensive auto-installer + API provider backup keys
@@ -957,3 +959,19 @@ Fix: write a `.gitignore` at the shared repo root on init (covering `.sync.lock`
   (1 `.gitignore` + 15 KB notes).
 
 **Agent(s) used**: Thor (M2.7, KB build + sync.lock fix + secret scanner test + search test).
+
+### 2026-06-30: v4.1.0 — Memory Service Phase 2 + mandatory session-start memory check
+
+**Context.** v4.0.0 shipped the memory subsystem, but round-trip testing exposed four production bugs: (1) the dashboard server couldn't start because of an `await` inside a non-async function, (2) there was no CLI write path — agents could read memory but couldn't write it from bash, (3) the `autoCommitOnMemoryWrite` config flag existed but was unwired, (4) every agent had `hindsight_*` permissions pointing at an MCP server that was already `enabled: false`. Plus 17 stale `.obsidian/` hardcoded references in the agent baseline (wrong for managed mode).
+
+**Lesson.** A subsystem that LOOKS complete (CLI works, vault exists, 60 tests pass) can still be unusable end-to-end. **Round-trip testing through the real interfaces (CLI + filesystem + git) catches bugs that unit tests miss.** Always exercise at least one full write/read/search/delete cycle after touching the surface area.
+
+The other lesson: docs and code drift independently. The agent baseline said "Read `.obsidian/INDEX.md`" while the vault was actually at `~/.local/share/bizar/memory/<repo>/`. The skill doc and the baseline disagreed about the directory scheme. When you touch the implementation, audit the docs in the same change.
+
+**Pattern (non-negotiable).** Before declaring a subsystem "done," exercise a full write/read/search/delete round-trip through the interfaces agents will actually use (CLI, REST, MCP). Unit tests prove the parts work; round-trip proves the system works.
+
+**Behavioral change.** v4.1.0 codifies a mandatory session-start memory check: every agent, at the start of EVERY new session, must run `bizar memory status && bizar memory search "<topic>"` BEFORE doing any other work. The mandatory framing is enforced by a drift-prevention test (`bizar-dash/tests/memory-protocol-drift.test.mjs`) that fails CI if the MANDATORY wording is removed.
+
+**Files changed (v4.1.0).** 17 source files: 3 server (`api.mjs`, `server.mjs`, `memory-store.mjs`, `memory-lightrag.mjs` new), 1 CLI (`cli/memory.mjs` write subcommand, `cli/bin.mjs` route), 1 config (`config/opencode.json` permission cleanup), 4 docs (`config/agents/_shared/AGENT_BASELINE.md`, `config/skills/obsidian/SKILL.md`, `~/.opencode/skills/obsidian/SKILL.md`, `config/AGENTS.md`), 4 release-meta (`package.json`, `CHANGELOG.md`, `wiki/Changelog.md`, `.bizar/PROJECT.md`), 2 self-meta (`.bizar/AGENTS_SELF_IMPROVEMENT.md`, `.bizar/PROJECT.md`). Plus 4 new test files (`memory-cli.test.mjs`, `memory-lightrag.test.mjs`, `memory-config.test.mjs`, `memory-protocol-drift.test.mjs`) and 1 new skill (`config/skills/memory-protocol/SKILL.md`).
+
+**Agents used.** mimir (research), thor (live round-trip test + verification), forseti (plan audit, caught 5 blockers), heimdall (config + docs), tyr (CLI write subcommand + tests).

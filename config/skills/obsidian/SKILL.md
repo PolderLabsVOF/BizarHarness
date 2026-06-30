@@ -10,6 +10,50 @@ version: 2
 
 The user has been working on this project — their notes contain the real context, the gotchas, the failed approaches, the preferred patterns. **Read the relevant vault entries before making any non-trivial decision.**
 
+## Quick Start for Agents
+
+Memory is accessed via the `bizar memory` CLI — agents have `bash: allow` and can invoke it directly.
+
+**Find the vault root:**
+```bash
+bizar memory status
+```
+
+**Search memory:**
+```bash
+bizar memory search "<query>"
+```
+
+**Read a specific note:**
+```bash
+# 1. List notes to find the path
+bizar memory list 2>/dev/null || ls ~/.local/share/bizar/memory/bizar-memory/projects/<projectId>/
+# 2. Read the note
+cat ~/.local/share/bizar/memory/bizar-memory/projects/<projectId>/<relpath>
+```
+
+**Write a new note:**
+```bash
+bizar memory write <relpath> \
+  --type <type> \
+  --status active \
+  --confidence verified \
+  --tag <tag1> --tag <tag2> \
+  --body "<body text>"
+```
+
+`<relpath>` is relative to the project namespace root (e.g. `decisions/0001-foo.md`). Do NOT include the `projects/<projectId>/` prefix — that double-nests.
+
+**Commit and push (if shared vault):**
+```bash
+bizar memory sync
+```
+
+**Health check:**
+```bash
+bizar memory doctor
+```
+
 ## The three layers
 
 | Layer | Role | Backed by | Write path |
@@ -69,6 +113,12 @@ bizar memory doctor                             # health check
 bizar memory log --tail 20                      # recent operations log
 bizar memory conflicts                          # list notes with status=conflict
 ```
+
+## Operations
+
+- **Open in Obsidian**: `/kb` — opens the project vault in Obsidian (resolves
+  from .bizar/memory.json; falls back to printing the path if Obsidian isn't
+  installed)
 
 ### Via direct file read (acceptable for one-off reads)
 
@@ -229,7 +279,7 @@ The vault directory is a Git repo. `bizar memory sync` does, in order:
 5. **Commit** — `git commit` with `commitMessageTemplate` (default `memory({projectId}): {summary}`).
 6. **Push** — only if `memory.json.git.autoPushOnSessionEnd` is true.
 
-If `autoCommitOnMemoryWrite` is false, write returns success without committing — the user reviews and runs `bizar memory sync` themselves. Recommended for production.
+`autoCommitOnMemoryWrite` defaults to `false` — writes return success without committing. The user reviews and runs `bizar memory sync` themselves. This is the default for production deployments.
 
 ## What NOT to write
 

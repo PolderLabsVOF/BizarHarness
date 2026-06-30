@@ -19,6 +19,7 @@ import { parseFrontmatter, serializeFrontmatter } from './yaml.mjs';
 import { validateNote } from './memory-schema.mjs';
 import { scan as scanSecrets, hasHighFindings } from './memory-secrets.mjs';
 import { atomicWriteJson, safeReadJSON, safeReadText } from '../../../cli/atomic.mjs';
+import * as memoryGit from './memory-git.mjs';
 
 const HOME = homedir();
 const BIZAR_MEMORY_ROOT = join(HOME, '.local', 'share', 'bizar', 'memory');
@@ -333,6 +334,33 @@ export function writeNote(projectRoot, relPath, { frontmatter, body }) {
   const content = `---\n${yamlBlock}\n---\n\n${body}`;
   writeFileSync(filePath, content, 'utf8');
 
+  // Auto-commit the written file to git (if configured).
+  // The lock serializes commits, not writes — concurrent writes will each
+  // trigger their own commit, which is the intended behaviour.
+  (() => {
+    try {
+      if (!memoryGit.isGitInstalled()) return;
+      const { config } = loadConfig(projectRoot);
+      if (config.mode === 'local-only') return;
+      if (config.git?.autoCommitOnMemoryWrite !== true) return;
+      const lockResult = memoryGit.acquireLock(vaultRoot);
+      if (!lockResult || lockResult.error) return; // skip if locked or error
+      try {
+        memoryGit.addFile(vaultRoot, relPath);
+        const summary = frontmatter.title || relPath;
+        const message = (config.git.commitMessageTemplate || 'memory(BizarHarness): {summary}')
+          .replace('{summary}', summary);
+        memoryGit.commit(vaultRoot, message, { author: config.git.commitAuthor });
+      } finally {
+        lockResult.release();
+      }
+    } catch (err) {
+      // Log but never re-throw — the write already succeeded; a failed
+      // auto-commit is recoverable on next write or manual commit.
+      console.error('[memory-store] autoCommitOnMemoryWrite failed:', err?.message || err);
+    }
+  })();
+
   const st = statSync(filePath);
   return {
     relPath,
@@ -422,3 +450,22 @@ export function validateAll(projectRoot) {
   }
   return results;
 }
+
+// ── LightRAG integration (v4.1.0) ──────────────────────────────────────────
+//
+// Re-export the LightRAG orchestrator from the memory-store module so the
+// dashboard, CLI, and tests have a single import surface. The actual
+// implementation lives in `memory-lightrag.mjs`.
+
+export {
+  resolveLightRAGConfig,
+  isInstalled as isLightRAGInstalled,
+  isRunning as isLightRAGRunning,
+  startServer as startLightRAG,
+  stopServer as stopLightRAG,
+  ensureRunning as ensureLightRAGRunning,
+  insertNote as insertLightRAGNote,
+  insertAllNotes as insertLightRAGAll,
+  reindexVault,
+  query as queryLightRAG,
+} from './memory-lightrag.mjs';

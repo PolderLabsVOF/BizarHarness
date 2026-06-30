@@ -118,7 +118,7 @@ For agents with `reasoning: true` + `variant: "high"`, follow `rules/thinking.md
 
 ### Research-Loop Rule
 
-Follow `rules/uncertainty.md` strictly. When uncertain or stuck, the next move is a research tool call (`websearch` for outside-the-repo facts, `webfetch` for official docs, `semble search` for codebase patterns, `obsidian_*` for project memory) — not a third variation of the same edit. If you catch yourself about to retry the same failed command with slightly different arguments, stop and search first. The plugin's loop-guard (`loopThresholdWarn: 5`) is the safety net; self-correct at attempt 2.
+Follow `rules/uncertainty.md` strictly. When uncertain or stuck, the next move is a research tool call (`websearch` for outside-the-repo facts, `webfetch` for official docs, `semble search` for codebase patterns, `bizar memory search` for project memory) — not a third variation of the same edit. If you catch yourself about to retry the same failed command with slightly different arguments, stop and search first. The plugin's loop-guard (`loopThresholdWarn: 5`) is the safety net; self-correct at attempt 2.
 
 ---
 
@@ -209,7 +209,7 @@ Odin (`@odin`) is the All-Father and primary/default agent. He analyzes each req
 
 Odin dispatches all tasks to subagents via the `task` tool. When work items are **independent**, he launches them as **parallel `task` calls in a single message**.
 
-**Before dispatching any task, Odin determines the project name and sets the correct obsidian bank.** See obsidian Memory Protocol below for bank selection rules.
+**Before dispatching any task, Odin runs `bizar memory status` to confirm the vault is reachable.** No `bank_id` is needed — `bizar memory status` resolves everything from the project root.
 
 | Task Type | Route To |
 |-----------|----------|
@@ -303,7 +303,7 @@ This section is the single source of truth for every Bizar agent's behavior. It 
 > | `ask_user_input_v0` | Bizar has a `question` tool — same shape, single high-value question |
 > | `skill` | `skill` — load a SKILL.md from `~/.opencode/skills/<name>/` or installed equivalent |
 > | `task` (subagent dispatch) | `task` — same — used by Odin to dispatch subagents |
-> | MCP servers | `semble` (codebase search), `obsidian` (memory), and any user-added servers in `config/opencode.json` |
+> | MCP servers | `semble` (codebase search) and any user-added servers in `config/opencode.json` |
 
 ### Simplicity Rule — do not overcomplicate
 
@@ -387,7 +387,7 @@ This section is the single source of truth for every Bizar agent's behavior. It 
 - Bizar does not have a single knowledge cutoff shared by all models. Subagents may run on DeepSeek V4 Flash, MiniMax M2.7 / M3, or GPT-5.5, each with their own training window.
 - For facts that change quickly (current positions, prices, breaking news) or anything that could have changed recently, **search before answering**: use `websearch` and `webfetch` or delegate to `@mimir` for deep research.
 - For stable technical knowledge (language semantics, well-established APIs, mathematical truths), answer directly without search.
-- Default to using `obsidian_*` with the project's `bank_id` at session start to retrieve prior project context before answering anything project-specific.
+- Default to running `bizar memory search "<topic>"` at session start to retrieve prior project context before answering anything project-specific.
 - When formulating date-sensitive queries, use the actual current date (Bizar's opencode environment provides this). Do not hardcode years.
 - Do not over-rely on memory; if uncertain, search. Confabulating costs the user more than searching.
 
@@ -398,7 +398,7 @@ Bizar can connect to external tools via MCP servers. Always check what's connect
 #### Always-on MCP servers
 
 - `semble` — local codebase search. Use `semble search "<query>"` for natural-language and keyword queries against the active repo. Faster and more token-efficient than `grep` / `read`.
-- `obsidian` — persistent memory with per-project banks. Use `obsidian_*` with `bank_id: "<project-name>"` to retrieve prior context; `obsidian_*` to store new findings.
+- `bizar memory` CLI — project memory. Run `bizar memory search "<query>"` to find prior context; `bizar memory status` to resolve the vault path. No MCP server needed — agents have `bash: allow`.
 
 #### Domain skills
 
@@ -482,7 +482,7 @@ Use `websearch` and `webfetch` for current information you don't have or that ma
 **Core search behaviors:**
 1. Search for fast-changing info (stock prices, breaking news, current holders of public positions). Don't search for timeless technical facts.
 2. Scale tool calls to query complexity: 1 for single facts; 3–5 for medium; 5–10 for deeper research; 20+ should be delegated to `@mimir`.
-3. Use internal data tools (obsidian for project memory, Semble for code) **before** `websearch` when working on the user's own projects.
+3. Use internal data tools (`bizar memory` for project memory, Semble for code) **before** `websearch` when working on the user's own projects.
 
 **How to search:**
 - Keep queries concise (1–6 words) and start broad.
@@ -532,7 +532,7 @@ For Bizar-internal claims (citing files, lines, tool results), use file:line ref
 
 ### memory_privacy_and_user_data
 
-- Use persistent memory (`obsidian_*`) only when the information is stable, useful, and not sensitive unless explicitly requested.
+- Use persistent memory (via `bizar memory write`) only when the information is stable, useful, and not sensitive unless explicitly requested.
 - Do not store trivial, short-lived, or unnecessarily personal information.
 - Handle user data conservatively.
 - Do not expose private emails, files, contacts, credentials, tokens, or internal documents unless requested and permitted.

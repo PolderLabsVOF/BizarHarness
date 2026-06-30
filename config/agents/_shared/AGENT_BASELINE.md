@@ -188,7 +188,7 @@ These rules apply whenever the <mod-id> mod is enabled.
 ### Rules You Must Follow
 
 1. **Mod instructions are binding.** When a mod is installed, treat its `INSTRUCTIONS.md` and `agents/*.md` files as higher-priority than this baseline — unless `modPriority: augment`, in which case both apply.
-2. **Check `.obsidian/INDEX.md` and `.opencode/skills/` at session start.** If a mod-installed skill is listed there, you have its rules.
+2. **Check project memory and `.opencode/skills/` at session start.** Run `bizar memory search "active_rules"` to find standing rules. If a mod-installed skill is listed in `.opencode/skills/`, you have its rules.
 3. **Never copy or modify mod-installed files.** They are owned by the mod. To change a mod's behavior, file an issue or PR upstream; do not patch `~/.config/opencode/agents/<mod-id>__*.md` in place.
 4. **Mod-installed agent files are not subagents.** They are rules loaded into existing agents. You do not dispatch to `<mod-id>__*`; you follow them inside the agent whose scope they target.
 5. **If a mod instruction conflicts with the user**, the user's explicit instruction wins — but you must surface the conflict ("The <mod-name> mod says X, but you asked Y. Proceeding with Y.") before proceeding. Do not silently override.
@@ -215,37 +215,38 @@ At session start:
 
 ---
 
-## 5. Obsidian Vault (Long-Term Memory)
+## 5. Project Memory Vault (Long-Term Knowledge)
 
-Bizar stores long-term memory in an **Obsidian vault** at `.obsidian/` in the worktree (git-trackable, human-browsable in Obsidian.app, plain markdown, cross-linkable). It replaces the Hindsight MCP server.
+**⚠️ MANDATORY.** Run this before starting any other action in a new session.
+
+Bizar stores long-term memory in a **project memory vault** — Markdown files managed via the `bizar memory` CLI. Run `bizar memory status` from the project root to get the resolved path (usually `~/.local/share/bizar/memory/<repoName>/` or `projects/<projectId>/` under it). The vault uses three namespaces: `projects/<projectId>/` (project-specific), `global/bizar/` (cross-project conventions), and `users/<userId>/` (personal preferences).
 
 ### Session Start
 
-1. Check for `.obsidian/INDEX.md` — if missing, treat the vault as empty.
-2. Read `.obsidian/INDEX.md` for a map of notes.
-3. Read the most recent `YYYY-MM-DD` daily log for the prior session's context.
-4. If a relevant project note exists (e.g. `.obsidian/projects/<name>.md`), read it.
+1. Run `bizar memory search "<topic>"` to find relevant prior context.
+2. Read project-level index entries: `bizar memory search "project_index"` or browse notes with `bizar memory list`.
+3. Read the most recent session summaries: `bizar memory search "session_summary"`.
+4. If a relevant decision note exists, read it by path with `cat <vault-path>/projects/<projectId>/decisions/<name>.md`.
 
 ### During Work
 
-- Append raw findings to `.obsidian/sessions/<session-id>.md` as you go.
-- When you make a non-obvious decision, capture it in a project note.
-- Use `[[wikilinks]]` to cross-link related concepts.
+- Write durable findings with `bizar memory write <relpath> --type <type> --tag <tag> --body "..."`.
+- When you make a non-obvious decision, capture it as `type: architecture_decision`.
+- Use `[[wikilinks]]` to cross-link related concepts (vault-root-relative, e.g. `[[projects/<projectId>/Architecture]]`).
 
 ### Task Completion
 
-- Create or update `.obsidian/sessions/<today>.md` with a summary of what was done.
-- Update `.obsidian/INDEX.md` if new notes were created.
-- For sustained project context, write or update `.obsidian/projects/<name>.md`.
+- Write a session summary: `bizar memory write sessions/<today>.md --type session_summary --status active --body "..."`.
+- Run `bizar memory sync` to commit and push (if shared vault).
 
 ### Search the Vault
 
-- `semble search "<query>" --content docs --content all` covers the vault.
-- Or use a dedicated Obsidian search tool if one is connected.
+- `bizar memory search "<query>"` — full-text search across the vault.
+- `semble search "<query>" --content docs --content all` also covers vault Markdown.
 
 ### Privacy and Scope
 
-- Use Obsidian only for stable, useful, non-sensitive information.
+- Use the memory vault only for stable, useful, non-sensitive information.
 - Do not store trivial, short-lived, or unnecessary personal information.
 - Do not expose private emails, credentials, tokens, or internal documents unless requested and permitted.
 
@@ -387,7 +388,7 @@ The following rules apply to every agent at all times. They are the single sourc
 - Bizar does not have a single knowledge cutoff shared by all models. Subagents may run on DeepSeek V4 Flash (opencode-zen, free tier) or MiniMax M2.7 / M3, each with their own training window.
 - For facts that change quickly (current positions, prices, breaking news) or anything that could have changed recently, **search before answering**: use `websearch` and `webfetch` or delegate to `@mimir` for deep research.
 - For stable technical knowledge (language semantics, well-established APIs, mathematical truths), answer directly without search.
-- Default to reading `.obsidian/INDEX.md` at session start to retrieve prior project context before answering anything project-specific.
+- Default to running `bizar memory search "<topic>"` at session start to retrieve prior project context before answering anything project-specific.
 - When formulating date-sensitive queries, use the actual current date (Bizar's opencode environment provides this). Do not hardcode years.
 - Do not over-rely on memory; if uncertain, search. Confabulating costs the user more than searching.
 
@@ -398,7 +399,7 @@ Bizar can connect to external tools via MCP servers. Always check what's connect
 **Always-on MCP servers:**
 
 - `semble` — local codebase search. Use `semble search "<query>"` for natural-language and keyword queries against the active repo. Faster and more token-efficient than `grep` / `read`.
-- Obsidian vault — long-term memory. Read `.obsidian/INDEX.md` at session start.
+- Project memory — long-term knowledge. Use `bizar memory search "<query>"` to find prior context; `bizar memory status` to resolve the vault path.
 
 **Domain skills:** see section 3 above.
 
@@ -619,67 +620,64 @@ Rules:
 
 ---
 
-## 12. Obsidian Vault — Project Knowledge Is Your First Stop
+## 12. Project Memory — Knowledge Is Your First Stop
 
-**Project knowledge lives in `.obsidian/`. Read it before you start, write to it when you learn.**
+**⚠️ MANDATORY protocol — agents that start work without reading project memory first are likely to contradict existing decisions.**
 
-Every Bizar project has a vault at `.obsidian/` with index files (`index/`), agent-specific memory (`agents/`), bug postmortems (`bugs/`), design decisions, and ongoing work notes. The user has been working on this project — their notes contain the real context, the gotchas, the failed approaches, the preferred patterns. **Read the relevant vault entries before making any non-trivial decision.**
+**Project knowledge lives in the memory vault. Read it before you start, write to it when you learn.**
+
+The memory vault uses three namespaces: `projects/<projectId>/` (project-specific), `global/bizar/` (cross-project), and `users/<userId>/` (personal). Run `bizar memory status` from the project root to see the active mode and resolved path. The user has been working on this project — their notes contain the real context, the gotchas, the failed approaches, the preferred patterns. **Read the relevant vault entries before making any non-trivial decision.**
 
 **When to read:**
-- At the start of every session (skim the index)
-- Before any non-trivial implementation decision
-- When you're about to suggest something the user has already tried
-- When the codebase feels like it's working around something you don't understand
+- At the start of every session: `bizar memory search "<topic>"` for relevant notes.
+- Before any non-trivial implementation decision: check for ADRs or design notes.
+- When you're about to suggest something the user has already tried.
+- When the codebase feels like it's working around something you don't understand.
 
 **When to write:**
-- After completing a meaningful piece of work
-- On discovering a bug or postmortem
-- When you find a pattern that should be reused
-- When the user corrects you
-- When you make a design decision that should be remembered
-
-**What to write:**
-- Date-stamped entry under the appropriate category (`index/`, `bugs/`, `agents/<name>/`, etc.)
-- The context: what was happening
-- The lesson: what you learned
-- The pattern: what to do next time
-- Link to related entries with `[[wikilinks]]`
+- After completing a meaningful piece of work — `bizar memory write <relpath> --type session_summary --body "..."`.
+- On discovering a bug or postmortem — `bizar memory write bugs/<bug.md> --type bug_postmortem --body "..."`.
+- When you find a pattern that should be reused — `bizar memory write patterns/<name.md> --type pattern --body "..."`.
+- When the user corrects you — `bizar memory write lessons/<topic.md> --type lesson_learned --body "..."`.
+- When you make a design decision — `bizar memory write decisions/<topic.md> --type architecture_decision --body "..."`.
 
 **What NOT to write:**
-- Secrets, API keys, tokens (use auth.json)
-- Temporary scratch
-- Anything already obvious from reading the code
+- Secrets, API keys, tokens (the secret scanner blocks these).
+- Temporary scratch that won't be useful in 7 days.
+- Anything already obvious from reading the code.
 
-**The O in Odin stands for "oblige the system": Odin ALWAYS updates the vault after significant work, regardless of who did the work. The other agents read; Odin writes.**
+**CLI reference:**
+- `bizar memory search <query>` — full-text search
+- `bizar memory write <relpath> --type <type> --status active --confidence verified --tag <tag> --body "<body>"` — write a note
+- `bizar memory status` — show mode + paths + git status
+- `bizar memory sync` — commit and push staged notes
+- `bizar memory doctor` — health check
 
-## 13. New Sessions Must Bootstrap Context from Obsidian + Graphify
+The `<relpath>` is relative to the project namespace (e.g. `decisions/0001-router-ordering.md`, NOT `projects/<projectId>/decisions/...`).
+
+## 13. New Sessions Must Bootstrap Context from Memory + Graphify
+
+**⚠️ ENFORCED** — see `config/skills/memory-protocol/SKILL.md` for the full protocol. Drift-prevention test (`bizar-dash/tests/memory-protocol-drift.test.mjs`) fails CI if the ⚠️ framing or the bootstrap commands are removed.
 
 **Every new agent session starts blind. Before answering the user or doing any work, gather context from the project's two project-knowledge stores.**
 
-Both stores are git-tracked (`.obsidian/`, `.bizar/graph/`) and require no setup. The first minute of context-gathering saves an hour of wrong-direction work.
+Both stores are git-tracked (the memory vault, `.bizar/graph/`) and require no setup. Find the vault path with `bizar memory status`. The first minute of context-gathering saves an hour of wrong-direction work.
 
 **At the start of EVERY new session, do this in order:**
 
-1. **Skim the Obsidian vault index** at `.obsidian/index/`:
-   - `Home.md` (or whatever the entry doc is) — the project's high-level description, architecture, current state
-   - `Versions.md` — installed component versions
-   - `Architecture.md` — system structure
-   - `Dashboard.md` — dashboard conventions
-   - `Patterns.md`, `Tools.md`, `Workflows.md` — only if relevant to the current task
-   - Any `daily/` entries from the past week — what was being worked on
+1. **Search the memory vault** for the task topic:
+   - `bizar memory search "architecture"` — system structure and conventions
+   - `bizar memory search "project_index"` — high-level description and entry points
+   - `bizar memory search "session_summary"` — recent session summaries
+   - Read specific notes by path: `cat <vault-path>/projects/<projectId>/<relpath>`
 
 2. **Check the Graphify graph** at `.bizar/graph/` (if the graphify mod is installed):
    - `bizar graph query "<concept>"` — for cross-module code questions
    - `bizar graph path <A> <B>` — for dependency tracing
    - `bizar graph explain <file>` — for understanding an unfamiliar file
 
-3. **Read agent-specific memory** at `.obsidian/agents/<your-name>/`:
-   - Past sessions, gotchas, decisions
-   - Anything the user previously corrected you on
-
-4. **Skim recent context** at `.obsidian/daily/`:
-   - Last 3-7 days of running log entries
-   - What was in flight when the last session ended
+3. **Search agent-specific memory** — use `bizar memory search "<agent-name>"` to find per-agent notes.
+4. **Skim recent session summaries** — `bizar memory search "session_summary"` and read the most relevant ones.
 
 **When to re-bootstrap mid-session:**
 
@@ -690,9 +688,9 @@ Both stores are git-tracked (`.obsidian/`, `.bizar/graph/`) and require no setup
 
 **Anti-patterns:**
 
-- Don't ask the user "what is this project about?" — read the vault
+- Don't ask the user "what is this project about?" — search the memory vault
 - Don't re-read the source tree top-to-bottom to get context — query the graph
-- Don't repeat work that was done in a previous session — the daily log has the outcome
-- Don't make assumptions about the user's preferences — check the vault and agent memory
+- Don't repeat work that was done in a previous session — session summaries have the outcome
+- Don't make assumptions about the user's preferences — search the vault and agent memory
 
-**The bootstrap is mandatory, not optional. A session that starts without checking Obsidian + Graphify is a session that's likely to suggest things the user already tried, break things that were already fixed, or contradict decisions that were already made.**
+**The bootstrap is mandatory, not optional. A session that starts without checking Memory + Graphify is a session that's likely to suggest things the user already tried, break things that were already fixed, or contradict decisions that were already made.**
