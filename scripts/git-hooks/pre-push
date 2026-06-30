@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Pre-push hook — block push of commits that touch per-machine state.
+#
+# Defense-in-depth: even if someone bypasses the pre-commit hook with
+# `git commit --no-verify`, this hook catches .bizar/ or config/opencode.json
+# changes before they reach the remote.
+#
+# Bypass: git push --no-verify (NOT recommended).
+
+set -euo pipefail
+
+REMOTE="$1"
+URL="$2"
+
+# Read ref updates from stdin (format: <local-ref> <local-sha> <remote-ref> <remote-sha>)
+# For a force-push or new branch, the "local-sha" may be the new tip.
+# We scan the names of changed files in all commits being pushed.
+COMMITS=""
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+  if [ -z "$LOCAL_SHA" ] || [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+  if [ -z "$REMOTE_SHA" ] || [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
+    # New branch — scan all commits on the local side
+    RANGE="$LOCAL_SHA"
+  else
+    RANGE="$REMOTE_SHA..$LOCAL_SHA"
+  fi
+  if [ -z "$COMMITS" ]; then
+    COMMITS="$RANGE"
+  else
+    COMMITS="$COMMITS $RANGE"
+  fi
+done
+
+if [ -z "$COMMITS" ]; then
+  exit 0
+fi
+
+BAD=$(git log --name-only --no-merges --pretty=format: $COMMITS 2>/dev/null \
+  | grep -E "(^|/)\.bizar/|config/opencode\.json$" \
+  | sort -u || true)
+
+if [ -n "$BAD" ]; then
+  echo "" >&2
+  echo "❌ Refusing to push to $REMOTE — these files in the commit range are per-machine and must not be pushed:" >&2
+  echo "$BAD" | sed 's/^/    /' >&2
+  echo "" >&2
+  echo "  .bizar/ contains per-project state (memory.json, graph/, plans, scripts)." >&2
+  echo "  config/opencode.json contains per-user opencode config (model API tokens)." >&2
+  echo "" >&2
+  echo "  To override (NOT recommended): git push --no-verify" >&2
+  exit 1
+fi

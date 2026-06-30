@@ -1,5 +1,56 @@
 # Changelog
 
+## v4.2.0 — `bizar memory setup` + git-backed default + .bizar/ enforcement
+
+### What changed
+
+- **NEW:** `bizar memory setup` CLI subcommand — one-shot setup for the managed memory vault. Asks for a git remote URL, validates the format, creates the vault, adds the remote, and tests connectivity. Idempotent: re-run with a new `--remote` to update the remote URL.
+  - Synopsis: `bizar memory setup [--remote <url>] [--mode managed|local-only] [--repo-name <name>] [--non-interactive]`
+  - Accepts SSH (`git@host:path`), HTTPS (`https://host/path`), or `ssh://` URL form
+  - Sets BOTH `memoryRepo.remote` and top-level `gitRemote` in `.bizar/memory.json` (the latter is read by `bizar memory push`)
+  - Tests connectivity via `git ls-remote`; warns but doesn't fail on auth/network errors
+- **NEW:** `memory-git.mjs` exports `addRemote(repoDir, remoteName, url, {overwrite})` and `lsRemote(repoDir, remoteName, {timeoutMs})`. Both used by `cmdSetup`.
+- **DEFAULT FLIP:** `bizar init` and `bizar memory init` now default to `managed` mode (git-backed) instead of `local-only`. The interactive prompt lists `managed` first. The behavior change applies only to NEW init runs; existing projects with `local-only` configs are unaffected.
+- **ENFORCEMENT:** `.bizar/` and `config/opencode.json` cannot be committed or pushed.
+  - `scripts/git-hooks/pre-commit` blocks any staged change matching `(^|/)\.bizar/` or `config/opencode.json`.
+  - NEW `scripts/git-hooks/pre-push` blocks any push whose commit range includes those paths.
+  - Both can be bypassed with `--no-verify` (not recommended).
+  - `scripts/install-hooks.sh` now installs both hooks.
+- **FOLLOW-UP (v4.2.1):** the 13 files currently tracked under `.bizar/` at HEAD (PROJECT.md, AGENTS_SELF_IMPROVEMENT.md, AUDIT-v2.0.0.md, etc.) will be `git rm --cached`'d in the next release. Until then, they remain tracked. New commits to those files will still be allowed by the hooks — the hooks only block NEW additions to `.bizar/`.
+
+### Migration
+
+v4.1.0 → v4.2.0 is non-breaking for projects already in `local-only` mode (they keep their config). It IS a UX change for new projects:
+
+- Old behavior: `bizar init` → asks mode → defaults `local-only` → done
+- New behavior: `bizar init` → asks mode → defaults `managed` → asks for git remote URL
+
+To set up a git-backed vault on an EXISTING project:
+```bash
+bizar memory setup --remote git@github.com:you/bizar-memory.git
+```
+
+To switch a project FROM managed TO local-only:
+```bash
+bizar memory setup --mode local-only
+```
+
+### Tests
+
+- New tests in `bizar-dash/tests/memory-cli.test.mjs` for `cmdSetup` (URL validation, idempotency, dual-write).
+- New tests in `bizar-dash/tests/memory-git.test.mjs` for `addRemote` / `lsRemote`.
+- Pre-commit hook tested via a `git commit` of a `.bizar/foo.md` file in a temp repo — must exit 1.
+- Pre-push hook tested via a forced commit (with `--no-verify`) and a subsequent `git push` — must exit 1.
+
+### Hook install
+
+After upgrading Bizar to v4.2.0, re-run `./scripts/install-hooks.sh` to install the new pre-push hook. Existing pre-commit hooks are also refreshed.
+
+### Known issues
+
+- v4.2.0 enforces `.bizar/` going forward but does NOT untrack the 13 files already tracked at HEAD. That cleanup ships in v4.2.1 with the file move to `config/defaults/`.
+- `.bizar/memory.json` is itself under `.bizar/` and therefore gitignored. Good.
+
 ## v4.1.0 — Memory Service Phase 2 + Mandatory session-start memory check
 
 ### What changed

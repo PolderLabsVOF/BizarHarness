@@ -27,6 +27,33 @@ function getProjectRoot() {
   return process.cwd();
 }
 
+/**
+ * Validate a git remote URL. Accepts HTTPS, SSH (scp-style), and SSH URL form.
+ * Rejects file://, plain paths, and other schemes.
+ *
+ * @param {string} url
+ * @returns {{ valid: true, kind: 'ssh'|'https'|'ssh-url' } | { valid: false, error: string }}
+ */
+export function validateRemoteUrl(url) {
+  if (typeof url !== 'string' || url.length === 0) {
+    return { valid: false, error: 'URL must be a non-empty string' };
+  }
+  const trimmed = url.trim();
+  // SSH scp-style: git@host:path
+  if (/^[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+:.+$/.test(trimmed)) {
+    return { valid: true, kind: 'ssh' };
+  }
+  // SSH URL form: ssh://[user@]host[:port]/path
+  if (/^ssh:\/\/(?:[a-zA-Z0-9._-]+@)?[a-zA-Z0-9._-]+(?::\d+)?\/.+$/.test(trimmed)) {
+    return { valid: true, kind: 'ssh-url' };
+  }
+  // HTTPS: https://host/path
+  if (/^https:\/\/[a-zA-Z0-9._-]+(?::\d+)?\/.+$/.test(trimmed)) {
+    return { valid: true, kind: 'https' };
+  }
+  return { valid: false, error: 'URL must be ssh://, https://, or git@host:path form' };
+}
+
 // ─── Helper formatters ────────────────────────────────────────────────────────
 
 function success(msg) { console.log(chalk.green('✓'), msg); }
@@ -215,8 +242,8 @@ async function cmdWrite(args) {
 
 /**
  * `bizar memory init`
- * Creates .bizar/memory.json with mode=local-only.
- * If mode=managed is desired, user passes --managed or --repo <name>.
+ * Creates .bizar/memory.json with mode=managed (default).
+ * Pass --memory-mode local-only to use local vault storage instead.
  *
  * Flags (added for install.sh bootstrap):
  *   --yes                Accept all defaults (skip prompts, skip if already initialized)
@@ -242,7 +269,7 @@ async function cmdInit(args) {
   }
 
   // --memory-mode takes precedence over --managed
-  let mode = 'local-only';
+  let mode = 'managed';
   const modeIdx = args.indexOf('--memory-mode');
   if (modeIdx !== -1 && args[modeIdx + 1]) {
     mode = args[modeIdx + 1];
@@ -323,6 +350,356 @@ async function cmdInit(args) {
   info(`vault: ${vaultResult.vaultRoot}`);
   if (vaultResult.created.length > 0) {
     for (const c of vaultResult.created) info(`  created: ${c}`);
+  }
+}
+
+/**
+ * `bizar memory setup` — configure or reconfigure the memory vault.
+ *
+ * v4.2.0 — first-class bootstrap entry point. Two flows:
+ *   - No existing config  → behaves like `init` + adds the remote (managed mode).
+ *   - Existing config     → optionally updates the remote URL on a managed vault.
+ *
+ * Flags:
+ *   --mode <managed|local-only>     Vault mode (default: managed)
+ *   --remote <url>                  Git remote URL (required for managed)
+ *   --repo-name <name>              Vault directory name (default: bizar-memory)
+ *   --non-interactive               No prompts; use flags or defaults
+ *   --yes                           Same as --non-interactive (backward compat)
+ *
+ * The remote URL is written to BOTH `memoryRepo.remote` (canonical,
+ * read by resolveVault) and the top-level `gitRemote` (read by cmdPush).
+ * Both must agree or `bizar memory push` will fail silently.
+ *
+ * Connectivity is checked via `memoryGit.lsRemote` after `addRemote`. A
+ * failure here is informational only — credentials may not be configured
+ * yet — and does NOT abort the setup.
+ *
+ * @param {string[]} argv
+ */
+export async function cmdSetup(argv) {
+  const projectRoot = getProjectRoot();
+  const { loadConfig, saveConfig, initVault, resolveVault } = memoryStore;
+
+  // ── Parse flags ──────────────────────────────────────────────────────────
+  const optVal = (name) => {
+    const i = argv.indexOf(name);
+    if (i === -1) return undefined;
+    const v = argv[i + 1];
+    if (!v || v.startsWith('-')) return undefined;
+    return v;
+  };
+  const hasFlag = (name) => argv.includes(name);
+
+  const nonInteractive = hasFlag('--non-interactive') || hasFlag('--yes');
+
+  // --mode (default managed). Accept --memory-mode alias too.
+  let mode = 'managed';
+  const modeRaw = optVal('--mode') ?? optVal('--memory-mode');
+  if (modeRaw) mode = modeRaw;
+  else if (hasFlag('--local-only')) mode = 'local-only';
+  else if (hasFlag('--managed')) mode = 'managed';
+  if (mode !== 'managed' && mode !== 'local-only') {
+    error(`invalid --mode: '${mode}' (must be 'managed' or 'local-only')`);
+    process.exit(1);
+  }
+
+  // --remote
+  let remote = optVal('--remote');
+  if (remote !== undefined) {
+    const v = validateRemoteUrl(remote);
+    if (!v.valid) {
+      error(`invalid --remote URL: ${v.error}`);
+      info('examples:');
+      info('  --remote git@github.com:user/repo.git');
+      info('  --remote ssh://git@github.com/user/repo.git');
+      info('  --remote https://github.com/user/repo.git');
+      process.exit(1);
+    }
+    // Store the trimmed canonical form
+    remote = remote.trim();
+  }
+
+  // --repo-name (or --memory-repo-name, --repo)
+  const repoName = optVal('--repo-name') ?? optVal('--memory-repo-name') ?? optVal('--repo') ?? 'bizar-memory';
+
+  // ── Help ────────────────────────────────────────────────────────────────
+  if (hasFlag('--help') || hasFlag('-h')) {
+    console.log(`
+  Usage: bizar memory setup [--remote <url>] [--mode <mode>] [--non-interactive]
+
+  Configure or reconfigure this project's memory vault.
+
+  Options:
+    --mode <managed|local-only>   Vault mode (default: managed)
+    --remote <url>                Git remote URL (required for managed)
+                                  Accepts: ssh://, https://, git@host:path
+    --repo-name <name>            Vault directory name (default: bizar-memory)
+    --local-only                  Shortcut for --mode local-only
+    --non-interactive             Skip prompts; use flags or defaults
+    --yes                         Alias for --non-interactive
+    --help, -h                    Show this help
+
+  Examples:
+    # Bootstrap: first-time init with a remote
+    bizar memory setup --non-interactive \\
+      --remote git@github.com:org/bizar-memory.git
+
+    # Reconfigure the remote on an existing managed vault
+    bizar memory setup --non-interactive \\
+      --remote https://github.com/org/bizar-memory.git
+
+    # Convert to local-only (removes remote but keeps notes)
+    bizar memory setup --non-interactive --local-only
+    `.trim());
+    return;
+  }
+
+  // ── Read existing config ────────────────────────────────────────────────
+  const { config: existingCfg, exists: configExists } = loadConfig(projectRoot);
+
+  // Decide whether this is a bootstrap (no config) or reconfigure (config
+  // already exists). The branch shape drives the rest of the function.
+  const isBootstrap = !configExists;
+
+  // Reconfigure path: if no --remote was passed AND --mode wasn't changed,
+  // just print status and exit. Otherwise apply the change.
+  if (!isBootstrap) {
+    const existingMode = existingCfg.memoryRepo?.mode || existingCfg.mode || 'local-only';
+    const existingRemote = existingCfg.memoryRepo?.remote || existingCfg.gitRemote || '';
+    const modeChanged = mode !== existingMode;
+    const remoteChanged = remote !== undefined && remote !== existingRemote;
+
+    if (!modeChanged && !remoteChanged) {
+      // Nothing to do — print status and exit
+      console.log(chalk.bold('\n  Memory setup (no changes)'));
+      console.log('  ─────────────────────────────');
+      success('already configured');
+      kv('mode', existingMode);
+      kv('remote', existingRemote || '(none)');
+      kv('vault', existingCfg.memoryRepo?.path || existingCfg.repoName || '(unknown)');
+      console.log();
+      info(`run \`bizar memory setup --remote <url>\` to change the remote`);
+      return;
+    }
+
+    // ── Reconfigure path — apply in place ───────────────────────────────
+    const updatedCfg = { ...existingCfg };
+
+    if (modeChanged && remote === undefined) {
+      // Switching modes without a new remote is fine, but warn if going
+      // managed without a URL to push to.
+      if (mode === 'managed' && !existingRemote) {
+        warn('switching to managed mode with no remote configured — push will fail');
+        info('pass --remote <url> to set one');
+      }
+    }
+
+    if (remote !== undefined) {
+      // Dual-write: top-level + memoryRepo.*
+      updatedCfg.gitRemote = remote;
+      updatedCfg.memoryRepo = {
+        ...(existingCfg.memoryRepo || {}),
+        mode: mode === 'managed' ? 'managed' : (updatedCfg.memoryRepo?.mode || 'local-only'),
+        remote,
+      };
+    }
+    if (modeChanged) {
+      updatedCfg.mode = mode;
+      if (updatedCfg.memoryRepo) {
+        updatedCfg.memoryRepo.mode = mode;
+      }
+    }
+
+    const saveResult = saveConfig(projectRoot, updatedCfg);
+    if (!saveResult.ok) {
+      error(`failed to save config: ${saveResult.error}`);
+      process.exit(1);
+    }
+
+    // If we now have a remote on a managed vault, register it.
+    if (mode === 'managed' && remote) {
+      addRemoteToVault(projectRoot, remote);
+    }
+
+    printSetupResult({ mode, remote, vaultPath: updatedCfg.memoryRepo?.path });
+    return;
+  }
+
+  // ── Bootstrap path (no existing config) ─────────────────────────────────
+
+  // For managed bootstrap, we need a remote. If missing, prompt or error.
+  if (mode === 'managed' && !remote) {
+    if (nonInteractive) {
+      error('--remote is required for --mode managed in non-interactive setup');
+      info('pass --remote <url> (or run without --non-interactive to be prompted)');
+      process.exit(1);
+    }
+    // Prompt via readline
+    const readline = await import('node:readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise((resolve) => {
+      rl.question(chalk.cyan('  remote URL (ssh://, https://, or git@host:path): '), resolve);
+    });
+    rl.close();
+    const trimmed = (answer || '').trim();
+    if (!trimmed) {
+      error('a remote URL is required for managed mode');
+      process.exit(1);
+    }
+    const v = validateRemoteUrl(trimmed);
+    if (!v.valid) {
+      error(`invalid remote URL: ${v.error}`);
+      process.exit(1);
+    }
+    remote = trimmed;
+  }
+
+  // Build a config object mirroring cmdInit's shape, with the remote set.
+  const home = homedir();
+  const projectId = projectRoot.split('/').pop() || 'project';
+  const vaultPath = mode === 'managed'
+    ? join(home, '.local', 'share', 'bizar', 'memory', repoName)
+    : join(projectRoot, '.obsidian');
+
+  const cfg = {
+    version: 1,
+    backend: 'bizar-local',
+    projectId,
+    memoryRepo: {
+      mode,
+      path: vaultPath,
+      remote: mode === 'managed' ? (remote || null) : null,
+      branch: 'main',
+      namespace: mode === 'managed' ? `projects/${projectId}` : null,
+    },
+    namespaces: {
+      project: `projects/${projectId}`,
+      global: 'global/bizar',
+      user: `users/${process.env.USER || process.env.USERNAME || 'local'}`,
+    },
+    lightrag: {
+      enabled: false,
+      host: '127.0.0.1',
+      port: 9621,
+      workingDir: join(projectRoot, '.bizar', 'lightrag'),
+    },
+    git: {
+      autoPullOnSessionStart: false,
+      autoCommitOnMemoryWrite: false,
+      autoPushOnSessionEnd: false,
+      commitAuthor: 'Bizar Memory <bizar-memory@local>',
+      commitMessageTemplate: `memory(${projectId}): {summary}`,
+    },
+  };
+
+  // Top-level gitRemote mirrors memoryRepo.remote so cmdPush works.
+  if (mode === 'managed' && remote) {
+    cfg.gitRemote = remote;
+  }
+
+  const saveResult = saveConfig(projectRoot, cfg);
+  if (!saveResult.ok) {
+    error(`failed to write config: ${saveResult.error}`);
+    process.exit(1);
+  }
+
+  // Initialize the vault on disk.
+  const vaultResult = initVault(projectRoot);
+  if (!vaultResult.ok) {
+    error(`vault init failed: ${vaultResult.error || 'unknown'}`);
+    process.exit(1);
+  }
+  if (vaultResult.created.length > 0) {
+    for (const c of vaultResult.created) info(`  created: ${c}`);
+  }
+
+  // For managed bootstrap with a remote, register it on the new vault.
+  if (mode === 'managed' && remote) {
+    addRemoteToVault(projectRoot, remote);
+  }
+
+  printSetupResult({ mode, remote, vaultPath });
+}
+
+/**
+ * Register `remote` as `origin` on the vault's git repo, then probe
+ * connectivity via `lsRemote`. Both operations are best-effort: we
+ * warn on failure but never abort the setup.
+ *
+ * @param {string} projectRoot
+ * @param {string} remote
+ */
+function addRemoteToVault(projectRoot, remote) {
+  const { resolveVault } = memoryStore;
+  const { vaultRoot } = resolveVault(projectRoot);
+
+  // Sanity check: is the vault a git repo? initVault should have ensured
+  // this, but double-check before calling git remote.
+  const gitDir = join(vaultRoot, '.git');
+  if (!existsSync(gitDir)) {
+    warn('vault is not a git repo — skipping remote registration');
+    info('run `bizar memory init` or `bizar memory sync` to repair');
+    return;
+  }
+
+  if (typeof memoryGit.addRemote !== 'function') {
+    warn('memoryGit.addRemote is not available in this build');
+    info('(waiting for the addRemote/lsRemote stream to merge) — remote URL saved to config');
+    return;
+  }
+
+  const addResult = memoryGit.addRemote(vaultRoot, 'origin', remote);
+  if (!addResult || addResult.ok === false) {
+    warn(`failed to register remote: ${addResult?.error || 'unknown error'}`);
+    info('the remote URL is still saved in .bizar/memory.json');
+    return;
+  }
+  if (addResult.action === 'unchanged') {
+    info(`remote 'origin' already set to ${remote}`);
+  } else if (addResult.action === 'updated') {
+    success(`updated remote 'origin' → ${remote}`);
+  } else {
+    success(`registered remote 'origin' → ${remote}`);
+  }
+
+  if (typeof memoryGit.lsRemote !== 'function') {
+    info('skipping connectivity probe (lsRemote not available yet)');
+    return;
+  }
+
+  const probe = memoryGit.lsRemote(vaultRoot, 'origin', { timeoutMs: 5000 });
+  if (typeof probe === 'string' && probe.length > 0) {
+    const refCount = probe.split('\n').filter(Boolean).length;
+    success(`connectivity ok (${refCount} refs reachable)`);
+  } else {
+    warn('could not reach remote (auth, network, or unknown host)');
+    info('the vault is set up; configure credentials and run `bizar memory pull`');
+  }
+}
+
+/**
+ * Render the standard "setup complete" report using the existing `kv`
+ * style. The connectivity line is omitted if not relevant.
+ *
+ * @param {{ mode: string, remote: string|undefined|null, vaultPath: string }} opts
+ */
+function printSetupResult({ mode, remote, vaultPath }) {
+  console.log();
+  success('memory setup complete');
+  console.log('  ─────────────────────────────');
+  kv('mode', mode);
+  kv('vault', String(vaultPath || ''));
+  if (remote) kv('remote', remote);
+  console.log();
+  if (!remote) {
+    info('local-only mode — notes are stored in this project only');
+    info('run `bizar memory setup --remote <url>` to attach a remote later');
+  } else {
+    info('next steps:');
+    info('  1. `bizar memory pull` to fetch the existing vault (if any)');
+    info('  2. `bizar memory write <relpath>` to start adding notes');
+    info('  3. `bizar memory push` to publish');
   }
 }
 
@@ -980,6 +1357,9 @@ export async function runMemory(subcommand, args) {
     case 'init':
       await cmdInit(args);
       break;
+    case 'setup':
+      await cmdSetup(args);
+      break;
     case 'status':
       await cmdStatus(args);
       break;
@@ -1037,6 +1417,7 @@ function showHelp() {
 
   Subcommands:
     init          Initialize memory config for this project
+    setup         Configure or reconfigure the memory vault (mode + remote)
     status        Show current memory configuration
     link <path>   Link to a shared memory repo (clone if URL)
     unlink        Revert to local-only mode

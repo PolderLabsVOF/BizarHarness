@@ -12,6 +12,13 @@ The user has been working on this project — their notes contain the real conte
 
 ## Quick Start for Agents
 
+**First-time setup** (if `.bizar/memory.json` is missing):
+```bash
+bizar memory setup --remote git@github.com:you/bizar-memory.git
+bizar memory status    # confirm vault reachable
+bizar memory doctor    # schema + secrets + git state
+```
+
 Memory is accessed via the `bizar memory` CLI — agents have `bash: allow` and can invoke it directly.
 
 **Find the vault root:**

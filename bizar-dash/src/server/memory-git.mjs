@@ -247,3 +247,83 @@ export function addAll(dir) {
     return { ok: false, error: err.message };
   }
 }
+
+/**
+ * Set the URL of a git remote, idempotently.
+ *
+ * @param {string} repoDir — the git repository root
+ * @param {string} remoteName — name of the remote (e.g. 'origin')
+ * @param {string} url — the remote URL
+ * @param {{ overwrite?: boolean }} [opts]
+ * @returns {{ ok: true, action: 'added' | 'updated' | 'unchanged' }}
+ * @throws if the remote already exists with a different URL and overwrite is false,
+ *         or if the underlying git command fails.
+ */
+export function addRemote(repoDir, remoteName, url, { overwrite = false } = {}) {
+  let existing = null;
+  try {
+    existing = execFileSync('git', ['remote', 'get-url', remoteName], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch (err) {
+    // exit code 2 or 128 means remote doesn't exist; anything else is a real error
+    if (err.status !== 2 && err.status !== 128) {
+      throw new Error(`failed to query remote '${remoteName}': ${err.message}`);
+    }
+  }
+
+  if (existing && existing === url) {
+    return { ok: true, action: 'unchanged' };
+  }
+
+  if (existing && !overwrite) {
+    throw new Error(
+      `remote '${remoteName}' already exists with URL ${existing}.\n` +
+      `  To update it, call addRemote(dir, name, url, { overwrite: true }).`,
+    );
+  }
+
+  if (existing) {
+    execFileSync('git', ['remote', 'set-url', remoteName, url], {
+      cwd: repoDir,
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return { ok: true, action: 'updated' };
+  }
+
+  execFileSync('git', ['remote', 'add', remoteName, url], {
+    cwd: repoDir,
+    timeout: 5000,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  return { ok: true, action: 'added' };
+}
+
+/**
+ * Test whether a git remote is reachable.
+ *
+ * @param {string} repoDir — the git repository root
+ * @param {string} remoteName — name of the remote (e.g. 'origin')
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {string} the trimmed stdout from `git ls-remote` on success,
+ *                   or '' on any failure (network, auth, timeout).
+ *                   Does NOT throw.
+ */
+export function lsRemote(repoDir, remoteName, { timeoutMs = 5000 } = {}) {
+  try {
+    const stdout = execFileSync('git', ['ls-remote', remoteName], {
+      cwd: repoDir,
+      timeout: timeoutMs,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return stdout.trim();
+  } catch {
+    return '';
+  }
+}

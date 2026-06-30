@@ -491,8 +491,8 @@ function showDashHelp() {
 function showMemoryHelp() {
   console.log(`
   memory <subcommand>   Manage project memory (local-only or Git-shared Obsidian vault)
-                        Subcommands: init, status, link, unlink, write, pull, commit, push,
-                        sync, reindex, conflicts, doctor
+                        Subcommands: init, setup, status, link, unlink, write, pull, commit,
+                        push, sync, reindex, conflicts, doctor
   `);
 }
 

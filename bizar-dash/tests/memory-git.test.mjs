@@ -9,7 +9,7 @@ import assert from 'node:assert';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 
 const TEST_GIT = await import('../src/server/memory-git.mjs').then((m) => m);
 const GIT_INSTALLED = TEST_GIT.isGitInstalled();
@@ -134,5 +134,113 @@ describe('memory-git', () => {
     if (!workingDir) return;
     const result = TEST_GIT.pull(workingDir);
     assert.strictEqual(result.ok, true);
+  });
+
+  describe('addRemote', () => {
+    (GIT_INSTALLED ? it : it.skip)('registers a new remote on a fresh repo', () => {
+      const dir = join(tmpdir(), `bizar-addremote-fresh-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(dir, { recursive: true });
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.name', 't'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+
+        const result = TEST_GIT.addRemote(dir, 'origin', 'git@github.com:user/repo.git');
+        assert.deepEqual(result, { ok: true, action: 'added' });
+
+        const url = execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: dir, encoding: 'utf8' }).trim();
+        assert.strictEqual(url, 'git@github.com:user/repo.git');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    (GIT_INSTALLED ? it : it.skip)('is idempotent when same URL is set twice', () => {
+      const dir = join(tmpdir(), `bizar-addremote-idempotent-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(dir, { recursive: true });
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.name', 't'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+
+        const first = TEST_GIT.addRemote(dir, 'origin', 'git@github.com:user/repo.git');
+        assert.deepEqual(first, { ok: true, action: 'added' });
+
+        const second = TEST_GIT.addRemote(dir, 'origin', 'git@github.com:user/repo.git');
+        assert.deepEqual(second, { ok: true, action: 'unchanged' });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    (GIT_INSTALLED ? it : it.skip)('throws when remote exists with different URL and overwrite is false', () => {
+      const dir = join(tmpdir(), `bizar-addremote-noverwrite-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(dir, { recursive: true });
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.name', 't'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+
+        TEST_GIT.addRemote(dir, 'origin', 'git@github.com:user/repo.git');
+        assert.throws(
+          () => TEST_GIT.addRemote(dir, 'origin', 'git@github.com:other/repo.git'),
+          /already exists/,
+        );
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    (GIT_INSTALLED ? it : it.skip)('overwrites remote URL when overwrite flag is set', () => {
+      const dir = join(tmpdir(), `bizar-addremote-overwrite-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(dir, { recursive: true });
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.name', 't'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+
+        TEST_GIT.addRemote(dir, 'origin', 'git@github.com:user/repo.git');
+        const result = TEST_GIT.addRemote(dir, 'origin', 'git@github.com:other/repo.git', { overwrite: true });
+        assert.deepEqual(result, { ok: true, action: 'updated' });
+
+        const url = execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: dir, encoding: 'utf8' }).trim();
+        assert.strictEqual(url, 'git@github.com:other/repo.git');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('lsRemote', () => {
+    (GIT_INSTALLED ? it : it.skip)('returns empty string for an unreachable remote', () => {
+      const dir = join(tmpdir(), `bizar-lsremote-unreachable-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(dir, { recursive: true });
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.name', 't'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+
+        TEST_GIT.addRemote(dir, 'origin', 'git@127.0.0.1:1/nope.git');
+        const result = TEST_GIT.lsRemote(dir, 'origin', { timeoutMs: 1000 });
+        assert.strictEqual(result, '');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    (GIT_INSTALLED ? it : it.skip)('returns empty string when the remote name does not exist', () => {
+      const dir = join(tmpdir(), `bizar-lsremote-nonexistent-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(dir, { recursive: true });
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.name', 't'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+
+        const result = TEST_GIT.lsRemote(dir, 'nonexistent', { timeoutMs: 1000 });
+        assert.strictEqual(result, '');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 });

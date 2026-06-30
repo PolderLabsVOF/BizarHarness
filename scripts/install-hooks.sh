@@ -15,6 +15,15 @@ fi
 cp "$HOOKS_DIR/pre-commit" "$GIT_HOOKS_DIR/pre-commit"
 chmod +x "$GIT_HOOKS_DIR/pre-commit"
 
+cp "$HOOKS_DIR/pre-push" "$GIT_HOOKS_DIR/pre-push"
+chmod +x "$GIT_HOOKS_DIR/pre-push"
+
 echo "✓ Installed pre-commit hook"
 echo "  The hook scans staged changes for likely secrets (Bearer tokens, API keys, etc.)"
+echo "  It also blocks commits touching .bizar/ or config/opencode.json (per-machine state)"
 echo "  To bypass in an emergency: git commit --no-verify"
+echo ""
+echo "✓ Installed pre-push hook"
+echo "  Blocks pushes whose commit range includes .bizar/ or config/opencode.json changes"
+echo "  Defense-in-depth: catches bypasses of pre-commit via --no-verify"
+echo "  To bypass in an emergency: git push --no-verify"
