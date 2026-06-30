@@ -94,9 +94,12 @@ export async function detectOpenCode() {
   return { exists, version, configDir, agentsDir };
 }
 
-export async function detectRtk() {
-  return commandExists('rtk');
+export async function detectHeadroom() {
+  return commandExists('headroom');
 }
+
+// Alias for backward-compat during migration
+export const detectRtk = detectHeadroom;
 
 export async function detectSemble() {
   if (commandExists('semble')) {
@@ -138,7 +141,7 @@ export function buildSummary(components, agents, target, skillPacks = []) {
   if (components.includes('rules')) parts.push('rules');
   if (components.includes('hooks')) parts.push('hooks');
   if (components.includes('commands')) parts.push('commands');
-  parts.push('RTK');
+  parts.push('Headroom');
   parts.push('Semble');
   parts.push('Skills CLI');
   if (skillPacks.length > 0) parts.push(`skills: ${skillPacks.join(', ')}`);

@@ -13,7 +13,7 @@
  *   - getChat:      per-project sessions/<id>.jsonl (preferred) — falls
  *                   back to legacy .bizar/sessions if no project is active
  *   - getAgents:    ~/.config/opencode/agents/*.md (frontmatter parse)
- *   - getArtifacts:     scans artifacts/ (worktree) and ~/.config/opencode/artifacts/
+ *   - getArtifacts:     scans .bizar/artifacts/ (worktree) and ~/.config/opencode/artifacts/
  */
 import {
   existsSync,
@@ -47,7 +47,7 @@ export function createState({ projectRoot, opencodeConfigDir, bizarRoot }) {
     bizarDir: join(projectRoot, '.bizar'),
     sessionsDir: join(projectRoot, '.bizar', 'sessions'),
     activityLog: join(projectRoot, '.bizar', 'activity.log'),
-    plansDir: join(projectRoot, 'artifacts'),
+    plansDir: join(projectRoot, '.bizar', 'artifacts'),
     globalPlansDir: join(opencodeConfigDir, 'artifacts'),
     settingsFile: join(HOME, '.config', 'bizar', 'settings.json'),
   };

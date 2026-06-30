@@ -11,7 +11,7 @@
  * edits so the editor never races the markdown regenerator.
  *
  * Storage locations, in order of preference:
- *   1. <projectRoot>/artifacts/<slug>            (worktree, project-scoped)
+ *   1. <projectRoot>/.bizar/artifacts/<slug>      (worktree, project-scoped)
  *   2. ~/.config/opencode/artifacts/<slug>       (global fallback)
  */
 import {
@@ -102,7 +102,7 @@ export const artifactsStore = {
    */
   resolveDir(slug, projectRoot) {
     const candidates = [];
-    if (projectRoot) candidates.push(join(projectRoot, 'artifacts', slug));
+    if (projectRoot) candidates.push(join(projectRoot, '.bizar', 'artifacts', slug));
     candidates.push(join(GLOBAL_PLANS_DIR, slug));
     for (const c of candidates) {
       if (existsSync(c)) return c;
@@ -116,7 +116,7 @@ export const artifactsStore = {
    */
   ensureDir(slug, projectRoot) {
     const target = projectRoot
-      ? join(projectRoot, 'artifacts', slug)
+      ? join(projectRoot, '.bizar', 'artifacts', slug)
       : join(GLOBAL_PLANS_DIR, slug);
     mkdirSync(target, { recursive: true });
     return target;
@@ -126,7 +126,7 @@ export const artifactsStore = {
     const seen = new Set();
     const out = [];
     const dirs = [];
-    if (projectRoot) dirs.push(join(projectRoot, 'artifacts'));
+    if (projectRoot) dirs.push(join(projectRoot, '.bizar', 'artifacts'));
     dirs.push(GLOBAL_PLANS_DIR);
     for (const dir of dirs) {
       if (!existsSync(dir)) continue;

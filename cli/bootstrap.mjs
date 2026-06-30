@@ -49,7 +49,7 @@ export function checkSetupStatus() {
  */
 function printSetupBanner() {
   // Use console.log directly to avoid chalk formatting issues in non-TTY
-  console.log('\n  ⚡ First-time setup — Bizar needs to install agents, plugin, RTK, Semble, Skills CLI...\n');
+  console.log('\n  ⚡ First-time setup — Bizar needs to install agents, plugin, Headroom, Semble, Skills CLI...\n');
 }
 
 /**

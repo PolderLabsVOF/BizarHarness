@@ -265,6 +265,7 @@ function parseFlags(tokens: string[]): ParsedFlags {
  *   - `/plan comments <slug> [id]`    — tool_invocation: bizar_get_plan_comments
  *   - `/plan wait <slug> [--timeout N]`
  *                                     — deferred (returns response; no tool call)
+ *   - `/kb`                          — open the Bizar Memory vault in Obsidian
  *   - `/help` / `/commands`           — help text
  */
 export function parseSlashCommand(
@@ -293,6 +294,8 @@ export function parseSlashCommand(
       return handlePlan(rest, ctx);
     case "bizar":
       return handleBizar(rest, ctx);
+    case "kb":
+      return handleKb(rest, ctx);
     case "help":
     case "commands":
       return helpResult();
@@ -1090,12 +1093,49 @@ function handleBizar(arg: string, ctx: ParseContext): SlashCommandResult {
   };
 }
 
+// --- /kb -----------------------------------------------------------------
+
+/**
+ * v4.0.0 — `/kb` opens the Bizar Memory vault in Obsidian.
+ *
+ * Behavior:
+ *   - Routes through the `bizar_open_kb` tool via tool_invocation.
+ *   - The tool resolves the vault path from .bizar/memory.json and
+ *     spawns Obsidian (or xdg-open as fallback).
+ *   - If memory isn't initialized, the tool returns a helpful message.
+ *
+ * No subcommands. With args, returns a help pointer.
+ */
+function handleKb(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const trimmed = arg.trim();
+
+  if (trimmed !== "") {
+    return {
+      handled: true,
+      response:
+        `Unknown argument: \`${trimmed}\`. \`/kb\` takes no arguments.\n\n` +
+        `Use \`/kb\` to open the Bizar Memory vault in Obsidian.\n` +
+        `Use \`bizar memory status\` to see vault details.`,
+    };
+  }
+
+  return {
+    handled: true,
+    response: "Opening Bizar Memory vault in Obsidian…",
+    sideEffect: {
+      kind: "tool_invocation",
+      toolName: "bizar_open_kb",
+      args: {},
+    },
+  };
+}
+
 // --- /help ----------------------------------------------------------------
 
 function helpResult(): SlashCommandResult {
   return {
     handled: true,
-    response: "Available commands: /visual-plan [on|off|status], /plan new <slug> [template], /plan list, /plan open <slug>, /plan get <slug>, /plan add <slug>, /plan update <slug> <id>, /plan delete <slug> <id>, /plan comment <slug> [id] \"text\", /plan comments <slug> [id], /plan status <slug> <status>, /plan wait <slug> [--timeout N], /bizar, /bizar <args>, /help. See the dialog for full descriptions.",
+    response: "Available commands: /visual-plan [on|off|status], /plan new <slug> [template], /plan list, /plan open <slug>, /plan get <slug>, /plan add <slug>, /plan update <slug> <id>, /plan delete <slug> <id>, /plan comment <slug> [id] \"text\", /plan comments <slug> [id], /plan status <slug> <status>, /plan wait <slug> [--timeout N], /kb, /bizar, /bizar <args>, /help. See the dialog for full descriptions.",
     dialog: {
       id: generateId(),
       title: "Bizar Commands",
@@ -1117,6 +1157,7 @@ function helpResult(): SlashCommandResult {
           { cmd: "/plan wait <slug> [--timeout N]", desc: "Wait for feedback (deferred)" },
           { cmd: "/bizar", desc: "Launch the Bizar dashboard" },
           { cmd: "/bizar <args>", desc: "Route a request via the menu" },
+          { cmd: "/kb", desc: "Open the Bizar Memory vault in Obsidian" },
           { cmd: "/help | /commands", desc: "Show this help" },
         ],
         templates: [...KNOWN_TEMPLATES],

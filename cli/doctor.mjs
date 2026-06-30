@@ -9,8 +9,8 @@
  * result without re-printing the per-check output.
  *
  * The checks are intentionally tolerant: missing optional tools
- * (rtk/semble/skills) don't fail the run, and the dashboard check is
- * skipped silently if no port file exists. The goal is "is your
+ * (headroom/semble/skills) don't fail the run, and the dashboard check
+ * is skipped silently if no port file exists. The goal is "is your
  * install healthy?" not "is every conceivable thing present?".
  *
  * Usage:
@@ -187,13 +187,13 @@ async function checkAgentFilesInstalled() {
 }
 
 /**
- * Lenient: passes if at least one of rtk/semble/skills is on PATH.
+ * Lenient: passes if at least one of headroom/semble/skills is on PATH.
  * These are informational — none of them are strictly required for
  * `bizar doctor` to do its job, and missing them shouldn't fail the
  * overall health report.
  */
 async function checkToolsAvailable() {
-  const tools = ['rtk', 'semble', 'skills'];
+  const tools = ['headroom', 'semble', 'skills'];
   const found = tools.filter(which);
   if (found.length === 0) {
     throw new Error(`none of ${tools.join('/')} on PATH`);

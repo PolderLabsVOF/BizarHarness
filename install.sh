@@ -101,6 +101,16 @@ section "Pre-flight: checking system tools"
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 have_file() { [ -e "$1" ]; }
 
+# Pre-populate PATH with the common install locations for opencode + npm
+# so the rest of this script can find them even if the calling shell
+# didn't source ~/.profile first.
+for p in "$HOME/.opencode/bin" "$HOME/.local/npm/bin" "$HOME/.cargo/bin"; do
+  case ":$PATH:" in
+    *":$p:"*) ;;
+    *) [ -d "$p" ] && export PATH="$p:$PATH" ;;
+  esac
+done
+
 MISSING=()
 have_cmd node || MISSING+=("node")
 have_cmd uv || MISSING+=("uv")
@@ -362,7 +372,7 @@ section "Install opencode CLI"
 if ! have_cmd opencode; then
   echo -e "  ${CYAN}→${NC} Installing opencode CLI..."
   if have_cmd curl; then
-    if curl -fsSL https://opencode.ai/install.sh | sh >/dev/null 2>&1; then
+    if curl -fsSL https://opencode.ai/install | sh >/dev/null 2>&1; then
       if have_cmd opencode; then
         note "opencode CLI installed at $(command -v opencode)"
       else

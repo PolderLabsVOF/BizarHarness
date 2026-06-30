@@ -341,43 +341,49 @@ export async function installPluginBizar(projectRoot) {
   }
 }
 
-export async function installRtk() {
+export async function installHeadroom() {
   const { execSync } = await import('node:child_process');
 
   const already = await detectRtk();
   if (already) {
-    const spinner = ora({ text: 'Configuring RTK for opencode...', color: 'magenta' }).start();
+    const spinner = ora({ text: 'Configuring Headroom for opencode...', color: 'magenta' }).start();
     try {
-      execSync('rtk init -g --opencode', { stdio: 'pipe' });
-      spinner.succeed(chalk.green('RTK configured for opencode'));
+      execSync('headroom wrap opencode', { stdio: 'pipe' });
+      spinner.succeed(chalk.green('Headroom configured for opencode'));
     } catch {
-      spinner.warn(chalk.yellow('Could not auto-configure RTK — run `rtk init -g --opencode` manually'));
+      spinner.warn(chalk.yellow('Could not auto-configure Headroom — run `headroom wrap opencode` manually'));
     }
     return true;
   }
 
-  const spinner = ora({ text: 'Installing RTK (Rust Token Killer)...', color: 'magenta' }).start();
+  const spinner = ora({ text: 'Installing Headroom (context compressor)...', color: 'magenta' }).start();
 
   if (process.platform === 'win32') {
-    // RTK ships a bash-only installer; no PowerShell equivalent. On
-    // Windows the user must install RTK manually (e.g. via Cargo or
-    // prebuilt binary) and re-run `rtk init -g --opencode`.
-    spinner.fail(chalk.red('Automatic RTK install not supported on Windows. Install manually from https://github.com/rtk-ai/rtk'));
+    spinner.fail(chalk.red('Automatic Headroom install not supported on Windows. Install manually: pip install "headroom-ai[all]"'));
     return false;
   }
 
   try {
     execSync(
-      'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+      'pip install --user "headroom-ai[all]"',
       { stdio: 'pipe', timeout: 60000 },
     );
-    spinner.text = 'Configuring RTK for opencode...';
-    execSync('rtk init -g --opencode', { stdio: 'pipe' });
-    spinner.succeed(chalk.green('RTK installed and configured for opencode'));
+    spinner.text = 'Configuring Headroom for opencode...';
+    execSync('headroom wrap opencode', { stdio: 'pipe' });
+    spinner.succeed(chalk.green('Headroom installed and configured for opencode'));
     return true;
   } catch {
-    spinner.fail(chalk.red('RTK install failed. Install manually from https://github.com/rtk-ai/rtk'));
-    return false;
+    // Fall back to npm
+    try {
+      execSync('npm install -g headroom-ai', { stdio: 'pipe', timeout: 60000 });
+      spinner.text = 'Configuring Headroom for opencode...';
+      execSync('headroom wrap opencode', { stdio: 'pipe' });
+      spinner.succeed(chalk.green('Headroom installed (npm) and configured for opencode'));
+      return true;
+    } catch {
+      spinner.fail(chalk.red('Headroom install failed. Install manually: pip install "headroom-ai[all]" or npm install -g headroom-ai'));
+      return false;
+    }
   }
 }
 

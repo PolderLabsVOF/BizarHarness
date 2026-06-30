@@ -546,3 +546,39 @@ describe("parseSlashCommand — /help includes new subcommands", () => {
     }
   });
 });
+
+// ===========================================================================
+// Group 11 — v4.0.0 /kb
+// ===========================================================================
+
+describe("parseSlashCommand — /kb", () => {
+  test("parses '/kb' slash command", () => {
+    const result = parseSlashCommand("/kb", baseCtx);
+    expect(result).not.toBeNull();
+    expect(result!.handled).toBe(true);
+    expect(result!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_open_kb",
+      args: {},
+    });
+  });
+
+  test("'/kb' with args returns help", () => {
+    const result = parseSlashCommand("/kb foo", baseCtx);
+    expect(result).not.toBeNull();
+    expect(result!.handled).toBe(true);
+    expect(result!.sideEffect).toBeUndefined();
+    expect(result!.response).toContain("Unknown argument");
+  });
+
+  test("'/kb' case-insensitive", () => {
+    const r = parseSlashCommand("/KB", baseCtx);
+    expect(r).not.toBeNull();
+    expect(r!.handled).toBe(true);
+    expect(r!.sideEffect).toEqual({
+      kind: "tool_invocation",
+      toolName: "bizar_open_kb",
+      args: {},
+    });
+  });
+});

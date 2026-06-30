@@ -22,7 +22,7 @@
  *      Path-traversal attacks (e.g. `../`) are blocked.
  *   3. **Subprocess allowlist** — only whitelisted binaries
  *      (`bizar`, `opencode`, `python3`, `graphify`, `git`, `node`,
- *      `npm`, `pip`, `pipx`, `uv`, `rtk`) can be spawned. Custom
+ *      `npm`, `pip`, `pipx`, `uv`, `headroom`) can be spawned. Custom
  *      binaries require an explicit `process:spawn:<bin>` permission.
  *   4. **Audit log** — every privileged operation (fs read/write,
  *      process spawn, network fetch) is logged to
@@ -73,7 +73,7 @@ export const ALLOWED_BINARIES = new Set([
   'npm',
   'npx',
   'git',
-  'rtk',
+  'headroom',
   'jq',
 ]);
 

@@ -137,7 +137,7 @@
 
 - **Mod security layer (`src/server/mod-security.mjs`).** Mods declare permissions in `mod.json`; the loader enforces them at every privileged action:
   - **Filesystem sandboxing** — mods get scoped `readFileSync` / `writeFileSync` helpers. Paths outside `fs:read:<scope>` / `fs:write:<scope>` throw. Scope syntax: exact path, directory with implicit recursion, `/*` suffix, or `~/` home-relative.
-  - **Subprocess allowlist** — only whitelisted binaries (`bizar`, `opencode`, `python3`, `git`, `node`, `npm`, `pip`, `uv`, `rtk`, `jq`, `graphify`, `pipx`, `opencode-ai`) can be spawned without an explicit `process:spawn:<bin>` permission. Path-style binaries (`/bin/ls`) require explicit permission.
+   - **Subprocess allowlist** — only whitelisted binaries (`bizar`, `opencode`, `python3`, `git`, `node`, `npm`, `pip`, `uv`, `headroom`, `jq`, `graphify`, `pipx`, `opencode-ai`) can be spawned without an explicit `process:spawn:<bin>` permission. Path-style binaries (`/bin/ls`) require explicit permission.
   - **Integrity hash** — every mod's files are SHA-256-hashed at install time; the hash is stored under `_integrity` in `mod.json`. On every load the hash is recomputed; a mismatch triggers a critical warning and refuses to load the mod's routes until reinstalled.
   - **Audit log** — every privileged action is logged as JSON lines to `~/.cache/bizar/logs/mod-audit.log` with timestamp, mod id, mod version, action, and details. Inspect via `GET /api/mods/audit?mod=<id>&limit=200`.
 - **Public mod registry.** New `bizarre-mods` repo at `DrB0rk/bizarre-mods` is the canonical source of mods. `GET /api/mods/registry` fetches `registry.json` and annotates each entry with installed state and upgrade hints. `POST /api/mods { id }` installs from the registry.

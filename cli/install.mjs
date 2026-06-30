@@ -5,8 +5,8 @@ import { join } from 'node:path';
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
-import { detectOpenCode, detectRtk, detectSemble, detectSkillsCli, detectUv, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installRtk, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
+import { detectOpenCode, detectHeadroom, detectSemble, detectSkillsCli, detectUv, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
+import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installHeadroom, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'quick.md',
@@ -554,32 +554,37 @@ export async function runPostInstall() {
   }
   console.log('BizarHarness: agents installed.');
 
-  // Install RTK
-  const rtkPresent = await detectRtk();
-  if (!rtkPresent) {
-    console.log('BizarHarness: installing RTK (token optimizer)...');
+  // Install Headroom
+  const headroomPresent = await detectHeadroom();
+  if (!headroomPresent) {
+    console.log('BizarHarness: installing Headroom (context compressor)...');
     try {
       if (process.platform === 'win32') {
-        // RTK ships a bash-only installer; on Windows the user installs it
-        // manually (e.g. `cargo install --git https://github.com/rtk-ai/rtk`).
-        console.log('BizarHarness: RTK bash installer does not run on Windows. Install manually from https://github.com/rtk-ai/rtk');
+        console.log('BizarHarness: Automatic Headroom install not supported on Windows. Install manually: pip install "headroom-ai[all]"');
       } else {
         execSync(
-          'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+          'pip install --user "headroom-ai[all]"',
           { stdio: 'pipe', timeout: 60000 },
         );
-        execSync('rtk init -g --opencode', { stdio: 'pipe' });
-        console.log('BizarHarness: RTK installed and configured.');
+        execSync('headroom wrap opencode', { stdio: 'pipe' });
+        console.log('BizarHarness: Headroom installed and configured.');
       }
     } catch {
-      console.log('BizarHarness: RTK install failed. Install manually from https://github.com/rtk-ai/rtk');
+      // Fall back to npm
+      try {
+        execSync('npm install -g headroom-ai', { stdio: 'pipe', timeout: 60000 });
+        execSync('headroom wrap opencode', { stdio: 'pipe' });
+        console.log('BizarHarness: Headroom installed (npm) and configured.');
+      } catch {
+        console.log('BizarHarness: Headroom install failed. Install manually: pip install "headroom-ai[all]" or npm install -g headroom-ai');
+      }
     }
   } else {
     try {
-      execSync('rtk init -g --opencode', { stdio: 'pipe' });
-      console.log('BizarHarness: RTK configured for opencode.');
+      execSync('headroom wrap opencode', { stdio: 'pipe' });
+      console.log('BizarHarness: Headroom configured for opencode.');
     } catch {
-      console.log('BizarHarness: could not configure RTK. Run `rtk init -g --opencode` manually.');
+      console.log('BizarHarness: could not configure Headroom. Run `headroom wrap opencode` manually.');
     }
   }
 

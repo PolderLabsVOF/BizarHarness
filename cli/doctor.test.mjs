@@ -8,7 +8,7 @@
  * tmpdir, and craft the opencode.json + agents/ directory to drive
  * specific pass/fail outcomes. For checks that depend on global
  * npm-installed packages or external CLIs (e.g. opencode --version,
- * npm root -g, which rtk), we accept that they may pass or fail
+ * npm root -g, which headroom), we accept that they may pass or fail
  * depending on the test environment and just verify the framework
  * returns the right shape.
  */
@@ -116,7 +116,7 @@ describe('runDoctor() shape', () => {
 
   test('silent mode suppresses ALL output when nothing fails', async () => {
     // Build a fully healthy environment. We can't make opencode reachable
-    // or rtk installed without modifying PATH, so we settle for: no failures
+    // or headroom installed without modifying PATH, so we settle for: no failures
     // means no output at all. Since we know some checks will fail in a
     // bare tmpdir, this test is structured to assert the negative case
     // differently: we verify silent+no-fail produces 0 lines.

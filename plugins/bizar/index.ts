@@ -120,6 +120,7 @@ import { createBgStatusTool } from "./src/tools/bg-status.js";
 import { createBgCollectTool } from "./src/tools/bg-collect.js";
 import { createBgKillTool } from "./src/tools/bg-kill.js";
 import { createBgGetCommentsTool } from "./src/tools/bg-get-comments.js";
+import { createOpenKbTool } from "./src/tools/open-kb.js";
 
 // v0.4.0 — visual plan flow: settings, slash commands, plan tools
 import { SettingsStore } from "./src/settings.js";
@@ -938,6 +939,12 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // when they click "Submit to agent" on a glyph. Available to all
     // agents; read-only.
     read_glyph_feedback: createReadGlyphFeedbackTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+    // v4.0.0 — open the Bizar Memory vault in Obsidian. Available to
+    // all agents; no serve child required.
+    bizar_open_kb: createOpenKbTool({
       worktree: ctx.worktree,
       logger: ctx.logger,
     }),

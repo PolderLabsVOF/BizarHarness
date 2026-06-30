@@ -139,11 +139,11 @@ If you used a per-project install, delete the `.bizar/` folder from the project 
 rm -rf .bizar/
 ```
 
-Note: `RTK`, `Semble`, and the `Skills CLI` are installed as side-effects of the BizarHarness installer. Remove them only if you're sure no other project depends on them.
+Note: `Headroom`, `Semble`, and the `Skills CLI` are installed as side-effects of the BizarHarness installer. Remove them only if you're sure no other project depends on them.
 
 ```bash
-# RTK
-rm -f ~/.local/bin/rtk
+# Headroom
+pip uninstall headroom-ai
 # Semble
 uv tool uninstall semble
 # Skills CLI

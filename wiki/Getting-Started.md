@@ -32,7 +32,7 @@ bizar
 
 The first run opens the interactive installer. It walks you through:
 
-1. **Pre-flight checks** — detects opencode, RTK, Semble, and the Skills CLI. Missing optional tools are installed automatically.
+1. **Pre-flight checks** — detects opencode, Headroom, Semble, and the Skills CLI. Missing optional tools are installed automatically.
 2. **Component selection** — pick what to install: agent definitions, the `AGENTS.md` master config, the `opencode.json` template, the Bizar plugin, optional rules/hooks/commands, bundled skills (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF), and the `.bizar/` folder.
 3. **Agent selection** — choose which of the twelve agents to enable. The default is to install all of them.
 4. **Install mode** — merge into your existing `~/.config/opencode/` or install into a project-local `.opencode/` directory.
@@ -49,7 +49,7 @@ Behind the scenes, the installer:
 - Copies the master `AGENTS.md` (with the routing table, skill discovery protocol, and Memory Service protocol) into `~/.config/opencode/`.
 - Merges the Bizar plugin entry into `~/.config/opencode/opencode.json`. If a config already exists, the installer backs it up to `opencode.json.bak` and uses `jq` for a deep merge.
 - Installs the bundled Bizar plugin (loop guard, status logging, handoff) into `~/.config/opencode/plugins/bizar/`.
-- Installs [RTK](https://github.com/rtk-ai/rtk) if missing, then runs `rtk init -g --opencode` to wire token compression into the shell.
+- Installs [Headroom](https://github.com/headroomlabs-ai/headroom) if missing, then runs `headroom wrap opencode` to wire token compression into the shell.
 - Installs [Semble](https://github.com/semble-ai/semble) if missing — used by Mimir for codebase search.
 - Installs the [Skills CLI](https://www.skills.sh) if missing — used by every implementation agent for on-demand skill discovery.
 - Adds the selected skill packs from skills.sh.

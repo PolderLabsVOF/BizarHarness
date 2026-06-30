@@ -7,7 +7,7 @@
 12 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
 
 [![npm](https://img.shields.io/npm/v/bizar?color=cb3837)](https://www.npmjs.com/package/bizar)
-[![RTK](https://img.shields.io/badge/rtk-integrated-8A2BE2)](https://github.com/rtk-ai/rtk)
+[![Headroom](https://img.shields.io/badge/headroom-integrated-8A2BE2)](https://github.com/headroomlabs-ai/headroom)
 [![Semble](https://img.shields.io/badge/semble-integrated-0ea5e9)](https://github.com/semble-ai/semble)
 [![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -201,40 +201,37 @@ bizar graph build
 - The `blessed` TUI library may render with quirks inside Windows Terminal; if you see garbled output in the TUI, use the browser UI via `bizar dash start --bg` and open http://localhost:4321 instead.
 - Some shell scripts under `config/skills/embedded-esp-idf/` are bash-only and require Git Bash (or WSL).
 - The bash `install.sh` does not run on Windows cmd/PowerShell; use the `npm install -g` path above.
-- RTK (Rust Token Killer) ships a bash-only installer. On Windows, install it manually via [Cargo](https://github.com/rtk-ai/rtk#installation) or a [prebuilt binary](https://github.com/rtk-ai/rtk/releases), then run `rtk init -g --opencode`.
+- Headroom ships a Python/npm installer. On Windows, install it manually: `pip install "headroom-ai[all]"` or `npm install -g headroom-ai`, then run `headroom wrap opencode`.
 
 ### Prerequisites
 
 - [opencode CLI](https://opencode.ai) installed and on `$PATH`
 - Provider connections (via `/connect` in opencode TUI)
-- [RTK](https://github.com/rtk-ai/rtk) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
+- [Headroom](https://github.com/headroomlabs-ai/headroom) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
 - [Semble](https://github.com/semble-ai/semble) (recommended) — AI-powered code search (used by Mimir agent)
 - [Skills CLI](https://www.skills.sh) (recommended) — Agent skill package manager (`npx skills add <owner/repo>`)
 
-### RTK Setup
+### Headroom Setup
 
-[RTK](https://github.com/rtk-ai/rtk) (Rust Token Killer) filters and compresses command output before it reaches the LLM context. It saves ~80% on common operations like `ls`, `git status`, `cargo test`, and `git diff`.
+[Headroom](https://github.com/headroomlabs-ai/headroom) filters and compresses command output before it reaches the LLM context. It saves ~80% on common operations like `ls`, `git status`, `cargo test`, and `git diff`.
 
 Install:
 
 ```bash
-# Homebrew (macOS)
-brew install rtk
+# Python (recommended)
+pip install "headroom-ai[all]"
 
-# Linux/macOS quick install
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-
-# Cargo
-cargo install --git https://github.com/rtk-ai/rtk
+# npm
+npm install -g headroom-ai
 ```
 
 Enable for opencode:
 
 ```bash
-rtk init -g --opencode
+headroom wrap opencode
 ```
 
-After setup, all Bash commands are transparently rewritten to their rtk equivalents — `git status` → `rtk git status`, `cargo test` → `rtk cargo test`. The LLM receives compact output, saving 60-90% on token costs.
+After setup, `headroom wrap opencode` injects config into `opencode.json` and starts a proxy. The LLM receives compact output, saving 60-90% on token costs. The wrapping is durable — all subsequent opencode sessions route through the headroom proxy.
 
 ### Semble Setup
 

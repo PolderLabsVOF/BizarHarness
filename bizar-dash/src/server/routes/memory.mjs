@@ -23,6 +23,28 @@ const { atomicWriteJson } = await import(`${SERVER_ROOT}/../../../cli/atomic.mjs
 
 const { wrap } = await import('./_shared.mjs').then((m) => m);
 
+// Lazy import to avoid circular dependency with memory-lightrag.mjs
+async function getMemoryLightrag() {
+  return import(`${SERVER_ROOT}/memory-lightrag.mjs`).then((m) => m);
+}
+
+/**
+ * Redact apiKey in the lightrag block before sending to the UI.
+ * apiKey '***' means it was already redacted.
+ * Any non-empty string that is not '***' is replaced with '***'.
+ */
+function redactLightRAGConfig(config) {
+  if (!config || !config.lightrag) return config;
+  const { lightrag, ...rest } = config;
+  const redactedLightrag = {
+    ...lightrag,
+    apiKey: lightrag.apiKey && lightrag.apiKey !== '' && lightrag.apiKey !== '***'
+      ? '***'
+      : lightrag.apiKey || undefined,
+  };
+  return { ...rest, lightrag: redactedLightrag };
+}
+
 export function createMemoryRouter({ projectRoot }) {
   const router = Router();
 
@@ -82,12 +104,42 @@ export function createMemoryRouter({ projectRoot }) {
   router.get('/memory/config', wrap(async (_req, res) => {
     const { loadConfig } = memoryStore;
     const { config, exists } = loadConfig(projectRoot);
-    res.json({ exists, config });
+    res.json({ exists, config: redactLightRAGConfig(config) });
   }));
 
   // POST /memory/config
   router.post('/memory/config', wrap(async (req, res) => {
     const { loadConfig, saveConfig } = memoryStore;
+
+    // ── Patch mode: merge only the lightrag block ──────────────────────────
+    if (req.body && req.body.patch === true) {
+      const { writeLightRAGConfig } = await getMemoryLightrag();
+      const { lightrag, patch: _patch, ...restPatch } = req.body;
+
+      // Validate no unexpected top-level fields in patch
+      if (Object.keys(restPatch).length > 0) {
+        res.status(400).json({ error: 'bad_request', message: 'patch mode only accepts a "lightrag" field' });
+        return;
+      }
+      if (!lightrag || typeof lightrag !== 'object') {
+        res.status(400).json({ error: 'bad_request', message: 'patch mode requires a "lightrag" object' });
+        return;
+      }
+
+      const result = writeLightRAGConfig(projectRoot, lightrag);
+      if (!result.ok) {
+        res.status(400).json({ error: 'validation_error', message: result.error });
+        return;
+      }
+
+      // Return full config with redacted lightrag block
+      const { config: full } = loadConfig(projectRoot);
+      const redacted = redactLightRAGConfig(full);
+      res.json({ ok: true, config: redacted });
+      return;
+    }
+
+    // ── Full replace mode (existing behaviour) ───────────────────────────────
     const { config: newConfig, confirm } = req.body || {};
     if (!newConfig || typeof newConfig !== 'object') {
       res.status(400).json({ error: 'bad_request', message: 'body must include config object' });
@@ -111,7 +163,8 @@ export function createMemoryRouter({ projectRoot }) {
       res.status(500).json({ error: 'write_failed', message: result.error });
       return;
     }
-    res.json({ ok: true, config: merged });
+    const redacted = redactLightRAGConfig(merged);
+    res.json({ ok: true, config: redacted });
   }));
 
   // GET /memory/notes
@@ -437,20 +490,34 @@ export function createMemoryRouter({ projectRoot }) {
     res.json({ conflicts });
   }));
 
-  // POST /memory/reindex — STUB
+  // POST /memory/reindex — v4.1.0 real LightRAG population
   router.post('/memory/reindex', wrap(async (_req, res) => {
-    const cacheDir = join(projectRoot, '.bizar', 'memory-cache');
-    if (!existsSync(cacheDir)) {
-      mkdirSync(cacheDir, { recursive: true });
+    const { reindexVault } = memoryStore;
+    const result = await reindexVault(projectRoot, {});
+    if (!result.ok && result.inserted === 0) {
+      res.status(422).json(result);
+      return;
     }
-    const marker = join(cacheDir, 'last-reindex-attempt.json');
-    const data = {
-      attemptedAt: new Date().toISOString(),
-      ok: false,
-      reason: 'lightrag-not-implemented',
-    };
-    atomicWriteJson(marker, data);
-    res.json({ ok: false, stub: true });
+    res.json(result);
+  }));
+
+  // GET /memory/query?q=...&topK=10 — merged lexical + semantic search
+  router.get('/memory/query', wrap(async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    if (!q) {
+      res.status(400).json({ error: 'q required' });
+      return;
+    }
+    const topK = Math.min(parseInt(req.query.topK, 10) || 10, 50);
+    const { searchVault, queryLightRAG } = memoryStore;
+    const lexical = searchVault(projectRoot, q, { limit: topK });
+    let semantic = null;
+    try {
+      semantic = await queryLightRAG(projectRoot, q, { topK });
+    } catch (err) {
+      semantic = { ok: false, error: err.message };
+    }
+    res.json({ ok: true, q, lexical, semantic });
   }));
 
   // GET /memory/doctor
@@ -493,6 +560,98 @@ export function createMemoryRouter({ projectRoot }) {
 
     const allPassed = checks.every((c) => c.pass);
     res.json({ ok: allPassed, checks });
+  }));
+
+  // GET /memory/lightrag/status
+  router.get('/memory/lightrag/status', wrap(async (_req, res) => {
+    const { resolveLightRAGConfig, isRunning } = await getMemoryLightrag();
+    const cfg = resolveLightRAGConfig(projectRoot);
+    const pidFile = join(cfg.workingDir, 'lightrag.pid');
+
+    // Inline readPidAlive logic
+    let pid = null;
+    let alive = false;
+    if (existsSync(pidFile)) {
+      try {
+        pid = parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
+        if (Number.isFinite(pid) && pid > 0) {
+          try {
+            process.kill(pid, 0);
+            alive = true;
+          } catch {
+            alive = false;
+          }
+        } else {
+          pid = null;
+        }
+      } catch {
+        pid = null;
+      }
+    }
+
+    const running = alive && (await isRunning(cfg));
+    const logFile = join(cfg.workingDir, 'lightrag.log');
+    const logTail = [];
+
+    if (existsSync(logFile)) {
+      try {
+        const content = readFileSync(logFile, 'utf8');
+        const lines = content.split('\n');
+        logTail.push(...lines.slice(-30));
+      } catch {}
+    }
+
+    let lastError = null;
+    if (!running && pid !== null) {
+      lastError = 'process not responding to health checks';
+    }
+
+    res.json({
+      running,
+      pid: running ? pid : null,
+      host: cfg.host,
+      port: cfg.port,
+      llmBinding: cfg.llmBinding,
+      embeddingBinding: cfg.embeddingBinding,
+      llmModel: cfg.llmModel,
+      embeddingModel: cfg.embeddingModel,
+      lastError,
+      logTail,
+    });
+  }));
+
+  // POST /memory/lightrag/start
+  router.post('/memory/lightrag/start', wrap(async (_req, res) => {
+    const { resolveLightRAGConfig, startServer } = await getMemoryLightrag();
+    const cfg = resolveLightRAGConfig(projectRoot);
+    const result = await startServer(cfg, {});
+    res.json(result);
+  }));
+
+  // POST /memory/lightrag/stop
+  router.post('/memory/lightrag/stop', wrap(async (_req, res) => {
+    const { resolveLightRAGConfig, stopServer } = await getMemoryLightrag();
+    const cfg = resolveLightRAGConfig(projectRoot);
+    const result = await stopServer(cfg, {});
+    res.json(result);
+  }));
+
+  // GET /memory/lightrag/log
+  router.get('/memory/lightrag/log', wrap(async (_req, res) => {
+    const { resolveLightRAGConfig } = await getMemoryLightrag();
+    const cfg = resolveLightRAGConfig(projectRoot);
+    const logFile = join(cfg.workingDir, 'lightrag.log');
+    if (!existsSync(logFile)) {
+      res.json({ lines: [] });
+      return;
+    }
+    try {
+      const content = readFileSync(logFile, 'utf8');
+      const lines = content.split('\n');
+      res.json({ lines: lines.slice(-200) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   }));
 
   return router;

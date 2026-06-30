@@ -36,6 +36,19 @@ import type {
   Snapshot,
 } from '../lib/types';
 
+type LightragStatus = {
+  running: boolean;
+  pid: number | null;
+  host: string;
+  port: number;
+  llmBinding: string;
+  embeddingBinding: string;
+  llmModel: string;
+  embeddingModel: string;
+  lastError: string | null;
+  logTail: string[];
+};
+
 type Props = {
   snapshot: Snapshot;
   settings: Settings;
@@ -44,13 +57,14 @@ type Props = {
   refreshSnapshot: () => Promise<void>;
 };
 
-type NavId = 'opencode' | 'providers' | 'mcps' | 'diagnostics' | 'export';
+type NavId = 'opencode' | 'providers' | 'mcps' | 'diagnostics' | 'memory' | 'export';
 
 const NAV_ITEMS: { id: NavId; label: string; icon: typeof Settings2; desc: string }[] = [
   { id: 'opencode', label: 'OpenCode config', icon: FileCode2, desc: 'Edit opencode.json directly' },
   { id: 'providers', label: 'Providers', icon: ServerIcon, desc: 'AI providers + API keys' },
   { id: 'mcps', label: 'MCPs', icon: Plug, desc: 'Model Context Protocol servers' },
   { id: 'diagnostics', label: 'Diagnostics', icon: Stethoscope, desc: 'Service health + counts' },
+  { id: 'memory', label: 'Memory & LightRAG', icon: Database, desc: 'Configure Bizar Memory Service and the LightRAG embedding server.' },
   { id: 'export', label: 'Export / Import', icon: Download, desc: 'Download diagnostics bundle' },
 ];
 
@@ -76,6 +90,10 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
 
   // Diagnostics state
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+
+  // Memory & LightRAG state
+  const [lightragStatus, setLightragStatus] = useState<LightragStatus | null>(null);
+  const [lightragLog, setLightragLog] = useState<string[]>([]);
 
   // Providers + MCPs state — re-fetch when nav switches so we always have fresh data.
   const [providers, setProviders] = useState<Provider[]>(snapshot.providers || []);
@@ -125,6 +143,7 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
     if (activeNav === 'providers' && providers.length === 0) reloadProviders();
     if (activeNav === 'mcps' && mcps.length === 0) reloadMcps();
     if (activeNav === 'diagnostics' && !diagnostics) loadDiagnostics();
+    if (activeNav === 'memory') loadLightragStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeNav]);
 
@@ -178,6 +197,24 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
       setDiagnostics(d);
     } catch (err) {
       toast.error(`Diagnostics load failed: ${(err as Error).message}`);
+    }
+  };
+
+  const loadLightragStatus = async () => {
+    try {
+      const d = await api.get<LightragStatus>('/memory/lightrag/status');
+      setLightragStatus(d);
+    } catch (err) {
+      toast.error(`LightRAG status failed: ${(err as Error).message}`);
+    }
+  };
+
+  const loadLightragLog = async () => {
+    try {
+      const d = await api.get<{ lines: string[] }>('/memory/lightrag/log');
+      setLightragLog(d.lines || []);
+    } catch {
+      setLightragLog([]);
     }
   };
 
@@ -261,6 +298,15 @@ export function Config({ snapshot, refreshSnapshot }: Props) {
 
           {activeNav === 'diagnostics' && (
             <DiagnosticsPanel diagnostics={diagnostics} loading={!diagnostics} onReload={loadDiagnostics} />
+          )}
+
+          {activeNav === 'memory' && (
+            <MemoryLightragPanel
+              status={lightragStatus}
+              onReload={loadLightragStatus}
+              logLines={lightragLog}
+              onReloadLog={loadLightragLog}
+            />
           )}
 
           {activeNav === 'export' && (
@@ -1465,6 +1511,420 @@ function ExportPanel({ onDownload }: { onDownload: () => void }) {
         service log errors, and active project metadata.
       </div>
     </Card>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Memory & LightRAG Panel
+   ────────────────────────────────────────────────────────────── */
+
+type LightragDraft = {
+  enabled: boolean;
+  host: string;
+  port: number | '';
+  workingDir: string;
+  llmBinding: string;
+  embeddingBinding: string;
+  llmBindingHost: string;
+  embeddingBindingHost: string;
+  llmModel: string;
+  embeddingModel: string;
+  apiKeySource: 'env' | 'file';
+  apiKey: string;
+};
+
+const LLM_BINDING_OPTIONS = ['ollama', 'openai', 'lollms', 'azure_openai', 'bedrock', 'gemini'];
+const EMBEDDING_BINDING_OPTIONS = ['ollama', 'openai', 'azure_openai', 'bedrock', 'jina', 'gemini', 'voyageai'];
+
+function MemoryLightragPanel({
+  status,
+  onReload,
+  logLines,
+  onReloadLog,
+}: {
+  status: LightragStatus | null;
+  onReload: () => void;
+  logLines: string[];
+  onReloadLog: () => void;
+}) {
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [loadingLog, setLoadingLog] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+
+  // Draft form state — initialise from status once loaded
+  const [draft, setDraft] = useState<LightragDraft>({
+    enabled: true,
+    host: '127.0.0.1',
+    port: 9621,
+    workingDir: '',
+    llmBinding: 'ollama',
+    embeddingBinding: 'ollama',
+    llmBindingHost: '',
+    embeddingBindingHost: '',
+    llmModel: 'minimax/MiniMax-M3',
+    embeddingModel: 'text-embedding-3-small',
+    apiKeySource: 'env',
+    apiKey: '',
+  });
+  const [dirty, setDirty] = useState(false);
+
+  // Sync draft from status when status loads
+  useEffect(() => {
+    if (!status) return;
+    setDraft((d) => ({
+      ...d,
+      enabled: true,
+      host: status.host,
+      port: status.port,
+      llmBinding: status.llmBinding,
+      embeddingBinding: status.embeddingBinding,
+      llmBindingHost: status.llmBindingHost || '',
+      embeddingBindingHost: status.embeddingBindingHost || '',
+      llmModel: status.llmModel,
+      embeddingModel: status.embeddingModel,
+      apiKeySource: 'env',
+      apiKey: '',
+    }));
+    setDirty(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.running]);
+
+  const set = <K extends keyof LightragDraft>(key: K, value: LightragDraft[K]) => {
+    setDraft((d) => ({ ...d, [key]: value }));
+    setDirty(true);
+  };
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      // Build patch payload
+      const patch: Record<string, unknown> = {
+        enabled: draft.enabled,
+        host: draft.host,
+        port: draft.port === '' ? 9621 : Number(draft.port),
+        workingDir: draft.workingDir,
+        llmBinding: draft.llmBinding,
+        embeddingBinding: draft.embeddingBinding,
+        llmBindingHost: draft.llmBindingHost || null,
+        embeddingBindingHost: draft.embeddingBindingHost || null,
+        llmModel: draft.llmModel,
+        embeddingModel: draft.embeddingModel,
+        apiKeySource: draft.apiKeySource,
+      };
+      if (draft.apiKeySource === 'file' && draft.apiKey !== '') {
+        patch.apiKey = draft.apiKey;
+      }
+      if (draft.apiKeySource === 'env') {
+        patch.apiKey = '<empty>';
+      }
+
+      await api.post('/memory/config', { patch: true, lightrag: patch });
+      toast.success('LightRAG config saved.');
+      setDirty(false);
+      onReload();
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStart = async () => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      const r = await api.post<{ ok: boolean; error?: string; pid?: number }>('/memory/lightrag/start');
+      if (r.ok) {
+        toast.success(`LightRAG started (pid ${r.pid}).`);
+      } else {
+        toast.error(`Start failed: ${r.error}`);
+      }
+      onReload();
+    } catch (err) {
+      toast.error(`Start failed: ${(err as Error).message}`);
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const handleStop = async () => {
+    if (stopping) return;
+    setStopping(true);
+    try {
+      await api.post('/memory/lightrag/stop');
+      toast.success('LightRAG stopped.');
+      onReload();
+    } catch (err) {
+      toast.error(`Stop failed: ${(err as Error).message}`);
+    } finally {
+      setStopping(false);
+    }
+  };
+
+  const handleRestart = async () => {
+    await handleStop();
+    await handleStart();
+  };
+
+  const handleShowLog = async () => {
+    if (!showLog) {
+      setLoadingLog(true);
+      await onReloadLog();
+      setLoadingLog(false);
+    }
+    setShowLog((v) => !v);
+  };
+
+  const running = status?.running ?? false;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Status card */}
+      <Card>
+        <CardTitle>
+          <Database size={14} /> LightRAG Server
+        </CardTitle>
+        <CardMeta>
+          In-process embedding server for semantic memory search.{' '}
+          <button type="button" className="link-btn" onClick={onReload}>Refresh</button>
+        </CardMeta>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {running ? (
+            <span className="tag tag-success">
+              running {status?.pid ? `(pid ${status.pid})` : ''}
+            </span>
+          ) : (
+            <span className="tag tag-neutral">stopped</span>
+          )}
+          {status && (
+            <span className="mono text-sm muted">
+              {status.host}:{status.port} · {status.llmBinding} · {status.embeddingModel}
+            </span>
+          )}
+          {status?.lastError && (
+            <span className="text-error text-sm">⚠ {status.lastError}</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          {!running ? (
+            <Button variant="primary" size="sm" onClick={handleStart} disabled={starting}>
+              {starting ? <Spinner size="sm" /> : <RefreshCw size={12} />}
+              {starting ? 'Starting…' : 'Start'}
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" size="sm" onClick={handleRestart} disabled={stopping || starting}>
+                <RefreshCw size={12} /> Restart
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleStop} disabled={stopping}>
+                {stopping ? <Spinner size="sm" /> : null}
+                {stopping ? 'Stopping…' : 'Stop'}
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="sm" onClick={handleShowLog}>
+            {showLog ? 'Hide' : 'Show'} log
+          </Button>
+        </div>
+        {showLog && (
+          <div style={{ marginTop: 12 }}>
+            <div className="field-help" style={{ marginBottom: 6 }}>
+              Last {logLines.length} line(s)
+              <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={onReloadLog}>
+                Refresh
+              </button>
+            </div>
+            {loadingLog ? (
+              <p className="muted text-sm">Loading…</p>
+            ) : logLines.length === 0 ? (
+              <p className="muted text-sm">No log output yet.</p>
+            ) : (
+              <pre className="log-pre">{logLines.join('\n')}</pre>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Binding card */}
+      <Card>
+        <CardTitle>
+          <ShieldCheck size={14} /> Bindings
+        </CardTitle>
+        <CardMeta>Choose the LLM and embedding provider bindings.</CardMeta>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+          <div className="field-row">
+            <label className="field-label">LLM Binding</label>
+            <select
+              className="input"
+              value={draft.llmBinding}
+              onChange={(e) => set('llmBinding', e.target.value)}
+            >
+              {LLM_BINDING_OPTIONS.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field-row">
+            <label className="field-label">Embedding Binding</label>
+            <select
+              className="input"
+              value={draft.embeddingBinding}
+              onChange={(e) => set('embeddingBinding', e.target.value)}
+            >
+              {EMBEDDING_BINDING_OPTIONS.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          {draft.llmBinding !== 'ollama' && (
+            <div className="field-row">
+              <label className="field-label">LLM Binding Host</label>
+              <input
+                className="input"
+                type="text"
+                value={draft.llmBindingHost}
+                onChange={(e) => set('llmBindingHost', e.target.value)}
+                placeholder="https://api.minimax.chat/v1"
+              />
+            </div>
+          )}
+          {draft.embeddingBinding !== 'ollama' && (
+            <div className="field-row">
+              <label className="field-label">Embedding Binding Host</label>
+              <input
+                className="input"
+                type="text"
+                value={draft.embeddingBindingHost}
+                onChange={(e) => set('embeddingBindingHost', e.target.value)}
+                placeholder="https://api.minimax.chat/v1"
+              />
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Models card */}
+      <Card>
+        <CardTitle>
+          <ServerIcon size={14} /> Models
+        </CardTitle>
+        <CardMeta>Model IDs for the LLM and embedding engine.</CardMeta>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+          <div className="field-row">
+            <label className="field-label">LLM Model</label>
+            <input
+              className="input"
+              type="text"
+              value={draft.llmModel}
+              onChange={(e) => set('llmModel', e.target.value)}
+              placeholder="minimax/MiniMax-M3"
+            />
+          </div>
+          <div className="field-row">
+            <label className="field-label">Embedding Model</label>
+            <input
+              className="input"
+              type="text"
+              value={draft.embeddingModel}
+              onChange={(e) => set('embeddingModel', e.target.value)}
+              placeholder="text-embedding-3-small"
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Connection card */}
+      <Card>
+        <CardTitle>
+          <Plug size={14} /> Connection
+        </CardTitle>
+        <CardMeta>Host, port, and working directory for the LightRAG server.</CardMeta>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+          <div className="field-row">
+            <label className="field-label">Host</label>
+            <input
+              className="input"
+              type="text"
+              value={draft.host}
+              onChange={(e) => set('host', e.target.value)}
+              placeholder="127.0.0.1"
+            />
+          </div>
+          <div className="field-row">
+            <label className="field-label">Port</label>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={65535}
+              value={draft.port}
+              onChange={(e) => set('port', e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="9621"
+            />
+          </div>
+          <div className="field-row">
+            <label className="field-label">Working Dir</label>
+            <input
+              className="input"
+              type="text"
+              value={draft.workingDir}
+              onChange={(e) => set('workingDir', e.target.value)}
+              placeholder=".bizar/lightrag (default)"
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Credentials card */}
+      <Card>
+        <CardTitle>
+          <ShieldCheck size={14} /> Credentials
+        </CardTitle>
+        <CardMeta>API key source — set in your shell env, or stored in .bizar/memory.json.</CardMeta>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+          <div className="field-row">
+            <label className="field-label">Source</label>
+            <select
+              className="input"
+              value={draft.apiKeySource}
+              onChange={(e) => set('apiKeySource', e.target.value as 'env' | 'file')}
+            >
+              <option value="env">Environment variable (recommended)</option>
+              <option value="file">Stored in .bizar/memory.json</option>
+            </select>
+          </div>
+          {draft.apiKeySource === 'env' ? (
+            <p className="muted text-sm" style={{ padding: '8px 0' }}>
+              Set <code>OPENAI_API_KEY</code> (or provider-specific env var) in your shell before
+              running reindex or queries.
+            </p>
+          ) : (
+            <div className="field-row">
+              <label className="field-label">API Key</label>
+              <input
+                className="input"
+                type="password"
+                value={draft.apiKey}
+                onChange={(e) => set('apiKey', e.target.value)}
+                placeholder={status?.running ? '(unchanged — leave blank)' : 'sk-…'}
+                autoComplete="off"
+              />
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <div className="view-actions">
+        <Button variant="primary" disabled={!dirty || saving} onClick={handleSave}>
+          {saving ? <Spinner size="sm" /> : <Save size={14} />}
+          {saving ? 'Saving…' : 'Save config'}
+        </Button>
+      </div>
+    </div>
   );
 }
 

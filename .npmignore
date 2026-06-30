@@ -5,7 +5,7 @@ cli/*.test.mjs
 .bizar/
 
 # Project plans (user data, not package)
-plans/
+.bizar/plans/
 
 # GitHub wiki (lives on GitHub)
 wiki/
