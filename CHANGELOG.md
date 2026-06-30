@@ -1,5 +1,20 @@
 # Changelog
 
+## v4.2.3 — Critical bootstrap regression fix
+
+### What changed
+
+- **CRITICAL FIX** for a regression introduced in v4.2.2 (and present in earlier versions): every `bizar` command (e.g. `bizar memory status`, `bizar doctor`, `bizar memory init`) crashed with `ERR_AMBIGUOUS_MODULE_SYNTAX` on a fresh install, because `cli/install.mjs:promptAndInstallOptional` referenced `__dirname` (a CommonJS global) without defining the ESM polyfill. The polyfill existed in `runInstaller` but not in `promptAndInstallOptional`.
+  - **Symptom**: `ReferenceError: Cannot determine intended module format because both require() and top-level await are present` thrown at `cli/install.mjs:332`.
+  - **Why the test suite missed it**: the existing tests all ran in environments where the bootstrap path had already completed (SETUP_MARKERS present), so `promptAndInstallOptional` was never called. Discovered by a clean-install E2E test in a fresh Docker container.
+  - **Fix**: hoist the `__dirname = dirname(fileURLToPath(import.meta.url))` polyfill to module scope in `cli/install.mjs`. All functions can now use it without each having to redefine.
+- **Regression test added** at `bizar-dash/tests/memory-install-bootstrap.test.mjs` — 4 new tests that spawn the CLI in a fresh temp directory with `BIZAR_SKIP_INSTALL` unset, ensuring the bootstrap path doesn't crash. Also a source-level assertion that the `__dirname` polyfill is at module scope (line < 20), so this can't regress.
+- Tests: 212/212 passing (was 208 before; +4 bootstrap regression tests).
+
+### Recommended upgrade
+
+All v4.2.x users should upgrade to v4.2.3 immediately. The package is **unusable on a fresh install** in v4.2.2 (and earlier). Run `npm install -g @polderlabs/bizar@4.2.3` to update.
+
 ## v4.2.2 — `bizar memory write` custom frontmatter flags
 
 ### What changed

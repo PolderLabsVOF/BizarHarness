@@ -1,7 +1,17 @@
 import chalk from 'chalk';
 import boxen from 'boxen';
 import { existsSync, lstatSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// ── ESM `__dirname` polyfill ────────────────────────────────────────────────
+// `__dirname` is a CommonJS global. ESM modules don't have it. We define it
+// at module scope so all functions in this file can use it without each
+// having to recreate the polyfill. (v4.2.3 — previously only `runInstaller`
+// had it, which caused `promptAndInstallOptional` to crash with
+// `ERR_AMBIGUOUS_MODULE_SYNTAX` when the bootstrap path fired on a fresh
+// install.)
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
@@ -232,11 +242,10 @@ export async function installPluginFromGlobal(opts = {}) {
  */
 export async function runInstaller() {
   const { existsSync } = await import('node:fs');
-  const { join, dirname } = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
+  const { join } = await import('node:path');
   const { spawnSync } = await import('node:child_process');
 
-  const __dirname = dirname(fileURLToPath(import.meta.url));
+  // __dirname is defined at module scope (see top of file)
   // cli/install.mjs → ../install.sh
   const installSh = join(__dirname, '..', 'install.sh');
 
