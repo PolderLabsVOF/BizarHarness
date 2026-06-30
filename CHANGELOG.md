@@ -1,5 +1,24 @@
 # Changelog
 
+## v4.2.1 — fix all 7 memory-system bugs
+
+### What changed
+
+- **Fix 1:** conflict-marker regex — add `m` flag and `^` anchor to all three alternations in `cmdConflicts` (`cli/memory.mjs:1240`).
+- **Fix 2:** symlink guard in `resolveSafe` — use `lstatSync` directly (not `existsSync && isSymbolicLink`, which misses dangling symlinks); blocks write/read/delete through pre-existing symlinks inside the vault.
+- **Fix 3:** path-traversal normalization — segment-aware `..` check before `path.resolve`; rejects `notes/../escape.md` while allowing `my..note.md`.
+- **Fix 4:** add `cmdRead` / `cmdList` / `cmdDelete` CLI subcommands; wired into dispatcher and `showHelp`; CLI parity with REST API.
+- **Fix 5:** `--namespace <project|global|user>` flag for all vault operations; new `resolveNamespaceRoot` helper in `memory-store.mjs`; `readNote` / `listNotes` / `deleteNote` accept `opts.root` for namespace routing.
+- **Fix 6:** `cmdInit --help` block (was hanging on stdin); `--non-interactive` alias for `--yes`.
+- **Fix 7:** `ensureUpstream` helper in `memory-git.mjs`; pre-flight in `cmdPull` and `cmdSync` when remote is configured (sets branch upstream tracking).
+
+### Tests
+
+- 205/205 passing across 16-file memory suite (up from 189).
+- New test file `memory-cli-readlistdelete.test.mjs` (9 tests).
+- 3 FINDING tests flipped to REGRESSION tests.
+- Live CLI smoke verified end-to-end round-trip and symlink attack rejection.
+
 ## v4.2.0 — `bizar memory setup` + git-backed default + .bizar/ enforcement
 
 ### What changed
