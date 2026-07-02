@@ -1,5 +1,13 @@
 # Changelog
 
+## v4.4.3 — Repair stale bin symlinks + defensive background-mode server pin
+
+### Bug fixes
+
+- **`bizar repair` subcommand added.** Detects stale `bizar` bin symlinks that point at a different `@polderlabs/bizar` package root (e.g. `~/.local/lib/node_modules/...` vs `~/.local/npm/lib/node_modules/...`) and repoints them to the current `npm root -g`. Prevents the common "I ran `npm i -g @polderlabs/bizar` but `bizar` still runs the old version" issue.
+- **`bizar repair` auto-runs after `bizar install`.** The install step now calls `runRepair()` so the symlink is corrected as part of the install flow.
+- **`bizar dash start --bg` no longer exits prematurely.** `startDashboard()` in `bizar-dash/src/cli.mjs` now pins the server + close callback at module scope when `bg:true`. Without this, the V8 GC could reap the `close` closure after the caller discards the return value, causing the listening socket to close and the process to exit before the dashboard was actually usable.
+
 ## v4.4.2 — `bizar update` skips git pull when running from global npm install
 
 ### Bug fixes

@@ -193,8 +193,23 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot,
   // Background mode: do NOT launch a browser (the caller already detached),
   // do NOT block on a signal. The caller (detachAfterBoot) decides how to
   // keep this process alive (or not) once we return.
+  // v4.4.3 — Pin the server + close callback at module scope so they
+  // are not garbage-collected when the caller discards the return
+  // value. Without this, the listening socket is closed by GC, the
+  // event loop drains, and the process exits immediately after
+  // startDashboard resolves.
+  if (bg) {
+    backgroundHandle = { url, port: usePort, close };
+  }
   return { url, port: usePort, close };
 }
+
+/**
+ * v4.4.3 — Module-scope handle for the background-mode dashboard.
+ * Prevents the express `server` from being garbage-collected after
+ * the caller discards startDashboard's return value.
+ */
+let backgroundHandle = null;
 
 /**
  * Called after startDashboard returns in background mode. The server is

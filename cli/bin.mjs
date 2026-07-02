@@ -695,6 +695,35 @@ async function main() {
       const result = await runDoctor();
       if (result.failed > 0) process.exit(1);
     }
+  } else if (args[0] === 'repair') {
+    // v4.4.3 — One-shot repair for stale `bizar` bin symlinks.
+    // Symptom: after `npm i -g @polderlabs/bizar`, the package is
+    // installed under `npm root -g` but the `bizar` symlink on PATH
+    // still points at a legacy install path (e.g. ~/.local/lib/...).
+    // Calls of `bizar ...` then run the old code with the old bugs.
+    if (isHelpRequest) {
+      console.log(`
+  bizar repair — Fix common install issues
+
+  Usage:
+    bizar repair                Diagnose + fix stale bin symlinks and mismatched versions
+    bizar repair --dry-run      Show what would change without modifying anything
+    bizar repair --bin-only     Only fix the bin symlink; skip version checks
+      `);
+    } else {
+      const { runRepair } = await import('./repair.mjs');
+      const dryRun = args.includes('--dry-run');
+      const binOnly = args.includes('--bin-only');
+      const result = await runRepair({ dryRun, binOnly });
+      if (!result.ok) {
+        for (const n of result.notes) console.log(`  ${n}`);
+        process.exit(1);
+      }
+      for (const n of result.notes) console.log(`  ${n}`);
+      if (result.fixed.length > 0) {
+        console.log(chalk.green('\n  Repair complete. Re-run your shell or `hash -r` to pick up the new path.'));
+      }
+    }
   } else if (args[0] === 'heads-up') {
     // v3.21.0 — Pre-push / pre-release heads-ups
     await runHeadsUp(args[1], args.slice(2));
@@ -702,7 +731,23 @@ async function main() {
     await runArtifact(args.slice(1), {});
   } else if (args[0] === 'install') {
     if (isHelpRequest) showInstallHelp();
-    else await runInstaller();
+    else {
+      await runInstaller();
+      // v4.4.3 — After install, repair any stale bin symlinks so the
+      // user picks up the new code (the installer itself may have
+      // been running from a stale install path).
+      try {
+        const { runRepair } = await import('./repair.mjs');
+        const r = await runRepair({});
+        if (r.fixed.length > 0) {
+          console.log(chalk.cyan('\n  Repair: repointed stale bin symlinks:'));
+          for (const f of r.fixed) console.log(`    ${f}`);
+          console.log(chalk.dim('    Re-run your shell or `hash -r` to pick up the new path.'));
+        }
+      } catch (err) {
+        console.log(chalk.dim(`  Repair skipped: ${err.message}`));
+      }
+    }
   } else if (args[0] === 'service') {
     if (isHelpRequest) showServiceHelp();
     else await runServiceCommand(args[1]);
@@ -832,19 +877,11 @@ async function runDash(dashArgs) {
 
   switch (sub) {
     case 'start':
-      // v4.4.0 — When `--bg` is passed, spawn the dashboard as a
-      // detached child process via the dash module's startInBackground
-      // helper, then return. Without this, runDash calls startDashboard
-      // in-process; once the bin's main() resolves, the bin process
-      // exits and takes the dashboard's HTTP server with it. The
-      // downstream effect is "(intermediate value)(intermediate value)
-      // (intermediate value) is not a function or its return value is
-      // not iterable" — a pre-existing crash signature in this codepath.
       if (subOpts.bg) {
-        // Spawn the dashboard as a detached child process. The child's
-        // argv is `node cli.mjs start --bg` so the dash module's own
-        // CLI dispatch hits the background branch and runs
-        // startDashboard in the child, not the parent.
+        // v4.4.0 — Background mode: spawn the dashboard as a detached
+        // child process via dashModule.startInBackground(). The child
+        // runs `node cli.mjs start --bg` which keeps itself alive via
+        // the bg-* pollers and the (v4.4.3) module-scope backgroundHandle.
         await dashModule.startInBackground(['start', ...(subOpts.subArgs || [])]);
       } else {
         await dashModule.start(subOpts);
