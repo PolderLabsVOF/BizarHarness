@@ -462,11 +462,38 @@ function spawnFreshDashboard({ port } = {}) {
 // ---------------------------------------------------------------------------
 
 /**
+ * v4.4.2 — Detect whether `bizar update` is running from a git checkout
+ * or from a globally-installed npm package. When run from the npm
+ * install (REPO_ROOT has no `.git/`), the git-pull step is meaningless
+ * and aborts the entire update. We no-op it and let the `npm update -g`
+ * path handle the version bump.
+ *
+ * Returns `{ inRepo: boolean, repoRoot: string }` so the caller can
+ * decide what to do.
+ */
+function detectRepoMode() {
+  const gitDir = join(REPO_ROOT, '.git');
+  return {
+    inRepo: existsSync(gitDir),
+    repoRoot: REPO_ROOT,
+  };
+}
+
+/**
  * Pull the latest changes from the git origin. Exits the process if the
  * pull fails (merge conflict etc.), matching the task flow — an update
  * should not proceed when the working tree is dirty.
  */
 function runGitPull({ dryRun = false } = {}) {
+  const { inRepo } = detectRepoMode();
+  if (!inRepo) {
+    // Running from a global npm install — there's no checkout to pull.
+    // The npm package update is handled separately by updatePackage().
+    if (dryRun) {
+      console.log(chalk.dim('  [dry-run] skipping git pull (not a git checkout)'));
+    }
+    return { ok: true, message: 'skipped git pull (not a git checkout)' };
+  }
   if (dryRun) {
     console.log(chalk.dim('  [dry-run] would run: git pull --rebase'));
     return { ok: true, message: '[dry-run] git pull --rebase' };
@@ -662,10 +689,19 @@ export async function runUpdate(subargs = []) {
   }
 
   // ── Git pull ──────────────────────────────────────────────────────────
+  const { inRepo } = detectRepoMode();
   if (dryRun) {
-    console.log(chalk.dim('\n  [dry-run] would pull latest from origin (git pull --rebase)'));
+    if (inRepo) {
+      console.log(chalk.dim('\n  [dry-run] would pull latest from origin (git pull --rebase)'));
+    } else {
+      console.log(chalk.dim('\n  [dry-run] skipping git pull (not a git checkout — npm install -g handles version bump)'));
+    }
   } else {
-    console.log(chalk.dim('\n  Pulling latest from origin...'));
+    if (inRepo) {
+      console.log(chalk.dim('\n  Pulling latest from origin...'));
+    } else {
+      console.log(chalk.dim('\n  Skipping git pull (not a git checkout — using npm install -g for version bump)'));
+    }
     const pull = runGitPull();
     if (pull.ok) {
       console.log(chalk.green(`  ✓ ${pull.message}`));

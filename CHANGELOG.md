@@ -1,5 +1,11 @@
 # Changelog
 
+## v4.4.2 — `bizar update` skips git pull when running from global npm install
+
+### Bug fixes
+
+- **`bizar update` no longer aborts when run from a global npm install.** When the installed package has no `.git/` directory (e.g. `/home/drb0rk/.local/npm/lib/node_modules/@polderlabs/bizar/`), `REPO_ROOT` points inside the package and `git pull --rebase` would fail with `fatal: not a git repository`. The update now detects this and skips the git pull step, letting the `npm install -g` path handle the version bump. The in-repo path is unchanged.
+
 ## v4.4.1 — Fix `bizar dash start --bg` crash
 
 ### Bug fixes
