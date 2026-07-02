@@ -302,6 +302,7 @@ export type Overview = {
 };
 
 export type ChatMessage = {
+  id?: string;
   role: 'user' | 'assistant' | 'system' | string;
   content?: string;
   message?: string;

@@ -1,5 +1,49 @@
 # Changelog
 
+## v4.3.0 — Opencode session chat integration in the dashboard Chat tab
+
+### What changed
+
+- **NEW: opencode sessions open INSIDE the dashboard's Chat tab.** Previously, selecting an opencode session in the Chat sidebar called `window.open('/opencode/session/${id}', '_blank')` — a phantom URL that 404'd because no such route existed. Now selecting an opencode session loads its messages, renders them in the existing `ChatThread`, opens a live SSE stream for assistant replies, and routes the composer to `/api/opencode-sessions/${id}/send` (which forwards to `POST /api/session/${id}/prompt` on the opencode serve child).
+
+- **New backend endpoints** (`bizar-dash/src/server/routes/opencode-session-detail.mjs`):
+  - `GET  /api/opencode-sessions/:id/messages` — list messages in dashboard `ChatMessage` shape. Uses `readServeInfo()` + `listOpencodeSessions()` to resolve the session's actual worktree (so sessions started in different worktrees than the plugin's cwd still work), then `listOpencodeMessages()`.
+  - `POST /api/opencode-sessions/:id/send` — body `{message, agent}` (both required). Synthesizes a unique `messageID` (`msg_<base36 ts><rand>`) for SSE echo dedup. Maps to `POST /api/session/{id}/prompt` with body `{id, prompt: {text}, agent}` per the opencode v2 wire format.
+  - `GET  /api/opencode-sessions/:id/stream` — SSE proxy. Opens one upstream connection to opencode's `GET /event?directory=...`, filters events whose `sessionID === :id`, forwards them to the client. Unwraps `sync` envelopes (`{type: "sync", syncEvent: {type: "x.y.1", data: ...}}` → `{type: "x.y", ...}`) before forwarding. Per-instance subscriber cap (50) to avoid FD exhaustion. Heartbeat every 25s.
+
+- **Frontend refactor:** `useChat.ts` now owns two parallel message streams (`bizarMessages` / `opencodeMessages`), an `activeSource` indicator, and an SSE connection lifecycle. `SessionList.tsx` no longer redirects to a phantom URL — it calls `onSelectOpencodeSession(id)` instead. The active styling reflects whichever source is displayed. `Chat.tsx` and `MobileChat.tsx` route the composer through the same `onSend` callback; the hook decides which endpoint to hit based on `activeSource`.
+
+- **`unwrapOpencodeSseEvent`** exported from `serve-info.mjs`. Plain-JS port of the plugin's TS unwrap helper (`plugins/bizar/src/event-stream.ts:340-399`). Accepts both v1 (direct) and v2 (sync envelope) wire formats; strips the `.<n>` version suffix.
+
+### Wire-format details (verified against opencode serve 1.17.x)
+
+- **Send** — body is `{id, prompt: {text}, agent}`, NOT `{parts: [...]}`. Endpoint is `POST /api/session/{id}/prompt`.
+- **List messages** — `GET /api/session/{id}/message?directory=<worktree>`. Response is `{data: [{info, parts}]}` or bare array.
+- **SSE** — `GET /event?directory=<worktree>`. Events arrive as `event: <type>\ndata: {json}\n\n` blocks; sync events wrap the inner data in `{syncEvent: {type, data}}` and add a version suffix.
+
+### Tests
+
+- 9 new tests in `bizar-dash/tests/opencode-sessions-detail.test.mjs`:
+  - `503 plugin_offline` when `serve.json` is missing.
+  - `200` message list with a fake upstream returning `{data: [{info, parts}]}`.
+  - `400` on send with empty body / missing agent / empty message.
+  - `200` on send success with synthesized `msg_*` messageID.
+  - `502 opencode_error` when upstream returns 404.
+  - SSE forwards only events for the requested session (filters by `sessionID`).
+  - SSE unwraps sync envelopes (`session.idle.1` → `session.idle`).
+- All 9 pass. Full suite: 305/313 (8 pre-existing `submit-feedback.test.mjs` 404 failures unchanged).
+
+### Operational caveats
+
+- **One SSE subscriber per dashboard tab per opencode session.** The proxy holds its own upstream connection per request — a user with 5 tabs × 3 opencode sessions can have 15 open upstream HTTP connections. Acceptable for v1; multi-tab fanout via the v2 event bus is a future enhancement.
+- **Session-directory resolution.** The plugin's `serve.json` records the cwd the plugin was started in. opencode sessions created in a different worktree (via `opencode serve --directory <path>`) need a per-session directory lookup, which we do via `listOpencodeSessions()` once and cache implicitly per request. If neither lookup yields a directory, the endpoint returns `503 directory_unknown`.
+- **Composer agent selection.** When an opencode session is active, the composer still exposes the user's chosen `agent` from the agent selector — we send it through `POST /prompt`'s `agent` field. opencode will use that agent for the response.
+- **Forwarded message dedup.** When the user sends a message, we POST to `/prompt` and immediately add an optimistic `user` message to the local list with the synthesized `msg_*` ID. The opencode serve echoes back `message.updated` events for the user's message too; we dedupe on `messageID`.
+
+### Recommended upgrade
+
+`npm install -g @polderlabs/bizar@4.3.0` — required for anyone using the dashboard's Chat tab against opencode sessions. The previous `window.open` redirect was a no-op (404); this is the first release where opencode sessions are actually usable from the dash.
+
 ## v4.2.4 — `bizar dash start` crashes: "is not iterable"
 
 ### What changed

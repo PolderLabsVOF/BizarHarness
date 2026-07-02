@@ -330,8 +330,12 @@ const DEFAULT_TIMEOUT_MS = 8_000;
  * Build the Authorization header for the opencode serve child. The wire
  * format is `Basic base64("opencode:<password>")` (matches what the
  * plugin's own HttpClient uses; see plugins/bizar/src/http-client.ts).
+ *
+ * v4.2.4 — exported so the SSE proxy in `routes/opencode-session-detail.mjs`
+ * can authenticate upstream fetches without duplicating the formula.
  */
-function buildAuthHeader(info) {
+export function buildAuthHeader(info) {
+  if (!info || typeof info.password !== 'string') return '';
   const creds = `opencode:${info.password}`;
   return `Basic ${Buffer.from(creds).toString('base64')}`;
 }
@@ -681,4 +685,123 @@ export function pingOpencodeServe(info, timeoutMs = 1_500) {
       finish(settled ? false : false);
     });
   });
+}
+
+// ── v4.2.4 — SSE event unwrap (port from plugins/bizar/src/event-stream.ts) ──
+//
+// The dashboard's chat UI subscribes to opencode's `/event?directory=...`
+// SSE stream to receive live updates for a chosen session. The wire
+// format has changed across opencode versions; this helper normalizes
+// both shapes into a single `{type, sessionID?, messageID?, part?, data}`
+// envelope that the SSE proxy can filter on `sessionID` and forward.
+//
+// Wire format 1 (direct, older opencode):
+//   event: session.created
+//   data: {"type":"session.created","properties":{"sessionID":"abc","title":"…"}}
+//
+// Wire format 2 (sync envelope, newer opencode):
+//   event: sync
+//   data: {"type":"sync","syncEvent":{"type":"session.created.1","data":{"sessionID":"abc"}}}
+//
+// Sync event `type` carries a `.<n>` version suffix (e.g. `session.created.1`).
+// We strip it so downstream code can match on `session.created`.
+// Field names inside the payload have also varied across builds:
+//   - `sessionID` vs `sessionId` vs `session_id` (and nested under `properties`)
+//   - `messageID` vs `messageId` vs `message_id`
+// We accept any of them defensively.
+//
+// Reference: plugins/bizar/src/event-stream.ts:340-399 (the TS plugin's
+// `dispatchEvent` method). We re-implement the same logic in plain JS
+// here so the dashboard server can use it without importing TS code.
+
+/**
+ * Unwrap and normalize a raw opencode SSE event payload.
+ *
+ * v0.4.3 wire formats accepted (see plugins/bizar/src/event-stream.ts:365-400):
+ *   1. Direct: `{type, properties: {sessionID, ...}}` — newer opencode uses
+ *      `data` instead of `properties`. We accept either field name.
+ *   2. Sync envelope: `{type: "sync", syncEvent: {type: "x.y.1", data: {...}}}`.
+ *      Unwrap to inner data; strip the `.1` version suffix from the type.
+ *
+ * Returns `null` if the event isn't a recognizable opencode event shape
+ * (e.g. non-object, missing type).
+ *
+ * @param {string|null} eventName  the SSE `event:` field (may be null)
+ * @param {unknown} data           the parsed JSON `data:` payload
+ * @returns {{type:string, sessionID?:string, messageID?:string, part?:object, data?:object}|null}
+ */
+export function unwrapOpencodeSseEvent(eventName, data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  let obj = /** @type {Record<string, unknown>} */ (data);
+
+  // Step 1: detect sync wrapper and unwrap. After this, `obj` points at
+  // the inner `syncEvent.data` (or remains the original on partial shape).
+  let innerType = null;
+  if (obj.type === 'sync' && obj.syncEvent && typeof obj.syncEvent === 'object') {
+    const syncEvent = /** @type {Record<string, unknown>} */ (obj.syncEvent);
+    if (typeof syncEvent.type === 'string') innerType = syncEvent.type;
+    if (syncEvent.data && typeof syncEvent.data === 'object') {
+      obj = /** @type {Record<string, unknown>} */ (syncEvent.data);
+    }
+  }
+
+  // Step 2: resolve the event type, preferring the inner sync type.
+  // Strip the trailing `.<digits>` version suffix.
+  const typeFromObj = innerType ?? (typeof obj.type === 'string' ? obj.type : null);
+  const rawType = typeFromObj ?? eventName ?? null;
+  if (typeof rawType !== 'string' || rawType.length === 0) return null;
+  const type = stripVersionSuffix(rawType);
+
+  // Step 3: extract identifiers from any of the common key spellings.
+  const sessionID = pickString(obj, [
+    'sessionID', 'sessionId', 'session_id',
+  ], ['properties']);
+  const messageID = pickString(obj, [
+    'messageID', 'messageId', 'message_id',
+  ], ['properties']);
+  const part = obj.part && typeof obj.part === 'object'
+    ? /** @type {object} */ (obj.part)
+    : undefined;
+
+  return { type, sessionID, messageID, part, data: obj };
+}
+
+/**
+ * Strip the trailing `.<digits>` version suffix from an event type
+ * (e.g. `session.created.1` → `session.created`).
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+export function stripVersionSuffix(s) {
+  if (typeof s !== 'string') return '';
+  return s.replace(/\.\d+$/, '');
+}
+
+/**
+ * Look up a string field on `obj`, falling back to any nested object
+ * whose key is in `nestedKeys` (e.g. `['properties']`).
+ *
+ * @param {Record<string, unknown>} obj
+ * @param {string[]} keys            top-level keys to check first
+ * @param {string[]} [nestedKeys]    optional parents to recurse into
+ * @returns {string|undefined}
+ */
+function pickString(obj, keys, nestedKeys) {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.length > 0) return v;
+  }
+  if (nestedKeys) {
+    for (const nk of nestedKeys) {
+      const nested = obj[nk];
+      if (nested && typeof nested === 'object') {
+        for (const k of keys) {
+          const v = /** @type {Record<string, unknown>} */ (nested)[k];
+          if (typeof v === 'string' && v.length > 0) return v;
+        }
+      }
+    }
+  }
+  return undefined;
 }

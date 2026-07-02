@@ -11,20 +11,27 @@ interface Props {
   sessions: ChatSession[];
   opencodeSessions: ChatSession[];
   activeSessionId: string;
+  /** The opencode session currently displayed, or null. */
+  activeOpencodeSessionId: string | null;
   activeProject: { name: string } | null;
   creating: boolean;
   onCreateSession: () => void;
+  /** Called when a bizar session is selected. */
   onSelectSession: (id: string) => void;
+  /** Called when an opencode session is selected — renders it in-dash. */
+  onSelectOpencodeSession: (s: ChatSession) => void;
 }
 
 export function SessionList({
   sessions,
   opencodeSessions,
   activeSessionId,
+  activeOpencodeSessionId,
   activeProject,
   creating,
   onCreateSession,
   onSelectSession,
+  onSelectOpencodeSession,
 }: Props) {
   const [view, setView] = useState<'bizar' | 'all'>('all');
   const [showAll, setShowAll] = useState(false);
@@ -38,8 +45,9 @@ export function SessionList({
   const totalOpencode = opencodeSessions.length;
 
   const handleSelectSession = (s: ChatSession) => {
-    if (s.source === 'opencode' && s.opencodeUrl) {
-      window.open(s.opencodeUrl, '_blank', 'noopener,noreferrer');
+    if (s.source === 'opencode') {
+      // Render opencode session in-dash — no window.open redirect
+      onSelectOpencodeSession(s);
       return;
     }
     onSelectSession(s.id);
@@ -113,14 +121,16 @@ export function SessionList({
       ) : (
         <ul className="chat-sessions-list">
           {displayedSessions.map((s) => {
-            const isActive = s.source !== 'opencode' && activeSessionId === s.id;
             const isOpencode = s.source === 'opencode';
+            const isActive = isOpencode
+              ? activeOpencodeSessionId === s.id
+              : activeSessionId === s.id;
             return (
               <li
                 key={isOpencode ? `oc-${s.id}` : s.id}
                 className={`chat-sessions-item ${isActive ? 'active' : ''} ${isOpencode ? 'chat-sessions-item-opencode' : ''}`}
                 onClick={() => handleSelectSession(s)}
-                title={isOpencode ? `Open in opencode UI: ${s.title || s.id}` : s.id}
+                title={isOpencode ? `Open in dashboard: ${s.title || s.id}` : s.id}
               >
                 {isOpencode && (
                   <ExternalLink size={10} className="chat-sessions-item-icon" />

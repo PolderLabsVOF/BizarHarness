@@ -121,19 +121,21 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
             sessions={chat.sessions}
             opencodeSessions={chat.opencodeSessions}
             activeSessionId={chat.sessionId}
+            activeOpencodeSessionId={chat.activeOpencodeSessionId}
             activeProject={snapshot.activeProject}
             onCreateSession={handleCreateSession}
-            onSelectSession={chat.loadChat}
+            onSelectSession={chat.selectBizarSession}
+            onSelectOpencodeSession={(s) => chat.loadOpencodeSession(s.id)}
             creating={creating}
           />
         </aside>
 
         <main className="chat-main">
           <ChatThread
-            messages={chat.messages}
+            messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
             loading={chat.loading}
             activeProject={snapshot.activeProject}
-            sessionId={chat.sessionId}
+            sessionId={chat.activeSource === 'opencode' ? (chat.activeOpencodeSessionId ?? chat.sessionId) : chat.sessionId}
             pinned={chat.pinned}
             onPickSuggestion={(t) => setText(t)}
             onCopy={(m) => chat.copyMessage(m as Parameters<typeof chat.copyMessage>[0])}
@@ -164,8 +166,8 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
 
         <aside className={`chat-info ${!infoOpen ? 'chat-info-hidden' : ''}`}>
           <InfoPanel
-            sessionId={chat.sessionId}
-            messages={chat.messages}
+            sessionId={chat.activeSource === 'opencode' ? (chat.activeOpencodeSessionId ?? chat.sessionId) : chat.sessionId}
+            messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
             pinned={chat.pinned}
             agent={agent}
             model={model}

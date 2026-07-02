@@ -40,6 +40,7 @@ import { createProvidersRouter } from './routes/providers.mjs';
 import { createSettingsRouter } from './routes/settings.mjs';
 import { createChatRouter } from './routes/chat.mjs';
 import { createOpencodeSessionsRouter } from './routes/opencode-sessions.mjs';
+import { createOpencodeSessionDetailRouter } from './routes/opencode-session-detail.mjs';
 import { createDialogsRouter } from './routes/dialogs.mjs';
 import { createSkillsRouter } from './routes/skills.mjs';
 import { createObsidianRouter } from './routes/obsidian.mjs';
@@ -104,6 +105,7 @@ export async function createApiRouter({
   router.use(createSettingsRouter({ state, broadcast }));
   router.use(createChatRouter({ state, broadcast }));
   router.use(createOpencodeSessionsRouter());
+  router.use(createOpencodeSessionDetailRouter());
   router.use(createDialogsRouter({ broadcast }));
   router.use(createSkillsRouter({ broadcast }));
   router.use(await createObsidianRouter({ projectRoot }));
