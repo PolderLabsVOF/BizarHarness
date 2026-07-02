@@ -775,20 +775,20 @@ function parseDashOpts(dashArgs) {
  * A legacy npm-global fallback is kept for the transitional period.
  */
 async function loadDashCli() {
-  // v4.0.0 — primary: relative import inside the same package
   const { pathToFileURL } = await import('node:url');
-  const candidates = [
-    join(import.meta.dirname, '..', 'bizar-dash', 'src', 'cli.mjs'),
-    // Legacy fallbacks for users with @polderlabs/bizar-dash still installed:
-    ...(async () => {
-      const { execFileSync } = await import('node:child_process');
-      try {
-        const npmRoot = execFileSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 5000 }).trim();
-        if (npmRoot) return [join(npmRoot, '@polderlabs', 'bizar-dash', 'src', 'cli.mjs')];
-      } catch { /* ignore */ }
-      return [];
-    })(),
-  ];
+  const { join } = await import('node:path');
+
+  const primary = join(import.meta.dirname, '..', 'bizar-dash', 'src', 'cli.mjs');
+
+  // Legacy npm-global fallback (only computed if primary is missing)
+  let legacyFallbacks = [];
+  try {
+    const { execFileSync } = await import('node:child_process');
+    const npmRoot = execFileSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 5000 }).trim();
+    if (npmRoot) legacyFallbacks = [join(npmRoot, '@polderlabs', 'bizar-dash', 'src', 'cli.mjs')];
+  } catch { /* npm not available or no globals — fine */ }
+
+  const candidates = [primary, ...legacyFallbacks];
 
   for (const p of candidates) {
     try {

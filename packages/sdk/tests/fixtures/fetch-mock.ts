@@ -52,7 +52,7 @@ export function makeFetchMock(): FetchMock {
   const requests: FetchMockRequest[] = [];
   let lastRequest: FetchMockRequest | null = null;
 
-  const mockFetch: typeof fetch = async (input, init) => {
+  const mockFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const req: FetchMockRequest = {
       url: typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url,
       method: (init?.method ?? "GET").toUpperCase(),
@@ -100,7 +100,7 @@ export function makeFetchMock(): FetchMock {
   };
 
   return {
-    fetch: mockFetch,
+    fetch: mockFetch as typeof fetch,
     respondWith(method, match, response) {
       rules.push({ method: method.toUpperCase(), match, response });
     },

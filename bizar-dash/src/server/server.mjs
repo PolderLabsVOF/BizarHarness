@@ -444,6 +444,7 @@ export async function createServer({
           });
         }
       } catch { /* ignore — mobile.css won't be served, fine */ }
+    }
     app.get('/', (req, res, next) => {
       if (!shouldRedirectToMobile(req)) {
         next();

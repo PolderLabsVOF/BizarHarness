@@ -1,5 +1,37 @@
 # Changelog
 
+## v4.2.4 — `bizar dash start` crashes: "is not iterable"
+
+### What changed
+
+- **CRITICAL FIX** for `bizar dash start --bg` (and all `bizar dash <subcommand>` commands): every dash command crashed with
+  `(intermediate value)(intermediate value)(intermediate value) is not a function or its return value is not iterable`.
+  - **Root cause** at `cli/bin.mjs:780-791`: `loadDashCli()` built the candidate-paths array using `...(async () => {...})()`. The async IIFE returned a `Promise`, and spreading a non-iterable throws `TypeError: <promise> is not iterable`. V8 reported the error through three anonymous frames (the array literal, the IIFE call site, the async function), surfacing as "(intermediate value)(intermediate value)(intermediate value)".
+  - **Fix**: hoist the async work out of the array literal. `loadDashCli()` now `await`s the legacy npm-root fallback, then constructs the `candidates` array synchronously.
+- **CRITICAL FIX** for the dashboard server failing to typecheck — `bizar-dash/src/server/server.mjs` had a missing closing `}` introduced in v3.23.0 when the `/mobile.css` route was added inside the `if (existsSync(assetsDir))` block. The `try { ... } catch { ... }` was correctly closed, but the surrounding `if` block was not — leading to 230 `{` vs 229 `}` (one stray `{`) and a tsc error at `server.mjs:797`.
+  - **Fix**: add the missing `}` to close the `if (existsSync(assetsDir)) { ... }` block at `server.mjs:447`.
+  - Note: this latent bug masked all other typecheck errors in the repo because tsc bailed out early.
+- **Fix** `npm run test:sdk` — the script was `npm test --prefix packages/sdk` but `packages/sdk/` has no `package.json`. Switched to `node_modules/.bin/vitest run --root packages/sdk`.
+- **Fix** latent typecheck errors that surfaced once `server.mjs` started parsing:
+  - `bizar-dash/src/web/views/Config.tsx:1584-1585` — `LightragStatus` type was missing `llmBindingHost` and `embeddingBindingHost` fields. Added them.
+  - `packages/sdk/tests/fixtures/fetch-mock.ts:103` — `mockFetch` returned from a `Record<…, ...>` was checked as `typeof fetch` (which now includes `preconnect`). Cast it explicitly.
+
+### Regression test
+
+`bizar-dash/tests/dash-cli-load.test.mjs` — spawns `node cli/bin.mjs dash status` and asserts the output contains no "is not iterable" error. Fails CI if the bug returns.
+
+### Tests
+
+- Typecheck: clean (was failing before this fix).
+- SDK tests: 28/28 passing.
+- Plugin tests (bun): 15/15 passing.
+- New dash-cli-load test: 2/2 passing.
+- 8 pre-existing `submit-feedback.test.mjs` failures (404 on `/api/artifacts/:slug/submit`) remain — those are unrelated to this fix.
+
+### Recommended upgrade
+
+`npm install -g @polderlabs/bizar@4.2.4` — required for anyone on v4.2.3 or earlier who runs `bizar dash ...` at all. Every dash subcommand was broken.
+
 ## v4.2.3 — Critical bootstrap regression fix
 
 ### What changed

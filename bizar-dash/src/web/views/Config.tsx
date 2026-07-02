@@ -43,6 +43,8 @@ type LightragStatus = {
   port: number;
   llmBinding: string;
   embeddingBinding: string;
+  llmBindingHost: string;
+  embeddingBindingHost: string;
   llmModel: string;
   embeddingModel: string;
   lastError: string | null;
