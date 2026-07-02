@@ -420,6 +420,32 @@ function handleSseBlock(block, res, sessionId) {
   try {
     res.write(`event: ${evt.type}\n`);
     res.write(`data: ${payload}\n\n`);
+
+    // v0.1.0 — also emit `chat:delta` / `chat:status` envelopes when
+    // a text part delta or session.idle arrives. These are consumed by
+    // dashboard components that listen to the same SSE stream.
+    if (evt.type === 'message.part.updated') {
+      const part = evt.part;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = /** @type {any} */ (part);
+      if (p && p.type === 'text' && typeof p.text === 'string') {
+        const deltaPayload = JSON.stringify({
+          sessionId: evt.sessionID,
+          messageId: evt.messageID || undefined,
+          delta: p.text,
+          type: 'text',
+        });
+        res.write(`event: chat:delta\n`);
+        res.write(`data: ${deltaPayload}\n\n`);
+      }
+    } else if (evt.type === 'session.idle') {
+      const statusPayload = JSON.stringify({
+        sessionId: evt.sessionID,
+        status: 'idle',
+      });
+      res.write(`event: chat:status\n`);
+      res.write(`data: ${statusPayload}\n\n`);
+    }
   } catch {
     /* socket closed mid-write */
   }

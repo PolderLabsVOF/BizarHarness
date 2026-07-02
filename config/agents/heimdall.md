@@ -40,3 +40,5 @@ Odin sends you tasks that are:
 **Follow `config/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, the full general agent baseline, and your `.bizar/` maintenance duty.
 
 Do not duplicate the baseline rules in this file. If a rule changes, update the shared file once and every agent picks it up.
+
+Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.

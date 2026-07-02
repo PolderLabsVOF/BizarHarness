@@ -1,13 +1,22 @@
-// src/views/Chat.tsx — Gemini-inspired dark chat orchestrator.
-// Composer state (agent, model, text, attachments) is local.
-// useChat handles messages, sessions, send, polling.
+// src/views/Chat.tsx — Gemini-inspired dark chat orchestrator (v3.22).
+//
+// v3.22 — redesigned layout: 3-column grid (rail / thread / info).
+// The legacy `.chat-shell / .chat-body / .chat-sessions / .chat-main /
+// .chat-info` wrapper classes are still available for MobileChat (which
+// uses its own view); this file uses the new `.chat-page` grid.
+//
+// The `chat-thread` section is a vertical grid (head / scroll / composer).
+// The scrollable message list lives inside the legacy `ChatThread`
+// component (still wrapped in its own `.chat-thread` div with className
+// `legacy` to opt into the original styles — see chat.css).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChatTopBar } from '../components/chat/ChatTopBar';
-import { SessionList } from '../components/chat/SessionList';
+import { ChatRail } from '../components/chat/ChatRail';
 import { ChatThread } from '../components/chat/ChatThread';
-import { FloatingComposer } from '../components/chat/FloatingComposer';
-import { InfoPanel } from '../components/chat/InfoPanel';
+import { ChatComposer } from '../components/chat/ChatComposer';
+import { ChatInfoPanel } from '../components/chat/ChatInfoPanel';
+import { JumpToLatest } from '../components/chat/JumpToLatest';
 import { useChat } from '../components/chat/useChat';
 import { useSlashCommands } from '../components/chat/useSlashCommands';
 import { useToast } from '../components/Toast';
@@ -28,7 +37,6 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId, onClearT
   const toast = useToast();
   const modal = useModal();
 
-  // ── Delegate to useChat: messages, sessions, send, polling ──────────────
   const chat = useChat(snapshot, settings, initialTaskId ?? '');
 
   // ── Composer state (local) ───────────────────────────────────────────────
@@ -39,12 +47,13 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId, onClearT
   const [creating, setCreating] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Slash commands ───────────────────────────────────────────────────────
   const { allCommands, suggestions, setQuery } = useSlashCommands(snapshot);
 
-  useEffect(() => { setQuery(text); }, [text, setQuery]);
+  useEffect(() => {
+    setQuery(text);
+  }, [text, setQuery]);
 
   // ── File attach ──────────────────────────────────────────────────────────
   const onAttach = () => fileInputRef.current?.click();
@@ -68,6 +77,7 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId, onClearT
     setText('');
     setQuery('');
     chat.onSend(msg, agent, model, attachments);
+    chat.jumpToLatest();
   };
 
   // ── Create session ───────────────────────────────────────────────────────
@@ -96,7 +106,9 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId, onClearT
       children: <p style={{ margin: 0 }}>This action cannot be undone.</p>,
       footer: (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <Button variant="secondary" size="sm" onClick={() => modal.close()}>Cancel</Button>
+          <Button variant="secondary" size="sm" onClick={() => modal.close()}>
+            Cancel
+          </Button>
           <Button
             variant="danger"
             size="sm"
@@ -112,7 +124,42 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId, onClearT
     });
   };
 
-  // ── Pin / copy are handled directly via chat.* ──────────────────────────
+  // ── Derived: sessions with display state overlaid ────────────────────────
+  const displaySessions = useMemo(
+    () => chat.sessions.map((s) => chat.getSessionDisplay(s)),
+    [chat.sessions, chat.getSessionDisplay],
+  );
+  const displayOpencodeSessions = useMemo(
+    () => chat.opencodeSessions.map((s) => chat.getSessionDisplay(s)),
+    [chat.opencodeSessions, chat.getSessionDisplay],
+  );
+
+  // ── Current session for the thread head subtitle ────────────────────────
+  const activeSessionDisplay = useMemo(() => {
+    const id = chat.activeSource === 'opencode'
+      ? chat.activeOpencodeSessionId ?? ''
+      : chat.sessionId;
+    if (!id) return null;
+    return (
+      displaySessions.find((s) => s.id === id) ??
+      displayOpencodeSessions.find((s) => s.id === id) ??
+      null
+    );
+  }, [
+    chat.activeSource,
+    chat.activeOpencodeSessionId,
+    chat.sessionId,
+    displaySessions,
+    displayOpencodeSessions,
+  ]);
+
+  const threadSubtitle = (() => {
+    const base = `${agent || 'Odin'} · ${snapshot.activeProject?.name ?? 'no project'}`;
+    const state = activeSessionDisplay?.state ?? 'idle';
+    if (state === 'streaming') return `Replying · ${base}`;
+    if (state === 'awaiting') return `Your turn · ${base}`;
+    return `${base} · idle`;
+  })();
 
   return (
     <div className="chat-shell">
@@ -125,35 +172,71 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId, onClearT
         onToggleInfo={() => {}}
         onOpenOverview={() => setActiveTab?.('overview')}
       />
-      <div className="chat-body">
-        <aside className="chat-sessions">
-          <SessionList
-            sessions={chat.sessions}
-            opencodeSessions={chat.opencodeSessions}
-            activeSessionId={chat.sessionId}
-            activeOpencodeSessionId={chat.activeOpencodeSessionId}
-            activeProject={snapshot.activeProject}
-            onCreateSession={handleCreateSession}
-            onSelectSession={chat.selectBizarSession}
-            onSelectOpencodeSession={(s) => chat.loadOpencodeSession(s.id)}
-            creating={creating}
-          />
-        </aside>
+      <div className="chat-page">
+        {/* ── rail ──────────────────────────────────────────────────────── */}
+        <ChatRail
+          sessions={displaySessions}
+          opencodeSessions={displayOpencodeSessions}
+          activeSessionId={chat.sessionId}
+          activeOpencodeSessionId={chat.activeOpencodeSessionId}
+          activeProject={snapshot.activeProject}
+          creating={creating}
+          onCreateSession={handleCreateSession}
+          onSelectSession={chat.selectBizarSession}
+          onSelectOpencodeSession={(s) => chat.loadOpencodeSession(s.id)}
+          onRenameSession={(id, title) => chat.renameSession(id, title)}
+          onDeleteSession={(id) => chat.deleteSession(id)}
+        />
 
-        <main className="chat-main">
-          <ChatThread
-            messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
-            loading={chat.loading}
-            activeProject={snapshot.activeProject}
-            sessionId={chat.activeSource === 'opencode' ? (chat.activeOpencodeSessionId ?? chat.sessionId) : chat.sessionId}
-            pinned={chat.pinned}
-            onPickSuggestion={(t) => setText(t)}
-            onCopy={(m) => chat.copyMessage(m as Parameters<typeof chat.copyMessage>[0])}
-            onDelete={handleDelete}
-            onTogglePin={chat.togglePin}
-            onRegenerate={chat.onRegenerate}
-          />
-          <FloatingComposer
+        {/* ── thread ───────────────────────────────────────────────────── */}
+        <section className="chat-thread-section">
+          <div className="chat-thread-head">
+            <div>
+              <div className="chat-thread-title">
+                {activeSessionDisplay?.title ?? chat.sessionId ?? 'New chat'}
+              </div>
+              <div
+                className={`chat-thread-sub chat-muted state-${activeSessionDisplay?.state ?? 'idle'}`}
+              >
+                <span className="chat-thread-dot" />
+                {threadSubtitle}
+              </div>
+            </div>
+            <div className="chat-thread-actions">
+              <button className="btn btn-ghost" title="Rename" type="button">
+                <span className="mono">rename</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="chat-thread-scroll" ref={chat.listRef} onScroll={chat.handleScroll}>
+            <ChatThread
+              messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
+              loading={chat.loading}
+              activeProject={snapshot.activeProject}
+              sessionId={
+                chat.activeSource === 'opencode'
+                  ? (chat.activeOpencodeSessionId ?? chat.sessionId)
+                  : chat.sessionId
+              }
+              pinned={chat.pinned}
+              onPickSuggestion={(t) => setText(t)}
+              onCopy={(m) => chat.copyMessage(m as Parameters<typeof chat.copyMessage>[0])}
+              onDelete={handleDelete}
+              onTogglePin={chat.togglePin}
+              onRegenerate={chat.onRegenerate}
+            />
+          </div>
+
+          {!chat.stickToBottom && (
+            <JumpToLatest
+              streaming={activeSessionDisplay?.state === 'streaming'}
+              newMessageCount={chat.newMessageCount}
+              onClick={chat.jumpToLatest}
+            />
+          )}
+
+          <ChatComposer
             agent={agent}
             setAgent={setAgent}
             model={model}
@@ -168,24 +251,31 @@ export function Chat({ snapshot, settings, setActiveTab, initialTaskId, onClearT
             onPickSuggestion={(cmd) => setText(`${cmd.split(' ')[0]} `)}
             agents={snapshot.agents || []}
             onAttach={onAttach}
-            sessionsOpen={true}
-            infoOpen={true}
           />
-          <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={onFiles} />
-        </main>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={onFiles}
+          />
+        </section>
 
-        <aside className="chat-info">
-          <InfoPanel
-            sessionId={chat.activeSource === 'opencode' ? (chat.activeOpencodeSessionId ?? chat.sessionId) : chat.sessionId}
-            messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
-            pinned={chat.pinned}
-            agent={agent}
-            model={model}
-            agents={snapshot.agents || []}
-            mcps={snapshot.mcps || []}
-            allCommands={allCommands}
-          />
-        </aside>
+        {/* ── info panel ──────────────────────────────────────────────── */}
+        <ChatInfoPanel
+          sessionId={
+            chat.activeSource === 'opencode'
+              ? (chat.activeOpencodeSessionId ?? chat.sessionId)
+              : chat.sessionId
+          }
+          messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
+          pinned={chat.pinned}
+          agent={agent}
+          model={model}
+          agents={snapshot.agents || []}
+          mcps={snapshot.mcps || []}
+          allCommands={allCommands}
+        />
       </div>
     </div>
   );

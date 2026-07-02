@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "instructions": [".opencode/instructions/bizar-tools.md"],
   "model": "minimax/MiniMax-M3",
   "small_model": "minimax/MiniMax-M2.7",
   "default_agent": "odin",

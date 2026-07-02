@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Send,
   FileText,
+  Inbox,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
@@ -45,6 +46,7 @@ import { api, enhancePrompt } from '../lib/api';
 import { cn, formatRelative, priorityColors, autoTitleFromContent } from '../lib/utils';
 import type { Agent, Settings, Snapshot, Task } from '../lib/types';
 import { openArtifactViewer } from '../components/ArtifactViewer';
+import { BacklogPanel } from '../components/tasks/BacklogPanel';
 
 type Props = {
   snapshot: Snapshot;
@@ -319,6 +321,10 @@ export function Tasks({ snapshot, refreshSnapshot, setActiveTab }: Props) {
     openArtifactViewer(modal, artifactId);
   };
 
+  // v3.22 — Backlog panel visibility.
+  const [showBacklog, setShowBacklog] = useState(false);
+  const backlogCount = (snapshot.tasks || []).filter((t) => t.status === 'backlog').length;
+
   return (
     <div className="view view-tasks">
       <header className="view-header">
@@ -447,8 +453,24 @@ export function Tasks({ snapshot, refreshSnapshot, setActiveTab }: Props) {
           >
             <Plus size={14} /> Add
           </Button>
+          {backlogCount > 0 && (
+            <Button
+              variant={showBacklog ? 'accent' : 'ghost'}
+              size="sm"
+              onClick={() => setShowBacklog((v) => !v)}
+              title={showBacklog ? 'Hide backlog' : 'Show backlog'}
+            >
+              <Inbox size={14} />
+              Backlog
+              <span className="badge">{backlogCount}</span>
+            </Button>
+          )}
         </div>
       </div>
+
+      {showBacklog && backlogCount > 0 && (
+        <BacklogPanel agents={snapshot.agents || []} onRefresh={refreshSnapshot} />
+      )}
 
       {selected.size > 0 && (
         <div className="task-bulk-bar">
@@ -900,7 +922,7 @@ function formatDuration(seconds: number): string {
   return `${m}m`;
 }
 
-function openTaskModal(
+export function openTaskModal(
   modal: ReturnType<typeof useModal>,
   toast: ReturnType<typeof useToast>,
   task: Task | null,

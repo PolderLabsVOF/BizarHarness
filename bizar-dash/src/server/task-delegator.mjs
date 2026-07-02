@@ -37,10 +37,11 @@
  * after the plugin is up.
  */
 
-import { tasksStore } from './tasks-store.mjs';
+import { tasksStore, ALLOWED_TASK_STATUSES } from './tasks-store.mjs';
 import { agentsStore } from './agents-store.mjs';
 import { notificationsStore } from './notifications-store.mjs';
 import { backgroundStore } from './background-store.mjs';
+import { projectsStore } from './projects-store.mjs';
 import { getActualBgLogPath } from './lib/path-safe.mjs';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
@@ -159,6 +160,12 @@ function autoTitleFromContent(body, fallback = true) {
   const cut = firstLine.slice(0, 60);
   const lastSpace = cut.lastIndexOf(' ');
   return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…';
+}
+
+// v3.22 — Shared helper: count running + pending bg instances.
+async function runningBgCount() {
+  const list = await backgroundStore.list();
+  return list.filter((b) => b.status === 'running' || b.status === 'pending').length;
 }
 
 export const taskDelegator = {
@@ -492,13 +499,8 @@ export const taskDelegator = {
       maxParallel = 6;
     }
 
-    // Count currently running bg instances across all candidate dirs.
-    // v3.5.4 (bug #5) — `list()` is now async because it merges
-    // opencode-direct sessions via fetch.
-    const runningInstances = (await backgroundStore.list()).filter(
-      (b) => b.status === 'running' || b.status === 'pending',
-    );
-    const runningCount = runningInstances.length;
+    // v3.22 — Reuse the shared runningBgCount helper.
+    const runningCount = await runningBgCount();
     const slotsAvailable = Math.max(0, maxParallel - runningCount);
 
     // v3.5.4 (bug: dispatch stuck) — Resolve the opencode serve child
@@ -770,6 +772,150 @@ export const taskDelegator = {
 
   /** For tests / introspection. */
   _BG_DIRS: BG_DIRS,
+
+  // v3.22 — Expose runningBgCount so callers can check dispatch capacity.
+  async runningBgCount() {
+    return runningBgCount();
+  },
+
+  /**
+   * Odin-pick: drain backlog into queued slots.
+   *
+   * Algorithm:
+   *  1. Determine active project. If none, return zeros + warning.
+   *  2. Read agents.maxParallel (default 6).
+   *  3. Compute running bg count via runningBgCount().
+   *  4. Compute slotsAvailable = max(0, maxParallel - runningCount). If 0, bail.
+   *  5. Load all non-archived tasks. Collect queued (parent or subtask, not yet
+   *     dispatched) and backlog items as candidates.
+   *  6. Sort: priority high>normal>low; tiebreak createdAt ASC; backlog items
+   *     sort after queued at the same priority (drain queue first).
+   *  7. Promote backlog items to fill candidate pool up to slotsAvailable.
+   *  8. Dispatch each candidate via dispatchToBackground.
+   *
+   * @param {object} ctx - { logLine?, broadcast? }
+   * @returns {{ promoted: number, dispatched: number, skipped: string[], warnings: string[] }}
+   */
+  async tickBacklog(ctx = {}) {
+    const logLine = ctx.logLine || (() => {});
+    const broadcast = ctx.broadcast || (() => {});
+    const warnings = [];
+    const skipped = [];
+
+    // 1. Active project or bail.
+    const active = projectsStore.active();
+    if (!active) {
+      warnings.push('no active project — tickBacklog skipped');
+      return { promoted: 0, dispatched: 0, skipped, warnings };
+    }
+    const projectId = active.id;
+    const projectRoot = active.path || process.cwd();
+
+    // 2. Read maxParallel.
+    const SETTINGS_FILE = join(HOME, '.config', 'bizar', 'settings.json');
+    let maxParallel = 6;
+    try {
+      if (existsSync(SETTINGS_FILE)) {
+        const raw = readFileSync(SETTINGS_FILE, 'utf8');
+        const settings = JSON.parse(raw);
+        maxParallel = settings?.agents?.maxParallel ?? 6;
+      }
+    } catch {
+      maxParallel = 6;
+    }
+
+    // 3 & 4. Running count and slots check.
+    const runningCount = await runningBgCount();
+    const slotsAvailable = Math.max(0, maxParallel - runningCount);
+    if (slotsAvailable === 0) {
+      skipped.push('no slots available');
+      return { promoted: 0, dispatched: 0, skipped, warnings };
+    }
+
+    // 5. Collect candidates.
+    const allTasks = tasksStore.loadTasks(projectId, { includeArchived: false });
+
+    const queuedCandidates = allTasks.filter((t) => {
+      if (t.status !== 'queued' || t.archived) return false;
+      // Parent tasks need subtasks; subtasks need a parent; both need to NOT already be dispatched.
+      const isSubtask = !!t.parent;
+      const hasSubtasks = Array.isArray(t.subtasks) && t.subtasks.length > 0;
+      if (isSubtask && !hasSubtasks) return false;
+      if (!isSubtask && hasSubtasks) return false;
+      const meta = t.metadata || {};
+      if (meta.bgInstanceId || meta.dispatchPending) return false;
+      return true;
+    });
+
+    const backlogItems = allTasks.filter((t) => t.status === 'backlog' && !t.archived);
+
+    // 6. Sort: priority ASC, createdAt ASC. Backlog items go after queued at same priority.
+    const priorityWeight = { high: 0, normal: 1, low: 2 };
+    const sortKey = (t, source) => {
+      const pw = priorityWeight[t.priority] ?? 1;
+      const src = source === 'backlog' ? 1 : 0;
+      return [pw, src, t.createdAt];
+    };
+    const allCandidates = [
+      ...queuedCandidates.map((t) => ({ task: t, source: 'queued' })),
+      ...backlogItems.map((t) => ({ task: t, source: 'backlog' })),
+    ];
+    allCandidates.sort((a, b) => {
+      const [pwA, srcA, ca] = sortKey(a.task, a.source);
+      const [pwB, srcB, cb] = sortKey(b.task, b.source);
+      if (pwA !== pwB) return pwA - pwB;
+      if (srcA !== srcB) return srcA - srcB;
+      return new Date(ca).getTime() - new Date(cb).getTime();
+    });
+
+    // 7. Promote backlog items to fill slots.
+    let promoted = 0;
+    const toPromote = allCandidates.filter((c) => c.source === 'backlog');
+    const toDispatch = [
+      ...allCandidates.filter((c) => c.source === 'queued'),
+      ...toPromote,
+    ].slice(0, slotsAvailable);
+
+    for (const c of toPromote) {
+      if (toDispatch.includes(c)) {
+        const updated = await tasksStore.promote(projectId, c.task.id);
+        if (updated) {
+          broadcast({ type: 'tasks:change', task: updated });
+          promoted++;
+        }
+      }
+    }
+
+    // 8. Dispatch each candidate.
+    let dispatched = 0;
+    for (const c of toDispatch) {
+      if (c.source === 'backlog') {
+        // Already promoted above.
+        continue;
+      }
+      const asSubtask = {
+        id: c.task.id,
+        title: c.task.title,
+        description: c.task.description,
+        assignee: c.task.assignee || 'tyr',
+        parent: c.task.parent || null,
+      };
+      const synthMain = { id: c.task.id };
+      try {
+        const result = await this.dispatchToBackground(synthMain, [asSubtask], { projectRoot, projectId, state: {}, broadcast }, broadcast);
+        if (result && Array.isArray(result.dispatched) && result.dispatched.length > 0) {
+          dispatched++;
+        } else if (result && result.warnings?.length) {
+          warnings.push(...result.warnings);
+        }
+      } catch (err) {
+        skipped.push(c.task.id);
+        warnings.push(`dispatch failed for ${c.task.id}: ${err.message}`);
+      }
+    }
+
+    return { promoted, dispatched, skipped, warnings };
+  },
 };
 
 // ── Public helpers for routes that need to walk bg state ─────────────

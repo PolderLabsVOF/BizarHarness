@@ -21,6 +21,7 @@ import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { BgStatusBadge } from '../components/BgStatusBadge';
 import { openKillConfirmDialog } from '../components/KillConfirmDialog';
+import { TmuxAttachCard } from '../components/background/TmuxAttachCard';
 import { api } from '../lib/api';
 import { Ws } from '../lib/ws';
 import { cn, formatTime, truncate } from '../lib/utils';
@@ -283,6 +284,8 @@ function BackgroundAgentCard({
           <Trash2 size={14} /> Kill
         </Button>
       </div>
+
+      <TmuxAttachCard instance={inst} />
     </Card>
   );
 }

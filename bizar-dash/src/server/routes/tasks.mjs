@@ -39,6 +39,7 @@ import {
   normalizeOpencodeMessage,
 } from '../serve-info.mjs';
 import { readActiveProjectId, wrap } from './_shared.mjs';
+import { ALLOWED_TASK_STATUSES } from '../tasks-store.mjs';
 
 /**
  * @param {object} deps
@@ -153,7 +154,7 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
   router.patch('/tasks/:id/status', wrap(async (req, res) => {
     const projectId = req.body?.projectId || readActiveProjectId();
     const { status } = req.body || {};
-    if (!['queued', 'doing', 'done', 'blocked', 'archived'].includes(status)) {
+    if (!ALLOWED_TASK_STATUSES.includes(status)) {
       res.status(400).json({ error: 'bad_request', message: 'invalid status' });
       return;
     }
@@ -462,6 +463,63 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
     broadcast({ type: 'task:progress', taskId: task.id, progress: task.metadata?.progress, step: task.metadata?.currentStep, agent: task.metadata?.progressAgent });
     broadcast({ type: 'tasks:change', task });
     res.json(task);
+  }));
+
+  // v3.22 — Backlog routes. GET /tasks/backlog is declared before
+  // /tasks/:id so the literal "backlog" segment is not captured as :id.
+  router.get('/tasks/backlog', wrap(async (req, res) => {
+    const projectId = req.query.projectId || readActiveProjectId();
+    const tasks = tasksStore.listBacklog(projectId);
+    res.json({ tasks });
+  }));
+
+  router.post('/tasks/:id/promote', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const task = await tasksStore.getById(projectId, req.params.id);
+    if (!task) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    if (task.status !== 'backlog') {
+      res.status(409).json({ error: 'not_backlog', message: `task is '${task.status}', must be 'backlog' to promote` });
+      return;
+    }
+    const updated = await tasksStore.promote(projectId, req.params.id);
+    broadcast({ type: 'tasks:change', task: updated });
+    res.json({ ok: true, task: updated });
+  }));
+
+  router.post('/tasks/:id/demote', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const task = await tasksStore.getById(projectId, req.params.id);
+    if (!task) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    if (task.status !== 'queued') {
+      res.status(409).json({ error: 'not_queued', message: `task is '${task.status}', must be 'queued' to demote` });
+      return;
+    }
+    const updated = await tasksStore.demote(projectId, req.params.id);
+    broadcast({ type: 'tasks:change', task: updated });
+    res.json({ ok: true, task: updated });
+  }));
+
+  router.post('/tasks/promote-batch', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'bad_request', message: 'ids[] required' });
+      return;
+    }
+    const result = await tasksStore.promoteBatch(projectId, ids);
+    for (const r of result.affected) {
+      if (!r.ok) continue;
+      const all = await tasksStore.loadTasks(projectId, { includeArchived: false });
+      const t = all.find((x) => x.id === r.id);
+      if (t) broadcast({ type: 'tasks:change', task: t });
+    }
+    res.json(result);
   }));
 
   return router;

@@ -60,3 +60,5 @@ When Odin tells you to run the test gate after parallel implementation work:
 **Follow `config/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
 
 You are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase` — that is @hermod's job.
+
+Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.

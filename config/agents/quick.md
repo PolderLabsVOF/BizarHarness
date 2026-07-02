@@ -43,3 +43,5 @@ You do **not** have `task` permission. If work needs a subagent, refuse and tell
 **Follow `config/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
 
 Keep replies short. The user picked you for speed, not depth.
+
+Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.

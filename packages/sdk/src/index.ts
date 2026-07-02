@@ -27,6 +27,7 @@ export type {
   DashboardError,
   ConnectionError,
   APIError,
+  OpencodeConnectionError,
 } from "./errors.js";
 
 export type {
@@ -61,3 +62,21 @@ export type {
 } from "./types.js";
 
 export { SDK_VERSION } from "./version.js";
+
+// Opencode SDK — wraps the opencode serve child with a typed interface.
+// Tries `@opencode-ai/sdk` first; falls back to a thin fetch wrapper.
+export { createOpencodeSdk } from "./opencode.js";
+export type { OpencodeSdk, OpencodeSdkConfig } from "./opencode.js";
+
+export { subscribeOpencodeEvents } from "./opencode-events.js";
+export type {
+  OpencodeEventEnvelope,
+  OpencodeEventSubscribeOptions,
+} from "./opencode-events.js";
+
+export type {
+  OpencodeSession,
+  OpencodeMessage,
+  OpencodePart,
+  OpencodeEvent,
+} from "./opencode-types.js";

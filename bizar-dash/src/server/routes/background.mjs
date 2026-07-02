@@ -161,5 +161,97 @@ export function createBackgroundRouter({ broadcast }) {
     res.json(summary);
   }));
 
+  // v3.22.0 — Open-terminal endpoint. The frontend calls this when the
+  // operator clicks "Open in terminal" on a TmuxAttachCard. The server
+  // spawns the platform's terminal emulator with the tmux attach command.
+  // Whitelisted emulators: 'system' (auto-detect), 'tmux-iterm' (macOS
+  // iTerm2), 'tmux-wt' (Windows Terminal).
+  //
+  // The endpoint ALWAYS returns 200 with `{ ok, command }` or
+  // `{ ok: false, error }` — never a raw 5xx, so the frontend can fall
+  // back to clipboard copy.
+  router.post('/background/:id/open-terminal', wrap(async (req, res) => {
+    const { backgroundStore } = await import('../background-store.mjs');
+    const info = backgroundStore.tmuxAttachInfo(req.params.id);
+
+    if (!info || !info.session) {
+      res.json({ ok: false, error: 'no_tmux_session' });
+      return;
+    }
+
+    // Validate actual tmux session name matches the bgr_<hex> pattern.
+    if (!/^bgr_[A-Za-z0-9_-]{1,24}$/.test(info.session)) {
+      res.json({ ok: false, error: 'invalid_session_name' });
+      return;
+    }
+
+    // Whitelist emulator selection.
+    const emulator = (req.body?.emulator || 'system').toString();
+    const ALLOWED_EMULATORS = ['system', 'tmux-iterm', 'tmux-wt'];
+    if (!ALLOWED_EMULATORS.includes(emulator)) {
+      res.json({ ok: false, error: 'unknown_emulator', allowed: ALLOWED_EMULATORS });
+      return;
+    }
+
+    const { execFileSync, spawn } = await import('node:child_process');
+    const platform = process.platform;
+    const command = `tmux attach -t ${info.session}`;
+
+    if (emulator === 'system') {
+      // Auto-detect platform terminal.
+      if (platform === 'darwin') {
+        spawn('osascript', [
+          '-e', `tell application "Terminal" to do script "${command}"`,
+          '-e', 'activate application "Terminal"',
+        ], { detached: true, stdio: 'ignore' }).unref();
+      } else if (platform === 'linux') {
+        const candidates = [
+          ['gnome-terminal', '--', ...command.split(' ')],
+          ['konsole', '-e', command],
+          ['xterm', '-e', command],
+          ['x-terminal-emulator', '-e', command],
+        ];
+        let launched = false;
+        for (const [cmd, ...args] of candidates) {
+          try {
+            execFileSync('which', [cmd], { stdio: 'pipe' });
+            spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+            launched = true;
+            break;
+          } catch { /* try next */ }
+        }
+        if (!launched) {
+          res.json({ ok: false, error: 'no_terminal_emulator_found' });
+          return;
+        }
+      } else if (platform === 'win32') {
+        try {
+          execFileSync('where', ['wt.exe'], { stdio: 'pipe' });
+          spawn('wt.exe', ['-e', ...command.split(' ')], { detached: true, stdio: 'ignore' }).unref();
+        } catch {
+          spawn('cmd', ['/c', 'start', '', 'cmd', '/k', ...command.split(' ')], { detached: true, stdio: 'ignore' }).unref();
+        }
+      } else {
+        res.json({ ok: false, error: `unsupported_platform: ${platform}` });
+        return;
+      }
+    } else if (emulator === 'tmux-iterm') {
+      if (platform !== 'darwin') {
+        res.json({ ok: false, error: 'tmux-iterm requires macOS' });
+        return;
+      }
+      // iTerm2 has a "tmux integration" mode; open -a iTerm sends the command.
+      spawn('open', ['-a', 'iTerm2', command], { detached: true, stdio: 'ignore' }).unref();
+    } else if (emulator === 'tmux-wt') {
+      if (platform !== 'win32') {
+        res.json({ ok: false, error: 'tmux-wt requires Windows' });
+        return;
+      }
+      spawn('wt.exe', ['-e', ...command.split(' ')], { detached: true, stdio: 'ignore' }).unref();
+    }
+
+    res.json({ ok: true, command });
+  }));
+
   return router;
 }

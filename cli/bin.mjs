@@ -291,17 +291,27 @@ function showServiceHelp() {
   bizar service — Manage the background service daemon
 
   Usage:
-    bizar service start        Start the service in background
-    bizar service stop         Stop the running service
-    bizar service status       Show whether the service is running
-    bizar service logs         Tail the service log
-    bizar service follow       Follow the service log until Ctrl-C
+    bizar service start            Start the service in background
+    bizar service stop             Stop the running service
+    bizar service status           Show whether the service is running
+    bizar service logs             Tail the service log
+    bizar service follow           Follow the service log until Ctrl-C
+    bizar service install          Register with systemd / launchd / scheduled task
+    bizar service install --force  Re-install even when the unit matches
+    bizar service uninstall        Remove the OS-level autostart
+    bizar service uninstall --force  Force-uninstall even when nothing is registered
 
   Description:
     The service watches per-project schedules (cron / interval / once)
     and runs them at the right time. It logs to
     ${bizarConfigDir}/service.log and writes its PID to
     ${bizarConfigDir}/service.pid.
+
+    install registers the daemon under the OS init system — systemd user
+    unit on Linux, launchd LaunchAgent on macOS, scheduled task
+    ("BizarDashboardService", ONSTART, HIGHEST) on Windows. After
+    install, a normal user does not need to run \`bizar service start\`
+    for the dashboard background process — the OS does it at login.
   `);
 }
 
@@ -613,9 +623,11 @@ async function runTestGate() {
 }
 
 /**
- * Service commands — start / stop / status / logs.
+ * Service commands — start / stop / status / logs / install / uninstall.
  *
- * Implementation lives in cli/service.mjs (created below).
+ * Implementation lives in cli/service.mjs. The install / uninstall
+ * branches delegate to cli/service-controller.mjs for OS-level
+ * registration (systemd / launchd / schtasks).
  */
 async function runServiceCommand(sub) {
   const { runService } = await import('./service.mjs');

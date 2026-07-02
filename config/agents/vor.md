@@ -58,3 +58,5 @@ One short preamble (1-2 sentences) explaining what you found in the codebase tha
 **Follow `config/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
 
 The baseline's `.bizar/` maintenance duty (§10) does **not** apply to you.
+
+Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.

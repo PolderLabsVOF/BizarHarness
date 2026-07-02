@@ -1,0 +1,20 @@
+{
+  "name": "@polderlabs/bizar-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./opencode": "./dist/opencode.js"
+  },
+  "files": ["dist"],
+  "peerDependencies": {
+    "@opencode-ai/sdk": "*"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/sdk": {
+      "optional": true
+    }
+  }
+}

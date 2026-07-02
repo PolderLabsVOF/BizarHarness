@@ -7,11 +7,19 @@
  * /api/chat/sessions (POST)              — create a new session
  * /api/chat/regenerate (POST)            — re-dispatch the last user message
  *
- * The POST /api/chat handler is the most complex endpoint in the
- * codebase: it persists the user message, mints an opencode session
- * if needed, posts the prompt, polls up to 90s for an assistant
- * reply, and persists + broadcasts the result. On plugin offline,
- * it falls back to a "queued" 202 response.
+ * v0.1.0 — POST /api/chat now streams tokens in real time via SSE.
+ * Instead of polling for up to 90s, the handler:
+ *   1. Persists the user message + resolves/creates the opencode session (unchanged).
+ *   2. Returns 200 immediately with `{ accepted, session, opencodeSessionId }`.
+ *   3. Subscribes to opencode's SSE `/event?directory=…` filtered by sessionID.
+ *   4. Streams `message.part.updated` deltas over the WebSocket as `chat:delta` envelopes.
+ *   5. On `session.idle`, persists the final assistant message and broadcasts
+ *      `chat:message`, then closes the subscription.
+ *
+ * Failure modes:
+ *   - No active project: broadcast the message, return 202 "queued" (unchanged).
+ *   - No serve-info: same queued fallback (unchanged).
+ *   - Upstream SSE error: clean up and return without crashing.
  */
 import { Router } from 'express';
 import {
@@ -31,10 +39,19 @@ import {
   sendOpencodePrompt,
   listOpencodeMessages,
   extractContentFromOpencodeMessage,
+  unwrapOpencodeSseEvent,
+  buildAuthHeader,
 } from '../serve-info.mjs';
 import { wrap } from './_shared.mjs';
 
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
+
+/**
+ * Maximum concurrent SSE subscriptions for chat streaming.
+ * Mirrors the cap in opencode-session-detail.mjs.
+ */
+const MAX_CHAT_SUBSCRIPTIONS = 50;
+let activeChatSubscriptions = 0;
 
 /**
  * @param {object} deps
@@ -52,33 +69,13 @@ export function createChatRouter({ state, broadcast }) {
     res.json(state.getChat({ sessionId, limit }));
   }));
 
-  // v3.5.5 — POST /api/chat now actually invokes the agent.
+  // ── POST /api/chat ─────────────────────────────────────────────────────
   //
-  // Flow:
-  //   1. Persist the user message to the per-project .jsonl log (same
-  //      as before — keeps the chat history intact even when the plugin
-  //      is offline).
-  //   2. Resolve a chat session id (use the body-provided one, or mint
-  //      a new `sess_*`).
-  //   3. Look up (or create) the opencode session id that backs this
-  //      chat session — stored in a sidecar file at
-  //      `<sessions>/<chatSessionId>.opencode.json`.
-  //   4. POST the prompt to the opencode session via the plugin's
-  //      opencode serve child.
-  //   5. Poll for the assistant response (up to 90s) and persist it.
-  //   6. Broadcast both messages on the WS `chat:message` channel.
+  // Flow (changes from v0.1.0):
+  //   1-4: unchanged (persist user message, resolve/opencode session, POST prompt).
+  //   5: Instead of polling, subscribe to SSE and stream deltas via WS.
+  //   6: On session.idle, persist + broadcast final message, return 200.
   //
-  // Failure modes:
-  //   - No active project: we still broadcast the message but skip
-  //     persistence and return 202 (legacy behavior).
-  //   - No serve-info: we fall back to the legacy "queued" path —
-  //     the user message is persisted and broadcast but no agent
-  //     invocation happens. The client can poll GET /api/chat for an
-  //     eventual reply if the plugin comes up.
-  //   - createSession / sendPrompt failure: 502 with the underlying
-  //     error, the user message is still persisted.
-  //   - Polling timeout: 202 with `timeout: true` so the client knows
-  //     the agent is still working and can poll again.
   router.post('/chat', wrap(async (req, res) => {
     const body = req.body || {};
     const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -89,8 +86,6 @@ export function createChatRouter({ state, broadcast }) {
     const active = projectsStore.active();
 
     // 1. Persist the user message to the per-project .jsonl log.
-    //    (No-op when no project is active — the legacy fallback path
-    //    only broadcast.)
     let chatSessionId = null;
     let file = null;
     let record = null;
@@ -118,7 +113,6 @@ export function createChatRouter({ state, broadcast }) {
         // best effort
       }
     } else {
-      // No project — synthesize an id so the response shape is consistent.
       const requestedSessionId = typeof body.session === 'string' ? body.session.trim() : '';
       chatSessionId = SESSION_ID_RE.test(requestedSessionId)
         ? requestedSessionId
@@ -141,7 +135,7 @@ export function createChatRouter({ state, broadcast }) {
     });
     broadcast({ type: 'chat:message', sessionId: chatSessionId, message: record });
 
-    // 2. No active project → legacy 202. Don't try to dispatch.
+    // 2. No active project → legacy 202.
     if (!active) {
       return res.status(202).json({
         accepted: true,
@@ -151,9 +145,7 @@ export function createChatRouter({ state, broadcast }) {
       });
     }
 
-    // 3. No plugin running → fall back to queued. The user message is
-    //    already persisted + broadcast; the next time the plugin comes
-    //    up the user can re-send or POST /api/chat/regenerate.
+    // 3. No plugin running → queued fallback.
     const serveInfo = readServeInfo();
     if (!serveInfo) {
       return res.status(202).json({
@@ -207,9 +199,7 @@ export function createChatRouter({ state, broadcast }) {
       }
     }
 
-    // 5. POST the prompt. We use the opencode session id as the
-    //    messageID — the polling loop below uses it to detect the
-    //    "before vs after" boundary.
+    // 5. POST the prompt.
     const agentName = body.agent || active.defaultAgent || 'odin';
     const send = await sendOpencodePrompt(
       serveInfo,
@@ -230,86 +220,42 @@ export function createChatRouter({ state, broadcast }) {
       });
     }
 
-    // 6. Poll for the assistant response. We look for the LAST
-    //    assistant message; if its creation time is greater than the
-    //    user's messageID timestamp, we consider it our reply. This
-    //    is the same heuristic the plugin's own event stream uses.
-    const promptSentAt = Date.now();
-    const deadline = promptSentAt + 90_000;
-    let assistantRecord = null;
-    let lastSeenAssistantId = null;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 2_000));
-      const list = await listOpencodeMessages(
-        serveInfo,
-        opencodeSessionId,
-        active.path || serveInfo.worktree,
-      );
-      if (!list.ok || !Array.isArray(list.messages) || list.messages.length === 0) {
-        continue;
-      }
-      // Walk newest → oldest; pick the first assistant message that
-      // was created at or after promptSentAt.
-      const assistants = list.messages
-        .filter((m) => (m?.info?.role || m?.role) === 'assistant')
-        .sort((a, b) => {
-          const ta = a?.info?.time?.created || 0;
-          const tb = b?.info?.time?.created || 0;
-          return tb - ta;
-        });
-      for (const m of assistants) {
-        const created = m?.info?.time?.created || 0;
-        if (created >= promptSentAt - 1_000) {
-          const id = m?.info?.id || '';
-          if (id && id === lastSeenAssistantId) continue;
-          lastSeenAssistantId = id;
-          assistantRecord = {
-            id: id || `asst_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-            ts: new Date(created || Date.now()).toISOString(),
-            role: 'assistant',
-            agent: agentName,
-            content: extractContentFromOpencodeMessage(m),
-            opencodeSessionId,
-            inReplyTo: record.id,
-          };
-          break;
-        }
-      }
-      if (assistantRecord) break;
-    }
-
-    if (assistantRecord) {
-      // 7. Persist + broadcast the assistant message.
-      try {
-        appendFileSync(file, JSON.stringify(assistantRecord) + '\n', 'utf8');
-      } catch {
-        // best effort
-      }
-      broadcast({ type: 'chat:message', sessionId: chatSessionId, message: assistantRecord });
-      state.appendActivity({
-        kind: 'chat.response',
-        agent: agentName,
-        message: (assistantRecord.content || '').slice(0, 500),
-      });
-      return res.json({
+    // 6. Enforce the concurrent subscription cap.
+    if (activeChatSubscriptions >= MAX_CHAT_SUBSCRIPTIONS) {
+      return res.status(503).json({
+        error: 'too_many_subscriptions',
+        message: `Chat subscription cap (${MAX_CHAT_SUBSCRIPTIONS}) reached; try again later.`,
         accepted: true,
         session: chatSessionId,
         opencodeSessionId,
-        userMessage: record,
-        assistantMessage: assistantRecord,
       });
     }
+    activeChatSubscriptions++;
 
-    // 8. Timeout — the agent is still working. The next poll of GET
-    //    /api/chat?session=… will pick up whatever has arrived by
-    //    then. Return 202 so the client knows nothing failed.
-    return res.status(202).json({
+    // 7. Return 200 immediately. The SSE subscription streams deltas via WS.
+    res.json({
       accepted: true,
       session: chatSessionId,
       opencodeSessionId,
       userMessage: record,
-      queued: true,
-      timeout: true,
+    });
+
+    // 8. Subscribe to opencode SSE and forward deltas via WS broadcast.
+    //    On session.idle: persist the final message, broadcast chat:message,
+    //    then decrement the counter.
+    void streamOpencodeSession({
+      serveInfo,
+      opencodeSessionId,
+      directory: active.path || serveInfo.worktree,
+      chatSessionId,
+      agentName,
+      file,
+      record,
+      broadcast,
+      state,
+      onDone: () => {
+        activeChatSubscriptions = Math.max(0, activeChatSubscriptions - 1);
+      },
     });
   }));
 
@@ -334,9 +280,6 @@ export function createChatRouter({ state, broadcast }) {
     res.json({ sessions });
   }));
 
-  // v3.0.4 — Create a new chat session. Generates an id, ensures the
-  // sessions dir + empty .jsonl file exist, and returns the session
-  // metadata. Idempotent: if the session already exists, returns it.
   router.post('/chat/sessions', wrap(async (req, res) => {
     const active = projectsStore.active();
     if (!active) {
@@ -363,9 +306,6 @@ export function createChatRouter({ state, broadcast }) {
     });
   }));
 
-  // ── /api/chat/regenerate ─────────────────────────────────────────────
-  // v3.0.0: re-dispatches the last user message before messageId via POST /chat.
-  // Full opencode re-dispatch lands in v3.1 when the plugin exposes a stable HTTP API.
   router.post('/chat/regenerate', wrap(async (req, res) => {
     const { sessionId, messageId } = req.body || {};
     if (!messageId) {
@@ -389,7 +329,6 @@ export function createChatRouter({ state, broadcast }) {
       res.status(404).json({ error: 'not_found', message: 'session not found' });
       return;
     }
-    // Read the session file and find the last user message before messageId
     const full = join(sessionsDir, targetFiles[0]);
     let lastUserMessage = null;
     let foundTarget = false;
@@ -421,7 +360,6 @@ export function createChatRouter({ state, broadcast }) {
       res.status(500).json({ error: 'read_failed', message: err.message });
       return;
     }
-    // Fallback: find last user message
     if (!lastUserMessage) {
       try {
         const lines = readFileSync(full, 'utf8').split(/\r?\n/).filter(Boolean).reverse();
@@ -444,7 +382,6 @@ export function createChatRouter({ state, broadcast }) {
       res.status(404).json({ error: 'not_found', message: 'no user message found to regenerate' });
       return;
     }
-    // Re-post via POST /chat (queued for agent processing)
     const record = {
       ts: new Date().toISOString(),
       role: 'user',
@@ -469,10 +406,6 @@ export function createChatRouter({ state, broadcast }) {
     res.status(202).json({ accepted: true, regeneratedMessage: record });
   }));
 
-  // S3 — /chat/audit: thin endpoint that AuditDialog.tsx calls.
-  // The heavy lifting is the existing `/audit` slash command routed to
-  // forseti via opencode.json.template. This keeps the dialog functional
-  // without re-implementing audit logic.
   router.post('/chat/audit', wrap(async (req, res) => {
     res.json({
       ok: true,
@@ -482,4 +415,248 @@ export function createChatRouter({ state, broadcast }) {
   }));
 
   return router;
+}
+
+// ── SSE streaming helper ──────────────────────────────────────────────────────
+
+/**
+ * Subscribe to opencode's SSE stream for a session, forward deltas via WS
+ * broadcast, and persist the final assistant message on idle.
+ *
+ * @param {object} opts
+ * @param {import('../serve-info.mjs').ServeInfo} opts.serveInfo
+ * @param {string} opts.opencodeSessionId
+ * @param {string} opts.directory
+ * @param {string} opts.chatSessionId
+ * @param {string} opts.agentName
+ * @param {string|null} opts.file  .jsonl path for persistence
+ * @param {object} opts.record  the user message record
+ * @param {Function} opts.broadcast
+ * @param {object} opts.state
+ * @param {Function} opts.onDone  called when the stream ends (for counter cleanup)
+ */
+async function streamOpencodeSession({
+  serveInfo,
+  opencodeSessionId,
+  directory,
+  chatSessionId,
+  agentName,
+  file,
+  record,
+  broadcast,
+  state,
+  onDone,
+}) {
+  const upstreamUrl = `${serveInfo.baseUrl}/event?directory=${encodeURIComponent(directory || '')}`;
+  const auth = buildAuthHeader(serveInfo);
+  const controller = new AbortController();
+
+  let upstream;
+  try {
+    upstream = fetch(upstreamUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: auth,
+      },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    broadcast({
+      type: 'chat:error',
+      sessionId: chatSessionId,
+      error: `upstream_open_failed: ${msg}`,
+    });
+    onDone();
+    return;
+  }
+
+  let assistantRecord = null;
+  let done = false;
+
+  void (async () => {
+    try {
+      const r = await upstream;
+      if (!r.ok || !r.body) {
+        const msg = `upstream_status: ${r.status}`;
+        broadcast({ type: 'chat:error', sessionId: chatSessionId, error: msg });
+        onDone();
+        return;
+      }
+      await pumpSseForChat(r.body, controller, opencodeSessionId, {
+        onDelta(envelope) {
+          // Forward text part deltas as chat:delta
+          const textDelta = extractTextDelta(envelope);
+          if (textDelta) {
+            broadcast({
+              type: 'chat:delta',
+              sessionId: chatSessionId,
+              delta: textDelta.delta,
+              type: 'text',
+              messageId: envelope.messageID || null,
+            });
+          }
+        },
+        onIdle(envelope) {
+          if (done) return;
+          done = true;
+          // Fetch the final message list and extract the assistant reply.
+          void (async () => {
+            try {
+              const list = await listOpencodeMessages(
+                serveInfo,
+                opencodeSessionId,
+                directory,
+              );
+              if (list?.ok && Array.isArray(list.messages)) {
+                const promptSentAt = Date.now() - 5_000; // buffer for clock skew
+                const assistants = list.messages
+                  .filter((m) => (m?.info?.role || m?.role) === 'assistant')
+                  .sort((a, b) => {
+                    const ta = a?.info?.time?.created || 0;
+                    const tb = b?.info?.time?.created || 0;
+                    return tb - ta;
+                  });
+                for (const m of assistants) {
+                  const created = m?.info?.time?.created || 0;
+                  if (created >= promptSentAt) {
+                    const id = m?.info?.id || '';
+                    assistantRecord = {
+                      id: id || `asst_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+                      ts: new Date(created || Date.now()).toISOString(),
+                      role: 'assistant',
+                      agent: agentName,
+                      content: extractContentFromOpencodeMessage(m),
+                      opencodeSessionId,
+                      inReplyTo: record.id,
+                    };
+                    break;
+                  }
+                }
+              }
+            } catch {
+              // best effort
+            }
+
+            if (assistantRecord) {
+              try {
+                if (file) appendFileSync(file, JSON.stringify(assistantRecord) + '\n', 'utf8');
+              } catch {
+                // best effort
+              }
+              broadcast({ type: 'chat:message', sessionId: chatSessionId, message: assistantRecord });
+              state.appendActivity({
+                kind: 'chat.response',
+                agent: agentName,
+                message: (assistantRecord.content || '').slice(0, 500),
+              });
+            }
+            onDone();
+          })();
+        },
+      });
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      broadcast({ type: 'chat:error', sessionId: chatSessionId, error: `stream_error: ${msg}` });
+      onDone();
+    } finally {
+      if (!done) {
+        done = true;
+        onDone();
+      }
+    }
+  })();
+}
+
+/**
+ * Pump an opencode SSE stream, filtering by sessionID and dispatching to
+ * the appropriate callback.
+ *
+ * @param {ReadableStream<Uint8Array>} body
+ * @param {AbortController} controller
+ * @param {string} sessionId
+ * @param {{ onDelta: Function, onIdle: Function }} handlers
+ */
+async function pumpSseForChat(body, controller, sessionId, handlers) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value && value.byteLength > 0) {
+        buffer += decoder.decode(value, { stream: true });
+      }
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) >= 0 || (sep = buffer.indexOf('\r\n\r\n')) >= 0) {
+        const isCRLF = buffer[sep] === '\r';
+        const block = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + (isCRLF ? 4 : 2));
+        handleChatSseBlock(block, sessionId, handlers);
+      }
+    }
+  } finally {
+    try { reader.releaseLock(); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Parse one SSE block and dispatch to onDelta or onIdle.
+ *
+ * @param {string} block
+ * @param {string} sessionId
+ * @param {{ onDelta: Function, onIdle: Function }} handlers
+ */
+function handleChatSseBlock(block, sessionId, handlers) {
+  if (!block || block.trim() === '') return;
+  let eventName = null;
+  const dataLines = [];
+  for (const line of block.split(/\r?\n/)) {
+    if (line === '' || line.startsWith(':')) continue;
+    const colon = line.indexOf(':');
+    if (colon < 0) continue;
+    const field = line.slice(0, colon);
+    let value = line.slice(colon + 1);
+    if (value.startsWith(' ')) value = value.slice(1);
+    if (field === 'event') eventName = value;
+    else if (field === 'data') dataLines.push(value);
+  }
+  if (dataLines.length === 0) return;
+  const raw = dataLines.join('\n');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  const evt = unwrapOpencodeSseEvent(eventName, parsed);
+  if (!evt || !evt.type) return;
+  if (evt.sessionID && evt.sessionID !== sessionId) return;
+
+  if (evt.type === 'message.part.updated') {
+    handlers.onDelta(evt);
+  } else if (evt.type === 'session.idle') {
+    handlers.onIdle(evt);
+  }
+}
+
+/**
+ * Extract a text delta from an opencode SSE event envelope.
+ * Returns null if no text delta is present.
+ *
+ * @param {object} envelope  from unwrapOpencodeSseEvent
+ * @returns {{ delta: string } | null}
+ */
+function extractTextDelta(envelope) {
+  const part = envelope.part;
+  if (!part || typeof part !== 'object') return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = /** @type {any} */ (part);
+  if (p.type === 'text' && typeof p.text === 'string') {
+    return { delta: p.text };
+  }
+  return null;
 }

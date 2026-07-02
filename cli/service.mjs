@@ -2,16 +2,22 @@
 /**
  * cli/service.mjs
  *
- * v3.0.0 — Background service daemon for Bizar.
+ * v4.4.0 — Background service daemon for Bizar.
  *
  * Subcommands:
- *   start    — spawn the service detached, return immediately
- *   stop     — kill the service
- *   status   — show running state
- *   logs     — tail the service log
+ *   start          — spawn the service detached, return immediately
+ *   stop           — kill the service
+ *   status         — show running state
+ *   logs           — tail the service log
+ *   follow / tail  — tail the service log live
+ *   install        — register with systemd / launchd / scheduled task
+ *   uninstall      — unregister the OS-level autostart
+ *   install --force  — re-install even when the unit matches
+ *   uninstall --force — re-uninstall even when not present
  *
  * The service:
  *   - Watches per-project schedules
+ *   - Ticks the task backlog (Stream B's task-delegator) when present
  *   - Fires due schedules (interval / cron / once)
  *   - Records every run in schedules.json
  *   - Logs to ~/.config/bizar/service.log
@@ -143,18 +149,37 @@ function stopService() {
 }
 
 function serviceStatus() {
+  // v4.4.0 — surface both the old PID-file status (so a manually-started
+  // session is still observable) and the OS-level registration status
+  // (systemd / launchd / schtasks). Process stays responsive with the
+  // unconditional `await import`.
   const pid = readPid();
-  if (!pid) {
-    console.log('Bizar service: stopped (no PID file)');
-    return;
-  }
-  if (!isAlive(pid)) {
-    console.log(`Bizar service: stopped (stale PID file: ${pid})`);
+  const alive = pid && isAlive(pid);
+  if (pid && !alive) {
     removePidFile();
-    return;
   }
-  console.log(`Bizar service: running (pid ${pid})`);
-  console.log(`Log: ${LOG_FILE}`);
+  (async () => {
+    let unitInfo = null;
+    try {
+      const { serviceStatus: ctrlStatus } = await import('./service-controller.mjs');
+      unitInfo = ctrlStatus();
+    } catch {
+      /* service-controller optional */
+    }
+    if (alive) {
+      console.log(`Bizar service: running (pid ${pid})`);
+      console.log(`Log: ${LOG_FILE}`);
+    } else {
+      console.log('Bizar service: stopped (no live PID)');
+    }
+    if (unitInfo) {
+      const unitBit = unitInfo.unitPath
+        ? `${unitInfo.installed ? 'installed' : 'partial'} (${unitInfo.unitPath})`
+        : 'not registered';
+      const runBit = unitInfo.running ? 'running' : 'not running';
+      console.log(`Bizar OS-level unit: ${unitBit}, ${runBit}`);
+    }
+  })();
 }
 
 function tailLogs(follow) {
@@ -205,6 +230,10 @@ async function daemonLoop() {
   const candidates = [
     // v4.0.0 primary: <repo>/bizar-dash/src/server/schedules-runner.mjs
     join(__dirname, '..', 'bizar-dash', 'src', 'server', 'schedules-runner.mjs'),
+    // v4.4.0 sibling: <repo>/bizar-dash/src/server/task-delegator.mjs
+    // Exported under the same runner module shape (default export) so the
+    // service can call .tickBacklog() alongside .schedulesRunner.tick().
+    join(__dirname, '..', 'bizar-dash', 'src', 'server', 'task-delegator.mjs'),
     // Legacy fallbacks — users with @polderlabs/bizar-dash still installed:
     join(HOME, '.npm-global', 'lib', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'server', 'schedules-runner.mjs'),
   ];
@@ -235,6 +264,37 @@ async function daemonLoop() {
       }
     }
   }
+  // v4.4.0 — Probe a sibling `task-delegator.mjs` separately so the backlog
+  // tick works regardless of which file won the race above. ESM namespace
+  // objects are non-extensible, so we cannot mutate `runner` to attach a
+  // `taskDelegator` property — instead, capture the imported module in a
+  // local binding and reference it from `tick()` below.
+  let taskDelegator = null;
+  if (runner && runner.taskDelegator && typeof runner.taskDelegator.tickBacklog === 'function') {
+    // The runner already exposes taskDelegator (e.g. task-delegator.mjs
+    // resolved as the runner). Use it.
+    taskDelegator = runner.taskDelegator;
+  } else {
+    const tdCandidates = [
+      join(__dirname, '..', 'bizar-dash', 'src', 'server', 'task-delegator.mjs'),
+      join(process.cwd(), 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'server', 'task-delegator.mjs'),
+      join(__dirname, '..', 'node_modules', '@polderlabs', 'bizar-dash', 'src', 'server', 'task-delegator.mjs'),
+    ];
+    for (const c of tdCandidates) {
+      if (existsSync(c)) {
+        try {
+          const td = await import(c);
+          if (td && td.taskDelegator && typeof td.taskDelegator.tickBacklog === 'function') {
+            taskDelegator = td.taskDelegator;
+            logLine(`using task-delegator at ${c}`);
+            break;
+          }
+        } catch (err) {
+          logLine(`failed to import task-delegator at ${c}: ${err.message}`);
+        }
+      }
+    }
+  }
   if (!runner) {
     logLine('FATAL: could not locate @polderlabs/bizar-dash/schedules-runner. Service exiting.');
     removePidFile();
@@ -261,6 +321,22 @@ async function daemonLoop() {
     } catch (err) {
       logLine(`tick error: ${err.message}`);
     }
+    // v4.4.0 — Drive the task backlog. The local binding is a closure
+    // capture, not an attached property, because ESM namespace objects
+    // are non-extensible. The check is intentionally lazy — if Stream B's
+    // task-delegator hasn't landed yet, this is a no-op.
+    try {
+      if (taskDelegator && typeof taskDelegator.tickBacklog === 'function') {
+        const r = await taskDelegator.tickBacklog({ logLine });
+        if (r && (r.promoted || r.dispatched)) {
+          const promoted = r.promoted || 0;
+          const dispatched = r.dispatched || 0;
+          logLine(`backlog: ${promoted} promoted, ${dispatched} dispatched`);
+        }
+      }
+    } catch (err) {
+      logLine(`backlog tick error: ${err.message}`);
+    }
   };
 
   // Run immediately, then on a 5s interval
@@ -269,6 +345,13 @@ async function daemonLoop() {
 }
 
 export async function runService(sub, _rest) {
+  if (sub === '_daemon') {
+    // Internal entrypoint used by the systemd / launchd / schtasks unit.
+    // The OS-level unit invokes `node cli/bin.mjs service _daemon` so this
+    // branch makes the dispatch round-trip work.
+    await daemonLoop();
+    return;
+  }
   if (sub === 'start') {
     await startService();
     return;
@@ -289,6 +372,34 @@ export async function runService(sub, _rest) {
     tailLogs(true);
     return;
   }
+  if (sub === 'install') {
+    const { installService } = await import('./service-controller.mjs');
+    const force = Array.isArray(_rest) && (_rest.includes('--force') || _rest.includes('-f'));
+    const dryRun = Array.isArray(_rest) && (_rest.includes('--dry-run'));
+    const r = installService({ force, dryRun });
+    if (r.ok) {
+      console.log(`[bizar-service] installed${r.alreadyInstalled ? ' (already)' : ''}.`);
+      if (r.unitPath) console.log(`[bizar-service] unit: ${r.unitPath}`);
+      if (r.note) console.log(`[bizar-service] ${r.note}`);
+    } else {
+      console.error(`[bizar-service] install failed: ${r.error}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (sub === 'uninstall') {
+    const { uninstallService } = await import('./service-controller.mjs');
+    const force = Array.isArray(_rest) && (_rest.includes('--force') || _rest.includes('-f'));
+    const r = uninstallService();
+    if (r.ok) {
+      console.log(`[bizar-service] uninstalled.`);
+      if (r.note) console.log(`[bizar-service] ${r.note}`);
+    } else {
+      console.error(`[bizar-service] uninstall failed: ${r.error}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
   console.log(`
   bizar service — Manage the background service daemon
 
@@ -298,6 +409,15 @@ export async function runService(sub, _rest) {
     bizar service status
     bizar service logs
     bizar service follow
+    bizar service install [--force] [--dry-run]
+    bizar service uninstall [--force]
+
+  Description:
+    install / uninstall register the daemon with systemd (Linux),
+    launchd (macOS), or a scheduled task (Windows) so it autostarts at
+    user login. install is idempotent — when the on-disk unit matches
+    the desired content, it returns without restarting the service.
+    Pass --force to overwrite or to drop a stale registration.
   `);
 }
 
@@ -316,6 +436,32 @@ if (isMain) {
     tailLogs(false);
   } else if (sub === 'start') {
     await startService();
+  } else if (sub === 'install') {
+    const { installService } = await import('./service-controller.mjs');
+    const flags = process.argv.slice(3);
+    const force = flags.includes('--force') || flags.includes('-f');
+    const dryRun = flags.includes('--dry-run');
+    const r = installService({ force, dryRun });
+    if (r.ok) {
+      console.log(`[bizar-service] installed${r.alreadyInstalled ? ' (already)' : ''}.`);
+      if (r.unitPath) console.log(`[bizar-service] unit: ${r.unitPath}`);
+      if (r.note) console.log(`[bizar-service] ${r.note}`);
+    } else {
+      console.error(`[bizar-service] install failed: ${r.error}`);
+      process.exit(1);
+    }
+  } else if (sub === 'uninstall') {
+    const { uninstallService } = await import('./service-controller.mjs');
+    const flags = process.argv.slice(3);
+    const force = flags.includes('--force') || flags.includes('-f');
+    const r = uninstallService();
+    if (r.ok) {
+      console.log(`[bizar-service] uninstalled.`);
+      if (r.note) console.log(`[bizar-service] ${r.note}`);
+    } else {
+      console.error(`[bizar-service] uninstall failed: ${r.error}`);
+      process.exit(1);
+    }
   } else {
     console.log(`
   bizar service — Manage the background service daemon
@@ -326,6 +472,8 @@ if (isMain) {
     node cli/service.mjs status
     node cli/service.mjs logs
     node cli/service.mjs follow
+    node cli/service.mjs install [--force] [--dry-run]
+    node cli/service.mjs uninstall [--force]
     `);
   }
 }

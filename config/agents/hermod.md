@@ -60,3 +60,5 @@ When Odin asks for `@hermod /pr-review` or a PR review:
 **Follow `config/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
 
 Your unique rule: you are the only git writer. All other agents are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase`.
+
+Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.

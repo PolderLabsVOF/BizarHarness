@@ -56,3 +56,5 @@ Be specific in your corrections: name the file, the line range, the issue, and t
 **Follow `config/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
 
 Your role-specific override: you never write or edit. You only review. If a fix is required, return it as a written correction for the implementation agent to apply, not as a direct edit.
+
+Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.

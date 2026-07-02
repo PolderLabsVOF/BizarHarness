@@ -67,6 +67,8 @@ export interface BizarClient {
   plans: PlansResource;
   events: EventsResource;
   health: HealthResource;
+  /** Change the base URL after the client was created. */
+  setBaseUrl(url: string): void;
 }
 
 export function createBizarClient(config: BizarClientConfig): BizarClient {
@@ -167,6 +169,9 @@ export function createBizarClient(config: BizarClientConfig): BizarClient {
           return e;
         }
       },
+    },
+    setBaseUrl(url: string) {
+      config.baseUrl = url;
     },
   };
 }

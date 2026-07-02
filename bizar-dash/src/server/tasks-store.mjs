@@ -16,6 +16,10 @@ import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { projectsStore } from './projects-store.mjs';
 
+// v3.22 — Canonical status list. All status checks flow through this
+// constant so a new status needs a change in only this one place.
+export const ALLOWED_TASK_STATUSES = ['backlog', 'queued', 'doing', 'done', 'blocked', 'archived'];
+
 const HOME = homedir();
 const LEGACY_FILE = join(HOME, '.config', 'bizar', 'tasks.json');
 
@@ -154,7 +158,7 @@ export const tasksStore = {
         id: genId(),
         title: input.title,
         description: input.description || '',
-        status: ['queued', 'doing', 'done', 'blocked', 'archived'].includes(input.status) ? input.status : 'queued',
+        status: ALLOWED_TASK_STATUSES.includes(input.status) ? input.status : 'queued',
         tags: Array.isArray(input.tags) ? input.tags : [],
         priority: ['low', 'normal', 'high'].includes(input.priority) ? input.priority : 'normal',
         assignee: input.assignee || null,
@@ -196,7 +200,7 @@ export const tasksStore = {
 
       if (typeof patch.title === 'string') task.title = patch.title.slice(0, 200);
       if (typeof patch.description === 'string') task.description = patch.description;
-      if (['queued', 'doing', 'done', 'blocked', 'archived'].includes(patch.status)) {
+      if (ALLOWED_TASK_STATUSES.includes(patch.status)) {
         if (patch.status !== task.status) {
           appendActivity(task, 'status', { from: task.status, to: patch.status });
         }
@@ -504,5 +508,49 @@ export const tasksStore = {
       }
     }
     return created;
+  },
+
+  // v3.22 — Backlog helpers. Tasks in `backlog` are parked; Odin
+  // promotes them to `queued` via tickBacklog when slots are free.
+
+  /**
+   * List all backlog tasks for a project.
+   * @returns {Task[]}
+   */
+  listBacklog(projectId) {
+    return this.loadTasks(projectId).filter((t) => t.status === 'backlog' && !t.archived);
+  },
+
+  /**
+   * Promote a single backlog task to queued.
+   * @returns {Task | null}
+   */
+  async promote(projectId, id) {
+    return this.update(projectId, id, { status: 'queued' });
+  },
+
+  /**
+   * Demote a queued task back to backlog.
+   * @returns {Task | null}
+   */
+  async demote(projectId, id) {
+    return this.update(projectId, id, { status: 'backlog' });
+  },
+
+  /**
+   * Bulk-promote multiple backlog tasks to queued.
+   * @returns {{ affected: object[] }}
+   */
+  async promoteBatch(projectId, ids) {
+    const affected = [];
+    for (const id of ids) {
+      try {
+        const t = await this.update(projectId, id, { status: 'queued' });
+        affected.push({ id, ok: !!t });
+      } catch (err) {
+        affected.push({ id, ok: false, error: err.message });
+      }
+    }
+    return { affected };
   },
 };

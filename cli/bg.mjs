@@ -15,10 +15,11 @@
  *   kill <id>          Kill a running agent
  *   logs <id>          Tail the agent's log file
  *
- * The "view" subcommand is the headline feature: it gives the user
- * one terminal window with all running agents visible at once via
- * tmux splits. This is the antidote to "is the agent doing
- * anything?" — you can SEE them all working in parallel.
+ * The "view" subcommand (v3.22) is the headline feature: it creates a
+ * tmux control session (`bizar-bg-view`) with one pane per running
+ * agent (each pane attached to the agent's own tmux session, tiled).
+ * This is the antidote to "is the agent doing anything?" — you can
+ * SEE them all working in parallel.
  */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -245,59 +246,112 @@ async function runKill(instanceId) {
 // --- view ----------------------------------------------------------------
 
 /**
- * Build a tmux "control session" that splits into N panes, each
- * showing the log of one running agent. The session name is fixed
- * (`bgr_view`) so subsequent `bizar bg view` calls reuse it.
+ * View subcommand (v3.22):
+ *   - Detects tmux. If missing, prints per-instance `bizar bg logs <id>`
+ *     fallback instructions and exits 0.
+ *   - Creates a fresh tmux control session `bizar-bg-view` with one pane
+ *     per running instance, each pane running `tmux attach -t <session>`.
+ *   - Caps at 16 panes (beyond that, tmux tiled layout degrades).
+ *   - Zero running instances → prints "no running agents" and exits 0.
  */
-function buildTmuxControlSession() {
+
+async function runView() {
   const all = readAllBgInstances();
-  const tmux = listBgrTmuxSessions();
+  const tmuxSessions = listBgrTmuxSessions();
   const running = all.filter(
-    (e) =>
-      (e.data.status === 'running' || e.data.status === 'pending') &&
-      e.data.sessionId &&
-      tmux.includes(tmuxSessionForSessionId(e.data.sessionId)),
+    (e) => e.data.status === 'running' || e.data.status === 'pending',
   );
 
+  // Zero running agents — not an error.
   if (running.length === 0) {
-    return { ok: false, reason: 'no-running-agents' };
+    console.log(chalk.dim('\n  No running background agents.\n'));
+    return 0;
   }
 
-  // 1. Create a fresh control session (or replace the existing one).
+  // Tmux presence check. If missing, print fallback instructions and exit 0
+  // (not an error — the operator can still use per-instance logs).
+  if (!which('tmux')) {
+    console.log(chalk.yellow('\n  ⚠ tmux is not installed on this host.\n'));
+    console.log(chalk.dim('  You can inspect individual agents via:\n'));
+    for (const r of running) {
+      console.log(chalk.cyan(`    bizar bg logs ${r.data.instanceId}`));
+    }
+    console.log();
+    return 0;
+  }
+
+  // Filter to instances that actually have a live tmux session.
+  const active = running.filter(
+    (e) =>
+      e.data.sessionId &&
+      tmuxSessions.includes(tmuxSessionForSessionId(e.data.sessionId)),
+  );
+
+  if (active.length === 0) {
+    console.log(chalk.dim('\n  No agents with active tmux sessions found.\n'));
+    console.log(chalk.dim('  State files exist but no tmux sessions are running.\n'));
+    console.log(chalk.dim('  Run `bizar bg list` to inspect state.\n'));
+    return 0;
+  }
+
+  // Cap at 16 panes — beyond that, tiled layout is unusable.
+  const capped = active.slice(0, 16);
+  const overflow = active.length - capped.length;
+
+  // Kill any stale bizar-bg-view session, then create a fresh one.
   try {
-    execFileSync('tmux', ['kill-session', '-t', 'bgr_view'], { stdio: 'pipe' });
+    execFileSync('tmux', ['kill-session', '-t', 'bizar-bg-view'], { stdio: 'pipe' });
   } catch {
-    // didn't exist
+    /* didn't exist */
   }
   execFileSync('tmux', [
-    'new-session', '-d', '-s', 'bgr_view',
+    'new-session', '-d', '-s', 'bizar-bg-view',
     '-x', '220', '-y', '50',
   ], { stdio: 'pipe' });
 
-  // 2. For each running agent after the first, split the pane
-  //    and attach a tail in the new pane.
-  for (let i = 1; i < running.length; i++) {
-    const splitCmd = i % 2 === 1 ? 'split-window -h -t bgr_view' : 'split-window -v -t bgr_view';
-    execFileSync('tmux', splitCmd.split(' '), { stdio: 'pipe' });
-  }
-  // Apply tiled layout for a clean grid.
-  execFileSync('tmux', ['select-layout', '-t', 'bgr_view', 'tiled'], { stdio: 'pipe' });
+  // Pane 0 → first instance
+  const firstSession = tmuxSessionForSessionId(capped[0].data.sessionId);
+  execFileSync('tmux', [
+    'send-keys', '-t', 'bizar-bg-view:0.0',
+    `tmux attach -t ${firstSession}`, 'Enter',
+  ], { stdio: 'pipe' });
 
-  // 3. Send a label + tail command to each pane.
-  for (let i = 0; i < running.length; i++) {
-    const r = running[i];
-    const tmuxName = tmuxSessionForSessionId(r.data.sessionId);
-    const logPath = r.data.logPath || join(homedir(), '.cache', 'bizar', 'logs', `${r.data.sessionId}.log`);
-    const header = `echo "═══ ${r.data.agent} │ ${r.data.instanceId} │ ${tmuxName} ═══"; tail -n 200 -F "${logPath}"`;
-    // Use send-keys so the echo+tail are sent in sequence, then Enter
-    // to run them. Target the pane by index in the bgr_view session.
+  // Split for remaining instances (2..N)
+  for (let i = 1; i < capped.length; i++) {
+    execFileSync('tmux', ['split-window', '-v', '-t', 'bizar-bg-view'], { stdio: 'pipe' });
+    const sessionName = tmuxSessionForSessionId(capped[i].data.sessionId);
     execFileSync('tmux', [
-      'send-keys', '-t', `bgr_view:0.${i}`,
-      header, 'Enter',
+      'send-keys', '-t', `bizar-bg-view:0.${i}`,
+      `tmux attach -t ${sessionName}`, 'Enter',
     ], { stdio: 'pipe' });
   }
 
-  return { ok: true, count: running.length, session: 'bgr_view' };
+  // Tiled layout for a clean grid.
+  execFileSync('tmux', ['select-layout', '-t', 'bizar-bg-view', 'tiled'], { stdio: 'pipe' });
+
+  console.log(chalk.green(`\n  ✓ Built tmux view session with ${capped.length} pane(s)\n`));
+
+  if (overflow > 0) {
+    console.log(chalk.yellow(`  ⚠ ${overflow} more agent(s) not shown (16-pane cap):\n`));
+    for (const r of active.slice(16)) {
+      const sn = tmuxSessionForSessionId(r.data.sessionId);
+      console.log(chalk.dim(`    bizar bg logs ${r.data.instanceId}  —  tmux attach -t ${sn}`));
+    }
+    console.log();
+  }
+
+  // Open an OS terminal window attached to the control session.
+  const open = openTerminalAttached('bizar-bg-view');
+  if (open.ok) {
+    console.log(chalk.green(`  ✓ Opened ${open.terminal} attached to "bizar-bg-view"\n`));
+    console.log(chalk.dim('  Tip: `tmux attach -t bizar-bg-view` from any terminal.\n'));
+  } else {
+    console.log(chalk.yellow(`  ⚠ Could not open terminal: ${open.error}\n`));
+    console.log(chalk.dim('  Run in a terminal you can see:\n'));
+    console.log(chalk.cyan(`    tmux attach -t bizar-bg-view\n`));
+  }
+
+  return 0;
 }
 
 /**
@@ -362,39 +416,7 @@ function openTerminalAttached(tmuxSession) {
   return { ok: false, error: `unsupported platform: ${platform}` };
 }
 
-async function runView() {
-  if (!which('tmux')) {
-    console.log(chalk.red('\n  ✗ tmux is not installed. Install it and retry.'));
-    console.log(chalk.dim('    macOS:  brew install tmux'));
-    console.log(chalk.dim('    Linux:  apt-get install tmux  (or your distro equivalent)'));
-    console.log(chalk.dim('    Windows: choco install tmux\n'));
-    return 1;
-  }
 
-  const build = buildTmuxControlSession();
-  if (!build.ok) {
-    if (build.reason === 'no-running-agents') {
-      console.log(chalk.dim('\n  No running background agents to view.\n'));
-      console.log(chalk.dim('  Spawn one with `bizar_spawn_background` (Odin) or via the dashboard,\n'));
-      console.log(chalk.dim('  then re-run this command.\n'));
-      return 1;
-    }
-    console.log(chalk.red(`\n  ✗ Failed to build control session: ${build.error || build.reason}\n`));
-    return 1;
-  }
-
-  console.log(chalk.green(`\n  ✓ Built tmux control session with ${build.count} pane(s)\n`));
-  const open = openTerminalAttached(build.session);
-  if (open.ok) {
-    console.log(chalk.green(`  ✓ Opened ${open.terminal} attached to tmux session "${build.session}"\n`));
-    console.log(chalk.dim(`  Tip: \`tmux attach -t ${build.session}\` from any terminal.\n`));
-  } else {
-    console.log(chalk.yellow(`  ⚠ Could not open a terminal window: ${open.error}\n`));
-    console.log(chalk.dim('  Run one of the following in a terminal you can see:\n'));
-    console.log(chalk.cyan(`    tmux attach -t ${build.session}\n`));
-  }
-  return 0;
-}
 
 // --- Help ----------------------------------------------------------------
 
@@ -416,8 +438,9 @@ function showHelp() {
     and a log file (default ~/.cache/bizar/logs/<sessionId>.log).
 
     The \`view\` subcommand is the headline feature: it creates a new
-    tmux session (\`bgr_view\`) with one pane per running agent, then
-    opens a new OS terminal window attached to it. You can see all
+    tmux session (\`bizar-bg-view\`) with one pane per running agent,
+    each pane attached to the agent's own tmux session (tiled layout),
+    then opens a new OS terminal window attached to it. You can see all
     your agents working in parallel at a glance.
   `);
 }

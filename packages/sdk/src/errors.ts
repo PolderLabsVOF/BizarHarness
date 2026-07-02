@@ -51,7 +51,15 @@ export type APIError = {
   };
 };
 
-export type BizarError = PluginError | DashboardError | ConnectionError | APIError;
+export type OpencodeConnectionError = {
+  name: "OpencodeConnectionError";
+  data: {
+    message: string;
+    cause?: unknown;
+  };
+};
+
+export type BizarError = PluginError | DashboardError | ConnectionError | APIError | OpencodeConnectionError;
 
 /**
  * Type guard: narrows `unknown` to `BizarError`.
@@ -64,7 +72,8 @@ export function isBizarError(value: unknown): value is BizarError {
     v.name === "PluginError" ||
     v.name === "DashboardError" ||
     v.name === "ConnectionError" ||
-    v.name === "APIError"
+    v.name === "APIError" ||
+    v.name === "OpencodeConnectionError"
   );
 }
 
