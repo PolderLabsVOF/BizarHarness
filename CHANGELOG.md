@@ -1,5 +1,11 @@
 # Changelog
 
+## v4.4.1 — Fix `bizar dash start --bg` crash
+
+### Bug fixes
+
+- **`bizar dash start --bg` no longer crashes.** `runDash()` in `cli/bin.mjs` was calling `dashModule.start(subOpts)` in-process even when `subOpts.bg` was true. Once the bin's `main()` resolved, the parent process exited and took the dashboard's HTTP server with it, producing the cryptic error `(intermediate value)(intermediate value)(intermediate value) is not a function or its return values are not iterable`. The fix dispatches through `dashModule.startInBackground()` when `--bg` is set, which spawns a detached child process and lets the parent exit cleanly.
+
 ## v4.4.0 — OpenCode SDK integration, backlog, always-on service, redesigned chat
 
 ### What changed

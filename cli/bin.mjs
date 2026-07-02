@@ -832,7 +832,23 @@ async function runDash(dashArgs) {
 
   switch (sub) {
     case 'start':
-      await dashModule.start(subOpts);
+      // v4.4.0 — When `--bg` is passed, spawn the dashboard as a
+      // detached child process via the dash module's startInBackground
+      // helper, then return. Without this, runDash calls startDashboard
+      // in-process; once the bin's main() resolves, the bin process
+      // exits and takes the dashboard's HTTP server with it. The
+      // downstream effect is "(intermediate value)(intermediate value)
+      // (intermediate value) is not a function or its return value is
+      // not iterable" — a pre-existing crash signature in this codepath.
+      if (subOpts.bg) {
+        // Spawn the dashboard as a detached child process. The child's
+        // argv is `node cli.mjs start --bg` so the dash module's own
+        // CLI dispatch hits the background branch and runs
+        // startDashboard in the child, not the parent.
+        await dashModule.startInBackground(['start', ...(subOpts.subArgs || [])]);
+      } else {
+        await dashModule.start(subOpts);
+      }
       break;
     case 'stop':
       await dashModule.stop(subOpts);
