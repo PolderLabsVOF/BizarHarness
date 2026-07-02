@@ -1,5 +1,23 @@
 # Changelog
 
+## v4.4.0 — OpenCode SDK integration, backlog, always-on service, redesigned chat
+
+### What changed
+
+- **Always-on service autostart:** `bizar service install` sets up systemd (Linux), launchd (macOS), or Task Scheduler (Windows) to keep the dashboard running. Idempotent; secrets are never written into the unit file (env file mode 0600).
+- **Backlog feature:** tasks in `backlog` status stay parked. Odin promotes them via `taskDelegator.tickBacklog()`, respecting `agents.maxParallel` and the shared `runningBgCount()` helper to prevent double-dispatch races.
+- **OpenCode SDK integration:** `@polderlabs/bizar-sdk` now exports `createOpencodeSdk` + `subscribeOpencodeEvents`. Dynamic-imports `@opencode-ai/sdk` if present, falls back to a thin fetch wrapper. `pingOpencodeSdk` replaces `pingOpencodeServe` (old name kept as alias for back-compat).
+- **Chat SSE streaming:** `routes/chat.mjs` now subscribes to `/event?directory=…` filtered by sessionID. Streams `chat:delta` + `chat:status` envelopes on the WS bus. Existing `/opencode-sessions/:id/stream` adds `chat:delta`/`chat:status` envelopes additively — original passthrough preserved.
+- **Chat UI redesign:** 3-column rail/thread/info grid, grouped sessions, state indicators, 3-dot menu with rename/delete modes, agent-tree with backbone+L-stub connectors, streaming avatar halo + cursor + dots, jump-to-latest pill with live badge. Fixes: sessions collapsed by default on click, 3-dot menu and collapse chevron never overlap (28px gap), notification badge pinned to meta row.
+- **MobileChat.tsx unchanged:** legacy `SessionList`/`InfoPanel`/`FloatingComposer` preserved at original paths. New `ChatRail`/`ChatInfoPanel`/`ChatComposer` reachable via `_legacy.ts` shim.
+- **Cross-platform installer:** `install.sh` (Linux/macOS) + `install.ps1` (Windows). Detects distro via `/etc/os-release`; apt/dnf/pacman/zypper/brew/winget. `scripts/check-deps.mjs` reports missing/outdated deps with per-platform install commands.
+- **Agent briefs:** `.opencode/instructions/bizar-tools.md` describes headroom, semble, bizar memory, bizar commands, bg tools, skills CLI. Each `config/agents/*.md` appends a one-line reference.
+- **Background agents tmux viewer:** `cli/bg view` opens a tiled tmux window with each running agent as a pane (caps at 16); friendly fallback when tmux is missing. Dashboard Active tab shows `TmuxAttachCard` with copy + open-in-terminal via `POST /api/background/:id/open-terminal`.
+
+### Tests
+
+All 295 tests pass. Typecheck clean.
+
 ## v4.3.0 — Opencode session chat integration in the dashboard Chat tab
 
 ### What changed
