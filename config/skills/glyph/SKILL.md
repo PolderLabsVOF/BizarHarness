@@ -1,7 +1,7 @@
 ---
 name: glyph
-description: Create and consume Bizar glyphs — visual artifacts at `artifacts/<slug>/`. Use for plans, recaps, design proposals, postmortems, handoffs. Quick reference for the block vocabulary and the 5 things that actually break a glyph.
-version: 3
+description: Create visual glyphs at `artifacts/<slug>/` for plans, recaps, design proposals, postmortems, handoffs. Glyphs should be compact and visual — one screen, dense info, no walls of text. This skill enforces that.
+version: 4
 ---
 
 # Glyphs
@@ -15,7 +15,7 @@ artifacts/<slug>/
 └── comments.json      ← free-placed pins (mutable)
 ```
 
-Two locations are scanned: `<projectRoot>/.bizar/artifacts/` (preferred) and `~/.config/opencode/artifacts/` (global).
+Two locations: `<projectRoot>/.bizar/artifacts/` (preferred) and `~/.config/opencode/artifacts/` (global).
 
 ## Frontmatter
 
@@ -28,104 +28,121 @@ kind: plan | postmortem | recap | design
 ---
 ```
 
-## The blocks at a glance
+## The 6 rules — read this first, every time
+
+These are non-negotiable. The existing 357-line v3-to-v4-consolidation glyph is a cautionary tale — don't write that one.
+
+### Rule 1 — One screen
+
+A glyph MUST fit on one screen of the dashboard (≈ 1000px tall at desktop width). Long glyphs are skimmed and abandoned. If you can't fit the work in 5-10 blocks, you're covering too much. Break the work into multiple glyphs, one per phase.
+
+### Rule 2 — One idea per block
+
+If a block covers two ideas, split it. Each block is a single visual unit. The dashboard groups blocks into sections by id prefix — use that.
+
+### Rule 3 — RichText is glue, not body
+
+RichText is for 1-3 sentence transitions between visual blocks. NEVER use RichText for the actual content. If you find yourself writing 4+ sentences in a RichText, switch to:
+
+- **A table** if you're listing things with attributes
+- **A decision** if you're explaining why one option won
+- **A file tree** if you're listing changes
+- **A stat** if you're highlighting a number
+- **A workflow** if you're describing a sequence
+
+### Rule 4 — Lead with visuals
+
+The first block after the title/headline should be a visual: a Stat, a Callout, or a Table. Never open with a long RichText. The user decides in 5 seconds whether to keep scrolling based on the visual.
+
+### Rule 5 — One headline callout
+
+Use `<Callout tone="success|danger">` once, near the top, as the TL;DR. Everything else supports it.
+
+### Rule 6 — Truncate hints, not bodies
+
+Stat `hint` props should be 1 short clause. Long hints mean the value needs to be a different block.
+
+## The block vocabulary — minimal reference
 
 | Block | What it shows | Required `data` |
 | --- | --- | --- |
-| `<RichText>` | Prose, lists, code blocks | none — body is markdown |
-| `<Callout tone="info\|warn\|success\|danger">` | Boxed callout | none (tone defaults to info) |
-| `<Stat label value trend hint />` | Big number with trend | `label`, `value` |
-| `<Checklist items={[...]} />` | Checkbox list | `items: [{id,label,checked}]` |
+| `<RichText>` | 1-3 sentences of glue | none |
+| `<Callout tone>` | Boxed TL;DR | none (tone defaults to info) |
+| `<Stat label value trend hint />` | Big number + label | `label`, `value` |
+| `<Checklist items />` | Checkbox list | `items: [{id,label,checked}]` |
 | `<Table columns rows />` | Tabular data | `columns: []`, `rows: [[]]` |
-| `<CodeTabs tabs />` | Tabbed code blocks | `tabs: [{id,label,language,code}]` |
+| `<CodeTabs tabs />` | Tabbed code | `tabs: [{id,label,language,code}]` |
 | `<Decision title question options />` | Multi-option choice | `options: [{id,label,detail,recommended?}]` |
 | `<OpenQuestions questions />` | Unanswered questions | `questions: [{id,label,kind,options?}]` |
-| `<FileTree title entries />` | File-by-file change list | `entries: [{path,change,note?}]` |
-| `<Diff before after filename language mode />` | Before/after diff | `before`, `after` |
+| `<FileTree title entries />` | File-by-file changes | `entries: [{path,change,note?}]` |
+| `<Diff before after filename language mode />` | Before/after | `before`, `after` |
 | `<Workflow steps connections />` | Node graph | `steps: [{id,label,type}]` |
 | `<Mockup title x y w h html />` | Inline UI mockup | `html` |
 | `<Diagram title dataHtml dataCss />` | Inline SVG | `dataHtml` |
 
-Every block needs a unique `id`. `RichText` and `Callout` use open/close tags with markdown children; everything else is self-closing.
+Every block needs a unique `id`. RichText + Callout use open/close tags (markdown body); everything else is self-closing.
 
 ## Skeleton
 
 ```mdx
 <RichText id="overview">
-## What this covers
+## What this is
 
-A one-paragraph summary.
+One sentence the reader can't miss.
 </RichText>
 
-<Stat id="headline" label="X" value="7" trend="flat" />
+<Stat id="headline" label="X shipped" value="7" trend="flat" hint="across v3.22 → v4.4.7" />
 
-<Callout id="warning" tone="warn">
-One important thing.
+<Callout id="tldr" tone="success">
+One-sentence TL;DR.
 </Callout>
+
+<Table
+  id="releases"
+  columns={["v", "what", "fix"]}
+  rows={[
+    ["3.22", "unified", "—"],
+    ["4.4.1", "bg fix", "process exit crash"],
+  ]}
+/>
 
 <FileTree
   id="files"
   title="Files changed"
   entries={[
-    { path: "src/foo.ts", change: "modified", note: "why" },
-    { path: "src/bar.ts", change: "added" },
-  ]}
-/>
-
-<Workflow
-  id="flow"
-  steps={[
-    { id: "s1", label: "Step 1", type: "task" },
-    { id: "s2", label: "Step 2", type: "task" },
-  ]}
-  connections={[
-    { from: "s1", to: "s2" },
+    { path: "cli/provision.mjs", change: "added", note: "unified provisioner" },
   ]}
 />
 ```
 
 ## The 5 things that break a glyph
 
-Read this BEFORE writing. Each one is a real bug we've shipped.
+These shipped as bugs. Read before writing.
 
 ### 1. Backticks inside attribute strings
 
-The parser scans for `` ` `` to delimit template literals. A literal backtick inside a string — even inside double-quotes — closes the surrounding context and breaks parsing.
+The parser scans for `` ` `` and breaks. Use straight quotes or rephrase:
 
 ```
 WRONG: Run `bizar install` to bootstrap.
 RIGHT: Run 'bizar install' to bootstrap.
-RIGHT: Run the installer to bootstrap.
 ```
 
-### 2. The parser doesn't track strings when counting braces
+### 2. Braces inside string values
 
-`{` and `}` inside string values still increment the brace depth walker. With brace-laden strings the walker terminates at the wrong closing brace and the value gets truncated.
+The brace counter doesn't know about strings. `{` / `}` in notes still bump depth. Keep note strings brace-free.
 
-**Rule:** keep string values brace-free. If you must use `{...}` in a note, escape or rephrase.
+### 3. `FileTree` `change` must be exact
 
-### 3. `FileTree` `change` field must be exact
+`added | modified | removed | renamed`. Empty string or `null` crashes on `t.bg`. Default to `modified` with a `note` when unclear.
 
-`change` must be `added` | `modified` | `removed` | `renamed`. Anything else (empty string, `null`, typo) makes the renderer crash on `t.bg`.
+### 4. Duplicate block ids
 
-```
-WRONG: change: null, change: "", change: "Modified"
-RIGHT: change: "modified"
-```
+Comment pins and error reporting key off ids. Two blocks with the same id collide.
 
-When in doubt, use `modified` with a `note` that explains why.
+### 5. `## Heading <768px`
 
-### 4. Two blocks with the same id
-
-Comment pins and error reporting are keyed by block id. Duplicates collide. Each `id` must be unique within a glyph.
-
-### 5. MDX heading with `<N`
-
-```
-WRONG: ## Mobile <768px         ← <7 looks like a malformed tag
-RIGHT: ## Mobile (under 768px)
-RIGHT: ## Mobile: under 768px
-```
+The parser sees `<7` as a malformed JSX tag. Use parentheses or colons.
 
 ## Validate before shipping
 
@@ -134,14 +151,13 @@ node -e "import('./bizar-dash/src/server/glyphs/mdx-compiler.mjs').then(m => { \
   const fs = require('node:fs'); \
   const out = m.compileGlyphMdxSync(fs.readFileSync('artifacts/<slug>/artifact.mdx','utf8')); \
   console.log('blocks:', out.blocks.length, 'errors:', out.errors.length); \
-  out.errors.forEach(e => console.error('  line', e.line, ':', e.message)); \
 })"
 ```
 
-If errors > 0, fix the MDX before opening the glyph in the browser. When a block DOES fail in the browser, v4.4.8+ shows a red banner with block id + error message — no more blank screen.
+Also check yourself: does it fit on one screen? Are there any 4-sentence RichText blocks? Are the stats/tables/file trees doing the heavy lifting? If not, rewrite.
 
 ## See also
 
 - `bizar-dash/src/server/glyphs/mdx-compiler.mjs` — parser
-- `bizar-dash/src/web/views/glyphs/GlyphRenderer.tsx` — React renderer (has the error banner)
-- `bizar-dash/src/web/views/glyphs/components.tsx` — block component implementations
+- `bizar-dash/src/web/views/glyphs/GlyphRenderer.tsx` — React renderer (has error banner)
+- `bizar-dash/src/web/views/glyphs/components.tsx` — block implementations
