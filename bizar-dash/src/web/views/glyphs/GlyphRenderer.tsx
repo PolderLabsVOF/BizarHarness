@@ -50,6 +50,142 @@ import {
 } from './components';
 
 // ---------------------------------------------------------------------------
+// BlockErrorBoundary — v4.4.8
+//
+// A single broken block (e.g. a FileTree whose `data.entries` ended up
+// not being an array because the parser silently produced a phantom
+// bareword entry) used to throw inside React, which propagated up and
+// blanked the whole canvas. The boundary catches throws per-block and
+// renders an inline error card instead. The boundary also exposes its
+// errors via a callback so we can surface them in the top-of-page
+// "render errors" banner.
+// ---------------------------------------------------------------------------
+
+interface BlockErrorBoundaryProps {
+  blockId: string;
+  blockType: string;
+  children: React.ReactNode;
+  onError: (blockId: string, blockType: string, err: Error, info: React.ErrorInfo) => void;
+}
+
+interface BlockErrorBoundaryState {
+  err: Error | null;
+}
+
+class BlockErrorBoundary extends React.Component<BlockErrorBoundaryProps, BlockErrorBoundaryState> {
+  state: BlockErrorBoundaryState = { err: null };
+  static getDerivedStateFromError(err: Error): BlockErrorBoundaryState {
+    return { err };
+  }
+  componentDidCatch(err: Error, info: React.ErrorInfo): void {
+    try {
+      this.props.onError(this.props.blockId, this.props.blockType, err, info);
+    } catch {
+      /* ignore — the boundary itself must not throw */
+    }
+  }
+  render(): React.ReactNode {
+    if (this.state.err) {
+      return (
+        <div
+          className="glyph-block-error"
+          role="alert"
+          style={{
+            border: '1px solid var(--error, #f85149)',
+            background: 'rgba(248, 81, 73, 0.06)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            margin: '12px 0',
+            color: 'var(--text)',
+            fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            fontSize: 12,
+            lineHeight: 1.55,
+          }}
+        >
+          <strong style={{ color: 'var(--error, #f85149)', fontFamily: 'var(--font-sans, system-ui, sans-serif)', display: 'block', marginBottom: 4 }}>
+            {this.props.blockType} block crashed
+          </strong>
+          <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>
+            block id: <code>{this.props.blockId}</code>
+          </div>
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--text)' }}>
+            {this.state.err.message}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Block validation — v4.4.8
+//
+// Before handing block data to the component switch, verify that the
+// shape matches the prop contract. Returns `{ ok: true }` when the
+// block can be rendered, or `{ ok: false, error }` when a field is
+// missing or wrong type. The renderer uses the error to skip the
+// component and surface an inline message instead of throwing.
+// ---------------------------------------------------------------------------
+
+function validateBlock(b: Block): { ok: true } | { ok: false; error: string } {
+  const data = (b.data ?? {}) as Record<string, unknown>;
+  switch (b.type) {
+    case 'RichText':
+      return { ok: true };
+    case 'Callout':
+      return { ok: true };
+    case 'Checklist':
+      if (!Array.isArray(data.items)) return { ok: false, error: 'Checklist requires data.items to be an array' };
+      return { ok: true };
+    case 'Table':
+      if (!Array.isArray(data.columns)) return { ok: false, error: 'Table requires data.columns to be an array' };
+      if (!Array.isArray(data.rows)) return { ok: false, error: 'Table requires data.rows to be an array' };
+      if (data.rows.length > 0 && !Array.isArray(data.rows[0])) return { ok: false, error: 'Table.data.rows[0] must be an array (cell array)' };
+      return { ok: true };
+    case 'CodeTabs':
+      if (!Array.isArray(data.tabs)) return { ok: false, error: 'CodeTabs requires data.tabs to be an array' };
+      return { ok: true };
+    case 'Decision':
+      if (!Array.isArray(data.options)) return { ok: false, error: 'Decision requires data.options to be an array' };
+      return { ok: true };
+    case 'OpenQuestions':
+      if (!Array.isArray(data.questions)) return { ok: false, error: 'OpenQuestions requires data.questions to be an array' };
+      return { ok: true };
+    case 'FileTree':
+      if (!Array.isArray(data.entries)) return { ok: false, error: 'FileTree requires data.entries to be an array' };
+      // v4.4.8 — also catch the phantom bareword entry the parser used
+      // to emit (the v3-to-v4-consolidation glyph crash). An entry that
+      // is not an object means the parser miscounted braces.
+      for (const e of data.entries) {
+        if (e === null || typeof e !== 'object' || Array.isArray(e)) {
+          return { ok: false, error: `FileTree contains a malformed entry: ${JSON.stringify(e)}` };
+        }
+      }
+      return { ok: true };
+    case 'Diff':
+      if (typeof data.before !== 'string') return { ok: false, error: 'Diff requires data.before to be a string' };
+      if (typeof data.after !== 'string') return { ok: false, error: 'Diff requires data.after to be a string' };
+      return { ok: true };
+    case 'Stat':
+      if (data.label === undefined || data.label === null) return { ok: false, error: 'Stat requires data.label' };
+      if (data.value === undefined || data.value === null) return { ok: false, error: 'Stat requires data.value' };
+      return { ok: true };
+    case 'Workflow':
+      if (!Array.isArray(data.steps)) return { ok: false, error: 'Workflow requires data.steps to be an array' };
+      return { ok: true };
+    case 'Mockup':
+      if (typeof data.html !== 'string') return { ok: false, error: 'Mockup requires data.html to be a string' };
+      return { ok: true };
+    case 'Diagram':
+      if (typeof data.dataHtml !== 'string') return { ok: false, error: 'Diagram requires data.dataHtml to be a string' };
+      return { ok: true };
+    default:
+      return { ok: false, error: `Unknown block type: ${(b as { type: string }).type}` };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types — match the server compiler output
 // ---------------------------------------------------------------------------
 
@@ -72,7 +208,7 @@ interface CompiledGlyph {
   slug: string;
   frontmatter: Record<string, unknown>;
   blocks: Block[];
-  errors: string[];
+  errors: Array<{ line?: number; message: string }>;
   compiledAt: string;
 }
 
@@ -161,6 +297,25 @@ export function GlyphRenderer({ slug, onClose, onCommentAdded }: Props) {
 
   // Active pin (expanded thread view)
   const [activePin, setActivePin] = useState<string | null>(null);
+
+  // v4.4.8 — Per-block render errors caught by BlockErrorBoundary. The
+  // boundary calls onError(err) which pushes into this array. We render
+  // the array at the top of the canvas in a prominent red banner so the
+  // user isn't left staring at a blank screen wondering what happened.
+  const [blockErrors, setBlockErrors] = useState<
+    Array<{ blockId: string; blockType: string; message: string }>
+  >([]);
+  const reportBlockError = React.useCallback(
+    (blockId: string, blockType: string, err: Error) => {
+      setBlockErrors((prev) => {
+        // dedupe by blockId so the same block crashing twice doesn't
+        // duplicate the entry
+        if (prev.some((e) => e.blockId === blockId)) return prev;
+        return [...prev, { blockId, blockType, message: err.message || String(err) }];
+      });
+    },
+    [],
+  );
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -289,10 +444,58 @@ export function GlyphRenderer({ slug, onClose, onCommentAdded }: Props) {
     setFullscreen((v) => !v);
   }
 
-  // Render a single block
+  // Render a single block — wrapped in a BlockErrorBoundary so a single
+// broken block (e.g. wrong data shape from a parser bug) shows an inline
+// error card instead of blanking the whole canvas.
   const renderBlock = (b: Block) => {
     const id = b.id;
     const data = (b.data ?? {}) as Record<string, unknown>;
+    // Validate data shape BEFORE handing to the component switch. A
+    // validation failure shows an inline error card immediately, no
+    // need for the boundary to catch it.
+    const validation = validateBlock(b);
+    if (!validation.ok) {
+      return (
+        <div
+          key={id}
+          id={id}
+          className="glyph-block-error"
+          role="alert"
+          style={{
+            border: '1px solid var(--error, #f85149)',
+            background: 'rgba(248, 81, 73, 0.06)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            margin: '12px 0',
+            color: 'var(--text)',
+            fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            fontSize: 12,
+            lineHeight: 1.55,
+          }}
+        >
+          <strong style={{ color: 'var(--error, #f85149)', fontFamily: 'var(--font-sans, system-ui, sans-serif)', display: 'block', marginBottom: 4 }}>
+            {b.type} block invalid
+          </strong>
+          <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>
+            block id: <code>{id}</code>
+          </div>
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{validation.error}</pre>
+        </div>
+      );
+    }
+    // Wrap the actual render in an error boundary so even runtime
+    // errors (bad component props, undefined data, etc.) don't crash
+    // the whole canvas.
+    return (
+      <BlockErrorBoundary key={id} blockId={id} blockType={b.type} onError={reportBlockError}>
+        {renderBlockInner(b, id, data)}
+      </BlockErrorBoundary>
+    );
+  };
+
+  // Inner renderer — split out so the outer renderBlock can validate +
+  // wrap in an error boundary without nesting the switch in the JSX tree.
+  const renderBlockInner = (b: Block, id: string, data: Record<string, unknown>) => {
     switch (b.type) {
       case 'RichText':
         return <RichText key={id} id={id}>{b.childrenMarkdown ?? ''}</RichText>;
@@ -506,13 +709,41 @@ export function GlyphRenderer({ slug, onClose, onCommentAdded }: Props) {
           </div>
         </header>
 
-        {/* Compiler warnings */}
-        {compiled.errors?.length > 0 && (
-          <div className="glyph-errors">
-            <strong>Compiler warnings:</strong>
-            <ul>
-              {compiled.errors.map((e, i) => (
-                <li key={i}>{e}</li>
+        {/* v4.4.8 — Render errors banner. Two layers:
+              1. Compiler warnings from the MDX parser (e.g. unknown
+                 tag, unclosed block). Lightweight, yellow border.
+              2. Block render errors caught by BlockErrorBoundary. These
+                 are the "one block crashed but the rest still rendered"
+                 cases. Red border, prominent, listed first so the user
+                 sees them before scrolling. */}
+        {(blockErrors.length > 0 || compiled.errors?.length > 0) && (
+          <div
+            className="glyph-render-errors"
+            role="alert"
+            style={{
+              border: '1px solid var(--error, #f85149)',
+              background: 'rgba(248, 81, 73, 0.08)',
+              borderRadius: 8,
+              padding: '12px 16px',
+              margin: '0 0 16px 0',
+              color: 'var(--text)',
+            }}
+          >
+            <strong style={{ color: 'var(--error, #f85149)', display: 'block', marginBottom: 8 }}>
+              {blockErrors.length > 0
+                ? `${blockErrors.length} block${blockErrors.length === 1 ? '' : 's'} failed to render`
+                : 'Compiler warnings'}
+            </strong>
+            <ul style={{ margin: 0, paddingLeft: 20, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 12, lineHeight: 1.6 }}>
+              {blockErrors.map((e, i) => (
+                <li key={`be-${i}`}>
+                  <strong>{e.blockType}</strong> (<code>{e.blockId}</code>): {e.message}
+                </li>
+              ))}
+              {compiled.errors?.map((e, i) => (
+                <li key={`ce-${i}`}>
+                  {e.line ? `line ${e.line}: ` : ''}{e.message}
+                </li>
               ))}
             </ul>
           </div>

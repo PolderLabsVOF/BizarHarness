@@ -199,6 +199,19 @@ function parseJsxValue(src) {
       }
       while (i < len) {
         skipWs();
+        // v4.4.8 — After consuming a comma + whitespace, check for the
+        // closer before recursing. Without this, an array like `[a, b, ]`
+        // would call parseValue on `]`, which falls through to the
+        // bareword-identifier branch and returns `{__ident: ''}` as a
+        // phantom element. The trailing-comma-then-closer case was the
+        // user-visible bug in the v3-to-v4-consolidation glyph: the
+        // FileTree's last entry was the bareword phantom, which then
+        // crashed the React renderer (components.tsx:609 tried to read
+        // `t.bg` on undefined).
+        if (arr && src[i] === closer) {
+          i += 1;
+          return items;
+        }
         if (arr) {
           items.push(parseValue());
         } else {
