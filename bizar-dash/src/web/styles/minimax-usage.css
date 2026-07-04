@@ -1,0 +1,371 @@
+/* ============================================================================
+ * src/web/styles/minimax-usage.css
+ *
+ * v4.5.0 — Styles for the MiniMax Token Plan usage dashboard.
+ *
+ * Scope: `.view-minimax-usage` and all child classes prefixed with
+ * `minimax-`. Reuses the dashboard's existing CSS variables
+ * (--accent, --bg-1, --bg-2, --border, --text, --text-muted, --success,
+ * --warning, --error) so the page inherits the rest of the design
+ * system automatically.
+ * ========================================================================== */
+
+.view-minimax-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 20px 32px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── header ────────────────────────────────────────────────────────────── */
+.view-minimax-usage .view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.view-minimax-usage .view-header-titles { flex: 1 1 360px; min-width: 0; }
+.view-minimax-usage .view-title {
+  display: flex;
+  align-items: center;
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+.view-minimax-usage .view-subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.view-minimax-usage .view-subtitle code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-2);
+  color: var(--text);
+}
+.view-minimax-usage .view-header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ── banner (warn / err) ───────────────────────────────────────────── */
+.view-minimax-usage .banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.view-minimax-usage .banner code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0,0,0,0.18);
+}
+.view-minimax-usage .banner-warn {
+  background: rgba(217, 158, 38, 0.12);
+  border-color: rgba(217, 158, 38, 0.35);
+  color: var(--text);
+}
+.view-minimax-usage .banner-err {
+  background: rgba(248, 81, 73, 0.10);
+  border-color: rgba(248, 81, 73, 0.40);
+  color: var(--text);
+}
+
+/* ── stat row ──────────────────────────────────────────────────────── */
+.view-minimax-usage .minimax-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .view-minimax-usage .minimax-stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+.view-minimax-usage .stat {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.view-minimax-usage .stat-label {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.view-minimax-usage .stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  word-break: break-word;
+}
+.view-minimax-usage .stat-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── per-model quota grid ────────────────────────────────────────── */
+.view-minimax-usage .minimax-models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+.view-minimax-usage .minimax-model-card { padding: 14px 16px; }
+.view-minimax-usage .minimax-model-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+.view-minimax-usage .minimax-model-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.view-minimax-usage .minimax-model-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.view-minimax-usage .minimax-model-status.is-warn { color: var(--warning, #d29922); }
+.view-minimax-usage .minimax-model-status.is-ok { color: var(--success, #3fb950); }
+
+/* ── quota rows inside a model card ─────────────────────────────── */
+.view-minimax-usage .minimax-quota-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.view-minimax-usage .minimax-quota-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+}
+.view-minimax-usage .minimax-quota-row.is-good { border-color: rgba(63, 185, 80, 0.25); }
+.view-minimax-usage .minimax-quota-row.is-warn { border-color: rgba(217, 158, 38, 0.35); background: rgba(217, 158, 38, 0.05); }
+.view-minimax-usage .minimax-quota-row.is-low  { border-color: rgba(248, 81, 73, 0.45); background: rgba(248, 81, 73, 0.06); }
+
+.view-minimax-usage .minimax-quota-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.view-minimax-usage .minimax-quota-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-weight: 500;
+}
+.view-minimax-usage .minimax-quota-remaining {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+  color: var(--text);
+}
+.view-minimax-usage .minimax-quota-row.is-good .minimax-quota-remaining { color: var(--success, #3fb950); }
+.view-minimax-usage .minimax-quota-row.is-warn .minimax-quota-remaining { color: var(--warning, #d29922); }
+.view-minimax-usage .minimax-quota-row.is-low  .minimax-quota-remaining { color: var(--error, #f85149); }
+
+.view-minimax-usage .minimax-bar {
+  position: relative;
+  height: 8px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.view-minimax-usage .minimax-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms ease-out;
+}
+.view-minimax-usage .minimax-quota-row.is-good .minimax-bar-fill { background: var(--success, #3fb950); }
+.view-minimax-usage .minimax-quota-row.is-warn .minimax-bar-fill { background: var(--warning, #d29922); }
+.view-minimax-usage .minimax-quota-row.is-low  .minimax-bar-fill { background: var(--error, #f85149); }
+
+.view-minimax-usage .minimax-quota-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.view-minimax-usage .minimax-quota-meta strong {
+  color: var(--text);
+  font-weight: 600;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ── Subscription Key card ──────────────────────────────────────── */
+.view-minimax-usage .minimax-link {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.view-minimax-usage .minimax-key-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.view-minimax-usage .minimax-key-input-wrap {
+  position: relative;
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+}
+.view-minimax-usage .minimax-key-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.view-minimax-usage .minimax-key-input {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 36px 8px 32px;
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+.view-minimax-usage .minimax-key-input:focus {
+  border-color: var(--accent);
+}
+.view-minimax-usage .minimax-key-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.view-minimax-usage .minimax-key-toggle {
+  position: absolute;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.view-minimax-usage .minimax-key-toggle:hover { color: var(--text); background: var(--bg-1); }
+.view-minimax-usage .is-ok { color: var(--success, #3fb950); }
+.view-minimax-usage .is-warn { color: var(--warning, #d29922); }
+
+/* ── test prompt card ────────────────────────────────────────────── */
+.view-minimax-usage .minimax-test-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.view-minimax-usage .minimax-test-prompt {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.view-minimax-usage .minimax-test-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.view-minimax-usage .minimax-test-result.ok {
+  background: rgba(63, 185, 80, 0.08);
+  border-color: rgba(63, 185, 80, 0.30);
+  color: var(--text);
+}
+.view-minimax-usage .minimax-test-result.err {
+  background: rgba(248, 81, 73, 0.08);
+  border-color: rgba(248, 81, 73, 0.30);
+  color: var(--text);
+}
+.view-minimax-usage .minimax-test-body { flex: 1; min-width: 0; }
+.view-minimax-usage .minimax-test-line { margin-bottom: 4px; }
+.view-minimax-usage .minimax-test-line code {
+  font-size: 12px;
+  background: rgba(0,0,0,0.25);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.view-minimax-usage .minimax-test-content {
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+.view-minimax-usage .minimax-test-usage {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.view-minimax-usage .minimax-test-usage code {
+  background: rgba(0,0,0,0.25);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.view-minimax-usage .minimax-test-result pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+/* ── error card fallback ─────────────────────────────────────────── */
+.view-minimax-usage .error-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(248, 81, 73, 0.06);
+  border: 1px solid rgba(248, 81, 73, 0.30);
+  color: var(--text);
+}
+.view-minimax-usage .error-card pre {
+  margin: 6px 0 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* ── spinner helper (in case global .spin doesn't cover all cases) ─── */
+.view-minimax-usage .spin { animation: minimax-spin 900ms linear infinite; }
+@keyframes minimax-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

@@ -48,6 +48,7 @@ import { createDiagnosticsRouter } from './routes/diagnostics.mjs';
 import { createPairRouter } from './routes/pair.mjs';
 import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
+import { createMinimaxRouter } from './routes/minimax.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
 
 /**
@@ -118,6 +119,7 @@ export async function createApiRouter({
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
+  router.use(createMinimaxRouter({ state, broadcast }));
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

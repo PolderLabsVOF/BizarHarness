@@ -35,6 +35,7 @@ import { ModView, type ModView as ModViewType } from './views/ModView';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
 import { History } from './views/History';
+import { MiniMaxUsage } from './views/MiniMaxUsage';
 import { BackgroundAgents } from './views/BackgroundAgents';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
@@ -75,6 +76,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   schedules: Schedules,
   skills: Skills,
   history: History,
+  minimax: MiniMaxUsage,
 };
 
 const VERSION = 'v3.21.0';

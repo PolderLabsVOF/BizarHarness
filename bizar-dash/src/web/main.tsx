@@ -8,6 +8,7 @@ import { MobileApp } from './MobileApp';
 import './styles/main.css';
 import './styles/mobile.css';
 import './styles/glyphs.css';
+import './styles/minimax-usage.css';
 
 function Root() {
   const [isMobile, setIsMobile] = useState(() => {

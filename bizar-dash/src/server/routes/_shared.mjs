@@ -134,6 +134,20 @@ export const DEFAULT_SETTINGS = {
     provider: 'opencode',
     model: 'opencode/deepseek-v4-flash-free',
   },
+  // v4.5.0 — MiniMax Token Plan integration. `apiKey` is the
+  // user's Subscription Key from
+  //   https://platform.minimax.io/user-center/payment/token-plan
+  // `groupId` is usually 'default' for an individual team. `baseUrl`
+  // is the Token Plan host (the remains endpoint lives on www.*, NOT
+  // api.*). `chatBaseUrl` is the chat-completions host (api.*).
+  // No key is shipped by default — the user enters their own.
+  minimax: {
+    enabled: true,
+    apiKey: '',
+    groupId: 'default',
+    baseUrl: 'https://www.minimax.io',
+    chatBaseUrl: 'https://api.minimax.io/v1',
+  },
 };
 
 /**
@@ -159,6 +173,7 @@ export function mergeSettings(existing) {
   merged.about = { ...DEFAULT_SETTINGS.about, ...(existing.about || {}) };
   merged.agents = { ...DEFAULT_SETTINGS.agents, ...(existing.agents || {}) };
   merged.systemLlm = { ...DEFAULT_SETTINGS.systemLlm, ...(existing.systemLlm || {}) };
+  merged.minimax = { ...DEFAULT_SETTINGS.minimax, ...(existing.minimax || {}) };
   // Always use the package version — never let user settings override it
   merged.about.version = DEFAULT_SETTINGS.about.version;
   return merged;

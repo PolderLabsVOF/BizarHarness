@@ -21,6 +21,7 @@ import {
   Sparkles,
   Activity,
   Radio,
+  Coins,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -48,6 +49,7 @@ export const TABS: TabDef[] = [
   { id: 'mods', label: 'Mods', icon: Puzzle },
   { id: 'schedules', label: 'Schedules', icon: Clock },
   { id: 'history', label: 'History', icon: HistoryIcon },
+  { id: 'minimax', label: 'Usage', icon: Coins },
   { id: 'config', label: 'Config', icon: Settings2 },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];

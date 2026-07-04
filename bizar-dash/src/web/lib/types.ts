@@ -265,6 +265,18 @@ export type Settings = {
   };
   // v3.21.0 — System LLM calls (auto-title, enhance-prompt, summarization).
   systemLlm?: SystemLlmConfig;
+  // v4.5.0 — MiniMax Token Plan integration. `apiKey` is the user's
+  // Subscription Key (NOT a pay-as-you-go API key). `groupId` is usually
+  // 'default' for an individual team. `baseUrl` is the Token Plan host
+  // (the remains endpoint lives on www.*, not api.*). `chatBaseUrl` is
+  // the chat-completions host (api.*/v1).
+  minimax?: {
+    enabled: boolean;
+    apiKey: string;
+    groupId: string;
+    baseUrl: string;
+    chatBaseUrl: string;
+  };
 };
 
 export type SettingsResponse = {
