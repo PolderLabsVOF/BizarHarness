@@ -47,12 +47,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..');
 
+// v4.4.5 — The plugin and dashboard are both shipped inside @polderlabs/bizar.
+// No separate @polderlabs/bizar-plugin or @polderlabs/bizar-dash packages.
+// Updating the main package updates everything.
 const PKG_MAIN = '@polderlabs/bizar';
-const PKG_DASH = '@polderlabs/bizar-dash';
-const PKG_PLUGIN = '@polderlabs/bizar-plugin';
 
 // All known components, in the order they should be prompted + updated.
-const COMPONENTS = ['opencode', 'bizar', 'dash', 'plugin'];
+const COMPONENTS = ['opencode', 'bizar'];
 
 // ---------------------------------------------------------------------------
 // Config paths (mirror the dashboard + service for consistency)
@@ -431,11 +432,13 @@ function spawnFreshDashboard({ port } = {}) {
   } catch {
     return { ok: false, message: 'could not locate npm global root' };
   }
-  const dashBin = join(globalRoot, ...PKG_DASH.split('/'), 'src', 'cli.mjs');
+  // v4.4.5 — Dashboard ships inside @polderlabs/bizar (no separate
+  // @polderlabs/bizar-dash). Resolve the main package's cli.mjs.
+  const dashBin = join(globalRoot, '@polderlabs', 'bizar', 'cli', 'bin.mjs');
   if (!existsSync(dashBin)) {
     return {
       ok: false,
-      message: `dashboard binary not found at ${dashBin} (was @polderlabs/bizar-dash installed?)`,
+      message: `dashboard binary not found at ${dashBin} (was @polderlabs/bizar installed?)`,
     };
   }
   try {
@@ -536,59 +539,6 @@ async function installSkills({ dryRun = false } = {}) {
   return results;
 }
 
-/**
- * Rebuild the bizar-dash frontend with Vite.
- */
-function rebuildDashboard({ dryRun = false } = {}) {
-  const dashDir = join(REPO_ROOT, 'bizar-dash');
-  const pkgJson = join(dashDir, 'package.json');
-  if (!existsSync(pkgJson)) {
-    return { ok: false, message: 'bizar-dash/package.json not found — is the dashboard cloned?' };
-  }
-  if (dryRun) {
-    console.log(chalk.dim('  [dry-run] would run: npx vite build (in bizar-dash/)'));
-    return { ok: true, message: '[dry-run] dashboard rebuild' };
-  }
-  console.log(chalk.dim('\n  Rebuilding dashboard...'));
-  const r = spawnSync('npx', ['vite', 'build'], {
-    stdio: 'inherit', cwd: dashDir, timeout: 120000,
-  });
-  if (r.status === 0) {
-    return { ok: true, message: 'dashboard rebuilt' };
-  }
-  return { ok: false, message: 'dashboard rebuild failed (try: cd bizar-dash && npx vite build)' };
-}
-
-/**
- * Detect and run the project's test suite. Checks for common test runners
- * (npm test, pytest, cargo test, go test) and runs the first one found.
- */
-function runTestGate({ dryRun = false } = {}) {
-  if (dryRun) {
-    console.log(chalk.dim('  [dry-run] would detect and run local test suite'));
-    return { ok: true, message: '[dry-run] test gate' };
-  }
-  const cwd = process.cwd();
-  const suites = [
-    { cmd: 'npm test',           check: 'package.json' },
-    { cmd: 'pytest',             check: 'pyproject.toml' },
-    { cmd: 'cargo test',         check: 'Cargo.toml' },
-    { cmd: 'go test ./...',      check: 'go.mod' },
-  ];
-  for (const suite of suites) {
-    try {
-      if (existsSync(join(cwd, suite.check))) {
-        console.log(chalk.dim(`\n  Running test suite: ${suite.cmd}...`));
-        execSync(suite.cmd, { stdio: 'inherit', timeout: 120000, cwd });
-        return { ok: true, message: `test gate passed (${suite.cmd})` };
-      }
-    } catch {
-      return { ok: false, message: `test gate failed (${suite.cmd})` };
-    }
-  }
-  return { ok: true, message: 'no test suite detected (skipped)' };
-}
-
 // ---------------------------------------------------------------------------
 // Prompt helpers
 // ---------------------------------------------------------------------------
@@ -603,9 +553,7 @@ async function promptForUpdates(forceAll) {
       message: 'Which components do you want to update?',
       choices: [
         { name: 'opencode (the opencode CLI itself)', value: 'opencode', checked: true },
-        { name: `bizar (${PKG_MAIN})`, value: 'bizar', checked: true },
-        { name: `bizar dash (${PKG_DASH}) — web dashboard`, value: 'dash', checked: true },
-        { name: `plugin (${PKG_PLUGIN})`, value: 'plugin', checked: true },
+        { name: `bizar (${PKG_MAIN}) — includes plugin + dashboard`, value: 'bizar', checked: true },
       ],
     },
   ]);
@@ -717,24 +665,16 @@ export async function runUpdate(subargs = []) {
   const cur = {
     opencode: currentVersion('opencode-ai'),
     bizar: currentVersion(PKG_MAIN),
-    dash: currentVersion(PKG_DASH),
-    plugin: currentVersion(PKG_PLUGIN),
   };
   const latest = {
     opencode: latestVersion('opencode-ai'),
     bizar: latestVersion(PKG_MAIN),
-    dash: latestVersion(PKG_DASH),
-    plugin: latestVersion(PKG_PLUGIN),
   };
 
   console.log('');
   console.log('  Installed vs. latest:');
   for (const k of COMPONENTS) {
-    const label =
-      k === 'plugin' ? PKG_PLUGIN :
-      k === 'dash' ? PKG_DASH :
-      k === 'bizar' ? PKG_MAIN :
-      'opencode-ai';
+    const label = k === 'bizar' ? PKG_MAIN : 'opencode-ai';
     const c = cur[k] ?? '(not installed)';
     const l = latest[k] ?? '(unknown)';
     const same = c === l;
@@ -824,23 +764,15 @@ export async function runUpdate(subargs = []) {
     console.log(chalk.bold(`  → ${PKG_MAIN}`));
     results.push(['bizar', updatePackage(PKG_MAIN, { dryRun })]);
   }
-  if (selected.has('dash')) {
-    console.log(chalk.bold(`  → ${PKG_DASH}`));
-    results.push(['dash', updatePackage(PKG_DASH, { dryRun })]);
-  }
-  if (selected.has('plugin')) {
-    console.log(chalk.bold(`  → ${PKG_PLUGIN}`));
-    results.push(['plugin', updatePackage(PKG_PLUGIN, { dryRun })]);
-  }
 
   // 4. Re-run the install script if anything relevant changed.
   const anySuccess = results.some(([, r]) => r.ok);
-  if (anySuccess && (selected.has('bizar') || selected.has('plugin'))) {
+  if (anySuccess && selected.has('bizar')) {
     console.log('');
     if (dryRun) {
       console.log(
         chalk.dim(
-          '  [dry-run] would re-run install script (bin.mjs --setup or install.sh)',
+          '  [dry-run] would re-run install.sh to refresh agent files + plugin copy',
         ),
       );
     } else {
@@ -849,7 +781,7 @@ export async function runUpdate(subargs = []) {
         console.log(chalk.green(`\n  ✓ ${rerun.message}`));
       } else {
         console.log(chalk.yellow(`\n  ⚠ ${rerun.message}`));
-        console.log(chalk.dim('    Run `bash install.sh` from the Bizar repo manually.'));
+        console.log(chalk.dim('    Run `bizar install` to refresh agent files + plugin copy.'));
       }
     }
   }
@@ -859,27 +791,15 @@ export async function runUpdate(subargs = []) {
   const skillResults = await installSkills({ dryRun });
   const skillOk = skillResults.length === 0 || skillResults.every((r) => r.ok);
 
-  // ── Rebuild dashboard ───────────────────────────────────────────────
-  console.log(chalk.bold('\n  → Rebuilding dashboard...'));
-  const dashRebuild = rebuildDashboard({ dryRun });
-  if (dashRebuild.ok) {
-    console.log(chalk.green(`  ✓ ${dashRebuild.message}`));
-  } else {
-    console.log(chalk.yellow(`  ⚠ ${dashRebuild.message}`));
-  }
-
-  // ── Test gate ───────────────────────────────────────────────────────
-  console.log(chalk.bold('\n  → Running test gate...'));
-  const testResult = runTestGate({ dryRun });
-  if (testResult.ok) {
-    console.log(chalk.green(`  ✓ ${testResult.message}`));
-  } else {
-    console.log(chalk.red(`  ✗ ${testResult.message}`));
-  }
+  // v4.4.5 — Dashboard dist ships prebuilt inside the npm package. No
+  // rebuild step is needed (and we can't run `vite build` from the
+  // installed package anyway — node_modules/vite lives outside the
+  // plugin's runtime context). The next launch picks up the new dist
+  // when `bizar dash start --bg` runs.
 
   // ── Restart dashboard ─────────────────────────────────────────────
-  // Restart if it was running before, or if the dashboard was just rebuilt.
-  if (restartAfter && (instances.dashboard || dashRebuild.ok)) {
+  // Restart if it was running before.
+  if (restartAfter && instances.dashboard) {
     if (dryRun) {
       console.log('');
       console.log(chalk.dim('  [dry-run] would restart dashboard with the new code'));
@@ -908,17 +828,10 @@ export async function runUpdate(subargs = []) {
     const marker = sr.ok ? chalk.green('✓') : chalk.red('✗');
     console.log(`    ${marker} ${'skill/skills'.padEnd(10)} ${sr.ok ? 'installed' : `failed: ${sr.skill}`}`);
   }
-  if (!dashRebuild.ok) {
-    console.log(`    ${chalk.yellow('⚠')} ${'dash'.padEnd(10)} ${dashRebuild.message}`);
-  }
-  const testMarker = testResult.ok ? chalk.green('✓') : chalk.red('✗');
-  console.log(`    ${testMarker} ${'test-gate'.padEnd(10)} ${testResult.message}`);
 
   const allResults = [
     ...results.map(([, r]) => r),
     ...skillResults,
-    dashRebuild,
-    testResult,
   ];
   const anyFail = allResults.some((r) => !r.ok);
   if (anyFail) {

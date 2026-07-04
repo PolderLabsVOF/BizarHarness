@@ -215,61 +215,97 @@ ensure_node() {
   note "Node.js installed: $(node --version)"
 }
 
-# ── git operations (clone or update) ───────────────────────────────────────────
+# ── Standalone installer (no git clone) ─────────────────────────────────────────
+# v4.4.5 — The plugin, agents, commands, hooks, and dashboard ALL ship inside
+# this package. No separate npm install, no git clone, no separate package
+# lookup. install.sh runs entirely against its own `$REPO_DIR` (which is the
+# installed package directory — `<npm root -g>/@polderlabs/bizar/`).
 
 ensure_repo() {
-  if $UPDATE_MODE; then
-    section "Updating BizarHarness repository"
-    action "Pulling latest via git pull --ff-only..."
-    dry git -C "$REPO_DIR" pull --ff-only
-    note "repository updated"
-    return
-  fi
-
-  # If we're already inside the repo, skip clone.
-  if [ -d "$REPO_DIR/.git" ]; then
-    note "repository already present at $REPO_DIR"
-    if $FORCE || $UPDATE_MODE; then
-      dry git -C "$REPO_DIR" pull --ff-only
-    fi
-    return
-  fi
-
-  section "Cloning BizarHarness repository"
-  local target
-  target="$(dirname "$REPO_DIR")/BizarHarness"
-  if [ ! -d "$target" ]; then
-    action "Cloning into $target..."
-    dry git clone https://github.com/DrB0rk/BizarHarness.git "$target"
-    note "cloned"
+  # v4.4.5 — No-op. Everything ships with the package. We still log a note
+  # so users upgrading from older versions see that the git-clone step is
+  # intentionally gone.
+  if [ -d "$REPO_DIR/plugins/bizar" ] && [ -d "$REPO_DIR/bizar-dash" ]; then
+    note "using bundled plugin + dashboard from $REPO_DIR"
   else
-    note "already cloned at $target"
+    err "package missing required files (plugins/bizar or bizar-dash)"
+    err "this looks like a corrupted install — try: npm install -g @polderlabs/bizar --force"
+    exit 1
+  fi
+
+  # Clean up any stale separate-repo clone left over from v3.x installs.
+  local stale_clone="$(dirname "$REPO_DIR")/BizarHarness"
+  if [ -d "$stale_clone" ] && [ "$stale_clone" != "$REPO_DIR" ]; then
+    if $DRY_RUN; then
+      dim "  would remove stale v3.x clone at $stale_clone"
+    else
+      action "Removing stale v3.x repo clone at $stale_clone..."
+      rm -rf "$stale_clone" 2>/dev/null && note "removed" || dim "  (could not remove; harmless)"
+    fi
   fi
 }
 
-# ── Install agent/config files via cli/install.mjs ──────────────────────────────
+# ── Copy agent / config / dashboard files ──────────────────────────────────────
 
 install_config() {
   section "Installing BizarHarness config files"
 
   if $DRY_RUN; then
-    dim "  would run: node \"$REPO_DIR/cli/install.mjs\" --non-interactive"
+    dim "  would copy agents/, commands/, hooks/, skills/ to ~/.config/opencode/"
     return
   fi
 
-  if [ -f "$REPO_DIR/cli/install.mjs" ]; then
-    action "Running cli/install.mjs (agent files, skills, plugin)..."
+  local dst="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+  mkdir -p "$dst/agents" "$dst/agents/_shared" "$dst/command" "$dst/commands" "$dst/skill" "$dst/skills" 2>/dev/null
 
-    # cli/install.mjs runInstaller() spawns bash install.sh — we need to pass
-    # the flags through. Use the canonical entry point with environment hints.
-    # The installer automatically copies agents, commands, hooks, skills, plugin.
-    if node "$REPO_DIR/cli/install.mjs" --non-interactive 2>&1; then
-      note "config files installed"
+  # Agents
+  if [ -d "$REPO_DIR/config/agents" ]; then
+    action "Copying agent files..."
+    cp -R "$REPO_DIR/config/agents/." "$dst/agents/" 2>/dev/null && note "agents synced" || warn "agent copy incomplete"
+  fi
+
+  # Slash commands
+  if [ -d "$REPO_DIR/config/command" ]; then
+    cp -R "$REPO_DIR/config/command/." "$dst/command/" 2>/dev/null
+  fi
+  if [ -d "$REPO_DIR/config/commands" ]; then
+    cp -R "$REPO_DIR/config/commands/." "$dst/commands/" 2>/dev/null
+  fi
+
+  # Skills (bundled)
+  for skill in obsidian glyph read-the-damn-docs; do
+    if [ -d "$REPO_DIR/config/skills/$skill" ]; then
+      cp -R "$REPO_DIR/config/skills/$skill" "$dst/skill/" 2>/dev/null
+      cp -R "$REPO_DIR/config/skills/$skill" "$dst/skills/" 2>/dev/null
+    fi
+  done
+  note "skills installed"
+
+  # AGENTS.md
+  if [ -f "$REPO_DIR/AGENTS.md" ]; then
+    cp "$REPO_DIR/AGENTS.md" "$dst/AGENTS.md" 2>/dev/null && note "AGENTS.md synced" || true
+  fi
+
+  # Plugin (copy from <pkg>/plugins/bizar/ to ~/.config/opencode/plugins/bizar/)
+  local dst_plugin="$dst/plugins/bizar"
+  if [ -d "$REPO_DIR/plugins/bizar" ]; then
+    mkdir -p "$dst_plugin"
+    # Skip node_modules + dist to keep the deploy dir small; the plugin's
+    # package.json declares its deps and Bun resolves them from the user's
+    # global node_modules at load time.
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a --exclude='node_modules' --exclude='dist' --exclude='.DS_Store' \
+        "$REPO_DIR/plugins/bizar/" "$dst_plugin/" 2>/dev/null && note "plugin copied to $dst_plugin" \
+        || warn "plugin copy incomplete"
     else
-      warn "cli/install.mjs exited non-zero — some config may be incomplete"
+      # Fallback: shell glob + cp — mirrors rsync's exclude behaviour by
+      # pruning after copy.
+      cp -R "$REPO_DIR/plugins/bizar/." "$dst_plugin/" 2>/dev/null
+      rm -rf "$dst_plugin/node_modules" "$dst_plugin/dist" 2>/dev/null
+      note "plugin copied to $dst_plugin (cp fallback)"
     fi
   else
-    warn "cli/install.mjs not found — config files not auto-installed"
+    warn "plugin source not found at $REPO_DIR/plugins/bizar/"
   fi
 }
 
@@ -370,7 +406,7 @@ install_service() {
 
     if [ "$ok" = "yes" ]; then
       if [ "$skipped" = "yes" ]; then
-        dim "  (service-controller not yet available — will be completed when Stream A lands)"
+        dim "  (service registration deferred — re-run \`bizar service install\` to retry)"
       fi
       note "service registration complete"
     else

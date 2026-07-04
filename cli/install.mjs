@@ -26,15 +26,12 @@ const AGENT_FILES = [
 ];
 
 /**
- * Install the Bizar opencode plugin from the separate global npm package
- * `@polderlabs/bizar-plugin`. The main `@polderlabs/bizar` package
- * no longer ships `plugins/bizar/` — the plugin lives in its own scoped package
- * so it can be versioned and published independently.
+ * Install the Bizar opencode plugin from this package's own
+ * `plugins/bizar/` directory into `~/.config/opencode/plugins/bizar/`.
  *
- * If the plugin package is globally installed, copies its contents into
- * `~/.config/opencode/plugins/bizar/` (or the platform-equivalent path via
- * `opencodeConfigDir()`). Otherwise, prints a hint directing the user to run
- * `npm install -g @polderlabs/bizar-plugin`.
+ * v4.0.0 consolidated everything into one npm package, so the plugin
+ * source ships with `@polderlabs/bizar` itself — no separate
+ * `@polderlabs/bizar-plugin` package, no git clone, no fresh checkout.
  *
  * Symlink guard (v3.12.2): if the dest is a symlink (e.g. created by
  * `bizar dev-link`), do NOT overwrite it. The copy below would otherwise
@@ -43,26 +40,22 @@ const AGENT_FILES = [
  * confirming the user really wants the deployed copy back).
  *
  * node_modules copy: the plugin imports `@polderlabs/bizar-sdk`, a
- * workspace-internal package not on the public registry. The npm source
- * bundles the SDK into its own `node_modules/`. After copying the plugin
- * files, this function ALSO copies the source's `node_modules/` to the
- * deployed `node_modules/` so Bun can resolve the import when the plugin
- * is loaded from `~/.config/opencode/plugins/bizar/`. Without this, the
- * plugin silently fails to load.
+ * workspace-internal package not on the public registry. After copying
+ * the plugin files, this function ALSO copies the source's `node_modules/`
+ * to the deployed `node_modules/` so Bun can resolve the import when the
+ * plugin is loaded from `~/.config/opencode/plugins/bizar/`. Without
+ * this, the plugin silently fails to load.
  *
  * Pass `{ silent: true }` to suppress the warning prints; the function
  * still returns `true` if the dest is already in the desired state.
  *
- * Pass `{ sourceDir: '/path/to/fake' }` (test seam) to bypass the
- * `npm root -g` lookup and use a caller-supplied source path. Used by
- * cli/install.test.mjs to drive the function against a controlled
- * filesystem without touching the real global npm root.
+ * Pass `{ sourceDir: '/path/to/fake' }` (test seam) to drive the function
+ * against a controlled filesystem without touching the real install.
  *
  * Returns `true` if the plugin was installed (or already in place),
  * `false` otherwise. Never throws.
  */
 export async function installPluginFromGlobal(opts = {}) {
-  const { execSync } = await import('node:child_process');
   const { mkdir, readdir, copyFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
 
@@ -87,7 +80,7 @@ export async function installPluginFromGlobal(opts = {}) {
     }
     console.log(
       chalk.yellow(
-        '  ⚠ ~/.config/opencode/plugins/bizar is a dev symlink — skipping npm copy.',
+        '  ⚠ ~/.config/opencode/plugins/bizar is a dev symlink — skipping copy.',
       ),
     );
     console.log(
@@ -100,26 +93,19 @@ export async function installPluginFromGlobal(opts = {}) {
   }
 
   // ── Resolve source path ─────────────────────────────────────────────────────
-  // Production: `npm root -g` + `@polderlabs/bizar-plugin`. Tests can pass
-  // `opts.sourceDir` to bypass the lookup entirely.
+  // v4.4.5 — the plugin ships inside this package at <pkg>/plugins/bizar/.
+  // No separate npm package, no git clone.
   let pluginPath;
   if (opts.sourceDir) {
     pluginPath = opts.sourceDir;
   } else {
-    let globalRoot;
-    try {
-      globalRoot = execSync('npm root -g', { stdio: ['ignore', 'pipe', 'ignore'] })
-        .toString()
-        .trim();
-    } catch {
-      console.log(chalk.yellow('  ⚠ Could not determine npm global root — skipping plugin install'));
-      return false;
-    }
-    pluginPath = join(globalRoot, '@polderlabs', 'bizar-plugin');
+    // __dirname is `<pkg>/cli/`, so ../plugins/bizar is the canonical source.
+    pluginPath = join(__dirname, '..', 'plugins', 'bizar');
   }
   if (!existsSync(pluginPath)) {
-    console.log(chalk.dim('  ℹ Bizar plugin not installed globally. To install it:'));
-    console.log(chalk.dim('    npm install -g @polderlabs/bizar-plugin'));
+    console.log(chalk.red(`  ✗ Plugin source not found at ${pluginPath}`));
+    console.log(chalk.dim('    This package appears to be missing plugins/bizar/. Reinstall:'));
+    console.log(chalk.dim('      npm install -g @polderlabs/bizar --force'));
     return false;
   }
 
@@ -311,42 +297,30 @@ async function isPackageInstalled(name) {
 }
 
 async function promptAndInstallOptional() {
-  // Plugin
-  const pluginInstalled = await isPackageInstalled('@polderlabs/bizar-plugin');
-  if (!pluginInstalled) {
-    console.log('');
-    console.log('  The Bizar opencode plugin is required for the /bizar command and agent integration.');
-    const install = await promptYesNo(
-      'Install @polderlabs/bizar-plugin?',
-      true,
-    );
-    if (install) {
-      try {
-        console.log('  Installing @polderlabs/bizar-plugin...');
-        execSync('npm install -g @polderlabs/bizar-plugin', { stdio: 'inherit' });
-        console.log('  ✓ @polderlabs/bizar-plugin installed');
-      } catch (err) {
-        console.log(`  ✗ Failed to install @polderlabs/bizar-plugin: ${err.message}`);
-        console.log('  You can install it later with: npm install -g @polderlabs/bizar-plugin');
-      }
-    } else {
-      console.log('  Skipped. Install later with: npm install -g @polderlabs/bizar-plugin');
-    }
+  // v4.4.5 — Plugin and dashboard are both shipped inside this package.
+  // No separate npm install step is required for either. The plugin
+  // copy happens via installPluginFromGlobal() in runInstaller(); the
+  // dashboard is loaded directly from this package's bizar-dash/src/.
+  // We just verify they're present here and warn loudly if not.
+  const pluginPath = join(__dirname, '..', 'plugins', 'bizar');
+  if (!existsSync(pluginPath)) {
+    console.error('');
+    console.error('  ✗ Plugin source not found at plugins/bizar/.');
+    console.error('    This package is missing the plugin source. Reinstall:');
+    console.error('      npm install -g @polderlabs/bizar --force');
   } else {
-    console.log('  ✓ @polderlabs/bizar-plugin already installed');
+    console.log('  ✓ Plugin source present (plugins/bizar/)');
   }
 
-  // Dashboard — v4.0.0: ships inside this package at <repo>/bizar-dash/
-  // Verify the directory is present; it's a corrupted install if missing.
   const dashDir = join(__dirname, '..', 'bizar-dash');
   const dashPkgJson = join(dashDir, 'package.json');
   if (!existsSync(dashPkgJson)) {
     console.error('');
-    console.error('  ✗ Dashboard directory not found at bizar-dash/.');
-    console.error('    This looks like a corrupted install.');
-    console.error('    Please report at: github.com/DrB0rk/BizarHarness/issues');
+    console.error('  ✗ Dashboard source not found at bizar-dash/.');
+    console.error('    This package is missing the dashboard source. Reinstall:');
+    console.error('      npm install -g @polderlabs/bizar --force');
   } else {
-    console.log('  ✓ Dashboard directory present (bizar-dash/)');
+    console.log('  ✓ Dashboard source present (bizar-dash/)');
   }
 }
 
