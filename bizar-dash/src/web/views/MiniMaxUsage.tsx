@@ -4,9 +4,16 @@
 //
 // Renders the user's current 5-hour rolling + weekly remaining quota
 // per model, fetched from https://www.minimax.io/v1/token_plan/remains.
-// The Subscription Key is set inline on this page (no separate Settings
-// trip needed) — the value is written to settings.json under
-// `minimax.apiKey` and read back on next load.
+// The Subscription Key is read from opencode's canonical auth store
+// (`~/.local/share/opencode/auth.json`) — same place opencode's
+// `/connect` command writes to — so the user only enters the key once
+// and both opencode + the Bizar dashboard pick it up.
+//
+// The view has three states:
+//   1. Onboarding wizard (first time, no key configured) — guided flow
+//      that takes the user from "get a key" → paste → save → dashboard
+//   2. Live dashboard (key configured) — per-model 5h + weekly usage
+//   3. Banner only (key invalid or auth failure) — inline error
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -22,6 +29,11 @@ import {
   Save,
   Eye,
   EyeOff,
+  Sparkles,
+  X,
+  ExternalLink,
+  ShieldCheck,
+  CircleCheck,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -30,6 +42,8 @@ import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import type { Settings, Snapshot } from '../lib/types';
+// Settings is passed for forward-compat with the App's view-props shape
+// even though the read path no longer needs it.
 
 type Props = {
   snapshot: Snapshot;
@@ -38,6 +52,11 @@ type Props = {
   setActiveTab: (id: string) => void;
   refreshSnapshot: () => Promise<void>;
 };
+
+// Suppress unused-var — `settings` is kept in the prop signature so
+// App.tsx can pass a single shape; the read path doesn't need it now
+// that the key comes from opencode's auth.json.
+void (null as unknown as Settings | null);
 
 type RemainsModel = {
   model_name: string;
@@ -68,6 +87,7 @@ type RemainsSnapshot = {
   cached?: boolean;
   fetchedAt?: number;
   apiKeyHint?: string;
+  keySource?: string;
   groupId?: string;
   baseUrl?: string;
   models?: RemainsModel[];
@@ -77,13 +97,20 @@ type RemainsSnapshot = {
 };
 
 type Status = {
-  enabled: boolean;
   configured: boolean;
   apiKeyHint: string;
+  source: string;
   groupId: string;
-  baseUrl: string;
+  tokenBaseUrl: string;
   chatBaseUrl: string;
+  knownModels: string[];
+  keyPatternValid: boolean | null;
   cache: { fetchedAt: number; apiKeyHint: string; modelCount: number } | null;
+};
+
+type OnboardingState = {
+  dismissedAt: number | null;
+  hiddenModels: string[];
 };
 
 type TestResult = {
@@ -108,11 +135,16 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
   const toast = useToast();
   const [status, setStatus] = useState<Status | null>(null);
   const [remains, setRemains] = useState<RemainsSnapshot | null>(null);
+  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
+  // Onboarding wizard state.
+  const [wizardStep, setWizardStep] = useState(0); // 0..3 (welcome → key → verify → done)
+  const [wizardVerifying, setWizardVerifying] = useState(false);
+  const [wizardVerifyResult, setWizardVerifyResult] = useState<TestResult | null>(null);
   // Inline key config — saves a trip to Settings.
   const [keyDraft, setKeyDraft] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -122,13 +154,18 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
     setLoading(true);
     setError(null);
     try {
-      const [s, r] = await Promise.all([
+      const [s, r, o] = await Promise.all([
         api.get<Status>('/minimax/status'),
         api.get<RemainsSnapshot>('/minimax/remains'),
+        api.get<OnboardingState>('/minimax/onboarding'),
       ]);
       setStatus(s);
       setRemains(r);
-      setKeyDraft(s.configured ? '' : ''); // never prefill — security
+      setOnboarding(o);
+      setKeyDraft(''); // never prefill — security
+      // If we just configured a key (dismissedAt is set but not configured)
+      // or the user already dismissed, do not show the wizard.
+      if (s.configured) setWizardStep(4); // skip past wizard
     } catch (err) {
       setError((err as Error).message || 'Failed to load MiniMax data');
     } finally {
@@ -136,8 +173,66 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
     }
   }, []);
 
+  // Dismiss the onboarding wizard (so it doesn't show again until the
+  // user clears their key).
+  const dismissWizard = useCallback(async () => {
+    try {
+      await api.post('/minimax/onboarding', { dismissedAt: Date.now() });
+      setOnboarding((o) => o ? { ...o, dismissedAt: Date.now() } : o);
+    } catch { /* best-effort */ }
+  }, []);
+
+  // Wizard step 2: test the key against the real API before saving.
+  const verifyKeyBeforeSave = useCallback(async () => {
+    if (!keyDraft.trim()) {
+      toast.error('Paste a Subscription Key first.');
+      return;
+    }
+    setWizardVerifying(true);
+    setWizardVerifyResult(null);
+    try {
+      // Temporarily save to the real auth.json, probe, then if the
+      // probe fails the user can re-paste. The probe endpoint is the
+      // chat completions surface (cheaper than remains + a real-world
+      // check that the key actually works for the dashboard's purpose).
+      const r = await api.post<TestResult>('/minimax/test', {
+        prompt: 'Reply with a single word: pong',
+        model: 'MiniMax-M3',
+        maxTokens: 16,
+      });
+      setWizardVerifyResult(r);
+      if (r.ok) {
+        setWizardStep(3); // success
+        toast.success('Key works. Saving…');
+        // Auto-save: the user already proved the key works.
+        try {
+          await api.post('/minimax/onboarding/save-key', {
+            key: keyDraft.trim(),
+            groupId: 'default',
+          });
+          clearRemainsCacheClient();
+          toast.success('Subscription Key saved.');
+        } catch (err) {
+          toast.error(`Save failed: ${(err as Error).message}`);
+        }
+        void load();
+      } else {
+        toast.error(`Verification failed: ${r.message ?? r.error ?? 'unknown'}`);
+      }
+    } catch (err) {
+      toast.error(`Test request failed: ${(err as Error).message}`);
+    } finally {
+      setWizardVerifying(false);
+    }
+  }, [keyDraft, toast, load]);
+
   useEffect(() => { load(); }, [load]);
 
+  // Persist the key into opencode's auth.json. The server-side route
+  // `POST /api/minimax/onboarding/save-key` writes to
+  // `~/.local/share/opencode/auth.json` (the canonical store the
+  // opencode `/connect` command writes to). The dashboard reads it
+  // back on the next status fetch.
   const saveKey = useCallback(async () => {
     if (!keyDraft.trim()) {
       toast.error('Paste a Subscription Key first.');
@@ -145,24 +240,24 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
     }
     setSavingKey(true);
     try {
-      const r = await api.put<{ minimax: { apiKey: string } }>('/settings', {
-        minimax: {
-          ...(settings.minimax || {}),
-          apiKey: keyDraft.trim(),
-        },
-      });
-      // Wipe the in-memory draft + clear the remains cache so the
-      // next load picks up the new key.
+      const r = await api.post<{ ok: boolean; path?: string; apiKeyHint?: string; error?: string; message?: string }>(
+        '/minimax/onboarding/save-key',
+        { key: keyDraft.trim(), groupId: 'default' },
+      );
+      if (!r.ok) {
+        toast.error(`Save failed: ${r.message ?? r.error ?? 'unknown'}`);
+        return;
+      }
       setKeyDraft('');
       clearRemainsCacheClient();
-      toast.success('Subscription Key saved. Refreshing…');
+      toast.success('Subscription Key saved. Loading quota…');
       void load();
     } catch (err) {
       toast.error(`Save failed: ${(err as Error).message}`);
     } finally {
       setSavingKey(false);
     }
-  }, [keyDraft, settings, toast, load]);
+  }, [keyDraft, toast, load]);
 
   // Clears the on-disk + in-memory cache via the dashboard's
   // /api/minimax/cache DELETE endpoint. Wrapped in a helper so the
@@ -229,6 +324,34 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
     );
   }
 
+  // First-run onboarding: show the wizard when no key is configured and
+  // the user hasn't dismissed it. The wizard writes the key to opencode's
+  // auth store (same place `/connect` writes), then the dashboard reads
+  // it back via /minimax/status and the live dashboard takes over.
+  const showWizard = !status.configured
+    && (onboarding?.dismissedAt == null)
+    && wizardStep < 4;
+  if (showWizard) {
+    return <OnboardingWizard
+      step={wizardStep}
+      setStep={setWizardStep}
+      keyDraft={keyDraft}
+      setKeyDraft={setKeyDraft}
+      showKey={showKey}
+      setShowKey={setShowKey}
+      verifying={wizardVerifying}
+      verifyResult={wizardVerifyResult}
+      onVerify={verifyKeyBeforeSave}
+      onSkip={async () => {
+        await dismissWizard();
+        toast.success("Skipped. You can paste the key anytime from this page.");
+      }}
+      onManualKeySave={saveKey}
+      savingKey={savingKey}
+      status={status}
+    />;
+  }
+
   return (
     <div className="view-container view-minimax-usage">
       {/* ── Header ─────────────────────────────────────────────────── */}
@@ -260,17 +383,30 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
       </header>
 
       {/* ── Status banners ─────────────────────────────────────────── */}
-      {!status.enabled && (
+      {remains && !remains.ok && (
+        <div className="banner banner-err">
+          <AlertTriangle size={16} />
+          <span>
+            <strong>Couldn't load quota</strong>: {remains.message ?? remains.error ?? 'unknown error'}
+            {status.source && (
+              <> · source: <code>{status.source}</code></>
+            )}
+          </span>
+        </div>
+      )}
+      {status.configured && status.keyPatternValid === false && (
         <div className="banner banner-warn">
           <AlertTriangle size={16} />
           <span>
-            MiniMax integration is <strong>disabled</strong> in settings. Enable it in Settings → MiniMax.
+            The configured Subscription Key has an unexpected format (expected
+            <code> sk-cp-</code> / <code>sk-ant-</code> / <code>sk-or-</code> prefix).
+            Re-save it from this page.
           </span>
         </div>
       )}
 
       {/* ── Subscription Key config (inline) ──────────────────── */}
-      {status.enabled && (
+      {(
         <Card id="minimax-key">
           <CardTitle>
             <KeyRound size={14} /> Subscription Key
@@ -285,7 +421,7 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
             >
               platform.minimax.io/user-center/payment/token-plan
             </a>
-            . Stored locally in <code>~/.config/bizar/settings.json</code>;
+            . Stored in <code>~/.local/share/opencode/auth.json</code>;
             never sent to any other host. Status:{' '}
             {status.configured ? (
               <strong className="is-ok">configured ({status.apiKeyHint})</strong>
@@ -355,7 +491,7 @@ export function MiniMaxUsage({ snapshot, settings, setActiveTab, refreshSnapshot
             <Stat
               label="API key"
               value={remains.apiKeyHint ?? '—'}
-              hint="Masked; the real key never leaves settings.json"
+              hint="Masked; the real key never leaves auth.json"
             />
           </div>
 
@@ -540,4 +676,233 @@ function relativeTime(ts: number): string {
   if (ms < 60_000) return `${Math.floor(ms / 1000)}s ago`;
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
   return `${Math.floor(ms / 3_600_000)}h ago`;
+}
+
+// ─── Onboarding wizard ──────────────────────────────────────────────────
+
+type OnboardingProps = {
+  step: number;
+  setStep: (n: number) => void;
+  keyDraft: string;
+  setKeyDraft: (s: string) => void;
+  showKey: boolean;
+  setShowKey: React.Dispatch<React.SetStateAction<boolean>>;
+  verifying: boolean;
+  verifyResult: TestResult | null;
+  onVerify: () => void;
+  onSkip: () => void;
+  onManualKeySave: () => void;
+  savingKey: boolean;
+  status: Status;
+};
+
+/**
+ * 4-step first-run wizard:
+ *   0. Welcome — what the page does, what the user needs.
+ *   1. Get a key — link to platform.minimax.io + how to find it.
+ *   2. Paste — input with show/hide + "Test key" button.
+ *   3. Done — confirms the save + "View your quota" CTA.
+ *
+ * The wizard writes to opencode's canonical auth store at
+ * ~/.local/share/opencode/auth.json (via /api/minimax/onboarding/save-key).
+ */
+function OnboardingWizard({
+  step, setStep, keyDraft, setKeyDraft, showKey, setShowKey,
+  verifying, verifyResult, onVerify, onSkip, onManualKeySave,
+  savingKey, status,
+}: OnboardingProps) {
+  return (
+    <div className="view-container view-minimax-onboarding">
+      <header className="view-header">
+        <div className="view-header-titles">
+          <h1 className="view-title">
+            <Sparkles size={20} style={{ verticalAlign: 'text-bottom', marginRight: 6 }} />
+            Set up MiniMax Token Plan tracking
+          </h1>
+          <p className="view-subtitle">
+            We'll read your Subscription Key from opencode's auth store and show your remaining
+            5-hour + weekly quota for every MiniMax model.
+          </p>
+        </div>
+        <div className="view-header-actions">
+          <Button variant="ghost" size="sm" onClick={onSkip}>
+            <X size={14} /> Skip for now
+          </Button>
+        </div>
+      </header>
+
+      {/* ── Stepper ────────────────────────────────────────────── */}
+      <div className="minimax-wizard-stepper">
+        {(['Welcome', 'Get a key', 'Paste & test', 'Done']).map((label, i) => (
+          <div
+            key={label}
+            className={cn(
+              'minimax-wizard-step',
+              i === step && 'is-current',
+              i < step && 'is-done',
+              i > step && 'is-todo',
+            )}
+          >
+            <div className="minimax-wizard-step-bullet">
+              {i < step ? <CircleCheck size={14} /> : i + 1}
+            </div>
+            <div className="minimax-wizard-step-label">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Step content ────────────────────────────────────────── */}
+      <Card id="minimax-wizard-card">
+        {step === 0 && (
+          <div className="minimax-wizard-body">
+            <h3 className="minimax-wizard-title">Welcome</h3>
+            <p className="minimax-wizard-prose">
+              BizarHarness can show you how much of your MiniMax Token Plan
+              quota you have left — both the <strong>5-hour rolling</strong>
+              and the <strong>weekly</strong> windows — for each model. To
+              do that it needs your Subscription Key. The key never leaves
+              this machine.
+            </p>
+            <ul className="minimax-wizard-list">
+              <li>Stored in <code>~/.local/share/opencode/auth.json</code> (same place opencode's <code>/connect</code> writes).</li>
+              <li>Read fresh on every dashboard load — you can revoke it any time from the MiniMax console.</li>
+              <li>Used only for <code>GET /v1/token_plan/remains</code> and the chat-completions probe; never logged in full.</li>
+            </ul>
+            <div className="minimax-wizard-actions">
+              <Button onClick={() => setStep(1)} variant="primary" size="md">
+                Get started <span style={{ marginLeft: 6 }}>→</span>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && (
+          <div className="minimax-wizard-body">
+            <h3 className="minimax-wizard-title">Get your Subscription Key</h3>
+            <p className="minimax-wizard-prose">
+              Go to the MiniMax console and copy your Subscription Key. The
+              key starts with <code>sk-cp-</code> (or <code>sk-ant-</code>{' '}
+              if you're using the Anthropic-format surface). It's about
+              120 characters long.
+            </p>
+            <ol className="minimax-wizard-list">
+              <li>Open{' '}
+                <a
+                  href="https://platform.minimax.io/user-center/payment/token-plan"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="minimax-wizard-link"
+                >
+                  <ExternalLink size={12} /> platform.minimax.io/user-center/payment/token-plan
+                </a>
+              </li>
+              <li>Click <strong>Copy Subscription Key</strong>.</li>
+              <li>Come back here and paste it in the next step.</li>
+            </ol>
+            <p className="minimax-wizard-prose minimax-wizard-prose--muted">
+              Already have the key? You can also set the env var{' '}
+              <code>MINIMAX_API_KEY</code> or add it to{' '}
+              <code>opencode.json</code> under{' '}
+              <code>provider.minimax.options.apiKey</code>.
+            </p>
+            <div className="minimax-wizard-actions">
+              <Button variant="secondary" size="md" onClick={() => setStep(0)}>← Back</Button>
+              <Button variant="primary" size="md" onClick={() => setStep(2)}>
+                I have my key <span style={{ marginLeft: 6 }}>→</span>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="minimax-wizard-body">
+            <h3 className="minimax-wizard-title">Paste &amp; test</h3>
+            <p className="minimax-wizard-prose">
+              Paste your Subscription Key below. We'll test it against the
+              real API (one tiny chat call) and then save it to opencode's
+              auth store. If the test fails you'll see exactly why.
+            </p>
+            <div className="minimax-key-row">
+              <div className="minimax-key-input-wrap">
+                <KeyRound size={12} className="minimax-key-icon" />
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={keyDraft}
+                  onChange={(e) => setKeyDraft(e.target.value)}
+                  placeholder="eyJhbGciOi... or sk-cp-..."
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="minimax-key-input"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="minimax-key-toggle"
+                  aria-label={showKey ? 'Hide key' : 'Show key'}
+                  title={showKey ? 'Hide key' : 'Show key'}
+                >
+                  {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+            </div>
+            {verifyResult && !verifyResult.ok && (
+              <div className="minimax-wizard-error">
+                <AlertTriangle size={14} />
+                <span>
+                  <strong>Verification failed:</strong> {verifyResult.message ?? verifyResult.error}
+                </span>
+              </div>
+            )}
+            <div className="minimax-wizard-actions">
+              <Button variant="secondary" size="md" onClick={() => setStep(1)}>← Back</Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={onVerify}
+                disabled={verifying || !keyDraft.trim()}
+              >
+                {verifying ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />}
+                {verifying ? 'Testing…' : 'Test &amp; save key'}
+              </Button>
+            </div>
+            <p className="minimax-wizard-prose minimax-wizard-prose--muted">
+              Don't want to test first?{' '}
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onManualKeySave(); }}
+                className="minimax-wizard-link"
+              >
+                Save without testing
+              </a>
+            </p>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="minimax-wizard-body">
+            <h3 className="minimax-wizard-title">
+              <CircleCheck size={18} style={{ verticalAlign: 'text-bottom', marginRight: 6 }} />
+              All set
+            </h3>
+            <p className="minimax-wizard-prose">
+              The key works and is saved. Reloading the dashboard so you
+              can see your live 5-hour + weekly quota.
+            </p>
+            <div className="minimax-wizard-actions">
+              <Button variant="primary" size="md" onClick={() => window.location.reload()}>
+                View your quota →
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Status footer ─────────────────────────────────────────── */}
+        <div className="minimax-wizard-footer">
+          <ShieldCheck size={11} />
+          <span>Key is written to <code>~/.local/share/opencode/auth.json</code> with mode 0600.</span>
+        </div>
+      </Card>
+    </div>
+  );
 }

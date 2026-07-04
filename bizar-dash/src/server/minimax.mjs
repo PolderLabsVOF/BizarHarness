@@ -4,101 +4,175 @@
  * v4.5.0 — MiniMax API client.
  *
  * Owns the network calls to platform.minimax.io for the Bizar
- * dashboard. Two surfaces:
+ * dashboard. The Subscription Key is read from opencode's canonical
+ * auth store (`~/.local/share/opencode/auth.json`) so the user only
+ * enters the key once (via opencode's `/connect` command) and the
+ * dashboard picks it up automatically.
  *
- *  1. fetchRemains()  — the public `/v1/token_plan/remains` endpoint.
- *     Returns the user's remaining Token Plan quota per model — both
- *     5-hour rolling window and weekly window — including the reset
- *     times for each. This is the headline data the user wants to see.
+ * Key resolution chain (in order, first match wins):
+ *   1. process.env.MINIMAX_API_KEY
+ *   2. process.env.ANTHROPIC_API_KEY     (MiniMax accepts Anthropic keys)
+ *   3. ~/.local/share/opencode/auth.json → "minimax" → "key"
+ *   4. ~/.config/opencode/opencode.json → provider.minimax.options.apiKey
+ *   5. ~/.config/opencode/opencode.json → provider.minimax.apiKey
  *
- *  2. chatCompletion() — a thin wrapper around `/v1/chat/completions`
- *     (OpenAI-compatible) for the dashboard's "Send a test prompt"
- *     button. Also captures the `usage` block from the response so the
- *     dashboard can show per-call consumption.
- *
- * The client always reads the API key from the user's settings
- * (settings.minimax.apiKey) and never logs it. The base URL is
- * configurable but defaults to `https://www.minimax.io` per the docs.
- *
- * Token Plan endpoints live on `www.minimax.io` (NOT `api.minimax.io`
- * — the chat completions endpoint uses that one). The default
- * `baseUrl` in the settings uses the Token Plan host so `fetchRemains`
- * works out of the box.
+ * Two surfaces:
+ *   - fetchRemains()       — Token Plan quota (5h + weekly per model)
+ *   - chatCompletion()     — one-shot chat call for the "test prompt" UI
  *
  * All network calls are guarded by a 10s timeout so a hung API
- * never wedges the dashboard.
+ * never wedges the dashboard. Responses are cached in memory (60s)
+ * and on disk (5min at ~/.config/bizar/minimax/remains-cache.json) so
+ * renders are fast and the API isn't hammered.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
 const HOME = homedir();
 const BIZAR_HOME = join(HOME, '.config', 'bizar');
+const OPENCODE_AUTH_FILE = join(HOME, '.local', 'share', 'opencode', 'auth.json');
+const OPENCODE_CONFIG_FILE = join(HOME, '.config', 'opencode', 'opencode.json');
 const CACHE_DIR = join(BIZAR_HOME, 'minimax');
 const CACHE_FILE = join(CACHE_DIR, 'remains-cache.json');
 
-// Default base URL. The docs say `https://www.minimax.io/v1/token_plan/remains`
-// (note: the `www` host, not `api`). Allow override per-user in settings.
+// Default base URLs. The docs say `https://www.minimax.io/v1/token_plan/remains`
+// (note: the `www` host, not `api`). The chat completions / OpenAI-format
+// surface lives on api.minimax.io.
 export const DEFAULT_BASE_URL = 'https://www.minimax.io';
-// Chat completions / OpenAI-style surface lives on api.minimax.io.
 export const DEFAULT_CHAT_BASE_URL = 'https://api.minimax.io/v1';
 
-// Models Bizar exposes by default in the dashboard.
+// Full MiniMax model list. Pulled live from /v1/models on the user's key
+// and cached in the dashboard. The dashboard's "Usage" view shows
+// remaining quota per-model.
 export const KNOWN_MODELS = [
   'MiniMax-M3',
   'MiniMax-M2.7',
+  'MiniMax-M2.7-highspeed',
   'MiniMax-M2.5',
+  'MiniMax-M2.5-highspeed',
   'MiniMax-M2.1',
+  'MiniMax-M2.1-highspeed',
   'MiniMax-M2',
 ];
 
-/**
- * Read the merged settings.json and return the MiniMax config block.
- * Never throws — returns sane defaults on parse failure.
- */
-export function readMinimaxSettings() {
-  const file = join(BIZAR_HOME, 'settings.json');
-  if (!existsSync(file)) {
-    return defaultMinimaxSettings();
-  }
+// Valid MiniMax API key prefixes (subscription + pay-as-you-go).
+// The user's key starts with `sk-cp-` and is 125 chars long. Real
+// keys have variable lengths and may include dashes, so the pattern
+// only validates the prefix.
+const MINIMAX_KEY_PATTERN = /^sk-(cp|ant|or)-[A-Za-z0-9_-]{20,}$/;
+
+// ─── Key resolution ─────────────────────────────────────────────────────
+
+function safeReadJson(file, fallback = null) {
   try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    const m = parsed.minimax;
-    if (!m || typeof m !== 'object') return defaultMinimaxSettings();
-    return {
-      enabled: m.enabled !== false,
-      apiKey: typeof m.apiKey === 'string' ? m.apiKey : '',
-      groupId: typeof m.groupId === 'string' ? m.groupId : 'default',
-      baseUrl: typeof m.baseUrl === 'string' ? m.baseUrl : DEFAULT_BASE_URL,
-      chatBaseUrl: typeof m.chatBaseUrl === 'string' ? m.chatBaseUrl : DEFAULT_CHAT_BASE_URL,
-    };
+    if (!existsSync(file)) return fallback;
+    return JSON.parse(readFileSync(file, 'utf8'));
   } catch {
-    return defaultMinimaxSettings();
+    return fallback;
   }
 }
 
-export function defaultMinimaxSettings() {
-  return {
-    enabled: true,
-    apiKey: '',
-    groupId: 'default',
-    baseUrl: DEFAULT_BASE_URL,
-    chatBaseUrl: DEFAULT_CHAT_BASE_URL,
-  };
+/**
+ * Resolve the MiniMax Subscription Key from opencode's canonical store.
+ * Returns `{ key: string|null, source: string, groupId: string }`.
+ *
+ * `source` is one of:
+ *   - 'env:MINIMAX_API_KEY'
+ *   - 'env:ANTHROPIC_API_KEY'
+ *   - 'auth.json'
+ *   - 'opencode.json:options.apiKey'
+ *   - 'opencode.json:apiKey'
+ *   - 'none'
+ */
+export function resolveApiKey() {
+  // 1. Env vars — opencode reads MINIMAX_API_KEY first
+  if (process.env.MINIMAX_API_KEY && process.env.MINIMAX_API_KEY.trim()) {
+    return {
+      key: process.env.MINIMAX_API_KEY.trim(),
+      source: 'env:MINIMAX_API_KEY',
+      groupId: 'default',
+    };
+  }
+  // 2. Anthropic key works against MiniMax's Anthropic-format surface
+  if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.trim()) {
+    return {
+      key: process.env.ANTHROPIC_API_KEY.trim(),
+      source: 'env:ANTHROPIC_API_KEY',
+      groupId: 'default',
+    };
+  }
+  // 3. ~/.local/share/opencode/auth.json
+  const auth = safeReadJson(OPENCODE_AUTH_FILE, null);
+  if (auth && typeof auth === 'object' && auth.minimax && auth.minimax.key) {
+    return {
+      key: String(auth.minimax.key).trim(),
+      source: 'auth.json',
+      groupId: String(auth.minimax.group_id || 'default'),
+    };
+  }
+  // 4. opencode.json → provider.minimax.options.apiKey
+  const cfg = safeReadJson(OPENCODE_CONFIG_FILE, null);
+  const minimax = cfg?.provider?.minimax;
+  if (minimax?.options?.apiKey) {
+    return {
+      key: String(minimax.options.apiKey).trim(),
+      source: 'opencode.json:options.apiKey',
+      groupId: String(cfg.provider.minimax.group_id || 'default'),
+    };
+  }
+  // 5. opencode.json → provider.minimax.apiKey
+  if (minimax?.apiKey) {
+    return {
+      key: String(minimax.apiKey).trim(),
+      source: 'opencode.json:apiKey',
+      groupId: String(cfg.provider.minimax.group_id || 'default'),
+    };
+  }
+  return { key: null, source: 'none', groupId: 'default' };
 }
 
-// ─── Cache (in-memory + disk) ──────────────────────────────────────────────
-
 /**
- * In-memory snapshot of the last remains response. Avoids re-hitting the
- * API on every dashboard render.
+ * Base URL resolution. The Token Plan endpoint lives on www.minimax.io;
+ * the chat completions live on api.minimax.io/v1. If the user has
+ * set a custom base URL in opencode.json's `options.baseURL`, that
+ * wins (with path-aware logic — we extract the host).
  */
+export function resolveBaseUrls() {
+  const cfg = safeReadJson(OPENCODE_CONFIG_FILE, null);
+  const minimaxOpts = cfg?.provider?.minimax?.options || {};
+  let tokenBase = DEFAULT_BASE_URL;
+  let chatBase = DEFAULT_CHAT_BASE_URL;
+  if (typeof minimaxOpts.baseURL === 'string' && minimaxOpts.baseURL.trim()) {
+    const u = minimaxOpts.baseURL.trim();
+    // If the user already points at the OpenAI-format surface, keep
+    // it as chatBase. Otherwise we use it for both, falling back to
+    // known hosts when the path looks like a generic base.
+    try {
+      const parsed = new URL(u);
+      const host = parsed.host;
+      if (host.startsWith('api.')) {
+        chatBase = u.replace(/\/$/, '');
+        tokenBase = chatBase.replace(/^https?:\/\/api\./, 'https://www.');
+      } else if (host.startsWith('www.')) {
+        tokenBase = u.replace(/\/$/, '');
+        chatBase = tokenBase.replace(/^https?:\/\/www\./, 'https://api.') + '/v1';
+      }
+    } catch {
+      // ignore — fall through to defaults
+    }
+  }
+  return { tokenBase, chatBase };
+}
+
+// ─── Cache ────────────────────────────────────────────────────────────────
+
 let memoryCache = null;
 
 function readDiskCache() {
   try {
     if (!existsSync(CACHE_FILE)) return null;
-    const stat = require('node:fs').statSync(CACHE_FILE);
+    const stat = statSync(CACHE_FILE);
     if (Date.now() - stat.mtimeMs > 5 * 60 * 1000) return null; // 5 min TTL
     return JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
   } catch {
@@ -110,23 +184,16 @@ function writeDiskCache(snapshot) {
   try {
     mkdirSync(CACHE_DIR, { recursive: true });
     writeFileSync(CACHE_FILE, JSON.stringify(snapshot, null, 2) + '\n', 'utf8');
-  } catch {
-    /* best-effort */
-  }
+  } catch { /* best-effort */ }
 }
 
 export function clearRemainsCache() {
   memoryCache = null;
   try {
-    if (existsSync(CACHE_FILE)) {
-      require('node:fs').unlinkSync(CACHE_FILE);
-    }
+    if (existsSync(CACHE_FILE)) unlinkSync(CACHE_FILE);
   } catch { /* best-effort */ }
 }
 
-/**
- * Try in-memory → disk cache. Returns the cached snapshot or null.
- */
 export function readCachedRemains() {
   if (memoryCache) return memoryCache;
   const fromDisk = readDiskCache();
@@ -137,12 +204,8 @@ export function readCachedRemains() {
   return null;
 }
 
-// ─── Network helpers ──────────────────────────────────────────────────────
+// ─── Network helpers ─────────────────────────────────────────────────────
 
-/**
- * Fetch with a hard timeout. Uses undici (Node 18+ global fetch is
- * fine but AbortSignal.timeout is simpler with node:fetch).
- */
 async function fetchWithTimeout(url, opts = {}, timeoutMs = 10_000) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);
@@ -153,45 +216,109 @@ async function fetchWithTimeout(url, opts = {}, timeoutMs = 10_000) {
   }
 }
 
-// ─── Public API ────────────────────────────────────────────────────────────
+// ─── Auth-file writer (for onboarding) ─────────────────────────────────
 
 /**
- * Hit /v1/token_plan/remains with the user's API key + group_id.
- *
- * Response shape:
- *   {
- *     model_remains: [
- *       { model_name, current_interval_remaining_percent, current_weekly_remaining_percent,
- *         start_time, end_time, remains_time, weekly_start_time, weekly_end_time,
- *         weekly_remains_time, current_interval_total_count, current_interval_usage_count,
- *         current_weekly_total_count, current_weekly_usage_count,
- *         current_interval_status, current_weekly_status },
- *       ...
- *     ],
- *     base_resp: { status_code, status_msg }
- *   }
- *
- * Returns the raw response, augmented with `fetchedAt` and (if we got
- * data) the per-model `endTimeISO` / `weeklyEndTimeISO` strings for
- * convenient rendering in the UI.
+ * Write the MiniMax key to opencode's auth store at the canonical
+ * path. Returns the path that was written. Used by the dashboard's
+ * onboarding wizard so the user only enters the key once.
  */
-export async function fetchRemains({ apiKey, groupId = 'default', baseUrl = DEFAULT_BASE_URL, force = false } = {}) {
-  if (!apiKey || !apiKey.trim()) {
-    return { ok: false, error: 'no_api_key', message: 'MiniMax API key is not configured' };
+export function writeAuthFile(key, groupId = 'default') {
+  mkdirSync(dirname(OPENCODE_AUTH_FILE), { recursive: true });
+  const cur = safeReadJson(OPENCODE_AUTH_FILE, {}) || {};
+  cur.minimax = {
+    type: 'api',
+    key: String(key).trim(),
+  };
+  if (groupId) cur.minimax.group_id = groupId;
+  writeFileSync(OPENCODE_AUTH_FILE, JSON.stringify(cur, null, 2) + '\n', 'utf8');
+  return OPENCODE_AUTH_FILE;
+}
+
+// ─── Public API ─────────────────────────────────────────────────────────
+
+/**
+ * Read the dashboard-side config that opencode doesn't own:
+ *   - the onboarding "dismissed" flag (so we don't keep nagging the
+ *     user with the first-run wizard after they've seen it once)
+ *   - the per-model enabled flag (so the user can hide a model
+ *     they don't want to track)
+ *
+ * Stored at ~/.config/bizar/minimax/onboarding.json.
+ */
+export function readOnboarding() {
+  return safeReadJson(join(BIZAR_HOME, 'minimax', 'onboarding.json'), {
+    dismissedAt: null,
+    hiddenModels: [],
+  });
+}
+
+export function writeOnboarding(patch) {
+  const cur = readOnboarding();
+  const next = { ...cur, ...patch };
+  mkdirSync(CACHE_DIR, { recursive: true });
+  writeFileSync(join(BIZAR_HOME, 'minimax', 'onboarding.json'), JSON.stringify(next, null, 2) + '\n', 'utf8');
+  return next;
+}
+
+/**
+ * Snapshot of the current MiniMax state for the dashboard. The
+ * `status` route returns this so the React view knows whether to
+ * show the wizard, the live dashboard, or a "needs configuration"
+ * banner.
+ */
+export function getStatus() {
+  const resolved = resolveApiKey();
+  const urls = resolveBaseUrls();
+  const cached = readCachedRemains();
+  return {
+    configured: !!resolved.key,
+    apiKeyHint: maskKey(resolved.key),
+    source: resolved.source,
+    groupId: resolved.groupId,
+    tokenBaseUrl: urls.tokenBase,
+    chatBaseUrl: urls.chatBase,
+    knownModels: KNOWN_MODELS,
+    keyPatternValid: resolved.key ? MINIMAX_KEY_PATTERN.test(resolved.key) : null,
+    cache: cached
+      ? {
+          fetchedAt: cached.fetchedAt,
+          apiKeyHint: cached.apiKeyHint,
+          modelCount: (cached.models || []).length,
+        }
+      : null,
+  };
+}
+
+/**
+ * Hit /v1/token_plan/remains with the user's resolved key.
+ *
+ * Returns the raw response, augmented with `fetchedAt`, ISO timestamps
+ * for the reset windows, and pre-computed consumed-percent fields so
+ * the UI doesn't have to do arithmetic on every cell.
+ */
+export async function fetchRemains({ force = false } = {}) {
+  const resolved = resolveApiKey();
+  if (!resolved.key) {
+    return { ok: false, error: 'no_api_key', message: 'MiniMax Subscription Key is not configured. Run `bizar setup` or add it via the dashboard onboarding.' };
+  }
+  if (!MINIMAX_KEY_PATTERN.test(resolved.key)) {
+    return { ok: false, error: 'invalid_key_format', message: 'MiniMax key does not look right. Expected sk-cp-…, sk-ant-…, or sk-or-… prefix.' };
   }
   if (!force) {
     const cached = readCachedRemains();
-    if (cached && cached.apiKeyHint === maskKey(apiKey) && (Date.now() - cached.fetchedAt) < 60_000) {
+    if (cached && cached.apiKeyHint === maskKey(resolved.key) && (Date.now() - cached.fetchedAt) < 60_000) {
       return { ok: true, cached: true, ...cached };
     }
   }
-  const url = `${baseUrl.replace(/\/$/, '')}/v1/token_plan/remains?group_id=${encodeURIComponent(groupId)}`;
+  const urls = resolveBaseUrls();
+  const url = `${urls.tokenBase.replace(/\/$/, '')}/v1/token_plan/remains?group_id=${encodeURIComponent(resolved.groupId)}`;
   let resp;
   try {
     resp = await fetchWithTimeout(url, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${resolved.key}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
@@ -219,8 +346,7 @@ export async function fetchRemains({ apiKey, groupId = 'default', baseUrl = DEFA
     };
   }
 
-  // Augment with ISO timestamps so the UI doesn't have to do ms → Date
-  // arithmetic for every cell.
+  // Augment with ISO timestamps + human labels for the UI.
   const models = (body.model_remains || []).map((m) => ({
     ...m,
     endTimeISO: new Date(m.end_time).toISOString(),
@@ -240,9 +366,10 @@ export async function fetchRemains({ apiKey, groupId = 'default', baseUrl = DEFA
   const snapshot = {
     ok: true,
     fetchedAt: Date.now(),
-    apiKeyHint: maskKey(apiKey),
-    groupId,
-    baseUrl,
+    apiKeyHint: maskKey(resolved.key),
+    keySource: resolved.source,
+    groupId: resolved.groupId,
+    baseUrl: urls.tokenBase,
     models,
     baseResp: body.base_resp,
   };
@@ -254,23 +381,22 @@ export async function fetchRemains({ apiKey, groupId = 'default', baseUrl = DEFA
 /**
  * Send a single chat-completion to /v1/chat/completions and return
  * the parsed response + parsed `usage` block. Used by the dashboard's
- * "Send a test prompt" button so the user can verify their key works
- * and see live token usage.
+ * "Send a test prompt" button.
  */
 export async function chatCompletion({
-  apiKey,
   prompt,
   model = 'MiniMax-M3',
-  baseUrl = DEFAULT_CHAT_BASE_URL,
   maxTokens = 256,
 } = {}) {
-  if (!apiKey || !apiKey.trim()) {
-    return { ok: false, error: 'no_api_key', message: 'MiniMax API key is not configured' };
+  const resolved = resolveApiKey();
+  if (!resolved.key) {
+    return { ok: false, error: 'no_api_key', message: 'MiniMax Subscription Key is not configured.' };
   }
   if (!prompt || !prompt.trim()) {
     return { ok: false, error: 'no_prompt', message: 'prompt is empty' };
   }
-  const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+  const urls = resolveBaseUrls();
+  const url = `${urls.chatBase.replace(/\/$/, '')}/chat/completions`;
   const body = JSON.stringify({
     model,
     messages: [{ role: 'user', content: prompt }],
@@ -282,7 +408,7 @@ export async function chatCompletion({
     resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${resolved.key}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },

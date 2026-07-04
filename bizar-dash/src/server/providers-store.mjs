@@ -545,16 +545,20 @@ export const providersStore = {
       keyPattern: /^sk-[A-Za-z0-9]{20,}$/,
     },
     {
-      // MiniMax accepts ANTHROPIC_API_KEY as a fallback because
-      // MiniMax's API is Anthropic-format-compatible and many users
-      // already have an Anthropic key configured. The backup key
-      // is the second slot — keep both as the most-resilient config.
+      // v4.5.0 — MiniMax provider, fully implemented. The dashboard
+      // onboarding wizard writes the Subscription Key to
+      // ~/.local/share/opencode/auth.json (the canonical store written
+      // by opencode's `/connect` command). The MiniMax key has a
+      // variable-length format; valid prefixes are `sk-cp-` (Token
+      // Plan + Coding Plan), `sk-ant-` (Anthropic-format compatible),
+      // and `sk-or-` (OpenRouter-style). The chat completions host
+      // is `api.minimax.io/v1` (NOT `api.minimax.chat` which 404s).
       id: 'minimax',
       name: 'MiniMax',
       envKeys: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'],
       backupEnvKeys: ['MINIMAX_API_KEY_BACKUP', 'MINIMAX_BACKUP_API_KEY', 'ANTHROPIC_API_KEY_BACKUP'],
-      baseURL: 'https://api.minimax.chat/v1',
-      keyPattern: /^[A-Za-z0-9]{20,}$/,
+      baseURL: 'https://api.minimax.io/v1',
+      keyPattern: /^sk-(cp|ant|or)-[A-Za-z0-9_-]{20,}$/,
     },
   ],
 
