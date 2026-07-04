@@ -1,0 +1,967 @@
+/**
+ * cli/provision.mjs
+ *
+ * v4.4.7 — Unified installer + updater.
+ *
+ * `bizar install` and `bizar update` used to be two separate code paths
+ * (install.sh + cli/install.mjs for install, cli/update.mjs for update)
+ * with massive overlap: both copied agents, both patched opencode.json,
+ * both ran the plugin copy, both kicked off the service, both called
+ * `bizar doctor` at the end. The two paths diverged over time, and the
+ * user-visible bug was that `update` tried to install separate npm
+ * packages (@polderlabs/bizar-plugin, @polderlabs/bizar-dash) that no
+ * longer exist.
+ *
+ * This module is the single source of truth. Both `bizar install` and
+ * `bizar update` call `runProvision({ mode, ... })`. The differences
+ * between modes are explicit and small:
+ *
+ *   install: bootstrap a fresh install. Detects what exists, installs
+ *            everything that's missing, configures the service, runs
+ *            doctor. Does NOT kill running instances (fresh install
+ *            has none).
+ *   update:   refresh an existing install. Kills running instances,
+ *            upgrades @polderlabs/bizar + opencode-ai via npm, re-copies
+ *            agent files / plugin / skills, re-patches opencode.json
+ *            (idempotent), restarts the dashboard, runs doctor.
+ *
+ * Both modes are safe to re-run — every step is idempotent and skips
+ * work that's already done.
+ *
+ * Public API:
+ *   runProvision({ mode, dryRun, force, restart, ...flags })
+ *     Runs the full provision flow for `mode` ('install' | 'update').
+ *   detectState()
+ *     Probe what's installed without modifying anything.
+ *     Returns a structured state object.
+ */
+
+import chalk from 'chalk';
+import { execSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// `cli/provision.mjs` lives at `<pkg>/cli/provision.mjs`. The repo root
+// (where `plugins/bizar/`, `bizar-dash/`, `package.json` etc. live) is
+// one level up. This works both in source checkouts AND in global npm
+// installs (`<npm root -g>/@polderlabs/bizar/cli/provision.mjs`).
+export const REPO_ROOT = join(__dirname, '..');
+export const PKG_MAIN = '@polderlabs/bizar';
+
+const HOME = homedir();
+
+function bizarConfigDir() {
+  if (process.platform === 'win32') {
+    return process.env.APPDATA
+      ? join(process.env.APPDATA, 'bizar')
+      : join(HOME, '.config', 'bizar');
+  }
+  return process.env.XDG_CONFIG_HOME
+    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
+    : join(HOME, '.config', 'bizar');
+}
+
+export const BIZAR_HOME = bizarConfigDir();
+export const OPENCODE_DIR =
+  process.platform === 'win32'
+    ? join(process.env.APPDATA || HOME, 'opencode')
+    : join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'opencode');
+
+const SERVICE_PID_FILE = join(BIZAR_HOME, 'service.pid');
+const DASHBOARD_PID_FILE = join(BIZAR_HOME, 'dashboard.pid');
+const DASHBOARD_PORT_FILE = join(BIZAR_HOME, 'dashboard.port');
+
+// ─── Tiny utilities ──────────────────────────────────────────────────────────
+
+function haveCmd(cmd) {
+  try {
+    execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readTextSafe(file, fallback = '') {
+  try {
+    if (!existsSync(file)) return fallback;
+    return readFileSync(file, 'utf8');
+  } catch {
+    return fallback;
+  }
+}
+
+function readJsonSafe(file, fallback = null) {
+  try {
+    if (!existsSync(file)) return fallback;
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+/** Read a PID file and return the live PID, or null if missing/stale. */
+export function readLivePid(pidFile) {
+  if (!existsSync(pidFile)) return null;
+  const raw = readTextSafe(pidFile).trim();
+  if (!raw) {
+    try { rmSync(pidFile, { force: true }); } catch { /* ignore */ }
+    return null;
+  }
+  const pid = parseInt(raw, 10);
+  if (!Number.isFinite(pid) || pid <= 0) {
+    try { rmSync(pidFile, { force: true }); } catch { /* ignore */ }
+    return null;
+  }
+  try {
+    process.kill(pid, 0);
+    return pid;
+  } catch {
+    try { rmSync(pidFile, { force: true }); } catch { /* ignore */ }
+    return null;
+  }
+}
+
+/** Send SIGTERM, wait, then SIGKILL if needed. Cross-platform. */
+export async function killAndWait(pid, { timeoutMs = 5000, label = 'process' } = {}) {
+  if (!pid) return true;
+  let sigtermOk = false;
+  try {
+    process.kill(pid);
+    sigtermOk = true;
+  } catch (err) {
+    if (err.code === 'ESRCH') return true;
+    console.log(chalk.yellow(`    ! could not signal ${label} (pid ${pid}): ${err.message}`));
+    return false;
+  }
+  const start = Date.now();
+  let sawExit = false;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      process.kill(pid, 0);
+    } catch (err) {
+      if (err.code === 'ESRCH') { sawExit = true; break; }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (sawExit) return true;
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGKILL');
+    }
+    if (sigtermOk) {
+      console.log(chalk.yellow(`    ! ${label} (pid ${pid}) did not exit gracefully; sent forced kill`));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return true;
+  } catch (err) {
+    if (err.code === 'ESRCH') return true;
+    console.log(chalk.red(`    ✗ could not force-kill ${label} (pid ${pid}): ${err.message}`));
+    return false;
+  }
+}
+
+// ─── State detection ──────────────────────────────────────────────────────────
+
+/**
+ * Probe the current state without modifying anything. Both install and
+ * update flows start here so they can decide what to skip.
+ *
+ * Returned shape:
+ *   {
+ *     pkgRoot: string,         // <npm root -g>/@polderlabs/bizar
+ *     pkgVersion: string|null, // installed @polderlabs/bizar version
+ *     pkgLatest: string|null,  // latest @polderlabs/bizar version on npm
+ *     plugin: { sourceDir, destDir, installed, upToDate, symlink },
+ *     opencodeJson: { path, hasPluginEntry, exists },
+ *     service: { installed, running, unitPath },
+ *     dashboard: { running, pid, port },
+ *     opencodeCli: { version, latest },
+ *     headsUpState: { ok, blockerCount, warningCount },
+ *     gitRepo: boolean,        // are we running from a git checkout?
+ *   }
+ */
+export function detectState({ cwd = process.cwd() } = {}) {
+  // ── npm-global package location ─────────────────────────────────────
+  let globalRoot = null;
+  try {
+    globalRoot = execSync('npm root -g', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim();
+  } catch { /* ignore */ }
+
+  const pkgRoot = globalRoot ? join(globalRoot, '@polderlabs', 'bizar') : null;
+  const pkgVersion = globalRoot ? currentVersion(PKG_MAIN) : null;
+  const pkgLatest = latestVersion(PKG_MAIN);
+
+  // ── Plugin copy (deployed to ~/.config/opencode/plugins/bizar) ──
+  const pluginSourceDir = pkgRoot ? join(pkgRoot, 'plugins', 'bizar') : null;
+  const pluginDestDir = join(OPENCODE_DIR, 'plugins', 'bizar');
+  let pluginInstalled = false;
+  let pluginUpToDate = false;
+  let pluginSymlink = false;
+  try {
+    const st = statSync(pluginDestDir);
+    pluginSymlink = st.isSymbolicLink();
+    pluginInstalled = true;
+    if (pluginSourceDir && existsSync(pluginSourceDir)) {
+      // Cheap freshness check: compare source vs dest mtime. The plugin
+      // source ships its bundled node_modules + compiled JS; if dest's
+      // mtime is older than source's, treat as out of date.
+      try {
+        const srcSt = statSync(pluginSourceDir);
+        const dstSt = statSync(pluginDestDir);
+        pluginUpToDate = srcSt.mtimeMs <= dstSt.mtimeMs;
+      } catch {
+        pluginUpToDate = false;
+      }
+    }
+  } catch {
+    pluginInstalled = false;
+  }
+
+  // ── opencode.json plugin entry ───────────────────────────────────────
+  const opencodeJsonPath = join(OPENCODE_DIR, 'opencode.json');
+  const opencodeJson = readJsonSafe(opencodeJsonPath, null);
+  let hasPluginEntry = false;
+  if (opencodeJson && Array.isArray(opencodeJson.plugin)) {
+    hasPluginEntry = opencodeJson.plugin.some(
+      (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
+    );
+  }
+
+  // ── Background service ─────────────────────────────────────────────
+  let serviceInstalled = false;
+  let serviceUnitPath = null;
+  if (pkgRoot) {
+    try {
+      const sc = require_safe(join(pkgRoot, 'cli', 'service-controller.mjs'));
+      serviceInstalled = sc?.isInstalled?.() ?? false;
+      serviceUnitPath = sc?.serviceUnitPath?.() ?? null;
+    } catch { /* ignore */ }
+  }
+  const servicePid = readLivePid(SERVICE_PID_FILE);
+  const serviceRunning = servicePid !== null;
+
+  // ── Dashboard process ──────────────────────────────────────────────
+  const dashboardPid = readLivePid(DASHBOARD_PID_FILE);
+  const dashboardPort = parseInt(readTextSafe(DASHBOARD_PORT_FILE, '').trim(), 10) || null;
+
+  // ── opencode CLI version ───────────────────────────────────────────
+  const opencodeCli = {
+    version: currentVersion('opencode-ai'),
+    latest: latestVersion('opencode-ai'),
+  };
+
+  // ── Heads-up gate (.bizar/PRE_PUSH_NOTES.md) ───────────────────────
+  let headsUpState = { ok: true, blockerCount: 0, warningCount: 0 };
+  try {
+    const { checkHeadsUps, findBizarDir } = require_safe('./heads-up.mjs');
+    const bizarDir = findBizarDir(cwd);
+    if (bizarDir && checkHeadsUps) {
+      headsUpState = checkHeadsUps(bizarDir);
+    }
+  } catch { /* ignore */ }
+
+  // ── Git checkout? ─────────────────────────────────────────────────
+  const gitRepo = existsSync(join(REPO_ROOT, '.git'));
+
+  return {
+    pkgRoot,
+    pkgVersion,
+    pkgLatest,
+    plugin: {
+      sourceDir: pluginSourceDir,
+      destDir: pluginDestDir,
+      installed: pluginInstalled,
+      upToDate: pluginUpToDate,
+      symlink: pluginSymlink,
+    },
+    opencodeJson: {
+      path: opencodeJsonPath,
+      exists: !!opencodeJson,
+      hasPluginEntry,
+    },
+    service: {
+      installed: serviceInstalled,
+      running: serviceRunning,
+      pid: servicePid,
+      unitPath: serviceUnitPath,
+    },
+    dashboard: {
+      running: dashboardPid !== null,
+      pid: dashboardPid,
+      port: dashboardPort,
+    },
+    opencodeCli,
+    headsUpState,
+    gitRepo,
+  };
+}
+
+/**
+ * Lightweight CommonJS-ish require for ESM contexts. Used to detect the
+ * service-controller + heads-up modules without paying the static-import
+ * cost when those features aren't needed. Falls back gracefully if the
+ * import fails (e.g. during `bizar install` from a corrupted package).
+ */
+async function require_safe(spec) {
+  try {
+    const url = new URL(spec, `file://${__dirname}/`).href;
+    return await import(url);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Version + npm helpers ───────────────────────────────────────────────────
+
+export function currentVersion(pkg) {
+  try {
+    const out = execSync(`npm ls -g ${pkg} --depth=0 --json`, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 15000,
+    }).toString();
+    const parsed = JSON.parse(out);
+    const deps = parsed.dependencies ?? {};
+    return deps[pkg]?.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function latestVersion(pkg) {
+  try {
+    const out = execSync(`npm view ${pkg} version`, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 15000,
+    }).toString().trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Print the installed-vs-latest version matrix in a stable column layout.
+ */
+export function printVersionMatrix(components) {
+  const colWidth = Math.max(8, ...components.map((c) => c.label.length));
+  for (const c of components) {
+    const cur = c.current ?? '(not installed)';
+    const lat = c.latest ?? '(unknown)';
+    const same = c.current && c.current === c.latest;
+    const marker = same ? chalk.green('✓ up to date') : chalk.yellow('⤵ update available');
+    console.log(`    ${c.label.padEnd(colWidth)}  ${cur.padEnd(15)} → ${lat}  ${marker}`);
+  }
+}
+
+// ─── Step implementations ───────────────────────────────────────────────────
+
+/**
+ * Ensure @polderlabs/bizar is installed via npm. Returns
+ * `{ ok, message, installed: <version|null> }`.
+ *
+ * `mode`:
+ *   'install' — install if missing; never upgrade an existing install
+ *   'update'  — install the latest version (upgrade or install)
+ */
+export async function ensureNpmPackage(pkg, { mode, dryRun, force }) {
+  const current = currentVersion(pkg);
+  const latest = latestVersion(pkg);
+
+  if (mode === 'install' && current && !force) {
+    return { ok: true, message: `${pkg}@${current} already installed`, installed: current };
+  }
+
+  if (current && current === latest && !force) {
+    return { ok: true, message: `${pkg}@${current} already up to date`, installed: current };
+  }
+
+  if (dryRun) {
+    return {
+      ok: true,
+      message: `[dry-run] would run: npm install -g ${pkg}${latest ? `@${latest}` : '@latest'}`,
+      installed: latest ?? current,
+    };
+  }
+
+  // If we're inside a `bizar update`, the dashboard service / dashboard
+  // processes are reading files inside the npm-global install dir. We
+  // can't replace those files atomically while they're open. The caller
+  // is expected to have already killed them via ensureInstancesKilled().
+  const r = spawnSync('npm', ['install', '-g', `${pkg}@latest`], { stdio: 'inherit' });
+  if (r.status !== 0) {
+    return { ok: false, message: `${pkg} install failed`, installed: current };
+  }
+  return { ok: true, message: `${pkg} updated`, installed: latestVersion(pkg) };
+}
+
+export async function updateOpencodeCli({ dryRun, force }) {
+  const current = currentVersion('opencode-ai');
+  const latest = latestVersion('opencode-ai');
+
+  if (current && current === latest && !force) {
+    return { ok: true, message: `opencode-ai@${current} up to date`, installed: current };
+  }
+
+  if (dryRun) {
+    return { ok: true, message: '[dry-run] opencode-ai upgrade' };
+  }
+
+  // Prefer the upstream installer (`opencode upgrade`). Falls back to npm.
+  const r1 = spawnSync('opencode', ['upgrade'], { stdio: 'inherit' });
+  if (r1.status === 0) {
+    return { ok: true, message: 'opencode updated via `opencode upgrade`' };
+  }
+  console.log(chalk.dim('  opencode upgrade not available; falling back to npm'));
+  const r2 = spawnSync('npm', ['install', '-g', 'opencode-ai@latest'], { stdio: 'inherit' });
+  if (r2.status === 0) {
+    return { ok: true, message: 'opencode updated via npm' };
+  }
+  return { ok: false, message: 'opencode update failed' };
+}
+
+/**
+ * Copy `plugins/bizar/` from the npm-installed package into
+ * `~/.config/opencode/plugins/bizar/`. Skips if the dest is a dev symlink
+ * (set by `bizar dev-link`). Idempotent — safe to re-run.
+ */
+export async function copyPluginToOpencode({ dryRun, force }) {
+  const state = detectState();
+  const src = state.plugin.sourceDir;
+  const dest = state.plugin.destDir;
+
+  if (!src || !existsSync(src)) {
+    return {
+      ok: false,
+      message: `plugin source not found at ${src ?? '(unknown)'} — reinstall @polderlabs/bizar`,
+    };
+  }
+
+  if (state.plugin.symlink && !force) {
+    return {
+      ok: true,
+      message: `plugin dest is a dev symlink — skipping copy (use \`bizar dev-unlink\` to restore)`,
+    };
+  }
+
+  if (state.plugin.upToDate && !force && state.plugin.installed) {
+    return { ok: true, message: 'plugin copy is up to date' };
+  }
+
+  if (dryRun) {
+    return { ok: true, message: `[dry-run] would copy ${src} → ${dest}` };
+  }
+
+  if (state.plugin.symlink && force) {
+    try { rmSync(dest, { force: true }); } catch { /* ignore */ }
+  }
+
+  const { cp } = await import('node:fs/promises');
+  try {
+    mkdirSync(dest, { recursive: true });
+    await cp(src, dest, {
+      recursive: true,
+      filter: (p) => !p.includes('node_modules') && !p.includes('dist') && !p.endsWith('.DS_Store'),
+    });
+    // Copy the SDK into the deployed plugin's node_modules so Bun can
+    // resolve @polderlabs/bizar-sdk when loading the plugin from
+    // ~/.config/opencode/plugins/bizar/.
+    const sdkSrc = join(state.pkgRoot, 'node_modules', '@polderlabs', 'bizar-sdk');
+    const sdkDst = join(dest, 'node_modules', '@polderlabs', 'bizar-sdk');
+    if (existsSync(sdkSrc)) {
+      mkdirSync(join(dest, 'node_modules', '@polderlabs'), { recursive: true });
+      await cp(sdkSrc, sdkDst, { recursive: true });
+    }
+    return { ok: true, message: `plugin copied to ${dest}` };
+  } catch (err) {
+    return { ok: false, message: `plugin copy failed: ${err.message}` };
+  }
+}
+
+/**
+ * Ensure the Bizar plugin entry exists in `~/.config/opencode/opencode.json`.
+ * Idempotent: if the entry already exists, no-op.
+ */
+export async function patchOpencodeJson({ dryRun, force }) {
+  const cfgPath = join(OPENCODE_DIR, 'opencode.json');
+  if (!existsSync(cfgPath)) {
+    if (dryRun) {
+      return { ok: true, message: `[dry-run] would bootstrap ${cfgPath}` };
+    }
+    mkdirSync(OPENCODE_DIR, { recursive: true });
+    const templateSrc = join(REPO_ROOT, 'config', 'opencode.json');
+    if (existsSync(templateSrc)) {
+      const { copyFileSync } = await import('node:fs');
+      copyFileSync(templateSrc, cfgPath);
+      return { ok: true, message: `${cfgPath} bootstrapped from package template` };
+    }
+    writeFileSync(cfgPath, JSON.stringify({
+      $schema: 'https://opencode.ai/config.json',
+      plugin: [],
+    }, null, 2));
+    return { ok: true, message: `${cfgPath} created` };
+  }
+
+  // File exists. Check whether the Bizar entry is already there.
+  const cfg = readJsonSafe(cfgPath, null);
+  if (!cfg || typeof cfg !== 'object') {
+    return { ok: false, message: `${cfgPath} is not valid JSON` };
+  }
+  const plugins = Array.isArray(cfg.plugin) ? cfg.plugin : [];
+  const hasEntry = plugins.some(
+    (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
+  );
+  if (hasEntry && !force) {
+    return { ok: true, message: 'opencode.json already has Bizar plugin entry' };
+  }
+
+  if (dryRun) {
+    return { ok: true, message: `[dry-run] would patch opencode.json with plugin entry` };
+  }
+
+  if (!hasEntry) {
+    plugins.push(['./plugins/bizar/index.ts', {
+      loopThresholdWarn: 5,
+      loopThresholdEscalate: 8,
+      loopThresholdBlock: 12,
+      loopWindowSize: 10,
+    }]);
+    cfg.plugin = plugins;
+  }
+  writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+  return { ok: true, message: 'opencode.json patched with Bizar plugin entry' };
+}
+
+/**
+ * Copy `config/agents/*.md` into `~/.config/opencode/agents/`. Idempotent.
+ * Doesn't overwrite existing files unless `force: true`.
+ */
+export async function syncAgentFiles({ dryRun, force }) {
+  const srcDir = join(REPO_ROOT, 'config', 'agents');
+  const dstDir = join(OPENCODE_DIR, 'agents');
+  if (!existsSync(srcDir)) {
+    return { ok: true, message: 'no bundled agents to sync' };
+  }
+  if (dryRun) {
+    return { ok: true, message: `[dry-run] would sync ${srcDir} → ${dstDir}` };
+  }
+
+  mkdirSync(dstDir, { recursive: true });
+  mkdirSync(join(dstDir, '_shared'), { recursive: true });
+
+  const { readdirSync, copyFileSync } = await import('node:fs');
+  let copied = 0;
+  let skipped = 0;
+  const files = readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of files) {
+    if (entry.isDirectory()) continue;
+    if (entry.name === '_shared') continue;
+    const dst = join(dstDir, entry.name);
+    if (existsSync(dst) && !force) {
+      skipped++;
+      continue;
+    }
+    copyFileSync(join(srcDir, entry.name), dst);
+    copied++;
+  }
+
+  // _shared/ — always overwrite (it's tiny + ships agent defaults).
+  const sharedSrc = join(srcDir, '_shared');
+  if (existsSync(sharedSrc)) {
+    for (const entry of readdirSync(sharedSrc, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      copyFileSync(join(sharedSrc, entry.name), join(dstDir, '_shared', entry.name));
+      copied++;
+    }
+  }
+
+  return { ok: true, message: `agents synced (${copied} copied, ${skipped} kept)`, copied, skipped };
+}
+
+/**
+ * Copy slash commands + skills to the opencode config dir.
+ */
+export async function syncConfigExtras({ dryRun }) {
+  if (dryRun) {
+    return { ok: true, message: '[dry-run] would sync commands + skills' };
+  }
+
+  const dst = OPENCODE_DIR;
+  mkdirSync(join(dst, 'command'), { recursive: true });
+  mkdirSync(join(dst, 'commands'), { recursive: true });
+  mkdirSync(join(dst, 'skill'), { recursive: true });
+  mkdirSync(join(dst, 'skills'), { recursive: true });
+
+  const { cp, readdirSync, copyFileSync, statSync } = await import('node:fs');
+  const copyDirIfExists = async (srcDir, dstDir) => {
+    if (!existsSync(srcDir)) return;
+    mkdirSync(dstDir, { recursive: true });
+    for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+      const src = join(srcDir, entry.name);
+      const dst = join(dstDir, entry.name);
+      if (entry.isDirectory()) await copyDirIfExists(src, dst);
+      else copyFileSync(src, dst);
+    }
+  };
+
+  for (const sub of ['command', 'commands']) {
+    const s = join(REPO_ROOT, 'config', sub);
+    if (existsSync(s)) await copyDirIfExists(s, join(dst, sub));
+  }
+  for (const skill of ['obsidian', 'glyph', 'read-the-damn-docs']) {
+    const s = join(REPO_ROOT, 'config', 'skills', skill);
+    if (existsSync(s)) {
+      await copyDirIfExists(s, join(dst, 'skill'));
+      await copyDirIfExists(s, join(dst, 'skills'));
+    }
+  }
+  return { ok: true, message: 'commands + skills synced' };
+}
+
+/**
+ * Run the system-deps + service-registration steps. These are shell-only
+ * (need sudo + platform package manager). We shell to the bundled
+ * install.sh which knows the platform.
+ */
+export async function ensureSystemDeps({ dryRun, mode }) {
+  const installSh = join(REPO_ROOT, 'install.sh');
+  if (!existsSync(installSh)) {
+    return {
+      ok: true,
+      message: `install.sh not found at ${installSh} — skipping system deps`,
+    };
+  }
+
+  if (dryRun) {
+    return { ok: true, message: '[dry-run] would shell to install.sh for system deps' };
+  }
+
+  const useBash = process.platform !== 'win32' || process.env.WSL_DISTRO_NAME;
+  if (useBash) {
+    // install.sh accepts --mode and a few other flags. Pass --mode
+    // through so the bash script can skip what we already did in JS.
+    const args = [installSh, '--mode', mode, '--non-interactive'];
+    const r = spawnSync('bash', args, { stdio: 'inherit' });
+    if (r.status !== 0) {
+      return { ok: false, message: `install.sh exited with code ${r.status}` };
+    }
+    return { ok: true, message: 'install.sh completed' };
+  }
+
+  // Windows without WSL — bash isn't available. The user can install
+  // system deps manually (Windows doesn't need apt/dnf for Node tooling).
+  return {
+    ok: true,
+    message: 'Windows without WSL: skipping system deps (none required for Node tooling)',
+  };
+}
+
+/**
+ * Run `bizar doctor` to verify the install.
+ */
+export async function runDoctor({ silent = false } = {}) {
+  try {
+    const { runDoctor: doctorFn } = await import('./doctor.mjs');
+    const result = await doctorFn({ silent });
+    return result;
+  } catch (err) {
+    return {
+      ok: false,
+      failed: 1,
+      results: [{ name: 'doctor', ok: false, message: err.message }],
+    };
+  }
+}
+
+// ─── Top-level orchestration ──────────────────────────────────────────────────
+
+/**
+ * Kill running Bizar instances before mutating npm-global files. Returns
+ * the kill results so the caller can report them.
+ */
+export async function ensureInstancesKilled({ dryRun, force, instances }) {
+  const live = instances ?? detectInstances();
+  const running = [];
+  if (live.service?.running) running.push({ kind: 'service', pid: live.service.pid });
+  if (live.dashboard?.running) running.push({ kind: 'dashboard', pid: live.dashboard.pid });
+
+  if (running.length === 0) {
+    return { killed: [], skipped: [] };
+  }
+
+  if (dryRun) {
+    return {
+      killed: running.map((r) => ({ ...r, ok: true, dryRun: true })),
+      skipped: [],
+    };
+  }
+
+  // Always kill (the npm update will replace on-disk files; running
+  // processes have those files open). `--force` skips the prompt.
+  // We don't prompt here — the caller (runProvision) is expected to
+  // confirm before calling this function. If we ever want to make
+  // it interactive, plumb `assumeYes` through here.
+  void force;
+  const killed = [];
+  for (const r of running) {
+    const label = r.kind === 'service' ? 'bizar service' : 'bizar-dash';
+    const ok = await killAndWait(r.pid, { label });
+    killed.push({ ...r, ok });
+    if (ok) {
+      try { rmSync(r.kind === 'service' ? SERVICE_PID_FILE : DASHBOARD_PID_FILE, { force: true }); } catch { /* ignore */ }
+      if (r.kind === 'dashboard') {
+        try { rmSync(DASHBOARD_PORT_FILE, { force: true }); } catch { /* ignore */ }
+      }
+    }
+  }
+  return { killed, skipped: [] };
+}
+
+/**
+ * Spawn a fresh dashboard detached. Used at the end of an `update` flow
+ * to pick up the just-upgraded code.
+ */
+export function spawnFreshDashboard({ port } = {}) {
+  const state = detectState();
+  if (!state.pkgRoot) {
+    return { ok: false, message: 'could not locate npm global root' };
+  }
+  const dashBin = join(state.pkgRoot, 'cli', 'bin.mjs');
+  if (!existsSync(dashBin)) {
+    return { ok: false, message: `dashboard binary not found at ${dashBin}` };
+  }
+  try {
+    mkdirSync(BIZAR_HOME, { recursive: true });
+  } catch { /* ignore */ }
+  const args = [dashBin, 'start', '--bg'];
+  if (port) args.push(`--port=${port}`);
+  try {
+    const child = spawn(process.execPath, args, {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, BIZAR_AUTO_RESPAWN: '1' },
+    });
+    child.on('error', () => { /* ignore */ });
+    child.unref();
+    return { ok: true, message: `dashboard re-spawned (pid ${child.pid})` };
+  } catch (err) {
+    return { ok: false, message: `dashboard re-spawn failed: ${err.message}` };
+  }
+}
+
+/**
+ * The unified provision flow. `mode` is 'install' or 'update'.
+ *
+ * Steps performed:
+ *   1. Detect state (no side effects).
+ *   2. (update only) Show installed-vs-latest version matrix.
+ *   3. (update only) Heads-up gate.
+ *   4. Kill running instances (update only — installs have none).
+ *   5. Upgrade npm packages (bizar + opencode-ai).
+ *   6. Shell to install.sh for system-deps + service registration.
+ *   7. Sync agent files, slash commands, skills.
+ *   8. Copy plugin to ~/.config/opencode/plugins/bizar/.
+ *   9. Patch opencode.json with the Bizar plugin entry.
+ *  10. (update only) Restart dashboard.
+ *  11. Doctor health check.
+ *  12. Summary.
+ *
+ * Every step is idempotent — running this twice is safe.
+ */
+export async function runProvision(opts = {}) {
+  const {
+    mode = 'install',
+    dryRun = false,
+    force = false,
+    restart = mode === 'update',
+    skipSystemDeps = false,
+    skipHeadsUps = false,
+    yes = false,
+  } = opts;
+
+  const banner = mode === 'update'
+    ? chalk.bold.hex('#a855f7')('\n  ᚦ BIZAR UPDATE ᚦ\n')
+    : chalk.bold.hex('#6366f1')('\n  ⚡ BIZAR INSTALL ᚦ\n');
+  console.log(banner);
+  if (dryRun) {
+    console.log(chalk.dim('  --dry-run set: no installs, kills, or restarts will be performed.\n'));
+  }
+
+  // ── 1. Detect state ──────────────────────────────────────────────────
+  const state = detectState();
+
+  // ── 2. (update) Version matrix ───────────────────────────────────────
+  if (mode === 'update') {
+    console.log('  Installed vs. latest:');
+    printVersionMatrix([
+      { label: 'opencode-ai', current: state.opencodeCli.version, latest: state.opencodeCli.latest },
+      { label: PKG_MAIN, current: state.pkgVersion, latest: state.pkgLatest },
+    ]);
+    console.log('');
+  }
+
+  // ── 3. (update) Heads-up gate ────────────────────────────────────────
+  if (mode === 'update' && !skipHeadsUps) {
+    const h = state.headsUpState;
+    if (h.blockerCount > 0) {
+      if (dryRun) {
+        console.log(chalk.yellow(`  Dry-run: ${h.blockerCount} active blocker(s) — update would be blocked.`));
+      } else if (yes || force) {
+        console.log(chalk.yellow(`  ⚠ ${h.blockerCount} active blocker(s) present — proceeding due to ${yes ? '--yes' : '--force'}.`));
+      } else {
+        console.error(chalk.red(`  ✗ ${h.blockerCount} active blocker(s) in .bizar/PRE_PUSH_NOTES.md`));
+        console.error(chalk.dim('    Archive with `bizar heads-up archive` or override with --force.'));
+        process.exit(1);
+      }
+    } else if (h.warningCount > 0) {
+      console.log(chalk.yellow(`  ⚠ ${h.warningCount} warning(s) in active heads-ups.`));
+    } else {
+      console.log(chalk.green('  ✓ Heads-ups: clear'));
+    }
+    console.log('');
+  }
+
+  // ── 4. Kill running instances (update only) ─────────────────────────
+  if (mode === 'update') {
+    const kill = await ensureInstancesKilled({ dryRun, force, instances: {
+      service: state.service.running ? { pid: state.service.pid } : null,
+      dashboard: state.dashboard.running ? { pid: state.dashboard.pid } : null,
+    } });
+    if (kill.killed.length > 0) {
+      const labels = kill.killed.map((k) => `${k.kind}${dryRun ? ' (dry-run)' : ''}`).join(', ');
+      console.log(chalk.yellow(`  ⚠ Stopped running instances: ${labels}`));
+      for (const k of kill.killed) {
+        const marker = k.ok ? chalk.green('✓') : chalk.red('✗');
+        console.log(`    ${marker} ${k.kind} ${k.ok ? 'stopped' : 'kill failed'}`);
+      }
+      // Give the kernel a moment to release file handles.
+      if (!dryRun) await new Promise((r) => setTimeout(r, 500));
+    } else {
+      console.log(chalk.dim('  No running Bizar instances detected.'));
+    }
+    console.log('');
+  }
+
+  // ── 5. npm package upgrades ─────────────────────────────────────────
+  const stepResults = [];
+  const runStep = async (label, fn) => {
+    console.log(chalk.bold(`  → ${label}`));
+    const r = await fn();
+    console.log(`    ${r.ok ? chalk.green('✓') : chalk.red('✗')} ${r.message}`);
+    stepResults.push({ label, ...r });
+    return r;
+  };
+
+  if (mode === 'update') {
+    await runStep('opencode-ai', () => updateOpencodeCli({ dryRun, force }));
+  }
+  await runStep(PKG_MAIN, () => ensureNpmPackage(PKG_MAIN, { mode, dryRun, force }));
+
+  // ── 6. System deps + service registration (shell) ──────────────────
+  if (!skipSystemDeps) {
+    console.log('');
+    await runStep('system-deps + service', () => ensureSystemDeps({ dryRun, mode }));
+  }
+
+  // ── 7-9. Sync agent files, commands, skills, plugin, opencode.json ──
+  console.log('');
+  await runStep('agent files + slash commands + skills', () =>
+    Promise.all([
+      syncAgentFiles({ dryRun, force }),
+      syncConfigExtras({ dryRun }),
+    ]).then((results) => {
+      const allOk = results.every((r) => r.ok);
+      const msgs = results.map((r) => r.message).join('; ');
+      return { ok: allOk, message: msgs || 'synced' };
+    }),
+  );
+  await runStep('plugin → ~/.config/opencode/plugins/bizar/', () =>
+    copyPluginToOpencode({ dryRun, force }),
+  );
+  await runStep('opencode.json plugin entry', () => patchOpencodeJson({ dryRun, force }));
+
+  // ── 10. (update) Restart dashboard ──────────────────────────────────
+  if (mode === 'update' && restart && state.dashboard.running) {
+    console.log('');
+    console.log(chalk.cyan('  Restarting dashboard with the new code...'));
+    const r = spawnFreshDashboard({ port: state.dashboard.port });
+    console.log(`    ${r.ok ? chalk.green('✓') : chalk.yellow('⚠')} ${r.message}`);
+    stepResults.push({ label: 'dashboard-restart', ...r });
+  }
+
+  // ── 11. Doctor health check ────────────────────────────────────────
+  console.log('');
+  const doctor = await runDoctor({ silent: true });
+  if (doctor.failed > 0) {
+    console.log(chalk.yellow(`  ⚠ Post-${mode} health check found ${doctor.failed} issue(s):`));
+    for (const r of (doctor.results || [])) {
+      if (!r.ok) {
+        console.log(chalk.red(`    ✗ ${r.name}: ${r.message}`));
+      }
+    }
+    console.log(chalk.dim(`  Run \`bizar doctor\` for details.`));
+  } else {
+    console.log(chalk.green('  ✓ Doctor: all checks passed'));
+  }
+
+  // ── 12. Summary ─────────────────────────────────────────────────────
+  console.log('');
+  console.log('  Summary:');
+  for (const r of stepResults) {
+    const marker = r.ok ? chalk.green('✓') : chalk.red('✗');
+    console.log(`    ${marker} ${r.label.padEnd(36)} ${r.message}`);
+  }
+
+  const anyFail = stepResults.some((r) => !r.ok);
+  if (anyFail) {
+    console.log(chalk.yellow('\n  Some steps had issues. See messages above.'));
+  } else {
+    console.log(chalk.green(`\n  ✓ ${mode === 'update' ? 'Update' : 'Install'} complete\n`));
+  }
+
+  return {
+    ok: !anyFail,
+    mode,
+    state,
+    stepResults,
+    doctor,
+  };
+}
+
+/**
+ * CLI-flag-parsing entrypoint for `bizar update`. Kept here so that
+ * `cli/update.mjs` (the bin.mjs-facing module) can stay a thin shim
+ * without duplicating flag parsing. Accepts the legacy `subargs: string[]`
+ * shape so any external callers keep working.
+ */
+export async function runUpdate(subargs = []) {
+  return runProvision({
+    mode: 'update',
+    dryRun: subargs.includes('--dry-run'),
+    force: subargs.includes('--force'),
+    yes: subargs.includes('--yes') || subargs.includes('-y'),
+    restart: !subargs.includes('--no-restart'),
+  });
+}
+
+/**
+ * CLI-flag-parsing entrypoint for `bizar install`. Mirrors `runUpdate`
+ * so `cli/install.mjs` can stay a thin shim too.
+ */
+export async function runInstallerCli(opts = []) {
+  const subargs = Array.isArray(opts) ? opts : [];
+  return runProvision({
+    mode: 'install',
+    dryRun: subargs.includes('--dry-run'),
+    force: subargs.includes('--force'),
+    yes: subargs.includes('--yes') || subargs.includes('-y'),
+  });
+}

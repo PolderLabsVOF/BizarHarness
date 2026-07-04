@@ -1,17 +1,21 @@
 <#
 .SYNOPSIS
-  BizarHarness Windows installer (PowerShell).
+  BizarHarness Windows installer (PowerShell, v4.4.7 — thin wrapper).
 
 .DESCRIPTION
-  Cross-platform installer for BizarHarness on Windows. Detects
-  and installs dependencies via winget → choco → npm, then
-  configures agent files, the opencode plugin, and the background
-  service.
+  Cross-platform installer for BizarHarness on Windows. v4.4.7 is a
+  thin wrapper that:
+    1. Installs Windows-specific system deps (Node.js, git, jq) via
+       winget → choco → npm fallback.
+    2. Shells to `node cli/provision.mjs --mode=install` for everything
+       else (agent files, plugin copy, opencode.json patching, skills
+       install, service registration via Task Scheduler, doctor check).
 
   Linux/macOS users should use install.sh instead.
 
 .PARAMETER Update
-  Pull latest via git, re-install config, re-install service.
+  Run in update mode (equivalent to --mode=update on the unified
+  provisioner; idempotent so safe to run after every npm install).
 
 .PARAMETER DryRun
   Print all actions without executing them.
@@ -29,384 +33,155 @@
   .\install.ps1 -NonInteractive -Force
 #>
 
-#Requires -Version 5.1
-Set-StrictMode -Version Latest
-
+[CmdletBinding()]
 param(
   [switch]$Update,
   [switch]$DryRun,
   [switch]$NonInteractive,
-  [switch]$Force
+  [switch]$Force,
+  [switch]$Help
 )
 
-# ── Constants ──────────────────────────────────────────────────────────────────
+$ErrorActionPreference = 'Stop'
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoDir = Resolve-Path $ScriptDir
-$ConfigDir = "$env:USERPROFILE\.config\opencode"
-$PluginDir = "$ConfigDir\plugins\bizar"
-$OpenCodeConfig = "$ConfigDir\opencode.json"
-
-$Host.UI.RawUI.WindowTitle = "BizarHarness Installer v3.22.0"
-
-# ── Helper functions ───────────────────────────────────────────────────────────
-
-function Write-Note  { Write-Host "  ✓ $($args[0])" -ForegroundColor Green }
-function Write-Warn  { Write-Host "  ⚠ $($args[0])" -ForegroundColor Yellow }
-function Write-Err   { Write-Host "  ✗ $($args[0])" -ForegroundColor Red }
-function Write-Action{ Write-Host "  → $($args[0])" -ForegroundColor Cyan }
-function Write-Dim   { Write-Host "  $($args[0])" -ForegroundColor DarkGray }
-function Write-Section{ Write-Host "`n── $($args[0]) ──" -ForegroundColor Cyan }
-
-function DryBlock {
-  <#
-  .SYNOPSIS
-    Execute a script block only if not in dry-run mode.
-  #>
-  param([scriptblock]$Block, [string]$Description)
-  if ($DryRun) {
-    Write-Dim "  [DRY-RUN] $Description"
-    return $null
-  }
-  return & $Block
-}
-
-function Have-Cmd {
-  param([string]$Name)
-  return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
-}
-
-function Have-File {
-  param([string]$Path)
-  return [bool](Test-Path $Path -PathType Leaf)
-}
-
-# ── Usage ──────────────────────────────────────────────────────────────────────
+# ── Helper functions ─────────────────────────────────────────────────────────
+function Write-Note   { param([string]$Msg) Write-Host "  ✓ $Msg" -ForegroundColor Green }
+function Write-Warn   { param([string]$Msg) Write-Host "  ⚠ $Msg" -ForegroundColor Yellow }
+function Write-Err    { param([string]$Msg) Write-Host "  ✗ $Msg" -ForegroundColor Red }
+function Write-Action { param([string]$Msg) Write-Host "  → $Msg" -ForegroundColor Cyan }
+function Write-Dim    { param([string]$Msg) Write-Host "  $Msg" -ForegroundColor DarkGray }
+function Write-Section{ param([string]$Msg) Write-Host "`n── $Msg ──" -ForegroundColor Cyan }
+function Have-Cmd     { param([string]$Cmd) $null -ne (Get-Command $Cmd -ErrorAction SilentlyContinue) }
+function Have-File    { param([string]$Path) Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue }
 
 function Show-Usage {
   @"
+install.ps1 — BizarHarness Windows installer
 
-  install.ps1 — BizarHarness Windows installer
-
-  Usage:
-    .\install.ps1                        Interactive install
-    .\install.ps1 -Help                  Show this help
-    .\install.ps1 -DryRun                Dry run — print actions, no changes
-    .\install.ps1 -NonInteractive         Non-interactive (CI safe)
-    .\install.ps1 -Force                 Overwrite existing files
-    .\install.ps1 -Update                Pull latest + re-install config + service
-
-  On Linux/macOS, run install.sh instead.
-
+Usage:
+  .\install.ps1                   Interactive install
+  .\install.ps1 -Help             Show this help
+  .\install.ps1 -DryRun           Print actions, no changes
+  .\install.ps1 -NonInteractive   Skip prompts (CI safe)
+  .\install.ps1 -Force            Overwrite existing files
+  .\install.ps1 -Update           Run in update mode
 "@
+}
+
+if ($Help) {
+  Show-Usage
   exit 0
 }
 
-if ($args -contains '--help' -or $args -contains '-h' -or $args -contains '-Help') {
-  Show-Usage
+# ── Paths ───────────────────────────────────────────────────────────────────
+$RepoDir = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '')).Path
+
+# ── System dependency install (Windows) ────────────────────────────────────
+# Windows tooling doesn't need apt/dnf/brew — we only need node + git + jq
+# + a terminal emulator. winget is the modern path; choco is the fallback.
+
+function Install-WindowsDeps {
+  Write-Section "Checking dependencies"
+
+  if (Have-Cmd node) {
+    Write-Note "Node.js $(node --version) present"
+  } else {
+    Write-Action "Installing Node.js 20 LTS..."
+    if (Have-Cmd winget) {
+      if (-not $DryRun) { winget install --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements | Out-Null }
+      Write-Note "Node.js installed via winget"
+    } elseif (Have-Cmd choco) {
+      if (-not $DryRun) { choco install -y nodejs-lts | Out-Null }
+      Write-Note "Node.js installed via choco"
+    } else {
+      Write-Action "Installing Node.js via npm-dist tarball fallback..."
+      if (-not $DryRun) {
+        $arch = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
+        $ver  = 'v20.17.0'
+        $url  = "https://nodejs.org/dist/$ver/node-$ver-win-$arch.zip"
+        $zip  = Join-Path $env:TEMP "node.zip"
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        Expand-Archive -Path $zip -DestinationPath "$env:ProgramFiles\nodejs" -Force
+        [Environment]::SetEnvironmentVariable('Path', "$env:Path;$env:ProgramFiles\nodejs", 'User')
+        $env:Path = "$env:Path;$env:ProgramFiles\nodejs"
+      }
+      Write-Note "Node.js installed via tarball fallback"
+    }
+  }
+
+  if (Have-Cmd git) { Write-Note "git present" }
+  elseif (Have-Cmd winget) { if (-not $DryRun) { winget install --id Git.Git --accept-source-agreements --accept-package-agreements | Out-Null } } }
+  elseif (Have-Cmd choco)  { if (-not $DryRun) { choco install -y git | Out-Null } }
+
+  if (Have-Cmd uv) { Write-Note "uv present" }
+  elseif (Have-Cmd winget) { if (-not $DryRun) { winget install --id astral-sh.uv --accept-source-agreements --accept-package-agreements | Out-Null } } }
 }
 
-# ── Header ─────────────────────────────────────────────────────────────────────
+# ── Service registration (delegated to Node) ───────────────────────────────
+function Install-Service {
+  Write-Section "Installing background service"
+  $bin = Join-Path $RepoDir 'cli\bin.mjs'
+  if (-not (Have-File $bin)) {
+    Write-Warn "cli/bin.mjs not found — service registration deferred"
+    return
+  }
+  if ($DryRun) {
+    Write-Dim "would run: node $bin service install"
+    return
+  }
+  $p = Start-Process -FilePath node -ArgumentList @($bin, 'service', 'install') -Wait -PassThru -NoNewWindow
+  if ($p.ExitCode -ne 0) {
+    Write-Warn "service registration had issues (exit $($p.ExitCode))"
+    Write-Dim "    manual command: node $bin service install"
+  }
+}
 
-Write-Host "`n  ⚡ BizarHarness Installer v3.22.0" -ForegroundColor Cyan
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+Write-Host ""
+Write-Host "  ⚡ BizarHarness Installer v4.4.7" -ForegroundColor Cyan
 if ($Update) { Write-Host "  Update mode" -ForegroundColor DarkGray }
 Write-Host ""
 
-# ── Ensure Node.js ─────────────────────────────────────────────────────────────
+$os = (Get-CimInstance Win32_OperatingSystem).Caption
+Write-Note "Detected $os"
 
-function Ensure-Node {
-  Write-Section "Node.js"
-  if (Have-Cmd node) {
-    $ver = node --version
-    Write-Note "Node.js $ver"
-    return
-  }
+Install-WindowsDeps
+Install-Service
 
-  Write-Action "Node.js not found — installing..."
-
-  # Try winget first
-  if (Have-Cmd winget) {
-    DryBlock -Description "winget install OpenJS.NodeJS.LTS" -Block {
-      winget install OpenJS.NodeJS.LTS 2>$null
-      if ($LASTEXITCODE -ne 0) { throw "winget install failed" }
-    }
-    if ((Get-Command node -ErrorAction SilentlyContinue)) {
-      Write-Note "Node.js installed via winget"
-      return
-    }
-  }
-
-  # Try choco
-  if (Have-Cmd choco) {
-    DryBlock -Description "choco install nodejs -y" -Block {
-      choco install nodejs -y 2>$null
-      refreshenv 2>$null
-    }
-    if ((Get-Command node -ErrorAction SilentlyContinue)) {
-      Write-Note "Node.js installed via choco"
-      return
-    }
-  }
-
-  # Fallback: download directly
-  Write-Warn "Could not install Node.js automatically."
-  Write-Warn "Download from https://nodejs.org/ and re-run this script."
-  if (-not $DryRun) { exit 1 }
+# ── Hand off to the unified provisioner ────────────────────────────────────
+$provision = Join-Path $RepoDir 'cli\provision.mjs'
+if (-not (Have-File $provision)) {
+  Write-Err "cli\provision.mjs not found"
+  exit 1
 }
 
-# ── Ensure git ─────────────────────────────────────────────────────────────────
+$mode = if ($Update) { 'update' } else { 'install' }
+$args = @('--mode', $mode)
+if ($DryRun)         { $args += '--dry-run' }
+if ($Force)          { $args += '--force' }
+if ($NonInteractive) { $args += '--yes' }
 
-function Ensure-Git {
-  if (Have-Cmd git) { return }
-
-  Write-Section "Git"
-  Write-Action "Git not found — installing..."
-
-  if (Have-Cmd winget) {
-    DryBlock -Description "winget install Git.Git" -Block {
-      winget install Git.Git 2>$null
-    }
-    if ((Get-Command git -ErrorAction SilentlyContinue)) {
-      Write-Note "Git installed via winget"
-      return
-    }
-  }
-
-  if (Have-Cmd choco) {
-    DryBlock -Description "choco install git -y" -Block {
-      choco install git -y 2>$null
-    }
-  }
-
-  Write-Warn "Git installation may require a restart. Continuing..."
+Write-Section "Running unified provisioner"
+Write-Action "node $provision $($args -join ' ')"
+$proc = Start-Process -FilePath node -ArgumentList @($provision) + $args -Wait -PassThru -NoNewWindow
+if ($proc.ExitCode -ne 0) {
+  Write-Warn "provisioner exited with code $($proc.ExitCode)"
+  exit $proc.ExitCode
 }
 
-# ── Verify opencode plugin ─────────────────────────────────────────────────────
+Write-Host ""
+Write-Host "┌────────────────────────────────────────────────────────────┐"
+Write-Host "│  BizarHarness ready.                                       │"
+Write-Host "│                                                            │"
+Write-Host "│  Next:                                                     │"
+Write-Host "│    1. Restart opencode to pick up new config                │"
+Write-Host "│    2. Run /connect in opencode to add API keys              │"
+Write-Host "│    3. Run 'bizar dash start' to launch the dashboard        │"
+Write-Host "│    4. Visit http://localhost:4321 in your browser            │"
+Write-Host "└────────────────────────────────────────────────────────────┘"
+Write-Host ""
 
-function Verify-Plugin {
-  Write-Section "Verifying Bizar plugin registration"
-
-  if (-not (Have-File $OpenCodeConfig)) {
-    Write-Warn "opencode.json not found at $OpenCodeConfig — plugin not registered"
-    return
-  }
-
-  try {
-    $json = Get-Content $OpenCodeConfig -Raw | ConvertFrom-Json
-  } catch {
-    Write-Warn "Could not parse opencode.json"
-    return
-  }
-
-  $hasPlugin = $false
-  if ($json.plugin) {
-    foreach ($p in $json.plugin) {
-      if ($p[0] -match 'plugins/bizar') {
-        $hasPlugin = $true
-        break
-      }
-    }
-  }
-
-  if ($hasPlugin) {
-    Write-Note "Bizar plugin registered in opencode.json"
-    return
-  }
-
-  Write-Action "Adding Bizar plugin entry..."
-
-  DryBlock -Description "patch opencode.json" -Block {
-    if (-not $json.plugin) {
-      $json | Add-Member -MemberType NoteProperty -Name 'plugin' -Value @()
-    }
-    $entry = @(
-      "./plugins/bizar/index.ts",
-      @{
-        loopThresholdWarn = 5
-        loopThresholdEscalate = 8
-        loopThresholdBlock = 12
-        loopWindowSize = 10
-      }
-    )
-    $json.plugin += ,$entry
-    $json | ConvertTo-Json -Depth 10 | Set-Content $OpenCodeConfig -Encoding UTF8
-  }
-
-  Write-Note "opencode.json updated with Bizar plugin"
+if ($DryRun) {
+  Write-Warn "DRY RUN — no changes were made"
 }
-
-# ── Verify plugin directory ────────────────────────────────────────────────────
-
-function Verify-PluginDir {
-  Write-Section "Verifying plugin directory"
-
-  if (Test-Path $PluginDir) {
-    Write-Note "plugin directory exists at $PluginDir"
-    return
-  }
-
-  Write-Action "Setting up plugin directory..."
-  DryBlock -Description "mkdir $PluginDir + copy from repo" -Block {
-    New-Item -ItemType Directory -Path $PluginDir -Force | Out-Null
-    $srcPlugin = "$RepoDir\plugins\bizar"
-    if (Test-Path $srcPlugin) {
-      Copy-Item "$srcPlugin\*" $PluginDir -Recurse -Force
-      Write-Note "plugin files copied from repo"
-    } else {
-      Write-Warn "no plugin source found in repo"
-    }
-  }
-}
-
-# ── Install config via cli/install.mjs ─────────────────────────────────────────
-
-function Install-Config {
-  Write-Section "Installing BizarHarness config files"
-  $installMjs = "$RepoDir\cli\install.mjs"
-
-  if (-not (Test-Path $installMjs)) {
-    Write-Warn "cli/install.mjs not found"
-    return
-  }
-
-  Write-Action "Running cli/install.mjs..."
-  DryBlock -Description "node cli/install.mjs --non-interactive" -Block {
-    $result = & node $installMjs --non-interactive 2>&1
-    if ($LASTEXITCODE -eq 0) {
-      Write-Note "config files installed"
-    } else {
-      Write-Warn "cli/install.mjs exited with code $LASTEXITCODE"
-      $result | Out-String | Write-Dim
-    }
-  }
-}
-
-# ── Install background service ─────────────────────────────────────────────────
-
-function Install-Service {
-  Write-Section "Installing background service"
-  $svcMjs = "$RepoDir\scripts\install-service.mjs"
-
-  if (-not (Test-Path $svcMjs)) {
-    Write-Warn "scripts/install-service.mjs not found"
-    return
-  }
-
-  Write-Action "Running install-service.mjs..."
-  DryBlock -Description "node scripts/install-service.mjs" -Block {
-    $result = & node $svcMjs 2>&1
-    $LASTEXITCODE = 0  # non-zero from service script isn't fatal
-    try {
-      $parsed = $result -join "`n" | ConvertFrom-Json
-      if ($parsed.ok -eq $true) {
-        Write-Note "service registration complete"
-      } else {
-        if ($parsed.skipped) {
-          Write-Dim "  (service-controller not yet available)"
-        }
-        Write-Warn "service registration had issues: $($parsed.error)"
-      }
-    } catch {
-      Write-Warn "could not parse service result"
-    }
-  }
-}
-
-# ── Check deps via check-deps.mjs ──────────────────────────────────────────────
-
-function Check-Deps {
-  Write-Section "Checking dependencies"
-  $checkDeps = "$RepoDir\scripts\check-deps.mjs"
-
-  if (-not (Test-Path $checkDeps)) {
-    Write-Warn "scripts/check-deps.mjs not found"
-    return
-  }
-
-  Write-Action "Running dependency detector..."
-  try {
-    $json = & node $checkDeps --strict 2>$null | ConvertFrom-Json
-    if ($json.ok -eq $true) {
-      Write-Note "all required dependencies satisfied"
-      return
-    }
-
-    foreach ($m in $json.missing) {
-      if ($m.name -eq 'tmux') { continue }  # optional
-      Write-Warn "missing dependency: $($m.name) ($($m.required))"
-    }
-  } catch {
-    Write-Warn "dependency detector failed: $_"
-  }
-}
-
-# ── Ensure repo ────────────────────────────────────────────────────────────────
-
-function Ensure-Repo {
-  if ($Update) {
-    Write-Section "Updating BizarHarness repository"
-    Write-Action "Pulling latest..."
-    DryBlock -Description "git pull --ff-only" -Block {
-      git -C $RepoDir pull --ff-only 2>$null
-    }
-    Write-Note "repository updated"
-    return
-  }
-
-  if (Test-Path "$RepoDir\.git") {
-    Write-Note "repository already present"
-    if ($Force) {
-      DryBlock -Description "git pull --ff-only" -Block {
-        git -C $RepoDir pull --ff-only 2>$null
-      }
-    }
-    return
-  }
-
-  Write-Section "Cloning BizarHarness repository"
-  Write-Action "Cloning..."
-  DryBlock -Description "git clone https://github.com/DrB0rk/BizarHarness.git" -Block {
-    git clone https://github.com/DrB0rk/BizarHarness.git $RepoDir 2>$null
-  }
-  Write-Note "cloned"
-}
-
-# ── Final banner ───────────────────────────────────────────────────────────────
-
-function Write-Banner {
-  Write-Section "Install complete"
-  Write-Host "`n┌────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
-  Write-Host "│  BizarHarness ready.                                       │" -ForegroundColor Cyan
-  Write-Host "│                                                            │" -ForegroundColor Cyan
-  Write-Host "│  ✓ Cross-platform installer v3.22.0                        │" -ForegroundColor Cyan
-  Write-Host "│                                                            │" -ForegroundColor Cyan
-  Write-Host "│  Dashboard: http://localhost:3333                          │" -ForegroundColor Cyan
-  Write-Host "│                                                            │" -ForegroundColor Cyan
-  Write-Host "│  Next:                                                     │" -ForegroundColor Cyan
-  Write-Host "│    1. Restart opencode to pick up new config               │" -ForegroundColor Cyan
-  Write-Host "│    2. Run /connect in opencode to add API keys              │" -ForegroundColor Cyan
-  Write-Host "│    3. Run 'bizar dash start' to launch the dashboard       │" -ForegroundColor Cyan
-  Write-Host "│    4. Visit http://localhost:3333 in your browser           │" -ForegroundColor Cyan
-  Write-Host "└────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
-  Write-Host ""
-
-  if ($DryRun) {
-    Write-Warn "DRY RUN — no changes were made"
-  }
-}
-
-# ── Main ───────────────────────────────────────────────────────────────────────
-
-function Main {
-  Ensure-Node
-  Ensure-Git
-  Check-Deps
-  Ensure-Repo
-  Install-Config
-  Verify-PluginDir
-  Verify-Plugin
-  Install-Service
-  Write-Banner
-}
-
-Main

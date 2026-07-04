@@ -153,59 +153,68 @@ function showExportHelp() {
 
 function showInstallHelp() {
   console.log(`
-  bizar install — Run the canonical BizarHarness installer
+  bizar install — Run the unified BizarHarness installer
 
   Usage:
-    bizar install
+    bizar install                 Install (or refresh) every component
+    bizar install --dry-run       Print what would happen, change nothing
+    bizar install --force         Overwrite existing files
+    bizar install --help          Show this help
 
   Description:
-    v3.20.11+ — thin wrapper around ./install.sh. The bash script
-    auto-installs every system dep (uv, python3.12, chrome-headless-shell
-    + runtime libs, jq), installs browser-harness via uv, syncs agents /
-    commands / hooks / skills into ~/.config/opencode/, configures
-    opencode.json + the Bizar plugin, and prints a single status banner.
+    v4.4.7+ — unified installer. Same code path as 'bizar update'; the
+    difference is just mode=install vs mode=update. Every step is
+    idempotent — running this twice is safe.
 
-    No API key collection, no interactive prompts, no opencode restart —
-    the installer is safe to re-run anytime.
+    1. Installs @polderlabs/bizar via npm (skipped if already current).
+    2. Shells to ./install.sh for platform-specific system deps (uv,
+       python3.12, jq, gh on Linux; brew on macOS) + service registration
+       (systemd / launchd / Task Scheduler).
+    3. Syncs agent files, slash commands, and bundled skills into
+       ~/.config/opencode/.
+    4. Copies plugins/bizar/ from the npm install into
+       ~/.config/opencode/plugins/bizar/ (preserves dev symlinks).
+    5. Patches ~/.config/opencode/opencode.json with the Bizar plugin
+       entry (skipped if already present).
+    6. Runs 'bizar doctor' as a post-install health check.
 
-    Run from a fresh git clone instead: \`cd BizarHarness && ./install.sh\`
+    No API key collection, no interactive prompts.
   `);
 }
 
 function showUpdateHelp() {
   console.log(`
-  bizar update — Update opencode, bizar, bizar-dash, and/or bizar-plugin
+  bizar update — Update opencode + @polderlabs/bizar (which bundles the
+  plugin and dashboard). Detects what's installed and only touches what's
+  missing or out of date.
 
   Usage:
     bizar update                       Update EVERYTHING (default; auto-kills + restarts)
-    bizar update --pick                Interactive picker (legacy per-component UI)
-    bizar update opencode bizar dash    Update specific components
     bizar update --no-restart          Don't auto-restart the dashboard after update
     bizar update --dry-run             Print what would happen, change nothing
+    bizar update --force               Override .bizar/PRE_PUSH_NOTES.md blockers
+    bizar update --yes                 Same as --force, but named for one-line scripts
     bizar update --help                Show this help
 
-  Components:
-    opencode   the opencode CLI itself
-    bizar      @polderlabs/bizar (this CLI + installer + agents + rules)
-    dash       @polderlabs/bizar-dash (web dashboard + TUI)
-    plugin     @polderlabs/bizar-plugin (opencode plugin)
+  Components updated:
+    opencode-ai   the opencode CLI itself
+    @polderlabs/bizar    this CLI + dashboard + plugin (one package)
 
-  Behavior (v3.15.0+):
-    • Default = automatic. Updates all 4 components without prompting.
-      Any missing package is auto-installed so a broken install gets
-      repaired in one shot.
+  Behavior (v4.4.7+):
+    • Single unified provisioner. 'bizar install' and 'bizar update' are
+      the same code path with different mode flags. Every step is
+      idempotent — re-running is safe.
     • Detects running Bizar instances (background service daemon, web
       dashboard) by reading ~/.config/bizar/{service,dashboard}.pid and
       cleans up any stale or empty PID files.
-    • Auto-kills running instances with a brief notice (use --pick to
-      be prompted first instead).
+    • Auto-kills running instances with a brief notice.
     • Sends SIGTERM, waits up to 5s, escalates to SIGKILL if needed.
     • Re-runs the install script so the deployed plugin source matches
       the just-upgraded npm version (avoids the version-skew trap).
-    • If the dashboard was running and bizar or dash was updated,
-      spawns a fresh detached dashboard process with the new code
-      (skipped with --no-restart).
-    • Runs \`bizar doctor\` after a successful update to catch config
+    • If the dashboard was running and bizar was updated, spawns a
+      fresh detached dashboard process with the new code (skipped with
+      --no-restart).
+    • Runs 'bizar doctor' after a successful update to catch config
       regressions before opencode tries to start.
 
   Examples:

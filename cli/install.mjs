@@ -203,60 +203,22 @@ export async function installPluginFromGlobal(opts = {}) {
 }
 
 /**
- * runInstaller — v3.20.11 thin wrapper.
+ * runInstaller — v4.4.7 thin wrapper around the unified provisioner.
  *
- * As of v3.20.11, `bizar install` is a thin wrapper around the canonical
- * `install.sh` script at the repo root. The bash script handles all the
- * heavy lifting: system-dep installation (uv, python3.12, chrome-headless-shell
- * + runtime libs, jq), browser-harness via uv, Chrome lifecycle, agent /
- * command / hook / skill sync, opencode.json merging, install-state.
+ * `bizar install` and `bizar update` are now the SAME code path with
+ * different `mode` flags. Everything (deps, plugin copy, opencode.json
+ * patching, service registration, agent files, skills, doctor) is
+ * owned by `cli/provision.mjs:runProvision`. This file just parses the
+ * flags and forwards.
  *
- * Why a thin wrapper instead of the old TUI:
- *   - One source of truth. The bash script is also what `git clone` users
- *     run (`./install.sh`), what `bizar update` re-runs, and what the npm
- *     postinstall hook invokes. Keeping a parallel Node implementation
- *     guarantees the two will diverge.
- *   - No interactive prompts. The TUI asked for API keys, restart
- *     confirmation, and component selection — none of which belong in a
- *     `npm i -g @polderlabs/bizar` install (no TTY, secrets stay local).
- *   - Cross-platform. The bash script already detects Windows and falls
- *     back to the npm-based path; re-implementing that in Node is busywork.
- *
- * Returns the install.sh exit code (0 = success, 1 = partial failure).
- * On platforms where bash isn't available (rare — Windows without WSL),
- * falls back to running the npm-based path directly.
+ * Backward-compatible — the public exports (`runInstaller`,
+ * `runPostInstall`, `installPluginFromGlobal`) still exist so that any
+ * external callers (including the postinstall npm hook) keep working.
+ * New code should call `runProvision({ mode: 'install' })` directly.
  */
-export async function runInstaller() {
-  const { existsSync } = await import('node:fs');
-  const { join } = await import('node:path');
-  const { spawnSync } = await import('node:child_process');
-
-  // __dirname is defined at module scope (see top of file)
-  // cli/install.mjs → ../install.sh
-  const installSh = join(__dirname, '..', 'install.sh');
-
-  if (!existsSync(installSh)) {
-    console.error(chalk.red('  ✗ install.sh not found at ' + installSh));
-    console.error(chalk.dim('    Run `git clone https://github.com/DrB0rk/BizarHarness` first, then `cd BizarHarness && ./install.sh`.'));
-    process.exit(1);
-  }
-
-  console.log(chalk.bold.hex('#6366f1')('\n  BizarHarness installer (delegating to install.sh)\n'));
-
-  const useBash = process.platform !== 'win32' || process.env.WSL_DISTRO_NAME;
-  if (useBash) {
-    const r = spawnSync('bash', [installSh], { stdio: 'inherit' });
-    process.exit(r.status ?? 1);
-  }
-
-  // Windows without WSL — bash isn't available. The bash script has a
-  // Windows fallback that uses npm-based install paths. Run the npm path
-  // directly: install the BizarHarness npm packages + copy plugin from
-  // global to ~/.config/opencode/plugins/bizar/. This is the same code
-  // path install.sh uses for `platform == win32`.
-  console.log(chalk.dim('  bash not available — running npm-based installer (Windows path)'));
-  console.log('');
-  await runPostInstall();
+export async function runInstaller(opts = {}) {
+  const { runProvision } = await import('./provision.mjs');
+  return runProvision({ ...opts, mode: 'install' });
 }
 
 // ── Interactive prompts for optional packages ─────────────────────────────────
