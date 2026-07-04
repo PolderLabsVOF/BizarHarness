@@ -178,6 +178,138 @@ export const modsLoader = {
     mkdirSync(MODS_DIR, { recursive: true });
   },
 
+  /**
+   * v4.4.11 — Validate an installed mod without mounting it.
+   *
+   * Runs after a copy (in `installFromPath` + `installFromRegistry`) and
+   * before the install is reported as successful. Returns a structured
+   * `{ ok, errors, warnings }` so callers (the API + the CLI + the
+   * provisioner) can surface failures consistently.
+   *
+   * Checks performed:
+   *   1. `mod.json` is valid JSON with required fields (id, name, version).
+   *   2. `entry.route` (if declared) is a file that exists and is readable.
+   *      We pre-parse it with `node --check` to catch syntax errors.
+   *   3. Permissions declared in mod.json are validated against the
+   *      allowed list (delegates to mod-security.mjs).
+   *   4. If `entry.validate` is declared, we dynamic-import that file
+   *      and call its `default` or named `validate` export. The hook can
+   *      throw to fail the install.
+   *
+   * Never throws — always returns a structured result.
+   */
+  async validateModInstallation(id) {
+    const errors = [];
+    const warnings = [];
+    const dir = join(MODS_DIR, id);
+    if (!existsSync(dir)) {
+      return { ok: false, errors: [`mod directory not found: ${dir}`], warnings };
+    }
+
+    // 1. mod.json valid + required fields
+    const manifest = safeReadJSON(join(dir, 'mod.json'), null);
+    if (!manifest || typeof manifest !== 'object') {
+      return {
+        ok: false,
+        errors: ['mod.json is missing or invalid JSON'],
+        warnings,
+      };
+    }
+    for (const field of ['id', 'name', 'version']) {
+      if (!manifest[field] || typeof manifest[field] !== 'string') {
+        errors.push(`mod.json is missing required field "${field}"`);
+      }
+    }
+    if (manifest.id && manifest.id !== id) {
+      errors.push(`mod.json "id" field ("${manifest.id}") does not match the directory name ("${id}")`);
+    }
+
+    // 2. entry.route exists + parses
+    const entry = manifest.entry || {};
+    if (entry.route) {
+      const routePath = join(dir, entry.route);
+      if (!existsSync(routePath)) {
+        errors.push(`entry.route "${entry.route}" does not exist at ${routePath}`);
+      } else {
+        // Pre-parse the route.mjs with `node --check` to catch syntax
+        // errors without executing it. Skipped if node is not available.
+        try {
+          const { spawnSync } = await import('node:child_process');
+          const probe = spawnSync(process.execPath, ['--check', routePath], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            timeout: 5000,
+          });
+          if (probe.status !== 0) {
+            // Extract the first error line from the syntax checker
+            // output. `node --check` prints something like:
+            //   /path/to/route.mjs:5
+            //   syntax is wrong here
+            //   ^^^
+            //   SyntaxError: message
+            // We want the last "SyntaxError:" line.
+            const stderr = (probe.stderr || '').toString();
+            const lines = stderr.split('\n').map((l) => l.trim()).filter(Boolean);
+            const errLine = lines.reverse().find((l) => l.toLowerCase().includes('syntaxerror')) || lines[0] || 'unknown';
+            errors.push(`entry.route "${entry.route}" has a syntax error: ${errLine}`);
+          }
+        } catch {
+          // node --check unavailable — skip (not fatal)
+        }
+      }
+    }
+
+    // 3. Permissions valid
+    if (Array.isArray(manifest.permissions)) {
+      const { invalid } = parsePermissions(manifest.permissions);
+      for (const p of invalid) {
+        warnings.push(`mod declares unknown permission: ${p}`);
+      }
+    }
+
+    // 4. Optional entry.validate hook
+    if (entry.validate) {
+      const validatePath = join(dir, entry.validate);
+      if (!existsSync(validatePath)) {
+        errors.push(`entry.validate "${entry.validate}" does not exist at ${validatePath}`);
+      } else {
+        try {
+          // Dynamic import — the validate hook is opt-in. The mod may
+          // export `default` (function) or named export `validate`.
+          const mod = await import(/* @vite-ignore */ `file://${validatePath}`);
+          const fn = mod.default || mod.validate;
+          if (typeof fn !== 'function') {
+            warnings.push(
+              `entry.validate "${entry.validate}" does not export a function (got ${typeof fn})`,
+            );
+          } else {
+            // Run the validate hook with a 5s timeout. The hook is
+            // trusted (it's part of the mod) but we don't want a bad
+            // hook to hang the install.
+            const result = await Promise.race([
+              Promise.resolve()
+                .then(() => fn({ mod: manifest, dir }))
+                .catch((err) => ({ ok: false, error: err.message })),
+              new Promise((resolve) =>
+                setTimeout(() => resolve({ ok: false, error: 'validate hook timed out after 5s' }), 5000),
+              ),
+            ]);
+            if (result && result.ok === false) {
+              errors.push(`mod validate hook failed: ${result.error || 'unknown'}`);
+            }
+          }
+        } catch (err) {
+          errors.push(`failed to load entry.validate "${entry.validate}": ${err.message}`);
+        }
+      }
+    }
+
+    return {
+      ok: errors.length === 0,
+      errors,
+      warnings,
+    };
+  },
+
   /** List all installed mods. v3.3.1 — never throws. */
   list() {
     try {
@@ -211,7 +343,7 @@ export const modsLoader = {
    * Install a mod from a local path. Copies the folder into
    * `~/.config/bizar/mods/<id>/`. The id is the source folder's basename.
    */
-  installFromPath(sourcePath) {
+  async installFromPath(sourcePath) {
     if (!existsSync(sourcePath)) {
       throw new Error(`source path does not exist: ${sourcePath}`);
     }
@@ -243,6 +375,24 @@ export const modsLoader = {
     // (agents/, commands/, skills/). This makes the mod's rules binding
     // on every agent at session start.
     installModInstructions(id, target);
+    // v4.4.11 — Smoke-test the mod before reporting success. We
+    // uninstall on failure so a broken mod doesn't leave a half-
+    // copied directory the user has to clean up manually.
+    const validation = await this.validateModInstallation(id);
+    if (!validation.ok) {
+      uninstallModInstructions(id);
+      rmSync(target, { recursive: true, force: true });
+      const err = new Error(
+        `mod "${id}" failed post-install validation: ${validation.errors.join('; ')}`,
+      );
+      err.validation = validation;
+      throw err;
+    }
+    if (validation.warnings.length > 0) {
+      console.warn(
+        `[mods-loader] mod "${id}" installed with warnings: ${validation.warnings.join('; ')}`,
+      );
+    }
     return loadMod({ id, dir: target });
   },
 
@@ -494,6 +644,24 @@ export const modsLoader = {
     // v3.20 — install mod instructions into the user's opencode config
     // (agents/, commands/, skills/). Triggered on registry install too.
     installModInstructions(id, target);
+    // v4.4.11 — Smoke-test the mod before reporting success. We
+    // uninstall on failure so a broken mod doesn't leave a half-
+    // copied directory the user has to clean up manually.
+    const validation = await this.validateModInstallation(id);
+    if (!validation.ok) {
+      uninstallModInstructions(id);
+      rmSync(target, { recursive: true, force: true });
+      const err = new Error(
+        `mod "${id}" failed post-install validation: ${validation.errors.join('; ')}`,
+      );
+      err.validation = validation;
+      throw err;
+    }
+    if (validation.warnings.length > 0) {
+      console.warn(
+        `[mods-loader] mod "${id}" installed with warnings: ${validation.warnings.join('; ')}`,
+      );
+    }
     return loadMod({ id, dir: target });
   },
 

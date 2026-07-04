@@ -38,7 +38,7 @@
 
 import chalk from 'chalk';
 import { execSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -272,6 +272,13 @@ export function detectState({ cwd = process.cwd() } = {}) {
   // ── Git checkout? ─────────────────────────────────────────────────
   const gitRepo = existsSync(join(REPO_ROOT, '.git'));
 
+  // ── Installed mods ─────────────────────────────────────────────────
+  // v4.4.11 — `bizar install` and `bizar update` never install or
+  // upgrade mods. The list below is informational only. Use
+  // `bizar mod install <id>` to add a mod explicitly.
+  const MODS_DIR = join(BIZAR_HOME, 'mods');
+  const installedMods = listInstalledMods(MODS_DIR);
+
   return {
     pkgRoot,
     pkgVersion,
@@ -302,7 +309,50 @@ export function detectState({ cwd = process.cwd() } = {}) {
     opencodeCli,
     headsUpState,
     gitRepo,
+    installedMods,
   };
+}
+
+/**
+ * v4.4.11 — Lightweight read-only scan of `~/.config/bizar/mods/`.
+ * Returns one entry per mod folder with the id + enabled flag parsed
+ * from mod.json. Never throws; mods with a missing or invalid mod.json
+ * are reported as `{id, error}` so the provisioner can surface them.
+ */
+function listInstalledMods(modsDir) {
+  const out = [];
+  if (!existsSync(modsDir)) return out;
+  let entries;
+  try {
+    entries = readdirSync(modsDir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(modsDir, entry.name);
+    const manifestPath = join(dir, 'mod.json');
+    if (!existsSync(manifestPath)) {
+      out.push({ id: entry.name, error: 'missing mod.json' });
+      continue;
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    } catch {
+      out.push({ id: entry.name, error: 'invalid mod.json' });
+      continue;
+    }
+    out.push({
+      id: manifest.id || entry.name,
+      name: manifest.name || entry.name,
+      version: manifest.version || '?',
+      enabled: manifest.enabled !== false,
+      installedAt: manifest.installedAt || null,
+      path: dir,
+    });
+  }
+  return out;
 }
 
 /**
@@ -681,6 +731,125 @@ export async function runDoctor({ silent = false } = {}) {
   }
 }
 
+/**
+ * v4.4.11 — The mods step. By default, NEVER install or upgrade mods
+ * during `bizar install` or `bizar update`. The step just reports the
+ * current mod list so the user can see what's installed.
+ *
+ * To install a mod as part of the run, the user must opt in by:
+ *   - passing `--with-mods <id1,id2>` to `bizar install` / `bizar update`
+ *   - or setting the env var `BIZAR_MODS_AUTO_INSTALL=allow`
+ *
+ * When opted in, we shell to the running dashboard's `/api/mods`
+ * endpoint (which already validates the mod) — we don't duplicate the
+ * install logic here.
+ */
+export async function runModsStep({ mode, dryRun, force, withMods, state }) {
+  // List the current mods (from the state we already detected).
+  const installed = state?.installedMods ?? [];
+  if (installed.length === 0) {
+    console.log(chalk.dim('  Mods: 0 installed.'));
+    return { ok: true, message: 'no mods installed', touched: false };
+  }
+
+  const enabled = installed.filter((m) => m.enabled).length;
+  const disabled = installed.length - enabled;
+  const summary = `${installed.length} installed (${enabled} enabled${disabled ? `, ${disabled} disabled` : ''})`;
+
+  // Resolve which mods the user asked us to install. The CLI parses
+  // `--with-mods a,b,c` into a string array; the provisioner accepts
+  // the same. We also accept a single env var as a comma-separated list.
+  const envList = (process.env.BIZAR_MODS_AUTO_INSTALL || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const wantedMods = Array.isArray(withMods) && withMods.length > 0
+    ? withMods
+    : (process.env.BIZAR_MODS_AUTO_INSTALL === 'allow' ? [] : envList);
+
+  // Default behavior: no install. Just print the list.
+  if (!wantedMods || wantedMods.length === 0) {
+    console.log(chalk.dim(`  Mods: ${summary}. Not modified (use \`bizar mod install <id>\` to add one).`));
+    // Surface mods with errors so the user knows they need attention.
+    const broken = installed.filter((m) => m.error);
+    for (const m of broken) {
+      console.log(chalk.yellow(`    ⚠ ${m.id}: ${m.error}`));
+    }
+    return { ok: true, message: `${summary}, not modified`, touched: false };
+  }
+
+  // Opt-in install path. Talk to the dashboard over HTTP — the
+  // dashboard's `POST /api/mods` endpoint already does the actual
+  // install + validation. If the dashboard isn't reachable, the
+  // install fails loudly.
+  console.log(chalk.cyan(`  Installing ${wantedMods.length} mod(s) via dashboard API: ${wantedMods.join(', ')}`));
+  const errors = [];
+  for (const id of wantedMods) {
+    try {
+      const result = await installModViaDashboard(id, { dryRun });
+      if (result.ok) {
+        console.log(chalk.green(`    ✓ ${id}: ${result.message}`));
+      } else {
+        console.log(chalk.red(`    ✗ ${id}: ${result.message}`));
+        errors.push(`${id}: ${result.message}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(chalk.red(`    ✗ ${id}: ${msg}`));
+      errors.push(`${id}: ${msg}`);
+    }
+  }
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      message: `mod install failed for ${errors.length} mod(s): ${errors.join('; ')}`,
+      touched: true,
+    };
+  }
+  return { ok: true, message: `${wantedMods.length} mod(s) installed`, touched: true };
+}
+
+/**
+ * v4.4.11 — POST to the dashboard's /api/mods endpoint to install a mod.
+ * We re-use the dashboard's own validation pipeline (mod-loader.mjs
+ * runs the same manifest + route.mjs + permissions checks) so we
+ * don't have to duplicate them here.
+ */
+async function installModViaDashboard(id, { dryRun }) {
+  if (dryRun) {
+    return { ok: true, message: '[dry-run] would install via dashboard' };
+  }
+  // Find the dashboard's port from BIZAR_HOME/dashboard.port.
+  const portFile = join(BIZAR_HOME, 'dashboard.port');
+  let port = 4321;
+  try {
+    if (existsSync(portFile)) {
+      const parsed = parseInt(readTextSafe(portFile, '4321').trim(), 10);
+      if (Number.isFinite(parsed) && parsed > 0) port = parsed;
+    }
+  } catch { /* ignore */ }
+  // We need an auth token. The dashboard's install endpoint is under
+  // /api/* which is auth-gated. Fetch the auth status + token via
+  // /api/auth/status (skipped from auth via the skipPaths list in
+  // server.mjs). If the dashboard has auth enabled, the user needs to
+  // supply a token via BIZAR_DASHBOARD_TOKEN.
+  const headers = { 'content-type': 'application/json' };
+  const token = process.env.BIZAR_DASHBOARD_TOKEN;
+  if (token) headers['authorization'] = `Basic ${Buffer.from(`opencode:${token}`).toString('base64')}`;
+  const url = `http://127.0.0.1:${port}/api/mods`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    return { ok: false, message: `dashboard returned ${res.status}: ${text.slice(0, 200) || '(no body)'}` };
+  }
+  const data = await res.json().catch(() => ({}));
+  return { ok: true, message: data?.name ? `installed ${data.name}@${data.version}` : 'installed' };
+}
+
 // ─── Top-level orchestration ──────────────────────────────────────────────────
 
 /**
@@ -785,6 +954,7 @@ export async function runProvision(opts = {}) {
     skipSystemDeps = false,
     skipHeadsUps = false,
     yes = false,
+    withMods = null,  // string[] — opt-in mod install. Default null = don't touch mods.
   } = opts;
 
   const banner = mode === 'update'
@@ -897,7 +1067,17 @@ export async function runProvision(opts = {}) {
     stepResults.push({ label: 'dashboard-restart', ...r });
   }
 
-  // ── 11. Doctor health check ────────────────────────────────────────
+  // ── 11. Mods (opt-in only) ─────────────────────────────────────────
+  // v4.4.11 — `bizar install` and `bizar update` never install or
+  // upgrade mods by default. The provisioner reports the current mod
+  // list so the user can see what's installed, then exits the mod step
+  // without touching anything. To install a mod, pass
+  // `--with-mods <id1,id2>` or set `BIZAR_MODS_AUTO_INSTALL=allow`.
+  console.log('');
+  const modsStep = await runModsStep({ mode, dryRun, force, withMods, state });
+  stepResults.push({ label: 'mods', ...modsStep });
+
+  // ── 12. Doctor health check ───────────────────────────────────────
   console.log('');
   const doctor = await runDoctor({ silent: true });
   if (doctor.failed > 0) {

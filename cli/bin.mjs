@@ -156,10 +156,11 @@ function showInstallHelp() {
   bizar install — Run the unified BizarHarness installer
 
   Usage:
-    bizar install                 Install (or refresh) every component
-    bizar install --dry-run       Print what would happen, change nothing
-    bizar install --force         Overwrite existing files
-    bizar install --help          Show this help
+    bizar install                       Install (or refresh) every component
+    bizar install --dry-run             Print what would happen, change nothing
+    bizar install --force               Overwrite existing files
+    bizar install --with-mods a,b,c     Opt-in: install specific mods as part of the run
+    bizar install --help                Show this help
 
   Description:
     v4.4.7+ — unified installer. Same code path as 'bizar update'; the
@@ -194,6 +195,7 @@ function showUpdateHelp() {
     bizar update --dry-run             Print what would happen, change nothing
     bizar update --force               Override .bizar/PRE_PUSH_NOTES.md blockers
     bizar update --yes                 Same as --force, but named for one-line scripts
+    bizar update --with-mods a,b,c     Opt-in: install specific mods as part of the run
     bizar update --help                Show this help
 
   Components updated:
@@ -580,6 +582,22 @@ function parseFlag(name) {
   return args[idx + 1] || null;
 }
 
+/**
+ * v4.4.11 — Parse `--with-mods <csv>` from the given subargs slice.
+ * Returns `null` if the flag isn't present (the provisioner's
+ * "don't touch mods" default), or a string[] of mod ids if it is.
+ */
+function parseWithModsFlag(subargs) {
+  const idx = subargs.indexOf('--with-mods');
+  if (idx === -1) return null;
+  const raw = subargs[idx + 1];
+  if (!raw || raw.startsWith('--')) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 async function readAutoLaunchWeb() {
   try {
     const fs = await import('node:fs');
@@ -677,7 +695,19 @@ async function main() {
     else await runTestGate();
   } else if (args[0] === 'update') {
     if (isHelpRequest) showUpdateHelp();
-    else await runUpdate(args.slice(1));
+    else {
+      // v4.4.11 — Same --with-mods opt-in for update.
+      const withMods = parseWithModsFlag(args.slice(1));
+      // runUpdate expects (subargs: string[], opts?: object). Splice
+      // --with-mods <csv> out of subargs since the provisioner now
+      // takes it via opts, not as a positional arg.
+      const subargs = args.slice(1).filter((a, i, arr) => {
+        if (a === '--with-mods') return false;
+        if (arr[i - 1] === '--with-mods') return false;
+        return true;
+      });
+      await runUpdate(subargs, { withMods });
+    }
   } else if (args[0] === 'dev-link') {
     if (isHelpRequest) showDevLinkHelp();
     else {
@@ -741,7 +771,10 @@ async function main() {
   } else if (args[0] === 'install') {
     if (isHelpRequest) showInstallHelp();
     else {
-      await runInstaller();
+      // v4.4.11 — Parse --with-mods <csv> to opt into mod installs
+      // during the run. Default: mods are NEVER touched.
+      const withMods = parseWithModsFlag(args.slice(1));
+      await runInstaller({ withMods });
       // v4.4.3 — After install, repair any stale bin symlinks so the
       // user picks up the new code (the installer itself may have
       // been running from a stale install path).
