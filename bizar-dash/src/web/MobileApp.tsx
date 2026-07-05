@@ -14,6 +14,7 @@ import { applyTheme, applyThemeTokens } from './lib/types';
 import { Ws } from './lib/ws';
 import { MobileBottomNav, type MobileTab } from './mobile/MobileBottomNav';
 import { MobileTopbar } from './mobile/MobileTopbar';
+import { MobileLayout, type DrawerTab } from './components/MobileLayout';
 import { MobileActivity } from './mobile/views/MobileActivity';
 import { MobileAgents } from './mobile/views/MobileAgents';
 import { MobileConfig } from './mobile/views/MobileConfig';
@@ -75,6 +76,7 @@ export function MobileApp() {
   const [activeTab, setActiveTab] = useState<MainTabId>('activity');
   const [stack, setStack] = useState<MobileView[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [pendingChatTaskId, setPendingChatTaskId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -390,27 +392,32 @@ export function MobileApp() {
   }
 
   return (
-    <div className="mobile-app">
-      <MobileTopbar
-        activeTab={currentView.id}
-        snapshot={snapshot}
+    <>
+      <MobileLayout
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        tabs={MAIN_TABS}
+        fullTabs={MAIN_TABS as DrawerTab[]}
+        onExitSettings={() => goToTab('activity')}
         onSearch={() => setSearchOpen(true)}
-        onNavigate={handleNavigate}
-      />
+      >
+        <MobileTopbar
+          activeTab={currentView.id}
+          snapshot={snapshot}
+          onSearch={() => setSearchOpen(true)}
+          onNavigate={handleNavigate}
+        />
 
-      <main className="mobile-content">{renderView()}</main>
+        <main className="mobile-content">{renderView()}</main>
 
-      {stack.length === 0 && (
-        <MobileBottomNav tabs={MAIN_TABS} activeTab={activeTab} onChange={handleTabChange} />
-      )}
-
-      {stack.length > 0 && (
-        <button type="button" className="mobile-back-btn" onClick={popView} aria-label="Go back">
-          ← Back
-        </button>
-      )}
+        {stack.length > 0 && (
+          <button type="button" className="mobile-back-btn" onClick={popView} aria-label="Go back">
+            ← Back
+          </button>
+        )}
+      </MobileLayout>
 
       <MobileSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={handleNavigate} />
-    </div>
+    </>
   );
 }

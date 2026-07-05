@@ -761,3 +761,113 @@
   opacity: 0.5;
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   v5.4 — Mobile settings accordion (mobile-settings)
+   ───────────────────────────────────────────────────────────────────── */
+
+.mobile-settings {
+  padding: 16px;
+}
+
+.mobile-settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface-2, var(--bg-elev-2, #1e1e2e));
+  border: 1px solid var(--border, #3a3a4a);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  color: var(--text-dim, #888);
+}
+
+.mobile-settings-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text, #e0e0e0);
+  font-size: 15px;
+  outline: none;
+}
+
+.mobile-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-settings-item {
+  background: var(--surface-1, var(--bg-elev, #18181f));
+  border: 1px solid var(--border, #3a3a4a);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.mobile-settings-item-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text, #e0e0e0);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mobile-settings-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface-2, var(--bg-elev-2, #1e1e2e));
+  color: var(--accent, #8b5cf6);
+  flex-shrink: 0;
+}
+
+.mobile-settings-item-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-settings-item-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.mobile-settings-item-desc {
+  font-size: 12px;
+  color: var(--text-dim, #888);
+  margin-top: 2px;
+}
+
+.mobile-settings-item-chevron {
+  color: var(--text-dim, #888);
+  transition: transform 200ms;
+  flex-shrink: 0;
+}
+
+.mobile-settings-item-chevron.is-rotated {
+  transform: rotate(90deg);
+}
+
+.mobile-settings-item.is-expanded {
+  border-color: var(--accent, #8b5cf6);
+}
+
+.mobile-settings-item-body {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--border, #3a3a4a);
+  background: var(--surface-2, var(--bg-elev-2, #1e1e2e));
+}
+
+.mobile-settings-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-dim, #888);
+  font-size: 14px;
+}
+

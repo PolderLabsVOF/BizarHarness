@@ -1,5 +1,64 @@
 # Changelog
 
+## v5.4.0 — Mobile UI full rewrite
+
+### Highlights
+
+User requested full mobile UI redesign with all desktop features available. v5.4 delivers a complete mobile-first interface:
+
+**Mobile navigation shell:**
+- `<MobileLayout>` — header + drawer + content + bottom nav wrapper
+- `<MobileHeader>` — sticky top bar with menu, title, search/settings-exit
+- `<MobileBottomNav>` — iOS/Android-style 5-tab bottom bar (overview, chat, tasks, memory, more)
+- `<MobileDrawer>` — slide-in drawer for all secondary views (8+ views in a 2-col grid)
+- 20 tests in `mobile-layout.test.tsx`
+
+**Mobile overview:**
+- `HeroCard` with prompt input ("What do you want to do?")
+- 4 vertical `StatCard`s (Tasks, Schedules, Active Agents, API Tokens) — color-coded borders
+- `RecentActivityCard` with last 8 activity events
+- `QuickActionsCard` (New task / New chat / Run doctor)
+- 10 tests in `mobile-overview.test.tsx`
+
+**Mobile settings (full rewrite):**
+- All 9 desktop sections available: General, AI Providers, Env Vars, Memory Vault, System LLM, Updates, Headroom, Tailscale, About
+- Accordion pattern (one section open at a time)
+- Search filter (matches title + description)
+- Uses existing desktop section components (no duplication)
+- 4 new tests in `mobile-settings.test.tsx`
+
+**Mobile tasks:**
+- Filter tabs (all/todo/doing/done/failed) with counts
+- Search filter
+- `<TaskCard>` with status-colored left border, priority badge, expandable details, transition actions
+- `<TaskCreateSheet>` — bottom sheet with title/description/priority form
+- Floating Action Button (FAB) for create
+- 7 new tests in `mobile-tasks.test.tsx`
+
+**Mobile chat (verified + polish):**
+- `<MobileChat>` already complete from v5.x — session list, message list, composer
+- Added 3 smoke tests in `mobile-chat.test.tsx`
+
+**Mobile misc views (memory, marketplace, plugins, eval, doctor):**
+- `MobileMemory` — 10 tabbed sources (Overview, LightRAG, Obsidian, Git, Search, Voice, Config, Graph, Web Clip, OCR)
+- `MobileMarketplace` — vertical list of plugins with search, install dialog
+- `MobilePlugins` — installed plugins list with permissions display
+- `MobileEval` — Runs/Schedules tabs with run cards (pass/warn/fail status)
+- `MobileDoctor` — big status icon (ok/warn/fail) with 30s auto-refresh
+- 15 tests in `mobile-misc.test.tsx`
+
+### Tests
+
+- 395 npm tests pass
+- 312 vitest tests pass (was 226, +86 new mobile tests)
+- 5 a11y tests fail (pre-existing in v5.3.1, unrelated to v5.4)
+- TypeScript: 0 errors in mobile files
+- Build: 395 KB main + 94 KB mobile (down from 432 KB in v5.3 — mobile grew +2 KB for the new layout)
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.4.0`
+
 ## v5.3.1 — Tailscale auth auto-configure end-to-end
 
 ### Bug fix

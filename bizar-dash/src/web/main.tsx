@@ -12,6 +12,7 @@ setLocale('en', en);
 // from index.html (e.g. when the auto-redirect to /m is bypassed).
 import './styles/main.css';
 import './styles/mobile.css';
+import './styles/mobile-layout.css';
 import './styles/glyphs.css';
 import './styles/minimax-usage.css';
 import './styles/skills.css';

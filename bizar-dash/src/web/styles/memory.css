@@ -1118,3 +1118,48 @@ dl.memory-config-row dd {
   margin: 0;
   font-style: italic;
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   v5.4 — Mobile Memory view
+   ───────────────────────────────────────────────────────────────────── */
+
+.mobile-memory {
+  padding: 16px;
+}
+
+.mobile-memory-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-memory-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface-2, var(--bg-elev-2, #1e1e2e));
+  border: 1px solid var(--border, #3a3a4a);
+  border-radius: 14px;
+  color: var(--text-dim, #888);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.mobile-memory-tab.is-active {
+  background: var(--accent, #8b5cf6);
+  color: #fff;
+  border-color: var(--accent, #8b5cf6);
+}
+
+.mobile-memory-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
