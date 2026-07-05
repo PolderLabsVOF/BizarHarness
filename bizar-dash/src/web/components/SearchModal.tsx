@@ -149,11 +149,13 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
             <X size={14} />
           </button>
         </div>
-        <div className="search-modal-scopes">
+        <div className="search-modal-scopes" role="tablist" aria-label="Search scope">
           {SCOPES.map((s) => (
             <button
               key={s.id}
               type="button"
+              role="tab"
+              aria-selected={scope === s.id}
               className={cn('search-scope', scope === s.id && 'search-scope-active')}
               onClick={() => setScope(s.id)}
             >

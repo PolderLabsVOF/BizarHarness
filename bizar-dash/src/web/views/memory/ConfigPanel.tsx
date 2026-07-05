@@ -274,8 +274,14 @@ function Row({
   if (inline) {
     return (
       <div className="memory-config-row-inline">
-        <div className="memory-config-row-label">{label}</div>
-        <div className="memory-config-row-control">{children}</div>
+        <div className="memory-config-row-label" id={`cfg-${label.replace(/\s+/g, '-').toLowerCase()}`}>{label}</div>
+        <div
+          className="memory-config-row-control"
+          role="group"
+          aria-labelledby={`cfg-${label.replace(/\s+/g, '-').toLowerCase()}`}
+        >
+          {children}
+        </div>
       </div>
     );
   }

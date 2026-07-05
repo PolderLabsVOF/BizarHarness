@@ -14,9 +14,23 @@
  */
 
 import express from 'express';
+import { createRateLimiter } from '../lib/rate-limit.mjs';
 
 export function createV2EventsRouter({ eventBus }) {
   const router = express.Router();
+
+  // v4.8.0 — Per-IP token bucket. The v2 event endpoint accepts
+  // arbitrary publishes from the opencode plugin, so we cap it
+  // higher than chat to keep automation pipelines flowing under
+  // burst. Defaults: 120 requests / minute / IP, 2 tokens/sec refill.
+  // Operators can tune via BIZAR_RATE_LIMIT_EVENT_CAPACITY /
+  // BIZAR_RATE_LIMIT_EVENT_REFILL.
+  const eventLimiter = createRateLimiter({
+    capacity: parseInt(process.env.BIZAR_RATE_LIMIT_EVENT_CAPACITY || '120', 10),
+    refillPerSecond: parseFloat(process.env.BIZAR_RATE_LIMIT_EVENT_REFILL || '2'),
+    scope: 'event',
+  });
+  router.use(eventLimiter);
 
   router.get('/event', (req, res) => {
     res.status(200);

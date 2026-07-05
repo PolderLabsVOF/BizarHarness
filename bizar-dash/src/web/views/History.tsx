@@ -234,12 +234,15 @@ export function History({ snapshot }: Props) {
         </div>
         <div className="view-actions">
           <div className="tasks-toolbar-group">
-            <Filter size={14} style={{ color: 'var(--text-dim)' }} />
+            <Filter size={14} style={{ color: 'var(--text-dim)' }} aria-hidden />
+            <label htmlFor="history-range" className="sr-only">Time range</label>
             <select
+              id="history-range"
               className="select select-sm"
               value={rangeId}
               onChange={(e) => setRangeId(e.target.value)}
               title="Time range"
+              aria-label="Time range"
             >
               {TIME_RANGES.map((r) => (
                 <option key={r.id} value={r.id}>{r.label}</option>

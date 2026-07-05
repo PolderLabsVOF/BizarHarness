@@ -216,7 +216,9 @@ export function LightragPanel({ refreshKey }: Props) {
         </CardTitle>
         <CardMeta>Send a natural-language query to the LightRAG index.</CardMeta>
         <div className="memory-search-row">
+          <label htmlFor="lightrag-query" className="sr-only">Search LightRAG</label>
           <input
+            id="lightrag-query"
             type="text"
             className="input"
             placeholder="e.g. how does the memory service write notes?"
@@ -226,6 +228,7 @@ export function LightragPanel({ refreshKey }: Props) {
               if (e.key === 'Enter') onQuery();
             }}
             disabled={busy === 'query'}
+            aria-label="Search LightRAG"
           />
           <Button variant="primary" onClick={onQuery} disabled={busy === 'query' || !query.trim()}>
             {busy === 'query' ? <Loader2 size={12} className="memory-spin" /> : <SearchIcon size={12} />}

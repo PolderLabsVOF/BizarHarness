@@ -200,13 +200,16 @@ export function Artifacts({ snapshot, refreshSnapshot }: Props) {
         </div>
         <div className="view-actions">
           <div className="search-input">
-            <Search size={14} />
+            <Search size={14} aria-hidden />
+            <label htmlFor="artifacts-search" className="sr-only">Search artifacts</label>
             <input
+              id="artifacts-search"
               className="input"
               type="text"
               placeholder="Search…"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
+              aria-label="Search artifacts"
             />
           </div>
           <Button
@@ -275,7 +278,9 @@ function NewPlanCard({ onCreate }: { onCreate: (slug: string, title?: string) =>
           setTitle('');
         }}
       >
+        <label htmlFor="new-artifact-slug" className="sr-only">Artifact slug</label>
         <input
+          id="new-artifact-slug"
           className="input"
           type="text"
           placeholder="slug (e.g. dashboard-v3.1)"
@@ -283,8 +288,11 @@ function NewPlanCard({ onCreate }: { onCreate: (slug: string, title?: string) =>
           required
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
+          aria-label="Artifact slug"
         />
+        <label htmlFor="new-artifact-title" className="sr-only">Artifact title</label>
         <input
+          id="new-artifact-title"
           className="input"
           type="text"
           placeholder="Title (optional)"
@@ -545,14 +553,14 @@ function PlanEditor({
       width: 560,
       children: (
         <div className="artifact-config-form">
-          <label className="field-label">Title</label>
-          <input ref={(el) => { titleEl = el; }} className="input" type="text" defaultValue={meta.title} />
-          <label className="field-label">Description (markdown)</label>
-          <textarea ref={(el) => { descEl = el; }} className="textarea" rows={3} defaultValue={meta.description || ''} />
-          <label className="field-label">Tags (comma-separated)</label>
-          <input ref={(el) => { tagsEl = el; }} className="input" type="text" defaultValue={(meta.tags || []).join(', ')} />
-          <label className="field-label">Status</label>
-          <select ref={(el) => { statusEl = el; }} className="select" defaultValue={meta.status}>
+          <label className="field-label" htmlFor="artifact-cfg-title">Title</label>
+          <input id="artifact-cfg-title" ref={(el) => { titleEl = el; }} className="input" type="text" defaultValue={meta.title} />
+          <label className="field-label" htmlFor="artifact-cfg-desc">Description (markdown)</label>
+          <textarea id="artifact-cfg-desc" ref={(el) => { descEl = el; }} className="textarea" rows={3} defaultValue={meta.description || ''} />
+          <label className="field-label" htmlFor="artifact-cfg-tags">Tags (comma-separated)</label>
+          <input id="artifact-cfg-tags" ref={(el) => { tagsEl = el; }} className="input" type="text" defaultValue={(meta.tags || []).join(', ')} />
+          <label className="field-label" htmlFor="artifact-cfg-status">Status</label>
+          <select id="artifact-cfg-status" ref={(el) => { statusEl = el; }} className="select" defaultValue={meta.status}>
             {PLAN_STATUSES.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
@@ -597,16 +605,16 @@ function PlanEditor({
       width: 520,
       children: (
         <div className="artifact-element-form">
-          <label className="field-label">Type</label>
-          <select ref={(el) => { typeEl = el; }} className="select" defaultValue="task">
+          <label className="field-label" htmlFor="artifact-elem-type">Type</label>
+          <select id="artifact-elem-type" ref={(el) => { typeEl = el; }} className="select" defaultValue="task">
             {ELEMENT_TYPES.map((t) => (
               <option key={t.id} value={t.id}>{t.label}</option>
             ))}
           </select>
-          <label className="field-label">Title</label>
-          <input ref={(el) => { titleEl = el; }} className="input" type="text" placeholder="Element title" autoFocus />
-          <label className="field-label">Content (markdown)</label>
-          <textarea ref={(el) => { contentEl = el; }} className="textarea" rows={4} placeholder="Description…" />
+          <label className="field-label" htmlFor="artifact-elem-title">Title</label>
+          <input id="artifact-elem-title" ref={(el) => { titleEl = el; }} className="input" type="text" placeholder="Element title" autoFocus />
+          <label className="field-label" htmlFor="artifact-elem-content">Content (markdown)</label>
+          <textarea id="artifact-elem-content" ref={(el) => { contentEl = el; }} className="textarea" rows={4} placeholder="Description…" />
         </div>
       ),
       footer: (
@@ -653,8 +661,8 @@ function PlanEditor({
       width: 480,
       children: (
         <div>
-          <label className="field-label">Comment</label>
-          <textarea ref={(el) => { textEl = el; }} className="textarea" rows={4} placeholder="Comment for the whole artifact…" autoFocus />
+          <label className="field-label" htmlFor="canvas-comment">Comment</label>
+          <textarea id="canvas-comment" ref={(el) => { textEl = el; }} className="textarea" rows={4} placeholder="Comment for the whole artifact…" autoFocus />
         </div>
       ),
       footer: (
@@ -908,18 +916,18 @@ function editElementInline(
     width: 520,
     children: (
       <div className="artifact-element-form">
-        <label className="field-label">Type</label>
-        <select ref={(el2) => { typeEl = el2; }} className="select" defaultValue={el.type}>
+        <label className="field-label" htmlFor="elem-edit-type">Type</label>
+        <select id="elem-edit-type" ref={(el2) => { typeEl = el2; }} className="select" defaultValue={el.type}>
           {ELEMENT_TYPES.map((t) => (
             <option key={t.id} value={t.id}>{t.label}</option>
           ))}
         </select>
-        <label className="field-label">Title</label>
-        <input ref={(el2) => { titleEl = el2; }} className="input" type="text" defaultValue={el.title} />
-        <label className="field-label">Status</label>
-        <input ref={(el2) => { statusEl = el2; }} className="input" type="text" defaultValue={el.status} placeholder="open / done / blocked …" />
-        <label className="field-label">Content (markdown)</label>
-        <textarea ref={(el2) => { contentEl = el2; }} className="textarea" rows={5} defaultValue={el.content} />
+        <label className="field-label" htmlFor="elem-edit-title">Title</label>
+        <input id="elem-edit-title" ref={(el2) => { titleEl = el2; }} className="input" type="text" defaultValue={el.title} />
+        <label className="field-label" htmlFor="elem-edit-status">Status</label>
+        <input id="elem-edit-status" ref={(el2) => { statusEl = el2; }} className="input" type="text" defaultValue={el.status} placeholder="open / done / blocked …" />
+        <label className="field-label" htmlFor="elem-edit-content">Content (markdown)</label>
+        <textarea id="elem-edit-content" ref={(el2) => { contentEl = el2; }} className="textarea" rows={5} defaultValue={el.content} />
       </div>
     ),
     footer: (
@@ -1464,12 +1472,17 @@ function CommentsPanel({
           setText('');
         }}
       >
+        <label htmlFor="artifacts-comment-input" className="sr-only">
+          {selectedElId ? 'Add a comment to this element' : 'Add a canvas comment'}
+        </label>
         <textarea
+          id="artifacts-comment-input"
           className="textarea"
           rows={2}
           placeholder={selectedElId ? 'Add a comment to this element…' : 'Add a canvas comment…'}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          aria-label={selectedElId ? 'Add a comment to this element' : 'Add a canvas comment'}
         />
         <Button variant="primary" size="sm" type="submit" disabled={!text.trim()}>
           <Send size={12} /> Post

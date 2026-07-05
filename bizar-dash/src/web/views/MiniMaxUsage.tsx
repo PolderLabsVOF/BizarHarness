@@ -585,18 +585,24 @@ function AnalyticsView({ toast }: { toast: ReturnType<typeof useToast> }) {
         ))}
         {range === 'custom' && (
           <div className="usage-custom-dates">
+            <label htmlFor="usage-from-date" className="sr-only">From date</label>
             <input
+              id="usage-from-date"
               type="date"
               className="usage-date-input"
               value={customFrom}
               onChange={e => setCustomFrom(e.target.value)}
+              aria-label="From date"
             />
-            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>to</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 12 }} aria-hidden>to</span>
+            <label htmlFor="usage-to-date" className="sr-only">To date</label>
             <input
+              id="usage-to-date"
               type="date"
               className="usage-date-input"
               value={customTo}
               onChange={e => setCustomTo(e.target.value)}
+              aria-label="To date"
             />
           </div>
         )}
@@ -879,9 +885,20 @@ function OnboardingWizard({ step, setStep, keyDraft, setKeyDraft, showKey, setSh
             <p className="minimax-wizard-prose">Paste your key below. We'll test it against the real API before saving.</p>
             <div className="minimax-key-row">
               <div className="minimax-key-input-wrap">
-                <KeyRound size={12} className="minimax-key-icon" />
-                <input type={showKey ? 'text' : 'password'} value={keyDraft} onChange={e => setKeyDraft(e.target.value)}
-                  placeholder="sk-cp-..." spellCheck={false} autoComplete="off" className="minimax-key-input" autoFocus />
+                <KeyRound size={12} className="minimax-key-icon" aria-hidden />
+                <label htmlFor="minimax-key-input" className="sr-only">Subscription Key</label>
+                <input
+                  id="minimax-key-input"
+                  type={showKey ? 'text' : 'password'}
+                  value={keyDraft}
+                  onChange={e => setKeyDraft(e.target.value)}
+                  placeholder="sk-cp-..."
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="minimax-key-input"
+                  autoFocus
+                  aria-label="Subscription Key"
+                />
                 <button type="button" onClick={() => setShowKey(v => !v)} className="minimax-key-toggle" aria-label={showKey ? 'Hide key' : 'Show key'}>
                   {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
                 </button>

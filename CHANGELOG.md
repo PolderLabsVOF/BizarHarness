@@ -1,5 +1,27 @@
 # Changelog
 
+## v4.7.1 — CLI silent-error fixes (no more silent command failures)
+
+### Bug fixes
+
+After v4.7.0, several commands could produce no output when their module failed to load (silent error swallowing in `importCommand`). v4.7.1 fixes:
+
+- **`importCommand` now logs errors** — replaced the silent `catch { return null; }` with a structured error message showing the module name, error message, and first 3 lines of the stack trace. (`cli/bin.mjs`)
+- **All 9 dispatch cases null-check `mod`** — if a command module fails to load, the user gets `✗ Could not load <name> command module` instead of `Cannot read property 'run' of null`. (`cli/bin.mjs`)
+- **`bizar help` alias added** — previously `bizar help` showed "Unknown command: help" because 'help' wasn't in the switch statement. Now it shows the global help. (`cli/bin.mjs`)
+- **Defensive `r.data` checks in MiniMax subcommands** — `bizar minimax {status,remains,test,config}` now show "Dashboard returned no data. Is the dashboard running?" instead of silently exiting when the dashboard is unreachable. (`cli/commands/minimax.mjs`)
+- **`dbg()` calls at dispatch points** — `BIZAR_DEBUG=1` now logs `loaded command module: <name>` and `command returned: <cmd>` for easier diagnostics. (`cli/bin.mjs`)
+
+### Tests
+
+- 7 new CLI error-visibility tests (`cli-error-visibility.test.mjs`)
+- All 388 npm tests still pass
+- 89/92 vitest tests pass (3 pre-existing failures in `backup-restore.test.tsx` from v4.8 stream, unrelated)
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@4.7.1`
+
 ## v4.7.0 — v4.6 + v4.7: Quality & Stability + Performance & Polish
 
 ### v4.6 — Quality & Stability

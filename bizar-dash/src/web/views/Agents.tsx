@@ -144,16 +144,18 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
       width: 640,
       children: (
         <div className="agent-form">
-          <label className="field-label">Name (a-z, 0-9, dashes)</label>
+          <label className="field-label" htmlFor="agent-new-name">Name (a-z, 0-9, dashes)</label>
           <input
+            id="agent-new-name"
             ref={(el) => (nameEl = el)}
             className="input"
             type="text"
             placeholder="my-agent"
             autoFocus
           />
-          <label className="field-label">Description</label>
+          <label className="field-label" htmlFor="agent-new-desc">Description</label>
           <input
+            id="agent-new-desc"
             ref={(el) => { descEl = el; }}
             className="input"
             type="text"
@@ -161,8 +163,8 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
           />
           <div className="task-form-row">
             <div className="task-form-field">
-              <label className="field-label">Model</label>
-              <select ref={(el) => (modelEl = el)} className="select" defaultValue="">
+              <label className="field-label" htmlFor="agent-new-model">Model</label>
+              <select id="agent-new-model" ref={(el) => (modelEl = el)} className="select" defaultValue="">
                 <option value="">(provider default)</option>
                 {MODELS.map((m) => (
                   <option key={m} value={m}>{m}</option>
@@ -170,22 +172,22 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
               </select>
             </div>
             <div className="task-form-field">
-              <label className="field-label">Mode</label>
-              <select ref={(el) => (modeEl = el)} className="select" defaultValue="subagent">
+              <label className="field-label" htmlFor="agent-new-mode">Mode</label>
+              <select id="agent-new-mode" ref={(el) => (modeEl = el)} className="select" defaultValue="subagent">
                 <option value="primary">primary</option>
                 <option value="subagent">subagent</option>
                 <option value="all">all</option>
               </select>
             </div>
             <div className="task-form-field" style={{ flex: '0 0 80px' }}>
-              <label className="field-label">Color</label>
-              <input ref={(el) => (colorEl = el)} className="input" type="color" defaultValue="#8b5cf6" />
+              <label className="field-label" htmlFor="agent-new-color">Color</label>
+              <input id="agent-new-color" ref={(el) => (colorEl = el)} className="input" type="color" defaultValue="#8b5cf6" />
             </div>
           </div>
           <div className="task-form-row">
             <div className="task-form-field" style={{ flex: 1 }}>
-              <label className="field-label">Category</label>
-              <select ref={(el) => (categoryEl = el)} className="select" defaultValue="">
+              <label className="field-label" htmlFor="agent-new-category">Category</label>
+              <select id="agent-new-category" ref={(el) => (categoryEl = el)} className="select" defaultValue="">
                 <option value="">(none)</option>
                 {CATEGORIES.map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
@@ -193,21 +195,24 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
               </select>
             </div>
             <div className="task-form-field" style={{ flex: 2 }}>
-              <label className="field-label">Tags (comma-separated)</label>
-              <input ref={(el) => (tagsEl = el)} className="input" type="text" placeholder="reasoning, code, planning" />
+              <label className="field-label" htmlFor="agent-new-tags">Tags (comma-separated)</label>
+              <input id="agent-new-tags" ref={(el) => (tagsEl = el)} className="input" type="text" placeholder="reasoning, code, planning" />
             </div>
           </div>
-          <label className="field-label">Tools</label>
-          <div ref={(el) => (toolsContainer = el)} className="agent-tools">
-            {TOOL_OPTIONS.map((t) => (
-              <label key={t} className="checkbox-row">
-                <input type="checkbox" value={t} />
-                <span>{t}</span>
-              </label>
-            ))}
-          </div>
-          <label className="field-label">System prompt</label>
+          <fieldset>
+            <legend className="field-label" style={{ padding: 0 }}>Tools</legend>
+            <div ref={(el) => (toolsContainer = el)} className="agent-tools">
+              {TOOL_OPTIONS.map((t) => (
+                <label key={t} className="checkbox-row">
+                  <input type="checkbox" value={t} aria-label={t} />
+                  <span>{t}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="field-label" htmlFor="agent-new-prompt">System prompt</label>
           <textarea
+            id="agent-new-prompt"
             ref={(el) => (promptEl = el)}
             className="textarea"
             rows={6}
@@ -280,8 +285,9 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
             <div className="muted">
               File: <code>{full.path}</code>
             </div>
-            <label className="field-label">Description</label>
+            <label className="field-label" htmlFor="agent-edit-desc">Description</label>
             <input
+              id="agent-edit-desc"
               ref={(el) => { descEl = el; }}
               className="input"
               type="text"
@@ -289,8 +295,8 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
             />
             <div className="task-form-row">
               <div className="task-form-field">
-                <label className="field-label">Model</label>
-                <select ref={(el) => (modelEl = el)} className="select" defaultValue={full.model}>
+                <label className="field-label" htmlFor="agent-edit-model">Model</label>
+                <select id="agent-edit-model" ref={(el) => (modelEl = el)} className="select" defaultValue={full.model}>
                   <option value="">(provider default)</option>
                   {MODELS.map((m) => (
                     <option key={m} value={m}>{m}</option>
@@ -298,22 +304,22 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                 </select>
               </div>
               <div className="task-form-field">
-                <label className="field-label">Mode</label>
-                <select ref={(el) => (modeEl = el)} className="select" defaultValue={full.mode || 'subagent'}>
+                <label className="field-label" htmlFor="agent-edit-mode">Mode</label>
+                <select id="agent-edit-mode" ref={(el) => (modeEl = el)} className="select" defaultValue={full.mode || 'subagent'}>
                   <option value="primary">primary</option>
                   <option value="subagent">subagent</option>
                   <option value="all">all</option>
                 </select>
               </div>
               <div className="task-form-field" style={{ flex: '0 0 80px' }}>
-                <label className="field-label">Color</label>
-                <input ref={(el) => (colorEl = el)} className="input" type="color" defaultValue={full.color || '#8b5cf6'} />
+                <label className="field-label" htmlFor="agent-edit-color">Color</label>
+                <input id="agent-edit-color" ref={(el) => (colorEl = el)} className="input" type="color" defaultValue={full.color || '#8b5cf6'} />
               </div>
             </div>
             <div className="task-form-row">
               <div className="task-form-field" style={{ flex: 1 }}>
-                <label className="field-label">Category</label>
-                <select ref={(el) => (categoryEl = el)} className="select" defaultValue={full.category || ''}>
+                <label className="field-label" htmlFor="agent-edit-category">Category</label>
+                <select id="agent-edit-category" ref={(el) => (categoryEl = el)} className="select" defaultValue={full.category || ''}>
                   <option value="">(none)</option>
                   {CATEGORIES.map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
@@ -321,8 +327,9 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                 </select>
               </div>
               <div className="task-form-field" style={{ flex: 2 }}>
-                <label className="field-label">Tags (comma-separated)</label>
+                <label className="field-label" htmlFor="agent-edit-tags">Tags (comma-separated)</label>
                 <input
+                  id="agent-edit-tags"
                   ref={(el) => (tagsEl = el)}
                   className="input"
                   type="text"
@@ -330,17 +337,20 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                 />
               </div>
             </div>
-            <label className="field-label">Tools</label>
-            <div ref={(el) => (toolsContainer = el)} className="agent-tools">
-              {TOOL_OPTIONS.map((t) => (
-                <label key={t} className="checkbox-row">
-                  <input type="checkbox" value={t} defaultChecked={full.tools?.includes(t)} />
-                  <span>{t}</span>
-                </label>
-              ))}
-            </div>
-            <label className="field-label">System prompt</label>
+            <fieldset>
+              <legend className="field-label" style={{ padding: 0 }}>Tools</legend>
+              <div ref={(el) => (toolsContainer = el)} className="agent-tools">
+                {TOOL_OPTIONS.map((t) => (
+                  <label key={t} className="checkbox-row">
+                    <input type="checkbox" value={t} aria-label={t} defaultChecked={full.tools?.includes(t)} />
+                    <span>{t}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <label className="field-label" htmlFor="agent-edit-prompt">System prompt</label>
             <textarea
+              id="agent-edit-prompt"
               ref={(el) => (promptEl = el)}
               className="textarea"
               rows={8}
@@ -483,15 +493,20 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
         </div>
         <div className="view-actions">
           <div className="search-input">
+            <label htmlFor="agents-search" className="sr-only">Search agents</label>
             <input
+              id="agents-search"
               className="input"
               type="text"
               placeholder="Search…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search agents"
             />
           </div>
+          <label htmlFor="agents-category-filter" className="sr-only">Filter by category</label>
           <select
+            id="agents-category-filter"
             className="select select-sm"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}

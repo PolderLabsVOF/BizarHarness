@@ -85,6 +85,7 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
   const [priorityFilter, setPriorityFilter] = useState<string>('');
   const [showBacklog, setShowBacklog] = useState(false);
   const [tick, setTick] = useState(0); // for live timer re-render
+  const [statusAnnouncement, setStatusAnnouncement] = useState('');
 
   const reload = async () => {
     try {
@@ -146,6 +147,7 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
     setTasks((cur) =>
       cur.map((x) => (x.id === taskId ? { ...x, status: newStatus } : x)),
     );
+    setStatusAnnouncement(`Task ${t.title} moved to ${newStatus}.`);
     try {
       await api.patch(`/tasks/${encodeURIComponent(taskId)}/status`, {
         status: newStatus,
@@ -155,6 +157,7 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
       setTasks((cur) =>
         cur.map((x) => (x.id === taskId ? { ...x, status: prev } : x)),
       );
+      setStatusAnnouncement(`Failed to move task ${t.title}: ${(err as Error).message}`);
       toast.error(`Move failed: ${(err as Error).message}`);
     }
   };
@@ -217,6 +220,10 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
 
   return (
     <div className="view view-tasks">
+      {/* Hidden live region for screen-reader announcements of status changes. */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {statusAnnouncement}
+      </div>
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
@@ -232,13 +239,14 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
       <div className="tasks-toolbar">
         <div className="tasks-toolbar-group">
           <div className="search-input" style={{ width: 200 }}>
-            <Search size={12} />
+            <Search size={12} aria-hidden />
             <input
               className="input"
               type="text"
               placeholder="Search…"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
+              aria-label="Search tasks"
             />
             {filter && (
               <button
@@ -256,8 +264,9 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
         <div className="tasks-toolbar-divider" />
 
         <div className="tasks-toolbar-group">
-          <span className="tasks-toolbar-label">Priority</span>
+          <label className="tasks-toolbar-label" htmlFor="tasks-priority-filter">Priority</label>
           <select
+            id="tasks-priority-filter"
             className="select select-sm"
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}

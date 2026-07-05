@@ -141,8 +141,10 @@ export function Chat({
       title: 'Rename session',
       children: (
         <input
+          id="rename-session-input"
           autoFocus
           defaultValue={currentTitle}
+          aria-label="Session title"
           onChange={(e) => {
             next = e.target.value;
           }}
@@ -406,6 +408,10 @@ export function Chat({
             className="chat-thread-scroll"
             ref={chat.listRef}
             onScroll={chat.handleScroll}
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            aria-label="Chat message thread"
           >
             <ChatThread
               messages={
@@ -463,6 +469,8 @@ export function Chat({
             multiple
             style={{ display: 'none' }}
             onChange={onFiles}
+            aria-label="Attach files to message"
+            tabIndex={-1}
           />
         </section>
 

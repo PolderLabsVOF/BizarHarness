@@ -715,6 +715,13 @@ function Shell() {
 
   return (
     <div className="app" data-layout={layout} data-active-tab={activeTab}>
+      {/* v4.8.0 — WCAG 2.2 AA: skip-to-main-content link. Hidden visually
+          until focused; clicking moves keyboard focus past the nav into
+          the active view. Screen readers and keyboard users can jump
+          past the topbar + sidebar without tabbing through every tab. */}
+      <a className="skip-to-main" href="#main-content">
+        Skip to main content
+      </a>
       {showHeader && (
         <Topbar
           activeTab={activeTab}
@@ -769,7 +776,7 @@ function Shell() {
             onTabChange={setActiveTab}
           />
         )}
-        <main className="content">
+        <main className="content" id="main-content" tabIndex={-1}>
           {bootError && (
             <div className="boot-error">
               <h2>Dashboard unavailable</h2>

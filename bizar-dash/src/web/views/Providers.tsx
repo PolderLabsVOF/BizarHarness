@@ -75,14 +75,14 @@ export function Providers({ snapshot, settings, refreshSnapshot }: Props) {
       title: 'Add Provider',
       children: (
         <div className="provider-form">
-          <label className="field-label">Provider name</label>
-          <input ref={(el) => { nameEl = el; }} className="input" type="text" placeholder="e.g. Anthropic, OpenAI" autoFocus />
-          <label className="field-label">Base URL</label>
-          <input ref={(el) => { urlEl = el; }} className="input" type="text" placeholder="https://api.openai.com/v1" />
-          <label className="field-label">API Key</label>
-          <input ref={(el) => { keyEl = el; }} className="input" type="password" placeholder="sk-..." />
-          <label className="field-label">Models (one per line)</label>
-          <textarea ref={(el) => { modelsEl = el; }} className="input" rows={4} placeholder="gpt-4o&#10;gpt-4o-mini&#10;..." />
+          <label className="field-label" htmlFor="provider-new-name">Provider name</label>
+          <input id="provider-new-name" ref={(el) => { nameEl = el; }} className="input" type="text" placeholder="e.g. Anthropic, OpenAI" autoFocus />
+          <label className="field-label" htmlFor="provider-new-url">Base URL</label>
+          <input id="provider-new-url" ref={(el) => { urlEl = el; }} className="input" type="text" placeholder="https://api.openai.com/v1" />
+          <label className="field-label" htmlFor="provider-new-key">API Key</label>
+          <input id="provider-new-key" ref={(el) => { keyEl = el; }} className="input" type="password" placeholder="sk-..." />
+          <label className="field-label" htmlFor="provider-new-models">Models (one per line)</label>
+          <textarea id="provider-new-models" ref={(el) => { modelsEl = el; }} className="input" rows={4} placeholder="gpt-4o&#10;gpt-4o-mini&#10;..." />
         </div>
       ),
       footer: (
@@ -118,14 +118,14 @@ export function Providers({ snapshot, settings, refreshSnapshot }: Props) {
       title: `Edit "${provider.name}"`,
       children: (
         <div className="provider-form">
-          <label className="field-label">Provider name</label>
-          <input ref={(el) => { nameEl = el; }} className="input" type="text" defaultValue={provider.name} />
-          <label className="field-label">Base URL</label>
-          <input ref={(el) => { urlEl = el; }} className="input" type="text" defaultValue={provider.baseURL} />
-          <label className="field-label">API Key (leave blank to keep current)</label>
-          <input ref={(el) => { keyEl = el; }} className="input" type="password" placeholder="sk-..." />
-          <label className="field-label">Models (one per line)</label>
-          <textarea ref={(el) => { modelsEl = el; }} className="input" rows={4} defaultValue={(provider.models || []).join('\n')} />
+          <label className="field-label" htmlFor="provider-edit-name">Provider name</label>
+          <input id="provider-edit-name" ref={(el) => { nameEl = el; }} className="input" type="text" defaultValue={provider.name} />
+          <label className="field-label" htmlFor="provider-edit-url">Base URL</label>
+          <input id="provider-edit-url" ref={(el) => { urlEl = el; }} className="input" type="text" defaultValue={provider.baseURL} />
+          <label className="field-label" htmlFor="provider-edit-key">API Key (leave blank to keep current)</label>
+          <input id="provider-edit-key" ref={(el) => { keyEl = el; }} className="input" type="password" placeholder="sk-..." />
+          <label className="field-label" htmlFor="provider-edit-models">Models (one per line)</label>
+          <textarea id="provider-edit-models" ref={(el) => { modelsEl = el; }} className="input" rows={4} defaultValue={(provider.models || []).join('\n')} />
         </div>
       ),
       footer: (

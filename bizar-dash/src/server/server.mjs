@@ -40,6 +40,7 @@ import { V2EventBus } from './v2-event-bus.mjs';
 import { loadOrCreateAuth, V2_DEFAULT_PORT } from './v2-auth-file.mjs';
 import { createV2Router } from './routes-v2/index.mjs';
 import { counter, gauge, render as renderMetrics } from './metrics.mjs';
+import { warn } from './logger.mjs';
 
 // v4.7.0 — Prometheus-style HTTP metrics. Bound to the server-wide
 // registry; render() emits the text exposition format consumed by
@@ -190,6 +191,13 @@ export async function createServer({
   // `unmatched` for 404s so the cardinality stays bounded. Hooked off
   // `finish` so the final status code is captured even after error
   // handlers run.
+  //
+  // v4.8.0 — When the status is 429, also emit a structured warning
+  // so operators can see when an IP is being throttled. The scope
+  // comes from the X-RateLimit-Scope header set by the per-route
+  // limiter middleware (chat / event); if no scope header is
+  // present, log the 429 with scope=unknown (it may be an upstream
+  // 429 proxied from the opencode plugin).
   app.use((req, res, next) => {
     res.on('finish', () => {
       const route = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : 'unmatched';
@@ -198,6 +206,15 @@ export async function createServer({
         route,
         status: String(res.statusCode),
       });
+      if (res.statusCode === 429) {
+        const scope = res.getHeader('X-RateLimit-Scope') || 'unknown';
+        warn('rate_limit_exceeded', {
+          ip: req.ip || (req.socket && req.socket.remoteAddress) || 'unknown',
+          scope,
+          method: req.method,
+          route,
+        });
+      }
     });
     next();
   });

@@ -44,6 +44,7 @@ import {
   buildAuthHeader,
 } from '../serve-info.mjs';
 import { wrap } from './_shared.mjs';
+import { createRateLimiter } from '../lib/rate-limit.mjs';
 
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
 
@@ -94,6 +95,19 @@ function resetChatDeltaCount(chatSessionId) {
  */
 export function createChatRouter({ state, broadcast }) {
   const router = Router();
+
+  // v4.8.0 — Per-IP token bucket. Chat endpoints are the most expensive
+  // thing the dashboard does (each POST kicks off an SSE subscription +
+  // opencode prompt dispatch), so the default budget is conservative:
+  // 60 requests / minute / IP, refilling at 1 token per second.
+  // Operators can tune via BIZAR_RATE_LIMIT_CHAT_CAPACITY /
+  // BIZAR_RATE_LIMIT_CHAT_REFILL.
+  const chatLimiter = createRateLimiter({
+    capacity: parseInt(process.env.BIZAR_RATE_LIMIT_CHAT_CAPACITY || '60', 10),
+    refillPerSecond: parseFloat(process.env.BIZAR_RATE_LIMIT_CHAT_REFILL || '1'),
+    scope: 'chat',
+  });
+  router.use(chatLimiter);
 
   router.get('/chat', wrap(async (req, res) => {
     const sessionId = req.query.session ? String(req.query.session) : null;

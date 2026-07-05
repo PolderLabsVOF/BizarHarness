@@ -136,7 +136,12 @@ function showHelp() {
 async function importCommand(name) {
   try {
     return await import(`./commands/${name}.mjs`);
-  } catch {
+  } catch (err) {
+    console.error(chalk.red(`  ✗ Failed to load command module '${name}': ${err && err.message ? err.message : String(err)}`));
+    if (err && err.stack) {
+      const lines = err.stack.split('\n').slice(0, 3);
+      console.error(chalk.dim(lines.join('\n')));
+    }
     return null;
   }
 }
@@ -184,61 +189,131 @@ async function main() {
     }
   }
 
+  // `bizar help` — explicit help alias
+  if (cmd === 'help') {
+    showHelp();
+    process.exit(EXIT_OK);
+    return;
+  }
+
   // Dispatch to command modules
   switch (cmd) {
     case 'install':
     case 'update': {
       const mod = await importCommand('install');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load install command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'install');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'service': {
       const mod = await importCommand('service');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load service command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'service');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'dash':
     case 'dashboard': {
       const mod = await importCommand('dash');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load dash command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'dash');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'minimax': {
       const mod = await importCommand('minimax');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load minimax command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'minimax');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'headroom': {
       const mod = await importCommand('headroom');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load headroom command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'headroom');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'mod': {
       const mod = await importCommand('mod');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load mod command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'mod');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'artifact': {
       const mod = await importCommand('artifact');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load artifact command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'artifact');
       await mod.runArtifact(cmdArgs, { wantJson });
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'memory': {
       const mod = await importCommand('memory');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load memory command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'memory');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
     case 'usage': {
       const mod = await importCommand('usage');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load usage command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'usage');
       await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       break;
     }
 
@@ -253,11 +328,19 @@ async function main() {
     case 'repair':
     case 'heads-up':
     case 'bg':
+    case 'digest':
     case 'browser-harness-up':
     case 'providers':
     case 'plan': {
       const mod = await importCommand('util');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load util command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'util');
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
       if (!found) {
         console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
         showHelp();

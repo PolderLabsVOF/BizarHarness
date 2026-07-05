@@ -77,7 +77,9 @@ export function SemanticSearchPanel({ refreshKey }: Props) {
         </CardTitle>
         <CardMeta>Query both LightRAG (graph-based) and the Obsidian vault in one shot.</CardMeta>
         <div className="memory-search-row">
+          <label htmlFor="semantic-search-input" className="sr-only">Semantic search</label>
           <input
+            id="semantic-search-input"
             type="text"
             className="input"
             placeholder="e.g. how are notes indexed?"
@@ -87,6 +89,7 @@ export function SemanticSearchPanel({ refreshKey }: Props) {
               if (e.key === 'Enter') onSearch(q);
             }}
             disabled={loading}
+            aria-label="Semantic search query"
           />
           <Button variant="primary" onClick={() => onSearch(q)} disabled={loading || !q.trim()}>
             {loading ? <Loader2 size={12} className="memory-spin" /> : <SearchIcon size={12} />}

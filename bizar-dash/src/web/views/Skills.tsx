@@ -191,13 +191,16 @@ function SkillsInner({ snapshot, refreshSnapshot }: Props) {
         </div>
         <div className="view-actions">
           <div className="search-input">
-            <Search size={14} />
+            <Search size={14} aria-hidden />
+            <label htmlFor="skills-search" className="sr-only">Search skills</label>
             <input
+              id="skills-search"
               className="input"
               type="text"
               placeholder="Search skills…"
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
+              aria-label="Search skills"
             />
             {searchQ && (
               <button

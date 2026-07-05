@@ -204,8 +204,9 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
             a <code>mod.json</code>). The folder will be copied to
             {' '}<code>~/.config/bizar/mods/&lt;id&gt;/</code>.
           </p>
-          <label className="field-label">Path</label>
+          <label className="field-label" htmlFor="install-mod-path">Path</label>
           <input
+            id="install-mod-path"
             ref={(el) => (pathEl = el)}
             className="input"
             type="text"
@@ -355,20 +356,26 @@ export function Mods({ snapshot, refreshSnapshot }: Props) {
 
       {/* v3.16.0 — Registry browser */}
       <Card className="mods-registry-card">
-        <div className="mods-registry-head" onClick={() => {
-          if (!registry && !registryLoading) loadRegistry();
-          setRegistryOpen((v) => !v);
-        }}>
-          <Globe size={14} />
+        <button
+          type="button"
+          className="mods-registry-head"
+          aria-expanded={registryOpen}
+          aria-controls="mods-registry-body"
+          onClick={() => {
+            if (!registry && !registryLoading) loadRegistry();
+            setRegistryOpen((v) => !v);
+          }}
+        >
+          <Globe size={14} aria-hidden />
           <span className="mods-registry-title">Mod registry</span>
           <span className="muted" style={{ fontSize: 11 }}>
             {registry?.mods ? `${registry.mods.length} available` : 'click to browse'}
           </span>
           <span className="mods-registry-spacer" />
-          {registryOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </div>
+          {registryOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+        </button>
         {registryOpen && (
-          <div className="mods-registry-body">
+          <div id="mods-registry-body" className="mods-registry-body">
             {registryLoading ? (
               <div className="muted" style={{ padding: 12, fontSize: 12 }}>Loading registry…</div>
             ) : registry?.error ? (
@@ -586,20 +593,26 @@ function ModDetails({ mod }: { mod: Mod }) {
 
       {/* v3.20 — Installed instructions (agents / commands / skills) */}
       <div className="mod-instructions">
-        <div className="mod-instructions-head" onClick={() => {
-          if (!instructions && !instructionsLoading) loadInstructions();
-          setInstructionsOpen((v) => !v);
-        }}>
-          <FileCode size={14} />
+        <button
+          type="button"
+          className="mod-instructions-head"
+          aria-expanded={instructionsOpen}
+          aria-controls={`mod-instructions-body-${mod.id}`}
+          onClick={() => {
+            if (!instructions && !instructionsLoading) loadInstructions();
+            setInstructionsOpen((v) => !v);
+          }}
+        >
+          <FileCode size={14} aria-hidden />
           <span>Installed instructions</span>
           <span className="muted" style={{ fontSize: 11 }}>
             {instructions ? `${instructions.total} files` : 'click to view'}
           </span>
           <span className="mod-instructions-spacer" />
-          {instructionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </div>
+          {instructionsOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+        </button>
         {instructionsOpen && instructions && (
-          <div className="mod-instructions-body">
+          <div id={`mod-instructions-body-${mod.id}`} className="mod-instructions-body">
             {instructions.agents.length > 0 && (
               <div className="mod-instructions-section">
                 <div className="mod-instructions-section-title">

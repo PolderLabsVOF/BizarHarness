@@ -3,7 +3,8 @@
  *
  * Miscellaneous utility commands:
  *   audit, init, export, test-gate, dev-link, dev-unlink,
- *   doctor, repair, heads-up, bg, browser-harness-up, providers detect
+ *   doctor, repair, heads-up, bg, browser-harness-up, providers detect,
+ *   backup, restore
  */
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'node:fs';
@@ -130,6 +131,51 @@ export function showRepairHelp() {
   `);
 }
 
+export function showBackupHelp() {
+  console.log(`
+  bizar backup — Backup BizarHarness state
+
+  Usage:
+    bizar backup [label]        Create a new backup (with optional label)
+    bizar backup list           List available backups
+    bizar backup verify <path>  Verify a backup's integrity
+    bizar backup delete <path>  Delete a backup
+
+  Description:
+    Backs up config (~/.config/bizar/, ~/.config/opencode/), memory,
+    usage logs, and optionally project-level state (.bizar/, skills/).
+    Backups are stored under ~/.local/share/bizar/backups/.
+
+  Examples:
+    bizar backup
+    bizar backup "before-upgrade"
+    bizar backup list
+    bizar backup verify ~/.local/share/bizar/backups/bizar-2025-07-05-120000
+  `);
+}
+
+export function showRestoreHelp() {
+  console.log(`
+  bizar restore — Restore BizarHarness from a backup
+
+  Usage:
+    bizar restore <path>                Restore from a backup
+    bizar restore <path> --dry-run      Preview restore without modifying files
+    bizar restore <path> --overwrite    Replace existing files (default: merge)
+    bizar restore <path> --skip         Keep existing files, don't overwrite
+
+  Description:
+    Restores files from a backup directory. Default strategy is 'merge'
+    (newer files from backup overlay existing files). Use --overwrite to
+    replace everything, or --skip to leave existing files untouched.
+
+  Examples:
+    bizar restore ~/.local/share/bizar/backups/bizar-2025-07-05-120000
+    bizar restore ~/.local/share/bizar/backups/bizar-2025-07-05-120000 --dry-run
+    bizar restore ~/.local/share/bizar/backups/bizar-2025-07-05-120000 --overwrite
+  `);
+}
+
 // ── Test gate ──────────────────────────────────────────────────────────────────
 
 export async function runTestGate() {
@@ -245,6 +291,102 @@ export async function run(name, args, isHelpRequest) {
       }
       break;
 
+    case 'backup': {
+      if (isHelpRequest || args.length === 0) {
+        showBackupHelp();
+        break;
+      }
+      const sub = args[0];
+      if (sub === 'list') {
+        const { listBackups } = await import('../../bizar-dash/src/server/backup-store.mjs');
+        const backups = await listBackups();
+        if (backups.length === 0) {
+          console.log('  No backups found.');
+        } else {
+          for (const b of backups) {
+            console.log(`  ${b.path}`);
+            console.log(`    Created: ${b.createdAt}`);
+            console.log(`    Size: ${b.sizeFormatted}`);
+            if (b.manifest?.label) console.log(`    Label: ${b.manifest.label}`);
+            console.log('');
+          }
+        }
+        break;
+      }
+      if (sub === 'verify') {
+        const path = args[1];
+        if (!path) { console.error('  Usage: bizar backup verify <path>'); process.exit(1); }
+        const { verifyBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+        const result = await verifyBackup({ backupPath: path });
+        if (result.ok) {
+          console.log(chalk.green('  ✓ Backup is valid'));
+        } else {
+          console.error(chalk.red('  ✗ Backup has issues:'));
+          for (const issue of result.issues) console.error(`    - ${issue}`);
+          process.exit(1);
+        }
+        break;
+      }
+      if (sub === 'delete') {
+        const path = args[1];
+        if (!path) { console.error('  Usage: bizar backup delete <path>'); process.exit(1); }
+        const { deleteBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+        const result = await deleteBackup({ backupPath: path });
+        if (result.ok) {
+          console.log(chalk.green('  ✓ Backup deleted'));
+        } else {
+          console.error(chalk.red(`  ✗ Delete failed: ${result.error}`));
+          process.exit(1);
+        }
+        break;
+      }
+      // Default: create backup
+      const label = sub || null;
+      const { createBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+      const result = await createBackup({ label });
+      if (result.ok) {
+        console.log(chalk.green('  ✓ Backup created'));
+        console.log(`  Path: ${result.path}`);
+        console.log(`  Size: ${result.sizeBytes > 0 ? `${(result.sizeBytes / 1024).toFixed(1)} KB` : '0 B'}`);
+        console.log(`  Duration: ${result.durationMs}ms`);
+      } else {
+        console.error(chalk.red('  ✗ Backup failed'));
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'restore': {
+      if (isHelpRequest) {
+        showRestoreHelp();
+        break;
+      }
+      const path = args[0];
+      if (!path) { showRestoreHelp(); process.exit(1); }
+      const dryRun = args.includes('--dry-run');
+      const conflictStrategy = args.includes('--overwrite') ? 'overwrite' : args.includes('--skip') ? 'skip' : 'merge';
+      const { restoreBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+      const result = await restoreBackup({ backupPath: path, dryRun, conflictStrategy });
+      if (dryRun) {
+        console.log('  Dry-run mode — no files were modified.');
+      }
+      if (result.restored.length > 0) {
+        console.log(`  Restored: ${result.restored.join(', ')}`);
+      }
+      if (result.skipped.length > 0) {
+        console.log(`  Skipped: ${result.skipped.join(', ')}`);
+      }
+      if (result.errors.length > 0) {
+        console.error(chalk.red('  Errors:'));
+        for (const e of result.errors) console.error(`    - ${e}`);
+        process.exit(1);
+      }
+      if (result.ok) {
+        console.log(chalk.green(`  ✓ Restore complete`));
+      }
+      break;
+    }
+
     case 'heads-up':
       if (isHelpRequest) {
         console.log('  heads-up <subcommand>   Manage pre-push / pre-release heads-ups (list/check/archive)');
@@ -260,6 +402,17 @@ export async function run(name, args, isHelpRequest) {
       } else {
         const { runBg } = await import('../bg.mjs');
         await runBg(args[0], args.slice(1));
+      }
+      break;
+
+    case 'digest':
+      // v4.8.0 — Weekly digest management
+      if (isHelpRequest) {
+        const { showDigestHelp } = await import('../digest.mjs');
+        showDigestHelp();
+      } else {
+        const { runDigest } = await import('../digest.mjs');
+        await runDigest(args[0], args.slice(1));
       }
       break;
 

@@ -23,12 +23,104 @@ import { homedir } from 'node:os';
 import { isIP } from 'node:net';
 import { projectsStore } from './projects-store.mjs';
 import { schedulesStore } from './schedules-store.mjs';
+import { Cron } from 'croner';
 
 const HOME = homedir();
 const LOG_DIR = join(HOME, '.config', 'bizar');
 const LOG_FILE = join(LOG_DIR, 'service.log');
 const ALLOW_PRIVATE_WEBHOOKS = process.env.BIZAR_DASHBOARD_ALLOW_PRIVATE_WEBHOOKS === '1';
 const SHELL_META = /[;&|`$<>\n\r]/;
+
+// ── Internal schedules ─────────────────────────────────────────────────────
+//
+// v4.8.0 — Builtin schedules registered at module load. These are NOT
+// persisted in the schedules-store; they live in-memory here and are
+// checked alongside the project schedules during tick(). When a builtin
+// schedule fires, the runner dispatches directly to the handler without
+// going through the task delegator or action runner.
+
+/** @type {Array<{ id: string, name: string, schedule: string, type: string, timezone: string, enabled: boolean, builtin: boolean, handler?: Function, lastRun: string|null, nextRun: string|null }>} */
+const internalSchedules = [];
+
+/**
+ * Register an internal schedule that is evaluated during tick().
+ *
+ * @param {object} spec
+ * @param {string} spec.id
+ * @param {string} spec.name
+ * @param {string} spec.cron      — cron expression
+ * @param {string} [spec.timezone='UTC']
+ * @param {Function} [spec.handler] — optional direct-call handler for builtin schedules
+ */
+export function registerInternalSchedule(spec) {
+  const tz = spec.timezone || 'UTC';
+  let nextRun = null;
+  if (spec.cron) {
+    try {
+      const job = new Cron(spec.cron, { timezone: tz });
+      const n = job.nextRun();
+      nextRun = n ? n.toISOString() : null;
+    } catch { /* invalid cron */ }
+  }
+  // Remove existing entry with same id (for hot-reload)
+  const existing = internalSchedules.findIndex((s) => s.id === spec.id);
+  const entry = {
+    id: spec.id,
+    name: spec.name || spec.id,
+    schedule: spec.cron || '',
+    type: 'cron',
+    timezone: tz,
+    enabled: true,
+    builtin: true,
+    handler: spec.handler || null,
+    lastRun: null,
+    nextRun,
+  };
+  if (existing >= 0) {
+    internalSchedules[existing] = { ...internalSchedules[existing], ...entry };
+  } else {
+    internalSchedules.push(entry);
+  }
+}
+
+/**
+ * Recompute nextRun for all internal schedules (called on system clock
+ * changes or after midnight).
+ */
+export function recomputeInternalSchedules() {
+  for (const s of internalSchedules) {
+    if (s.type === 'cron' && s.schedule) {
+      try {
+        const job = new Cron(s.schedule, { timezone: s.timezone || 'UTC' });
+        const n = job.nextRun();
+        s.nextRun = n ? n.toISOString() : null;
+      } catch {
+        s.nextRun = null;
+      }
+    }
+  }
+}
+
+// v4.8.0 — Auto-register the weekly digest cron at module load.
+registerInternalSchedule({
+  id: 'bizar-internal-weekly-digest',
+  name: 'Weekly digest',
+  cron: '0 0 * * 0',
+  timezone: 'UTC',
+  handler: async () => {
+    logLine('[digest] Weekly digest cron fired — generating…');
+    try {
+      const { generateAndSave } = await import('./digest-store.mjs');
+      const projectRoot = process.env.BIZAR_PROJECT_ROOT || process.cwd();
+      const result = await generateAndSave({ projectRoot });
+      logLine(`[digest] Weekly digest generated: ${result.weekStart} (${result.saveResult.paths.length} file(s))`);
+      return { ok: true, result };
+    } catch (err) {
+      logLine(`[digest] Weekly digest generation failed: ${err.message}`);
+      return { ok: false, error: err.message };
+    }
+  },
+});
 
 function logLine(line) {
   try {
@@ -292,6 +384,8 @@ export const schedulesRunner = {
       console.warn('swallowed in schedules due-list:', err.message);
     }
     let skipped = 0;
+
+    // Project schedules
     for (const projectId of projectIds) {
       const due = schedulesStore.due(projectId, Date.now());
       for (const sched of due) {
@@ -300,6 +394,38 @@ export const schedulesRunner = {
         fired.push({ projectId, scheduleId: sched.id, ...result });
       }
     }
+
+    // v4.8.0 — Internal (builtin) schedules
+    const now = Date.now();
+    for (const sched of internalSchedules) {
+      if (!sched.enabled) continue;
+      if (!sched.nextRun) continue;
+      if (new Date(sched.nextRun).getTime() > now) continue;
+      const startedAt = new Date().toISOString();
+      logLine(`[${startedAt}] run internal ${sched.id} (${sched.name})`);
+      try {
+        if (typeof sched.handler === 'function') {
+          const res = await sched.handler();
+          sched.lastRun = new Date().toISOString();
+          // Recompute nextRun
+          if (sched.schedule) {
+            try {
+              const job = new Cron(sched.schedule, { timezone: sched.timezone || 'UTC' });
+              const n = job.nextRun();
+              sched.nextRun = n ? n.toISOString() : null;
+            } catch {
+              sched.nextRun = null;
+            }
+          }
+          logLine(`[${new Date().toISOString()}] done internal ${sched.id} → ${res.ok ? 'success' : 'error'}`);
+          fired.push({ projectId: 'internal', scheduleId: sched.id, ok: res.ok, runResult: res });
+        }
+      } catch (err) {
+        logLine(`[${new Date().toISOString()}] failed internal ${sched.id}: ${err.message}`);
+        fired.push({ projectId: 'internal', scheduleId: sched.id, ok: false, runResult: { error: err.message } });
+      }
+    }
+
     if (skipped > 0) {
       logLine(`[schedule] tick: ${skipped} skipped by budget pre-flight`);
     }

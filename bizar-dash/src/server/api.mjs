@@ -138,6 +138,14 @@ export async function createApiRouter({
   // Each route handler inside the router is at its bare path (e.g. '/status'),
   // which becomes '/api/headroom/status' at the top level.
   router.use('/headroom', createHeadroomRouter());
+  // v4.8.0 — Weekly digest endpoints. Lazy-imported so digest-store
+  // module-level imports (tasks, schedules, etc.) don't block boot.
+  const { createDigestsRouter } = await import('./routes/digests.mjs');
+  router.use(createDigestsRouter({ projectRoot }));
+  // v4.8.0 — Backup/restore endpoints. Lazy-imported so backup-store
+  // module-level fs operations don't block boot.
+  const { createBackupRouter } = await import('./routes/backup.mjs');
+  router.use(createBackupRouter({ projectRoot }));
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

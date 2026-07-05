@@ -100,6 +100,11 @@ async function runMinimaxCommand(minimaxArgs) {
       console.error(chalk.red(`  ✗ ${r.message || r.error}`));
       process.exit(1);
     }
+    if (!r.data) {
+      console.error(chalk.red('  ✗ Dashboard returned no data. Is the dashboard running?'));
+      console.error(chalk.dim(`    Tried: http://127.0.0.1:4321/api/minimax/status`));
+      process.exit(1);
+    }
     const s = r.data;
     console.log('');
     console.log(chalk.bold('  MiniMax Token Plan status'));
@@ -124,6 +129,11 @@ async function runMinimaxCommand(minimaxArgs) {
     const r = await minimaxApi('/api/minimax/remains');
     if (!r.ok) {
       console.error(chalk.red(`  ✗ ${r.message || r.error}`));
+      process.exit(1);
+    }
+    if (!r.data) {
+      console.error(chalk.red('  ✗ Dashboard returned no data. Is the dashboard running?'));
+      console.error(chalk.dim(`    Tried: http://127.0.0.1:4321/api/minimax/remains`));
       process.exit(1);
     }
     if (!r.data?.ok) {
@@ -160,6 +170,11 @@ async function runMinimaxCommand(minimaxArgs) {
       console.error(chalk.red(`  ✗ ${r.message || r.error}`));
       process.exit(1);
     }
+    if (!r.data) {
+      console.error(chalk.red('  ✗ Dashboard returned no data. Is the dashboard running?'));
+      console.error(chalk.dim(`    Tried: http://127.0.0.1:4321/api/minimax/test`));
+      process.exit(1);
+    }
     const data = r.data;
     if (!data?.ok) {
       console.error(chalk.red(`  ✗ ${data?.message || data?.error || 'unknown'}`));
@@ -193,6 +208,11 @@ async function runMinimaxCommand(minimaxArgs) {
     });
     if (!r.ok) {
       console.error(chalk.red(`  ✗ ${r.message || r.error}`));
+      process.exit(1);
+    }
+    if (!r.data) {
+      console.error(chalk.red('  ✗ Dashboard returned no data. Is the dashboard running?'));
+      console.error(chalk.dim(`    Tried: http://127.0.0.1:4321/api/minimax/onboarding/save-key`));
       process.exit(1);
     }
     console.log(chalk.green(`  ✓ Saved to ${r.data?.path}`));

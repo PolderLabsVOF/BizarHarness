@@ -288,11 +288,14 @@ function OverviewInner({
             }
           }}
         >
+          <label htmlFor="overview-hero-input" className="sr-only">Describe what you want Odin to do</label>
           <textarea
+            id="overview-hero-input"
             ref={inputRef}
             className="overview-input-hero"
             placeholder="e.g. Implement user authentication with email + password, including registration, login, password reset, and integration tests. Use Bcrypt, JWT tokens, and the existing API style."
             disabled={submitting}
+            aria-label="Describe what you want Odin to do"
           />
           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
             <Button
@@ -367,7 +370,11 @@ function OverviewInner({
             No activity yet. Use the chat above or invoke a Bizar command to start a feed.
           </div>
         ) : (
-          <div className={cn('activity-feed-list-wrap', !activityExpanded && 'activity-feed-list-wrap-collapsed')}>
+          <div
+            className={cn('activity-feed-list-wrap', !activityExpanded && 'activity-feed-list-wrap-collapsed')}
+            aria-live="polite"
+            aria-relevant="additions"
+          >
             <VirtualList
               items={activityItems.slice(0, 30).filter((it, idx) => !hiddenKeys.has(itemKey(it, idx)))}
               itemHeight={60}

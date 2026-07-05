@@ -1109,7 +1109,9 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                         </Button>
                       </div>
                       <div className="tl-form-row">
+                        <label htmlFor="bg-message-input" className="sr-only">Send a message to this bg session</label>
                         <input
+                          id="bg-message-input"
                           className="input"
                           placeholder="Send a message to this bg session…"
                           value={bgMessage}
@@ -1117,6 +1119,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') onSendBgMessage();
                           }}
+                          aria-label="Send a message to this bg session"
                         />
                         <Button variant="primary" size="sm" disabled={!bgMessage.trim()} onClick={onSendBgMessage}>
                           <Send size={12} /> Send
@@ -1127,18 +1130,22 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
 
                   {selectedItem.kind !== 'bg' && (
                     <div className="tl-detail-create">
-                      <div className="field-label">Create follow-up task</div>
+                      <label className="field-label" htmlFor="followup-task-title">Create follow-up task</label>
                       <input
+                        id="followup-task-title"
                         className="input"
                         placeholder="Task title"
                         value={taskTitle}
                         onChange={(e) => setTaskTitle(e.target.value)}
                       />
                       <div className="tl-form-row">
+                        <label htmlFor="followup-task-priority" className="sr-only">Task priority</label>
                         <select
+                          id="followup-task-priority"
                           className="select"
                           value={taskPriority}
                           onChange={(e) => setTaskPriority(e.target.value)}
+                          aria-label="Task priority"
                         >
                           <option value="low">Low</option>
                           <option value="normal">Normal</option>
@@ -1180,7 +1187,9 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                       ))}
                     </ul>
                     <div className="comment-input-row">
+                      <label htmlFor="comment-input" className="sr-only">Add a comment</label>
                       <input
+                        id="comment-input"
                         className="input"
                         placeholder="Add a comment…"
                         value={commentText}
@@ -1188,6 +1197,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) onAddComment();
                         }}
+                        aria-label="Add a comment"
                       />
                       <Button
                         variant="secondary"

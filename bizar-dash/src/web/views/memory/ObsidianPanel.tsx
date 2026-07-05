@@ -222,13 +222,16 @@ export function ObsidianPanel({ refreshKey }: Props) {
       <div className="memory-obsidian-list-col">
         <div className="memory-list-toolbar">
           <div className="search-input">
-            <SearchIcon size={14} />
+            <SearchIcon size={14} aria-hidden />
+            <label htmlFor="obsidian-search" className="sr-only">Search notes</label>
             <input
+              id="obsidian-search"
               type="text"
               className="input"
               placeholder="Search notes…"
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
+              aria-label="Search notes"
             />
             {searchQ && (
               <button
@@ -519,8 +522,9 @@ function NoteEditor({
 
   return (
     <div className="memory-editor-modal">
-      <label className="field-label">Path</label>
+      <label className="field-label" htmlFor="obsidian-note-path">Path</label>
       <input
+        id="obsidian-note-path"
         type="text"
         className="input mono"
         value={relPath}
@@ -528,19 +532,23 @@ function NoteEditor({
         disabled={mode === 'edit'}
         placeholder="notes/example.md"
       />
-      <label className="field-label" style={{ marginTop: 12 }}>Frontmatter (YAML)</label>
+      <label className="field-label" htmlFor="obsidian-note-frontmatter" style={{ marginTop: 12 }}>Frontmatter (YAML)</label>
       <textarea
+        id="obsidian-note-frontmatter"
         className="memory-editor-textarea mono text-sm"
         rows={6}
         value={frontmatterYaml}
         onChange={(e) => setFrontmatterYaml(e.target.value)}
+        aria-label="Frontmatter YAML"
       />
-      <label className="field-label" style={{ marginTop: 12 }}>Body (Markdown)</label>
+      <label className="field-label" htmlFor="obsidian-note-body" style={{ marginTop: 12 }}>Body (Markdown)</label>
       <textarea
+        id="obsidian-note-body"
         className="memory-editor-textarea mono text-sm"
         rows={14}
         value={body}
         onChange={(e) => setBody(e.target.value)}
+        aria-label="Body markdown"
       />
       <div className="modal-footer-actions" style={{ marginTop: 12 }}>
         <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>

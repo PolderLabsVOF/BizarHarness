@@ -125,6 +125,8 @@ export function Composer({
           multiple
           style={{ display: 'none' }}
           onChange={onFiles}
+          aria-label="Attach files"
+          tabIndex={-1}
         />
         <button
           type="button"

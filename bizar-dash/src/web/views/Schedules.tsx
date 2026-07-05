@@ -512,8 +512,9 @@ function ScheduleEditorModal({
 
   return (
     <form className="schedule-form" onSubmit={handleSubmit}>
-      <label className="field-label">Name</label>
+      <label className="field-label" htmlFor="schedule-name">Name</label>
       <input
+        id="schedule-name"
         className="input"
         type="text"
         placeholder="Weekly code review"
@@ -524,8 +525,9 @@ function ScheduleEditorModal({
 
       <div className="task-form-row">
         <div className="task-form-field">
-          <label className="field-label">Type</label>
+          <label className="field-label" htmlFor="schedule-type">Type</label>
           <select
+            id="schedule-type"
             className="select"
             value={state.type}
             onChange={(e) => update('type', e.target.value as EditorState['type'])}
@@ -543,8 +545,9 @@ function ScheduleEditorModal({
             <>
               <div className="task-form-row">
                 <div className="task-form-field">
-                  <label className="field-label">Day of week</label>
+                  <label className="field-label" htmlFor="schedule-dow">Day of week</label>
                   <select
+                    id="schedule-dow"
                     className="select"
                     value={state.cronDow}
                     onChange={(e) => update('cronDow', e.target.value)}
@@ -555,8 +558,9 @@ function ScheduleEditorModal({
                   </select>
                 </div>
                 <div className="task-form-field">
-                  <label className="field-label">Hour</label>
+                  <label className="field-label" htmlFor="schedule-hour">Hour</label>
                   <select
+                    id="schedule-hour"
                     className="select"
                     value={String(state.cronHour)}
                     onChange={(e) => update('cronHour', parseInt(e.target.value, 10))}
@@ -567,8 +571,9 @@ function ScheduleEditorModal({
                   </select>
                 </div>
                 <div className="task-form-field">
-                  <label className="field-label">Minute</label>
+                  <label className="field-label" htmlFor="schedule-minute">Minute</label>
                   <select
+                    id="schedule-minute"
                     className="select"
                     value={String(state.cronMinute)}
                     onChange={(e) => update('cronMinute', parseInt(e.target.value, 10))}
@@ -583,8 +588,9 @@ function ScheduleEditorModal({
           )}
           {state.showAdvanced && (
             <div className="task-form-field">
-              <label className="field-label">Cron expression</label>
+              <label className="field-label" htmlFor="schedule-cron-expr">Cron expression</label>
               <input
+                id="schedule-cron-expr"
                 className="input"
                 type="text"
                 value={state.rawCron}
@@ -597,6 +603,7 @@ function ScheduleEditorModal({
             type="button"
             className="link-btn"
             onClick={() => update('showAdvanced', !state.showAdvanced)}
+            aria-expanded={state.showAdvanced}
           >
             <ChevronDown
               size={12}
@@ -613,8 +620,9 @@ function ScheduleEditorModal({
       {state.type === 'interval' && (
         <div className="task-form-row">
           <div className="task-form-field" style={{ flex: 1 }}>
-            <label className="field-label">Every</label>
+            <label className="field-label" htmlFor="schedule-interval-n">Every</label>
             <input
+              id="schedule-interval-n"
               className="input"
               type="number"
               min={1}
@@ -623,8 +631,9 @@ function ScheduleEditorModal({
             />
           </div>
           <div className="task-form-field" style={{ flex: 1 }}>
-            <label className="field-label">Unit</label>
+            <label className="field-label" htmlFor="schedule-interval-unit">Unit</label>
             <select
+              id="schedule-interval-unit"
               className="select"
               value={state.intervalUnit}
               onChange={(e) => update('intervalUnit', e.target.value)}
@@ -639,8 +648,9 @@ function ScheduleEditorModal({
 
       {state.type === 'once' && (
         <div className="task-form-field">
-          <label className="field-label">Run at</label>
+          <label className="field-label" htmlFor="schedule-once-at">Run at</label>
           <input
+            id="schedule-once-at"
             className="input"
             type="datetime-local"
             value={state.onceAt}
@@ -651,8 +661,9 @@ function ScheduleEditorModal({
 
       <div className="task-form-row">
         <div className="task-form-field" style={{ flex: 1 }}>
-          <label className="field-label">Timezone</label>
+          <label className="field-label" htmlFor="schedule-timezone">Timezone</label>
           <select
+            id="schedule-timezone"
             className="select"
             value={tzSelectValue}
             onChange={(e) => update('timezone', e.target.value)}
@@ -665,8 +676,9 @@ function ScheduleEditorModal({
         </div>
         {state.timezone === 'Other…' && (
           <div className="task-form-field" style={{ flex: 1 }}>
-            <label className="field-label">IANA name</label>
+            <label className="field-label" htmlFor="schedule-custom-tz">IANA name</label>
             <input
+              id="schedule-custom-tz"
               className="input"
               type="text"
               placeholder="Europe/Paris"
@@ -679,8 +691,9 @@ function ScheduleEditorModal({
 
       <div className="task-form-row">
         <div className="task-form-field">
-          <label className="field-label">Action</label>
+          <label className="field-label" htmlFor="schedule-action-type">Action</label>
           <select
+            id="schedule-action-type"
             className="select"
             value={state.actionType}
             onChange={(e) => update('actionType', e.target.value as EditorState['actionType'])}
@@ -691,8 +704,9 @@ function ScheduleEditorModal({
           </select>
         </div>
         <div className="task-form-field" style={{ flex: 2 }}>
-          <label className="field-label">Target</label>
+          <label className="field-label" htmlFor="schedule-action-target">Target</label>
           <input
+            id="schedule-action-target"
             className="input"
             type="text"
             placeholder={state.actionType === 'webhook' ? 'https://...' : state.actionType === 'agent' ? 'agent name or task ref' : 'echo hi'}
@@ -704,8 +718,9 @@ function ScheduleEditorModal({
 
       {state.actionType === 'agent' && (
         <div className="task-form-field">
-          <label className="field-label">Prompt (what to send the agent)</label>
+          <label className="field-label" htmlFor="schedule-action-prompt">Prompt (what to send the agent)</label>
           <textarea
+            id="schedule-action-prompt"
             className="input"
             rows={3}
             placeholder="Review open PRs for stale code review comments and nudge reviewers."
@@ -719,6 +734,7 @@ function ScheduleEditorModal({
         <legend>Budget pre-flight</legend>
         <label className="checkbox-row">
           <input
+            id="schedule-skip-budget"
             type="checkbox"
             checked={state.skipIfBudgetLow}
             onChange={(e) => update('skipIfBudgetLow', e.target.checked)}
@@ -726,8 +742,9 @@ function ScheduleEditorModal({
           <span>Skip this run when too many background tasks are already running.</span>
         </label>
         <div className="task-form-field">
-          <label className="field-label">Max concurrent bg tasks</label>
+          <label className="field-label" htmlFor="schedule-max-concurrent">Max concurrent bg tasks</label>
           <input
+            id="schedule-max-concurrent"
             className="input"
             type="number"
             min={1}
@@ -741,6 +758,7 @@ function ScheduleEditorModal({
 
       <label className="checkbox-row">
         <input
+          id="schedule-enabled"
           type="checkbox"
           checked={state.enabled}
           onChange={(e) => update('enabled', e.target.checked)}
