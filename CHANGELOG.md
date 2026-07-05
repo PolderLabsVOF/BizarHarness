@@ -1,5 +1,53 @@
 # Changelog
 
+## v5.2.0 — Plugin permissions UI, Voice auto-transcription, Tailscale auth integration, Eval report web UI
+
+### Highlights
+
+**Plugin permissions UI:**
+- New `<PluginPermissions>` shows colored chips for each granted permission (net, fs, config, log, exec)
+- New `<PluginCard>` with name, version, description, permissions, enable toggle, configure/uninstall
+- New `Plugins` view with filter input + grid layout
+- `GET /api/plugins/installed` now returns `permissions`, `config`, `methodCount`, `invocations`, `lastInvokedAt`
+- New `<Toggle>` reusable component
+- New "Plugins" entry in Topbar/Sidebar between Mods and Settings
+
+**Voice note auto-transcription:**
+- New `bizar-dash/src/server/workers/transcription-worker.mjs` — singleton queue with FIFO drain
+- Audio saved immediately; transcription runs in background (5s poll, `.unref()`-ed)
+- WS broadcast `voice:updated` event when transcript ready
+- `transcriptionPending: true` in upload response so UI shows "transcribing..." state
+- 14 new tests in `voice-transcribe-worker.test.mjs`
+
+**Tailscale auth integration:**
+- New `cli/commands/tailscale.mjs` — `bizar tailscale {status,auth,serve,unset,url}`
+- Auto-setup when `TAILSCALE_AUTHKEY` or `BIZAR_TAILSCALE_AUTOSETUP=1` is set
+- New `/api/tailscale/{status,setup,unset}` endpoints
+- New `<TailscaleSettings>` component in Settings → Network section
+- 14 new tests in `cli-tailscale.test.mjs`
+
+**Eval report web UI:**
+- New `<EvalReport>` view — list runs + select run + diff against baseline
+- New `<EvalRunCard>` with pass/warn/fail status pill
+- New `<EvalDiff>` — categorizes fixtures as same/improved/regressed/added/removed
+- New `Eval` overview tab with summary cards
+- New "Eval" entry in Topbar before Doctor
+- 17 new tests in `eval-web-ui.test.tsx`
+
+### Tests
+
+- 395 npm tests pass
+- 226 vitest tests pass (was 202, +24 new)
+- 14 new transcription worker tests
+- 14 new Tailscale CLI tests
+- 17 new eval UI tests
+- TypeScript: 0 errors
+- Build: 92 KB mobile + 427 KB desktop
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.2.0`
+
 ## v5.1.0 — Plugin marketplace registry, Mobile bundle <100 KB, OTLP trace improvements, Eval framework 15 fixtures
 
 ### Highlights

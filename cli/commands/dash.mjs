@@ -127,7 +127,24 @@ export async function runDash(dashArgs) {
   }
 
   switch (sub) {
-    case 'start':
+    case 'start': {
+      // v5.2 — Auto-setup Tailscale serve if auth key is available
+      const usePort = subOpts.port || 4321;
+      if (process.env.TAILSCALE_AUTHKEY || process.env.BIZAR_TAILSCALE_AUTOSETUP === '1') {
+        try {
+          const { ensureTailscaleAuth, setupTailscaleServe } = await import('./tailscale.mjs');
+          const authResult = await ensureTailscaleAuth();
+          if (authResult.authenticated) {
+            const serveResult = await setupTailscaleServe({ dashboardPort: usePort });
+            if (serveResult.ok) {
+              console.log(chalk.green(`  ✓ Tailscale serve: ${serveResult.url}`));
+            }
+          }
+        } catch (err) {
+          // Non-fatal: Tailscale setup errors don't block dashboard start
+          console.log(chalk.dim(`  ⚠ Tailscale auto-setup skipped: ${err.message}`));
+        }
+      }
       if (subOpts.bg) {
         // Pass --port, --host, --bind through to the child process
         const bgArgs = ['start', ...(subOpts.subArgs || [])];
@@ -138,6 +155,7 @@ export async function runDash(dashArgs) {
         await dashModule.start(subOpts);
       }
       break;
+    }
     case 'stop':
       await dashModule.stop(subOpts);
       break;

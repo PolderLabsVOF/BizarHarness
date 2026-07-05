@@ -24,6 +24,7 @@ import {
   Coins,
   Brain,
   Stethoscope,
+  ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -51,8 +52,13 @@ export const TABS: TabDef[] = [
   { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'mods', label: 'Mods', icon: Puzzle },
   { id: 'schedules', label: 'Schedules', icon: Clock },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'history', label: 'History', icon: HistoryIcon },
   { id: 'minimax', label: 'Usage', icon: Coins },
+  // v5.2.0 — Eval framework UI. Lives next to Doctor (both are
+  // operator-quality surfaces) so the "did the last eval pass?"
+  // question is one click from the home screen.
+  { id: 'eval', label: 'Eval', icon: ClipboardCheck },
   // v6.0.0 — Doctor page. Lives between Overview and Settings so the
   // "is everything healthy?" question is always one click from the
   // home screen and from the settings surface (where an operator

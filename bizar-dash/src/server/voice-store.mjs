@@ -169,6 +169,33 @@ export function getVoiceNote(id) {
 }
 
 /**
+ * v5.2 — Patch an existing note in place. Used by the background
+ * transcription worker to attach the transcript after Whisper returns.
+ *
+ * Atomic write via the same `atomicWriteJson` helper as `saveVoiceNote`.
+ * `updatedAtMs` is refreshed on every call so callers / the UI can see
+ * when the note last changed. `createdAtMs` is preserved.
+ *
+ * If the id is unknown, returns null without touching the index. Callers
+ * (e.g. the worker) treat null as "skip and log".
+ *
+ * @param {string} id
+ * @param {Partial<VoiceNote>} patch
+ * @returns {VoiceNote|null}
+ */
+export function updateVoiceNote(id, patch) {
+  if (!id || !patch || typeof patch !== 'object') return null;
+  const notes = loadIndex();
+  const note = notes.find((n) => n.id === id);
+  if (!note) return null;
+
+  Object.assign(note, patch, { updatedAtMs: Date.now() });
+  saveIndex(notes);
+  log.info('voice note updated', { id, fields: Object.keys(patch) });
+  return note;
+}
+
+/**
  * @param {string} id
  * @returns {boolean}
  */

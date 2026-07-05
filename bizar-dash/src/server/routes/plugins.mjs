@@ -134,10 +134,18 @@ export function createPluginsRouter() {
       userAgent: _req.headers?.['user-agent'],
     });
     const installed = store.listInstalled();
-    span.setAttribute('plugin.installed.count', installed.length);
-    res.json({ plugins: installed });
+    const enhanced = installed.map(p => ({
+      ...p,
+      permissions: p.permissions || [],
+      config: p.config || {},
+      methodCount: p.methodCount || 0,
+      invocations: p.invocations || 0,
+      lastInvokedAt: p.lastInvokedAt || null,
+    }));
+    span.setAttribute('plugin.installed.count', enhanced.length);
+    res.json({ plugins: enhanced });
     recordTrace('plugin.installed.list', {
-      count_bucket: installed.length === 0 ? '0' : installed.length < 10 ? '1-9' : '10+',
+      count_bucket: enhanced.length === 0 ? '0' : enhanced.length < 10 ? '1-9' : '10+',
     });
   })));
 

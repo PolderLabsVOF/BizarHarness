@@ -12,6 +12,7 @@ import { ThemeSection } from './settings/ThemeSection';
 import { UpdatesSection } from './settings/UpdatesSection';
 import { GeneralSection } from './settings/GeneralSection';
 import { NetworkSection } from './settings/NetworkSection';
+import { TailscaleSettings } from '../components/TailscaleSettings';
 import { NotificationsSection } from './settings/NotificationsSection';
 import { AuthSection } from './settings/AuthSection';
 import { AgentSection } from './settings/AgentSection';
@@ -290,6 +291,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot, settingsMode, s
         {(showAll || sectionOf('layout') || sectionOf('general')) && <GeneralSection {...sp} autoSave={autoSave} />}
         {(showAll || sectionOf('env-vars')) && <EnvVarsSection />}
         {(showAll || sectionOf('network') || sectionOf('service') || sectionOf('tailscale')) && <NetworkSection tailscale={tailscale} tailscaleDraft={tailscaleDraft} setTailscaleDraft={setTailscaleDraft} onTailscaleToggle={onTailscaleToggle} />}
+        {(showAll || sectionOf('network') || sectionOf('tailscale')) && <TailscaleSettings initialStatus={tailscale} />}
         {(showAll || sectionOf('notifications')) && <NotificationsSection {...sp} />}
         {(showAll || sectionOf('auth')) && <AuthSection settings={settings} authStatus={authStatus} setAuthStatus={setAuthStatus} />}
         {(showAll || sectionOf('agents') || sectionOf('dashboard') || sectionOf('background')) && <AgentSection {...sp} autoSave={autoSave} />}

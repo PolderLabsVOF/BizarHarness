@@ -22,6 +22,8 @@ function getBizarConfigDir() {
 
 export function showServiceHelp() {
   const bizarConfigDir = getBizarConfigDir();
+  const tsAuthkey = process.env.TAILSCALE_AUTHKEY ? '(set)' : '(not set)';
+  const tsAuto = process.env.BIZAR_TAILSCALE_AUTOSETUP === '1' ? 'enabled' : 'disabled';
   console.log(`
   bizar service — Manage the background service daemon
 
@@ -47,6 +49,11 @@ export function showServiceHelp() {
     ("BizarDashboardService", ONSTART, HIGHEST) on Windows. After
     install, a normal user does not need to run \`bizar service start\`
     for the dashboard background process — the OS does it at login.
+
+  Tailscale Integration (v5.2):
+    TAILSCALE_AUTHKEY=${tsAuthkey}
+    BIZAR_TAILSCALE_AUTOSETUP=${tsAuto}
+    Run \`bizar tailscale --help\` for Tailscale management.
   `);
 }
 

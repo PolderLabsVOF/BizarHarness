@@ -102,6 +102,7 @@ function showHelp() {
     memory <subcommand> Manage project memory (Bizar Memory Service)
     headroom <subcommand> Manage Headroom context compression
     minimax <subcommand>   Manage MiniMax Token Plan integration
+    tailscale <subcommand> Manage Tailscale integration (auth, serve, status)
     mod <subcommand>       Manage mods (install/upgrade/list via the dashboard API)
     usage                 Show compact usage analytics summary (24h rolling)
     doctor              Check the BizarHarness install for health issues
@@ -252,6 +253,19 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'minimax');
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
+      break;
+    }
+
+    case 'tailscale': {
+      const mod = await importCommand('tailscale');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load tailscale command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'tailscale');
       await mod.run(cmd, cmdArgs, isHelpRequest);
       dbg('command returned:', cmd);
       break;

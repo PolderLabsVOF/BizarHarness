@@ -473,6 +473,19 @@ export async function createServer({
     console.warn('[bizar-dash] headroom startup hook skipped:', err?.message || err);
   }
 
+  // v5.2 — Background transcription worker for voice notes. Uploads
+  // save audio immediately and enqueue the noteId here; the worker
+  // drains the queue, calls Whisper (or BIZAR_WHISPER_ENDPOINT), and
+  // broadcasts a `voice:updated` event so the dashboard updates in
+  // place. Errors here MUST NOT block boot — the worker is best-effort
+  // and a missing transcribe just leaves the note with no transcript.
+  try {
+    const { startTranscriptionWorker } = await import('./workers/transcription-worker.mjs');
+    startTranscriptionWorker({ broadcast: localBroadcast });
+  } catch (err) {
+    console.warn('[bizar-dash] transcription worker failed to start:', err?.message || err);
+  }
+
   // All /api/* routes go through apiRouter (after mod routes are checked).
   // IMPORTANT: mount v2 router FIRST so `/api/v2/*` matches before
   // apiRouter's internal 404 catch-all (api.mjs line ~109) can swallow it.

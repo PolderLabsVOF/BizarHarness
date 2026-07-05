@@ -181,6 +181,10 @@ export async function createApiRouter({
   // v5.0.0 — Screenshot OCR routes. Accepts images, extracts text.
   const { createOcrRouter } = await import('./routes/ocr.mjs');
   router.use(await createOcrRouter({ projectRoot }));
+  // v5.2 — Tailscale auth key integration. Registered before misc.mjs so
+  // /tailscale/* routes here take precedence over any overlapping misc routes.
+  const { createTailscaleRouter } = await import('./routes/tailscale.mjs');
+  router.use(createTailscaleRouter({}));
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

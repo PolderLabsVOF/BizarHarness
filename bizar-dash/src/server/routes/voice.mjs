@@ -2,9 +2,11 @@
  * src/server/routes/voice.mjs
  *
  * v5.0.0 — Voice notes REST API.
+ * v5.2   — Upload now saves audio immediately and enqueues background
+ *           transcription instead of blocking the request on Whisper.
  *
  * Endpoints:
- *   POST   /api/voice/upload            — multipart upload, transcribe, save
+ *   POST   /api/voice/upload            — multipart upload, enqueue transcription
  *   GET    /api/voice/list?vaultPath=   — list notes (optionally filtered)
  *   GET    /api/voice/:id              — get note details
  *   DELETE /api/voice/:id              — delete note + audio + transcript
@@ -16,7 +18,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { info, warn, child } from '../logger.mjs';
 import { saveVoiceNote, listVoiceNotes, getVoiceNote, deleteVoiceNote } from '../voice-store.mjs';
-import { transcribe } from '../voice-transcribe.mjs';
+import { enqueueTranscription } from '../workers/transcription-worker.mjs';
 import { wrap } from './_shared.mjs';
 import formidable from 'formidable';
 
@@ -28,6 +30,14 @@ const log = child({ module: 'voice-routes' });
  */
 export function createVoiceRouter(_deps) {
   const router = Router();
+
+  /**
+   * Whether Whisper is configured. When false, the worker is skipped
+   * entirely — uploads still succeed, just without transcripts.
+   */
+  function whisperAvailable() {
+    return Boolean(process.env.OPENAI_API_KEY) || Boolean(process.env.BIZAR_WHISPER_ENDPOINT);
+  }
 
   // POST /api/voice/upload — multipart: audio file + vaultPath field
   router.post('/voice/upload', wrap(async (req, res) => {
@@ -60,8 +70,11 @@ export function createVoiceRouter(_deps) {
         return;
       }
 
-      // Transcribe
-      const transcript = await transcribe(audioBuffer, { mimeType: 'audio/webm' });
+      // v5.2 — Transcription is now asynchronous. Save the audio first;
+      // the worker fills in the transcript when Whisper (or a local
+      // proxy) responds. Clients can poll GET /api/voice/:id or watch
+      // the `voice:updated` WS event for the transcript to appear.
+      const transcript = null;
 
       // Duration from audioFile (formidable provides size but not duration — we
       // store null and the frontmatter will show '?')
@@ -77,8 +90,31 @@ export function createVoiceRouter(_deps) {
         return;
       }
 
-      log.info('voice note saved via upload', { id: saved.id, transcriptLength: transcript?.length ?? 0 });
-      res.json({ notePath: saved.notePath, audioPath: saved.audioPath, id: saved.id, transcription: transcript });
+      // Kick the background worker ONLY when we have a place to send
+      // the audio. Without credentials the worker would just return
+      // null forever and waste an open file descriptor.
+      let transcriptionPending = false;
+      if (whisperAvailable()) {
+        try {
+          enqueueTranscription(saved.id);
+          transcriptionPending = true;
+        } catch (enqErr) {
+          warn('transcription enqueue failed', { id: saved.id, err: enqErr.message });
+        }
+      }
+
+      log.info('voice note saved via upload', {
+        id: saved.id,
+        transcriptionPending,
+        transcriptLength: 0,
+      });
+      res.json({
+        notePath: saved.notePath,
+        audioPath: saved.audioPath,
+        id: saved.id,
+        transcription: null,
+        transcriptionPending,
+      });
     });
   }));
 

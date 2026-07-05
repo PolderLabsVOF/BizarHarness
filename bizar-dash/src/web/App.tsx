@@ -31,6 +31,7 @@ import { Activity } from './views/Activity';
 import { Config } from './views/Config';
 import { SettingsView } from './views/Settings';
 import { Mods } from './views/Mods';
+import { Plugins } from './views/Plugins';
 import { ModView, type ModView as ModViewType } from './views/ModView';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
@@ -39,6 +40,8 @@ import { History } from './views/History';
 import { MiniMaxUsage } from './views/MiniMaxUsage';
 import { BackgroundAgents } from './views/BackgroundAgents';
 import { Doctor } from './views/Doctor';
+import { Eval } from './views/Eval';
+import { EvalReport } from './views/EvalReport';
 import { SettingsNav } from './components/SettingsNav';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
@@ -92,10 +95,16 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   skills: Skills,
   history: History,
   minimax: MiniMaxUsage,
+  plugins: Plugins,
   // v6.0.0 — Doctor page (system health + diagnostics surface).
   // Registered here so the tab id 'doctor' from Topbar.tsx TABS
   // resolves to a real view instead of falling back to Overview.
   doctor: Doctor,
+  // v5.2.0 — Eval framework web UI. `eval` is the sidebar tab
+  // (recent runs summary), `evalReport` is reachable from the
+  // Eval view's "Open Eval Report" button (full report + diff).
+  eval: Eval,
+  evalReport: EvalReport,
 };
 
 const VERSION = 'v4.5.0';
