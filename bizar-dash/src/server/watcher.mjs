@@ -69,8 +69,8 @@ export function createWatcher({ paths, onChange, options = {} }) {
     async stop() {
       try {
         await watcher.close();
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.warn('swallowed in watcher.close:', err.message);
       }
     },
     /** Force a synthetic broadcast — useful after a self-mutation. */

@@ -1,5 +1,5 @@
 // src/views/Overview.tsx — v3.7.0 activity cards + SSE stream.
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Bot,
   CheckSquare,
@@ -49,7 +49,7 @@ type Props = {
   refreshSnapshot: () => Promise<void>;
 };
 
-export function Overview({
+function OverviewInner({
   snapshot,
   settings,
   setActiveTab,
@@ -813,3 +813,5 @@ function ActivityFeedItem({
     </div>
   );
 }
+const OverviewMemo = React.memo(OverviewInner);
+export { OverviewMemo as Overview };

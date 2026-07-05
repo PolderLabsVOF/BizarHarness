@@ -38,6 +38,7 @@ import {
   renameSync,
   mkdirSync,
   readdirSync,
+  statSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -66,13 +67,80 @@ function atomicWriteJson(filePath, data) {
   renameSync(tmp, filePath);
 }
 
+// v5.0.0 — Bug S1: 1-second debounced cache for opencode.json reads.
+// `list()`/`listAll()` and other consumers call `loadConfig()` on every
+// WS poll (every ~5s per client) and on every route hit. With N clients
+// that becomes O(N) reads per minute. The cache collapses all reads
+// within a 1-second window to a single read. Writes invalidate so
+// subsequent reads see the new state.
+//
+// The cache lives on `globalThis` so it is shared across all module
+// instances of providers-store.mjs — tests and code that re-imports
+// the module (e.g. via `?cb=` cache-bust) must see the same cache,
+// otherwise a write on one instance becomes invisible to another.
+//
+// The cache also tracks the file's mtime+size and invalidates if the
+// on-disk file has been modified externally (e.g. an editor saving
+// opencode.json, or a test setup writing a fresh file). This prevents
+// stale reads when the file changes outside our write paths.
+const OPENCODE_JSON_CACHE_GLOBAL_KEY = '__bizar_opencode_json_cache__';
+function _opencodeCacheSlot() {
+  if (!globalThis[OPENCODE_JSON_CACHE_GLOBAL_KEY]) {
+    globalThis[OPENCODE_JSON_CACHE_GLOBAL_KEY] = { entry: null, at: 0 };
+  }
+  return globalThis[OPENCODE_JSON_CACHE_GLOBAL_KEY];
+}
+
+const OPENCODE_JSON_CACHE_TTL_MS = 1000;
+
+function _fileStamp(filePath) {
+  // Best-effort stat — if stat fails (file missing, etc.), the caller
+  // will re-read and re-populate the cache.
+  try {
+    const st = statSync(filePath);
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return null;
+  }
+}
+
+function readOpencodeJsonCached(filePath = OPENCODE_JSON) {
+  const slot = _opencodeCacheSlot();
+  const now = Date.now();
+  if (slot.entry && slot.entry.filePath === filePath) {
+    const age = now - slot.at;
+    if (age < OPENCODE_JSON_CACHE_TTL_MS) {
+      // Fast path: still within TTL. Verify the file hasn't been
+      // modified externally (e.g. another process, an editor, or a
+      // test that writes the file directly). The stamp check is cheap
+      // and protects correctness when the file is touched outside
+      // our write paths.
+      const stamp = _fileStamp(filePath);
+      if (stamp === null || stamp === slot.entry.stamp) {
+        return slot.entry.data;
+      }
+    }
+  }
+  const data = safeReadJSON(filePath, {});
+  slot.entry = { filePath, data, stamp: _fileStamp(filePath) };
+  slot.at = now;
+  return data;
+}
+
+function invalidateOpencodeJsonCache() {
+  const slot = _opencodeCacheSlot();
+  slot.entry = null;
+  slot.at = 0;
+}
+
 function loadConfig() {
-  return safeReadJSON(OPENCODE_JSON, {});
+  return readOpencodeJsonCached(OPENCODE_JSON);
 }
 
 function saveConfig(data) {
   mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
   atomicWriteJson(OPENCODE_JSON, data);
+  invalidateOpencodeJsonCache();
 }
 
 // v4.6.0 — expose the on-disk load/save helpers so route modules can
@@ -80,6 +148,10 @@ function saveConfig(data) {
 // in routes/config.mjs). Prior sessions had a blocker where these
 // were not exported and config.mjs referenced them implicitly.
 export { loadConfig, saveConfig };
+
+// v5.0.0 — expose cache helpers for tests and other consumers that need
+// to force a re-read (e.g. settings-store after a write).
+export { readOpencodeJsonCached, invalidateOpencodeJsonCache, OPENCODE_JSON_CACHE_TTL_MS };
 
 // ── v4.6.0 Backup-key rotation constants ────────────────────────────────────
 //

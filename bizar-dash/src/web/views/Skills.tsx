@@ -1,5 +1,5 @@
 // src/views/Skills.tsx — v4.0.0 skills browser: scans all local SKILL.md sources.
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Sparkles,
   Search,
@@ -58,7 +58,7 @@ const SOURCE_ICON: Record<string, typeof Package> = {
   project: Folder,
 };
 
-export function Skills({ snapshot, refreshSnapshot }: Props) {
+function SkillsInner({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
   const modal = useModal();
   const [skills, setSkills]       = useState<Skill[]>([]);
@@ -377,3 +377,4 @@ function highlightMatch(text: string, q: string): React.ReactNode {
     </>
   );
 }
+export const Skills = React.memo(SkillsInner);

@@ -1885,13 +1885,22 @@ async function handleRequest(req, res, slug, planDir, serverPort) {
 
 // ─── Browser opening ─────────────────────────────────────────────────────────
 
+function isWSL() {
+  try {
+    const version = readFileSync('/proc/version', 'utf8');
+    if (version.toLowerCase().includes('microsoft')) return true;
+  } catch { /* not WSL */ }
+  return !!process.env.WSL_INTEROP;
+}
+
 function openBrowser(url) {
   const platform = process.platform;
+  const wsl = isWSL();
   let cmd, args;
   if (platform === 'darwin') {
     cmd = 'open';
     args = [url];
-  } else if (platform === 'win32') {
+  } else if (platform === 'win32' || wsl) {
     cmd = 'cmd';
     args = ['/c', 'start', '""', url];
   } else {
@@ -1900,9 +1909,7 @@ function openBrowser(url) {
   }
 
   // Check if the command exists
-  const probe = platform === 'win32'
-    ? spawnSync('where', [cmd], { stdio: 'ignore' })
-    : spawnSync('which', [cmd], { stdio: 'ignore' });
+  const probe = spawnSync('which', [cmd], { stdio: 'ignore' });
   if (probe.status !== 0) {
     console.log(`  ℹ Open ${url} in your browser (no ${cmd} available)`);
     return false;

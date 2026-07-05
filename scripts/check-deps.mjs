@@ -19,6 +19,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // ── Semver helpers (works without node:semver on 18.x) ─────────────────────────
 
@@ -77,9 +78,7 @@ function which(cmd) {
   for (const dir of pathDirs) {
     if (!dir) continue;
     for (const ext of pathext) {
-      const full = dir.endsWith('/') || dir.endsWith('\\')
-        ? `${dir}${cmd}${ext}`
-        : `${dir}/${cmd}${ext}`;
+      const full = join(dir, cmd + ext);
       try {
         // existsSync + check executable — we can't do a real access() check
         // cross-platform without stat, but testing with execFileSync on a
@@ -125,6 +124,47 @@ function readOpencodeVersion() {
   return m ? m[1] : raw.split(' ')[0];
 }
 
+function readPython3Version() {
+  const raw = safeExec('python3', ['--version']);
+  if (!raw) return null;
+  const m = raw.match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : raw.split(' ').pop();
+}
+
+function readJqVersion() {
+  const raw = safeExec('jq', ['--version']);
+  if (!raw) return null;
+  return raw.replace(/^jq-/, '');
+}
+
+function readGhVersion() {
+  const raw = safeExec('gh', ['--version']);
+  if (!raw) return null;
+  const m = raw.match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : raw.split(' ')[0];
+}
+
+function readHeadroomVersion() {
+  const raw = safeExec('headroom', ['--version']);
+  if (!raw) return null;
+  const m = raw.match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : raw.split(' ')[0];
+}
+
+function readSembleVersion() {
+  const raw = safeExec('semble', ['--version']);
+  if (!raw) return null;
+  const m = raw.match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : raw.split(' ')[0];
+}
+
+function readSkillsVersion() {
+  const raw = safeExec('skills', ['--version']);
+  if (!raw) return null;
+  const m = raw.match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : raw.split(' ')[0];
+}
+
 // ── Install command builders ───────────────────────────────────────────────────
 
 function installCmdFor(name) {
@@ -142,6 +182,13 @@ function windowsInstallCmd(name) {
     case 'opencode': return 'winget install OpenCodeAI.OpenCode 2>nul || npm install -g @opencode-ai/cli 2>nul';
     case 'tmux':   return 'winget install mintty.tmux 2>nul || choco install tmux -y 2>nul';
     case 'git':    return 'winget install Git.Git 2>nul || choco install git -y 2>nul';
+    case 'python3': return 'winget install Python.Python.3.12 2>nul || choco install python -y 2>nul';
+    case 'pip':    return 'python -m pip install --upgrade pip 2>nul || pip install --upgrade pip 2>nul';
+    case 'jq':     return 'winget install jqlang.jq 2>nul || choco install jq -y 2>nul';
+    case 'gh':     return 'winget install GitHub.cli 2>nul || choco install gh -y 2>nul';
+    case 'headroom':
+    case 'semble':
+    case 'skills': return 'npm install -g ' + name + ' 2>nul';
     default:       return null;
   }
 }
@@ -153,6 +200,13 @@ function macInstallCmd(name) {
     case 'opencode': return 'brew install opencodeai/tap/opencode';
     case 'tmux':   return 'brew install tmux';
     case 'git':    return null; // pre-installed on macOS
+    case 'python3': return 'brew install python@3.12';
+    case 'pip':    return 'python3 -m pip install --upgrade pip';
+    case 'jq':     return 'brew install jq';
+    case 'gh':     return 'brew install gh';
+    case 'headroom':
+    case 'semble':
+    case 'skills': return 'npm install -g ' + name;
     default:       return null;
   }
 }
@@ -179,6 +233,18 @@ function linuxInstallCmd(name) {
       return `${sudo}${pm} install -y tmux`;
     case 'git':
       return `${sudo}${pm} install -y git`;
+    case 'python3':
+      return `${sudo}${pm} install -y python3 python3-pip`;
+    case 'pip':
+      return `${sudo}${pm} install -y python3-pip || ${sudo}python3 -m pip install --upgrade pip`;
+    case 'jq':
+      return `${sudo}${pm} install -y jq`;
+    case 'gh':
+      return `${sudo}${pm} install -y gh`;
+    case 'headroom':
+    case 'semble':
+    case 'skills':
+      return `npm install -g ${name}`;
     default:
       return null;
   }
@@ -285,6 +351,97 @@ export async function checkDeps({ strict = false } = {}) {
     }
   }
 
+  // --- python3 ---
+  {
+    const current = readPython3Version();
+    const entry = { name: 'python3', status: 'missing', current, required: 'recommended' };
+    if (which('python3')) {
+      entry.status = 'present';
+      present.push(entry);
+    } else {
+      entry.installCmd = installCmdFor('python3');
+      missing.push(entry);
+    }
+  }
+
+  // --- pip ---
+  {
+    const entry = { name: 'pip', status: 'missing', current: null, required: 'recommended' };
+    if (which('pip') || which('pip3')) {
+      entry.status = 'present';
+      entry.current = 'found';
+      present.push(entry);
+    } else {
+      entry.installCmd = installCmdFor('pip');
+      missing.push(entry);
+    }
+  }
+
+  // --- jq ---
+  {
+    const current = readJqVersion();
+    const entry = { name: 'jq', status: 'missing', current, required: 'recommended' };
+    if (which('jq')) {
+      entry.status = 'present';
+      present.push(entry);
+    } else {
+      entry.installCmd = installCmdFor('jq');
+      missing.push(entry);
+    }
+  }
+
+  // --- gh (GitHub CLI) ---
+  {
+    const current = readGhVersion();
+    const entry = { name: 'gh', status: 'missing', current, required: 'recommended' };
+    if (which('gh')) {
+      entry.status = 'present';
+      present.push(entry);
+    } else {
+      entry.installCmd = installCmdFor('gh');
+      missing.push(entry);
+    }
+  }
+
+  // --- headroom ---
+  {
+    const current = readHeadroomVersion();
+    const entry = { name: 'headroom', status: 'missing', current, required: 'recommended' };
+    if (which('headroom')) {
+      entry.status = 'present';
+      present.push(entry);
+    } else {
+      entry.installCmd = installCmdFor('headroom');
+      missing.push(entry);
+    }
+  }
+
+  // --- semble ---
+  {
+    const current = readSembleVersion();
+    const entry = { name: 'semble', status: 'missing', current, required: 'recommended' };
+    if (which('semble')) {
+      entry.status = 'present';
+      present.push(entry);
+    } else {
+      entry.installCmd = installCmdFor('semble');
+      missing.push(entry);
+    }
+  }
+
+  // --- skills CLI ---
+  {
+    const current = readSkillsVersion();
+    const entry = { name: 'skills', status: 'missing', current, required: 'recommended' };
+    if (which('skills')) {
+      entry.status = 'present';
+      present.push(entry);
+    } else {
+      entry.installCmd = installCmdFor('skills');
+      missing.push(entry);
+    }
+  }
+
   const ok = strict
     ? missing.filter(d => d.name !== 'tmux').length === 0
     : true;
@@ -302,11 +459,20 @@ const isMain = process.argv[1] && (
 if (isMain) {
   const strict = process.argv.includes('--strict') || process.argv.includes('-s');
   const pretty = process.argv.includes('--pretty') || process.argv.includes('-p');
+  const wantJson = process.argv.includes('--json') || pretty;
   checkDeps({ strict }).then(r => {
-    if (pretty) {
-      console.log(JSON.stringify(r, null, 2));
+    if (wantJson) {
+      process.stdout.write(JSON.stringify(r, null, pretty ? 2 : 0) + '\n');
     } else {
-      console.log(JSON.stringify(r));
+      // human-readable output when neither --json nor --pretty is set
+      console.log(`platform: ${r.platform}`);
+      for (const d of r.present) {
+        const v = d.current ? `@${d.current}` : '';
+        console.log(`  ${d.name}${v}  ${d.status}`);
+      }
+      for (const d of r.missing) {
+        console.log(`  ${d.name}  missing${d.installCmd ? `  (install: ${d.installCmd})` : ''}`);
+      }
     }
     // exit non-zero when strict mode finds missing required deps
     if (strict && !r.ok) process.exit(1);

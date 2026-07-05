@@ -1,6 +1,6 @@
 // src/App.tsx — root shell. Wires data + contexts + tab routing.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Topbar, TABS } from './components/Topbar';
 import { Sidebar } from './components/Sidebar';
 import { ModalProvider, useModal } from './components/Modal';
@@ -394,10 +394,6 @@ function Shell() {
         const m = msg;
         const file = m.path?.split('/').pop() || m.path || '';
         toast.info(`File changed: ${file}`, 2500);
-        api
-          .get<Snapshot>('/snapshot')
-          .then((s) => setSnapshot((cur) => ({ ...(cur ?? ({} as Snapshot)), ...s })))
-          .catch(() => undefined);
       } else if (msg.type === 'tasks:change') {
         const m = msg;
         setSnapshot((cur) => {
@@ -798,7 +794,11 @@ function Shell() {
               <p>Loading Bizar…</p>
             </div>
           )}
-          {renderedView}
+          {renderedView && (
+            <Suspense fallback={<div className="loading"><Spinner size="lg" /><p>Loading…</p></div>}>
+              <ViewErrorBoundary>{renderedView}</ViewErrorBoundary>
+            </Suspense>
+          )}
         </main>
       </div>
       <SearchModal
@@ -808,4 +808,38 @@ function Shell() {
       />
     </div>
   );
+}
+
+// v4.5.x — Catches render-time errors in the active view so a single bad
+// component doesn't bring down the whole dashboard (topbar, sidebar, WS).
+// Falls back to a friendly error card with a Retry button that re-mounts
+// the wrapped subtree by remounting the boundary via React `key` bumps.
+class ViewErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { err: Error | null }
+> {
+  state: { err: Error | null } = { err: null };
+  static getDerivedStateFromError(err: Error): { err: Error | null } {
+    return { err };
+  }
+  componentDidCatch(err: Error, info: { componentStack?: string }) {
+    // eslint-disable-next-line no-console
+    console.error('[ViewErrorBoundary] caught render error:', err, info?.componentStack);
+  }
+  reset = () => this.setState({ err: null });
+  override render() {
+    if (this.state.err) {
+      return (
+        <div className="view-error-fallback" role="alert">
+          <AlertTriangle size={20} />
+          <div className="view-error-body">
+            <strong>This view crashed.</strong>
+            <pre>{this.state.err.message}</pre>
+            <Button variant="secondary" size="sm" onClick={this.reset}>Retry</Button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }

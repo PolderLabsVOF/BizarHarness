@@ -78,7 +78,9 @@ export function createMemoryRouter({ projectRoot }) {
       try {
         const data = JSON.parse(readFileSync(reindexMarker, 'utf8'));
         lastSecretScan = data.attemptedAt || null;
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('swallowed in memory reindex marker read:', err.message);
+      }
     }
 
     res.json({
@@ -486,7 +488,9 @@ export function createMemoryRouter({ projectRoot }) {
           conflicts.push({ relPath: note.relPath, reason: 'git conflict markers' });
         }
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('swallowed in memory conflict scan:', err.message);
+    }
 
     res.json({ conflicts });
   }));
@@ -523,7 +527,9 @@ export function createMemoryRouter({ projectRoot }) {
     try {
       const { recordQuery } = await getMemoryLightrag();
       recordQuery(projectRoot, Date.now() - startedAt);
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('swallowed in memory recordQuery:', err.message);
+    }
     res.json({ ok: true, q, lexical, semantic });
   }));
 
@@ -605,7 +611,9 @@ export function createMemoryRouter({ projectRoot }) {
         const content = readFileSync(logFile, 'utf8');
         const lines = content.split('\n');
         logTail.push(...lines.slice(-30));
-      } catch {}
+      } catch (err) {
+        console.warn('swallowed in memory log tail:', err.message);
+      }
     }
 
     let lastError = null;

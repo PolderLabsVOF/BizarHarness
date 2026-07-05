@@ -110,11 +110,11 @@ function Install-WindowsDeps {
   }
 
   if (Have-Cmd git) { Write-Note "git present" }
-  elseif (Have-Cmd winget) { if (-not $DryRun) { winget install --id Git.Git --accept-source-agreements --accept-package-agreements | Out-Null } } }
+  elseif (Have-Cmd winget) { if (-not $DryRun) { winget install --id Git.Git --accept-source-agreements --accept-package-agreements | Out-Null } }
   elseif (Have-Cmd choco)  { if (-not $DryRun) { choco install -y git | Out-Null } }
 
   if (Have-Cmd uv) { Write-Note "uv present" }
-  elseif (Have-Cmd winget) { if (-not $DryRun) { winget install --id astral-sh.uv --accept-source-agreements --accept-package-agreements | Out-Null } } }
+  elseif (Have-Cmd winget) { if (-not $DryRun) { winget install --id astral-sh.uv --accept-source-agreements --accept-package-agreements | Out-Null } }
 }
 
 # ── Service registration (delegated to Node) ───────────────────────────────
@@ -164,7 +164,8 @@ if ($NonInteractive) { $args += '--yes' }
 
 Write-Section "Running unified provisioner"
 Write-Action "node $provision $($args -join ' ')"
-$proc = Start-Process -FilePath node -ArgumentList @($provision) + $args -Wait -PassThru -NoNewWindow
+$allArgs = @($provision) + $args
+$proc = Start-Process -FilePath node -ArgumentList $allArgs -Wait -PassThru -NoNewWindow
 if ($proc.ExitCode -ne 0) {
   Write-Warn "provisioner exited with code $($proc.ExitCode)"
   exit $proc.ExitCode

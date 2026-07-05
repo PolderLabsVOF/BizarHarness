@@ -8,7 +8,7 @@
 // (written by minimax.mjs after every chatCompletion / fetchRemains call).
 // The Usage Analytics tab is only shown when the key is configured.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Coins,
   RefreshCw,
@@ -196,7 +196,7 @@ type TimeRange = '24h' | '7d' | '30d' | 'custom';
 
 // ─── Main component ────────────────────────────────────────────────────
 
-export function MiniMaxUsage({ activeTab, setActiveTab }: Props) {
+function MiniMaxUsageInner({ activeTab, setActiveTab }: Props) {
   // Share state between tabs.
   const [view, setView] = useState<'quota' | 'analytics'>('quota');
   const toast = useToast();
@@ -921,3 +921,4 @@ function OnboardingWizard({ step, setStep, keyDraft, setKeyDraft, showKey, setSh
     </div>
   );
 }
+export const MiniMaxUsage = React.memo(MiniMaxUsageInner);

@@ -54,6 +54,36 @@ const MAX_CHAT_SUBSCRIPTIONS = 50;
 let activeChatSubscriptions = 0;
 
 /**
+ * v5.0.0 — Bug S3: per-chat-session backpressure cap on the SSE→WS
+ * forwarding pipeline. The upstream SSE can pump deltas faster than
+ * the WS broadcast can flush them if a connected WS client is slow.
+ * `safeSend()` in server.mjs already terminates slow WS clients based
+ * on the byte-level `bufferedAmount`, but we also need a defensive
+ * message-count cap so a single chat session can't accumulate an
+ * unbounded number of queued deltas in this process. When a session
+ * exceeds CHAT_DELTA_BUFFER_CAP, additional deltas are dropped with
+ * a warning log so operators see the issue.
+ */
+const CHAT_DELTA_BUFFER_CAP = 1000;
+const chatDeltaCounts = new Map(); // chatSessionId -> count since idle
+
+function noteChatDelta(chatSessionId) {
+  const cur = chatDeltaCounts.get(chatSessionId) || 0;
+  if (cur >= CHAT_DELTA_BUFFER_CAP) {
+    console.warn(
+      `[chat] dropped delta for session ${chatSessionId}: per-session cap (${CHAT_DELTA_BUFFER_CAP}) exceeded; client is too slow`,
+    );
+    return false;
+  }
+  chatDeltaCounts.set(chatSessionId, cur + 1);
+  return true;
+}
+
+function resetChatDeltaCount(chatSessionId) {
+  chatDeltaCounts.delete(chatSessionId);
+}
+
+/**
  * @param {object} deps
  * @param {object} deps.state
  * @param {Function} deps.broadcast
@@ -489,6 +519,11 @@ async function streamOpencodeSession({
           // Forward text part deltas as chat:delta
           const textDelta = extractTextDelta(envelope);
           if (textDelta) {
+            // Bug S3 — drop the delta (with warning) if this session
+            // has hit the per-connection cap. The upstream SSE pump
+            // continues, but we stop forwarding to WS to avoid
+            // unbounded buffering here.
+            if (!noteChatDelta(chatSessionId)) return;
             broadcast({
               type: 'chat:delta',
               sessionId: chatSessionId,
@@ -501,6 +536,9 @@ async function streamOpencodeSession({
         onIdle(envelope) {
           if (done) return;
           done = true;
+          // Bug S3 — release the per-session delta counter on idle so
+          // the next prompt starts with a fresh budget.
+          resetChatDeltaCount(chatSessionId);
           // Fetch the final message list and extract the assistant reply.
           void (async () => {
             try {

@@ -1,5 +1,54 @@
 # Changelog
 
+## v4.5.2 — Bug-fix sweep (16 fixes across CLI, server, frontend, build)
+
+### Highlights
+
+Six parallel research streams catalogued every issue across the codebase; three fix streams resolved 16 high-confidence bugs. Auth-related items intentionally skipped — Tailscale handles auth.
+
+**CLI + installer (10 fixes):**
+- `parseWithModsFlag` now exits with code 2 + clear error when `--with-mods` has no value.
+- `dashboard` deprecation warning moved from stderr (`console.warn`) to stdout.
+- `install.ps1:113,117` — extra closing braces removed; `elseif` chains restructured.
+- `install.ps1:167` — `Start-Process` argument splatting fixed (build array first).
+- `install.sh` — banner moved to AFTER provisioner succeeds.
+- `cli/provision.mjs` — npm install now has 10-min timeout; `ETIMEDOUT` → exit code 4.
+- `scripts/check-deps.mjs` — Windows path joining via `path.join()`; new deps covered (`pip`, `python3`, `headroom`, `semble`, `skills`, `jq`, `gh`); `--json` flag added.
+- `cli/artifact.mjs` — WSL detection via `/proc/version` + `WSL_INTEROP`; falls back to `cmd.exe /c start`.
+- `bin.mjs` — global `--json` output flag for doctor / usage / memory status.
+- `bin.mjs` — global `--debug` flag (sets `DEBUG=bizar:*` + `BIZAR_DEBUG=1`).
+- Standardized exit codes: `EXIT_OK=0, EXIT_ERROR=1, EXIT_USAGE=2, EXIT_MISSING_DEP=3, EXIT_TIMEOUT=4`.
+
+**Dashboard server (4 fixes):**
+- `providers-store.mjs` — 1-second debounced cache for `opencode.json` reads (with mtime/size stamp check); `invalidateOpencodeJsonCache()` on writes.
+- `server.mjs:buildSnapshot` — now uses the cached read.
+- `routes/chat.mjs` — per-session delta buffer cap (1000); drops oldest with warning when exceeded.
+- `memory-lightrag.mjs` — added `console.warn('[lightrag] swallowed in <context>:', err.message)` to all silent catches.
+
+**Dashboard web + build (6 fixes + 2 perf):**
+- `vite.config.ts` — `sourcemap: 'hidden'` (drops ~3 MB of source maps from npm tarball).
+- `.npmignore` — excludes `dist/**/*.map`, `**/__tests__/`, `**/*.test.{mjs,ts,tsx}`.
+- `Toast.tsx` — `role="alert" aria-live="assertive" aria-atomic="true"`.
+- `App.tsx` — `Suspense` wrapper with `Spinner` fallback.
+- View components (`Tasks`, `Settings`, `Memory`, `Overview`, `Skills`, `MiniMaxUsage`) wrapped in `React.memo()`.
+- `Topbar.tsx` — `role="tablist" aria-label="Primary tabs"` + `role="tab"` + `aria-selected`.
+- `App.tsx` — removed redundant `api.get('/snapshot')` refetch on WS file-change events.
+- `main.css` — `content-visibility: auto` on `.activity-item`, `.task-card`, `.chat-message`.
+
+### Tests
+
+- 9 new CLI bugfix tests (`cli-bugfixes.test.mjs`)
+- 13 new server bugfix tests (`server-bugfixes.test.mjs`)
+- 26 new frontend/build bugfix tests (`frontend-bugfixes.test.mjs`)
+- 48 new tests, all passing
+- Total `npm test`: **340 pass, 0 fail**
+- `npx tsc --noEmit`: 0 errors
+- `npm run build`: success (371 KB main + 475 KB mobile JS bundles)
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@4.5.2`
+
 ## v4.5.1 — Headroom default + full Memory tab
 
 ### Highlights

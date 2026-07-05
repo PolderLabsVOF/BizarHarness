@@ -22,6 +22,13 @@ import { fileURLToPath } from 'node:url';
 
 const HOME = homedir();
 const BIZAR_HOME = join(HOME, '.config', 'bizar');
+
+// Exit codes
+const EXIT_OK = 0;
+const EXIT_ERROR = 1;
+const EXIT_USAGE = 2;
+const EXIT_MISSING_DEP = 3;
+const EXIT_TIMEOUT = 4;
 import chalk from 'chalk';
 import { runInstaller } from './install.mjs';
 import { runAudit } from './audit.mjs';
@@ -35,6 +42,17 @@ import { ensureSetup, checkSetupStatus } from './bootstrap.mjs';
 const args = process.argv.slice(2);
 const isHelpRequest = args.includes('--help') || args.includes('-h');
 const isVersionRequest = args.includes('--version') || args.includes('-v');
+const wantJson = args.includes('--json');
+const wantDebug = args.includes('--debug');
+
+if (wantDebug) {
+  process.env.DEBUG = 'bizar:*';
+  process.env.BIZAR_DEBUG = '1';
+}
+
+function dbg(...msg) {
+  if (wantDebug) console.error('[DEBUG]', ...msg);
+}
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 // Every bin command checks setup status on first invocation.
@@ -759,7 +777,7 @@ function showUsageHelp() {
   `);
 }
 
-async function runUsageCommand(args) {
+async function runUsageCommand(args, wantJson = false) {
   const range = (args[0] && ['24h', '7d', '30d'].includes(args[0])) ? args[0] : '24h';
   const { port, secret } = readDashboardConn();
   const url = `http://127.0.0.1:${port}/api/usage?range=${range}`;
@@ -773,6 +791,10 @@ async function runUsageCommand(args) {
     if (!resp.ok || !data) {
       console.error(chalk.red(`  ✗ Failed to load usage data: ${data?.message ?? resp.statusText}`));
       process.exit(1);
+    }
+    if (wantJson) {
+      process.stdout.write(JSON.stringify(data) + '\n');
+      return;
     }
     const t = data.totals;
     console.log('');
@@ -1083,11 +1105,15 @@ function parseFlag(name) {
  * Returns `null` if the flag isn't present (the provisioner's
  * "don't touch mods" default), or a string[] of mod ids if it is.
  */
-function parseWithModsFlag(subargs) {
+export function parseWithModsFlag(subargs) {
   const idx = subargs.indexOf('--with-mods');
   if (idx === -1) return null;
   const raw = subargs[idx + 1];
-  if (!raw || raw.startsWith('--')) return [];
+  if (!raw || raw.startsWith('--')) {
+    console.error('bizar: --with-mods requires a value (e.g. --with-mods a,b,c)');
+    console.error('Usage: bizar install --with-mods <mod-id,mod-id>');
+    process.exit(2);
+  }
   return raw
     .split(',')
     .map((s) => s.trim())
@@ -1181,7 +1207,7 @@ async function main() {
     if (isHelpRequest && !args[1]) showMemoryHelp();
     else {
       const { runMemory } = await import('./memory.mjs');
-      await runMemory(args[1], args.slice(2));
+      await runMemory(args[1], args.slice(2), { wantJson });
     }
   } else if (args[0] === 'headroom') {
     await runHeadroomCommand(args.slice(1));
@@ -1229,8 +1255,11 @@ async function main() {
     if (isHelpRequest) showDoctorHelp();
     else {
       const { runDoctor } = await import('./doctor.mjs');
-      const result = await runDoctor();
-      if (result.failed > 0) process.exit(1);
+      const result = await runDoctor({ silent: wantJson, json: wantJson });
+      if (wantJson) {
+        process.stdout.write(JSON.stringify(result) + '\n');
+      }
+      if (result.failed > 0) process.exit(EXIT_ERROR);
     }
   } else if (args[0] === 'repair') {
     // v4.4.3 — One-shot repair for stale `bizar` bin symlinks.
@@ -1328,11 +1357,11 @@ async function main() {
     await runMinimaxCommand(args.slice(1));
   } else if (args[0] === 'usage') {
     // v4.6.0 — Compact usage analytics summary from the JSONL store.
-    await runUsageCommand(args.slice(1));
+    await runUsageCommand(args.slice(1), wantJson);
   } else if (args[0] === 'dash' || args[0] === 'dashboard') {
     // `bizar dashboard` is a deprecated alias for `bizar dash`
     if (args[0] === 'dashboard') {
-      console.warn(chalk.yellow('  ⚠ `bizar dashboard` is deprecated, use `bizar dash` instead.'));
+      process.stdout.write(chalk.yellow('  ⚠ `bizar dashboard` is deprecated, use `bizar dash` instead.\n'));
     }
     const dashArgs = args.slice(1); // everything after 'dash' or 'dashboard'
     if (dashArgs.length === 0 || isHelpRequest) {
@@ -1458,7 +1487,12 @@ async function runDash(dashArgs) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-await main().catch((err) => {
-  console.error(chalk.red(`bizar: ${err && err.message ? err.message : String(err)}`));
-  process.exit(1);
-});
+// Only run main() when bin.mjs is executed directly (not imported as a module in tests)
+const thisFile = fileURLToPath(import.meta.url);
+const isMainModule = process.argv[1] === thisFile;
+if (isMainModule) {
+  await main().catch((err) => {
+    console.error(chalk.red(`bizar: ${err && err.message ? err.message : String(err)}`));
+    process.exit(1);
+  });
+}

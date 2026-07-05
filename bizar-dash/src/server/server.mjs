@@ -24,6 +24,7 @@ import { agentsStore } from './agents-store.mjs';
 import { tasksStore } from './tasks-store.mjs';
 import { schedulesStore } from './schedules-store.mjs';
 import { providersStore, mcpsStore } from './providers-store.mjs';
+import { readOpencodeJsonCached } from './providers-store.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
 import { startBgRetryLoop, stopBgRetryLoop } from './bg-retry.mjs';
@@ -281,8 +282,8 @@ export async function createServer({
     if (client.bufferedAmount > WS_BACKPRESSURE_LIMIT_BYTES) {
       try {
         client.terminate();
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.warn('swallowed in terminate (backpressure):', err.message);
       }
       return false;
     }
@@ -396,8 +397,8 @@ export async function createServer({
       try {
         socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
         socket.destroy();
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.warn('swallowed in 403 destroy:', err.message);
       }
       return;
     }
@@ -405,8 +406,8 @@ export async function createServer({
       try {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.warn('swallowed in 401 destroy:', err.message);
       }
       return;
     }
@@ -420,8 +421,8 @@ export async function createServer({
       if (client.isAlive === false) {
         try {
           client.terminate();
-        } catch {
-          /* ignore */
+        } catch (err) {
+          console.warn('swallowed in heartbeat terminate:', err.message);
         }
         return;
       }
@@ -431,8 +432,8 @@ export async function createServer({
       } catch {
         try {
           client.terminate();
-        } catch {
-          /* ignore */
+        } catch (err) {
+          console.warn('swallowed in ping-fail terminate:', err.message);
         }
       }
     });
@@ -577,8 +578,8 @@ export async function createServer({
             }
             fileSize = newSize;
           }
-        } catch {
-          /* ignore */
+        } catch (err) {
+          console.warn('swallowed in sendLogChunk:', err.message);
         }
       }
 
@@ -617,8 +618,8 @@ export async function createServer({
           data: buildSnapshotSafe(state, opencodeConfigDir),
         }),
       );
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in ws snapshot send:', err.message);
     }
 
     ws.on('message', (raw) => {
@@ -678,34 +679,34 @@ export async function createServer({
   function close() {
     try {
       stopBgPoller();
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in stopBgPoller:', err.message);
     }
     try {
       stopBgRetryLoop();
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in stopBgRetryLoop:', err.message);
     }
     try {
       watcher.stop();
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in watcher.stop:', err.message);
     }
     try {
       wss.clients.forEach((c) => c.terminate());
       wss.close();
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in wss.close:', err.message);
     }
     try {
       clearInterval(heartbeatInterval);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in clearInterval:', err.message);
     }
     try {
       server.close();
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in server.close:', err.message);
     }
     currentBroadcast = () => {};
   }
@@ -723,14 +724,15 @@ function buildSnapshotSafe(state, opencodeConfigDir) {
 
 function buildSnapshot(state, opencodeConfigDir) {
   const cfgFile = join(opencodeConfigDir, 'opencode.json');
-  let cfg = null;
-  if (existsSync(cfgFile)) {
-    try {
-      cfg = JSON.parse(readFileSync(cfgFile, 'utf8'));
-    } catch {
-      cfg = null;
-    }
-  }
+  // v5.0.0 — Bug S2: read opencode.json via the 1s-debounced cache in
+  // providers-store.mjs. WS clients connect on snapshot delivery; with N
+  // clients the readFileSync here was the main per-connection blocker.
+  // The cache collapses all reads within a 1-second window to a single
+  // disk hit. Writes (settings change, providers-store mutations)
+  // invalidate the cache, so the snapshot always reflects the latest
+  // state within at most 1s.
+  const exists = existsSync(cfgFile);
+  const cfg = readOpencodeJsonCached();
   const activeProject = projectsStore.active();
   return {
     overview: state.getOverview(),
@@ -740,9 +742,9 @@ function buildSnapshot(state, opencodeConfigDir) {
     activeProject,
     config: {
       path: cfgFile,
-      data: cfg,
-      raw: cfg ? JSON.stringify(cfg, null, 2) : '',
-      exists: existsSync(cfgFile),
+      data: exists ? cfg : null,
+      raw: exists && cfg ? JSON.stringify(cfg, null, 2) : '',
+      exists,
     },
     settings: readSettings(),
     tasks: activeProject ? tasksStore.loadTasks(activeProject.id) : [],

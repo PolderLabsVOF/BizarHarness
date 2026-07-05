@@ -322,8 +322,6 @@ main() {
       ;;
   esac
 
-  print_banner
-
   # ── Hand off to the unified provisioner (Node) ─────────────────────────
   # All cross-OS work (agent files, plugin copy, opencode.json patching,
   # skills install, doctor check) lives in `cli/provision.mjs:runProvision`.
@@ -350,6 +348,7 @@ main() {
       warn "provisioner exited with code $rc"
       exit "$rc"
     fi
+    print_banner
   else
     warn "cli/provision.mjs not found — agent files / plugin / opencode.json"
     warn "    were NOT synced. Run \`bizar install\` from a checkout to fix."

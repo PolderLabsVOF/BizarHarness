@@ -446,7 +446,10 @@ export async function ensureNpmPackage(pkg, { mode, dryRun, force }) {
   // processes are reading files inside the npm-global install dir. We
   // can't replace those files atomically while they're open. The caller
   // is expected to have already killed them via ensureInstancesKilled().
-  const r = spawnSync('npm', ['install', '-g', `${pkg}@latest`], { stdio: 'inherit' });
+  const r = spawnSync('npm', ['install', '-g', `${pkg}@latest`], { stdio: 'inherit', timeout: 600000 });
+  if (r.status === null && r.error?.code === 'ETIMEDOUT') {
+    return { ok: false, message: `${pkg} install timed out after 10 minutes`, installed: current };
+  }
   if (r.status !== 0) {
     return { ok: false, message: `${pkg} install failed`, installed: current };
   }
@@ -471,7 +474,10 @@ export async function updateOpencodeCli({ dryRun, force }) {
     return { ok: true, message: 'opencode updated via `opencode upgrade`' };
   }
   console.log(chalk.dim('  opencode upgrade not available; falling back to npm'));
-  const r2 = spawnSync('npm', ['install', '-g', 'opencode-ai@latest'], { stdio: 'inherit' });
+  const r2 = spawnSync('npm', ['install', '-g', 'opencode-ai@latest'], { stdio: 'inherit', timeout: 600000 });
+  if (r2.status === null && r2.error?.code === 'ETIMEDOUT') {
+    return { ok: false, message: 'opencode install timed out after 10 minutes' };
+  }
   if (r2.status === 0) {
     return { ok: true, message: 'opencode updated via npm' };
   }

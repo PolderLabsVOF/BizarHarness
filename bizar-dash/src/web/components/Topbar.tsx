@@ -139,7 +139,7 @@ export function Topbar({
         </div>
       </div>
       {showTabs && (
-        <nav className="tabs-row" role="tablist">
+        <nav className="tabs-row" role="tablist" aria-label="Primary tabs">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const active = tab.id === activeTab;

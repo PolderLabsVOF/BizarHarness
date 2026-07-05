@@ -115,42 +115,44 @@ async function findProxyPid(port) {
     }
   } catch { /* ignore */ }
 
-  // Try to find process listening on the port via /proc/net/tcp (Linux)
+  // Try to find process listening on the port via /proc/net/tcp (Linux only).
+  // On macOS/Windows /proc does not exist — return null early to avoid noisy errors.
+  if (process.platform !== 'linux') {
+    return null;
+  }
   try {
-    if (process.platform === 'linux') {
-      const netTcp = readFileSync('/proc/net/tcp', 'utf8');
-      const portHex = port.toString(16).toUpperCase().padStart(4, '0');
-      const lines = netTcp.split('\n');
-      for (const line of lines.slice(1)) {
-        // Format: sl  local_address rem_address   st tx_queue rx_queue ... inode
-        const parts = line.trim().split(/\s+/);
-        if (parts.length < 10) continue;
-        const local = parts[1];
-        const localPortHex = local.split(':')[1];
-        if (localPortHex?.toUpperCase() === portHex) {
-          // Try to get PID from the socket inode
-          const inode = parts[9];
-          if (inode && inode !== '0') {
-            // Scan /proc/*/fd/* for socket inodes
-            const { readdirSync, readlinkSync } = await import('node:fs');
-            const procDir = '/proc';
-            const pids = readdirSync(procDir).filter(
-              (n) => /^\d+$/.test(n) && !isNaN(parseInt(n, 10)),
-            );
-            for (const pid of pids) {
-              try {
-                const fdDir = join(procDir, pid, 'fd');
-                const fds = readdirSync(fdDir);
-                for (const fd of fds) {
-                  try {
-                    const link = readlinkSync(join(fdDir, fd));
-                    if (link.includes(`socket:[${inode}]`)) {
-                      return parseInt(pid, 10);
-                    }
-                  } catch { /* skip */ }
-                }
-              } catch { /* skip */ }
-            }
+    const netTcp = readFileSync('/proc/net/tcp', 'utf8');
+    const portHex = port.toString(16).toUpperCase().padStart(4, '0');
+    const lines = netTcp.split('\n');
+    for (const line of lines.slice(1)) {
+      // Format: sl  local_address rem_address   st tx_queue rx_queue ... inode
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 10) continue;
+      const local = parts[1];
+      const localPortHex = local.split(':')[1];
+      if (localPortHex?.toUpperCase() === portHex) {
+        // Try to get PID from the socket inode
+        const inode = parts[9];
+        if (inode && inode !== '0') {
+          // Scan /proc/*/fd/* for socket inodes
+          const { readdirSync, readlinkSync } = await import('node:fs');
+          const procDir = '/proc';
+          const pids = readdirSync(procDir).filter(
+            (n) => /^\d+$/.test(n) && !isNaN(parseInt(n, 10)),
+          );
+          for (const pid of pids) {
+            try {
+              const fdDir = join(procDir, pid, 'fd');
+              const fds = readdirSync(fdDir);
+              for (const fd of fds) {
+                try {
+                  const link = readlinkSync(join(fdDir, fd));
+                  if (link.includes(`socket:[${inode}]`)) {
+                    return parseInt(pid, 10);
+                  }
+                } catch { /* skip */ }
+              }
+            } catch { /* skip */ }
           }
         }
       }

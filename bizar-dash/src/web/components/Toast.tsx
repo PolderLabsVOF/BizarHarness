@@ -134,7 +134,7 @@ function ToastItem({
 }) {
   const Icon = ICONS[toast.kind];
   return (
-    <div className={`toast toast-${toast.kind}`} role="status">
+    <div className={`toast toast-${toast.kind}`} role="alert" aria-live="assertive" aria-atomic="true">
       <Icon size={16} className="toast-icon" />
       <span className="toast-message">{toast.message}</span>
       <button

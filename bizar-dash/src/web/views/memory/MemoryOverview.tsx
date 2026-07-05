@@ -98,14 +98,14 @@ export function MemoryOverview({ refreshKey, onRefresh, setActiveSubPanel }: Pro
   const [data, setData] = useState<MemoryOverviewData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const [health, status, lightrag, storage] = await Promise.all([
-        api.get<HealthResponse>('/memory/health').catch(() => null),
-        api.get<MemoryStatus>('/memory/status').catch(() => null),
-        api.get<LightragStats>('/memory/lightrag/stats').catch(() => null),
-        api.get<StorageStats>('/memory/storage').catch(() => null),
+        api.get<HealthResponse>('/memory/health', signal).catch(() => null),
+        api.get<MemoryStatus>('/memory/status', signal).catch(() => null),
+        api.get<LightragStats>('/memory/lightrag/stats', signal).catch(() => null),
+        api.get<StorageStats>('/memory/storage', signal).catch(() => null),
       ]);
       setData({
         health: health || {
@@ -145,7 +145,9 @@ export function MemoryOverview({ refreshKey, onRefresh, setActiveSubPanel }: Pro
   };
 
   useEffect(() => {
-    reload();
+    const ctrl = new AbortController();
+    void reload(ctrl.signal);
+    return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 

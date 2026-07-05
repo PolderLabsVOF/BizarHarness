@@ -1,6 +1,15 @@
 # Exclude test files from npm tarball
 cli/*.test.mjs
 
+# Source maps — only ship hidden sourcemaps (sourcemap: 'hidden' in vite.config)
+bizar-dash/dist/**/*.map
+
+# Test files
+**/__tests__/
+**/*.test.mjs
+**/*.test.ts
+**/*.test.tsx
+
 # Internal design docs (not for npm)
 .bizar/
 

@@ -1376,6 +1376,8 @@
   border-radius: var(--radius-lg); padding: 0.875rem 1.125rem;
   transition: border-color var(--motion-base) var(--motion-ease);
   max-width: 880px; width: 100%; align-self: flex-start;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 80px;
 }
 .chat-message-user { background: var(--bg-2); }
 .chat-message-pinned { border-left: 2px solid var(--accent); }

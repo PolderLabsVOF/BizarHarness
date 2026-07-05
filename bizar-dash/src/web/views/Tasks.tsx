@@ -20,7 +20,7 @@
 // We keep the API contract (statuses: queued/doing/done/blocked/backlog)
 // so the dashboard doesn't break the existing server, tasks store, and
 // tests. The UI maps API statuses to friendlier labels.
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   CheckSquare,
   Plus,
@@ -76,7 +76,7 @@ const COLUMNS: { id: Task['status']; label: string; kind: StatusKind }[] = [
 const PRIORITIES = ['low', 'normal', 'high'] as const;
 type Priority = (typeof PRIORITIES)[number];
 
-export function Tasks({ snapshot, refreshSnapshot, setActiveTab }: Props) {
+function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
   const toast = useToast();
   const modal = useModal();
   const [tasks, setTasks] = useState<Task[]>(snapshot.tasks || []);
@@ -772,3 +772,4 @@ function openEditTaskModal(
     ),
   });
 }
+export const Tasks = React.memo(TasksInner);

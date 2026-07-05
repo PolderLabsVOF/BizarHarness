@@ -596,7 +596,8 @@ export const modsLoader = {
       const res = await fetch(modJsonUrl);
       if (!res.ok) return null;
       modJson = await res.json();
-    } catch {
+    } catch (err) {
+      console.warn('swallowed in fetchModMetadata:', err.message);
       return null;
     }
     const id = modJson.id;
@@ -674,7 +675,8 @@ export const modsLoader = {
       let entries;
       try {
         entries = readdirSync(p, { withFileTypes: true });
-      } catch {
+      } catch (err) {
+        console.warn('swallowed in mod walk:', err.message);
         return;
       }
       for (const e of entries) {
@@ -913,20 +915,26 @@ export const modsLoader = {
       try {
         out.agents = readdirSync(OPENCODE_AGENTS_DIR)
           .filter((f) => f.startsWith(prefix));
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('swallowed in agents readdir:', err.message);
+      }
     }
     if (existsSync(OPENCODE_COMMANDS_DIR)) {
       try {
         out.commands = readdirSync(OPENCODE_COMMANDS_DIR)
           .filter((f) => f.startsWith(prefix));
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('swallowed in commands readdir:', err.message);
+      }
     }
     if (existsSync(OPENCODE_SKILLS_DIR)) {
       try {
         out.skills = readdirSync(OPENCODE_SKILLS_DIR, { withFileTypes: true })
           .filter((e) => e.isDirectory() && e.name.startsWith(skillPrefix))
           .map((e) => e.name);
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('swallowed in skills readdir:', err.message);
+      }
     }
     return out;
   },

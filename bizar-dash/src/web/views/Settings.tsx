@@ -485,7 +485,7 @@ function UpdatesCard() {
   );
 }
 
-export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
+function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
   const toast = useToast();
   const [settings, setSettings] = useState<Settings>(initial);
   const [dirty, setDirty] = useState(false);
@@ -1821,3 +1821,4 @@ function ActivityLogCard() {
     </Card>
   );
 }
+export const SettingsView = React.memo(SettingsViewInner);

@@ -12,7 +12,7 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, 'bizar-dash/dist'),
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: 'hidden',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'bizar-dash/src/web/index.html'),

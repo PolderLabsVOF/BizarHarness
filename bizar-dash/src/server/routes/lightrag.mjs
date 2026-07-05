@@ -127,13 +127,17 @@ export function createLightragRouter({ projectRoot }) {
         const content = readFileSync(logFile, 'utf8');
         const lines = content.split('\n');
         logTail.push(...lines.slice(-30));
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('swallowed in lightrag log tail:', err.message);
+      }
     }
 
     let logSize = 0;
     try {
       if (existsSync(logFile)) logSize = statSync(logFile).size;
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('swallowed in lightrag log stat:', err.message);
+    }
 
     res.json({
       running: alive,

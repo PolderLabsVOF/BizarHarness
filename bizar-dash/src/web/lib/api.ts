@@ -135,8 +135,8 @@ class ApiClient {
    * @example
    *   const r = await api.get<ProjectList>('/projects');
    */
-  async get<T>(path: string): Promise<T> {
-    return this.req<T>('GET', path);
+  async get<T>(path: string, signal?: AbortSignal): Promise<T> {
+    return this.req<T>('GET', path, undefined, signal);
   }
 
   /**
@@ -145,8 +145,8 @@ class ApiClient {
    * IMPORTANT: do NOT include the `/api` prefix in `path` — the
    * wrapper adds it. Use the unprefixed form: `api.post('/fs/mkdir', body)`.
    */
-  async post<T>(path: string, body?: unknown): Promise<T> {
-    return this.req<T>('POST', path, body);
+  async post<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    return this.req<T>('POST', path, body, signal);
   }
 
   /**
@@ -155,8 +155,8 @@ class ApiClient {
    * IMPORTANT: do NOT include the `/api` prefix in `path` — the
    * wrapper adds it. Use the unprefixed form: `api.put('/settings', body)`.
    */
-  async put<T>(path: string, body?: unknown): Promise<T> {
-    return this.req<T>('PUT', path, body);
+  async put<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    return this.req<T>('PUT', path, body, signal);
   }
 
   /**
@@ -165,8 +165,8 @@ class ApiClient {
    * IMPORTANT: do NOT include the `/api` prefix in `path` — the
    * wrapper adds it. Use the unprefixed form: `api.patch('/settings', body)`.
    */
-  async patch<T>(path: string, body?: unknown): Promise<T> {
-    return this.req<T>('PATCH', path, body);
+  async patch<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    return this.req<T>('PATCH', path, body, signal);
   }
 
   /**
@@ -175,11 +175,11 @@ class ApiClient {
    * IMPORTANT: do NOT include the `/api` prefix in `path` — the
    * wrapper adds it. Use the unprefixed form: `api.del('/projects/123')`.
    */
-  async del<T = unknown>(path: string): Promise<T> {
-    return this.req<T>('DELETE', path);
+  async del<T = unknown>(path: string, signal?: AbortSignal): Promise<T> {
+    return this.req<T>('DELETE', path, undefined, signal);
   }
 
-  private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async req<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const tok = this.getToken();
     if (tok) headers.Authorization = `Bearer ${tok}`;
@@ -187,6 +187,7 @@ class ApiClient {
     if (body !== undefined && body !== null) {
       opts.body = typeof body === 'string' ? body : JSON.stringify(body);
     }
+    if (signal) opts.signal = signal;
     const r = await fetch(this.base + path, opts);
     const ct = r.headers.get('content-type') || '';
     if (ct.includes('application/json')) {

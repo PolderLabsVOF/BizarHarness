@@ -84,7 +84,8 @@ function readLogTail(filePath, n = 30) {
     const content = readFileSync(filePath, 'utf8');
     const lines = content.split('\n');
     return lines.slice(-n);
-  } catch {
+  } catch (err) {
+    console.warn('[lightrag] swallowed in readLogTail:', err?.message || err);
     return [];
   }
 }
@@ -206,7 +207,8 @@ export function resolveLightRAGConfig(projectRoot) {
   if (existsSync(path)) {
     try {
       userCfg = JSON.parse(readFileSync(path, 'utf8')).lightrag || {};
-    } catch {
+    } catch (err) {
+      console.warn('[lightrag] swallowed in resolveLightRAGConfig.readMemoryJson:', err?.message || err);
       userCfg = {};
     }
   }
@@ -269,8 +271,9 @@ export function findLightragBinary() {
       timeout: 3000,
     }).trim();
     if (path) return path;
-  } catch {
+  } catch (err) {
     // command returned non-zero — fall through
+    console.warn('[lightrag] swallowed in findLightragBinary.which:', err?.message || err);
   }
   return null;
 }
@@ -336,7 +339,8 @@ export async function isRunning(config) {
   try {
     const res = await httpGet(`http://${config.host}:${config.port}/health`, 3000);
     return res.status === 200;
-  } catch {
+  } catch (err) {
+    console.warn('[lightrag] swallowed in isRunning.healthCheck:', err?.message || err);
     return false;
   }
 }
@@ -361,7 +365,8 @@ function readPidAlive(pidFile) {
     if (!Number.isFinite(pid) || pid <= 0) return { pid: null, alive: false };
     const alive = killPid(pid, 0); // signal 0 = probe
     return { pid, alive };
-  } catch {
+  } catch (err) {
+    console.warn('[lightrag] swallowed in readPidAlive:', err?.message || err);
     return { pid: null, alive: false };
   }
 }
@@ -387,7 +392,9 @@ export async function startServer(config, { logger } = {}) {
   if (existing && !existingAlive) {
     try {
       unlinkSync(pidFile);
-    } catch {}
+    } catch (err) {
+      console.warn('[lightrag] swallowed in startServer.unlinkStalePid:', err?.message || err);
+    }
   }
 
   if (!findLightragBinary()) {
@@ -818,7 +825,8 @@ export async function stats(projectRoot) {
       try {
         process.kill(parsed, 0);
         pid = parsed;
-      } catch {
+      } catch (err) {
+        console.warn('[lightrag] swallowed in stats.pidProbe:', err?.message || err);
         pid = null;
       }
     }
@@ -835,8 +843,8 @@ export async function stats(projectRoot) {
       lastReindexOk = m.ok === true;
       lastReindexInserted = typeof m.inserted === 'number' ? m.inserted : null;
       lastReindexFailed = typeof m.failed === 'number' ? m.failed : null;
-    } catch {
-      /* marker corrupt — ignore */
+    } catch (err) {
+      console.warn('[lightrag] swallowed in stats.markerRead:', err?.message || err);
     }
   }
 
@@ -853,13 +861,13 @@ export async function stats(projectRoot) {
         try {
           const obj = JSON.parse(readFileSync(p, 'utf8'));
           indexedApprox += Object.keys(obj || {}).length;
-        } catch {
-          /* skip */
+        } catch (err) {
+          console.warn('[lightrag] swallowed in stats.kvStoreRead:', err?.message || err);
         }
       }
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('[lightrag] swallowed in stats.kvStoreScan:', err?.message || err);
   }
 
   // Note count = listNotes from the vault.
@@ -895,8 +903,8 @@ export async function stats(projectRoot) {
         walk(vaultRoot);
       }
     }
-  } catch {
-    /* ignore — leave noteCount at 0 */
+  } catch (err) {
+    console.warn('[lightrag] swallowed in stats.noteCount:', err?.message || err);
   }
 
   // Query stats: best-effort — LightRAG's /query endpoint doesn't expose
@@ -920,12 +928,12 @@ export async function stats(projectRoot) {
               counted++;
             }
           }
-        } catch {
-          /* skip */
+        } catch (err) {
+          console.warn('[lightrag] swallowed in stats.queryLogLine:', err?.message || err);
         }
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('[lightrag] swallowed in stats.queryLogRead:', err?.message || err);
     }
   }
   const avgResponseMs = counted > 0 ? Math.round(totalResponseMs / counted) : null;
@@ -974,24 +982,24 @@ export function recordQuery(projectRoot, durationMs) {
         const keep = lines.slice(-50000).join('\n');
         writeFileSync(path, keep);
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('[lightrag] swallowed in recordQuery.truncate:', err?.message || err);
     }
-  } catch {
-    /* never throw */
+  } catch (err) {
+    console.warn('[lightrag] swallowed in recordQuery:', err?.message || err);
   }
 }
 
 function appendFileSafe(path, content) {
   try {
     appendFileSync(path, content);
-  } catch {
-    /* fall back to manual write */
+  } catch (err) {
+    console.warn('[lightrag] appendFileSync failed, falling back to read+write:', err?.message || err);
     try {
       const cur = existsSync(path) ? readFileSync(path, 'utf8') : '';
       writeFileSync(path, cur + content);
-    } catch {
-      /* swallow — stats are best-effort */
+    } catch (err2) {
+      console.warn('[lightrag] swallowed in appendFileSafe.manualWrite:', err2?.message || err2);
     }
   }
 }
@@ -1024,13 +1032,13 @@ export async function rebuildGraph(projectRoot, opts = {}) {
       for (const e of readdirSync(config.workingDir)) {
         try {
           unlinkSync(join(config.workingDir, e));
-        } catch {
-          /* skip */
+        } catch (err) {
+          console.warn('[lightrag] swallowed in rebuildGraph.unlinkEntry:', err?.message || err);
         }
       }
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('[lightrag] swallowed in rebuildGraph.wipe:', err?.message || err);
   }
   // Reindex from scratch.
   return reindexVault(projectRoot, opts);

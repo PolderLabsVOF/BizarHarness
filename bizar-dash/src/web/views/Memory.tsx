@@ -7,7 +7,7 @@
 // semantic search) plus a config panel and a high-level overview. Each is a
 // standalone component under views/memory/.
 
-import { useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Brain,
   FileText,
@@ -50,7 +50,7 @@ const SOURCES: Array<{
   { id: 'config', label: 'Config', icon: Sliders },
 ];
 
-export function Memory(_props: Props) {
+function MemoryInner(_props: Props) {
   const toast = useToast();
   const [active, setActive] = useState<SubPanel>('overview');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -138,3 +138,4 @@ export function Memory(_props: Props) {
     </div>
   );
 }
+export const Memory = React.memo(MemoryInner);

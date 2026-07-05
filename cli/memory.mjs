@@ -755,7 +755,8 @@ function printSetupResult({ mode, remote, vaultPath }) {
 /**
  * `bizar memory status`
  */
-async function cmdStatus(_args) {
+async function cmdStatus(_args, opts = {}) {
+  const { wantJson = false } = opts;
   const projectRoot = getProjectRoot();
   const { loadConfig, resolveVault, initVault, listNotes } = memoryStore;
   const { isGitInstalled, status: gitStatus } = memoryGit;
@@ -768,19 +769,15 @@ async function cmdStatus(_args) {
 
   const { vaultRoot, mode, projectId, branch } = resolveVault(projectRoot);
 
-  console.log(chalk.bold('\n  Bizar Memory Status'));
-  console.log('  ─────────────────────────────');
-  kv('mode', mode);
-  kv('projectId', projectId);
-  kv('vault', vaultRoot);
-  kv('branch', branch);
+  const out = { mode, projectId, vault: vaultRoot, branch };
 
   // Ensure vault exists
   if (!existsSync(vaultRoot)) {
-    warn(`vault directory does not exist — run \`bizar memory init\` or \`bizar memory sync\``);
+    out.vaultExists = false;
   } else {
+    out.vaultExists = true;
     const notes = listNotes(projectRoot);
-    kv('noteCount', String(notes.length));
+    out.noteCount = notes.length;
   }
 
   // Git status if managed
@@ -788,14 +785,14 @@ async function cmdStatus(_args) {
     if (isGitInstalled()) {
       const gs = gitStatus(vaultRoot);
       if (gs.ok) {
-        kv('git', `${gs.branch} (${gs.clean ? chalk.green('clean') : chalk.red('dirty')})`);
-        if (gs.ahead > 0) kv('ahead', String(gs.ahead));
-        if (gs.behind > 0) kv('behind', String(gs.behind));
+        out.git = { branch: gs.branch, clean: gs.clean };
+        if (gs.ahead > 0) out.git.ahead = gs.ahead;
+        if (gs.behind > 0) out.git.behind = gs.behind;
       } else {
-        kv('git', chalk.yellow(`not a git repo`));
+        out.git = { error: 'not a git repo' };
       }
     } else {
-      kv('git', chalk.yellow(`git not installed`));
+      out.git = { error: 'git not installed' };
     }
   }
 
@@ -804,15 +801,15 @@ async function cmdStatus(_args) {
     const { isLightRAGRunning, isLightRAGInstalled, resolveLightRAGConfig } = memoryStore;
     const cfg = resolveLightRAGConfig(projectRoot);
     if (!cfg.enabled) {
-      kv('lightrag', chalk.gray('disabled'));
+      out.lightrag = { enabled: false };
     } else if (!(await isLightRAGInstalled())) {
-      kv('lightrag', chalk.yellow('not installed — `uv tool install "lightrag-hku[api]"`'));
+      out.lightrag = { enabled: true, installed: false };
     } else {
       const running = await isLightRAGRunning(cfg);
-      kv('lightrag', running ? chalk.green(`${cfg.host}:${cfg.port} (running)`) : chalk.yellow(`${cfg.host}:${cfg.port} (not running — run \`bizar memory reindex\`)`));
+      out.lightrag = { enabled: true, installed: true, running, host: cfg.host, port: cfg.port };
     }
   } catch (err) {
-    kv('lightrag', chalk.gray(`status unavailable (${err.message})`));
+    out.lightrag = { error: err.message };
   }
 
   // Last reindex attempt
@@ -820,10 +817,55 @@ async function cmdStatus(_args) {
   if (existsSync(reindexMarker)) {
     try {
       const { finishedAt, ok, inserted, failed, noteCount } = JSON.parse(readFileSync(reindexMarker, 'utf8'));
-      kv('lastReindex', `${new Date(finishedAt).toLocaleString()} — ${ok ? chalk.green(`${inserted}/${noteCount} ok`) : chalk.red(`${failed} failed`)}`);
+      out.lastReindex = { finishedAt, ok, inserted, failed, noteCount };
     } catch { /* ignore */ }
   }
 
+  if (wantJson) {
+    process.stdout.write(JSON.stringify(out) + '\n');
+    return;
+  }
+
+  console.log(chalk.bold('\n  Bizar Memory Status'));
+  console.log('  ─────────────────────────────');
+  kv('mode', mode);
+  kv('projectId', projectId);
+  kv('vault', vaultRoot);
+  kv('branch', branch);
+  if (!out.vaultExists) {
+    warn(`vault directory does not exist — run \`bizar memory init\` or \`bizar memory sync\``);
+  } else {
+    kv('noteCount', String(out.noteCount));
+  }
+  if (out.git) {
+    if (out.git.error) {
+      kv('git', chalk.yellow(out.git.error));
+    } else {
+      const cleanStr = out.git.clean ? chalk.green('clean') : chalk.red('dirty');
+      kv('git', `${out.git.branch} (${cleanStr})`);
+      if (out.git.ahead) kv('ahead', String(out.git.ahead));
+      if (out.git.behind) kv('behind', String(out.git.behind));
+    }
+  }
+  if (out.lightrag) {
+    if (out.lightrag.error) {
+      kv('lightrag', chalk.gray(`status unavailable (${out.lightrag.error})`));
+    } else if (!out.lightrag.enabled) {
+      kv('lightrag', chalk.gray('disabled'));
+    } else if (!out.lightrag.installed) {
+      kv('lightrag', chalk.yellow('not installed — `uv tool install "lightrag-hku[api]"`'));
+    } else {
+      const runningStr = out.lightrag.running
+        ? chalk.green(`${out.lightrag.host}:${out.lightrag.port} (running)`)
+        : chalk.yellow(`${out.lightrag.host}:${out.lightrag.port} (not running)`);
+      kv('lightrag', runningStr);
+    }
+  }
+  if (out.lastReindex) {
+    const lr = out.lastReindex;
+    const lrStr = `${new Date(lr.finishedAt).toLocaleString()} — ${lr.ok ? chalk.green(`${lr.inserted}/${lr.noteCount} ok`) : chalk.red(`${lr.failed} failed`)}`;
+    kv('lastReindex', lrStr);
+  }
   console.log();
 }
 
@@ -1606,8 +1648,10 @@ async function cmdDelete(args) {
 /**
  * @param {string} subcommand
  * @param {string[]} args
+ * @param {{ wantJson?: boolean }} opts
  */
-export async function runMemory(subcommand, args) {
+export async function runMemory(subcommand, args, opts = {}) {
+  const { wantJson = false } = opts;
   switch (subcommand) {
     case 'init':
       await cmdInit(args);
@@ -1616,7 +1660,7 @@ export async function runMemory(subcommand, args) {
       await cmdSetup(args);
       break;
     case 'status':
-      await cmdStatus(args);
+      await cmdStatus(args, { wantJson });
       break;
     case 'link':
       await cmdLink(args);

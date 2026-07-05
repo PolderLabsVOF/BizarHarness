@@ -269,10 +269,12 @@ const CHECKS = [
 
 /**
  * Run all health checks. Prints per-check output unless `opts.silent`.
- * Always prints a final summary line. Returns `{ passed, failed, results }`.
+ * Prints a final summary line unless `opts.json` is true.
+ * Returns `{ passed, failed, results }`.
  */
 export async function runDoctor(opts = {}) {
   const silent = !!opts.silent;
+  const jsonMode = !!opts.json;
   const results = [];
   for (const [name, fn] of CHECKS) {
     const r = await runCheck(name, fn);
@@ -288,8 +290,8 @@ export async function runDoctor(opts = {}) {
   const passed = results.filter((r) => r.ok).length;
   const failed = results.length - passed;
 
-  // Always print a summary line if there were failures, or if not silent.
-  if (failed > 0 || !silent) {
+  // Print summary line only when not in JSON mode
+  if (!jsonMode && (failed > 0 || !silent)) {
     console.log('');
     if (failed === 0) {
       console.log(

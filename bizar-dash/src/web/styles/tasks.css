@@ -162,6 +162,8 @@
   cursor: grab;
   transition: transform var(--motion-fast) var(--ease),
     border-color var(--motion-base) var(--ease);
+  content-visibility: auto;
+  contain-intrinsic-size: 0 80px;
 }
 
 .task-card:hover {

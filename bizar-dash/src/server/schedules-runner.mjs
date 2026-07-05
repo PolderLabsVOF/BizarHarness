@@ -34,8 +34,8 @@ function logLine(line) {
   try {
     mkdirSync(LOG_DIR, { recursive: true });
     appendFileSync(LOG_FILE, line + '\n', 'utf8');
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('swallowed in schedule log append:', err.message);
   }
 }
 
@@ -288,8 +288,8 @@ export const schedulesRunner = {
     const projectIds = new Set(reg.projects.map((project) => project.id));
     try {
       if (schedulesStore.list('default').length > 0) projectIds.add('default');
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('swallowed in schedules due-list:', err.message);
     }
     let skipped = 0;
     for (const projectId of projectIds) {
