@@ -293,4 +293,40 @@ describe('MobileLayout', () => {
     );
     expect(screen.getByTestId('child')).toBeInTheDocument();
   });
+
+  it('layout has correct CSS class applied', () => {
+    const { container } = render(
+      <MobileLayout
+        activeTab="activity"
+        onTabChange={vi.fn()}
+        tabs={TABS}
+        fullTabs={TABS}
+      >
+        <div>Child content</div>
+      </MobileLayout>,
+    );
+    // Verify the layout and content elements exist with correct class names
+    const layout = container.querySelector('.mobile-layout');
+    expect(layout).toBeInTheDocument();
+    const main = container.querySelector('.mobile-content');
+    expect(main).toBeInTheDocument();
+    const header = container.querySelector('.mobile-header');
+    expect(header).toBeInTheDocument();
+  });
+
+  it('renders exactly one header and one main inside the layout', () => {
+    const { container } = render(
+      <MobileLayout
+        activeTab="activity"
+        onTabChange={vi.fn()}
+        tabs={TABS}
+        fullTabs={TABS}
+      >
+        <div>Child content</div>
+      </MobileLayout>,
+    );
+    const layout = container.querySelector('.mobile-layout');
+    expect(layout!.querySelectorAll('header').length).toBe(1);
+    expect(layout!.querySelectorAll('main').length).toBe(1);
+  });
 });

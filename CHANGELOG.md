@@ -1,5 +1,34 @@
 # Changelog
 
+## v5.4.1 — Mobile UI bug fixes
+
+### Bug fixes
+
+User reported three mobile UI issues after v5.4.0. All fixed:
+
+1. **Two top bars** — `MobileApp.tsx` was rendering `<MobileTopbar>` as a child of `<MobileLayout>`, but `MobileLayout` already renders its own `<MobileHeader>`. Both showed simultaneously. Removed the `<MobileTopbar>` import and JSX usage from `MobileApp`. Also removed the redundant `<main className="mobile-content">` wrapper since `MobileLayout` provides it.
+
+2. **Not scrollable** — `.mobile-layout` had `min-height: 100vh` (allowed overflow) and `.mobile-content` had `flex: 1` (didn't allow proper shrink). Changed to `height: 100dvh; overflow: hidden;` on the layout and `flex: 1 1 auto; min-height: 0; overscroll-behavior: contain;` on the content. The layout now uses a proper viewport-locked flexbox with internal scrolling, like a native iOS/Android app.
+
+3. **Settings not styled** — Added `@media (max-width: 768px)` overrides in `settings.css`:
+   - Full-width cards (was constrained to grid columns)
+   - 16px touch-friendly inputs (prevents iOS zoom on focus)
+   - Larger toggles (48px × 28px)
+   - Single-column settings grid (was multi-column)
+   - Hidden desktop settings sidebar (mobile uses bottom nav instead)
+
+### Tests
+
+- 395 npm tests pass
+- 22 mobile-layout tests pass (3 new)
+- 312 vitest tests pass total
+- TypeScript: 0 errors
+- Build: 395 KB main + 90 KB mobile
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.4.1`
+
 ## v5.4.0 — Mobile UI full rewrite
 
 ### Highlights

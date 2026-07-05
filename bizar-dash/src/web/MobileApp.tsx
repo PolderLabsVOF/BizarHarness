@@ -13,7 +13,6 @@ import type { Notification, Settings, Snapshot, WsMessage } from './lib/types';
 import { applyTheme, applyThemeTokens } from './lib/types';
 import { Ws } from './lib/ws';
 import { MobileBottomNav, type MobileTab } from './mobile/MobileBottomNav';
-import { MobileTopbar } from './mobile/MobileTopbar';
 import { MobileLayout, type DrawerTab } from './components/MobileLayout';
 import { MobileActivity } from './mobile/views/MobileActivity';
 import { MobileAgents } from './mobile/views/MobileAgents';
@@ -401,20 +400,12 @@ export function MobileApp() {
         onExitSettings={() => goToTab('activity')}
         onSearch={() => setSearchOpen(true)}
       >
-        <MobileTopbar
-          activeTab={currentView.id}
-          snapshot={snapshot}
-          onSearch={() => setSearchOpen(true)}
-          onNavigate={handleNavigate}
-        />
-
-        <main className="mobile-content">{renderView()}</main>
-
         {stack.length > 0 && (
           <button type="button" className="mobile-back-btn" onClick={popView} aria-label="Go back">
             ← Back
           </button>
         )}
+        {renderView()}
       </MobileLayout>
 
       <MobileSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={handleNavigate} />

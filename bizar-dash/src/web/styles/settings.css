@@ -871,3 +871,49 @@
   font-size: 14px;
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   Mobile overrides — ensure nested section components work in accordion
+   ───────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Settings cards should be full width */
+  .settings-card,
+  .card {
+    width: 100%;
+    margin: 0 0 12px;
+  }
+
+  /* Settings form fields should be larger for touch */
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  select,
+  textarea {
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+
+  /* Toggles should be larger for touch */
+  .toggle input[type="checkbox"] {
+    width: 48px;
+    height: 28px;
+  }
+
+  /* Settings grid should be single column on mobile */
+  .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Hide sidebar nav on mobile */
+  .settings-sidebar,
+  .settings-nav-root {
+    display: none;
+  }
+
+  /* Section content inside accordion should not break layout */
+  .mobile-settings-item-body .settings-content,
+  .mobile-settings-item-body .settings-card,
+  .mobile-settings-item-body .card {
+    width: 100%;
+  }
+}
+
