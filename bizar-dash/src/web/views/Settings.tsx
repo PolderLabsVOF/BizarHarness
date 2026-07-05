@@ -36,6 +36,7 @@ import { Card, CardTitle, CardMeta } from '../components/Card';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { HeadroomSettingsCard } from '../components/HeadroomSettings';
 import { Ws } from '../lib/ws';
 import {
   applyTheme,
@@ -72,6 +73,21 @@ const PRESET_THEMES = [
   { name: 'Cyan', accent: '#06b6d4' },
   { name: 'Mono', accent: '#6b7280' },
 ];
+
+// v5.0.0 — Headroom default settings
+const DEFAULT_HEADROOM_SETTINGS = {
+  enabled: true,
+  autoInstall: true,
+  port: 8787,
+  host: '127.0.0.1',
+  outputShaper: false,
+  telemetry: false,
+  budget: 0,
+  backend: 'anthropic',
+  autoStart: true,
+  autoWrap: true,
+  routeAllProviders: true,
+};
 
 const FONT_FAMILIES = [
   'Inter',
@@ -552,6 +568,7 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'background', label: 'Background' },
     { id: 'system-llm', label: 'System LLM' },
+    { id: 'headroom', label: 'Headroom' },
     { id: 'updates', label: 'Updates' },
     { id: 'activity-log', label: 'Activity' },
     { id: 'about', label: 'About' },
@@ -1585,6 +1602,19 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
           </div>
         </Card>
 </div>
+
+        <div data-section="headroom" style={{display: (activeSection === null || activeSection === 'headroom') ? 'block' : 'none'}}>
+          <HeadroomSettingsCard
+            settings={settings.headroom || DEFAULT_HEADROOM_SETTINGS}
+            onPatch={(patch) => {
+              setSettings((cur) => ({
+                ...cur,
+                headroom: { ...(cur.headroom || DEFAULT_HEADROOM_SETTINGS), ...patch },
+              }));
+              setDirty(true);
+            }}
+          />
+        </div>
 
       <PairDeviceCard />
 

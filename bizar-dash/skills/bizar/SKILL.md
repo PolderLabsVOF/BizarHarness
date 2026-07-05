@@ -74,6 +74,26 @@ export MINIMAX_API_KEY_3="third-key"
 
 Rotation triggers on 429 (rate limit), 402 (quota exhausted), 500/502/503/504 (server error). Does NOT trigger on 401 (unauthorized - fix the key).
 
+## Headroom
+
+The Bizar dashboard manages Headroom through Settings → Headroom. To check status:
+
+```bash
+bizar headroom status
+bizar headroom stats
+bizar headroom install
+bizar headroom wrap
+```
+
+Or via the dashboard API:
+- `GET /api/headroom/status` — live status
+- `GET /api/headroom/stats` — compression stats
+- `POST /api/headroom/install` — install headroom
+- `POST /api/headroom/wrap` — wrap opencode
+- `POST /api/headroom/proxy/start` — start proxy
+
+Headroom is a context compression layer that sits between opencode and LLM providers, compressing tool outputs, logs, RAG chunks, and conversation history by 60–95%.
+
 ## Troubleshooting
 
 ### Odin Self-Handles Instead of Routing

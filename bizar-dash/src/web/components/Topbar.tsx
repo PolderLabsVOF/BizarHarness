@@ -22,6 +22,7 @@ import {
   Activity,
   Radio,
   Coins,
+  Brain,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -46,6 +47,7 @@ export const TABS: TabDef[] = [
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'background', label: 'Active', icon: Radio },
   { id: 'skills', label: 'Skills', icon: Sparkles },
+  { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'mods', label: 'Mods', icon: Puzzle },
   { id: 'schedules', label: 'Schedules', icon: Clock },
   { id: 'history', label: 'History', icon: HistoryIcon },

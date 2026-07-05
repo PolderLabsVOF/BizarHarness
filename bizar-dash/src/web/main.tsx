@@ -10,6 +10,7 @@ import './styles/mobile.css';
 import './styles/glyphs.css';
 import './styles/minimax-usage.css';
 import './styles/skills.css';
+import './styles/memory.css';
 
 function Root() {
   const [isMobile, setIsMobile] = useState(() => {

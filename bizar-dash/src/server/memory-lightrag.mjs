@@ -42,6 +42,8 @@ import {
   closeSync,
   unlinkSync,
   readdirSync,
+  statSync,
+  appendFileSync,
 } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -767,4 +769,269 @@ export async function query(config, question, { mode = 'mix', topK = 10 } = {}) 
   } catch (err) {
     return { ok: false, mode, error: err.message };
   }
+}
+
+// ── v4.7.0 — Memory tab helpers ─────────────────────────────────────────────
+//
+// Lightweight status / stats / rebuild helpers used by the dedicated Memory
+// view. The full reindexVault path above already produces a marker file with
+// most of the numbers we want; these helpers are thin wrappers around it.
+
+/**
+ * Aggregate stats for the Memory → LightRAG panel.
+ *
+ * Pulls from:
+ *   - the last-reindex.json marker file (writeMarker: true leaves it)
+ *   - the configured working dir (where chunks/index files live)
+ *   - the running server (PID, alive)
+ *
+ * Returns a defensive default when nothing has been indexed yet.
+ *
+ * @param {string} projectRoot
+ * @returns {{
+ *   running: boolean,
+ *   pid: number|null,
+ *   host: string,
+ *   port: number,
+ *   workingDir: string,
+ *   lastReindexAt: string|null,
+ *   lastReindexOk: boolean|null,
+ *   lastReindexInserted: number|null,
+ *   lastReindexFailed: number|null,
+ *   noteCount: number,
+ *   indexedApprox: number,
+ *   queryCountLast24h: number,
+ *   avgResponseMs: number|null,
+ *   error?: string,
+ * }}
+ */
+export async function stats(projectRoot) {
+  const config = resolveLightRAGConfig(projectRoot);
+  const cacheDir = join(projectRoot, '.bizar', 'memory-cache');
+  const markerPath = join(cacheDir, 'last-reindex.json');
+  const running = await isRunning(config);
+  let pid = null;
+  const pidFile = join(config.workingDir, 'lightrag.pid');
+  if (existsSync(pidFile)) {
+    const parsed = parseIntSafe(readFileSync(pidFile, 'utf8'));
+    if (parsed !== null && parsed > 0) {
+      try {
+        process.kill(parsed, 0);
+        pid = parsed;
+      } catch {
+        pid = null;
+      }
+    }
+  }
+
+  let lastReindexAt = null;
+  let lastReindexOk = null;
+  let lastReindexInserted = null;
+  let lastReindexFailed = null;
+  if (existsSync(markerPath)) {
+    try {
+      const m = JSON.parse(readFileSync(markerPath, 'utf8'));
+      lastReindexAt = m.finishedAt || m.attemptedAt || null;
+      lastReindexOk = m.ok === true;
+      lastReindexInserted = typeof m.inserted === 'number' ? m.inserted : null;
+      lastReindexFailed = typeof m.failed === 'number' ? m.failed : null;
+    } catch {
+      /* marker corrupt — ignore */
+    }
+  }
+
+  // Approximate the indexed chunk count from the on-disk KV store. LightRAG
+  // writes its chunks to <workingDir>/kv_store_*.json. We sum the lengths of
+  // the document store as a proxy for "indexed documents"; this is best-effort
+  // and clearly labeled as approximate.
+  let indexedApprox = 0;
+  try {
+    const docStore = join(config.workingDir, 'kv_store_doc_status.json');
+    const fullDocs = join(config.workingDir, 'kv_store_full_docs.json');
+    for (const p of [docStore, fullDocs]) {
+      if (existsSync(p)) {
+        try {
+          const obj = JSON.parse(readFileSync(p, 'utf8'));
+          indexedApprox += Object.keys(obj || {}).length;
+        } catch {
+          /* skip */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // Note count = listNotes from the vault.
+  let noteCount = 0;
+  try {
+    const memPath = join(projectRoot, '.bizar', 'memory.json');
+    if (existsSync(memPath)) {
+      const mem = JSON.parse(readFileSync(memPath, 'utf8'));
+      const projectId = mem.projectId || '';
+      const mode = mem.memoryRepo?.mode || 'local-only';
+      let vaultRoot;
+      if (mode === 'local-only') {
+        vaultRoot = join(projectRoot, '.obsidian');
+      } else {
+        const raw = mem.memoryRepo?.path || '';
+        let expanded;
+        if (!raw) expanded = join(projectRoot, '.bizar', 'memory');
+        else if (raw.startsWith('~')) expanded = join(homedir(), raw.slice(1));
+        else if (raw.startsWith('/')) expanded = raw;
+        else expanded = join(projectRoot, raw);
+        vaultRoot = join(expanded, 'projects', projectId);
+      }
+      if (existsSync(vaultRoot)) {
+        const { readdirSync } = await import('node:fs');
+        function walk(dir) {
+          for (const e of readdirSync(dir, { withFileTypes: true })) {
+            if (e.name.startsWith('.')) continue;
+            const full = join(dir, e.name);
+            if (e.isDirectory()) walk(full);
+            else if (e.name.endsWith('.md')) noteCount++;
+          }
+        }
+        walk(vaultRoot);
+      }
+    }
+  } catch {
+    /* ignore — leave noteCount at 0 */
+  }
+
+  // Query stats: best-effort — LightRAG's /query endpoint doesn't expose
+  // query counts in the open-core build. We track our own running counter
+  // in a sidecar JSON file.
+  const queryLogPath = join(cacheDir, 'lightrag-query-log.jsonl');
+  let queryCountLast24h = 0;
+  let totalResponseMs = 0;
+  let counted = 0;
+  if (existsSync(queryLogPath)) {
+    try {
+      const lines = readFileSync(queryLogPath, 'utf8').split('\n').filter(Boolean);
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      for (const line of lines) {
+        try {
+          const rec = JSON.parse(line);
+          if (typeof rec.ts === 'number' && rec.ts >= cutoff) {
+            queryCountLast24h++;
+            if (typeof rec.ms === 'number' && Number.isFinite(rec.ms)) {
+              totalResponseMs += rec.ms;
+              counted++;
+            }
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const avgResponseMs = counted > 0 ? Math.round(totalResponseMs / counted) : null;
+
+  return {
+    running,
+    pid: running ? pid : null,
+    host: config.host,
+    port: config.port,
+    workingDir: config.workingDir,
+    lastReindexAt,
+    lastReindexOk,
+    lastReindexInserted,
+    lastReindexFailed,
+    noteCount,
+    indexedApprox,
+    queryCountLast24h,
+    avgResponseMs,
+  };
+}
+
+function parseIntSafe(s) {
+  const n = parseInt(String(s || '').trim(), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Record a query for stats tracking. Called by the /query endpoint so the
+ * Memory tab can show usage. Best-effort; never throws.
+ *
+ * @param {string} projectRoot
+ * @param {number} durationMs
+ */
+export function recordQuery(projectRoot, durationMs) {
+  try {
+    const cacheDir = join(projectRoot, '.bizar', 'memory-cache');
+    mkdirSync(cacheDir, { recursive: true });
+    const path = join(cacheDir, 'lightrag-query-log.jsonl');
+    appendFileSafe(path, JSON.stringify({ ts: Date.now(), ms: Math.max(0, Math.round(durationMs)) }) + '\n');
+    // Truncate if file grows past 5MB — keep last ~50k queries.
+    try {
+      const st = statMaybe(path);
+      if (st && st.size > 5 * 1024 * 1024) {
+        const content = readFileSync(path, 'utf8');
+        const lines = content.split('\n');
+        const keep = lines.slice(-50000).join('\n');
+        writeFileSync(path, keep);
+      }
+    } catch {
+      /* ignore */
+    }
+  } catch {
+    /* never throw */
+  }
+}
+
+function appendFileSafe(path, content) {
+  try {
+    appendFileSync(path, content);
+  } catch {
+    /* fall back to manual write */
+    try {
+      const cur = existsSync(path) ? readFileSync(path, 'utf8') : '';
+      writeFileSync(path, cur + content);
+    } catch {
+      /* swallow — stats are best-effort */
+    }
+  }
+}
+
+function statMaybe(path) {
+  try {
+    return statSync(path);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rebuild the graph from scratch. Stops the server, wipes the working dir,
+ * and re-runs reindexVault. Returns { ok, started, error?, markerPath? }.
+ *
+ * Idempotent: safe to call when the server is already stopped.
+ *
+ * @param {string} projectRoot
+ * @param {{ logger?: { info?: Function, warn?: Function } }} [opts]
+ */
+export async function rebuildGraph(projectRoot, opts = {}) {
+  const config = resolveLightRAGConfig(projectRoot);
+  // Stop server first.
+  await stopServer(config, opts).catch(() => {});
+  // Wipe the working dir contents (preserve the dir itself).
+  try {
+    const { readdirSync } = await import('node:fs');
+    if (existsSync(config.workingDir)) {
+      for (const e of readdirSync(config.workingDir)) {
+        try {
+          unlinkSync(join(config.workingDir, e));
+        } catch {
+          /* skip */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  // Reindex from scratch.
+  return reindexVault(projectRoot, opts);
 }

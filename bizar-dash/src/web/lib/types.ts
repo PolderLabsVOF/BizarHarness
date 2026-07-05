@@ -277,6 +277,22 @@ export type Settings = {
     baseUrl: string;
     chatBaseUrl: string;
   };
+  // v5.0.0 — Headroom context compression settings.
+  headroom?: HeadroomSettings;
+};
+
+export type HeadroomSettings = {
+  enabled: boolean;
+  autoInstall: boolean;
+  port: number;
+  host: string;
+  outputShaper: boolean;
+  telemetry: boolean;
+  budget: number;
+  backend: string;
+  autoStart: boolean;
+  autoWrap: boolean;
+  routeAllProviders: boolean;
 };
 
 export type SettingsResponse = {

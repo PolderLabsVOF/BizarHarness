@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
+import { MemoryStatusCard } from './memory/MemoryStatusCard';
 import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
@@ -460,6 +461,8 @@ export function Overview({
           </div>
         )}
       </Card>
+
+      <MemoryStatusCard setActiveTab={setActiveTab} />
 
       <div className="overview-cols">
         <Card>

@@ -12,7 +12,7 @@
 import { Router } from 'express';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const SERVER_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -513,11 +513,17 @@ export function createMemoryRouter({ projectRoot }) {
     const { searchVault, queryLightRAG } = memoryStore;
     const lexical = searchVault(projectRoot, q, { limit: topK });
     let semantic = null;
+    const startedAt = Date.now();
     try {
       semantic = await queryLightRAG(projectRoot, q, { topK });
     } catch (err) {
       semantic = { ok: false, error: err.message };
     }
+    // Record the query duration for the LightRAG stats panel. Best-effort.
+    try {
+      const { recordQuery } = await getMemoryLightrag();
+      recordQuery(projectRoot, Date.now() - startedAt);
+    } catch { /* ignore */ }
     res.json({ ok: true, q, lexical, semantic });
   }));
 
@@ -894,5 +900,426 @@ export function createMemoryRouter({ projectRoot }) {
     });
   }));
 
+  // ── v4.7.0 — Memory tab endpoints ─────────────────────────────────────────
+  //
+  // These endpoints are the canonical surface for the dedicated Memory
+  // tab. They sit alongside the per-resource endpoints above and return
+  // the shapes the React panels expect (always objects, never arrays).
+
+  // GET /memory/health — composite health score (0..100) + breakdown.
+  // Components:
+  //   - vaultExists      (vault dir on disk)
+  //   - vaultWritable    (can write a temp file and unlink it)
+  //   - gitClean         (mode is managed/linked AND `git status` is clean)
+  //   - lightragRunning  (server up + health check ok)
+  //   - schemaValid      (no validation errors across the vault)
+  //   - secretsClean     (no HIGH-severity secret findings)
+  router.get('/memory/health', wrap(async (_req, res) => {
+    const { resolveVault, loadConfig, listNotes, validateAll, scanForSecrets } = memoryStore;
+    const { isGitInstalled, status: gitStatus } = memoryGit;
+
+    const checks = [];
+    let score = 0;
+
+    const { exists, config } = loadConfig(projectRoot);
+    if (!exists) {
+      res.json({
+        score: 0,
+        status: 'unconfigured',
+        checks: [{ name: 'config', pass: false, detail: 'memory not initialised' }],
+        message: 'memory not initialised — run `bizar memory init`',
+      });
+      return;
+    }
+
+    const { vaultRoot, mode } = resolveVault(projectRoot);
+    const vaultExists = existsSync(vaultRoot);
+    checks.push({
+      name: 'vault_exists',
+      pass: vaultExists,
+      detail: vaultExists ? vaultRoot : 'vault directory missing',
+    });
+    if (vaultExists) score += 20;
+
+    // Writable?
+    let writable = false;
+    if (vaultExists) {
+      try {
+        const probe = join(vaultRoot, '.health-probe.tmp');
+        writeFileSync(probe, 'ok');
+        try {
+          const { unlinkSync } = await import('node:fs');
+          unlinkSync(probe);
+        } catch { /* best effort */ }
+        writable = true;
+      } catch {
+        writable = false;
+      }
+    }
+    checks.push({ name: 'vault_writable', pass: writable, detail: writable ? 'yes' : 'no' });
+    if (writable) score += 10;
+
+    // Git clean?
+    let gitClean = null;
+    if ((mode === 'managed' || mode === 'linked') && vaultExists && isGitInstalled()) {
+      const gs = gitStatus(vaultRoot);
+      gitClean = gs.clean;
+      checks.push({
+        name: 'git_clean',
+        pass: gs.clean,
+        detail: gs.clean ? 'working tree clean' : `${(gs.modified?.length || 0) + (gs.untracked?.length || 0)} pending`,
+      });
+      if (gs.clean) score += 20;
+    } else if (mode === 'local-only') {
+      checks.push({ name: 'git_clean', pass: true, detail: 'local-only mode (no git)' });
+      // local-only mode shouldn't penalise — count as clean
+      score += 20;
+    } else {
+      checks.push({ name: 'git_clean', pass: false, detail: 'git not installed or vault missing' });
+    }
+
+    // LightRAG running?
+    let lightragRunning = false;
+    try {
+      const { resolveLightRAGConfig, isRunning } = await getMemoryLightrag();
+      const cfg = resolveLightRAGConfig(projectRoot);
+      lightragRunning = await isRunning(cfg);
+    } catch {
+      lightragRunning = false;
+    }
+    checks.push({
+      name: 'lightrag_running',
+      pass: lightragRunning,
+      detail: lightragRunning ? 'yes' : 'stopped or disabled',
+    });
+    if (lightragRunning) score += 20;
+
+    // Schema valid?
+    let invalidCount = 0;
+    if (vaultExists) {
+      const validationResults = validateAll(projectRoot);
+      invalidCount = validationResults.length;
+    }
+    checks.push({
+      name: 'schema_valid',
+      pass: invalidCount === 0,
+      detail: invalidCount === 0 ? 'all notes valid' : `${invalidCount} invalid`,
+    });
+    if (invalidCount === 0 && vaultExists) score += 15;
+
+    // Secrets clean?
+    let highFindings = 0;
+    if (vaultExists) {
+      for (const n of listNotes(projectRoot)) {
+        const r = scanForSecrets(projectRoot, n.relPath);
+        if (!r.safe) {
+          for (const f of r.findings) {
+            if (f.severity === 'HIGH') highFindings++;
+          }
+        }
+      }
+    }
+    checks.push({
+      name: 'secrets_clean',
+      pass: highFindings === 0,
+      detail: highFindings === 0 ? 'no HIGH-severity secrets' : `${highFindings} HIGH finding(s)`,
+    });
+    if (highFindings === 0) score += 15;
+
+    const status = score >= 80 ? 'healthy' : score >= 50 ? 'degraded' : 'unhealthy';
+    res.json({
+      score,
+      status,
+      checks,
+      message:
+        status === 'healthy' ? 'memory system healthy' :
+        status === 'degraded' ? 'one or more subsystems need attention' :
+        'multiple subsystems failing',
+    });
+  }));
+
+  // GET /memory/storage — disk-usage summary for the Memory tab.
+  // Walks the vault + .bizar/memory-cache + lightrag working dir.
+  router.get('/memory/storage', wrap(async (_req, res) => {
+    const { resolveVault } = memoryStore;
+    const { vaultRoot, mode } = resolveVault(projectRoot);
+
+    const targets = [];
+    if (existsSync(vaultRoot)) targets.push({ name: 'vault', path: vaultRoot });
+    const cacheDir = join(projectRoot, '.bizar', 'memory-cache');
+    if (existsSync(cacheDir)) targets.push({ name: 'memory-cache', path: cacheDir });
+    const lightragDir = join(projectRoot, '.bizar', 'lightrag');
+    if (existsSync(lightragDir)) targets.push({ name: 'lightrag', path: lightragDir });
+
+    let total = 0;
+    const breakdown = targets.map((t) => {
+      const size = dirSize(t.path);
+      total += size;
+      return { name: t.name, path: t.path, size };
+    });
+
+    res.json({
+      total,
+      breakdown,
+      mode,
+      vaultRoot,
+      message: total === 0 ? 'no memory data on disk yet' : `${formatBytes(total)} on disk`,
+    });
+  }));
+
+  // GET /memory/git/diff — textual diff of the working tree (last commit vs HEAD).
+  // Returns { hasDiff, lines, files } — `lines` is a flat unified-diff-ish view.
+  router.get('/memory/git/diff', wrap(async (_req, res) => {
+    const { resolveVault } = memoryStore;
+    const { isGitInstalled } = memoryGit;
+    const { vaultRoot, mode } = resolveVault(projectRoot);
+
+    if (mode === 'local-only') {
+      res.json({ hasDiff: false, lines: [], files: [], mode: 'local-only' });
+      return;
+    }
+    if (!isGitInstalled()) {
+      res.status(503).json({ error: 'git_not_installed' });
+      return;
+    }
+
+    let raw = '';
+    try {
+      raw = execFileSync('git', ['diff', '--no-color', '--no-ext-diff'], {
+        cwd: vaultRoot,
+        encoding: 'utf8',
+        maxBuffer: 8 * 1024 * 1024,
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'diff_failed', message: err.message });
+      return;
+    }
+
+    // Also include untracked file names.
+    let untracked = [];
+    try {
+      const statusRaw = execFileSync('git', ['status', '--porcelain'], {
+        cwd: vaultRoot,
+        encoding: 'utf8',
+      });
+      for (const line of statusRaw.split('\n')) {
+        if (line.startsWith('??')) untracked.push(line.slice(3).trim());
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const lines = raw.split('\n');
+    const files = [];
+    for (const line of lines) {
+      if (line.startsWith('diff --git ')) {
+        const m = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+        if (m) files.push(m[2]);
+      }
+    }
+    for (const u of untracked) {
+      if (!files.includes(u)) files.push(u);
+    }
+
+    res.json({
+      hasDiff: lines.length > 1 || untracked.length > 0,
+      lines,
+      files,
+      mode,
+    });
+  }));
+
+  // GET /memory/lightrag/stats — aggregate stats for the LightRAG panel.
+  router.get('/memory/lightrag/stats', wrap(async (_req, res) => {
+    try {
+      const { stats } = await getMemoryLightrag();
+      const data = await stats(projectRoot);
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: 'stats_failed', message: err.message });
+    }
+  }));
+
+  // POST /memory/lightrag/reindex — alias of /memory/reindex (the canonical
+  // path lives there for backwards compat). Both return the same shape.
+  router.post('/memory/lightrag/reindex', wrap(async (_req, res) => {
+    const { reindexVault } = memoryStore;
+    const result = await reindexVault(projectRoot, {});
+    res.json(result);
+  }));
+
+  // POST /memory/lightrag/rebuild-graph — nuke the working dir + reindex.
+  router.post('/memory/lightrag/rebuild-graph', wrap(async (_req, res) => {
+    try {
+      const { rebuildGraph } = await getMemoryLightrag();
+      const result = await rebuildGraph(projectRoot, {});
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: 'rebuild_failed', message: err.message });
+    }
+  }));
+
+  // GET /memory/obsidian/tree — recursive folder tree for the Memory browser.
+  router.get('/memory/obsidian/tree', wrap(async (_req, res) => {
+    try {
+      const obsidian = await import(`${SERVER_ROOT}/memory-obsidian.mjs`);
+      const node = obsidian.tree(projectRoot);
+      res.json({ tree: node });
+    } catch (err) {
+      res.status(500).json({ error: 'tree_failed', message: err.message });
+    }
+  }));
+
+  // GET /memory/obsidian/backlinks?note=path/to/note.md
+  router.get('/memory/obsidian/backlinks', wrap(async (req, res) => {
+    const note = String(req.query.note || '').trim();
+    if (!note) {
+      res.status(400).json({ error: 'bad_request', message: 'note query param required' });
+      return;
+    }
+    try {
+      const obsidian = await import(`${SERVER_ROOT}/memory-obsidian.mjs`);
+      const links = obsidian.listBacklinks(projectRoot, note);
+      res.json({ note, backlinks: links });
+    } catch (err) {
+      res.status(500).json({ error: 'backlinks_failed', message: err.message });
+    }
+  }));
+
+  // GET /memory/obsidian/notes?path=...&limit=...
+  // Query-string variant of the canonical /memory/notes endpoint. Used by
+  // the ObsidianPanel folder browser which knows the parent path.
+  router.get('/memory/obsidian/notes', wrap(async (req, res) => {
+    const { listNotes } = memoryStore;
+    const all = listNotes(projectRoot);
+    const path = String(req.query.path || '').trim();
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    let notes = all;
+    if (path) {
+      notes = all.filter((n) => n.relPath.startsWith(path));
+    }
+    notes = notes.slice(0, limit);
+    res.json({ path: path || null, count: notes.length, notes });
+  }));
+
+  // PUT /memory/notes/* — update an existing note (or create).
+  router.put('/memory/notes/*', wrap(async (req, res) => {
+    const { writeNote } = memoryStore;
+    const relPath = req.params[0];
+    const { frontmatter, body } = req.body || {};
+    if (!relPath) {
+      res.status(400).json({ error: 'bad_request', message: 'path is required' });
+      return;
+    }
+    if (!relPath.endsWith('.md')) {
+      res.status(400).json({ error: 'bad_request', message: 'path must end in .md' });
+      return;
+    }
+    try {
+      const note = writeNote(projectRoot, relPath, { frontmatter: frontmatter || {}, body: body || '' });
+      res.json(note);
+    } catch (err) {
+      if (err.code === 'SCHEMA_VALIDATION_FAILED' || err.code === 'SECRET_DETECTED') {
+        res.status(400).json({ error: err.code, message: err.message, findings: err.findings });
+      } else {
+        res.status(400).json({ error: 'bad_request', message: err.message });
+      }
+    }
+  }));
+
+  // POST /memory/semantic-search — cross-source search.
+  // Body: { query: string, limit?: number, sources?: Array<'lightrag'|'obsidian'> }
+  router.post('/memory/semantic-search', wrap(async (req, res) => {
+    const body = req.body || {};
+    const query = String(body.query || '').trim();
+    if (!query) {
+      res.status(400).json({ error: 'bad_request', message: 'query is required' });
+      return;
+    }
+    const limit = Math.min(parseInt(body.limit, 10) || 10, 50);
+    const requestedSources = Array.isArray(body.sources) && body.sources.length > 0
+      ? new Set(body.sources.map((s) => String(s).toLowerCase()))
+      : new Set(['lightrag', 'obsidian']);
+
+    const results = [];
+    if (requestedSources.has('obsidian')) {
+      const { searchVault } = memoryStore;
+      const lex = searchVault(projectRoot, query, { limit });
+      for (const r of lex) {
+        results.push({
+          source: 'obsidian',
+          relPath: r.relPath,
+          snippet: r.snippet,
+          score: r.score,
+          mtime: r.mtime,
+        });
+      }
+    }
+    if (requestedSources.has('lightrag')) {
+      try {
+        const { resolveLightRAGConfig, query: lightragQuery } = await getMemoryLightrag();
+        const cfg = resolveLightRAGConfig(projectRoot);
+        const r = await lightragQuery(cfg, query, { topK: limit });
+        if (r.ok && r.response) {
+          // LightRAG's response shape varies by mode; coerce to a snippet.
+          const text = typeof r.response === 'string'
+            ? r.response
+            : (r.response?.response || r.response?.answer || JSON.stringify(r.response));
+          results.push({
+            source: 'lightrag',
+            relPath: null,
+            snippet: String(text).slice(0, 500),
+            score: 1,
+            mtime: null,
+            raw: r.response,
+          });
+        }
+      } catch (err) {
+        results.push({ source: 'lightrag', error: err.message });
+      }
+    }
+
+    // Dedupe by (source, relPath), keep highest score.
+    const seen = new Map();
+    for (const r of results) {
+      const key = `${r.source}|${r.relPath || '_query_'}`;
+      const prev = seen.get(key);
+      if (!prev || (r.score || 0) > (prev.score || 0)) {
+        seen.set(key, r);
+      }
+    }
+    const deduped = [...seen.values()].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    res.json({ query, count: deduped.length, results: deduped });
+  }));
+
   return router;
+}
+
+/**
+ * Recursively sum file sizes under `dir`. Returns 0 if dir doesn't exist.
+ */
+function dirSize(dir) {
+  let total = 0;
+  function walk(d) {
+    let st;
+    try { st = statSync(d); } catch { return; }
+    if (st.isFile()) { total += st.size; return; }
+    if (!st.isDirectory()) return;
+    let entries;
+    try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      walk(join(d, e.name));
+    }
+  }
+  walk(dir);
+  return total;
+}
+
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }

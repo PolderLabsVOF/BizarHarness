@@ -523,6 +523,157 @@ export function validateAll(projectRoot) {
   return results;
 }
 
+// ── v4.7.0 — Memory tab helpers ─────────────────────────────────────────────
+//
+// Lightweight helpers used by the dedicated Memory view: backlinks (wikilink
+// reverse index) and a vault-stats summary for the overview card.
+
+/**
+ * Find every note in the vault that links TO `targetRelPath` via a wikilink.
+ *
+ * A wikilink matches one of:
+ *   - `[[target]]`
+ *   - `[[target|alias]]`
+ *   - `[[target#heading]]`
+ *   - `[[target#heading|alias]]`
+ *
+ * The match is by basename without extension (Obsidian's wikilink semantics)
+ * AND by full relPath-without-extension, so `[[notes/foo]]` matches
+ * `notes/foo.md` and `[[foo]]` matches `foo.md` anywhere in the vault.
+ *
+ * @param {string} projectRoot
+ * @param {string} targetRelPath — the note we want backlinks for
+ * @returns {Array<{ fromRelPath: string, fromTitle: string, snippet: string, mtime: number }>}
+ */
+export function findBacklinks(projectRoot, targetRelPath) {
+  if (!targetRelPath) return [];
+  const targetBase = basenameOf(targetRelPath).replace(/\.md$/i, '');
+  const targetStripped = targetRelPath.replace(/\.md$/i, '');
+  if (!targetBase && !targetStripped) return [];
+
+  const out = [];
+  const WIKILINK_RE = /\[\[([^\]\n|]+?)(?:\|[^\]\n]+?)?(?:#[^\]\n]+?)?\]\]/g;
+
+  for (const note of listNotes(projectRoot)) {
+    if (note.relPath === targetRelPath) continue; // skip self
+    const body = note.body || '';
+    const matches = [];
+    let m;
+    WIKILINK_RE.lastIndex = 0;
+    while ((m = WIKILINK_RE.exec(body)) !== null) {
+      const raw = (m[1] || '').trim();
+      if (!raw) continue;
+      const stripped = raw.split('#')[0].trim();
+      if (!stripped) continue;
+      const baseOnly = stripped.split('/').pop() || stripped;
+      if (baseOnly === targetBase || stripped === targetStripped) {
+        matches.push({ raw, idx: m.index });
+      }
+    }
+    if (matches.length === 0) continue;
+
+    // Build a snippet around the FIRST match — 80 chars each side.
+    const first = matches[0];
+    const start = Math.max(0, first.idx - 80);
+    const end = Math.min(body.length, first.idx + first.raw.length + 80);
+    const snippet = (start > 0 ? '…' : '') +
+      body.slice(start, end).replace(/\s+/g, ' ').trim() +
+      (end < body.length ? '…' : '');
+
+    out.push({
+      fromRelPath: note.relPath,
+      fromTitle: note.frontmatter?.title || basenameOf(note.relPath).replace(/\.md$/i, ''),
+      snippet,
+      mtime: note.mtime,
+    });
+  }
+
+  return out.sort((a, b) => b.mtime - a.mtime);
+}
+
+/** Minimal basename helper — avoids pulling `path.basename` into the bundle. */
+function basenameOf(p) {
+  if (!p) return '';
+  const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  return idx >= 0 ? p.slice(idx + 1) : p;
+}
+
+/**
+ * High-level stats used by the Memory tab and Overview status card.
+ *
+ * @param {string} projectRoot
+ * @returns {{ exists: boolean, vaultRoot: string, mode: string, noteCount: number, totalSize: number, folderCount: number, folders: string[], lastModified: number|null, gitClean: boolean|null, gitBranch: string|null }}
+ */
+export function vaultStats(projectRoot) {
+  const { exists, config } = loadConfig(projectRoot);
+  if (!exists) {
+    return {
+      exists: false,
+      vaultRoot: '',
+      mode: 'local-only',
+      noteCount: 0,
+      totalSize: 0,
+      folderCount: 0,
+      folders: [],
+      lastModified: null,
+      gitClean: null,
+      gitBranch: null,
+    };
+  }
+
+  const { vaultRoot, mode, branch } = resolveVault(projectRoot);
+  if (!vaultRoot || !existsSync(vaultRoot)) {
+    return {
+      exists: true,
+      vaultRoot: vaultRoot || '',
+      mode,
+      noteCount: 0,
+      totalSize: 0,
+      folderCount: 0,
+      folders: [],
+      lastModified: null,
+      gitClean: null,
+      gitBranch: branch || config?.branch || 'main',
+    };
+  }
+
+  const notes = listNotes(projectRoot);
+  const totalSize = notes.reduce((acc, n) => acc + (n.size || 0), 0);
+  const folders = new Set();
+  for (const n of notes) {
+    const seg = n.relPath.split('/');
+    if (seg.length > 1) folders.add(seg[0]);
+  }
+
+  let gitClean = null;
+  let gitBranch = null;
+  if (mode === 'managed' || mode === 'linked') {
+    try {
+      const { isGitInstalled, status: gitStatus } = memoryGit;
+      if (isGitInstalled()) {
+        const gs = gitStatus(vaultRoot);
+        gitClean = gs.clean;
+        gitBranch = gs.branch;
+      }
+    } catch {
+      // ignore — git is optional
+    }
+  }
+
+  return {
+    exists: true,
+    vaultRoot,
+    mode,
+    noteCount: notes.length,
+    totalSize,
+    folderCount: folders.size,
+    folders: [...folders].sort(),
+    lastModified: notes[0]?.mtime || null,
+    gitClean,
+    gitBranch: gitBranch || branch || config?.branch || 'main',
+  };
+}
+
 // ── LightRAG integration (v4.1.0) ──────────────────────────────────────────
 //
 // Re-export the LightRAG orchestrator from the memory-store module so the

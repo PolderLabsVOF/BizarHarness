@@ -46,7 +46,7 @@ function makeProjectRoot() {
 }
 
 function seedArtifact(projectRoot, slug, { comments = [], answers = [], status = 'draft' } = {}) {
-  const dir = join(projectRoot, 'artifacts', slug);
+  const dir = join(projectRoot, '.bizar', 'artifacts', slug);
   mkdirSync(dir, { recursive: true });
   const meta = {
     slug,
@@ -85,7 +85,7 @@ test('submitFeedback creates feedback.md', () => {
     const result = artifactsStore.submitFeedback(slug, { answers: [] }, root);
     assert.equal(result.ok, true);
     assert.equal(result.slug, slug);
-    const feedbackPath = join(root, 'artifacts', slug, 'feedback.md');
+    const feedbackPath = join(root, '.bizar', 'artifacts', slug, 'feedback.md');
     assert.ok(existsSync(feedbackPath), 'feedback.md should be created');
     const content = readFileSync(feedbackPath, 'utf8');
     assert.ok(content.includes('glyph: ' + slug), 'frontmatter glyph line');
@@ -107,7 +107,7 @@ test('submitFeedback updates meta.json status to "review"', () => {
     seedArtifact(root, slug, { status: 'draft' });
     const result = artifactsStore.submitFeedback(slug, { answers: [] }, root);
     assert.equal(result.ok, true);
-    const meta = JSON.parse(readFileSync(join(root, 'artifacts', slug, 'meta.json'), 'utf8'));
+    const meta = JSON.parse(readFileSync(join(root, '.bizar', 'artifacts', slug, 'meta.json'), 'utf8'));
     assert.equal(meta.status, 'review', 'meta.status should be "review"');
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -123,7 +123,7 @@ test('submitFeedback updates meta.json lastEdited', () => {
     const result = artifactsStore.submitFeedback(slug, { answers: [] }, root);
     const after = Date.now();
     assert.equal(result.ok, true);
-    const meta = JSON.parse(readFileSync(join(root, 'artifacts', slug, 'meta.json'), 'utf8'));
+    const meta = JSON.parse(readFileSync(join(root, '.bizar', 'artifacts', slug, 'meta.json'), 'utf8'));
     const ts = Date.parse(meta.lastEdited);
     assert.ok(Number.isFinite(ts), 'lastEdited should be a parseable timestamp');
     assert.ok(ts >= before && ts <= after, `lastEdited ${meta.lastEdited} should be in [${before}, ${after}]`);
@@ -208,7 +208,7 @@ test('submitFeedback falls back to comments.json when canvas has none', () => {
     const slug = 'glyph-comments-json-fallback';
     // Seed canvas with empty comments array, comments.json with one comment.
     seedArtifact(root, slug);
-    const dir = join(root, 'artifacts', slug);
+    const dir = join(root, '.bizar', 'artifacts', slug);
     // Replace plan.json with empty comments, populate comments.json.
     const canvas = JSON.parse(readFileSync(join(dir, 'plan.json'), 'utf8'));
     canvas.comments = [];
@@ -339,7 +339,7 @@ test('POST /api/artifacts/:slug/submit persists feedback.md on disk', async () =
         body: JSON.stringify({ answers: [] }),
       });
       assert.equal(res.status, 200);
-      const feedbackPath = join(root, 'artifacts', slug, 'feedback.md');
+      const feedbackPath = join(root, '.bizar', 'artifacts', slug, 'feedback.md');
       assert.ok(existsSync(feedbackPath), 'feedback.md should exist on disk');
       const content = readFileSync(feedbackPath, 'utf8');
       assert.ok(content.startsWith('---'), 'starts with YAML frontmatter');

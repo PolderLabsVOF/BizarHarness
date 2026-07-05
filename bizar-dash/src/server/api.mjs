@@ -53,6 +53,7 @@ import { createMiscRouter } from './routes/misc.mjs';
 import { createEnvVarsRouter } from './routes/env-vars.mjs';
 import { createUpdateRouter } from './routes/update.mjs';
 import { createUsageRouter } from './routes/usage.mjs';
+import { createHeadroomRouter } from './routes/headroom.mjs';
 
 /**
  * @param {object} deps
@@ -132,6 +133,11 @@ export async function createApiRouter({
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
   router.use(createMinimaxRouter({ state, broadcast }));
   router.use(createUsageRouter());
+  // v5.0.0 — Headroom context compression endpoints.
+  // Mounted at /api/headroom/* so the mount-prefix stripping works correctly.
+  // Each route handler inside the router is at its bare path (e.g. '/status'),
+  // which becomes '/api/headroom/status' at the top level.
+  router.use('/headroom', createHeadroomRouter());
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

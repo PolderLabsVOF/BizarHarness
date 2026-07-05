@@ -34,6 +34,7 @@ import { Mods } from './views/Mods';
 import { ModView, type ModView as ModViewType } from './views/ModView';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
+import { Memory } from './views/Memory';
 import { History } from './views/History';
 import { MiniMaxUsage } from './views/MiniMaxUsage';
 import { BackgroundAgents } from './views/BackgroundAgents';
@@ -67,6 +68,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   chat: Chat,
   agents: Agents,
   artifacts: Artifacts,
+  memory: Memory,
   tasks: Tasks,
   activity: Activity,
   background: BackgroundAgents,

@@ -66,6 +66,17 @@ When both Obsidian vault and LightRAG are configured:
 | Related concepts discovery | LightRAG search |
 | Precise location of text | grep + read |
 
+## Memory tab in the dashboard (v4.7.0+)
+
+The dashboard's **Memory** tab (sidebar entry between Skills and Settings) surfaces LightRAG controls without leaving the browser:
+
+- **LightRAG panel** — Start / Stop / Restart / Reindex all / Rebuild graph. Rebuild graph wipes the working dir and re-runs a full reindex (idempotent — safe to re-run).
+- **Stats** — Approximate indexed-chunk count (from `kv_store_*.json`), query count last 24h, and average response time. Stats are tracked in a sidecar JSONL at `<project>/.bizar/memory-cache/lightrag-query-log.jsonl`.
+- **Quick search** — Sends `GET /api/memory/query?q=...&topK=8` and shows the raw LightRAG response.
+- **Semantic search panel** — Cross-source search: runs both LightRAG and Obsidian vault lexical search and merges results, deduped by (source, relPath).
+
+Open the tab by setting `activeTab = 'memory'` or via the Overview's Memory status card. The LightRAG stats are fetched via `GET /api/memory/lightrag/stats`; the rebuild path uses `POST /api/memory/lightrag/rebuild-graph`.
+
 ## Common Issues
 
 ### Empty search results

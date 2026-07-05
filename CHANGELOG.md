@@ -1,5 +1,37 @@
 # Changelog
 
+## v4.5.1 — Headroom default + full Memory tab
+
+### Highlights
+
+- **Headroom is now the default compression layer.** New `bizar-dash/src/server/headroom.mjs` wraps the `headroom` CLI (status, stats, install, wrap, unwrap, start, stop, startup hook). REST endpoints at `/api/headroom/*`. Settings → Headroom section with all toggles + action buttons (install, wrap, start, stop, open dashboard). Auto-install/wrap/start on dashboard startup (try/catch — startup never fails if Headroom has issues). `withHeadroomProxy()` helper routes the dashboard's own LLM calls through the proxy when enabled.
+- **Full Memory tab in dashboard.** Dedicated tab between Skills and Settings. 5 panels: Overview (composite health score), LightRAG (start/stop/reindex/rebuild + stats + quick search), Obsidian Vault (folder tree + note list + edit modal + backlinks), Git Sync (pull/push/commit/fetch + diff viewer), Semantic Search (cross-source LightRAG + Obsidian), Config. Overview tab gets a `<MemoryStatusCard>`. 11 new endpoints in `routes/memory.mjs`. Obsidian façade at `bizar-dash/src/server/memory-obsidian.mjs`.
+- **CLI:** `bizar headroom status|stats|install|wrap|unwrap|start|stop|doctor`.
+- **Skills:** dedicated `bizar-dash/skills/headroom/SKILL.md`. Extended `obsidian` and `lightrag` skills with Memory tab docs.
+- **Doc fix:** `.opencode/instructions/bizar-tools.md` — replaced broken `headroom plan --tokens` reference with accurate Headroom 0.30.0 commands.
+- **Bug fix:** `cli/bin.mjs` syntax error (single quote opened string, backtick closed it on line 915). Now compiles.
+
+### Tasks
+
+Two tasks added to the Bizar task store: `tsk_b1c8add787` (Headroom full integration) and `tsk_abb21919a5` (Full Memory tab).
+
+### Tests
+
+- 24 Headroom tests (status, install, settings)
+- 40 Memory tests (tab + lightrag-extended + obsidian)
+- 56 new tests, all passing
+- Total `npm test`: **340 pass, 0 fail**
+- `npx tsc --noEmit`: 0 errors
+- `npm run build`: success (370 KB main + 475 KB mobile JS bundles)
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@4.5.1`
+
+## v4.5.0 — Settings overhaul, provider backup keys, usage analytics, chat overhaul
+
+[Existing v4.5.0 entry was added to bizar-dash/CHANGELOG.md by the prior release]
+
 ## v4.4.3 — Repair stale bin symlinks + defensive background-mode server pin
 
 ### Bug fixes

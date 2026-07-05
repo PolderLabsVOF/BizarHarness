@@ -315,6 +315,22 @@ export async function createServer({
     broadcast: localBroadcast,
   });
 
+  // v5.0.0 — Headroom startup hook. Runs after api.mjs is loaded so the
+  // headroom routes are registered. Errors are caught and logged — startup
+  // must not fail if Headroom has issues.
+  const { headroomStartupHook } = await import('./headroom.mjs');
+  const { readSettings } = await import('./routes/_shared.mjs');
+  try {
+    const settings = readSettings();
+    if (settings?.data?.headroom) {
+      headroomStartupHook(settings.data.headroom).catch((err) => {
+        console.warn('[bizar-dash] headroomStartupHook error:', err?.message || err);
+      });
+    }
+  } catch (err) {
+    console.warn('[bizar-dash] headroom startup hook skipped:', err?.message || err);
+  }
+
   // All /api/* routes go through apiRouter (after mod routes are checked).
   // IMPORTANT: mount v2 router FIRST so `/api/v2/*` matches before
   // apiRouter's internal 404 catch-all (api.mjs line ~109) can swallow it.

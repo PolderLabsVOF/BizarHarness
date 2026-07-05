@@ -172,7 +172,7 @@ describe('upgradeFromRegistry — end-to-end with stubbed registry', () => {
   it('upgrades in place when the registry returns a newer version', async () => {
     // Install v1.0.0 from a source folder.
     const v1Source = buildTestMod(TEST_MOD_ID, '1.0.0');
-    const installed = modsLoader.installFromPath(v1Source);
+    const installed = await modsLoader.installFromPath(v1Source);
     assert.equal(installed.version, '1.0.0');
 
     // Build a fake registry entry for v2.0.0 and stub installFromRegistry
