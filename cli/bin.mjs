@@ -98,6 +98,7 @@ function showHelp() {
     doctor              Check the BizarHarness install for health issues
     heads-up <subcommand>  Manage pre-push / pre-release heads-ups (list/check/archive)
     minimax <subcommand>   Manage MiniMax Token Plan integration (key + onboarding)
+    usage                 Show compact usage analytics summary (24h rolling)
     mod <subcommand>       Manage mods (install/upgrade/list via the dashboard API)
 
   Examples:
@@ -196,6 +197,8 @@ function showUpdateHelp() {
 
   Usage:
     bizar update                       Update EVERYTHING (default; auto-kills + restarts)
+    bizar update --check               Only print current vs. latest; do not update
+    bizar update --channel=stable|beta Pick the npm dist-tag (default: stable)
     bizar update --no-restart          Don't auto-restart the dashboard after update
     bizar update --dry-run             Print what would happen, change nothing
     bizar update --force               Override .bizar/PRE_PUSH_NOTES.md blockers
@@ -223,12 +226,20 @@ function showUpdateHelp() {
       --no-restart).
     • Runs 'bizar doctor' after a successful update to catch config
       regressions before opencode tries to start.
+    • With --check: prints the version matrix and release-notes excerpt
+      between current and latest, exits non-zero if an update is available.
 
   Examples:
     bizar update                       Full auto-update (recommended)
+    bizar update --check               Show version matrix + notes, do nothing
+    bizar update --channel=beta        Upgrade to latest beta build
     bizar update --dry-run             Preview what would change
-    bizar update --pick                Pick specific components
     bizar update plugin --no-restart   Plugin-only, leave dashboard alone
+
+  Errors:
+    Network failures (registry offline / DNS) and npm permission issues
+    are surfaced with the raw npm output. The provisioner never silently
+    swallows them — look for the ✗ marker in the step output.
   `);
 }
 
@@ -731,6 +742,73 @@ async function runMinimaxCommand(minimaxArgs) {
   process.exit(1);
 }
 
+// ── Usage subcommand ───────────────────────────────────────────────────────
+
+function showUsageHelp() {
+  console.log(`
+  bizar usage — Show compact usage analytics summary
+
+  Usage:
+    bizar usage [24h|7d|30d]   Show summary for the given range (default: 24h)
+
+  Examples:
+    bizar usage
+    bizar usage 7d
+    bizar usage 30d
+  `);
+}
+
+async function runUsageCommand(args) {
+  const range = (args[0] && ['24h', '7d', '30d'].includes(args[0])) ? args[0] : '24h';
+  const { port, secret } = readDashboardConn();
+  const url = `http://127.0.0.1:${port}/api/usage?range=${range}`;
+  const headers = { accept: 'application/json' };
+  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  try {
+    const resp = await fetch(url, { method: 'GET', headers });
+    const text = await resp.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+    if (!resp.ok || !data) {
+      console.error(chalk.red(`  ✗ Failed to load usage data: ${data?.message ?? resp.statusText}`));
+      process.exit(1);
+    }
+    const t = data.totals;
+    console.log('');
+    console.log(chalk.bold(`  Usage summary — ${range} (from JSONL store)`));
+    console.log('');
+    console.log(`    ${chalk.dim('Requests:')}   ${t.requests.toLocaleString()}  (${t.errors} errors)`);
+    console.log(`    ${chalk.dim('Tokens:')}     ${t.totalTokens.toLocaleString()} total  (${t.promptTokens.toLocaleString()} prompt · ${t.completionTokens.toLocaleString()} completion)`);
+    console.log(`    ${chalk.dim('Cached:')}     ${t.cachedTokens.toLocaleString()} tokens`);
+    console.log(`    ${chalk.dim('Reasoning:')}  ${t.reasoningTokens.toLocaleString()} tokens`);
+    console.log(`    ${chalk.dim('Avg latency:')} ${t.avgLatencyMs}ms  (p95: ${t.p95LatencyMs}ms)`);
+    if (t.costEstimate > 0) {
+      console.log(`    ${chalk.dim('Est. cost:')}   $${t.costEstimate.toFixed(4)} USD`);
+    }
+    console.log('');
+    if (data.daily && data.daily.length > 0) {
+      console.log(chalk.dim(`  ${chalk.bold('Daily breakdown')}`));
+      for (const day of data.daily.slice(-7)) {
+        const barLen = Math.round((day.totalTokens / Math.max(...data.daily.map(d => d.totalTokens))) * 20);
+        const bar = '█'.repeat(barLen) + '░'.repeat(20 - barLen);
+        console.log(`    ${day.date}  ${bar}  ${day.totalTokens.toLocaleString()} tok  ${day.requests} req`);
+      }
+    }
+    if (data.perModel && data.perModel.length > 0) {
+      console.log('');
+      console.log(chalk.dim(`  ${chalk.bold('Per model')}`));
+      for (const m of data.perModel.slice(0, 8)) {
+        console.log(`    ${m.modelId.padEnd(24)} ${String(m.requests).padStart(6)} req  ${String(m.totalTokens).padStart(8)} tok`);
+      }
+    }
+    console.log('');
+  } catch (err) {
+    console.error(chalk.red(`  ✗ Network error: ${err && err.message ? err.message : String(err)}`));
+    console.error(chalk.dim('    Is the dashboard running? Run `bizar dash start` first.'));
+    process.exit(1);
+  }
+}
+
 function showDashHelp() {
   console.log(`
   bizar dash — Manage the Bizar dashboard
@@ -1083,6 +1161,9 @@ async function main() {
     // test, config, clear, reset-onboarding. All commands shell out
     // to the dashboard's /api/minimax/* routes.
     await runMinimaxCommand(args.slice(1));
+  } else if (args[0] === 'usage') {
+    // v4.6.0 — Compact usage analytics summary from the JSONL store.
+    await runUsageCommand(args.slice(1));
   } else if (args[0] === 'dash' || args[0] === 'dashboard') {
     // `bizar dashboard` is a deprecated alias for `bizar dash`
     if (args[0] === 'dashboard') {

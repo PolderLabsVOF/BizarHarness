@@ -18,7 +18,8 @@ import {
   writeFileSync,
   rmSync,
   existsSync,
-  renameSync,
+  copyFileSync,
+  unlinkSync,
   readFileSync,
   mkdirSync,
 } from 'node:fs';
@@ -91,23 +92,21 @@ async function startDashboard() {
 }
 
 let dashboardServer, dashboardBaseUrl, tmpDir;
-const SERVE_JSON_PATH = join(homedir(), '.cache', 'bizar', 'serve.json');
+let SERVE_JSON_PATH;
 let originalServeJson;
 
 before(async () => {
+  SERVE_JSON_PATH = `${tmpdir()}/bizar-test-serve-detail-${process.pid}-${Date.now()}.json`;
+  process.env.BIZAR_SERVE_JSON_PATH = SERVE_JSON_PATH;
   await startUpstream();
   await startDashboard();
   tmpDir = mkdtempSync(join(tmpdir(), 'opencode-sessions-detail-'));
-  // Snapshot any existing serve.json so we can restore it.
   if (existsSync(SERVE_JSON_PATH)) {
     originalServeJson = readFileSync(SERVE_JSON_PATH, 'utf8');
   }
-  mkdirSync(join(homedir(), '.cache', 'bizar'), { recursive: true });
 });
 
 after(async () => {
-  // Restore the real serve.json (or remove ours) before exit so we
-  // never leave a fake file behind in the user's home.
   if (originalServeJson !== undefined) {
     writeFileSync(SERVE_JSON_PATH, originalServeJson, 'utf8');
   } else if (existsSync(SERVE_JSON_PATH)) {
@@ -116,6 +115,7 @@ after(async () => {
   if (dashboardServer) await new Promise((r) => dashboardServer.close(r));
   if (upstreamServer) await new Promise((r) => upstreamServer.close(r));
   if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+  delete process.env.BIZAR_SERVE_JSON_PATH;
 });
 
 beforeEach(() => {
@@ -128,11 +128,14 @@ function writeServeJson(worktree) {
   writeFileSync(SERVE_JSON_PATH, JSON.stringify({ port: upstreamPort, password: 'test-pw', worktree, pid: 99999, startedAt: Date.now() }), 'utf8');
 }
 
-/** Move serve.json aside so readServeInfo() returns null. */
+/** Move serve.json aside so readServeInfo() returns null.
+ *  Uses copy + unlink because rename across filesystems (e.g.
+ *  /home/* → /tmp/*) throws EXDEV on Linux. */
 function moveServeJsonAside() {
   if (!existsSync(SERVE_JSON_PATH)) return;
-  const tmp = join(tmpDir, `serve-aside-${Date.now()}.json`);
-  renameSync(SERVE_JSON_PATH, tmp);
+  const tmp = join(tmpDir, `serve-aside-${Date.now()}-${process.pid}.json`);
+  copyFileSync(SERVE_JSON_PATH, tmp);
+  unlinkSync(SERVE_JSON_PATH);
 }
 
 function parseSseStream(text) {

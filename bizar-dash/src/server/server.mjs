@@ -302,6 +302,10 @@ export async function createServer({
   }
   currentBroadcast = localBroadcast;
 
+  // v4 — Load BIZAR_* env vars from ~/.config/bizar/env.json into process.env.
+  const { loadEnvJson } = await import('./routes/env-vars.mjs');
+  loadEnvJson();
+
   const apiRouter = await createApiRouter({
     state,
     watcher,

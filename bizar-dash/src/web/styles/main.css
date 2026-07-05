@@ -166,6 +166,18 @@ pre,
   --space-10: 40px;
   --space-12: 48px;
 
+  /* v4.6.0 — Semantic spacing aliases. These mirror the existing
+     --space-* numeric scale so existing rules stay untouched, and
+     new code can pick the alias that fits the intent. Use whichever
+     reads clearer at the call site; they resolve to the same pixel
+     values. Goal: kill the "is this 12 or 16?" guessing in
+     view-level padding. */
+  --spacing-xs: var(--space-1);  /* 4px  — micro gap, icon-to-text */
+  --spacing-sm: var(--space-2);  /* 8px  — tight stack, between rows */
+  --spacing-md: var(--space-3);  /* 12px — default card padding */
+  --spacing-lg: var(--space-4);  /* 16px — section padding */
+  --spacing-xl: var(--space-6);  /* 24px — page-level padding */
+
   /* Radius */
   --radius-sm: 4px;
   --radius: 8px;
@@ -415,6 +427,34 @@ pre,
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   font-size: 12px;
+}
+
+/* v3.6.2 — Token-entry form on boot-error screen */
+.token-entry-form {
+  margin: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.token-entry-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.token-entry-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.token-entry-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.token-entry-hint code {
+  background: var(--bg);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
 }
 
 /* ─── Topbar ───────────────────────────────────────────────────────── */
@@ -5581,6 +5621,12 @@ html[data-compact-mode="true"] {
   --space-4: 12px;
   --space-5: 16px;
   --space-6: 20px;
+  /* Spacing aliases track the scaled numeric scale. */
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-3);
+  --spacing-lg: var(--space-4);
+  --spacing-xl: var(--space-6);
 }
 html[data-compact-mode="true"] .kanban-col-header { padding: 4px; }
 html[data-compact-mode="true"] .task-card { padding: 6px; }

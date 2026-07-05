@@ -50,6 +50,9 @@ import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
 import { createMinimaxRouter } from './routes/minimax.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
+import { createEnvVarsRouter } from './routes/env-vars.mjs';
+import { createUpdateRouter } from './routes/update.mjs';
+import { createUsageRouter } from './routes/usage.mjs';
 
 /**
  * @param {object} deps
@@ -103,6 +106,10 @@ export async function createApiRouter({
   router.use(createHistoryRouter({ projectRoot }));
   router.use(createConfigRouter({ state, watcher }));
   router.use(createProvidersRouter());
+  router.use(createEnvVarsRouter());
+  // v4.6.0 — Update endpoints (status / check / apply). Wired with the
+  // shared broadcast so apply can stream progress via WS.
+  router.use(createUpdateRouter({ broadcast }));
   router.use(createSettingsRouter({ state, broadcast }));
   router.use(createChatRouter({ state, broadcast }));
   router.use(createOpencodeSessionsRouter());
@@ -114,12 +121,17 @@ export async function createApiRouter({
   // memory routes haven't landed yet, the dashboard still boots.
   const { createMemoryRouter } = await import('./routes/memory.mjs');
   router.use(createMemoryRouter({ projectRoot }));
+  // v4.6.0 — LightRAG settings endpoints (defaults + status). Lazy-imported
+  // so a sibling that owns this file can ship independently.
+  const { createLightragRouter } = await import('./routes/lightrag.mjs');
+  router.use(createLightragRouter({ projectRoot }));
   router.use(createDiagnosticsRouter());
   router.use(createPairRouter({ state, broadcast }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
   router.use(createMinimaxRouter({ state, broadcast }));
+  router.use(createUsageRouter());
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

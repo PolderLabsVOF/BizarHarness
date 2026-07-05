@@ -1,300 +1,190 @@
-/**
- * src/server/skills-store.mjs
- *
- * v3.1.0 — Skills registry. Wraps the `skills` CLI (npm i -g skills)
- * and exposes a stable JSON surface for the dashboard.
- *
- *   - list:   skills list --json
- *   - search: skills search <query>   (or local mock)
- *   - install: skills add <pkg>
- *   - disable / enable: edit a small registry under
- *     ~/.config/bizar/skills-state.json so we don't tamper with the
- *     upstream CLI's own state.
- */
+// src/server/skills-store.mjs
+//
+// v4.0.0 - Skills registry that scans SKILL.md files from all local
+// sources rather than relying on the `skills` CLI npm registry.
+//
+// Sources (in priority order for conflicts):
+//   1. ~/.opencode/skills/<name>/SKILL.md    - user-overridable builtins
+//   2. ~/.agents/skills/<name>/SKILL.md      - user-added skills
+//   3. bizar-dash/skills/<name>/SKILL.md     - BizarHarness shipped
+//   4. .agents/skills/<name>/SKILL.md        - project-local
+//   5. .opencode/skills/<name>/SKILL.md      - project-local
+//
+// Each SKILL.md is parsed for YAML frontmatter (description:) and
+// the first # H1 heading (display name fallback).  No external deps.
 import {
   existsSync,
+  readdirSync,
   readFileSync,
-  writeFileSync,
-  renameSync,
-  mkdirSync,
+  statSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
-const execFileP = promisify(execFile);
 const HOME = homedir();
-const STATE_FILE = join(HOME, '.config', 'bizar', 'skills-state.json');
 
-// Atomic JSON write: serialize to a sibling temp file, then rename into
-// place. `rename` is atomic on POSIX (same filesystem), so a crash
-// between write and rename never leaves a half-written / corrupt file.
-function atomicWriteJson(filePath, data) {
-  const tmp = `${filePath}.tmp.${process.pid}`;
-  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
-  renameSync(tmp, filePath);
-}
+/** Project root is injected at construction time. */
+let PROJECT_ROOT = process.cwd();
 
-/**
- * Categories surfaced in the Skills view. Matched against the
- * `category` field returned by `skills list --json`. The CLI's actual
- * output is loosely categorized, so we accept any string.
- */
-export const CATEGORIES = [
-  { id: 'all', label: 'All', icon: 'sparkles' },
-  { id: 'languages', label: 'Programming Languages', icon: 'code' },
-  { id: 'frameworks', label: 'Frameworks', icon: 'layers' },
-  { id: 'tools', label: 'Tools', icon: 'wrench' },
-  { id: 'testing', label: 'Testing', icon: 'flask' },
-  { id: 'design', label: 'Design', icon: 'palette' },
-  { id: 'reasoning', label: 'Reasoning', icon: 'brain' },
-  { id: 'planning', label: 'Planning', icon: 'map' },
-  { id: 'gitops', label: 'GitOps', icon: 'git-branch' },
-  { id: 'docs', label: 'Docs', icon: 'book' },
-];
+export function setProjectRoot(p) { PROJECT_ROOT = p; }
 
-function loadState() {
-  try {
-    if (!existsSync(STATE_FILE)) return {};
-    return JSON.parse(readFileSync(STATE_FILE, 'utf8')) || {};
-  } catch {
-    return {};
-  }
-}
+// -- Source directories --------------------------------------------------------
 
-function saveState(state) {
-  try {
-    mkdirSync(dirname(STATE_FILE), { recursive: true });
-    atomicWriteJson(STATE_FILE, state);
-  } catch {
-    /* best effort */
-  }
-}
-
-function safeExec(args, { timeoutMs = 8000 } = {}) {
-  return execFileP('skills', args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 })
-    .then((r) => r.stdout)
-    .catch((err) => {
-      // Don't throw — return empty so the UI can fall back to a mock.
-      // eslint-disable-next-line no-console
-      console.warn('[skills] command failed:', err.message);
-      return '';
-    });
-}
-
-/** Local mock used as a fallback if the CLI isn't installed. */
-function mockCatalog() {
+/** All SKILL.md scan roots in priority order (first wins for conflicts). */
+function sourceRoots() {
   return [
-    {
-      id: 'anthropics/skills',
-      name: 'Anthropic Skills',
-      description: 'Curated skill set from Anthropic — Claude prompt patterns, agents, evals.',
-      category: 'reasoning',
-      source: 'anthropics/skills',
-      tags: ['reasoning', 'agents'],
-      version: '1.0.0',
-      installCmd: 'skills add anthropics/skills',
-    },
-    {
-      id: 'vercel-labs/agent-skills',
-      name: 'Vercel Agent Skills',
-      description: 'Vercel-Labs agent skill set — React, Next.js, frontend performance.',
-      category: 'frameworks',
-      source: 'vercel-labs/agent-skills',
-      tags: ['react', 'nextjs', 'frontend'],
-      version: '1.0.0',
-      installCmd: 'skills add vercel-labs/agent-skills',
-    },
-    {
-      id: 'supabase/agent-skills',
-      name: 'Supabase Agent Skills',
-      description: 'Supabase agent skill set — Postgres, Auth, Edge Functions.',
-      category: 'tools',
-      source: 'supabase/agent-skills',
-      tags: ['postgres', 'auth'],
-      version: '1.0.0',
-      installCmd: 'skills add supabase/agent-skills',
-    },
-    {
-      id: 'mattpocock/skills',
-      name: 'Matt Pocock Skills',
-      description: 'TypeScript, TDD, testing patterns from Matt Pocock.',
-      category: 'testing',
-      source: 'mattpocock/skills',
-      tags: ['typescript', 'tdd'],
-      version: '1.0.0',
-      installCmd: 'skills add mattpocock/skills',
-    },
-    {
-      id: 'cloudflare/skills',
-      name: 'Cloudflare Skills',
-      description: 'Cloudflare Workers, Durable Objects, Agents SDK.',
-      category: 'tools',
-      source: 'cloudflare/skills',
-      tags: ['cloudflare', 'workers'],
-      version: '1.0.0',
-      installCmd: 'skills add cloudflare/skills',
-    },
-    {
-      id: 'anthropics/claude-code-skills',
-      name: 'Claude Code Skills',
-      description: 'Skills for Claude Code — prompt patterns and tool usage.',
-      category: 'reasoning',
-      source: 'anthropics/claude-code-skills',
-      tags: ['claude', 'code'],
-      version: '1.0.0',
-      installCmd: 'skills add anthropics/claude-code-skills',
-    },
+    { dir: join(HOME, '.opencode', 'skills'),   source: 'user'    },
+    { dir: join(HOME, '.agents', 'skills'),     source: 'user'    },
+    { dir: join(PROJECT_ROOT, 'bizar-dash', 'skills'), source: 'shipped' },
+    { dir: join(PROJECT_ROOT, '.agents', 'skills'),   source: 'project' },
+    { dir: join(PROJECT_ROOT, '.opencode', 'skills'), source: 'project' },
   ];
 }
 
-function inferCategoryFromTags(tags = []) {
-  const lower = tags.map((t) => t.toLowerCase());
-  if (lower.some((t) => /react|next|vue|svelte|frontend|tailwind/.test(t))) return 'frameworks';
-  if (lower.some((t) => /tdd|test|jest|vitest|playwright|pytest/.test(t))) return 'testing';
-  if (lower.some((t) => /postgres|auth|cloudflare|supabase|kubernetes|docker/.test(t))) return 'tools';
-  if (lower.some((t) => /design|ui|ux|figma|tailwind|theme/.test(t))) return 'design';
-  if (lower.some((t) => /reasoning|agent|claude|gpt|llm|chat/.test(t))) return 'reasoning';
-  if (lower.some((t) => /plan|roadmap|architecture/.test(t))) return 'planning';
-  if (lower.some((t) => /git|github|gh|ci|deploy/.test(t))) return 'gitops';
-  if (lower.some((t) => /doc|readme|wiki|changelog/.test(t))) return 'docs';
-  if (lower.some((t) => /python|js|ts|rust|go|kotlin|swift|c\+\+|ruby|java|php/.test(t))) return 'languages';
-  return 'tools';
+// -- Frontmatter parser (no external deps) ------------------------------------
+
+/**
+ * Parse YAML frontmatter from a SKILL.md string.
+ * Returns { description, name, ...rest } from frontmatter, plus the body.
+ */
+function parseFrontmatter(raw) {
+  const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  if (!fmMatch) return { description: '', name: '', body: raw };
+
+  const fmStr = fmMatch[1];
+  const body  = fmMatch[2];
+  const fm    = {};
+
+  // Very simple YAML key: value parser (values only - no nested structures)
+  for (const line of fmStr.split('\n')) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx < 0) continue;
+    const key = line.slice(0, colonIdx).trim();
+    const val = line.slice(colonIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+    fm[key] = val;
+  }
+
+  return {
+    description: fm.description || '',
+    name:        fm.name        || '',
+    body,
+    ...fm,
+  };
 }
 
-export const skillsStore = {
-  STATE_FILE,
-  CATEGORIES,
+/**
+ * Extract display name from body: first # Heading or ## Heading.
+ * Returns null if none found.
+ */
+function extractHeading(body) {
+  const m = body.match(/^#{1,2}\s+(.+)$/m);
+  return m ? m[1].trim() : null;
+}
 
-  /** List installed skills. */
-  async list() {
-    const state = loadState();
-    const out = await safeExec(['list', '--json']);
-    let items = [];
-    if (out && out.trim().startsWith('[')) {
+// -- Core scanner -------------------------------------------------------------
+
+/**
+ * Scan one directory for SKILL.md files.
+ * Returns an array of parsed skill objects.
+ */
+function scanDir(dir, source) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const mdPath = join(dir, entry.name, 'SKILL.md');
+      if (!existsSync(mdPath)) continue;
+      let raw;
       try {
-        items = JSON.parse(out);
+        raw = readFileSync(mdPath, 'utf8');
       } catch {
-        items = [];
+        continue;
       }
-    } else if (out && out.trim().startsWith('{')) {
-      // Some versions return { skills: [...] }
-      try {
-        const parsed = JSON.parse(out);
-        items = parsed.skills || parsed.items || [];
-      } catch {
-        items = [];
-      }
-    }
-    // If the CLI is not installed or returned nothing, fall back to a
-    // minimal local mock so the UI is still useful in dev.
-    if (items.length === 0) {
-      items = mockCatalog().map((m) => ({ ...m, installed: true, mock: true }));
-    }
-    return items.map((it) => {
-      const id = it.id || it.name || it.source || it.path || 'unknown';
-      const name = it.name || id.split('/').pop() || id;
-      const tags = Array.isArray(it.tags) ? it.tags : [];
-      const category = it.category || inferCategoryFromTags(tags);
-      const enabled = state[id]?.enabled !== false; // default enabled
-      return {
-        id,
-        name,
-        description: it.description || '',
-        category,
-        tags,
-        version: it.version || '0.0.0',
-        source: it.source || id,
-        path: it.path || null,
-        installed: true,
-        enabled,
-        mock: !!it.mock,
-      };
-    });
-  },
+      const { description, name: fmName, body } = parseFrontmatter(raw);
+      const displayName = fmName || extractHeading(body) || entry.name;
+      const relPath = mdPath; // absolute path to the file
 
-  /** Search the registry. Falls back to a mock local index. */
-  async search(query) {
-    const trimmed = (query || '').trim();
-    let items = [];
-    if (trimmed) {
-      const out = await safeExec(['search', trimmed]);
-      if (out) {
-        try {
-          const parsed = JSON.parse(out);
-          items = Array.isArray(parsed) ? parsed : parsed.results || parsed.items || [];
-        } catch {
-          // Fall through to text-mode parse.
-          items = out
-            .split(/\r?\n/)
-            .filter((l) => l.trim())
-            .map((l) => ({ name: l.trim(), id: l.trim(), source: l.trim() }));
-        }
-      }
-    }
-    if (items.length === 0) {
-      // Mock fallback: filter the mock catalog by query.
-      const q = trimmed.toLowerCase();
-      items = mockCatalog().filter((m) =>
-        !q ||
-        m.name.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q) ||
-        m.tags.some((t) => t.toLowerCase().includes(q)),
-      );
-      if (items.length === 0 && !q) items = mockCatalog();
-    }
-    return items.map((it) => {
-      const id = it.id || it.name || it.source || 'unknown';
-      const name = it.name || id.split('/').pop() || id;
-      const tags = Array.isArray(it.tags) ? it.tags : [];
-      return {
-        id,
-        name,
-        description: it.description || '',
-        category: it.category || inferCategoryFromTags(tags),
-        tags,
-        version: it.version || '0.0.0',
-        source: it.source || id,
-        installCmd: it.installCmd || `skills add ${id}`,
-      };
-    });
-  },
-
-  /** Install a skill by name/source. */
-  async install(name, source) {
-    const target = source || name;
-    try {
-      const { stdout, stderr } = await execFileP('skills', ['add', target], {
-        timeout: 60_000,
-        maxBuffer: 4 * 1024 * 1024,
+      out.push({
+        name:        displayName,
+        description: description.slice(0, 200),
+        source,
+        path:        relPath,
+        body,        // full body for detail view
       });
-      return {
-        ok: true,
-        name: target,
-        output: [stdout, stderr].filter(Boolean).join('\n').trim(),
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        name: target,
-        error: err instanceof Error ? err.message : String(err),
-      };
     }
+  } catch {
+    // Directory unreadable - skip
+  }
+  return out;
+}
+
+/** In-memory cache with manual invalidation. */
+let _cache    = null;
+let _cacheAge = 0;
+const CACHE_TTL_MS = 30_000;
+
+function getCache() {
+  if (_cache && Date.now() - _cacheAge < CACHE_TTL_MS) return _cache;
+  const skills = [];
+  for (const { dir, source } of sourceRoots()) {
+    skills.push(...scanDir(dir, source));
+  }
+  _cache    = skills;
+  _cacheAge = Date.now();
+  return skills;
+}
+
+export function invalidateCache() {
+  _cache    = null;
+  _cacheAge = 0;
+}
+
+// -- Fuzzy search (simple includes-based, no external deps) --------------------
+
+function fuzzyMatch(skill, q) {
+  const hay = `${skill.name} ${skill.description}`.toLowerCase();
+  const terms = q.toLowerCase().split(/\s+/);
+  return terms.every((t) => hay.includes(t));
+}
+
+function stripAnsi(str) {
+  return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+}
+
+// -- Public API ----------------------------------------------------------------
+
+export const skillsStore = {
+  /** List all skills grouped by source. */
+  async list() {
+    return getCache();
   },
 
-  /** Disable a skill (kept on disk, not loaded). */
-  disable(id) {
-    const state = loadState();
-    state[id] = { ...(state[id] || {}), enabled: false, disabledAt: Date.now() };
-    saveState(state);
-    return { ok: true, enabled: false };
+  /**
+   * Fuzzy search by name + description.
+   * Returns plain objects - NO ANSI codes, NO formatted terminal output.
+   */
+  async search(query) {
+    const q = (query || '').trim();
+    const all = getCache();
+    if (!q) return all;
+    return all.filter((s) => fuzzyMatch(s, q));
   },
 
-  enable(id) {
-    const state = loadState();
-    state[id] = { ...(state[id] || {}), enabled: true, enabledAt: Date.now() };
-    saveState(state);
-    return { ok: true, enabled: true };
+  /**
+   * Return a single skill by source + name.
+   */
+  async get(source, name) {
+    const all = getCache();
+    return all.find(
+      (s) => s.source === source && (s.name === name || s.path.endsWith(`/${name}/SKILL.md`)),
+    ) || null;
+  },
+
+  /** Force a cache refresh. */
+  refresh() {
+    invalidateCache();
+    return getCache();
   },
 };

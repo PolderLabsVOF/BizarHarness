@@ -308,11 +308,31 @@ export async function fetchRemains({ force = false } = {}) {
   if (!force) {
     const cached = readCachedRemains();
     if (cached && cached.apiKeyHint === maskKey(resolved.key) && (Date.now() - cached.fetchedAt) < 60_000) {
+      // Cached — still record it so usage totals stay honest.
+      await recordUsageDynamic({
+        providerId: 'minimax',
+        modelId: 'unknown',
+        endpoint: 'remains',
+        requestId: `rem_${Math.random().toString(36).slice(2, 9)}`,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        cachedTokens: 0,
+        reasoningTokens: 0,
+        latencyMs: 0,
+        finishReason: null,
+        error: null,
+        keyEnvVar: resolved.source,
+        isBackup: false,
+        cached: true,
+      });
       return { ok: true, cached: true, ...cached };
     }
   }
   const urls = resolveBaseUrls();
   const url = `${urls.tokenBase.replace(/\/$/, '')}/v1/token_plan/remains?group_id=${encodeURIComponent(resolved.groupId)}`;
+  const requestId = `rem_${Math.random().toString(36).slice(2, 9)}`;
+  const startMs = Date.now();
   let resp;
   try {
     resp = await fetchWithTimeout(url, {
@@ -324,27 +344,101 @@ export async function fetchRemains({ force = false } = {}) {
       },
     });
   } catch (err) {
+    const latencyMs = Date.now() - startMs;
+    await recordUsageDynamic({
+      providerId: 'minimax',
+      modelId: 'unknown',
+      endpoint: 'remains',
+      requestId,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cachedTokens: 0,
+      reasoningTokens: 0,
+      latencyMs,
+      finishReason: null,
+      error: { code: 'network_error', message: err.message || 'fetch failed' },
+      keyEnvVar: resolved.source,
+      isBackup: false,
+      cached: false,
+    });
     return { ok: false, error: 'network_error', message: err.message || 'fetch failed' };
   }
+  const latencyMs = Date.now() - startMs;
   const text = await resp.text();
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { /* keep as null */ }
   if (!resp.ok) {
+    const errMsg = body?.base_resp?.status_msg || resp.statusText || 'request failed';
+    await recordUsageDynamic({
+      providerId: 'minimax',
+      modelId: 'unknown',
+      endpoint: 'remains',
+      requestId,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cachedTokens: 0,
+      reasoningTokens: 0,
+      latencyMs,
+      finishReason: null,
+      error: { code: `http_${resp.status}`, message: errMsg },
+      keyEnvVar: resolved.source,
+      isBackup: false,
+      cached: false,
+    });
     return {
       ok: false,
       error: `http_${resp.status}`,
-      message: body?.base_resp?.status_msg || resp.statusText || 'request failed',
+      message: errMsg,
       status: resp.status,
     };
   }
   if (!body || body.base_resp?.status_code !== 0) {
+    const errMsg = body?.base_resp?.status_msg || 'unknown error';
+    await recordUsageDynamic({
+      providerId: 'minimax',
+      modelId: 'unknown',
+      endpoint: 'remains',
+      requestId,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cachedTokens: 0,
+      reasoningTokens: 0,
+      latencyMs,
+      finishReason: null,
+      error: { code: 'api_error', message: errMsg },
+      keyEnvVar: resolved.source,
+      isBackup: false,
+      cached: false,
+    });
     return {
       ok: false,
       error: 'api_error',
-      message: body?.base_resp?.status_msg || 'unknown error',
+      message: errMsg,
       raw: body,
     };
   }
+
+  // Record success for remains (no token metering — it's a quota check).
+  await recordUsageDynamic({
+    providerId: 'minimax',
+    modelId: 'unknown',
+    endpoint: 'remains',
+    requestId,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    cachedTokens: 0,
+    reasoningTokens: 0,
+    latencyMs,
+    finishReason: null,
+    error: null,
+    keyEnvVar: resolved.source,
+    isBackup: false,
+    cached: false,
+  });
 
   // Augment with ISO timestamps + human labels for the UI.
   const models = (body.model_remains || []).map((m) => ({
@@ -403,6 +497,8 @@ export async function chatCompletion({
     max_completion_tokens: maxTokens,
     stream: false,
   });
+  const requestId = `msg_${Math.random().toString(36).slice(2, 9)}`;
+  const startMs = Date.now();
   let resp;
   try {
     resp = await fetchWithTimeout(url, {
@@ -415,39 +511,134 @@ export async function chatCompletion({
       body,
     });
   } catch (err) {
+    // Record error usage.
+    await recordUsageDynamic({
+      providerId: 'minimax',
+      modelId: model,
+      endpoint: 'chat',
+      requestId,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cachedTokens: 0,
+      reasoningTokens: 0,
+      latencyMs: Date.now() - startMs,
+      finishReason: null,
+      error: { code: 'network_error', message: err.message || 'fetch failed' },
+      keyEnvVar: resolved.source,
+      isBackup: false,
+      cached: false,
+    });
     return { ok: false, error: 'network_error', message: err.message || 'fetch failed' };
   }
+  const latencyMs = Date.now() - startMs;
   const text = await resp.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* ignore */ }
   if (!resp.ok) {
+    const errMsg = data?.base_resp?.status_msg || resp.statusText || 'request failed';
+    // Record error usage.
+    await recordUsageDynamic({
+      providerId: 'minimax',
+      modelId: model,
+      endpoint: 'chat',
+      requestId,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cachedTokens: 0,
+      reasoningTokens: 0,
+      latencyMs,
+      finishReason: null,
+      error: { code: `http_${resp.status}`, message: errMsg },
+      keyEnvVar: resolved.source,
+      isBackup: false,
+      cached: false,
+    });
     return {
       ok: false,
       error: `http_${resp.status}`,
-      message: data?.base_resp?.status_msg || resp.statusText || 'request failed',
+      message: errMsg,
       status: resp.status,
       raw: data,
     };
   }
   if (!data || data.base_resp?.status_code !== 0) {
+    const errMsg = data?.base_resp?.status_msg || 'unknown error';
+    // Record error usage.
+    await recordUsageDynamic({
+      providerId: 'minimax',
+      modelId: model,
+      endpoint: 'chat',
+      requestId,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cachedTokens: 0,
+      reasoningTokens: 0,
+      latencyMs,
+      finishReason: null,
+      error: { code: 'api_error', message: errMsg },
+      keyEnvVar: resolved.source,
+      isBackup: false,
+      cached: false,
+    });
     return {
       ok: false,
       error: 'api_error',
-      message: data?.base_resp?.status_msg || 'unknown error',
+      message: errMsg,
       raw: data,
     };
   }
   const choice = (data.choices || [])[0] || {};
   const content = choice?.message?.content || '';
+  const usage = data.usage || null;
+  const promptTokens     = usage?.prompt_tokens ?? 0;
+  const completionTokens = usage?.completion_tokens ?? 0;
+  const totalTokens     = usage?.total_tokens ?? promptTokens + completionTokens;
+  const cachedTokens    = usage?.prompt_tokens_details?.cached_tokens ?? 0;
+  const reasoningTokens = usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+
+  // Record success usage.
+  await recordUsageDynamic({
+    providerId: 'minimax',
+    modelId: data.model || model,
+    endpoint: 'chat',
+    requestId,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cachedTokens,
+    reasoningTokens,
+    latencyMs,
+    finishReason: choice?.finish_reason || null,
+    error: null,
+    keyEnvVar: resolved.source,
+    isBackup: false,
+    cached: false,
+  });
+
   return {
     ok: true,
     model: data.model || model,
     content,
     reasoning: choice?.message?.reasoning_content || null,
     finishReason: choice?.finish_reason || null,
-    usage: data.usage || null,
+    usage,
     baseResp: data.base_resp,
   };
+}
+
+/**
+ * Dynamically import the usage store and record a usage entry.
+ * Separated from chatCompletion() to avoid a circular import.
+ * @param {object} record
+ */
+async function recordUsageDynamic(record) {
+  try {
+    const { recordUsage } = await import('./minimax-usage-store.mjs');
+    recordUsage(record);
+  } catch { /* best-effort — usage recording must never break the API */ }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

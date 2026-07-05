@@ -1,5 +1,9 @@
-// src/web/mobile/views/MobileChat.tsx — mobile-adapted chat using shared components.
-// Composer state (agent, model, text, attachments) is local.
+// src/web/mobile/views/MobileChat.tsx — mobile chat (v4.2.5).
+//
+// v4.2.5 — matches Chat.tsx overhaul: opencode session-create via the
+// new endpoint, source-routed composer (opencode send vs. local chat),
+// source indicator badge, rename / delete / export on the info panel,
+// and matching busy flags.
 
 import { useEffect, useRef, useState } from 'react';
 import { ChatTopBar } from '../../components/chat/ChatTopBar';
@@ -22,28 +26,41 @@ interface Props {
   onClearTaskId?: () => void;
 }
 
-export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, onClearTaskId }: Props) {
+export function MobileChat({
+  snapshot,
+  settings,
+  setActiveTab,
+  initialTaskId,
+  onClearTaskId,
+}: Props) {
   const toast = useToast();
   const modal = useModal();
 
   const chat = useChat(snapshot, settings, initialTaskId ?? '');
+  useEffect(() => {
+    chat.setToast({
+      error: (msg: string) => toast.error(msg),
+      success: (msg: string) => toast.success(msg),
+      info: (msg: string) => toast.info(msg),
+      warning: (msg: string) => toast.warning(msg),
+    });
+  }, [chat, toast]);
 
   const [text, setText] = useState('');
   const [agent, setAgent] = useState(settings.defaultAgent || 'odin');
   const [model, setModel] = useState(settings.defaultModel || '');
   const [attachments, setAttachments] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { allCommands, suggestions, setQuery } = useSlashCommands(snapshot);
-
-  useEffect(() => { setQuery(text); }, [text, setQuery]);
+  useEffect(() => {
+    setQuery(text);
+  }, [text, setQuery]);
 
   const onAttach = () => fileInputRef.current?.click();
-
   const onFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -56,30 +73,19 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const msg = text.trim();
     if (!msg) return;
     setText('');
     setQuery('');
-    chat.onSend(msg, agent, model, attachments);
+    const result = await chat.onSend(msg, agent, model, attachments);
+    if (result.ok) chat.jumpToLatest();
   };
 
   const handleCreateSession = async () => {
-    if (creating) return;
-    if (!snapshot.activeProject) {
-      toast.warning('Pick a project in Overview to scope chat sessions.', 4000);
-      return;
-    }
-    setCreating(true);
-    try {
-      const created = await fetch('/chat/sessions', { method: 'POST' }).then((r) => r.json());
-      chat.loadChat(created.id);
-      toast.success(`Session ${created.id} created.`);
-    } catch (err) {
-      toast.error(`Create failed: ${(err as Error).message}`);
-    } finally {
-      setCreating(false);
-    }
+    if (chat.busy.create) return;
+    await chat.onCreateSession();
+    setSessionsOpen(false);
   };
 
   const handleDelete = (idx: number) => {
@@ -88,13 +94,43 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
       children: <p style={{ margin: 0 }}>This action cannot be undone.</p>,
       footer: (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <Button variant="secondary" size="sm" onClick={() => modal.close()}>Cancel</Button>
+          <Button variant="secondary" size="sm" onClick={() => modal.close()}>
+            Cancel
+          </Button>
           <Button
             variant="danger"
             size="sm"
             onClick={() => {
               modal.close();
               chat.deleteMessage(idx);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    });
+  };
+
+  const handleDeleteSession = (id: string, title: string) => {
+    modal.open({
+      title: 'Delete session?',
+      children: (
+        <p style={{ margin: 0 }}>
+          Delete <strong>{title}</strong>? This cannot be undone.
+        </p>
+      ),
+      footer: (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Button variant="secondary" size="sm" onClick={() => modal.close()}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={async () => {
+              modal.close();
+              await chat.deleteSession(id);
             }}
           >
             Delete
@@ -116,7 +152,9 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
         onOpenOverview={() => setActiveTab?.('overview')}
       />
       <div className="chat-body">
-        <aside className={`chat-sessions ${!sessionsOpen ? 'chat-sessions-hidden' : ''}`}>
+        <aside
+          className={`chat-sessions ${!sessionsOpen ? 'chat-sessions-hidden' : ''}`}
+        >
           <SessionList
             sessions={chat.sessions}
             opencodeSessions={chat.opencodeSessions}
@@ -126,19 +164,30 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
             onCreateSession={handleCreateSession}
             onSelectSession={chat.selectBizarSession}
             onSelectOpencodeSession={(s) => chat.loadOpencodeSession(s.id)}
-            creating={creating}
+            creating={chat.busy.create}
           />
         </aside>
 
         <main className="chat-main">
           <ChatThread
-            messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
+            messages={
+              chat.activeSource === 'opencode'
+                ? chat.opencodeMessages
+                : chat.bizarMessages
+            }
             loading={chat.loading}
             activeProject={snapshot.activeProject}
-            sessionId={chat.activeSource === 'opencode' ? (chat.activeOpencodeSessionId ?? chat.sessionId) : chat.sessionId}
+            sessionId={
+              chat.activeSource === 'opencode'
+                ? chat.activeOpencodeSessionId ?? chat.sessionId
+                : chat.sessionId
+            }
             pinned={chat.pinned}
+            activeSource={chat.activeSource}
             onPickSuggestion={(t) => setText(t)}
-            onCopy={(m) => chat.copyMessage(m as Parameters<typeof chat.copyMessage>[0])}
+            onCopy={(m) =>
+              chat.copyMessage(m as Parameters<typeof chat.copyMessage>[0])
+            }
             onDelete={handleDelete}
             onTogglePin={chat.togglePin}
             onRegenerate={chat.onRegenerate}
@@ -151,6 +200,7 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
             text={text}
             setText={setText}
             sending={chat.sending}
+            activeSource={chat.activeSource}
             onSend={handleSend}
             attachments={attachments}
             setAttachments={setAttachments}
@@ -161,19 +211,44 @@ export function MobileChat({ snapshot, settings, setActiveTab, initialTaskId, on
             sessionsOpen={sessionsOpen}
             infoOpen={infoOpen}
           />
-          <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={onFiles} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={onFiles}
+          />
         </main>
 
-        <aside className={`chat-info ${!infoOpen ? 'chat-info-hidden' : ''}`}>
+        <aside
+          className={`chat-info ${!infoOpen ? 'chat-info-hidden' : ''}`}
+        >
           <InfoPanel
-            sessionId={chat.activeSource === 'opencode' ? (chat.activeOpencodeSessionId ?? chat.sessionId) : chat.sessionId}
-            messages={chat.activeSource === 'opencode' ? chat.opencodeMessages : chat.bizarMessages}
+            sessionId={
+              chat.activeSource === 'opencode'
+                ? chat.activeOpencodeSessionId ?? chat.sessionId
+                : chat.sessionId
+            }
+            messages={
+              chat.activeSource === 'opencode'
+                ? chat.opencodeMessages
+                : chat.bizarMessages
+            }
             pinned={chat.pinned}
             agent={agent}
             model={model}
             agents={snapshot.agents || []}
             mcps={snapshot.mcps || []}
             allCommands={allCommands}
+            activeSource={chat.activeSource}
+            onDelete={() => {
+              const id =
+                chat.activeSource === 'opencode'
+                  ? chat.activeOpencodeSessionId
+                  : chat.sessionId;
+              if (!id) return;
+              handleDeleteSession(id, id);
+            }}
           />
         </aside>
       </div>

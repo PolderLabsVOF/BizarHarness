@@ -8,6 +8,8 @@
  * /api/config/providers (POST)          — add
  * /api/config/providers/:id (PUT)       — update
  * /api/config/providers/:id (DELETE)    — remove
+ * /api/config/providers/auto (POST)     — add with key, auto-discover models
+ *                                          + apply systemLlm config
  * /api/config/mcps                      — list MCP servers
  * /api/config/mcps (POST)               — add
  * /api/config/mcps/:id (PUT)            — update
@@ -22,7 +24,12 @@
 import { Router } from 'express';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { providersStore, mcpsStore } from '../providers-store.mjs';
+import {
+  providersStore,
+  mcpsStore,
+  loadConfig,
+  saveConfig,
+} from '../providers-store.mjs';
 import { OPENCODE_JSON, atomicWriteJson, safeReadJSON, wrap } from './_shared.mjs';
 
 /**
@@ -101,9 +108,53 @@ export function createConfigRouter({ state, watcher }) {
     res.status(204).end();
   }));
 
+  // v4.4.14 — "Add with key" — the user pastes a key, we figure out the
+  // rest. Auto-discovers the live model list (probes /v1/models), writes
+  // the full provider block, and (if requested) applies the system LLM
+  // config so the rest of the dashboard's /api/llm/* calls hit this
+  // provider+model.
+  router.post('/config/providers/auto', wrap(async (req, res) => {
+    const body = req.body || {};
+    const result = await providersStore.addWithAuto({
+      id: typeof body.id === 'string' ? body.id.trim() : undefined,
+      name: typeof body.name === 'string' ? body.name.trim() : undefined,
+      apiKey: typeof body.apiKey === 'string' ? body.apiKey : '',
+      groupId: typeof body.groupId === 'string' ? body.groupId : 'default',
+      setAsSystemLlm: body.setAsSystemLlm !== false,
+      preferredModel: typeof body.preferredModel === 'string' ? body.preferredModel : undefined,
+      systemLlmModel: typeof body.systemLlmModel === 'string' ? body.systemLlmModel : undefined,
+    });
+    if (!result.ok) {
+      res.status(result.error === 'unknown_provider' ? 400 : 400).json(result);
+      return;
+    }
+    res.status(201).json(result);
+  }));
+
   // ── /api/config/mcps ───────────────────────────────────────────────────
   router.get('/config/mcps', wrap(async (_req, res) => {
     res.json({ mcps: mcpsStore.list() });
+  }));
+
+  // v4.4.14 — System LLM settings. The dashboard reads / writes the
+  // opencode.json#systemLlm block via this thin surface. The block
+  // controls which provider+model is used for the dashboard's own
+  // /api/llm/* calls (auto-title, enhance-prompt, summarization).
+  router.get('/llm/system-llm', wrap(async (_req, res) => {
+    const cfg = loadConfig();
+    res.json(cfg.systemLlm || { enabled: false, provider: null, model: null });
+  }));
+
+  router.put('/llm/system-llm', wrap(async (req, res) => {
+    const cfg = loadConfig();
+    const body = req.body || {};
+    cfg.systemLlm = {
+      enabled: body.enabled !== false,
+      provider: typeof body.provider === 'string' ? body.provider : (cfg.systemLlm?.provider || null),
+      model: typeof body.model === 'string' ? body.model : (cfg.systemLlm?.model || null),
+    };
+    saveConfig(cfg);
+    res.json(cfg.systemLlm);
   }));
 
   router.post('/config/mcps', wrap(async (req, res) => {

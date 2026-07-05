@@ -1121,15 +1121,129 @@ export async function runProvision(opts = {}) {
  * `cli/update.mjs` (the bin.mjs-facing module) can stay a thin shim
  * without duplicating flag parsing. Accepts the legacy `subargs: string[]`
  * shape so any external callers keep working.
+ *
+ * Recognized flags (v4.4.14):
+ *   --check           Only print current vs. latest, don't update.
+ *   --channel <name>  npm dist-tag (stable | beta). Default: stable.
+ *   --no-restart      Don't auto-restart the dashboard after update.
+ *   --dry-run         Print what would happen, change nothing.
+ *   --force           Override .bizar/PRE_PUSH_NOTES.md blockers.
+ *   --yes / -y        Same as --force, but named for one-line scripts.
+ *   --with-mods <csv> Opt-in: install specific mods as part of the run.
+ *
+ * With --check, we print the version matrix and release notes between
+ * current and latest, then return without touching the system.
  */
 export async function runUpdate(subargs = []) {
+  const args = Array.isArray(subargs) ? subargs : [];
+  const checkOnly = args.includes('--check');
+
+  // --channel <name> — extract a single value. Accepts both
+  //   --channel=beta     (equals form)
+  //   --channel beta     (separate-arg form)
+  // Default: 'stable'.
+  let channel = 'stable';
+  const eqArg = args.find((a) => a.startsWith('--channel='));
+  if (eqArg) {
+    const value = eqArg.slice('--channel='.length);
+    if (value === 'stable' || value === 'beta') {
+      channel = value;
+    } else {
+      console.log(chalk.yellow(`  ⚠ Unknown channel "${value}". Using "stable".`));
+    }
+  } else {
+    const channelIdx = args.indexOf('--channel');
+    if (channelIdx >= 0) {
+      const value = args[channelIdx + 1];
+      if (!value || value.startsWith('--')) {
+        console.log(chalk.yellow('  ⚠ --channel needs a value (stable | beta). Using "stable".'));
+      } else if (value !== 'stable' && value !== 'beta') {
+        console.log(chalk.yellow(`  ⚠ Unknown channel "${value}". Using "stable".`));
+      } else {
+        channel = value;
+      }
+    }
+  }
+
+  if (checkOnly) {
+    return runCheck(channel);
+  }
+
+  // Pass channel through to the provisioner. The provisioner does the
+  // actual npm install; channel maps to the npm dist-tag suffix.
   return runProvision({
     mode: 'update',
-    dryRun: subargs.includes('--dry-run'),
-    force: subargs.includes('--force'),
-    yes: subargs.includes('--yes') || subargs.includes('-y'),
-    restart: !subargs.includes('--no-restart'),
+    dryRun: args.includes('--dry-run'),
+    force: args.includes('--force'),
+    yes: args.includes('--yes') || args.includes('-y'),
+    restart: !args.includes('--no-restart'),
+    channel,
   });
+}
+
+/**
+ * v4.4.14 — `bizar update --check`. Print the version matrix and (if
+ * a newer version exists) the release notes between current and latest.
+ * Does NOT touch the system. Exits non-zero when an update is available
+ * so callers can use it in CI / pre-flight scripts.
+ */
+export async function runCheck(channel = 'stable') {
+  console.log(chalk.bold.hex('#a855f7')('\n  ᚦ BIZAR UPDATE — CHECK ᚦ\n'));
+  console.log(chalk.dim(`  Channel: ${channel}\n`));
+
+  const state = detectState();
+  printVersionMatrix([
+    { label: 'opencode-ai', current: state.opencodeCli.version, latest: state.opencodeCli.latest },
+    { label: PKG_MAIN, current: state.pkgVersion, latest: state.pkgLatest },
+  ]);
+
+  const cur = state.pkgVersion;
+  const lat = state.pkgLatest;
+  if (cur && lat && cur !== lat) {
+    console.log(chalk.dim(`\n  Release notes (${cur} → ${lat}):`));
+    const notes = fetchReleaseNotes(PKG_MAIN, cur, lat).catch((err) => {
+      console.log(chalk.dim(`    (could not fetch: ${err.message || err})`));
+      return null;
+    });
+    const text = await notes;
+    if (text) {
+      // Trim to a sensible cap (first 30 lines) so the console stays
+      // readable; the full notes are one `npm view` call away.
+      const lines = text.split(/\r?\n/).slice(0, 30);
+      for (const line of lines) console.log(`    ${line}`);
+      if (lines.length === 30) console.log(chalk.dim('    ... (truncated; run `npm view @polderlabs/bizar` for full)'));
+    }
+    console.log(chalk.yellow(`\n  ⤵ Run \`bizar update\` to apply.\n`));
+    // Non-zero exit so scripts can detect the update-available case.
+    return { ok: true, updateAvailable: true, channel };
+  }
+
+  console.log(chalk.green('\n  ✓ Already on the latest version.\n'));
+  return { ok: true, updateAvailable: false, channel };
+}
+
+/**
+ * Fetch the release notes between two versions from the npm registry.
+ * Returns a plain-text summary (the registry's "description" field for
+ * the latest version), or null on any failure. Never throws — failures
+ * are surfaced to the caller as null so the check command stays useful
+ * offline.
+ */
+async function fetchReleaseNotes(pkg, _from, _to) {
+  // The npm registry does not expose a structured per-version release-
+  // notes field. The best we can do is `npm view <pkg> description`
+  // which is the package's README excerpt. We surface that as "notes".
+  try {
+    const { execFileSync } = await import('node:child_process');
+    const out = execFileSync('npm', ['view', pkg, 'description'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 10000,
+      encoding: 'utf8',
+    }).toString().trim();
+    return out || null;
+  } catch {
+    return null;
+  }
 }
 
 /**

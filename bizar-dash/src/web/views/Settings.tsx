@@ -1209,6 +1209,12 @@ export function SettingsView({ settings: initial, refreshSnapshot }: Props) {
               Dashboard tokens are generated on first boot and saved to{' '}
               <code>~/.config/bizar/dashboard-secret</code> (mode 0600).
             </p>
+            {/* v3.6.2 */}
+            <p className="muted" style={{ fontSize: 12, margin: '4px 0' }}>
+              For Tailscale Serve or any reverse-proxy access, paste this token
+              once via the boot screen — it is saved per-origin and works for all
+              subsequent visits.
+            </p>
           </div>
           <div className="field" data-setting-id="auth.token">
             <label className="field-label">Token (this browser)</label>

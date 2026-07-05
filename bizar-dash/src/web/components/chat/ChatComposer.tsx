@@ -1,18 +1,9 @@
-// src/components/chat/ChatComposer.tsx — bottom composer pill (v3.22 design).
+// src/components/chat/ChatComposer.tsx — bottom composer pill (v4.2.5).
 //
-// Replaces FloatingComposer. Visual layout follows the design HTML:
-//
-//   [agent chip] [model badge] [──── textarea ────] [📎] [✨] [➤]
-//
-// All wrapped in a single pill (chat-composer-pill) with rounded ends
-// and a focus-within accent border. The legacy Composer component
-// already provides the textarea, agent chip menu, attachment tags,
-// and slash-command suggestion dropdown — the redesign simply nests
-// the Composer inside the new pill chrome and adds the hint row
-// (⏎ / ⇧⏎ / /) underneath.
-//
-// Props match the original FloatingComposer EXACTLY (so Chat.tsx +
-// MobileChat.tsx don't need any changes).
+// v4.2.5 — small refinement: the pill's border picks up the
+// activeSource color (opencode → accent border; bizar → neutral),
+// so the user has visual confirmation that their next message will
+// land in the right backend.
 
 import { useState } from 'react';
 import { Composer } from './Composer';
@@ -32,31 +23,29 @@ interface Props {
   onPickSuggestion: (cmd: string) => void;
   agents: Array<{ name: string }>;
   onAttach: () => void;
-  /** Backward-compat — used to be page-level panel toggles. Ignored in
-   *  the redesign (rail + info are always visible). */
+  /** Which stream will receive the next message. */
+  activeSource?: 'bizar' | 'opencode' | null;
+  /** Backward-compat — used to be page-level panel toggles. Ignored. */
   sessionsOpen?: boolean;
   /** Backward-compat — see sessionsOpen. */
   infoOpen?: boolean;
 }
 
 export function ChatComposer(props: Props) {
-  const { text, sending, onSend } = props;
+  const { text, sending, onSend, activeSource } = props;
   const [takingOff, setTakingOff] = useState(false);
 
-  // Wrap onSend with a brief takeoff animation — a small CSS hook on
-  // the wrapper pill. We don't animate a specific element here; the
-  // pill itself gets the brief `takeoff` class so the send button
-  // (the last child of Composer) gets the animation if the design
-  // wants it.
   const handleSend = () => {
-    if (!text.trim()) return;
+    if (!text.trim() || sending) return;
     setTakingOff(true);
     onSend();
     window.setTimeout(() => setTakingOff(false), 320);
   };
 
   return (
-    <div className="chat-composer-wrap">
+    <div
+      className={`chat-composer-wrap chat-composer-source-${activeSource ?? 'none'}`}
+    >
       <div className={`chat-composer-pill${takingOff ? ' takeoff' : ''}`}>
         <Composer {...props} onSend={handleSend} />
       </div>
@@ -70,6 +59,13 @@ export function ChatComposer(props: Props) {
         <span>
           <kbd>/</kbd> commands
         </span>
+        {activeSource === 'opencode' && (
+          <span className="chat-composer-source-hint">→ opencode</span>
+        )}
+        {activeSource === 'bizar' && (
+          <span className="chat-composer-source-hint">→ bizar chat</span>
+        )}
+        {sending && <span className="chat-composer-source-hint">sending…</span>}
       </div>
     </div>
   );

@@ -1,5 +1,13 @@
 // src/lib/api.ts — REST client. Single instance, type-safe wrappers.
 //
+// v3.6.2 — Token URL pickup for reverse-proxy / Tailscale Serve access.
+// When the dashboard is accessed via Tailscale Serve (or any reverse
+// proxy) the browser runs on a different origin than localhost. The server
+// sees the remote client through the local proxy and requires auth.
+// The `?token=…` URL param lets operators share a direct link that
+// automatically installs the token into localStorage so the dashboard
+// "just works" after the first paste — no separate localhost tab needed.
+//
 // v3.6.1 — Authentication is now loopback-aware on the server side.
 // The browser makes API calls over 127.0.0.1 (or via Tailscale serve
 // proxying to 127.0.0.1), and the server auto-trusts loopback
@@ -50,6 +58,35 @@ class ApiClient {
       else localStorage.removeItem(TOKEN_KEY);
     } catch {
       /* localStorage unavailable — token won't persist across reloads */
+    }
+  }
+
+  /**
+   * v3.6.2 — Check the URL search params for a `token` value and
+   * persist it into localStorage if found. Strips the param from the
+   * URL via `history.replaceState` so the token doesn't leak into
+   * browser history or shared links.
+   *
+   * Returns `true` if a token was found and saved, `false` otherwise.
+   * Safe to call multiple times (subsequent calls with no token in URL
+   * return `false` and are no-ops).
+   */
+  pickupTokenFromUrl(): boolean {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tok = params.get('token');
+      if (!tok) return false;
+      this.setToken(tok);
+      // Remove the token param from the URL without a page reload.
+      params.delete('token');
+      const newSearch = params.toString();
+      const newUrl = newSearch
+        ? `${window.location.pathname}?${newSearch}`
+        : window.location.pathname;
+      history.replaceState(null, '', newUrl);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -180,6 +217,12 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+// v3.6.2 — Auto-pickup token from URL on module load so the dashboard
+// works through reverse proxies (Tailscale Serve, nginx, etc.) without
+// needing a separate localhost tab.
+api.pickupTokenFromUrl();
+
 export { ApiClient, TOKEN_KEY };
 
 /**

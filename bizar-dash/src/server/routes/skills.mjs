@@ -1,11 +1,13 @@
 /**
  * src/server/routes/skills.mjs
  *
- * /api/skills                           — list (?category=foo to filter)
- * /api/skills/search                    — fuzzy search by name/description
- * /api/skills/install (POST)            — install by name or source URL
- * /api/skills/:id/disable (POST)        — disable
- * /api/skills/:id/enable (POST)         — enable
+ * v4.0.0 — Serves locally-scanned SKILL.md files across all sources.
+ *
+ * Endpoints:
+ *   GET  /skills                     — list all skills
+ *   GET  /skills/search?q=           — fuzzy search (plain data, no ANSI)
+ *   GET  /skills/:source/:name       — single skill detail
+ *   POST /skills/refresh             — invalidate cache + rescan
  */
 import { Router } from 'express';
 import { skillsStore } from '../skills-store.mjs';
@@ -19,57 +21,44 @@ import { wrap } from './_shared.mjs';
 export function createSkillsRouter({ broadcast }) {
   const router = Router();
 
-  // v3.3.0 — `?category=foo` filters the list server-side. The
-  // frontend uses this to power the collapsible categories view
-  // (the old "all in one list" mode is now the default "Show all"
-  // toggle in the UI).
+  // GET /skills
   router.get('/skills', wrap(async (req, res) => {
-    const skills = await skillsStore.list();
-    let out = skills;
-    if (req.query.category) {
-      const wanted = String(req.query.category).toLowerCase();
-      if (wanted !== 'all') {
-        out = skills.filter((s) => (s.category || '').toLowerCase() === wanted);
-      }
-    }
-    res.json({ skills: out, categories: skillsStore.CATEGORIES, total: skills.length });
+    const all = await skillsStore.list();
+    // Group counts by source
+    const counts = { shipped: 0, user: 0, project: 0 };
+    for (const s of all) counts[s.source] = (counts[s.source] || 0) + 1;
+    res.json({ skills: all, count: all.length, counts });
   }));
 
+  // GET /skills/search?q=
   router.get('/skills/search', wrap(async (req, res) => {
     const q = (req.query.q || '').toString();
     const results = await skillsStore.search(q);
-    res.json({ results, query: q, categories: skillsStore.CATEGORIES });
+    // Ensure plain strings — strip any accidental ANSI from CLI output
+    const clean = results.map((s) => ({
+      name:        s.name,
+      description: s.description,
+      source:      s.source,
+      path:        s.path,
+    }));
+    res.json({ results: clean, query: q, count: clean.length });
   }));
 
-  router.post('/skills/install', wrap(async (req, res) => {
-    const { name, source } = req.body || {};
-    if (!name && !source) {
-      res.status(400).json({ error: 'bad_request', message: 'name or source is required' });
+  // GET /skills/:source/:name
+  router.get('/skills/:source/:name', wrap(async (req, res) => {
+    const skill = await skillsStore.get(req.params.source, req.params.name);
+    if (!skill) {
+      res.status(404).json({ error: 'not_found', message: 'skill not found' });
       return;
     }
-    try {
-      const result = await skillsStore.install(name, source);
-      if (!result.ok) {
-        res.status(502).json({ error: 'install_failed', message: result.error || 'skills CLI install failed' });
-        return;
-      }
-      broadcast({ type: 'skills:change' });
-      res.status(202).json(result);
-    } catch (err) {
-      res.status(500).json({ error: 'install_failed', message: err.message });
-    }
+    res.json(skill);
   }));
 
-  router.post('/skills/:id/disable', wrap(async (req, res) => {
-    const out = skillsStore.disable(req.params.id);
+  // POST /skills/refresh
+  router.post('/skills/refresh', wrap(async (req, res) => {
+    const skills = skillsStore.refresh();
     broadcast({ type: 'skills:change' });
-    res.json(out);
-  }));
-
-  router.post('/skills/:id/enable', wrap(async (req, res) => {
-    const out = skillsStore.enable(req.params.id);
-    broadcast({ type: 'skills:change' });
-    res.json(out);
+    res.json({ ok: true, count: skills.length });
   }));
 
   return router;

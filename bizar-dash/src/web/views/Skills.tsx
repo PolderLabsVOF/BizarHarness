@@ -1,31 +1,20 @@
-// src/views/Skills.tsx — v3.1.0 skills registry: installed + search.
+// src/views/Skills.tsx — v4.0.0 skills browser: scans all local SKILL.md sources.
 import { useEffect, useMemo, useState } from 'react';
 import {
   Sparkles,
   Search,
   RefreshCw,
-  Download,
-  Power,
-  PowerOff,
-  Code,
-  Layers,
-  Wrench,
-  FlaskConical,
-  Palette,
-  Brain,
-  Map as MapIcon,
-  GitBranch,
-  Book,
-  CheckCircle2,
-  XCircle,
-  Tag as TagIcon,
   ExternalLink,
+  XCircle,
+  BookOpen,
+  Folder,
+  Users,
+  Package,
 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Card, CardTitle, CardMeta } from '../components/Card';
+import { Card } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
-import { StatusBadge } from '../components/StatusBadge';
 import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
 import { api } from '../lib/api';
@@ -41,55 +30,51 @@ type Props = {
 };
 
 type Skill = {
-  id: string;
   name: string;
   description: string;
-  category: string;
-  tags: string[];
-  version: string;
-  source: string;
-  path?: string | null;
-  installed?: boolean;
-  enabled?: boolean;
-  mock?: boolean;
-  installCmd?: string;
+  source: 'shipped' | 'user' | 'project';
+  path: string;
+  body?: string;
 };
 
-const ICONS: Record<string, typeof Sparkles> = {
-  all: Sparkles,
-  languages: Code,
-  frameworks: Layers,
-  tools: Wrench,
-  testing: FlaskConical,
-  design: Palette,
-  reasoning: Brain,
-  planning: MapIcon,
-  gitops: GitBranch,
-  docs: Book,
+type Tab = { id: 'all' | 'shipped' | 'user' | 'project'; label: string; icon: typeof Sparkles };
+
+const TABS: Tab[] = [
+  { id: 'all',     label: 'All',     icon: Sparkles   },
+  { id: 'shipped', label: 'Shipped', icon: Package    },
+  { id: 'user',    label: 'User',    icon: Users      },
+  { id: 'project', label: 'Project', icon: Folder     },
+];
+
+const SOURCE_LABEL: Record<string, string> = {
+  shipped: 'Shipped',
+  user:    'User',
+  project: 'Project',
+};
+
+const SOURCE_ICON: Record<string, typeof Package> = {
+  shipped: Package,
+  user:    Users,
+  project: Folder,
 };
 
 export function Skills({ snapshot, refreshSnapshot }: Props) {
   const toast = useToast();
   const modal = useModal();
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [categories, setCategories] = useState<{ id: string; label: string; icon: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [searchQ, setSearchQ] = useState('');
+  const [skills, setSkills]       = useState<Skill[]>([]);
+  const [counts, setCounts]       = useState({ shipped: 0, user: 0, project: 0, all: 0 });
+  const [loading, setLoading]     = useState(true);
+  const [activeTab, setActiveTab]  = useState<'all' | 'shipped' | 'user' | 'project'>('all');
+  const [searchQ, setSearchQ]     = useState('');
   const [searchResults, setSearchResults] = useState<Skill[] | null>(null);
   const [searching, setSearching] = useState(false);
-  const [installing, setInstalling] = useState<string | null>(null);
-  // v3.3.1 — tracks which category <details> elements are open. Default: first 3.
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set(['all', 'languages', 'frameworks']),
-  );
 
   const reload = async () => {
     setLoading(true);
     try {
-      const d = await api.get<{ skills: Skill[]; categories: { id: string; label: string; icon: string }[] }>('/skills');
+      const d = await api.get<{ skills: Skill[]; counts: Record<string, number> }>('/skills');
       setSkills(d.skills || []);
-      setCategories(d.categories || []);
+      setCounts({ shipped: d.counts?.shipped ?? 0, user: d.counts?.user ?? 0, project: d.counts?.project ?? 0, all: (d.skills || []).length });
     } catch (err) {
       toast.error(`Skills load failed: ${(err as Error).message}`);
     } finally {
@@ -97,11 +82,9 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  useEffect(() => {
-    reload();
-  }, []);
+  useEffect(() => { reload(); }, []);
 
-  // Debounce search.
+  // Debounced search
   useEffect(() => {
     if (!searchQ.trim()) {
       setSearchResults(null);
@@ -110,7 +93,9 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
     setSearching(true);
     const id = setTimeout(async () => {
       try {
-        const d = await api.get<{ results: Skill[] }>(`/skills/search?q=${encodeURIComponent(searchQ.trim())}`);
+        const d = await api.get<{ results: Skill[] }>(
+          `/skills/search?q=${encodeURIComponent(searchQ.trim())}`,
+        );
         setSearchResults(d.results || []);
       } catch (err) {
         toast.error(`Search failed: ${(err as Error).message}`);
@@ -119,98 +104,89 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
       }
     }, 280);
     return () => clearTimeout(id);
-  }, [searchQ, toast]);
+  }, [searchQ]);
 
-  const filteredInstalled = useMemo(() => {
-    let out = skills;
-    if (activeCategory !== 'all') {
-      out = out.filter((s) => (s.category || 'tools') === activeCategory);
-    }
-    return out;
-  }, [skills, activeCategory]);
+  const displayed = useMemo<Skill[]>(() => {
+    if (searchResults !== null) return searchResults;
+    if (activeTab === 'all') return skills;
+    return skills.filter((s) => s.source === activeTab);
+  }, [skills, activeTab, searchResults]);
 
-  const onInstall = async (s: Skill) => {
-    if (!confirm(`Install skill "${s.name}"?\n\n${s.installCmd || `skills add ${s.id}`}`)) return;
-    setInstalling(s.id);
+  const onRefresh = async () => {
     try {
-      await api.post('/skills/install', { name: s.name, source: s.id });
-      toast.success(`Installed ${s.name}.`);
-      setSearchResults((cur) => cur?.filter((x) => x.id !== s.id) || cur);
+      await api.post('/skills/refresh', {});
+      toast.success('Skills refreshed.');
       await reload();
     } catch (err) {
-      toast.error(`Install failed: ${(err as Error).message}`);
-    } finally {
-      setInstalling(null);
+      toast.error(`Refresh failed: ${(err as Error).message}`);
     }
   };
 
-  const onToggle = async (s: Skill) => {
+  const onShowDetail = async (skill: Skill) => {
     try {
-      if (s.enabled !== false) {
-        await api.post(`/skills/${encodeURIComponent(s.id)}/disable`);
-        toast.success(`Disabled ${s.name}.`);
-      } else {
-        await api.post(`/skills/${encodeURIComponent(s.id)}/enable`);
-        toast.success(`Enabled ${s.name}.`);
-      }
-      await reload();
-    } catch (err) {
-      toast.error(`Toggle failed: ${(err as Error).message}`);
-    }
-  };
-
-  const onShowDetails = (s: Skill) => {
-    let content: React.ReactNode;
-    content = (
-      <div className="skill-detail">
-        <p className="muted text-sm mono skill-detail-source">{s.source}</p>
-        <p className="skill-detail-desc">{s.description || 'No description.'}</p>
-        <div className="skill-detail-meta">
-          <span><strong>Category:</strong> {s.category}</span>
-          <span><strong>Version:</strong> <code>{s.version}</code></span>
-          {s.path && <span><strong>Path:</strong> <code>{s.path}</code></span>}
-        </div>
-        {s.tags && s.tags.length > 0 && (
-          <div className="skill-detail-tags">
-            {s.tags.map((t) => (
-              <span key={t} className="tag">{t}</span>
-            ))}
+      const full = await api.get<Skill>(
+        `/skills/${encodeURIComponent(skill.source)}/${encodeURIComponent(skill.name)}`,
+      );
+      modal.open({
+        title: full.name,
+        width: 640,
+        children: (
+          <div className="skill-detail">
+            <div className="skill-detail-meta">
+              <span className="skill-source-badge" data-source={full.source}>
+                {SOURCE_LABEL[full.source] || full.source}
+              </span>
+              <code className="mono text-sm muted">{full.path}</code>
+            </div>
+            {full.description && (
+              <p className="skill-detail-desc">{full.description}</p>
+            )}
+            {full.body && (
+              <div className="skill-detail-body">
+                <pre className="skill-body-pre">{full.body}</pre>
+              </div>
+            )}
           </div>
-        )}
-        {s.installCmd && (
-          <div>
-            <label className="field-label">Install command</label>
-            <pre className="skill-detail-cmd mono">{s.installCmd}</pre>
-          </div>
-        )}
-      </div>
-    );
-    modal.open({
-      title: s.name,
-      width: 560,
-      children: content,
-      footer: (
-        <div className="modal-footer-actions">
+        ),
+        footer: (
           <Button variant="ghost" onClick={() => modal.close()}>Close</Button>
-          {!s.installed && (
-            <Button variant="primary" onClick={() => { modal.close(); onInstall(s); }} loading={installing === s.id}>
-              <Download size={12} /> Install
-            </Button>
-          )}
-        </div>
-      ),
-    });
+        ),
+      });
+    } catch {
+      // Fallback: show what we already have
+      modal.open({
+        title: skill.name,
+        width: 560,
+        children: (
+          <div className="skill-detail">
+            <div className="skill-detail-meta">
+              <span className="skill-source-badge" data-source={skill.source}>
+                {SOURCE_LABEL[skill.source] || skill.source}
+              </span>
+              <code className="mono text-sm muted">{skill.path}</code>
+            </div>
+            {skill.description && (
+              <p className="skill-detail-desc">{skill.description}</p>
+            )}
+          </div>
+        ),
+        footer: (
+          <Button variant="ghost" onClick={() => modal.close()}>Close</Button>
+        ),
+      });
+    }
   };
 
   return (
     <div className="view view-skills">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
             <Sparkles size={18} /> Skills
           </h2>
           <p className="view-subtitle">
-            Installed skills + browse the registry. Powered by the <code>skills</code> CLI.
+            Browse all available skills — shipped, user, and project-local.
           </p>
         </div>
         <div className="view-actions">
@@ -219,7 +195,7 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
             <input
               className="input"
               type="text"
-              placeholder="Browse new skills…"
+              placeholder="Search skills…"
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
             />
@@ -229,19 +205,42 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
                 className="icon-btn"
                 aria-label="Clear search"
                 onClick={() => setSearchQ('')}
-                title="Clear"
               >
                 <XCircle size={12} />
               </button>
             )}
           </div>
-          <Button variant="secondary" size="sm" onClick={reload}>
+          <Button variant="secondary" size="sm" onClick={onRefresh}>
             <RefreshCw size={14} /> Refresh
           </Button>
         </div>
       </header>
 
-      {/* v3.3.1 — Search results take priority over category view */}
+      {/* ── Source tabs ────────────────────────────────────────────────── */}
+      {!searchQ.trim() && (
+        <div className="skills-tabs">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const count = tab.id === 'all'
+              ? counts.all
+              : counts[tab.id as keyof typeof counts] ?? 0;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={cn('skills-tab', activeTab === tab.id && 'skills-tab-active')}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon size={14} />
+                <span>{tab.label}</span>
+                <span className="skills-tab-count">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Search results ───────────────────────────────────────────── */}
       {searchQ.trim() && (
         <section className="skills-section">
           <h3 className="skills-section-title">
@@ -262,14 +261,12 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
             />
           ) : (
             <div className="skills-grid">
-              {(searchResults || []).map((s) => (
+              {(searchResults || []).map((s, i) => (
                 <SkillCard
-                  key={`search-${s.id}`}
+                  key={`search-${i}`}
                   skill={s}
-                  onShow={() => onShowDetails(s)}
-                  onInstall={() => onInstall(s)}
-                  installing={installing === s.id}
-                  installed={!!skills.find((x) => x.id === s.id)}
+                  onShow={() => onShowDetail(s)}
+                  searchQ={searchQ}
                 />
               ))}
             </div>
@@ -277,155 +274,106 @@ export function Skills({ snapshot, refreshSnapshot }: Props) {
         </section>
       )}
 
-      {/* v3.3.1 — Collapsible category sections */}
+      {/* ── Skills grid (tab view) ───────────────────────────────────── */}
       {!searchQ.trim() && (
-        <>
-          {/* Quick category pills */}
-          <div className="skills-categories">
-            {categories.map((c) => {
-              const Icon = ICONS[c.id] || Sparkles;
-              const count = skills.filter((s) => (s.category || 'tools') === c.id).length;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={cn('skill-category', activeCategory === c.id && 'skill-category-active')}
-                  onClick={() => setActiveCategory(c.id)}
-                >
-                  <Icon size={14} />
-                  <span>{c.label}</span>
-                  {count > 0 && <span className="skill-category-count">{count}</span>}
-                </button>
-              );
-            })}
-          </div>
+        <section className="skills-section">
+          {loading ? (
+            <div className="view-loading"><Spinner size="lg" /></div>
+          ) : displayed.length === 0 ? (
+            <EmptyState
+              icon={<BookOpen size={28} />}
+              title="No skills here"
+              message={
+                activeTab === 'all'
+                  ? 'No skills found. Install skills with the skills CLI or add SKILL.md files to a skills directory.'
+                  : `No skills in the ${SOURCE_LABEL[activeTab]} tab.`
+              }
+            />
+          ) : (
+            <div className="skills-grid">
+              {displayed.map((s, i) => (
+                <SkillCard
+                  key={`${s.source}-${s.name}-${i}`}
+                  skill={s}
+                  onShow={() => onShowDetail(s)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
-          {/* Installed skills grouped by category with <details> */}
-          <section className="skills-section">
-            <h3 className="skills-section-title">
-              <CheckCircle2 size={14} /> Installed
-            </h3>
-            {loading ? (
-              <div className="view-loading"><Spinner size="lg" /></div>
-            ) : (
-              <div className="skills-categories-list">
-                {categories.map((cat) => {
-                  const catSkills = filteredInstalled.filter((s) => (s.category || 'tools') === cat.id);
-                  if (catSkills.length === 0) return null;
-                  const isOpen = expandedCategories.has(cat.id);
-                  return (
-                    <details
-                      key={cat.id}
-                      className="skills-category"
-                      open={isOpen}
-                      onToggle={(e) => {
-                        const tgt = e.currentTarget as HTMLDetailsElement;
-                        setExpandedCategories((prev) => {
-                          const next = new Set(prev);
-                          if (tgt.open) next.add(cat.id);
-                          else next.delete(cat.id);
-                          return next;
-                        });
-                      }}
-                    >
-                      <summary className="skills-category-summary">
-                        <span className="skills-category-name">
-                          {ICONS[cat.id] && (() => { const Icon = ICONS[cat.id]; return <Icon size={14} />; })()}
-                          {cat.label}
-                        </span>
-                        <span className="skill-category-count">{catSkills.length}</span>
-                      </summary>
-                      <div className="skills-grid">
-                        {catSkills.map((s) => (
-                          <SkillCard
-                            key={s.id}
-                            skill={s}
-                            onShow={() => onShowDetails(s)}
-                            onToggle={() => onToggle(s)}
-                          />
-                        ))}
-                      </div>
-                    </details>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </>
+      {/* ── Footer ────────────────────────────────────────────────────── */}
+      {!searchQ.trim() && (
+        <footer className="view-footer">
+          <span className="text-sm muted">
+            Skills are discovered from{' '}
+            <code>~/.opencode/skills/</code>,{' '}
+            <code>~/.agents/skills/</code>,{' '}
+            <code>bizar-dash/skills/</code>, and project-local directories.
+          </span>
+        </footer>
       )}
     </div>
   );
 }
 
+// ── SkillCard ─────────────────────────────────────────────────────────────────
+
 function SkillCard({
   skill,
   onShow,
-  onInstall,
-  onToggle,
-  installing,
-  installed,
+  searchQ = '',
 }: {
   skill: Skill;
   onShow: () => void;
-  onInstall?: () => void;
-  onToggle?: () => void;
-  installing?: boolean;
-  installed?: boolean;
+  searchQ?: string;
 }) {
-  const Icon = ICONS[skill.category] || Sparkles;
-  const enabled = skill.enabled !== false;
+  const Icon = SOURCE_ICON[skill.source] || Package;
+  const desc = skill.description
+    ? skill.description.length > 200
+      ? skill.description.slice(0, 200) + '…'
+      : skill.description
+    : 'No description.';
+
   return (
-    <Card variant="elevated" interactive className={cn('skill-card', !enabled && 'skill-card-disabled')}>
+    <Card variant="elevated" interactive className="skill-card">
       <div className="skill-card-head">
-        <div className="skill-card-icon" style={{ background: `color-mix(in srgb, var(--accent) 12%, transparent)` }}>
+        <div
+          className="skill-card-icon"
+          style={{ background: `color-mix(in srgb, var(--accent) 12%, transparent)` }}
+        >
           <Icon size={18} />
         </div>
         <div className="skill-card-title-area">
-          <div className="skill-card-title">{skill.name}</div>
-          <div className="skill-card-source mono">{skill.source}</div>
+          <div className="skill-card-title">
+            {highlightMatch(skill.name, searchQ)}
+          </div>
+          <span className="skill-source-badge" data-source={skill.source}>
+            {SOURCE_LABEL[skill.source] || skill.source}
+          </span>
         </div>
-        {installed ? (
-          <StatusBadge kind={enabled ? 'success' : 'neutral'}>
-            {enabled ? 'on' : 'off'}
-          </StatusBadge>
-        ) : (
-          <StatusBadge kind="accent">new</StatusBadge>
-        )}
       </div>
-      <p className="skill-card-desc">{skill.description || 'No description.'}</p>
-      <div className="skill-card-meta">
-        <span className="mono text-sm">v{skill.version}</span>
-        {skill.category && <span className="text-sm muted">{skill.category}</span>}
-        {skill.tags && skill.tags.length > 0 && skill.tags.slice(0, 3).map((t) => (
-          <span key={t} className="skill-card-tag">{t}</span>
-        ))}
-      </div>
+      <p className="skill-card-desc">{desc}</p>
       <div className="skill-card-actions">
         <Button variant="ghost" size="sm" onClick={onShow}>
-          <ExternalLink size={12} /> Details
+          <ExternalLink size={12} /> View
         </Button>
-        {installed && onToggle && (
-          <Button
-            variant={enabled ? 'ghost' : 'secondary'}
-            size="sm"
-            onClick={onToggle}
-            title={enabled ? 'Disable' : 'Enable'}
-          >
-            {enabled ? <PowerOff size={12} /> : <Power size={12} />}
-            {enabled ? 'Disable' : 'Enable'}
-          </Button>
-        )}
-        {!installed && onInstall && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onInstall}
-            loading={installing}
-          >
-            <Download size={12} /> Install
-          </Button>
-        )}
       </div>
     </Card>
+  );
+}
+
+/** Simple substring highlight — wraps matched term in <mark>. */
+function highlightMatch(text: string, q: string): React.ReactNode {
+  if (!q.trim()) return text;
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="skill-highlight">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
   );
 }

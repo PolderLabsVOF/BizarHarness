@@ -60,11 +60,26 @@ import { createConnection, isIP } from 'node:net';
 const HOME = homedir();
 
 // Mirrors plugins/bizar/src/serve-info.ts → BG_DIRS pattern.
-const SERVE_INFO_FILES = [
+const DEFAULT_SERVE_INFO_FILES = [
   join(HOME, '.cache', 'bizar', 'serve.json'),
   join(HOME, '.config', 'opencode', 'serve.json'),
   join(HOME, '.bizar', 'serve.json'),
 ];
+
+/**
+ * Resolve the serve.json candidate paths at call time so test
+ * suites can override with `BIZAR_SERVE_JSON_PATH=/tmp/...json`.
+ * Order: env override (if set and exists) → default search list.
+ *
+ * @returns {string[]}
+ */
+function serveInfoFiles() {
+  const override = process.env.BIZAR_SERVE_JSON_PATH;
+  if (override && typeof override === 'string' && override.length > 0) {
+    return [override];
+  }
+  return DEFAULT_SERVE_INFO_FILES;
+}
 
 /**
  * @typedef {Object} ServeInfo
@@ -100,7 +115,7 @@ const SERVE_INFO_FILES = [
  * @returns {ServeInfo|null}
  */
 export function readServeInfo() {
-  for (const file of SERVE_INFO_FILES) {
+  for (const file of serveInfoFiles()) {
     if (!existsSync(file)) continue;
     try {
       const raw = readFileSync(file, 'utf8');
@@ -304,7 +319,7 @@ export async function listOpencodeSessions(info, timeoutMs = 5000) {
   }
 }
 
-export const SERVE_INFO_FILE_PATHS = SERVE_INFO_FILES;
+export const SERVE_INFO_FILE_PATHS = DEFAULT_SERVE_INFO_FILES;
 
 // ── v3.5.4 (bug: dispatch stuck) — spawn helpers ─────────────────────────
 //
@@ -623,7 +638,123 @@ export function normalizeOpencodeMessage(msg) {
 }
 
 /**
- * `GET /health` — used by the dispatcher startup check to verify the
+ * `DELETE /api/session/{id}?directory=...` — delete a session on the
+ * opencode serve child. v4.2.4 dashboard feature parity: the rail
+ * menu offers delete and the chat info panel can prune finished
+ * sessions from inside the dashboard.
+ *
+ * Idempotent: a 404 (already gone) is treated as a successful delete.
+ *
+ * @param {ServeInfo} info
+ * @param {string} sessionId
+ * @param {string} [directory]
+ * @param {number} [timeoutMs]
+ * @returns {Promise<{ok:true,status:number}|{ok:false,error:string,status?:number}>}
+ */
+export async function deleteOpencodeSession(info, sessionId, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
+  if (!sessionId) return { ok: false, error: 'sessionId is required' };
+  const dir = directory || info.worktree || '';
+  const url = `${info.baseUrl}/api/session/${encodeURIComponent(sessionId)}?directory=${encodeURIComponent(dir)}`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: buildAuthHeader(info),
+        Accept: 'application/json',
+      },
+      signal: ac.signal,
+    });
+    if (res.ok || res.status === 404) {
+      return { ok: true, status: res.status };
+    }
+    let detail = '';
+    try { detail = (await res.text()).slice(0, 500); } catch { /* ignore */ }
+    return {
+      ok: false,
+      status: res.status,
+      error: `DELETE /api/session/${sessionId} failed: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    return {
+      ok: false,
+      error: isAbort ? `deleteSession timed out after ${timeoutMs}ms` : `deleteSession network error: ${msg}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * `PATCH /api/session/{id}?directory=...` — update session fields
+ * (currently just `title`) on the opencode serve child. Used by the
+ * rail row-menu "Rename" affordance.
+ *
+ * @param {ServeInfo} info
+ * @param {string} sessionId
+ * @param {{ title?: string }} patch
+ * @param {string} [directory]
+ * @param {number} [timeoutMs]
+ * @returns {Promise<{ok:true,session:object}|{ok:false,error:string,status?:number}>}
+ */
+export async function updateOpencodeSession(info, sessionId, patch, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
+  if (!sessionId) return { ok: false, error: 'sessionId is required' };
+  if (!patch || typeof patch !== 'object') return { ok: false, error: 'patch is required' };
+  const dir = directory || info.worktree || '';
+  const url = `${info.baseUrl}/api/session/${encodeURIComponent(sessionId)}?directory=${encodeURIComponent(dir)}`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const body = {};
+    if (typeof patch.title === 'string') {
+      const t = patch.title.trim();
+      if (!t) return { ok: false, error: 'title cannot be empty' };
+      if (t.length > 200) return { ok: false, error: 'title too long (> 200 chars)' };
+      body.title = t;
+    } else {
+      return { ok: false, error: 'no supported fields in patch (only `title` is wired)' };
+    }
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: buildAuthHeader(info),
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.text()).slice(0, 500); } catch { /* ignore */ }
+      return {
+        ok: false,
+        status: res.status,
+        error: `PATCH /api/session/${sessionId} failed: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`,
+      };
+    }
+    let session = null;
+    try { session = await res.json(); } catch { /* non-JSON body is fine — we still got 2xx */ }
+    return { ok: true, session };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    return {
+      ok: false,
+      error: isAbort ? `updateSession timed out after ${timeoutMs}ms` : `updateSession network error: ${msg}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * GET /health — used by the dispatcher startup check to verify the
  * serve child is actually reachable before we try to enqueue work.
  *
  * v3.11.0 — Replaced the HTTP `GET /health` probe with a TCP-connect

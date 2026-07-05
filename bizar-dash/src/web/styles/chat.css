@@ -1599,3 +1599,137 @@
   max-width: 320px;
 }
 .chat-empty-state-action { margin-top: 0.5rem; }
+
+/* ============================================================
+   v4.2.5 — CHAT OVERHAUL: source badge, info-actions, error
+   row, and source-tinted composer. These are additive — they
+   don't override any of the legacy rules above.
+   ============================================================ */
+
+/* ---- source badge (opencode / bizar chat) ---- */
+.chat-source-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font: 10px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.chat-source-opencode {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--accent);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+.chat-source-bizar {
+  background: var(--bg-2);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.chat-source-none {
+  background: var(--bg-2);
+  color: var(--text-muted);
+  border-color: var(--border);
+  opacity: 0.7;
+}
+
+/* ---- thread-head title row (so badge sits inline) ---- */
+.chat-thread-title-row {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- thread error row (SSE/upstream failures) ---- */
+.chat-thread-error {
+  margin-top: 4px;
+  padding: 4px 10px;
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  border-radius: var(--radius-sm);
+  font: 11px/1.3 var(--font-mono);
+  color: var(--error);
+}
+
+/* ---- info-panel section heads + actions ---- */
+.chat-info-section-head {
+  display: flex; align-items: center;
+  margin-bottom: 8px;
+}
+.chat-info-value {
+  font: 13px/1.4 var(--font-sans);
+  color: var(--text);
+}
+.chat-info-actions {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px;
+}
+.chat-info-actions .btn {
+  font: 11px/1 var(--font-sans);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+.chat-info-actions .btn:hover:not(:disabled) {
+  background: var(--bg-1);
+}
+.chat-info-actions .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.chat-info-actions .btn-danger { color: var(--error); border-color: rgba(248, 81, 73, 0.4); }
+.chat-info-actions .btn-danger:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.08);
+}
+
+/* ---- btn-ghost tokens (also defined in main.css but we re-stamp here for safety) ---- */
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font: 11px/1 var(--font-mono);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+.btn-ghost:hover:not(:disabled) { background: var(--bg-1); color: var(--text); }
+.btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost.btn-danger { color: var(--error); }
+.btn-ghost.btn-sm { padding: 4px 6px; font-size: 11px; }
+
+/* ---- composer: source-tinted pill border + hint line ---- */
+.chat-composer-source-opencode .chat-composer-pill {
+  border-color: rgba(139, 92, 246, 0.35);
+}
+.chat-composer-source-opencode .chat-composer-pill:focus-within {
+  border-color: var(--accent);
+}
+.chat-composer-source-opencode::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.6;
+}
+.chat-composer-wrap {
+  position: relative;
+}
+.chat-composer-source-hint {
+  margin-left: auto;
+  font: 10px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+/* ---- legacy composer pointer-events fix ---- */
+.chat-composer-wrap.legacy {
+  pointer-events: none;
+}
+.chat-composer-wrap.legacy > * { pointer-events: auto; }

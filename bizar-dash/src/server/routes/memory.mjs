@@ -12,7 +12,8 @@
 import { Router } from 'express';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 const SERVER_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const memoryStore = await import(`${SERVER_ROOT}/memory-store.mjs`).then((m) => m);
@@ -652,6 +653,245 @@ export function createMemoryRouter({ projectRoot }) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  }));
+
+  // ── v4.6.0 Global memory-config surface ─────────────────────────────────
+  //
+  // A second config file at `~/.config/bizar/memory-config.json` holds
+  // operator-facing settings that aren't tied to a single project —
+  // e.g. the global default LightRAG URL, the global obsidian vault
+  // path, and git push defaults. The Settings view (handled by the
+  // sibling thor-settings agent) reads + writes this file via these
+  // endpoints.
+  //
+  // Distinct from the per-project `.bizar/memory.json` (the existing
+  // /memory/config surfaces that). We use a separate path to keep the
+  // two systems cleanly separated.
+
+  const GLOBAL_MEMORY_CONFIG_PATH = join(
+    process.env.HOME || '/tmp',
+    '.config',
+    'bizar',
+    'memory-config.json',
+  );
+
+  function loadGlobalMemoryConfig() {
+    try {
+      if (!existsSync(GLOBAL_MEMORY_CONFIG_PATH)) {
+        return {
+          exists: false,
+          config: {
+            lightrag: { enabled: false, url: 'http://127.0.0.1:9621', llm: '', embedding: '' },
+            obsidian: { vaultPath: '', syncInterval: 300 },
+            git: { repoPath: '', remoteUrl: '', branch: 'main', autoSync: false },
+          },
+        };
+      }
+      const raw = JSON.parse(readFileSync(GLOBAL_MEMORY_CONFIG_PATH, 'utf8'));
+      return { exists: true, config: raw };
+    } catch {
+      return {
+        exists: false,
+        error: 'corrupt_json',
+        config: {
+          lightrag: { enabled: false, url: 'http://127.0.0.1:9621', llm: '', embedding: '' },
+          obsidian: { vaultPath: '', syncInterval: 300 },
+          git: { repoPath: '', remoteUrl: '', branch: 'main', autoSync: false },
+        },
+      };
+    }
+  }
+
+  function saveGlobalMemoryConfig(config) {
+    const dir = dirname(GLOBAL_MEMORY_CONFIG_PATH);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    atomicWriteJson(GLOBAL_MEMORY_CONFIG_PATH, config);
+  }
+
+  // GET /memory/config/global — grouped shape (lightrag/obsidian/git).
+  router.get('/memory/config/global', wrap(async (_req, res) => {
+    const { exists, config, error } = loadGlobalMemoryConfig();
+    res.json({
+      exists,
+      path: GLOBAL_MEMORY_CONFIG_PATH,
+      config,
+      ...(error ? { error } : {}),
+    });
+  }));
+
+  // PUT /memory/config/global — partial update. Validates each block
+  // and merges on top of the existing config.
+  router.put('/memory/config/global', wrap(async (req, res) => {
+    const body = req.body || {};
+    const { exists, config: existing } = loadGlobalMemoryConfig();
+
+    // Light validation — no zod import (keep surface small). Each
+    // block is shallow-merged; if a block is present, we shallow-merge
+    // its top-level fields, rejecting unknown top-level keys.
+    const next = JSON.parse(JSON.stringify(existing));
+
+    const VALID_TOP_KEYS = new Set(['lightrag', 'obsidian', 'git']);
+    const EXTRA_KEYS = Object.keys(body).filter((k) => !VALID_TOP_KEYS.has(k));
+    if (EXTRA_KEYS.length > 0) {
+      res.status(400).json({
+        error: 'bad_request',
+        message: `unknown top-level keys: ${EXTRA_KEYS.join(', ')}`,
+      });
+      return;
+    }
+
+    if (body.lightrag !== undefined) {
+      if (typeof body.lightrag !== 'object' || body.lightrag === null || Array.isArray(body.lightrag)) {
+        res.status(400).json({ error: 'bad_request', message: 'lightrag must be an object' });
+        return;
+      }
+      const l = body.lightrag;
+      if ('enabled' in l && typeof l.enabled !== 'boolean') {
+        res.status(400).json({ error: 'bad_request', message: 'lightrag.enabled must be boolean' });
+        return;
+      }
+      if ('url' in l && typeof l.url !== 'string') {
+        res.status(400).json({ error: 'bad_request', message: 'lightrag.url must be a string' });
+        return;
+      }
+      if ('llm' in l && typeof l.llm !== 'string') {
+        res.status(400).json({ error: 'bad_request', message: 'lightrag.llm must be a string' });
+        return;
+      }
+      if ('embedding' in l && typeof l.embedding !== 'string') {
+        res.status(400).json({ error: 'bad_request', message: 'lightrag.embedding must be a string' });
+        return;
+      }
+      next.lightrag = { ...next.lightrag, ...l };
+    }
+
+    if (body.obsidian !== undefined) {
+      if (typeof body.obsidian !== 'object' || body.obsidian === null || Array.isArray(body.obsidian)) {
+        res.status(400).json({ error: 'bad_request', message: 'obsidian must be an object' });
+        return;
+      }
+      const o = body.obsidian;
+      if ('vaultPath' in o && typeof o.vaultPath !== 'string') {
+        res.status(400).json({ error: 'bad_request', message: 'obsidian.vaultPath must be a string' });
+        return;
+      }
+      if ('syncInterval' in o) {
+        const n = Number(o.syncInterval);
+        if (!Number.isFinite(n) || n < 0 || n > 86400 * 30) {
+          res.status(400).json({ error: 'bad_request', message: 'obsidian.syncInterval must be 0..2592000 seconds' });
+          return;
+        }
+        next.obsidian.syncInterval = n;
+      }
+      if ('vaultPath' in o) next.obsidian.vaultPath = o.vaultPath;
+    }
+
+    if (body.git !== undefined) {
+      if (typeof body.git !== 'object' || body.git === null || Array.isArray(body.git)) {
+        res.status(400).json({ error: 'bad_request', message: 'git must be an object' });
+        return;
+      }
+      const g = body.git;
+      if ('repoPath' in g && typeof g.repoPath !== 'string') {
+        res.status(400).json({ error: 'bad_request', message: 'git.repoPath must be a string' });
+        return;
+      }
+      if ('remoteUrl' in g && typeof g.remoteUrl !== 'string') {
+        res.status(400).json({ error: 'bad_request', message: 'git.remoteUrl must be a string' });
+        return;
+      }
+      if ('branch' in g) {
+        if (typeof g.branch !== 'string' || !/^[A-Za-z0-9._/-]{1,200}$/.test(g.branch)) {
+          res.status(400).json({ error: 'bad_request', message: 'git.branch must be a valid git ref name' });
+          return;
+        }
+        next.git.branch = g.branch;
+      }
+      if ('autoSync' in g && typeof g.autoSync !== 'boolean') {
+        res.status(400).json({ error: 'bad_request', message: 'git.autoSync must be boolean' });
+        return;
+      }
+      if ('repoPath' in g) next.git.repoPath = g.repoPath;
+      if ('remoteUrl' in g) next.git.remoteUrl = g.remoteUrl;
+      if ('autoSync' in g) next.git.autoSync = g.autoSync;
+    }
+
+    try {
+      saveGlobalMemoryConfig(next);
+    } catch (err) {
+      res.status(500).json({ error: 'write_failed', message: err.message });
+      return;
+    }
+    res.json({ ok: true, exists: true, path: GLOBAL_MEMORY_CONFIG_PATH, config: next });
+  }));
+
+  // POST /memory/test-git — test the configured git repo. Returns:
+  //   { ok: bool, checks: [...], message?: string }
+  // Steps performed:
+  //   1. Path exists?
+  //   2. Is a directory?
+  //   3. Is a valid git repo (has .git/)?
+  //   4. (Optional) Has a configured remote?
+  //   5. (Optional) Can we push (skipped unless ?push=1)?
+  router.post('/memory/test-git', wrap(async (req, res) => {
+    const { config } = loadGlobalMemoryConfig();
+    const repoPath = config?.git?.repoPath || '';
+    const remoteUrl = config?.git?.remoteUrl || '';
+    const wantPush = req.query.push === '1' || req.body?.push === true;
+
+    const checks = [];
+    if (!repoPath) {
+      checks.push({ name: 'repo_path_set', pass: false, detail: 'git.repoPath is empty — set it in Settings first' });
+      res.json({ ok: false, checks, message: 'repo path not configured' });
+      return;
+    }
+
+    checks.push({
+      name: 'repo_path_exists',
+      pass: existsSync(repoPath),
+      detail: existsSync(repoPath) ? repoPath : `${repoPath} does not exist`,
+    });
+
+    let isGit = false;
+    let isDir = false;
+    try {
+      const s = statSync(repoPath);
+      isDir = s.isDirectory();
+      checks.push({ name: 'repo_is_directory', pass: isDir, detail: isDir ? 'yes' : 'not a directory' });
+    } catch (err) {
+      checks.push({ name: 'repo_is_directory', pass: false, detail: err.message });
+    }
+
+    if (isDir) {
+      isGit = existsSync(join(repoPath, '.git'));
+      checks.push({ name: 'is_git_repo', pass: isGit, detail: isGit ? 'yes' : 'no .git/ directory' });
+    } else {
+      checks.push({ name: 'is_git_repo', pass: false, detail: 'skipped (not a directory)' });
+    }
+
+    if (remoteUrl) {
+      checks.push({ name: 'remote_url_set', pass: true, detail: remoteUrl });
+    } else {
+      checks.push({ name: 'remote_url_set', pass: false, detail: 'no remote configured' });
+    }
+
+    if (wantPush && isGit && remoteUrl) {
+      try {
+        const out = execFileSync('git', ['ls-remote', '--heads', remoteUrl], { timeout: 5000 }).toString();
+        checks.push({ name: 'remote_reachable', pass: true, detail: `${out.split('\n').filter(Boolean).length} heads` });
+      } catch (err) {
+        checks.push({ name: 'remote_reachable', pass: false, detail: err.message });
+      }
+    }
+
+    const ok = checks.every((c) => c.pass);
+    res.json({
+      ok,
+      checks,
+      message: ok ? 'git config looks healthy' : 'one or more checks failed',
+    });
   }));
 
   return router;

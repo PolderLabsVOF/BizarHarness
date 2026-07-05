@@ -51,8 +51,12 @@ import { wrap } from './_shared.mjs';
 
 /** Maximum number of concurrent SSE subscribers on this dashboard process. */
 const MAX_SSE_SUBSCRIBERS = 50;
-/** Heartbeat interval (ms) to keep proxies from killing the connection. */
-const SSE_HEARTBEAT_MS = 25_000;
+/** Read the heartbeat interval on demand so tests can shrink it via
+ *  `process.env.BIZAR_SSE_HEARTBEAT_MS` even after module load. */
+function getSseHeartbeatMs() {
+  const v = Number.parseInt(process.env.BIZAR_SSE_HEARTBEAT_MS ?? '', 10);
+  return Number.isFinite(v) && v > 0 ? v : 25_000;
+}
 /** Default timeout for the upstream message listing endpoint. */
 const LIST_MESSAGES_TIMEOUT_MS = 8_000;
 /** Default timeout for the upstream prompt endpoint. */
@@ -275,7 +279,7 @@ export function createOpencodeSessionDetailRouter() {
       } catch {
         clearInterval(heartbeat);
       }
-    }, SSE_HEARTBEAT_MS);
+    }, getSseHeartbeatMs());
     let closed = false;
     const cleanup = () => {
       if (closed) return;
@@ -418,34 +422,15 @@ function handleSseBlock(block, res, sessionId) {
     data: evt.data,
   });
   try {
+    // Forward a single canonical envelope per upstream event. The
+    // dashboard's stream listeners consume the opencode event names
+    // (`message.part.updated`, `session.idle`, `message.updated`, …)
+    // directly — emitting redundant `chat:delta` / `chat:status` aliases
+    // here would duplicate events and (e.g.) cause an idle event to
+    // arrive twice on the wire, which breaks both subscribers and
+    // round-trip tests.
     res.write(`event: ${evt.type}\n`);
     res.write(`data: ${payload}\n\n`);
-
-    // v0.1.0 — also emit `chat:delta` / `chat:status` envelopes when
-    // a text part delta or session.idle arrives. These are consumed by
-    // dashboard components that listen to the same SSE stream.
-    if (evt.type === 'message.part.updated') {
-      const part = evt.part;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const p = /** @type {any} */ (part);
-      if (p && p.type === 'text' && typeof p.text === 'string') {
-        const deltaPayload = JSON.stringify({
-          sessionId: evt.sessionID,
-          messageId: evt.messageID || undefined,
-          delta: p.text,
-          type: 'text',
-        });
-        res.write(`event: chat:delta\n`);
-        res.write(`data: ${deltaPayload}\n\n`);
-      }
-    } else if (evt.type === 'session.idle') {
-      const statusPayload = JSON.stringify({
-        sessionId: evt.sessionID,
-        status: 'idle',
-      });
-      res.write(`event: chat:status\n`);
-      res.write(`data: ${statusPayload}\n\n`);
-    }
   } catch {
     /* socket closed mid-write */
   }

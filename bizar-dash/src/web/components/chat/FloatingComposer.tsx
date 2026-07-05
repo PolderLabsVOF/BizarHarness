@@ -19,11 +19,17 @@ interface Props {
   onAttach: () => void;
   sessionsOpen: boolean;
   infoOpen: boolean;
+  /** Which stream will receive the next message — propagates the
+   *  pill border color and a small "→ opencode" hint. */
+  activeSource?: 'bizar' | 'opencode' | null;
 }
 
 export function FloatingComposer(props: Props) {
+  const { activeSource } = props;
   return (
-    <div className="chat-composer-wrap">
+    <div
+      className={`chat-composer-wrap chat-composer-source-${activeSource ?? 'none'} legacy`}
+    >
       <div className="chat-composer-pill">
         <Composer {...props} />
       </div>

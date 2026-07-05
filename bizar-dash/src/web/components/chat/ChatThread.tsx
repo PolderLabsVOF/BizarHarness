@@ -1,4 +1,8 @@
 // src/components/chat/ChatThread.tsx — message list, welcome screen, loading skeleton.
+//
+// v4.2.5 — accepts `activeSource` so the loading skeleton can hint
+// which stream is loading and the welcome variant for "opencode"
+// can differ from the local chat welcome.
 
 import { useEffect, useRef } from 'react';
 import { LoadingSkeleton } from './LoadingSkeleton';
@@ -19,6 +23,12 @@ interface Props {
   activeProject: { name: string } | null;
   sessionId: string;
   pinned: Set<number>;
+  /** Which stream currently owns the thread — purely cosmetic, lets
+   *  the empty/loading states be slightly more specific. The type
+   *  uses `unknown` so we don't pull in a tight coupling; the value
+   *  is reflected back into the loading skeleton and welcome screen
+   *  via data attributes so CSS can style accordingly. */
+  activeSource?: 'bizar' | 'opencode' | null;
   onPickSuggestion: (text: string) => void;
   onCopy: (m: Message) => void;
   onDelete: (idx: number) => void;
@@ -32,6 +42,7 @@ export function ChatThread({
   activeProject,
   sessionId,
   pinned,
+  activeSource,
   onPickSuggestion,
   onCopy,
   onDelete,
@@ -40,19 +51,12 @@ export function ChatThread({
 }: Props) {
   const innerRef = useRef<HTMLDivElement>(null);
 
-  // v3.22 — only auto-scroll when we own the scroll container (i.e.
-  // when rendered directly as the message scroller). When embedded
+  // Only auto-scroll when we own the scroll container (i.e. when
+  // rendered directly as the message scroller). When embedded
   // inside Chat.tsx's chat-thread-scroll, the parent handles scroll.
-  // We detect this by checking if our closest scroll ancestor is
-  // ourselves; if so, auto-scroll. Otherwise, no-op.
   useEffect(() => {
     const el = innerRef.current;
     if (!el) return;
-    // If we ARE the scroll container (legacy / mobile path), scroll.
-    // If a parent .chat-thread-scroll wraps us, the parent scrolls.
-    const isScroller = el.scrollHeight > el.clientHeight && el.matches(':scope');
-    // Simpler heuristic: if no `.chat-thread-scroll` ancestor exists,
-    // auto-scroll. Otherwise let the parent handle it.
     let p: HTMLElement | null = el.parentElement;
     let wrapped = false;
     while (p) {
@@ -63,13 +67,13 @@ export function ChatThread({
       p = p.parentElement;
     }
     if (!wrapped) el.scrollTop = el.scrollHeight;
-    // isScroller is referenced for clarity; suppress unused warning.
-    void isScroller;
   }, [messages]);
+
+  const stream: 'bizar' | 'opencode' = activeSource === 'opencode' ? 'opencode' : 'bizar';
 
   if (loading) {
     return (
-      <div className="chat-thread legacy" ref={innerRef}>
+      <div className="chat-thread legacy" ref={innerRef} data-stream={stream}>
         <LoadingSkeleton count={3} />
       </div>
     );
@@ -77,16 +81,24 @@ export function ChatThread({
 
   if (!activeProject) {
     return (
-      <div className="chat-thread legacy" ref={innerRef}>
-        <WelcomeScreen variant="no-project" projectName="" onPickSuggestion={onPickSuggestion} />
+      <div className="chat-thread legacy" ref={innerRef} data-stream={stream}>
+        <WelcomeScreen
+          variant="no-project"
+          projectName=""
+          onPickSuggestion={onPickSuggestion}
+        />
       </div>
     );
   }
 
   if (messages.length === 0) {
     return (
-      <div className="chat-thread legacy" ref={innerRef}>
-        <WelcomeScreen variant="empty" projectName={activeProject.name} onPickSuggestion={onPickSuggestion} />
+      <div className="chat-thread legacy" ref={innerRef} data-stream={stream}>
+        <WelcomeScreen
+          variant="empty"
+          projectName={activeProject.name}
+          onPickSuggestion={onPickSuggestion}
+        />
       </div>
     );
   }

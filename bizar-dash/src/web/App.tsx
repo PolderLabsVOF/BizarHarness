@@ -7,8 +7,8 @@ import { ModalProvider, useModal } from './components/Modal';
 import { ToastProvider, useToast } from './components/Toast';
 import { SearchModal } from './components/SearchModal';
 import { Notifications } from './components/Notifications';
+import { api, ApiError } from './lib/api';
 import { CommandDialog, type DialogDescriptor } from './components/CommandDialog';
-import { api } from './lib/api';
 import { Ws } from './lib/ws';
 import {
   applyTheme,
@@ -79,7 +79,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   minimax: MiniMaxUsage,
 };
 
-const VERSION = 'v3.21.0';
+const VERSION = 'v4.5.0';
 
 /**
  * Render the active view. If `activeTab` matches a built-in tab id,
@@ -113,6 +113,67 @@ function renderActiveView(
   return <V {...viewProps} />;
 }
 
+// v3.6.2 — Inline token-entry form shown on the boot-error screen when
+// the server returns 401 (reverse-proxy / Tailscale Serve scenario).
+// The user pastes the token, it is saved to localStorage, and boot is
+// retried. The form closes on Escape or on successful save.
+function TokenEntryForm({ onSaved }: { onSaved: () => void }) {
+  const [value, setValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus the input on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const submit = () => {
+    const tok = value.trim();
+    if (!tok) return;
+    api.setToken(tok);
+    onSaved();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onSaved();
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  return (
+    <form
+      className="token-entry-form"
+      onSubmit={(e) => { e.preventDefault(); submit(); }}
+    >
+      <div className="token-entry-row">
+        <input
+          ref={inputRef}
+          type="password"
+          className="input mono"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Paste auth token"
+          spellCheck={false}
+          autoComplete="off"
+          onKeyDown={handleKeyDown}
+        />
+        <Button type="submit" variant="primary" size="sm" disabled={!value.trim()}>
+          Save &amp; retry
+        </Button>
+      </div>
+      <p className="token-entry-hint">
+        Where do I find this token? Check the file{' '}
+        <code>~/.config/bizar/dashboard-secret</code> on the machine
+        running the dashboard, or look for it in the server output.
+      </p>
+    </form>
+  );
+}
+
 export function App() {
   return (
     <ToastProvider>
@@ -133,6 +194,7 @@ function Shell() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   const [bootError, setBootError] = useState<string | null>(null);
+  const [authPromptOpen, setAuthPromptOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [stuckAgents, setStuckAgents] = useState<{ name: string }[]>([]);
   const [stuckBannerDismissed, setStuckBannerDismissed] = useState(false);
@@ -196,9 +258,11 @@ function Shell() {
     return () => mql.removeEventListener('change', handler);
   }, [settings?.theme?.mode]);
 
-  // Initial fetch — runs once on mount
-  useEffect(() => {
+  // v3.6.2 — Boot logic extracted to retryBoot so it can be re-invoked
+  // after the user pastes a token in the inline recovery form.
+  const retryBoot = useCallback(async () => {
     let cancelled = false;
+
     const loadBootData = () =>
       Promise.all([
         api.get<Snapshot>('/snapshot').catch(() => null),
@@ -216,42 +280,59 @@ function Shell() {
       if (stuck?.stuck) setStuckAgents(stuck.stuck);
     };
 
-    (async () => {
-      try {
-        const auth = await api.probeAuthStatus();
-        const [snap, set, stuck] = await loadBootData();
-        if (cancelled) return;
+    try {
+      const auth = await api.probeAuthStatus();
+      const [snap, set, stuck] = await loadBootData();
+      if (cancelled) return;
 
-        applyBootData(snap, set, stuck);
-        if (snap || set) return;
-
-        if (!auth.loopback) {
-          setBootError('Dashboard server unreachable.');
-          return;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        if (cancelled) return;
-
-        const [retrySnap, retrySet, retryStuck] = await loadBootData();
-        if (cancelled) return;
-
-        applyBootData(retrySnap, retrySet, retryStuck);
-        if (!retrySnap && !retrySet) {
-          setBootError('Dashboard server unreachable.');
-        }
-      } catch (err) {
-        if (cancelled) return;
-        const msg = (err as Error)?.message ?? 'unknown error';
-        setBootError(msg);
-        toast.error(`Failed to load: ${msg}`);
+      applyBootData(snap, set, stuck);
+      if (snap || set) {
+        setBootError(null);
+        return;
       }
-    })();
 
+      if (!auth.loopback) {
+        setBootError('Dashboard server unreachable.');
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (cancelled) return;
+
+      const [retrySnap, retrySet, retryStuck] = await loadBootData();
+      if (cancelled) return;
+
+      applyBootData(retrySnap, retrySet, retryStuck);
+      if (!retrySnap && !retrySet) {
+        setBootError('Dashboard server unreachable.');
+      }
+    } catch (err) {
+      if (cancelled) return;
+      const msg = (err as Error)?.message ?? 'unknown error';
+      // v3.6.2 — If we got a 401, the user needs to supply a token.
+      // Surface the form inline instead of just the error message.
+      if (err instanceof ApiError && err.status === 401) {
+        setBootError(msg);
+        setAuthPromptOpen(true);
+        toast.error(`Auth required: ${msg}`);
+        return;
+      }
+      setBootError(msg);
+      toast.error(`Failed to load: ${msg}`);
+    }
+  }, [toast]);
+
+  // Initial fetch — runs once on mount
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(() => {
+      if (!cancelled) retryBoot();
+    }, 0);
     return () => {
       cancelled = true;
+      clearTimeout(id);
     };
-  }, [toast]);
+  }, [retryBoot]);
 
   // Apply defaultTab ONCE on mount only — must NOT re-fire on toast changes
   useEffect(() => {
@@ -695,6 +776,14 @@ function Shell() {
             <div className="boot-error">
               <h2>Dashboard unavailable</h2>
               <p>{bootError}</p>
+              {authPromptOpen && (
+                <TokenEntryForm
+                  onSaved={() => {
+                    setAuthPromptOpen(false);
+                    retryBoot();
+                  }}
+                />
+              )}
               <p className="boot-error-hint">
                 Make sure the Bizar dashboard server is running. Try{' '}
                 <code>bizar-dash start</code> in your terminal.
