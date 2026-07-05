@@ -138,6 +138,11 @@ export async function runDash(dashArgs) {
             const serveResult = await setupTailscaleServe({ dashboardPort: usePort });
             if (serveResult.ok) {
               console.log(chalk.green(`  ✓ Tailscale serve: ${serveResult.url}`));
+              // v5.3.1 — Auto-trust Tailscale clients so they don't need
+              // a bearer token. Tailscale users are already authenticated
+              // on the tailnet before they reach the dashboard.
+              process.env.BIZAR_DASHBOARD_TRUST_TAILSCALE = '1';
+              console.log(chalk.dim('  ✓ Tailscale clients auto-trusted (BIZAR_DASHBOARD_TRUST_TAILSCALE=1)'));
             }
           }
         } catch (err) {

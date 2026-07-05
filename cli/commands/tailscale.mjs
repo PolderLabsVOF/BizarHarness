@@ -83,9 +83,16 @@ export async function setupTailscaleServe({ dashboardPort = 4097, path = '/', ht
   } catch { /* ignore — might not have existing config */ }
 
   // Set up new serve config
+  // v5.3.1 — Use --set-x-forwarded-for=trailing so the dashboard sees
+  // the original client IP (a 100.x Tailscale address) in X-Forwarded-For.
+  // Without this, the dashboard can't tell that the request came from
+  // a trusted tailnet client and demands a bearer token.
   try {
     execFileSync('tailscale', [
-      'serve', '--bg', `--https=${https}`, `--set-path=${path}`,
+      'serve', '--bg',
+      `--https=${https}`,
+      `--set-path=${path}`,
+      '--set-x-forwarded-for=trailing',
       `http://localhost:${dashboardPort}`,
     ], { encoding: 'utf8', timeout: 30000 });
   } catch (err) {

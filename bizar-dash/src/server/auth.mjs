@@ -484,7 +484,20 @@ function extractToken(req) {
  */
 export function getCurrentUserId(req) {
   const token = extractToken(req);
-  if (!token) return null;
+  if (!token) {
+    // v5.3.1 — Tailscale trust: when the dashboard is reached via
+    // tailscale serve and the operator has opted in to trust tailnet
+    // clients, derive a deterministic userId from the tailnet hostname
+    // so the rest of the v5.0 multi-user code paths (workspaces, etc.)
+    // work without requiring an explicit token.
+    if (process.env.BIZAR_DASHBOARD_TRUST_TAILSCALE === '1' && isLoopback(req)) {
+      const hostname = String(req?.headers?.host || '').split(':')[0];
+      if (hostname && hostname.endsWith('.ts.net')) {
+        return 'usr_ts_' + createHash('sha256').update(hostname).digest('hex').slice(0, 12);
+      }
+    }
+    return null;
+  }
 
   const secret = getOrCreateSecret();
 

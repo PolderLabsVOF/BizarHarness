@@ -1,5 +1,61 @@
 # Changelog
 
+## v5.3.1 — Tailscale auth auto-configure end-to-end
+
+### Bug fix
+
+When `BIZAR_DASHBOARD_TRUST_TAILSCALE=1` is set (or auto-set by `bizar dash start --bg` on a Tailscale-auth'd host), Tailscale clients still saw `401 Invalid or missing auth token` on v1 endpoints that use `getCurrentUserId()` (e.g. `/api/workspaces`, `/api/users/me`).
+
+**Root cause:** The requireAuth middleware correctly trusted loopback+Tailscale XFF. But `getCurrentUserId()` only read the bearer token; if no token was present (which is the common case for tailnet users), it returned `null`. v1 routes that called `getCurrentUserId()` directly (instead of relying on requireAuth) then returned 401.
+
+**Fix:**
+
+1. `bizar-dash/src/server/auth.mjs` — `getCurrentUserId()` now synthesizes a deterministic `usr_ts_<hash>` userId from the request's `Host` header (the Tailscale hostname) when:
+   - `BIZAR_DASHBOARD_TRUST_TAILSCALE=1` is set, AND
+   - the request is from a loopback peer (the Tailscale serve proxy), AND
+   - the `Host` header ends in `.ts.net` (a Tailscale hostname)
+2. `bizar-dash/src/server/routes/users.mjs` — `/api/users/me` synthesizes a minimal Tailnet user record (`{ id, email: <host>@tailscale.local, name: 'Tailnet user (<host>)', tailnet: true }`) when the userId is `usr_ts_*` and not in the store.
+3. `cli/commands/dash.mjs` — auto-sets `BIZAR_DASHBOARD_TRUST_TAILSCALE=1` env var when Tailscale serve is auto-configured. The child process (spawned via `startInBackground`) inherits the env.
+
+**After upgrade, end-to-end Tailscale auth (no bearer token):**
+
+```
+/api/v2/health        → 200
+/api/workspaces       → 200   (was 401)
+/api/users/me         → 200   (was 404, now returns synthetic tailnet user)
+/api/voice/list       → 200
+/api/backup/list      → 200
+/api/plugins/installed → 200
+/api/eval/runs        → 200
+/api/memory/health    → 200
+/api/env-vars         → 200
+/api/settings         → 200
+/api/snapshot         → 200
+```
+
+`/api/users/me` now returns:
+```json
+{
+  "user": {
+    "id": "usr_ts_53d35e4d79c7",
+    "email": "borkpc@tailscale.local",
+    "name": "Tailnet user (borkpc)",
+    "tailnet": true
+  },
+  "workspaces": []
+}
+```
+
+### Tests
+
+- All existing tests still pass (395 npm + 226 vitest)
+- TypeScript: 0 errors
+- Tailscale auth verified end-to-end on live `https://borkpc.tail2cdf4d.ts.net/`
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.3.1`
+
 ## v5.3.0 — Plugin permissions enforcement, Plugin marketplace web UI, Eval CSV + schedules, Full WCAG audit
 
 ### Highlights

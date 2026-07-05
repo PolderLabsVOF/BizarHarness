@@ -26,7 +26,25 @@ export function createUsersRouter() {
       return res.status(401).json({ error: 'unauthorized', message: 'Not authenticated' });
     }
     const user = await getUser(userId);
+    // v5.3.1 — Tailscale-trust: when getCurrentUserId returns a derived
+    // userId (usr_ts_*) that doesn't exist in the store, synthesize a
+    // minimal user record from the request Host header so the dashboard
+    // can render a profile without needing a full signup.
     if (!user) {
+      if (userId.startsWith('usr_ts_')) {
+        const host = String(req.headers?.host || '').split(':')[0] || 'tailnet';
+        const tailnetName = host.split('.')[0] || 'tailnet';
+        const workspaces = await listWorkspacesWithRoles(userId);
+        return res.json({
+          user: {
+            id: userId,
+            email: `${tailnetName}@tailscale.local`,
+            name: `Tailnet user (${tailnetName})`,
+            tailnet: true
+          },
+          workspaces
+        });
+      }
       return res.status(404).json({ error: 'not_found', message: 'User not found' });
     }
     const workspaces = await listWorkspacesWithRoles(userId);
