@@ -13,6 +13,7 @@ import {
   FileText,
   GitBranch,
   LayoutDashboard,
+  Network,
   RefreshCw,
   Search as SearchIcon,
   Sliders,
@@ -26,8 +27,9 @@ import { ObsidianPanel } from './memory/ObsidianPanel';
 import { GitSyncPanel } from './memory/GitSyncPanel';
 import { SemanticSearchPanel } from './memory/SemanticSearchPanel';
 import { ConfigPanel } from './memory/ConfigPanel';
+import { MemoryGraphPanel } from './memory/MemoryGraphPanel';
 
-type SubPanel = 'overview' | 'lightrag' | 'obsidian' | 'git' | 'semantic' | 'config';
+type SubPanel = 'overview' | 'lightrag' | 'obsidian' | 'git' | 'semantic' | 'config' | 'graph';
 
 type Props = {
   snapshot: unknown;
@@ -48,6 +50,7 @@ const SOURCES: Array<{
   { id: 'git', label: 'Git Sync', icon: GitBranch },
   { id: 'semantic', label: 'Semantic Search', icon: SearchIcon },
   { id: 'config', label: 'Config', icon: Sliders },
+  { id: 'graph', label: 'Memory Graph', icon: Network },
 ];
 
 function MemoryInner(_props: Props) {
@@ -78,6 +81,8 @@ function MemoryInner(_props: Props) {
         return <SemanticSearchPanel refreshKey={refreshKey} />;
       case 'config':
         return <ConfigPanel refreshKey={refreshKey} />;
+      case 'graph':
+        return <MemoryGraphPanel refreshKey={refreshKey} />;
       default:
         return <Card>Unknown panel: {active}</Card>;
     }

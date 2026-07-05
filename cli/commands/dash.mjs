@@ -42,6 +42,12 @@ export function showDashHelp() {
   Note:
     \`bizar dashboard\` is a deprecated alias for \`bizar dash\` and still
     works, but new code should use \`bizar dash\`.
+
+  OpenTelemetry (optional, env vars):
+    BIZAR_OTEL=1                       Enable OpenTelemetry tracing (off by default)
+    OTEL_ENABLED=1                     Alias that also opts in
+    OTEL_EXPORTER_OTLP_ENDPOINT        OTLP HTTP traces endpoint
+                                       (default http://localhost:4318/v1/traces)
   `);
 }
 

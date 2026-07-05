@@ -953,3 +953,86 @@ dl.memory-config-row dd {
 .memory-status-card-sub {
   font-size: 11px;
 }
+
+/* ── Memory Graph ─────────────────────────────────────────────────────── */
+
+.memory-graph-canvas {
+  display: block;
+  background: var(--bg, #0b0e14);
+  border: 1px solid var(--border, #232a39);
+  border-radius: var(--radius, 8px);
+  user-select: none;
+}
+
+.memory-graph-canvas-svg {
+  height: 480px;
+}
+
+.memory-graph-node {
+  transition: opacity var(--motion-fast, 120ms);
+}
+
+.memory-graph-node:hover circle {
+  opacity: 1;
+}
+
+.memory-graph-tooltip {
+  position: absolute;
+  padding: 6px 10px;
+  background: var(--bg-elev, #12161f);
+  border: 1px solid var(--border, #232a39);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  color: var(--text, #c9d1d9);
+  pointer-events: none;
+  z-index: 10;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memory-graph-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.memory-graph-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.memory-graph-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.memory-graph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim, #b4bcd0);
+}
+
+.memory-graph-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.memory-graph-stats {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text, #c9d1d9);
+}

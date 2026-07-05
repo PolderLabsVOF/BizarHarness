@@ -1,9 +1,9 @@
 // src/mobile/views/MobileSettings.tsx — mobile settings with full desktop parity.
 import { useEffect, useState } from 'react';
-import { QrCode, RefreshCw, Smartphone, Sun, Moon, Monitor, Save } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { Smartphone, Sun, Moon, Monitor, Save } from 'lucide-react';
 import { api } from '../../lib/api';
 import { applyTheme, applyThemeTokens, type Settings, type Snapshot, type ThemeName } from '../../lib/types';
+import { QrCodePanel } from './QrCodePanel';
 
 type Props = {
   settings: Settings;
@@ -30,33 +30,18 @@ const PRESET_ACCENTS = [
   { name: 'Mono', accent: '#6b7280' },
 ];
 
-function formatCountdown(ms: number): string {
-  if (ms <= 0) return 'expired';
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, '0')}`;
-}
-
 export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props) {
   const [settings, setSettings] = useState<Settings>(initial);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pair, setPair] = useState<PairSession | null>(null);
   const [pairing, setPairing] = useState(false);
-  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     setSettings(initial);
     setDirty(false);
     if (initial.theme) applyThemeTokens(initial.theme);
   }, [initial]);
-
-  useEffect(() => {
-    if (!pair) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [pair]);
 
   const patchTheme = (patch: Partial<Settings['theme']>) => {
     setSettings((cur) => {
@@ -101,8 +86,8 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
     }
   };
 
-  const remaining = pair ? pair.expiresAt - now : 0;
-  const expired = pair != null && remaining <= 0;
+  // remaining/expired are now managed inside QrCodePanel to keep
+  // qrcode.react out of the main mobile bundle chunk.
 
   return (
     <div className="mobile-view">
@@ -332,24 +317,14 @@ export function MobileSettings({ settings: initial, snapshot, onRefresh }: Props
         <div className="mobile-card">
           {!pair && (
             <button type="button" className="mobile-btn" onClick={startPair} disabled={pairing} style={{ width: '100%' }}>
-              <QrCode size={14} /> {pairing ? 'Generating…' : 'Generate QR Code'}
+              <Smartphone size={14} /> {pairing ? 'Generating…' : 'Generate QR Code'}
             </button>
           )}
-          {pair && !expired && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ background: '#fff', padding: 12, borderRadius: 12, display: 'inline-block' }}>
-                <QRCodeSVG value={pair.qrPayload} size={180} level="M" />
-              </div>
-              <div style={{ marginTop: 8, fontSize: 12 }}>
-                Expires in <strong>{formatCountdown(remaining)}</strong>
-              </div>
-              <div className="mono" style={{ fontSize: 10, wordBreak: 'break-all', marginTop: 4 }}>{pair.publicUrl}</div>
-            </div>
-          )}
-          {pair && expired && (
-            <button type="button" className="mobile-btn" onClick={startPair} style={{ width: '100%' }}>
-              <RefreshCw size={14} /> Generate new QR
-            </button>
+          {pair && (
+            <QrCodePanel
+              pair={pair}
+              onStart={startPair}
+            />
           )}
         </div>
       </section>

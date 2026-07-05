@@ -1,0 +1,50 @@
+# ── Bizar Dashboard — Docker Compose ─────────────────────────────────────────
+# Quick start: docker compose up -d
+#
+# Volumes persist configuration, memory notes, usage logs, and backups
+# across container restarts and upgrades.
+
+version: '3.8'
+
+services:
+  bizar-dash:
+    build: .
+    container_name: bizar-dash
+    restart: unless-stopped
+    ports:
+      - "4097:4097"
+      - "4098:4098"
+    volumes:
+      - bizar-config:/home/bizar/.config/bizar
+      - bizar-memory:/home/bizar/.local/share/bizar/memory
+      - bizar-usage:/home/bizar/.local/share/bizar/usage.jsonl
+      - bizar-backups:/home/bizar/.local/share/bizar/backups
+    environment:
+      - BIZAR_HOME=/home/bizar/.config/bizar
+      - BIZAR_DASHBOARD_PORT=4097
+      - BIZAR_DASHBOARD_HOST=0.0.0.0
+      - NODE_ENV=production
+      # Optional: OpenTelemetry export
+      - BIZAR_OTEL=${BIZAR_OTEL:-0}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Optional: Headroom context compression
+      - HEADROOM_ENABLED=${HEADROOM_ENABLED:-0}
+      # Optional: Tailscale auth key (set for Funnel / Serve)
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4097/api/v2/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bizar-config:
+  bizar-memory:
+  bizar-usage:
+  bizar-backups:

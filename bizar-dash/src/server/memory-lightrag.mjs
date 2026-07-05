@@ -1052,6 +1052,115 @@ function statMaybe(path) {
 }
 
 /**
+ * Get a graph representation of the LightRAG index.
+ *
+ * If `root` is given, fetches entities reachable within `depth` hops
+ * from that entity via LightRAG's /graph endpoint. Otherwise returns
+ * all entities up to `limit`.
+ *
+ * Falls back to reading .bizar/memory/lightrag/kv_store_*.json directly
+ * when the LightRAG server is unavailable.
+ *
+ * @param {{ projectRoot: string, root?: string|null, depth?: number, limit?: number }}
+ * @returns {Promise<{nodes: Array<{id:string,label:string,type:string,size:number,group:string}>, edges: Array<{source:string,target:string,type:string,weight:number}>}>}
+ */
+export async function getLightRAGGraph({ projectRoot, root = null, depth = 2, limit = 200 }) {
+  const config = resolveLightRAGConfig(projectRoot);
+
+  // Attempt to query the running server.
+  if (await isRunning(config)) {
+    try {
+      const nodes = [];
+      const edges = [];
+
+      if (root) {
+        // Use LightRAG's /graph endpoint with root entity.
+        const url = `http://${config.host}:${config.port}/graph?root=${encodeURIComponent(root)}&depth=${depth}&limit=${limit}`;
+        const res = await httpGet(url, config.timeoutMs);
+        if (res.status === 200) {
+          let parsed;
+          try { parsed = JSON.parse(res.body); } catch { parsed = {}; }
+          // LightRAG /graph shape varies; normalise to our contract.
+          // LightRAG returns { entities: [...], relations: [...] } or similar.
+          const ents = parsed.entities || parsed.nodes || [];
+          const rels = parsed.relations || parsed.edges || [];
+          for (const e of ents.slice(0, limit)) {
+            const id = String(e.id || e.name || JSON.stringify(e));
+            nodes.push({
+              id,
+              label: String(e.label || e.name || id).slice(0, 60),
+              type: String(e.type || 'entity'),
+              size: Number(e.size || 1),
+              group: String(e.group || e.type || 'default'),
+            });
+          }
+          for (const r of rels) {
+            edges.push({
+              source: String(r.source || r.from || r.src || ''),
+              target: String(r.target || r.to || r.dst || ''),
+              type: String(r.type || 'related'),
+              weight: Number(r.weight || 1),
+            });
+          }
+          return { nodes, edges };
+        }
+      } else {
+        // Return all entities from kv_store_full_docs.json.
+        const docsPath = join(config.workingDir, 'kv_store_full_docs.json');
+        if (existsSync(docsPath)) {
+          try {
+            const docs = JSON.parse(readFileSync(docsPath, 'utf8'));
+            const keys = Object.keys(docs || {}).slice(0, limit);
+            // Group by top-level path segment as a proxy for group.
+            for (const k of keys) {
+              const parts = k.replace(/^bizar:\/\//, '').split('/');
+              const group = parts.length > 1 ? parts[0] : 'root';
+              nodes.push({
+                id: k,
+                label: parts[parts.length - 1].replace(/[_-]/g, ' '),
+                type: 'note',
+                size: 1,
+                group,
+              });
+            }
+            return { nodes, edges };
+          } catch (err) {
+            console.warn('[lightrag] getLightRAGGraph fallback read failed:', err?.message);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[lightrag] getLightRAGGraph server query failed, falling back:', err?.message);
+    }
+  }
+
+  // Fallback: read kv_store files directly.
+  const nodes = [];
+  const edges = [];
+  try {
+    const docsPath = join(config.workingDir, 'kv_store_full_docs.json');
+    if (existsSync(docsPath)) {
+      const docs = JSON.parse(readFileSync(docsPath, 'utf8'));
+      const keys = Object.keys(docs || {}).slice(0, limit);
+      for (const k of keys) {
+        const parts = k.replace(/^bizar:\/\//, '').split('/');
+        const group = parts.length > 1 ? parts[0] : 'root';
+        nodes.push({
+          id: k,
+          label: parts[parts.length - 1].replace(/[_-]/g, ' '),
+          type: 'note',
+          size: 1,
+          group,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[lightrag] getLightRAGGraph fallback read error:', err?.message);
+  }
+  return { nodes, edges };
+}
+
+/**
  * Rebuild the graph from scratch. Stops the server, wipes the working dir,
  * and re-runs reindexVault. Returns { ok, started, error?, markerPath? }.
  *

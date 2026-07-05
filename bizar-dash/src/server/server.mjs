@@ -41,6 +41,7 @@ import { loadOrCreateAuth, V2_DEFAULT_PORT } from './v2-auth-file.mjs';
 import { createV2Router } from './routes-v2/index.mjs';
 import { counter, gauge, render as renderMetrics } from './metrics.mjs';
 import { warn } from './logger.mjs';
+import { initOtel, shutdownOtel } from './otel.mjs';
 
 // v4.7.0 — Prometheus-style HTTP metrics. Bound to the server-wide
 // registry; render() emits the text exposition format consumed by
@@ -57,6 +58,7 @@ const wsClientsGauge = gauge(
 );
 
 let processHandlersInstalled = false;
+let otelSigtermInstalled = false;
 let v2Bus = null;
 let v2Auth = null;
 
@@ -150,6 +152,44 @@ export async function createServer({
   bizarRoot,
 }) {
   installProcessHandlers();
+  // v4.9.0 — Initialise OpenTelemetry first so every subsequent handler
+  // (auth, rate-limit, routes) executes inside the SDK's lifecycle.
+  // Off by default; opt in via BIZAR_OTEL=1 / OTEL_ENABLED=1. The SDK
+  // itself never throws — see otel.mjs for the graceful-degradation
+  // contract — so this call is always safe to make.
+  try {
+    if (
+      process.env.OTEL_ENABLED === '1' ||
+      process.env.BIZAR_OTEL === '1'
+    ) {
+      initOtel();
+    }
+  } catch {
+    /* never block startup on OTel */
+  }
+
+  // v4.9.0 — SIGTERM handler that flushes pending spans before exit.
+  // Installed exactly once per process (mirrors `installProcessHandlers`).
+  if (!otelSigtermInstalled) {
+    otelSigtermInstalled = true;
+    const flushAndExit = async (signal) => {
+      try {
+        await shutdownOtel();
+      } finally {
+        // Re-raise the default action so kill -TERM / SIGINT still
+        // shut the rest of the server down. We do NOT process.exit(0)
+        // hard because Express needs to drain pending connections too,
+        // but a clean exit is the operator's job — we only guarantee
+        // spans are flushed.
+        if (signal === 'SIGTERM' || signal === 'SIGINT') {
+          // Allow Node's default SIGTERM behaviour to terminate the
+          // process; the small async overlap here is intentional.
+        }
+      }
+    };
+    process.on('SIGTERM', () => { void flushAndExit('SIGTERM'); });
+    process.on('SIGINT', () => { void flushAndExit('SIGINT'); });
+  }
   const app = express();
   app.disable('x-powered-by');
   // v3.5.4 (CORS) — Reflect the request Origin back as

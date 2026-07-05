@@ -22,7 +22,9 @@
  *   - Upstream SSE error: clean up and return without crashing.
  */
 import { Router } from 'express';
+import { SpanStatusCode } from '@opentelemetry/api';
 import { warn as logWarn } from '../logger.mjs';
+import { tracer } from '../otel.mjs';
 import {
   existsSync,
   mkdirSync,
@@ -109,11 +111,31 @@ export function createChatRouter({ state, broadcast }) {
   });
   router.use(chatLimiter);
 
+  // v4.9.0 — Wrap chat reads in a span. Status flips to ERROR only on
+  // thrown errors; a 200 with empty history is still OK. We bind the
+  // session id up front so a trace collector can filter by chat
+  // session across the SSE pump span opened further downstream.
   router.get('/chat', wrap(async (req, res) => {
-    const sessionId = req.query.session ? String(req.query.session) : null;
-    const requestedLimit = req.query.limit ? Number(req.query.limit) : 200;
-    const limit = Math.min(500, Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 200));
-    res.json(state.getChat({ sessionId, limit }));
+    return tracer.startActiveSpan('chat.history', async (span) => {
+      try {
+        const sessionId = req.query.session ? String(req.query.session) : null;
+        const requestedLimit = req.query.limit ? Number(req.query.limit) : 200;
+        const limit = Math.min(
+          500,
+          Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 200),
+        );
+        span.setAttribute('chat.session_id', sessionId || '');
+        span.setAttribute('chat.history_limit', limit);
+        res.json(state.getChat({ sessionId, limit }));
+        span.setStatus({ code: SpanStatusCode.OK });
+      } catch (err) {
+        span.recordException(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }));
 
   // ── POST /api/chat ─────────────────────────────────────────────────────
@@ -123,186 +145,240 @@ export function createChatRouter({ state, broadcast }) {
   //   5: Instead of polling, subscribe to SSE and stream deltas via WS.
   //   6: On session.idle, persist + broadcast final message, return 200.
   //
+  // v4.9.0 — POST /api/chat now runs entirely inside a 'chat.send'
+  // span. The span's status is driven by the final HTTP status code
+  // (captured via `res.on('finish')`), so every early-return branch —
+  // 202 queued fallback, 502 upstream error, 503 subscription cap,
+  // 400 missing message — automatically lands on the right span
+  // status. The async SSE pump launched at the tail of the handler is
+  // intentionally NOT parented to this span: that work continues for
+  // seconds after the response flushes, and riding one span for the
+  // whole pump would defeat the point of distributed tracing.
   router.post('/chat', wrap(async (req, res) => {
-    const body = req.body || {};
-    const message = typeof body.message === 'string' ? body.message.trim() : '';
-    if (!message) {
-      res.status(400).json({ error: 'bad_request', message: 'message is required' });
-      return;
-    }
-    const active = projectsStore.active();
-
-    // 1. Persist the user message to the per-project .jsonl log.
-    let chatSessionId = null;
-    let file = null;
-    let record = null;
-    if (active) {
-      const dir = projectsStore.ensureProjectDir(active.id);
-      const sessionsDir = join(dir, 'sessions');
-      mkdirSync(sessionsDir, { recursive: true });
-      const requestedSessionId = typeof body.session === 'string' ? body.session.trim() : '';
-      chatSessionId = SESSION_ID_RE.test(requestedSessionId)
-        ? requestedSessionId
-        : `sess_${Date.now().toString(36)}`;
-      file = join(sessionsDir, `${chatSessionId}.jsonl`);
-      record = {
-        id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        ts: new Date().toISOString(),
-        role: 'user',
-        agent: body.agent || null,
-        model: body.model || null,
-        content: message,
-        attachments: body.attachments || [],
+    return tracer.startActiveSpan('chat.send', async (span) => {
+      let spanEnded = false;
+      const finishSpan = () => {
+        if (spanEnded) return;
+        spanEnded = true;
+        try {
+          const code = res.statusCode || 0;
+          if (code >= 400) {
+            span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${code}` });
+          } else {
+            span.setStatus({ code: SpanStatusCode.OK });
+          }
+        } finally {
+          span.end();
+        }
       };
+      res.once('finish', finishSpan);
       try {
-        appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
-      } catch {
-        // best effort
-      }
-    } else {
-      const requestedSessionId = typeof body.session === 'string' ? body.session.trim() : '';
-      chatSessionId = SESSION_ID_RE.test(requestedSessionId)
-        ? requestedSessionId
-        : `sess_${Date.now().toString(36)}`;
-      record = {
-        id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        ts: new Date().toISOString(),
-        role: 'user',
-        agent: body.agent || null,
-        model: body.model || null,
-        content: message,
-        attachments: body.attachments || [],
-      };
-    }
+        const body = req.body || {};
+        const message = typeof body.message === 'string' ? body.message.trim() : '';
+        span.setAttribute('chat.message_length', message.length);
+        span.setAttribute('chat.requested_session', typeof body.session === 'string' ? body.session.trim() : '');
+        span.setAttribute('chat.requested_agent', typeof body.agent === 'string' ? body.agent : '');
+        if (!message) {
+          res.status(400).json({ error: 'bad_request', message: 'message is required' });
+          return;
+        }
+        const active = projectsStore.active();
+        span.setAttribute('chat.has_active_project', active ? true : false);
 
-    state.appendActivity({
-      kind: 'chat.message',
-      agent: body.agent || null,
-      message: message.slice(0, 500),
-    });
-    broadcast({ type: 'chat:message', sessionId: chatSessionId, message: record });
+        // 1. Persist the user message to the per-project .jsonl log.
+        let chatSessionId = null;
+        let file = null;
+        let record = null;
+        const requestedSessionRaw = typeof body.session === 'string' ? body.session.trim() : '';
+        if (active) {
+          const dir = projectsStore.ensureProjectDir(active.id);
+          const sessionsDir = join(dir, 'sessions');
+          mkdirSync(sessionsDir, { recursive: true });
+          chatSessionId = SESSION_ID_RE.test(requestedSessionRaw)
+            ? requestedSessionRaw
+            : `sess_${Date.now().toString(36)}`;
+          span.setAttribute('chat.session_id', chatSessionId);
+          file = join(sessionsDir, `${chatSessionId}.jsonl`);
+          record = {
+            id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            ts: new Date().toISOString(),
+            role: 'user',
+            agent: body.agent || null,
+            model: body.model || null,
+            content: message,
+            attachments: body.attachments || [],
+          };
+          try {
+            appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
+          } catch {
+            // best effort
+          }
+        } else {
+          chatSessionId = SESSION_ID_RE.test(requestedSessionRaw)
+            ? requestedSessionRaw
+            : `sess_${Date.now().toString(36)}`;
+          span.setAttribute('chat.session_id', chatSessionId);
+          record = {
+            id: `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            ts: new Date().toISOString(),
+            role: 'user',
+            agent: body.agent || null,
+            model: body.model || null,
+            content: message,
+            attachments: body.attachments || [],
+          };
+        }
 
-    // 2. No active project → legacy 202.
-    if (!active) {
-      return res.status(202).json({
-        accepted: true,
-        agent: body.agent || null,
-        queued: true,
-        reason: 'no_active_project',
-      });
-    }
-
-    // 3. No plugin running → queued fallback.
-    const serveInfo = readServeInfo();
-    if (!serveInfo) {
-      return res.status(202).json({
-        accepted: true,
-        agent: body.agent || null,
-        queued: true,
-        session: chatSessionId,
-        reason: 'plugin_offline',
-      });
-    }
-
-    const sessionsDir = join(projectsStore.ensureProjectDir(active.id), 'sessions');
-    const sidecarPath = join(sessionsDir, `${chatSessionId}.opencode.json`);
-
-    // 4. Resolve or create the opencode session that backs this chat.
-    let opencodeSessionId = null;
-    try {
-      if (existsSync(sidecarPath)) {
-        const sidecar = JSON.parse(readFileSync(sidecarPath, 'utf8'));
-        opencodeSessionId = sidecar?.opencodeSessionId || null;
-      }
-    } catch {
-      opencodeSessionId = null;
-    }
-
-    if (!opencodeSessionId) {
-      const agentName = body.agent || active.defaultAgent || 'odin';
-      const create = await createOpencodeSession(
-        serveInfo,
-        { title: `Chat: ${agentName}`, agent: agentName },
-        active.path || serveInfo.worktree,
-      );
-      if (!create.ok || !create.sessionId) {
-        return res.status(502).json({
-          error: 'create_session_failed',
-          message: create.error || 'failed to create opencode session',
-          session: chatSessionId,
+        state.appendActivity({
+          kind: 'chat.message',
+          agent: body.agent || null,
+          message: message.slice(0, 500),
         });
-      }
-      opencodeSessionId = create.sessionId;
-      try {
-        const sidecar = {
+        broadcast({ type: 'chat:message', sessionId: chatSessionId, message: record });
+
+        // 2. No active project → legacy 202.
+        if (!active) {
+          res.status(202).json({
+            accepted: true,
+            agent: body.agent || null,
+            queued: true,
+            reason: 'no_active_project',
+          });
+          return;
+        }
+
+        // 3. No plugin running → queued fallback.
+        const serveInfo = readServeInfo();
+        if (!serveInfo) {
+          res.status(202).json({
+            accepted: true,
+            agent: body.agent || null,
+            queued: true,
+            session: chatSessionId,
+            reason: 'plugin_offline',
+          });
+          return;
+        }
+
+        const sessionsDir = join(projectsStore.ensureProjectDir(active.id), 'sessions');
+        const sidecarPath = join(sessionsDir, `${chatSessionId}.opencode.json`);
+
+        // 4. Resolve or create the opencode session that backs this chat.
+        let opencodeSessionId = null;
+        try {
+          if (existsSync(sidecarPath)) {
+            const sidecar = JSON.parse(readFileSync(sidecarPath, 'utf8'));
+            opencodeSessionId = sidecar?.opencodeSessionId || null;
+          }
+        } catch {
+          opencodeSessionId = null;
+        }
+        span.setAttribute('chat.opencode_session_id', opencodeSessionId || '');
+
+        if (!opencodeSessionId) {
+          const agentName = body.agent || active.defaultAgent || 'odin';
+          const create = await createOpencodeSession(
+            serveInfo,
+            { title: `Chat: ${agentName}`, agent: agentName },
+            active.path || serveInfo.worktree,
+          );
+          if (!create.ok || !create.sessionId) {
+            res.status(502).json({
+              error: 'create_session_failed',
+              message: create.error || 'failed to create opencode session',
+              session: chatSessionId,
+            });
+            return;
+          }
+          opencodeSessionId = create.sessionId;
+          try {
+            const sidecar = {
+              opencodeSessionId,
+              agent: agentName,
+              createdAt: Date.now(),
+              chatSessionId,
+            };
+            writeFileSync(sidecarPath, JSON.stringify(sidecar, null, 2) + '\n', 'utf8');
+          } catch {
+            // best effort
+          }
+        }
+
+        // 5. POST the prompt.
+        const agentName = body.agent || active.defaultAgent || 'odin';
+        const send = await sendOpencodePrompt(
+          serveInfo,
+          {
+            sessionId: opencodeSessionId,
+            agent: agentName,
+            text: message,
+            messageID: record.id,
+          },
+          active.path || serveInfo.worktree,
+        );
+        if (!send.ok) {
+          res.status(502).json({
+            error: 'send_prompt_failed',
+            message: send.error || 'failed to send prompt to opencode',
+            session: chatSessionId,
+            opencodeSessionId,
+          });
+          return;
+        }
+
+        // 6. Enforce the concurrent subscription cap.
+        if (activeChatSubscriptions >= MAX_CHAT_SUBSCRIPTIONS) {
+          res.status(503).json({
+            error: 'too_many_subscriptions',
+            message: `Chat subscription cap (${MAX_CHAT_SUBSCRIPTIONS}) reached; try again later.`,
+            accepted: true,
+            session: chatSessionId,
+            opencodeSessionId,
+          });
+          return;
+        }
+        activeChatSubscriptions++;
+
+        // 7. Return 200 immediately. The SSE subscription streams deltas via WS.
+        res.json({
+          accepted: true,
+          session: chatSessionId,
           opencodeSessionId,
-          agent: agentName,
-          createdAt: Date.now(),
+          userMessage: record,
+        });
+
+        // 8. Subscribe to opencode SSE and forward deltas via WS broadcast.
+        //    On session.idle: persist the final message, broadcast chat:message,
+        //    then decrement the counter.
+        void streamOpencodeSession({
+          serveInfo,
+          opencodeSessionId,
+          directory: active.path || serveInfo.worktree,
           chatSessionId,
-        };
-        writeFileSync(sidecarPath, JSON.stringify(sidecar, null, 2) + '\n', 'utf8');
-      } catch {
-        // best effort
+          agentName,
+          file,
+          record,
+          broadcast,
+          state,
+          onDone: () => {
+            activeChatSubscriptions = Math.max(0, activeChatSubscriptions - 1);
+          },
+        });
+      } catch (err) {
+        if (!spanEnded) {
+          // Errors caught here propagate to `wrap()`, which writes
+          // an error JSON response and triggers `res.on('finish')`
+          // later. We must end the span NOW (before rethrowing) so
+          // finishSpan sees `spanEnded === true` and skips its own
+          // end — calling span.end() twice is invalid in the OTel
+          // API.
+          spanEnded = true;
+          span.recordException(err);
+          span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+          span.end();
+        }
+        throw err;
       }
-    }
-
-    // 5. POST the prompt.
-    const agentName = body.agent || active.defaultAgent || 'odin';
-    const send = await sendOpencodePrompt(
-      serveInfo,
-      {
-        sessionId: opencodeSessionId,
-        agent: agentName,
-        text: message,
-        messageID: record.id,
-      },
-      active.path || serveInfo.worktree,
-    );
-    if (!send.ok) {
-      return res.status(502).json({
-        error: 'send_prompt_failed',
-        message: send.error || 'failed to send prompt to opencode',
-        session: chatSessionId,
-        opencodeSessionId,
-      });
-    }
-
-    // 6. Enforce the concurrent subscription cap.
-    if (activeChatSubscriptions >= MAX_CHAT_SUBSCRIPTIONS) {
-      return res.status(503).json({
-        error: 'too_many_subscriptions',
-        message: `Chat subscription cap (${MAX_CHAT_SUBSCRIPTIONS}) reached; try again later.`,
-        accepted: true,
-        session: chatSessionId,
-        opencodeSessionId,
-      });
-    }
-    activeChatSubscriptions++;
-
-    // 7. Return 200 immediately. The SSE subscription streams deltas via WS.
-    res.json({
-      accepted: true,
-      session: chatSessionId,
-      opencodeSessionId,
-      userMessage: record,
-    });
-
-    // 8. Subscribe to opencode SSE and forward deltas via WS broadcast.
-    //    On session.idle: persist the final message, broadcast chat:message,
-    //    then decrement the counter.
-    void streamOpencodeSession({
-      serveInfo,
-      opencodeSessionId,
-      directory: active.path || serveInfo.worktree,
-      chatSessionId,
-      agentName,
-      file,
-      record,
-      broadcast,
-      state,
-      onDone: () => {
-        activeChatSubscriptions = Math.max(0, activeChatSubscriptions - 1);
-      },
     });
   }));
 

@@ -707,6 +707,127 @@ export const LIGHTRAG_DEFAULT_LLM = 'opencode/gpt-5-nano';
 export const LIGHTRAG_DEFAULT_EMBEDDING = 'opencode/text-embedding-3-small';
 
 /**
+ * Build a wikilink link graph from all .md notes in the vault.
+ *
+ * Nodes: one per note (id = relPath, label = title or basename).
+ * Edges: one per wikilink [[Target]] found in note bodies.
+ *
+ * @param {{ projectRoot: string, vaultPath?: string|null, limit?: number }} opts
+ * @returns {{ nodes: Array<{id:string,label:string,type:string,size:number,group:string}>, edges: Array<{source:string,target:string,type:string,weight:number}> }}
+ */
+export function getObsidianLinkGraph({ projectRoot, vaultPath = null, limit = 200 }) {
+  const { vaultRoot } = resolveVault(projectRoot);
+  const root = vaultPath || vaultRoot;
+  const nodesMap = new Map(); // id → node
+  const edges = [];
+
+  // Collect all notes.
+  const notes = listNotesForGraph(root);
+  const sliced = notes.slice(0, limit);
+
+  for (const note of sliced) {
+    if (!nodesMap.has(note.relPath)) {
+      nodesMap.set(note.relPath, {
+        id: note.relPath,
+        label: note.frontmatter?.title || note.relPath.split('/').pop()?.replace(/\.md$/i, '') || note.relPath,
+        type: 'note',
+        size: 1,
+        group: note.relPath.split('/')[0] || 'root',
+      });
+    }
+
+    // Extract wikilinks from body.
+    const WIKILINK_RE = /\[\[([^\]\n|]+?)(?:\|[^\]\n]+?)?(?:#[^\]\n]+?)?\]\]/g;
+    const body = note.body || '';
+    let m;
+    WIKILINK_RE.lastIndex = 0;
+    while ((m = WIKILINK_RE.exec(body)) !== null) {
+      const raw = (m[1] || '').trim();
+      if (!raw) continue;
+      const target = raw.split('#')[0].trim().split('/').pop() || raw;
+      // Resolve to a note id (basename match).
+      const targetId = resolveWikilinkTarget(target, notes);
+      if (targetId && targetId !== note.relPath) {
+        edges.push({
+          source: note.relPath,
+          target: targetId,
+          type: 'links_to',
+          weight: 1,
+        });
+        // Ensure target node exists.
+        if (!nodesMap.has(targetId)) {
+          nodesMap.set(targetId, {
+            id: targetId,
+            label: target,
+            type: 'note',
+            size: 1,
+            group: targetId.split('/')[0] || 'root',
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    nodes: [...nodesMap.values()].slice(0, limit),
+    edges: edges.slice(0, limit * 3),
+  };
+}
+
+/**
+ * List notes from a specific root path (not the project vault root).
+ * Used by getObsidianLinkGraph for scanning arbitrary vaults.
+ */
+function listNotesForGraph(scanRoot) {
+  if (!existsSync(scanRoot)) return [];
+  const out = [];
+  function walk(dir, prefix) {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); }
+    catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const full = join(dir, e.name);
+      const rel = prefix ? `${prefix}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        walk(full, rel);
+      } else if (e.name.endsWith('.md')) {
+        try {
+          const raw = readFileSync(full, 'utf8');
+          const { frontmatter, body } = parseFrontmatter(raw);
+          out.push({ relPath: rel, frontmatter, body });
+        } catch { /* skip */ }
+      }
+    }
+  }
+  walk(scanRoot, '');
+  return out;
+}
+
+/**
+ * Resolve a wikilink target (e.g. "My Note" or "subdir/My Note") to a note id.
+ * Uses basename matching (Obsidian semantics).
+ */
+function resolveWikilinkTarget(targetName, notes) {
+  const normalized = targetName.replace(/\.md$/i, '').toLowerCase();
+  // Try exact relPath match first.
+  for (const n of notes) {
+    const base = n.relPath.replace(/\.md$/i, '').toLowerCase();
+    if (base === normalized || base.endsWith('/' + normalized)) {
+      return n.relPath;
+    }
+  }
+  // Fallback: basename-only match.
+  for (const n of notes) {
+    const base = n.relPath.split('/').pop()?.replace(/\.md$/i, '').toLowerCase();
+    if (base === normalized) {
+      return n.relPath;
+    }
+  }
+  return null;
+}
+
+/**
  * Return the effective LightRAG model defaults, applying env-var
  * overrides on top of the built-in opencode-Zen-free defaults.
  *

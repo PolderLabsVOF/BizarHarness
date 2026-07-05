@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { applyTheme, applyThemeTokens, type Settings, type SettingsResponse, type Snapshot, type TailscaleStatus } from '../lib/types';
 
+import { SettingsSearch, type SettingsSection, type SettingsField } from '../components/SettingsSearch';
 import { ThemeSection } from './settings/ThemeSection';
 import { UpdatesSection } from './settings/UpdatesSection';
 import { GeneralSection } from './settings/GeneralSection';
@@ -52,6 +53,99 @@ const SECTION_LINKS = [
   { id: 'skills', label: 'Skills' },
   { id: 'backup', label: 'Backup' },
 ] as const;
+
+/* ─── Settings search sections metadata ─── */
+const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: 'theme', label: 'Theme', fields: [
+    { key: 'theme.presets', label: 'Accent presets', section: 'theme' },
+    { key: 'theme.accent', label: 'Accent color', section: 'theme' },
+    { key: 'theme.success', label: 'Success color', section: 'theme' },
+    { key: 'theme.warning', label: 'Warning color', section: 'theme' },
+    { key: 'theme.error', label: 'Error color', section: 'theme' },
+    { key: 'theme.info', label: 'Info color', section: 'theme' },
+    { key: 'theme.fontFamily', label: 'Font family', section: 'theme' },
+    { key: 'theme.fontSize', label: 'Font size', section: 'theme' },
+    { key: 'theme.compactMode', label: 'Compact mode', section: 'theme' },
+    { key: 'theme.animations', label: 'Animations', section: 'theme' },
+  ] },
+  { id: 'updates', label: 'Updates', fields: [
+    { key: 'updates.channel', label: 'Update channel', section: 'updates' },
+  ] },
+  { id: 'layout', label: 'Layout', fields: [
+    { key: 'ui.layout', label: 'UI layout', section: 'layout' },
+    { key: 'ui.showHeader', label: 'Show header', section: 'layout' },
+    { key: 'ui.showStatusBar', label: 'Show status bar', section: 'layout' },
+    { key: 'ui.defaultTab', label: 'Default tab', section: 'layout' },
+  ] },
+  { id: 'general', label: 'General', fields: [
+    { key: 'defaultAgent', label: 'Default agent', section: 'general' },
+    { key: 'defaultModel', label: 'Model override', section: 'general' },
+  ] },
+  { id: 'network', label: 'Network', fields: [
+    { key: 'tailscale.enabled', label: 'Tailscale Serve', section: 'network' },
+    { key: 'tailscale.port', label: 'Tailscale port', section: 'network' },
+    { key: 'tailscale.https', label: 'Tailscale HTTPS', section: 'network' },
+    { key: 'tailscale.hostname', label: 'Tailscale hostname', section: 'network' },
+  ] },
+  { id: 'notifications', label: 'Notifications', fields: [
+    { key: 'notifications.onAgentComplete', label: 'Notify on agent complete', section: 'notifications' },
+    { key: 'notifications.onPlanApproval', label: 'Notify on plan approval', section: 'notifications' },
+  ] },
+  { id: 'auth', label: 'Auth', fields: [
+    { key: 'auth.enabled', label: 'Auth enabled', section: 'auth' },
+    { key: 'auth.loopback', label: 'Loopback mode', section: 'auth' },
+    { key: 'auth.token', label: 'Auth token', section: 'auth' },
+  ] },
+  { id: 'agents', label: 'Agents', fields: [
+    { key: 'agents.maxParallel', label: 'Max parallel agents', section: 'agents' },
+    { key: 'agents.stuckThresholdMs', label: 'Stuck threshold', section: 'agents' },
+    { key: 'agents.autoRestart', label: 'Auto restart', section: 'agents' },
+    { key: 'workflow.artifactsEnabled', label: 'Artifacts enabled', section: 'agents' },
+    { key: 'workflow.agentsDecideAutonomously', label: 'Autonomous decisions', section: 'agents' },
+  ] },
+  { id: 'dashboard', label: 'Dashboard', fields: [
+    { key: 'dashboard.autoLaunchWeb', label: 'Auto-launch web', section: 'dashboard' },
+    { key: 'dashboard.projectsDirectory', label: 'Projects directory', section: 'dashboard' },
+    { key: 'dashboard.allowedRoots', label: 'Allowed roots', section: 'dashboard' },
+  ] },
+  { id: 'background', label: 'Background', fields: [
+    { key: 'service.enabled', label: 'Background service', section: 'background' },
+    { key: 'service.autostart', label: 'Auto-start service', section: 'background' },
+  ] },
+  { id: 'system-llm', label: 'System LLM', fields: [
+    { key: 'systemLlm.enabled', label: 'System LLM enabled', section: 'system-llm' },
+  ] },
+  { id: 'headroom', label: 'Headroom', fields: [
+    { key: 'headroom.enabled', label: 'Headroom enabled', section: 'headroom' },
+    { key: 'headroom.port', label: 'Headroom port', section: 'headroom' },
+    { key: 'headroom.budget', label: 'Headroom budget', section: 'headroom' },
+    { key: 'headroom.backend', label: 'Headroom backend', section: 'headroom' },
+  ] },
+  { id: 'activity-log', label: 'Activity', fields: [
+    { key: 'activity.log', label: 'Activity log', section: 'activity-log' },
+  ] },
+  { id: 'about', label: 'About', fields: [
+    { key: 'about.version', label: 'Version', section: 'about' },
+    { key: 'about.homepage', label: 'Homepage', section: 'about' },
+    { key: 'about.license', label: 'License', section: 'about' },
+  ] },
+  { id: 'env-vars', label: 'Env Vars', fields: [
+    { key: 'env.add', label: 'Add variable', section: 'env-vars' },
+  ] },
+  { id: 'providers', label: 'Providers', fields: [
+    { key: 'providers.list', label: 'Provider list', section: 'providers' },
+  ] },
+  { id: 'memory', label: 'Memory', fields: [
+    { key: 'memory.config', label: 'Memory config', section: 'memory' },
+  ] },
+  { id: 'skills', label: 'Skills', fields: [
+    { key: 'skills.paths', label: 'Skill paths', section: 'skills' },
+  ] },
+  { id: 'backup', label: 'Backup', fields: [
+    { key: 'backup.create', label: 'Create backup', section: 'backup' },
+    { key: 'backup.restore', label: 'Restore backup', section: 'backup' },
+  ] },
+];
 
 function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
   const toast = useToast();
@@ -144,6 +238,8 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
           </Button>
         </div>
       </header>
+
+      <SettingsSearch sections={SETTINGS_SECTIONS} onJump={onJumpSection} />
 
       <nav className="settings-subnav" aria-label="Settings sections">
         <button type="button" className={cn('settings-subnav-button', 'settings-subnav-button-all', showAll && 'settings-subnav-button-active')} onClick={() => onJumpSection(null)} title="Show all settings sections">All</button>

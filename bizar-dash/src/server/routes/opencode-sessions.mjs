@@ -26,10 +26,12 @@
  */
 
 import { Router } from 'express';
+import { SpanStatusCode } from '@opentelemetry/api';
 import Database from 'better-sqlite3';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { wrap } from './_shared.mjs';
+import { tracer } from '../otel.mjs';
 import {
   readServeInfo,
   listOpencodeSessions,
@@ -118,58 +120,90 @@ export function createOpencodeSessionsRouter() {
   // Returns 503 when the opencode plugin is offline.
   // ────────────────────────────────────────────────────────────────────
   router.post('/opencode-sessions/new', wrap(async (req, res) => {
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const title = typeof body.title === 'string' && body.title.trim().length > 0
-      ? body.title.trim().slice(0, TITLE_MAX)
-      : null;
-    const agent = typeof body.agent === 'string' ? body.agent.trim() : '';
-    if (!agent) {
-      res.status(400).json({ error: 'bad_request', message: '`agent` is required' });
-      return;
-    }
-    if (!AGENT_NAME_RE.test(agent)) {
-      res.status(400).json({ error: 'bad_request', message: '`agent` is invalid (allowed: [A-Za-z0-9_-]{1,64})' });
-      return;
-    }
-    if (title !== null && title.length > TITLE_MAX) {
-      res.status(400).json({ error: 'bad_request', message: `title too long (> ${TITLE_MAX} chars)` });
-      return;
-    }
+    return tracer.startActiveSpan('opencode.session.create', async (span) => {
+      let spanEnded = false;
+      const finishSpan = () => {
+        if (spanEnded) return;
+        spanEnded = true;
+        try {
+          const code = res.statusCode || 0;
+          if (code >= 400) {
+            span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${code}` });
+          } else {
+            span.setStatus({ code: SpanStatusCode.OK });
+          }
+        } finally {
+          span.end();
+        }
+      };
+      res.once('finish', finishSpan);
+      try {
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const title = typeof body.title === 'string' && body.title.trim().length > 0
+          ? body.title.trim().slice(0, TITLE_MAX)
+          : null;
+        const agent = typeof body.agent === 'string' ? body.agent.trim() : '';
+        span.setAttribute('opencode.session.agent', agent);
+        span.setAttribute('opencode.session.title_length', title === null ? 0 : title.length);
+        if (!agent) {
+          res.status(400).json({ error: 'bad_request', message: '`agent` is required' });
+          return;
+        }
+        if (!AGENT_NAME_RE.test(agent)) {
+          res.status(400).json({ error: 'bad_request', message: '`agent` is invalid (allowed: [A-Za-z0-9_-]{1,64})' });
+          return;
+        }
+        if (title !== null && title.length > TITLE_MAX) {
+          res.status(400).json({ error: 'bad_request', message: `title too long (> ${TITLE_MAX} chars)` });
+          return;
+        }
 
-    const info = readServeInfo();
-    if (!info) {
-      res.status(503).json({
-        error: 'plugin_offline',
-        message: 'opencode plugin is not running',
-      });
-      return;
-    }
+        const info = readServeInfo();
+        if (!info) {
+          res.status(503).json({
+            error: 'plugin_offline',
+            message: 'opencode plugin is not running',
+          });
+          return;
+        }
 
-    const directory = typeof body.directory === 'string' && body.directory.length > 0
-      ? body.directory
-      : (info.worktree || '');
+        const directory = typeof body.directory === 'string' && body.directory.length > 0
+          ? body.directory
+          : (info.worktree || '');
+        span.setAttribute('opencode.session.directory', directory);
 
-    const finalTitle = title || `Chat: ${agent}`;
-    const result = await createOpencodeSession(
-      info,
-      { title: finalTitle, agent },
-      directory,
-    );
-    if (!result.ok || !result.sessionId) {
-      const status = result.status === 404 ? 404 : 502;
-      res.status(status).json({
-        error: 'opencode_error',
-        message: result.error || 'failed to create opencode session',
-      });
-      return;
-    }
+        const finalTitle = title || `Chat: ${agent}`;
+        const result = await createOpencodeSession(
+          info,
+          { title: finalTitle, agent },
+          directory,
+        );
+        if (!result.ok || !result.sessionId) {
+          const status = result.status === 404 ? 404 : 502;
+          res.status(status).json({
+            error: 'opencode_error',
+            message: result.error || 'failed to create opencode session',
+          });
+          return;
+        }
 
-    res.status(201).json({
-      id: result.sessionId,
-      title: finalTitle,
-      agent,
-      directory,
-      createdAt: Date.now(),
+        span.setAttribute('opencode.session.id', result.sessionId);
+        res.status(201).json({
+          id: result.sessionId,
+          title: finalTitle,
+          agent,
+          directory,
+          createdAt: Date.now(),
+        });
+      } catch (err) {
+        if (!spanEnded) {
+          spanEnded = true;
+          span.recordException(err);
+          span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+          span.end();
+        }
+        throw err;
+      }
     });
   }));
 

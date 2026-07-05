@@ -1,5 +1,58 @@
 # Changelog
 
+## v4.9.0 — Mobile bundle fix, OpenTelemetry, Memory graph, Docker, Settings search
+
+### Highlights
+
+**Mobile bundle fix:**
+- Lazy-loaded `qrcode.react` (17 KB) out of the main mobile bundle
+- Mobile bundle: 476 KB → 459 KB (-17 KB)
+- Remaining 64 KB gap vs desktop is a Vite chunking characteristic, not a code bug
+
+**OpenTelemetry export:**
+- New `bizar-dash/src/server/otel.mjs` — NodeSDK + OTLP HTTP exporter
+- Opt-in via `BIZAR_OTEL=1` or `OTEL_ENABLED=1`
+- `OTEL_EXPORTER_OTLP_ENDPOINT` env var (default `http://localhost:4318/v1/traces`)
+- Spans on key paths: `chat.send`, `chat.history`, `opencode.session.create`
+- Graceful degradation — never blocks dashboard startup if OTLP unreachable
+- SIGTERM/SIGINT flushes pending spans before exit
+- 6 new `@opentelemetry/*` deps
+
+**Memory graph visualization (6th Memory tab panel):**
+- New `MemoryGraphPanel.tsx` + `MemoryGraphView.tsx` — hand-rolled SVG force-directed graph (60-iteration layout)
+- Pan + zoom via mouse + touch
+- `GET /api/memory/graph?root=<noteId>&depth=2&limit=200` — returns `{nodes, edges, totalNodes, totalEdges}`
+- Combines LightRAG entities + Obsidian wikilinks
+- Filter input, root selector, depth slider (1-3), refresh, legend, stats footer
+- No external viz library — pure SVG
+
+**Self-hosted dashboard (Docker):**
+- Multi-stage `Dockerfile` (Node 22 Alpine) — estimated 180-220 MB final image
+- `docker-compose.yml` with named volumes for config, memory, usage, backups
+- Healthcheck at `/api/v2/health`
+- `.dockerignore` excludes node_modules, tests, secrets
+- `docs/DOCKER.md` — user guide: quick start, config, volumes, upgrade, backup, Tailscale, Headroom, OTEL, troubleshooting, production
+- Tailscale authkey support, OpenTelemetry collector export, Headroom integration
+
+**Settings search improvements:**
+- New `bizar-dash/src/web/lib/search.ts` — Levenshtein-based fuzzy search
+- Typo tolerance (≤ 2 edits) via Levenshtein distance
+- Recent searches in localStorage (last 5) with dropdown
+- Quick-jump to `[data-section][data-key]` with 2s flash animation
+- Match highlighting via `<mark>` tag
+- Replaced `fuse.js` with hand-rolled search (smaller bundle)
+
+### Tests
+
+- 388 npm tests pass
+- 128 vitest tests pass (was 92, +36 new)
+- `npx tsc --noEmit`: 0 errors
+- `npm run build`: success (mobile 459 KB → desktop 393 KB)
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@4.9.0`
+
 ## v4.8.0 — Backup/restore, rate limiting, Settings refactor, weekly digests, a11y
 
 ### Highlights

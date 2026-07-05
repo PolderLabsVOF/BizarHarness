@@ -1149,6 +1149,52 @@ export function createMemoryRouter({ projectRoot }) {
     }
   }));
 
+  // GET /memory/graph — combined knowledge graph (LightRAG entities + Obsidian wikilinks).
+  // Query params: ?root=<noteId>&depth=2&limit=200
+  router.get('/memory/graph', wrap(async (req, res) => {
+    const root = req.query.root ? String(req.query.root) : null;
+    const depth = Math.min(parseInt(req.query.depth, 10) || 2, 3);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+
+    try {
+      const lightrag = await getMemoryLightrag();
+      const [lrGraph, obsidianGraph] = await Promise.all([
+        lightrag.getLightRAGGraph({ projectRoot, root, depth, limit }),
+        (async () => {
+          try {
+            const { getObsidianLinkGraph } = memoryStore;
+            return getObsidianLinkGraph({ projectRoot, limit });
+          } catch {
+            return { nodes: [], edges: [] };
+          }
+        })(),
+      ]);
+
+      // Dedupe nodes by id; prefer the lightrag node (has richer type/size).
+      const nodeMap = new Map();
+      for (const n of obsidianGraph.nodes) nodeMap.set(n.id, n);
+      for (const n of lrGraph.nodes) {
+        if (!nodeMap.has(n.id)) nodeMap.set(n.id, n);
+      }
+      const nodes = [...nodeMap.values()].slice(0, limit);
+
+      // Merge edges from both sources; deduplicate by source+target.
+      const edgeSet = new Set();
+      const edges = [];
+      for (const e of [...obsidianGraph.edges, ...lrGraph.edges]) {
+        const key = `${e.source}|${e.target}`;
+        if (!edgeSet.has(key)) {
+          edgeSet.add(key);
+          edges.push(e);
+        }
+      }
+
+      res.json({ nodes, edges, totalNodes: nodes.length, totalEdges: edges.length });
+    } catch (err) {
+      res.status(500).json({ error: 'graph_failed', message: err.message });
+    }
+  }));
+
   // POST /memory/lightrag/reindex — alias of /memory/reindex (the canonical
   // path lives there for backwards compat). Both return the same shape.
   router.post('/memory/lightrag/reindex', wrap(async (_req, res) => {
