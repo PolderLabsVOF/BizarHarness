@@ -1,5 +1,58 @@
 # Changelog
 
+## v4.8.0 — Backup/restore, rate limiting, Settings refactor, weekly digests, a11y
+
+### Highlights
+
+**Backup/restore dashboard state:**
+- New `backup-store.mjs` — backs up `~/.config/bizar/`, env.json, opencode.json, memory vault, project state
+- `GET /api/backup/list`, `POST /api/backup/create`, `POST /api/backup/restore`, `POST /api/backup/verify`, `DELETE /api/backup/:path`
+- CLI: `bizar backup [label]`, `bizar backup list/verify/delete`, `bizar restore <path> [--dry-run|--overwrite|--skip]`
+- Dashboard: `<BackupRestoreCard>` in Settings → Backup section
+- Manifest format with `version`, `createdAt`, `paths`, `bizarVersion`, `platform`, `nodeVersion`
+- SHA-256 integrity verification
+- Conflict strategies: overwrite / merge / skip
+
+**Rate limiting:**
+- New `lib/rate-limit.mjs` — token bucket per IP
+- `BIZAR_RATE_LIMIT_CHAT_CAPACITY` (default 60) + `BIZAR_RATE_LIMIT_CHAT_REFILL` (default 1/sec)
+- `BIZAR_RATE_LIMIT_EVENT_CAPACITY` (default 120) + `BIZAR_RATE_LIMIT_EVENT_REFILL` (default 2/sec)
+- `X-RateLimit-{Limit,Remaining,Reset}` headers on every response
+- `Retry-After` on 429 responses
+- Structured logging on rate-limit hits
+
+**Settings refactor (1830 → 176 lines shell + 14 sub-components):**
+- `views/Settings.tsx` — shell with section nav
+- `views/settings/GeneralSection.tsx` (105 lines), `ThemeSection.tsx` (168), `UpdatesSection.tsx` (256), `NetworkSection.tsx` (87), `NotificationsSection.tsx` (34), `AuthSection.tsx` (159), `AgentSection.tsx` (294), `SystemLlmSection.tsx` (81), `HeadroomSection.tsx` (39), `ActivitySection.tsx` (205), `EnvVarsSection.tsx` (16), `ProvidersSection.tsx` (16), `MemorySection.tsx` (16), `SkillsSection.tsx` (16), `BackupSection.tsx` (16)
+- Each section: < 300 lines, explicit props interface
+
+**Auto-generated weekly digests:**
+- New `digest-store.mjs` — aggregates last 7 days of activity
+- Sections: Tasks completed, Tasks created, Memory notes written, Chat sessions, Schedules fired, Background agents, Token usage
+- Saved to `~/.local/share/bizar/memory/digests/weekly-YYYY-MM-DD.md`
+- Auto-generated every Sunday 00:00 via internal schedule
+- `GET/POST/DELETE /api/digests[/...]` endpoints
+- CLI: `bizar digest [list|generate|view|delete]`
+
+**WCAG 2.2 AA a11y completion:**
+- 60+ form labels added across Schedules (13), Agents (11), Mods (4), Memory panels (5), Chat (3), Artifacts (8), Providers (8), MiniMaxUsage (4), Tasks (3), History (1), Skills (1), Overview (1)
+- Skip-to-main link in `App.tsx`
+- Activity feed + Chat thread get `aria-live="polite"` + `aria-relevant="additions"`
+- Tasks hidden `role="status"` live region for status changes
+- Light-theme status colors darkened (oklch 0.72→0.55) for AA contrast
+- Mods registry/instructions toggles → real `<button>` with `aria-expanded` + `aria-controls`
+- SearchModal scope buttons → `role="tablist"` / `role="tab"`
+
+### Tests
+
+- 388 npm tests + 92 vitest tests (75 from v4.7 + 17 new for v4.8) = 480 pass, 0 fail
+- `npx tsc --noEmit`: 0 errors
+- `npm run build`: success
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@4.8.0`
+
 ## v4.7.2 — CRITICAL FIX: `bizar` was completely broken when invoked via symlink
 
 ### Bug fix
