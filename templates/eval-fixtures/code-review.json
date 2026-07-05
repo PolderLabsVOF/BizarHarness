@@ -1,0 +1,16 @@
+{
+  "id": "code-review",
+  "name": "Code review quality",
+  "description": "Agent identifies bugs in provided code",
+  "agent": "thor",
+  "prompt": "Review this code: function add(a, b) { return a - b; }",
+  "expected": {
+    "contains": ["bug", "subtract", "wrong", "incorrect"],
+    "notContains": [],
+    "regex": [],
+    "jsonSchema": null,
+    "maxTokens": 300,
+    "maxLatencyMs": 15000
+  },
+  "tags": ["code-review", "quality"]
+}

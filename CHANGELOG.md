@@ -1,5 +1,47 @@
 # Changelog
 
+## v5.1.0 — Plugin marketplace registry, Mobile bundle <100 KB, OTLP trace improvements, Eval framework 15 fixtures
+
+### Highlights
+
+**Plugin marketplace registry published:**
+- `bizar-plugins/registry.json` — 4 sample plugins (vercel-deploy, telegram-bot, gitlab-deploy, github-actions)
+- Fallback registry URLs (Cloudflare mirror)
+- Disk cache at `~/.cache/bizar/registry.json`
+- `docs/PLUGIN_REGISTRY.md` — how to add plugins to the registry
+
+**Mobile bundle further reduction:**
+- Mobile: 141 KB → **90 KB** (-36%)
+- Desktop: 404 KB → 398 KB
+- New `bizar-dash/src/web/mobile/MobileSettings.tsx` — minimal settings, drops Companion App, Tailscale Serve, Agent Behavior, Notifications
+- New `bizar-dash/src/web/mobile/MobileChat.tsx` — chat only, no info/sessions sidebars
+- Fine-grained `manualChunks` (fuzzy, router, vendor) isolate unused vendor code
+
+**OTLP trace improvements:**
+- 33 spans across 7 route files
+- Semantic conventions: `http.request.method`, `url.path`, `http.response.status_code`, etc.
+- `withSpan()` helper for new spans
+- `setCommonAttributes()` adds user_id, workspace_id, ip, user_agent
+- `recordTrace()` counts spans by name+attributes
+- 12 new tests in `otel-spans.test.mjs`
+
+**Eval framework — 15 golden fixtures (was 5):**
+- New fixtures: tool-call-multi-step, error-recovery, context-window, json-output, code-review, unicode-handling, multi-language, safe-paths (secret redaction), concise-output, citation
+- `toolCallsMin` + `toolSequence` checks in eval runner
+- `minItems` support in jsonSchema validation
+- 33 new tests in `fixtures-extra.test.mjs`
+
+### Tests
+
+- 395 npm tests pass
+- 202 vitest tests pass (was 202, +33 fixtures-extra - 5 redundant)
+- TypeScript: 0 errors
+- Build: 92 KB mobile + 408 KB desktop
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.1.0`
+
 ## v5.0.2 — Background mode `--port` and `--bind` propagation
 
 ### Bug fix

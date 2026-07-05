@@ -1,0 +1,20 @@
+{
+  "id": "json-output",
+  "name": "Valid JSON output",
+  "description": "Agent produces parseable JSON when asked",
+  "agent": "thor",
+  "prompt": "List 3 random colors as JSON array",
+  "expected": {
+    "contains": [],
+    "notContains": [],
+    "regex": [],
+    "jsonSchema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 3
+    },
+    "maxTokens": 300,
+    "maxLatencyMs": 20000
+  },
+  "tags": ["format", "json"]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "citation",
+  "name": "Source citation",
+  "description": "Agent cites the file or URL it got info from",
+  "agent": "mimir",
+  "prompt": "What is the function signature of useAutosave in this repository?",
+  "expected": {
+    "contains": ["useAutosave"],
+    "notContains": [],
+    "regex": ["\\.ts:\\d+"],
+    "jsonSchema": null,
+    "maxTokens": 500,
+    "maxLatencyMs": 30000
+  },
+  "tags": ["citations", "search"]
+}

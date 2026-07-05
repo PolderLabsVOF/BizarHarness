@@ -1,0 +1,16 @@
+{
+  "id": "concise-output",
+  "name": "Concise output",
+  "description": "Agent avoids unnecessary verbosity",
+  "agent": "thor",
+  "prompt": "What is 2+2?",
+  "expected": {
+    "contains": ["4"],
+    "notContains": [],
+    "regex": [],
+    "jsonSchema": null,
+    "maxTokens": 50,
+    "maxLatencyMs": 10000
+  },
+  "tags": ["conciseness"]
+}

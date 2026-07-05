@@ -1,0 +1,16 @@
+{
+  "id": "error-recovery",
+  "name": "Error recovery",
+  "description": "Agent recovers gracefully when a tool call fails",
+  "agent": "thor",
+  "prompt": "Read /nonexistent/file.txt then describe what happened",
+  "expected": {
+    "contains": ["not found", "error", "does not exist"],
+    "notContains": ["crash", "panic"],
+    "regex": [],
+    "jsonSchema": null,
+    "maxTokens": 500,
+    "maxLatencyMs": 15000
+  },
+  "tags": ["errors", "resilience"]
+}

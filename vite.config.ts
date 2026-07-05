@@ -24,14 +24,17 @@ export default defineConfig({
         // isn't directly reachable from the entry chunk root).
         manualChunks: (id) => {
           if (!id) return;
-          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/react-router-dom/')) {
-            return 'react-vendor';
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react')) return 'icons';
+            if (id.includes('react-markdown') || id.includes('remark')) return 'markdown';
+            if (id.includes('react-router')) return 'router';
+            if (id.includes('react') || id.includes('scheduler')) return 'react-vendor';
+            if (id.includes('fuse.js')) return 'fuzzy';
+            if (id.includes('recharts')) return 'charts';
+            if (id.includes('@xyflow')) return 'flow';
+            if (id.includes('@mdx-js')) return 'editor';
+            return 'vendor';
           }
-          if (id.includes('node_modules/recharts/')) return 'charts';
-          if (id.includes('node_modules/react-markdown/') || id.includes('node_modules/remark-gfm/')) return 'markdown';
-          if (id.includes('node_modules/@xyflow/')) return 'flow';
-          if (id.includes('node_modules/@mdx-js/')) return 'editor';
-          if (id.includes('node_modules/lucide-react/')) return 'icons';
         },
       },
     },

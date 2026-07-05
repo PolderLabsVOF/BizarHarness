@@ -191,3 +191,78 @@ export function reset() {
   gauges.clear();
   histograms.clear();
 }
+
+// ─── v5.1.0 ────────────────────────────────────────────────────────────────
+// Trace → metrics correlation helpers.
+//
+// The OTEL exporter ships spans to a collector; the Prometheus
+// exporter ships counters from this in-process registry. To answer
+// "how many `chat.send` spans landed in the last hour?" without
+// leaving the dashboard, route handlers call `recordTrace(name,
+// attributes)` from inside their `withSpan` wrapper. The Map keeps a
+// bounded per-(name, attribute-set) count so a single high-cardinality
+// label (e.g. `chat.session_id`) does not blow up memory.
+//
+// `traceCountByName` is intentionally exported read-only — tests
+// import it to assert the helper was called with the right key, but
+// production code should always go through `recordTrace` to keep
+// the key derivation in one place.
+//
+//─── v5.1.0 ends ───────────────────────────────────────────────────────────
+
+/**
+ * Bounded counter of recorded trace samples, keyed by
+ * `${name}:${JSON.stringify(attributes)}`. Routes populate this
+ * from inside their `withSpan` callback so the dashboard can answer
+ * "how often did span X fire with attribute set Y" without leaving
+ * the process.
+ *
+ * The Map is intentionally an exported `let`-equivalent: tests
+ * reset it via {@link resetTraceCounts}; production code never
+ * mutates the Map directly.
+ *
+ * @type {Map<string, number>}
+ */
+export const traceCountByName = new Map();
+
+/**
+ * Increment the trace counter for `(name, attributes)`.
+ *
+ * The composite key is `${name}:${jsonString}` so two spans named
+ * `chat.send` with different `chat.session_id` attributes are
+ * tracked separately. Undefined/null/empty-string attribute values
+ * are dropped from the key for stability (avoids the empty-string vs
+ * undefined distinction polluting counts). Keys are alphabetised
+ * before serialisation so `{a:1,b:2}` and `{b:2,a:1}` collide on
+ * the same bucket — `JSON.stringify` alone would not give that
+ * guarantee because it preserves insertion order.
+ *
+ * @param {string} name
+ * @param {Record<string, string|number|boolean|undefined|null>} [attributes]
+ * @returns {number} the new total for that key
+ */
+export function recordTrace(name, attributes = {}) {
+  if (!name) return 0;
+  const keys = [];
+  if (attributes && typeof attributes === 'object') {
+    for (const k of Object.keys(attributes)) {
+      const v = attributes[k];
+      if (v === undefined || v === null || v === '') continue;
+      keys.push(k);
+    }
+  }
+  keys.sort();
+  const cleanAttrs = {};
+  for (const k of keys) cleanAttrs[k] = attributes[k];
+  const key = `${name}:${JSON.stringify(cleanAttrs)}`;
+  const next = (traceCountByName.get(key) || 0) + 1;
+  traceCountByName.set(key, next);
+  return next;
+}
+
+/**
+ * Clear every recorded-trace counter. Intended for tests.
+ */
+export function resetTraceCounts() {
+  traceCountByName.clear();
+}

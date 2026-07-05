@@ -41,7 +41,7 @@ import { loadOrCreateAuth, V2_DEFAULT_PORT } from './v2-auth-file.mjs';
 import { createV2Router } from './routes-v2/index.mjs';
 import { counter, gauge, render as renderMetrics } from './metrics.mjs';
 import { warn } from './logger.mjs';
-import { initOtel, shutdownOtel } from './otel.mjs';
+import { initOtel, shutdownOtel, tracer } from './otel.mjs';
 
 // v4.7.0 — Prometheus-style HTTP metrics. Bound to the server-wide
 // registry; render() emits the text exposition format consumed by
@@ -238,25 +238,54 @@ export async function createServer({
   // limiter middleware (chat / event); if no scope header is
   // present, log the 429 with scope=unknown (it may be an upstream
   // 429 proxied from the opencode plugin).
+  //
+  // v5.1.0 — Also opens an HTTP-server root span on every request
+  // via the OpenTelemetry tracer. The span is created inside
+  // `startActiveSpan` so the per-route spans below automatically
+  // parent under it (the OTel SDK's AsyncHooksContextManager is
+  // installed by NodeSDK.start()). HTTP semantic convention
+  // attributes (`http.request.method`, `url.path`, `http.route`,
+  // `http.response.status_code`, `http.user_agent`) are added up
+  // front / on finish. Cost when OTEL is off: zero — the no-op
+  // tracer does nothing.
   app.use((req, res, next) => {
-    res.on('finish', () => {
-      const route = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : 'unmatched';
-      httpRequestsTotal.inc({
-        method: req.method,
-        route,
-        status: String(res.statusCode),
-      });
-      if (res.statusCode === 429) {
-        const scope = res.getHeader('X-RateLimit-Scope') || 'unknown';
-        warn('rate_limit_exceeded', {
-          ip: req.ip || (req.socket && req.socket.remoteAddress) || 'unknown',
-          scope,
+    tracer.startActiveSpan('http.request', { attributes: {
+      'http.request.method': req.method,
+      'url.path': req.originalUrl || req.url || '',
+      'url.scheme': req.protocol || 'http',
+      'http.user_agent': (req.headers && req.headers['user-agent']) || '',
+      'http.client_ip': req.ip || (req.socket && req.socket.remoteAddress) || '',
+      'http.host': req.headers?.host || '',
+    } }, (rootSpan) => {
+      res.on('finish', () => {
+        const route = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : 'unmatched';
+        httpRequestsTotal.inc({
           method: req.method,
           route,
+          status: String(res.statusCode),
         });
-      }
+        try {
+          rootSpan.setAttribute('http.route', route);
+          rootSpan.setAttribute('http.response.status_code', res.statusCode);
+          if (res.statusCode >= 500) {
+            rootSpan.setStatus({ code: 2 /* ERROR */, message: `HTTP ${res.statusCode}` });
+          } else {
+            rootSpan.setStatus({ code: 1 /* OK */ });
+          }
+        } catch { /* never throw from OTel helpers */ }
+        try { rootSpan.end(); } catch { /* ignore */ }
+        if (res.statusCode === 429) {
+          const scope = res.getHeader('X-RateLimit-Scope') || 'unknown';
+          warn('rate_limit_exceeded', {
+            ip: req.ip || (req.socket && req.socket.remoteAddress) || 'unknown',
+            scope,
+            method: req.method,
+            route,
+          });
+        }
+      });
+      next();
     });
-    next();
   });
 
   // v4.7.0 — Cache-Control headers for live JSON endpoints. The

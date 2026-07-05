@@ -34,6 +34,8 @@ import { join, extname } from 'node:path';
  * @property {object} [jsonSchema]
  * @property {number} [maxTokens]
  * @property {number} [maxLatencyMs]
+ * @property {number} [toolCallsMin]
+ * @property {string[]} [toolSequence]
  */
 
 /**
@@ -133,7 +135,25 @@ function checkJsonSchema(content, schema) {
   // Basic schema validation — check required fields exist
   const errors = [];
   if (schema.type === 'object' && typeof parsed !== 'object' || Array.isArray(parsed)) {
-    errors.push(`expected object, got ${typeof parsed}`);
+    if (schema.type !== 'array') {
+      errors.push(`expected ${schema.type}, got ${typeof parsed}`);
+    }
+  }
+  if (schema.type === 'array') {
+    if (!Array.isArray(parsed)) {
+      errors.push(`expected array, got ${typeof parsed}`);
+    } else {
+      if (schema.minItems != null && parsed.length < schema.minItems) {
+        errors.push(`array length ${parsed.length} is less than minItems ${schema.minItems}`);
+      }
+      if (schema.items?.type) {
+        for (let i = 0; i < parsed.length; i++) {
+          if (typeof parsed[i] !== schema.items.type) {
+            errors.push(`item at index ${i} expected type ${schema.items.type}, got ${typeof parsed[i]}`);
+          }
+        }
+      }
+    }
   }
   if (schema.properties) {
     for (const [key, prop] of Object.entries(schema.properties)) {
@@ -182,18 +202,58 @@ function checkMaxLatency(latencyMs, maxLatencyMs) {
   };
 }
 
+/**
+ * @param {string[]} toolCalls
+ * @param {number} minCalls
+ * @returns {CheckResult}
+ */
+function checkToolCallsMin(toolCalls, minCalls) {
+  if (minCalls == null) return { kind: 'toolCallsMin', ok: true };
+  const ok = toolCalls.length >= minCalls;
+  return {
+    kind: 'toolCallsMin',
+    ok,
+    message: ok ? undefined : `tool calls ${toolCalls.length} is less than min ${minCalls}`,
+  };
+}
+
+/**
+ * @param {string[]} toolCalls
+ * @param {string[]} sequence
+ * @returns {CheckResult}
+ */
+function checkToolSequence(toolCalls, sequence) {
+  if (!sequence || !sequence.length) return { kind: 'toolSequence', ok: true };
+  const seqStr = sequence.join(',');
+  const callStr = toolCalls.join(',');
+  // Find the sequence as a subsequence
+  let seqIdx = 0;
+  for (const call of toolCalls) {
+    if (call === sequence[seqIdx]) {
+      seqIdx++;
+      if (seqIdx === sequence.length) break;
+    }
+  }
+  const ok = seqIdx === sequence.length;
+  return {
+    kind: 'toolSequence',
+    ok,
+    message: ok ? undefined : `tool sequence [${seqStr}] not found in [${callStr}]`,
+  };
+}
+
 // ── Core runner ───────────────────────────────────────────────────────────────
 
 /**
  * Run a single fixture against an LLM.
  *
  * @param {Fixture} fixture
- * @param {{ llmCall: (prompt: string, opts: {agent: string}) => Promise<{content: string, usage: object}>, timeoutMs?: number }} opts
+ * @param {{ llmCall: (prompt: string, opts: {agent: string}) => Promise<{content: string, usage: object}>, timeoutMs?: number, toolCalls?: string[] }} opts
  * @returns {Promise<EvalResult>}
  */
 export async function runFixture(
   fixture,
-  { llmCall, timeoutMs = 60000 } = {},
+  { llmCall, timeoutMs = 60000, toolCalls = [] } = {},
 ) {
   if (!llmCall) throw new Error('llmCall is required');
   const start = Date.now();
@@ -212,6 +272,10 @@ export async function runFixture(
     clearTimeout(timer);
     content = result.content || '';
     usage = result.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    // Support tool calls returned from llmCall
+    if (result.toolCalls?.length) {
+      toolCalls = result.toolCalls;
+    }
   } catch (err) {
     if (err.message === 'timeout') {
       timeoutHit = true;
@@ -255,6 +319,12 @@ export async function runFixture(
   if (expected.maxLatencyMs != null) {
     checks.push(checkMaxLatency(latencyMs, expected.maxLatencyMs));
   }
+  if (expected.toolCallsMin != null) {
+    checks.push(checkToolCallsMin(toolCalls, expected.toolCallsMin));
+  }
+  if (expected.toolSequence?.length) {
+    checks.push(checkToolSequence(toolCalls, expected.toolSequence));
+  }
 
   const ok = checks.every((c) => c.ok);
 
@@ -266,6 +336,26 @@ export async function runFixture(
     content,
     usage,
   };
+}
+
+/**
+ * Run a single fixture by ID from a known fixture map (useful for testing).
+ *
+ * @param {string} fixtureId
+ * @param {Fixture[]} fixtures
+ * @param {{ llmCall: Function, timeoutMs?: number, toolCalls?: string[] }} opts
+ * @returns {Promise<EvalResult>}
+ */
+export async function runFixtureById(
+  fixtureId,
+  fixtures,
+  { llmCall, timeoutMs = 60000, toolCalls = [] } = {},
+) {
+  const fixture = fixtures.find((f) => f.id === fixtureId);
+  if (!fixture) {
+    throw new Error(`Fixture not found: ${fixtureId}`);
+  }
+  return runFixture(fixture, { llmCall, timeoutMs, toolCalls });
 }
 
 /**

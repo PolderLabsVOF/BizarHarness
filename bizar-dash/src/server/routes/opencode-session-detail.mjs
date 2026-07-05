@@ -54,6 +54,8 @@ import {
   extractContentFromOpencodeMessage,
 } from '../serve-info.mjs';
 import { child as loggerChild } from '../logger.mjs';
+import { tracer, withSpan, setCommonAttributes } from '../otel.mjs';
+import { recordTrace } from '../metrics.mjs';
 import { wrap } from './_shared.mjs';
 
 /** Structured logger scoped to this route — emits `{module:'opencode-session-detail', ...}` on every line. */
@@ -112,28 +114,40 @@ export function createOpencodeSessionDetailRouter() {
   // Returns the message history for a session in the dashboard's
   // ChatMessage shape: { id, role, content, ts }.
   // ---------------------------------------------------------------------
-  router.get('/opencode-sessions/:id/messages', wrap(async (req, res) => {
+  router.get('/opencode-sessions/:id/messages', wrap(withSpan('opencode.session.messages', async (span, req, res) => {
     const sessionId = String(req.params?.id || '');
+    setCommonAttributes(span, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    });
+    span.setAttribute('opencode.session_id', sessionId);
     if (!sessionId) {
-      return res.status(400).json({ error: 'bad_request', message: 'session id is required' });
+      res.status(400).json({ error: 'bad_request', message: 'session id is required' });
+      recordTrace('opencode.session.messages', { outcome: 'missing_session_id' });
+      return;
     }
     const info = readServeInfo();
     if (!info) {
-      return res.status(503).json({
+      res.status(503).json({
         error: 'plugin_offline',
         message: 'opencode plugin is not running',
         suggestion: 'Run `bizar doctor` for diagnostics, or start opencode with `opencode serve`',
       });
+      recordTrace('opencode.session.messages', { outcome: 'plugin_offline' });
+      return;
     }
     const directory = await resolveSessionDirectory(sessionId, info);
     if (!directory) {
-      return res.status(503).json({
+      res.status(503).json({
         error: 'directory_unknown',
         message:
           'Cannot determine the opencode session directory; ensure the opencode plugin is running with serve.json containing worktree.',
         suggestion: 'Create a new session or restart opencode serve.',
       });
+      recordTrace('opencode.session.messages', { outcome: 'directory_unknown' });
+      return;
     }
+    span.setAttribute('opencode.worktree', directory);
     const result = await listOpencodeMessages(info, sessionId, directory, LIST_MESSAGES_TIMEOUT_MS);
     if (!result?.ok) {
       const errMsg = result?.error || 'unknown error from opencode serve';
@@ -154,17 +168,23 @@ export function createOpencodeSessionDetailRouter() {
         cause,
         err: errMsg,
       });
-      return res.status(502).json({
+      span.setAttribute('opencode.error_cause', cause);
+      span.setAttribute('opencode.upstream_status', result?.status ?? 0);
+      res.status(502).json({
         error: 'opencode_error',
         message: errMsg,
         cause,
         status: result?.status ?? undefined,
         suggestion: 'Check that the opencode serve child is running. Try `bizar doctor` or restart the plugin.',
       });
+      recordTrace('opencode.session.messages', { outcome: 'opencode_error', cause });
+      return;
     }
     const messages = Array.isArray(result.messages) ? result.messages.map(toChatMessage) : [];
-    return res.json({ messages });
-  }));
+    span.setAttribute('opencode.message_count', messages.length);
+    res.json({ messages });
+    recordTrace('opencode.session.messages', { outcome: 'ok', message_count_bucket: messages.length === 0 ? '0' : messages.length < 50 ? '1-49' : '50+' });
+  })));
 
   // ---------------------------------------------------------------------
   // POST /opencode-sessions/:id/send
@@ -172,40 +192,59 @@ export function createOpencodeSessionDetailRouter() {
   // Body: { message: string, agent: string } — both required.
   // Returns { ok: true, messageId } or an error envelope.
   // ---------------------------------------------------------------------
-  router.post('/opencode-sessions/:id/send', wrap(async (req, res) => {
+  router.post('/opencode-sessions/:id/send', wrap(withSpan('opencode.session.send', async (span, req, res) => {
     const sessionId = String(req.params?.id || '');
+    setCommonAttributes(span, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    });
+    span.setAttribute('opencode.session_id', sessionId);
     if (!sessionId) {
-      return res.status(400).json({ error: 'bad_request', message: 'session id is required' });
+      res.status(400).json({ error: 'bad_request', message: 'session id is required' });
+      recordTrace('opencode.session.send', { outcome: 'missing_session_id' });
+      return;
     }
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     const agent = typeof body.agent === 'string' ? body.agent.trim() : '';
+    span.setAttribute('opencode.message_length', message.length);
+    if (agent) span.setAttribute('opencode.agent', agent);
     if (!message) {
-      return res.status(400).json({ error: 'bad_request', message: '`message` is required' });
+      res.status(400).json({ error: 'bad_request', message: '`message` is required' });
+      recordTrace('opencode.session.send', { outcome: 'missing_message' });
+      return;
     }
     if (!agent) {
-      return res.status(400).json({ error: 'bad_request', message: '`agent` is required' });
+      res.status(400).json({ error: 'bad_request', message: '`agent` is required' });
+      recordTrace('opencode.session.send', { outcome: 'missing_agent' });
+      return;
     }
     const info = readServeInfo();
     if (!info) {
-      return res.status(503).json({
+      res.status(503).json({
         error: 'plugin_offline',
         message: 'opencode plugin is not running',
         suggestion: 'Run `bizar doctor` for diagnostics, or start opencode with `opencode serve`',
       });
+      recordTrace('opencode.session.send', { outcome: 'plugin_offline' });
+      return;
     }
     const directory = await resolveSessionDirectory(sessionId, info);
     if (!directory) {
-      return res.status(503).json({
+      res.status(503).json({
         error: 'directory_unknown',
         message:
           'Cannot determine the opencode session directory; ensure the opencode plugin is running with serve.json containing worktree.',
         suggestion: 'Create a new session or restart opencode serve.',
       });
+      recordTrace('opencode.session.send', { outcome: 'directory_unknown' });
+      return;
     }
+    span.setAttribute('opencode.worktree', directory);
     // Synthesize a unique messageID so the client can correlate the
     // prompt with the SSE events that opencode emits for it.
     const messageID = `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    span.setAttribute('opencode.message_id', messageID);
     const result = await sendOpencodePrompt(
       info,
       { sessionId, agent, text: message, messageID },
@@ -227,16 +266,21 @@ export function createOpencodeSessionDetailRouter() {
         cause,
         err: errMsg,
       });
-      return res.status(502).json({
+      span.setAttribute('opencode.error_cause', cause);
+      res.status(502).json({
         error: 'opencode_error',
         message: errMsg,
         cause,
         status: result?.status ?? undefined,
         suggestion: 'Check that the opencode serve child is running. Try `bizar doctor` or restart the plugin.',
       });
+      recordTrace('opencode.session.send', { outcome: 'opencode_error', cause });
+      return;
     }
-    return res.json({ ok: true, messageId: result.messageId });
-  }));
+    span.setAttribute('opencode.ack_message_id', result.messageId || '');
+    res.json({ ok: true, messageId: result.messageId });
+    recordTrace('opencode.session.send', { outcome: 'ok' });
+  })));
 
   // ---------------------------------------------------------------------
   // GET /opencode-sessions/:id/stream  (SSE proxy)
@@ -253,10 +297,42 @@ export function createOpencodeSessionDetailRouter() {
   //     is ported to serve-info.mjs (`unwrapOpencodeSseEvent`).
   //   - We DO mirror the response shape used by `routes-v2/events.mjs`:
   //     `event: <type>\ndata: <json>\n\n`.
+  //   - v5.1.0 — span lifecycle is manual (`startSpan` + `span.end()`)
+  //     because the response is a long-lived stream. Using `withSpan`
+  //     would end the span the instant the handler returned, well
+  //     before the actual SSE close. We pin the same tracer for
+  //     consistency with the rest of this module.
   // ---------------------------------------------------------------------
   router.get('/opencode-sessions/:id/stream', (req, res) => {
     const sessionId = String(req.params?.id || '');
+    const span = tracer.startSpan('opencode.session.stream', {
+      attributes: {
+        'opencode.session_id': sessionId,
+        'http.client_ip': req.ip || req.socket?.remoteAddress || '',
+        'http.user_agent': (req.headers && req.headers['user-agent']) || '',
+      },
+    });
+    let spanEnded = false;
+    const endSpan = (extraAttrs) => {
+      if (spanEnded) return;
+      spanEnded = true;
+      try {
+        if (extraAttrs && typeof extraAttrs === 'object') {
+          for (const [k, v] of Object.entries(extraAttrs)) {
+            try { span.setAttribute(k, v); } catch { /* ignore */ }
+          }
+        }
+        span.setStatus({ code: 1 /* OK */ });
+        span.end();
+      } catch {
+        /* never throw from OTel helper */
+      }
+    };
     if (!sessionId) {
+      try {
+        span.setStatus({ code: 2 /* ERROR */, message: 'missing_session_id' });
+        span.end();
+      } catch { /* ignore */ }
       return res.status(400).json({ error: 'bad_request', message: 'session id is required' });
     }
     if (activeSubscribers >= MAX_SSE_SUBSCRIBERS) {
@@ -264,6 +340,12 @@ export function createOpencodeSessionDetailRouter() {
         error: 'too_many_subscribers',
         message: `SSE subscriber cap reached (${MAX_SSE_SUBSCRIBERS}); try again later.`,
       });
+      try {
+        span.setAttribute('opencode.stream.outcome', 'too_many_subscribers');
+        span.setStatus({ code: 2 /* ERROR */, message: 'too_many_subscribers' });
+        span.end();
+      } catch { /* ignore */ }
+      recordTrace('opencode.session.stream', { outcome: 'too_many_subscribers' });
       return;
     }
 
@@ -280,10 +362,13 @@ export function createOpencodeSessionDetailRouter() {
     if (!info) {
       res.write(`event: error\ndata: ${JSON.stringify({ error: 'plugin_offline' })}\n\n`);
       res.end();
+      endSpan({ 'opencode.stream.outcome': 'plugin_offline' });
+      recordTrace('opencode.session.stream', { outcome: 'plugin_offline' });
       return;
     }
 
     activeSubscribers += 1;
+    span.setAttribute('opencode.stream.active_subscribers', activeSubscribers);
 
     // Upstream fetch + line-buffered SSE parser. Aborted on client
     // disconnect or when the upstream closes.
@@ -300,6 +385,7 @@ export function createOpencodeSessionDetailRouter() {
       }
     }, getSseHeartbeatMs());
     let closed = false;
+    const startTs = Date.now();
     const cleanup = () => {
       if (closed) return;
       closed = true;
@@ -309,8 +395,21 @@ export function createOpencodeSessionDetailRouter() {
       if (!res.writableEnded) {
         try { res.end(); } catch { /* ignore */ }
       }
+      const lifetimeMs = Date.now() - startTs;
+      endSpan({
+        'opencode.stream.outcome': closedReason || 'closed',
+        'opencode.stream.lifetime_ms': lifetimeMs,
+      });
+      recordTrace('opencode.session.stream', {
+        outcome: closedReason || 'closed',
+        lifetime_bucket: lifetimeMs < 1_000 ? '<1s' : lifetimeMs < 60_000 ? '<60s' : '60s+',
+      });
     };
-    req.on('close', cleanup);
+    let closedReason = 'client_closed';
+    req.on('close', () => {
+      closedReason = 'client_closed';
+      cleanup();
+    });
 
     const upstreamUrl = `${info.baseUrl}/event?directory=${encodeURIComponent(info.worktree || '')}`;
     let upstream;
@@ -326,6 +425,7 @@ export function createOpencodeSessionDetailRouter() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       res.write(`event: error\ndata: ${JSON.stringify({ error: 'upstream_open_failed', message: msg })}\n\n`);
+      closedReason = 'upstream_open_failed';
       cleanup();
       return;
     }
@@ -338,10 +438,12 @@ export function createOpencodeSessionDetailRouter() {
             error: 'upstream_status',
             status: r.status,
           })}\n\n`);
+          closedReason = 'upstream_bad_status';
           cleanup();
           return;
         }
         await pumpSseStream(r.body, res, sessionId);
+        closedReason = 'upstream_eof';
       } catch (err) {
         if (controller.signal.aborted) return; // client disconnected, already cleaned up
         const msg = err instanceof Error ? err.message : String(err);
@@ -350,6 +452,7 @@ export function createOpencodeSessionDetailRouter() {
             res.write(`event: error\ndata: ${JSON.stringify({ error: 'upstream_read_error', message: msg })}\n\n`);
           } catch { /* ignore */ }
         }
+        closedReason = 'upstream_read_error';
       } finally {
         cleanup();
       }

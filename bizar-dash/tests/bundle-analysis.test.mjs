@@ -37,10 +37,11 @@ function kbytes(path) {
 
 // v5.0 targets:
 // - mobile.js < desktop.js (must be smaller — mobile has no App.tsx deduplication)
-// - mobile.js < 400 KB (was 459 KB after v4.9; manualChunks + lazy views target ~350 KB)
-// - desktop.js < 450 KB (was 393 KB; shared vendor chunks may shift bytes)
-const DESKTOP_MAX_KB = 450;
-const MOBILE_MAX_KB  = 400;
+// - mobile.js < 120 KB (was 141 KB in v5.0.2; mobile-specific lazy views + fine vendor chunks)
+// - desktop.js < 400 KB (was 404 KB in v5.0.2; fine vendor chunks shifted some bytes to desktop
+//   but overall vendor bytes are better distributed — 380 KB is the stretch goal)
+const DESKTOP_MAX_KB = 400;
+const MOBILE_MAX_KB  = 120;
 
 const desktop = findLargestAsset('main-');
 const mobile  = findLargestAsset('mobile-');

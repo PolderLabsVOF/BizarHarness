@@ -1,5 +1,5 @@
 // src/MobileApp.tsx — mobile root with state-based routing + stack navigation.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
 import {
   Activity,
   CheckSquare,
@@ -16,7 +16,6 @@ import { MobileBottomNav, type MobileTab } from './mobile/MobileBottomNav';
 import { MobileTopbar } from './mobile/MobileTopbar';
 import { MobileActivity } from './mobile/views/MobileActivity';
 import { MobileAgents } from './mobile/views/MobileAgents';
-import { MobileChat } from './mobile/views/MobileChat';
 import { MobileConfig } from './mobile/views/MobileConfig';
 import { MobileHistory } from './mobile/views/MobileHistory';
 import { MobileMods } from './mobile/views/MobileMods';
@@ -25,9 +24,12 @@ import { MobileArtifactCanvas } from './mobile/views/MobileArtifactCanvas';
 import { MobileArtifacts } from './mobile/views/MobileArtifacts';
 import { MobileSchedules } from './mobile/views/MobileSchedules';
 import { MobileSearchModal } from './mobile/views/MobileSearchModal';
-import { MobileSettings } from './mobile/views/MobileSettings';
 import { MobileSkills } from './mobile/views/MobileSkills';
 import { MobileTasks } from './mobile/views/MobileTasks';
+
+// Lazy-loaded mobile-specific variants (code-split from main bundle)
+const MobileSettings = React.lazy(() => import('./mobile/MobileSettings').then(m => ({ default: m.MobileSettings })));
+const MobileChat = React.lazy(() => import('./mobile/MobileChat').then(m => ({ default: m.MobileChat })));
 
 type MainTabId = 'activity' | 'chat' | 'tasks' | 'settings' | 'more';
 
@@ -326,12 +328,14 @@ export function MobileApp() {
         return <MobileActivity snapshot={snapshot} onRefresh={refreshSnapshot} />;
       case 'chat':
         return (
-          <MobileChat
-            snapshot={snapshot}
-            settings={settings}
-            initialTaskId={pendingChatTaskId}
-            onClearTaskId={() => setPendingChatTaskId(null)}
-          />
+          <Suspense fallback={<div className="mobile-loading"><Spinner size="lg" /></div>}>
+            <MobileChat
+              snapshot={snapshot}
+              settings={settings}
+              initialTaskId={pendingChatTaskId}
+              onClearTaskId={() => setPendingChatTaskId(null)}
+            />
+          </Suspense>
         );
       case 'tasks':
         return (
@@ -345,7 +349,11 @@ export function MobileApp() {
           />
         );
       case 'settings':
-        return <MobileSettings settings={settings} snapshot={snapshot} onRefresh={refreshSnapshot} />;
+        return (
+          <Suspense fallback={<div className="mobile-loading"><Spinner size="lg" /></div>}>
+            <MobileSettings settings={settings} snapshot={snapshot} onRefresh={refreshSnapshot} />
+          </Suspense>
+        );
       case 'more':
         return (
           <MobileMore

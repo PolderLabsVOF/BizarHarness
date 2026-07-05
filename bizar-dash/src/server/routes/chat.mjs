@@ -24,7 +24,8 @@
 import { Router } from 'express';
 import { SpanStatusCode } from '@opentelemetry/api';
 import { warn as logWarn } from '../logger.mjs';
-import { tracer } from '../otel.mjs';
+import { tracer, withSpan, setCommonAttributes } from '../otel.mjs';
+import { recordTrace } from '../metrics.mjs';
 import {
   existsSync,
   mkdirSync,
@@ -382,15 +383,19 @@ export function createChatRouter({ state, broadcast }) {
     });
   }));
 
-  router.get('/chat/sessions', wrap(async (_req, res) => {
+  router.get('/chat/sessions', wrap(withSpan('chat.sessions.list', async (span, _req, res) => {
     const active = projectsStore.active();
+    setCommonAttributes(span, { userAgent: _req.headers?.['user-agent'] });
+    span.setAttribute('chat.has_active_project', active ? true : false);
     if (!active) {
       res.json({ sessions: [] });
+      recordTrace('chat.sessions.list', { has_active_project: false });
       return;
     }
     const dir = join(projectsStore.ensureProjectDir(active.id), 'sessions');
     if (!existsSync(dir)) {
       res.json({ sessions: [] });
+      recordTrace('chat.sessions.list', { has_active_project: true, sessions_dir_exists: false });
       return;
     }
     const sessions = readdirSync(dir)
@@ -400,13 +405,24 @@ export function createChatRouter({ state, broadcast }) {
         return { id: f.replace(/\.jsonl$/, ''), file: f, mtime: st.mtimeMs, size: st.size };
       });
     sessions.sort((a, b) => b.mtime - a.mtime);
+    span.setAttribute('chat.session_count', sessions.length);
     res.json({ sessions });
-  }));
+    recordTrace('chat.sessions.list', {
+      has_active_project: true,
+      session_count_bucket: sessions.length === 0 ? '0' : sessions.length < 10 ? '1-9' : '10+',
+    });
+  })));
 
-  router.post('/chat/sessions', wrap(async (req, res) => {
+  router.post('/chat/sessions', wrap(withSpan('chat.session.create', async (span, req, res) => {
     const active = projectsStore.active();
+    setCommonAttributes(span, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    });
+    span.setAttribute('chat.has_active_project', active ? true : false);
     if (!active) {
       res.status(400).json({ error: 'no_active_project', message: 'No active project. Pick one in Overview first.' });
+      recordTrace('chat.session.create', { outcome: 'no_active_project' });
       return;
     }
     const requestedId = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
@@ -419,6 +435,7 @@ export function createChatRouter({ state, broadcast }) {
     if (!existsSync(file)) {
       writeFileSync(file, '', 'utf8');
     }
+    span.setAttribute('chat.session_id', sessionId);
     state.appendActivity({ kind: 'chat.session.create', id: sessionId });
     broadcast({ type: 'chat:session:create', sessionId });
     res.status(201).json({
@@ -427,29 +444,39 @@ export function createChatRouter({ state, broadcast }) {
       mtime: Date.now(),
       size: 0,
     });
-  }));
+    recordTrace('chat.session.create', { outcome: 'created' });
+  })));
 
-  router.post('/chat/regenerate', wrap(async (req, res) => {
+  router.post('/chat/regenerate', wrap(withSpan('chat.regenerate', async (span, req, res) => {
     const { sessionId, messageId } = req.body || {};
+    setCommonAttributes(span, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    });
     if (!messageId) {
       res.status(400).json({ error: 'bad_request', message: 'messageId is required' });
+      recordTrace('chat.regenerate', { outcome: 'missing_message_id' });
       return;
     }
     const active = projectsStore.active();
+    span.setAttribute('chat.has_active_project', active ? true : false);
     if (!active) {
       res.status(400).json({ error: 'no_active_project', message: 'no active project' });
+      recordTrace('chat.regenerate', { outcome: 'no_active_project' });
       return;
     }
     const dir = projectsStore.ensureProjectDir(active.id);
     const sessionsDir = join(dir, 'sessions');
     if (!existsSync(sessionsDir)) {
       res.status(404).json({ error: 'not_found', message: 'no sessions found' });
+      recordTrace('chat.regenerate', { outcome: 'no_sessions' });
       return;
     }
     const allFiles = readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
     const targetFiles = sessionId ? allFiles.filter((f) => f === `${sessionId}.jsonl`) : allFiles;
     if (!targetFiles.length) {
       res.status(404).json({ error: 'not_found', message: 'session not found' });
+      recordTrace('chat.regenerate', { outcome: 'session_not_found' });
       return;
     }
     const full = join(sessionsDir, targetFiles[0]);
@@ -481,6 +508,7 @@ export function createChatRouter({ state, broadcast }) {
       }
     } catch (err) {
       res.status(500).json({ error: 'read_failed', message: err.message });
+      recordTrace('chat.regenerate', { outcome: 'read_failed' });
       return;
     }
     if (!lastUserMessage) {
@@ -503,6 +531,7 @@ export function createChatRouter({ state, broadcast }) {
     }
     if (!lastUserMessage) {
       res.status(404).json({ error: 'not_found', message: 'no user message found to regenerate' });
+      recordTrace('chat.regenerate', { outcome: 'no_user_message' });
       return;
     }
     const record = {
@@ -520,6 +549,8 @@ export function createChatRouter({ state, broadcast }) {
     } catch {
       /* best effort */
     }
+    span.setAttribute('chat.session_id', sessionId || '');
+    span.setAttribute('chat.regenerate_agent', record.agent || '');
     state.appendActivity({
       kind: 'chat.regenerate',
       agent: lastUserMessage.agent || null,
@@ -527,15 +558,21 @@ export function createChatRouter({ state, broadcast }) {
     });
     broadcast({ type: 'chat:regenerate', message: record });
     res.status(202).json({ accepted: true, regeneratedMessage: record });
-  }));
+    recordTrace('chat.regenerate', { outcome: 'regenerated' });
+  })));
 
-  router.post('/chat/audit', wrap(async (req, res) => {
+  router.post('/chat/audit', wrap(withSpan('chat.audit', async (span, req, res) => {
+    setCommonAttributes(span, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    });
     res.json({
       ok: true,
       note: 'audit dispatched — see command.audit in config/opencode.json.template',
       audit: { status: 'queued' },
     });
-  }));
+    recordTrace('chat.audit', { outcome: 'queued' });
+  })));
 
   return router;
 }

@@ -31,7 +31,10 @@
  *   }
  */
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as logger from '../logger.mjs';
 
 /**
  * Default registry URL. Override with `BIZAR_REGISTRY_URL` env var.
@@ -42,6 +45,68 @@ import { createReadStream } from 'node:fs';
  */
 const DEFAULT_REGISTRY_URL =
   'https://raw.githubusercontent.com/DrB0rk/bizar-plugins/main/registry.json';
+
+/**
+ * Fallback registry URLs tried in order when the primary URL fails.
+ * BIZAR_REGISTRY_URL env var takes precedence over all if set.
+ */
+const FALLBACK_REGISTRY_URLS = [
+  'https://bizar-plugins.bork.deno.net/registry.json',
+];
+
+/**
+ * All registry URLs in priority order: explicit override (if any) first,
+ * then BIZAR_REGISTRY_URL, then defaults including fallbacks.
+ * @returns {string[]}
+ */
+function getRegistryUrls() {
+  const urls = [];
+  if (process.env.BIZAR_REGISTRY_URL && process.env.BIZAR_REGISTRY_URL.trim()) {
+    urls.push(process.env.BIZAR_REGISTRY_URL.trim());
+  }
+  urls.push(DEFAULT_REGISTRY_URL, ...FALLBACK_REGISTRY_URLS);
+  return urls;
+}
+
+/** Path to the on-disk registry cache. */
+function getCacheFilePath() {
+  const homedir = process.env.HOME || process.env.USERPROFILE || tmpdir();
+  const cacheDir = join(homedir, '.cache', 'bizar');
+  return join(cacheDir, 'registry.json');
+}
+
+/**
+ * Read the registry from the on-disk cache file.
+ * Returns null if the file doesn't exist or can't be parsed.
+ * @returns {Promise<RegistryShape | null>}
+ */
+export async function readRegistryCache() {
+  try {
+    const cachePath = getCacheFilePath();
+    if (!existsSync(cachePath)) return null;
+    const raw = readFileSync(cachePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write the registry to the on-disk cache file.
+ * @param {RegistryShape} data
+ */
+export function writeRegistryCache(data) {
+  try {
+    const cachePath = getCacheFilePath();
+    const cacheDir = dirname(cachePath);
+    if (!existsSync(cacheDir)) {
+      mkdirSync(cacheDir, { recursive: true });
+    }
+    writeFileSync(cachePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    logger.warn('failed to write registry cache', { err: err.message });
+  }
+}
 
 /** How long a cached registry is considered fresh. */
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -156,65 +221,102 @@ export function validateRegistry(data) {
 /**
  * Fetch the registry, returning the validated parsed shape.
  *
+ * When no explicit URL is provided, iterates through all registry URLs
+ * (BIZAR_REGISTRY_URL env var > defaults > fallbacks) until one succeeds.
+ * On complete failure, falls back to the on-disk cache file.
+ *
  * Cache: in-memory for 1 hour per URL. A `force: true` option bypasses
  * the cache (used by the `update` CLI subcommand).
  *
  * @param {object} [opts]
- * @param {string} [opts.url]   override the URL (default: env/default)
+ * @param {string} [opts.url]   override the URL (uses all fallbacks if omitted)
  * @param {boolean} [opts.force] skip the cache
  * @param {typeof globalThis.fetch} [opts.fetch] fetch override (tests)
  * @returns {Promise<RegistryShape>}
  */
 export async function fetchRegistry({ url, force = false, fetch: fetchImpl } = {}) {
-  const resolvedUrl = getRegistryUrl(url);
   const now = Date.now();
-  if (
-    !force &&
-    _cache &&
-    _cache.url === resolvedUrl &&
-    now - _cache.fetchedAt < CACHE_TTL_MS
-  ) {
-    return _cache.data;
-  }
   const fetchFn = fetchImpl || globalThis.fetch;
   if (typeof fetchFn !== 'function') {
     throw new Error('fetch is not available in this runtime');
   }
-  let res;
-  try {
-    res = await fetchFn(resolvedUrl, {
-      headers: { 'User-Agent': 'bizar-registry-client/5.0' },
-    });
-  } catch (err) {
-    const wrap = new Error(
-      `registry fetch failed for ${resolvedUrl}: ${err.message}`,
-    );
-    wrap.code = 'registry_unreachable';
-    wrap.cause = err;
-    throw wrap;
+
+  // Determine which URLs to try: explicit url takes priority, otherwise use all
+  const urls = url ? [url] : getRegistryUrls();
+
+  // Check in-memory cache first (only valid for the first URL in the list)
+  if (!force && _cache && urls.includes(_cache.url)) {
+    if (now - _cache.fetchedAt < CACHE_TTL_MS) {
+      return _cache.data;
+    }
   }
-  if (!res.ok) {
-    const err = new Error(
-      `registry fetch returned ${res.status} ${res.statusText} from ${resolvedUrl}`,
-    );
-    err.code = 'registry_unreachable';
-    err.status = res.status;
-    throw err;
+
+  let lastError;
+  for (const registryUrl of urls) {
+    try {
+      const res = await fetchFn(registryUrl, {
+        headers: { 'User-Agent': 'bizar-registry-client/5.0' },
+      });
+      if (!res.ok) {
+        logger.warn('registry fetch failed, trying next', {
+          url: registryUrl,
+          status: res.status,
+          statusText: res.statusText,
+        });
+        lastError = new Error(
+          `registry fetch returned ${res.status} ${res.statusText} from ${registryUrl}`,
+        );
+        lastError.code = 'registry_unreachable';
+        lastError.status = res.status;
+        continue;
+      }
+      let json;
+      try {
+        json = await res.json();
+      } catch (err) {
+        logger.warn('registry fetch failed, trying next', {
+          url: registryUrl,
+          err: err.message,
+        });
+        lastError = new Error(
+          `registry at ${registryUrl} is not valid JSON: ${err.message}`,
+        );
+        lastError.code = 'invalid_registry';
+        lastError.cause = err;
+        continue;
+      }
+      const validated = validateRegistry(json);
+      _cache = { fetchedAt: now, url: registryUrl, data: validated };
+      writeRegistryCache(validated);
+      return validated;
+    } catch (err) {
+      logger.warn('registry fetch failed, trying next', {
+        url: registryUrl,
+        err: err.message,
+      });
+      lastError = err;
+    }
   }
-  let json;
-  try {
-    json = await res.json();
-  } catch (err) {
-    const wrap = new Error(
-      `registry at ${resolvedUrl} is not valid JSON: ${err.message}`,
-    );
-    wrap.code = 'invalid_registry';
-    wrap.cause = err;
-    throw wrap;
+
+  // All URLs failed — try the on-disk cache as last resort,
+  // but only when no explicit URL was provided (disk cache is not
+  // meaningful when the caller specified a particular endpoint).
+  if (!url) {
+    const cached = await readRegistryCache();
+    if (cached) {
+      logger.warn('all registry URLs failed, using disk cache');
+      _cache = { fetchedAt: now, url: urls[0], data: cached };
+      return cached;
+    }
   }
-  const validated = validateRegistry(json);
-  _cache = { fetchedAt: now, url: resolvedUrl, data: validated };
-  return validated;
+
+  // Nothing worked — throw the last error with a helpful message
+  const wrap = new Error(
+    `registry fetch failed for all URLs. Last error: ${lastError?.message}`,
+  );
+  wrap.code = 'registry_unreachable';
+  wrap.cause = lastError;
+  throw wrap;
 }
 
 /**
