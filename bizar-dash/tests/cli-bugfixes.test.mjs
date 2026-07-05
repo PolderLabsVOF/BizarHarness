@@ -20,7 +20,7 @@ const REPO = join(process.cwd());
 describe('B1 — parseWithModsFlag', () => {
   it('exits with code 2 when --with-mods is the last arg', async () => {
     // Import fresh each time to avoid module-level side effects
-    const { parseWithModsFlag } = await import('../../cli/bin.mjs');
+    const { parseWithModsFlag } = await import('../../cli/commands/install.mjs');
     let exitCode = null;
     const origExit = process.exit;
     // Mock process.exit to capture the code without terminating the test
@@ -36,7 +36,7 @@ describe('B1 — parseWithModsFlag', () => {
   });
 
   it('exits with code 2 when next arg is another flag', async () => {
-    const { parseWithModsFlag } = await import('../../cli/bin.mjs');
+    const { parseWithModsFlag } = await import('../../cli/commands/install.mjs');
     let exitCode = null;
     const origExit = process.exit;
     try {
@@ -51,7 +51,7 @@ describe('B1 — parseWithModsFlag', () => {
   });
 
   it('returns null when --with-mods is not present', async () => {
-    const { parseWithModsFlag } = await import('../../cli/bin.mjs');
+    const { parseWithModsFlag } = await import('../../cli/commands/install.mjs');
     let exitCode = null;
     const origExit = process.exit;
     try {
@@ -65,7 +65,7 @@ describe('B1 — parseWithModsFlag', () => {
   });
 
   it('returns array of mod ids when value is provided', async () => {
-    const { parseWithModsFlag } = await import('../../cli/bin.mjs');
+    const { parseWithModsFlag } = await import('../../cli/commands/install.mjs');
     let exitCode = null;
     const origExit = process.exit;
     try {

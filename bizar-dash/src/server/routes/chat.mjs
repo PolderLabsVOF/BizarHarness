@@ -22,6 +22,7 @@
  *   - Upstream SSE error: clean up and return without crashing.
  */
 import { Router } from 'express';
+import { warn as logWarn } from '../logger.mjs';
 import {
   existsSync,
   mkdirSync,
@@ -70,9 +71,11 @@ const chatDeltaCounts = new Map(); // chatSessionId -> count since idle
 function noteChatDelta(chatSessionId) {
   const cur = chatDeltaCounts.get(chatSessionId) || 0;
   if (cur >= CHAT_DELTA_BUFFER_CAP) {
-    console.warn(
-      `[chat] dropped delta for session ${chatSessionId}: per-session cap (${CHAT_DELTA_BUFFER_CAP}) exceeded; client is too slow`,
-    );
+    logWarn('dropped delta for session: per-session cap exceeded; client is too slow', {
+      module: 'chat',
+      sessionId: chatSessionId,
+      cap: CHAT_DELTA_BUFFER_CAP,
+    });
     return false;
   }
   chatDeltaCounts.set(chatSessionId, cur + 1);

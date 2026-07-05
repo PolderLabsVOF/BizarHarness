@@ -1,8 +1,9 @@
 import { access, constants, readFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -152,4 +153,43 @@ export function buildSummary(components, agents, target, skillPacks = []) {
     target,
     parts,
   };
+}
+
+// ── Path helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Return the platform-specific Bizar config directory.
+ * Windows: %APPDATA%\bizar
+ * Unix: $XDG_CONFIG_HOME/bizar (default: ~/.config/bizar)
+ */
+export function bizarConfigDir() {
+  if (process.platform === 'win32') {
+    return process.env.APPDATA
+      ? join(process.env.APPDATA, 'bizar')
+      : join(homedir(), '.config', 'bizar');
+  }
+  return process.env.XDG_CONFIG_HOME
+    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
+    : join(homedir(), '.config', 'bizar');
+}
+
+/**
+ * Check if a command exists on PATH.
+ * Returns true if found, false otherwise.
+ */
+export function which(cmd) {
+  const probe = spawnSync('which', [cmd], { stdio: 'ignore' });
+  return probe.status === 0;
+}
+
+/**
+ * Check if a command exists on PATH (bg.mjs variant that returns the path or null).
+ */
+export function whichPath(cmd) {
+  try {
+    const out = execFileSync('which', [cmd], { encoding: 'utf8' });
+    return out.trim() || null;
+  } catch {
+    return null;
+  }
 }

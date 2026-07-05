@@ -2,7 +2,7 @@
 // Shows per-project timelines (task events, plan events, project lifecycle)
 // aggregated from the activity log.
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   History as HistoryIcon,
   RefreshCw,
@@ -17,6 +17,7 @@ import {
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
+import { VirtualList } from '../components/VirtualList';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { cn, formatRelative } from '../lib/utils';
@@ -64,6 +65,85 @@ const TIME_RANGES = [
   { id: '30d', label: 'Last 30 days', ms: 30 * 24 * 60 * 60 * 1000 },
   { id: 'all', label: 'All time', ms: 0 },
 ];
+
+function renderProjectCard(
+  p: ProjectHistory,
+  events: HistoryEvent[],
+  expanded: Set<string>,
+  toggleProject: (id: string) => void,
+): React.ReactNode {
+  const isOpen = expanded.has(p.id);
+  return (
+    <Card key={p.id} className="history-project" style={{ marginBottom: 4 }}>
+      <div className="history-project-head">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
+          <div className="history-project-name">
+            <Folder size={16} /> {p.name}
+          </div>
+          <div className="history-project-meta">{p.path}</div>
+        </div>
+        <div className="history-project-stats">
+          <span className="history-project-stat">
+            <span className="history-project-stat-num">{p.tasks.done}</span>
+            <span className="muted">/ {p.tasks.total} done</span>
+          </span>
+          {p.tasks.doing > 0 && (
+            <span className="history-project-stat">
+              <span className="history-project-stat-num">{p.tasks.doing}</span>
+              <span className="muted">doing</span>
+            </span>
+          )}
+          {p.tasks.blocked > 0 && (
+            <span className="history-project-stat">
+              <span className="history-project-stat-num">{p.tasks.blocked}</span>
+              <span className="muted">blocked</span>
+            </span>
+          )}
+          <span className="history-project-stat">
+            <FileText size={11} /> <span className="history-project-stat-num">{p.plans}</span>
+            <span className="muted"> plan{p.plans === 1 ? '' : 's'}</span>
+          </span>
+          {p.lastAccessed && (
+            <span className="history-project-stat">
+              <span className="muted">last opened {formatRelative(p.lastAccessed)}</span>
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => toggleProject(p.id)}
+          aria-label={isOpen ? 'Collapse' : 'Expand'}
+        >
+          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      </div>
+
+      {isOpen && (
+        <div className="history-timeline-mini">
+          {events.length === 0 ? (
+            <div className="muted" style={{ padding: '12px 8px', fontSize: 12 }}>
+              No events in this time range.
+            </div>
+          ) : (
+            events.slice(-100).reverse().map((ev, i) => (
+              <div key={i} className="history-timeline-row">
+                <span className="history-timeline-ts">
+                  {new Date(ev.ts).toLocaleTimeString()}
+                </span>
+                <span className="history-timeline-kind">{ev.kind || 'event'}</span>
+                <span className="history-timeline-msg" title={String(ev.text || ev.title || '')}>
+                  {ev.author ? `@${ev.author} ` : ''}
+                  {String(ev.text ?? ev.title ?? ev.name ?? '')}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export function History({ snapshot }: Props) {
   const toast = useToast();
@@ -203,80 +283,15 @@ export function History({ snapshot }: Props) {
             </Card>
           )}
 
-          {data.projects.map((p) => {
-            const events = eventsByProject.get(p.id) || [];
-            const isOpen = expanded.has(p.id);
-            return (
-              <Card key={p.id} className="history-project">
-                <div className="history-project-head">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
-                    <div className="history-project-name">
-                      <Folder size={16} /> {p.name}
-                    </div>
-                    <div className="history-project-meta">{p.path}</div>
-                  </div>
-                  <div className="history-project-stats">
-                    <span className="history-project-stat">
-                      <span className="history-project-stat-num">{p.tasks.done}</span>
-                      <span className="muted">/ {p.tasks.total} done</span>
-                    </span>
-                    {p.tasks.doing > 0 && (
-                      <span className="history-project-stat">
-                        <span className="history-project-stat-num">{p.tasks.doing}</span>
-                        <span className="muted">doing</span>
-                      </span>
-                    )}
-                    {p.tasks.blocked > 0 && (
-                      <span className="history-project-stat">
-                        <span className="history-project-stat-num">{p.tasks.blocked}</span>
-                        <span className="muted">blocked</span>
-                      </span>
-                    )}
-                    <span className="history-project-stat">
-                      <FileText size={11} /> <span className="history-project-stat-num">{p.plans}</span>
-                      <span className="muted"> plan{p.plans === 1 ? '' : 's'}</span>
-                    </span>
-                    {p.lastAccessed && (
-                      <span className="history-project-stat">
-                        <span className="muted">last opened {formatRelative(p.lastAccessed)}</span>
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    onClick={() => toggleProject(p.id)}
-                    aria-label={isOpen ? 'Collapse' : 'Expand'}
-                  >
-                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </button>
-                </div>
-
-                {isOpen && (
-                  <div className="history-timeline-mini">
-                    {events.length === 0 ? (
-                      <div className="muted" style={{ padding: '12px 8px', fontSize: 12 }}>
-                        No events in this time range.
-                      </div>
-                    ) : (
-                      events.slice(-100).reverse().map((ev, i) => (
-                        <div key={i} className="history-timeline-row">
-                          <span className="history-timeline-ts">
-                            {new Date(ev.ts).toLocaleTimeString()}
-                          </span>
-                          <span className="history-timeline-kind">{ev.kind || 'event'}</span>
-                          <span className="history-timeline-msg" title={String(ev.text || ev.title || '')}>
-                            {ev.author ? `@${ev.author} ` : ''}
-                            {String(ev.text ?? ev.title ?? ev.name ?? '')}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+          {data.projects.length > 0 && (
+            <VirtualList
+              items={data.projects}
+              itemHeight={70}
+              height={Math.min(data.projects.length * 70, 500)}
+              className="history-virtual-list"
+              renderItem={(p) => renderProjectCard(p, eventsByProject.get(p.id) || [], expanded, toggleProject)}
+            />
+          )}
 
           {/* Global / unassigned events */}
           {eventsByProject.has('global') && (

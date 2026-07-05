@@ -888,6 +888,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
                   className="input"
                   value={settings.theme.accent}
                   onChange={(e) => patchTheme({ accent: e.target.value })}
+                  aria-label="Accent color hex"
                 />
               </div>
             </div>
@@ -906,6 +907,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
                   className="input"
                   value={settings.theme.success}
                   onChange={(e) => patchTheme({ success: e.target.value })}
+                  aria-label="Success color hex"
                 />
               </div>
             </div>
@@ -924,6 +926,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
                   className="input"
                   value={settings.theme.warning}
                   onChange={(e) => patchTheme({ warning: e.target.value })}
+                  aria-label="Warning color hex"
                 />
               </div>
             </div>
@@ -942,6 +945,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
                   className="input"
                   value={settings.theme.error}
                   onChange={(e) => patchTheme({ error: e.target.value })}
+                  aria-label="Error color hex"
                 />
               </div>
             </div>
@@ -960,6 +964,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
                   className="input"
                   value={settings.theme.info}
                   onChange={(e) => patchTheme({ info: e.target.value })}
+                  aria-label="Info color hex"
                 />
               </div>
             </div>
@@ -1144,8 +1149,9 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
                   />
                 </div>
                 <div className="task-form-field">
-                  <label className="field-label">Use HTTPS</label>
+                  <label className="field-label" htmlFor="tailscale-https">Use HTTPS</label>
                   <input
+                    id="tailscale-https"
                     type="checkbox"
                     checked={tailscaleDraft.https}
                     onChange={(e) => setTailscaleDraft((cur) => ({ ...cur, https: e.target.checked }))}

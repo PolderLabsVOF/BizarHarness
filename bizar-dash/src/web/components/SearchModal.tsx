@@ -128,8 +128,8 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
   return (
     <div className="search-modal-backdrop" onClick={onClose}>
       <div className="search-modal" role="dialog" aria-modal="true" aria-labelledby="search-modal-title" onClick={(e) => e.stopPropagation()}>
-        <div className="search-modal-head">
-          <Search size={14} />
+        <div className="search-modal-head" role="search">
+          <Search size={14} aria-hidden />
           <span id="search-modal-title" className="sr-only">Search</span>
           <input
             ref={inputRef}
@@ -138,6 +138,7 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
+            aria-label="Search"
           />
           <button
             type="button"

@@ -27,6 +27,7 @@ import {
   LIGHTRAG_DEFAULT_EMBEDDING,
 } from '../memory-store.mjs';
 import { resolveLightRAGConfig } from '../memory-lightrag.mjs';
+import { warn as logWarn } from '../logger.mjs';
 import { wrap } from './_shared.mjs';
 
 /**
@@ -128,7 +129,7 @@ export function createLightragRouter({ projectRoot }) {
         const lines = content.split('\n');
         logTail.push(...lines.slice(-30));
       } catch (err) {
-        console.warn('swallowed in lightrag log tail:', err.message);
+        logWarn('swallowed in lightrag log tail', { module: 'lightrag', err: err.message });
       }
     }
 
@@ -136,7 +137,7 @@ export function createLightragRouter({ projectRoot }) {
     try {
       if (existsSync(logFile)) logSize = statSync(logFile).size;
     } catch (err) {
-      console.warn('swallowed in lightrag log stat:', err.message);
+      logWarn('swallowed in lightrag log stat', { module: 'lightrag', err: err.message });
     }
 
     res.json({

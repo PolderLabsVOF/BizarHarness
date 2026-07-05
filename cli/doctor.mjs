@@ -21,9 +21,8 @@
 import chalk from 'chalk';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { opencodeConfigDir, opencodeAgentsDir } from './utils.mjs';
+import { opencodeConfigDir, opencodeAgentsDir, which, bizarConfigDir } from './utils.mjs';
 
 // v3.20.11: list every agent the install script is expected to deploy.
 // Adding a new agent to `config/agents/` without adding it here causes
@@ -50,12 +49,6 @@ const REQUIRED_AGENTS = [
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-function bizarConfigDir() {
-  return process.env.XDG_CONFIG_HOME
-    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
-    : join(homedir(), '.config', 'bizar');
-}
-
 /**
  * Run a check function and capture its result. The check either
  * returns a string message (pass) or throws an Error (fail).
@@ -71,11 +64,6 @@ async function runCheck(name, fn) {
       message: err && err.message ? err.message : String(err),
     };
   }
-}
-
-function which(cmd) {
-  const probe = spawnSync('which', [cmd], { stdio: 'ignore' });
-  return probe.status === 0;
 }
 
 // ── individual checks ───────────────────────────────────────────────────────

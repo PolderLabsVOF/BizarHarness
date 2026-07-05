@@ -52,8 +52,31 @@ import https from 'node:https';
 
 import { atomicWriteJson } from './routes/_shared.mjs';
 import { parseFrontmatter } from './yaml.mjs';
+import { warn as logWarn } from './logger.mjs';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * v4.7.0 — Per-site log rate limiter for hot-path catches.
+ *
+ * Several empty catches below sit on stdout/stderr `data` handlers
+ * that can fire dozens of times per second when LightRAG is chatty
+ * (or the disk is slow). Without rate-limiting, a transient disk
+ * hiccup floods the log with thousands of identical warnings and
+ * hides the real problem underneath.
+ *
+ * Returns true the first time it's called for a key within `intervalMs`,
+ * then false until the window passes. Default 60s — matches the
+ * "if it's still broken, say it again a minute later" pattern.
+ */
+const _lastLog = new Map();
+function _rateLimit(key, intervalMs = 60_000) {
+  const now = Date.now();
+  const last = _lastLog.get(key) || 0;
+  if (now - last < intervalMs) return false;
+  _lastLog.set(key, now);
+  return true;
+}
 
 function deepMerge(target, source) {
   const out = { ...target };
@@ -444,11 +467,23 @@ export async function startServer(config, { logger } = {}) {
   let fd = -1;
   try {
     fd = openSync(logFile, 'a');
-    child.stdout?.on('data', (d) => { try { writeSync(fd, d); } catch {} });
-    child.stderr?.on('data', (d) => { try { writeSync(fd, d); } catch {} });
+    child.stdout?.on('data', (d) => {
+      try { writeSync(fd, d); } catch (err) {
+        if (_rateLimit('lightrag-write-stdout')) logWarn('lightrag stream write failed (stdout)', { module: 'lightrag', err: err?.message || String(err) });
+      }
+    });
+    child.stderr?.on('data', (d) => {
+      try { writeSync(fd, d); } catch (err) {
+        if (_rateLimit('lightrag-write-stderr')) logWarn('lightrag stream write failed (stderr)', { module: 'lightrag', err: err?.message || String(err) });
+      }
+    });
     child.on('exit', (code, signal) => {
-      try { closeSync(fd); } catch {}
-      try { unlinkSync(pidFile); } catch {}
+      try { closeSync(fd); } catch (err) {
+        if (_rateLimit('lightrag-close-fd')) logWarn('lightrag close fd failed', { module: 'lightrag', err: err?.message || String(err) });
+      }
+      try { unlinkSync(pidFile); } catch (err) {
+        if (_rateLimit('lightrag-exit-unlink')) logWarn('lightrag pid unlink failed', { module: 'lightrag', err: err?.message || String(err) });
+      }
       log(`lightrag-server exited (code=${code}, signal=${signal})`);
     });
   } catch (openErr) {
@@ -483,7 +518,9 @@ export async function stopServer(config, { logger } = {}) {
   const pidFile = join(config.workingDir, 'lightrag.pid');
   const { pid, alive } = readPidAlive(pidFile);
   if (!pid || !alive) {
-    try { unlinkSync(pidFile); } catch {}
+    try { unlinkSync(pidFile); } catch (err) {
+      if (_rateLimit('lightrag-stop-notrunning-unlink')) logWarn('lightrag pid unlink failed (not running)', { module: 'lightrag', err: err?.message || String(err) });
+    }
     return { ok: true, message: 'not running' };
   }
   log(`stopping lightrag-server (pid ${pid})`);
@@ -493,7 +530,9 @@ export async function stopServer(config, { logger } = {}) {
     log(`escalating to SIGKILL (pid ${pid})`);
     killPid(pid, 'SIGKILL');
   }
-  try { unlinkSync(pidFile); } catch {}
+  try { unlinkSync(pidFile); } catch (err) {
+    if (_rateLimit('lightrag-stop-unlink')) logWarn('lightrag pid unlink failed (stop)', { module: 'lightrag', err: err?.message || String(err) });
+  }
   return { ok: true, message: 'stopped' };
 }
 

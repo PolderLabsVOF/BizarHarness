@@ -39,6 +39,7 @@ import {
 import { homedir, platform } from 'node:os';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bizarConfigDir } from './utils.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,17 +47,6 @@ const HOME = homedir();
 const PLATFORM = platform();
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
-
-function bizarConfigDir() {
-  if (PLATFORM === 'win32') {
-    return process.env.APPDATA
-      ? join(process.env.APPDATA, 'bizar')
-      : join(HOME, '.config', 'bizar');
-  }
-  return process.env.XDG_CONFIG_HOME
-    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
-    : join(HOME, '.config', 'bizar');
-}
 
 function userUnitDir() {
   if (PLATFORM === 'win32') return null;

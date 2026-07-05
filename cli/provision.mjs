@@ -42,9 +42,11 @@ import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bizarConfigDir } from './utils.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const HOME = homedir();
 
 // `cli/provision.mjs` lives at `<pkg>/cli/provision.mjs`. The repo root
 // (where `plugins/bizar/`, `bizar-dash/`, `package.json` etc. live) is
@@ -52,19 +54,6 @@ const __dirname = dirname(__filename);
 // installs (`<npm root -g>/@polderlabs/bizar/cli/provision.mjs`).
 export const REPO_ROOT = join(__dirname, '..');
 export const PKG_MAIN = '@polderlabs/bizar';
-
-const HOME = homedir();
-
-function bizarConfigDir() {
-  if (process.platform === 'win32') {
-    return process.env.APPDATA
-      ? join(process.env.APPDATA, 'bizar')
-      : join(HOME, '.config', 'bizar');
-  }
-  return process.env.XDG_CONFIG_HOME
-    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
-    : join(HOME, '.config', 'bizar');
-}
 
 export const BIZAR_HOME = bizarConfigDir();
 export const OPENCODE_DIR =

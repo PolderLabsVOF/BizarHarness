@@ -18,6 +18,7 @@ import { searchStore } from '../search-store.mjs';
 import { tailscaleStore } from '../tailscale-store.mjs';
 import { updateStore } from '../update-store.mjs';
 import { projectsStore } from '../projects-store.mjs';
+import { error as logError } from '../logger.mjs';
 import { wrap } from './_shared.mjs';
 
 /**
@@ -81,7 +82,7 @@ export function createMiscRouter({ state, broadcast }) {
     updateStore.applyWithProgress({
       packages,
       broadcast,
-    }).catch((err) => console.error('[updates] error:', err));
+    }).catch((err) => logError('updates error', { module: 'updates', err: err?.message || String(err) }));
     res.json({ started: true, packages });
   });
 

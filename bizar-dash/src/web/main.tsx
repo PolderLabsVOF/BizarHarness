@@ -3,6 +3,11 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { MobileApp } from './MobileApp';
+import en from './locales/en.json';
+import { setLocale } from './lib/i18n';
+
+// Initialize i18n
+setLocale('en', en);
 // Import mobile CSS so the MobileApp renders with styles when served
 // from index.html (e.g. when the auto-redirect to /m is bypassed).
 import './styles/main.css';

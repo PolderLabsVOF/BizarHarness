@@ -1,5 +1,80 @@
 # Changelog
 
+## v4.7.0 — v4.6 + v4.7: Quality & Stability + Performance & Polish
+
+### v4.6 — Quality & Stability
+
+**CLI refactor — split the monoliths:**
+- `cli/bin.mjs` shrunk from **1,498 → 275 lines** (just bootstrap + dispatch + help)
+- `cli/artifact.mjs` shrunk from **2,121 → 63 lines** (now a thin re-export)
+- Created 10 new command modules under `cli/commands/`:
+  - `install.mjs` (install + update)
+  - `service.mjs` (service install/start/stop/etc.)
+  - `dash.mjs` (dash start/stop/status/tui)
+  - `minimax.mjs` (MiniMax subcommands)
+  - `headroom.mjs` (Headroom subcommands)
+  - `mod.mjs` (mod install/upgrade/list)
+  - `artifact.mjs` (artifact dispatch)
+  - `memory.mjs` (memory subcommands)
+  - `usage.mjs` (usage CLI shim)
+  - `util.mjs` (doctor, repair, test-gate, audit, etc.)
+- Created 3 artifact modules:
+  - `cli/artifact-cli.mjs` (605 lines — CLI dispatch)
+  - `cli/artifact-server.mjs` (847 lines — HTTP server)
+  - `cli/artifact-render.mjs` (621 lines — HTML rendering)
+- Centralized `which()` and `bizarConfigDir()` into `cli/utils.mjs`
+- Fixed `--help`/`--version`/`-h`/`-v` as global flags
+- Fixed `memory <sub> --help` propagation so subcommand help works
+
+**Structured logging + metrics + cache-control:**
+- New `bizar-dash/src/server/logger.mjs` — JSON structured logger (debug/info/warn/error), `child()` factory, `BIZAR_LOG_LEVEL` env knob
+- New `bizar-dash/src/server/metrics.mjs` — Prometheus-style counters/gauges/histograms with text-exposition `render()`
+- New `GET /metrics` endpoint (mounted before auth for Prometheus scrapers)
+- `http_requests_total{method,route,status}` counter middleware
+- `ws_clients` gauge tracking connect/close/error
+- `Cache-Control: no-cache` for `/api/settings` and `/api/snapshot`
+- Replaced `console.log`/`console.error` in `routes/*.mjs` with structured logger
+- Rate-limited logging on remaining 6 empty catches in `memory-lightrag.mjs`
+
+**Web frontend test infrastructure:**
+- New `bizar-dash/vitest.config.ts` (vitest + jsdom + RTL setup)
+- New `bizar-dash/tests/setup.ts` (jest-dom matchers + cleanup)
+- 10 component tests (Card, Button, Toast, Modal, Spinner, StatusBadge, etc.)
+- 7 hook tests (useToast, useModal)
+- 36 lib tests (i18n, utils, formatRelative, formatTime, cn, etc.)
+- Added `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom` devDeps
+- New `npm run test:web` script
+
+**Virtual scrolling + i18n + a11y polish:**
+- New `<VirtualList>` component (hand-rolled, no deps) — used in 4 views: ChatThread, Overview, Activity, History
+- New `bizar-dash/src/web/lib/i18n.ts` + `hooks/useI18n.ts` + `locales/en.json` — foundation for translations (30 strings)
+- `SearchModal` gets `role="search"` + `aria-label="Search"`
+- Settings color inputs get `aria-label`s; Tailscale checkbox properly associated
+- Toast already had `role="alert"` from v4.5.2
+
+### v4.7 — Performance & Polish
+
+**Virtual scrolling ships in production** (covered above) — chat, activity, history, memory tabs now handle thousands of items without DOM blowup.
+
+**i18n infrastructure** (covered above) — 30 strings ready, foundation in place for future translations.
+
+**Structured observability** (covered above) — `/metrics` endpoint, request counter, WS gauge, structured JSON logs.
+
+### Tests
+
+- 17 new tests for logger + metrics
+- 75 new vitest tests for web components/hooks/lib
+- 9 existing CLI bugfix tests still passing
+- 13 existing server bugfix tests still passing
+- Total `npm test`: **388 pass / 0 fail**
+- Total `npm run test:web`: **75 pass / 0 fail**
+- `npx tsc --noEmit`: 0 errors
+- `npm run build`: success (372 KB main + 476 KB mobile JS bundles)
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@4.7.0`
+
 ## v4.5.2 — Bug-fix sweep (16 fixes across CLI, server, frontend, build)
 
 ### Highlights

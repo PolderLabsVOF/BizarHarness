@@ -35,6 +35,7 @@ import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
+import { VirtualList } from '../components/VirtualList';
 import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
 import { api } from '../lib/api';
@@ -776,23 +777,29 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
                     <p>No events yet.</p>
                   </div>
                 ) : (
-                  [...events].reverse().map((ev, i) => {
-                    const Icon =
-                      ev.author ? Bot : ev.kind === 'task' ? CheckSquare : ev.kind === 'bg' ? Cpu : ActivityIcon;
-                    return (
-                      <div key={`${ev.ts}-${i}`} className="tl-stream-event">
-                        <span className="tl-stream-event-time">
-                          {new Date(ev.ts).toLocaleTimeString('en-GB', { hour12: false })}
-                        </span>
-                        <span className="tl-stream-event-icon" style={{ color: statusColor(ev.kind) }}>
-                          <Icon size={12} />
-                        </span>
-                        <span className="tl-stream-event-text">
-                          {ev.author || ev.text || ev.kind}
-                        </span>
-                      </div>
-                    );
-                  })
+                  <VirtualList
+                    items={[...events].reverse()}
+                    itemHeight={40}
+                    height={400}
+                    className="tl-stream-virtual"
+                    renderItem={(ev) => {
+                      const Icon =
+                        ev.author ? Bot : ev.kind === 'task' ? CheckSquare : ev.kind === 'bg' ? Cpu : ActivityIcon;
+                      return (
+                        <div className="tl-stream-event">
+                          <span className="tl-stream-event-time">
+                            {new Date(ev.ts).toLocaleTimeString('en-GB', { hour12: false })}
+                          </span>
+                          <span className="tl-stream-event-icon" style={{ color: statusColor(ev.kind) }}>
+                            <Icon size={12} />
+                          </span>
+                          <span className="tl-stream-event-text">
+                            {ev.author || ev.text || ev.kind}
+                          </span>
+                        </div>
+                      );
+                    }}
+                  />
                 )}
               </div>
             </aside>

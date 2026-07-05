@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { WelcomeScreen } from './WelcomeScreen';
 import { MessageBubble } from './MessageBubble';
+import { VirtualList } from '../VirtualList';
 
 interface Message {
   role?: string;
@@ -105,17 +106,22 @@ export function ChatThread({
 
   return (
     <div className="chat-thread legacy" ref={innerRef}>
-      {messages.map((m, i) => (
-        <MessageBubble
-          key={`${i}-${m.ts ?? ''}`}
-          message={m}
-          pinned={pinned.has(i)}
-          onCopy={() => onCopy(m)}
-          onDelete={() => onDelete(i)}
-          onTogglePin={() => onTogglePin(i)}
-          onRegenerate={() => onRegenerate(String(m.ts ?? i))}
-        />
-      ))}
+      <VirtualList
+        items={messages}
+        itemHeight={120}
+        height={800}
+        className="chat-thread-virtual"
+        renderItem={(m, i) => (
+          <MessageBubble
+            message={m}
+            pinned={pinned.has(i)}
+            onCopy={() => onCopy(m)}
+            onDelete={() => onDelete(i)}
+            onTogglePin={() => onTogglePin(i)}
+            onRegenerate={() => onRegenerate(String(m.ts ?? i))}
+          />
+        )}
+      />
     </div>
   );
 }

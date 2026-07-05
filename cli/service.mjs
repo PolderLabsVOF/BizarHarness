@@ -35,21 +35,11 @@ import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { bizarConfigDir } from './utils.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const HOME = homedir();
-
-function bizarConfigDir() {
-  if (process.platform === 'win32') {
-    return process.env.APPDATA
-      ? join(process.env.APPDATA, 'bizar')
-      : join(HOME, '.config', 'bizar');
-  }
-  return process.env.XDG_CONFIG_HOME
-    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
-    : join(HOME, '.config', 'bizar');
-}
 
 const BIZAR_HOME = bizarConfigDir();
 const LOG_FILE = join(BIZAR_HOME, 'service.log');

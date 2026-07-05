@@ -15,6 +15,7 @@ import { agentsStore } from '../agents-store.mjs';
 import { schedulesStore } from '../schedules-store.mjs';
 import { providersStore, mcpsStore } from '../providers-store.mjs';
 import { modsLoader } from '../mods-loader.mjs';
+import { error as logError } from '../logger.mjs';
 import {
   OPENCODE_JSON,
   readSettings,
@@ -56,7 +57,7 @@ export function createOverviewRouter({ state }) {
         },
       );
       child.on('error', (err) => {
-        console.error('[dashboard] restart spawn failed:', err.message);
+        logError('restart spawn failed', { module: 'overview', err: err.message });
       });
       child.unref();
       process.exit(0);

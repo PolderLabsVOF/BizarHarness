@@ -33,6 +33,7 @@ import { Button } from '../components/Button';
 import { MemoryStatusCard } from './memory/MemoryStatusCard';
 import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
+import { VirtualList } from '../components/VirtualList';
 import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
 import { FileBrowser } from '../components/FileBrowser';
@@ -367,21 +368,23 @@ function OverviewInner({
           </div>
         ) : (
           <div className={cn('activity-feed-list-wrap', !activityExpanded && 'activity-feed-list-wrap-collapsed')}>
-            <div className="activity-feed-list">
-              {activityItems.slice(0, 30).map((it, idx) => {
-                const k = itemKey(it, idx);
-                if (hiddenKeys.has(k)) return null;
+            <VirtualList
+              items={activityItems.slice(0, 30).filter((it, idx) => !hiddenKeys.has(itemKey(it, idx)))}
+              itemHeight={60}
+              height={Math.min(activityItems.filter((it, idx) => !hiddenKeys.has(itemKey(it, idx))).length * 60, 480)}
+              className="activity-feed-list"
+              renderItem={(it, vlIdx) => {
+                const originalIdx = activityItems.slice(0, 30).findIndex((a) => a === it);
                 return (
                   <ActivityFeedItem
-                    key={`${it.ts}-${idx}`}
                     item={it}
-                    activityKey={k}
+                    activityKey={itemKey(it, originalIdx)}
                     onNavigate={setActiveTab}
                     onHide={onHide}
                   />
                 );
-              })}
-            </div>
+              }}
+            />
             {!activityExpanded && activityItems.length > 8 && <div className="activity-feed-fade" aria-hidden="true" />}
           </div>
         )}

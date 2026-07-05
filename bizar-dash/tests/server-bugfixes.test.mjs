@@ -312,7 +312,7 @@ describe('Bug S3 — chat.mjs per-session delta cap', () => {
     );
     assert.match(src, /CHAT_DELTA_BUFFER_CAP\s*=\s*1000/,
       'cap constant should be set to 1000');
-    assert.match(src, /console\.warn\(/,
-      'cap-exceeded path should log a warning');
+    assert.match(src, /logWarn\(/,
+      'cap-exceeded path should log a warning via the structured logger');
   });
 });

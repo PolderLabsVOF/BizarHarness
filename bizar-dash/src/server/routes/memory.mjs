@@ -14,6 +14,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { warn as logWarn } from '../logger.mjs';
 
 const SERVER_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const memoryStore = await import(`${SERVER_ROOT}/memory-store.mjs`).then((m) => m);
@@ -79,7 +80,7 @@ export function createMemoryRouter({ projectRoot }) {
         const data = JSON.parse(readFileSync(reindexMarker, 'utf8'));
         lastSecretScan = data.attemptedAt || null;
       } catch (err) {
-        console.warn('swallowed in memory reindex marker read:', err.message);
+        logWarn('swallowed in memory reindex marker read', { module: 'memory', err: err.message });
       }
     }
 
@@ -489,7 +490,7 @@ export function createMemoryRouter({ projectRoot }) {
         }
       }
     } catch (err) {
-      console.warn('swallowed in memory conflict scan:', err.message);
+      logWarn('swallowed in memory conflict scan', { module: 'memory', err: err.message });
     }
 
     res.json({ conflicts });
@@ -528,7 +529,7 @@ export function createMemoryRouter({ projectRoot }) {
       const { recordQuery } = await getMemoryLightrag();
       recordQuery(projectRoot, Date.now() - startedAt);
     } catch (err) {
-      console.warn('swallowed in memory recordQuery:', err.message);
+      logWarn('swallowed in memory recordQuery', { module: 'memory', err: err.message });
     }
     res.json({ ok: true, q, lexical, semantic });
   }));
@@ -612,7 +613,7 @@ export function createMemoryRouter({ projectRoot }) {
         const lines = content.split('\n');
         logTail.push(...lines.slice(-30));
       } catch (err) {
-        console.warn('swallowed in memory log tail:', err.message);
+        logWarn('swallowed in memory log tail', { module: 'memory', err: err.message });
       }
     }
 

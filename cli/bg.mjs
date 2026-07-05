@@ -26,6 +26,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import chalk from 'chalk';
+import { whichPath } from './utils.mjs';
 
 const BG_DIRS = [
   join(homedir(), '.cache', 'bizar', 'bg'),
@@ -78,7 +79,7 @@ function tmuxSessionForSessionId(sessionId) {
  * List tmux sessions matching the bgr_ prefix.
  */
 function listBgrTmuxSessions() {
-  if (!which('tmux')) return [];
+  if (!whichPath('tmux')) return [];
   try {
     const out = execFileSync('tmux', ['list-sessions', '-F', '#{session_name}'], { encoding: 'utf8' });
     return out
@@ -88,15 +89,6 @@ function listBgrTmuxSessions() {
   } catch {
     // tmux returns exit 1 if no server is running
     return [];
-  }
-}
-
-function which(cmd) {
-  try {
-    const out = execFileSync('which', [cmd], { encoding: 'utf8' });
-    return out.trim() || null;
-  } catch {
-    return null;
   }
 }
 
@@ -270,7 +262,7 @@ async function runView() {
 
   // Tmux presence check. If missing, print fallback instructions and exit 0
   // (not an error — the operator can still use per-instance logs).
-  if (!which('tmux')) {
+  if (!whichPath('tmux')) {
     console.log(chalk.yellow('\n  ⚠ tmux is not installed on this host.\n'));
     console.log(chalk.dim('  You can inspect individual agents via:\n'));
     for (const r of running) {
@@ -382,7 +374,7 @@ function openTerminalAttached(tmuxSession) {
       { cmd: 'x-terminal-emulator', args: ['-e', `tmux attach -t ${tmuxSession}`] },
     ];
     for (const c of candidates) {
-      if (which(c.cmd)) {
+      if (whichPath(c.cmd)) {
         try {
           spawn(c.cmd, c.args, { detached: true, stdio: 'ignore' }).unref();
           return { ok: true, terminal: c.cmd };
@@ -401,7 +393,7 @@ function openTerminalAttached(tmuxSession) {
       { cmd: 'cmd', args: ['/c', 'start', 'tmux', 'attach', '-t', tmuxSession] },
     ];
     for (const c of candidates) {
-      if (which(c.cmd)) {
+      if (whichPath(c.cmd)) {
         try {
           spawn(c.cmd, c.args, { detached: true, stdio: 'ignore' }).unref();
           return { ok: true, terminal: c.cmd };

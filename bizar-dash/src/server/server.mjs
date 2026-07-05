@@ -39,6 +39,21 @@ import { buildAllowedRootsFromSettings, resolveSafePath } from './lib/path-safe.
 import { V2EventBus } from './v2-event-bus.mjs';
 import { loadOrCreateAuth, V2_DEFAULT_PORT } from './v2-auth-file.mjs';
 import { createV2Router } from './routes-v2/index.mjs';
+import { counter, gauge, render as renderMetrics } from './metrics.mjs';
+
+// v4.7.0 — Prometheus-style HTTP metrics. Bound to the server-wide
+// registry; render() emits the text exposition format consumed by
+// `GET /metrics`. Counter is keyed by {method, route, status} where
+// `route` is the matched Express pattern (e.g. `/api/tasks/:id`) to
+// keep cardinality bounded; unmatched 404s collapse to `unmatched`.
+const httpRequestsTotal = counter(
+  'http_requests_total',
+  'Count of HTTP requests handled by the dashboard server.',
+);
+const wsClientsGauge = gauge(
+  'ws_clients',
+  'Number of currently-connected WebSocket clients (snapshot + /ws/logs).',
+);
 
 let processHandlersInstalled = false;
 let v2Bus = null;
@@ -158,6 +173,46 @@ export async function createServer({
   app.use(express.json({ limit: '2mb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
+
+  // v4.7.0 — Prometheus scrape endpoint. Mounted BEFORE the auth
+  // middleware and OUTSIDE /api/* so scrapers don't need a bearer
+  // token. Returns text/plain in the standard 0.0.4 exposition
+  // format so both Prometheus and `curl http://host/metrics` work.
+  app.get('/metrics', (_req, res) => {
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.send(renderMetrics());
+  });
+
+  // v4.7.0 — Per-request counter. Uses the matched Express route
+  // pattern (e.g. `/api/tasks/:id`) when available; falls back to
+  // `unmatched` for 404s so the cardinality stays bounded. Hooked off
+  // `finish` so the final status code is captured even after error
+  // handlers run.
+  app.use((req, res, next) => {
+    res.on('finish', () => {
+      const route = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : 'unmatched';
+      httpRequestsTotal.inc({
+        method: req.method,
+        route,
+        status: String(res.statusCode),
+      });
+    });
+    next();
+  });
+
+  // v4.7.0 — Cache-Control headers for live JSON endpoints. The
+  // frontend pulls these every few seconds, so we use `no-cache` (which
+  // allows conditional revalidation) rather than `no-store` (which
+  // forbids it). Static assets already get `max-age=1y` via
+  // express.static above; this only fills the gap for the live API.
+  app.use('/api/settings', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    next();
+  });
+  app.use('/api/snapshot', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-cache');
     next();
   });
 
@@ -519,8 +574,15 @@ export async function createServer({
 
   wss.on('connection', (ws, req) => {
     ws.isAlive = true;
+    wsClientsGauge.set(wss.clients.size);
     ws.on('pong', () => {
       ws.isAlive = true;
+    });
+    ws.on('close', () => {
+      wsClientsGauge.set(wss.clients.size);
+    });
+    ws.on('error', () => {
+      wsClientsGauge.set(wss.clients.size);
     });
     const path = req.url
       ? (() => {
