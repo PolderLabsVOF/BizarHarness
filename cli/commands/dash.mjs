@@ -129,7 +129,11 @@ export async function runDash(dashArgs) {
   switch (sub) {
     case 'start':
       if (subOpts.bg) {
-        await dashModule.startInBackground(['start', ...(subOpts.subArgs || [])]);
+        // Pass --port, --host, --bind through to the child process
+        const bgArgs = ['start', ...(subOpts.subArgs || [])];
+        if (subOpts.port) bgArgs.push('--port', String(subOpts.port));
+        if (process.env.BIZAR_DASHBOARD_BIND) bgArgs.push('--bind', process.env.BIZAR_DASHBOARD_BIND);
+        await dashModule.startInBackground(bgArgs);
       } else {
         await dashModule.start(subOpts);
       }

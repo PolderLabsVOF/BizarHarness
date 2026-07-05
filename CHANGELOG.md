@@ -1,5 +1,24 @@
 # Changelog
 
+## v5.0.2 — Background mode `--port` and `--bind` propagation
+
+### Bug fix
+
+`bizar dash start --bg --port 4097 --bind 0.0.0.0` was silently ignoring `--port` and `--bind` because the bg-spawned child process only received `['start', ...subArgs]` and not the parsed options. The child fell back to `DEFAULT_PORT=4321` and `127.0.0.1`.
+
+**Fix:** In `cli/commands/dash.mjs` `runDash()`, when `subOpts.bg` is true, build the bg args from the parsed `subOpts` so `--port` and `--bind` are passed through to the spawned process.
+
+After upgrade, this works end-to-end:
+
+```bash
+export BIZAR_DASHBOARD_BIND=0.0.0.0
+bizar dash start --port 4097 --host 0.0.0.0 --bg --force
+# Bizar dashboard started in background on http://localhost:4097/
+
+sudo tailscale serve --bg --https=443 --set-path=/ http://localhost:4097
+# https://borkpc.tail2cdf4d.ts.net/  (tailnet only)
+```
+
 ## v5.0.1 — Settings redesign, Doctor page, Auto-save, Compaction, Model fixes, Layout polish
 
 ### Bug fixes & polish
