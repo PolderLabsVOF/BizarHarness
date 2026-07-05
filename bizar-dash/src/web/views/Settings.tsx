@@ -23,6 +23,7 @@ import { ProvidersSection } from './settings/ProvidersSection';
 import { MemorySection } from './settings/MemorySection';
 import { SkillsSection } from './settings/SkillsSection';
 import { BackupSection } from './settings/BackupSection';
+import { WorkspacesSection } from './settings/WorkspacesSection';
 
 type Props = {
   snapshot: Snapshot;
@@ -52,6 +53,7 @@ const SECTION_LINKS = [
   { id: 'memory', label: 'Memory' },
   { id: 'skills', label: 'Skills' },
   { id: 'backup', label: 'Backup' },
+  { id: 'workspaces', label: 'Workspaces' },
 ] as const;
 
 /* ─── Settings search sections metadata ─── */
@@ -264,6 +266,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
         {(showAll || sectionOf('memory')) && <MemorySection />}
         {(showAll || sectionOf('skills')) && <SkillsSection />}
         {(showAll || sectionOf('backup')) && <BackupSection />}
+        {(showAll || sectionOf('workspaces')) && <WorkspacesSection />}
       </div>
     </div>
   );

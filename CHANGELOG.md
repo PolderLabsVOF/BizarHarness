@@ -1,5 +1,113 @@
 # Changelog
 
+## v5.0.0 — Multi-user workspaces, Plugin marketplace, Eval framework, One-click deploy, Voice notes, Web clipper, Screenshot OCR
+
+### Major release — BizarHarness is now a team platform.
+
+### Highlights
+
+**Multi-user / Team Workspaces:**
+- New `workspaces.mjs` — file-based store at `~/.local/share/bizar/workspaces/` (mode 0700)
+- Workspaces have owners, members, invites, roles (admin/editor/viewer)
+- Backwards compatible: single-user setups get a "default" workspace auto-created
+- 11 REST endpoints: `GET/POST /api/workspaces`, `POST /api/invites/:token/accept`, etc.
+- CLI: `bizar workspace list|create|switch|invite|accept|members|remove-member`
+- Dashboard: `<WorkspaceSelector>`, `<InviteDialog>`, full Workspace view
+- JWT-based user context (existing dashboard-secret still works via SHA-256 hash)
+
+**Plugin marketplace:**
+- New `bizar-dash/src/server/plugins/{registry,store,sandbox}.mjs`
+- `node:vm` sandbox with permission system (net, fs, config, log)
+- `tar-stream` extraction (Zip-Slip defense)
+- 7 REST endpoints under `/api/plugins/*`
+- CLI: `bizar plugin search|install|list|info|config|update|uninstall|invoke`
+- Registry URL: `BIZAR_REGISTRY_URL` env var (default: GitHub registry)
+- Templates at `templates/plugin-template/`
+
+**Eval framework:**
+- New `eval.mjs` — fixture runner with parallel execution
+- Check types: `contains`, `notContains`, `regex`, `jsonSchema`, `maxTokens`, `maxLatencyMs`
+- 5 REST endpoints under `/api/eval/*`
+- CLI: `bizar eval list|run|show|diff|init|validate`
+- 5 example fixtures in `templates/eval-fixtures/`
+- Skill at `bizar-dash/skills/eval/SKILL.md`
+
+**One-click deploy:**
+- New `cli/commands/deploy.mjs` with subcommands per platform
+- `bizar deploy --to vercel|cloudflare|fly|docker [--compose]`
+- Templates for all 4 platforms at `templates/deploy/{vercel,cloudflare,fly,docker}/`
+- Token resolution from env vars (`VERCEL_TOKEN`, `CLOUDFLARE_API_TOKEN`, `FLY_API_TOKEN`)
+- `docs/DEPLOY.md` user guide
+
+**Voice notes:**
+- Browser `MediaRecorder` API integration in `<VoiceRecorder>`
+- Whisper API transcription (graceful degradation without `OPENAI_API_KEY`)
+- New `<VoiceNotesPanel>` (7th Memory tab panel)
+- Audio files at `~/.local/share/bizar/voice-notes/`
+- 5 REST endpoints under `/api/voice/*`
+- CLI: `bizar voice list|delete|configure|transcribe`
+- `formidable` for multipart upload
+
+**Web clipper:**
+- Browser extension at `browser-extensions/bizar-clipper/` (Manifest V3)
+- Bookmarklet fallback at `bookmarklet/bizar-clipper.js` (single-line for URL bar)
+- Saves page + selection to vault `clips/<slug>.md`
+- New `<VaultFromClipboardPanel>` (Memory tab)
+- 3 REST endpoints under `/api/clipboard/*`
+- CLI: `bizar clip list|delete|configure`
+
+**Screenshot OCR:**
+- `tesseract.js` integration in `<ScreenshotOCR>` + `<ScreenshotCapture>` (uses `getDisplayMedia`)
+- New `<FromScreenshotPanel>` (Memory tab)
+- 2 REST endpoints under `/api/ocr/*`
+- CLI: `bizar ocr list|process|configure`
+
+**Mobile bundle round 2:**
+- `manualChunks` (function form) extracts shared vendor chunks
+- Mobile: 459 KB → 140 KB (-69%)
+- Desktop: 393 KB → 382 KB (-3%)
+- Mobile now **228 KB smaller** than desktop (was 64 KB larger)
+
+**Bug fixes:**
+- `auth.mjs` ESM compatibility — replaced CommonJS `require('node:crypto')` with named imports
+- `api.mjs` — `router.use()` of async router factories now uses `await`
+- Dockerfile — `npm ci` → `npm install` (avoids lock file sync issues), added `COPY plugins/`, fixed build paths
+- Bumped `@opentelemetry/*` from devDeps to deps (required for runtime)
+
+### Real-world validation
+
+**Local integration tests** — Started dashboard from source, hit every v5.0 endpoint, verified data persists to disk:
+- All 11 v5.0 endpoints return 200
+- Workspace creation, clipboard save, voice upload all write to disk
+- /metrics returns Prometheus format
+- Plugin templates exist for vercel, cloudflare, fly, docker
+- Eval fixtures in `templates/eval-fixtures/`
+
+**Docker container validation** — Built `Dockerfile`, ran container, tested all endpoints inside Docker:
+- Image builds successfully (146 MB)
+- Container starts, dashboard on port 4097, v2 on 4098
+- Bearer token auth works (uses `/root/.config/bizar/dashboard-secret`)
+- All v5.0 endpoints return 200 inside container:
+  - `/v2/health`, `/workspaces`, `/users/me`, `/voice/list`, `/backup/list`, `/plugins/installed`, `/eval/runs`, `/clipboard/list`, `/memory/health`, `/usage`
+- Workspace creation: ✓ (writes to `/root/.config/bizar/workspaces/`)
+- Clipboard save: ✓ (writes to `/app/.obsidian/clips/`)
+- Voice upload: ✓ (writes to `/root/.local/share/bizar/voice-notes/`)
+- Healthcheck at `/api/v2/health` passes
+
+### Tests
+
+- 388 npm tests pass
+- 141 vitest tests pass (was 128 in v4.9, +13 new)
+- Total: **529 tests pass, 0 fail**
+- TypeScript: 0 errors
+- Build succeeds: 140 KB mobile + 382 KB desktop
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.0.0`
+
+This is a **major version**. Existing single-user installs keep working without migration. To enable multi-user workspaces, run `bizar workspace create <name>` and start inviting users.
+
 ## v4.9.0 — Mobile bundle fix, OpenTelemetry, Memory graph, Docker, Settings search
 
 ### Highlights

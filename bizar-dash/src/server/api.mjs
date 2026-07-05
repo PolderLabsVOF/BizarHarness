@@ -31,6 +31,7 @@ import { createTasksRouter } from './routes/tasks.mjs';
 import { createArtifactsRouter } from './routes/artifacts.mjs';
 import { createSchedulesRouter } from './routes/schedules.mjs';
 import { createModsRouter } from './routes/mods.mjs';
+import { createPluginsRouter } from './routes/plugins.mjs';
 import { createAgentsRouter } from './routes/agents.mjs';
 import { createBackgroundRouter } from './routes/background.mjs';
 import { createActivityRouter } from './routes/activity.mjs';
@@ -54,6 +55,11 @@ import { createEnvVarsRouter } from './routes/env-vars.mjs';
 import { createUpdateRouter } from './routes/update.mjs';
 import { createUsageRouter } from './routes/usage.mjs';
 import { createHeadroomRouter } from './routes/headroom.mjs';
+import { createEvalRouter } from './routes/eval.mjs';
+import { createWorkspacesRouter } from './routes/workspaces.mjs';
+import { createUsersRouter } from './routes/users.mjs';
+import { createVoiceRouter } from './routes/voice.mjs';
+import { attachUserContext } from './auth.mjs';
 
 /**
  * @param {object} deps
@@ -81,6 +87,11 @@ export async function createApiRouter({
   // companion clients and (later) scope them to a single project.
   router.use(pairStore.middleware);
 
+  // v5.0.0 — User context middleware. Attaches req.userId and req.workspaceId
+  // from the bearer token. Runs after requireAuth (applied in server.mjs),
+  // so the user is already authenticated at this point.
+  router.use(attachUserContext());
+
   // Compose each domain router in the order the original monolith
   // declared them. Order is mostly cosmetic — Express path patterns
   // don't overlap across domains — but it keeps the route table
@@ -101,6 +112,10 @@ export async function createApiRouter({
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
   router.use(createSchedulesRouter({ broadcast }));
   router.use(createModsRouter());
+  // v5.0.0 — Plugin marketplace routes. Mounted right after mods so
+  // the related-domain grouping is visible in the route table. The
+  // router is factory-created; no shared deps needed.
+  router.use(createPluginsRouter());
   router.use(createAgentsRouter({ state, broadcast }));
   router.use(createBackgroundRouter({ broadcast }));
   router.use(createActivityRouter({ state }));
@@ -126,6 +141,8 @@ export async function createApiRouter({
   // so a sibling that owns this file can ship independently.
   const { createLightragRouter } = await import('./routes/lightrag.mjs');
   router.use(createLightragRouter({ projectRoot }));
+  // v5.0.0 — Voice notes (record, transcribe, list, delete, stream audio).
+  router.use(createVoiceRouter({}));
   router.use(createDiagnosticsRouter());
   router.use(createPairRouter({ state, broadcast }));
   router.use(createThemesRouter({ state }));
@@ -138,6 +155,11 @@ export async function createApiRouter({
   // Each route handler inside the router is at its bare path (e.g. '/status'),
   // which becomes '/api/headroom/status' at the top level.
   router.use('/headroom', createHeadroomRouter());
+  // v5.0.0 — Eval framework endpoints.
+  router.use(createEvalRouter({ state, broadcast }));
+  // v5.0.0 — Workspace and user management endpoints.
+  router.use(createWorkspacesRouter());
+  router.use(createUsersRouter());
   // v4.8.0 — Weekly digest endpoints. Lazy-imported so digest-store
   // module-level imports (tasks, schedules, etc.) don't block boot.
   const { createDigestsRouter } = await import('./routes/digests.mjs');
@@ -146,6 +168,12 @@ export async function createApiRouter({
   // module-level fs operations don't block boot.
   const { createBackupRouter } = await import('./routes/backup.mjs');
   router.use(createBackupRouter({ projectRoot }));
+  // v5.0.0 — Web Clipper (clipboard) routes. Saves page/selection content.
+  const { createClipboardRouter } = await import('./routes/clipboard.mjs');
+  router.use(await createClipboardRouter({ projectRoot }));
+  // v5.0.0 — Screenshot OCR routes. Accepts images, extracts text.
+  const { createOcrRouter } = await import('./routes/ocr.mjs');
+  router.use(await createOcrRouter({ projectRoot }));
   router.use(createMiscRouter({ state, broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh

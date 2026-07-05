@@ -1036,3 +1036,85 @@ dl.memory-config-row dd {
   font-size: 13px;
   color: var(--text, #c9d1d9);
 }
+
+/* ── Voice Notes ─────────────────────────────────────────────────────────── */
+
+.voice-recorder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-recorder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.voice-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-note-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-elev, #12161f);
+  border: 1px solid var(--border, #232a39);
+  border-radius: var(--radius, 8px);
+  transition: border-color var(--motion-fast, 120ms);
+}
+
+.voice-note-card:hover {
+  border-color: var(--border-strong, #2d3648);
+}
+
+.voice-note-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.voice-note-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim, #b4bcd0);
+}
+
+.voice-note-date {
+  font-family: var(--font-mono, monospace);
+}
+
+.voice-note-duration {
+  font-family: var(--font-mono, monospace);
+  padding: 1px 6px;
+  background: var(--bg-elev-2, #1a1f2b);
+  border-radius: 4px;
+}
+
+.voice-note-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.voice-note-transcript {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text, #c9d1d9);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.voice-note-no-transcript {
+  margin: 0;
+  font-style: italic;
+}

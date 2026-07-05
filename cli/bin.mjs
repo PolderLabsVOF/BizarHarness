@@ -13,7 +13,7 @@
  * Commands:
  *   install, audit, init, export, artifact, update, test-gate, service, dash,
  *   memory, headroom, minimax, usage, mod, doctor, repair, dev-link, dev-unlink,
- *   heads-up, bg, browser-harness-up, providers
+ *   heads-up, bg, browser-harness-up, providers, deploy, plugin, marketplace
  */
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'node:fs';
@@ -110,8 +110,13 @@ function showHelp() {
     dev-unlink          Remove the dev symlink and restore the deployed copy
     heads-up <subcommand>  Manage pre-push / pre-release heads-ups
     bg <subcommand>     Manage background agents (list/view/kill/logs)
+    deploy              One-click deploy to Vercel, Cloudflare, Fly.io, or Docker
+    plugin <subcommand> Manage marketplace plugins (search/install/config/invoke)
+    marketplace <subcommand>  Browse and install plugins from the public marketplace
     browser-harness-up  Start Chromium for browser-harness (start/stop/status)
     providers detect    Auto-detect provider API keys from env + opencode.json
+    clip <subcommand>       Manage web clipper saved clips (list/delete/configure)
+    ocr <subcommand>        OCR operations on images (list/process/configure)
 
   Examples:
     bizar install
@@ -317,7 +322,72 @@ async function main() {
       break;
     }
 
-    // All other utility commands
+    case 'deploy': {
+      const mod = await importCommand('deploy');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load deploy command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'deploy');
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
+      break;
+    }
+
+    case 'plugin': {
+      const mod = await importCommand('plugin');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load plugin command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'plugin');
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
+      break;
+    }
+
+    case 'marketplace': {
+      const mod = await importCommand('marketplace');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load marketplace command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'marketplace');
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
+      break;
+    }
+
+      case 'clip': {
+      const mod = await importCommand('clip');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load clip command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'clip');
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
+      break;
+    }
+
+    case 'ocr': {
+      const mod = await importCommand('ocr');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load ocr command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'ocr');
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
+      break;
+    }
+
+  // All other utility commands
     case 'audit':
     case 'init':
     case 'export':

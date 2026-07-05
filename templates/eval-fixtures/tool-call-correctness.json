@@ -1,0 +1,24 @@
+{
+  "id": "tool-call-correctness",
+  "name": "Tool call correctness",
+  "description": "Verifies the agent uses the correct tool for a file system operation",
+  "agent": "thor",
+  "prompt": "Create a new file called /tmp/eval-test.txt with the content 'eval test output' using the write tool.",
+  "expected": {
+    "contains": [
+      "write",
+      "/tmp/eval-test.txt",
+      "eval test output"
+    ],
+    "notContains": [
+      "error",
+      "failed",
+      "could not"
+    ],
+    "regex": [],
+    "jsonSchema": null,
+    "maxTokens": 500,
+    "maxLatencyMs": 30000
+  },
+  "tags": ["tools", "smoke", "file-ops"]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "bizar-dash",
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/(.*)", "dest": "/public/$1" }
+  ],
+  "functions": {
+    "api/index.js": {
+      "memory": 256,
+      "maxDuration": 30
+    }
+  }
+}

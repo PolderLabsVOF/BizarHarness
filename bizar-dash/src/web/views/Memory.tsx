@@ -10,11 +10,14 @@
 import React, { useCallback, useState } from 'react';
 import {
   Brain,
+  Clipboard,
   FileText,
   GitBranch,
   LayoutDashboard,
+  Mic,
   Network,
   RefreshCw,
+  Scan,
   Search as SearchIcon,
   Sliders,
 } from 'lucide-react';
@@ -28,8 +31,11 @@ import { GitSyncPanel } from './memory/GitSyncPanel';
 import { SemanticSearchPanel } from './memory/SemanticSearchPanel';
 import { ConfigPanel } from './memory/ConfigPanel';
 import { MemoryGraphPanel } from './memory/MemoryGraphPanel';
+import { FromScreenshotPanel } from './memory/FromScreenshotPanel';
+import { VaultFromClipboardPanel } from './memory/VaultFromClipboardPanel';
+import { VoiceNotesPanel } from '../components/VoiceNotesPanel';
 
-type SubPanel = 'overview' | 'lightrag' | 'obsidian' | 'git' | 'semantic' | 'config' | 'graph';
+type SubPanel = 'overview' | 'lightrag' | 'obsidian' | 'git' | 'semantic' | 'config' | 'graph' | 'webclip' | 'screenshot' | 'voice';
 
 type Props = {
   snapshot: unknown;
@@ -51,6 +57,9 @@ const SOURCES: Array<{
   { id: 'semantic', label: 'Semantic Search', icon: SearchIcon },
   { id: 'config', label: 'Config', icon: Sliders },
   { id: 'graph', label: 'Memory Graph', icon: Network },
+  { id: 'webclip', label: 'Web Clip', icon: Clipboard },
+  { id: 'screenshot', label: 'Screenshot OCR', icon: Scan },
+  { id: 'voice', label: 'Voice Notes', icon: Mic },
 ];
 
 function MemoryInner(_props: Props) {
@@ -83,6 +92,12 @@ function MemoryInner(_props: Props) {
         return <ConfigPanel refreshKey={refreshKey} />;
       case 'graph':
         return <MemoryGraphPanel refreshKey={refreshKey} />;
+      case 'webclip':
+        return <VaultFromClipboardPanel refreshKey={refreshKey} />;
+      case 'screenshot':
+        return <FromScreenshotPanel refreshKey={refreshKey} />;
+      case 'voice':
+        return <VoiceNotesPanel refreshKey={refreshKey} />;
       default:
         return <Card>Unknown panel: {active}</Card>;
     }
@@ -97,7 +112,7 @@ function MemoryInner(_props: Props) {
             <Brain size={18} /> Memory
           </h2>
           <p className="view-subtitle">
-            LightRAG, Obsidian vault, git sync, and semantic search — all in one place.
+            LightRAG, Obsidian vault, git sync, semantic search, web clips, and screenshot OCR — all in one place.
           </p>
         </div>
         <div className="view-actions">

@@ -35,9 +35,12 @@ function kbytes(path) {
   return readFileSync(path).length / 1024;
 }
 
-// Caps — adjust only when the architecture intentionally changes chunk composition.
+// v5.0 targets:
+// - mobile.js < desktop.js (must be smaller — mobile has no App.tsx deduplication)
+// - mobile.js < 400 KB (was 459 KB after v4.9; manualChunks + lazy views target ~350 KB)
+// - desktop.js < 450 KB (was 393 KB; shared vendor chunks may shift bytes)
 const DESKTOP_MAX_KB = 450;
-const MOBILE_MAX_KB  = 500;
+const MOBILE_MAX_KB  = 400;
 
 const desktop = findLargestAsset('main-');
 const mobile  = findLargestAsset('mobile-');

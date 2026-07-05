@@ -1,0 +1,16 @@
+{
+  "id": "latency-bounds",
+  "name": "Latency bounds",
+  "description": "Verifies the agent responds within a strict latency budget",
+  "agent": "thor",
+  "prompt": "Respond with exactly the word 'ok' and nothing else.",
+  "expected": {
+    "contains": ["ok"],
+    "notContains": [],
+    "regex": [],
+    "jsonSchema": null,
+    "maxTokens": 50,
+    "maxLatencyMs": 10000
+  },
+  "tags": ["latency", "performance"]
+}

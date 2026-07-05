@@ -40,7 +40,7 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHmac, createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 
 /** Absolute path to the on-disk token. Override via BIZAR_DASHBOARD_SECRET_PATH. */
@@ -378,4 +378,158 @@ function timingSafeEqual(a, b) {
     diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   }
   return diff === 0;
+}
+
+// ── v5.0.0: JWT helpers for multi-user workspaces ──────────────────────────────
+
+/**
+ * Simple HMAC-SHA256 based JWT encoding. Not standards-compliant (no
+ * Base64URL padding quirks, no claims validation beyond expiry), but
+ * sufficient for local dashboard use and avoids adding a jwt library
+ * dependency. The secret is the dashboard secret, giving us free key
+ * distribution for existing single-user setups.
+ *
+ * Payload shape:
+ * {
+ *   userId: string,
+ *   email?: string,
+ *   name?: string,
+ *   role?: string,
+ *   workspaceIds?: string[],
+ *   iat: number,  // issued at (unix ms)
+ *   exp: number,  // expiry (unix ms)
+ * }
+ *
+ * @param {object} payload
+ * @param {number} [expiresInMs=30 days]
+ * @returns {string} JWT-like token (base64header.base64payload.signature)
+ */
+export function mintToken(payload, expiresInMs = 30 * 24 * 60 * 60 * 1000) {
+  // We use the raw crypto module for HMAC-SHA256, which is built-in.
+  // use named import
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64');
+  const now = Date.now();
+  const claims = { ...payload, iat: now, exp: now + expiresInMs };
+  const payloadEncoded = Buffer.from(JSON.stringify(claims)).toString('base64');
+  const signature = createHmac('sha256', getOrCreateSecret())
+    .update(`${header}.${payloadEncoded}`)
+    .digest('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  return `${header}.${payloadEncoded}.${signature}`;
+}
+
+/**
+ * Decode and verify a JWT-like token. Returns null if the token is
+ * invalid, expired, or has been tampered with.
+ *
+ * @param {string} token
+ * @returns {{ payload: object } | null}
+ */
+export function verifyToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [headerB64, payloadB64, signatureB64] = parts;
+  // use named import
+  const expectedSig = createHmac('sha256', getOrCreateSecret())
+    .update(`${headerB64}.${payloadB64}`)
+    .digest('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+  if (signatureB64 !== expectedSig) return null;
+
+  let payload;
+  try {
+    // Restore base64 padding and standard base64
+    const payloadStd = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payloadStd + '=='.slice(0, (4 - payloadStd.length % 4) % 4);
+    payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch {
+    return null;
+  }
+
+  // Check expiry
+  if (payload.exp && Date.now() > payload.exp) return null;
+
+  return { payload };
+}
+
+/**
+ * Extract the raw token from a request (header or query param).
+ *
+ * @param {import('express').Request} req
+ * @returns {string}
+ */
+function extractToken(req) {
+  const auth = req.headers?.authorization || '';
+  if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+    return auth.slice(7);
+  }
+  if (req.query && req.query.token) {
+    return String(req.query.token);
+  }
+  return '';
+}
+
+/**
+ * Determine the current userId from the request.
+ *
+ * Tries to decode the token as a JWT first (v5.0 multi-user format).
+ * Falls back to treating the raw token as a legacy secret, deriving a
+ * deterministic userId from it for single-user compatibility.
+ *
+ * @param {import('express').Request} req
+ * @returns {string|null} userId or null if not authenticated
+ */
+export function getCurrentUserId(req) {
+  const token = extractToken(req);
+  if (!token) return null;
+
+  const secret = getOrCreateSecret();
+
+  // If the token exactly matches the secret, it's a legacy single-user setup.
+  // Derive a deterministic userId from the secret for backward compat.
+  if (timingSafeEqual(token, secret)) {
+    // use named import
+    return 'usr_' + createHash('sha256').update(secret).digest('hex').slice(0, 12);
+  }
+
+  // Try JWT decode
+  const verified = verifyToken(token);
+  if (verified?.payload?.userId) {
+    return verified.payload.userId;
+  }
+
+  return null;
+}
+
+/**
+ * Get the workspaceId the request wants to operate in.
+ * Reads X-Workspace-Id header, falls back to first workspace for the user.
+ *
+ * @param {import('express').Request} req
+ * @returns {string|null}
+ */
+export function getCurrentWorkspaceId(req) {
+  const headerWsId = req.headers?.['x-workspace-id'];
+  if (typeof headerWsId === 'string' && headerWsId.trim()) {
+    return headerWsId.trim();
+  }
+  // Fallback: let the caller decide (usually first workspace)
+  return null;
+}
+
+/**
+ * Express middleware: attach userId and workspaceId to the request
+ * from the bearer token. Must run AFTER requireAuth.
+ *
+ * @returns {import('express').RequestHandler}
+ */
+export function attachUserContext() {
+  return (req, _res, next) => {
+    req.userId = getCurrentUserId(req);
+    req.workspaceId = getCurrentWorkspaceId(req);
+    next();
+  };
 }

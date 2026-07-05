@@ -1,0 +1,28 @@
+{
+  "id": "code-search-basic",
+  "name": "Basic code search",
+  "description": "Verifies the agent can find a function definition using the sembe search tool",
+  "agent": "thor",
+  "prompt": "Find the function named 'add' in this repository. Show its signature and parameter names. Do not guess — use the code search tool to locate it first.",
+  "expected": {
+    "contains": [
+      "function add",
+      "a",
+      "b"
+    ],
+    "notContains": [
+      "TODO",
+      "FIXME",
+      "Not found",
+      "could not locate"
+    ],
+    "regex": [
+      "function\\s+add\\s*\\(",
+      "const\\s+add\\s*=\\s*\\("
+    ],
+    "jsonSchema": null,
+    "maxTokens": 500,
+    "maxLatencyMs": 30000
+  },
+  "tags": ["code-search", "smoke"]
+}

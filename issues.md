@@ -1,0 +1,3 @@
+- filtering in settings menu doesnt work. change the way the settings tabs work. when openin gsettings i want all the sections to show up in the main sidebar instead of the normal tabs. when exiting out of the settings it should go back to normal again.
+- add a doctor page in the dashboard where i can see system health and full diagnostics.
+- make settign
