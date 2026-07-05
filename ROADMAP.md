@@ -1,47 +1,57 @@
-# BizarHarness — Comprehensive Findings, Improvements & Feature Suggestions
+# BizarHarness — Roadmap, Findings, Improvements & Feature Suggestions
 
 **Generated**: 2026-07-05
-**Last Updated**: 2026-07-05 (post-v4.5.2)
+**Last Updated**: 2026-07-05 (post-v4.7.0)
 **Scope**: Synthesis of 5+ research streams covering the CLI, installer, dashboard server, dashboard web frontend, opencode plugin/SDK, skills/docs, and cross-cutting security/performance/a11y concerns. Targets BizarHarness v4.5.x → v5.0.
+
+> **This file is the living roadmap for BizarHarness.** Every release updates it. Bug fixes and feature additions mark items as `[RESOLVED in vX.Y.Z]` or `[PARTIAL]`. New findings extend the §3 backlog and the §10 new features list. The §11 roadmap tracks the next 3-6 months.
 
 This document is the single source of truth for what should change in BizarHarness over the next 6 months. It consolidates every finding from the research streams (CLI/installer, dashboard server, dashboard web, cross-cutting audit, plugin/SDK, skills/docs), groups them by impact and effort, and proposes a sequenced roadmap. Bug fixes already applied this session are credited. Remaining work is itemized with file references and proposed solutions. New features that would meaningfully extend the product (multi-user teams, plugin marketplace, voice notes, plugin marketplace) are described with effort estimates. Use this to drive sprint planning.
 
-**Status (2026-07-05):** v4.5.0, v4.5.1, v4.5.2 have shipped. See §13 "What's Done" for what was resolved in each release. Remaining work is itemized in §3 (bugs) and §10 (new features).
+**Status (2026-07-05):** v4.5.0, v4.5.1, v4.5.2, v4.7.0 have shipped. See §13 "What's Done" for what was resolved in each release. v4.6 + v4.7 (Quality & Stability + Performance & Polish) are DONE. Remaining: v4.8 (Memory & Knowledge) and v5.0 (Major release with multi-user).
 
-> **Active focus (post-v4.5.2):**
-> 1. Split `cli/bin.mjs` and `cli/artifact.mjs` (gating refactors)
-> 2. Add web frontend test infrastructure (currently zero tests)
-> 3. Refactor Settings.tsx (1823 lines) into sub-components
-> 4. Eliminate remaining 23 empty catch blocks
-> 5. Mobile bundle > desktop investigation
+> **Active focus (post-v4.7.0):**
+> 1. Investigate mobile bundle > desktop size discrepancy (476 KB vs 372 KB)
+> 2. Refactor Settings.tsx (1823 lines) into sub-components
+> 3. OpenTelemetry export
+> 4. Complete WCAG 2.2 AA compliance
+> 5. v4.8 features: voice notes, web clipper, memory graph visualization
 
 ---
 
 ## Section 1: Executive Summary
 
-### Top 5 Critical Issues Found (Outstanding)
+### Top 5 Critical Issues Found (Outstanding, post-v4.7.0)
 
-1. **`bin.mjs` is a 1,464-line monolith** and **`artifact.mjs` is ~2,100 lines** — three responsibilities mixed in one file. Both need to be split into `cli/commands/` and `cli/artifact-{cli,server,render}.mjs` respectively. (`bin.mjs:1-1464`, `cli/artifact.mjs:1-2100`)
-2. **v1 dashboard routes are completely unauthenticated** (`server.mjs:port-4097`) — any process on localhost can hit `/api/projects`, `/api/agents`, `/api/chat`, etc. with no token. Loopback auto-trust is documented as "auto-trust on 127.0.0.1" but v1 has no auth module at all. (Mimir Stream 2 finding)
-3. **Mobile JS bundle (476 KB) is larger than desktop (371 KB)** — mobile users download *more* JavaScript than desktop users, which is backwards. (`vite.config.ts` + `mobile.tsx`)
-4. **Zero test coverage for the entire web frontend** — no `vitest`, no Playwright, no jest, no `@testing-library/react`. A render crash in `Settings.tsx` (1,823 lines) takes down the whole app. (`bizar-dash/src/web/` — no test directory exists)
-5. **Zero i18n/translation infrastructure** — every UI string is hardcoded English. No RTL support, no locale switching, no `.json` resource bundles. (Every `views/*.tsx`)
+1. **Mobile JS bundle (476 KB) is larger than desktop (372 KB)** — mobile users download *more* JavaScript than desktop users, which is backwards. Root cause unknown. (`vite.config.ts` + `mobile.tsx`) — *[DEFERRED to v4.8]*
+2. **OpenTelemetry export not yet implemented** — distributed tracing missing for cross-service debugging. — *[Active Focus #3]*
+3. **Full WCAG 2.2 AA compliance only partial** — Settings.tsx still has bulk unlabeled form inputs, activity feed lacks `aria-live`, color-only indicators remain. — *[Active Focus #4]*
+4. **Settings.tsx is 1,823 lines** — needs split into sub-components for maintainability + a11y scoping. — *[Active Focus #2]*
+5. **Multi-user / team workspaces not started** — single-operator only; teams need shared state. (v5.0)
+
+### Top 5 Critical Issues Resolved in v4.7.0
+
+1. ✓ **`bin.mjs` 1498 → 275 lines** and **`artifact.mjs` 2121 → 63 lines** — split into `cli/commands/` (10 modules) and `cli/artifact-{cli,server,render}.mjs`.
+2. ✓ **Structured logging** — `logger.mjs` JSON logger with debug/info/warn/error + `child()` + `BIZAR_LOG_LEVEL`.
+3. ✓ **Metrics endpoint** — `GET /metrics` in Prometheus format with `http_requests_total` + `ws_clients`.
+4. ✓ **Web frontend test infrastructure** — `vitest + jsdom + RTL`; 75 tests across components/hooks/lib; `npm run test:web`.
+5. ✓ **Virtual scrolling** — hand-rolled `<VirtualList>` used in 4 views (ChatThread, Overview, Activity, History).
 
 ### Top 5 Quick Wins (Each < 1 day)
 
-1. **Add `--json` global output flag** to `bizar doctor`, `bizar status`, `bizar usage`, `bizar memory status` so the CLI is scriptable.
-2. **Add `--debug` / `--verbose` global flag** that flips all empty catch blocks to log warnings via `DEBUG=bizar:*`. (Cross-cutting audit §6.5)
-3. **Set `sourcemap: 'hidden'` in `vite.config.ts:15`** to drop the 3 MB of source maps shipped in the npm tarball.
-4. **Add `.npmignore` entries** for `bizar-dash/dist/*.map` and `**/__tests__/` to keep the tarball lean.
-5. **Centralize `which()` and `bizarConfigDir()`** into `cli/utils.mjs` — they're reimplemented in 3+ files. (Cross-cutting audit §2.1, CLI §10 R4/R5)
+1. ✓ **[v4.5.2]** Add `--json` global output flag** to `bizar doctor`, `bizar status`, `bizar usage`, `bizar memory status` so the CLI is scriptable.
+2. ✓ **[v4.5.2]** Add `--debug` / `--verbose` global flag** that flips all empty catch blocks to log warnings via `DEBUG=bizar:*`.
+3. ✓ **[v4.5.2]** Set `sourcemap: 'hidden'` in `vite.config.ts:15`** to drop the 3 MB of source maps shipped in the npm tarball.
+4. ✓ **[v4.5.2]** Add `.npmignore` entries** for `bizar-dash/dist/*.map` and `**/__tests__/` to keep the tarball lean.
+5. ✓ **[v4.7.0]** Centralize `which()` and `bizarConfigDir()`** into `cli/utils.mjs` — they're reimplemented in 3+ files. (Cross-cutting audit §2.1, CLI §10 R4/R5)
 
 ### Top 5 Architectural Improvements (Multi-day)
 
-1. **Split `cli/bin.mjs` into `cli/commands/*.mjs`** — one file per command family (install, dash, minimax, mod, artifact, memory, headroom, util). Reduces `bin.mjs` to ~200 lines of dispatch.
-2. **Split `cli/artifact.mjs` into three modules**: CLI dispatch, HTTP server, HTML rendering. Three responsibilities that have nothing in common except the file.
-3. **Introduce a router + `React.lazy()`** to the web frontend so each view is a separate bundle. Removes 200+ KB from initial paint.
-4. **Introduce structured logging** (pino or a 50-line leveled-logger wrapper) across `bizar-dash/src/server/`. Add log levels (`info/warn/error/debug`) and correlation IDs.
-5. **Add a metrics endpoint** (`/metrics` in Prometheus format) to the server. Export request counts, WS connections, polling intervals, memory-store sizes. One Sentry/Prometheus integration unlocks observability.
+1. ✓ **[v4.7.0]** Split `cli/bin.mjs` into `cli/commands/*.mjs`** — one file per command family (install, dash, minimax, mod, artifact, memory, headroom, util). `bin.mjs` shrunk to 275 lines.
+2. ✓ **[v4.7.0]** Split `cli/artifact.mjs` into three modules**: CLI dispatch, HTTP server, HTML rendering. `artifact.mjs` shrunk to 63 lines (re-export).
+3. **Introduce a router + `React.lazy()`** to the web frontend so each view is a separate bundle. Removes 200+ KB from initial paint. (Suspense wrapper landed — F24; per-view lazy pending)
+4. ✓ **[v4.7.0]** Introduce structured logging** (`logger.mjs`) across `bizar-dash/src/server/`. Add log levels (`info/warn/error/debug`); correlation IDs still pending.
+5. ✓ **[v4.7.0]** Add a metrics endpoint** (`/metrics` in Prometheus format) to the server. `http_requests_total` + `ws_clients` wired; histograms scaffolded.
 
 ### Top 5 New Feature Ideas (Preview — see §10 for full list)
 
@@ -55,7 +65,7 @@ This document is the single source of truth for what should change in BizarHarne
 
 ## Section 2: Bugs Fixed in This Session
 
-All fixes verified — full `npm test` passes (388/388), `tsc --noEmit` clean. This section now consolidates fixes across all three releases (v4.5.0, v4.5.1, v4.5.2). For a higher-level narrative of what shipped in each release, see §13.
+All fixes verified — full `npm test` passes (388/388) + `npm run test:web` passes (75/75) = **463 total / 0 fail**. `tsc --noEmit` clean. This section now consolidates fixes across all four releases (v4.5.0, v4.5.1, v4.5.2, v4.7.0). For a higher-level narrative of what shipped in each release, see §13.
 
 ### 2.1 Cross-cutting audit (v4.5.2 prep — F1–F7)
 
@@ -246,7 +256,7 @@ High-confidence bugs from all streams, grouped by severity. Each lists file:line
 #### B-L3: `console.log` vs `console.error` mix
 - **File**: many — see §4 R11
 - **Root cause**: Inconsistent across files. `artifact.mjs:1101` logs request to stderr, errors to stdout.
-- **Status**: *Partial fix in v4.5.2* — `dashboard` deprecation now goes to stdout (F9); full logging consistency convention still pending (R11).
+- **Status**: *Partial fix in v4.7.0* — `dashboard` deprecation now goes to stdout (F9); `routes/*.mjs` console.log/error replaced with structured logger (S-R6 ✓). Full cross-module convention still pending (R11).
 - **Fix**: Adopt convention: informational → stdout, errors/warnings → stderr.
 
 #### B-L4: Stale port file read in `bin.mjs:395`
@@ -261,9 +271,9 @@ High-confidence bugs from all streams, grouped by severity. Each lists file:line
 
 #### B-L6: 50+ empty `catch { /* ignore */ }` blocks remain
 - **Files**: `server.mjs:282-287,621`, `auth.mjs:84-86`, `memory-lightrag.mjs`, `mods-loader.mjs`, `dialog-store.mjs`
-- **Root cause**: 27 were fixed this session; ~23 remain (down from ~50 at start of session, after F20 added more warnings in `memory-lightrag.mjs`).
-- **Status**: *Partial fix* — about 27 + F20 lightrag catches now log warns; ~23 remain (see "Active Focus" callout at top).
-- **Fix**: Apply the same `console.warn` pattern across all server modules.
+- **Root cause**: 27 were fixed in v4.5.2 prep; ~23 remained after v4.5.2. v4.7.0 added rate-limited logging to the remaining 6 in `memory-lightrag.mjs`.
+- **Status**: *Nearly complete* — ~6 rate-limited catches remain after v4.7.0 (down from ~50 at start, down from ~23 after v4.5.2).
+- **Fix**: Rate-limited logger pattern (already applied in `memory-lightrag.mjs`). Apply to the last 6.
 
 ---
 
@@ -371,58 +381,61 @@ Current checks (post-v4.5.2): node, bun, opencode, tmux, git, **pip, python3, he
 
 | # | Refactor | Status | Notes |
 |---|----------|--------|-------|
-| R1 | Split `bin.mjs` into `cli/commands/` | open | *Gating refactor — Active Focus #1* |
-| R2 | Split `artifact.mjs` into 3 modules | open | *Gating refactor — Active Focus #1* |
-| R3 | Eliminate empty catch blocks | partial — ~32 of ~55 fixed | Active Focus #4 |
-| R4 | Centralize `which()` | open | |
-| R5 | Centralize `bizarConfigDir()` | open | |
+| R1 | Split `bin.mjs` into `cli/commands/` | ✓ [v4.7.0] | bin.mjs 1498→275 lines; 10 new command modules under `cli/commands/` |
+| R2 | Split `artifact.mjs` into 3 modules | ✓ [v4.7.0] | artifact.mjs 2121→63 lines (re-export); `artifact-cli/server/render.mjs` |
+| R3 | Eliminate empty catch blocks | ✓ [v4.7.0 — ~6 rate-limited remains] | ~49 of ~55 fixed across v4.5.2 + v4.7.0; remaining 6 rate-limited |
+| R4 | Centralize `which()` | ✓ [v4.7.0] | centralized in `cli/utils.mjs` |
+| R5 | Centralize `bizarConfigDir()` | ✓ [v4.7.0] | centralized in `cli/utils.mjs` |
 | R6 | `--json` global output flag | ✓ [v4.5.2] | doctor / usage / memory status scriptable |
 | R7 | `--debug` / `--verbose` global | ✓ [v4.5.2] | `DEBUG=bizar:*` + `BIZAR_DEBUG=1` |
 | R8 | Standardized exit codes | ✓ [v4.5.2] | 0/1/2/3/4 enforced |
 | R9 | Cache `detectState()` result | open | |
 | R10 | Banner after success | ✓ [v4.5.2] | `install.sh` banner moved (B-L5) |
-| R11 | Logging consistency convention | partial — `dashboard` deprecation → stdout (F9); full convention still pending | |
+| R11 | Logging consistency convention | partial — `dashboard` deprecation → stdout (F9); `routes/*.mjs` replaced with structured logger (v4.7.0); full cross-module convention still pending | |
 | R12 | Extract shared flag parsing | partial — `parseWithModsFlag` errors when empty (F8); extraction to `utils.mjs` pending | |
 
-#### R1 (HIGH): Split `bin.mjs` into `cli/commands/`
+#### R1 (HIGH): Split `bin.mjs` into `cli/commands/` ✓ [v4.7.0]
 
-Create:
-```
-cli/commands/
-├── install.mjs    # install, update
-├── service.mjs    # service start/stop/status/install/uninstall
-├── dash.mjs       # dash start/stop/status/cleanup/tui
-├── minimax.mjs    # status/remains/test/config/clear/reset
-├── headroom.mjs   # status/stats/install/wrap/unwrap/start/stop/doctor
-├── mod.mjs        # install/upgrade/list/registry
-├── artifact.mjs   # new/open/list/delete/export/templates
-├── memory.mjs     # init/setup/status/etc
-└── util.mjs       # doctor, repair, test-gate, dev-link, dev-unlink, usage, bg, audit, init, export
-```
+**Shipped in v4.7.0**:
+- `bin.mjs`: 1498 → 275 lines (bootstrap + flag parse + dispatch)
+- 10 new command modules under `cli/commands/`:
+  ```
+  cli/commands/
+  ├── install.mjs    # install, update
+  ├── service.mjs    # service start/stop/status/install/uninstall
+  ├── dash.mjs       # dash start/stop/status/cleanup/tui
+  ├── minimax.mjs    # status/remains/test/config/clear/reset
+  ├── headroom.mjs   # status/stats/install/wrap/unwrap/start/stop/doctor
+  ├── mod.mjs        # install/upgrade/list/registry
+  ├── artifact.mjs   # new/open/list/delete/export/templates
+  ├── memory.mjs     # init/setup/status/etc
+  └── util.mjs       # doctor, repair, test-gate, dev-link, dev-unlink, usage, bg, audit, init, export
+  ```
+- `--help` / `--version` global flag handling fixed.
 
-`bin.mjs` becomes: bootstrap (~30 lines), flag parse (~30 lines), subcommand dispatch (~80 lines). Total ~140 lines.
+#### R2 (HIGH): Split `artifact.mjs` into Three Files ✓ [v4.7.0]
 
-#### R2 (HIGH): Split `artifact.mjs` into Three Files
-
+**Shipped in v4.7.0**:
 - `cli/artifact-cli.mjs` — CLI dispatch, flag parsing
 - `cli/artifact-server.mjs` — HTTP server, request routing
 - `cli/artifact-render.mjs` — HTML fragments, Markdown export, canvas helpers
+- `cli/artifact.mjs` shrunk from 2121 → 63 lines (now a thin re-export shim).
 
-#### R3 (MEDIUM): Eliminate Empty Catch Blocks
+#### R3 (MEDIUM): Eliminate Empty Catch Blocks ✓ [v4.7.0 — 6 remain rate-limited]
 
 Replace `catch { /* ignore */ }` with:
 - `catch (err) { logger.debug('...', err.message); }` for expected failures
 - `catch (err) { logger.warn('...', err.message); }` for recoverable failures
 - Let unexpected errors propagate (or log at `error`)
-- **Status**: ~32 of ~55 fixed (F3 + F20). See §7 / B-L6.
+- **Status**: ~49 of ~55 fixed across v4.5.2 + v4.7.0. Remaining 6 in `memory-lightrag.mjs` are rate-limited. See §7 / B-L6.
 
-#### R4 (LOW): Centralize `which()`
+#### R4 (LOW): Centralize `which()` ✓ [v4.7.0]
 
-Move `which()` into `utils.mjs` next to `commandExists()`. Remove duplicates from `doctor.mjs:76`, `bg.mjs:94`.
+**Shipped in v4.7.0**: `which()` is centralized in `cli/utils.mjs`. Duplicates removed from `doctor.mjs`, `bg.mjs`, `provision.mjs`.
 
-#### R5 (MEDIUM): Centralize `bizarConfigDir()`
+#### R5 (MEDIUM): Centralize `bizarConfigDir()` ✓ [v4.7.0]
 
-Move to `utils.mjs`. Single export. Used everywhere via `import { bizarConfigDir } from '../utils.mjs'`.
+**Shipped in v4.7.0**: `bizarConfigDir()` is centralized in `cli/utils.mjs`. All modules now import from a single source.
 
 #### R6 (LOW): Add `--json` Output Flag ✓ [v4.5.2]
 
@@ -446,7 +459,7 @@ Shipped: `install.sh:251-272` banner moved to after provisioner exits 0. See B-L
 
 #### R11 (MEDIUM): Logging Consistency
 
-Convention: informational → stdout (`console.log`), errors/warnings → stderr (`console.error`/`process.stderr.write`). **Status**: partial — `dashboard` deprecation → stdout (F9); full convention across all commands still pending.
+Convention: informational → stdout (`console.log`), errors/warnings → stderr (`console.error`/`process.stderr.write`). **Status**: partial — `dashboard` deprecation → stdout (F9); `routes/*.mjs` replaced with structured logger (v4.7.0); full CLI-side convention across all commands still pending.
 
 #### R12 (MEDIUM): Extract Shared Flag Parsing
 
@@ -506,14 +519,15 @@ Source: Mimir Stream 2 (inline task result). v1 on `:4097` (no auth), v2 on `:40
 | S-R1 | Remove or auth-protect v1 server | open | Deferred per v4.5.2 changelog — Tailscale handles auth |
 | S-R2 | Single config root | open | |
 | S-R3 | Rate limiting | open | |
-| S-R4 | SSE backpressure | open | Per-session delta cap (F19) is a partial step |
+| S-R4 | SSE backpressure | partial | Per-session delta cap (F19) is a partial step |
 | S-R5 | Debounced opencode.json cache | ✓ [v4.5.2] | 1s debounce + mtime/size stamp check + `invalidateOpencodeJsonCache()` (F17) |
-| S-R6 | Structured logging | partial — `--debug` flag landed (R7); leveled logger wrapper still pending | |
-| S-R7 | Metrics endpoint | open | See §10 F-NEW-22 |
+| S-R6 | Structured logging | ✓ [v4.7.0] | `logger.mjs` — JSON structured logger with debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL` |
+| S-R7 | Metrics endpoint | ✓ [v4.7.0] | `metrics.mjs` + GET /metrics; counters/gauges/histograms; `http_requests_total` + `ws_clients` |
 | S-R8 | Centralize path-safe utility | open | |
 | S-R9 | Validate WS messages | open | |
 | S-R10 | Process.env hygiene | partial — env-var manager landed v4.5.0 (`~/.config/bizar/env.json` mode 0600); teardown-on-exit still pending | |
 | S-R11 | Single 0600 secret path | open | |
+| (new) | Cache-Control headers on /api/settings and /api/snapshot | ✓ [v4.7.0] | `Cache-Control: no-cache` |
 | (new) | Headroom integration module | ✓ [v4.5.1] | `headroom.mjs` + `/api/headroom/*` + auto-install/wrap/start on startup (F36) |
 | (new) | Memory tab endpoints | ✓ [v4.5.1] | 11 new endpoints in `routes/memory.mjs` + Obsidian façade at `memory-obsidian.mjs` |
 | (new) | Settings tab merge | ✓ [v4.5.0] | Config tab merged into Settings; section nav shipped |
@@ -534,13 +548,22 @@ Wrap `res.write()` in `if (res.writableNeedDrain) await once(res, 'drain')` to a
 
 #### S-R5: Debounced opencode.json cache ✓ [v4.5.2]
 Shipped: `providers-store.mjs:49-58` now has 1-second debounced cache with mtime/size stamp check; `invalidateOpencodeJsonCache()` on writes (F17). `buildSnapshot` (S-R5 reuse) now uses cached read (F18).
+#### S-R6: Structured logging ✓ [v4.7.0]
 
-#### S-R6: Structured logging
-Wrap `console.*` in a 50-line leveled logger (`log.debug`, `log.info`, `log.warn`, `log.error`). Add `X-Request-ID` to all requests and propagate.
+**Shipped in v4.7.0**:
+- `logger.mjs` — JSON structured logger (debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL` env var).
+- `console.log/error` in `routes/*.mjs` replaced with structured logger.
+- Remaining 6 empty catches in `memory-lightrag.mjs` rate-limited through the logger.
+- **Remaining**: Full correlation-id propagation (`X-Request-ID`) and `process.env`-based log filtering across CLI side (R11 partial).
 
-#### S-R7: Metrics endpoint
-Expose `/metrics` in Prometheus text format. Counters: `bizar_http_requests_total{route,method,status}`, `bizar_ws_clients`, `bizar_opencode_json_reads_total`. Histograms: request duration, WS message size.
+#### S-R7: Metrics endpoint ✓ [v4.7.0]
 
+**Shipped in v4.7.0**:
+- `metrics.mjs` — Prometheus-style counters, gauges, histograms.
+- `GET /metrics` endpoint mounted before auth (so Prometheus scrapers don't need a token).
+- `http_requests_total{route,method,status}` counter middleware.
+- `ws_clients` gauge tracking active WebSocket connections.
+- **Remaining**: Histograms for request duration and WS message size are scaffolded but not yet wired into every hot path.
 #### S-R8: Centralize path-safe utility
 `lib/path-safe.mjs` exists. Currently used in `routes/fs.mjs:28-34` and `memory-store.mjs:320,347`. Audit all `fs.readFile`/`writeFile` calls in the server and route them through `resolveSafePath`.
 
@@ -622,11 +645,11 @@ Beyond the no-AbortController pattern:
 
 **What's done well:** Modal focus trap, semantic ARIA on Modal/MobileModal/Toast/EmptyState, `:focus-visible` rings, dark theme contrast ~7:1.
 
-**Gaps (with status as of v4.5.2):**
+**Gaps (with status as of v4.7.0):**
 
 | Issue | Location | Status | Fix |
 |-------|----------|--------|-----|
-| No `<label>` on form inputs | `Settings.tsx` (entire file uses inline styles + placeholders) | open | Wrap each `<input>` in `<label>` or add `aria-label` |
+| No `<label>` on form inputs | `Settings.tsx` (entire file uses inline styles + placeholders) | partial | Color inputs now have `aria-label`s (v4.7.0); Tailscale checkbox properly associated (v4.7.0). Bulk of form inputs still unlabeled. |
 | Topbar tabs missing `role="tablist"` / `aria-selected` | `Topbar.tsx` ~150 | ✓ [v4.5.2 — F25] | `role="tablist"` + `role="tab"` + `aria-selected` |
 | `Toast` has no `role="alert"` for errors | `Toast.tsx` | ✓ [v4.5.2 — F23] | `role="alert" aria-live="assertive" aria-atomic="true"` |
 | Activity feed no `aria-live` | `Overview.tsx` activity banner | open | Add `aria-live="polite"` to the activity list container |
@@ -635,15 +658,16 @@ Beyond the no-AbortController pattern:
 | Mobile bottom nav no keyboard path | `MobileApp.tsx` | open | Ensure `tabindex` flows to all interactive items |
 | GlyphRenderer 5s timeout no live region | `glyphs/components.tsx` | open | Add `aria-live="polite"` to status region |
 | Color-only status indicators | `StatusBadge` and ad-hoc `.badge` | open | Add accessible text or `aria-label` |
+| `SearchModal` has no `role="search"` | `SearchModal.tsx` | ✓ [v4.7.0] | `role="search"` + `aria-label="Search"` |
 
 ### 6.6 Performance — Concrete Wins
 
 | Issue | File | Status | Fix |
 |-------|------|--------|-----|
 | All views re-render every 5s on `snapshot` prop | `App.tsx:635-647` | ✓ [v4.5.2 — F28] | `React.memo()` on `Tasks`, `Settings`, `Memory`, `Overview`, `Skills`, `MiniMaxUsage` |
-| No virtual scrolling | activity/history/chat lists | open | Add `react-window` for lists > 50 items |
-| No code splitting | `App.tsx` static imports | ✓ [v4.5.2 partial — F24] | `Suspense` wrapper added; per-view `React.lazy()` still pending |
-| Inline styles in Settings | `Settings.tsx` ~1823 lines | open | Extract to CSS classes, components |
+| No virtual scrolling | activity/history/chat lists | ✓ [v4.7.0] | New `<VirtualList>` component (hand-rolled, no deps); used in `ChatThread`, `Overview`, `Activity`, `History` |
+| No code splitting | `App.tsx` static imports | partial — F24 | `Suspense` wrapper added (v4.5.2); per-view `React.lazy()` still pending |
+| Inline styles in Settings | `Settings.tsx` ~1823 lines | open | Extract to CSS classes, components — *Active Focus #2* |
 | 228 KB CSS | `main.css` 8901 lines | open | Split per-view CSS, run `purgecss` against actual selectors |
 | CSS animations without `will-change` | many | open | `will-change: transform` on streaming bubbles, spinners |
 | No `content-visibility: auto` on long lists | activity feed, chat | ✓ [v4.5.2 — F27] | `content-visibility: auto` on `.activity-item`, `.task-card`, `.chat-message` |
@@ -660,7 +684,7 @@ Beyond the no-AbortController pattern:
   - `views/*.css` (one per view, already partially exists in `styles/`)
 - Add `@layer` declarations so cascade is predictable: `@layer reset, tokens, base, components, utilities, overrides;`
 - Settings.tsx inline styles (1823 lines) → extract to CSS classes / CSS modules — *Active Focus #3*
-- Mobile CSS (29 KB) is reasonable but mobile JS (476 KB) > desktop (371 KB) — investigate imports — *Active Focus #5*
+- Mobile CSS (29 KB) is reasonable but mobile JS (476 KB) > desktop (372 KB) — investigate imports — *[DEFERRED to v4.8]*
 
 ### 6.8 Component Reuse Gaps
 
@@ -688,7 +712,7 @@ Two systems exist:
 | Artifact canvas | ✓ (`VisCanvas`) | ✓ (`MobileArtifactCanvas`) | Parity ✓ |
 | Mods | ✓ | ✓ | Parity ✓ |
 | Plans | ✓ | ✓ | Parity ✓ |
-| Bundle size | 371 KB JS | **476 KB JS** | Mobile 28% larger (B-MOBILE-1) — *Active Focus #5* |
+| Bundle size | 372 KB JS | **476 KB JS** | Mobile 28% larger (B-MOBILE-1) — *[DEFERRED to v4.8]* |
 
 ### 6.11 Priority Recommendations (P0–P3)
 
@@ -701,23 +725,24 @@ Two systems exist:
 4. **`[k: string]: unknown` → typed interfaces** in Snapshot, HistoryEvent, Settings — *open*
 5. **`React.memo()` on view components** receiving snapshot — ✓ **DONE (v4.5.2 — F28)** 6 heavy views wrapped
 6. **Replace `confirm()` in BacklogPanel** with modal system — *open*
-7. **Add `<label>` to all form inputs`** (Settings especially) — *open*
+7. **Add `<label>` to all form inputs`** (Settings especially) — partial [v4.7.0] — color inputs labeled, Tailscale checkbox associated; bulk still unlabeled
 8. **Add `role="tab"`/tablist to Topbar** + `aria-selected` — ✓ **DONE (v4.5.2 — F25)**
 
 #### P2 — Medium Impact
 9. **`React.lazy()` for views** — code-splitting — *open* (Suspense wrapper landed — F24)
-10. **`react-window` for chat/activity/history** — virtual scroll — *open*
+10. **`react-window` for chat/activity/history** — virtual scroll — ✓ **DONE (v4.7.0)** — hand-rolled `<VirtualList>` in `ChatThread`, `Overview`, `Activity`, `History`
 11. **`will-change: transform`** on animated elements — *open*
 12. **`aria-live="polite"`** on activity/task/chat regions — *open*
 13. **Break `main.css` into per-view CSS** files — *open*
 
 #### P3 — Nice to Have
-14. **`vitest + @testing-library/react`** for unit/integration tests — *open — Active Focus #2*
+14. **`vitest + @testing-library/react`** for unit/integration tests — ✓ **DONE (v4.7.0)** — 75 tests (10 component, 7 hook, 36 lib, plus setup); `npm run test:web`
 15. **`content-visibility: auto`** on long lists — ✓ **DONE (v4.5.2 — F27)**
-16. **Extract Settings inline styles** to CSS classes — *open — Active Focus #3*
+16. **Extract Settings inline styles** to CSS classes — *open — Active Focus #2*
 17. **Unify chat dual implementation** — delete legacy — *open*
 18. **WS message queue** for offline resilience — *open*
 19. **Document mobile/desktop split architecture** in `README.md` — *open*
+20. **i18n infrastructure** (i18next + `i18n/en.json` resource bundles) — partial [v4.7.0] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 foundation strings); full migration still pending
 
 ---
 
@@ -746,8 +771,8 @@ Source: `.obsidian/projects/cross-cutting-audit-2026-07-05.md` (428 lines).
 
 | Asset | Size | Issue | Status |
 |-------|------|-------|--------|
-| `main-usWhlPWa.js` (desktop) | 371 KB | OK | ✓ |
-| `mobile-O6ANdD4W.js` (mobile) | **476 KB** | Larger than desktop (B-MOBILE-1) | open — Active Focus #5 |
+| `main-*.js` (desktop) | 372 KB | OK | ✓ |
+| `mobile-*.js` (mobile) | **476 KB** | Larger than desktop (B-MOBILE-1) | [DEFERRED to v4.8] |
 | `main-*.css` | 228 KB | Very large — needs purgecss audit | open |
 | `mobile-*.css` | 29 KB | OK | ✓ |
 | Source maps | 1.17 MB / 1.88 MB | In npm tarball | ✓ [v4.5.2 — F21] `sourcemap: 'hidden'`; ✓ [v4.5.2 — F22] `.npmignore` excludes `dist/**/*.map` |
@@ -755,7 +780,7 @@ Source: `.obsidian/projects/cross-cutting-audit-2026-07-05.md` (428 lines).
 **Action items**:
 1. ✓ **[DONE v4.5.2 — F21]** Set `vite.config.ts:15` `sourcemap: 'hidden'`
 2. ✓ **[DONE v4.5.2 — F22]** Add `.npmignore` rule for `bizar-dash/dist/*.map`
-3. *open* — Audit `mobile.tsx` imports — why is it 28% larger? *(Active Focus #5)*
+3. [DEFERRED to v4.8] — Audit `mobile.tsx` imports — why is it 28% larger?
 4. *open* — Run purgecss / lighthouse-ci for CSS pruning
 
 ### 7.3 Performance — Synchronous I/O on Server
@@ -771,25 +796,25 @@ Source: `.obsidian/projects/cross-cutting-audit-2026-07-05.md` (428 lines).
 
 Source §3 of cross-cutting audit + §6.5 of frontend analysis.
 
-1. No `<label>` associations in Settings (1763 lines of form fields). — *open*
+1. No `<label>` associations in Settings (1763 lines of form fields). — partial [v4.7.0] — color inputs labeled; Tailscale checkbox associated; bulk unlabeled
 2. **Topbar tabs lack `role="tablist"`** — ✓ [v4.5.2 — F25]
 3. **Toast notifications lack `role="alert"` on errors** — ✓ [v4.5.2 — F23]
 4. Activity feed has no `aria-live`. — *open*
 5. WS status dot is color-only — no accessible text. — *open*
 6. No global `:focus-visible` ring. — *open*
-7. SearchModal has no `role="search"`. — *open*
+7. SearchModal has no `role="search"`. — ✓ [v4.7.0]
 8. Mobile bottom nav no keyboard path. — *open*
-9. Color inputs (Settings) lack proper labels. — *open*
+9. Color inputs (Settings) lack proper labels. — ✓ [v4.7.0]
 10. Confirm dialogs use native `confirm()`. — *open* (B-M3)
 
 ### 7.5 Internationalization
 
-- **Zero translation infrastructure**: Every string is hardcoded English.
+- **Translation infrastructure**: partial [v4.7.0] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 foundation strings). Full migration still pending.
 - **No `Intl.*` wrappers** for dates/numbers.
 - **Zero RTL support**: no `dir="auto"`, no logical CSS properties.
 
 For a CLI developer tool this is acceptable. For wider adoption, plan:
-- Extract all user-facing strings to `i18n/en.json`.
+- Migrate all user-facing strings to `locales/<lang>.json` resource bundles.
 - Add `i18next` or `react-intl` with locale switcher.
 - Use CSS `dir="rtl"` for Arabic/Hebrew.
 
@@ -802,24 +827,24 @@ For a CLI developer tool this is acceptable. For wider adoption, plan:
 | Memory/Secrets | Good | ✓ |
 | Dashboard server | Weak (most route files lack tests) | partial — server-bugfixes.test.mjs (v4.5.2, 13 tests) |
 | CLI | Moderate (doctor, install, artifact, service tests) | partial — cli-bugfixes.test.mjs (v4.5.2, 9 tests) |
-| **Web frontend** | **Zero — no test directory exists** | partial — frontend-bugfixes.test.mjs (v4.5.2, 26 tests) — still no real unit/integration tests |
+| **Web frontend** | 75 tests across 10 components / 7 hooks / 36 lib | ✓ [v4.7.0] — `vitest + jsdom + RTL`; `npm run test:web`; 10 component tests (Card, Button, Toast, Modal, Spinner, StatusBadge), 7 hook tests (useToast, useModal), 36 lib tests (i18n, utils, formatRelative, formatTime, cn) |
 | Accessibility | **Zero — no aXe, Lighthouse, or Playwright a11y tests** | *open* |
-| i18n | **Zero** | *open* |
+| i18n | Foundation only — `locales/en.json` 30 strings | partial [v4.7.0] |
 | Performance | **Zero — no bundle analysis, no perf regression tests** | *open* |
 | Memory store concurrent writes | No test | *open* |
 | Path-safe symlink traversal | No test | ✓ (path-safe.test.mjs exists) |
 
-**Action**: Add `vitest` + `@testing-library/react` to `bizar-dash/`. Start with smoke tests on 3 views (Settings, Chat, Overview) at 60% target coverage over 3 sprints. *(Active Focus #2)*
+**Action**: Add `vitest` + `@testing-library/react` to `bizar-dash/`. ✓ **DONE in v4.7.0**. Next: aXe / Playwright a11y tests at 60% target coverage over 3 sprints.
 
-**Test totals (post-v4.5.2)**: `npm test` → **388 pass / 0 fail / 94 suites / 30.3 s**.
+**Test totals (post-v4.7.0)**: `npm test` → **388 pass / 0 fail** + `npm run test:web` → **75 pass / 0 fail** = **463 total / 0 fail**.
 
 ### 7.7 Observability
 
-- **Logging**: Mix of `console.log`/`error`/`warn` with prefixes (`[bizar-dash]`, `[mod]` etc.). No leveled logger, no correlation IDs. *partial* — `--debug` global flag landed (R7); leveled logger wrapper still pending (S-R6).
-- **Metrics**: None. No Prometheus, no counters, no histograms. *open* — see S-R7 / F-NEW-22.
-- **Tracing**: None. No OpenTelemetry, no DTrace probes. *open* — see F-NEW-23.
+- **Logging**: ✓ [v4.7.0] `logger.mjs` JSON structured logger (debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL`). `console.*` in `routes/*.mjs` replaced. Remaining: correlation-id propagation and full CLI-side convention.
+- **Metrics**: ✓ [v4.7.0] `metrics.mjs` Prometheus-style counters/gauges/histograms + `GET /metrics` endpoint (mounted before auth). `http_requests_total{route,method,status}` counter + `ws_clients` gauge wired.
+- **Tracing**: None. No OpenTelemetry, no DTrace probes. *open* — see F-NEW-23 — *Active Focus #3*.
 - **Error reporting**: Local crash handlers but no Sentry/DataDog/Honeycomb integration. *open* — see F-NEW-25.
-- **Empty catches**: ✓ ~32 of ~55 fixed (F3 + F20); *~23 remain* (Active Focus #4). WS handlers especially.
+- **Empty catches**: ✓ ~49 of ~55 fixed (F3 + F20 + v4.7.0 logger); *~6 remain* in `memory-lightrag.mjs` (rate-limited).
 
 ### 7.8 Build / Packaging
 
@@ -835,19 +860,19 @@ For a CLI developer tool this is acceptable. For wider adoption, plan:
 | 1 | vitest CVE | `package.json:87` | CRITICAL | **FIXED (F1, v4.5.2 prep)** |
 | 2 | API keys in plaintext | `providers-store.mjs:1185` | HIGH | partial — ✓ [v4.5.0] EnvVarManager at `~/.config/bizar/env.json` (mode 0600); env-var rotation with cooldown tracking landed. Open — keys still readable if user keeps them in `opencode.json`. |
 | 3 | Token in URL | `auth.mjs:187-189`, `ws.ts:29` | MEDIUM | Open — see B-M6 |
-| 4 | No metrics/tracing/log levels | server-wide | MEDIUM | Partial — `--debug` flag landed (R7); leveled logger + metrics endpoint still pending (S-R6/R7) |
-| 5 | Mobile bundle > desktop | vite build | MEDIUM | Open — see B-MOBILE-1 *(Active Focus #5)* |
+| 4 | No metrics/tracing/log levels | server-wide | MEDIUM | ✓ [v4.7.0] — `logger.mjs` (S-R6) + `metrics.mjs` + `/metrics` endpoint (S-R7). Remaining: OpenTelemetry export (F-NEW-23). |
+| 5 | Mobile bundle > desktop | vite build | MEDIUM | [DEFERRED to v4.8] — see B-MOBILE-1 |
 | 6 | `/proc/net/tcp` hardcoded | `headroom.mjs:121` | MEDIUM | **FIXED (F2, v4.5.2 prep)** |
 | 7 | Source maps shipped | `vite.config.ts:15` | LOW | **FIXED (F21, v4.5.2)** — `sourcemap: 'hidden'` |
 | 8 | 228 KB CSS | Vite build | LOW | Open — purgecss pending |
-| 9 | Zero i18n | UI-wide | LOW | Open — known gap |
-| 10 | Empty catches | server files | MEDIUM | Partial — F3 + F20 fixed ~32 of ~55; **~23 remain** *(Active Focus #4)* |
+| 9 | Zero i18n | UI-wide | LOW | partial [v4.7.0] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 strings) foundation |
+| 10 | Empty catches | server files | MEDIUM | ~49 of ~55 fixed across v4.5.2 + v4.7.0; **~6 rate-limited remain** in `memory-lightrag.mjs` |
 
 ---
 
 ## Section 8: Improvements — Opencode Plugin & SDK
 
-Stream 4 had limited findings but the following gaps are noteworthy. *No v4.5.0/v4.5.1/v4.5.2 release closed items in this section — all open.*
+Stream 4 had limited findings but the following gaps are noteworthy. *No v4.5.0/v4.5.1/v4.5.2/v4.7.0 release closed items in this section — all open.*
 
 ### 8.1 Tool Catalog Coverage
 
@@ -889,7 +914,7 @@ Agent briefs (`.bizar/briefs/*.md`) exist but the handoff protocol is loose. Spe
 
 ## Section 9: Improvements — Skills, Docs, Templates
 
-Stream 5 findings. *Several skills shipped in v4.5.0 and v4.5.1 — see §13 and the table below.*
+Stream 5 findings. *Several skills shipped in v4.5.0 and v4.5.1; publishing skill shipped in v4.7.0 — see §13 and the table below.*
 
 ### 9.1 Skills Coverage Gaps
 
@@ -918,7 +943,8 @@ Stream 5 findings. *Several skills shipped in v4.5.0 and v4.5.1 — see §13 and
 | `skills-cli` | shipped | ✓ [v4.5.0] | |
 | `sdk` | shipped | ✓ [v4.5.0] | |
 | `headroom` | new | ✓ [v4.5.1] — `bizar-dash/skills/headroom/SKILL.md` | |
-| 11 shipped total | (see §13) | ✓ |
+| `publishing` | new | ✓ [v4.7.0] — `bizar-dash/skills/publishing/SKILL.md` | release-process guidance |
+| 12 shipped total | (see §13) | ✓ |
 
 A "thin" skill is one whose `SKILL.md` is < 70 lines of body content. Add expanded examples, decision matrices, or rename to clearly indicate minimal-depth (e.g., `grilling-quick` vs `grilling-deep`).
 
@@ -1148,35 +1174,27 @@ Same as Slack but for Discord.
 
 ---
 
-## Section 11: Roadmap (Updated 2026-07-05)
+## Section 11: Roadmap (Updated 2026-07-05 — post-v4.7.0)
 
 ### ✓ Shipped
 
 - **v4.5.0** — Settings overhaul, provider backup keys, usage analytics, chat overhaul, skills tab fix, task creation simplify, UI consistency pass
 - **v4.5.1** — Headroom default compression + full Memory tab
 - **v4.5.2** — Bug-fix sweep (16 fixes across CLI, server, frontend, build)
+- **v4.7.0** — v4.6 + v4.7: CLI refactor (split monoliths), structured logging, metrics endpoint, web frontend tests, virtual scrolling, i18n foundation, a11y polish
 
-### Up Next (proposed)
+### Remaining for v4.7 (rolled into v4.8 due to scope)
+- [ ] Mobile JS bundle > desktop investigation (476 KB vs 372 KB)
+- [ ] OpenTelemetry export
+- [ ] Full WCAG 2.2 AA compliance (only partial in v4.7.0)
 
-- **v4.6** — Quality & Stability
-  - [ ] Split `cli/bin.mjs` (1464 lines) into `cli/commands/*.mjs`
-  - [ ] Split `cli/artifact.mjs` (~2100 lines) into 3 modules
-  - [ ] Add web frontend test infrastructure (vitest + @testing-library/react)
-  - [ ] Add structured logging across server
-  - [ ] Eliminate remaining empty catch blocks (~23 of them)
-  - [ ] Refactor Settings.tsx (1823 lines) into sub-components
-  - [ ] Add virtual scrolling for chat/activity/history
+### Up Next
 
-- **v4.7** — Performance & Polish
-  - [ ] Mobile JS bundle > desktop investigation (476 KB vs 371 KB)
-  - [ ] Centralize which() and bizarConfigDir() (3 duplicates → 1)
-  - [ ] Cache-Control headers on API responses
-  - [ ] Add metrics endpoint (/metrics in Prometheus format)
+- **v4.8** — Memory & Knowledge + Performance Polish
+  - [ ] Investigate mobile bundle > desktop size discrepancy
   - [ ] OpenTelemetry export
-  - [ ] Full WCAG 2.2 AA compliance
-  - [ ] i18n infrastructure (translation bundles, locale switching)
-
-- **v4.8** — Memory & Knowledge
+  - [ ] Complete WCAG 2.2 AA compliance (focus on remaining form labels, color contrast, focus management)
+  - [ ] Refactor Settings.tsx (1823 lines) into sub-components
   - [ ] Voice notes → transcripts (Whisper integration)
   - [ ] Web clipper browser extension
   - [ ] Auto-generated weekly digests
@@ -1205,15 +1223,15 @@ All improvements from §3–§10, ranked. Status column added — `✓` = done i
 | 2 | Add `--debug` global flag (R7) | §4 | S | M | ✓ [v4.5.2] |
 | 3 | `sourcemap: 'hidden'` (R3 of build) | §7 | S | M | ✓ [v4.5.2 — F21] |
 | 4 | `.npmignore` `*.map` | §7 | S | L | ✓ [v4.5.2 — F22] |
-| 5 | Centralize `bizarConfigDir()` (R5) | §4 | S | M | [ ] |
-| 6 | Centralize `which()` (R4) | §4 | S | L | [ ] |
-| 7 | AbortController on remaining ~11 views | §6 | S | M | [~] 4 of 15+ (F5) |
+| 5 | Centralize `bizarConfigDir()` (R5) | §4 | S | M | ✓ [v4.7.0] |
+| 6 | Centralize `which()` (R4) | §4 | S | L | ✓ [v4.7.0] |
+| 7 | AbortController on remaining ~11 views | §6 | S | M | [PARTIAL] 4 of 15+ (F5) |
 | 8 | Replace `Math.random()` IDs with `crypto.randomUUID()` (B-M9) | §3 | S | L | [ ] |
-| 9 | Set `cache-control` headers on API | §7 | S | L | [ ] |
+| 9 | Set `cache-control` headers on API | §7 | S | L | ✓ [v4.7.0] — `/api/settings` and `/api/snapshot` |
 | 10 | Replace `confirm()` in BacklogPanel (B-M3) | §3 | S | L | [ ] |
 | 11 | Cost predictor before send (F-NEW-6) | §10 | S | M | [ ] |
 | 12 | Backup/restore (F-NEW-19) | §10 | S | H | [ ] |
-| 13 | Prometheus `/metrics` (F-NEW-22) | §10 | S | M | [ ] |
+| 13 | Prometheus `/metrics` (F-NEW-22) | §10 | S | M | ✓ [v4.7.0] |
 | 14 | Sentry integration (F-NEW-25) | §10 | S | H | [ ] |
 | 15 | Slack notifications (F-NEW-34) | §10 | S | M | [ ] |
 | 16 | Auto weekly digests (F-NEW-15) | §10 | S | M | [ ] |
@@ -1226,18 +1244,18 @@ All improvements from §3–§10, ranked. Status column added — `✓` = done i
 
 | # | Item | Source | Effort | Impact | Status |
 |---|------|--------|--------|--------|--------|
-| 21 | Split `bin.mjs` into `cli/commands/` (R1) | §4 | M | H | [ ] Active Focus #1 |
-| 22 | Split `artifact.mjs` into 3 files (R2) | §4 | M | H | [ ] Active Focus #1 |
+| 21 | Split `bin.mjs` into `cli/commands/` (R1) | §4 | M | H | ✓ [v4.7.0] |
+| 22 | Split `artifact.mjs` into 3 files (R2) | §4 | M | H | ✓ [v4.7.0] |
 | 23 | Remove or auth-protect v1 server (B-H5) | §3/§5 | M | H | [ ] Deferred — Tailscale handles auth |
-| 24 | React.lazy() per-view | §6 | M | H | [~] Suspense landed (F24); per-view lazy pending |
-| 25 | Web frontend test infra + smoke tests | §7 | M | H | [~] bugfix tests only; still no real unit/integration tests — Active Focus #2 |
-| 26 | `<label>` on Settings inputs (a11y) | §7 | M | H | [ ] |
+| 24 | React.lazy() per-view | §6 | M | H | [PARTIAL] Suspense landed (F24); per-view lazy pending |
+| 25 | Web frontend test infra + smoke tests | §7 | M | H | ✓ [v4.7.0] — vitest + RTL; 75 tests |
+| 26 | `<label>` on Settings inputs (a11y) | §7 | M | H | [PARTIAL] color inputs labeled; Tailscale checkbox associated (v4.7.0); bulk unlabeled |
 | 27 | `React.memo()` on snapshot receivers | §6 | M | M | ✓ [v4.5.2 — F28] |
-| 28 | virtual scrolling (react-window) | §6 | M | M | [ ] |
-| 29 | Structured logging + correlation IDs (S-R6) | §5 | M | H | [~] `--debug` flag landed (R7); leveled logger wrapper pending |
+| 28 | virtual scrolling (react-window) | §6 | M | M | ✓ [v4.7.0] — hand-rolled `<VirtualList>` in 4 views |
+| 29 | Structured logging + correlation IDs (S-R6) | §5 | M | H | ✓ [v4.7.0] — `logger.mjs`; correlation IDs still pending |
 | 30 | Rate limiting (S-R3) | §5 | M | M | [ ] |
-| 31 | `oauth` for V2 — actually, env-var key rotation already exists | §5 | M | M | [~] EnvVarManager + provider backup keys landed v4.5.0; full ACL system still pending |
-| 32 | i18n infrastructure (i18next) | §7 | M | H | [ ] |
+| 31 | `oauth` for V2 — actually, env-var key rotation already exists | §5 | M | M | [PARTIAL] EnvVarManager + provider backup keys landed v4.5.0; full ACL system still pending |
+| 32 | i18n infrastructure (i18next) | §7 | M | H | [PARTIAL] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 strings) foundation (v4.7.0) |
 | 33 | Voice notes → transcripts (F-NEW-12) | §10 | M | H | [ ] |
 | 34 | Screenshot OCR (F-NEW-13) | §10 | M | M | [ ] |
 | 35 | Web clipper extension (F-NEW-14) | §10 | M | H | [ ] |
@@ -1247,8 +1265,8 @@ All improvements from §3–§10, ranked. Status column added — `✓` = done i
 | 39 | A/B prompt playground (F-NEW-4) | §10 | M | M | [ ] |
 | 40 | One-click deploy (F-NEW-17) | §10 | M | H | [ ] |
 | 41 | `aria-live` on activity/task/chat regions | §6 | S | M | [ ] |
-| 42 | Settings.tsx → sub-components (a11y + scoping) | §6 | M | M | [ ] Active Focus #3 |
-| 43 | Mobile bundle > desktop (B-MOBILE-1) | §6 | M | M | [ ] Active Focus #5 |
+| 42 | Settings.tsx → sub-components (a11y + scoping) | §6 | M | M | [ ] Active Focus #2 |
+| 43 | Mobile bundle > desktop (B-MOBILE-1) | §6 | M | M | [DEFERRED to v4.8] Active Focus #1 |
 | 44 | `content-visibility: auto` on long lists | §6 | S | M | ✓ [v4.5.2 — F27] |
 | 45 | WS message queue | §6 | M | M | [ ] |
 | 46 | Per-view CSS splitting (main.css 8901 lines) | §6 | M | M | [ ] |
@@ -1273,19 +1291,19 @@ All improvements from §3–§10, ranked. Status column added — `✓` = done i
 | 60 | Multi-project dashboards (F-NEW-20) | §10 | L | H |
 | 61 | CLI for everything (F-NEW-30) | §10 | L | M |
 
-### Quick-Win → Roadmap Mapping (Updated)
+### Quick-Win → Roadmap Mapping (Updated 2026-07-05)
 
-- **v4.6** [ ] items 5, 6, 8, 9, 10, 11, 12, 19, 20, 26 (remaining quick wins + a11y) + items 21, 22, 25, 42, 43 (active focus) + item 23 (deferred)
-- **v4.7** [ ] items 24, 28, 29, 30, 32, 41, 46 (perf + a11y)
-- **v4.8** [ ] items 33-40 (memory features)
+- **v4.7.0** ✓ items 5, 6, 9, 13, 21, 22, 25, 26 (partial), 28, 29, 32 (partial) (CLI refactor + observability + tests + perf + a11y polish)
+- **v4.8** [ ] items 24, 30, 41, 43, 46 (perf + a11y + CSS) + items 33-40 (memory features)
 - **v5.0** [ ] items 54-61 (collaboration)
-- **Shipped (✓)**: items 1-4, 7 (partial), 18, 27, 44, 47-53 (v4.5.0/v4.5.1/v4.5.2)
+- **Carry-over (deferred)**: item 23 (Tailscale handles auth); items 8, 10, 14, 15-17, 19, 20, 31, 42, 45 (quick wins)
+- **Shipped (✓)**: items 1-4, 7 (partial), 18, 27, 44, 47-53 (v4.5.0/v4.5.1/v4.5.2) + items 5, 6, 9, 13, 21, 22, 25, 28, 29 (v4.7.0)
 
 ---
 
 ## Section 13: What's Done
 
-This section tracks the work completed across v4.5.0 → v4.5.2. Items marked "✓ DONE" in §3-§10 below reference this section.
+This section tracks the work completed across v4.5.0 → v4.7.0. Items marked "✓ DONE" in §3-§10 below reference this section.
 
 ### v4.5.0 — Settings + Provider + Usage + Chat overhaul
 
@@ -1408,6 +1426,50 @@ This section tracks the work completed across v4.5.0 → v4.5.2. Items marked "�
 - 48 new bug-fix tests
 - Total `npm test` after v4.5.2: 388 pass / 0 fail
 
+### v4.7.0 — v4.6 + v4.7: Quality & Stability + Performance & Polish
+
+**CLI refactor — split the monoliths:**
+- ✓ bin.mjs 1498→275 lines; artifact.mjs 2121→63 lines (re-export)
+- ✓ 10 new command modules under `cli/commands/`
+- ✓ 3 new artifact modules (`artifact-cli/server/render.mjs`)
+- ✓ Centralized `which()` and `bizarConfigDir()` into `cli/utils.mjs`
+- ✓ Fixed `--help` / `--version` global flag handling
+
+**Structured logging + metrics:**
+- ✓ `logger.mjs` — JSON structured logger with debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL`
+- ✓ `metrics.mjs` — Prometheus-style counters/gauges/histograms
+- ✓ `GET /metrics` endpoint (mounted before auth)
+- ✓ `http_requests_total{route,method,status}` counter middleware
+- ✓ `ws_clients` gauge tracking active WebSocket connections
+- ✓ `Cache-Control: no-cache` headers on `/api/settings` and `/api/snapshot`
+- ✓ Replaced `console.log/error` in `routes/*.mjs` with structured logger
+- ✓ Rate-limited remaining 6 empty catches in `memory-lightrag.mjs`
+
+**Web frontend test infrastructure:**
+- ✓ `vitest + jsdom + RTL` setup (`bizar-dash/vitest.config.ts` + `tests/setup.ts`)
+- ✓ 75 new tests (10 component, 7 hook, 36 lib, plus setup)
+- ✓ `npm run test:web` script
+- ✓ 4 new devDependencies (`@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom`)
+
+**Virtual scrolling + i18n + a11y:**
+- ✓ `<VirtualList>` hand-rolled (no deps) — used in 4 views (`ChatThread`, `Overview`, `Activity`, `History`)
+- ✓ `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 foundation strings)
+- ✓ `SearchModal` `role="search"` + `aria-label="Search"`
+- ✓ Settings color inputs labeled; Tailscale checkbox properly associated
+
+**Publishing guide:**
+- ✓ `docs/RELEASING.md` (692 lines) — comprehensive release guide
+- ✓ `bizar-dash/skills/publishing/SKILL.md` (145 lines) — agent-loadable skill
+
+### Tests added in v4.7.0
+
+- 17 new tests for logger + metrics
+- 75 new vitest tests for web components/hooks/lib
+- 9 CLI bugfix + 13 server bugfix tests (carried from v4.5.2)
+- Total `npm test`: 388 pass
+- Total `npm run test:web`: 75 pass
+- Combined: 463 tests pass, 0 fail
+
 ### Auth note (v4.5.2)
 
 Auth-related items were intentionally skipped per the v4.5.2 changelog: "Auth-related items intentionally skipped — Tailscale handles auth." Items that remain open on this front: B-H5 (v1 server open on :4097), B-M6 (token in URL), B-M8 (`/api/auth/reveal` echoes token).
@@ -1416,10 +1478,10 @@ Auth-related items were intentionally skipped per the v4.5.2 changelog: "Auth-re
 
 ## Final Notes
 
-This document is the deliverable for the research session on 2026-07-05, updated same-day after v4.5.0/v4.5.1/v4.5.2 shipped. Next research sweep is suggested in 3-4 months. All file:line references are accurate as of the session; new features and bugs that land in the meantime should be appended to §13 "What's Done", not folded into the bug lists.
+This document is the deliverable for the research session on 2026-07-05, updated same-day after v4.5.0/v4.5.1/v4.5.2/v4.7.0 shipped. Next research sweep is suggested in 3-4 months. All file:line references are accurate as of the session; new features and bugs that land in the meantime should be appended to §13 "What's Done", not folded into the bug lists.
 
-For sprint planning, start with Section 12 (Effort vs Impact Matrix) and §11 (Roadmap v4.6 onwards). Items marked ✓ in §3-§10 are closed; remaining work is tracked in §3 (Bugs), §10 (Features), and §11 (Roadmap).
+For sprint planning, start with Section 12 (Effort vs Impact Matrix) and §11 (Roadmap v4.8 onwards). Items marked ✓ in §3-§10 are closed; remaining work is tracked in §3 (Bugs), §10 (Features), and §11 (Roadmap).
 
 ---
 
-**Summary**: `/home/drb0rk/Projects/BizarHarness/SUGGESTIONS.md` updated to reflect three shipped releases. Top 3 remaining priorities (post-v4.5.2): (1) Split `bin.mjs` and `artifact.mjs` monoliths (R1, R2) — Active Focus; (2) Add Web frontend test infrastructure (real unit/integration tests — bugfix tests alone are insufficient); (3) Refactor Settings.tsx (1823 lines) into sub-components.
+**Summary**: `/home/drb0rk/Projects/BizarHarness/ROADMAP.md` updated to reflect four shipped releases (v4.5.0, v4.5.1, v4.5.2, v4.7.0). Top 5 remaining priorities (post-v4.7.0): (1) Investigate mobile bundle > desktop size discrepancy (476 KB vs 372 KB); (2) Refactor Settings.tsx (1823 lines) into sub-components; (3) OpenTelemetry export; (4) Complete WCAG 2.2 AA compliance (focus on remaining form labels, color contrast, focus management); (5) v4.8 features: voice notes, web clipper, memory graph visualization.

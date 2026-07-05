@@ -131,7 +131,7 @@ Before bumping the version, update these files (the version bump itself is the L
 
 # 4. .bizar/AGENTS_SELF_IMPROVEMENT.md — append "### YYYY-MM-DD — vX.Y.Z" entry
 
-# 5. SUGGESTIONS.md (only if roadmap changed) — update "Next" section
+# 5. ROADMAP.md (only if roadmap changed) — update "Next" section
 ```
 
 The order matters: write the CHANGELOG entry **before** bumping `package.json` so the CHANGELOG commit and the bump commit can be separate (or one combined commit if you prefer; v4.7.0 used a single combined commit).
@@ -593,7 +593,7 @@ This is the canonical pre-release checklist. Copy it into the agent's working me
 - [ ] package.json version bumped
 - [ ] .bizar/PROJECT.md Current Version bumped
 - [ ] .bizar/AGENTS_SELF_IMPROVEMENT.md has new entry appended
-- [ ] SUGGESTIONS.md updated (if roadmap changed)
+- [ ] ROADMAP.md updated (if roadmap changed)
 
 ### Release
 - [ ] Commit: `git add -A && git commit -m "vX.Y.Z: ..."`
