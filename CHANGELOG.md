@@ -1,5 +1,45 @@
 # Changelog
 
+## v4.7.2 — CRITICAL FIX: `bizar` was completely broken when invoked via symlink
+
+### Bug fix
+
+**Root cause:** `isMainModule` check in `cli/bin.mjs` compared `process.argv[1]` (which is the **symlink path** when invoked via `/home/drb0rk/.local/bin/bizar`) to `import.meta.url` (which is the **resolved target path**). These never match on a symlinked install, so `main()` was never called — every command (`bizar`, `bizar dash`, `bizar minimax remains`, etc.) silently produced NO output.
+
+This bug existed since v4.6.0's CLI refactor split `bin.mjs`. It only affected symlinked installs (the standard npm global install pattern). Running `node /full/path/to/bin.mjs` directly worked fine, masking the bug during local development.
+
+### Fix
+
+```js
+// Resolve both paths before comparing:
+const { realpathSync } = await import('node:fs');
+const resolvedArgv = (() => {
+  try { return realpathSync(process.argv[1]); }
+  catch { return process.argv[1]; }
+})();
+const isMainModule = resolvedArgv === thisFile;
+```
+
+(`cli/bin.mjs:362-374`)
+
+### Verification
+
+After upgrade to v4.7.2:
+- `bizar` → shows help banner
+- `bizar minimax remains` → shows quota
+- `bizar install` → runs provisioner
+- All commands produce expected output
+
+### Tests
+
+- All 388 npm tests pass
+- All 89 passing vitest tests pass
+- `node --check` clean
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@4.7.2`
+
 ## v4.7.1 — CLI silent-error fixes (no more silent command failures)
 
 ### Bug fixes

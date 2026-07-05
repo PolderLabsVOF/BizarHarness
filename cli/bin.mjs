@@ -360,7 +360,18 @@ async function main() {
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 const thisFile = fileURLToPath(import.meta.url);
-const isMainModule = process.argv[1] === thisFile;
+// Resolve symlinks: when invoked via a symlink (e.g. /home/drb0rk/.local/bin/bizar),
+// process.argv[1] is the symlink path, but import.meta.url is the resolved target.
+// Compare via realpath so main() runs regardless of how the script is invoked.
+const { realpathSync } = await import('node:fs');
+const resolvedArgv = (() => {
+  try {
+    return realpathSync(process.argv[1]);
+  } catch {
+    return process.argv[1];
+  }
+})();
+const isMainModule = resolvedArgv === thisFile;
 if (isMainModule) {
   await main().catch((err) => {
     console.error(chalk.red(`bizar: ${err && err.message ? err.message : String(err)}`));
