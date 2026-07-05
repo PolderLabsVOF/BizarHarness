@@ -31,23 +31,33 @@
  * `error` event and end the stream rather than risk file-descriptor
  * exhaustion when many tabs are open.
  *
- * The directory resolver walks `listOpencodeSessions` first (so a
- * session started from any worktree gets its own directory), then
- * falls back to `info.worktree` (the plugin's cwd). If neither is
- * known we 503.
+ * The directory resolver lives in `serve-info.mjs` as
+ * `resolveSessionDirectory(sessionId, serveInfo)` and is shared with
+ * `routes/opencode-sessions.mjs`. It probes the recorded worktree
+ * first (cheap), then falls back to listing every session and
+ * matching on id. If neither yields a directory we 503 with
+ * `directory_unknown`.
+ *
+ * v5.0.0 — bug #4 fix: structured error envelopes with `cause`,
+ * `status`, and `suggestion`; structured `logger.error` on every
+ * upstream failure for diagnostics.
  */
 
 import { Router } from 'express';
 import {
   readServeInfo,
   listOpencodeMessages,
-  listOpencodeSessions,
+  resolveSessionDirectory,
   sendOpencodePrompt,
   unwrapOpencodeSseEvent,
   buildAuthHeader,
   extractContentFromOpencodeMessage,
 } from '../serve-info.mjs';
+import { child as loggerChild } from '../logger.mjs';
 import { wrap } from './_shared.mjs';
+
+/** Structured logger scoped to this route — emits `{module:'opencode-session-detail', ...}` on every line. */
+const logger = loggerChild({ module: 'opencode-session-detail' });
 
 /** Maximum number of concurrent SSE subscribers on this dashboard process. */
 const MAX_SSE_SUBSCRIBERS = 50;
@@ -61,39 +71,6 @@ function getSseHeartbeatMs() {
 const LIST_MESSAGES_TIMEOUT_MS = 8_000;
 /** Default timeout for the upstream prompt endpoint. */
 const SEND_PROMPT_TIMEOUT_MS = 12_000;
-
-/**
- * Resolve the opencode `directory` query parameter for a session.
- *
- * Tries (in order):
- *   1. The session's own `location.directory` from `listOpencodeSessions`.
- *   2. `info.worktree` (the plugin's recorded cwd at startup).
- *
- * Returns `null` when neither is known — callers should 503 in that
- * case so the UI can show "directory unknown" rather than sending the
- * prompt with a blank directory (which the opencode API would 400).
- *
- * @param {ReturnType<typeof readServeInfo>} info
- * @param {string} sessionId
- * @returns {Promise<string|null>}
- */
-async function resolveSessionDirectory(info, sessionId) {
-  if (!info) return null;
-  try {
-    const sessions = await listOpencodeSessions(info, 5_000);
-    if (Array.isArray(sessions)) {
-      const entry = sessions.find((s) => s && s.id === sessionId);
-      const dir = entry?.location?.directory;
-      if (typeof dir === 'string' && dir.length > 0) return dir;
-    }
-  } catch {
-    /* fall through to worktree */
-  }
-  if (typeof info.worktree === 'string' && info.worktree.length > 0) {
-    return info.worktree;
-  }
-  return null;
-}
 
 /**
  * Normalize an opencode message into the dashboard's chat shape:
@@ -145,21 +122,44 @@ export function createOpencodeSessionDetailRouter() {
       return res.status(503).json({
         error: 'plugin_offline',
         message: 'opencode plugin is not running',
+        suggestion: 'Run `bizar doctor` for diagnostics, or start opencode with `opencode serve`',
       });
     }
-    const directory = await resolveSessionDirectory(info, sessionId);
+    const directory = await resolveSessionDirectory(sessionId, info);
     if (!directory) {
       return res.status(503).json({
         error: 'directory_unknown',
         message:
           'Cannot determine the opencode session directory; ensure the opencode plugin is running with serve.json containing worktree.',
+        suggestion: 'Create a new session or restart opencode serve.',
       });
     }
     const result = await listOpencodeMessages(info, sessionId, directory, LIST_MESSAGES_TIMEOUT_MS);
     if (!result?.ok) {
+      const errMsg = result?.error || 'unknown error from opencode serve';
+      // v5.0.0 — bug #4: prefer the structured `cause` field if the
+      // helper surfaced one (it carries `ECONNREFUSED` / `UND_ERR_*`
+      // from the underlying fetch); fall back to substring inference
+      // for older error message shapes.
+      let cause = result?.cause || 'unknown';
+      if (cause === 'unknown') {
+        if (errMsg.includes('timed out')) cause = 'timeout';
+        else if (errMsg.includes('network error') || errMsg.includes('fetch failed')) cause = 'network';
+      }
+      logger.error('opencode listMessages failed', {
+        sessionId,
+        worktree: directory,
+        servePort: info.port,
+        status: result?.status ?? null,
+        cause,
+        err: errMsg,
+      });
       return res.status(502).json({
         error: 'opencode_error',
-        message: result?.error || 'unknown error from opencode serve',
+        message: errMsg,
+        cause,
+        status: result?.status ?? undefined,
+        suggestion: 'Check that the opencode serve child is running. Try `bizar doctor` or restart the plugin.',
       });
     }
     const messages = Array.isArray(result.messages) ? result.messages.map(toChatMessage) : [];
@@ -191,14 +191,16 @@ export function createOpencodeSessionDetailRouter() {
       return res.status(503).json({
         error: 'plugin_offline',
         message: 'opencode plugin is not running',
+        suggestion: 'Run `bizar doctor` for diagnostics, or start opencode with `opencode serve`',
       });
     }
-    const directory = await resolveSessionDirectory(info, sessionId);
+    const directory = await resolveSessionDirectory(sessionId, info);
     if (!directory) {
       return res.status(503).json({
         error: 'directory_unknown',
         message:
           'Cannot determine the opencode session directory; ensure the opencode plugin is running with serve.json containing worktree.',
+        suggestion: 'Create a new session or restart opencode serve.',
       });
     }
     // Synthesize a unique messageID so the client can correlate the
@@ -211,9 +213,26 @@ export function createOpencodeSessionDetailRouter() {
       SEND_PROMPT_TIMEOUT_MS,
     );
     if (!result?.ok) {
+      const errMsg = result?.error || 'unknown error from opencode serve';
+      let cause = result?.cause || 'unknown';
+      if (cause === 'unknown') {
+        if (errMsg.includes('timed out')) cause = 'timeout';
+        else if (errMsg.includes('network error') || errMsg.includes('fetch failed')) cause = 'network';
+      }
+      logger.error('opencode sendPrompt failed', {
+        sessionId,
+        worktree: directory,
+        servePort: info.port,
+        status: result?.status ?? null,
+        cause,
+        err: errMsg,
+      });
       return res.status(502).json({
         error: 'opencode_error',
-        message: result?.error || 'unknown error from opencode serve',
+        message: errMsg,
+        cause,
+        status: result?.status ?? undefined,
+        suggestion: 'Check that the opencode serve child is running. Try `bizar doctor` or restart the plugin.',
       });
     }
     return res.json({ ok: true, messageId: result.messageId });

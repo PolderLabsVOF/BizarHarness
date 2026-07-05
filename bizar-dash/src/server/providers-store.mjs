@@ -326,6 +326,11 @@ export function syncLegacyKeys(p) {
   return next;
 }
 
+// ── MiniMax model constants ──────────────────────────────────────────────────
+//
+// Cheap/fast everyday model — agents that need a lightweight workhorse.
+export const MINIMAX_DEFAULT = 'MiniMax-M2.7';
+
 // ── v4.6.0 Provider catalog ─────────────────────────────────────────────────
 //
 // Curated list of well-known providers. The dashboard's "Add provider"
@@ -406,9 +411,10 @@ export const PROVIDER_CATALOG = Object.freeze([
     keyHint: 'sk-cp-…, sk-ant-…, or sk-or-…',
     docs: 'https://api.minimax.io',
     models: [
-      'MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed',
-      'MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1',
-      'MiniMax-M2.1-highspeed', 'MiniMax-M2',
+      Object.freeze({ id: 'MiniMax-M2.7-Flash', name: 'MiniMax M2.7 Flash', tier: 'cheap', recommended: true }),
+      Object.freeze({ id: 'MiniMax-M2.7', name: 'MiniMax M2.7', tier: 'cheap' }),
+      Object.freeze({ id: 'MiniMax-M3', name: 'MiniMax M3', tier: 'mid' }),
+      Object.freeze({ id: 'MiniMax-M3-Reasoning', name: 'MiniMax M3 Reasoning', tier: 'premium' }),
     ],
     requiresKey: true,
   }),
@@ -1543,7 +1549,8 @@ export const providersStore = {
       keyPattern: /^sk-(cp|ant|or)-[A-Za-z0-9_-]{20,}$/,
       defaultModel: 'MiniMax-M3',
       defaultModels: [
-        'MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed',
+        'MiniMax-M2.7-Flash', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed',
+        'MiniMax-M3', 'MiniMax-M3-Reasoning',
         'MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1',
         'MiniMax-M2.1-highspeed', 'MiniMax-M2',
       ],

@@ -1,7 +1,7 @@
 ---
 description: Mimir — Deep codebase research and exploration. Uses Semble as primary search tool. Architecture analysis, pattern discovery, documentation research, and project initialization.
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: minimax/MiniMax-M2.7
 color: "#06b6d4"
 permission:
   read: allow

@@ -1,0 +1,12 @@
+{
+  "id": "template-hourly-health",
+  "name": "Hourly health check",
+  "description": "Run bizar doctor every hour",
+  "type": "interval",
+  "schedule": "1h",
+  "action": {
+    "type": "command",
+    "target": "bizar doctor"
+  },
+  "tags": ["health", "monitoring"]
+}

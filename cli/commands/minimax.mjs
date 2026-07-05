@@ -148,8 +148,11 @@ async function runMinimaxCommand(minimaxArgs) {
     for (const m of data.models || []) {
       const five = m.current_interval_remaining_percent;
       const week = m.current_weekly_remaining_percent;
-      const fiveBar = '█'.repeat(Math.round(five / 5)) + '░'.repeat(20 - Math.round(five / 5));
-      const weekBar = '█'.repeat(Math.round(week / 5)) + '░'.repeat(20 - Math.round(week / 5));
+      // Bar shows CONSUMED as filled (inverted from remaining)
+      const fiveConsumed = 100 - five;
+      const weekConsumed = 100 - week;
+      const fiveBar = '█'.repeat(Math.round(fiveConsumed / 5)) + '░'.repeat(20 - Math.round(fiveConsumed / 5));
+      const weekBar = '█'.repeat(Math.round(weekConsumed / 5)) + '░'.repeat(20 - Math.round(weekConsumed / 5));
       const fiveColor = five >= 75 ? chalk.green : five >= 25 ? chalk.yellow : chalk.red;
       const weekColor = week >= 75 ? chalk.green : week >= 25 ? chalk.yellow : chalk.red;
       console.log(`    ${chalk.bold(m.model_name)}`);

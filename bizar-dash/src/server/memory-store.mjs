@@ -20,9 +20,55 @@ import { validateNote } from './memory-schema.mjs';
 import { scan as scanSecrets, hasHighFindings } from './memory-secrets.mjs';
 import { atomicWriteJson, safeReadJSON, safeReadText } from '../../../cli/atomic.mjs';
 import * as memoryGit from './memory-git.mjs';
+import { warn as loggerWarn } from './logger.mjs';
 
 const HOME = homedir();
+
+/**
+ * Default vault root — auto-created on first use.
+ * Override with BIZAR_MEMORY_VAULT env var.
+ */
+export const DEFAULT_MEMORY_VAULT = join(HOME, '.local', 'share', 'bizar', 'memory');
+
+/**
+ * Default git remote — set via BIZAR_MEMORY_GIT_REMOTE to enable sync.
+ */
+export const DEFAULT_GIT_REMOTE = process.env.BIZAR_MEMORY_GIT_REMOTE || null;
+
 const BIZAR_MEMORY_ROOT = join(HOME, '.local', 'share', 'bizar', 'memory');
+
+/**
+ * Return the effective vault root for the default memory vault.
+ * Override with BIZAR_MEMORY_VAULT env var.
+ *
+ * @returns {string}
+ */
+export function currentVault() {
+  return process.env.BIZAR_MEMORY_VAULT || DEFAULT_MEMORY_VAULT;
+}
+
+/**
+ * Ensure the default memory vault directory exists and is git-initialised.
+ * Idempotent — calling multiple times is safe.
+ *
+ * @returns {string} the vault path that was ensured
+ */
+export function ensureVaultExists() {
+  const vault = currentVault();
+  if (!existsSync(vault)) {
+    mkdirSync(vault, { recursive: true, mode: 0o700 });
+    if (!existsSync(join(vault, '.git'))) {
+      try {
+        execFileSync('git', ['init'], { cwd: vault, stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.email', 'bizar@localhost'], { cwd: vault, stdio: 'pipe' });
+        execFileSync('git', ['config', 'user.name', 'BizarHarness'], { cwd: vault, stdio: 'pipe' });
+      } catch (err) {
+        loggerWarn('failed to init git in vault', { vault, err: err.message });
+      }
+    }
+  }
+  return vault;
+}
 
 /**
  * Path safety: reject any relPath that would escape the vault root.

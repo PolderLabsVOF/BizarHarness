@@ -1,0 +1,12 @@
+{
+  "id": "template-daily-backup",
+  "name": "Daily backup",
+  "description": "Create a backup every day at 03:00",
+  "type": "cron",
+  "schedule": "0 3 * * *",
+  "action": {
+    "type": "command",
+    "target": "bizar backup --label daily"
+  },
+  "tags": ["backup", "maintenance"]
+}

@@ -1,5 +1,26 @@
 # Changelog
 
+## v5.0.1 — Settings redesign, Doctor page, Auto-save, Compaction, Model fixes, Layout polish
+
+### Bug fixes & polish
+
+- **Settings redesign** — All settings sections now accessible via persistent sidebar nav when in settings mode; toggle back to normal sidebar on exit
+- **Doctor page** — New full-page Doctor view at `/api/doctor` with system health, services, counts, recent errors panels; auto-refreshes every 30s
+- **Settings auto-save** — `AutosaveField` + `useAutosave` hook debounce text inputs (800ms) and textareas (1500ms) with subtle pulse/saved animation
+- **Opencode chat error handling** — Proper 503/502 responses with structured `cause` field; `resolveSessionDirectory()` falls back across worktrees; frontend shows retry button
+- **Default memory vault location** — `~/.local/share/bizar/memory` (mode 0700); auto-creates + git-inits on first server start; ConfigPanel simplified to show only git remote URL
+- **Removed "Coming soon" placeholders** — Deleted 5 stub section files
+- **Replaced free models with MiniMax** — All 8 agents updated to use `MiniMax-M2.7`, M2.7-Flash, M3, or M3-Reasoning based on complexity tier
+- **Layout/padding fix** — `.view` containers get 32px top padding, card gaps 16-20px, view headers with bottom border
+- **Compaction at 50% context** — New `plugins/bizar/src/compaction.mjs` (built from scratch); configurable threshold; `config/opencode.json` has `compaction.threshold = 0.5`
+
+### Tests
+
+- 388 npm tests pass
+- 178 vitest tests pass
+- TypeScript: 0 errors
+- Build succeeds
+
 ## v5.0.0 — Multi-user workspaces, Plugin marketplace, Eval framework, One-click deploy, Voice notes, Web clipper, Screenshot OCR
 
 ### Major release — BizarHarness is now a team platform.

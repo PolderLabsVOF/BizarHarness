@@ -413,6 +413,92 @@
   flex-wrap: wrap;
 }
 
+/* Bulk import panel */
+.env-var-bulk-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+}
+
+.env-var-bulk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.env-var-bulk-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-size: 12px;
+}
+
+.env-var-bulk-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Search */
+.env-var-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.env-var-search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.env-var-search {
+  padding-left: 26px !important;
+  width: 160px;
+  font-size: 12px;
+}
+
+/* Groups */
+.env-var-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.env-var-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-elev-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  width: 100%;
+  text-align: left;
+  transition: background var(--motion-fast);
+}
+
+.env-var-group-header:hover {
+  background: var(--bg-elev-2);
+}
+
+.env-var-group-prefix {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.env-var-group-count {
+  font-size: 11px;
+}
+
 /* Memory section */
 .memory-field-row {
   display: grid;
@@ -496,3 +582,182 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ─── Autosave field status indicator ─── */
+.autosave-field {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.autosave-status {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success, #3fb950);
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.autosave-field.saved .autosave-status,
+.autosave-field.saving .autosave-status,
+.autosave-field.error .autosave-status {
+  opacity: 1;
+}
+
+.autosave-field.error .autosave-status {
+  color: var(--error, #f85149);
+}
+
+.autosave-field.saving .autosave-status {
+  animation: autosave-save-pulse 800ms ease-out;
+}
+
+.autosave-field.saved .autosave-status {
+  animation: autosave-saved-fade 1500ms ease-out;
+}
+
+@keyframes autosave-save-pulse {
+  0% { transform: translateY(-50%) scale(0.5); opacity: 0; }
+  50% { transform: translateY(-50%) scale(1.2); opacity: 1; }
+  100% { transform: translateY(-50%) scale(1); opacity: 1; }
+}
+
+@keyframes autosave-saved-fade {
+  0% { transform: translateY(-50%) scale(0.5); opacity: 0; }
+  30% { transform: translateY(-50%) scale(1.1); opacity: 1; }
+  70% { transform: translateY(-50%) scale(1); opacity: 1; }
+  100% { transform: translateY(-50%) scale(1); opacity: 0; }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   v4.9.0 — Settings sidebar mode (sidebar layout only)
+   When settingsMode is active, the sidebar replaces the normal tab rail
+   with a full-width nav showing all settings sections grouped by category.
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Sidebar when in settings mode — full height, scrollable */
+.sidebar-settings-mode {
+  width: var(--sidebar-width, 240px);
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* Settings nav root */
+.settings-nav-root {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+  gap: 2px;
+}
+
+/* Back button */
+.settings-nav-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast);
+  margin-bottom: var(--space-2);
+}
+
+.settings-nav-back:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+.settings-nav-divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-2) 0;
+}
+
+/* Section groups */
+.settings-nav-group {
+  margin-bottom: var(--space-3);
+}
+
+.settings-nav-group-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+  padding: 4px 8px 6px;
+}
+
+/* Individual nav items */
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+
+.settings-nav-item:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+.settings-nav-item-active {
+  background: var(--accent-bg);
+  color: var(--accent-2);
+  border-color: var(--accent-border);
+}
+
+.settings-nav-item-active:hover {
+  background: var(--accent-bg);
+  color: var(--accent-2);
+}
+
+.settings-nav-item-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.settings-nav-item-active .settings-nav-item-icon {
+  opacity: 1;
+}
+
+.settings-nav-item-label {
+  flex: 1;
+}
+
+.settings-nav-item-chevron {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+

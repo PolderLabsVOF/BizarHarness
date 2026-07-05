@@ -1,3 +1,5 @@
-- filtering in settings menu doesnt work. change the way the settings tabs work. when openin gsettings i want all the sections to show up in the main sidebar instead of the normal tabs. when exiting out of the settings it should go back to normal again.
-- add a doctor page in the dashboard where i can see system health and full diagnostics.
-- make settign
+- add templates as examples in schedules users can use to create their own ones. 
+- fix the chat bar sizing in this picture:![alt text](image.png)
+- i dont see the settings manu rework we discussed earlier.
+- percentage display is like reversed or something ![alt text](image-1.png)
+- when done install the newest verison of bizar locally and deploy the dash with tailscale

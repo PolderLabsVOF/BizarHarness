@@ -38,6 +38,8 @@ import { Memory } from './views/Memory';
 import { History } from './views/History';
 import { MiniMaxUsage } from './views/MiniMaxUsage';
 import { BackgroundAgents } from './views/BackgroundAgents';
+import { Doctor } from './views/Doctor';
+import { SettingsNav } from './components/SettingsNav';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
 import { AlertTriangle, Globe, LayoutTemplate, X } from 'lucide-react';
@@ -49,6 +51,17 @@ type ViewProps = {
   activeTab: string;
   setActiveTab: (id: string) => void;
   refreshSnapshot: () => Promise<void>;
+  /**
+   * v4.9.0 — When true, the sidebar shows the full settings navigation
+   * instead of the normal tab rail. Toggled by clicking the Settings tab.
+   */
+  settingsMode: boolean;
+  /**
+   * v4.9.0 — The active settings section highlighted in the sidebar nav.
+   * Null means "show all". Managed at App level so Sidebar can read it.
+   */
+  settingsActiveSection: string | null;
+  setSettingsActiveSection: (id: string | null) => void;
   /**
    * v3.3.0 — Cross-view scratch state. The "Open in chat" button
    * on the Agents tab sets `pendingInitialAgent`, which the Chat
@@ -79,6 +92,10 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   skills: Skills,
   history: History,
   minimax: MiniMaxUsage,
+  // v6.0.0 — Doctor page (system health + diagnostics surface).
+  // Registered here so the tab id 'doctor' from Topbar.tsx TABS
+  // resolves to a real view instead of falling back to Overview.
+  doctor: Doctor,
 };
 
 const VERSION = 'v4.5.0';
@@ -196,6 +213,11 @@ function Shell() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   const [bootError, setBootError] = useState<string | null>(null);
+  // v4.9.0 — Settings mode: when true, sidebar shows all settings sections
+  const [settingsMode, setSettingsMode] = useState(false);
+  // v4.9.0 — The active settings section shown in the sidebar nav.
+  // Null means "show all sections". Managed here so Sidebar can read it.
+  const [settingsActiveSection, setSettingsActiveSection] = useState<string | null>(null);
   const [authPromptOpen, setAuthPromptOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [stuckAgents, setStuckAgents] = useState<{ name: string }[]>([]);
@@ -592,7 +614,7 @@ function Shell() {
       const id = map[e.key];
       if (id) {
         e.preventDefault();
-        setActiveTab(id);
+        handleTabChange(id);
       }
     };
     document.addEventListener('keydown', handler);
@@ -610,6 +632,14 @@ function Shell() {
     },
     [toast],
   );
+
+  // v4.9.0 — Settings mode: entering settings tab activates the sidebar layout.
+  // Navigating to any other tab exits settings mode.
+  const handleTabChange = useCallback((id: string) => {
+    setActiveTab(id);
+    if (id === 'settings') setSettingsMode(true);
+    else setSettingsMode(false);
+  }, []);
 
   // v3.20.3 — Merge built-in tabs with installed mod views. Mod views
   // are appended after the built-in tabs and use the same rendering
@@ -634,13 +664,16 @@ function Shell() {
         snapshot,
         settings,
         activeTab,
-        setActiveTab: setActiveTab,
+        setActiveTab: handleTabChange,
         refreshSnapshot,
+        settingsMode,
+        settingsActiveSection,
+        setSettingsActiveSection,
       };
       return renderActiveView(activeTab, viewProps, modViews, modViewsReloadKey);
     }
     return null;
-  }, [activeTab, snapshot, settings, modViews, modViewsReloadKey, refreshSnapshot]);
+  }, [activeTab, snapshot, settings, modViews, modViewsReloadKey, refreshSnapshot, settingsMode, settingsActiveSection, setSettingsActiveSection, handleTabChange]);
 
   const refreshProjects = async () => {
     try {
@@ -671,10 +704,10 @@ function Shell() {
 
   const onSearchSelect = (r: SearchResult) => {
     const t = r.type;
-    if (t === 'agent') setActiveTab('agents');
-    else if (t === 'task') setActiveTab('tasks');
-    else if (t === 'mod') setActiveTab('mods');
-    else if (t === 'schedule') setActiveTab('schedules');
+    if (t === 'agent') handleTabChange('agents');
+    else if (t === 'task') handleTabChange('tasks');
+    else if (t === 'mod') handleTabChange('mods');
+    else if (t === 'schedule') handleTabChange('schedules');
     else if (t === 'project') {
       const id = (r.item as ProjectRecord).id;
       onActivateProject(id);
@@ -686,7 +719,7 @@ function Shell() {
       const settingId = (r.item as { id?: string; path?: string }).id
         || (r.item as { path?: string }).path
         || '';
-      setActiveTab('settings');
+      handleTabChange('settings');
       // Defer the scroll to allow the view to mount, then apply a brief
       // CSS highlight. We poll a few times because the Settings view
       // mounts lazily after tab switch.
@@ -725,7 +758,7 @@ function Shell() {
       {showHeader && (
         <Topbar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           wsStatus={wsStatus}
           version={VERSION}
           activeProject={snapshot?.activeProject || null}
@@ -752,7 +785,7 @@ function Shell() {
             variant="secondary"
             size="sm"
             onClick={() => {
-              setActiveTab('agents');
+              handleTabChange('agents');
               setStuckBannerDismissed(true);
             }}
           >
@@ -773,7 +806,11 @@ function Shell() {
           <Sidebar
             tabs={mergedTabs}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
+            settingsMode={settingsMode}
+            settingsActiveSection={settingsActiveSection}
+            onSettingsSectionChange={setSettingsActiveSection}
+            onExitSettings={() => handleTabChange('overview')}
           />
         )}
         <main className="content" id="main-content" tabIndex={-1}>

@@ -784,6 +784,7 @@ function QuotaBar({ icon, label, remainingPct, consumedPct, used, total, resetIn
       <div className="minimax-quota-head">
         <span className="minimax-quota-label">{icon} {label}</span>
         <span className="minimax-quota-remaining">{remainingPct}% remaining</span>
+        <span className="minimax-quota-consumed">· {consumedPct}% used</span>
       </div>
       <div className="minimax-bar">
         <div className="minimax-bar-fill" style={{ width: `${consumedPct}%` }} aria-label={`${consumedPct}% consumed`} />

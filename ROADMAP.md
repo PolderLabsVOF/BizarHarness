@@ -1174,40 +1174,37 @@ Same as Slack but for Discord.
 
 ---
 
-## Section 11: Roadmap (Updated 2026-07-05 — post-v4.7.0)
+## Section 11: Roadmap (Updated 2026-07-05 — post-v5.0.1)
 
 ### ✓ Shipped
 
-- **v4.5.0** — Settings overhaul, provider backup keys, usage analytics, chat overhaul, skills tab fix, task creation simplify, UI consistency pass
+- **v4.5.0** — Settings overhaul, provider backup keys, usage analytics
 - **v4.5.1** — Headroom default compression + full Memory tab
-- **v4.5.2** — Bug-fix sweep (16 fixes across CLI, server, frontend, build)
-- **v4.7.0** — v4.6 + v4.7: CLI refactor (split monoliths), structured logging, metrics endpoint, web frontend tests, virtual scrolling, i18n foundation, a11y polish
+- **v4.5.2** — Bug-fix sweep (16 fixes)
+- **v4.7.0** — CLI refactor + logger + metrics + 75 vitest tests
+- **v4.7.1** — CLI error visibility
+- **v4.7.2** — Symlink-broken `bizar` CRITICAL FIX
+- **v4.8.0** — Backup/restore + rate-limit + Settings refactor + digests + a11y
+- **v4.9.0** — Mobile + OTel + Memory graph + Docker + Settings search
+- **v5.0.0** — Multi-user + plugin marketplace + eval + deploy + voice + clipper + OCR
+- **v5.0.1** — Settings redesign + Doctor + Auto-save + chat fixes + vault default + MiniMax models + layout fix + compaction
 
-### Remaining for v4.7 (rolled into v4.8 due to scope)
-- [ ] Mobile JS bundle > desktop investigation (476 KB vs 372 KB)
-- [ ] OpenTelemetry export
-- [ ] Full WCAG 2.2 AA compliance (only partial in v4.7.0)
+### Remaining (post-v5.0.1)
 
-### Up Next
+- [ ] OTLP trace export (skeleton exists in v4.9, needs more spans)
+- [ ] Full WCAG 2.2 AA audit (mostly done in v4.8, gaps remain)
+- [ ] Mobile bundle further reduction (currently 140 KB)
+- [ ] Plugin marketplace registry (registry.json needs to be published)
+- [ ] Eval framework golden fixtures expansion
+- [ ] Voice note auto-transcription (currently Whisper API only)
 
-- **v4.8** — Memory & Knowledge + Performance Polish
-  - [ ] Investigate mobile bundle > desktop size discrepancy
-  - [ ] OpenTelemetry export
-  - [ ] Complete WCAG 2.2 AA compliance (focus on remaining form labels, color contrast, focus management)
-  - [ ] Refactor Settings.tsx (1823 lines) into sub-components
-  - [ ] Voice notes → transcripts (Whisper integration)
-  - [ ] Web clipper browser extension
-  - [ ] Auto-generated weekly digests
-  - [ ] Memory graph visualization
-  - [ ] Screenshot → OCR + note
+### Future (v5.1+)
 
-- **v5.0** — Major release
-  - [ ] Multi-user / team workspaces
-  - [ ] Plugin marketplace
-  - [ ] Eval framework integration
-  - [ ] One-click deploy (Vercel/Cloudflare/Fly)
-  - [ ] Self-hosted dashboard (Docker)
-  - [ ] Backup/restore the entire dashboard state
+- [ ] Multi-user workspace UI improvements (member management)
+- [ ] Plugin permissions UI
+- [ ] Self-hosted dashboard with Tailscale integration
+- [ ] Eval report web UI
+- [ ] Deploy previews for Vercel
 
 ---
 
@@ -1469,6 +1466,71 @@ This section tracks the work completed across v4.5.0 → v4.7.0. Items marked "�
 - Total `npm test`: 388 pass
 - Total `npm run test:web`: 75 pass
 - Combined: 463 tests pass, 0 fail
+
+### v5.0.1 — Settings redesign, Doctor page, Auto-save, Compaction, Model fixes, Layout polish
+
+**Settings redesign (Issue 1):**
+- ✓ Settings mode toggles full sidebar nav showing all sections
+- ✓ `<SettingsNav>` component with 4 collapsible groups (General, Core, Experience, Data)
+- ✓ Settings sections persist selected section across navigation
+
+**Doctor page (Issue 2):**
+- ✓ New full-page Doctor view at `/api/doctor` + dashboard route
+- ✓ 5 panels: System Health, Services, Counts, Recent Errors, Actions
+- ✓ 30s auto-refresh via cheap `/api/doctor/health` poll
+- ✓ `<DoctorPanel>` reusable component
+- ✓ StatusBadge extended with ok/warn/fail variants
+- ✓ Sidebar entry between Overview and Settings
+
+**Settings auto-save (Issue 3):**
+- ✓ `useAutosave` hook with debounced save + flush on unmount
+- ✓ `<AutosaveField>` generic wrapper with status indicator
+- ✓ Subtle save animation (pulse on save, fade on saved)
+- ✓ Text inputs: 800ms debounce + blur immediate save
+- ✓ Textareas: 1500ms debounce
+- ✓ Wired into GeneralSection, AgentSection
+
+**Opencode chat network error fix (Issue 4):**
+- ✓ Proper error handling: 503 plugin_offline / 503 directory_unknown / 502 opencode_error
+- ✓ `resolveSessionDirectory()` falls back across worktrees
+- ✓ Frontend shows structured error with Retry button
+- ✓ `cause` field identifies network/timeout/HTTP errors
+
+**Default memory vault location (Issue 5):**
+- ✓ `DEFAULT_MEMORY_VAULT = ~/.local/share/bizar/memory` (mode 0700)
+- ✓ Auto-creates + git-inits vault on first server start
+- ✓ ConfigPanel + MemorySection simplified — only git remote URL is editable
+
+**Removed "Coming soon" placeholders (Issue 6):**
+- ✓ Deleted 5 placeholder files (BackupSection, EnvVarsSection, ProvidersSection, SkillsSection, MemorySection)
+- ✓ Removed 5 entries from Settings.tsx section list
+
+**Replaced free models with MiniMax (Issue 7):**
+- ✓ 6 agent files updated from `opencode/deepseek-v4-flash-free` → `minimax/MiniMax-M2.7`
+- ✓ `quick.md` uses `MiniMax-M2.7-Flash` (simple tasks)
+- ✓ `tyr/odin/forseti/vidarr` use `MiniMax-M3` (complex)
+- ✓ `PROVIDER_CATALOG` has MiniMax with 4 models
+- ✓ Settings default model updated
+
+**Layout/padding fix (Issue 10):**
+- ✓ `.view` / `.page` containers get 32px top padding
+- ✓ Card gaps increased to 16-20px
+- ✓ View header gets 24px bottom margin + bottom border
+- ✓ All pages audited and fixed
+
+**Compaction at 50% context (Issue 9):**
+- ✓ New `plugins/bizar/src/compaction.mjs` (built from scratch)
+- ✓ `shouldCompact()` returns true at 50% usage
+- ✓ `setCompactionThreshold()` configurable 0.1-1.0
+- ✓ `maybeCompactSession()` triggers compaction with preserve_recent=10
+- ✓ Config in `config/opencode.json`: `compaction.threshold = 0.5`
+
+### Tests added in v5.0.1
+
+- 388 npm tests pass
+- 178 vitest tests pass
+- TypeScript: 0 errors
+- Build succeeds
 
 ### Auth note (v4.5.2)
 

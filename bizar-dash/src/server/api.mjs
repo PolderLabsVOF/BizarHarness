@@ -46,6 +46,7 @@ import { createDialogsRouter } from './routes/dialogs.mjs';
 import { createSkillsRouter } from './routes/skills.mjs';
 import { createObsidianRouter } from './routes/obsidian.mjs';
 import { createDiagnosticsRouter } from './routes/diagnostics.mjs';
+import { createDoctorRouter } from './routes/doctor.mjs';
 import { createPairRouter } from './routes/pair.mjs';
 import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
@@ -144,6 +145,12 @@ export async function createApiRouter({
   // v5.0.0 — Voice notes (record, transcribe, list, delete, stream audio).
   router.use(createVoiceRouter({}));
   router.use(createDiagnosticsRouter());
+  // v6.0.0 — Doctor page API. Mounted right after diagnostics so the
+  // /doctor/* paths live next to the legacy /diagnostics/* surface
+  // they conceptually extend. Each route inside is at its bare path
+  // (e.g. '/health'), which becomes '/api/doctor/health' at the top
+  // level once /api is prepended by server.mjs.
+  router.use('/doctor', createDoctorRouter());
   router.use(createPairRouter({ state, broadcast }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Server as ServerIcon, Globe, Save } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { AutosaveField } from '../../components/AutosaveField';
 import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
 import type { Settings } from '../../lib/types';
@@ -11,9 +12,11 @@ type Props = {
   settings: Settings;
   patchAgents: (patch: Partial<Settings['agents']>) => void;
   patchDashboard: (patch: Partial<Settings['dashboard']>) => void;
+  /** Called after state is patched; parent debounces the API save */
+  autoSave?: (key: keyof Settings, value: Settings[keyof Settings]) => void;
 };
 
-export function AgentSection({ settings, patchAgents, patchDashboard }: Props) {
+export function AgentSection({ settings, patchAgents, patchDashboard, autoSave }: Props) {
   const toast = useToast();
   const [pluginOptions, setPluginOptions] = useState<Record<string, number>>({});
 
@@ -139,19 +142,27 @@ export function AgentSection({ settings, patchAgents, patchDashboard }: Props) {
           <label className="field-label" htmlFor="set-allowed-roots">
             Additional allowed roots <span className="muted">(advanced)</span>
           </label>
-          <textarea
-            id="set-allowed-roots"
-            className="textarea"
-            rows={4}
-            placeholder="/workspace&#10;/srv/projects"
-            value={(settings.dashboard.allowedRoots ?? []).join('\n')}
-            onChange={(e) => {
-              const lines = e.target.value
-                .split('\n')
-                .map((l) => l.trim())
-                .filter(Boolean);
+          {/* key= forces re-mount when allowedRoots changes externally (e.g. reset/reload) */}
+          <AutosaveField
+            key={settings.dashboard.allowedRoots?.join('\n')}
+            initialValue={(settings.dashboard.allowedRoots ?? []).join('\n')}
+            delay={1500}
+            saveFn={async (v) => {
+              const lines = v.split('\n').map((l) => l.trim()).filter(Boolean);
               patchDashboard({ allowedRoots: lines });
+              autoSave?.('dashboard', { allowedRoots: lines } as Settings['dashboard']);
             }}
+            render={({ value, onChange, onBlur }) => (
+              <textarea
+                id="set-allowed-roots"
+                className="textarea"
+                rows={4}
+                placeholder="/workspace&#10;/srv/projects"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onBlur={onBlur}
+              />
+            )}
           />
           <p className="field-help">
             Optional. Add filesystem roots beyond your home directory that the file

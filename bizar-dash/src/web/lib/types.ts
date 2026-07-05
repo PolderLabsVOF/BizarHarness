@@ -535,6 +535,140 @@ export type TailscaleStatus = {
   settings: { enabled: boolean; port: number; https: boolean; hostname: string };
 };
 
+// ────────────────────────────────────────────────────────────────────────
+// v6.0.0 — Doctor page types
+// ────────────────────────────────────────────────────────────────────────
+
+export type DoctorStatus = 'ok' | 'warn' | 'fail';
+
+export type DoctorCheck = {
+  name: string;
+  status: DoctorStatus;
+  message: string;
+};
+
+export type DoctorChecks = {
+  system: DoctorCheck[];
+  config: DoctorCheck[];
+  services: DoctorCheck[];
+};
+
+export type DoctorHealth = {
+  ts: string;
+  status: DoctorStatus;
+  issues: DoctorCheck[];
+  groups: DoctorChecks;
+};
+
+export type DoctorCounts = {
+  tasks: number;
+  schedules: number;
+  mods: number;
+  providers: number;
+  mcps: number;
+  agents: number;
+  projects: number;
+  activeProject: string | null;
+  workspaces: number;
+  voiceNotes: number;
+  evalRuns: number;
+  backups: number;
+};
+
+export type DoctorService = {
+  running: boolean;
+  port?: number;
+  host?: string;
+  pid?: number;
+  uptime?: number;
+  error?: string;
+  baseUrl?: string | null;
+  reachable?: boolean;
+  path?: string | null;
+  logPath?: string;
+  logExists?: boolean;
+};
+
+export type DoctorServices = {
+  dashboard: DoctorService;
+  headroom: DoctorService;
+  lightrag: DoctorService;
+  opencode: DoctorService;
+};
+
+export type DoctorRecentError = {
+  line: string;
+  ts: string | null;
+  tsMs: number | null;
+};
+
+export type DoctorOpencode = {
+  configExists: boolean;
+  configPath: string;
+  agentsDir: string;
+  agentFiles: string[];
+  dashboardConnected: boolean;
+};
+
+export type DoctorDisk = {
+  path: string;
+  exists: boolean;
+  sizeBytes: number;
+};
+
+export type DoctorSnapshot = {
+  timestamp: string;
+  bizarVersion: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  uptime: number;
+  memory: NodeJS.MemoryUsage;
+  disk: DoctorDisk;
+  services: DoctorServices;
+  counts: DoctorCounts;
+  recentErrors: DoctorRecentError[];
+  configHealth: DoctorCheck[];
+  opencode: DoctorOpencode;
+  checks: DoctorChecks;
+  health: { status: DoctorStatus; issues: DoctorCheck[] };
+};
+
+/**
+ * The categories the Doctor page renders. Order is the render order.
+ * Each maps 1:1 to either a `DoctorChecks` group or a derived slice.
+ */
+export type DoctorCategory =
+  | 'system'
+  | 'services'
+  | 'counts'
+  | 'errors'
+  | 'actions';
+
+export type DoctorCheckOrInfo =
+  | DoctorCheck
+  | { kind: 'count'; label: string; value: number | string };
+
+export type DoctorPanelProps = {
+  category: DoctorCategory;
+  /** Title shown in the card header. Optional — derived from category if omitted. */
+  title?: string;
+  /** Lucide icon for the header. Optional — derived from category if omitted. */
+  icon?: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }>;
+  /** Per-line entries. Each carries an implicit `ok | warn | fail` status pill. */
+  checks: DoctorCheck[];
+  /**
+   * Plain key/value rows that aren't checks (e.g. counts). Rendered
+   * as a compact two-column list below the check rows when present.
+   */
+  info?: Array<{ label: string; value: string | number }>;
+  /** Meta line shown beneath the title. */
+  meta?: string;
+  /** Optional custom body — bypasses the default check-list render. */
+  children?: React.ReactNode;
+  className?: string;
+};
+
 export type SearchResult = {
   type: string;
   score: number;

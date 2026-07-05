@@ -5,9 +5,17 @@
 // in use, a section for usage/cost placeholders (filled in by the
 // MiniMax usage module when present), and rename / delete / export
 // actions wired to the parent.
+//
+// v5.0.0 — bug #4 fix: the panel now renders a structured error
+// section when the opencode session load fails. The chat-thread
+// header (rendered by Chat.tsx) also shows the error inline; the
+// info-panel error makes it impossible to miss when the right
+// sidebar is in view, and exposes the server's `suggestion` and a
+// Retry button so the operator can act without scrolling.
 
 import { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   MessageSquare,
   Bot,
   Server,
@@ -16,6 +24,7 @@ import {
   Trash2,
   Download,
   CircleDollarSign,
+  RotateCw,
 } from 'lucide-react';
 import type { ChatMessage } from '../../lib/types';
 
@@ -36,6 +45,23 @@ interface Props {
   onExport?: () => void;
   /** Per-action busy flags — disable buttons while pending. */
   busy?: { rename?: boolean; delete?: boolean };
+  /**
+   * v5.0.0 — bug #4: structured error envelope from `loadOpencodeSession`.
+   * When present, the panel renders an error section above the Session
+   * section so the operator can see what went wrong without scrolling.
+   */
+  error?: {
+    code: string;
+    message: string;
+    suggestion?: string | null;
+    canRetry?: boolean;
+  } | null;
+  /**
+   * v5.0.0 — bug #4: retry handler invoked when the operator clicks
+   * the Retry button on the error section. Wired to
+   * `chat.retryOpencodeSession` by Chat.tsx.
+   */
+  onRetry?: () => void;
 }
 
 interface UsageRow {
@@ -86,6 +112,8 @@ export function ChatInfoPanel({
   onDelete,
   onExport,
   busy,
+  error,
+  onRetry,
 }: Props) {
   // Best-effort: pull usage summary from the MiniMax usage endpoint
   // when the session is opencode. Falls back silently if the module
@@ -129,6 +157,42 @@ export function ChatInfoPanel({
 
   return (
     <aside className="chat-info">
+      {error && (
+        <div
+          className="chat-info-section chat-info-error"
+          role="alert"
+          aria-live="polite"
+        >
+          <h4>
+            <AlertTriangle
+              size={11}
+              style={{ marginRight: 4, verticalAlign: -1 }}
+              aria-hidden
+            />{' '}
+            Couldn't load session
+          </h4>
+          <p className="chat-info-value chat-ellipsis" title={error.message}>
+            {error.message}
+          </p>
+          <div className="chat-info-mono">
+            code · {error.code}
+          </div>
+          {error.suggestion ? (
+            <p className="chat-info-suggestion">{error.suggestion}</p>
+          ) : null}
+          {error.canRetry !== false && onRetry ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm chat-info-retry"
+              onClick={onRetry}
+              title="Retry loading the session"
+            >
+              <RotateCw size={12} aria-hidden /> Retry
+            </button>
+          ) : null}
+        </div>
+      )}
+
       <div className="chat-info-section">
         <div className="chat-info-section-head">
           <h4>

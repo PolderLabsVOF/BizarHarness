@@ -892,13 +892,15 @@
    ============================================================ */
 .chat-composer-wrap {
   position: relative;
-  padding: var(--space-3) var(--space-8) var(--space-5);
+  padding: 8px 16px 8px;
   border-top: 1px solid var(--border);
   background: var(--bg);
 }
 .chat-composer-pill {
-  display: flex; align-items: center; gap: var(--space-2);
+  display: flex; align-items: flex-end; gap: var(--space-2);
   width: 100%;
+  min-height: 48px;
+  max-height: 200px;
   padding: 8px 8px 8px 16px;
   background: var(--bg-1);
   border: 1px solid var(--border);
@@ -1480,9 +1482,9 @@
 .chat-composer-textarea {
   flex: 1; min-width: 0; width: 100%; resize: none;
   background: transparent; border: none; outline: none;
-  color: var(--text); font: inherit; font-size: 0.9375rem;
-  line-height: 1.5; padding: 0.5rem 0.5rem;
-  max-height: 200px; overflow-y: auto;
+  color: var(--text); font: inherit; font-size: 14px;
+  line-height: 1.4; padding: 8px 12px;
+  min-height: 24px; max-height: 160px; overflow-y: auto;
 }
 .chat-composer-textarea::placeholder { color: var(--text-muted); }
 .chat-attach-btn {
@@ -1494,6 +1496,7 @@
 .chat-attach-btn:hover { background: var(--bg-2); color: var(--text); }
 .chat-send-btn {
   flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  align-self: flex-end;
   width: 32px; height: 32px; padding: 0; background: var(--accent);
   color: white; border: none; border-radius: var(--radius-sm); cursor: pointer;
 }

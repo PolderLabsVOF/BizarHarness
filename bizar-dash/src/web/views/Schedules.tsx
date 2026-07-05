@@ -13,6 +13,7 @@ import {
   RefreshCw,
   History,
   ChevronDown,
+  LayoutTemplate,
 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
@@ -23,6 +24,8 @@ import { useModal } from '../components/Modal';
 import { api } from '../lib/api';
 import { formatRelative } from '../lib/utils';
 import type { Schedule, Settings, Snapshot } from '../lib/types';
+import { ScheduleTemplateCard } from '../components/ScheduleTemplateCard';
+import type { ScheduleTemplate } from '../components/ScheduleTemplateCard';
 
 type Props = {
   snapshot: Snapshot;
@@ -221,6 +224,9 @@ export function Schedules({ snapshot, refreshSnapshot }: Props) {
   const modal = useModal();
   const [schedules, setSchedules] = useState<Schedule[]>(snapshot.schedules || []);
   const [loading, setLoading] = useState(!snapshot.schedules);
+  const [activeSection, setActiveSection] = useState<'schedules' | 'templates'>('schedules');
+  const [templates, setTemplates] = useState<ScheduleTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   const reload = async () => {
     try {
@@ -235,6 +241,18 @@ export function Schedules({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
+  const loadTemplates = async () => {
+    setTemplatesLoading(true);
+    try {
+      const r = await api.get<{ templates: ScheduleTemplate[] }>('/schedules/templates');
+      setTemplates(r.templates || []);
+    } catch (err) {
+      toast.error(`Templates load failed: ${(err as Error).message}`);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (snapshot.schedules?.length || snapshot.schedules) {
       setSchedules(snapshot.schedules || []);
@@ -244,6 +262,12 @@ export function Schedules({ snapshot, refreshSnapshot }: Props) {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.schedules]);
+
+  useEffect(() => {
+    if (activeSection === 'templates' && templates.length === 0) {
+      loadTemplates();
+    }
+  }, [activeSection]);
 
   const openEditor = (initial?: Schedule) => {
     modal.open({
@@ -294,6 +318,20 @@ export function Schedules({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
+  const onUseTemplate = async (template: ScheduleTemplate) => {
+    try {
+      const saved = await api.post<Schedule>('/schedules/from-template', {
+        templateId: template.id,
+      });
+      setSchedules((cur) => [...cur, saved]);
+      setActiveSection('schedules');
+      toast.success(`Schedule "${saved.name}" created from template.`);
+      await refreshSnapshot();
+    } catch (err) {
+      toast.error(`Failed to create schedule: ${(err as Error).message}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="view-loading"><Spinner size="lg" /></div>
@@ -304,25 +342,69 @@ export function Schedules({ snapshot, refreshSnapshot }: Props) {
     <div className="view view-schedules">
       <header className="view-header">
         <div className="view-header-text">
-          <h2 className="view-title">
-            <Clock size={18} /> Schedules ({schedules.length})
-          </h2>
+          <div className="view-title-row">
+            <h2 className="view-title">
+              <Clock size={18} /> Schedules
+            </h2>
+            <div className="view-section-tabs">
+              <button
+                type="button"
+                className={`tab-btn ${activeSection === 'schedules' ? 'tab-btn-active' : ''}`}
+                onClick={() => setActiveSection('schedules')}
+              >
+                Schedules ({schedules.length})
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${activeSection === 'templates' ? 'tab-btn-active' : ''}`}
+                onClick={() => setActiveSection('templates')}
+              >
+                <LayoutTemplate size={14} /> Templates
+              </button>
+            </div>
+          </div>
           <p className="view-subtitle">
-            Recurring tasks for the active project: <strong>{snapshot.activeProject?.name || '(none)'}</strong>.
-            Service daemon runs them at the right time.
+            {activeSection === 'schedules'
+              ? <>Recurring tasks for <strong>{snapshot.activeProject?.name || '(none)'}</strong>. Service daemon runs them at the right time.</>
+              : 'Example schedules you can use as a starting point.'}
           </p>
         </div>
         <div className="view-actions">
-          <Button variant="secondary" size="sm" onClick={reload}>
-            <RefreshCw size={14} /> Refresh
-          </Button>
-          <Button variant="primary" size="sm" onClick={() => openEditor()}>
-            <Plus size={14} /> New schedule
-          </Button>
+          {activeSection === 'schedules' && (
+            <>
+              <Button variant="secondary" size="sm" onClick={reload}>
+                <RefreshCw size={14} /> Refresh
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => openEditor()}>
+                <Plus size={14} /> New schedule
+              </Button>
+            </>
+          )}
+          {activeSection === 'templates' && (
+            <Button variant="secondary" size="sm" onClick={loadTemplates} disabled={templatesLoading}>
+              <RefreshCw size={14} /> Refresh
+            </Button>
+          )}
         </div>
       </header>
 
-      {schedules.length === 0 ? (
+      {activeSection === 'templates' ? (
+        templatesLoading ? (
+          <div className="view-loading"><Spinner size="lg" /></div>
+        ) : templates.length === 0 ? (
+          <EmptyState
+            icon={<LayoutTemplate size={32} />}
+            title="No templates"
+            message="No schedule templates found. Templates are loaded from templates/schedules/."
+          />
+        ) : (
+          <div className="schedule-template-grid">
+            {templates.map((t) => (
+              <ScheduleTemplateCard key={t.id} template={t} onUse={onUseTemplate} />
+            ))}
+          </div>
+        )
+      ) : schedules.length === 0 ? (
         <EmptyState
           icon={<Clock size={32} />}
           title="No schedules"

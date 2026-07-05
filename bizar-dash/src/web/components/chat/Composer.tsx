@@ -41,7 +41,7 @@ export function Composer({
 }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  useAutoGrowTextarea(inputRef, text, 200);
+  useAutoGrowTextarea(inputRef, text, 160);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

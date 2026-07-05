@@ -56,6 +56,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createConnection, isIP } from 'node:net';
+import { warn as loggerWarn, error as loggerError } from './logger.mjs';
 
 const HOME = homedir();
 
@@ -321,6 +322,147 @@ export async function listOpencodeSessions(info, timeoutMs = 5000) {
 
 export const SERVE_INFO_FILE_PATHS = DEFAULT_SERVE_INFO_FILES;
 
+// ── v5.0.0 — bug #4 — directory resolver (shared between route modules) ──
+//
+// Both `routes/opencode-sessions.mjs` and `routes/opencode-session-detail.mjs`
+// need the same logic: given a sessionId and the plugin's serve-info, figure
+// out which `directory` (worktree) to pass as a `?directory=…` query param
+// to opencode's HTTP API. We previously had two copies of this resolver
+// inline in each route; now there's one in serve-info.mjs so a fix here
+// reaches both routes.
+//
+// Strategy (per issue #4 brief):
+//   1. If serve.json has a `worktree` AND a fast probe (`GET
+//      /api/session/{id}?directory=<worktree>`) succeeds (HTTP 200), use
+//      the worktree — no need to list every opencode session.
+//   2. Otherwise, list every session via `GET /api/session` and find the
+//      one whose id matches. Use its `location.directory` (or the legacy
+//      `worktree` field, if present) as the directory.
+//   3. If neither yields a directory, return null — callers should 503
+//      so the UI can show "directory unknown" rather than sending the
+//      request with a blank `?directory=` (opencode 400s on that).
+//
+// `worktreeHasSession` is a small `GET /api/session/{id}?directory=...`
+// probe used as a fast-path so we don't pay the cost of listing every
+// session on every listMessages call. The endpoint returns 200 when the
+// session exists in that worktree, 404 when it doesn't. We treat 2xx
+// other than 200 as success (opencode has shipped both `200` and `204`
+// on this endpoint across versions).
+
+/**
+ * Lightweight probe — does `sessionId` exist in `worktree`?
+ *
+ * Implemented as `GET /api/session/{id}?directory={worktree}`. Returns
+ * `true` on 2xx, `false` on 404, `null` on network / auth / other
+ * errors (the caller should fall back to the slower list path and
+ * trust THAT result).
+ *
+ * Never throws.
+ *
+ * @param {ServeInfo} info
+ * @param {string} sessionId
+ * @param {string} worktree
+ * @param {number} [timeoutMs]
+ * @returns {Promise<boolean|null>}
+ */
+async function worktreeHasSession(info, sessionId, worktree, timeoutMs = 2_500) {
+  if (!info || !sessionId || !worktree) return null;
+  const url = `${info.baseUrl}/api/session/${encodeURIComponent(sessionId)}?directory=${encodeURIComponent(worktree)}`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: buildAuthHeader(info),
+        Accept: 'application/json',
+      },
+      signal: ac.signal,
+    });
+    if (res.status >= 200 && res.status < 300) return true;
+    if (res.status === 404) return false;
+    // 401/403/5xx → don't trust the result, let the fallback path decide.
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Resolve the opencode `directory` (worktree) for a session.
+ *
+ * Per the brief:
+ *   1. If we have a worktree AND a fast probe confirms the session
+ *      lives there, return it.
+ *   2. Otherwise, list every session and find the matching one; use
+ *      its `location.directory` (or legacy `worktree`).
+ *   3. Return null if neither yields a directory.
+ *
+ * Signature is `(sessionId, serveInfo)` (positional, sessionId first)
+ * to match the brief. Callers that only have `serveInfo` can pass
+ * `null` for `sessionId` and the function will fall through to the
+ * list path.
+ *
+ * Never throws.
+ *
+ * @param {string|null|undefined} sessionId
+ * @param {ServeInfo|null|undefined} serveInfo
+ * @returns {Promise<string|null>}
+ */
+export async function resolveSessionDirectory(sessionId, serveInfo) {
+  if (!serveInfo) return null;
+
+  // Fast path: probe the recorded worktree first. If the session lives
+  // there, we save the round-trip to /api/session.
+  if (typeof serveInfo.worktree === 'string' && serveInfo.worktree.length > 0) {
+    const probe = await worktreeHasSession(serveInfo, sessionId || '', serveInfo.worktree);
+    if (probe === true) return serveInfo.worktree;
+  }
+
+  // Slower fallback: list every session and find the match.
+  try {
+    const sessions = await listOpencodeSessions(serveInfo, 5_000);
+    if (Array.isArray(sessions)) {
+      const entry = sessionId
+        ? sessions.find(
+            (s) =>
+              s && (s.id === sessionId || (typeof s.sessionId === 'string' && s.sessionId === sessionId)),
+          )
+        : null;
+      if (entry) {
+        const dir = entry?.location?.directory;
+        if (typeof dir === 'string' && dir.length > 0) return dir;
+        // Defensive: some opencode builds store the worktree on the
+        // session at the top level instead of under `location`.
+        const legacy = entry?.worktree;
+        if (typeof legacy === 'string' && legacy.length > 0) return legacy;
+      }
+      // No matching session, but we have a worktree from serve.json —
+      // last-chance fallback. This mirrors the pre-v5.0.0 inline
+      // resolver behaviour so an unmatched session still routes to
+      // the plugin's recorded cwd rather than 503'ing.
+      if (!entry && typeof serveInfo.worktree === 'string' && serveInfo.worktree.length > 0) {
+        return serveInfo.worktree;
+      }
+    } else if (typeof serveInfo.worktree === 'string' && serveInfo.worktree.length > 0) {
+      // listOpencodeSessions returned null (serve offline / auth fail).
+      // Fall back to the worktree so we at least try the same
+      // directory the plugin recorded — the upstream 404/502 will
+      // surface a clearer error than a 503 directory_unknown.
+      return serveInfo.worktree;
+    }
+  } catch (err) {
+    loggerWarn('resolveSessionDirectory: listOpencodeSessions failed', {
+      sessionId: sessionId || null,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  return null;
+}
+
 // ── v3.5.4 (bug: dispatch stuck) — spawn helpers ─────────────────────────
 //
 // The dashboard's task delegator used to shell out to
@@ -473,8 +615,21 @@ export async function sendOpencodePrompt(info, opts, directory, timeoutMs = DEFA
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const isAbort = err instanceof Error && err.name === 'AbortError';
+    let cause = 'unknown';
+    if (isAbort) cause = 'timeout';
+    else if (err && typeof err === 'object') {
+      const code = /** @type {any} */ (err).code;
+      if (typeof code === 'string' && code.length > 0) {
+        cause = code.startsWith('ECONN') || code.startsWith('UND_ERR') || code === 'ENOTFOUND'
+          ? 'network'
+          : code;
+      } else {
+        cause = 'network';
+      }
+    }
     return {
       ok: false,
+      cause,
       error: isAbort ? `sendPrompt timed out after ${timeoutMs}ms` : `sendPrompt network error: ${msg}`,
     };
   } finally {
@@ -543,8 +698,25 @@ export async function listOpencodeMessages(info, sessionId, directory, timeoutMs
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const isAbort = err instanceof Error && err.name === 'AbortError';
+    // v5.0.0 — bug #4: surface a structured `cause` to the route so it
+    // can render a useful suggestion without substring-sniffing the
+    // error message. Prefers the underlying network error code
+    // (ECONNREFUSED, UND_ERR_SOCKET, …) when present.
+    let cause = 'unknown';
+    if (isAbort) cause = 'timeout';
+    else if (err && typeof err === 'object') {
+      const code = /** @type {any} */ (err).code;
+      if (typeof code === 'string' && code.length > 0) {
+        cause = code.startsWith('ECONN') || code.startsWith('UND_ERR') || code === 'ENOTFOUND'
+          ? 'network'
+          : code;
+      } else {
+        cause = 'network';
+      }
+    }
     return {
       ok: false,
+      cause,
       error: isAbort ? `listMessages timed out after ${timeoutMs}ms` : `listMessages network error: ${msg}`,
     };
   } finally {

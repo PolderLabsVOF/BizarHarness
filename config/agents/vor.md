@@ -1,7 +1,7 @@
 ---
 description: Vör — Asks clarifying questions for ambiguous or incomplete requests. Reads project context first, then asks one targeted, project-specific question.
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: minimax/MiniMax-M2.7
 color: "#a78bfa"
 permission:
   read: allow

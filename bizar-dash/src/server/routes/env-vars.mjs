@@ -1,7 +1,7 @@
 /**
  * src/server/routes/env-vars.mjs
  *
- * v1 — Bizar env vars stored in ~/.config/bizar/env.json (mode 0600).
+ * v2 — Bizar env vars stored in ~/.config/bizar/env.json (mode 0600).
  *
  * Endpoints:
  *   GET    /api/env-vars           — list all (masked values)
@@ -9,6 +9,9 @@
  *   PUT    /api/env-vars/:name     — update {value}
  *   DELETE /api/env-vars/:name     — remove + delete from process.env
  *   POST   /api/env-vars/:name/test — {referenced, inProcessEnv}
+ *   POST   /api/env-vars/bulk-import — {ok, imported, skipped, errors[]}
+ *   GET    /api/env-vars/export    — text/plain .env format
+ *   GET    /api/env-vars/grouped   — { "BIZAR_*": [...], "PROVIDER_*": [...] }
  *
  * Name must match /^BIZAR_[A-Z0-9_]+$/.
  * On startup, loadEnvJson() sets process.env[name] = value for every entry.
@@ -159,6 +162,69 @@ export function createEnvVarsRouter() {
     const inProcessEnv = name in process.env;
     // Conservative: we don't statically analyze code, so referenced = inProcessEnv for now
     res.json({ referenced: inProcessEnv, inProcessEnv });
+  }));
+
+  // POST /api/env-vars/bulk-import — parse KEY=value lines
+  router.post('/env-vars/bulk-import', wrap(async (req, res) => {
+    const { envContent } = req.body || {};
+    if (typeof envContent !== 'string') {
+      res.status(400).json({ error: 'envContent_required', message: 'envContent string is required' });
+      return;
+    }
+    const lines = envContent.split('\n');
+    const store = readStore();
+    let imported = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) { skipped++; continue; }
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx < 1) { errors.push(`Invalid line (no '='): ${trimmed.slice(0, 40)}`); skipped++; continue; }
+      const rawName = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1);
+      if (!NAME_RE.test(rawName)) { errors.push(`Invalid name: ${rawName}`); skipped++; continue; }
+      const name = rawName.toUpperCase();
+      if (store[name]) { errors.push(`Already exists (skipping): ${name}`); skipped++; continue; }
+      const entry = { value, createdAt: new Date().toISOString(), source: 'bulk-import' };
+      store[name] = entry;
+      process.env[name] = value;
+      imported++;
+    }
+
+    if (imported > 0) writeStore(store);
+    res.json({ ok: true, imported, skipped, errors });
+  }));
+
+  // GET /api/env-vars/export — return .env format
+  router.get('/env-vars/export', wrap(async (_req, res) => {
+    const store = readStore();
+    const lines = [];
+    for (const [name, entry] of Object.entries(store)) {
+      lines.push(`${name}=${entry.value}`);
+    }
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', 'attachment; filename=".env"');
+    res.send(lines.join('\n'));
+  }));
+
+  // GET /api/env-vars/grouped — return vars grouped by prefix
+  router.get('/env-vars/grouped', wrap(async (_req, res) => {
+    const store = readStore();
+    const groups = {};
+    for (const [name, entry] of Object.entries(store)) {
+      // Extract second-level prefix: BIZAR_EXT_A -> EXT_, BIZAR_PROVIDER_KEY -> PROVIDER_
+      const m = name.match(/^BIZAR_([A-Z0-9]+_)/);
+      const prefix = m ? m[1] : name;
+      (groups[prefix] ??= []).push({
+        name,
+        value: mask(entry.value),
+        createdAt: entry.createdAt,
+        source: entry.source,
+      });
+    }
+    res.json(groups);
   }));
 
   return router;

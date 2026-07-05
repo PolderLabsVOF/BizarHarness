@@ -2,6 +2,7 @@
 import React from 'react';
 import { Layout as LayoutIcon } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../../components/Card';
+import { AutosaveField } from '../../components/AutosaveField';
 import { cn } from '../../lib/utils';
 import type { Settings } from '../../lib/types';
 
@@ -9,6 +10,8 @@ type Props = {
   settings: Settings;
   patchUi: (patch: Partial<Settings['ui']>) => void;
   patchTop: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  /** Called by AutosaveField after state is patched; the parent debounces the API save */
+  autoSave?: (key: keyof Settings, value: Settings[keyof Settings]) => void;
 };
 
 const LAYOUTS = [
@@ -17,7 +20,7 @@ const LAYOUTS = [
   { id: 'both', label: 'Both' },
 ] as const;
 
-export function GeneralSection({ settings, patchUi, patchTop }: Props) {
+export function GeneralSection({ settings, patchUi, patchTop, autoSave }: Props) {
   return (
     <>
       {/* UI Layout */}
@@ -79,24 +82,44 @@ export function GeneralSection({ settings, patchUi, patchTop }: Props) {
         <CardMeta>Default agent + model override.</CardMeta>
         <div className="field" data-setting-id="defaultAgent">
           <label className="field-label" htmlFor="set-default-agent">Default agent</label>
-          <input
-            id="set-default-agent"
-            className="input"
-            type="text"
-            placeholder="e.g. odin"
-            value={settings.defaultAgent || ''}
-            onChange={(e) => patchTop('defaultAgent', e.target.value)}
+          <AutosaveField
+            initialValue={settings.defaultAgent || ''}
+            saveFn={async (v) => {
+              patchTop('defaultAgent', v);
+              autoSave?.('defaultAgent', v);
+            }}
+            render={({ value, onChange, onBlur }) => (
+              <input
+                id="set-default-agent"
+                className="input"
+                type="text"
+                placeholder="e.g. odin"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onBlur={onBlur}
+              />
+            )}
           />
         </div>
         <div className="field" data-setting-id="defaultModel">
           <label className="field-label" htmlFor="set-default-model">Model override</label>
-          <input
-            id="set-default-model"
-            className="input"
-            type="text"
-            placeholder="(leave empty for provider default)"
-            value={settings.defaultModel || ''}
-            onChange={(e) => patchTop('defaultModel', e.target.value)}
+          <AutosaveField
+            initialValue={settings.defaultModel || ''}
+            saveFn={async (v) => {
+              patchTop('defaultModel', v);
+              autoSave?.('defaultModel', v);
+            }}
+            render={({ value, onChange, onBlur }) => (
+              <input
+                id="set-default-model"
+                className="input"
+                type="text"
+                placeholder="(leave empty for provider default)"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onBlur={onBlur}
+              />
+            )}
           />
         </div>
       </Card>

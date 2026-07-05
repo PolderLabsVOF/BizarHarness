@@ -1,0 +1,13 @@
+{
+  "id": "template-weekly-digest",
+  "name": "Weekly digest",
+  "description": "Generate the weekly digest every Sunday at 00:00",
+  "type": "cron",
+  "schedule": "0 0 * * 0",
+  "action": {
+    "type": "agent",
+    "target": "",
+    "prompt": "Generate the weekly digest and save to vault"
+  },
+  "tags": ["memory", "reporting"]
+}

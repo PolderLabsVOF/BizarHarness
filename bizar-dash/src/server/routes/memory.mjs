@@ -48,6 +48,9 @@ function redactLightRAGConfig(config) {
 }
 
 export function createMemoryRouter({ projectRoot }) {
+  // Auto-create the default vault and git-init if needed — idempotent.
+  memoryStore.ensureVaultExists();
+
   const router = Router();
 
   // GET /memory/status

@@ -131,8 +131,8 @@ export const DEFAULT_SETTINGS = {
   },
   systemLlm: {
     enabled: true,
-    provider: 'opencode',
-    model: 'opencode/deepseek-v4-flash-free',
+    provider: 'minimax',
+    model: 'minimax/MiniMax-M2.7',
   },
   // v4.5.0 — MiniMax Token Plan integration. `apiKey` is the
   // user's Subscription Key from

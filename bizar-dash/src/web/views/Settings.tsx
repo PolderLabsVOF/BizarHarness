@@ -1,5 +1,5 @@
 // src/views/Settings.tsx — v4 settings shell: routes to focused sub-components.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Sliders, Save, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '../components/Button';
 import { useToast } from '../components/Toast';
@@ -18,12 +18,8 @@ import { AgentSection } from './settings/AgentSection';
 import { SystemLlmSection } from './settings/SystemLlmSection';
 import { HeadroomSection } from './settings/HeadroomSection';
 import { ActivitySection } from './settings/ActivitySection';
-import { EnvVarsSection } from './settings/EnvVarsSection';
-import { ProvidersSection } from './settings/ProvidersSection';
-import { MemorySection } from './settings/MemorySection';
-import { SkillsSection } from './settings/SkillsSection';
-import { BackupSection } from './settings/BackupSection';
 import { WorkspacesSection } from './settings/WorkspacesSection';
+import { EnvVarsSection } from './settings/EnvVarsSection';
 
 type Props = {
   snapshot: Snapshot;
@@ -31,6 +27,12 @@ type Props = {
   activeTab: string;
   setActiveTab: (id: string) => void;
   refreshSnapshot: () => Promise<void>;
+  /** v4.9.0 — When true, navigation uses the sidebar instead of the subnav bar. */
+  settingsMode?: boolean;
+  /** v4.9.0 — The active section. Null means "show all". Used when settingsMode is true. */
+  settingsActiveSection?: string | null;
+  /** v4.9.0 — Called when the user selects a section via the sidebar. */
+  setSettingsActiveSection?: (id: string | null) => void;
 };
 
 const SECTION_LINKS = [
@@ -38,6 +40,7 @@ const SECTION_LINKS = [
   { id: 'updates', label: 'Updates' },
   { id: 'layout', label: 'Layout' },
   { id: 'general', label: 'General' },
+  { id: 'env-vars', label: 'Env Vars' },
   { id: 'network', label: 'Network' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'auth', label: 'Auth' },
@@ -48,11 +51,6 @@ const SECTION_LINKS = [
   { id: 'headroom', label: 'Headroom' },
   { id: 'activity-log', label: 'Activity' },
   { id: 'about', label: 'About' },
-  { id: 'env-vars', label: 'Env Vars' },
-  { id: 'providers', label: 'Providers' },
-  { id: 'memory', label: 'Memory' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'backup', label: 'Backup' },
   { id: 'workspaces', label: 'Workspaces' },
 ] as const;
 
@@ -82,6 +80,9 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'general', label: 'General', fields: [
     { key: 'defaultAgent', label: 'Default agent', section: 'general' },
     { key: 'defaultModel', label: 'Model override', section: 'general' },
+  ] },
+  { id: 'env-vars', label: 'Environment Variables', fields: [
+    { key: 'env-vars.count', label: 'Env var count', section: 'env-vars' },
   ] },
   { id: 'network', label: 'Network', fields: [
     { key: 'tailscale.enabled', label: 'Tailscale Serve', section: 'network' },
@@ -131,25 +132,9 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     { key: 'about.homepage', label: 'Homepage', section: 'about' },
     { key: 'about.license', label: 'License', section: 'about' },
   ] },
-  { id: 'env-vars', label: 'Env Vars', fields: [
-    { key: 'env.add', label: 'Add variable', section: 'env-vars' },
-  ] },
-  { id: 'providers', label: 'Providers', fields: [
-    { key: 'providers.list', label: 'Provider list', section: 'providers' },
-  ] },
-  { id: 'memory', label: 'Memory', fields: [
-    { key: 'memory.config', label: 'Memory config', section: 'memory' },
-  ] },
-  { id: 'skills', label: 'Skills', fields: [
-    { key: 'skills.paths', label: 'Skill paths', section: 'skills' },
-  ] },
-  { id: 'backup', label: 'Backup', fields: [
-    { key: 'backup.create', label: 'Create backup', section: 'backup' },
-    { key: 'backup.restore', label: 'Restore backup', section: 'backup' },
-  ] },
 ];
 
-function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
+function SettingsViewInner({ settings: initial, refreshSnapshot, settingsMode, settingsActiveSection, setSettingsActiveSection, setActiveTab }: Props) {
   const toast = useToast();
   const [settings, setSettings] = useState<Settings>(initial);
   const [dirty, setDirty] = useState(false);
@@ -158,9 +143,30 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
   const [tailscaleDraft, setTailscaleDraft] = useState({ port: 4321, https: true, hostname: '' });
   const [authStatus, setAuthStatus] = useState<{ required: boolean; loopback: boolean; peer: string } | null>(null);
 
+  // v4.9.0 — Exit settings mode by switching back to overview tab.
+  const handleExitSettings = () => { setActiveTab('overview'); };
+
   useEffect(() => { setSettings(initial); setDirty(false); if (initial.theme) applyThemeTokens(initial.theme); }, [initial]);
   useEffect(() => { if (!tailscale) return; setTailscaleDraft({ port: tailscale.settings.port, https: tailscale.settings.https !== false, hostname: tailscale.settings.hostname || '' }); }, [tailscale]);
   useEffect(() => { api.get<TailscaleStatus>('/tailscale/status').then(setTailscale).catch(() => undefined); }, []);
+
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const autoSave = useCallback(async (key: keyof Settings, value: Settings[keyof Settings]) => {
+    setSettings((cur) => ({ ...cur, [key]: value }));
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await api.put('/settings', { ...settings, [key]: value });
+      } catch (err) {
+        console.error('autoSave failed', err);
+      }
+    }, 300);
+  }, [settings]);
+
+  useEffect(() => () => {
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+  }, []);
 
   const patchTheme = (patch: Partial<Settings['theme']>) => { setSettings((cur) => { const next = { ...cur, theme: { ...cur.theme, ...patch } }; applyThemeTokens(next.theme); return next; }); setDirty(true); };
   const patchUi = (patch: Partial<Settings['ui']>) => { setSettings((cur) => ({ ...cur, ui: { ...cur.ui, ...patch } })); setDirty(true); };
@@ -169,19 +175,36 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
   const patchAgents = (patch: Partial<Settings['agents']>) => { setSettings((cur) => ({ ...cur, agents: { ...cur.agents, ...patch } })); setDirty(true); };
   const patchDashboard = (patch: Partial<Settings['dashboard']>) => { setSettings((cur) => ({ ...cur, dashboard: { ...cur.dashboard, ...patch } })); setDirty(true); };
 
-  const [activeSection, setActiveSection] = useState<string | null>(() => {
+  // v4.9.0 — In settingsMode, section navigation is driven by the sidebar via
+  // settingsActiveSection (shared state at App level). Outside settingsMode,
+  // fall back to local hash-based state for backwards compatibility.
+  const [localActiveSection, setLocalActiveSection] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     const hash = window.location.hash.replace(/^#settings-/, '');
     return SECTION_LINKS.some((s) => s.id === hash) ? hash : null;
   });
 
-  const onJumpSection = (id: string | null) => {
-    setActiveSection(id);
-    try {
-      history.replaceState(null, '', id ? `#settings-${id}` : window.location.pathname);
-      if (id) { const el = document.getElementById(`settings-${id}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-      else window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch { /* ignore */ }
+  // The effective active section: use sidebar state in settingsMode, local state otherwise.
+  const activeSection = settingsMode ? (settingsActiveSection ?? null) : localActiveSection;
+
+  // v4.9.0 — In settingsMode, update the shared App-level state. Otherwise update local state.
+  const handleJumpSection = (id: string | null) => {
+    if (settingsMode) {
+      setSettingsActiveSection?.(id);
+    } else {
+      setLocalActiveSection(id);
+      try {
+        history.replaceState(null, '', id ? `#settings-${id}` : window.location.pathname);
+        if (id) { const el = document.getElementById(`settings-${id}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch { /* ignore */ }
+    }
+    if (id) {
+      const el = document.getElementById(`settings-${id}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const onTailscaleToggle = async () => {
@@ -222,6 +245,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
   const sp = { settings, patchTheme, patchUi, patchTop, patchNotifications, patchAgents, patchDashboard };
   const about = settings.about || { version: '3.0.4', homepage: 'https://github.com/DrB0rk/BizarHarness', license: 'MIT' };
 
+  // v4.9.0 — showAll means no section is filtered (activeSection is null).
   const showAll = activeSection === null;
   const sectionOf = (id: string) => activeSection === id;
 
@@ -241,31 +265,37 @@ function SettingsViewInner({ settings: initial, refreshSnapshot }: Props) {
         </div>
       </header>
 
-      <SettingsSearch sections={SETTINGS_SECTIONS} onJump={onJumpSection} />
+      {settingsMode && (
+        <div className="settings-mode-banner">
+          <span>You're in settings mode. All sections are visible in the sidebar.</span>
+          <Button variant="secondary" size="sm" onClick={handleExitSettings}>← Back to main view</Button>
+        </div>
+      )}
 
+      <SettingsSearch sections={SETTINGS_SECTIONS} onJump={handleJumpSection} />
+
+      {/* v4.9.0 — Subnav removed; section navigation is now driven by the sidebar */}
+      {/*
       <nav className="settings-subnav" aria-label="Settings sections">
-        <button type="button" className={cn('settings-subnav-button', 'settings-subnav-button-all', showAll && 'settings-subnav-button-active')} onClick={() => onJumpSection(null)} title="Show all settings sections">All</button>
+        <button type="button" className={cn('settings-subnav-button', 'settings-subnav-button-all', showAll && 'settings-subnav-button-active')} onClick={() => handleJumpSection(null)} title="Show all settings sections">All</button>
         {SECTION_LINKS.map((s) => (
-          <button key={s.id} type="button" className={cn('settings-subnav-button', activeSection === s.id && 'settings-subnav-button-active')} onClick={() => onJumpSection(s.id)}>{s.label}</button>
+          <button key={s.id} type="button" className={cn('settings-subnav-button', activeSection === s.id && 'settings-subnav-button-active')} onClick={() => handleJumpSection(s.id)}>{s.label}</button>
         ))}
       </nav>
+      */}
 
       <div className={cn('settings-grid', activeSection && 'settings-grid-filtered')} data-active-section={activeSection || undefined}>
         {(showAll || sectionOf('theme')) && <ThemeSection {...sp} />}
         {(showAll || sectionOf('updates')) && <UpdatesSection />}
-        {(showAll || sectionOf('layout') || sectionOf('general')) && <GeneralSection {...sp} />}
+        {(showAll || sectionOf('layout') || sectionOf('general')) && <GeneralSection {...sp} autoSave={autoSave} />}
+        {(showAll || sectionOf('env-vars')) && <EnvVarsSection />}
         {(showAll || sectionOf('network') || sectionOf('service') || sectionOf('tailscale')) && <NetworkSection tailscale={tailscale} tailscaleDraft={tailscaleDraft} setTailscaleDraft={setTailscaleDraft} onTailscaleToggle={onTailscaleToggle} />}
         {(showAll || sectionOf('notifications')) && <NotificationsSection {...sp} />}
         {(showAll || sectionOf('auth')) && <AuthSection settings={settings} authStatus={authStatus} setAuthStatus={setAuthStatus} />}
-        {(showAll || sectionOf('agents') || sectionOf('dashboard') || sectionOf('background')) && <AgentSection {...sp} />}
+        {(showAll || sectionOf('agents') || sectionOf('dashboard') || sectionOf('background')) && <AgentSection {...sp} autoSave={autoSave} />}
         {(showAll || sectionOf('system-llm')) && <SystemLlmSection {...sp} />}
         {(showAll || sectionOf('headroom')) && <HeadroomSection settings={settings} setSettings={setSettings} setDirty={setDirty} />}
         {(showAll || sectionOf('activity-log') || sectionOf('about')) && <ActivitySection about={about} />}
-        {(showAll || sectionOf('env-vars')) && <EnvVarsSection />}
-        {(showAll || sectionOf('providers')) && <ProvidersSection />}
-        {(showAll || sectionOf('memory')) && <MemorySection />}
-        {(showAll || sectionOf('skills')) && <SkillsSection />}
-        {(showAll || sectionOf('backup')) && <BackupSection />}
         {(showAll || sectionOf('workspaces')) && <WorkspacesSection />}
       </div>
     </div>

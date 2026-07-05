@@ -1,14 +1,13 @@
-// src/web/views/memory/ConfigPanel.tsx — global memory config + per-system toggles.
+// src/web/views/memory/ConfigPanel.tsx — simplified memory config.
 import { useEffect, useState } from 'react';
 import {
-  Brain,
-  Database,
-  FileText,
   GitBranch,
+  GitCommitHorizontal,
+  Download,
+  Upload,
   Loader2,
   Plug,
   Save,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Card, CardMeta, CardTitle } from '../../components/Card';
@@ -17,10 +16,19 @@ import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 
+type GitConfig = {
+  remoteUrl?: string;
+};
+
 type GlobalConfig = {
-  lightrag?: { enabled?: boolean; url?: string; llm?: string; embedding?: string };
-  obsidian?: { vaultPath?: string; syncInterval?: number };
-  git?: { repoPath?: string; remoteUrl?: string; branch?: string; autoSync?: boolean };
+  git?: GitConfig;
+};
+
+type SyncStatus = {
+  clean?: boolean;
+  branch?: string;
+  modified?: number;
+  untracked?: number;
 };
 
 type Props = { refreshKey: number };
@@ -30,6 +38,10 @@ export function ConfigPanel({ refreshKey }: Props) {
   const [cfg, setCfg] = useState<GlobalConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [remoteUrl, setRemoteUrl] = useState('');
+  const [vaultPath] = useState<string>('');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tests, setTests] = useState<Array<{ name: string; pass: boolean; detail: string }> | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -38,10 +50,29 @@ export function ConfigPanel({ refreshKey }: Props) {
     try {
       const r = await api.get<{ config: GlobalConfig }>('/memory/config/global');
       setCfg(r.config);
+      setRemoteUrl(r.config?.git?.remoteUrl || '');
+      // Also fetch git status from the per-project vault
+      await loadSyncStatus();
     } catch (err) {
       toast.error(`Config load failed: ${(err as Error).message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSyncStatus = async () => {
+    try {
+      const r = await api.get<{ ok: boolean; clean?: boolean; branch?: string; modified?: number; untracked?: number }>('/memory/git/status');
+      if (r.ok) {
+        setSyncStatus({
+          clean: r.clean,
+          branch: r.branch,
+          modified: r.modified,
+          untracked: r.untracked,
+        });
+      }
+    } catch {
+      // git status is best-effort
     }
   };
 
@@ -50,20 +81,40 @@ export function ConfigPanel({ refreshKey }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
-  const update = (block: keyof GlobalConfig, key: string, value: unknown) => {
-    setCfg((cur) => cur ? { ...cur, [block]: { ...(cur[block] || {}), [key]: value } } : cur);
-  };
-
   const onSave = async () => {
     if (!cfg) return;
     setSaving(true);
     try {
-      await api.put('/memory/config/global', cfg);
+      await api.put('/memory/config/global', { git: { remoteUrl } });
       toast.success('Config saved.');
     } catch (err) {
       toast.error(`Save failed: ${(err as Error).message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const runAction = async (action: 'pull' | 'push' | 'commit') => {
+    setActionLoading(action);
+    try {
+      if (action === 'pull') {
+        const r = await api.post<{ ok: boolean; output?: string }>('/memory/git/pull', {});
+        if (r.ok) toast.success('Pull successful.');
+        else toast.error(`Pull failed: ${r.output || 'unknown error'}`);
+      } else if (action === 'push') {
+        const r = await api.post<{ ok: boolean }>('/memory/git/push', {});
+        if (r.ok) toast.success('Push successful.');
+        else toast.error('Push failed.');
+      } else if (action === 'commit') {
+        const r = await api.post<{ ok: boolean; message?: string }>('/memory/git/commit', {});
+        if (r.ok) toast.success(`Committed: ${r.message}`);
+        else toast.error('Commit failed.');
+      }
+      await loadSyncStatus();
+    } catch (err) {
+      toast.error(`${action} failed: ${(err as Error).message}`);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -94,144 +145,75 @@ export function ConfigPanel({ refreshKey }: Props) {
 
   return (
     <div className="memory-panel-content">
-      {/* ── LightRAG ──────────────────────────────────────────────── */}
-      <Card>
-        <CardTitle><Brain size={14} /> LightRAG</CardTitle>
-        <CardMeta>URL + model overrides. Server-side defaults from <code>opencode Zen free tier</code>.</CardMeta>
-        <div className="memory-config-form">
-          <Row label="Enabled" inline>
-            <label className="memory-switch">
-              <input
-                type="checkbox"
-                checked={!!cfg.lightrag?.enabled}
-                onChange={(e) => update('lightrag', 'enabled', e.target.checked)}
-              />
-              <span>{cfg.lightrag?.enabled ? 'on' : 'off'}</span>
-            </label>
-          </Row>
-          <Row label="URL">
-            <input
-              type="text"
-              className="input mono"
-              value={cfg.lightrag?.url || ''}
-              onChange={(e) => update('lightrag', 'url', e.target.value)}
-              placeholder="http://127.0.0.1:9621"
-            />
-          </Row>
-          <Row label="LLM model">
-            <input
-              type="text"
-              className="input mono"
-              value={cfg.lightrag?.llm || ''}
-              onChange={(e) => update('lightrag', 'llm', e.target.value)}
-              placeholder="opencode/gpt-5-nano"
-            />
-          </Row>
-          <Row label="Embedding">
-            <input
-              type="text"
-              className="input mono"
-              value={cfg.lightrag?.embedding || ''}
-              onChange={(e) => update('lightrag', 'embedding', e.target.value)}
-              placeholder="opencode/text-embedding-3-small"
-            />
-          </Row>
-        </div>
-      </Card>
-
-      {/* ── Obsidian ──────────────────────────────────────────────── */}
-      <Card>
-        <CardTitle><FileText size={14} /> Obsidian vault</CardTitle>
-        <CardMeta>Path + sync cadence for the markdown vault.</CardMeta>
-        <div className="memory-config-form">
-          <Row label="Vault path">
-            <input
-              type="text"
-              className="input mono"
-              value={cfg.obsidian?.vaultPath || ''}
-              onChange={(e) => update('obsidian', 'vaultPath', e.target.value)}
-              placeholder="/home/me/vault"
-            />
-          </Row>
-          <Row label="Sync interval (seconds)">
-            <input
-              type="number"
-              min={0}
-              max={2592000}
-              className="input mono"
-              value={cfg.obsidian?.syncInterval ?? 300}
-              onChange={(e) => update('obsidian', 'syncInterval', Number(e.target.value))}
-            />
-          </Row>
-        </div>
-      </Card>
-
-      {/* ── Git ───────────────────────────────────────────────────── */}
+      {/* ── Git sync ───────────────────────────────────────────────────── */}
       <Card>
         <CardTitle><GitBranch size={14} /> Git sync</CardTitle>
-        <CardMeta>Repo path, remote, branch, and auto-sync toggle.</CardMeta>
+        <CardMeta>Configure the git remote and sync your memory vault.</CardMeta>
         <div className="memory-config-form">
-          <Row label="Repo path">
-            <input
-              type="text"
-              className="input mono"
-              value={cfg.git?.repoPath || ''}
-              onChange={(e) => update('git', 'repoPath', e.target.value)}
-              placeholder="/path/to/repo"
-            />
+          <Row label="Vault path" inline>
+            <span className="memory-vault-path mono muted">{vaultPath || '(loading…)'}</span>
           </Row>
           <Row label="Remote URL">
             <input
               type="text"
               className="input mono"
-              value={cfg.git?.remoteUrl || ''}
-              onChange={(e) => update('git', 'remoteUrl', e.target.value)}
+              value={remoteUrl}
+              onChange={(e) => setRemoteUrl(e.target.value)}
               placeholder="git@github.com:org/repo.git"
             />
           </Row>
-          <Row label="Branch">
-            <input
-              type="text"
-              className="input mono"
-              value={cfg.git?.branch || 'main'}
-              onChange={(e) => update('git', 'branch', e.target.value)}
-              placeholder="main"
-            />
-          </Row>
-          <Row label="Auto-sync" inline>
-            <label className="memory-switch">
-              <input
-                type="checkbox"
-                checked={!!cfg.git?.autoSync}
-                onChange={(e) => update('git', 'autoSync', e.target.checked)}
-              />
-              <span>{cfg.git?.autoSync ? 'on' : 'off'}</span>
-            </label>
-          </Row>
+          {syncStatus && (
+            <Row label="Status" inline>
+              <span className={cn('memory-pill', syncStatus.clean ? 'memory-pill-ok' : 'memory-pill-warn')}>
+                {syncStatus.clean ? 'clean' : 'dirty'}
+              </span>
+              {syncStatus.branch && (
+                <span className="muted" style={{ marginLeft: 8 }}>
+                  <GitBranch size={12} style={{ display: 'inline' }} /> {syncStatus.branch}
+                </span>
+              )}
+              {!syncStatus.clean && syncStatus.modified !== undefined && (
+                <span className="muted" style={{ marginLeft: 8 }}>
+                  {syncStatus.modified} modified, {syncStatus.untracked} untracked
+                </span>
+              )}
+            </Row>
+          )}
+        </div>
+        <div className="memory-action-row" style={{ marginTop: 12 }}>
+          <Button
+            variant="secondary"
+            onClick={() => runAction('pull')}
+            disabled={actionLoading !== null}
+          >
+            {actionLoading === 'pull' ? <Loader2 size={12} className="memory-spin" /> : <Download size={12} />}
+            Pull
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => runAction('commit')}
+            disabled={actionLoading !== null}
+          >
+            {actionLoading === 'commit' ? <Loader2 size={12} className="memory-spin" /> : <GitCommitHorizontal size={12} />}
+            Commit
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => runAction('push')}
+            disabled={actionLoading !== null}
+          >
+            {actionLoading === 'push' ? <Loader2 size={12} className="memory-spin" /> : <Upload size={12} />}
+            Push
+          </Button>
         </div>
       </Card>
 
-      {/* ── CCR (placeholder when Headroom is installed) ─────────── */}
-      <Card>
-        <CardTitle>
-          <Sparkles size={14} /> CCR (Compress-Cache-Retrieve)
-        </CardTitle>
-        <CardMeta>
-          Reversible compression for very long conversations. Enabled automatically
-          when the Headroom mod is installed.
-        </CardMeta>
-        <div className="muted text-sm">
-          See Settings → Headroom for CCR configuration. This panel will surface
-          retention + compression-ratio controls when the mod is active.
-        </div>
-      </Card>
-
-      {/* ── Test all connections ─────────────────────────────────── */}
+      {/* ── Connection tests ─────────────────────────────────────────── */}
       <Card>
         <CardTitle>
           <Plug size={14} /> Connection tests
         </CardTitle>
-        <CardMeta>Verify the configured git repo, remote, and path.</CardMeta>
+        <CardMeta>Verify the configured git remote is reachable.</CardMeta>
         <div className="memory-action-row">
           <Button variant="secondary" onClick={onTest} disabled={testing}>
             {testing ? <Loader2 size={12} className="memory-spin" /> : <Plug size={12} />}
@@ -292,4 +274,3 @@ function Row({
     </label>
   );
 }
-

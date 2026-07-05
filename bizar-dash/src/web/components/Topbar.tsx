@@ -23,6 +23,7 @@ import {
   Radio,
   Coins,
   Brain,
+  Stethoscope,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -52,6 +53,11 @@ export const TABS: TabDef[] = [
   { id: 'schedules', label: 'Schedules', icon: Clock },
   { id: 'history', label: 'History', icon: HistoryIcon },
   { id: 'minimax', label: 'Usage', icon: Coins },
+  // v6.0.0 — Doctor page. Lives between Overview and Settings so the
+  // "is everything healthy?" question is always one click from the
+  // home screen and from the settings surface (where an operator
+  // typically arrives after something looks off).
+  { id: 'doctor', label: 'Doctor', icon: Stethoscope },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 
@@ -155,6 +161,11 @@ export function Topbar({
               >
                 <Icon size={14} className="tab-icon" />
                 <span className="tab-label">{tab.label}</span>
+                {tab.id === 'settings' && active && (
+                  <span className="settings-mode-indicator" title="Settings mode active">
+                    <Settings2 size={12} />
+                  </span>
+                )}
               </button>
             );
           })}

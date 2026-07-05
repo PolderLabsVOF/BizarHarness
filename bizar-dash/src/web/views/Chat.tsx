@@ -354,7 +354,21 @@ export function Chat({
               </div>
               {chat.opencodeError && (
                 <div className="chat-thread-error" role="alert">
-                  {chat.opencodeError}
+                  <p className="chat-error-message">{chat.opencodeError}</p>
+                  {chat.opencodeSuggestion && (
+                    <p className="chat-error-suggestion">{chat.opencodeSuggestion}</p>
+                  )}
+                  {chat.activeOpencodeSessionId && (
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      onClick={() =>
+                        chat.loadOpencodeSession(chat.activeOpencodeSessionId!)
+                      }
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               )}
             </div>

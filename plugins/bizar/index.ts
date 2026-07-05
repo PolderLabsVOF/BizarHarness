@@ -143,6 +143,18 @@ import { executeSideEffect, type ExecuteOptions } from "./src/commands-impl.js";
 import { join as pathJoin } from "node:path";
 import { homedir } from "node:os";
 
+// v0.6.3 — Compaction gate. Configures the compaction threshold from
+// `rawOptions.compaction.threshold` (default 0.5) and wires two opencode
+// hooks: `experimental.session.compacting` (push a Bizar-policy note onto
+// the compaction prompt) and `experimental.compaction.autocontinue`
+// (skip the synthetic "continue" turn when our policy decides to compact).
+// The pure decision logic lives in `src/compaction.mjs`.
+import {
+  getCompactionThreshold,
+  setCompactionThreshold,
+  resetCompactionDefaults,
+} from "./src/compaction.mjs";
+
 // --- Env-var constants (per spec §8) -------------------------------------
 
 /** `BIZAR_SERVE_PORT` — default 0 (random). */
@@ -401,6 +413,29 @@ async function init(
 
   const logger = createLogger(input.client as unknown as Parameters<typeof createLogger>[0]);
   loggerHandle = logger;
+
+  // v0.6.3 — Compaction gate. Read the user-configured threshold from
+  // `rawOptions.compaction.threshold` (default 0.5). Invalid values are
+  // caught by `setCompactionThreshold` and logged; we fall back to the
+  // module default rather than crashing init (per spec §8.1: any init
+  // error must not break the plugin).
+  resetCompactionDefaults();
+  const compactionCfg = (rawOptions as Record<string, unknown> | undefined)
+    ?.compaction as { threshold?: unknown } | undefined;
+  if (compactionCfg && typeof compactionCfg.threshold === "number") {
+    try {
+      setCompactionThreshold(compactionCfg.threshold);
+      logger.info(
+        `bizar: compaction threshold set to ${compactionCfg.threshold} (from plugin options)`,
+      );
+    } catch (err) {
+      logger.warn(
+        `bizar: invalid compaction threshold ${String(compactionCfg.threshold)}; using default ${getCompactionThreshold()}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
 
   // §6.4 — refuse to start if logDir or stateDir is inside a secret dir.
   const offending = findOffendingPath(options);
@@ -1411,6 +1446,48 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
 
     // v0.4.2 — register the 4 background tools.
     tool: tools,
+
+    // v0.6.3 — Compaction gate. Called by opencode BEFORE it starts a
+    // session compaction. We append a one-line Bizar policy note so the
+    // model summarises with our threshold in mind (the default opencode
+    // compaction prompt doesn't know about our 50% trigger). The threshold
+    // itself was set during `init()` from `rawOptions.compaction.threshold`.
+    "experimental.session.compacting": async (_input, output) => {
+      try {
+        const threshold = getCompactionThreshold();
+        output.context.push(
+          `Bizar compaction policy: this compaction was triggered at the configured ${threshold} ratio of context usage. Preserve technical decisions, file paths, error messages, and unresolved questions verbatim in the summary; compress conversational filler.`,
+        );
+      } catch (err) {
+        ctx.logger.warn(
+          `bizar: experimental.session.compacting failed (passing through): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    },
+
+    // v0.6.3 — Compaction auto-continue gate. Called by opencode AFTER
+    // compaction succeeds and BEFORE it injects a synthetic user "continue"
+    // message. We disable auto-continue when compaction was actually
+    // triggered (so the user sees the compacted state and can drive the
+    // next step), and let auto-continue proceed otherwise. We can't read
+    // the live usage ratio here, so we use the configured threshold as a
+    // proxy: if it's been lowered below 1.0, the policy is "compact
+    // early", and we want the user in the loop.
+    "experimental.compaction.autocontinue": async (_input, output) => {
+      try {
+        if (getCompactionThreshold() < 1.0) {
+          output.enabled = false;
+        }
+      } catch (err) {
+        ctx.logger.warn(
+          `bizar: experimental.compaction.autocontinue failed (passing through): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    },
 
     // v0.4.2 — dispose hook. Opencode calls this when the plugin is
     // being torn down. We do a best-effort cleanup similar to the

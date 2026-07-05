@@ -5,6 +5,13 @@
 //   - bizar     (GET /api/chat)
 //   - opencode  (GET /api/opencode-sessions/:id/messages + SSE)
 //
+// v5.0.0 — bug #4 fix: `loadOpencodeSession` failure path now extracts
+// structured `code`, `cause`, `status`, and `suggestion` from the
+// server's ApiError.data envelope and exposes them via a new
+// `opencodeErrorInfo` field. `ChatInfoPanel` consumes that field to
+// render a structured "Couldn't load session" panel with the server's
+// `suggestion` verbatim, plus a Retry button.
+//
 // Changes from v3.22:
 //   * SSE has automatic reconnect-with-backoff (1s → 30s, doubled on
 //     each error up to a cap). Closes cleanly on unmount and on
@@ -59,6 +66,31 @@ export interface ChatBusyState {
   delete: boolean;
 }
 
+/**
+ * Structured error envelope surfaced by `loadOpencodeSession` when
+ * the upstream `/api/opencode-sessions/:id/messages` call fails.
+ *
+ * - `code` mirrors the server's `error` field (`plugin_offline`,
+ *   `directory_unknown`, `opencode_error`, `bad_request`).
+ * - `cause` is the server's structured cause (`network`, `timeout`,
+ *   `unknown`, or a raw ECONNREFUSED-style string).
+ * - `suggestion` is the operator-friendly hint from the server
+ *   (e.g. "Run `bizar doctor` for diagnostics").
+ * - `canRetry` is `true` whenever the failure is transient (network
+ *   error, upstream 502) — i.e. the user can fix it by trying again
+ *   after starting the plugin / waiting for opencode to come back.
+ *   False for hard failures (bad_request).
+ */
+export interface OpencodeErrorInfo {
+  type: 'session_load_failed';
+  code: string;
+  message: string;
+  cause?: string;
+  status?: number;
+  suggestion?: string | null;
+  canRetry: boolean;
+}
+
 /** Shape of one opencode SSE envelope after unwrapping. */
 interface OpencodeSseEnvelope {
   type: string;
@@ -95,6 +127,14 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   const [activeSource, setActiveSource] = useState<'bizar' | 'opencode' | null>(null);
   const [activeOpencodeSessionId, setActiveOpencodeSessionId] = useState<string | null>(null);
   const [opencodeError, setOpencodeError] = useState<string | null>(null);
+  const [opencodeSuggestion, setOpencodeSuggestion] = useState<string | null>(null);
+  /**
+   * Structured error info for the opencode session load path. New in
+   * v5.0.0 — `ChatInfoPanel` consumes this to render its own error
+   * section (in addition to the chat-thread-header error already
+   * rendered by Chat.tsx). `null` when no error.
+   */
+  const [opencodeErrorInfo, setOpencodeErrorInfo] = useState<OpencodeErrorInfo | null>(null);
 
   // ── v3.22 — session-state, unread, tree per session ────────────────────────
   const [sessionStates, setSessionStates] = useState<Record<string, SessionDisplayState>>({});
@@ -300,6 +340,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       sseAutoReconnectRef.current = true;
       sseReconnectAttemptRef.current = 0;
       setOpencodeError(null);
+      setOpencodeSuggestion(null);
+      setOpencodeErrorInfo(null);
 
       const connect = () => {
         if (!sseAutoReconnectRef.current) return;
@@ -527,6 +569,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
           // Successful (re)connect — reset backoff.
           sseReconnectAttemptRef.current = 0;
           setOpencodeError(null);
+          setOpencodeSuggestion(null);
+          setOpencodeErrorInfo(null);
         };
       };
 
@@ -554,6 +598,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     setOpencodeMessages([]);
     setSeenOpencodeMessages(new Set());
     setOpencodeError(null);
+    setOpencodeSuggestion(null);
+    setOpencodeErrorInfo(null);
     setActiveOpencodeSessionId(null);
     setActiveSource('bizar');
   }, []);
@@ -576,6 +622,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       }
 
       setOpencodeError(null);
+      setOpencodeSuggestion(null);
+      setOpencodeErrorInfo(null);
       setLoading(true);
 
       try {
@@ -585,7 +633,62 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         setOpencodeMessages(data.messages || []);
       } catch (err) {
         const msg = (err as Error).message;
-        toastRef.current?.error(`Opencode session load failed: ${msg}`);
+        // v5.0.0 — bug #4: surface the server's structured error
+        // envelope so the UI can render a useful suggestion instead
+        // of the raw upstream error string. The server returns
+        // `{error, message, cause?, status?, suggestion?}` for every
+        // non-2xx response (see serve-info.mjs + routes/opencode-
+        // session-detail.mjs).
+        let info: OpencodeErrorInfo | null = null;
+        if (err instanceof ApiError && err.data && typeof err.data === 'object') {
+          const d = err.data as {
+            error?: string;
+            message?: string;
+            cause?: string;
+            status?: number;
+            suggestion?: string;
+          };
+          // canRetry: 503/502 are transient (plugin offline /
+          // upstream hiccup); the operator can fix the plugin and
+          // try again. 400 is a hard bad_request — retrying with the
+          // same payload won't help.
+          const code = d.error || 'unknown';
+          const canRetry =
+            code !== 'bad_request' &&
+            code !== 'too_many_subscribers' &&
+            code !== 'unauthorized';
+          info = {
+            type: 'session_load_failed',
+            code,
+            message: d.message || msg,
+            cause: d.cause,
+            status: d.status,
+            suggestion: d.suggestion ?? null,
+            canRetry,
+          };
+        } else if (err instanceof ApiError) {
+          info = {
+            type: 'session_load_failed',
+            code: 'unknown',
+            message: msg,
+            suggestion: null,
+            canRetry: true,
+          };
+        }
+        // Legacy fields — kept so the existing Chat.tsx thread-header
+        // error display continues to work unchanged.
+        setOpencodeError(
+          info
+            ? `Opencode session load failed (${info.code}): ${info.message}`
+            : `Opencode session load failed: ${msg}`,
+        );
+        setOpencodeSuggestion(info?.suggestion ?? null);
+        setOpencodeErrorInfo(info);
+        toastRef.current?.error(
+          info
+            ? `Opencode session load failed: ${info.message}`
+            : `Opencode session load failed: ${msg}`,
+        );
         setOpencodeMessages([]);
       } finally {
         setLoading(false);
@@ -1039,6 +1142,20 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     activeSource,
     activeOpencodeSessionId,
     opencodeError,
+    opencodeSuggestion,
+    /**
+     * v5.0.0 — bug #4: structured error info consumed by
+     * `ChatInfoPanel`. `null` when no error is active.
+     */
+    opencodeErrorInfo,
+    /**
+     * v5.0.0 — bug #4: retry helper exposed for `ChatInfoPanel`'s
+     * Retry button. Calls `loadOpencodeSession` on the currently
+     * active opencode session (or no-op if none is active).
+     */
+    retryOpencodeSession: () => {
+      if (activeOpencodeSessionId) void loadOpencodeSession(activeOpencodeSessionId);
+    },
     // ── v3.22 — per-session display state ──────────────────────────────────
     sessionStates,
     busy,

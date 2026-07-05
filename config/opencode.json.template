@@ -28,7 +28,14 @@
       "loopThresholdWarn": 5,
       "loopThresholdEscalate": 8,
       "loopThresholdBlock": 12,
-      "loopWindowSize": 10
+      "loopWindowSize": 10,
+      "compaction": {
+        "auto": true,
+        "threshold": 0.5,
+        "preserve_recent": 10,
+        "strategy": "summarize",
+        "model": "minimax/MiniMax-M3-Reasoning"
+      }
     }]
   ],
   "tools": {
