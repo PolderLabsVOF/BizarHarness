@@ -1,10 +1,11 @@
 // src/views/Plugins.tsx — manage installed plugins and their permissions.
 
 import { useEffect, useState } from 'react';
-import { Puzzle } from 'lucide-react';
+import { Puzzle, Store } from 'lucide-react';
 import { PluginCard, type InstalledPlugin } from '../components/PluginCard';
 import { EmptyState } from '../components/EmptyState';
 import { Spinner } from '../components/Spinner';
+import { Button } from '../components/Button';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import type { Settings, Snapshot } from '../lib/types';
@@ -17,7 +18,7 @@ type Props = {
   refreshSnapshot: () => Promise<void>;
 };
 
-export function Plugins(_props: Props) {
+export function Plugins({ setActiveTab }: Props) {
   const toast = useToast();
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,13 +91,17 @@ export function Plugins(_props: Props) {
             Manage plugins installed via the marketplace.
           </p>
         </div>
+        <Button variant="secondary" size="sm" onClick={() => setActiveTab('marketplace')}>
+          <Store size={14} aria-hidden />
+          Browse Marketplace
+        </Button>
       </header>
 
       {plugins.length === 0 ? (
         <EmptyState
           icon={<Puzzle size={32} />}
           title="No plugins installed"
-          message="Install plugins from the marketplace using the CLI."
+          message="Browse the marketplace to discover and install plugins."
         />
       ) : (
         <>
@@ -107,6 +112,7 @@ export function Plugins(_props: Props) {
               placeholder="Filter plugins…"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
+              aria-label="Filter plugins"
               style={{ maxWidth: 320 }}
             />
           </div>

@@ -33,6 +33,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import * as logger from '../logger.mjs';
+import { logPermissionUse } from './permission-audit.mjs';
 
 /** Default timeout for both script compile + async method execution. */
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -380,7 +381,20 @@ function safeStringify(value) {
  * @param {number} [opts.timeoutMs]
  * @param {number} [opts.memoryLimitMb]
  * @param {typeof globalThis.fetch} [opts.fetchImpl]
- * @returns {Promise<Record<string, Function>>}
+ * @param {Array<{ name: string, permissions?: string[] }>} [opts.methodSpecs]
+ *     Per-method permission declarations from `plugin.json`'s
+ *     `exports` array. Each entry is `{ name, permissions }`; used by
+ *     `safeInvoke` to enforce method-level permission checks before
+ *     invoking. Optional — a plugin loaded without this field gets no
+ *     method-level gating (legacy behaviour).
+ * @returns {Promise<{
+ *   exports: Record<string, Function>,
+ *   permissions: Set<string>,
+ *   invalidPermissions: string[],
+ *   memoryLimitMb: number,
+ *   api: object,
+ *   methodSpecs: Array<{ name: string, permissions?: string[] }>
+ * }>}
  */
 export async function loadPlugin(opts) {
   const {
@@ -393,6 +407,7 @@ export async function loadPlugin(opts) {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     memoryLimitMb = DEFAULT_MEMORY_LIMIT_MB,
     fetchImpl,
+    methodSpecs = [],
   } = opts;
 
   if (!mainFile || typeof mainFile !== 'string') {
@@ -494,7 +509,29 @@ export async function loadPlugin(opts) {
     invalidPermissions: invalid,
     memoryLimitMb,
     api,
+    methodSpecs: Array.isArray(methodSpecs) ? methodSpecs : [],
+    // Stash the plugin id on the loaded object so safeInvoke can
+    // write it to the audit log without callers having to thread it
+    // through as a separate argument (compatible with the v5.0
+    // invocation shape).
+    pluginId,
   };
+}
+
+/**
+ * v5.3.0 helper — normalise whatever shape `loaded.permissions` was
+ * stored as into a plain array. `loadPlugin` uses a `Set` internally,
+ * but tests may pass an `Array`, and `loaded.permissions` may also be
+ * missing entirely (older callers). Always returns an array of strings.
+ *
+ * @param {unknown} perms
+ * @returns {string[]}
+ */
+function permissionsAsArray(perms) {
+  if (!perms) return [];
+  if (perms instanceof Set) return [...perms];
+  if (Array.isArray(perms)) return perms.filter((p) => typeof p === 'string');
+  return [];
 }
 
 /**
@@ -502,16 +539,49 @@ export async function loadPlugin(opts) {
  * Returns `{ ok: true, result }` on success, `{ ok: false, error }`
  * on any throw (including permission errors, timeouts, plugin bugs).
  *
+ * v5.3.0 — method-level permission enforcement: when `loaded.methodSpecs`
+ * is populated (from plugin.json's `exports` array), `safeInvoke` checks
+ * the called method's declared permissions against the plugin's granted
+ * permissions BEFORE running. A denial is recorded in the audit log
+ * (`permission-audit.mjs`) and returned with `code: 'permission_denied'`
+ * and a `missing` array listing the ungranted permissions.
+ *
  * @param {object} loaded  return value of loadPlugin()
  * @param {string} method  method name on the plugin's exports
  * @param {unknown[]} args
  * @param {number} [timeoutMs]
- * @returns {Promise<{ ok: true, result: unknown } | { ok: false, error: string, code?: string }>}
+ * @returns {Promise<{ ok: true, result: unknown } | { ok: false, error: string, code?: string, missing?: string[] }>}
  */
 export async function safeInvoke(loaded, method, args = [], timeoutMs = DEFAULT_TIMEOUT_MS) {
   if (!loaded || typeof loaded !== 'object') {
     return { ok: false, error: 'plugin not loaded', code: 'not_loaded' };
   }
+
+  // v5.3.0 — method-level permission enforcement. Uses
+  // `loaded.methodSpecs` (a copy of plugin.json's `exports` array, each
+  // entry shaped `{ name, permissions?: string[] }`). When the plugin
+  // declares no method-level permissions, we skip the check entirely
+  // (backward compatibility for plugins loaded without a manifest).
+  const pluginId = loaded.pluginId || loaded.id || 'unknown';
+  const methodSpecs = Array.isArray(loaded.methodSpecs) ? loaded.methodSpecs : [];
+  const methodSpec = methodSpecs.find((s) => s && s.name === method);
+  if (methodSpec) {
+    const required = Array.isArray(methodSpec.permissions) ? methodSpec.permissions : [];
+    const grantedArr = permissionsAsArray(loaded.permissions);
+    const missing = required.filter((p) => !grantedArr.includes(p));
+    if (missing.length > 0) {
+      logPermissionUse(pluginId, method, missing.join(','), false);
+      return {
+        ok: false,
+        error: `Method "${method}" requires permissions: ${missing.join(', ')}`,
+        code: 'permission_denied',
+        missing,
+      };
+    }
+    // Allowed — log the granted set (or 'none' if no perms required).
+    logPermissionUse(pluginId, method, required.join(',') || 'none', true);
+  }
+
   const fn = loaded.exports && loaded.exports[method];
   if (typeof fn !== 'function') {
     return {
@@ -586,6 +656,9 @@ export async function loadAndInvoke(opts) {
       pluginRoot: opts.pluginRoot,
       timeoutMs: opts.timeoutMs,
       fetchImpl: opts.fetchImpl,
+      // v5.3.0 — wire method-level permissions through from the manifest
+      // so safeInvoke can enforce them.
+      methodSpecs: Array.isArray(manifest.exports) ? manifest.exports : [],
     });
   } catch (err) {
     return {
@@ -652,4 +725,5 @@ export const __testing = {
   DEFAULT_MEMORY_LIMIT_MB,
   ALLOWED_GLOBALS,
   KNOWN_PERMS,
+  permissionsAsArray,
 };

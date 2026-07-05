@@ -46,10 +46,10 @@ export function PluginCard({ plugin, onToggle, onUninstall, onConfigure }: Plugi
       )}
       <PluginPermissions permissions={plugin.permissions ?? []} />
       <div className="plugin-card-actions">
-        <Button size="sm" onClick={() => onConfigure(plugin.id)}>
+        <Button size="sm" onClick={() => onConfigure(plugin.id)} aria-label={`Configure ${plugin.name}`}>
           Configure
         </Button>
-        <Button size="sm" variant="danger" onClick={() => onUninstall(plugin.id)}>
+        <Button size="sm" variant="danger" onClick={() => onUninstall(plugin.id)} aria-label={`Uninstall ${plugin.name}`}>
           Uninstall
         </Button>
       </div>

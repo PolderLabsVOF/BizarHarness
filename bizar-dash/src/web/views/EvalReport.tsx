@@ -29,6 +29,7 @@ import {
   type EvalRunWithResults,
   type EvalFixtureResult,
 } from '../components/EvalDiff';
+import { EvalExportButton } from '../components/EvalExportButton';
 import { api } from '../lib/api';
 import { cn, formatTime } from '../lib/utils';
 import type { Settings, Snapshot } from '../lib/types';
@@ -68,9 +69,12 @@ function RunDetail({
           <CardTitle>
             <ClipboardCheck size={14} aria-hidden /> {run.id}
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClearSelection} title="Close detail">
-            <X size={12} /> Close
-          </Button>
+          <div className="eval-run-detail-actions">
+            <EvalExportButton runId={run.id} />
+            <Button variant="ghost" size="sm" onClick={onClearSelection} title="Close detail">
+              <X size={12} /> Close
+            </Button>
+          </div>
         </div>
         <CardMeta>
           {formatTime(run.startedAt)}

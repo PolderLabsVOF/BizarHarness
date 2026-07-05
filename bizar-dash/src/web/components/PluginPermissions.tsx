@@ -16,7 +16,7 @@ export type PluginPermissionsProps = {
 
 export function PluginPermissions({ permissions }: PluginPermissionsProps) {
   return (
-    <div className="plugin-permissions">
+    <div className="plugin-permissions" aria-label="Required permissions">
       {permissions.map((perm) => {
         const info = PERMISSION_LABELS[perm] ?? { label: perm, icon: Shield, color: 'gray', description: '' };
         const Icon = info.icon;

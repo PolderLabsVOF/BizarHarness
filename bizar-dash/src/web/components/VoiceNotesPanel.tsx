@@ -120,6 +120,34 @@ export function VoiceNotesPanel({ vaultPath, refreshKey = 0 }: Props) {
 
   useEffect(() => {
     loadNotes();
+    
+    // v5.2.0 — Listen for transcription worker updates
+    const handleMessage = (e: MessageEvent) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'voice:updated' && msg.noteId) {
+          // Update the matching note's transcript in place
+          setNotes((prev) => prev.map((n) => 
+            n.id === msg.noteId 
+              ? { ...n, transcript: msg.patch?.transcript ?? n.transcript }
+              : n
+          ));
+        }
+      } catch { /* ignore parse errors */ }
+    };
+    
+    // Connect to WS for real-time transcript updates
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.addEventListener('message', handleMessage);
+    } catch { /* ignore */ }
+    
+    return () => {
+      ws?.removeEventListener('message', handleMessage);
+      ws?.close();
+    };
   }, [vaultPath, refreshKey]);
 
   const handleDelete = async (id: string) => {

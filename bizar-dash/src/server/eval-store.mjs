@@ -22,6 +22,10 @@ const STORE_HOME = process.env.BIZAR_STORE_HOME
   : join(homedir(), '.local', 'share', 'bizar');
 const EVAL_DIR = join(STORE_HOME, 'eval');
 const INDEX_FILE = join(EVAL_DIR, '.index.json');
+const CONFIG_DIR = process.env.BIZAR_EVAL_CONFIG_DIR
+  ? process.env.BIZAR_EVAL_CONFIG_DIR
+  : join(homedir(), '.config', 'bizar');
+const SCHEDULES_FILE = join(CONFIG_DIR, 'eval-schedules.json');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -208,6 +212,57 @@ export function buildRunId() {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const rand = Math.random().toString(36).slice(2, 6);
   return `run_${ts}_${rand}`;
+}
+
+// ── Eval schedules ───────────────────────────────────────────────────────────
+
+function loadSchedules() {
+  return safeReadJSON(SCHEDULES_FILE, []);
+}
+
+function saveSchedulesIndex(schedules) {
+  ensureDir(join(homedir(), '.config', 'bizar'));
+  atomicWriteJson(SCHEDULES_FILE, schedules);
+}
+
+/**
+ * Register a new eval schedule.
+ *
+ * @param {{ name: string, suitePath: string, cron: string, agent?: string }} opts
+ * @returns {{ id: string, name: string, suitePath: string, cron: string, agent: string }}
+ */
+export function registerEvalSchedule({ name, suitePath, cron, agent = 'thor' }) {
+  const schedules = loadSchedules();
+  const id = `eval_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const schedule = { id, name, suitePath, cron, agent };
+  schedules.push(schedule);
+  saveSchedulesIndex(schedules);
+  return schedule;
+}
+
+/**
+ * List all eval schedules.
+ *
+ * @returns {Array<{ id: string, name: string, suitePath: string, cron: string, agent: string }>}
+ */
+export function listEvalSchedules() {
+  return loadSchedules();
+}
+
+/**
+ * Delete an eval schedule by id.
+ *
+ * @param {string} id
+ * @returns {{ ok: boolean }}
+ */
+export function deleteEvalSchedule(id) {
+  if (!id) return { ok: false };
+  const schedules = loadSchedules();
+  const idx = schedules.findIndex((s) => s.id === id);
+  if (idx < 0) return { ok: false };
+  schedules.splice(idx, 1);
+  saveSchedulesIndex(schedules);
+  return { ok: true };
 }
 
 // ── Test reset ────────────────────────────────────────────────────────────────

@@ -208,7 +208,7 @@ function DoctorInner({
         </div>
         <div className="doctor-header-meta muted">
           <Clock size={12} aria-hidden />
-          <span>
+          <span aria-live="polite" aria-atomic="true">
             v{data.bizarVersion} · {data.platform}/{data.arch} ·{' '}
             up {Math.floor(data.uptime)}s
             {lastFetched ? ` · refreshed ${formatTime(new Date(lastFetched))}` : ''}
@@ -266,7 +266,7 @@ function DoctorInner({
           </CardTitle>
           <CardMeta>Run a check, view logs, or export the snapshot.</CardMeta>
           <div className="doctor-actions-row">
-            <Button variant="primary" onClick={fetchSnapshot} disabled={refreshing}>
+            <Button variant="primary" onClick={fetchSnapshot} disabled={refreshing} aria-label="Refresh diagnostics">
               {refreshing ? <Spinner size="sm" /> : <RefreshCw size={12} />}
               {refreshing ? 'Running…' : 'Run Health Check Now'}
             </Button>
@@ -279,7 +279,7 @@ function DoctorInner({
             <Button
               variant="ghost"
               onClick={() => setAutoRefresh((v) => !v)}
-              title="Toggle auto-refresh"
+              aria-label={autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'}
             >
               {autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'}
             </Button>

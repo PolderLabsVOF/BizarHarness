@@ -358,6 +358,69 @@ export async function runFixtureById(
   return runFixture(fixture, { llmCall, timeoutMs, toolCalls });
 }
 
+// ── CSV export ────────────────────────────────────────────────────────────────
+
+/**
+ * Convert an array of EvalResult to CSV format.
+ *
+ * @param {object[]} results
+ * @returns {string}
+ */
+export function toCSV(results) {
+  const headers = [
+    'fixture_id',
+    'name',
+    'agent',
+    'ok',
+    'pass_count',
+    'fail_count',
+    'latency_ms',
+    'tokens',
+    'timestamp',
+  ];
+  const rows = results.map((r) => [
+    r.fixtureId,
+    r.name || '',
+    r.agent || '',
+    r.ok ? '1' : '0',
+    r.checks?.filter((c) => c.pass).length || 0,
+    r.checks?.filter((c) => !c.pass).length || 0,
+    r.latencyMs || 0,
+    r.usage?.total_tokens || 0,
+    r.timestamp || '',
+  ]);
+
+  return [headers, ...rows]
+    .map((row) =>
+      row
+        .map((cell) => {
+          const s = String(cell);
+          return s.includes(',') || s.includes('"') || s.includes('\n')
+            ? `"${s.replace(/"/g, '""')}"`
+            : s;
+        })
+        .join(',')
+    )
+    .join('\n');
+}
+
+/**
+ * Run a suite and return both the run result and CSV export.
+ *
+ * @param {string} suitePath
+ * @param {{ llmCall?: Function, concurrency?: number, timeoutMs?: number }} opts
+ * @returns {Promise<{ run: object, csv: string }>}
+ */
+export async function runSuiteAndExport(suitePath, opts) {
+  const run = await runSuite(suitePath, opts);
+  return {
+    run,
+    csv: toCSV(run.results),
+  };
+}
+
+// ── Fixture loading ─────────────────────────────────────────────────────────
+
 /**
  * Load all JSON fixtures from a directory.
  *

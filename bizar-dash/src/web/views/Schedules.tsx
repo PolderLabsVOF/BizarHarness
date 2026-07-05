@@ -372,7 +372,7 @@ export function Schedules({ snapshot, refreshSnapshot }: Props) {
         <div className="view-actions">
           {activeSection === 'schedules' && (
             <>
-              <Button variant="secondary" size="sm" onClick={reload}>
+              <Button variant="secondary" size="sm" onClick={reload} aria-label="Refresh schedules">
                 <RefreshCw size={14} /> Refresh
               </Button>
               <Button variant="primary" size="sm" onClick={() => openEditor()}>

@@ -29,6 +29,7 @@ import { withSpan, setCommonAttributes } from '../otel.mjs';
 import { recordTrace } from '../metrics.mjs';
 import * as registry from '../plugins/registry.mjs';
 import * as store from '../plugins/store.mjs';
+import { getPermissionAuditLog } from '../plugins/permission-audit.mjs';
 
 /**
  * @returns {import('express').Router}
@@ -315,20 +316,59 @@ export function createPluginsRouter() {
     }
     // Distinguish "this is a plugin bug" (500) from "this is a usage
     // error" (400/404) so the client can decide whether to retry.
+    // v5.3.0 — `permission_denied` returns HTTP 403 (Forbidden) since
+    // the request is well-formed but the caller is not authorised to
+    // invoke the method. All other usage errors stay at 400.
     const usageCodes = new Set([
       'not_installed',
       'no_such_method',
       'bad_manifest',
-      'permission_denied',
       'corrupt_install',
     ]);
-    const status = usageCodes.has(result.code) ? 400 : 500;
+    let status;
+    if (result.code === 'permission_denied') {
+      status = 403;
+    } else if (usageCodes.has(result.code)) {
+      status = 400;
+    } else {
+      status = 500;
+    }
     span.setAttribute('plugin.invoke.error_code', result.code || 'unknown');
-    res.status(status).json(result);
+    if (result.code === 'permission_denied') {
+      span.setAttribute('plugin.invoke.permission_missing',
+        (result.missing || []).join(','));
+    }
+    res.status(status).json({
+      error: result.code || 'plugin_error',
+      message: result.error,
+      ...(result.code === 'permission_denied'
+        ? { missing: result.missing }
+        : {}),
+      ...(result.permission ? { permission: result.permission } : {}),
+    });
     recordTrace('plugin.invoke', {
-      outcome: 'error',
+      outcome: result.code === 'permission_denied' ? 'permission_denied' : 'error',
       code: result.code || 'unknown',
     });
+  })));
+
+  // ── GET /api/plugins/:id/audit ─────────────────────────────────────────
+  // v5.3.0 — return the in-memory permission audit log for one plugin
+  // (newest-first). Bounded to 50 entries by default; pass `?limit=N`
+  // to fetch up to the buffer's full capacity. The route is read-only
+  // — admin tools should not clear the log from here.
+  router.get('/plugins/:id/audit', wrap(withSpan('plugin.audit.get', async (span, req, res) => {
+    setCommonAttributes(span, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    });
+    span.setAttribute('plugin.id', req.params.id || '');
+    const limit = Number.isFinite(Number(req.query?.limit))
+      ? Math.max(1, Math.min(1000, Number(req.query.limit)))
+      : 50;
+    const audit = getPermissionAuditLog({ pluginId: req.params.id, limit });
+    res.json({ audit });
+    recordTrace('plugin.audit.get', { count: audit.length });
   })));
 
   return router;

@@ -63,6 +63,7 @@ export function ScheduleTemplateCard({ template, onUse }: Props) {
         variant="secondary"
         size="sm"
         onClick={() => onUse(template)}
+        aria-label={`Use template: ${template.name}`}
       >
         Use this template
       </Button>

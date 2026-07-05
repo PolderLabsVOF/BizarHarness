@@ -10,7 +10,7 @@
 // overview pattern (counts at top, recent history, call to action).
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ClipboardCheck, ArrowRight, RefreshCw, ExternalLink } from 'lucide-react';
+import { ClipboardCheck, ArrowRight, RefreshCw, ExternalLink, Clock, Plus, Trash2 } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from '../components/Card';
 import { Button } from '../components/Button';
 import { EmptyState } from '../components/EmptyState';
@@ -20,6 +20,14 @@ import { EvalRunCard, type EvalRunSummary } from '../components/EvalRunCard';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import type { Settings, Snapshot } from '../lib/types';
+
+type EvalSchedule = {
+  id: string;
+  name: string;
+  suitePath: string;
+  cron: string;
+  agent: string;
+};
 
 type Props = {
   snapshot: Snapshot;
@@ -31,10 +39,103 @@ type Props = {
 
 const RECENT_RUNS_LIMIT = 8;
 
+function AddScheduleForm({
+  onAdded,
+  onCancel,
+}: {
+  onAdded: (schedule: EvalSchedule) => void;
+  onCancel: () => void;
+}) {
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [suitePath, setSuitePath] = useState('');
+  const [cron, setCron] = useState('');
+  const [agent, setAgent] = useState('thor');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !suitePath || !cron) {
+      toast.error('name, suitePath, and cron are required');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await api.post<EvalSchedule>('/eval/schedules', { name, suitePath, cron, agent });
+      onAdded(result);
+      toast.success('Schedule created');
+    } catch (err) {
+      toast.error(`Failed to create schedule: ${(err as Error).message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form className="eval-schedule-form" onSubmit={handleSubmit}>
+      <div className="form-row">
+        <label htmlFor="sched-name">Name</label>
+        <input
+          id="sched-name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Daily fixture check"
+          required
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="sched-suite">Suite path</label>
+        <input
+          id="sched-suite"
+          type="text"
+          value={suitePath}
+          onChange={(e) => setSuitePath(e.target.value)}
+          placeholder="./fixtures"
+          required
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="sched-cron">Cron</label>
+        <input
+          id="sched-cron"
+          type="text"
+          value={cron}
+          onChange={(e) => setCron(e.target.value)}
+          placeholder="0 8 * * *"
+          required
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="sched-agent">Agent</label>
+        <input
+          id="sched-agent"
+          type="text"
+          value={agent}
+          onChange={(e) => setAgent(e.target.value)}
+          placeholder="thor"
+        />
+      </div>
+      <div className="form-actions">
+        <Button type="submit" variant="primary" size="sm" disabled={submitting}>
+          {submitting ? 'Creating…' : 'Create schedule'}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function EvalInner({ setActiveTab }: Props) {
   const toast = useToast();
   const [runs, setRuns] = useState<EvalRunSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [subTab, setSubTab] = useState<'runs' | 'schedules'>('runs');
+  const [schedules, setSchedules] = useState<EvalSchedule[]>([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [showAddSchedule, setShowAddSchedule] = useState(false);
   const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -51,11 +152,36 @@ function EvalInner({ setActiveTab }: Props) {
     }
   }, [toast]);
 
+  const loadSchedules = useCallback(async () => {
+    setLoadingSchedules(true);
+    try {
+      const r = await api.get<{ schedules: EvalSchedule[] }>('/eval/schedules');
+      if (!cancelledRef.current) setSchedules(r.schedules || []);
+    } catch (err) {
+      if (!cancelledRef.current) {
+        toast.error(`Failed to load eval schedules: ${(err as Error).message}`);
+      }
+    } finally {
+      if (!cancelledRef.current) setLoadingSchedules(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     cancelledRef.current = false;
     load();
+    if (subTab === 'schedules') loadSchedules();
     return () => { cancelledRef.current = true; };
-  }, [load]);
+  }, [load, loadSchedules, subTab]);
+
+  const deleteSchedule = async (id: string) => {
+    try {
+      await api.del(`/eval/schedules/${id}`);
+      setSchedules((prev) => prev.filter((s) => s.id !== id));
+      toast.success('Schedule deleted');
+    } catch (err) {
+      toast.error(`Failed to delete schedule: ${(err as Error).message}`);
+    }
+  };
 
   const recent = runs.slice(0, RECENT_RUNS_LIMIT);
   const totals = runs.reduce(
@@ -139,30 +265,104 @@ function EvalInner({ setActiveTab }: Props) {
       </div>
 
       <div className="eval-recent-section">
-        <h2 className="eval-section-title">Recent runs</h2>
-        {loading && recent.length === 0 ? (
-          <div className="eval-runs-loading">
-            <Spinner size="sm" />
-            <span className="muted">Loading runs…</span>
-          </div>
-        ) : recent.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardCheck size={28} />}
-            title="No eval runs yet"
-            message={
-              <>
-                Run a suite via the CLI:{' '}
-                <code className="mono">bizar eval run ./path/to/fixtures</code>.
-                Results will appear here.
-              </>
-            }
-          />
+        <div className="eval-sub-tabs">
+          <button
+            type="button"
+            className={cn('eval-sub-tab', subTab === 'runs' ? 'is-active' : '')}
+            onClick={() => setSubTab('runs')}
+          >
+            <ClipboardCheck size={12} aria-hidden /> Runs
+          </button>
+          <button
+            type="button"
+            className={cn('eval-sub-tab', subTab === 'schedules' ? 'is-active' : '')}
+            onClick={() => { setSubTab('schedules'); if (schedules.length === 0) loadSchedules(); }}
+          >
+            <Clock size={12} aria-hidden /> Schedules
+          </button>
+        </div>
+
+        {subTab === 'runs' ? (
+          <>
+            <h2 className="eval-section-title">Recent runs</h2>
+            {loading && recent.length === 0 ? (
+              <div className="eval-runs-loading">
+                <Spinner size="sm" />
+                <span className="muted">Loading runs…</span>
+              </div>
+            ) : recent.length === 0 ? (
+              <EmptyState
+                icon={<ClipboardCheck size={28} />}
+                title="No eval runs yet"
+                message={
+                  <>
+                    Run a suite via the CLI:{' '}
+                    <code className="mono">bizar eval run ./path/to/fixtures</code>.
+                    Results will appear here.
+                  </>
+                }
+              />
+            ) : (
+              <div className="eval-runs-list">
+                {recent.map((r) => (
+                  <EvalRunCard key={r.id} run={r} />
+                ))}
+              </div>
+            )}
+          </>
         ) : (
-          <div className="eval-runs-list">
-            {recent.map((r) => (
-              <EvalRunCard key={r.id} run={r} />
-            ))}
-          </div>
+          <>
+            <h2 className="eval-section-title">Schedules</h2>
+            {loadingSchedules ? (
+              <div className="eval-runs-loading">
+                <Spinner size="sm" />
+                <span className="muted">Loading schedules…</span>
+              </div>
+            ) : schedules.length === 0 ? (
+              <EmptyState
+                icon={<Clock size={28} />}
+                title="No eval schedules"
+                message="Schedules let you run eval suites automatically on a cron. Add one below."
+              />
+            ) : (
+              <div className="eval-schedules-list">
+                {schedules.map((s) => (
+                  <Card key={s.id} className="eval-schedule-card">
+                    <div className="eval-schedule-row">
+                      <div className="eval-schedule-info">
+                        <CardTitle>{s.name}</CardTitle>
+                        <CardMeta className="muted">
+                          {s.cron} · {s.suitePath} · agent:{s.agent || 'thor'}
+                        </CardMeta>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteSchedule(s.id)}
+                        title="Delete schedule"
+                      >
+                        <Trash2 size={12} aria-hidden />
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+            <div className="eval-schedule-add">
+              <AddScheduleForm
+                onAdded={(newSchedule) => {
+                  setSchedules((prev) => [...prev, newSchedule]);
+                  setShowAddSchedule(false);
+                }}
+                onCancel={() => setShowAddSchedule(false)}
+              />
+              {!showAddSchedule && (
+                <Button variant="secondary" size="sm" onClick={() => setShowAddSchedule(true)}>
+                  <Plus size={12} aria-hidden /> Add schedule
+                </Button>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -199,6 +199,9 @@ async function runAction(action, ctx = {}) {
   if (action.type === 'agent') {
     return runAgentAction(action, ctx);
   }
+  if (action.type === 'eval-run') {
+    return runEvalAction(action, ctx);
+  }
   throw new Error(`unknown action type: ${action.type}`);
 }
 
@@ -366,6 +369,64 @@ async function runWebhook(action) {
     }
     return { ok: r.ok, status: r.status };
   } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function runEvalAction(action, ctx = {}) {
+  const logger = ctx.logger || {
+    info: (msg, meta) => console.log(`[eval-run] ${msg}`, meta || ''),
+    error: (msg, meta) => console.error(`[eval-run] ${msg}`, meta || ''),
+  };
+  try {
+    const { runSuite } = await import('./eval.mjs');
+    const { saveRun, buildRunId } = await import('./eval-store.mjs');
+    const { chatCompletion } = await import('./minimax.mjs');
+
+    const runId = buildRunId();
+    const startedAt = new Date().toISOString();
+
+    const llmCall = async (prompt, opts = {}) => {
+      const result = await chatCompletion({ prompt, model: 'MiniMax-M3' });
+      if (!result.ok) throw new Error(result.message || 'llm call failed');
+      return {
+        content: result.content,
+        usage: {
+          inputTokens: result.usage?.prompt_tokens ?? 0,
+          outputTokens: result.usage?.completion_tokens ?? 0,
+          totalTokens: result.usage?.total_tokens ?? 0,
+        },
+      };
+    };
+
+    const result = await runSuite(action.suitePath, {
+      llmCall,
+      concurrency: 5,
+      timeoutMs: 120_000,
+      agent: action.agent,
+    });
+
+    const finishedAt = new Date().toISOString();
+    const run = {
+      id: runId,
+      startedAt,
+      finishedAt,
+      suitePath: action.suitePath,
+      total: result.total,
+      passed: result.passed,
+      failed: result.failed,
+      results: result.results,
+    };
+
+    await saveRun(run);
+    logger.info('scheduled eval completed', {
+      suite: action.suitePath,
+      passed: result.passed,
+      total: result.total,
+    });
+    return { ok: result.failed === 0, passed: result.passed, failed: result.failed, total: result.total };
+  } catch (err) {
+    logger.error('scheduled eval failed', { error: err.message });
     return { ok: false, error: err.message };
   }
 }

@@ -628,6 +628,10 @@ export async function invokePlugin(pluginId, method, args = [], opts = {}) {
       pluginRoot: pluginDir,
       timeoutMs: opts.timeoutMs,
       fetchImpl: opts.fetchImpl,
+      // v5.3.0 — pass method-level permission declarations through to
+      // the sandbox so `safeInvoke` can enforce them. Manifest defaults
+      // to an empty array (readManifest normalises missing exports).
+      methodSpecs: Array.isArray(manifest.exports) ? manifest.exports : [],
     });
   } catch (err) {
     return { ok: false, error: err.message, code: err.code || 'load_error' };

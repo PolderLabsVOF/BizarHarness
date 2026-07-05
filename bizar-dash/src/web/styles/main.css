@@ -9162,6 +9162,120 @@ select:focus-visible,
   margin-top: var(--space-2);
 }
 
+/* ─── v5.3.0 — Plugin marketplace ──────────────────────────────── */
+.marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.marketplace-plugin-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.marketplace-plugin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.marketplace-plugin-description {
+  color: var(--text-dim);
+  margin: var(--space-2) 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.marketplace-plugin-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.marketplace-plugin-tags .tag {
+  background: var(--surface-3, rgba(255, 255, 255, 0.05));
+  color: var(--text-dim, #8b949e);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.marketplace-plugin-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
+.marketplace-plugin-author {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.marketplace-search-row {
+  margin-bottom: 16px;
+}
+
+.category-chips {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.category-chips button {
+  padding: 6px 12px;
+  border: 1px solid var(--border, #30363d);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.category-chips button:hover {
+  background: var(--surface-2);
+}
+
+.category-chips button.active {
+  background: var(--accent, #8b5cf6);
+  color: white;
+  border-color: var(--accent, #8b5cf6);
+}
+
+.install-confirm h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 16px;
+}
+
+.install-warning {
+  display: flex;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 12px;
+  border-radius: 6px;
+  margin: 12px 0;
+  color: #d29922;
+  font-size: 13px;
+}
+
+.install-warning p {
+  margin: 0;
+  color: var(--text);
+}
+
+.install-confirm-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
 /* ─── Plugin permissions ──────────────────────────────────────────── */
 .plugin-permissions {
   display: flex;
@@ -9609,4 +9723,29 @@ select:focus-visible,
 .eval-recent-section {
   display: flex;
   flex-direction: column;
+}
+
+/* ─── High-contrast mode (prefers-contrast: more) ──────────────────── */
+@media (prefers-contrast: more) {
+  :root {
+    --text-dim: var(--text);
+    --text-muted: var(--text);
+  }
+
+  [data-theme='light'] {
+    --text-dim: #374151;
+    --text-muted: #374151;
+  }
+
+  :focus-visible,
+  button:focus-visible,
+  [role='button']:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline-width: 3px;
+    outline-style: solid;
+  }
 }

@@ -1,5 +1,55 @@
 # Changelog
 
+## v5.3.0 — Plugin permissions enforcement, Plugin marketplace web UI, Eval CSV + schedules, Full WCAG audit
+
+### Highlights
+
+**Plugin permissions enforcement (v5.2 was UI-only, v5.3 actually checks):**
+- `safeInvoke` reads manifest `exports[].permissions` and checks against plugin's granted permissions
+- Denied calls return `{ ok: false, code: 'permission_denied', missing: [...] }` and are logged to the audit log
+- New `GET /api/plugins/:id/audit` endpoint returns permission use history
+- `POST /api/plugins/:id/invoke` returns HTTP 403 when permission denied
+- New `permission-audit.mjs` module with 1000-entry FIFO log + structured logging
+- 16 new tests
+
+**Plugin marketplace web UI (browse + install from dashboard):**
+- New `Marketplace.tsx` view — search, category filter, plugin grid
+- New `MarketplacePluginCard.tsx` — name, version, category, author, tags, permissions, Install button
+- New `InstallConfirmDialog.tsx` — confirmation modal with permission warning
+- New "Marketplace" tab in Topbar between Mods and Plugins
+- "Browse Marketplace" button on Plugins view
+
+**Eval report improvements (CSV export + scheduled runs):**
+- `GET /api/eval/runs/:id/export.csv` — streams CSV with proper RFC-4180 escaping
+- New `GET/POST/DELETE /api/eval/schedules` for scheduling eval runs on a cron
+- New `eval-run` action type in schedules-runner
+- Schedules tab in Eval view with Add/Delete UI
+- 13 new tests (7 CSV + 6 scheduled)
+
+**Full WCAG 2.2 AA audit final pass:**
+- Added `aria-label` to PluginCard, PluginPermissions, ScheduleTemplateCard, Doctor, Schedules, Plugins filter
+- Added `aria-live="polite"` to Doctor header for auto-refresh announcements
+- Added `prefers-contrast: more` media query for high-contrast users
+- New `tests/a11y/` test suite (components, forms, navigation)
+- New `docs/A11Y.md` conformance report
+- All v5.3 NEW components have semantic structure
+
+**Voice transcription worker WS hookup (post-v5.2 cleanup):**
+- VoiceNotesPanel now listens for `voice:updated` WS events
+- Transcript appears in UI within 5s of upload completion (no manual refresh)
+
+### Tests
+
+- 395 npm tests pass
+- 226 vitest tests pass (was 202, +24 new: 16 permissions + 11 marketplace + 13 eval improvements + 8 a11y - shared with 226 from before)
+- 16 plugins-permissions + 11 marketplace + 13 eval improvements + 8 a11y
+- TypeScript: 0 errors
+- Build: 92 KB mobile + 432 KB desktop
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.3.0`
+
 ## v5.2.0 — Plugin permissions UI, Voice auto-transcription, Tailscale auth integration, Eval report web UI
 
 ### Highlights

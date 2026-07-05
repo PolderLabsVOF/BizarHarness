@@ -14,8 +14,8 @@
  * via the state for custom providers.
  */
 import { Router } from 'express';
-import { loadFixtures, runFixture, runSuite } from '../eval.mjs';
-import { saveRun, listRuns, getRun, compareRuns, buildRunId } from '../eval-store.mjs';
+import { loadFixtures, runFixture, runSuite, toCSV } from '../eval.mjs';
+import { saveRun, listRuns, getRun, compareRuns, buildRunId, registerEvalSchedule, listEvalSchedules, deleteEvalSchedule } from '../eval-store.mjs';
 import { chatCompletion } from '../minimax.mjs';
 import { wrap } from './_shared.mjs';
 
@@ -43,6 +43,19 @@ export function createEvalRouter({ state, broadcast }) {
       return;
     }
     res.json(run);
+  }));
+
+  // GET /api/eval/runs/:id/export.csv — download run results as CSV
+  router.get('/eval/runs/:id/export.csv', wrap(async (req, res) => {
+    const run = await getRun(req.params.id);
+    if (!run) {
+      res.status(404).json({ error: 'not_found', message: `run ${req.params.id} not found` });
+      return;
+    }
+    const csv = toCSV(run.results || []);
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="eval-${req.params.id}.csv"`);
+    res.send(csv);
   }));
 
   // GET /api/eval/fixtures — list fixtures in a suite path
@@ -141,6 +154,33 @@ export function createEvalRouter({ state, broadcast }) {
       return;
     }
     res.json(diff);
+  }));
+
+  // GET /api/eval/schedules — list all eval schedules
+  router.get('/eval/schedules', wrap(async (req, res) => {
+    const schedules = await listEvalSchedules();
+    res.json({ schedules });
+  }));
+
+  // POST /api/eval/schedules — create a new eval schedule
+  router.post('/eval/schedules', wrap(async (req, res) => {
+    const { name, suitePath, cron, agent } = req.body || {};
+    if (!name || !suitePath || !cron) {
+      res.status(400).json({ error: 'bad_request', message: 'name, suitePath, and cron are required' });
+      return;
+    }
+    const schedule = await registerEvalSchedule({ name, suitePath, cron, agent });
+    res.status(201).json(schedule);
+  }));
+
+  // DELETE /api/eval/schedules/:id — delete an eval schedule
+  router.delete('/eval/schedules/:id', wrap(async (req, res) => {
+    const result = await deleteEvalSchedule(req.params.id);
+    if (!result.ok) {
+      res.status(404).json({ error: 'not_found', message: `schedule ${req.params.id} not found` });
+      return;
+    }
+    res.json({ ok: true });
   }));
 
   return router;
