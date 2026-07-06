@@ -176,3 +176,78 @@ describe('chatCompletion records usage', () => {
     }
   });
 });
+
+// ── fetchRemains error handling ────────────────────────────────────────────
+
+describe('fetchRemains — HTTP error messages (v5.5.2 fix)', () => {
+  // Force a unique HOME so the test doesn't conflict with other minimax tests
+  // that write to the same sandbox directory.
+  const SANDBOX = mkdtempSync(join(tmpdir(), `bizar-minimax-404-${Date.now()}-`));
+  const ORIG_HOME = process.env.HOME;
+  const ORIG_BIZAR_STORE_HOME = process.env.BIZAR_STORE_HOME;
+
+  before(() => {
+    process.env.HOME = SANDBOX;
+    process.env.BIZAR_STORE_HOME = join(SANDBOX, '.config', 'bizar');
+    mkdirSync(process.env.BIZAR_STORE_HOME, { recursive: true });
+  });
+
+  after(() => {
+    process.env.HOME = ORIG_HOME;
+    process.env.BIZAR_STORE_HOME = ORIG_BIZAR_STORE_HOME ?? '';
+    try { rmSync(SANDBOX, { recursive: true, force: true }); } catch { /* ignore */ }
+  });
+
+  async function mockRemains(url, status, body) {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = function mock(urlOrReq, opts) {
+      const u = typeof urlOrReq === 'string' ? urlOrReq : urlOrReq?.url || String(urlOrReq);
+      if (u.includes('/token_plan/remains')) {
+        return Promise.resolve({
+          ok: false,
+          status,
+          headers: { get: () => 'application/json' },
+          statusText: status === 404 ? 'Not Found' : status === 401 ? 'Unauthorized' : status === 429 ? 'Too Many Requests' : 'Error',
+          text: () => Promise.resolve(JSON.stringify(body || {})),
+        });
+      }
+      return originalFetch.call(this, urlOrReq, opts);
+    };
+    try {
+      // Import with cache-bust to get fresh module state with the new HOME.
+      const { fetchRemains: fr } = await import(`../src/server/minimax.mjs?v=${Date.now()}`);
+      return await fr({ force: true });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
+  it('404 returns a descriptive message (not just "Not Found")', async () => {
+    const result = await mockRemains('/token_plan/remains', 404, {});
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'http_404');
+    assert.ok(
+      result.message.includes('endpoint may have changed') ||
+        result.message.includes('BizarHarness update'),
+      `Expected descriptive 404 message, got: ${result.message}`,
+    );
+  });
+
+  it('401/403 returns "invalid or expired key" message', async () => {
+    const result = await mockRemains('/token_plan/remains', 401, {});
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.message.includes('invalid or expired'),
+      `Expected "invalid or expired" message, got: ${result.message}`,
+    );
+  });
+
+  it('429 returns "rate limit" message', async () => {
+    const result = await mockRemains('/token_plan/remains', 429, {});
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.message.includes('rate limit'),
+      `Expected "rate limit" message, got: ${result.message}`,
+    );
+  });
+});

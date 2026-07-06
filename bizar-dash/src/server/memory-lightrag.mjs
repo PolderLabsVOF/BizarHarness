@@ -670,7 +670,11 @@ export async function ensureRunning(config, opts) {
  *      '0' / 'false' / 'no', skip.
  *   3. Check if the server is already running — if so, return
  *      ok=true, started=false, reason='already-running'.
- *   4. Otherwise call `startServer(config)` and return its result.
+ *   4. Probe LLM availability (detectAvailableLLM) — if unreachable
+ *      AND no API key is configured, log a clear warning but still
+ *      attempt to start the server (the user may have installed
+ *      ollama mid-session or configured a key after boot).
+ *   5. Call `startServer(config)` and return its result.
  *
  * Errors are caught and logged as warnings — startup must not fail
  * the dashboard just because LightRAG couldn't be started (the user
@@ -727,7 +731,22 @@ export async function lightragStartupHook(projectRoot, opts = {}) {
     warn('startup hook: isRunning probe failed:', err?.message || err);
   }
 
-  // 6. Try to start.
+  // 6. Probe LLM availability — log a warning if unreachable + no API key,
+  //    but still attempt to start (user may have installed ollama mid-session).
+  const llm = await detectAvailableLLM(config);
+  if (!llm) {
+    const binding = config.llmBinding || 'ollama';
+    warn(
+      `startup hook: ${binding} is not reachable and no API key is configured. ` +
+        `LightRAG may start in a degraded state. ` +
+        `Set an API key env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, or MINIMAX_API_KEY) ` +
+        `or ensure ollama is running.`,
+    );
+  } else {
+    log(`startup hook: LLM detected: ${llm.provider} (${llm.detail})`);
+  }
+
+  // 7. Try to start — still attempt even if LLM probe failed (see step 6 note).
   try {
     const r = await startServer(config, opts);
     if (r.ok) {

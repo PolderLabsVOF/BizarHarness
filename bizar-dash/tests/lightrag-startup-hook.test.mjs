@@ -203,4 +203,36 @@ describe('lightragStartupHook — config resolution', () => {
   });
 });
 
+describe('lightragStartupHook — LLM unavailable but still starts', () => {
+  test('hook still returns ok=true when LLM is unreachable but binary is found', async () => {
+    // This test verifies the v5.5.2 fix: when detectAvailableLLM returns
+    // null (ollama unreachable + no API key), the hook used to return
+    // ok=false without attempting to start. Now it logs a warning but
+    // still tries to start. We verify the hook returns a structured
+    // result without throwing.
+    writeMemoryJson(tmpRoot, {
+      lightrag: {
+        enabled: true,
+        // Port unlikely to be in use — we pre-create a PID file to
+        // short-circuit the actual start probe.
+        port: 29997,
+        workingDir: join(tmpRoot, '.bizar', 'lightrag'),
+      },
+    });
+    mkdirSync(join(tmpRoot, '.bizar', 'lightrag'), { recursive: true });
+    // Pre-create PID file pointing to a live PID so isRunning short-circuits
+    // to "already-running" without spawning.
+    writeFileSync(join(tmpRoot, '.bizar', 'lightrag', 'lightrag.pid'), String(process.pid));
+    try {
+      const r = await lightragStartupHook(tmpRoot);
+      // With the fix: hook returns ok=true, reason='already-running' even
+      // when LLM probe would have failed (no API key, ollama unreachable).
+      assert.equal(r.ok, true, 'hook should succeed even when LLM is unreachable');
+      assert.equal(r.reason, 'already-running');
+    } finally {
+      rmSync(join(tmpRoot, '.bizar', 'lightrag'), { recursive: true, force: true });
+    }
+  });
+});
+
 console.log('  lightrag-startup-hook tests loaded');

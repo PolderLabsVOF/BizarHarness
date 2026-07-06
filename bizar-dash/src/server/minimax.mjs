@@ -369,7 +369,21 @@ export async function fetchRemains({ force = false } = {}) {
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { /* keep as null */ }
   if (!resp.ok) {
-    const errMsg = body?.base_resp?.status_msg || resp.statusText || 'request failed';
+    // v5.5.2 — Provide descriptive messages for common failure modes
+    // rather than surfacing raw HTTP status text.
+    let errMsg;
+    if (resp.status === 404) {
+      errMsg =
+        'MiniMax token plan API returned 404. The endpoint may have changed — ' +
+        'this may require a BizarHarness update. group_id=' +
+        encodeURIComponent(resolved.groupId);
+    } else if (resp.status === 401 || resp.status === 403) {
+      errMsg = 'MiniMax API key is invalid or expired. Check your key in the dashboard onboarding.';
+    } else if (resp.status === 429) {
+      errMsg = 'MiniMax API rate limit hit. Try again in a few minutes.';
+    } else {
+      errMsg = body?.base_resp?.status_msg || resp.statusText || 'request failed';
+    }
     await recordUsageDynamic({
       providerId: 'minimax',
       modelId: 'unknown',

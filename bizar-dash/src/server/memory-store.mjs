@@ -843,6 +843,77 @@ export function vaultStats(projectRoot) {
   };
 }
 
+// ── v5.5.2 Legacy config migration ─────────────────────────────────────────
+//
+// When the user upgrades from pre-v5.5.2, their `.bizar/memory.json` may
+// still point `git.repoPath` at the legacy path
+// (`~/.local/share/bizar/memory/bizar-memory`). The new default vault root
+// is `~/.bizar_memory/bizar-memory`. This helper detects the stale path and
+// auto-corrects the config so all git checks work immediately after upgrade.
+//
+// Behaviour:
+//   - Only migrates if the legacy path doesn't exist but the new one does.
+//   - Only migrates if `git.repoPath` is explicitly set in the config.
+//   - Idempotent — once migrated, the new path exists and the check is a
+//     no-op on subsequent boots.
+//   - Returns { migrated: true } only on actual change; { migrated: false }
+//     for all other cases (already correct, not applicable, or failure).
+//
+// Called once at dashboard startup from server.mjs.
+
+/**
+ * Detect and fix a stale `git.repoPath` pointing at the legacy vault location.
+ *
+ * @param {string} projectRoot — project root (where `.bizar/memory.json` lives)
+ * @returns {{ migrated: boolean, from?: string, to?: string, error?: string }}
+ */
+export function migrateLegacyGitRepoPath(projectRoot) {
+  const configPath = join(projectRoot, '.bizar', 'memory.json');
+  let raw;
+  try {
+    raw = safeReadJSON(configPath, null);
+  } catch {
+    return { migrated: false };
+  }
+  if (!raw) return { migrated: false };
+
+  const gitBlock = raw.git || raw.memoryRepo || {};
+  const currentRepoPath = gitBlock.repoPath;
+  if (!currentRepoPath || typeof currentRepoPath !== 'string') return { migrated: false };
+
+  const expanded = currentRepoPath.startsWith('~')
+    ? join(HOME, currentRepoPath.slice(1))
+    : currentRepoPath;
+
+  // Only migrate when the configured path doesn't exist but the new default does.
+  if (existsSync(expanded)) return { migrated: false };
+
+  const newDefault = join(DEFAULT_MEMORY_VAULT, 'bizar-memory');
+  if (!existsSync(newDefault)) return { migrated: false };
+
+  // Verify the new path is actually a git repo before migrating.
+  if (!existsSync(join(newDefault, '.git'))) return { migrated: false };
+
+  // Apply the fix: update gitBlock.repoPath (or memoryRepo.repoPath) to newDefault.
+  try {
+    const updated = JSON.parse(JSON.stringify(raw));
+    if (!updated.git) updated.git = {};
+    if (!updated.memoryRepo) updated.memoryRepo = {};
+    updated.git.repoPath = newDefault;
+    updated.memoryRepo.path = newDefault;
+    atomicWriteJson(configPath, updated);
+    console.warn(
+      `[memory-store] Auto-migrated git.repoPath from legacy path\n` +
+        `[memory-store]   FROM: ${expanded}\n` +
+        `[memory-store]   TO:   ${newDefault}\n` +
+        `[memory-store] Please restart the dashboard to pick up the new path.`,
+    );
+    return { migrated: true, from: expanded, to: newDefault };
+  } catch (err) {
+    return { migrated: false, error: err.message };
+  }
+}
+
 // ── LightRAG integration (v4.1.0) ──────────────────────────────────────────
 //
 // Re-export the LightRAG orchestrator from the memory-store module so the

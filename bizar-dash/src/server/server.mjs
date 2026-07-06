@@ -476,6 +476,23 @@ export async function createServer({
     console.warn('[bizar-dash] headroom startup hook skipped:', err?.message || err);
   }
 
+  // v5.5.2 — Auto-migrate legacy git.repoPath from the old vault location
+  // to the new default. Runs before the lightrag hook so git-dependent
+  // checks are already correct.
+  try {
+    const { migrateLegacyGitRepoPath } = await import('./memory-store.mjs');
+    const result = migrateLegacyGitRepoPath(projectRoot);
+    if (result.migrated) {
+      console.warn(
+        `[bizar-dash] git.repoPath auto-migrated:\n` +
+          `  from: ${result.from}\n` +
+          `  to:   ${result.to}`,
+      );
+    }
+  } catch (err) {
+    console.warn('[bizar-dash] git.repoPath migration check failed:', err?.message || err);
+  }
+
   // v5.x — LightRAG startup hook (issue #6). Mirrors the headroom hook:
   // reads config from .bizar/memory.json + env vars, then calls
   // lightragStartupHook() which respects `lightrag.enabled` and the

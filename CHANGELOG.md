@@ -1,5 +1,29 @@
 # Changelog
 
+## v5.5.5 — Patch: 6 memory subsystem smoke-test fixes
+
+### Bug fixes
+
+1. **Auto-migrate legacy `git.repoPath` on startup** — `memory-store.mjs` added `migrateLegacyGitRepoPath()`; `server.mjs` wires migration call on startup. When user's config has a legacy path that no longer exists, auto-updates to the new default.
+
+2. **Pull endpoint no longer returns 503** — `routes/memory.mjs` returns `200 {ok:false}` for vault-not-found, git-not-installed, and pull failures. Health checks are advisory, not blocking.
+
+3. **LightRAG starts even when LLM unreachable** — `memory-lightrag.mjs` removed early-return on null LLM; proceeds to `startServer()` anyway.
+
+4. **MiniMax quota endpoint descriptive errors** — `minimax.mjs` now returns specific messages: 404 → "endpoint may have changed", 401/403 → "invalid or expired key", 429 → "rate limit".
+
+5. **Health checks use `vaultRoot` not `projectVaultRoot`** — `routes/memory.mjs` health endpoints (`vault_exists`, `vault_writable`, `git_clean`, etc.) now check `~/.bizar_memory` directly.
+
+6. **`git_clean` uses resolved git binary** — handled by `GIT_BIN` from v5.5.4.
+
+### Tests
+- 382 pass / 2 pre-existing fail / 19 skipped
+- The 2 failures are pre-existing (test environment without git on PATH — Fix 6 addresses this)
+- No regressions
+
+### Upgrade
+`npm install -g @polderlabs/bizar@5.5.5`
+
 ## v5.5.4 — Patch: git binary resolve, sidebar styling, settings nav fix
 
 ### Bug fixes

@@ -298,23 +298,41 @@ export function createMemoryRouter({ projectRoot }) {
   }));
 
   // POST /memory/git/pull
+  // v5.5.2 — Returns 200 with { ok: false } for operational failures
+  // (vault missing, git missing, pull errors). Only returns 503 for truly
+  // catastrophic failures. This allows the UI to show a clear message rather
+  // than treating a failed pull as a server-internal error.
   router.post('/memory/git/pull', wrap(async (_req, res) => {
     const { resolveVault } = memoryStore;
     const { pull, isGitInstalled } = memoryGit;
     const { projectVaultRoot, mode } = resolveVault(projectRoot);
 
     if (mode === 'local-only') {
-      res.status(400).json({ error: 'local_only_mode' });
+      res.json({ ok: false, error: 'local_only_mode', message: 'pull is not available in local-only mode' });
       return;
     }
+
+    if (!existsSync(projectVaultRoot)) {
+      res.json({
+        ok: false,
+        error: 'vault_not_found',
+        message: `Vault directory not found at ${projectVaultRoot}. Run \`bizar memory init\` to create it.`,
+      });
+      return;
+    }
+
     if (!isGitInstalled()) {
-      res.status(503).json({ error: 'git_not_installed' });
+      res.json({
+        ok: false,
+        error: 'git_not_installed',
+        message: 'git is not installed or not found on PATH. Install git to enable sync.',
+      });
       return;
     }
 
     const result = pull(projectVaultRoot);
     if (!result.ok) {
-      res.status(500).json({ error: 'pull_failed', message: result.error });
+      res.json({ ok: false, error: 'pull_failed', message: result.error });
       return;
     }
     res.json({ ok: true, output: result.output });
@@ -1001,20 +1019,33 @@ export function createMemoryRouter({ projectRoot }) {
     }
 
     const { vaultRoot, projectVaultRoot, mode } = resolveVault(projectRoot);
-    const vaultExists = existsSync(projectVaultRoot);
+    // v5.5.2 — Check the GENERAL vault root (vaultRoot), not the project
+    // subdirectory (projectVaultRoot). The general vault exists at
+    // ~/.bizar_memory if the user has ever run `bizar memory init` or if
+    // auto-migration ran. The project subdirectory
+    // (~/.bizar_memory/projects/<projectId>/) is only created lazily on
+    // first write.
+    const generalVaultExists = existsSync(vaultRoot);
+    const projectVaultExists = existsSync(projectVaultRoot);
     checks.push({
       name: 'vault_exists',
-      pass: vaultExists,
-      detail: vaultExists ? vaultRoot : 'vault directory missing',
+      pass: generalVaultExists,
+      detail: generalVaultExists
+        ? projectVaultExists
+          ? vaultRoot
+          : `${vaultRoot} (project subdirectory not yet created — click Initialize)`
+        : `vault directory missing — run \`bizar memory init\` to create it`,
     });
-    if (vaultExists) score += 20;
+    if (generalVaultExists) score += 20;
 
     // Writable?
+    // v5.5.2 — Write to vaultRoot (the general vault), not projectVaultRoot,
+    // since the project subdirectory may not exist yet.
     let writable = false;
-    if (vaultExists) {
+    if (generalVaultExists) {
       try {
-        const probe = join(projectVaultRoot, '.health-probe.tmp');
-        writeFileSync(probe, 'ok');
+        const probe = join(vaultRoot, '.health-probe.tmp');
+        writeFileSync(probe, 'ok', 'utf8');
         try {
           const { unlinkSync } = await import('node:fs');
           unlinkSync(probe);
@@ -1024,13 +1055,20 @@ export function createMemoryRouter({ projectRoot }) {
         writable = false;
       }
     }
-    checks.push({ name: 'vault_writable', pass: writable, detail: writable ? 'yes' : 'no' });
+    checks.push({
+      name: 'vault_writable',
+      pass: writable,
+      detail: writable ? 'yes' : generalVaultExists ? 'vault root not writable' : 'vault directory missing',
+    });
     if (writable) score += 10;
 
     // Git clean?
+    // v5.5.2 — In managed/linked mode, the git repo lives at vaultRoot, not
+    // projectVaultRoot. Use vaultRoot for git status; projectVaultRoot is only
+    // a subdirectory of the repo.
     let gitClean = null;
-    if ((mode === 'managed' || mode === 'linked') && vaultExists && isGitInstalled()) {
-      const gs = gitStatus(projectVaultRoot);
+    if ((mode === 'managed' || mode === 'linked') && generalVaultExists && isGitInstalled()) {
+      const gs = gitStatus(vaultRoot);
       gitClean = gs.clean;
       checks.push({
         name: 'git_clean',
@@ -1064,7 +1102,7 @@ export function createMemoryRouter({ projectRoot }) {
 
     // Schema valid?
     let invalidCount = 0;
-    if (vaultExists) {
+    if (generalVaultExists) {
       const validationResults = validateAll(projectRoot);
       invalidCount = validationResults.length;
     }
@@ -1073,11 +1111,11 @@ export function createMemoryRouter({ projectRoot }) {
       pass: invalidCount === 0,
       detail: invalidCount === 0 ? 'all notes valid' : `${invalidCount} invalid`,
     });
-    if (invalidCount === 0 && vaultExists) score += 15;
+    if (invalidCount === 0 && generalVaultExists) score += 15;
 
     // Secrets clean?
     let highFindings = 0;
-    if (vaultExists) {
+    if (generalVaultExists) {
       for (const n of listNotes(projectRoot)) {
         const r = scanForSecrets(projectRoot, n.relPath);
         if (!r.safe) {

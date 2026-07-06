@@ -9,8 +9,11 @@ import assert from 'node:assert';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { execSync, execFileSync } from 'node:child_process';
 
 const TEST_MEMORY_STORE = await import('../src/server/memory-store.mjs').then((m) => m);
+const { DEFAULT_MEMORY_VAULT } = TEST_MEMORY_STORE;
+const TEST_GIT = await import('../src/server/memory-git.mjs').then((m) => m);
 
 describe('memory-store', () => {
   let projectRoot;
@@ -386,6 +389,105 @@ describe('memory-store', () => {
       TEST_MEMORY_STORE.initVault(projectRoot);
       const ok = TEST_MEMORY_STORE.deleteNote(projectRoot, 'does-not-exist.md');
       assert.strictEqual(ok, false);
+    });
+  });
+
+  // ── migrateLegacyGitRepoPath ────────────────────────────────────────────
+
+  describe('migrateLegacyGitRepoPath', () => {
+    it('returns migrated=false when config does not exist', () => {
+      // projectRoot has no .bizar/memory.json
+      const r = TEST_MEMORY_STORE.migrateLegacyGitRepoPath(projectRoot);
+      assert.strictEqual(r.migrated, false);
+    });
+
+    it('returns migrated=false when git.repoPath is not set', () => {
+      TEST_MEMORY_STORE.saveConfig(projectRoot, {
+        version: 1,
+        mode: 'managed',
+        projectId: 'test-proj',
+        memoryRepo: { mode: 'managed', path: null },
+      });
+      const r = TEST_MEMORY_STORE.migrateLegacyGitRepoPath(projectRoot);
+      assert.strictEqual(r.migrated, false);
+    });
+
+    it('returns migrated=false when legacy path does not exist and new path also does not exist', () => {
+      TEST_MEMORY_STORE.saveConfig(projectRoot, {
+        version: 1,
+        mode: 'managed',
+        projectId: 'test-proj',
+        git: { repoPath: '/nonexistent/legacy/path' },
+        memoryRepo: { mode: 'managed', path: '/nonexistent/legacy/path' },
+      });
+      const r = TEST_MEMORY_STORE.migrateLegacyGitRepoPath(projectRoot);
+      assert.strictEqual(r.migrated, false);
+    });
+
+    it('returns migrated=false when legacy path does not exist but new path is not a git repo', () => {
+      // Use the same path the migration function checks, but don't init git
+      const newDefault = join(DEFAULT_MEMORY_VAULT, 'bizar-memory');
+      mkdirSync(newDefault, { recursive: true });
+      try {
+        TEST_MEMORY_STORE.saveConfig(projectRoot, {
+          version: 1,
+          mode: 'managed',
+          projectId: 'test-proj',
+          git: { repoPath: '/nonexistent/legacy/path' },
+          memoryRepo: { mode: 'managed', path: '/nonexistent/legacy/path' },
+        });
+        const r = TEST_MEMORY_STORE.migrateLegacyGitRepoPath(projectRoot);
+        assert.strictEqual(r.migrated, false);
+      } finally {
+        rmSync(newDefault, { recursive: true, force: true });
+      }
+    });
+
+    it('migrates when legacy path does not exist but new path is a git repo', () => {
+      // newDefault = join(DEFAULT_MEMORY_VAULT, 'bizar-memory') in the migration function
+      const newDefault = join(DEFAULT_MEMORY_VAULT, 'bizar-memory');
+      mkdirSync(newDefault, { recursive: true });
+      // Init git in the actual path the migration function checks
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: newDefault, encoding: 'utf8', stdio: 'pipe' });
+      } catch { /* ignore — git may not be available in test env */ }
+      try {
+        TEST_MEMORY_STORE.saveConfig(projectRoot, {
+          version: 1,
+          mode: 'managed',
+          projectId: 'test-proj',
+          git: { repoPath: '/nonexistent/legacy/path' },
+          memoryRepo: { mode: 'managed', path: '/nonexistent/legacy/path' },
+        });
+        const r = TEST_MEMORY_STORE.migrateLegacyGitRepoPath(projectRoot);
+        assert.strictEqual(r.migrated, true);
+        assert.ok(r.from.includes('/nonexistent/legacy/path'));
+        assert.strictEqual(r.to, newDefault);
+
+        // Verify config was updated
+        const updated = TEST_MEMORY_STORE.loadConfig(projectRoot);
+        assert.strictEqual(updated.config.git?.repoPath, newDefault);
+      } finally {
+        rmSync(newDefault, { recursive: true, force: true });
+      }
+    });
+
+    it('returns migrated=false when legacy path already exists (no need to migrate)', () => {
+      const legacyPath = join(tmpdir(), `bizar-legacy-exists-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      mkdirSync(legacyPath, { recursive: true });
+      try {
+        TEST_MEMORY_STORE.saveConfig(projectRoot, {
+          version: 1,
+          mode: 'managed',
+          projectId: 'test-proj',
+          git: { repoPath: legacyPath },
+          memoryRepo: { mode: 'managed', path: legacyPath },
+        });
+        const r = TEST_MEMORY_STORE.migrateLegacyGitRepoPath(projectRoot);
+        assert.strictEqual(r.migrated, false);
+      } finally {
+        rmSync(legacyPath, { recursive: true, force: true });
+      }
     });
   });
 });
