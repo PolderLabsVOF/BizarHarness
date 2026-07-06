@@ -93,7 +93,7 @@ describe('Sidebar — settingsMode', () => {
       />,
     );
     const themeBtn = screen.getByRole('button', { name: /theme/i });
-    expect(themeBtn).toHaveClass('settings-nav-item-active');
+    expect(themeBtn).toHaveClass('sidebar-tab-active');
   });
 
   it('calls onSettingsSectionChange when a section is clicked', async () => {

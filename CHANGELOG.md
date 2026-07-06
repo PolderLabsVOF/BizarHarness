@@ -1,5 +1,23 @@
 # Changelog
 
+## v5.5.4 — Patch: git binary resolve, sidebar styling, settings nav fix
+
+### Bug fixes
+
+1. **`bizar memory pull` failed with `spawnSync git ENOENT`** — when the dashboard runs as a systemd user unit, `PATH` doesn't include `/usr/bin`, so `execFileSync('git', ...)` fails even though git is installed. `bizar-dash/src/server/memory-git.mjs` and `memory-store.mjs` now use `resolveGitBinary()` which calls `which git` first, falls back to known paths (`/usr/bin/git`, `/usr/local/bin/git`, `/opt/homebrew/bin/git`). Resolves once at module load and caches as `GIT_BIN`. Replaced all 18+ `execFileSync('git', ...)` call sites.
+
+2. **Settings sidebar styling now matches main sidebar** — `SettingsNav` used custom `.settings-nav-item*` classes giving it different visual treatment from the main sidebar. Section buttons now use `.sidebar-tab` / `.sidebar-tab-active` (same classes as main Sidebar). Back button also uses `.sidebar-tab`. Custom rules removed from `settings.css`.
+
+3. **Duplicate Layout/General sections + missing nav sections fixed** — `general` and `layout` both rendered the same `GeneralSection`. Several sections rendered by Settings.tsx (network, notifications, auth, agents, activity-log, workspaces) had no entry in SettingsNav. SettingsNav reorganised into groups: General (Theme, Layout), Core (Env Vars, Network, Notifications, Auth, System LLM), Agents, Experience (Updates, Headroom), Data (Activity Log, Workspaces). Added lucide-react icons: `Wifi`, `Bell`, `Shield`, `Users`, `Activity`, `FolderGit2`.
+
+### Tests
+- `npm run typecheck`: clean
+- `npm run test:web`: 347/352 pass; 5 pre-existing a11y failures (unrelated)
+- `npm test`: pre-existing failures from CI not having git installed (unrelated)
+
+### Upgrade
+`npm install -g @polderlabs/bizar@5.5.4`
+
 ## v5.5.3 — Smoke test fixes for `bizar update`
 
 ### Bug fixes

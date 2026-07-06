@@ -18,7 +18,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, lstatSync, unlinkSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync as _execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve as pathResolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { parseFrontmatter, serializeFrontmatter } from './yaml.mjs';
@@ -27,6 +27,43 @@ import { scan as scanSecrets, hasHighFindings } from './memory-secrets.mjs';
 import { atomicWriteJson, safeReadJSON, safeReadText } from '../../../cli/atomic.mjs';
 import * as memoryGit from './memory-git.mjs';
 import { warn as loggerWarn } from './logger.mjs';
+
+/**
+ * Resolve the `git` binary path once at module load time.
+ *
+ * When the dashboard runs under systemd, PATH typically does not include
+ * /usr/bin — this helper finds git's absolute path so that all
+ * execFileSync calls work regardless of the process's environment.
+ *
+ * @returns {string} absolute path to git, or 'git' as a best-effort fallback
+ */
+function resolveGitBinary() {
+  try {
+    const out = _execFileSync('which', ['git'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    if (out) return out;
+  } catch { /* which not available or failed */ }
+
+  const fallbacks = ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/git/bin/git'];
+  for (const f of fallbacks) {
+    try {
+      _execFileSync(f, ['--version'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      return f;
+    } catch { /* keep looking */ }
+  }
+
+  return 'git';
+}
+
+/** Cached absolute path to the git binary. */
+const GIT_BIN = resolveGitBinary();
+
+/** Wrapper that always uses the resolved GIT_BIN path. */
+function execFileSync(args, opts) {
+  return _execFileSync(GIT_BIN, args, opts);
+}
 
 const HOME = homedir();
 
@@ -99,9 +136,9 @@ export function ensureVaultExists() {
     mkdirSync(vault, { recursive: true, mode: 0o700 });
     if (!existsSync(join(vault, '.git'))) {
       try {
-        execFileSync('git', ['init'], { cwd: vault, stdio: 'pipe' });
-        execFileSync('git', ['config', 'user.email', 'bizar@localhost'], { cwd: vault, stdio: 'pipe' });
-        execFileSync('git', ['config', 'user.name', 'BizarHarness'], { cwd: vault, stdio: 'pipe' });
+        execFileSync(['init'], { cwd: vault, stdio: 'pipe' });
+        execFileSync(['config', 'user.email', 'bizar@localhost'], { cwd: vault, stdio: 'pipe' });
+        execFileSync(['config', 'user.name', 'BizarHarness'], { cwd: vault, stdio: 'pipe' });
       } catch (err) {
         loggerWarn('failed to init git in vault', { vault, err: err.message });
       }
@@ -318,7 +355,7 @@ export function initVault(projectRoot) {
     const isGit = existsSync(join(repoPath, '.git'));
     if (!isGit) {
       try {
-        execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath, stdio: 'pipe' });
+        execFileSync(['init', '-b', 'main'], { cwd: repoPath, stdio: 'pipe' });
         created.push(`${repoPath}/.git/`);
       } catch (err) {
         return { ok: false, vaultRoot, created, error: `git init failed: ${err.message}` };
@@ -339,8 +376,8 @@ export function initVault(projectRoot) {
           'utf8');
         created.push(`${repoPath}/.gitignore`);
         try {
-          execFileSync('git', ['add', '.gitignore'], { cwd: repoPath });
-          execFileSync('git', ['commit', '-m', 'chore: initial .gitignore for memory repo'], {
+          execFileSync(['add', '.gitignore'], { cwd: repoPath });
+          execFileSync(['commit', '-m', 'chore: initial .gitignore for memory repo'], {
             cwd: repoPath,
             env: {
               ...process.env,

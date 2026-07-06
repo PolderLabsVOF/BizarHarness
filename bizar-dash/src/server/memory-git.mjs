@@ -9,16 +9,60 @@
  * addFile, addAll.
  */
 
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync as _execFileSync, execSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+
+/**
+ * Resolve the `git` binary path once at module load time.
+ *
+ * When the dashboard runs under systemd, PATH typically does not include
+ * /usr/bin — resulting in `spawnSync git ENOENT` even though git IS
+ * installed.  This helper locates git using `which`, then falls back to
+ * common installation paths before returning an absolute path (or 'git'
+ * as a last-resort).
+ *
+ * @returns {string} absolute path to git, or 'git' as a best-effort fallback
+ */
+export function resolveGitBinary() {
+  // Try `which git` first
+  try {
+    const out = _execFileSync('which', ['git'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    if (out) return out;
+  } catch { /* which not available or failed */ }
+
+  // Fallback to common absolute paths
+  const fallbacks = ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/git/bin/git'];
+  for (const f of fallbacks) {
+    try {
+      _execFileSync(f, ['--version'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      return f;
+    } catch { /* keep looking */ }
+  }
+
+  return 'git'; // best-effort fallback — will only work if PATH is correct
+}
+
+/** Cached absolute path to the git binary. */
+const GIT_BIN = resolveGitBinary();
+
+/**
+ * Wrapper around execFileSync that always uses the resolved GIT_BIN path.
+ * This ensures git is found even when PATH is stripped (e.g. systemd units).
+ */
+function execFileSync(args, opts) {
+  return _execFileSync(GIT_BIN, args, opts);
+}
 
 /**
  * @returns {boolean} true if `git --version` exits 0.
  */
 export function isGitInstalled() {
   try {
-    execFileSync('git', ['--version'], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    execFileSync(GIT_BIN, ['--version'], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     return true;
   } catch {
     return false;
@@ -36,7 +80,7 @@ export function isGitInstalled() {
 export function clone(remote, targetDir, { branch = 'main', depth = 1 } = {}) {
   try {
     const args = ['clone', '--branch', branch, '--depth', String(depth), remote, targetDir];
-    const output = execFileSync('git', args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    const output = execFileSync(args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     return { ok: true, output };
   } catch (err) {
     return { ok: false, output: '', error: err.message };
@@ -53,7 +97,7 @@ export function clone(remote, targetDir, { branch = 'main', depth = 1 } = {}) {
 export function pull(dir, { rebase = true } = {}) {
   try {
     const args = rebase ? ['pull', '--rebase'] : ['pull', '--ff-only'];
-    const output = execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    const output = execFileSync(args, { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     return { ok: true, output };
   } catch (err) {
     return { ok: false, output: '', error: err.message };
@@ -74,7 +118,7 @@ export function commit(dir, message, { author } = {}) {
     if (author) {
       args.push('--author', author);
     }
-    const output = execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    const output = execFileSync(args, { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     return { ok: true, output };
   } catch (err) {
     return { ok: false, output: '', error: err.message };
@@ -91,7 +135,6 @@ export function commit(dir, message, { author } = {}) {
 export function push(dir, { remote = 'origin', branch = 'main' } = {}) {
   try {
     const output = execFileSync(
-      'git',
       ['push', remote, branch],
       { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
     );
@@ -112,7 +155,7 @@ export function status(dir) {
     // Get branch name
     let branch = 'main';
     try {
-      branch = execFileSync('git', ['branch', '--show-current'], {
+      branch = execFileSync(['branch', '--show-current'], {
         cwd: dir,
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -120,7 +163,7 @@ export function status(dir) {
     } catch { /* ignore */ }
 
     // Get status --porcelain
-    const raw = execFileSync('git', ['status', '--porcelain'], {
+    const raw = execFileSync(['status', '--porcelain'], {
       cwd: dir,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -143,13 +186,13 @@ export function status(dir) {
     let ahead = 0;
     let behind = 0;
     try {
-      const revparse = execFileSync('git', ['revparse', '--abbrev-ref', '@{upstream}'], {
+      const revparse = execFileSync(['rev-parse', '--abbrev-ref', '@{upstream}'], {
         cwd: dir,
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
       if (revparse) {
-        const aheadBehind = execFileSync('git', ['rev-list', '--left-right', '--count', `${branch}...${revparse}`], {
+        const aheadBehind = execFileSync(['rev-list', '--left-right', '--count', `${branch}...${revparse}`], {
           cwd: dir,
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -226,7 +269,7 @@ export function acquireLock(repoDir) {
  */
 export function addFile(dir, filePath) {
   try {
-    execFileSync('git', ['add', filePath], { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    execFileSync(['add', filePath], { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -241,7 +284,7 @@ export function addFile(dir, filePath) {
  */
 export function addAll(dir) {
   try {
-    execFileSync('git', ['add', '-A'], { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    execFileSync(['add', '-A'], { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -262,7 +305,7 @@ export function addAll(dir) {
 export function addRemote(repoDir, remoteName, url, { overwrite = false } = {}) {
   let existing = null;
   try {
-    existing = execFileSync('git', ['remote', 'get-url', remoteName], {
+    existing = execFileSync(['remote', 'get-url', remoteName], {
       cwd: repoDir,
       encoding: 'utf8',
       timeout: 5000,
@@ -287,7 +330,7 @@ export function addRemote(repoDir, remoteName, url, { overwrite = false } = {}) 
   }
 
   if (existing) {
-    execFileSync('git', ['remote', 'set-url', remoteName, url], {
+    execFileSync(['remote', 'set-url', remoteName, url], {
       cwd: repoDir,
       timeout: 5000,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -295,7 +338,7 @@ export function addRemote(repoDir, remoteName, url, { overwrite = false } = {}) 
     return { ok: true, action: 'updated' };
   }
 
-  execFileSync('git', ['remote', 'add', remoteName, url], {
+  execFileSync(['remote', 'add', remoteName, url], {
     cwd: repoDir,
     timeout: 5000,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -315,7 +358,7 @@ export function addRemote(repoDir, remoteName, url, { overwrite = false } = {}) 
  */
 export function lsRemote(repoDir, remoteName, { timeoutMs = 5000 } = {}) {
   try {
-    const stdout = execFileSync('git', ['ls-remote', remoteName], {
+    const stdout = execFileSync(['ls-remote', remoteName], {
       cwd: repoDir,
       timeout: timeoutMs,
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
@@ -356,7 +399,7 @@ export function ensureUpstream(cwd, branch, remote = 'origin') {
   // Current upstream — empty string means none configured.
   let current = '';
   try {
-    current = execFileSync('git', ['rev-parse', '--abbrev-ref', '@{upstream}'], {
+    current = execFileSync(['rev-parse', '--abbrev-ref', '@{upstream}'], {
       cwd,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -371,7 +414,7 @@ export function ensureUpstream(cwd, branch, remote = 'origin') {
 
   // Verify the remote exists before trying to set upstream to it.
   try {
-    execFileSync('git', ['rev-parse', '--verify', remote], {
+    execFileSync(['rev-parse', '--verify', remote], {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -380,7 +423,7 @@ export function ensureUpstream(cwd, branch, remote = 'origin') {
   }
 
   try {
-    execFileSync('git', ['branch', '--set-upstream-to', `${remote}/${branch}`], {
+    execFileSync(['branch', '--set-upstream-to', `${remote}/${branch}`], {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
     });

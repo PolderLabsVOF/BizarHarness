@@ -617,28 +617,6 @@
   gap: 2px;
 }
 
-/* Back button */
-.settings-nav-back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--motion-fast), color var(--motion-fast);
-  margin-bottom: var(--space-2);
-}
-
-.settings-nav-back:hover {
-  background: var(--bg-elev-2);
-  color: var(--text);
-}
-
 .settings-nav-divider {
   height: 1px;
   background: var(--border);
@@ -657,58 +635,6 @@
   color: var(--text-dim);
   font-weight: 600;
   padding: 4px 8px 6px;
-}
-
-/* Individual nav items */
-.settings-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
-}
-
-.settings-nav-item:hover {
-  background: var(--bg-elev-2);
-  color: var(--text);
-}
-
-.settings-nav-item-active {
-  background: var(--accent-bg);
-  color: var(--accent-2);
-  border-color: var(--accent-border);
-}
-
-.settings-nav-item-active:hover {
-  background: var(--accent-bg);
-  color: var(--accent-2);
-}
-
-.settings-nav-item-icon {
-  flex-shrink: 0;
-  opacity: 0.7;
-}
-
-.settings-nav-item-active .settings-nav-item-icon {
-  opacity: 1;
-}
-
-.settings-nav-item-label {
-  flex: 1;
-}
-
-.settings-nav-item-chevron {
-  flex-shrink: 0;
-  opacity: 0.5;
 }
 
 /* ─────────────────────────────────────────────────────────────────────

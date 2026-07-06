@@ -51,7 +51,9 @@ describe('SettingsNav', () => {
     );
     expect(screen.getByText('General', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
     expect(screen.getByText('Core', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
+    expect(screen.getByText('Agents', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
     expect(screen.getByText('Experience', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
+    expect(screen.getByText('Data', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
   });
 
   it('renders section items within each group', () => {
@@ -65,7 +67,6 @@ describe('SettingsNav', () => {
     // General group
     expect(screen.getByRole('button', { name: /theme/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /layout/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /general/i })).toBeInTheDocument();
     // Core group
     expect(screen.getByRole('button', { name: /env vars/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /system llm/i })).toBeInTheDocument();
@@ -96,7 +97,7 @@ describe('SettingsNav', () => {
       />,
     );
     const themeBtn = screen.getByRole('button', { name: /theme/i });
-    expect(themeBtn).toHaveClass('settings-nav-item-active');
+    expect(themeBtn).toHaveClass('sidebar-tab-active');
   });
 
   it('toggles off the active section when clicking it again', async () => {

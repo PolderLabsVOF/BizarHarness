@@ -288,7 +288,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot, settingsMode, s
       <div className={cn('settings-grid', activeSection && 'settings-grid-filtered')} data-active-section={activeSection || undefined}>
         {(showAll || sectionOf('theme')) && <div id="settings-theme"><ThemeSection {...sp} /></div>}
         {(showAll || sectionOf('updates')) && <div id="settings-updates"><UpdatesSection /></div>}
-        {(showAll || sectionOf('layout') || sectionOf('general')) && <div id="settings-general"><GeneralSection {...sp} autoSave={autoSave} /></div>}
+        {(showAll || sectionOf('layout')) && <div id="settings-general"><GeneralSection {...sp} autoSave={autoSave} /></div>}
         {(showAll || sectionOf('env-vars')) && <div id="settings-env-vars"><EnvVarsSection /></div>}
         {(showAll || sectionOf('network') || sectionOf('service') || sectionOf('tailscale')) && <div id="settings-network"><NetworkSection tailscale={tailscale} tailscaleDraft={tailscaleDraft} setTailscaleDraft={setTailscaleDraft} onTailscaleToggle={onTailscaleToggle} /></div>}
         {(showAll || sectionOf('network') || sectionOf('tailscale')) && <TailscaleSettings initialStatus={tailscale} />}

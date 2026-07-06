@@ -15,6 +15,24 @@ const TEST_GIT = await import('../src/server/memory-git.mjs').then((m) => m);
 const GIT_INSTALLED = TEST_GIT.isGitInstalled();
 
 describe('memory-git', () => {
+  describe('resolveGitBinary', () => {
+    it('returns a non-empty string', () => {
+      const { resolveGitBinary } = TEST_GIT;
+      const bin = resolveGitBinary();
+      assert.ok(typeof bin === 'string' && bin.length > 0, `expected non-empty string, got: ${bin}`);
+    });
+
+    it('is a valid git command (absolute path or "git")', () => {
+      const { resolveGitBinary } = TEST_GIT;
+      const bin = resolveGitBinary();
+      // Must be either 'git' or an absolute path (starts with /)
+      assert.ok(
+        bin === 'git' || bin.startsWith('/'),
+        `expected 'git' or absolute path, got: ${bin}`,
+      );
+    });
+  });
+
   let bareRemote;
   let workingDir;
 
