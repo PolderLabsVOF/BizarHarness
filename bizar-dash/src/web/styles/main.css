@@ -9085,9 +9085,24 @@ select:focus-visible,
   margin-top: 1rem;
 }
 
-/* v4.9.0 settings-mode-banner / settings-mode-indicator removed in v6.x:
-   each settings section is its own tab, so there's no longer a "settings
-   mode" to banner or to mark with an indicator dot. */
+/* v4.9.0 — Banner shown in Settings view when settingsMode is active */
+.settings-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: linear-gradient(to right, rgba(139, 92, 246, 0.1), transparent);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.settings-mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent, #8b5cf6);
+  margin-left: 6px;
+}
 
 /* ─── Toggle switch ──────────────────────────────────────────────── */
 

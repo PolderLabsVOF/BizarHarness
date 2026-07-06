@@ -1,8 +1,4 @@
 // src/components/Topbar.tsx — header with brand, project selector, search, tabs, ws status.
-// v6.x — Each settings section is its own top-level tab in the rail
-// (handled by the Sidebar; the Topbar also surfaces them in its tabs row
-// when the topbar layout is active). Dropped the layout selector and the
-// `settings-mode-indicator` adornment.
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -10,7 +6,9 @@ import {
   MessageSquare,
   Bot,
   Map,
+  Folder,
   CheckSquare,
+  Settings2,
   Sliders,
   Puzzle,
   Clock,
@@ -19,6 +17,8 @@ import {
   ChevronDown,
   Plus,
   RefreshCw,
+  Power,
+  Sparkles,
   Activity,
   Radio,
   Coins,
@@ -26,17 +26,6 @@ import {
   Stethoscope,
   ClipboardCheck,
   Store,
-  Palette,
-  LayoutGrid,
-  Terminal,
-  Wifi,
-  Bell,
-  Lock,
-  Cpu,
-  Gauge,
-  Folder,
-  Sparkles,
-  Settings2,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -78,25 +67,7 @@ export const TABS: TabDef[] = [
   // home screen and from the settings surface (where an operator
   // typically arrives after something looks off).
   { id: 'doctor', label: 'Doctor', icon: Stethoscope },
-  // v6.x — Settings: each section is its own top-level tab. Grouped
-  // visually with a divider before "Theme" so the rail still reads
-  // as "system tabs → settings tabs". Use distinct lucide icons so
-  // each section is recognisable at a glance instead of a generic
-  // gear icon for all of them.
-  { id: '__settings_divider__', label: '', icon: Settings2 },
-  { id: 'settings-theme', label: 'Theme', icon: Palette },
-  { id: 'settings-general', label: 'General', icon: Sliders },
-  { id: 'settings-layout', label: 'Layout', icon: LayoutGrid },
-  { id: 'settings-network', label: 'Network', icon: Wifi },
-  { id: 'settings-notifications', label: 'Notifications', icon: Bell },
-  { id: 'settings-auth', label: 'Auth', icon: Lock },
-  { id: 'settings-env-vars', label: 'Env Vars', icon: Terminal },
-  { id: 'settings-agents', label: 'Agents', icon: Bot },
-  { id: 'settings-system-llm', label: 'System LLM', icon: Cpu },
-  { id: 'settings-headroom', label: 'Headroom', icon: Gauge },
-  { id: 'settings-updates', label: 'Updates', icon: RefreshCw },
-  { id: 'settings-activity-log', label: 'Activity Log', icon: Activity },
-  { id: 'settings-workspaces', label: 'Workspaces', icon: Folder },
+  { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 
 export type TopbarProps = {
@@ -118,7 +89,7 @@ export type TopbarProps = {
    */
   notificationsSlot?: ReactNode;
   /**
-   * Whether to render the tabs row. In sidebar layout the sidebar
+   * Whether to render the tabs row. In sidebar/both layouts the sidebar
    * carries navigation, so we hide this row to keep the topbar slim.
    */
   showTabs?: boolean;
@@ -185,16 +156,6 @@ export function Topbar({
       {showTabs && (
         <nav className="tabs-row" role="tablist" aria-label="Primary tabs">
           {TABS.map((tab) => {
-            // v6.x — `__settings_divider__` is a layout-only entry; render a
-            // non-interactive separator that visually splits system tabs from
-            // settings tabs.
-            if (tab.id === '__settings_divider__') {
-              return (
-                <span key={tab.id} className="tab-separator tab-separator-settings" aria-hidden="true">
-                  <span className="tab-separator-label">Settings</span>
-                </span>
-              );
-            }
             const Icon = tab.icon;
             const active = tab.id === activeTab;
             return (
@@ -209,6 +170,11 @@ export function Topbar({
               >
                 <Icon size={14} className="tab-icon" />
                 <span className="tab-label">{tab.label}</span>
+                {tab.id === 'settings' && active && (
+                  <span className="settings-mode-indicator" title="Settings mode active">
+                    <Settings2 size={12} />
+                  </span>
+                )}
               </button>
             );
           })}
@@ -423,6 +389,3 @@ function TopbarAddProjectDialog({
     </div>
   );
 }
-
-// (No additional exports below this point — keep Topbar's public surface
-//  to the props, TABS, and the named Topbar component.)

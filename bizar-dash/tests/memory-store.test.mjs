@@ -53,11 +53,12 @@ describe('memory-store', () => {
         lightrag: { enabled: false, host: '127.0.0.1', port: 9621, workingDir: join(projectRoot, '.bizar', 'lightrag') },
         git: { autoPullOnSessionStart: false, autoCommitOnMemoryWrite: false, autoPushOnSessionEnd: false, commitAuthor: 'Bizar Memory <bizar-memory@local>', commitMessageTemplate: 'memory(my-proj): {summary}' },
       });
-      const { vaultRoot, mode } = TEST_MEMORY_STORE.resolveVault(projectRoot);
+      const { vaultRoot, projectVaultRoot, mode } = TEST_MEMORY_STORE.resolveVault(projectRoot);
       assert.strictEqual(mode, 'managed');
-      assert.ok(vaultRoot.includes('data/memory'));
-      assert.ok(vaultRoot.includes('projects'));
-      assert.ok(vaultRoot.includes('my-proj'));
+      assert.ok(vaultRoot.includes('data/memory'), 'vaultRoot should include data/memory');
+      assert.ok(projectVaultRoot.includes('projects'), 'projectVaultRoot should include projects');
+      assert.ok(projectVaultRoot.includes('my-proj'), 'projectVaultRoot should include my-proj');
+      assert.ok(projectVaultRoot.startsWith(vaultRoot), 'projectVaultRoot should be under vaultRoot');
     });
   });
 

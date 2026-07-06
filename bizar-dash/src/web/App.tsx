@@ -43,6 +43,7 @@ import { BackgroundAgents } from './views/BackgroundAgents';
 import { Doctor } from './views/Doctor';
 import { Eval } from './views/Eval';
 import { EvalReport } from './views/EvalReport';
+import { SettingsNav } from './components/SettingsNav';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
 import { AlertTriangle, Globe, LayoutTemplate, X } from 'lucide-react';
@@ -56,10 +57,16 @@ type ViewProps = {
   setActiveTab: (id: string) => void;
   refreshSnapshot: () => Promise<void>;
   /**
-   * v6.x — Optional settings section id. When set, the SettingsView
-   * renders only that section (each settings section is its own tab).
+   * v4.9.0 — When true, the sidebar shows the full settings navigation
+   * instead of the normal tab rail. Toggled by clicking the Settings tab.
    */
-  section?: string;
+  settingsMode: boolean;
+  /**
+   * v4.9.0 — The active settings section highlighted in the sidebar nav.
+   * Null means "show all". Managed at App level so Sidebar can read it.
+   */
+  settingsActiveSection: string | null;
+  setSettingsActiveSection: (id: string | null) => void;
   /**
    * v3.3.0 — Cross-view scratch state. The "Open in chat" button
    * on the Agents tab sets `pendingInitialAgent`, which the Chat
@@ -74,25 +81,6 @@ export type CrossViewState = {
   initialAgent?: string | null;
 };
 
-// v6.x — Each settings section is its own top-level tab. Registered with
-// the `settings-` prefix so they don't collide with runtime tabs (e.g. the
-// existing `agents` runtime tab vs. the new `settings-agents` settings tab).
-const SETTINGS_SECTION_IDS = [
-  'theme',
-  'updates',
-  'layout',
-  'general',
-  'env-vars',
-  'network',
-  'notifications',
-  'auth',
-  'agents',
-  'system-llm',
-  'headroom',
-  'activity-log',
-  'workspaces',
-] as const;
-
 const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   overview: Overview,
   chat: Chat,
@@ -103,6 +91,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   activity: Activity,
   background: BackgroundAgents,
   config: Config,
+  settings: SettingsView,
   marketplace: Marketplace,
   mods: Mods,
   schedules: Schedules,
@@ -120,12 +109,6 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   eval: Eval,
   evalReport: EvalReport,
 };
-
-// Register each settings section as a dedicated VIEW_MAP entry.
-// The SettingsView component renders only the requested section.
-for (const sectionId of SETTINGS_SECTION_IDS) {
-  VIEW_MAP[`settings-${sectionId}`] = (p) => <SettingsView {...p} section={sectionId} />;
-}
 
 const VERSION = 'v4.5.0';
 
@@ -242,6 +225,11 @@ function Shell() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   const [bootError, setBootError] = useState<string | null>(null);
+  // v4.9.0 — Settings mode: when true, sidebar shows all settings sections
+  const [settingsMode, setSettingsMode] = useState(false);
+  // v4.9.0 — The active settings section shown in the sidebar nav.
+  // Null means "show all sections". Managed here so Sidebar can read it.
+  const [settingsActiveSection, setSettingsActiveSection] = useState<string | null>(null);
   const [authPromptOpen, setAuthPromptOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [stuckAgents, setStuckAgents] = useState<{ name: string }[]>([]);
@@ -657,10 +645,12 @@ function Shell() {
     [toast],
   );
 
-  // v6.x — Each settings section is its own tab. No special "settings mode"
-  // toggle needed; clicking a settings tab just switches to that section.
+  // v4.9.0 — Settings mode: entering settings tab activates the sidebar layout.
+  // Navigating to any other tab exits settings mode.
   const handleTabChange = useCallback((id: string) => {
     setActiveTab(id);
+    if (id === 'settings') setSettingsMode(true);
+    else setSettingsMode(false);
   }, []);
 
   // v3.20.3 — Merge built-in tabs with installed mod views. Mod views
@@ -688,11 +678,14 @@ function Shell() {
         activeTab,
         setActiveTab: handleTabChange,
         refreshSnapshot,
+        settingsMode,
+        settingsActiveSection,
+        setSettingsActiveSection,
       };
       return renderActiveView(activeTab, viewProps, modViews, modViewsReloadKey);
     }
     return null;
-  }, [activeTab, snapshot, settings, modViews, modViewsReloadKey, refreshSnapshot, handleTabChange]);
+  }, [activeTab, snapshot, settings, modViews, modViewsReloadKey, refreshSnapshot, settingsMode, settingsActiveSection, setSettingsActiveSection, handleTabChange]);
 
   const refreshProjects = async () => {
     try {
@@ -735,16 +728,10 @@ function Shell() {
       toast.info(`/${(r.item as { name: string }).name} — run from the TUI`, 2500);
     } else if (t === 'setting') {
       // v3.0.4 — Jump to Settings view and scroll to the matching row.
-      // v6.x — Each settings section is its own tab; pick the right one
-      // based on the field key prefix (e.g. `theme.accent` -> `settings-theme`).
       const settingId = (r.item as { id?: string; path?: string }).id
         || (r.item as { path?: string }).path
         || '';
-      const sectionKey = settingId.split('.')[0] || '';
-      const sectionId = SETTINGS_SECTION_IDS.includes(sectionKey as typeof SETTINGS_SECTION_IDS[number])
-        ? `settings-${sectionKey}`
-        : 'settings-general';
-      handleTabChange(sectionId);
+      handleTabChange('settings');
       // Defer the scroll to allow the view to mount, then apply a brief
       // CSS highlight. We poll a few times because the Settings view
       // mounts lazily after tab switch.
@@ -827,11 +814,17 @@ function Shell() {
         </div>
       )}
       <div className="layout-body">
-        <Sidebar
-          tabs={mergedTabs}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-        />
+        {layout !== 'topnav' && (
+          <Sidebar
+            tabs={mergedTabs}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            settingsMode={settingsMode}
+            settingsActiveSection={settingsActiveSection}
+            onSettingsSectionChange={setSettingsActiveSection}
+            onExitSettings={() => handleTabChange('overview')}
+          />
+        )}
         <main className="content" id="main-content" tabIndex={-1}>
           {bootError && (
             <div className="boot-error">

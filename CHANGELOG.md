@@ -1,5 +1,31 @@
 # Changelog
 
+## v5.5.2 — Memory vault path fix
+
+### Bug fixes
+
+User reported that the memory vault path was being set to a project-specific location (`~/.local/share/bizar/memory/bizar-memory/projects/<id>`) instead of a general memory directory. Within the general vault, projects should auto-sort into their own folders.
+
+**Fixes:**
+
+1. **General vault root** — `memory-store.mjs` now serves the general vault root (`~/.bizar_memory`) as `vaultRoot` in `/memory/status`. Project notes sort into `~/.bizar_memory/projects/<projectId>/` automatically. UI displays the general root, not the project-specific subpath.
+
+2. **Save Path button works** — added `POST /memory/config/vault` endpoint that accepts a new vault path, validates it, persists to `~/.config/bizar/memory-config.json`, and re-initialises the vault. The "Save Path" button in Memory → Config now actually updates the working path.
+
+3. **Git repoPath fix** — `git.repoPath` now defaults to the vault root when not explicitly set. Test git connection succeeds. Pull / Commit / Push buttons operate on the correct directory.
+
+4. **Namespace routing fix** — `writeNote`/`readNote`/`deleteNote` now correctly route `global/bizar` and `users/<id>` namespaces to `vaultRoot` (not `projectVaultRoot`), so global notes don't accidentally land inside the project subfolder.
+
+5. **`addRemoteToVault` overwrite** — setup command can now reconfigure the git remote when called with a new `--remote` URL.
+
+### Tests
+- 395 npm tests pass
+- 332 vitest tests pass / 5 pre-existing a11y (not from this release)
+- TypeScript clean
+
+### Upgrade
+`npm install -g @polderlabs/bizar@5.5.2`
+
 ## v5.5.1 — Steering followup + UI overhaul + server log fixes + browser extension cleanup
 
 ### Highlights

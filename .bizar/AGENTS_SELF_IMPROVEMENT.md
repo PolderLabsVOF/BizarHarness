@@ -1213,3 +1213,19 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 **Files changed:** ~20 files. Steering rewrite: `plugins/bizar/src/tools/bg-spawn.ts`, `bg-send-message.ts`, `bg-spawner.mjs`. Settings restructure: 13 section files + `Sidebar.tsx` + CSS + 19 new tests, 3 old test files deleted. Memory vault path: `ConfigPanel.tsx`, `MemoryOverview.tsx`, `MemorySection.tsx` + 7 new tests. Marketplace UI + 7 new tests. Server fixes: `server.mjs` (TDZ), `memory-lightrag.mjs` (ECONNREFUSED spam), `routes/plugins.mjs` + `cli/commands/marketplace.mjs` (registry URL), `routes/activity.mjs` (SSE endpoint), `headroom.mjs` (DEP0190). Browser extension: `content.ts` (safeSendMessage). 3 new test files for steering.
 
 **Agents used:** Thor (settings UI overhaul, server log fixes), Tyr (steering followup, bg-spawner rewrite), Heimdall (browser extension cleanup, self-improvement entry).
+
+### 2026-07-06
+
+**Context**: v5.5.2 memory vault fix. User reported path was project-specific instead of a general root.
+
+**Lessons**:
+- `vaultRoot` vs `projectVaultRoot` must be clearly distinguished in APIs. The user-facing concept is the GENERAL vault, not the per-project subfolder.
+- When the dashboard UI shows a path, show the GENERAL vault root — project sorting is internal.
+- "Save" buttons in settings UIs must actually persist; if the backend doesn't support it, add the endpoint rather than telling the user to use CLI.
+- `addRemote` without `{ overwrite: true }` is a footgun for any "reconfigure" CLI command.
+
+**Pattern**: When designing multi-tenant paths, separate the user-facing "vault root" from internal "namespace subpath". UI shows the root, backend routes by namespace.
+
+**Files**: memory-store.mjs, routes/memory.mjs, ConfigPanel.tsx, cli/memory.mjs.
+
+**Agents**: Thor.

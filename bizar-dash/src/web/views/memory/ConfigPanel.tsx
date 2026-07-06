@@ -132,9 +132,9 @@ export function ConfigPanel({ refreshKey }: Props) {
         await api.post('/memory/init', { vaultRoot: target });
         toast.success(`Vault initialised at ${target}.`);
       } else {
-        // Backend doesn't currently expose a "move vault" endpoint, so
-        // we surface a clear message rather than silently failing.
-        toast.info('Vault path already initialised — run `bizar memory init --path <new>` from the CLI to move it.');
+        // v6.x — Call the new vault config endpoint to persist the path.
+        await api.post('/memory/config/vault', { vaultRoot: target });
+        toast.success(`Vault path updated to ${target}.`);
       }
       setVaultPathDraft(target);
       await reload();
@@ -269,7 +269,7 @@ export function ConfigPanel({ refreshKey }: Props) {
             />
             <span className="field-hint">
               {initialised
-                ? 'Save to update the working path (or use `bizar memory init --path <new>` from the CLI to migrate).'
+                ? 'Save to update the working path.'
                 : 'Save and initialise will create this folder if it does not exist.'}
             </span>
           </Row>

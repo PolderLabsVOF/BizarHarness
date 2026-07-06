@@ -10,8 +10,9 @@
  */
 
 import { Router } from 'express';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve as pathResolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { existsSync, mkdirSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { warn as logWarn } from '../logger.mjs';
@@ -60,17 +61,19 @@ export function createMemoryRouter({ projectRoot }) {
 
     const { config, exists } = loadConfig(projectRoot);
     if (!exists) {
-      res.json({ initialized: false, mode: null, projectId: null, vaultRoot: null });
+      res.json({ initialized: false, mode: null, projectId: null, vaultRoot: null, projectVaultRoot: null });
       return;
     }
 
-    const { vaultRoot, mode, projectId, branch } = resolveVault(projectRoot);
-    const notes = existsSync(vaultRoot) ? listNotes(projectRoot) : [];
+    // v6.x — vaultRoot is now the GENERAL vault root (e.g. ~/.bizar_memory).
+    // projectVaultRoot is the project-specific subdirectory for note storage.
+    const { vaultRoot, projectVaultRoot, mode, projectId, branch } = resolveVault(projectRoot);
+    const notes = existsSync(projectVaultRoot) ? listNotes(projectRoot) : [];
 
     let gitClean = null;
     let gitBranch = null;
-    if ((mode === 'managed' || mode === 'linked') && existsSync(vaultRoot) && isGitInstalled()) {
-      const gs = gitStatus(vaultRoot);
+    if ((mode === 'managed' || mode === 'linked') && existsSync(projectVaultRoot) && isGitInstalled()) {
+      const gs = gitStatus(projectVaultRoot);
       gitClean = gs.clean;
       gitBranch = gs.branch;
     }
@@ -91,7 +94,8 @@ export function createMemoryRouter({ projectRoot }) {
       initialized: true,
       mode,
       projectId,
-      vaultRoot,
+      vaultRoot, // v6.x — general vault root (e.g. ~/.bizar_memory)
+      projectVaultRoot, // v6.x — project-specific subdirectory for managed/linked mode
       branch: gitBranch || branch,
       gitClean,
       noteCount: notes.length,
@@ -277,7 +281,7 @@ export function createMemoryRouter({ projectRoot }) {
   router.get('/memory/git/status', wrap(async (_req, res) => {
     const { resolveVault } = memoryStore;
     const { isGitInstalled, status: gitStatus } = memoryGit;
-    const { vaultRoot, mode } = resolveVault(projectRoot);
+    const { projectVaultRoot, mode } = resolveVault(projectRoot);
 
     if (mode === 'local-only') {
       res.json({ ok: true, mode: 'local-only' });
@@ -289,7 +293,7 @@ export function createMemoryRouter({ projectRoot }) {
       return;
     }
 
-    const gs = gitStatus(vaultRoot);
+    const gs = gitStatus(projectVaultRoot);
     res.json({ ok: true, mode, ...gs });
   }));
 
@@ -297,7 +301,7 @@ export function createMemoryRouter({ projectRoot }) {
   router.post('/memory/git/pull', wrap(async (_req, res) => {
     const { resolveVault } = memoryStore;
     const { pull, isGitInstalled } = memoryGit;
-    const { vaultRoot, mode } = resolveVault(projectRoot);
+    const { projectVaultRoot, mode } = resolveVault(projectRoot);
 
     if (mode === 'local-only') {
       res.status(400).json({ error: 'local_only_mode' });
@@ -308,7 +312,7 @@ export function createMemoryRouter({ projectRoot }) {
       return;
     }
 
-    const result = pull(vaultRoot);
+    const result = pull(projectVaultRoot);
     if (!result.ok) {
       res.status(500).json({ error: 'pull_failed', message: result.error });
       return;
@@ -320,7 +324,7 @@ export function createMemoryRouter({ projectRoot }) {
   router.post('/memory/git/commit', wrap(async (req, res) => {
     const { resolveVault } = memoryStore;
     const { commit: gitCommit, addAll, isGitInstalled } = memoryGit;
-    const { vaultRoot, mode } = resolveVault(projectRoot);
+    const { projectVaultRoot, mode } = resolveVault(projectRoot);
 
     if (mode === 'local-only') {
       res.status(400).json({ error: 'local_only_mode' });
@@ -331,14 +335,14 @@ export function createMemoryRouter({ projectRoot }) {
       return;
     }
 
-    const addResult = addAll(vaultRoot);
+    const addResult = addAll(projectVaultRoot);
     if (!addResult.ok) {
       res.status(500).json({ error: 'git_add_failed', message: addResult.error });
       return;
     }
 
     const message = req.body?.message || `[memory-sync] ${new Date().toISOString().replace(/T.*/, '')} vault sync`;
-    const result = gitCommit(vaultRoot, message);
+    const result = gitCommit(projectVaultRoot, message);
     if (!result.ok) {
       res.status(500).json({ error: 'commit_failed', message: result.error });
       return;
@@ -350,7 +354,7 @@ export function createMemoryRouter({ projectRoot }) {
   router.post('/memory/git/push', wrap(async (_req, res) => {
     const { resolveVault, loadConfig } = memoryStore;
     const { push: gitPush, isGitInstalled } = memoryGit;
-    const { vaultRoot, mode, branch } = resolveVault(projectRoot);
+    const { projectVaultRoot, mode, branch } = resolveVault(projectRoot);
     const { config } = loadConfig(projectRoot);
 
     if (mode === 'local-only') {
@@ -362,7 +366,7 @@ export function createMemoryRouter({ projectRoot }) {
       return;
     }
 
-    const result = gitPush(vaultRoot, { remote: config.gitRemote || 'origin', branch });
+    const result = gitPush(projectVaultRoot, { remote: config.gitRemote || 'origin', branch });
     if (!result.ok) {
       res.status(500).json({ error: 'push_failed', message: result.error });
       return;
@@ -374,7 +378,7 @@ export function createMemoryRouter({ projectRoot }) {
   router.post('/memory/git/sync', wrap(async (req, res) => {
     const { resolveVault, listNotes, validateAll, scanForSecrets } = memoryStore;
     const { pull, addAll, commit: gitCommit, push: gitPush, status: gitStatus, acquireLock, isGitInstalled } = memoryGit;
-    const { vaultRoot, mode, branch } = resolveVault(projectRoot);
+    const { projectVaultRoot, mode, branch } = resolveVault(projectRoot);
     const { config } = memoryStore.loadConfig(projectRoot);
 
     if (mode === 'local-only') {
@@ -386,7 +390,7 @@ export function createMemoryRouter({ projectRoot }) {
       return;
     }
 
-    const lock = acquireLock(vaultRoot);
+    const lock = acquireLock(projectVaultRoot);
     if (lock.error) {
       res.status(423).json({ error: 'locked', message: 'vault is locked by another process' });
       return;
@@ -396,13 +400,13 @@ export function createMemoryRouter({ projectRoot }) {
 
     try {
       // Pull
-      const pullResult = pull(vaultRoot);
+      const pullResult = pull(projectVaultRoot);
       if (!pullResult.ok) {
         // Non-fatal — may be up to date or have no remote
       }
 
       // Check status
-      const gs = gitStatus(vaultRoot);
+      const gs = gitStatus(projectVaultRoot);
       if (gs.clean) {
         res.json({ ok: true, message: 'nothing to sync', clean: true });
         return;
@@ -437,7 +441,7 @@ export function createMemoryRouter({ projectRoot }) {
       }
 
       // Add all
-      const addResult = addAll(vaultRoot);
+      const addResult = addAll(projectVaultRoot);
       if (!addResult.ok) {
         res.status(500).json({ error: 'git_add_failed' });
         return;
@@ -447,7 +451,7 @@ export function createMemoryRouter({ projectRoot }) {
       const date = new Date().toISOString().replace(/T.*/, '');
       const summary = allNotes[0]?.relPath?.slice(0, 60) || 'vault sync';
       const message = `[memory-sync] ${date} ${summary}`;
-      const commitResult = gitCommit(vaultRoot, message);
+      const commitResult = gitCommit(projectVaultRoot, message);
       if (!commitResult.ok) {
         res.status(500).json({ error: 'commit_failed', message: commitResult.error });
         return;
@@ -455,7 +459,7 @@ export function createMemoryRouter({ projectRoot }) {
 
       // Push if requested
       if (pushRequested && config.gitRemote) {
-        const pushResult = gitPush(vaultRoot, { remote: config.gitRemote, branch });
+        const pushResult = gitPush(projectVaultRoot, { remote: config.gitRemote, branch });
         if (!pushResult.ok) {
           res.status(500).json({ error: 'push_failed', message: pushResult.error });
           return;
@@ -476,7 +480,7 @@ export function createMemoryRouter({ projectRoot }) {
   // GET /memory/conflicts
   router.get('/memory/conflicts', wrap(async (_req, res) => {
     const { listNotes, readNote } = memoryStore;
-    const { vaultRoot } = memoryStore.resolveVault(projectRoot);
+    const { projectVaultRoot } = memoryStore.resolveVault(projectRoot);
     const notes = listNotes(projectRoot);
     const conflicts = [];
 
@@ -490,7 +494,7 @@ export function createMemoryRouter({ projectRoot }) {
     try {
       const { readFileSync: rf } = await import('node:fs');
       for (const note of notes) {
-        const filePath = join(vaultRoot, note.relPath);
+        const filePath = join(projectVaultRoot, note.relPath);
         const content = rf(filePath, 'utf8');
         if (/^<{7}\s|^={7}\s|>{7}\s/.test(content)) {
           conflicts.push({ relPath: note.relPath, reason: 'git conflict markers' });
@@ -849,6 +853,49 @@ export function createMemoryRouter({ projectRoot }) {
     res.json({ ok: true, exists: true, path: GLOBAL_MEMORY_CONFIG_PATH, config: next });
   }));
 
+  // POST /memory/config/vault — v6.x — update the vault root path.
+  // Accepts { vaultRoot: string }
+  // Persists to ~/.config/bizar/memory-config.json so it survives restarts,
+  // and sets process.env.BIZAR_MEMORY_VAULT for the current process.
+  router.post('/memory/config/vault', wrap(async (req, res) => {
+    const { vaultRoot: newVaultRoot } = req.body || {};
+    const trimmed = typeof newVaultRoot === 'string' ? newVaultRoot.trim() : '';
+    if (!trimmed || typeof newVaultRoot !== 'string') {
+      res.status(400).json({ error: 'vaultRoot required' });
+      return;
+    }
+
+    // Expand ~ to home directory
+    const expanded = trimmed.startsWith('~')
+      ? join(homedir(), trimmed.slice(1))
+      : trimmed;
+    const resolved = pathResolve(expanded);
+
+    // Validate: try to create the directory if it doesn't exist
+    try {
+      mkdirSync(resolved, { recursive: true, mode: 0o700 });
+    } catch (err) {
+      res.status(400).json({ error: `Cannot create vault at ${resolved}: ${err.message}` });
+      return;
+    }
+
+    // Persist to the global memory config so it survives restarts.
+    // Also update process.env so the change takes effect immediately.
+    process.env.BIZAR_MEMORY_VAULT = resolved;
+    const { config: existing } = loadGlobalMemoryConfig();
+    const next = JSON.parse(JSON.stringify(existing));
+    next.git = next.git || {};
+    next.git.repoPath = resolved; // v6.x — also set git.repoPath to the vault root
+    try {
+      saveGlobalMemoryConfig(next);
+    } catch (err) {
+      res.status(500).json({ error: 'write_failed', message: err.message });
+      return;
+    }
+
+    res.json({ ok: true, vaultRoot: resolved });
+  }));
+
   // POST /memory/test-git — test the configured git repo. Returns:
   //   { ok: bool, checks: [...], message?: string }
   // Steps performed:
@@ -857,15 +904,20 @@ export function createMemoryRouter({ projectRoot }) {
   //   3. Is a valid git repo (has .git/)?
   //   4. (Optional) Has a configured remote?
   //   5. (Optional) Can we push (skipped unless ?push=1)?
+  // v6.x — falls back to the general vault root (BIZAR_MEMORY_VAULT or ~/.bizar_memory)
+  // when git.repoPath is not explicitly configured.
   router.post('/memory/test-git', wrap(async (req, res) => {
     const { config } = loadGlobalMemoryConfig();
-    const repoPath = config?.git?.repoPath || '';
+    // v6.x: fall back to the general vault root when not explicitly set
+    const configuredPath = config?.git?.repoPath || '';
+    const repoPath = configuredPath || memoryStore.currentVault();
     const remoteUrl = config?.git?.remoteUrl || '';
     const wantPush = req.query.push === '1' || req.body?.push === true;
 
     const checks = [];
-    if (!repoPath) {
-      checks.push({ name: 'repo_path_set', pass: false, detail: 'git.repoPath is empty — set it in Settings first' });
+    // Only fail if the fallback path also doesn't exist
+    if (!configuredPath && !existsSync(repoPath)) {
+      checks.push({ name: 'repo_path_set', pass: false, detail: `git.repoPath not set — vault at ${repoPath} does not exist yet` });
       res.json({ ok: false, checks, message: 'repo path not configured' });
       return;
     }
@@ -948,8 +1000,8 @@ export function createMemoryRouter({ projectRoot }) {
       return;
     }
 
-    const { vaultRoot, mode } = resolveVault(projectRoot);
-    const vaultExists = existsSync(vaultRoot);
+    const { vaultRoot, projectVaultRoot, mode } = resolveVault(projectRoot);
+    const vaultExists = existsSync(projectVaultRoot);
     checks.push({
       name: 'vault_exists',
       pass: vaultExists,
@@ -961,7 +1013,7 @@ export function createMemoryRouter({ projectRoot }) {
     let writable = false;
     if (vaultExists) {
       try {
-        const probe = join(vaultRoot, '.health-probe.tmp');
+        const probe = join(projectVaultRoot, '.health-probe.tmp');
         writeFileSync(probe, 'ok');
         try {
           const { unlinkSync } = await import('node:fs');
@@ -978,7 +1030,7 @@ export function createMemoryRouter({ projectRoot }) {
     // Git clean?
     let gitClean = null;
     if ((mode === 'managed' || mode === 'linked') && vaultExists && isGitInstalled()) {
-      const gs = gitStatus(vaultRoot);
+      const gs = gitStatus(projectVaultRoot);
       gitClean = gs.clean;
       checks.push({
         name: 'git_clean',
@@ -1058,10 +1110,11 @@ export function createMemoryRouter({ projectRoot }) {
   // Walks the vault + .bizar/memory-cache + lightrag working dir.
   router.get('/memory/storage', wrap(async (_req, res) => {
     const { resolveVault } = memoryStore;
-    const { vaultRoot, mode } = resolveVault(projectRoot);
+    const { vaultRoot, projectVaultRoot, mode } = resolveVault(projectRoot);
 
     const targets = [];
-    if (existsSync(vaultRoot)) targets.push({ name: 'vault', path: vaultRoot });
+    // Use projectVaultRoot for the actual note storage path
+    if (existsSync(projectVaultRoot)) targets.push({ name: 'vault', path: projectVaultRoot });
     const cacheDir = join(projectRoot, '.bizar', 'memory-cache');
     if (existsSync(cacheDir)) targets.push({ name: 'memory-cache', path: cacheDir });
     const lightragDir = join(projectRoot, '.bizar', 'lightrag');
@@ -1078,7 +1131,7 @@ export function createMemoryRouter({ projectRoot }) {
       total,
       breakdown,
       mode,
-      vaultRoot,
+      vaultRoot, // general vault root for display
       message: total === 0 ? 'no memory data on disk yet' : `${formatBytes(total)} on disk`,
     });
   }));
@@ -1088,7 +1141,7 @@ export function createMemoryRouter({ projectRoot }) {
   router.get('/memory/git/diff', wrap(async (_req, res) => {
     const { resolveVault } = memoryStore;
     const { isGitInstalled } = memoryGit;
-    const { vaultRoot, mode } = resolveVault(projectRoot);
+    const { projectVaultRoot, mode } = resolveVault(projectRoot);
 
     if (mode === 'local-only') {
       res.json({ hasDiff: false, lines: [], files: [], mode: 'local-only' });
@@ -1102,7 +1155,7 @@ export function createMemoryRouter({ projectRoot }) {
     let raw = '';
     try {
       raw = execFileSync('git', ['diff', '--no-color', '--no-ext-diff'], {
-        cwd: vaultRoot,
+        cwd: projectVaultRoot,
         encoding: 'utf8',
         maxBuffer: 8 * 1024 * 1024,
       });
@@ -1115,7 +1168,7 @@ export function createMemoryRouter({ projectRoot }) {
     let untracked = [];
     try {
       const statusRaw = execFileSync('git', ['status', '--porcelain'], {
-        cwd: vaultRoot,
+        cwd: projectVaultRoot,
         encoding: 'utf8',
       });
       for (const line of statusRaw.split('\n')) {

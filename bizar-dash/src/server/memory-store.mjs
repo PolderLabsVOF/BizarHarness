@@ -207,8 +207,14 @@ export function saveConfig(projectRoot, config) {
 /**
  * Resolve the effective vault root, namespaces, and related paths based on mode.
  *
+ * v6.x — `vaultRoot` is now always the GENERAL vault root (e.g. `~/.bizar_memory`).
+ * A new `projectVaultRoot` field carries the project-specific subdirectory for
+ * note storage in managed/linked mode (`~/.bizar_memory/projects/<projectId>`).
+ * This distinction lets the UI display the general root while the store still
+ * writes notes to the correct project subdirectory.
+ *
  * @param {string} projectRoot
- * @returns {{ mode: string, projectId: string, vaultRoot: string, repoPath: string | null, configDir: string, gitRemote: string | null, branch: string, lightragDir: string, namespaces: object }}
+ * @returns {{ mode: string, projectId: string, vaultRoot: string, projectVaultRoot: string, repoPath: string | null, configDir: string, gitRemote: string | null, branch: string, lightragDir: string, namespaces: object }}
  */
 export function resolveVault(projectRoot) {
   const { config } = loadConfig(projectRoot);
@@ -219,16 +225,19 @@ export function resolveVault(projectRoot) {
   const gitRemote = mr.remote || config.gitRemote || null;
 
   let vaultRoot;
+  let projectVaultRoot;
   let repoPath;
   if (mode === 'local-only') {
     vaultRoot = join(projectRoot, '.obsidian');
+    projectVaultRoot = vaultRoot;
     repoPath = null;
   } else {
     // managed or linked — path may be absolute, ~-relative, or a sibling of projectRoot
     const rawPath = mr.path || config.repoName || join(projectRoot, '.bizar', 'memory');
     const expanded = rawPath.startsWith('~') ? join(HOME, rawPath.slice(1)) : rawPath;
     repoPath = expanded;
-    vaultRoot = join(expanded, 'projects', projectId);
+    vaultRoot = expanded; // v6.x — general root, e.g. ~/.bizar_memory
+    projectVaultRoot = join(expanded, 'projects', projectId); // project-specific subdirectory
   }
 
   const configDir = join(projectRoot, '.bizar');
@@ -239,29 +248,28 @@ export function resolveVault(projectRoot) {
     user: `users/${process.env.USER || process.env.USERNAME || 'local'}`,
   };
 
-  return { mode, projectId, vaultRoot, repoPath, configDir, gitRemote, branch, lightragDir, namespaces };
+  return { mode, projectId, vaultRoot, projectVaultRoot, repoPath, configDir, gitRemote, branch, lightragDir, namespaces };
 }
 
 /**
  * Resolve the absolute path of a namespace root.
  *
- * For `project`, returns vaultRoot (the existing default). For `global` and
- * `user`, returns `<vaultRoot>/<namespaces.global|user>` in both modes —
- * `writeNote('global/bizar/foo.md', …)` already places files there in both
- * local-only and managed mode, so this matches the on-disk layout that
- * existing callers rely on.
+ * For `project`, returns projectVaultRoot (the directory where project notes
+ * are stored: `<vaultRoot>/projects/<projectId>` in managed mode, or
+ * `<projectRoot>/.obsidian` in local-only mode). For `global` and `user`,
+ * returns `<vaultRoot>/<namespaces.X>` — these namespaces live at the vault
+ * root level, not inside the project subdirectory.
  *
- * (Note: an earlier draft distinguished local-only vs managed, putting
- * global under `<repoPath>/global/bizar` in managed mode. That diverged from
- * where writeNote actually creates the file, which is always under
- * vaultRoot. This implementation matches the on-disk reality.)
+ * Routing: writeNote/readNote/deleteNote use this to determine where files
+ * live. Project relPaths go to projectVaultRoot; global/ and users/ relPaths
+ * go to vaultRoot-based paths.
  *
- * @param {{ mode: string, vaultRoot: string, namespaces: object }} vaultInfo
+ * @param {{ mode: string, vaultRoot: string, projectVaultRoot: string, namespaces: object }} vaultInfo
  * @param {'project'|'global'|'user'} namespace
  * @returns {string|null} absolute path, or null if the namespace is unknown
  */
 export function resolveNamespaceRoot(vaultInfo, namespace) {
-  if (namespace === 'project') return vaultInfo.vaultRoot;
+  if (namespace === 'project') return vaultInfo.projectVaultRoot;
   const ns = vaultInfo.namespaces?.[namespace];
   if (!ns) return null;
   return join(vaultInfo.vaultRoot, ns);
@@ -381,8 +389,8 @@ export function initVault(projectRoot) {
  * @returns {Array<{ relPath: string, mtime: number, size: number, frontmatter: Record<string, unknown>, body: string, schemaValid: boolean }>}
  */
 export function listNotes(projectRoot, opts = {}) {
-  const { vaultRoot } = resolveVault(projectRoot);
-  const root = opts.root || vaultRoot;
+  const { projectVaultRoot } = resolveVault(projectRoot);
+  const root = opts.root || projectVaultRoot;
   if (!existsSync(root)) return [];
 
   const namespace = opts.namespace || '';
@@ -425,8 +433,16 @@ export function listNotes(projectRoot, opts = {}) {
  * @returns {{ relPath: string, frontmatter: Record<string, unknown>, body: string, raw: string, mtime: number, size: number, schemaValid: boolean } | null}
  */
 export function readNote(projectRoot, relPath, opts = {}) {
-  const vaultInfo = resolveVault(projectRoot);
-  const root = opts.root || vaultInfo.vaultRoot;
+  const { vaultRoot, projectVaultRoot } = resolveVault(projectRoot);
+  // When opts.root is explicitly provided, use it. Otherwise route based on
+  // namespace so reads find notes where writeNote placed them.
+  let root;
+  if (opts.root) {
+    root = opts.root;
+  } else {
+    const isProjectNamespace = !relPath.startsWith('global/') && !relPath.startsWith('users/');
+    root = isProjectNamespace ? projectVaultRoot : vaultRoot;
+  }
   const filePath = resolveSafe(root, relPath);
   if (!filePath || !existsSync(filePath)) return null;
   try {
@@ -450,7 +466,7 @@ export function readNote(projectRoot, relPath, opts = {}) {
  * @throws {Error} if schema validation fails or HIGH-severity secret found
  */
 export function writeNote(projectRoot, relPath, { frontmatter, body }) {
-  const { vaultRoot } = resolveVault(projectRoot);
+  const { vaultRoot, projectVaultRoot } = resolveVault(projectRoot);
 
   // Validate frontmatter
   const { valid, errors, warnings } = validateNote(frontmatter, body);
@@ -473,13 +489,20 @@ export function writeNote(projectRoot, relPath, { frontmatter, body }) {
     throw err;
   }
 
+  // Determine the effective vault root based on namespace.
+  // Project notes (relPaths that don't start with global/ or users/) go under
+  // projectVaultRoot. Global and user notes go under vaultRoot.
+  // This matches the layout resolveNamespaceRoot returns for each namespace.
+  const isProjectNamespace = !relPath.startsWith('global/') && !relPath.startsWith('users/');
+  const noteVaultRoot = isProjectNamespace ? projectVaultRoot : vaultRoot;
+
   // Build file content
-  const filePath = resolveSafe(vaultRoot, relPath);
+  const filePath = resolveSafe(noteVaultRoot, relPath);
   if (!filePath) {
     throw new Error(`Invalid note path: ${relPath}`);
   }
 
-  // Lazily create the project namespace directory (F7 — not created at initVault)
+  // Lazily create the namespace directory (not created at initVault)
   const nsDir = dirname(filePath);
   if (!existsSync(nsDir)) {
     mkdirSync(nsDir, { recursive: true });
@@ -538,8 +561,16 @@ export function writeNote(projectRoot, relPath, { frontmatter, body }) {
  * @returns {boolean}
  */
 export function deleteNote(projectRoot, relPath, opts = {}) {
-  const vaultInfo = resolveVault(projectRoot);
-  const root = opts.root || vaultInfo.vaultRoot;
+  const { vaultRoot, projectVaultRoot } = resolveVault(projectRoot);
+  // When opts.root is explicitly provided, use it. Otherwise route based on
+  // namespace so deletes find notes where writeNote placed them.
+  let root;
+  if (opts.root) {
+    root = opts.root;
+  } else {
+    const isProjectNamespace = !relPath.startsWith('global/') && !relPath.startsWith('users/');
+    root = isProjectNamespace ? projectVaultRoot : vaultRoot;
+  }
   const filePath = resolveSafe(root, relPath);
   if (!filePath || !existsSync(filePath)) return false;
   unlinkSync(filePath);
@@ -560,8 +591,23 @@ export function searchVault(projectRoot, query, { limit = 25 } = {}) {
   const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
   if (tokens.length === 0) return [];
 
+  const { vaultRoot, projectVaultRoot } = resolveVault(projectRoot);
+
+  // Collect notes from all namespaces by walking vaultRoot (which contains
+  // projects/<id>/, global/, and users/ as siblings). This finds project,
+  // global, and user notes in a single scan. relPaths returned are vaultRoot-
+  // relative (e.g. "projects/<id>/decisions/foo.md" or "global/bizar/foo.md").
+  // For project notes, strip the "projects/<id>/" prefix so the relPath matches
+  // what writeNote uses (projectVaultRoot-relative).
+  const projectPrefix = join('projects', projectVaultRoot.split('/').pop());
+  const allNotes = listNotes(projectRoot, { root: vaultRoot });
+
   const results = [];
-  for (const note of listNotes(projectRoot)) {
+  for (const note of allNotes) {
+    let relPath = note.relPath;
+    if (relPath.startsWith(projectPrefix)) {
+      relPath = relPath.slice(projectPrefix.length + 1);
+    }
     const lower = (note.body + ' ' + JSON.stringify(note.frontmatter)).toLowerCase();
     let score = 0;
     for (const t of tokens) {
@@ -572,7 +618,7 @@ export function searchVault(projectRoot, query, { limit = 25 } = {}) {
     const start = Math.max(0, idx - 60);
     const end = Math.min(lower.length, idx + 160);
     const snippet = (start > 0 ? '…' : '') + lower.slice(start, end).replace(/\s+/g, ' ').trim();
-    results.push({ relPath: note.relPath, snippet, score, mtime: note.mtime });
+    results.push({ relPath, snippet, score, mtime: note.mtime });
   }
 
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
@@ -707,8 +753,8 @@ export function vaultStats(projectRoot) {
     };
   }
 
-  const { vaultRoot, mode, branch } = resolveVault(projectRoot);
-  if (!vaultRoot || !existsSync(vaultRoot)) {
+  const { vaultRoot, projectVaultRoot, mode, branch } = resolveVault(projectRoot);
+  if (!projectVaultRoot || !existsSync(projectVaultRoot)) {
     return {
       exists: true,
       vaultRoot: vaultRoot || '',
@@ -737,7 +783,7 @@ export function vaultStats(projectRoot) {
     try {
       const { isGitInstalled, status: gitStatus } = memoryGit;
       if (isGitInstalled()) {
-        const gs = gitStatus(vaultRoot);
+        const gs = gitStatus(projectVaultRoot);
         gitClean = gs.clean;
         gitBranch = gs.branch;
       }

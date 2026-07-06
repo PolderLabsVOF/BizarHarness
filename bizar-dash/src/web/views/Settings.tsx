@@ -1,38 +1,13 @@
-// src/views/Settings.tsx — v6.x per-section settings view.
-//
-// v6.x — Each settings section is its own top-level tab. SettingsView
-// accepts a `section` prop and renders ONLY that section. The page
-// header reflects the section name. There is no in-page subnav or
-// grouped section display — the sidebar rail already carries navigation.
-//
-// The Save / Reload / Reset buttons remain at the page level because
-// most sections still share the global Settings object on the server
-// (the auto-save behaviour in some section components is a UX nicety,
-// not a substitute for explicit save).
-import React, { useEffect, useState, useRef, useCallback, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import {
-  Palette,
-  RefreshCw,
-  RotateCcw,
-  LayoutGrid,
-  Sliders,
-  Terminal,
-  Wifi,
-  Bell,
-  Lock,
-  Bot,
-  Cpu,
-  Gauge,
-  Activity as ActivityIcon,
-  Folder,
-  Save,
-  type LucideIcon,
-} from 'lucide-react';
+// src/views/Settings.tsx — v4 settings shell: routes to focused sub-components.
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Sliders, Save, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '../components/Button';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
+import { cn } from '../lib/utils';
 import { applyTheme, applyThemeTokens, type Settings, type SettingsResponse, type Snapshot, type TailscaleStatus } from '../lib/types';
 
+import { SettingsSearch, type SettingsSection, type SettingsField } from '../components/SettingsSearch';
 import { ThemeSection } from './settings/ThemeSection';
 import { UpdatesSection } from './settings/UpdatesSection';
 import { GeneralSection } from './settings/GeneralSection';
@@ -53,156 +28,114 @@ type Props = {
   activeTab: string;
   setActiveTab: (id: string) => void;
   refreshSnapshot: () => Promise<void>;
-  /** v6.x — Which settings section to render. Each section is its own tab. */
-  section?: string;
+  /** v4.9.0 — When true, navigation uses the sidebar instead of the subnav bar. */
+  settingsMode?: boolean;
+  /** v4.9.0 — The active section. Null means "show all". Used when settingsMode is true. */
+  settingsActiveSection?: string | null;
+  /** v4.9.0 — Called when the user selects a section via the sidebar. */
+  setSettingsActiveSection?: (id: string | null) => void;
 };
 
-type TailscaleDraft = { port: number; https: boolean; hostname: string };
-type AuthStatusShape = { required: boolean; loopback: boolean; peer: string };
+const SECTION_LINKS = [
+  { id: 'theme', label: 'Theme' },
+  { id: 'updates', label: 'Updates' },
+  { id: 'layout', label: 'Layout' },
+  { id: 'general', label: 'General' },
+  { id: 'env-vars', label: 'Env Vars' },
+  { id: 'network', label: 'Network' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'auth', label: 'Auth' },
+  { id: 'agents', label: 'Agents' },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'background', label: 'Background' },
+  { id: 'system-llm', label: 'System LLM' },
+  { id: 'headroom', label: 'Headroom' },
+  { id: 'activity-log', label: 'Activity' },
+  { id: 'about', label: 'About' },
+  { id: 'workspaces', label: 'Workspaces' },
+] as const;
 
-type SectionDef = {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  description: string;
-  render: (ctx: {
-    sp: {
-      settings: Settings;
-      patchTheme: (patch: Partial<Settings['theme']>) => void;
-      patchUi: (patch: Partial<Settings['ui']>) => void;
-      patchTop: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
-      patchNotifications: (patch: Partial<Settings['notifications']>) => void;
-      patchAgents: (patch: Partial<Settings['agents']>) => void;
-      patchDashboard: (patch: Partial<Settings['dashboard']>) => void;
-    };
-    autoSave: (key: keyof Settings, value: Settings[keyof Settings]) => Promise<void>;
-    tailscale: TailscaleStatus | null;
-    tailscaleDraft: TailscaleDraft;
-    setTailscaleDraft: Dispatch<SetStateAction<TailscaleDraft>>;
-    onTailscaleToggle: () => Promise<void>;
-    authStatus: AuthStatusShape | null;
-    setAuthStatus: Dispatch<SetStateAction<AuthStatusShape | null>>;
-    setSettings: Dispatch<SetStateAction<Settings>>;
-    setDirty: Dispatch<SetStateAction<boolean>>;
-    about: { version: string; homepage: string; license: string };
-  }) => ReactNode;
-};
+/* ─── Settings search sections metadata ─── */
+const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: 'theme', label: 'Theme', fields: [
+    { key: 'theme.presets', label: 'Accent presets', section: 'theme' },
+    { key: 'theme.accent', label: 'Accent color', section: 'theme' },
+    { key: 'theme.success', label: 'Success color', section: 'theme' },
+    { key: 'theme.warning', label: 'Warning color', section: 'theme' },
+    { key: 'theme.error', label: 'Error color', section: 'theme' },
+    { key: 'theme.info', label: 'Info color', section: 'theme' },
+    { key: 'theme.fontFamily', label: 'Font family', section: 'theme' },
+    { key: 'theme.fontSize', label: 'Font size', section: 'theme' },
+    { key: 'theme.compactMode', label: 'Compact mode', section: 'theme' },
+    { key: 'theme.animations', label: 'Animations', section: 'theme' },
+  ] },
+  { id: 'updates', label: 'Updates', fields: [
+    { key: 'updates.channel', label: 'Update channel', section: 'updates' },
+  ] },
+  { id: 'layout', label: 'Layout', fields: [
+    { key: 'ui.layout', label: 'UI layout', section: 'layout' },
+    { key: 'ui.showHeader', label: 'Show header', section: 'layout' },
+    { key: 'ui.showStatusBar', label: 'Show status bar', section: 'layout' },
+    { key: 'ui.defaultTab', label: 'Default tab', section: 'layout' },
+  ] },
+  { id: 'general', label: 'General', fields: [
+    { key: 'defaultAgent', label: 'Default agent', section: 'general' },
+    { key: 'defaultModel', label: 'Model override', section: 'general' },
+  ] },
+  { id: 'env-vars', label: 'Environment Variables', fields: [
+    { key: 'env-vars.count', label: 'Env var count', section: 'env-vars' },
+  ] },
+  { id: 'network', label: 'Network', fields: [
+    { key: 'tailscale.enabled', label: 'Tailscale Serve', section: 'network' },
+    { key: 'tailscale.port', label: 'Tailscale port', section: 'network' },
+    { key: 'tailscale.https', label: 'Tailscale HTTPS', section: 'network' },
+    { key: 'tailscale.hostname', label: 'Tailscale hostname', section: 'network' },
+  ] },
+  { id: 'notifications', label: 'Notifications', fields: [
+    { key: 'notifications.onAgentComplete', label: 'Notify on agent complete', section: 'notifications' },
+    { key: 'notifications.onPlanApproval', label: 'Notify on plan approval', section: 'notifications' },
+  ] },
+  { id: 'auth', label: 'Auth', fields: [
+    { key: 'auth.enabled', label: 'Auth enabled', section: 'auth' },
+    { key: 'auth.loopback', label: 'Loopback mode', section: 'auth' },
+    { key: 'auth.token', label: 'Auth token', section: 'auth' },
+  ] },
+  { id: 'agents', label: 'Agents', fields: [
+    { key: 'agents.maxParallel', label: 'Max parallel agents', section: 'agents' },
+    { key: 'agents.stuckThresholdMs', label: 'Stuck threshold', section: 'agents' },
+    { key: 'agents.autoRestart', label: 'Auto restart', section: 'agents' },
+    { key: 'workflow.artifactsEnabled', label: 'Artifacts enabled', section: 'agents' },
+    { key: 'workflow.agentsDecideAutonomously', label: 'Autonomous decisions', section: 'agents' },
+  ] },
+  { id: 'dashboard', label: 'Dashboard', fields: [
+    { key: 'dashboard.autoLaunchWeb', label: 'Auto-launch web', section: 'dashboard' },
+    { key: 'dashboard.projectsDirectory', label: 'Projects directory', section: 'dashboard' },
+    { key: 'dashboard.allowedRoots', label: 'Allowed roots', section: 'dashboard' },
+  ] },
+  { id: 'background', label: 'Background', fields: [
+    { key: 'service.enabled', label: 'Background service', section: 'background' },
+    { key: 'service.autostart', label: 'Auto-start service', section: 'background' },
+  ] },
+  { id: 'system-llm', label: 'System LLM', fields: [
+    { key: 'systemLlm.enabled', label: 'System LLM enabled', section: 'system-llm' },
+  ] },
+  { id: 'headroom', label: 'Headroom', fields: [
+    { key: 'headroom.enabled', label: 'Headroom enabled', section: 'headroom' },
+    { key: 'headroom.port', label: 'Headroom port', section: 'headroom' },
+    { key: 'headroom.budget', label: 'Headroom budget', section: 'headroom' },
+    { key: 'headroom.backend', label: 'Headroom backend', section: 'headroom' },
+  ] },
+  { id: 'activity-log', label: 'Activity', fields: [
+    { key: 'activity.log', label: 'Activity log', section: 'activity-log' },
+  ] },
+  { id: 'about', label: 'About', fields: [
+    { key: 'about.version', label: 'Version', section: 'about' },
+    { key: 'about.homepage', label: 'Homepage', section: 'about' },
+    { key: 'about.license', label: 'License', section: 'about' },
+  ] },
+];
 
-/* v6.x — Section definitions. Order here drives the order of the section
-   tabs in VIEW_MAP (already registered in App.tsx). */
-const SECTION_DEFS: Record<string, SectionDef> = {
-  theme: {
-    id: 'theme',
-    label: 'Theme',
-    icon: Palette,
-    description: 'Accent colors, fonts, density, and animation preferences.',
-    render: ({ sp }) => <ThemeSection {...sp} />,
-  },
-  updates: {
-    id: 'updates',
-    label: 'Updates',
-    icon: RefreshCw,
-    description: 'Choose the update channel and check for new Bizar versions.',
-    render: () => <UpdatesSection />,
-  },
-  layout: {
-    id: 'layout',
-    label: 'Layout',
-    icon: LayoutGrid,
-    description: 'UI layout mode, default tab, and status bar visibility.',
-    render: ({ sp, autoSave }) => <GeneralSection {...sp} autoSave={autoSave} />,
-  },
-  general: {
-    id: 'general',
-    label: 'General',
-    icon: Sliders,
-    description: 'Default agent and model overrides.',
-    render: ({ sp, autoSave }) => <GeneralSection {...sp} autoSave={autoSave} />,
-  },
-  'env-vars': {
-    id: 'env-vars',
-    label: 'Env Vars',
-    icon: Terminal,
-    description: 'Inspect and edit environment variables exposed to agents.',
-    render: () => <EnvVarsSection />,
-  },
-  network: {
-    id: 'network',
-    label: 'Network',
-    icon: Wifi,
-    description: 'Tailscale Serve, proxy settings, and dashboard network options.',
-    render: ({ sp, tailscale, tailscaleDraft, setTailscaleDraft, onTailscaleToggle }) => (
-      <>
-        <NetworkSection
-          tailscale={tailscale}
-          tailscaleDraft={tailscaleDraft}
-          setTailscaleDraft={setTailscaleDraft}
-          onTailscaleToggle={onTailscaleToggle}
-        />
-        <TailscaleSettings initialStatus={tailscale} />
-      </>
-    ),
-  },
-  notifications: {
-    id: 'notifications',
-    label: 'Notifications',
-    icon: Bell,
-    description: 'When the dashboard should ping you.',
-    render: ({ sp }) => <NotificationsSection {...sp} />,
-  },
-  auth: {
-    id: 'auth',
-    label: 'Auth',
-    icon: Lock,
-    description: 'Authentication and token-bearer settings.',
-    render: ({ sp, authStatus, setAuthStatus }) => (
-      <AuthSection settings={sp.settings} authStatus={authStatus} setAuthStatus={setAuthStatus} />
-    ),
-  },
-  agents: {
-    id: 'agents',
-    label: 'Agents',
-    icon: Bot,
-    description: 'Agent runner config: parallelism, stuck thresholds, autonomy.',
-    render: ({ sp, autoSave }) => <AgentSection {...sp} autoSave={autoSave} />,
-  },
-  'system-llm': {
-    id: 'system-llm',
-    label: 'System LLM',
-    icon: Cpu,
-    description: 'LLM used by the dashboard for auto-titling and enhancements.',
-    render: ({ sp }) => <SystemLlmSection {...sp} />,
-  },
-  headroom: {
-    id: 'headroom',
-    label: 'Headroom',
-    icon: Gauge,
-    description: 'Context compression proxy settings.',
-    render: ({ sp, setSettings, setDirty }) => (
-      <HeadroomSection settings={sp.settings} setSettings={setSettings} setDirty={setDirty} />
-    ),
-  },
-  'activity-log': {
-    id: 'activity-log',
-    label: 'Activity Log',
-    icon: ActivityIcon,
-    description: 'Per-agent activity retention and the About card.',
-    render: ({ about }) => <ActivitySection about={about} />,
-  },
-  workspaces: {
-    id: 'workspaces',
-    label: 'Workspaces',
-    icon: Folder,
-    description: 'Manage workspace roots and shared directories.',
-    render: () => <WorkspacesSection />,
-  },
-};
-
-function SettingsViewInner({
-  settings: initial,
-  refreshSnapshot,
-  section = 'theme',
-}: Props) {
+function SettingsViewInner({ settings: initial, refreshSnapshot, settingsMode, settingsActiveSection, setSettingsActiveSection, setActiveTab }: Props) {
   const toast = useToast();
   const [settings, setSettings] = useState<Settings>(initial);
   const [dirty, setDirty] = useState(false);
@@ -211,7 +144,8 @@ function SettingsViewInner({
   const [tailscaleDraft, setTailscaleDraft] = useState({ port: 4321, https: true, hostname: '' });
   const [authStatus, setAuthStatus] = useState<{ required: boolean; loopback: boolean; peer: string } | null>(null);
 
-  const def = SECTION_DEFS[section] ?? SECTION_DEFS.theme;
+  // v4.9.0 — Exit settings mode by switching back to overview tab.
+  const handleExitSettings = () => { setActiveTab('overview'); };
 
   useEffect(() => { setSettings(initial); setDirty(false); if (initial.theme) applyThemeTokens(initial.theme); }, [initial]);
   useEffect(() => { if (!tailscale) return; setTailscaleDraft({ port: tailscale.settings.port, https: tailscale.settings.https !== false, hostname: tailscale.settings.hostname || '' }); }, [tailscale]);
@@ -241,6 +175,38 @@ function SettingsViewInner({
   const patchNotifications = (patch: Partial<Settings['notifications']>) => { setSettings((cur) => ({ ...cur, notifications: { ...cur.notifications, ...patch } })); setDirty(true); };
   const patchAgents = (patch: Partial<Settings['agents']>) => { setSettings((cur) => ({ ...cur, agents: { ...cur.agents, ...patch } })); setDirty(true); };
   const patchDashboard = (patch: Partial<Settings['dashboard']>) => { setSettings((cur) => ({ ...cur, dashboard: { ...cur.dashboard, ...patch } })); setDirty(true); };
+
+  // v4.9.0 — In settingsMode, section navigation is driven by the sidebar via
+  // settingsActiveSection (shared state at App level). Outside settingsMode,
+  // fall back to local hash-based state for backwards compatibility.
+  const [localActiveSection, setLocalActiveSection] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const hash = window.location.hash.replace(/^#settings-/, '');
+    return SECTION_LINKS.some((s) => s.id === hash) ? hash : null;
+  });
+
+  // The effective active section: use sidebar state in settingsMode, local state otherwise.
+  const activeSection = settingsMode ? (settingsActiveSection ?? null) : localActiveSection;
+
+  // v4.9.0 — In settingsMode, update the shared App-level state. Otherwise update local state.
+  const handleJumpSection = (id: string | null) => {
+    if (settingsMode) {
+      setSettingsActiveSection?.(id);
+    } else {
+      setLocalActiveSection(id);
+      try {
+        history.replaceState(null, '', id ? `#settings-${id}` : window.location.pathname);
+        if (id) { const el = document.getElementById(`settings-${id}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch { /* ignore */ }
+    }
+    if (id) {
+      const el = document.getElementById(`settings-${id}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const onTailscaleToggle = async () => {
     try {
@@ -279,50 +245,63 @@ function SettingsViewInner({
 
   const sp = { settings, patchTheme, patchUi, patchTop, patchNotifications, patchAgents, patchDashboard };
   const about = settings.about || { version: '3.0.4', homepage: 'https://github.com/DrB0rk/BizarHarness', license: 'MIT' };
-  const Icon = def.icon;
+
+  // v4.9.0 — showAll means no section is filtered (activeSection is null).
+  const showAll = activeSection === null;
+  const sectionOf = (id: string) => activeSection === id;
 
   return (
     <div className="view view-settings">
       <header className="view-header">
         <div className="view-header-text">
-          <h2 className="view-title">
-            <Icon size={18} aria-hidden /> {def.label}
-          </h2>
-          <p className="view-subtitle">{def.description}</p>
+          <h2 className="view-title"><Sliders size={18} /> Settings</h2>
+          <p className="view-subtitle">Personal preferences. Changes are saved to <code>~/.config/bizar/settings.json</code>.</p>
         </div>
         <div className="view-actions">
-          <Button variant="ghost" size="sm" onClick={onReset} aria-label="Reset all settings">
-            <RotateCcw size={14} /> Reset
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onReload} aria-label="Reload settings from disk">
-            <RefreshCw size={14} /> Reload
-          </Button>
+          <Button variant="ghost" size="sm" onClick={onReset}><RotateCcw size={14} /> Reset</Button>
+          <Button variant="secondary" size="sm" onClick={onReload}><RefreshCw size={14} /> Reload</Button>
           <Button variant="primary" size="sm" disabled={!dirty || saving} onClick={onSave}>
-            {saving ? <span className="btn-spinner" /> : <Save size={14} aria-hidden />}{saving ? 'Saving…' : 'Save'}
+            {saving ? <span className="btn-spinner" /> : <Save size={14} />}{saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </header>
 
-      <div className="settings-body" data-section={def.id}>
-        <div id={`settings-${def.id}`}>
-          {def.render({
-            sp,
-            autoSave,
-            tailscale,
-            tailscaleDraft,
-            setTailscaleDraft,
-            onTailscaleToggle,
-            authStatus,
-            setAuthStatus,
-            setSettings,
-            setDirty,
-            about,
-          })}
+      {settingsMode && (
+        <div className="settings-mode-banner">
+          <span>You're in settings mode. All sections are visible in the sidebar.</span>
+          <Button variant="secondary" size="sm" onClick={handleExitSettings}>← Back to main view</Button>
         </div>
+      )}
+
+      <SettingsSearch sections={SETTINGS_SECTIONS} onJump={handleJumpSection} />
+
+      {/* v4.9.0 — Subnav removed; section navigation is now driven by the sidebar */}
+      {/*
+      <nav className="settings-subnav" aria-label="Settings sections">
+        <button type="button" className={cn('settings-subnav-button', 'settings-subnav-button-all', showAll && 'settings-subnav-button-active')} onClick={() => handleJumpSection(null)} title="Show all settings sections">All</button>
+        {SECTION_LINKS.map((s) => (
+          <button key={s.id} type="button" className={cn('settings-subnav-button', activeSection === s.id && 'settings-subnav-button-active')} onClick={() => handleJumpSection(s.id)}>{s.label}</button>
+        ))}
+      </nav>
+      */}
+
+      <div className={cn('settings-grid', activeSection && 'settings-grid-filtered')} data-active-section={activeSection || undefined}>
+        {(showAll || sectionOf('theme')) && <div id="settings-theme"><ThemeSection {...sp} /></div>}
+        {(showAll || sectionOf('updates')) && <div id="settings-updates"><UpdatesSection /></div>}
+        {(showAll || sectionOf('layout') || sectionOf('general')) && <div id="settings-general"><GeneralSection {...sp} autoSave={autoSave} /></div>}
+        {(showAll || sectionOf('env-vars')) && <div id="settings-env-vars"><EnvVarsSection /></div>}
+        {(showAll || sectionOf('network') || sectionOf('service') || sectionOf('tailscale')) && <div id="settings-network"><NetworkSection tailscale={tailscale} tailscaleDraft={tailscaleDraft} setTailscaleDraft={setTailscaleDraft} onTailscaleToggle={onTailscaleToggle} /></div>}
+        {(showAll || sectionOf('network') || sectionOf('tailscale')) && <TailscaleSettings initialStatus={tailscale} />}
+        {(showAll || sectionOf('notifications')) && <div id="settings-notifications"><NotificationsSection {...sp} /></div>}
+        {(showAll || sectionOf('auth')) && <div id="settings-auth"><AuthSection settings={settings} authStatus={authStatus} setAuthStatus={setAuthStatus} /></div>}
+        {(showAll || sectionOf('agents') || sectionOf('dashboard') || sectionOf('background')) && <div id="settings-agents"><AgentSection {...sp} autoSave={autoSave} /></div>}
+        {(showAll || sectionOf('system-llm')) && <div id="settings-system-llm"><SystemLlmSection {...sp} /></div>}
+        {(showAll || sectionOf('headroom')) && <div id="settings-headroom"><HeadroomSection settings={settings} setSettings={setSettings} setDirty={setDirty} /></div>}
+        {(showAll || sectionOf('activity-log') || sectionOf('about')) && <div id="settings-activity-log"><ActivitySection about={about} /></div>}
+        {(showAll || sectionOf('workspaces')) && <div id="settings-workspaces"><WorkspacesSection /></div>}
       </div>
     </div>
   );
 }
 
 export const SettingsView = React.memo(SettingsViewInner);
-export const __SETTINGS_SECTION_IDS = Object.keys(SECTION_DEFS);

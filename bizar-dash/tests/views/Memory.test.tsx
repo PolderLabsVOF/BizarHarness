@@ -6,6 +6,9 @@
  * path to '' and rendered "(loading…)" forever. After the fix, they fetch
  * /api/memory/status and render the actual path or a "not initialised"
  * placeholder, plus an Initialise button.
+ *
+ * v6.x also adds tests for the Save Path button calling
+ * POST /memory/config/vault (instead of just showing a message).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -56,6 +59,7 @@ describe('MemoryOverview vault path', () => {
         initialized: true,
         mode: 'local-only',
         vaultRoot: '/Users/test/.bizar_memory',
+        projectVaultRoot: '/Users/test/.bizar_memory',
         noteCount: 5,
         gitClean: true,
         branch: 'main',
@@ -88,7 +92,7 @@ describe('MemoryOverview vault path', () => {
   it('shows "not initialised" when status reports initialized=false', async () => {
     (api.get as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
       if (url === '/memory/status') return Promise.resolve({
-        initialized: false, mode: null, projectId: null, vaultRoot: null,
+        initialized: false, mode: null, projectId: null, vaultRoot: null, projectVaultRoot: null,
       });
       if (url === '/memory/health') return Promise.resolve({
         score: 0, status: 'unconfigured', checks: [], message: 'not initialised',
@@ -184,6 +188,41 @@ describe('ConfigPanel vault path', () => {
     });
     await user.click(screen.getByTestId('memory-init-vault'));
     expect(post).toHaveBeenCalledWith('/memory/init', expect.anything());
+  });
+
+  // v6.x — Save Path now calls POST /memory/config/vault
+  it('calls POST /memory/config/vault when Save path is clicked (already initialised)', async () => {
+    const post = vi.fn().mockResolvedValue({ ok: true, vaultRoot: '/new/path/.bizar_memory' });
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+      if (url === '/memory/config/global') return Promise.resolve({ config: { git: { remoteUrl: '' } } });
+      if (url === '/memory/status') return Promise.resolve({
+        initialized: true, vaultRoot: '/old/path/.bizar_memory', mode: 'managed',
+      });
+      if (url === '/memory/git/status') return Promise.resolve({ ok: true, clean: true, branch: 'main' });
+      return Promise.resolve(null);
+    });
+    (api.post as ReturnType<typeof vi.fn>) = post;
+
+    const user = userEvent.setup();
+    render(
+      <Harness>
+        <ConfigPanel refreshKey={0} />
+      </Harness>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-save-vault-path')).toBeInTheDocument();
+    });
+
+    // Change the vault path input
+    const input = screen.getByTestId('memory-vault-path-input');
+    await user.clear(input);
+    await user.type(input, '/new/path/.bizar_memory');
+
+    await user.click(screen.getByTestId('memory-save-vault-path'));
+
+    // v6.x: should call /memory/config/vault (not just show a message)
+    expect(post).toHaveBeenCalledWith('/memory/config/vault', { vaultRoot: '/new/path/.bizar_memory' });
   });
 });
 

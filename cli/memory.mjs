@@ -698,7 +698,7 @@ function addRemoteToVault(projectRoot, remote) {
     return;
   }
 
-  const addResult = memoryGit.addRemote(vaultRoot, 'origin', remote);
+  const addResult = memoryGit.addRemote(vaultRoot, 'origin', remote, { overwrite: true });
   if (!addResult || addResult.ok === false) {
     warn(`failed to register remote: ${addResult?.error || 'unknown error'}`);
     info('the remote URL is still saved in .bizar/memory.json');

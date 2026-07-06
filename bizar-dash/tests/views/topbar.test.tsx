@@ -1,11 +1,11 @@
 /**
  * tests/views/topbar.test.tsx
  *
- * v6.x — Topbar tests. Verifies that:
- *   - Each settings section is exposed as its own tab in TABS.
- *   - The Settings tab itself is gone (replaced by per-section tabs).
- *   - The settings divider visually separates system tabs from settings tabs.
- *   - Clicking a tab invokes onTabChange with the tab id.
+ * v4.9.0 / v5.5.0 — Topbar tests. Verifies that:
+ *   - The Settings tab appears as a single entry in the tab rail.
+ *   - Clicking Settings invokes onTabChange with 'settings'.
+ *   - The Settings tab shows the settings-mode-indicator when active.
+ *   - All other tabs work normally.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -26,7 +26,7 @@ describe('Topbar', () => {
         activeTab={activeTab}
         onTabChange={onTabChange}
         wsStatus="connected"
-        version="v6.0.0"
+        version="v4.9.0"
         activeProject={null}
         projects={[]}
         onProjectChange={vi.fn()}
@@ -35,68 +35,53 @@ describe('Topbar', () => {
       />,
     );
 
-  it('exposes each settings section as its own top-level tab', () => {
+  it('renders the Settings tab as a single entry', () => {
     renderTopbar('overview');
-    // Spot-check a few section tabs
-    expect(screen.getByRole('tab', { name: /theme/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /general/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /layout/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /env vars/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /auth/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /system llm/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /headroom/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /activity log/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /workspaces/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /settings/i })).toBeInTheDocument();
   });
 
-  it('does not expose a legacy "Settings" parent tab', () => {
+  it('renders all main tabs', () => {
     renderTopbar('overview');
-    // The plain "Settings" tab is gone — replaced by `settings-*` tabs.
-    expect(screen.queryByRole('tab', { name: /^settings$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /overview/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /chat/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /agents/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /memory/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /settings/i })).toBeInTheDocument();
   });
 
-  it('renders a settings-group divider with a "Settings" label', () => {
-    const { container } = renderTopbar('overview');
-    const separator = container.querySelector('.tab-separator-settings');
-    expect(separator).toBeInTheDocument();
-    expect(separator?.textContent).toMatch(/settings/i);
-  });
-
-  it('exposes the tab ids in TABS', () => {
+  it('exposes the Settings tab id in TABS', () => {
     const ids = TABS.map((t) => t.id);
-    expect(ids).toContain('settings-theme');
-    expect(ids).toContain('settings-general');
-    expect(ids).toContain('settings-layout');
-    expect(ids).toContain('settings-env-vars');
-    expect(ids).toContain('settings-network');
-    expect(ids).toContain('settings-notifications');
-    expect(ids).toContain('settings-auth');
-    expect(ids).toContain('settings-agents');
-    expect(ids).toContain('settings-system-llm');
-    expect(ids).toContain('settings-headroom');
-    expect(ids).toContain('settings-updates');
-    expect(ids).toContain('settings-activity-log');
-    expect(ids).toContain('settings-workspaces');
-    expect(ids).not.toContain('settings');
+    expect(ids).toContain('settings');
+    // Settings should NOT have a prefix (it's a single entry, not per-section)
+    expect(ids).not.toContain('settings-theme');
+    expect(ids).not.toContain('settings-general');
   });
 
-  it('calls onTabChange with the section id when a settings section tab is clicked', async () => {
+  it('calls onTabChange with "settings" when the Settings tab is clicked', async () => {
     const user = userEvent.setup();
     renderTopbar('overview');
-    await user.click(screen.getByRole('tab', { name: /theme/i }));
-    expect(onTabChange).toHaveBeenCalledWith('settings-theme');
+    await user.click(screen.getByRole('tab', { name: /settings/i }));
+    expect(onTabChange).toHaveBeenCalledWith('settings');
   });
 
   it('calls onTabChange with "overview" when the Overview tab is clicked', async () => {
     const user = userEvent.setup();
-    renderTopbar('settings-theme');
+    renderTopbar('settings');
     await user.click(screen.getByRole('tab', { name: /overview/i }));
     expect(onTabChange).toHaveBeenCalledWith('overview');
   });
 
   it('highlights the active tab with `tab-active`', () => {
-    renderTopbar('settings-theme');
-    const themeTab = screen.getByRole('tab', { name: /theme/i });
-    expect(themeTab).toHaveClass('tab-active');
+    renderTopbar('settings');
+    const settingsTab = screen.getByRole('tab', { name: /settings/i });
+    expect(settingsTab).toHaveClass('tab-active');
+  });
+
+  it('does not render settings section tabs (they are in the sidebar when in settings mode)', () => {
+    renderTopbar('overview');
+    // These section tabs should NOT exist in the topbar
+    expect(screen.queryByRole('tab', { name: /theme/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /general/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /layout/i })).not.toBeInTheDocument();
   });
 });

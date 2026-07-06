@@ -93,10 +93,10 @@ describe('memory-namespace: managed mode — write/read across namespaces', () =
   });
 
   describe('namespace filtering via resolveNamespaceRoot + opts.root (Fix 5)', () => {
-    it('resolveNamespaceRoot returns project root for "project" namespace', () => {
+    it('resolveNamespaceRoot returns projectVaultRoot for "project" namespace', () => {
       const vi = TEST_MEMORY_STORE.resolveVault(projectRoot);
       const root = TEST_MEMORY_STORE.resolveNamespaceRoot(vi, 'project');
-      assert.strictEqual(root, vi.vaultRoot, 'project namespace root should equal vaultRoot');
+      assert.strictEqual(root, vi.projectVaultRoot, 'project namespace root should equal projectVaultRoot');
     });
 
     it('resolveNamespaceRoot returns <vaultRoot>/<namespaces.X> for global/user', () => {
