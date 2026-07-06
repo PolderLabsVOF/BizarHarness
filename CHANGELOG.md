@@ -1,5 +1,28 @@
 # Changelog
 
+## v5.5.6 — Minor: new `/plow-through` slash command
+
+### Highlights
+
+- New `/plow-through` slash command — autonomous mode that drives the agent to work fully end-to-end without asking clarifying questions
+
+### What's New
+
+1. **`/plow-through` slash command** — `config/commands/plow-through.md` defines the command with YAML frontmatter (`agent: odin`) and a 68-line body covering: autonomous-mode contract, execution pattern (read → search memory → decompose → dispatch → test gate → commit → report), when to use / when NOT to use, and background agent guidance
+
+2. **`cli/plow-through.test.mjs`** — 6 tests verifying: file exists, valid frontmatter, body has autonomous-mode contract keywords and "when NOT to use" section
+
+### Auto-sync
+New command automatically picked up by `syncConfigExtras()` in `cli/provision.mjs` (copies entire `config/commands/` directory). No provisioner changes needed.
+
+### Tests
+- 382 pass / 2 pre-existing fail / 19 skipped
+- All 6 new plow-through tests pass
+- The 2 failures are pre-existing (git-not-installed env issue, unrelated)
+
+### Upgrade
+`npm install -g @polderlabs/bizar@5.5.6`
+
 ## v5.5.5 — Patch: 6 memory subsystem smoke-test fixes
 
 ### Bug fixes
