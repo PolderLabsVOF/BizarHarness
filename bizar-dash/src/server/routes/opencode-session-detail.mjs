@@ -160,7 +160,7 @@ export function createOpencodeSessionDetailRouter() {
         if (errMsg.includes('timed out')) cause = 'timeout';
         else if (errMsg.includes('network error') || errMsg.includes('fetch failed')) cause = 'network';
       }
-      logger.error('opencode listMessages failed', {
+      logger.warn('opencode listMessages failed (expected when serve is gone)', {
         sessionId,
         worktree: directory,
         servePort: info.port,

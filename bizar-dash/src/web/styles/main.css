@@ -5833,12 +5833,10 @@ html[data-animations="false"] * {
   overflow: hidden;
 }
 
-.app[data-layout="topnav"] > .layout-body {
-  flex-direction: column;
-}
-
-.app[data-layout="sidebar"] > .layout-body,
-.app[data-layout="both"] > .layout-body {
+/* v6.x — Sidebar is always shown, so the body is always a horizontal
+   flex row. `data-layout` is kept on the root for any legacy selectors
+   that might still rely on it. */
+.app > .layout-body {
   flex-direction: row;
 }
 
@@ -9087,27 +9085,11 @@ select:focus-visible,
   margin-top: 1rem;
 }
 
-/* v4.9.0 — Settings mode visual indicators */
+/* v4.9.0 settings-mode-banner / settings-mode-indicator removed in v6.x:
+   each settings section is its own tab, so there's no longer a "settings
+   mode" to banner or to mark with an indicator dot. */
 
-.settings-mode-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  background: linear-gradient(to right, rgba(139, 92, 246, 0.1), transparent);
-  border: 1px solid var(--accent, #8b5cf6);
-  border-radius: 8px;
-  margin-bottom: 24px;
-  font-size: 14px;
-  color: var(--text);
-}
-
-.settings-mode-indicator {
-  display: inline-flex;
-  align-items: center;
-  color: var(--accent, #8b5cf6);
-  margin-left: 6px;
-}
+/* ─── Toggle switch ──────────────────────────────────────────────── */
 
 /* ─── Toggle switch ──────────────────────────────────────────────── */
 .toggle {
@@ -9211,6 +9193,48 @@ select:focus-visible,
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 16px;
   margin-top: 24px;
+}
+
+/* v6.x — Source banner above the plugin grid. Surfaces the registry
+   URL so users know where data came from and shows a "cached" notice
+   when the disk cache was the source. */
+.marketplace-source-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-top: 16px;
+  background: var(--bg-elev-2, #1a1f2b);
+  border: 1px solid var(--border, #232a39);
+  border-radius: var(--radius, 8px);
+  font-size: 12px;
+}
+
+.marketplace-source-banner code {
+  background: transparent;
+  padding: 0;
+}
+
+.marketplace-cache-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-3, rgba(255, 255, 255, 0.05));
+  color: var(--text-dim, #b4bcd0);
+  font-size: 11px;
+}
+
+.marketplace-count-pill {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-bg, rgba(139, 92, 246, 0.12));
+  color: var(--accent, #8b5cf6);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .marketplace-plugin-card {

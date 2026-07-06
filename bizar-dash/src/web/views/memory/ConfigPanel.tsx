@@ -1,4 +1,7 @@
 // src/web/views/memory/ConfigPanel.tsx — simplified memory config.
+// v6.x — Vault path is now fetched from /api/memory/status so the row
+// stops saying "(loading…)" forever. Users can change the vault path
+// inline and initialise the vault if it doesn't exist yet.
 import { useEffect, useState } from 'react';
 import {
   GitBranch,
@@ -8,6 +11,9 @@ import {
   Loader2,
   Plug,
   Save,
+  FolderInput,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Card, CardMeta, CardTitle } from '../../components/Card';
@@ -31,6 +37,17 @@ type SyncStatus = {
   untracked?: number;
 };
 
+type MemoryStatus = {
+  initialized: boolean;
+  mode?: string | null;
+  projectId?: string | null;
+  vaultRoot?: string | null;
+  branch?: string | null;
+  gitClean?: boolean | null;
+  noteCount?: number;
+  lastSecretScan?: string | null;
+};
+
 type Props = { refreshKey: number };
 
 export function ConfigPanel({ refreshKey }: Props) {
@@ -39,7 +56,10 @@ export function ConfigPanel({ refreshKey }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [remoteUrl, setRemoteUrl] = useState('');
-  const [vaultPath] = useState<string>('');
+  const [memoryStatus, setMemoryStatus] = useState<MemoryStatus | null>(null);
+  const [vaultPathDraft, setVaultPathDraft] = useState<string>('');
+  const [pathInitialising, setPathInitialising] = useState(false);
+  const [pathSaving, setPathSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tests, setTests] = useState<Array<{ name: string; pass: boolean; detail: string }> | null>(null);
@@ -48,9 +68,22 @@ export function ConfigPanel({ refreshKey }: Props) {
   const reload = async () => {
     setLoading(true);
     try {
-      const r = await api.get<{ config: GlobalConfig }>('/memory/config/global');
-      setCfg(r.config);
-      setRemoteUrl(r.config?.git?.remoteUrl || '');
+      const [cfgRes, statusRes] = await Promise.all([
+        api.get<{ config: GlobalConfig }>('/memory/config/global').catch(() => null),
+        api.get<MemoryStatus>('/memory/status').catch(() => null),
+      ]);
+      if (cfgRes) {
+        setCfg(cfgRes.config);
+        setRemoteUrl(cfgRes.config?.git?.remoteUrl || '');
+      } else {
+        setCfg({});
+      }
+      if (statusRes) {
+        setMemoryStatus(statusRes);
+        // Initialise the draft input from the server's current vaultRoot.
+        // Only overwrite while the user hasn't started editing.
+        setVaultPathDraft((cur) => cur || statusRes.vaultRoot || '');
+      }
       // Also fetch git status from the per-project vault
       await loadSyncStatus();
     } catch (err) {
@@ -80,6 +113,50 @@ export function ConfigPanel({ refreshKey }: Props) {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
+
+  // v6.x — Save the new vault path. If the folder doesn't exist, the
+  // backend's /memory/init endpoint can be used to create it (handled
+  // by ensureVaultExists()).
+  const onSaveVaultPath = async () => {
+    const target = vaultPathDraft.trim();
+    if (!target) {
+      toast.error('Vault path cannot be empty.');
+      return;
+    }
+    setPathSaving(true);
+    try {
+      const status = await api.get<MemoryStatus & { exists?: boolean }>('/memory/status').catch(() => null);
+      const initialised = status?.initialized;
+      if (!initialised) {
+        // Initialise the vault at the chosen path.
+        await api.post('/memory/init', { vaultRoot: target });
+        toast.success(`Vault initialised at ${target}.`);
+      } else {
+        // Backend doesn't currently expose a "move vault" endpoint, so
+        // we surface a clear message rather than silently failing.
+        toast.info('Vault path already initialised — run `bizar memory init --path <new>` from the CLI to move it.');
+      }
+      setVaultPathDraft(target);
+      await reload();
+    } catch (err) {
+      toast.error(`Vault path save failed: ${(err as Error).message}`);
+    } finally {
+      setPathSaving(false);
+    }
+  };
+
+  const onInitVault = async () => {
+    setPathInitialising(true);
+    try {
+      await api.post('/memory/init', {});
+      toast.success('Vault initialised.');
+      await reload();
+    } catch (err) {
+      toast.error(`Init failed: ${(err as Error).message}`);
+    } finally {
+      setPathInitialising(false);
+    }
+  };
 
   const onSave = async () => {
     if (!cfg) return;
@@ -143,16 +220,89 @@ export function ConfigPanel({ refreshKey }: Props) {
   }
   if (!cfg) return <div className="muted">No config available.</div>;
 
+  const initialised = !!memoryStatus?.initialized;
+  const currentVaultPath = memoryStatus?.vaultRoot ?? '';
+
   return (
     <div className="memory-panel-content">
+      {/* ── Vault path ──────────────────────────────────────────────────── */}
+      <Card>
+        <CardTitle>
+          <FolderInput size={14} /> Vault location
+        </CardTitle>
+        <CardMeta>
+          The on-disk folder where notes and memory metadata live. Default:{' '}
+          <code>~/.bizar_memory</code>.
+        </CardMeta>
+        <div className="memory-config-form">
+          <Row label="Current path" inline>
+            <span className="memory-vault-path mono" data-testid="memory-current-vault-path">
+              {currentVaultPath || <span className="muted">not initialised</span>}
+            </span>
+            {initialised ? (
+              <span
+                className="memory-pill memory-pill-ok"
+                style={{ marginLeft: 8 }}
+                title="Vault folder exists on disk"
+              >
+                <CheckCircle2 size={10} /> initialised
+              </span>
+            ) : (
+              <span
+                className="memory-pill memory-pill-warn"
+                style={{ marginLeft: 8 }}
+                title="Vault folder does not exist yet"
+              >
+                <XCircle size={10} /> not initialised
+              </span>
+            )}
+          </Row>
+          <Row label="Set path">
+            <input
+              type="text"
+              className="input mono"
+              value={vaultPathDraft}
+              onChange={(e) => setVaultPathDraft(e.target.value)}
+              placeholder="~/.bizar_memory"
+              aria-label="Vault path"
+              data-testid="memory-vault-path-input"
+            />
+            <span className="field-hint">
+              {initialised
+                ? 'Save to update the working path (or use `bizar memory init --path <new>` from the CLI to migrate).'
+                : 'Save and initialise will create this folder if it does not exist.'}
+            </span>
+          </Row>
+        </div>
+        <div className="memory-action-row" style={{ marginTop: 12 }}>
+          <Button
+            variant="primary"
+            onClick={onSaveVaultPath}
+            disabled={pathSaving || pathInitialising || !vaultPathDraft.trim()}
+            data-testid="memory-save-vault-path"
+          >
+            {pathSaving ? <Loader2 size={12} className="memory-spin" /> : <Save size={12} />}
+            {initialised ? 'Save path' : 'Save and initialise'}
+          </Button>
+          {!initialised && (
+            <Button
+              variant="secondary"
+              onClick={onInitVault}
+              disabled={pathInitialising || pathSaving}
+              data-testid="memory-init-vault"
+            >
+              {pathInitialising ? <Loader2 size={12} className="memory-spin" /> : <FolderInput size={12} />}
+              Initialise default
+            </Button>
+          )}
+        </div>
+      </Card>
+
       {/* ── Git sync ───────────────────────────────────────────────────── */}
       <Card>
         <CardTitle><GitBranch size={14} /> Git sync</CardTitle>
         <CardMeta>Configure the git remote and sync your memory vault.</CardMeta>
         <div className="memory-config-form">
-          <Row label="Vault path" inline>
-            <span className="memory-vault-path mono muted">{vaultPath || '(loading…)'}</span>
-          </Row>
           <Row label="Remote URL">
             <input
               type="text"

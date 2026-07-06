@@ -1,50 +1,73 @@
 /**
  * src/server/bg-spawner.mjs
  *
- * v5.x — Dashboard-side background agent spawner.
+ * v5.5.1 — Dashboard-side background agent spawner, rewired to use the
+ * opencode SDK (sessions + promptAsync) instead of `opencode run` subprocesses.
  *
- * Bridges "spawn from UI" without requiring an LLM round-trip. Mirrors
- * the plugin's `opencode-runner.ts` semantics as a Node-flavoured
- * equivalent: spawns one `opencode run` subprocess per agent, captures
- * stdout/stderr to a log file, tracks the PID, and broadcasts WS events
- * for each new output line.
+ * Background agents run as long-lived opencode-serve SDK sessions, which:
+ *   - Accept mid-flight prompts (the "true mid-flight steer" promised in
+ *     v0.9.x / v5.5.0).
+ *   - Don't need an OS subprocess per agent (we used to fork one
+ *     `opencode run` per agent).
+ *   - Are portable across POSIX and Windows (no signals).
  *
- * Why the dashboard has its own spawner:
- *   - The plugin process (the opencode plugin) isn't always reachable
- *     from the dashboard. Spawning from UI must work even when the
- *     user is operating the dashboard before/after an opencode session.
- *   - The dashboard already has its own pid space and state directory;
- *     this module inherits the existing `~/.cache/bizar/bg/*.json`
- *     layout so the dashboard list view picks up the new instance
- *     immediately.
+ * What this module owns:
+ *   - Instance lifecycle (create, status, list, kill, pause, resume, steer).
+ *   - State file (`~/.cache/bizar/bg/<instanceId>.json`) — same shape as
+ *     v5.5.0 so the dashboard's existing list view picks up new instances
+ *     without any migration. `processId` is left `null`; the schema field
+ *     stays (backwards compat) but is no longer the source of truth for
+ *     liveness — we use `liveSession === true` to mark "this instance is
+ *     backed by a live opencode session".
+ *   - Event subscription: `sdk.events.subscribe({ sessionID })` yields
+ *     opencode SSE envelopes which we forward to the WS bus as
+ *     `bg:output` / `background:change` / `bg:tool-call` events.
  *
- * Public surface:
- *   - `spawnBgAgent({...})` — create instance + subprocess, return
- *     `{ instanceId, sessionId?, processId? }`.
- *   - `killBgAgent(instanceId, { signal })`, `pauseBgAgent`,
- *     `resumeBgAgent` — control signals. POSIX-only for signal
- *     variants; Windows returns an explicit error.
- *   - `isAlive(instanceId)` — liveness check for an instance PID.
- *   - `status()` — diagnostic dump (process count, ids).
+ * Public surface (kept identical to v5.5.0):
+ *   - `spawnBgAgent({...})`        — create instance + SDK session.
+ *   - `killBgAgent(instanceId, …)` — abort the session.
+ *   - `pauseBgAgent(instanceId)`   — output pause (see note below).
+ *   - `resumeBgAgent(instanceId)`  — resume forwarding.
+ *   - `steerBgAgent(instanceId, …)`— TRUE mid-flight prompt (no kill+respawn).
+ *   - `isAlive(instanceId)`        — liveness check.
+ *   - `status()`                   — diagnostics.
+ *   - `configureSpawner(ctx)`      — broadcast wiring.
  *
- * State file: `~/.cache/bizar/bg/<instanceId>.json` — same shape
- * the plugin uses, kept compatible. We update the file as the
- * subprocess progresses (status flips, tool calls recorded, etc.).
+ * Note on `pauseBgAgent`:
+ *   In subprocess mode, pause sent SIGSTOP to the underlying OS process.
+ *   The opencode serve child doesn't expose an HTTP pause — there's no
+ *   documented "freeze the agent loop" endpoint. We therefore implement
+ *   pause as "stop forwarding events to the dashboard" (output pause).
+ *   The session keeps running; events that arrive while paused are
+ *   buffered; resume drains the buffer. This matches the user's mental
+ *   model ("pause the live output") and is cross-platform.
+ *
+ * Backwards compatibility (v5.5.0 → v5.5.1):
+ *   - State-file shape unchanged: `processId` stays in the schema (now
+ *     always `null`) so a v5.5.0 instance file can still be read.
+ *   - REST surface unchanged: `POST /api/background`, `POST .../steer`,
+ *     `POST .../pause`, `POST .../resume`, `DELETE /api/background/:id`
+ *     all keep their contract.
+ *   - `steerBgAgent` semantics change from "kill+respawn with [STEERED
+ *     <ts>] marker" to "true mid-flight prompt"; the response shape stays
+ *     `{ ok, newInstanceId? }` but `newInstanceId` is no longer returned
+ *     (the same instance is reused).
  */
-import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, statSync, readdirSync, unlinkSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
-import { homedir } from 'node:os';
-import { resolve as pathResolve, dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import { resolve as pathResolve } from "node:path";
+
+import { getOpencodeSdkOrThrow } from "./opencode-sdk.mjs";
 
 /** Same shape the plugin uses for instance IDs. */
 function generateInstanceId() {
   const bytes = randomBytes(16);
   // crockford base32: 26 chars total, take 22
-  const ALPH = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const ALPH = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
   let bits = 0;
   let value = 0;
-  let out = '';
+  let out = "";
   for (let i = 0; i < bytes.length; i++) {
     value = (value << 8) | bytes[i];
     bits += 8;
@@ -54,19 +77,19 @@ function generateInstanceId() {
     }
   }
   if (bits > 0) out += ALPH[(value << (5 - bits)) & 0x1f];
-  return 'bgr_' + out.slice(0, 22);
+  return "bgr_" + out.slice(0, 22);
 }
 
 // --- Configuration -------------------------------------------------------
 
 const HOME = homedir();
 const BG_DIR_CANDIDATES = [
-  pathResolve(HOME, '.cache', 'bizar', 'bg'),
-  pathResolve(HOME, '.config', 'opencode', 'bg'),
-  pathResolve(HOME, '.bizar', 'bg'),
+  pathResolve(HOME, ".cache", "bizar", "bg"),
+  pathResolve(HOME, ".config", "opencode", "bg"),
+  pathResolve(HOME, ".bizar", "bg"),
 ];
 const LOG_DIR_CANDIDATES = [
-  process.env.BIZAR_LOG_DIR || pathResolve(HOME, '.cache', 'bizar', 'logs'),
+  process.env.BIZAR_LOG_DIR || pathResolve(HOME, ".cache", "bizar", "logs"),
 ];
 
 function pickBgDir() {
@@ -89,26 +112,28 @@ function pickLogDir() {
   return def;
 }
 
-// --- In-memory subprocess registry --------------------------------------
+// --- In-memory session registry ------------------------------------------
 
 /**
  * @typedef {object} SpawnerRecord
- * @property {number} processId
  * @property {string} instanceId
  * @property {string} sessionId
  * @property {string} logPath
- * @property {import('node:child_process').ChildProcess} proc
  * @property {string} state — "starting" | "running" | "paused" | "done" | "failed" | "killed"
  * @property {number} startedAt
  * @property {number} [endedAt]
- * @property {number} [exitCode]
  * @property {string} [worktree]
+ * @property {boolean} paused            — v5.5.1 output-pause flag
+ * @property {Array<object>} pauseBuffer — events buffered while paused
+ * @property {{ close: () => void, stream?: AsyncIterable<unknown> } | null} sub  — SDK event sub
+ * @property {number} steerCount          — number of mid-flight prompts sent
+ * @property {number} lastSteerAt         — epoch ms of the last steer
  */
 
 /** @type {Map<string, SpawnerRecord>} — keyed by instanceId */
 const byInstanceId = new Map();
-/** @type {Map<number, SpawnerRecord>} — keyed by processId */
-const byPid = new Map();
+/** @type {Map<string, SpawnerRecord>} — keyed by sessionId (for fast lookup from event handler) */
+const bySessionId = new Map();
 
 // --- Public API ---------------------------------------------------------
 
@@ -125,10 +150,19 @@ export function configureSpawner(ctx) {
 }
 
 /**
- * Spawn one opencode run subprocess. Mirrors the plugin's
- * `bg-spawn.ts` semantics. Writes the initial BackgroundState JSON,
- * starts the subprocess, then patches the JSON when the session id
- * appears in stderr.
+ * Spawn one opencode serve SDK session for the bg agent. Mirrors the
+ * v5.5.0 plugin-side `bg-spawn.ts` semantics on the input/output side:
+ *
+ *   - Generates an instanceId.
+ *   - Writes the initial state file (same shape as v5.5.0 — the
+ *     `processId` field stays in the schema but is always `null` now).
+ *   - Creates an SDK session via `sdk.sessions.create({ title })`.
+ *   - Fires the prompt via `sdk.sessions.promptAsync({ sessionId, body })`.
+ *   - Subscribes to `sdk.events.subscribe({ sessionID })` to forward
+ *     SSE events to the dashboard's WS bus.
+ *
+ * The function returns as soon as the sessionId is known (sub-second),
+ * matching the v5.5.0 "return instanceId immediately" contract.
  *
  * @param {object} opts
  * @param {string} opts.agent
@@ -143,27 +177,43 @@ export function configureSpawner(ctx) {
  */
 export async function spawnBgAgent(opts) {
   if (!opts || !opts.agent || !opts.prompt || !opts.worktree) {
-    return { instanceId: '', sessionId: null, processId: null, error: 'missing_required_fields' };
+    return { instanceId: "", sessionId: null, processId: null, error: "missing_required_fields" };
   }
+
+  // Resolve the SDK early so a missing serve fails fast with a clear error.
+  let sdk;
+  try {
+    sdk = await getOpencodeSdkOrThrow();
+  } catch (err) {
+    return {
+      instanceId: "",
+      sessionId: null,
+      processId: null,
+      error: `opencode_serve_unavailable: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
   const instanceId = generateInstanceId();
   const logDir = pickLogDir();
   const logPath = pathResolve(logDir, `${instanceId}.log`);
   const now = Date.now();
-  /** @type {BackgroundState} */
+
+  // Initial state — same shape as v5.5.0 (processId stays for compat).
+  /** @type {any} */
   const initial = {
     instanceId,
-    sessionId: '',
+    sessionId: "",
     agent: opts.agent,
     model: opts.model
       ? `${opts.model.providerID}/${opts.model.modelID}`
-      : 'agent-default',
+      : "agent-default",
     promptPreview: String(opts.prompt).slice(0, 200),
     prompt: String(opts.prompt),
-    parentAgent: 'dashboard',
+    parentAgent: "dashboard",
     logPath,
     timeoutMs: Math.max(1000, Math.floor(opts.timeoutMs ?? 300_000)),
     toolCallCount: 0,
-    status: 'pending',
+    status: "pending",
     startedAt: now,
     lastEventAt: now,
     lastToolOrTextAt: now,
@@ -171,315 +221,470 @@ export async function spawnBgAgent(opts) {
     persistent: Boolean(opts.persistent),
     maxRestarts: Math.max(1, Math.floor(opts.maxRestarts ?? 3)),
     restartCount: 0,
-    runnerState: 'starting',
+    runnerState: "starting",
     spawnedAt: now,
     progress: 0,
     toolCalls: [],
     tags: Array.isArray(opts.tags) ? opts.tags.slice(0, 10) : undefined,
-    source: 'dashboard',
+    source: "dashboard",
+    // v5.5.1 — explicit flag so the state file carries the "this is a
+    // live opencode session, not a subprocess" marker. Dashboard
+    // reconciliation reads this to decide whether to call SDK abort
+    // vs the legacy `proc.kill` path.
+    liveSession: true,
   };
 
   await writeStateFile(initial);
-  broadcast({ type: 'background:change', id: instanceId, status: 'pending', source: 'dashboard' });
+  broadcast({ type: "background:change", id: instanceId, status: "pending", source: "dashboard" });
 
-  // Build argv — mirror plugins/bizar/src/opencode-runner.ts buildOpencodeRunArgs.
-  const args = [
-    'opencode',
-    'run',
-    '--dir', opts.worktree,
-    '--print-logs',
-    '--log-level', 'INFO',
-    '--title', `bgr:${opts.agent}:${instanceId}`,
-    '--agent', opts.agent,
-  ];
-  if (opts.model) args.push('--model', `${opts.model.providerID}/${opts.model.modelID}`);
-  args.push('--', String(opts.prompt));
-
-  // For subagents, wrap with delegation prompt (mirroring bg-spawn.ts).
-  const PRIMARY = new Set(['odin', 'quick', 'browser-harness']);
-  let finalPrompt = String(opts.prompt);
-  let wrapperAgent = opts.agent;
-  if (!PRIMARY.has(opts.agent)) {
-    wrapperAgent = 'odin';
-    finalPrompt = [
-      'You are Odin, the BizarHarness router.',
-      '',
-      'A background agent session has been requested with a SPECIFIC subagent.',
-      'Your only job is to delegate to that subagent using the `task` tool. Do NOT',
-      'perform the work yourself. Do NOT interpret the user\'s prompt.',
-      '',
-      `Requested subagent: ${opts.agent}`,
-      '',
-      'Task prompt to pass verbatim:',
-      '--- BEGIN USER PROMPT ---',
-      String(opts.prompt),
-      '--- END USER PROMPT ---',
-      '',
-      `Use the task tool with agent="${opts.agent}" and the exact prompt above.`,
-    ].join('\n');
-    args[args.indexOf('--agent') + 1] = wrapperAgent;
-    // Replace the trailing "-- <prompt>" with the wrapped prompt.
-    const dashIdx = args.indexOf('--', args.indexOf('--agent'));
-    if (dashIdx >= 0) {
-      args.splice(dashIdx + 1, 1, finalPrompt);
-    }
-  }
-
-  let proc;
-  try {
-    proc = spawn(args[0], args.slice(1), {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-  } catch (err) {
-    await patchState(instanceId, {
-      status: 'failed',
-      error: `spawn failed: ${err instanceof Error ? err.message : String(err)}`,
-      completedAt: Date.now(),
-    });
-    broadcast({ type: 'background:change', id: instanceId, status: 'failed', error: err.message });
-    return { instanceId, sessionId: null, processId: null, error: err.message };
-  }
-
+  // --- Create the SDK session ---
   /** @type {SpawnerRecord} */
   const rec = {
-    processId: proc.pid,
     instanceId,
-    sessionId: '',
+    sessionId: "",
     logPath,
-    proc,
-    state: 'starting',
-    startedAt: Date.now(),
+    state: "starting",
+    startedAt: now,
     worktree: opts.worktree,
-  };
-  byInstanceId.set(instanceId, rec);
-  byPid.set(proc.pid, rec);
-
-  const sessionIdRegex = /message=created id=(ses_[A-Za-z0-9_]+)/;
-  let buf = '';
-  let appendOffset = 0;
-
-  // Helper: append a line to the log file AND broadcast ws event.
-  const emit = (label, chunk) => {
-    if (!chunk) return;
-    const text = chunk.toString('utf-8');
-    appendFileSync(logPath, `[${label}] ${text}`);
-    appendOffset += Buffer.byteLength(text, 'utf-8');
-    // Per-line broadcast: split on newlines.
-    for (const line of text.split(/\r?\n/)) {
-      if (!line) continue;
-      broadcast({
-        type: 'bg:output',
-        instanceId,
-        line,
-        ts: Date.now(),
-        byteOffset: appendOffset,
-        stream: label,
-      });
-    }
+    paused: false,
+    pauseBuffer: [],
+    sub: null,
+    steerCount: 0,
+    lastSteerAt: 0,
   };
 
-  proc.stdout.on('data', (chunk) => emit('stdout', chunk));
-  proc.stderr.on('data', (chunk) => {
-    emit('stderr', chunk);
-    const text = chunk.toString('utf-8');
-    buf += text;
-    const m = buf.match(sessionIdRegex);
-    if (m && m[1] && !rec.sessionId) {
-      rec.sessionId = m[1];
-      const sid = m[1];
-      patchState(instanceId, {
-        sessionId: sid,
-        status: 'running',
-        runnerState: 'running',
-        processId: proc.pid,
-        sessionIdAt: Date.now(),
-      }).then(() => {
-        broadcast({ type: 'background:change', id: instanceId, status: 'running', sessionId: sid });
-      });
-    }
-  });
-
-  proc.on('exit', async (code, signal) => {
-    rec.state = signal === 'SIGTERM' || signal === 'SIGKILL' ? 'killed' : (code === 0 ? 'done' : 'failed');
-    rec.endedAt = Date.now();
-    rec.exitCode = code ?? undefined;
-    byPid.delete(proc.pid);
-    const wasAdopted = false;
-    const update = {
-      runnerState: rec.state,
-      completedAt: rec.endedAt,
-      ...(code != null ? { exitCode: code } : {}),
-    };
-    if (signal) update.exitSignal = signal;
-    // Don't clobber "steered" status.
-    const cur = readStateFile(instanceId);
-    if (cur && cur.status !== 'steered' && cur.status !== 'killed' && cur.status !== 'failed') {
-      update.status = rec.state === 'killed' ? 'killed' : rec.state === 'done' ? 'done' : 'failed';
-    }
-    await patchState(instanceId, update);
-    broadcast({
-      type: 'background:change',
-      id: instanceId,
-      status: update.status,
-      processId: proc.pid,
-      exitCode: code,
-      ...(rec.sessionId ? { sessionId: rec.sessionId } : {}),
-    });
-    void wasAdopted;
-  });
-
-  proc.on('error', (err) => {
-    broadcast({ type: 'bg:error', instanceId, error: err.message });
-  });
-
-  return { instanceId, sessionId: null, processId: proc.pid };
-}
-
-/**
- * Kill an instance's subprocess. Sends SIGTERM, then SIGKILL after 5s.
- * @param {string} instanceId
- * @param {{signal?: 'SIGTERM' | 'SIGKILL', reason?: string}} [opts]
- * @returns {{ ok: boolean, error?: string }}
- */
-export async function killBgAgent(instanceId, opts = {}) {
-  const rec = byInstanceId.get(instanceId);
-  if (!rec) return { ok: false, error: 'instance_not_tracked' };
-  if (rec.endedAt) return { ok: true, note: 'already_exited' };
-  const signal = opts.signal || 'SIGTERM';
   try {
-    rec.proc.kill(signal);
-    rec.state = 'killed';
-    if (rec.sessionId) {
+    const created = await sdk.sessions.create({
+      title: `bgr:${opts.agent}:${instanceId}`,
+      agent: opts.agent,
+      ...(opts.model ? { model: opts.model } : {}),
+    });
+    const sessionId = created?.id || "";
+    if (!sessionId) {
+      const msg = "opencode sessions.create returned no id";
       await patchState(instanceId, {
-        status: 'killed',
-        runnerState: 'killed',
+        status: "failed",
+        error: msg,
         completedAt: Date.now(),
-        exitSignal: signal,
       });
-      broadcast({ type: 'background:change', id: instanceId, status: 'killed', reason: opts.reason });
+      broadcast({ type: "background:change", id: instanceId, status: "failed", error: msg });
+      return { instanceId, sessionId: null, processId: null, error: msg };
     }
-    setTimeout(() => {
-      if (!rec.endedAt) {
-        try { rec.proc.kill('SIGKILL'); } catch { /* ignore */ }
-      }
-    }, 5_000);
-    return { ok: true };
+    rec.sessionId = sessionId;
+    rec.state = "running";
+    byInstanceId.set(instanceId, rec);
+    bySessionId.set(sessionId, rec);
+
+    // --- Send the prompt asynchronously (fire-and-forget) ---
+    // `promptAsync` returns `null` (202-style): the prompt is queued on
+    // the server and processed in the background. We don't block the
+    // spawn on it.
+    await sdk.sessions
+      .promptAsync({ sessionId, body: { text: String(opts.prompt) } })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        broadcast({ type: "bg:error", instanceId, error: `promptAsync failed: ${msg}` });
+      });
+
+    // --- Subscribe to the session's event stream ---
+    let sub = null;
+    try {
+      sub = await sdk.events.subscribe({ sessionID: sessionId });
+    } catch (err) {
+      // Non-fatal: events won't be forwarded but the session still runs.
+      broadcast({
+        type: "bg:error",
+        instanceId,
+        error: `events.subscribe failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+    rec.sub = sub;
+
+    if (sub && sub.stream) {
+      void forwardEvents(rec, sub.stream);
+    }
+
+    // --- Persist sessionId into state file ---
+    await patchState(instanceId, {
+      sessionId,
+      status: "running",
+      runnerState: "running",
+      // processId stays null — the schema field is preserved for compat
+      // but is no longer the source of truth for liveness.
+      processId: null,
+      sessionIdAt: Date.now(),
+      liveSession: true,
+    });
+    broadcast({
+      type: "background:change",
+      id: instanceId,
+      status: "running",
+      sessionId,
+      liveSession: true,
+    });
+
+    return { instanceId, sessionId, processId: null };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    await patchState(instanceId, {
+      status: "failed",
+      error: `sdk.sessions.create threw: ${msg}`,
+      completedAt: Date.now(),
+    });
+    broadcast({ type: "background:change", id: instanceId, status: "failed", error: msg });
+    return { instanceId, sessionId: null, processId: null, error: msg };
   }
 }
 
 /**
- * Pause an instance: SIGSTOP the subprocess.
+ * Forward SDK SSE events to the dashboard's WS bus. Resolves when the
+ * subscription ends (the session terminated or the SSE connection died).
+ *
+ * Translates opencode event types to dashboard shapes:
+ *   - `session.idle`   → `background:change { status: 'done' }`
+ *   - `session.error`  → `background:change { status: 'failed' }`
+ *   - `message.part.updated` (text/tool) → `bg:output` + tool-call bookkeeping
+ *
+ * @param {SpawnerRecord} rec
+ * @param {AsyncIterable<any>} stream
+ */
+async function forwardEvents(rec, stream) {
+  try {
+    for await (const ev of stream) {
+      if (!ev || typeof ev !== "object") continue;
+
+      // Output-pause: buffer events instead of forwarding, so the
+      // dashboard doesn't show live updates while paused.
+      if (rec.paused) {
+        try {
+          rec.pauseBuffer.push(ev);
+          // Cap the buffer so a long pause doesn't grow unbounded.
+          if (rec.pauseBuffer.length > 1000) rec.pauseBuffer.shift();
+        } catch {
+          /* ignore */
+        }
+        continue;
+      }
+
+      const type = typeof ev.type === "string" ? ev.type : null;
+      if (!type) continue;
+
+      // Append a compact line to the log file for tail/inspection.
+      try {
+        appendFileSync(
+          rec.logPath,
+          `[sdk-event] type=${type} ts=${Date.now()}\n`,
+        );
+      } catch {
+        /* ignore */
+      }
+
+      // Tool / text parts: forward as `bg:output` + bump counters.
+      if (type === "message.part.updated") {
+        const part = ev.part || ev.data?.part;
+        const partText =
+          part?.text ||
+          (part?.type === "tool" ? `[tool ${part?.tool || part?.name || ""}]` : "");
+        if (partText) {
+          broadcast({
+            type: "bg:output",
+            instanceId: rec.instanceId,
+            line: typeof partText === "string" ? partText : JSON.stringify(partText),
+            ts: Date.now(),
+            stream: "sse",
+          });
+        }
+        if (part?.type === "tool") {
+          const tc = {
+            id: ev.partID || ev.messageID || `tc_${Date.now().toString(36)}`,
+            name: String(part.tool || part.name || "tool"),
+            status: part.state || "running",
+            startedAt: Date.now(),
+          };
+          // Best-effort persist: read-modify-write the toolCalls array.
+          try {
+            const st = readStateFile(rec.instanceId);
+            if (st) {
+              const list = Array.isArray(st.toolCalls) ? st.toolCalls.slice() : [];
+              list.push(tc);
+              if (list.length > 100) list.shift();
+              await patchState(rec.instanceId, { toolCalls: list, toolCallCount: list.length });
+            }
+          } catch {
+            /* ignore */
+          }
+          broadcast({
+            type: "bg:tool-call",
+            instanceId: rec.instanceId,
+            toolCall: tc,
+          });
+        }
+        // Heartbeat for the stall checker / output-pause ticker.
+        await patchState(rec.instanceId, {
+          lastEventAt: Date.now(),
+          ...(part?.type === "tool" || part?.type === "text"
+            ? { lastToolOrTextAt: Date.now() }
+            : {}),
+        });
+        continue;
+      }
+
+      // Session-terminal events: flip state to the appropriate terminal.
+      if (type === "session.idle" || type === "session.idle.0") {
+        rec.state = "done";
+        rec.endedAt = Date.now();
+        await patchState(rec.instanceId, {
+          status: "done",
+          runnerState: "done",
+          completedAt: rec.endedAt,
+        });
+        broadcast({
+          type: "background:change",
+          id: rec.instanceId,
+          status: "done",
+        });
+        break;
+      }
+      if (type === "session.error" || type === "session.error.0") {
+        rec.state = "failed";
+        rec.endedAt = Date.now();
+        const errMsg = String(ev.error || ev.data?.error || "session error");
+        await patchState(rec.instanceId, {
+          status: "failed",
+          runnerState: "failed",
+          error: errMsg,
+          completedAt: rec.endedAt,
+        });
+        broadcast({
+          type: "background:change",
+          id: rec.instanceId,
+          status: "failed",
+          error: errMsg,
+        });
+        break;
+      }
+
+      // Anything else: forward as a generic bg:output so the dashboard
+      // log captures it.
+      broadcast({
+        type: "bg:output",
+        instanceId: rec.instanceId,
+        line: `[event] ${type}`,
+        ts: Date.now(),
+        stream: "sse",
+      });
+    }
+  } catch (err) {
+    broadcast({
+      type: "bg:error",
+      instanceId: rec.instanceId,
+      error: `event stream ended: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  } finally {
+    // Clean up so a re-adopt / restart can re-subscribe cleanly.
+    bySessionId.delete(rec.sessionId);
+  }
+}
+
+/**
+ * Kill an instance's opencode session. Aborts the SDK session; best-effort.
+ * @param {string} instanceId
+ * @param {{signal?: 'SIGTERM' | 'SIGKILL', reason?: string}} [_opts]  — `signal` accepted for compat but ignored (sessions are aborted via SDK)
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export async function killBgAgent(instanceId, _opts = {}) {
+  const rec = byInstanceId.get(instanceId);
+  if (!rec) return { ok: false, error: "instance_not_tracked" };
+  if (rec.endedAt) return { ok: true, note: "already_exited" };
+
+  try {
+    const sdk = await getOpencodeSdkOrThrow();
+    await sdk.sessions.abort({ sessionId: rec.sessionId });
+  } catch (err) {
+    // Best-effort: even if abort fails, mark the state so the UI
+    // reflects the intent.
+    broadcast({
+      type: "bg:error",
+      instanceId,
+      error: `abort failed: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+
+  // Close the event subscription so we stop forwarding events.
+  try {
+    rec.sub?.close?.();
+  } catch {
+    /* ignore */
+  }
+  rec.sub = null;
+
+  rec.state = "killed";
+  rec.endedAt = Date.now();
+  await patchState(instanceId, {
+    status: "killed",
+    runnerState: "killed",
+    completedAt: rec.endedAt,
+  });
+  broadcast({ type: "background:change", id: instanceId, status: "killed" });
+  return { ok: true };
+}
+
+/**
+ * Pause an instance's event forwarding. In v5.5.1 (SDK-based) we can't
+ * freeze the underlying opencode agent loop without a documented pause
+ * endpoint; pause is therefore an OUTPUT pause — events that arrive
+ * while paused are buffered; resume drains them.
+ *
+ * Idempotent against already-paused / already-exited instances.
+ *
  * @param {string} instanceId
  * @returns {{ ok: boolean, error?: string }}
  */
 export function pauseBgAgent(instanceId) {
-  if (process.platform === 'win32') {
-    return { ok: false, error: 'unsupported_on_win32' };
-  }
   const rec = byInstanceId.get(instanceId);
-  if (!rec) return { ok: false, error: 'instance_not_tracked' };
-  if (rec.endedAt) return { ok: true, note: 'already_exited' };
-  if (rec.state === 'paused') return { ok: true };
-  try {
-    rec.proc.kill('SIGSTOP');
-    rec.state = 'paused';
-    patchState(instanceId, {
-      status: 'paused',
-      pausedAt: Date.now(),
-    }).then(() => {
-      broadcast({ type: 'background:change', id: instanceId, status: 'paused' });
+  if (!rec) return { ok: false, error: "instance_not_tracked" };
+  if (rec.endedAt) return { ok: true, note: "already_exited" };
+  if (rec.paused) return { ok: true };
+  rec.paused = true;
+  patchState(instanceId, { status: "paused", pausedAt: Date.now() })
+    .then(() => {
+      broadcast({ type: "background:change", id: instanceId, status: "paused" });
+    })
+    .catch(() => {
+      /* ignore */
     });
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
+  return { ok: true };
 }
 
 /**
- * Resume an instance: SIGCONT.
+ * Resume an instance: drain the buffered events to the WS bus, then
+ * resume live forwarding.
+ *
+ * Idempotent.
+ *
  * @param {string} instanceId
+ * @returns {{ ok: boolean, error?: string }}
  */
 export function resumeBgAgent(instanceId) {
-  if (process.platform === 'win32') {
-    return { ok: false, error: 'unsupported_on_win32' };
-  }
   const rec = byInstanceId.get(instanceId);
-  if (!rec) return { ok: false, error: 'instance_not_tracked' };
-  if (rec.endedAt) return { ok: true, note: 'already_exited' };
-  if (rec.state !== 'paused') return { ok: true };
-  try {
-    rec.proc.kill('SIGCONT');
-    rec.state = 'running';
-    patchState(instanceId, {
-      status: 'running',
-      pausedAt: undefined,
-    }).then(() => {
-      broadcast({ type: 'background:change', id: instanceId, status: 'running' });
-    });
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message };
+  if (!rec) return { ok: false, error: "instance_not_tracked" };
+  if (rec.endedAt) return { ok: true, note: "already_exited" };
+  if (!rec.paused) return { ok: true };
+  rec.paused = false;
+
+  // Drain the buffer (best-effort; if a flush helper above changes,
+  // this is the only place we need to update).
+  const buffered = rec.pauseBuffer;
+  rec.pauseBuffer = [];
+  for (const ev of buffered) {
+    try {
+      const type = ev?.type;
+      const part = ev?.part || ev?.data?.part;
+      const partText =
+        part?.text ||
+        (part?.type === "tool" ? `[tool ${part?.tool || part?.name || ""}]` : "");
+      if (type === "message.part.updated" && partText) {
+        broadcast({
+          type: "bg:output",
+          instanceId,
+          line: typeof partText === "string" ? partText : JSON.stringify(partText),
+          ts: Date.now(),
+          stream: "sse-buffered",
+        });
+      } else if (typeof type === "string") {
+        broadcast({
+          type: "bg:output",
+          instanceId,
+          line: `[event] ${type}`,
+          ts: Date.now(),
+          stream: "sse-buffered",
+        });
+      }
+    } catch {
+      /* ignore */
+    }
   }
+  patchState(instanceId, { status: "running", pausedAt: undefined })
+    .then(() => {
+      broadcast({ type: "background:change", id: instanceId, status: "running" });
+    })
+    .catch(() => {
+      /* ignore */
+    });
+  return { ok: true };
 }
 
 /**
- * Steer an instance by killing it and spawning a new one with the
- * original prompt + a [STEERED ...] marker + the user's message
- * appended. Returns the new instance id.
+ * v5.5.1 — TRUE mid-flight steer. Sends a follow-up prompt to the
+ * running opencode session via the SDK. NO kill+respawn; the same
+ * instanceId and sessionId are reused.
+ *
+ * Returns `{ ok: true, instanceId, mode: 'true_midflight' }`.
  *
  * @param {string} instanceId
  * @param {string} message
- * @returns {Promise<{ ok: boolean, newInstanceId?: string, error?: string }>}
+ * @returns {Promise<{ ok: boolean, instanceId?: string, mode?: string, error?: string }>}
  */
 export async function steerBgAgent(instanceId, message) {
   if (!message || !message.trim()) {
-    return { ok: false, error: 'message_empty' };
+    return { ok: false, error: "message_empty" };
   }
-  const cur = readStateFile(instanceId);
-  if (!cur) return { ok: false, error: 'instance_not_found' };
-  // Persist the steered-from state.
+  const rec = byInstanceId.get(instanceId);
+  if (!rec) return { ok: false, error: "instance_not_found" };
+  if (rec.endedAt) return { ok: false, error: "instance_already_terminated" };
+
+  let sdk;
+  try {
+    sdk = await getOpencodeSdkOrThrow();
+  } catch (err) {
+    return {
+      ok: false,
+      error: `opencode_serve_unavailable: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  try {
+    // Synchronous prompt: blocks until the server accepts the message.
+    // Use promptAsync if we want fire-and-forget; the v5.5.0 spec kept
+    // this as the synchronous form so the dashboard can surface a clear
+    // error if the SDK rejects the message.
+    await sdk.sessions.prompt({
+      sessionId: rec.sessionId,
+      body: { text: String(message).slice(0, 200_000) },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `prompt failed: ${msg}` };
+  }
+
+  rec.steerCount += 1;
+  rec.lastSteerAt = Date.now();
   await patchState(instanceId, {
-    status: 'steered',
-    completedAt: Date.now(),
-    steeredFromMessage: message.slice(0, 500),
-    steeredAt: Date.now(),
+    steerCount: rec.steerCount,
+    lastSteerAt: rec.lastSteerAt,
+    interventionCount: rec.steerCount, // dashboard UI treats intervention count and steer count together
+    lastEventAt: Date.now(),
   });
-  broadcast({ type: 'background:change', id: instanceId, status: 'steered' });
-  // Kill the current subprocess (best-effort — the new one will
-  // continue regardless; we don't want to block).
-  void killBgAgent(instanceId, { signal: 'SIGTERM', reason: 'steered' });
-  // Spawn the steered replacement.
-  const combined = [
-    cur.prompt || cur.promptPreview || '',
-    '',
-    `[STEERED ${new Date().toISOString()}]`,
-    message.trim(),
-  ].join('\n');
-  const res = await spawnBgAgent({
-    agent: cur.agent,
-    prompt: combined,
-    model: cur.model && cur.model !== 'agent-default'
-      ? { providerID: cur.model.split('/')[0], modelID: cur.model.split('/').slice(1).join('/') }
-      : undefined,
-    worktree: cur.worktree || process.cwd(),
-    persistent: cur.persistent,
-    maxRestarts: cur.maxRestarts,
-    timeoutMs: cur.timeoutMs,
-    tags: cur.tags,
+  broadcast({
+    type: "background:change",
+    id: instanceId,
+    status: "running",
+    action: "steer",
+    steerCount: rec.steerCount,
   });
-  if (res.error) return { ok: false, error: res.error };
-  // Link the new instance to the old one in the state file.
-  if (res.instanceId) {
-    patchState(res.instanceId, { parentInstanceId: instanceId }).catch(() => {});
-  }
-  return { ok: true, newInstanceId: res.instanceId, processId: res.processId };
+  broadcast({
+    type: "bg:output",
+    instanceId,
+    line: `[steer #${rec.steerCount}] ${String(message).slice(0, 500)}`,
+    ts: Date.now(),
+    stream: "steer",
+  });
+  return { ok: true, instanceId, mode: "true_midflight", steerCount: rec.steerCount };
 }
 
 /**
- * Liveness probe.
+ * Liveness probe. With SDK sessions we can probe the server directly.
+ *
  * @param {string} instanceId
  * @returns {boolean}
  */
@@ -508,7 +713,11 @@ const state = {
  * @param {object} msg
  */
 function broadcast(msg) {
-  try { state.broadcast(msg); } catch { /* ignore */ }
+  try {
+    state.broadcast(msg);
+  } catch {
+    /* ignore */
+  }
 }
 
 function bgDir() {
@@ -528,12 +737,12 @@ async function writeStateFile(bgState) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const file = stateFile(bgState.instanceId);
   const tmp = `${file}.tmp`;
-  writeFileSync(tmp, JSON.stringify(bgState, null, 2), 'utf-8');
+  writeFileSync(tmp, JSON.stringify(bgState, null, 2), "utf-8");
   try {
-    const fs = await import('node:fs');
+    const fs = await import("node:fs");
     fs.renameSync(tmp, file);
   } catch {
-    writeFileSync(file, JSON.stringify(bgState, null, 2), 'utf-8');
+    writeFileSync(file, JSON.stringify(bgState, null, 2), "utf-8");
   }
 }
 
@@ -546,11 +755,11 @@ async function patchState(instanceId, patch) {
   const file = stateFile(instanceId);
   if (!existsSync(file)) return;
   try {
-    const cur = JSON.parse(readFileSync(file, 'utf-8') || '{}');
+    const cur = JSON.parse(readFileSync(file, "utf-8") || "{}");
     const next = { ...cur, ...patch };
-    writeFileSync(file, JSON.stringify(next, null, 2), 'utf-8');
+    writeFileSync(file, JSON.stringify(next, null, 2), "utf-8");
   } catch (err) {
-    broadcast({ type: 'bg:error', instanceId, error: `state_patch failed: ${err.message}` });
+    broadcast({ type: "bg:error", instanceId, error: `state_patch failed: ${err.message}` });
   }
 }
 
@@ -562,13 +771,21 @@ function readStateFile(instanceId) {
   const file = stateFile(instanceId);
   if (!existsSync(file)) return null;
   try {
-    return JSON.parse(readFileSync(file, 'utf-8'));
+    return JSON.parse(readFileSync(file, "utf-8"));
   } catch {
     return null;
   }
 }
 
-void dirname;
-void statSync;
-void readdirSync;
-void unlinkSync;
+/** For tests: clear the in-memory registry. Does NOT close SDK sessions. */
+export function _resetForTests() {
+  for (const rec of byInstanceId.values()) {
+    try {
+      rec.sub?.close?.();
+    } catch {
+      /* ignore */
+    }
+  }
+  byInstanceId.clear();
+  bySessionId.clear();
+}

@@ -48,7 +48,9 @@ const DEFAULT_HEADROOM_HOST = '127.0.0.1';
 function runCmd(cmd, args, opts = {}) {
   return new Promise((resolve) => {
     const { timeout = 30000, cwd = HOME, env = process.env } = opts;
-    const child = spawn(cmd, args, { cwd, env, shell: true });
+    // shell:false avoids DEP0190 deprecation warning and is safe because
+    // args are already a proper array (not interpolated into a command string).
+    const child = spawn(cmd, args, { cwd, env, shell: false });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {

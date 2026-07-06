@@ -1,37 +1,18 @@
-// src/components/Sidebar.tsx — vertical navigation rail for sidebar/both layouts.
+// src/components/Sidebar.tsx — vertical navigation rail.
+// v6.x — Sidebar is always shown. Each settings section is its own tab in
+// the rail; there is no longer a "settings mode" that swaps the rail for
+// a sub-nav. The rail uses the same `.sidebar-tab` / `.sidebar-tab-active`
+// classes as before for a consistent visual language.
 import type { TabDef } from './Topbar';
-import { SettingsNav } from './SettingsNav';
 import { cn } from '../lib/utils';
 
 export type SidebarProps = {
   tabs: TabDef[];
   activeTab: string;
   onTabChange: (id: string) => void;
-  /** v4.9.0 — When true, show the full settings sidebar nav instead of tabs. */
-  settingsMode?: boolean;
-  /** v4.9.0 — The currently highlighted settings section. */
-  settingsActiveSection?: string | null;
-  /** v4.9.0 — Called when user clicks a section in the settings sidebar. */
-  onSettingsSectionChange?: (id: string | null) => void;
-  /** v4.9.0 — Called when user clicks the back button in settings mode. */
-  onExitSettings?: () => void;
 };
 
-export function Sidebar({ tabs, activeTab, onTabChange, settingsMode, settingsActiveSection, onSettingsSectionChange, onExitSettings }: SidebarProps) {
-  // v4.9.0 — When settingsMode is active, render the full settings nav instead
-  // of the normal tab rail. This lets users see all sections at a glance.
-  if (settingsMode) {
-    return (
-      <aside className="sidebar sidebar-settings-mode" aria-label="Settings navigation">
-        <SettingsNav
-          activeSection={settingsActiveSection ?? null}
-          onSectionChange={onSettingsSectionChange ?? (() => {})}
-          onExitSettings={onExitSettings ?? (() => {})}
-        />
-      </aside>
-    );
-  }
-
+export function Sidebar({ tabs, activeTab, onTabChange }: SidebarProps) {
   // Split tabs into built-in (no `isMod` flag) and mod-added entries.
   // Render a separator + small "Mods" label between them so users can
   // tell what's part of Bizar vs what an installed mod contributed.
@@ -87,4 +68,3 @@ export function Sidebar({ tabs, activeTab, onTabChange, settingsMode, settingsAc
     </aside>
   );
 }
-

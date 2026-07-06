@@ -1,6 +1,8 @@
 // src/web/views/settings/MemorySection.tsx — memory vault + git config for Settings.
+// v6.x — Vault path now loads from /api/memory/status (was hardcoded to '').
+// We also surface a small "Initialise" button when the vault does not exist.
 import React, { useEffect, useState } from 'react';
-import { Brain, GitBranch, Loader2, Save } from 'lucide-react';
+import { Brain, GitBranch, Loader2, Save, FolderInput } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Card, CardTitle, CardMeta } from '../../components/Card';
 import { Spinner } from '../../components/Spinner';
@@ -15,21 +17,41 @@ type GlobalConfig = {
   git?: GitConfig;
 };
 
+type MemoryStatus = {
+  initialized: boolean;
+  vaultRoot?: string | null;
+  mode?: string | null;
+};
+
 export function MemorySection() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [initialising, setInitialising] = useState(false);
   const [remoteUrl, setRemoteUrl] = useState('');
-  const [vaultPath] = useState<string>(''); // server-side default, not user-editable
+  const [vaultPath, setVaultPath] = useState<string>('');
+  const [vaultInitialised, setVaultInitialised] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    api.get<{ config: GlobalConfig; path?: string }>('/memory/config/global')
-      .then((r) => {
-        setRemoteUrl(r.config?.git?.remoteUrl || '');
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const [cfgRes, statusRes] = await Promise.all([
+          api.get<{ config: GlobalConfig; path?: string }>('/memory/config/global').catch(() => null),
+          api.get<MemoryStatus>('/memory/status').catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (cfgRes) setRemoteUrl(cfgRes.config?.git?.remoteUrl || '');
+        if (statusRes) {
+          setVaultPath(statusRes.vaultRoot || '');
+          setVaultInitialised(!!statusRes.initialized);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [refreshKey]);
 
   const onSave = async () => {
@@ -42,6 +64,19 @@ export function MemorySection() {
       toast.error(`Save failed: ${(err as Error).message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onInitialise = async () => {
+    setInitialising(true);
+    try {
+      await api.post('/memory/init', {});
+      toast.success('Vault initialised.');
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      toast.error(`Initialise failed: ${(err as Error).message}`);
+    } finally {
+      setInitialising(false);
     }
   };
 
@@ -60,9 +95,28 @@ export function MemorySection() {
       ) : (
         <div className="settings-fields">
           <div className="field">
-            <label className="field-label">Vault path</label>
-            <div className="field-readonly mono muted" style={{ fontSize: 12, padding: '6px 0' }}>
-              {vaultPath || '~/.local/share/bizar/memory'}
+            <label className="field-label">
+              <FolderInput size={12} style={{ display: 'inline', marginRight: 4 }} />
+              Vault path
+            </label>
+            <div
+              className="field-readonly mono"
+              data-testid="settings-memory-vault-path"
+              style={{ fontSize: 12, padding: '6px 0' }}
+            >
+              {vaultPath || <span className="muted">not initialised</span>}
+              {vaultInitialised ? null : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onInitialise}
+                  disabled={initialising}
+                  style={{ marginLeft: 12 }}
+                >
+                  {initialising ? <Loader2 size={12} className="memory-spin" /> : <FolderInput size={12} />}
+                  Initialise
+                </Button>
+              )}
             </div>
           </div>
 

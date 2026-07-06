@@ -1,5 +1,66 @@
 # Changelog
 
+## v5.5.1 — Steering followup + UI overhaul + server log fixes + browser extension cleanup
+
+### Highlights
+
+**Steering followup (true mid-flight):** `bg-spawner.mjs` rewritten to use opencode SDK sessions (`sdk.sessions.create()` + `sdk.sessions.promptAsync()`) with live WS event streaming. `bg-spawn.ts` and `bg-send-message.ts` now delegate to dashboard HTTP endpoints — `opencode-runner.ts` stubbed to reject with "use dashboard HTTP". Background agents now support true mid-flight steering with `liveSession` tracking and dashboard-side `pause/resume/kill`.
+
+**UI overhaul:** 13 settings sections migrated from a sub-menu to independent sidebar tabs. `SettingsNav.tsx` deleted. Memory vault path now actually fetches `/memory/status`, shows real path, supports editing, and shows an init button when uninitialised. Marketplace gains better loading/empty/error states, registry source URL banner, cached notice, and refresh button.
+
+**Server log fixes:** TDZ bug fixed in `server.mjs` (dynamic import before startup scan). LightRAG ECONNREFUSED spam fixed via `_lightRAGNotInstalled` flag and 60s rate-limited warn log. Registry URL corrected to `DrB0rk/bizar-mods`. `/api/activity/stream` SSE endpoint added. `shell: true` → `shell: false` in `headroom.mjs`. `opencode listMessages` demoted from error to warn.
+
+**Browser extension cleanup:** `content.js` now wraps `chrome.runtime.sendMessage` / `browser.runtime.sendMessage` in `safeSendMessage()` with sync throw + async rejection catching, and falls back to direct `fetch()` to dashboard API.
+
+### What's New
+
+**Background agents — SDK-based steering:**
+- `bg-spawner.mjs` (574 → 686 lines): uses `sdk.sessions.create()` + `sdk.sessions.promptAsync()` instead of `opencode run` subprocess; subscribes to `sdk.events.subscribe({sessionID})` for live output streaming
+- `bg-spawn.ts` (plugin): delegates to dashboard `POST /api/background` instead of spawning subprocess
+- `bg-send-message.ts` (plugin): now works via `POST /api/background/:id/steer` → `sdk.sessions.prompt()`; true mid-flight, no more `unavailable_in_subprocess_mode`
+- `opencode-runner.ts` (plugin): `spawnAgent` returns `{ ok: false, error: "use dashboard HTTP" }`; other runner functions are no-ops
+- `background.ts` (plugin): added module-level dashboard HTTP helpers; `pause/resume/kill` now check `liveSession` and delegate to dashboard
+- `background-state.ts`: added optional `liveSession?` and `dashboardInstanceId?` fields (additive — old state files still valid)
+
+**Settings UI restructure:**
+- 13 settings sections now each have their own sidebar tab (was: parent Settings tab + SettingsNav sub-menu)
+- Deleted `SettingsNav.tsx`, `tests/settings-layout.test.tsx`, `tests/settings-mode-wiring.test.tsx`, `tests/settings-nav.test.tsx`
+- Removed `settingsMode` state and sidebar/topbar layout selector
+- Settings sidebar now uses `.sidebar-tab` classes (matches main sidebar styling)
+
+**Memory vault path fix:**
+- `ConfigPanel.tsx`, `MemoryOverview.tsx`, `MemorySection.tsx`: now actually fetch `/memory/status`, display real path, allow editing, show init button when uninitialised
+
+**Marketplace UI improvements:**
+- Better loading, empty, and error states
+- Registry source URL banner
+- Cached notice
+- Refresh button
+
+**Server log fixes:**
+- `server.mjs:37`: TDZ bug fixed — removed static import of `readSettings`, added dynamic import before startup scan
+- `memory-lightrag.mjs`: added `_lightRAGNotInstalled` flag; `isRunning()` returns false immediately when flag set; warn log rate-limited to 60s
+- `plugins/registry.mjs`, `cli/commands/marketplace.mjs`: registry URL updated to `https://raw.githubusercontent.com/DrB0rk/bizar-mods/main/registry.json` (was `bizar-plugins`, returned 404)
+- `routes/activity.mjs`: `/api/activity/stream` SSE endpoint added (was 404)
+- `headroom.mjs:51`: `shell: true` → `shell: false` (DEP0190 fix)
+- `opencode listMessages`: downgraded from `error` to `warn` with "expected when serve is gone" message
+
+**Browser extension:**
+- `content.js`: added `safeSendMessage()` helper — catches both sync throws and async rejections from `chrome.runtime.sendMessage` / `browser.runtime.sendMessage`; silent fallback to direct `fetch()` to dashboard API
+
+### Tests
+
+- Backend `node --test`: 395 pass / 0 fail
+- Web vitest: 332 pass / 5 pre-existing a11y failures (not from this release)
+- Plugin bun: 295 pass / 0 fail
+- `npm run typecheck`: 0 errors
+- `npm run build`: success
+- 3 test files deleted (`settings-layout`, `settings-mode-wiring`, `settings-nav`); 4 new test files added (`background-sdk-session`, `background-session-events`, `background-steer-sdk`, `bg-spawn-http`)
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.5.1`
+
 ## v5.5.0 — Background agents dashboard + memory system + installer overhaul
 
 ### Highlights

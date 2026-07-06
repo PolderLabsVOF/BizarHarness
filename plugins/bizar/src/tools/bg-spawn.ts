@@ -1,23 +1,51 @@
 /**
  * plugins/bizar/src/tools/bg-spawn.ts
  *
- * v0.8.0 — `bizar_spawn_background` tool, refactored to spawn one
- * `opencode run` subprocess per agent (instead of POSTing to a
- * passive `opencode serve` HTTP API). See opencode-runner.ts for the
- * spawning implementation; see ../opencode-runner.ts for the
- * rationale and the wire format we parse.
+ * v5.5.1 — `bizar_spawn_background` tool, refactored to delegate to the
+ * dashboard's SDK-based spawner (`POST /api/background`) instead of
+ * spawning `opencode run` subprocesses directly.
+ *
+ * Why the plugin now talks to the dashboard instead of running `opencode run`:
+ *   - The v5.5.0 design (opencode-runner.ts) spawned one `opencode run`
+ *     subprocess per agent. Steering a running agent required
+ *     kill+respawn with a `[STEERED <ts>]` marker — a poor approximation
+ *     of "true mid-flight prompt".
+ *   - opencode's serve child exposes long-lived SDK sessions that accept
+ *     new prompts via `POST /api/session/{id}/prompt`. Steering is then
+ *     a real mid-flight redirect: the same session keeps running, the
+ *     new prompt becomes the next user turn.
+ *   - The dashboard already owns the opencode SDK (see
+ *     `bizar-dash/src/server/opencode-sdk.mjs`); it can mediate between
+ *     the plugin's many bg instances and the single opencode serve child.
+ *
+ * This tool therefore:
+ *   1. Validates the request (Odin-only check, model parsing,
+ *      timeoutMs clamping — unchanged from v5.5.0).
+ *   2. Builds the delegation wrapper prompt if the agent is a subagent.
+ *   3. POSTs `{ agent, prompt, worktree, ... }` to the dashboard at
+ *      `POST /api/background`.
+ *   4. Tracks the returned instance in the local InstanceManager so the
+ *      existing `bizar_status`, `bizar_collect`, `bizar_kill`,
+ *      `bizar_pause`, `bizar_resume` tools work unchanged (they now
+ *      delegate to the dashboard HTTP API too — see respective tool files).
+ *
+ * Backwards compat: the public tool args are unchanged. The return
+ * shape is backwards compatible — `instanceId` + `sessionId` are still
+ * present, but `processId` is `null` (no OS subprocess) and a new
+ * `liveSession: true` flag indicates the new SDK-backed mode.
  *
  * Spec §1, §6.3, §7.1.
  */
 import { tool } from "@opencode-ai/plugin";
 import { z } from "zod";
 
-import { generateInstanceId, generateMessageId } from "../background.js";
+import { generateInstanceId } from "../background.js";
 import type { InstanceManager } from "../background.js";
 import type { Logger } from "../logger.js";
-import { spawnAgent } from "../opencode-runner.js";
 import { resolve as pathResolve } from "node:path";
 import { homedir } from "node:os";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 /** Spec §7.3: `timeoutMs` clamped to [1000, 1800000] (1s..30min). */
 const TIMEOUT_MIN_MS = 1000;
@@ -26,24 +54,11 @@ const TIMEOUT_DEFAULT_MS = 300_000;
 
 /**
  * Agents whose `mode` is `primary` and therefore accepted by
- * `opencode run --agent <name>`. opencode 1.17.x silently REJECTS
- * any agent whose `mode` is `subagent` with a "Falling back to default
- * agent" warning — the bg instance then runs odin regardless of what
- * the caller asked for. See `wiki/Troubleshooting.md` for the full
- * postmortem.
- *
- * To invoke a subagent cleanly, `spawnAgent` below routes the spawn
- * through a primary agent (odin) with an explicit delegation prompt
- * that tells odin to call its `task` tool to spawn the requested
- * subagent. Subagent changes here MUST mirror `config/agents/*.md`.
+ * opencode's `--agent` flag.
  *
  * Exported for testability — the test asserts the set is in sync with
  * the agent configs.
  */
-// v3.20.11 — kept in sync with config/agents/*.md via the
-// "is in sync with the on-disk agent configs" test below. The set
-// must equal exactly the agents whose frontmatter declares
-// `mode: primary` (currently odin, quick, browser-harness).
 export const PRIMARY_AGENTS: ReadonlySet<string> = new Set([
   "odin",
   "quick",
@@ -59,18 +74,9 @@ export function needsDelegationWrapper(agent: string): boolean {
 }
 
 /**
- * Build the delegation prompt that wraps a subagent request. The
- * wrapper runs as odin; odin must call its `task` tool to spawn the
- * requested subagent and report the subagent's final output verbatim.
+ * Build the delegation prompt that wraps a subagent request.
  *
- * The prompt is intentionally directive — LLMs are non-deterministic,
- * and a passive "please consider delegating" framing is too easily
- * ignored. The explicit "do not interpret", "do not perform the work
- * yourself", and "report only the subagent's output" constraints give
- * the LLM no room to drift.
- *
- * Exported for testability — the test asserts the prompt is directive
- * enough to override Odin's default routing behavior.
+ * Exported for testability.
  */
 export function buildDelegationPrompt(requestedAgent: string, userPrompt: string): string {
   return [
@@ -120,21 +126,137 @@ export interface BgSpawnDeps {
   instanceManager: InstanceManager;
   worktree: string;
   logger: Logger;
+  /**
+   * Optional injection point for tests. When provided, the dashboard
+   * HTTP call is short-circuited and the test function is called with
+   * the resolved request shape. Production code never sets this.
+   */
+  _dashboardPost?: (url: string, init: { headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 }
 
 /**
- * Compute the LogWriter's actual log path for a given instanceId.
- * The plugin's `LogWriter` (../report.ts:147) writes to
- * `${logDir}/${sessionId}.log` where `logDir` defaults to
- * `~/.cache/bizar/logs` (overridable via the `BIZAR_LOG_DIR` env
- * var). The instanceId is what we know at spawn time — the opencode
- * sessionId is generated later by the subprocess and we don't
- * pre-allocate it. We therefore use the instanceId as the log file
- * name and let the runner append to it.
+ * Compute the LogWriter's actual log path for a given instanceId. Mirrors
+ * the convention used by `bg-spawn.ts` pre-v5.5.1 so existing log readers
+ * (dashboard's log viewer) find the file in the same place.
  */
 function buildLogPath(instanceId: string): string {
   const logDir = process.env.BIZAR_LOG_DIR || pathResolve(homedir(), ".cache", "bizar", "logs");
   return pathResolve(logDir, `${instanceId}.log`);
+}
+
+// --- Dashboard HTTP wiring -----------------------------------------------
+
+/**
+ * Resolve the dashboard base URL. Order:
+ *   1. `BIZAR_DASHBOARD_URL` env override (matches dashboard-client.ts).
+ *   2. `BIZAR_DASHBOARD_PORT` env override → `http://127.0.0.1:<port>`.
+ *   3. Default `http://127.0.0.1:4098` (matches dashboard default port
+ *      in install.sh + bizarre installer).
+ */
+function resolveDashboardUrl(): string {
+  const fromEnv = process.env.BIZAR_DASHBOARD_URL;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim().replace(/\/+$/, "");
+  const port = process.env.BIZAR_DASHBOARD_PORT;
+  if (port && /^\d+$/.test(port)) return `http://127.0.0.1:${port}`;
+  return "http://127.0.0.1:4098";
+}
+
+const DEFAULT_DASHBOARD_AUTH_PATHS = [
+  join(homedir(), ".config", "bizar", "dashboard-secret"),
+  join(homedir(), ".cache", "bizarharness", "dash-auth.json"),
+  join(homedir(), ".cache", "bizar", "dash-auth.json"),
+];
+
+/**
+ * Read the dashboard bearer token from the on-disk secret file. The
+ * dashboard writes `~/.config/bizar/dashboard-secret` (mode 0600) on
+ * first boot. Loopback requests don't need the token (auth middleware
+ * trusts loopback automatically), but we send it anyway when available
+ * so a non-loopback deployment works without extra config.
+ */
+function readDashboardToken(): string {
+  for (const candidate of DEFAULT_DASHBOARD_AUTH_PATHS) {
+    try {
+      if (!existsSync(candidate)) continue;
+      const text = readFileSync(candidate, "utf-8").trim();
+      if (text && text.length >= 16) return text;
+    } catch {
+      /* ignore */
+    }
+  }
+  // Fall back to the password (dash-auth.json carries a `password` field).
+  for (const candidate of DEFAULT_DASHBOARD_AUTH_PATHS) {
+    try {
+      if (!existsSync(candidate)) continue;
+      const parsed = JSON.parse(readFileSync(candidate, "utf-8")) as { password?: unknown };
+      if (typeof parsed.password === "string" && parsed.password.length >= 16) {
+        return parsed.password;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
+/**
+ * POST JSON to the dashboard. Returns the parsed JSON on 2xx; throws a
+ * structured `Error` (with `.httpStatus`) on transport / non-2xx so
+ * callers can surface a clear error to the agent.
+ *
+ * In tests, `deps._dashboardPost` overrides this with a mock.
+ */
+async function postJsonToDashboard(
+  url: string,
+  body: unknown,
+  logger: Logger,
+  override?: BgSpawnDeps["_dashboardPost"],
+): Promise<unknown> {
+  if (override) {
+    const res = await override(url, {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.json().catch(() => ({}));
+      const err = new Error(
+        `dashboard HTTP ${res.status}: ${JSON.stringify(text).slice(0, 200)}`,
+      );
+      (err as Error & { httpStatus?: number }).httpStatus = res.status;
+      throw err;
+    }
+    return res.json();
+  }
+
+  const token = readDashboardToken();
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    accept: "application/json",
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 8_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const err = new Error(
+        `dashboard HTTP ${res.status}: ${text.slice(0, 200)}`,
+      );
+      (err as Error & { httpStatus?: number }).httpStatus = res.status;
+      throw err;
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+  void logger;
 }
 
 /**
@@ -145,11 +267,13 @@ function buildLogPath(instanceId: string): string {
 export function createBgSpawnTool(deps: BgSpawnDeps) {
   return tool({
     description:
-      "Spawn a background agent that runs asynchronously as a separate `opencode run` subprocess. " +
+      "Spawn a background agent that runs asynchronously as a long-lived opencode serve session " +
+      "(SDK-backed via the dashboard). " +
       "Only Odin may call this tool. " +
       "Returns an instanceId immediately (sub-second), then the agent runs to completion in the background. " +
       "Use `bizar_status` / `bizar_collect` / `bizar_kill` to manage the instance. " +
       "Use `bizar_bg_view` (CLI) to watch all running agents in a tmux split window. " +
+      "Steering is TRUE mid-flight via `bizar_send_message` (no kill+respawn). " +
       "IMPORTANT: do NOT block waiting for the agent. Return control to the user right after spawning.",
     args: {
       agent: z.string().min(1).describe("Agent name to spawn (e.g. 'mimir', 'thor', 'tyr')."),
@@ -223,14 +347,23 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       }
       const timeoutMs = requested;
 
-      // 4. Generate the instanceId and seed the manager (track BEFORE
-      //    the subprocess starts, so a fast-exiting agent is still
-      //    queryable via bizar_status).
+      // 4. Build the delegation wrapper (mirrors bg-spawn.ts pre-v5.5.1).
+      const isPrimary = PRIMARY_AGENTS.has(args.agent);
+      const wrapperPrompt = isPrimary
+        ? args.prompt
+        : buildDelegationPrompt(args.agent, args.prompt);
+
+      // 5. Pre-allocate the instanceId so we can track BEFORE the
+      //    dashboard call (track-before-HTTP, HIGH-21). The dashboard
+      //    generates its own instanceId, but accepting ours would
+      //    require a second round-trip — instead we accept the
+      //    dashboard's id and patch it back in. The local InstanceManager
+      //    mirrors the dashboard state so `bizar_status` works.
       const instanceId = generateInstanceId();
       const logPath = buildLogPath(instanceId);
       const draft = {
         instanceId,
-        sessionId: "", // filled in once the opencode run reports it
+        sessionId: "", // filled in once the dashboard returns the sessionId
         agent: args.agent,
         model: modelOverride
           ? `${modelOverride.providerID}/${modelOverride.modelID}`
@@ -241,12 +374,9 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         logPath,
         timeoutMs,
         toolCallCount: 0,
-        // v0.5.5 — persistent auto-restart
         persistent: args.persistent ?? false,
         maxRestarts: args.maxRestarts ?? 3,
         restartCount: 0,
-        // v5.x — progress reporting seed. Agents update via
-        // `bizar_report_progress`; the dashboard renders the bar.
         progress: 0,
         toolCalls: [],
       };
@@ -259,41 +389,38 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         };
       }
 
-      // 5. Spawn the opencode run subprocess. The runner returns
-      //    when the opencode child has reported its session id in
-      //    the structured log stream (typically <500ms).
-      //
-      //    opencode 1.17.x rejects `--agent <subagent>` with a silent
-      //    fallback to the default agent. To invoke a subagent we
-      //    route through a primary wrapper (odin) with a delegation
-      //    prompt. The instance record still attributes the work to
-      //    the requested agent — only the opencode process is odin's.
-      const messageID = generateMessageId();
-      const isPrimary = PRIMARY_AGENTS.has(args.agent);
-      const wrapperAgent = isPrimary ? args.agent : "odin";
-      const wrapperPrompt = isPrimary
-        ? args.prompt
-        : buildDelegationPrompt(args.agent, args.prompt);
-      let spawnRes: Awaited<ReturnType<typeof spawnAgent>>;
+      // 6. POST to the dashboard. The dashboard owns the SDK and the
+      //    underlying opencode session; we mirror its instanceId.
+      const dashboardUrl = `${resolveDashboardUrl()}/api/background`;
+      let spawnRes: { instanceId: string; sessionId: string | null; status?: string; liveSession?: boolean };
       try {
-        spawnRes = await spawnAgent({
-          prompt: wrapperPrompt,
-          agent: wrapperAgent,
-          model: modelOverride,
-          worktree: deps.worktree,
-          logPath,
-          title: `bgr:${args.agent}:${instanceId}:${messageID}`,
-        });
+        spawnRes = (await postJsonToDashboard(
+          dashboardUrl,
+          {
+            agent: args.agent,
+            prompt: wrapperPrompt,
+            model: modelOverride
+              ? `${modelOverride.providerID}/${modelOverride.modelID}`
+              : undefined,
+            worktree: deps.worktree,
+            timeoutMs,
+            persistent: Boolean(args.persistent),
+            maxRestarts: args.maxRestarts ?? 3,
+            tags: [`spawned-by:${ctx.agent}`, `plugin-instance:${instanceId}`],
+          },
+          deps.logger,
+          deps._dashboardPost,
+        )) as { instanceId: string; sessionId: string | null; status?: string; liveSession?: boolean };
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         await deps.instanceManager.update(instanceId, {
           status: "failed",
-          error: `spawnAgent threw: ${msg}`,
+          error: `dashboard POST /api/background failed: ${msg}`,
           completedAt: Date.now(),
         });
         return {
           output: JSON.stringify({
-            error: `spawn crashed: ${msg}`,
+            error: `spawn failed: dashboard unreachable (${msg}). Make sure the Bizar dashboard is running.`,
             instanceId,
             sessionId: null,
             status: "failed",
@@ -301,103 +428,55 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         };
       }
 
-      if (!spawnRes.ok || !spawnRes.sessionId) {
+      // 7. The dashboard allocates its own instanceId. Patch our local
+      //    record to mirror the dashboard state — keep the original
+      //    instanceId we returned to the caller (the plugin's existing
+      //    InstanceManager tracks by that id, and the dashboard already
+      //    has the same metadata via the `tags: ["plugin-instance:<id>"]`
+      //    we sent above).
+      if (spawnRes.instanceId && spawnRes.instanceId !== instanceId) {
+        // Update the local record's sessionId + flags; the local id stays
+        // as-is so all subsequent tool calls (status/collect/kill/...)
+        // resolve correctly. The dashboard id is stored alongside as
+        // `dashboardInstanceId` for cross-referencing.
         await deps.instanceManager.update(instanceId, {
-          status: "failed",
-          error: spawnRes.error || "opencode run failed before reporting session id",
-          completedAt: Date.now(),
+          sessionId: spawnRes.sessionId || "",
+          status: "running",
+          runnerState: "running",
+          sessionIdAt: Date.now(),
+          liveSession: true,
+          dashboardInstanceId: spawnRes.instanceId,
         });
-        return {
-          output: JSON.stringify({
-            error: `spawn failed: ${spawnRes.error || "no session id"}`,
-            instanceId,
-            sessionId: null,
-            status: "failed",
-          }),
-        };
-      }
-
-      // 6. Persist the sessionId in the instance state. The high-level
-      //    `status` stays "pending" until the runner reports a terminal
-      //    state; we record the processId and the runner's
-      //    intermediate states in the dedicated fields.
-      await deps.instanceManager.update(instanceId, {
-        sessionId: spawnRes.sessionId,
-        status: "running",
-        processId: spawnRes.processId,
-        runnerState: "running",
-        sessionIdAt: Date.now(),
-      });
-
-      // 7. Wire the runner's exit event to the instance state. When
-      //    the opencode run subprocess exits, the runner updates
-      //    the status (done / failed / killed) and triggers the
-      //    persistent auto-restart flow if appropriate.
-      if (spawnRes.processId !== undefined) {
-        const { onExit } = await import("../opencode-runner.js");
-        onExit(spawnRes.processId, (status) => {
-          // Map runner states to BackgroundStatus. The runner reports
-          // "starting" | "running" | "paused" | "done" | "failed" | "killed";
-          // BackgroundStatus has "pending" | "running" | "paused" | "done" |
-          // "failed" | "killed" | "timed_out" | "steered". "starting"
-          // maps to "running" (in-flight, no terminal state). "paused"
-          // is preserved so pause/resume survives subprocess reconnects.
-          const mapped: "pending" | "running" | "paused" | "done" | "failed" | "killed" =
-            status.state === "starting" || status.state === "running"
-              ? "running"
-              : status.state === "paused"
-                ? "paused"
-                : status.state;
-
-          const update: Parameters<InstanceManager["update"]>[1] = {
-            status: mapped,
-            runnerState: status.state,
-            completedAt: status.endedAt ?? Date.now(),
-          };
-          if (status.exitCode !== undefined) update.exitCode = status.exitCode;
-          if (status.error) {
-            update.runnerError = status.error;
-            update.error = status.error;
-          }
-          if (status.endedAt !== undefined) update.runnerEndedAt = status.endedAt;
-          // Best-effort: if the InstanceManager has gone away (e.g.
-          // the plugin restarted), the update silently no-ops.
-          deps.instanceManager
-            .update(instanceId, update)
-            .then(() => {
-              // Persistent auto-restart: only for natural failures,
-              // not for explicit kills or successes.
-              if (status.state === "failed") {
-                return deps.instanceManager.maybeAutoRestart(instanceId);
-              }
-              return undefined;
-            })
-            .catch((err: unknown) => {
-              deps.logger.warn(
-                `bizar: bg-spawn exit update failed for ${instanceId}: ${
-                  err instanceof Error ? err.message : String(err)
-                }`,
-              );
-            });
+      } else {
+        await deps.instanceManager.update(instanceId, {
+          sessionId: spawnRes.sessionId || "",
+          status: "running",
+          runnerState: "running",
+          sessionIdAt: Date.now(),
+          liveSession: true,
         });
       }
 
-      // 8. Return the spawn result. v0.8.0 message: the agent is
-      //    running in the background; Odin should return control to
-      //    the user immediately and not block waiting.
+      // 8. Return the spawn result. v5.5.1 message: the agent is
+      //    running in the background on an opencode serve session; Odin
+      //    should return control to the user immediately.
       return {
         output: JSON.stringify({
           instanceId,
+          dashboardInstanceId: spawnRes.instanceId,
           sessionId: spawnRes.sessionId,
-          processId: spawnRes.processId,
+          processId: null, // no subprocess; the opencode serve child owns the session
           status: "running",
+          liveSession: true,
           message:
-            "Background agent started. It will run to completion in a separate `opencode run` subprocess. " +
+            "Background agent started. It runs as an opencode serve SDK session managed by the Bizar dashboard. " +
             "Use `bizar_status <instanceId>` to check progress, `bizar_collect <instanceId>` to wait for the result, " +
+            "`bizar_send_message <instanceId> <msg>` for true mid-flight steering, " +
             "or `bizar_kill <instanceId>` to stop it. Run `bizar bg view` in another terminal to watch all running agents live.",
           nextSteps: [
             "Tell the user the agent is running and approximately how long they should expect to wait",
             "If the user wants the result now, call `bizar_collect <instanceId>` (with a reasonable timeout)",
+            "If the user wants to redirect the agent, call `bizar_send_message <instanceId> <msg>` — this is TRUE mid-flight",
             "If the user wants to stop the agent, call `bizar_kill <instanceId>`",
             "Do NOT block waiting for the result unless the user explicitly asked for it",
           ],

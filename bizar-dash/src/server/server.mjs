@@ -34,7 +34,6 @@ import {
   isAllowedDashboardOrigin,
   isAllowedDashboardOriginForRequest,
 } from './auth.mjs';
-import { readSettings } from './routes/_shared.mjs';
 import { buildAllowedRootsFromSettings, resolveSafePath } from './lib/path-safe.mjs';
 import { V2EventBus } from './v2-event-bus.mjs';
 import { loadOrCreateAuth, V2_DEFAULT_PORT } from './v2-auth-file.mjs';
@@ -344,6 +343,10 @@ export async function createServer({
   // against the allow-list before scanning. A tampered settings file
   // cannot widen the boundary.
   try {
+    // Dynamic import breaks a potential circular-dep TDZ: _shared.mjs imports
+    // projectsStore which may transitively import something that touches
+    // _shared.mjs before readSettings is fully initialised.
+    const { readSettings } = await import('./routes/_shared.mjs');
     const settings = readSettings();
     const allowedRoots = buildAllowedRootsFromSettings({
       settings: settings.data,

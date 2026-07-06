@@ -1,66 +1,139 @@
 /**
  * plugins/bizar/src/tools/bg-send-message.ts
  *
- * v5.x — `bizar_send_message` tool. Mid-flight redirect for a
- * background agent — "steer" the running instance with a new
- * instruction.
+ * v5.5.1 — `bizar_send_message` tool. TRUE mid-flight steer.
  *
- * ────────────────────────────────────────────────────────────────
- * v0.8.0 DESIGN NOTE — why this tool is a structured no-op
- * ────────────────────────────────────────────────────────────────
- * In the opencode 1.17 `serve` HTTP API (used by bg-spawn up to v0.7)
- * you could `POST /session/{id}/prompt` to send a follow-up message
- * to a running session — the loop would pick it up mid-run and start
- * a new turn. That's the "real" steer path.
+ * In v5.5.0 this tool returned `unavailable_in_subprocess_mode` because
+ * `opencode run` is a one-shot CLI. v5.5.1 switched bg agents to
+ * long-lived opencode serve SDK sessions, so this tool now delegates
+ * to `POST /api/background/<id>/steer` on the dashboard. The dashboard
+ * calls `sdk.sessions.prompt()` on the live session, which the
+ * opencode serve child picks up mid-loop as the next user turn.
  *
- * In v0.8.0 the plugin switched to `opencode run`, which is a
- * one-shot CLI: it accepts the prompt on the command line, runs the
- * agent loop to completion, and exits. There is no documented HTTP /
- * IPC channel for sending a follow-up user message mid-run. The
- * subprocess doesn't expose one and we don't own the opencode source.
+ * Wire contract (mirrors `bizar-dash/src/server/routes/background.mjs`):
+ *   - Request: `POST /api/background/:id/steer` with body `{ message }`.
+ *   - Response: `{ ok, mode: 'true_midflight', newInstanceId: null, instanceId, steerCount }`.
  *
- * Two paths to a workable steer:
- *
- *   1. **Switch back to HTTP server mode** — every bg agent would
- *      start its own `opencode serve` + a server-side streaming
- *      prompt. Heavyweight (extra processes, double the memory) and
- *      a 1-2 sprint piece of work.
- *
- *   2. **Kill + restart with appended prompt** — graceful shutdown
- *      of the current subprocess, spin up a new one whose prompt is
- *      `(original) + "\n\n[STEERED " + ISO timestamp + "]\n" + msg`.
- *      Cheaper; matches the user's mental model of "send new
- *      instruction"; implemented in the dashboard at
- *      `POST /api/background/:id/steer`.
- *
- * We document the constraint here. The tool itself returns the
- * concrete error and the recommended path so the agent can either
- * (a) ask Odin to use the dashboard steer endpoint or (b) call
- * `bizar_kill` + `bizar_spawn_background` with a combined prompt as
- * a backup.
- *
- * In a future v0.9.x this tool will be promoted to the real
- * implementation once opencode run supports mid-flight prompting.
+ * Errors surface as `{ ok: false, error }` so callers can react.
  */
 import { tool } from "@opencode-ai/plugin";
 import { z } from "zod";
 
 import type { InstanceManager } from "../background.js";
 import type { Logger } from "../logger.js";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 export interface BgSendMessageDeps {
   instanceManager: InstanceManager;
   logger: Logger;
+  /**
+   * Optional injection point for tests. When provided, the dashboard
+   * HTTP call is short-circuited and the test function is called with
+   * the resolved request shape.
+   */
+  _dashboardPost?: (url: string, init: { headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+}
+
+// --- Dashboard URL + token (mirrors bg-spawn.ts) ------------------------
+
+function resolveDashboardUrl(): string {
+  const fromEnv = process.env.BIZAR_DASHBOARD_URL;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim().replace(/\/+$/, "");
+  const port = process.env.BIZAR_DASHBOARD_PORT;
+  if (port && /^\d+$/.test(port)) return `http://127.0.0.1:${port}`;
+  return "http://127.0.0.1:4098";
+}
+
+const DEFAULT_DASHBOARD_AUTH_PATHS = [
+  join(homedir(), ".config", "bizar", "dashboard-secret"),
+  join(homedir(), ".cache", "bizarharness", "dash-auth.json"),
+  join(homedir(), ".cache", "bizar", "dash-auth.json"),
+];
+
+function readDashboardToken(): string {
+  for (const candidate of DEFAULT_DASHBOARD_AUTH_PATHS) {
+    try {
+      if (!existsSync(candidate)) continue;
+      const text = readFileSync(candidate, "utf-8").trim();
+      if (text && text.length >= 16) return text;
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const candidate of DEFAULT_DASHBOARD_AUTH_PATHS) {
+    try {
+      if (!existsSync(candidate)) continue;
+      const parsed = JSON.parse(readFileSync(candidate, "utf-8")) as { password?: unknown };
+      if (typeof parsed.password === "string" && parsed.password.length >= 16) {
+        return parsed.password;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
+async function postJsonToDashboard(
+  url: string,
+  body: unknown,
+  override?: BgSendMessageDeps["_dashboardPost"],
+): Promise<unknown> {
+  if (override) {
+    const res = await override(url, {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.json().catch(() => ({}));
+      const err = new Error(
+        `dashboard HTTP ${res.status}: ${JSON.stringify(text).slice(0, 200)}`,
+      );
+      (err as Error & { httpStatus?: number }).httpStatus = res.status;
+      throw err;
+    }
+    return res.json();
+  }
+  const token = readDashboardToken();
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    accept: "application/json",
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 8_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const err = new Error(
+        `dashboard HTTP ${res.status}: ${text.slice(0, 200)}`,
+      );
+      (err as Error & { httpStatus?: number }).httpStatus = res.status;
+      throw err;
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function createBgSendMessageTool(deps: BgSendMessageDeps) {
   return tool({
     description:
       "Send a follow-up message to a running background agent. " +
-      "v0.8.0 LIMITATION: opencode run is a one-shot CLI and does not " +
-      "support mid-flight prompting. This tool returns an `unavailable_in_subprocess_mode` " +
-      "error and points the caller to the dashboard's steer endpoint, " +
-      "which performs kill+restart-with-appended-prompt.",
+      "v5.5.1: TRUE mid-flight steer via the opencode serve SDK. " +
+      "The same instance keeps running; the new message becomes the next user turn " +
+      "of the running opencode session. No kill+respawn, no [STEERED <ts>] marker, " +
+      "no loss of agent context.",
     args: {
       instanceId: z
         .string()
@@ -71,9 +144,9 @@ export function createBgSendMessageTool(deps: BgSendMessageDeps) {
         .min(1)
         .describe("The follow-up instruction to send."),
     },
-    execute: async (rawArgs, ctx) => {
+    execute: async (rawArgs, _ctx) => {
       const args = rawArgs as { instanceId: string; message: string };
-      // Verify the instance exists so we don't silently accept bogus ids.
+      // 1. Verify the instance exists so we don't silently accept bogus ids.
       const inst = await deps.instanceManager.get(args.instanceId);
       if (!inst) {
         return {
@@ -83,23 +156,49 @@ export function createBgSendMessageTool(deps: BgSendMessageDeps) {
           }),
         };
       }
-      deps.logger.debug(
-        `bizar: sendMessage(${args.instanceId}) — mid-flight steer unavailable in v0.8.0 subprocess mode`,
-      );
-      void ctx;
-      return {
-        output: JSON.stringify({
-          error: "unavailable_in_subprocess_mode",
-          message:
-            "v0.8.0 bg agents run as `opencode run` subprocesses and cannot accept a follow-up prompt mid-flight. " +
-            "Use the dashboard's `POST /api/background/<id>/steer` (Steer button on instance detail) which performs " +
-            "kill+restart with the new instruction appended to the original prompt. " +
-            "Or, if running headlessly, you can call `bizar_kill` followed by `bizar_spawn_background` " +
-            "with a combined prompt yourself.",
-          instanceId: args.instanceId,
-          dashboardHint: `POST /api/background/${args.instanceId}/steer`,
-        }),
-      };
+
+      // 2. v5.5.1 — delegate to the dashboard. The dashboard owns the
+      //    opencode SDK and calls `sdk.sessions.prompt({...})` on the
+      //    live session, which the opencode serve child picks up
+      //    mid-loop as the next user turn.
+      const dashboardUrl = `${resolveDashboardUrl()}/api/background/${encodeURIComponent(args.instanceId)}/steer`;
+      try {
+        const data = (await postJsonToDashboard(
+          dashboardUrl,
+          { message: args.message },
+          deps._dashboardPost,
+        )) as { ok: boolean; mode?: string; steerCount?: number; error?: string };
+        if (!data || data.ok !== true) {
+          return {
+            output: JSON.stringify({
+              error: data?.error || "steer_failed",
+              instanceId: args.instanceId,
+            }),
+          };
+        }
+        deps.logger.info(
+          `bizar: sendMessage(${args.instanceId}) — TRUE mid-flight steer #${data.steerCount ?? "?"} accepted`,
+        );
+        return {
+          output: JSON.stringify({
+            ok: true,
+            mode: data.mode || "true_midflight",
+            instanceId: args.instanceId,
+            steerCount: data.steerCount ?? 0,
+            message:
+              "Steer delivered to the running opencode session. The agent will pick up your message as the next user turn — no kill+respawn was performed, no context was lost.",
+          }),
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        deps.logger.warn(`bizar: sendMessage(${args.instanceId}) failed: ${msg}`);
+        return {
+          output: JSON.stringify({
+            error: `steer_failed: ${msg}`,
+            instanceId: args.instanceId,
+          }),
+        };
+      }
     },
   });
 }

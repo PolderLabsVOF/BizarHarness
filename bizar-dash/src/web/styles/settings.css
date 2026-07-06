@@ -7,67 +7,17 @@
   gap: var(--space-5);
 }
 
-/* Settings inner layout: sticky sidebar nav + scrollable content */
+/* Settings inner layout: single-column for the v6.x per-section view.
+   Each settings section is its own tab; the page just renders the section
+   body inside a column. */
 .settings-body {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: var(--space-5);
-  align-items: start;
-}
-
-@media (max-width: 800px) {
-  .settings-body {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Left: settings sidebar nav */
-.settings-nav {
-  position: sticky;
-  top: 72px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: calc(100vh - 100px);
-  overflow-y: auto;
+  gap: var(--space-5);
 }
 
-.settings-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
-}
-
-.settings-nav-item:hover {
-  background: var(--bg-elev-2);
-  color: var(--text);
-}
-
-.settings-nav-item-active {
-  background: var(--accent-bg);
-  color: var(--accent-2);
-  border-color: var(--accent-border);
-}
-
-.settings-nav-section-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
-  padding: 10px 10px 4px;
-  font-weight: 600;
-}
+/* v6.x: legacy `.settings-nav`, `.settings-nav-item`, `.settings-nav-section-label`
+   classes removed — the sidebar rail uses the shared `.sidebar-tab` styles. */
 
 /* Right: settings content area */
 .settings-content {
@@ -645,121 +595,9 @@
   to { transform: rotate(360deg); }
 }
 
-/* ─────────────────────────────────────────────────────────────────────
-   v4.9.0 — Settings sidebar mode (sidebar layout only)
-   When settingsMode is active, the sidebar replaces the normal tab rail
-   with a full-width nav showing all settings sections grouped by category.
-   ───────────────────────────────────────────────────────────────────── */
-
-/* Sidebar when in settings mode — full height, scrollable */
-.sidebar-settings-mode {
-  width: var(--sidebar-width, 240px);
-  overflow-y: auto;
-  border-right: 1px solid var(--border);
-  background: var(--bg);
-}
-
-/* Settings nav root */
-.settings-nav-root {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-3);
-  gap: 2px;
-}
-
-/* Back button */
-.settings-nav-back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--motion-fast), color var(--motion-fast);
-  margin-bottom: var(--space-2);
-}
-
-.settings-nav-back:hover {
-  background: var(--bg-elev-2);
-  color: var(--text);
-}
-
-.settings-nav-divider {
-  height: 1px;
-  background: var(--border);
-  margin: var(--space-2) 0;
-}
-
-/* Section groups */
-.settings-nav-group {
-  margin-bottom: var(--space-3);
-}
-
-.settings-nav-group-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  font-weight: 600;
-  padding: 4px 8px 6px;
-}
-
-/* Individual nav items */
-.settings-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
-}
-
-.settings-nav-item:hover {
-  background: var(--bg-elev-2);
-  color: var(--text);
-}
-
-.settings-nav-item-active {
-  background: var(--accent-bg);
-  color: var(--accent-2);
-  border-color: var(--accent-border);
-}
-
-.settings-nav-item-active:hover {
-  background: var(--accent-bg);
-  color: var(--accent-2);
-}
-
-.settings-nav-item-icon {
-  flex-shrink: 0;
-  opacity: 0.7;
-}
-
-.settings-nav-item-active .settings-nav-item-icon {
-  opacity: 1;
-}
-
-.settings-nav-item-label {
-  flex: 1;
-}
-
-.settings-nav-item-chevron {
-  flex-shrink: 0;
-  opacity: 0.5;
-}
+/* v4.9.0 .sidebar-settings-mode and .settings-nav-* classes removed in v6.x:
+   each settings section is its own tab in the sidebar, which uses the
+   shared `.sidebar-tab` / `.sidebar-tab-active` styles. */
 
 /* ─────────────────────────────────────────────────────────────────────
    v5.4 — Mobile settings accordion (mobile-settings)

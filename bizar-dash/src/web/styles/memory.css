@@ -208,6 +208,23 @@
   font-size: 13px;
 }
 
+/* v6.x — Vault path display under the health hero so users always
+   know where their notes live without scrolling to the Config panel. */
+.memory-health-vault {
+  margin: 4px 0 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  word-break: break-all;
+}
+
+.memory-health-vault-label {
+  font-weight: 600;
+  color: var(--text-dim, #b4bcd0);
+  margin-right: 4px;
+}
+
 /* ── Stat grid + cards ──────────────────────────────────────────────────── */
 
 .memory-stat-grid {

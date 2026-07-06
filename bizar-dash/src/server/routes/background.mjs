@@ -2,20 +2,26 @@
  * src/server/routes/background.mjs
  *
  * /api/background                          — list
- * /api/background (POST)                   — spawn from UI (v5.x)
+ * /api/background (POST)                   — spawn from UI (v5.x; v5.5.1 SDK-backed)
  * /api/background/:id                      — single instance
  * /api/background/:id/output               — tail captured output
  * /api/background/:id/tool-calls (GET)     — tool call history (v5.x)
  * /api/background/:id/tmux                 — tmux attach metadata
  * /api/background/:id/message (POST)       — send a follow-up message
- * /api/background/:id/pause (POST)         — pause subprocess (v5.x)
- * /api/background/:id/resume (POST)        — resume subprocess (v5.x)
- * /api/background/:id/steer (POST)         — kill+respawn with new prompt (v5.x)
+ * /api/background/:id/pause (POST)         — pause (v5.x SIGSTOP / v5.5.1 output pause)
+ * /api/background/:id/resume (POST)        — resume (v5.x SIGCONT / v5.5.1 drain)
+ * /api/background/:id/steer (POST)         — TRUE mid-flight prompt (v5.5.1)
  * /api/background/:id/retry (POST)         — manual unstick (v3.11.0)
  * /api/background/:id (DELETE)             — kill
  *
  * Backed by the opencode-plugin's bg instance store. Imports the
  * store lazily so this module loads even when the plugin is offline.
+ *
+ * v5.5.1: the spawner is now SDK-based (see ../bg-spawner.mjs).
+ * `POST /api/background/:id/steer` performs a true mid-flight prompt
+ * (no kill+respawn); the response shape stays backwards compatible with
+ * the v5.5.0 contract except `newInstanceId` is `null` (same instance
+ * is reused) and a new `mode: "true_midflight"` field is added.
  */
 import { Router } from 'express';
 import { wrap } from './_shared.mjs';
@@ -146,7 +152,16 @@ export function createBackgroundRouter({ broadcast }) {
     res.json({ ok: true, status: 'running' });
   }));
 
-  // v5.x — Steer (kill+restart with appended prompt). Body: { message }.
+  // v5.5.1 — Steer is now TRUE mid-flight: the dashboard calls
+  // sdk.sessions.prompt() on the live opencode session. No kill+respawn.
+  // The response shape is the same `{ ok, newInstanceId?, processId? }` —
+  // `newInstanceId` is omitted (the same instance is reused); the
+  // `mode` field tells the dashboard this was a true mid-flight steer.
+  //
+  // Backwards compat: clients that read `newInstanceId` from the response
+  // see `null` in v5.5.1 (the field is dropped, not set to the same id —
+  // explicitly set to `null` so a test can tell the new behavior apart
+  // from the old kill+respawn path).
   router.post('/background/:id/steer', wrap(async (req, res) => {
     const message = String((req.body && req.body.message) || '').trim();
     if (!message) {
@@ -162,16 +177,19 @@ export function createBackgroundRouter({ broadcast }) {
     broadcast({
       type: 'background:change',
       id: req.params.id,
-      status: 'steered',
-      newInstanceId: result.newInstanceId,
+      status: 'running',
+      action: 'steer',
+      steerCount: result.steerCount,
     });
-    broadcast({
-      type: 'background:change',
-      id: result.newInstanceId,
-      status: 'pending',
-      parentInstanceId: req.params.id,
+    res.json({
+      ok: true,
+      mode: result.mode || 'true_midflight',
+      // Same instance — explicitly null so dashboards/tests can detect
+      // the new behavior (the v5.5.0 contract returned a new id here).
+      newInstanceId: null,
+      instanceId: req.params.id,
+      steerCount: result.steerCount,
     });
-    res.json({ ok: true, status: 'steered', newInstanceId: result.newInstanceId, processId: result.processId });
   }));
 
   // v3.5.5 — Tmux session metadata. The UI uses this to render an

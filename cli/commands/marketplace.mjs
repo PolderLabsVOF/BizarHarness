@@ -29,7 +29,7 @@ export function showMarketplaceHelp() {
   Description:
     The marketplace is the public registry of plugins hosted at
     ${process.env.BIZAR_REGISTRY_URL ||
-      'https://raw.githubusercontent.com/DrB0rk/bizar-plugins/main/registry.json'}.
+      'https://raw.githubusercontent.com/DrB0rk/bizar-mods/main/registry.json'}.
 
     This command is a thin alias for the \`plugin\` command — run
     \`bizar plugin --help\` for the full surface (config, update, invoke, ...).

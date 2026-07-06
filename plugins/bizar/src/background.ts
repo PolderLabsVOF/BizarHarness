@@ -79,6 +79,100 @@ import { researchInterventionPrompt } from "./research-prompt.js";
 
 import * as opencodeRunner from "./opencode-runner.js";
 
+// --- v5.5.1 — dashboard HTTP helpers -------------------------------------
+//
+// Background agents run as opencode serve SDK sessions managed by the
+// dashboard. The plugin's `pause`/`resume` (and the tool layer's
+// `kill`/`send-message`) therefore talk to the dashboard over HTTP
+// instead of touching the OS or the opencode SDK directly.
+//
+// These helpers are intentionally tiny — they only need to do POSTs
+// for `pause`/`resume`. The token + URL resolution matches what
+// `bg-spawn.ts` and `bg-send-message.ts` do.
+
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+
+function resolveDashboardUrl(): string {
+  const fromEnv = process.env.BIZAR_DASHBOARD_URL;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim().replace(/\/+$/, "");
+  const port = process.env.BIZAR_DASHBOARD_PORT;
+  if (port && /^\d+$/.test(port)) return `http://127.0.0.1:${port}`;
+  return "http://127.0.0.1:4098";
+}
+
+const DEFAULT_DASHBOARD_AUTH_PATHS = [
+  join(homedir(), ".config", "bizar", "dashboard-secret"),
+  join(homedir(), ".cache", "bizarharness", "dash-auth.json"),
+  join(homedir(), ".cache", "bizar", "dash-auth.json"),
+];
+
+function readDashboardToken(): string {
+  for (const candidate of DEFAULT_DASHBOARD_AUTH_PATHS) {
+    try {
+      if (!existsSync(candidate)) continue;
+      const text = readFileSync(candidate, "utf-8").trim();
+      if (text && text.length >= 16) return text;
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const candidate of DEFAULT_DASHBOARD_AUTH_PATHS) {
+    try {
+      if (!existsSync(candidate)) continue;
+      const parsed = JSON.parse(readFileSync(candidate, "utf-8")) as { password?: unknown };
+      if (typeof parsed.password === "string" && parsed.password.length >= 16) {
+        return parsed.password;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
+/**
+ * POST to the dashboard with a JSON `{}` body. Used for pause/resume —
+ * no payload, just the URL. Returns `{ ok: true }` on 2xx, `{ ok: false,
+ * error }` on transport failure or non-2xx (so the caller can surface
+ * a structured error without catching exceptions).
+ */
+async function postDashboardControl(
+  path: string,
+  logger: Logger,
+): Promise<{ ok: boolean; error?: string }> {
+  const url = `${resolveDashboardUrl()}${path}`;
+  const token = readDashboardToken();
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    accept: "application/json",
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 5_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({}),
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      logger.warn(`bizar: dashboard ${path} returned ${res.status}: ${text.slice(0, 200)}`);
+      return { ok: false, error: `dashboard_http_${res.status}` };
+    }
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`bizar: dashboard ${path} failed: ${msg}`);
+    return { ok: false, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // --- Public surface -------------------------------------------------------
 
 /** A snapshot of an instance for the `bizar_status` tool. */
@@ -466,6 +560,13 @@ export class InstanceManager {
    * Abort the opencode session and mark the instance `killed`. If the
    * instance is already in a terminal state, this is a no-op (spec §1.5,
    * MEDIUM-40).
+   *
+   * v5.5.1 — SDK-backed instances are killed via `DELETE /api/background/:id`
+   * on the dashboard (which calls `sdk.sessions.abort`). Pre-v5.5.1
+   * fallback: bg-only mode marks the instance killed in-memory and lets
+   * the runner notice; full mode (with HTTP client) calls
+   * `http.abortSession` directly. The two paths are now functionally
+   * equivalent — the dashboard IS the SDK client in v5.5.1.
    */
   async kill(instanceId: string): Promise<void> {
     const inst = this.instances.get(instanceId);
@@ -473,6 +574,34 @@ export class InstanceManager {
     if (TERMINAL_STATUSES.has(inst.status)) {
       this.logger.debug(
         `bizar: kill(${instanceId}) is a no-op (status=${inst.status})`,
+      );
+      return;
+    }
+    // v5.5.1 — SDK-backed: ask the dashboard to abort.
+    if (inst.liveSession) {
+      const url = `${resolveDashboardUrl()}/api/background/${encodeURIComponent(instanceId)}`;
+      const token = readDashboardToken();
+      const headers: Record<string, string> = { accept: "application/json" };
+      if (token) headers.authorization = `Bearer ${token}`;
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 5_000);
+      try {
+        await fetch(url, { method: "DELETE", headers, signal: ac.signal });
+      } catch (err) {
+        this.logger.warn(
+          `bizar: kill(${instanceId}) dashboard DELETE failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+      await this.update(instanceId, {
+        status: "killed",
+        completedAt: Date.now(),
+      });
+      this.logger.info(
+        `bizar: killed background instance ${instanceId} (sdk-backed, dashboard DELETE)`,
       );
       return;
     }
@@ -493,16 +622,12 @@ export class InstanceManager {
       });
       return;
     }
-    // Abort the opencode session. The next SSE event for this session
-    // (EventSessionIdle or EventSessionError) will finalize the status.
+    // Pre-v5.5.1 fallback — direct abort on the legacy serve child.
     const abort = await this.http.abortSession(inst.sessionId, this.worktree);
     if (!abort.ok) {
       this.logger.warn(
         `bizar: kill(${instanceId}): abort failed: ${abort.error}`,
       );
-      // Even if the abort call failed, we still want the in-memory state
-      // to reflect a deliberate kill so the user sees it. The next SSE
-      // event will overwrite if it disagrees.
     }
     await this.update(instanceId, {
       status: "killed",
@@ -734,20 +859,18 @@ export class InstanceManager {
    * Scan the bg directory, load every instance, and rebuild the in-memory
    * map. Any `running` or `pending` instance is checked for liveness:
    *
-   *   - If the instance has a `processId` AND the opencode run subprocess
-   *     is still alive (per `opencodeRunner.isAlive()`), we RE-ADOPT it:
-   *     status flips back to `running`, `runnerState: "adopted"`, and the
-   *     the manager continues to monitor via the existing
-   *     `onExit` callback registered at spawn time.
-   *   - If the subprocess is gone (or there was no PID on file), we mark
-   *     the instance `failed` with reason "subprocess died during restart".
+   *   - v5.5.1: bg instances no longer have OS subprocesses — they live
+   *     as opencode serve SDK sessions on the dashboard. `opencodeRunner.
+   *     isAlive(pid)` always returns `false`, so the adoption branch is
+   *     effectively dead code; we keep it for the rare case a state file
+   *     from v5.5.0 (with a real pid) survives an upgrade. We mark the
+   *     instance `failed` with reason `"v5.5.1 session reconciliation
+   *     pending"` so the operator knows to look at the dashboard; the
+   *     dashboard's own SSE bridge will reconcile.
+   *   - v5.5.0 and earlier: a still-alive PID re-adopts as before.
    *
    * Historical terminal records (done, failed, killed, timed_out, steered)
    * are preserved as-is.
-   *
-   * Best-effort: liveness check uses `process.kill(pid, 0)` which is fast
-   * (no signal is sent) and safe (returns false on EPERM / ESRCH without
-   * raising to us).
    */
   async rebuildInMemoryMap(): Promise<void> {
     let all: BackgroundState[];
@@ -768,7 +891,26 @@ export class InstanceManager {
       this.instances.set(inst.instanceId, inst);
       rebuilt += 1;
       if (inst.status === "running" || inst.status === "pending") {
-        // Try to adopt a still-alive subprocess.
+        // v5.5.1 — prefer the liveSession flag (the SDK-session marker)
+        // when present. If the dashboard still tracks the session, we
+        // re-adopt; otherwise we mark failed with a reconcilable message.
+        if (inst.liveSession) {
+          // SDK-backed: we trust the state file. The dashboard's SSE
+          // bridge will deliver the next event. Mark `running` and
+          // `runnerState: "adopted"` so the operator sees the plugin
+          // has caught up.
+          await this.update(inst.instanceId, {
+            status: "running",
+            completedAt: undefined,
+            runnerState: "adopted",
+          });
+          adopted += 1;
+          this.logger.info(
+            `bizar: re-adopted SDK-backed bg instance ${inst.instanceId}`,
+          );
+          continue;
+        }
+        // Pre-v5.5.1 subprocess fallback (rare; the runner is stubbed).
         const pid = inst.processId;
         const alive = typeof pid === "number" && opencodeRunner.isAlive(pid);
         if (alive) {
@@ -1046,10 +1188,16 @@ export class InstanceManager {
   // --- v5.x — pause / resume / progress / tool-call instrumentation -------
 
   /**
-   * Pause a running instance. Sends SIGSTOP to the opencode run subprocess
-   * (POSIX only — returns `{ ok: false, error: "..." }` on Windows and
-   * for processes we can't signal). On success, the in-memory status
-   * flips to `"paused"` and `pausedAt` is stamped.
+   * Pause a running instance. In v5.5.1 (SDK-backed) this delegates to
+   * the dashboard's `POST /api/background/:id/pause`, which performs an
+   * OUTPUT pause (stops forwarding events to the WS bus; the underlying
+   * opencode serve session keeps running). For pre-v5.5.1 instances
+   * that still carry a `processId`, fall back to the old SIGSTOP path
+   * via the (now stubbed) runner — best-effort, returns ok:false if the
+   * runner reports the OS no longer supports it.
+   *
+   * On success, the in-memory status flips to `"paused"` and `pausedAt`
+   * is stamped.
    *
    * Already-terminal instances return `{ ok: false, error: "already_terminal" }`.
    * Already-paused instances return `{ ok: true }` (no-op).
@@ -1061,18 +1209,28 @@ export class InstanceManager {
       return { ok: false, error: "already_terminal" };
     }
     if (inst.status === "paused") return { ok: true };
-    if (inst.processId === undefined) {
-      // No PID on file — for v0.8.0 the runner is the only owner of the
-      // subprocess. Try the runner's registry as a fallback before giving up.
-      const runnerStatus = opencodeRunner.getStatus(NaN as unknown as number);
-      if (runnerStatus === null) {
-        return { ok: false, error: "no_subprocess" };
+
+    // v5.5.1 — SDK-backed: delegate to the dashboard.
+    if (inst.liveSession) {
+      const res = await postDashboardControl(`/api/background/${encodeURIComponent(instanceId)}/pause`, this.logger);
+      if (!res.ok) {
+        return { ok: false, error: res.error || "pause_failed" };
       }
+      await this.update(instanceId, {
+        status: "paused",
+        pausedAt: Date.now(),
+      });
+      this.logger.info(`bizar: paused background instance ${instanceId} (sdk-backed)`);
+      return { ok: true };
     }
-    const pid = inst.processId;
-    if (pid === undefined) {
+
+    // Pre-v5.5.1 fallback: subprocess SIGSTOP. The runner is a stub now,
+    // but if a state file from v5.5.0 is still around we try the old
+    // path for compatibility.
+    if (inst.processId === undefined) {
       return { ok: false, error: "no_subprocess" };
     }
+    const pid = inst.processId;
     const res = opencodeRunner.pauseAgent(pid);
     if (!res.ok) return { ok: false, error: res.error || "pause_failed" };
     await this.update(instanceId, {
@@ -1080,20 +1238,40 @@ export class InstanceManager {
       pausedAt: Date.now(),
     });
     this.logger.info(
-      `bizar: paused background instance ${instanceId} (pid=${pid})`,
+      `bizar: paused background instance ${instanceId} (pid=${pid}, legacy)`,
     );
     return { ok: true };
   }
 
   /**
-   * Resume a paused instance. Sends SIGCONT to the subprocess and flips
-   * status back to `"running"`. Idempotent: resuming a non-paused
-   * instance is a no-op that returns `{ ok: true }`.
+   * Resume a paused instance. In v5.5.1 (SDK-backed) delegates to the
+   * dashboard's `POST /api/background/:id/resume`, which drains the
+   * buffered events back to the WS bus. For pre-v5.5.1 instances with
+   * a `processId`, falls back to the old SIGCONT path via the runner.
+   *
+   * Idempotent: resuming a non-paused instance is a no-op that returns
+   * `{ ok: true }`.
    */
   async resume(instanceId: string): Promise<{ ok: boolean; error?: string }> {
     const inst = this.instances.get(instanceId);
     if (!inst) return { ok: false, error: "instance_not_found" };
     if (inst.status !== "paused") return { ok: true };
+
+    // v5.5.1 — SDK-backed: delegate to the dashboard.
+    if (inst.liveSession) {
+      const res = await postDashboardControl(`/api/background/${encodeURIComponent(instanceId)}/resume`, this.logger);
+      if (!res.ok) {
+        return { ok: false, error: res.error || "resume_failed" };
+      }
+      await this.update(instanceId, {
+        status: "running",
+        pausedAt: undefined,
+      });
+      this.logger.info(`bizar: resumed background instance ${instanceId} (sdk-backed)`);
+      return { ok: true };
+    }
+
+    // Pre-v5.5.1 fallback: subprocess SIGCONT.
     if (inst.processId === undefined) {
       return { ok: false, error: "no_subprocess" };
     }
@@ -1104,7 +1282,7 @@ export class InstanceManager {
       pausedAt: undefined,
     });
     this.logger.info(
-      `bizar: resumed background instance ${instanceId} (pid=${inst.processId})`,
+      `bizar: resumed background instance ${instanceId} (pid=${inst.processId}, legacy)`,
     );
     return { ok: true };
   }

@@ -50,6 +50,7 @@ See [`../FINAL_GOAL.md`](../FINAL_GOAL.md) for the full vision document. The goa
 
 ## Current Version
 
+- v5.5.1 — Steering followup + UI overhaul + server log fixes + browser extension cleanup
 - v5.5.0 — Background agents dashboard integration + memory system full integration + installer end-to-end overhaul.
 
 ## Recently Shipped (v4.5.0)

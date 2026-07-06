@@ -365,7 +365,9 @@ export function findLightragBinary() {
 }
 
 export async function isInstalled() {
-  return findLightragBinary() !== null;
+  const found = findLightragBinary() !== null;
+  if (found) _lightragNotInstalled = false;
+  return found;
 }
 
 function httpGet(url, timeoutMs) {
@@ -421,12 +423,31 @@ function httpPost(url, body, timeoutMs) {
   });
 }
 
+/**
+ * v5.x — Flag set when LightRAG is confirmed not installed or explicitly
+ * disabled. When true, isRunning() returns false immediately without
+ * making any network request, preventing ECONNREFUSED log spam from a
+ * binary that will never be present.
+ *
+ * Reset by findLightragBinary() succeeding (e.g. after user installs
+ * the binary without restarting the dashboard).
+ */
+let _lightragNotInstalled = false;
+
 export async function isRunning(config) {
+  // Fast path: skip network check if we already know LightRAG is absent.
+  // This suppresses the ECONNREFUSED log spam that otherwise occurs on every
+  // poll when the binary is not on PATH.
+  if (_lightragNotInstalled) return false;
   try {
     const res = await httpGet(`http://${config.host}:${config.port}/health`, 3000);
     return res.status === 200;
   } catch (err) {
-    console.warn('[lightrag] swallowed in isRunning.healthCheck:', err?.message || err);
+    // Rate-limit: only log once per 60s to avoid flooding the console
+    // when LightRAG health-check fails repeatedly.
+    if (_rateLimit('isRunning.healthCheck', 60_000)) {
+      console.warn('[lightrag] isRunning healthCheck failed:', err?.message || err);
+    }
     return false;
   }
 }
@@ -484,6 +505,7 @@ export async function startServer(config, { logger } = {}) {
   }
 
   if (!findLightragBinary()) {
+    _lightragNotInstalled = true;
     return {
       ok: false,
       error:
@@ -682,6 +704,7 @@ export async function lightragStartupHook(projectRoot, opts = {}) {
 
   // 3. Check lightrag.enabled flag.
   if (config.enabled === false) {
+    _lightragNotInstalled = true;
     log('startup hook: lightrag disabled in .bizar/memory.json, skipping');
     return { ok: true, started: false, reason: 'disabled' };
   }
@@ -689,6 +712,7 @@ export async function lightragStartupHook(projectRoot, opts = {}) {
   // 4. Check env-var override.
   const envAuto = process.env.BIZAR_LIGHTRAG_AUTOSTART;
   if (typeof envAuto === 'string' && /^(0|false|no|off)$/i.test(envAuto.trim())) {
+    _lightragNotInstalled = true;
     log(`startup hook: BIZAR_LIGHTRAG_AUTOSTART=${envAuto}, skipping`);
     return { ok: true, started: false, reason: 'env-disabled' };
   }

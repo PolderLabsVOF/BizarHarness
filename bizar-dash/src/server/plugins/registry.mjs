@@ -44,7 +44,7 @@ import * as logger from '../logger.mjs';
  * deployments, point this at an internal CDN or S3 bucket.
  */
 const DEFAULT_REGISTRY_URL =
-  'https://raw.githubusercontent.com/DrB0rk/bizar-plugins/main/registry.json';
+  'https://raw.githubusercontent.com/DrB0rk/bizar-mods/main/registry.json';
 
 /**
  * Fallback registry URLs tried in order when the primary URL fails.

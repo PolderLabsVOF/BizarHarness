@@ -246,6 +246,17 @@ export interface BackgroundState {
   // v0.8.0 — process tracking (see opencode-runner.ts).
   processId?: number;
   exitCode?: number;
+  // v5.5.1 — `liveSession: true` means this instance is backed by an
+  // opencode serve SDK session managed by the dashboard (not by an OS
+  // subprocess). The plugin's bg-kill/bg-pause/bg-resume tools check
+  // this flag and delegate to the dashboard HTTP API instead of
+  // touching the (now-stubbed) opencode-runner. Optional for backward
+  // compat — pre-v5.5.1 state files leave it unset / false.
+  liveSession?: boolean;
+  // v5.5.1 — instanceId assigned by the dashboard (may differ from the
+  // plugin's locally-allocated `instanceId` when the dashboard mints its
+  // own). Cross-reference for cross-system debugging.
+  dashboardInstanceId?: string;
   runnerState?: string;
   runnerError?: string;
   spawnMessage?: string;

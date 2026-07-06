@@ -96,6 +96,7 @@ type Props = {
 export function MemoryOverview({ refreshKey, onRefresh, setActiveSubPanel }: Props) {
   const toast = useToast();
   const [data, setData] = useState<MemoryOverviewData | null>(null);
+  const [vaultPath, setVaultPath] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   const reload = async (signal?: AbortSignal) => {
@@ -107,6 +108,10 @@ export function MemoryOverview({ refreshKey, onRefresh, setActiveSubPanel }: Pro
         api.get<LightragStats>('/memory/lightrag/stats', signal).catch(() => null),
         api.get<StorageStats>('/memory/storage', signal).catch(() => null),
       ]);
+      // v6.x — Surface the resolved vault path as a top-level piece of state
+      // so the section header can display it instead of relying on
+      // derived fields. Resolves the "(loading…)" UI bug in the Config panel.
+      setVaultPath(status?.vaultRoot || '');
       setData({
         health: health || {
           score: 0,
@@ -186,6 +191,12 @@ export function MemoryOverview({ refreshKey, onRefresh, setActiveSubPanel }: Pro
             <span style={{ color: scoreColor }}>{health.status}</span>
           </h3>
           <p className="memory-health-message">{health.message}</p>
+          {/* v6.x — Vault path surfaced as a top-level piece of context.
+              Resolves the "(loading…)" stuck-state in the Config panel. */}
+          <p className="memory-health-vault mono muted" data-testid="memory-overview-vault-path">
+            <span className="memory-health-vault-label">Vault:</span>{' '}
+            {vaultPath || <em>not initialised</em>}
+          </p>
           <Button variant="ghost" size="sm" onClick={onRefresh}>
             <RefreshCw size={12} /> Refresh
           </Button>

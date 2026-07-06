@@ -2,6 +2,7 @@
  * src/server/routes/activity.mjs
  *
  * /api/activity                            — full activity log (newest first)
+ * /api/activity/stream                     — SSE stream of activity events
  * /api/activity/hidden                     — list of hidden event keys (for overview hide)
  * /api/activity/hide                      — POST { keys: [...] }  add to hidden
  * /api/activity/hide                      — DELETE                  clear all hidden
@@ -105,6 +106,90 @@ export function createActivityRouter({ state } = {}) {
     writeHidden(data);
     res.json(data);
   }));
+
+  // GET /activity/stream — SSE stream of activity events.
+  //
+  // The Overview tab (Overview.tsx) opens this SSE connection to get live
+  // activity updates without polling. Two event types are sent:
+  //   event: snapshot\ndata: { events: ActivityItem[], generatedAt: string }\n\n
+  //   event: activity\ndata: ActivityItem\n\n
+  //
+  // The SSE lifetime is unbounded; the client auto-reconnects on drop.
+  // We send a 25s heartbeat to keep the connection alive through proxies.
+  router.get('/activity/stream', (req, res) => {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+    let closed = false;
+
+    // Send current snapshot immediately.
+    try {
+      const overview = state?.getOverview?.();
+      const events = Array.isArray(overview?.recentActivity)
+        ? overview.recentActivity.slice(0, 50)
+        : [];
+      res.write(`event: snapshot\ndata: ${JSON.stringify({ events, generatedAt: overview?.generatedAt || new Date().toISOString() })}\n\n`);
+    } catch {
+      res.write(`event: snapshot\ndata: ${JSON.stringify({ events: [], generatedAt: new Date().toISOString() })}\n\n`);
+    }
+
+    // Poll for new activity every 5 seconds.
+    // Reads recentActivity from state and emits only genuinely new entries
+    // (identified by ts, which is set at write time).
+    let knownLastTs = null;
+    const pollInterval = setInterval(() => {
+      if (closed || res.writableEnded || res.destroyed) {
+        clearInterval(pollInterval);
+        return;
+      }
+      try {
+        const overview = state?.getOverview?.();
+        const events = Array.isArray(overview?.recentActivity)
+          ? overview.recentActivity
+          : [];
+        if (events.length === 0) return;
+
+        const newestTs = events[0].ts;
+        // Only emit if there's a genuinely newer event (newer timestamp than
+        // what we last sent, or a new entry with the same timestamp but
+        // different content).
+        if (knownLastTs === null || newestTs !== knownLastTs) {
+          const newEvents = knownLastTs === null
+            ? events
+            : events.filter((e) => e.ts !== knownLastTs);
+          for (const entry of newEvents) {
+            res.write(`event: activity\ndata: ${JSON.stringify(entry)}\n\n`);
+          }
+          knownLastTs = newestTs;
+        }
+      } catch {
+        /* ignore poll errors */
+      }
+    }, 5_000);
+
+    // Heartbeat to keep the connection alive through reverse proxies.
+    const heartbeat = setInterval(() => {
+      if (closed || res.writableEnded || res.destroyed) {
+        clearInterval(heartbeat);
+        return;
+      }
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 25_000);
+
+    req.on('close', () => {
+      closed = true;
+      clearInterval(pollInterval);
+      clearInterval(heartbeat);
+    });
+  });
 
   return router;
 }

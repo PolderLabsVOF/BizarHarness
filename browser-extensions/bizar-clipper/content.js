@@ -64,6 +64,31 @@
     }
   }
 
+  // ── Safe messaging (handles MV3 service-worker disconnect) ─────────────────
+
+  /**
+   * Send a message to the background service worker without throwing on
+   * disconnected port errors. In Manifest V3 the service worker may be
+   * terminated between calls; this wrapper catches the resulting
+   * "Attempt to postMessage on disconnected port" error silently and
+   * returns undefined, so the caller can fall back to a direct API call.
+   */
+  async function safeSendMessage(message) {
+    try {
+      if (typeof browser !== 'undefined' && browser.runtime) {
+        // Firefox
+        return await browser.runtime.sendMessage(message).catch(() => undefined);
+      }
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        // Chrome — the API may throw synchronously on disconnected port
+        return await chrome.runtime.sendMessage(message).catch(() => undefined);
+      }
+    } catch {
+      // Defensive: any other error, don't surface
+    }
+    return undefined;
+  }
+
   // ── Save logic ──────────────────────────────────────────────────────────────
 
   async function sendClip(selectionText) {
@@ -76,14 +101,10 @@
     };
 
     // Try sending via background script first
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'clip-save', data });
-      if (response && response.ok) {
-        showToast('✓ Saved to Bizar vault');
-        return;
-      }
-    } catch {
-      // Background not reachable — fetch directly (bookmarklet-style fallback)
+    const response = await safeSendMessage({ type: 'clip-save', data });
+    if (response && response.ok) {
+      showToast('✓ Saved to Bizar vault');
+      return;
     }
 
     // Direct fetch fallback
