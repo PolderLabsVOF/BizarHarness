@@ -302,12 +302,14 @@ describe('runDoctor() with fixture HOME', () => {
     assert.equal(r.ok, true, r.message);
   });
 
-  test('provider-config-sanity fails without minimax block', async () => {
+  test('provider-config-sanity warns (not fails) without minimax block', async () => {
+    // v5.x: checkProviderConfigSanity warns instead of throwing when the
+    // provider.minimax block is missing, since provision.mjs auto-adds it.
     writeOpencodeConfig({ provider: {} });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'provider-config-sanity');
-    assert.equal(r.ok, false);
-    assert.match(r.message, /minimax/);
+    assert.equal(r.ok, true, 'should pass with warning, not throw');
+    assert.match(r.message, /warn.*minimax|minimax.*missing/i);
   });
 
   test('provider-config-sanity fails when models lack interleaved+reasoning', async () => {

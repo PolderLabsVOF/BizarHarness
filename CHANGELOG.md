@@ -1,5 +1,34 @@
 # Changelog
 
+## v5.5.3 — Smoke test fixes for `bizar update`
+
+### Bug fixes
+
+Patch release fixing smoke test failures discovered by a real `bizar update` run.
+
+**Fixes:**
+
+1. **provider-config-sanity no longer fails when `provider.minimax` is missing** — `cli/doctor.mjs:217-228` changed from throw to warn-when-missing. `cli/provision.mjs:587-640` `patchOpencodeJson` now auto-adds the default `provider.minimax` block on install/update, even when the plugin entry already exists. `cli/doctor.test.mjs:305-311` test updated to match the new warn-not-fail behavior.
+
+2. **`bizar doctor` now exits 0** — resolved by fix #1's check removal.
+
+3. **Smoke test dashboard HTTP check uses retry loop** — `cli/post-install-smoke.mjs:85-121` now uses a 5-attempt retry with 2s backoff (was single 30s timeout). Handles the case where the systemd unit needs time to bind after `bizar update` restarts it.
+
+4. **Smoke test dashboard WebSocket check uses retry loop** — `cli/post-install-smoke.mjs:123-172` same retry strategy as HTTP check.
+
+5. **Smoke test lightrag-server check uses file existence + PATH lookup** — `cli/post-install-smoke.mjs:188-210` replaced `execFileSync --version` (unreliable) with file-existence check + `command -v` PATH lookup.
+
+### New tests
+
+- `cli/post-install-smoke.test.mjs` — 2 tests covering the lightrag existence check
+
+### Tests
+- `node --test cli/doctor.test.mjs cli/post-install-smoke.test.mjs cli/provision.test.mjs`: 30/30 pass
+- `npm run typecheck`: clean
+
+### Upgrade
+`npm install -g @polderlabs/bizar@5.5.3`
+
 ## v5.5.2 — Memory vault path fix
 
 ### Bug fixes

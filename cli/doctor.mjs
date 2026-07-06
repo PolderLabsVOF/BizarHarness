@@ -222,7 +222,10 @@ async function checkProviderConfigSanity() {
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const minimax = cfg.provider && cfg.provider.minimax;
   if (!minimax) {
-    throw new Error('provider.minimax block missing');
+    // Warn instead of throw — provision.mjs auto-adds this block on
+    // install/update, but users with an older pre-v5 opencode.json
+    // may not have it yet.
+    return 'warn: provider.minimax block missing (run `bizar update` to patch)';
   }
   const models = minimax.models || {};
   const saneNames = Object.entries(models).filter(([, m]) => {

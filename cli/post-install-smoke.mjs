@@ -9,7 +9,7 @@
  *   3. Dashboard HTTP responds 200
  *   4. WebSocket connects to dashboard
  *   5. `bizar bg list` returns (even if empty)
- *   6. lightrag-server --version works
+ *   6. lightrag-server installed
  *
  * Each check has a 30s timeout. Exits 0 if all pass, 1 otherwise.
  *
@@ -20,11 +20,10 @@
  *   CheckResult: { name: string, ok: boolean, message: string }
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
-import { execFileSync } from 'node:child_process';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const HOME = homedir();
@@ -82,69 +81,93 @@ export async function runSmokeTest({ bizarHome, repoPath, timeoutMs = DEFAULT_TI
     }
   });
 
-  // ── 3. Dashboard HTTP responds 200 ─────────────────────────────────────────
+  // ── 3. Dashboard HTTP responds 200 (with retry) ─────────────────────────────────
   check('dashboard HTTP', async () => {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const maxAttempts = 5;
+    const delayMs = 2000;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/`, {
-          signal: controller.signal,
-          method: 'GET',
-        });
-        clearTimeout(timer);
-        if (res.ok) return { ok: true, message: `HTTP ${res.status} on port ${port}` };
-        return { ok: false, message: `HTTP ${res.status} on port ${port} (expected 200)` };
-      } catch (err) {
-        clearTimeout(timer);
-        if (err.name === 'AbortError') {
-          return { ok: false, message: `dashboard not responding on port ${port} (timeout)` };
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(`http://127.0.0.1:${port}/`, {
+            signal: controller.signal,
+            method: 'GET',
+          });
+          clearTimeout(timer);
+          if (res.ok) {
+            if (attempt > 1) {
+              return { ok: true, message: `HTTP ${res.status} on port ${port} (tried ${attempt}x)` };
+            }
+            return { ok: true, message: `HTTP ${res.status} on port ${port}` };
+          }
+          lastErr = `HTTP ${res.status} on port ${port} (expected 200)`;
+        } catch (err) {
+          clearTimeout(timer);
+          lastErr = err.name === 'AbortError'
+            ? `dashboard not responding on port ${port} (timeout)`
+            : `dashboard unreachable on port ${port}: ${err.message}`;
         }
-        return { ok: false, message: `dashboard unreachable on port ${port}: ${err.message}` };
+      } catch (err) {
+        lastErr = `fetch not available: ${err.message}`;
       }
-    } catch (err) {
-      return { ok: false, message: `fetch not available: ${err.message}` };
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
     }
+    return { ok: false, message: lastErr || 'dashboard HTTP failed' };
   });
 
-  // ── 4. WebSocket connects ──────────────────────────────────────────────────
+  // ── 4. WebSocket connects (with retry) ────────────────────────────────────────
   check('dashboard WebSocket', async () => {
-    try {
-      const { WebSocket } = await import('ws' in globalThis
-        ? { ws: globalThis.ws, WebSocket: globalThis.WebSocket }
-        : await import(`ws`).then(m => ({ ws: m, WebSocket: m.WebSocket || m.default }))
-      );
-      const url = `ws://127.0.0.1:${port}/ws`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const maxAttempts = 5;
+    const delayMs = 2000;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const ws = new WebSocket(url);
-        await new Promise((resolve, reject) => {
-          ws.on('open', resolve);
-          ws.on('error', reject);
-          ws.on('close', () => reject(new Error('closed before open')));
-          controller.signal.addEventListener('abort', () => {
-            ws.close();
-            reject(new Error('timeout'));
+        const { WebSocket } = await import('ws' in globalThis
+          ? { ws: globalThis.ws, WebSocket: globalThis.WebSocket }
+          : await import(`ws`).then(m => ({ ws: m, WebSocket: m.WebSocket || m.default }))
+        );
+        const url = `ws://127.0.0.1:${port}/ws`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const ws = new WebSocket(url);
+          await new Promise((resolve, reject) => {
+            ws.on('open', resolve);
+            ws.on('error', reject);
+            ws.on('close', () => reject(new Error('closed before open')));
+            controller.signal.addEventListener('abort', () => {
+              ws.close();
+              reject(new Error('timeout'));
+            });
           });
-        });
-        clearTimeout(timer);
-        ws.close();
-        return { ok: true, message: `WebSocket connected at ${url}` };
-      } catch (err) {
-        clearTimeout(timer);
-        if (err.message === 'timeout') {
-          return { ok: false, message: `WebSocket timeout on ${url}` };
+          clearTimeout(timer);
+          ws.close();
+          if (attempt > 1) {
+            return { ok: true, message: `WebSocket connected at ${url} (tried ${attempt}x)` };
+          }
+          return { ok: true, message: `WebSocket connected at ${url}` };
+        } catch (err) {
+          clearTimeout(timer);
+          lastErr = err.message === 'timeout'
+            ? `WebSocket timeout on ${url}`
+            : `WebSocket failed on ${url}: ${err.message}`;
         }
-        return { ok: false, message: `WebSocket failed on ${url}: ${err.message}` };
+      } catch (err) {
+        // ws module not available in this environment — skip
+        if (err.code === 'MODULE_NOT_FOUND' || err.message?.includes('ws')) {
+          return { ok: true, message: 'ws module not available — skipping WebSocket check' };
+        }
+        lastErr = `WebSocket check failed: ${err.message}`;
       }
-    } catch (err) {
-      // ws module not available in this environment — skip
-      if (err.code === 'MODULE_NOT_FOUND' || err.message?.includes('ws')) {
-        return { ok: true, message: 'ws module not available — skipping WebSocket check' };
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, delayMs));
       }
-      return { ok: false, message: `WebSocket check failed: ${err.message}` };
     }
+    return { ok: false, message: lastErr || 'WebSocket failed' };
   });
 
   // ── 5. `bizar bg list` returns ────────────────────────────────────────────
@@ -161,24 +184,27 @@ export async function runSmokeTest({ bizarHome, repoPath, timeoutMs = DEFAULT_TI
     }
   });
 
-  // ── 6. lightrag-server --version ──────────────────────────────────────────
+  // ── 6. lightrag-server installed ─────────────────────────────────────────
+  // Just verify the binary exists — `lightrag-hku` (uv tool) does not
+  // reliably support --version across all versions, so we check file
+  // presence instead of running it.
   check('lightrag-server', () => {
-    const candidates = ['lightrag-server'];
-    if (process.env.HOME) {
-      candidates.push(join(process.env.HOME, '.local', 'bin', 'lightrag-server'));
+    const localBin = join(HOME, '.local', 'bin', 'lightrag-server');
+    if (existsSync(localBin)) {
+      return { ok: true, message: `${localBin} exists` };
     }
-    let found = false;
-    for (const cmd of candidates) {
-      try {
-        const out = execFileSync(cmd, ['--version'], {
-          encoding: 'utf8',
-          timeout: 5000,
-          stdio: ['ignore', 'pipe', 'ignore'],
-        });
-        found = true;
-        return { ok: true, message: `${cmd} responds: ${(out || '').trim().slice(0, 100)}` };
-      } catch { /* try next */ }
-    }
+    // Also check PATH via shell (covers shims installed by uv tool)
+    try {
+      const out = execSync('command -v lightrag-server', {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 5000,
+        encoding: 'utf8',
+      });
+      const resolved = (out || '').trim();
+      if (resolved) {
+        return { ok: true, message: `lightrag-server on PATH: ${resolved}` };
+      }
+    } catch { /* not on PATH */ }
     return { ok: false, message: 'lightrag-server not found in PATH or ~/.local/bin/' };
   });
 

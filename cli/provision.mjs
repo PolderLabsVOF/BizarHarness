@@ -594,12 +594,36 @@ export async function patchOpencodeJson({ dryRun, force }) {
   const hasEntry = plugins.some(
     (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
   );
-  if (hasEntry && !force) {
+
+  // Auto-add provider.minimax block if missing (v5.x — must happen
+  // even when the plugin entry already exists, so always evaluate).
+  const DEFAULT_MINIMAX_BLOCK = {
+    options: {
+      baseURL: 'https://api.minimax.io/v1',
+      apiKey: '{env:MiniMax_API_KEY}',
+    },
+    models: {
+      'MiniMax-M2.7-Flash': { name: 'MiniMax M2.7 Flash', interleaved: { field: 'reasoning_details' }, reasoning: true },
+      'MiniMax-M2.7': { name: 'MiniMax M2.7', interleaved: { field: 'reasoning_details' }, reasoning: true },
+      'MiniMax-M3': { name: 'MiniMax M3', interleaved: { field: 'reasoning_details' }, reasoning: true },
+      'MiniMax-M3-Reasoning': { name: 'MiniMax M3 Reasoning', interleaved: { field: 'reasoning_details' }, reasoning: true },
+    },
+  };
+  let addedProvider = false;
+  if (!cfg.provider) {
+    cfg.provider = {};
+  }
+  if (!cfg.provider.minimax) {
+    cfg.provider.minimax = DEFAULT_MINIMAX_BLOCK;
+    addedProvider = true;
+  }
+
+  if (hasEntry && !force && !addedProvider) {
     return { ok: true, message: 'opencode.json already has Bizar plugin entry' };
   }
 
   if (dryRun) {
-    return { ok: true, message: `[dry-run] would patch opencode.json with plugin entry` };
+    return { ok: true, message: `[dry-run] would patch opencode.json with plugin entry${addedProvider ? ' + provider.minimax' : ''}` };
   }
 
   if (!hasEntry) {
@@ -611,8 +635,14 @@ export async function patchOpencodeJson({ dryRun, force }) {
     }]);
     cfg.plugin = plugins;
   }
+
   writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-  return { ok: true, message: 'opencode.json patched with Bizar plugin entry' };
+  return {
+    ok: true,
+    message: addedProvider
+      ? 'opencode.json patched with provider.minimax (plugin entry was already present)'
+      : 'opencode.json patched with Bizar plugin entry + provider.minimax',
+  };
 }
 
 /**
