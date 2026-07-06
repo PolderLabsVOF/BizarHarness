@@ -377,6 +377,24 @@ export async function runService(sub, _rest) {
     }
     return;
   }
+  if (sub === 'restart') {
+    // v5.x — issue #7. Used by `bizar update` to make sure the service
+    // picks up the freshly-installed binary without leaving the old one
+    // running with stale inodes.
+    const { restartService } = await import('./service-controller.mjs');
+    const force = Array.isArray(_rest) && (_rest.includes('--force') || _rest.includes('-f'));
+    const dryRun = Array.isArray(_rest) && (_rest.includes('--dry-run'));
+    const r = restartService({ force, dryRun });
+    if (r.ok) {
+      console.log('[bizar-service] restarted.');
+      if (r.unitPath) console.log(`[bizar-service] unit: ${r.unitPath}`);
+      if (r.note) console.log(`[bizar-service] ${r.note}`);
+    } else {
+      console.error(`[bizar-service] restart failed: ${r.error}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
   if (sub === 'uninstall') {
     const { uninstallService } = await import('./service-controller.mjs');
     const force = Array.isArray(_rest) && (_rest.includes('--force') || _rest.includes('-f'));
@@ -400,6 +418,7 @@ export async function runService(sub, _rest) {
     bizar service logs
     bizar service follow
     bizar service install [--force] [--dry-run]
+    bizar service restart [--force] [--dry-run]
     bizar service uninstall [--force]
 
   Description:
@@ -408,6 +427,10 @@ export async function runService(sub, _rest) {
     user login. install is idempotent — when the on-disk unit matches
     the desired content, it returns without restarting the service.
     Pass --force to overwrite or to drop a stale registration.
+
+    restart stops the daemon, reinstalls the unit, and starts it again.
+    Used by \`bizar update\` to make sure the service picks up the new
+    code without leaving the old binary running.
   `);
 }
 

@@ -31,7 +31,12 @@ const BACKUP_PATHS = [
   { src: '~/.config/bizar/env.json', label: 'env', required: false },
   { src: '~/.config/opencode/opencode.json', label: 'opencode', required: false },
   { src: '~/.config/opencode/projects/', label: 'projects', required: false },
-  { src: '~/.local/share/bizar/memory/', label: 'memory', required: false },
+  // v5.x — Default memory vault moved from `~/.local/share/bizar/memory` to
+  // `~/.bizar_memory`. Back up the new default; the legacy path is only
+  // used when the user has set `BIZAR_MEMORY_VAULT` to it, in which case
+  // they're still pointing at the old location and a separate backup is
+  // not needed (their data is already covered by the override).
+  { src: '~/.bizar_memory/', label: 'memory', required: false },
   { src: '~/.local/share/bizar/usage.jsonl', label: 'usage', required: false },
 ];
 

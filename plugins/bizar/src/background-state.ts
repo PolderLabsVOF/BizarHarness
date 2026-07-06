@@ -44,16 +44,59 @@ import os from "node:os";
 // --- Public types (spec §3.2) ---------------------------------------------
 
 /**
+ * v5.x — Per-tool-call history entry. One row per tool invocation.
+ * `result` is the truncated text returned by the tool; `error` is the
+ * error message if the tool threw.
+ *
+ * Persistence: stored as `toolCalls` on `BackgroundState`, capped at
+ * {@link MAX_TOOL_CALL_HISTORY} entries to keep the JSON state file
+ * small. The `args` and `result` fields are truncated to
+ * {@link MAX_TOOL_ARG_CHARS} characters each.
+ */
+export interface ToolCallEntry {
+  /** Plugin-generated tool call id. */
+  id: string;
+  /** Tool name (e.g. "bash", "edit", "read"). */
+  name: string;
+  /** JSON-serialized args (truncated). */
+  args: string;
+  /** "running" while the tool is in-flight; "ok" or "error" after. */
+  status: "running" | "ok" | "error";
+  /** Epoch ms when the tool call started. */
+  startedAt: number;
+  /** Epoch ms when the tool call completed (omitted while running). */
+  endedAt?: number;
+  /** Result preview (truncated). */
+  result?: string;
+  /** Error message (if status === "error"). */
+  error?: string;
+}
+
+/** v5.x — Cap on how many tool calls we remember per instance. */
+export const MAX_TOOL_CALL_HISTORY = 100;
+/** v5.x — Cap on per-tool args/result length (chars). */
+export const MAX_TOOL_ARG_CHARS = 1_000;
+
+/**
  * Background instance status. Maps opencode events and lifecycle transitions
  * to a small, stable set of terminal and in-flight states.
+ *
+ * v5.x — `paused` added for pause/resume support. `steered` added for
+ * mid-flight redirect (kill + restart with new prompt). Both are
+ * informational and don't change the wire-state contract: `paused` is
+ * a non-terminal in-flight status (the underlying subprocess is alive
+ * but suspended), and `steered` is treated as terminal for cleanup
+ * purposes because the original subprocess has exited.
  */
 export type BackgroundStatus =
   | "pending"
   | "running"
+  | "paused"
   | "done"
   | "failed"
   | "killed"
-  | "timed_out";
+  | "timed_out"
+  | "steered";
 
 /**
  * Per-instance state for a background agent.
@@ -78,10 +121,11 @@ export type BackgroundStatus =
  *   - `parentAgent` — who spawned it (always "odin" in v0.4 per §6.3).
  *   - `parentInstanceId` — for nested spawns (reserved, not in v0.4).
  *   - `logPath` — path to `~/.cache/bizar/logs/<sessionId>.log`.
- *   - `toolCallCount` — updated via `EventMessagePartUpdated` events.
- *   - `loopGuardTool` — set when threshold-12 throw is captured. Used at
- *     `bizar_collect` to prepend the marker.
- *   - `timeoutMs` — collect-time timeout requested by caller.
+   *   - `toolCallCount` — updated via `EventMessagePartUpdated` events.
+   *     For tool call history with names/args/results, see `toolCalls`.
+   *   - `loopGuardTool` — set when threshold-12 throw is captured. Used at
+   *     `bizar_collect` to prepend the marker.
+   *   - `timeoutMs` — collect-time timeout requested by caller.
  *   - `lastEventAt` — epoch ms when the most recent SSE event arrived for
  *     this instance. Set on every event the manager observes (tool/text
  *     part updates, session.idle, session.error, session.created/updated/
@@ -151,6 +195,28 @@ export interface BackgroundState {
   timeoutMs: number;
   toolCallCount: number;
   loopGuardTool?: string;
+  /**
+   * v5.x — Per-tool-call history. Records each tool invocation with its
+   * args, status, timing, and (when available) the tool result or
+   * error. Capped at the last 100 entries per instance (see
+   * `MAX_TOOL_CALL_HISTORY`). Exposed via `InstanceView.toolCalls` so
+   * the dashboard can render a tool-call list.
+   */
+  toolCalls?: ToolCallEntry[];
+  /**
+   * v5.x — Progress reporting. Set by `bizar_report_progress` from the
+   * running agent. Range 0..100; -1 means "indeterminate". The
+   * dashboard renders this as a progress bar.
+   */
+  progress?: number;
+  /** v5.x — Free-form progress message from the agent. */
+  progressMessage?: string;
+  /** v5.x — When the progress was last updated. */
+  progressAt?: number;
+  /** v5.x — Pause timestamp (when the subprocess was SIGSTOPed). */
+  pausedAt?: number;
+  /** v5.x — Optional list of tags supplied at spawn time. */
+  tags?: string[];
   // v0.3.0 — stall and thinking-loop protection. These are typed as
   // optional in the schema because (a) the field can be absent in older
   // files on disk, and (b) the `InstanceManager.add()` input (AddDraft)
@@ -229,12 +295,18 @@ export const EMPTY_BACKGROUND_STATE: Omit<
 
 /**
  * Terminal states per spec §1.6 / §4.4. Used by collect/await logic.
+ *
+ * v5.x — `steered` is treated as terminal because the original
+ * subprocess has exited; a new instance is created to carry the
+ * steered work. Collect on a steered instance returns whatever text
+ * the subprocess emitted before the kill.
  */
 export const TERMINAL_STATUSES: ReadonlySet<BackgroundStatus> = new Set<BackgroundStatus>([
   "done",
   "failed",
   "killed",
   "timed_out",
+  "steered",
 ]);
 
 // --- Logger interface -----------------------------------------------------
@@ -390,6 +462,13 @@ function readState(
     }
     if (typeof parsed.maxRestarts !== "number") {
       parsed.maxRestarts = 3;
+    }
+    // v5.x — backfill tool call history and progress for old files.
+    if (!Array.isArray(parsed.toolCalls)) {
+      parsed.toolCalls = [];
+    }
+    if (typeof parsed.progress !== "number") {
+      parsed.progress = 0;
     }
     return parsed;
   } catch (err: unknown) {

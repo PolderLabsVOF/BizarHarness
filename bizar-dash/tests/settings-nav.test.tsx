@@ -25,7 +25,7 @@ describe('SettingsNav', () => {
         onExitSettings={onExitSettings}
       />,
     );
-    expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exit settings/i })).toBeInTheDocument();
   });
 
   it('calls onExitSettings when back button is clicked', async () => {
@@ -52,7 +52,7 @@ describe('SettingsNav', () => {
     expect(screen.getByText('General', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
     expect(screen.getByText('Core', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
     expect(screen.getByText('Experience', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
-    expect(screen.getByText('Data', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
+    // Data group was removed - no longer exists in SettingsNav
   });
 
   it('renders section items within each group', () => {
@@ -63,14 +63,16 @@ describe('SettingsNav', () => {
         onExitSettings={onExitSettings}
       />,
     );
+    // General group
     expect(screen.getByRole('button', { name: /theme/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /layout/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /general/i })).toBeInTheDocument();
+    // Core group
     expect(screen.getByRole('button', { name: /env vars/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /memory/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /system llm/i })).toBeInTheDocument();
+    // Experience group
     expect(screen.getByRole('button', { name: /updates/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /skills/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /headroom/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /backup/i })).toBeInTheDocument();
   });
 
   it('calls onSectionChange with correct id when a section is clicked', async () => {

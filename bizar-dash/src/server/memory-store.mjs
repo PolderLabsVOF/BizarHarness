@@ -4,11 +4,17 @@
  * MarkdownMemoryStore — reads/writes Obsidian-compatible `.md` notes with YAML
  * frontmatter for the Bizar Memory Service. Supports three modes:
  *   local-only  — vault at <projectRoot>/.obsidian/
- *   managed    — vault at ~/.local/share/bizar/memory/<repoName>/projects/<projectId>/
+ *   managed    — vault at ~/.bizar_memory/<repoName>/projects/<projectId>/
  *   linked     — alias for managed
  *
  * The project namespace directory is created LAZY on first writeNote, not at
  * initVault time (F7 invariant).
+ *
+ * v5.x — Default vault root relocated from `~/.local/share/bizar/memory` to
+ * `~/.bizar_memory` per issue #5. The old path still works if `BIZAR_MEMORY_VAULT`
+ * is set; on first run, `ensureVaultExists()` emits a one-time notice when the
+ * old path exists and the new one doesn't, but does NOT auto-migrate (too
+ * risky to move user data without consent).
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, lstatSync, unlinkSync } from 'node:fs';
@@ -27,15 +33,26 @@ const HOME = homedir();
 /**
  * Default vault root — auto-created on first use.
  * Override with BIZAR_MEMORY_VAULT env var.
+ *
+ * v5.x — moved from `~/.local/share/bizar/memory` to `~/.bizar_memory` so the
+ * vault lives at a memorable, top-level location in the user's home.
  */
-export const DEFAULT_MEMORY_VAULT = join(HOME, '.local', 'share', 'bizar', 'memory');
+export const DEFAULT_MEMORY_VAULT = join(HOME, '.bizar_memory');
+
+/**
+ * v5.x — Legacy vault path kept for migration detection only. The old
+ * `~/.local/share/bizar/memory` location is no longer the default; if a
+ * user still has notes there, `ensureVaultExists()` logs a one-time
+ * notice pointing them at the migration command.
+ */
+export const LEGACY_MEMORY_VAULT = join(HOME, '.local', 'share', 'bizar', 'memory');
 
 /**
  * Default git remote — set via BIZAR_MEMORY_GIT_REMOTE to enable sync.
  */
 export const DEFAULT_GIT_REMOTE = process.env.BIZAR_MEMORY_GIT_REMOTE || null;
 
-const BIZAR_MEMORY_ROOT = join(HOME, '.local', 'share', 'bizar', 'memory');
+const BIZAR_MEMORY_ROOT = join(HOME, '.bizar_memory');
 
 /**
  * Return the effective vault root for the default memory vault.
@@ -51,11 +68,34 @@ export function currentVault() {
  * Ensure the default memory vault directory exists and is git-initialised.
  * Idempotent — calling multiple times is safe.
  *
+ * v5.x — On first call with a fresh default vault, if the legacy
+ * `~/.local/share/bizar/memory` path exists and the new
+ * `~/.bizar_memory` doesn't, log a one-time migration notice. We do
+ * NOT auto-migrate: the user owns the data and may have already moved
+ * it, or may want to keep the old path via `BIZAR_MEMORY_VAULT`.
+ *
  * @returns {string} the vault path that was ensured
  */
 export function ensureVaultExists() {
   const vault = currentVault();
   if (!existsSync(vault)) {
+    // v5.x — Migration notice: legacy path exists, new default does not.
+    // Only emit when the user is using the default (no env override) and
+    // the new path doesn't exist yet.
+    if (
+      !process.env.BIZAR_MEMORY_VAULT &&
+      vault === DEFAULT_MEMORY_VAULT &&
+      existsSync(LEGACY_MEMORY_VAULT)
+    ) {
+      console.warn(
+        `[memory-store] Detected a legacy memory vault at ${LEGACY_MEMORY_VAULT}.\n` +
+          `[memory-store] The default location has moved to ${DEFAULT_MEMORY_VAULT}.\n` +
+          `[memory-store] To keep using the old vault, set BIZAR_MEMORY_VAULT=${LEGACY_MEMORY_VAULT}.\n` +
+          `[memory-store] To migrate, move the contents manually: ` +
+          `mv ${LEGACY_MEMORY_VAULT}/* ${DEFAULT_MEMORY_VAULT}/\n` +
+          `[memory-store] (not auto-migrated — please review before moving user data).`,
+      );
+    }
     mkdirSync(vault, { recursive: true, mode: 0o700 });
     if (!existsSync(join(vault, '.git'))) {
       try {

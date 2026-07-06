@@ -46,7 +46,8 @@ function generateComposeScaffold(outDir, opts) {
     '      - .env',
     '    volumes:',
     '      - bizar-config:/home/bizar/.config/bizar',
-    '      - bizar-memory:/home/bizar/.local/share/bizar/memory',
+    // v5.x — default memory vault relocated to ~/.bizar_memory
+    '      - bizar-memory:/home/bizar/.bizar_memory',
     '',
     'volumes:',
     '  bizar-config:',

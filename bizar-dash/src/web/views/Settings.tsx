@@ -286,19 +286,19 @@ function SettingsViewInner({ settings: initial, refreshSnapshot, settingsMode, s
       */}
 
       <div className={cn('settings-grid', activeSection && 'settings-grid-filtered')} data-active-section={activeSection || undefined}>
-        {(showAll || sectionOf('theme')) && <ThemeSection {...sp} />}
-        {(showAll || sectionOf('updates')) && <UpdatesSection />}
-        {(showAll || sectionOf('layout') || sectionOf('general')) && <GeneralSection {...sp} autoSave={autoSave} />}
-        {(showAll || sectionOf('env-vars')) && <EnvVarsSection />}
-        {(showAll || sectionOf('network') || sectionOf('service') || sectionOf('tailscale')) && <NetworkSection tailscale={tailscale} tailscaleDraft={tailscaleDraft} setTailscaleDraft={setTailscaleDraft} onTailscaleToggle={onTailscaleToggle} />}
+        {(showAll || sectionOf('theme')) && <div id="settings-theme"><ThemeSection {...sp} /></div>}
+        {(showAll || sectionOf('updates')) && <div id="settings-updates"><UpdatesSection /></div>}
+        {(showAll || sectionOf('layout') || sectionOf('general')) && <div id="settings-general"><GeneralSection {...sp} autoSave={autoSave} /></div>}
+        {(showAll || sectionOf('env-vars')) && <div id="settings-env-vars"><EnvVarsSection /></div>}
+        {(showAll || sectionOf('network') || sectionOf('service') || sectionOf('tailscale')) && <div id="settings-network"><NetworkSection tailscale={tailscale} tailscaleDraft={tailscaleDraft} setTailscaleDraft={setTailscaleDraft} onTailscaleToggle={onTailscaleToggle} /></div>}
         {(showAll || sectionOf('network') || sectionOf('tailscale')) && <TailscaleSettings initialStatus={tailscale} />}
-        {(showAll || sectionOf('notifications')) && <NotificationsSection {...sp} />}
-        {(showAll || sectionOf('auth')) && <AuthSection settings={settings} authStatus={authStatus} setAuthStatus={setAuthStatus} />}
-        {(showAll || sectionOf('agents') || sectionOf('dashboard') || sectionOf('background')) && <AgentSection {...sp} autoSave={autoSave} />}
-        {(showAll || sectionOf('system-llm')) && <SystemLlmSection {...sp} />}
-        {(showAll || sectionOf('headroom')) && <HeadroomSection settings={settings} setSettings={setSettings} setDirty={setDirty} />}
-        {(showAll || sectionOf('activity-log') || sectionOf('about')) && <ActivitySection about={about} />}
-        {(showAll || sectionOf('workspaces')) && <WorkspacesSection />}
+        {(showAll || sectionOf('notifications')) && <div id="settings-notifications"><NotificationsSection {...sp} /></div>}
+        {(showAll || sectionOf('auth')) && <div id="settings-auth"><AuthSection settings={settings} authStatus={authStatus} setAuthStatus={setAuthStatus} /></div>}
+        {(showAll || sectionOf('agents') || sectionOf('dashboard') || sectionOf('background')) && <div id="settings-agents"><AgentSection {...sp} autoSave={autoSave} /></div>}
+        {(showAll || sectionOf('system-llm')) && <div id="settings-system-llm"><SystemLlmSection {...sp} /></div>}
+        {(showAll || sectionOf('headroom')) && <div id="settings-headroom"><HeadroomSection settings={settings} setSettings={setSettings} setDirty={setDirty} /></div>}
+        {(showAll || sectionOf('activity-log') || sectionOf('about')) && <div id="settings-activity-log"><ActivitySection about={about} /></div>}
+        {(showAll || sectionOf('workspaces')) && <div id="settings-workspaces"><WorkspacesSection /></div>}
       </div>
     </div>
   );

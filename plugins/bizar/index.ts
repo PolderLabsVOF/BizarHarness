@@ -119,8 +119,18 @@ import { createBgSpawnTool } from "./src/tools/bg-spawn.js";
 import { createBgStatusTool } from "./src/tools/bg-status.js";
 import { createBgCollectTool } from "./src/tools/bg-collect.js";
 import { createBgKillTool } from "./src/tools/bg-kill.js";
+import { createBgPauseTool } from "./src/tools/bg-pause.js";
+import { createBgResumeTool } from "./src/tools/bg-resume.js";
+import { createBgReportProgressTool } from "./src/tools/bg-report-progress.js";
+import { createBgSendMessageTool } from "./src/tools/bg-send-message.js";
 import { createBgGetCommentsTool } from "./src/tools/bg-get-comments.js";
 import { createOpenKbTool } from "./src/tools/open-kb.js";
+import { createMemorySearchTool } from "./src/tools/memory-search.js";
+import { createMemoryReadTool } from "./src/tools/memory-read.js";
+import { createMemoryWriteTool } from "./src/tools/memory-write.js";
+import { createMemoryListTool } from "./src/tools/memory-list.js";
+import { createMemoryInject, popMemoryContext } from "./src/hooks/memory-inject.js";
+import { createMemoryWriteOnEnd } from "./src/hooks/memory-write-on-end.js";
 
 // v0.4.0 — visual plan flow: settings, slash commands, plan tools
 import { SettingsStore } from "./src/settings.js";
@@ -360,10 +370,25 @@ interface RuntimeContext {
   seenMessageIds: Map<string, Set<string>>;
   /** sessionID → pending system-transform message, set at warn/escalate. */
   pendingInjections: Map<string, string>;
+  /** §Memory — sessionIDs that have already received memory context. */
+  injectedSessions: Set<string>;
   /** v0.7.0-alpha.1 — Dashboard publisher (or null if disabled/not started).
    *  Used by the `event` hook to forward opencode session lifecycle
    *  events to the v2 dashboard via the @polderlabs/bizar-sdk. */
   dashboardPublisher: DashboardPublisher | null;
+  /** §Memory — injects relevant memory context at session start. */
+  memoryInject: (sessionID: string, firstMessage: string) => Promise<void>;
+  /** §Memory — writes session summary to memory vault on session end. */
+  memoryWriteOnEnd: (sessionID: string, info: {
+    sessionID: string;
+    agent: string;
+    startedAt: number;
+    endedAt: number;
+    status: "idle" | "error" | "killed";
+    error?: string;
+  }, conversationPreview: string) => Promise<void>;
+  /** §Memory — session start timestamps for duration calculation on session end. */
+  sessionStartTimes: Map<string, number>;
 }
 
 /**
@@ -652,6 +677,22 @@ let bgAvailable = false;
 
   installSignalHandlers(logger, instanceManager, serve, stream, options.stateDir);
 
+  // §Memory — compute injectedSessions and memoryInject early so they can
+  // be embedded directly in the ctx object literal (avoids TS2741).
+  const injectedSessions = new Set<string>();
+  const sessionStartTimes = new Map<string, number>();
+  const { memoryInject } = createMemoryInject({
+    injectedSessions,
+    worktree: input.worktree,
+    logger,
+    enabled: true, // TODO: gate on settings.memory.injectOnSessionStart
+  });
+  const { memoryWriteOnEnd } = createMemoryWriteOnEnd({
+    worktree: input.worktree,
+    logger,
+    enabled: true, // TODO: gate on settings.memory.writeOnSessionEnd
+  });
+
   const ctx: RuntimeContext = {
     logger,
     options,
@@ -663,7 +704,11 @@ let bgAvailable = false;
     directory: input.directory,
     seenMessageIds: new Map(),
     pendingInjections: new Map(),
+    injectedSessions,
     dashboardPublisher,
+    memoryInject,
+    memoryWriteOnEnd,
+    sessionStartTimes,
   };
 
   return buildHooks(ctx, { instanceManager, bgAvailable });
@@ -983,6 +1028,25 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       worktree: ctx.worktree,
       logger: ctx.logger,
     }),
+
+    // §Memory — Bizar Memory tools. Available to all agents; no serve
+    // child required. Worktree is passed for context (vault discovery).
+    bizar_memory_search: createMemorySearchTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+    bizar_memory_read: createMemoryReadTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+    bizar_memory_write: createMemoryWriteTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
+    bizar_memory_list: createMemoryListTool({
+      worktree: ctx.worktree,
+      logger: ctx.logger,
+    }),
   };
   const tools = bg.instanceManager
     ? {
@@ -992,6 +1056,10 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
         // src/opencode-runner.ts). The serve child is still
         // available for the dashboard's v2 protocol and for any
         // TUI/web client that wants to attach to it.
+        //
+        // v5.x — added pause/resume/steer/progress tools for
+        // dashboard integration. See tools/bg-{pause,resume,
+        // report-progress,send-message}.ts.
         bizar_spawn_background: createBgSpawnTool({
           instanceManager: bg.instanceManager,
           worktree: ctx.worktree,
@@ -1006,6 +1074,23 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
           logger: ctx.logger,
         }),
         bizar_kill: createBgKillTool({
+          instanceManager: bg.instanceManager,
+          logger: ctx.logger,
+        }),
+        bizar_pause: createBgPauseTool({
+          instanceManager: bg.instanceManager,
+          logger: ctx.logger,
+        }),
+        bizar_resume: createBgResumeTool({
+          instanceManager: bg.instanceManager,
+          logger: ctx.logger,
+        }),
+        bizar_send_message: createBgSendMessageTool({
+          instanceManager: bg.instanceManager,
+          logger: ctx.logger,
+        }),
+        // Available to ALL agents (the body of a bg agent calls it).
+        bizar_report_progress: createBgReportProgressTool({
           instanceManager: bg.instanceManager,
           logger: ctx.logger,
         }),
@@ -1039,6 +1124,14 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       if (pending) {
         output.system.push(pending);
         ctx.pendingInjections.delete(sessionID);
+      }
+
+      // §Memory — inject relevant memory context at the start of the
+      // session (first turn only). `popMemoryContext` is idempotent
+      // (marks session as injected on first call).
+      const memCtx = popMemoryContext(sessionID);
+      if (memCtx) {
+        output.system.push(memCtx);
       }
     },
 
@@ -1150,7 +1243,61 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
           });
           ctx.pendingInjections.delete(sessionID);
           ctx.seenMessageIds.delete(sessionID);
+          ctx.injectedSessions.delete(sessionID);
+          ctx.sessionStartTimes.delete(sessionID);
         }
+
+        // §Memory — on session start, fetch relevant memory context and
+        // queue it for injection via `popMemoryContext` in the transform hook.
+        if (type === "session.created") {
+          const ev2 = ev as {
+            properties?: {
+              sessionID?: string;
+              startedAt?: number;
+              [k: string]: unknown;
+            };
+            messageText?: string;
+            firstMessage?: string;
+          };
+          // Record start time for session-end duration calculation.
+          const startedAt = typeof ev2.properties?.startedAt === "number"
+            ? ev2.properties.startedAt
+            : Date.now();
+          ctx.sessionStartTimes.set(sessionID, startedAt);
+          // Extract the first user message text — different opencode versions
+          // surface this in different places; try several keys.
+          const firstMessage =
+            typeof ev2.messageText === "string"
+              ? ev2.messageText
+              : typeof ev2.firstMessage === "string"
+                ? ev2.firstMessage
+                : typeof ev.properties?.messageText === "string"
+                  ? ev.properties.messageText
+                  : "";
+          void ctx.memoryInject(sessionID, firstMessage);
+        }
+
+        // §Memory — on session end, write an automated session summary to the
+        // memory vault. Fire-and-forget — failures are logged but never throw.
+        if (type === "session.idle" || type === "session.error") {
+          const startedAt = ctx.sessionStartTimes.get(sessionID) ?? Date.now();
+          const endedAt = Date.now();
+          const errorProp = (ev as { properties?: { error?: string } }).properties?.error;
+          void ctx.memoryWriteOnEnd(
+            sessionID,
+            {
+              sessionID,
+              agent: (ev as { properties?: { agent?: string } }).properties?.agent ?? "unknown",
+              startedAt,
+              endedAt,
+              status: type === "session.idle" ? "idle" : "error",
+              error: type === "session.error" ? (errorProp ?? "unknown") : undefined,
+            },
+            "",
+          );
+          ctx.sessionStartTimes.delete(sessionID);
+        }
+
         // Other event types are no-ops on the hook side. The state file
         // is updated by `chat.message` and `tool.execute.before/after`.
       } catch (err) {

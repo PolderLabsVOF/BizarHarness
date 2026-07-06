@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 #
-# install.sh — Cross-platform BizarHarness installer (v4.4.7 — thin shell wrapper).
+# install.sh — Cross-platform BizarHarness installer (v5.x — thin shell wrapper).
 #
-# v4.4.7 — Unified installer/updater. Almost all logic now lives in
-# `cli/provision.mjs:runProvision`, which is shared between `bizar install`
-# and `bizar update`. This bash script exists only for the platform-specific
-# steps that need sudo + a system package manager:
+# v5.x — Updated for issue #7. The install/update flow now:
+#   1. On first install: registers the system service that auto-starts
+#      the dashboard (`bizar service install`).
+#   2. On update: stops the running service before files are replaced
+#      (`bizar service stop` → npm upgrade → `bizar service restart`).
+#
+# Almost all logic still lives in `cli/provision.mjs:runProvision`, which
+# is shared between `bizar install` and `bizar update`. This bash script
+# exists only for the platform-specific steps that need sudo + a system
+# package manager:
 #
 #   - Linux:  ensure node is installed (apt/dnf/pacman/zypper), install uv,
 #             python3.12, jq, gh, browser-harness, Chrome runtime libs.
@@ -20,7 +26,7 @@
 #   --non-interactive   skip prompts (CI safe)
 #   --dry-run           print actions, make no changes
 #   --force             overwrite existing files
-#   --update            this is a re-install (currently a no-op alias)
+#   --update            this is a re-install
 #   --mode=install|update|install-only-system
 #                       install = full flow (the default)
 #                       update  = alias for install (provisioner auto-detects)
@@ -145,6 +151,21 @@ ensure_node() {
       action "Installing Node.js via zypper..."
       dry $SUDO zypper install -y nodejs20 npm20
       ;;
+    alpine)
+      action "Installing Node.js via apk..."
+      dry $SUDO apk add --no-cache nodejs npm
+      ;;
+    nixos)
+      action "Detected NixOS — Node.js must be installed via nix-shell"
+      warn "Run the following, then re-run this installer:"
+      warn "  nix-shell -p nodejs python3 jq gh git"
+      warn "  node cli/provision.mjs"
+      exit 0
+      ;;
+    void)
+      action "Installing Node.js via xbps..."
+      dry $SUDO xbps-install -S nodejs
+      ;;
     *)
       err "Unsupported distro: $ID"
       err "Install Node.js 18+ manually: https://nodejs.org/"
@@ -165,6 +186,29 @@ check_deps() {
     warn "dependency detector reported missing deps — proceeding with best-effort checks"
   else
     note "all required dependencies satisfied"
+  fi
+}
+
+install_lightrag() {
+  # LightRAG is optional but recommended. Install via uv tool.
+  # uv tools install to ~/.local/bin/ — ensure that's on PATH.
+  if [ -d "$HOME/.local/bin" ] && [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
+  if have_cmd lightrag-server; then
+    note "LightRAG $(lightrag-server --version 2>/dev/null || echo 'server') present"
+    return 0
+  fi
+  action "Installing LightRAG via uv tool..."
+  if dry uv tool install "lightrag-hku[api]" 2>&1; then
+    note "LightRAG installed"
+    # Verify reachable
+    if [ -f "$HOME/.local/bin/lightrag-server" ]; then
+      note "LightRAG binary found at ~/.local/bin/"
+    fi
+  else
+    warn "LightRAG install failed — the memory graph will not be available"
+    warn "    Install later: uv tool install \"lightrag-hku[api]\""
   fi
 }
 
@@ -206,7 +250,32 @@ install_missing_deps_linux() {
         note "uv installed via astral.sh"
       fi
       ;;
+    alpine)
+      action "Installing uv, python3, jq, gh via apk..."
+      dry $SUDO apk add --no-cache python3 py3-pip jq git curl
+      if ! have_cmd uv; then
+        dry curl -LsSf https://astral.sh/uv/install.sh | sh
+        note "uv installed via astral.sh"
+      fi
+      ;;
+    void)
+      action "Installing uv, python3, jq, gh via xbps..."
+      dry $SUDO xbps-install -S python3 python3-pip jq git curl
+      if ! have_cmd uv; then
+        dry curl -LsSf https://astral.sh/uv/install.sh | sh
+        note "uv installed via astral.sh"
+      fi
+      ;;
+    nixos)
+      warn "NixOS detected — LightRAG and other uv tools require manual setup"
+      warn "  After nix-shell: nix-shell -p nodejs python3 jq gh git"
+      warn "  Then run: uv tool install \"lightrag-hku[api]\""
+      warn "  And re-run this installer: node cli/provision.mjs"
+      return 0
+      ;;
   esac
+  # LightRAG via uv tool (requires uv to be on PATH)
+  install_lightrag
 }
 
 install_missing_deps_macos() {
@@ -222,6 +291,8 @@ install_missing_deps_macos() {
   fi
   action "Installing uv, python3.12, jq, gh via brew..."
   dry brew install uv jq gh 2>/dev/null || true
+  # LightRAG via uv tool (requires uv to be on PATH)
+  install_lightrag
 }
 
 # ── Service registration (delegated to Node) ────────────────────────────────
@@ -230,6 +301,12 @@ install_service() {
   # The unified provisioner does this via `cli/service-controller.mjs`.
   # We still call it from here because the bash script may run standalone
   # (e.g. for first-boot provisioning before the npm package is set up).
+  #
+  # v5.x — issue #7: On first install, register the service so the
+  # dashboard auto-starts at login. On update, the running service is
+  # stopped by the provisioner before files are replaced, then restarted
+  # by the provisioner after — see cli/provision.mjs. This function
+  # covers the FIRST install path only.
   local bin="$REPO_DIR/cli/bin.mjs"
   if [ ! -f "$bin" ]; then
     warn "cli/bin.mjs not found — service registration deferred"
@@ -238,6 +315,10 @@ install_service() {
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
     dim "  would run: node $bin service install"
+    return 0
+  fi
+  if [ "$UPDATE_MODE" -eq 1 ]; then
+    dim "  update mode: service restart is handled by the Node provisioner"
     return 0
   fi
   if ! node "$bin" service install 2>&1; then

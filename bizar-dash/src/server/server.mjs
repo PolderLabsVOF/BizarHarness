@@ -473,6 +473,28 @@ export async function createServer({
     console.warn('[bizar-dash] headroom startup hook skipped:', err?.message || err);
   }
 
+  // v5.x — LightRAG startup hook (issue #6). Mirrors the headroom hook:
+  // reads config from .bizar/memory.json + env vars, then calls
+  // lightragStartupHook() which respects `lightrag.enabled` and the
+  // BIZAR_LIGHTRAG_AUTOSTART env override. All errors are caught — the
+  // dashboard must boot even when LightRAG can't start.
+  try {
+    const { lightragStartupHook } = await import('./memory-lightrag.mjs');
+    lightragStartupHook(projectRoot).then((r) => {
+      if (!r.ok) {
+        console.warn('[bizar-dash] lightragStartupHook:', r.error || r.reason || 'not started');
+      } else if (r.started) {
+        console.log(`[bizar-dash] lightrag auto-started (pid=${r.pid})`);
+      } else {
+        console.log(`[bizar-dash] lightrag: ${r.reason || 'not started'}`);
+      }
+    }).catch((err) => {
+      console.warn('[bizar-dash] lightragStartupHook error:', err?.message || err);
+    });
+  } catch (err) {
+    console.warn('[bizar-dash] lightrag startup hook skipped:', err?.message || err);
+  }
+
   // v5.2 — Background transcription worker for voice notes. Uploads
   // save audio immediately and enqueue the noteId here; the worker
   // drains the queue, calls Whisper (or BIZAR_WHISPER_ENDPOINT), and

@@ -2,10 +2,15 @@
  * src/server/routes/background.mjs
  *
  * /api/background                          — list
+ * /api/background (POST)                   — spawn from UI (v5.x)
  * /api/background/:id                      — single instance
  * /api/background/:id/output               — tail captured output
+ * /api/background/:id/tool-calls (GET)     — tool call history (v5.x)
  * /api/background/:id/tmux                 — tmux attach metadata
  * /api/background/:id/message (POST)       — send a follow-up message
+ * /api/background/:id/pause (POST)         — pause subprocess (v5.x)
+ * /api/background/:id/resume (POST)        — resume subprocess (v5.x)
+ * /api/background/:id/steer (POST)         — kill+respawn with new prompt (v5.x)
  * /api/background/:id/retry (POST)         — manual unstick (v3.11.0)
  * /api/background/:id (DELETE)             — kill
  *
@@ -23,10 +28,66 @@ import { wrap } from './_shared.mjs';
 export function createBackgroundRouter({ broadcast }) {
   const router = Router();
 
+  // Wire bg-spawner's broadcast so spawned agents broadcast on the
+  // existing WS bus (mirroring the way `bg-poller.mjs` does it).
+  import('../bg-spawner.mjs').then((m) => {
+    if (m && typeof m.configureSpawner === 'function') {
+      m.configureSpawner({ broadcast });
+    }
+  }).catch(() => { /* ignore — spawner optional */ });
+
   router.get('/background', wrap(async (_req, res) => {
     const { backgroundStore } = await import('../background-store.mjs');
     const instances = await backgroundStore.list();
     res.json({ instances, status: backgroundStore.status() });
+  }));
+
+  // v5.x — Spawn from UI. Body: { agent, prompt, model?, persistent?, maxRestarts?, tags?, timeoutMs?, worktree? }
+  router.post('/background', wrap(async (req, res) => {
+    const body = req.body || {};
+    const agent = String(body.agent || '').trim();
+    const prompt = String(body.prompt || '').trim();
+    const worktree = body.worktree ? String(body.worktree) : process.cwd();
+    if (!agent || !prompt) {
+      res.status(400).json({ error: 'bad_request', message: 'agent and prompt are required' });
+      return;
+    }
+    let model;
+    if (body.model && typeof body.model === 'string') {
+      const idx = body.model.indexOf('/');
+      if (idx > 0) {
+        model = {
+          providerID: body.model.slice(0, idx).trim(),
+          modelID: body.model.slice(idx + 1).trim(),
+        };
+      }
+    }
+    const tags = Array.isArray(body.tags)
+      ? body.tags.filter((t) => typeof t === 'string').slice(0, 10)
+      : undefined;
+    const { spawnBgAgent } = await import('../bg-spawner.mjs');
+    const result = await spawnBgAgent({
+      agent,
+      prompt,
+      worktree,
+      model,
+      timeoutMs: Number(body.timeoutMs) || 300_000,
+      persistent: Boolean(body.persistent),
+      maxRestarts: Number(body.maxRestarts) || 3,
+      tags,
+    });
+    if (result.error) {
+      res.status(500).json({ error: 'spawn_failed', message: result.error, instanceId: result.instanceId });
+      return;
+    }
+    res.status(201).json({
+      instanceId: result.instanceId,
+      sessionId: result.sessionId ?? null,
+      processId: result.processId ?? null,
+      status: 'pending',
+      agent,
+      worktree,
+    });
   }));
 
   router.get('/background/:id', wrap(async (req, res) => {
@@ -44,6 +105,73 @@ export function createBackgroundRouter({ broadcast }) {
     const lines = Math.min(500, Math.max(1, parseInt(req.query.lines || '50', 10) || 50));
     const result = backgroundStore.captureOutput(req.params.id, lines);
     res.json(result);
+  }));
+
+  // v5.x — Tool-call history. The state file carries a `toolCalls`
+  // array populated by the plugin's InstanceManager as it observes
+  // opencode events. This endpoint is read-only; the plugin owns the
+  // shape.
+  router.get('/background/:id/tool-calls', wrap(async (req, res) => {
+    const { backgroundStore } = await import('../background-store.mjs');
+    const inst = backgroundStore.get(req.params.id);
+    if (!inst) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const calls = Array.isArray(inst.toolCalls) ? inst.toolCalls : [];
+    res.json({ instanceId: req.params.id, toolCalls: calls, count: calls.length });
+  }));
+
+  // v5.x — Pause. SIGSTOP the subprocess.
+  router.post('/background/:id/pause', wrap(async (req, res) => {
+    const { pauseBgAgent } = await import('../bg-spawner.mjs');
+    const result = pauseBgAgent(req.params.id);
+    if (!result.ok) {
+      res.status(result.error === 'unsupported_on_win32' ? 501 : 400).json({ ok: false, error: result.error });
+      return;
+    }
+    broadcast({ type: 'background:change', id: req.params.id, status: 'paused' });
+    res.json({ ok: true, status: 'paused' });
+  }));
+
+  // v5.x — Resume. SIGCONT the subprocess.
+  router.post('/background/:id/resume', wrap(async (req, res) => {
+    const { resumeBgAgent } = await import('../bg-spawner.mjs');
+    const result = resumeBgAgent(req.params.id);
+    if (!result.ok) {
+      res.status(result.error === 'unsupported_on_win32' ? 501 : 400).json({ ok: false, error: result.error });
+      return;
+    }
+    broadcast({ type: 'background:change', id: req.params.id, status: 'running' });
+    res.json({ ok: true, status: 'running' });
+  }));
+
+  // v5.x — Steer (kill+restart with appended prompt). Body: { message }.
+  router.post('/background/:id/steer', wrap(async (req, res) => {
+    const message = String((req.body && req.body.message) || '').trim();
+    if (!message) {
+      res.status(400).json({ ok: false, error: 'message_empty' });
+      return;
+    }
+    const { steerBgAgent } = await import('../bg-spawner.mjs');
+    const result = await steerBgAgent(req.params.id, message);
+    if (!result.ok) {
+      res.status(400).json({ ok: false, error: result.error });
+      return;
+    }
+    broadcast({
+      type: 'background:change',
+      id: req.params.id,
+      status: 'steered',
+      newInstanceId: result.newInstanceId,
+    });
+    broadcast({
+      type: 'background:change',
+      id: result.newInstanceId,
+      status: 'pending',
+      parentInstanceId: req.params.id,
+    });
+    res.json({ ok: true, status: 'steered', newInstanceId: result.newInstanceId, processId: result.processId });
   }));
 
   // v3.5.5 — Tmux session metadata. The UI uses this to render an
@@ -126,6 +254,21 @@ export function createBackgroundRouter({ broadcast }) {
   }));
 
   router.delete('/background/:id', wrap(async (req, res) => {
+    // v5.x — Prefer the dashboard-side spawner's kill for instances
+    // that we own (spawned via POST /background). Falls back to the
+    // plugin's tmux/abort path for instances spawned by the plugin.
+    try {
+      const { isAlive: spawnerAlive, killBgAgent } = await import('../bg-spawner.mjs');
+      if (spawnerAlive(req.params.id)) {
+        const r = await killBgAgent(req.params.id, { signal: 'SIGTERM' });
+        if (r.ok) {
+          broadcast({ type: 'background:change', action: 'kill', id: req.params.id, source: 'dashboard' });
+          res.json({ ok: true, instanceId: req.params.id, source: 'dashboard' });
+          return;
+        }
+      }
+    } catch { /* ignore — fall through to legacy */ }
+
     const { backgroundStore } = await import('../background-store.mjs');
     // v3.5.4 (bug #3) — `kill()` is now async (it awaits the abortSession
     // HTTP call to opencode serve, then deletes the state file, then

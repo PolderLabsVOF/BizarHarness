@@ -30,6 +30,7 @@ import { Tasks } from './views/Tasks';
 import { Activity } from './views/Activity';
 import { Config } from './views/Config';
 import { SettingsView } from './views/Settings';
+import { Marketplace } from './views/Marketplace';
 import { Mods } from './views/Mods';
 import { Plugins } from './views/Plugins';
 import { ModView, type ModView as ModViewType } from './views/ModView';
@@ -47,6 +48,7 @@ import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
 import { AlertTriangle, Globe, LayoutTemplate, X } from 'lucide-react';
 import './styles/main.css';
+import './styles/settings.css';
 
 type ViewProps = {
   snapshot: Snapshot;
@@ -90,6 +92,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   background: BackgroundAgents,
   config: Config,
   settings: SettingsView,
+  marketplace: Marketplace,
   mods: Mods,
   schedules: Schedules,
   skills: Skills,

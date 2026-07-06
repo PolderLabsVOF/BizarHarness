@@ -260,7 +260,7 @@ ${stack.runner ? `- Dev: \`${stack.runner}\`` : ''}
             name: 'memoryMode',
             message: 'Memory backend',
             choices: [
-              { name: 'managed (shared user-level repo at ~/.local/share/bizar/memory/bizar-memory/)', value: 'managed' },
+              { name: 'managed (shared user-level repo at ~/.bizar_memory/bizar-memory/)', value: 'managed' },
               { name: 'local-only (vault stays in this project at .obsidian/)', value: 'local-only' },
             ],
             default: 'managed',

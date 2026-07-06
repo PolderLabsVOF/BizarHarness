@@ -223,10 +223,10 @@ Bizar stores long-term memory in a **project memory vault** — Markdown files m
 
 ### Session Start
 
-1. Run `bizar memory search "<topic>"` to find relevant prior context.
-2. Read project-level index entries: `bizar memory search "project_index"` or browse notes with `bizar memory list`.
-3. Read the most recent session summaries: `bizar memory search "session_summary"`.
-4. If a relevant decision note exists, read it by path with `cat <vault-path>/projects/<projectId>/decisions/<name>.md`.
+1. Run `bizar_memory_search({ query: "<topic>" })` to find relevant prior context (the plugin's session-start hook also auto-injects relevant memory at session creation).
+2. Read project-level index entries: `bizar_memory_search({ query: "project_index" })` or browse notes with `bizar_memory_list({})`.
+3. Read the most recent session summaries: `bizar_memory_search({ query: "session_summary" })`.
+4. If a relevant decision note exists, read it by path with `bizar_memory_read({ path: "projects/<projectId>/decisions/<name>.md" })`.
 
 ### During Work
 
@@ -388,7 +388,7 @@ The following rules apply to every agent at all times. They are the single sourc
 - Bizar does not have a single knowledge cutoff shared by all models. Subagents may run on DeepSeek V4 Flash (opencode-zen, free tier) or MiniMax M2.7 / M3, each with their own training window.
 - For facts that change quickly (current positions, prices, breaking news) or anything that could have changed recently, **search before answering**: use `websearch` and `webfetch` or delegate to `@mimir` for deep research.
 - For stable technical knowledge (language semantics, well-established APIs, mathematical truths), answer directly without search.
-- Default to running `bizar memory search "<topic>"` at session start to retrieve prior project context before answering anything project-specific.
+- Default to running `bizar_memory_search({ query: "<topic>" })` at session start to retrieve prior project context before answering anything project-specific. (The plugin also auto-injects relevant memory via the session-start hook — agents don't need to manually call this if the hook is active.)
 - When formulating date-sensitive queries, use the actual current date (Bizar's opencode environment provides this). Do not hardcode years.
 - Do not over-rely on memory; if uncertain, search. Confabulating costs the user more than searching.
 
@@ -629,7 +629,7 @@ Rules:
 The memory vault uses three namespaces: `projects/<projectId>/` (project-specific), `global/bizar/` (cross-project), and `users/<userId>/` (personal). Run `bizar memory status` from the project root to see the active mode and resolved path. The user has been working on this project — their notes contain the real context, the gotchas, the failed approaches, the preferred patterns. **Read the relevant vault entries before making any non-trivial decision.**
 
 **When to read:**
-- At the start of every session: `bizar memory search "<topic>"` for relevant notes.
+- At the start of every session: the plugin's session-start hook auto-injects relevant memory context. You can also call `bizar_memory_search({ query: "<topic>" })` explicitly.
 - Before any non-trivial implementation decision: check for ADRs or design notes.
 - When you're about to suggest something the user has already tried.
 - When the codebase feels like it's working around something you don't understand.

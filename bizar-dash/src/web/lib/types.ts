@@ -687,13 +687,25 @@ export type SearchResult = {
  */
 export type BgInstance = {
   instanceId: string;
-  status?: 'pending' | 'running' | 'done' | 'failed' | 'killed' | 'timed_out' | string;
+  status?:
+    | 'pending'
+    | 'running'
+    | 'paused'
+    | 'done'
+    | 'failed'
+    | 'killed'
+    | 'timed_out'
+    | 'steered'
+    | string;
   agent?: string;
   prompt?: string;
   startedAt?: number;
   completedAt?: number;
   currentStep?: string | null;
+  /** v5.x — Progress percentage (0..100; -1 = indeterminate). */
   progress?: number;
+  /** v5.x — Free-form progress message. */
+  progressMessage?: string;
   toolCallCount?: number;
   tmuxSession?: string;
   tmuxActive?: boolean;
@@ -706,6 +718,32 @@ export type BgInstance = {
   resultPreview?: string;
   lastEventAt?: number;
   taskId?: string;
+  // v5.x — extended dashboard surface
+  /** PID of the opencode run subprocess (for pause/resume/steer). */
+  processId?: number;
+  /** Free-form runner state from the opencode-runner. */
+  runnerState?: string;
+  /** Tags from spawn. */
+  tags?: string[];
+  /** Epoch ms when the subprocess was paused. */
+  pausedAt?: number;
+  /** When the instance was steered. */
+  steeredAt?: number;
+};
+
+/**
+ * v5.x — Per-tool-call history entry, surfaced by the
+ * `bizar_status` tool and the `/api/background/:id/tool-calls` endpoint.
+ */
+export type BgToolCall = {
+  id: string;
+  name: string;
+  args?: string;
+  status: 'running' | 'ok' | 'error';
+  startedAt: number;
+  endedAt?: number;
+  result?: string;
+  error?: string;
 };
 
 export type BackgroundListResponse = {

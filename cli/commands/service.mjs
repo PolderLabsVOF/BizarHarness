@@ -35,6 +35,8 @@ export function showServiceHelp() {
     bizar service follow           Follow the service log until Ctrl-C
     bizar service install          Register with systemd / launchd / scheduled task
     bizar service install --force  Re-install even when the unit matches
+    bizar service restart          Stop, reinstall unit, start (used by update)
+    bizar service restart --force  Reinstall the unit before starting
     bizar service uninstall        Remove the OS-level autostart
     bizar service uninstall --force  Force-uninstall even when nothing is registered
 
@@ -49,6 +51,11 @@ export function showServiceHelp() {
     ("BizarDashboardService", ONSTART, HIGHEST) on Windows. After
     install, a normal user does not need to run \`bizar service start\`
     for the dashboard background process — the OS does it at login.
+
+    restart stops the running daemon, reinstalls the unit (so the
+    freshly-installed code is loaded), and starts it again. This is
+    what \`bizar update\` uses to pick up the new binary without leaving
+    the old one running.
 
   Tailscale Integration (v5.2):
     TAILSCALE_AUTHKEY=${tsAuthkey}

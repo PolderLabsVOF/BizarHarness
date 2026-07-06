@@ -1,7 +1,7 @@
 // src/components/SettingsNav.tsx — v4.9.0 full-sidebar settings navigation.
 // Shown in the sidebar rail when settingsMode is active. All sections are
 // visible at once; clicking one scrolls the Settings view to that section.
-import { ChevronRight, Palette, Terminal, Boxes, Brain, Cpu, RefreshCw, Sparkles, Gauge, Archive, ArrowLeft, LayoutGrid, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Palette, Terminal, Cpu, RefreshCw, Gauge, ArrowLeft, LayoutGrid, type LucideIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export type SettingsSection = {
@@ -28,8 +28,6 @@ const SECTION_GROUPS: SettingsSectionGroup[] = [
     label: 'Core',
     sections: [
       { id: 'env-vars', label: 'Env Vars', icon: Terminal },
-      { id: 'providers', label: 'Providers', icon: Boxes },
-      { id: 'memory', label: 'Memory', icon: Brain },
       { id: 'system-llm', label: 'System LLM', icon: Cpu },
     ],
   },
@@ -37,14 +35,7 @@ const SECTION_GROUPS: SettingsSectionGroup[] = [
     label: 'Experience',
     sections: [
       { id: 'updates', label: 'Updates', icon: RefreshCw },
-      { id: 'skills', label: 'Skills', icon: Sparkles },
       { id: 'headroom', label: 'Headroom', icon: Gauge },
-    ],
-  },
-  {
-    label: 'Data',
-    sections: [
-      { id: 'backup', label: 'Backup', icon: Archive },
     ],
   },
 ];

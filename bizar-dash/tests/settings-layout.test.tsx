@@ -57,7 +57,7 @@ describe('Sidebar — settingsMode', () => {
     // Should NOT show the normal tab rail
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     // Should show the back button
-    expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exit settings/i })).toBeInTheDocument();
     // Should show section groups (use selector to avoid duplicate text matches)
     expect(screen.getByText('General', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
     expect(screen.getByText('Core', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
@@ -109,8 +109,8 @@ describe('Sidebar — settingsMode', () => {
         onExitSettings={onExitSettings}
       />,
     );
-    await user.click(screen.getByRole('button', { name: /memory/i }));
-    expect(onSettingsSectionChange).toHaveBeenCalledWith('memory');
+    await user.click(screen.getByRole('button', { name: /env vars/i }));
+    expect(onSettingsSectionChange).toHaveBeenCalledWith('env-vars');
   });
 
   it('calls onTabChange when a normal sidebar tab is clicked', async () => {

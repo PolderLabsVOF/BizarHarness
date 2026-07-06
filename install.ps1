@@ -1,15 +1,20 @@
 <#
 .SYNOPSIS
-  BizarHarness Windows installer (PowerShell, v4.4.7 — thin wrapper).
+  BizarHarness Windows installer (PowerShell, v5.x — thin wrapper).
 
 .DESCRIPTION
-  Cross-platform installer for BizarHarness on Windows. v4.4.7 is a
+  Cross-platform installer for BizarHarness on Windows. v5.x is a
   thin wrapper that:
     1. Installs Windows-specific system deps (Node.js, git, jq) via
        winget → choco → npm fallback.
     2. Shells to `node cli/provision.mjs --mode=install` for everything
        else (agent files, plugin copy, opencode.json patching, skills
        install, service registration via Task Scheduler, doctor check).
+
+  v5.x — issue #7: On first install, registers the system service that
+  auto-starts the dashboard at logon. On update mode, the service is
+  stopped, the upgrade runs, and the service is restarted (so the
+  freshly-installed code is loaded).
 
   Linux/macOS users should use install.sh instead.
 
@@ -115,6 +120,34 @@ function Install-WindowsDeps {
 
   if (Have-Cmd uv) { Write-Note "uv present" }
   elseif (Have-Cmd winget) { if (-not $DryRun) { winget install --id astral-sh.uv --accept-source-agreements --accept-package-agreements | Out-Null } }
+
+  # LightRAG via uv tool (optional but recommended for memory graph)
+  if (Have-Cmd uv) {
+    $uvBinDir = Join-Path $env:LOCALAPPDATA 'uv\data\tools\.bin'
+    $lightragExe = if ($env:LOCALAPPDATA) { Join-Path $uvBinDir 'lightrag-server.exe' } else { $null }
+    if ($lightragExe -and (Test-Path $lightragExe -ErrorAction SilentlyContinue)) {
+      Write-Note "LightRAG server present"
+    } else {
+      Write-Action "Installing LightRAG via uv tool..."
+      if (-not $DryRun) {
+        try {
+          $proc = Start-Process -FilePath 'uv' -ArgumentList @('tool', 'install', 'lightrag-hku[api]') -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq $null) {
+            Write-Note "LightRAG installed"
+          } else {
+            Write-Warn "LightRAG install failed — memory graph will not be available"
+            Write-Dim "  Install later: uv tool install `"lightrag-hku[api]`""
+          }
+        } catch {
+          Write-Warn "LightRAG install failed — memory graph will not be available"
+          Write-Dim "  Install later: uv tool install `"lightrag-hku[api]`""
+        }
+      }
+    }
+  } else {
+    Write-Dim "  uv not found — LightRAG not installed. Install uv then run:"
+    Write-Dim "    uv tool install `"lightrag-hku[api]`""
+  }
 }
 
 # ── Service registration (delegated to Node) ───────────────────────────────
@@ -127,6 +160,15 @@ function Install-Service {
   }
   if ($DryRun) {
     Write-Dim "would run: node $bin service install"
+    return
+  }
+  if ($Update) {
+    # v5.x — issue #7. Update mode: the provisioner will stop the
+    # running service, replace files, and restart it. We don't call
+    # installService here because the unit may have been registered
+    # already and the provisioner is the right place to do stop/
+    # reinstall/start atomically.
+    Write-Dim "update mode: service restart is handled by the Node provisioner"
     return
   }
   $p = Start-Process -FilePath node -ArgumentList @($bin, 'service', 'install') -Wait -PassThru -NoNewWindow

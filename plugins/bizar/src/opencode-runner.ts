@@ -51,7 +51,13 @@ import { createWriteStream, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Subprocess } from "bun";
 
-export type AgentState = "starting" | "running" | "done" | "failed" | "killed";
+export type AgentState =
+  | "starting"
+  | "running"
+  | "paused"
+  | "done"
+  | "failed"
+  | "killed";
 
 export interface AgentStatus {
   state: AgentState;
@@ -371,6 +377,86 @@ export function killAgent(
     }
   }, 5_000);
   return { ok: true };
+}
+
+/**
+ * v5.x — Pause a tracked agent by sending SIGSTOP. POSIX only —
+ * Windows has no signal model and returns `ok: false`. Idempotent
+ * against an exited process (returns `ok: true` with a note).
+ *
+ * The agent's `state` flips to `"paused"` so {@link getStatus}
+ * reflects the new lifecycle accurately.
+ */
+export function pauseAgent(
+  processId: number,
+): { ok: boolean; error?: string } {
+  if (process.platform === "win32") {
+    return { ok: false, error: "pause unsupported on win32" };
+  }
+  const rec = agents.get(processId);
+  if (!rec) return { ok: false, error: "no such process" };
+  if (rec.status.endedAt !== undefined) return { ok: true, error: "already_exited" };
+  if (rec.status.state === "paused") return { ok: true };
+  try {
+    rec.proc.kill("SIGSTOP");
+    rec.status.state = "paused";
+    return { ok: true };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: `SIGSTOP failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * v5.x — Resume a paused agent by sending SIGCONT. POSIX only. No-op
+ * against an exited process.
+ */
+export function resumeAgent(
+  processId: number,
+): { ok: boolean; error?: string } {
+  if (process.platform === "win32") {
+    return { ok: false, error: "resume unsupported on win32" };
+  }
+  const rec = agents.get(processId);
+  if (!rec) return { ok: false, error: "no such process" };
+  if (rec.status.endedAt !== undefined) return { ok: true, error: "already_exited" };
+  if (rec.status.state !== "paused") return { ok: true };
+  try {
+    rec.proc.kill("SIGCONT");
+    rec.status.state = "running";
+    return { ok: true };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: `SIGCONT failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * v5.x — Liveness check for a previously spawned PID. Uses
+ * `process.kill(pid, 0)` which sends no signal — it just probes the
+ * process table. Returns `false` for unknown / exited PIDs and on
+ * permission errors.
+ *
+ * NOTE: this is a separate registry from the in-memory `agents` map.
+ * After a plugin restart, the in-memory map is empty but the
+ * underlying PID may still be alive. The function probes the OS, so
+ * it answers the underlying question even when the agent record has
+ * been forgotten.
+ */
+export function isAlive(processId: number): boolean {
+  if (!Number.isFinite(processId) || processId <= 0) return false;
+  try {
+    // Signal 0 = probe only. Returns true if the process exists and
+    // we have permission to signal it.
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -1,1549 +1,542 @@
-# BizarHarness — Roadmap, Findings, Improvements & Feature Suggestions
+# BizarHarness Roadmap
 
-**Generated**: 2026-07-05
-**Last Updated**: 2026-07-05 (post-v4.7.0)
-**Scope**: Synthesis of 5+ research streams covering the CLI, installer, dashboard server, dashboard web frontend, opencode plugin/SDK, skills/docs, and cross-cutting security/performance/a11y concerns. Targets BizarHarness v4.5.x → v5.0.
+**Last updated**: 2026-07-06
+**Current version**: v5.0.1
+**Reading order**: this file → `FINAL_GOAL.md` (the vision) → `.obsidian/projects/current-state-analysis-2026-07-06.md` (the baseline).
 
-> **This file is the living roadmap for BizarHarness.** Every release updates it. Bug fixes and feature additions mark items as `[RESOLVED in vX.Y.Z]` or `[PARTIAL]`. New findings extend the §3 backlog and the §10 new features list. The §11 roadmap tracks the next 3-6 months.
-
-This document is the single source of truth for what should change in BizarHarness over the next 6 months. It consolidates every finding from the research streams (CLI/installer, dashboard server, dashboard web, cross-cutting audit, plugin/SDK, skills/docs), groups them by impact and effort, and proposes a sequenced roadmap. Bug fixes already applied this session are credited. Remaining work is itemized with file references and proposed solutions. New features that would meaningfully extend the product (multi-user teams, plugin marketplace, voice notes, plugin marketplace) are described with effort estimates. Use this to drive sprint planning.
-
-**Status (2026-07-05):** v4.5.0, v4.5.1, v4.5.2, v4.7.0 have shipped. See §13 "What's Done" for what was resolved in each release. v4.6 + v4.7 (Quality & Stability + Performance & Polish) are DONE. Remaining: v4.8 (Memory & Knowledge) and v5.0 (Major release with multi-user).
-
-> **Active focus (post-v4.7.0):**
-> 1. Investigate mobile bundle > desktop size discrepancy (476 KB vs 372 KB)
-> 2. Refactor Settings.tsx (1823 lines) into sub-components
-> 3. OpenTelemetry export
-> 4. Complete WCAG 2.2 AA compliance
-> 5. v4.8 features: voice notes, web clipper, memory graph visualization
+This is the **strategic** roadmap. Bug-fix lists, deployment notes, and per-release changelogs live in `CHANGELOG.md`. The "what works today / what's missing" inventory is in the current-state analysis. This document is about where we are going and how we get there.
 
 ---
 
-## Section 1: Executive Summary
+## 1. TL;DR
 
-### Top 5 Critical Issues Found (Outstanding, post-v4.7.0)
-
-1. **Mobile JS bundle (476 KB) is larger than desktop (372 KB)** — mobile users download *more* JavaScript than desktop users, which is backwards. Root cause unknown. (`vite.config.ts` + `mobile.tsx`) — *[DEFERRED to v4.8]*
-2. **OpenTelemetry export not yet implemented** — distributed tracing missing for cross-service debugging. — *[Active Focus #3]*
-3. **Full WCAG 2.2 AA compliance only partial** — Settings.tsx still has bulk unlabeled form inputs, activity feed lacks `aria-live`, color-only indicators remain. — *[Active Focus #4]*
-4. **Settings.tsx is 1,823 lines** — needs split into sub-components for maintainability + a11y scoping. — *[Active Focus #2]*
-5. **Multi-user / team workspaces not started** — single-operator only; teams need shared state. (v5.0)
-
-### Top 5 Critical Issues Resolved in v4.7.0
-
-1. ✓ **`bin.mjs` 1498 → 275 lines** and **`artifact.mjs` 2121 → 63 lines** — split into `cli/commands/` (10 modules) and `cli/artifact-{cli,server,render}.mjs`.
-2. ✓ **Structured logging** — `logger.mjs` JSON logger with debug/info/warn/error + `child()` + `BIZAR_LOG_LEVEL`.
-3. ✓ **Metrics endpoint** — `GET /metrics` in Prometheus format with `http_requests_total` + `ws_clients`.
-4. ✓ **Web frontend test infrastructure** — `vitest + jsdom + RTL`; 75 tests across components/hooks/lib; `npm run test:web`.
-5. ✓ **Virtual scrolling** — hand-rolled `<VirtualList>` used in 4 views (ChatThread, Overview, Activity, History).
-
-### Top 5 Quick Wins (Each < 1 day)
-
-1. ✓ **[v4.5.2]** Add `--json` global output flag** to `bizar doctor`, `bizar status`, `bizar usage`, `bizar memory status` so the CLI is scriptable.
-2. ✓ **[v4.5.2]** Add `--debug` / `--verbose` global flag** that flips all empty catch blocks to log warnings via `DEBUG=bizar:*`.
-3. ✓ **[v4.5.2]** Set `sourcemap: 'hidden'` in `vite.config.ts:15`** to drop the 3 MB of source maps shipped in the npm tarball.
-4. ✓ **[v4.5.2]** Add `.npmignore` entries** for `bizar-dash/dist/*.map` and `**/__tests__/` to keep the tarball lean.
-5. ✓ **[v4.7.0]** Centralize `which()` and `bizarConfigDir()`** into `cli/utils.mjs` — they're reimplemented in 3+ files. (Cross-cutting audit §2.1, CLI §10 R4/R5)
-
-### Top 5 Architectural Improvements (Multi-day)
-
-1. ✓ **[v4.7.0]** Split `cli/bin.mjs` into `cli/commands/*.mjs`** — one file per command family (install, dash, minimax, mod, artifact, memory, headroom, util). `bin.mjs` shrunk to 275 lines.
-2. ✓ **[v4.7.0]** Split `cli/artifact.mjs` into three modules**: CLI dispatch, HTTP server, HTML rendering. `artifact.mjs` shrunk to 63 lines (re-export).
-3. **Introduce a router + `React.lazy()`** to the web frontend so each view is a separate bundle. Removes 200+ KB from initial paint. (Suspense wrapper landed — F24; per-view lazy pending)
-4. ✓ **[v4.7.0]** Introduce structured logging** (`logger.mjs`) across `bizar-dash/src/server/`. Add log levels (`info/warn/error/debug`); correlation IDs still pending.
-5. ✓ **[v4.7.0]** Add a metrics endpoint** (`/metrics` in Prometheus format) to the server. `http_requests_total` + `ws_clients` wired; histograms scaffolded.
-
-### Top 5 New Feature Ideas (Preview — see §10 for full list)
-
-1. **Multi-user / Team Workspaces** — shared tasks, comments, @-mentions. Currently single-operator. (Effort: L)
-2. **Plugin Marketplace** — install mods/plugins from a public registry (CLI flag `--from-registry`). Unlocks community contributions. (Effort: L)
-3. **Voice Notes → Transcripts** — record in mobile app, Whisper transcription, store in memory vault. (Effort: M)
-4. **One-click Deploy** — `bizar deploy --to vercel` / `cloudflare` / `fly`. Reads `bizar` config, creates appropriate infra. (Effort: M)
-5. **Eval Framework Integration** — `bizar eval run <suite>` with golden-file fixtures for agent evaluation. (Effort: M)
+- **What Bizar is**: a Norse-pantheon multi-agent platform for opencode. 12 agent definitions, a CLI, a dashboard, a memory service, and an opencode plugin — all in one npm package (`@polderlabs/bizar`).
+- **Where it is**: v5.0.1, 566 tests passing, ~25k lines of code, mature CLI/dashboard/plugin subsystems. Solid for one-shot and short-horizon work. **L2 on the autonomy scale** (semi-autonomous, multi-step with checkpoints).
+- **Where it's going**: **L4 by v6.x** (autonomous with HITL escalations), **L5 by v7.x** (fully autonomous long-horizon with strategic HITL), plus **Pillar 6: Specialist Research Agents** — a tier of research specialists (Mimir, Veritas, Codex, Praxis) with a dedicated dashboard tab for evidence-based work across all other pillars. See `FINAL_GOAL.md` §2 and `ROADMAP.md` §5.6.
+- **Top 3 in flight**: (1) wrapping up the v5.x quality/polish line (issues #1-#8 fixed, MiniMax swap, dashboard layout pass); (2) designing the runtime agent orchestrator (the Tier 1 unlock); (3) growing the self-improvement loop into a measured, automated system.
+- **Top 1 needing help**: distributed-systems / agent-runtime engineering. The runtime orchestrator is the bottleneck for everything in Tier 1+. See §9 Contributing.
 
 ---
 
-## Section 2: Bugs Fixed in This Session
+## 2. Current State (v5.x)
 
-All fixes verified — full `npm test` passes (388/388) + `npm run test:web` passes (75/75) = **463 total / 0 fail**. `tsc --noEmit` clean. This section now consolidates fixes across all four releases (v4.5.0, v4.5.1, v4.5.2, v4.7.0). For a higher-level narrative of what shipped in each release, see §13.
+Brief. For the full inventory, see `.obsidian/projects/current-state-analysis-2026-07-06.md` — this section is the executive summary.
 
-### 2.1 Cross-cutting audit (v4.5.2 prep — F1–F7)
+**Shipped and working** (with file:line refs into the analysis):
+- 12 agents defined in `config/agents/` (odin/frigg/vor/mimir/heimdall/hermod/thor/baldr/tyr/vidarr/forseti/quick) — analysis §4
+- CLI: 15+ command modules, install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate — analysis §3
+- Dashboard server: v1 on `:4097`, v2 on `:4098`, 18 memory endpoints, structured logging, Prometheus `/metrics` — analysis §3
+- Dashboard web: 17 views (Overview, Chat, Tasks, Memory, Doctor, …) with auto-save settings, kanban tasks, plan canvas — analysis §3
+- Opencode plugin: 7 custom tools, background agent system (stall detection, loop guard, tool-call cap, 8-instance cap), 50% context compaction — analysis §3
+- Memory service: 3 vault modes (off/local-only/managed/linked), 11 CLI subcommands, 18 REST endpoints, Obsidian-compatible Markdown, git-backed sync, secret scanning — analysis §3 / §7
+- Self-improvement: `.bizar/AGENTS_SELF_IMPROVEMENT.md` (1,139 lines, 15 active rules) — analysis §7
+- 566 tests (388 npm + 178 vitest), 0 failing
 
-The original 7 cross-cutting fixes from the research sweep:
+**The architectural gap** (analysis §12, eight gaps):
+1. No runtime agent orchestrator — agents are prompts, not services.
+2. No true parallel execution — `task` calls are sequential.
+3. No long-horizon infrastructure — tasks timeout at 5-30 min, no checkpoint/resume, no session persistence.
+4. No automated self-improvement loop — manual log, not a learning system.
+5. No real HITL — plan approval is 2s polling, no in-chat, no interrupt.
+6. No cross-session memory — memory is passive, not auto-injected.
+7. No task planning / decomposition — decomposition is LLM-driven, no DAGs.
+8. No cost enforcement — cost tiers are labels, not budgets.
 
-| # | Bug | File | Line(s) | Fix Description |
-|---|-----|------|---------|-----------------|
-| F1 | vitest CVE-2025-30208 (arbitrary file read via Vitest UI) | `package.json` | 87 | Bumped `vitest@^2.1.0` → `^4.1.9` |
-| F2 | `/proc/net/tcp` reads fail on macOS/Windows | `headroom.mjs` | 121 | Tightened to early-return on non-linux with a platform guard |
-| F3 | 27 empty `catch { /* ignore */ }` blocks hiding errors | `server.mjs` (13), `watcher.mjs` (1), `mods-loader.mjs` (5), `schedules-runner.mjs` (2), `routes/memory.mjs` (4), `routes/lightrag.mjs` (2) | various | Added `console.warn(\`[module] swallowed: ${err.message}\`)` to each |
-| F4 | `MiniMaxUsage.tsx` stale closure on `timeRange` | `bizar-dash/src/web/views/MiniMaxUsage.tsx` (AnalyticsView load effect) | ~load effect | Added `customFrom`, `customTo` to `useEffect` deps |
-| F5 | Missing `AbortController` lets state updates fire on unmounted components | `api.ts` + `Skills`, `Settings`, `MemoryOverview`, `Overview` views | various | Threaded optional `AbortSignal` through the API client and added cancellation to the 4 views |
-| F6 | Duplicate `:root` block redefining `--space-*` and status colors | `bizar-dash/src/web/styles/main.css` | 159-167 vs 219-221 (and 132-138 vs 208-211) | Merged duplicate definitions so the v3.21.x values win cleanly |
-| F7 | No error boundaries — render crash takes down whole dashboard | `bizar-dash/src/web/App.tsx` (renderedView) | — | Added `ViewErrorBoundary` class component, wrapped `{renderedView}` |
-
-### 2.2 v4.5.2 — CLI + installer bug fixes
-
-| # | Bug | File | Fix |
-|---|-----|------|-----|
-| F8 | `parseWithModsFlag` accepts `--with-mods` with no value silently | `cli/bin.mjs` | Now exits with code 2 + clear error when value is empty |
-| F9 | `dashboard` deprecation warning written to stderr | `cli/bin.mjs:1332-1336` | Switched to `process.stdout.write` with `Deprecated:` prefix |
-| F10 | `install.ps1` stray closing braces + invalid `elseif` chain | `install.ps1:113,117` | Removed extra `}`; restructured `if/elseif/else` chains |
-| F11 | `install.ps1` Start-Process splatting wrong (`@($provision) + $args`) | `install.ps1:167` | Build array first, then `-ArgumentList @(node, $provision, $mode, ...)` |
-| F12 | `install.sh` banner printed before provisioner succeeds | `install.sh:252-271` | Moved banner to after provisioner exits 0 |
-| F13 | `npm install -g` had no timeout (could hang on dead mirror) | `cli/provision.mjs:449` | Added 10-minute timeout; `ETIMEDOUT` → exit code 4 |
-| F14 | `check-deps.mjs` Windows path joining broken | `scripts/check-deps.mjs:70-92` | Use `path.win32.join()`; iterate `.exe`/`.cmd` extensions; added `--json` flag |
-| F15 | New deps not covered by check-deps (pip, python3, headroom, semble, skills, jq, gh) | `scripts/check-deps.mjs` | Added all required checks |
-| F16 | `cli/artifact.mjs` WSL browser detection wrong | `cli/artifact.mjs` | Detect via `/proc/version` + `WSL_INTEROP`; fall back to `cmd.exe /c start` |
-
-### 2.3 v4.5.2 — Dashboard server bug fixes
-
-| # | Bug | File | Fix |
-|---|-----|------|-----|
-| F17 | `providers-store.mjs` reads/parses `opencode.json` on every API call | `bizar-dash/src/server/providers-store.mjs:49-58` | 1-second debounced cache (with mtime/size stamp check); `invalidateOpencodeJsonCache()` on writes |
-| F18 | `server.mjs buildSnapshot` did a fresh read | `bizar-dash/src/server/server.mjs:724-753` | Now uses the cached read |
-| F19 | Chat per-session SSE delta buffer unbounded | `bizar-dash/src/server/routes/chat.mjs` | Cap at 1000 deltas; drop oldest with warning when exceeded |
-| F20 | `memory-lightrag.mjs` silent catches (extra context) | `bizar-dash/src/server/memory-lightrag.mjs` | Added `console.warn('[lightrag] swallowed in <context>:', err.message)` to all silent catches |
-
-### 2.4 v4.5.2 — Dashboard web + build bug fixes
-
-| # | Bug | File | Fix |
-|---|-----|------|-----|
-| F21 | Source maps shipped in npm tarball (~3 MB) | `vite.config.ts:15` | Set `sourcemap: 'hidden'` |
-| F22 | `.npmignore` didn't exclude `dist/*.map`, `__tests__/`, `*.test.{mjs,ts,tsx}` | `.npmignore` | Added three exclude rules |
-| F23 | `Toast.tsx` had no `role="alert"` for errors | `bizar-dash/src/web/components/Toast.tsx` | `role="alert" aria-live="assertive" aria-atomic="true"` |
-| F24 | `App.tsx` had no Suspense boundary for lazy components | `bizar-dash/src/web/App.tsx` | Suspense wrapper with `Spinner` fallback |
-| F25 | Topbar tabs lacked `role="tablist"` / `aria-selected` | `bizar-dash/src/web/components/Topbar.tsx` | Added `role="tablist"`, `role="tab"`, `aria-selected` |
-| F26 | Redundant `api.get('/snapshot')` refetch on WS file-change events | `bizar-dash/src/web/App.tsx` | Removed the redundant refetch |
-| F27 | Activity/task/chat lists had no `content-visibility` hint | `bizar-dash/src/web/styles/main.css` | Added `content-visibility: auto` on `.activity-item`, `.task-card`, `.chat-message` |
-| F28 | Heavy view components re-rendered every 5s | `App.tsx:635-647` | Wrapped `Tasks`, `Settings`, `Memory`, `Overview`, `Skills`, `MiniMaxUsage` in `React.memo()` |
-
-### 2.5 v4.5.0 — Major feature bug fixes (from chat+skills+settings overhaul)
-
-| # | Bug | Fix |
-|---|-----|-----|
-| F29 | "Can't open an opencode session" (SSE per-session event gating broken) | New per-session event gating; SSE reconnect-with-backoff in `useChat.ts` |
-| F30 | "Can't create a new session" (bare `fetch('/chat/sessions')` → 404) | New `POST/PATCH/DELETE /api/opencode-sessions[/...]` endpoints |
-| F31 | Skills tab only showed `skills` CLI output, not Bizar skills | Rewrote Skills tab to render Bizar skill library |
-| F32 | Skills search returned terminal ASCII garbage | Switched to human-readable output renderer |
-| F33 | Agent picker in Tasks.tsx conflated agent and project context | Agent picker removed; task creation simplified |
-
-### 2.6 v4.5.1 — Headroom + Memory tab bug fixes
-
-| # | Bug | Fix |
-|---|-----|-----|
-| F34 | Doc reference to `headroom plan --tokens` (broken/removed) | `.opencode/instructions/bizar-tools.md` rewritten with Headroom 0.30.0 commands |
-| F35 | `cli/bin.mjs` syntax error (mismatched quote/backtick near line 915) | Fixed string delimiter — module now compiles |
-| F36 | Headroom not auto-wired on dashboard startup | New `headroom.mjs` module + auto-install/wrap/start on startup (try/catch) |
-
-### 2.7 Diff Stats (Approximate, all releases combined)
-
-- `package.json`: 1 line changed (vitest bump)
-- `headroom.mjs`: 3 lines added (platform check) + full Headroom module in v4.5.1
-- ~50 empty catches: ~50 lines added (warn statements)
-- `MiniMaxUsage.tsx`: 1 dep array change
-- `api.ts` + 4 views: ~80 lines net (AbortSignal threading)
-- `main.css`: ~30 lines deleted (duplicates); +content-visibility rules
-- `App.tsx`: ~30 lines added (ErrorBoundary class + import + wrap); +Suspense; +React.memo wraps; removed redundant snapshot refetch
-- `ViewErrorBoundary.tsx`: ~25 lines new file
-- 10 CLI/installer fixes spanning install.ps1, install.sh, bin.mjs, artifact.mjs, check-deps.mjs, provision.mjs
-- 4 server fixes in providers-store / chat / memory-lightrag / buildSnapshot
-- 8 web/build fixes in vite config, .npmignore, Toast, App, Topbar, main.css
+These eight gaps define Tier 1 and Tier 2 of the roadmap below. Every other improvement ladders up to one of them.
 
 ---
 
-## Section 3: Bugs Found (Not Yet Fixed)
+## 3. Vision & Strategy
 
-High-confidence bugs from all streams, grouped by severity. Each lists file:line, root cause, and the smallest viable fix.
+**The Final Goal** (verbatim from `FINAL_GOAL.md`):
 
-### CRITICAL
+> Bizar is a fully autonomous AI agent development platform for long-running, long-horizon tasks with human-in-the-loop elements.
 
-#### **[FIXED in v4.5.2]** B-C1: `bin.mjs` accepts `--with-mods` with no value silently
-- **Was**: `cli/bin.mjs:1086-1095` — `parseWithModsFlag()` returned `[]` if next arg missing or started with `--`. User error was masked.
-- **Resolution (v4.5.2)**: Now exits with code 2 and prints a clear error when the flag is found without a CSV value.
+The vision decomposes into **five pillars**:
 
-#### **[FIXED in v4.5.2]** B-C2: `install.ps1` has stray closing braces + invalid `elseif` chain
-- **Was**: `install.ps1:113,117` — extra `}` after each install block; `if/elseif/elseif/else { } elseif` invalid.
-- **Resolution (v4.5.2)**: Restructured chains with single closing brace; no `elseif` after terminal `else`.
+1. **Loops** — agents that run iteratively (recurring, refinement, exploration).
+2. **Multi-Agent Validation** — multiple agents independently work the same problem; consensus drives action.
+3. **Agent Hierarchy** — structured delegation: Odin (strategic) → Tyr (architectural) → Thor (modular) → Heimdall (mechanical), with Hermod handling gitops and Forseti auditing.
+4. **Agent Council** — N-agent vote for high-stakes decisions; size and rule vary by action class.
+5. **Constant Self-Improvement** — closed-loop: outcomes → patterns → rules → applied rules → better outcomes.
 
-#### **[FIXED in v4.5.2]** B-C3: `install.ps1` Start-Process argument splatting is wrong
-- **Was**: `install.ps1:167` — `@($provision) + $args` didn't splat as intended; `$args` auto-variable overwritten.
-- **Resolution (v4.5.2)**: Build array first; explicit `-ArgumentList @(node, $provision, $mode, ...)`.
+Read `FINAL_GOAL.md` for the full treatment. The rest of this document is the execution plan.
 
-### HIGH
+**Strategy principles** (every tier in §4 is checked against these):
 
-#### **[FIXED in v4.5.2]** B-H1: `dashboard` deprecation warning goes to stderr
-- **Was**: `cli/bin.mjs:1332-1336` — `console.warn()` writes to stderr. Tools piping stderr for errors interpret deprecation as failure.
-- **Resolution (v4.5.2)**: Switched to `process.stdout.write` with `Deprecated:` prefix.
-
-#### **[FIXED in v4.5.2]** B-H2: `bin.mjs:1180-1210` — `npm install -g ${pkg}@latest` no timeout
-- **Was**: `cli/provision.mjs:449` — `spawnSync('npm', ['install', '-g', ...])` could hang on dead mirror, auth prompt, or slow network.
-- **Resolution (v4.5.2)**: 10-minute timeout; `ETIMEDOUT` → exit code 4 with `mirror timeout — try again` message.
-
-#### **[FIXED in v4.5.2]** B-H3: `check-deps.mjs` Windows path joining is broken
-- **Was**: `scripts/check-deps.mjs:70-92` — used `/` separator instead of `path.join()`. PATHEXT extension handling not applied per-path.
-- **Resolution (v4.5.2)**: `path.win32.join()`; iterate `.exe`/`.cmd` extensions; `--json` flag added.
-
-#### B-H4: `parseWithModsFlag` doesn't validate mod ID pattern
-- **File**: `cli/bin.mjs:1086-1095`
-- **Root cause**: Splits on commas, trims, but doesn't regex-check `^[a-z0-9-]+$`. Bogus IDs reach the dashboard and produce a confusing 400.
-- **Fix**: Validate each entry; reject anything not matching the pattern with a clear error.
-
-#### B-H5: v1 dashboard routes have no auth at all
-- **File**: `bizar-dash/src/server/server.mjs` (entire v1 surface)
-- **Root cause**: v1 server listens on `:4097` without `requireAuth` middleware. Any local process can hit `/api/projects`, `/api/chat`, etc.
-- **Status**: Open — *intentionally skipped* per v4.5.2 changelog ("Auth-related items intentionally skipped — Tailscale handles auth").
-- **Fix**: Add the same `requireAuth` + loopback-trust logic that v2 uses. Or: remove v1 entirely (only v2 is documented) — this is the cheaper path.
-
-### MEDIUM
-
-#### B-M1: `MiniMaxUsage.tsx` `useAutoGrowTextarea` deps
-- **File**: `bizar-dash/src/web/components/chat/useAutoGrowTextarea.ts`
-- **Root cause**: Resize effect likely missing `[value]` dep. (F4 fixed `AnalyticsView` load, but the textarea hook wasn't audited.)
-- **Fix**: Add `value` to the effect dep array, or use a ref-based pattern.
-
-#### B-M2: `Providers._expanded` state lost on snapshot refresh
-- **File**: `bizar-dash/src/web/views/Providers.tsx`
-- **Root cause**: `useState` initializer reads `snapshot.providers` on mount only. Every 5s poll refetches snapshot → init isn't re-run → expansion state appears to reset.
-- **Fix**: Move `_expanded` into the snapshot state via API, or store in `localStorage` keyed by provider ID.
-
-#### B-M3: `BacklogPanel` `confirm()` blocks event loop
-- **File**: `bizar-dash/src/web/components/tasks/BacklogPanel.tsx`
-- **Root cause**: Native `window.confirm('Delete this task?')` is blocking, inaccessible, and unstyled. The project already has `KillConfirmDialog` infrastructure.
-- **Fix**: Replace with `useModal().showConfirm(...)` or `KillConfirmDialog`.
-
-#### B-M4: `BacklogPanel` promote doesn't trigger snapshot refresh
-- **File**: `bizar-dash/src/web/components/tasks/BacklogPanel.tsx`
-- **Root cause**: `onPromote(task.id)` removes optimistically; parent handler doesn't always call `refreshSnapshot()`. Next poll can re-add the task.
-- **Fix**: Have `onPromote` await the API call then call `refreshSnapshot()`. Or rely on WS `tasks:change` broadcast (verify it fires).
-
-#### B-M5: Schedules "Other..." timezone has no UI handling
-- **File**: `bizar-dash/src/web/views/Schedules.tsx:40-48`
-- **Root cause**: Comment says "Other…" lets operator type any zone, but the visible UI shows only the 7 hardcoded options.
-- **Fix**: Add a free-form input when "Other" is selected.
-
-#### B-M6: SSE/WS token in URL lands in browser history
-- **File**: `api.ts:74-91` (mitigated), `auth.mjs:187-189`, `ws.ts:29`
-- **Root cause**: `?token=` query param is required for EventSource/WebSocket (no custom headers). Stripped via `replaceState` but if a redirect happens before strip runs, token leaks to referrer.
-- **Fix**: Move the `pickupTokenFromUrl()` call as early as possible (module load) and consider reading token from `document.cookie` only.
-
-#### B-M7: WebSocket has no message queue
-- **File**: `bizar-dash/src/web/lib/ws.ts`
-- **Root cause**: Messages sent while disconnected are silently dropped (no buffer).
-- **Fix**: Add a bounded (100-msg) queue in `ws.ts` that drains on reconnection.
-
-#### B-M8: `/api/auth/reveal` returns token in plaintext response body
-- **File**: `bizar-dash/src/server/routes/auth.mjs:57`
-- **Root cause**: Endpoint echoes full token. Proxy/access logs may capture it.
-- **Fix**: Return only a partial display ("abc...xyz") with a "copy to clipboard" UI affordance.
-
-#### B-M9: `15` instances of `Math.random()` for IDs
-- **Files**: `providers-store.mjs:1289`, `routes-v2/sessions.mjs:108`, `minimax.mjs:316,334,500`, `mods-loader.mjs:795`, `Modal.tsx:66`, `useChat.ts:701`, `opencode-session-detail.mjs:206`, `task-delegator.mjs:64`, `routes/chat.mjs:102,121,292,526`, `serve-info.mjs:443`
-- **Root cause**: Non-cryptographic but still inappropriate for IDs that might be used in URLs or DB keys.
-- **Fix**: Replace with `crypto.randomUUID()` (Node 14.17+ / modern browsers).
-
-### LOW
-
-#### B-L1: 228 KB CSS bundle — no tree-shaking verification
-- **File**: `vite.config.ts`
-- **Root cause**: Tailwind/CSS-in-CSS likely includes all components even unused ones. Dead-code elimination not verified.
-- **Fix**: Run `vite build` with `--mode production` and audit the `dist/*.css` for unused selectors via `purgecss` or Coverage tool.
-
-#### B-L2: `applying-flash` animation hint without `:focus-visible`
-- **File**: `bizar-dash/src/web/styles/main.css`
-- **Root cause**: `setting-flash` animation exists but no consistent `:focus-visible` ring on keyboard-focusable elements.
-- **Fix**: Add a global `*:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }`.
-
-#### B-L3: `console.log` vs `console.error` mix
-- **File**: many — see §4 R11
-- **Root cause**: Inconsistent across files. `artifact.mjs:1101` logs request to stderr, errors to stdout.
-- **Status**: *Partial fix in v4.7.0* — `dashboard` deprecation now goes to stdout (F9); `routes/*.mjs` console.log/error replaced with structured logger (S-R6 ✓). Full cross-module convention still pending (R11).
-- **Fix**: Adopt convention: informational → stdout, errors/warnings → stderr.
-
-#### B-L4: Stale port file read in `bin.mjs:395`
-- **File**: `cli/bin.mjs:395`
-- **Root cause**: Reads port file without checking if PID is still alive. If dashboard crashes, commands report "not running" only on port bind error.
-- **Status**: Open (was identified but not explicitly resolved by v4.5.2).
-- **Fix**: Read PID from port file, `kill -0` to check liveness, treat stale as "not running".
-
-#### **[FIXED in v4.5.2]** B-L5: Install banner prints before provisioner succeeds
-- **Was**: `install.sh:252-271` — user saw celebratory banner then failure message.
-- **Resolution (v4.5.2)**: Banner moved to *after* the provisioner exits 0.
-
-#### B-L6: 50+ empty `catch { /* ignore */ }` blocks remain
-- **Files**: `server.mjs:282-287,621`, `auth.mjs:84-86`, `memory-lightrag.mjs`, `mods-loader.mjs`, `dialog-store.mjs`
-- **Root cause**: 27 were fixed in v4.5.2 prep; ~23 remained after v4.5.2. v4.7.0 added rate-limited logging to the remaining 6 in `memory-lightrag.mjs`.
-- **Status**: *Nearly complete* — ~6 rate-limited catches remain after v4.7.0 (down from ~50 at start, down from ~23 after v4.5.2).
-- **Fix**: Rate-limited logger pattern (already applied in `memory-lightrag.mjs`). Apply to the last 6.
+- **Long-horizon first.** The 5-minute task is already solved. Optimize for the 5-hour and 5-day tasks.
+- **HITL as a primitive, not an afterthought.** Every autonomous capability must declare its HITL posture (strategic / blocking / observational / background).
+- **Ladder up.** A feature either advances a pillar or it doesn't ship. We are ruthless about cutting what doesn't.
+- **Ship the foundation, then the intelligence.** A runtime orchestrator without smart agents is a scaffold. Smart agents without a runtime is a demo. Build the runtime first (Tier 1-2), then the intelligence (Tier 3).
 
 ---
 
-## Section 4: Improvements — CLI & Installer
+## 4. Roadmap Tiers
 
-Source: `.obsidian/projects/cli-installer-analysis.md` (460 lines).
+Organized by horizon: Now (Tier 0), Next (Tiers 1-2), Later (Tier 3), Future (Tier 4).
 
-### 4.1 File Inventory & Health
+### Tier 0 — Now (v5.x in flight)
 
-| File | Lines | Quality | Status | Priority to Split |
-|------|-------|---------|--------|-------------------|
-| `cli/bin.mjs` | 1464 | Overgrown: 7 help functions + 4 inline commands + 2 dashboard loaders + bootstrap | open | **HIGH** |
-| `cli/artifact.mjs` | ~2100 | Three responsibilities (CLI, HTTP server, HTML rendering) | open | **HIGH** |
-| `cli/provision.mjs` | 1261 | Well-structured, idempotent | ✓ | ✓ |
-| `cli/install.mjs` | 593 | Thin wrapper + 430 lines of legacy interactive | open | MEDIUM |
-| `cli/copy.mjs` | 586 | Solid, atomic writes | ✓ | ✓ |
-| `cli/utils.mjs` | 155 | Clean | ✓ | ✓ |
-| `cli/doctor.mjs` | 306 | Well-structured, testable | ✓ | ✓ |
-| `install.sh` | 359 | Solid distro detection | ✓ [v4.5.2 banner order fixed] | LOW |
-| `install.ps1` | 187 | Adequate; install.ps1 bugs B-C2/B-C3 fixed in v4.5.2 | ✓ [v4.5.2] | MEDIUM |
-| `scripts/check-deps.mjs` | 317 | Coverage gaps closing; new deps + `--json` added v4.5.2 | ✓ [v4.5.2 partial] | MEDIUM |
+**Goal**: finish what's started. Polish, fix, and stabilize the v5.x line. No new architectural work.
 
-### 4.2 Duplicated Utilities (Eliminate)
+**In flight** (active, targeted for v5.0.2 / v5.1):
 
-| Utility | Defined In | Recommendation |
-|---------|-----------|----------------|
-| `which()` | `doctor.mjs:76`, `bg.mjs:94`, `provision.mjs:81`, `utils.mjs:41` | Move to `utils.mjs`, export from one place (R4) |
-| `bizarConfigDir()` | `bin.mjs:65-74`, `provision.mjs:58-67`, `doctor.mjs:53-57` | Move to `utils.mjs` (R5) |
-| `readJSON()` / `readTextSafe()` | `provision.mjs:90-106` + inline in `bin.mjs`, `artifact.mjs` | Centralize as `readJSON(path)` in `utils.mjs` |
-| `detectState()` called 3× | `provision.mjs:969,487,902` | Cache result and pass through (R9) |
+- **Issues #1-#8** (`issues.md`) — all just shipped in v5.0.1 and v5.0.2 prep:
+  - Settings sidebar styling + functional buttons
+  - Marketplace differentiation from Overview
+  - Schedules page button styling
+  - Default memory vault path (`~/.local/share/bizar/memory` — `config/opencode.json` and `bizar-dash/src/server/memory-store.mjs`)
+  - Headroom + LightRAG auto-start on dashboard boot (`bizar-dash/src/server/headroom.mjs`, `bizar-dash/src/server/server.mjs` startup hooks)
+  - System service auto-start on install/update (`cli/provision.mjs` service install + `cli/commands/update.mjs` kill-update-redeploy sequence)
+  - UI consistency audit pass on every page (32px top padding, 16-20px card gaps — `bizar-dash/src/web/styles/main.css`)
+- **MiniMax swap** — 6 agent files updated from `opencode/deepseek-v4-flash-free` to `minimax/MiniMax-M2.7` / `MiniMax-M3` (see `config/agents/{tyr,odin,forseti,vidarr,quick,frigg,vor,heimdall,hermod,thor,baldr,mimir}.md`).
+- **Doctor page stabilization** — 30s auto-refresh, 5 health panels (`bizar-dash/src/web/views/Doctor.tsx`).
+- **Settings auto-save** — `useAutosave` hook + `<AutosaveField>` wired into General + Agent sections (`bizar-dash/src/web/components/hooks/useAutosave.ts`).
 
-### 4.3 Help Text Improvements
+**Carry-over bugs (post-v5.0.1)** — see §6 Backlog for the full P0/P1/P2 list. Top three: B-M3 (`BacklogPanel` uses native `confirm()`), B-M7 (no WS message queue), B-MOBILE-1 (mobile bundle > desktop).
 
-| Help Function | File | Status |
-|---------------|------|--------|
-| `showInstallHelp()` | bin.mjs | Detailed ✓ |
-| `showUpdateHelp()` | bin.mjs | Detailed ✓ |
-| `showServiceHelp()` | bin.mjs | Detailed ✓ |
-| `showTestGateHelp()` | bin.mjs:248-251 | One-line — needs usage, examples, flags |
-| `showMemoryHelp()` | bin.mjs:1008-1014 | Single-line — needs examples |
-| `showAuditHelp()`, `showInitHelp()`, `showExportHelp()` | bin.mjs | Minimal |
+**Out of scope for Tier 0**: any new agent capability, any new HITL mechanism, any runtime work. Tier 0 is the closing of v5.
 
-### 4.4 Cross-Platform Gaps
+### Tier 1 — Next: Runtime Foundation (v6.0)
 
-| OS / Distro | Status | Notes |
-|-------------|--------|-------|
-| Ubuntu/Debian | ✓ | Best supported |
-| Fedora/RHEL | ✓ | Good |
-| Arch/Manjaro | ✓ | Good |
-| openSUSE | ✓ | Package names may be wrong |
-| Alpine | ✗ | No musl detection |
-| Void / NixOS | ✗ | No `/etc/os-release` match |
-| Windows (no WSL) | Partial | install.ps1 syntax broken, no Headroom/system deps |
-| macOS | Thin | brew uv/jq/gh only; check-deps works |
+**Goal**: the big pivot. Replace "agents as prompts running sequentially in an opencode session" with "agents as services dispatched by a runtime orchestrator."
 
-Headroom auto-install disabled on Windows (`copy.mjs:361-363`) and Graphify install disabled on Windows (`install.mjs:385-388`) — both are stubs that should either be completed or hidden behind a feature flag.
+**Key deliverables** (all blocks the others):
 
-### 4.5 Flag Consistency Audit
+- **Runtime agent orchestrator** — a lightweight Node.js service (`bizar-orchestrator/`) that:
+  - Owns the agent definitions in `config/agents/`
+  - Receives work requests (from CLI, dashboard, schedule, web)
+  - Decomposes via Odin (LLM-driven decomposition) or accepts a pre-built plan
+  - Dispatches to agents via the plugin's background spawn + persistent sessions
+  - Tracks state across restarts (writes to `~/.local/share/bizar/orchestrator/`)
+  - Exposes REST + WS APIs for dashboard visibility
+  - Enforces the Forseti gate at Tier 4/5 dispatch
+- **Session persistence for background agents** — `plugins/bizar/src/background.ts` writes active instance state to disk; orchestrator reloads on startup. Closes the "if you restart, you lose" gap (analysis §5).
+- **In-chat plan approval** — replace `plugins/bizar/src/tools/wait-for-feedback.ts` 2s polling with WS push from plan server. Add approve/reject/comment buttons inline in `Chat.tsx`. Closes gap 5.
+- **Task queue replacing 8-instance cap** — orchestrator owns the queue; 8 → 64 with priority + deadline awareness. Closes gap 3 partially.
+- **Structured planning (DAGs)** — plans become graphs (`plans/<slug>/dag.json`) with explicit dependencies, parallel branches, per-step status. UI: re-render the plan canvas as a graph view. Closes gap 7.
+- **Checkpoint / resume** — background agents checkpoint after each tool call (or every N steps); orchestrator resumes from last checkpoint on restart. Closes the rest of gap 3.
+- **Research agent scaffolding** — `config/agents/` gets Veritas, Codex, and Praxis agent definitions (see `FINAL_GOAL.md` §2). Mimir is repurposed as the broad-research generalist with query-planning capability.
+- **Research tab UI shell** — scaffold in `bizar-dash/src/web/views/Research.tsx`: query input, source panel stub, session list. Ships in Tier 1 as a non-functional shell; backend wiring is Tier 2.
 
-| Flag | Used In | Issue | Status |
-|------|---------|-------|--------|
-| `--dry-run` | install, update, repair | ✓ Consistent | ✓ |
-| `--force` | install, update, repair, dev-link, service install | ✓ Consistent | ✓ |
-| `--yes`/`-y` | update, minimax | `--yes` is long-only vs `--force` — inconsistent | open |
-| `--no-restart` | update | Negative form — prefer `--restart=always\|never`; **kept as `bizar update --no-restart`** per v4.5.0 design (S4 §7) | ✓ [v4.5.0 — shipped] |
-| `--with-mods a,b,c` | install, update | Accepts both space and `=`, both forms valid — unify; **silent empty value now errors out** in v4.5.2 | ✓ [v4.5.2 partial] |
-| `--check` / `--channel` / `--json` / `--debug` | update / global CLI | New global flags added in v4.5.0/v4.5.2 | ✓ [v4.5.0 + v4.5.2] |
+**Exit criteria for Tier 1**:
+- A 4-hour task can be submitted via CLI or dashboard and complete without any process restart killing it.
+- A plan with 5 parallel branches executes with all 5 running concurrently (real fork-join, not sequential `task` calls).
+- A plan approval flow uses push, not polling.
+- The Forseti gate is enforced in code, not just in prompt text.
 
-### 4.6 check-deps.mjs Coverage Gaps
+**Effort**: 8-12 weeks. The orchestrator is the single biggest piece of work in the project; everything else in Tier 1 hangs off it.
 
-Current checks (post-v4.5.2): node, bun, opencode, tmux, git, **pip, python3, headroom, semble, skills, jq, gh** (added v4.5.2).
+### Tier 2 — Next: Long-Horizon (v6.x)
 
-**Coverage closed in v4.5.2**:
-- ✓ [v4.5.2] pip / pipx / uv (Python)
-- ✓ [v4.5.2] python3.8+
-- ✓ [v4.5.2] jq
-- ✓ [v4.5.2] gh (GitHub CLI)
-- ✓ [v4.5.2] headroom, semble, skills (Bizar internals)
-- open — chalk, boxen (npm runtime — bundled, low priority)
+**Goal**: the runtime works for hours. Make it work for days and weeks.
 
-### 4.7 Empty Catch Blocks (Beyond What F3 + F20 Fixed)
+**Key deliverables**:
 
-~50+ instances originally. v4.5.2 audit (F3 + F20) fixed 27 + ~5 lightrag catches. Remaining clusters:
-- `artifact.mjs:543,656,690,1034` — four more
-- `bin.mjs:535,538,552` — three more
-- `provision.mjs:113,247,270,396,406,514,830,888` — eight more
-- `mod-*.mjs` (loader/security/registry) — ~12 more
-- `auth.mjs:84-86`, `dialog-store.mjs`, `provider-store.mjs` — several more
+- **DAG-based planning execution** — the planner (Tier 1's DAG output) becomes the runtime's source of truth. Each DAG node is a background agent slot. Dependencies block execution; parallel branches run concurrently; failures propagate up.
+- **Interruptible agents** — `bizar_pause` / `bizar_resume` / `bizar_interrupt` tools. Suspend a running background agent without losing state. The human can redirect mid-execution.
+- **Durable result store** — background results don't disappear after `bizar_collect`. They land in `~/.local/share/bizar/orchestrator/results/<run-id>/` with structured metadata. UI: searchable history with diff/replay.
+- **Multi-day task demonstrations** — three reference workflows shipped as defaults: a multi-PR refactor, a codebase migration, an ongoing security monitor. Each is a runnable example that proves the runtime.
+- **Session replay** — every agent run can be replayed from its event log. Used for debugging, postmortem, and (in Tier 3) training data for self-improvement.
+- **Specialist research agents live** — Veritas (primary-source verification), Codex (knowledge synthesis), and Praxis (live monitoring + recurring feeds) are operational. Mimir's query-planning capability is wired to the orchestrator.
+- **Research → memory vault pipeline** — `~/.bizar_memory/research/<slug>.md` namespace with structured frontmatter (query, sources, confidence, date). "Save to memory" button on the Research tab writes here; Praxis reads from here for recurring feeds.
+- **Scheduled research feeds** — Praxis runs on the schedule system (`bizar-dash/src/server/routes/schedules.mjs`). Users can turn any one-shot research into a periodic feed with a configurable interval.
 
-**Status**: *Partial fix* — ~32 fixed (F3 + F20 + v4.5.2 lightrag catches); ~23 remain (see Active Focus). Apply the same `console.warn` pattern from F3.
+**Exit criteria for Tier 2**:
+- A user can submit a 3-day task, walk away, and come back to either a completed result or a clean handoff.
+- A user can pause a running agent, give it new instructions, and resume.
+- Every background result is replayable.
+- Three reference long-horizon workflows are demonstrable end-to-end.
 
-### 4.8 Test Coverage Gaps
+**Effort**: 6-8 weeks after Tier 1 lands.
 
-| File | Risk | Status | Priority |
-|------|------|--------|----------|
-| `bin.mjs` | Critical — 1464 lines, sparse tests | partial — cli-bugfixes.test.mjs (v4.5.2) | HIGH |
-| `provision.mjs` | Critical — install/update flow | partial — cli-bugfixes.test.mjs (v4.5.2) | HIGH |
-| `install.mjs` | High — 430 lines of legacy interactive | open | HIGH |
-| `copy.mjs` | High — atomic writes untested | open | MEDIUM |
-| `utils.mjs` | Medium | open | MEDIUM |
-| `install.sh` / `install.ps1` | Medium | open | LOW |
-| `check-deps.mjs` | Medium | partial — cli-bugfixes.test.mjs (v4.5.2) | MEDIUM |
+### Tier 3 — Later: Intelligence (v7.x)
 
-### 4.9 Recommended Refactors R1–R12
+**Goal**: the runtime becomes self-improving. The agents get smarter with use.
 
-| # | Refactor | Status | Notes |
-|---|----------|--------|-------|
-| R1 | Split `bin.mjs` into `cli/commands/` | ✓ [v4.7.0] | bin.mjs 1498→275 lines; 10 new command modules under `cli/commands/` |
-| R2 | Split `artifact.mjs` into 3 modules | ✓ [v4.7.0] | artifact.mjs 2121→63 lines (re-export); `artifact-cli/server/render.mjs` |
-| R3 | Eliminate empty catch blocks | ✓ [v4.7.0 — ~6 rate-limited remains] | ~49 of ~55 fixed across v4.5.2 + v4.7.0; remaining 6 rate-limited |
-| R4 | Centralize `which()` | ✓ [v4.7.0] | centralized in `cli/utils.mjs` |
-| R5 | Centralize `bizarConfigDir()` | ✓ [v4.7.0] | centralized in `cli/utils.mjs` |
-| R6 | `--json` global output flag | ✓ [v4.5.2] | doctor / usage / memory status scriptable |
-| R7 | `--debug` / `--verbose` global | ✓ [v4.5.2] | `DEBUG=bizar:*` + `BIZAR_DEBUG=1` |
-| R8 | Standardized exit codes | ✓ [v4.5.2] | 0/1/2/3/4 enforced |
-| R9 | Cache `detectState()` result | open | |
-| R10 | Banner after success | ✓ [v4.5.2] | `install.sh` banner moved (B-L5) |
-| R11 | Logging consistency convention | partial — `dashboard` deprecation → stdout (F9); `routes/*.mjs` replaced with structured logger (v4.7.0); full cross-module convention still pending | |
-| R12 | Extract shared flag parsing | partial — `parseWithModsFlag` errors when empty (F8); extraction to `utils.mjs` pending | |
+**Key deliverables** (one per pillar — see §5 for the full breakdown):
 
-#### R1 (HIGH): Split `bin.mjs` into `cli/commands/` ✓ [v4.7.0]
+- **Multi-agent validation as a primitive** — any task can opt into N-way validation. Cost-metered. Configurable per task class.
+- **Agent council implementation** — the trigger rules from `FINAL_GOAL.md` §2.4 become runtime code. Solo execution, peer review, trio, or quorum depending on action class. All votes logged with reasoning.
+- **Agent hierarchy enforcement** — the tree from `FINAL_GOAL.md` §2.3 is mechanically enforced. A Thor session cannot edit a file outside its task scope. A Tyr session cannot call implementation tools. Permissions are runtime checks, not prompt instructions.
+- **Automated self-improvement loop** — outcomes recorded → patterns clustered → rules proposed → rules tested on past tasks → rules applied to future agents. The current `AGENTS_SELF_IMPROVEMENT.md` becomes the input, not the output.
+- **Cross-session memory injection** — at session start, the orchestrator queries the memory service for relevant past decisions and injects the top-K. At session end, the orchestrator auto-writes a structured session summary.
+- **Cross-council research verification** — when a council convenes (Pillar 4), each member runs an independent Veritas check on the claims in the proposal. Diverging source quality is surfaced as an additional axis of disagreement.
+- **Automatic research trigger on stale knowledge** — the orchestrator flags when a decision depends on knowledge older than a configurable threshold (e.g., "CVEs older than 30 days for this library"). A Praxis feed is auto-spawned to refresh it before the council meets.
 
-**Shipped in v4.7.0**:
-- `bin.mjs`: 1498 → 275 lines (bootstrap + flag parse + dispatch)
-- 10 new command modules under `cli/commands/`:
-  ```
-  cli/commands/
-  ├── install.mjs    # install, update
-  ├── service.mjs    # service start/stop/status/install/uninstall
-  ├── dash.mjs       # dash start/stop/status/cleanup/tui
-  ├── minimax.mjs    # status/remains/test/config/clear/reset
-  ├── headroom.mjs   # status/stats/install/wrap/unwrap/start/stop/doctor
-  ├── mod.mjs        # install/upgrade/list/registry
-  ├── artifact.mjs   # new/open/list/delete/export/templates
-  ├── memory.mjs     # init/setup/status/etc
-  └── util.mjs       # doctor, repair, test-gate, dev-link, dev-unlink, usage, bg, audit, init, export
-  ```
-- `--help` / `--version` global flag handling fixed.
+**Exit criteria for Tier 3**:
+- A high-stakes action (merge to main) cannot be executed without a council vote.
+- An agent that violates its hierarchy scope is rejected by the orchestrator, not by the prompt.
+- A new rule promoted by the self-improvement loop demonstrably improves outcomes on a held-out test.
+- A returning agent that worked on a related task 30 days ago has relevant context at session start.
 
-#### R2 (HIGH): Split `artifact.mjs` into Three Files ✓ [v4.7.0]
+**Effort**: 10-14 weeks. The self-improvement loop is the most research-y piece; expect iteration.
 
-**Shipped in v4.7.0**:
-- `cli/artifact-cli.mjs` — CLI dispatch, flag parsing
-- `cli/artifact-server.mjs` — HTTP server, request routing
-- `cli/artifact-render.mjs` — HTML fragments, Markdown export, canvas helpers
-- `cli/artifact.mjs` shrunk from 2121 → 63 lines (now a thin re-export shim).
+### Tier 4 — Future: Scale (v8.x+)
 
-#### R3 (MEDIUM): Eliminate Empty Catch Blocks ✓ [v4.7.0 — 6 remain rate-limited]
+**Goal**: Bizar scales beyond a single user on a single machine.
 
-Replace `catch { /* ignore */ }` with:
-- `catch (err) { logger.debug('...', err.message); }` for expected failures
-- `catch (err) { logger.warn('...', err.message); }` for recoverable failures
-- Let unexpected errors propagate (or log at `error`)
-- **Status**: ~49 of ~55 fixed across v4.5.2 + v4.7.0. Remaining 6 in `memory-lightrag.mjs` are rate-limited. See §7 / B-L6.
+- **Fork-join parallelism at scale** — orchestrator coordinates N concurrent agents across M machines. Work-stealing, resource-aware scheduling.
+- **Cost-aware routing engine** — orchestrator tracks actual token costs per task, enforces budgets, routes to the cheapest capable model. Closes gap 8.
+- **Public plugin registry** — ship `registry.json`, `bizar mod publish`, `bizar mod search`. Automated security review pipeline. Closes the "no public registry" gap in the mods system.
+- **Enterprise multi-tenant** — workspace isolation, role-based access, audit log, SSO. The 5-config-roots problem (analysis §5.1) gets consolidated here.
+- **Agent marketplace** — agents-as-a-service, with the same registry/security pattern as the mod marketplace. Users can publish and consume agent specializations.
 
-#### R4 (LOW): Centralize `which()` ✓ [v4.7.0]
-
-**Shipped in v4.7.0**: `which()` is centralized in `cli/utils.mjs`. Duplicates removed from `doctor.mjs`, `bg.mjs`, `provision.mjs`.
-
-#### R5 (MEDIUM): Centralize `bizarConfigDir()` ✓ [v4.7.0]
-
-**Shipped in v4.7.0**: `bizarConfigDir()` is centralized in `cli/utils.mjs`. All modules now import from a single source.
-
-#### R6 (LOW): Add `--json` Output Flag ✓ [v4.5.2]
-
-Global `--json` flag shipped: `bizar doctor --json`, `bizar usage --json`, `bizar memory status --json`. Scriptable from CI.
-
-#### R7 (MEDIUM): Add `--debug` / `--verbose` ✓ [v4.5.2]
-
-Global `--debug` flag shipped: sets `DEBUG=bizar:*` + `BIZAR_DEBUG=1`. All empty catches + `logger.warn` go through it.
-
-#### R8 (MEDIUM): Standardize Exit Codes ✓ [v4.5.2]
-
-Shipped: `EXIT_OK=0, EXIT_ERROR=1, EXIT_USAGE=2, EXIT_MISSING_DEP=3, EXIT_TIMEOUT=4`. (Permission-denied code merged into EXIT_ERROR.)
-
-#### R9 (LOW): Cache `detectState()` Result
-
-`provision.mjs:969,487,902` all call `detectState()`. Each call execs `npm root -g` + `npm ls -g`. Cache result and pass `state` parameter through.
-
-#### R10 (LOW): Banner After Success ✓ [v4.5.2]
-
-Shipped: `install.sh:251-272` banner moved to after provisioner exits 0. See B-L5.
-
-#### R11 (MEDIUM): Logging Consistency
-
-Convention: informational → stdout (`console.log`), errors/warnings → stderr (`console.error`/`process.stderr.write`). **Status**: partial — `dashboard` deprecation → stdout (F9); `routes/*.mjs` replaced with structured logger (v4.7.0); full CLI-side convention across all commands still pending.
-
-#### R12 (MEDIUM): Extract Shared Flag Parsing
-
-`parseWithModsFlag` (bin.mjs:1086) and `parseDashOpts` (bin.mjs:1358) are the only structured parsers. Add to `utils.mjs`:
-- `parseCSVFlag(args, name)`
-- `parseKVFlag(args, name, defaultValue)`
-- `parseBoolFlag(args, name, defaultValue)` (already implicit via R7/R8 — extracted partially)
-- **Status**: partial — `parseWithModsFlag` now errors when empty (F8); full extraction to `utils.mjs` pending.
+**Effort**: TBD. None of this is in active development; it is the long arc.
 
 ---
 
-## Section 5: Improvements — Dashboard Server
+## 5. The Six Pillars — Implementation Tracks
 
-Source: Mimir Stream 2 (inline task result). v1 on `:4097` (no auth), v2 on `:4098` (basic auth).
+One section per pillar. Each section: what it means concretely, current state (file:line refs), target state, implementation milestones, open questions.
 
-### 5.1 Architecture Observations
+### 5.1 Pillar 1: Loops
 
-**Strengths:**
-- **12+ well-factored subsystems**: projects, auth, memory (4 vault modes), background agents, chat, schedules, mods, artifacts, v2 event bus, env vars, providers/usage, notifications, diagnostics, updates.
-- **4 vault modes**: off, local-only, managed (git-backed), linked (external vault). Good config-space coverage.
-- **Lazy imports** for heavy modules (graceful startup, fast cold-launch).
-- **File-based everything** — no DB. JSON files, JSONL logs, MD notes, YAML configs. Easy to debug, easy to corrupt.
+**What it means**: agents run iteratively — recurring (cron), refinement (self-critique), exploration (convergent research). The system supports all three loop shapes natively.
 
-**Weaknesses:**
-- **v1 server fully open** — no auth on `:4097` (see B-H5).
-- **Config sprawl** across `~/.config/bizar/`, `~/.config/opencode/`, `~/.cache/bizarharness/`, `.bizar/`, `~/.opencode/`. Five roots, no single README of where things live.
-- **`process.env` pollution** — env-var-based key rotation writes into `process.env`; test runners inherit this.
-- **No rate limiting** — `/api/chat/stream` can be hit unboundedly.
-- **SSE backpressure** — chat stream producer doesn't respect consumer backpressure.
+**Current state**:
+- Recurring: scaffolded but not generic. `bizar-dash/src/server/routes/schedules.mjs` and `bizar plan` exist, but no "schedule an agent" primitive. The `Schedules.tsx` view is partially built.
+- Refinement: ad-hoc. Agents self-critique in prompts (`bizar plan` workflow has a Forseti review step in `odin.md:111-117` — prompt-level, not code).
+- Exploration: not supported. Agents terminate when they decide to.
 
-### 5.2 Auth Coverage Gaps
+**Target state**:
+- A `loop: { type: "recurring|refinement|exploration", ... }` config primitive consumed by the orchestrator.
+- Loops have explicit stop conditions (max iterations, cost ceiling, wall-clock, convergence threshold).
+- Loops emit structured events (start / tick / stop / abort) to the dashboard for visibility.
 
-| Surface | v1 (`:4097`) | v2 (`:4098`) |
-|---------|--------------|--------------|
-| Project CRUD | ✗ unauthenticated | ✓ |
-| Memory read/write | ✗ unauthenticated | ✓ |
-| Chat stream | ✗ unauthenticated | ✓ |
-| Schedule run | ✗ unauthenticated | ✓ |
-| Mod install/upgrade | ✗ unauthenticated | ✓ (post v3.6.2 fix) |
-| `/api/auth/reveal` | N/A | Token echo'd in response (B-M8) |
+**Implementation milestones**:
+1. **Loop primitive in orchestrator** — the `Loop` type, lifecycle, stop conditions. (Tier 1, ~1 week)
+2. **Recurring loops in CLI** — `bizar loop add <cron> --agent <id> --prompt <p>` → orchestrator schedules. (Tier 1, ~1 week)
+3. **Refinement loops as a wrapping pattern** — `bizar run --refine <task> --rubric <file>` runs a sub-task loop until rubric passes. (Tier 2, ~2 weeks)
+4. **Exploration loops with convergence detection** — agent declares hypotheses, gathers evidence, score function determines convergence. (Tier 3, ~3 weeks)
+5. **Loop dashboard view** — visibility into active loops, history, manual stop. (Tier 2, ~1 week)
 
-**Recommendation**: Either (a) add `requireAuth` middleware to v1 — full refactor, breaks backwards compat; or (b) **remove v1 entirely**, document the migration path, and require v2 for all clients. (b) is cheaper and clean. **v4.5.2 status**: *intentionally deferred* per the v4.5.2 changelog ("Auth-related items intentionally skipped — Tailscale handles auth").
+**Open questions**:
+- What does "convergence" mean for an exploration loop on qualitative research? Embedding similarity? LLM-as-judge? Both?
+- Should loops be billed differently from one-shots (cost ceiling is critical)?
 
-### 5.3 WebSocket Lifecycle
+### 5.2 Pillar 2: Multi-Agent Validation
 
-- Per-connection `setInterval(sendLogChunk, 1000)` (server.mjs:585) — cleaned up on close. ✓
-- `pingTimer` at 30s (ws.ts:117-119) — cleaned up. ✓
-- Heartbeat interval at 30s (server.mjs:418-439) — cleaned up. ✓
-- `MobileApp.tsx:71` `setInterval(refreshSnapshot, 10000)` — verification of unmount cancel missing. Add cleanup. *(open)*
-- ✓ [v4.5.2] `App.tsx` — removed redundant `api.get('/snapshot')` refetch on WS file-change events (perf win, F26).
-- ✓ [v4.5.2] `routes/chat.mjs` — per-session delta buffer cap (1000); drops oldest with warning when exceeded (F19).
+**What it means**: any task can opt into N-way independent execution. Results are compared; conflicts are surfaced; consensus drives action.
 
-### 5.4 Recommended Server Refactors
+**Current state**:
+- Not implemented. Single agent executes each task. Forseti reviews plans (prompt-level), not execution results.
 
-| # | Refactor | Status | Notes |
-|---|----------|--------|-------|
-| S-R1 | Remove or auth-protect v1 server | open | Deferred per v4.5.2 changelog — Tailscale handles auth |
-| S-R2 | Single config root | open | |
-| S-R3 | Rate limiting | open | |
-| S-R4 | SSE backpressure | partial | Per-session delta cap (F19) is a partial step |
-| S-R5 | Debounced opencode.json cache | ✓ [v4.5.2] | 1s debounce + mtime/size stamp check + `invalidateOpencodeJsonCache()` (F17) |
-| S-R6 | Structured logging | ✓ [v4.7.0] | `logger.mjs` — JSON structured logger with debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL` |
-| S-R7 | Metrics endpoint | ✓ [v4.7.0] | `metrics.mjs` + GET /metrics; counters/gauges/histograms; `http_requests_total` + `ws_clients` |
-| S-R8 | Centralize path-safe utility | open | |
-| S-R9 | Validate WS messages | open | |
-| S-R10 | Process.env hygiene | partial — env-var manager landed v4.5.0 (`~/.config/bizar/env.json` mode 0600); teardown-on-exit still pending | |
-| S-R11 | Single 0600 secret path | open | |
-| (new) | Cache-Control headers on /api/settings and /api/snapshot | ✓ [v4.7.0] | `Cache-Control: no-cache` |
-| (new) | Headroom integration module | ✓ [v4.5.1] | `headroom.mjs` + `/api/headroom/*` + auto-install/wrap/start on startup (F36) |
-| (new) | Memory tab endpoints | ✓ [v4.5.1] | 11 new endpoints in `routes/memory.mjs` + Obsidian façade at `memory-obsidian.mjs` |
-| (new) | Settings tab merge | ✓ [v4.5.0] | Config tab merged into Settings; section nav shipped |
-| (new) | Provider subsystem | ✓ [v4.5.0] | PROVIDER_CATALOG (13 entries) + auto-add wizard + backup keys + key rotation |
-| (new) | Usage monitoring | ✓ [v4.5.0] | JSONL store + interactive SVG chart + per-model table + time-range picker + `getUsageLimitsForAgent()` |
+**Target state**:
+- A `validate: { reviewers: N, agreement_threshold: 0.6|0.8|1.0, conflict_escalation: "human|council" }` config primitive.
+- The orchestrator spawns N parallel agents with the same input, compares structured outputs, and either proceeds (consensus) or escalates (conflict).
+- Validation cost is metered and reported.
 
-#### S-R1: Remove or auth-protect v1 server
-Either kill `:4097` entirely or run it through the same `requireAuth` middleware as v2. *Deferred — Tailscale handles auth.*
+**Implementation milestones**:
+1. **Validation primitive in orchestrator** — config schema, parallel spawn, result comparison framework. (Tier 1, ~2 weeks)
+2. **Output comparison types** — exact match, JSON schema, embedding similarity, LLM-as-judge. (Tier 1, ~2 weeks)
+3. **Validation as a default for high-stakes tasks** — security reviews, refactor proposals, schema migrations. (Tier 2, ~1 week)
+4. **Validation dashboard** — see all N outputs side-by-side, diff view, escalation UI. (Tier 2, ~1 week)
+5. **Validation telemetry** — measure catch rate, agreement distribution, cost. (Tier 3, ~2 weeks)
 
-#### S-R2: Single config root
-Consolidate `~/.config/bizar/`, `~/.config/opencode/`, `~/.cache/bizarharness/` under one root with symlinks for backwards compat. Document in `wiki/configuration-paths.md`.
+**Open questions**:
+- Is "LLM-as-judge" a separate agent, or a model call? (Probably a model call — cheaper, faster, but lower quality.)
+- What's the default N for validation? 3? Configurable per task class?
+- How do we prevent N agents from making the same mistake? Diversity of tools, prompts, or both?
 
-#### S-R3: Rate limiting
-Add `express-rate-limit` middleware. `/api/chat/stream`: 10/min/IP. `/api/snapshot`: 60/min/IP. Other API: 300/min/IP.
+### 5.3 Pillar 3: Agent Hierarchy
 
-#### S-R4: SSE backpressure
-Wrap `res.write()` in `if (res.writableNeedDrain) await once(res, 'drain')` to avoid memory blowup when client is slow. *Partial fix*: F19 added per-session delta buffer cap (1000) in v4.5.2.
+**What it means**: the agent tree (Odin → Tyr → Thor → Heimdall; Hermod for gitops; Forseti for audit) is enforced at runtime, not just suggested in prompts. Lower-level agents cannot exceed their scope.
 
-#### S-R5: Debounced opencode.json cache ✓ [v4.5.2]
-Shipped: `providers-store.mjs:49-58` now has 1-second debounced cache with mtime/size stamp check; `invalidateOpencodeJsonCache()` on writes (F17). `buildSnapshot` (S-R5 reuse) now uses cached read (F18).
-#### S-R6: Structured logging ✓ [v4.7.0]
+**Current state**:
+- 12 agent definitions in `config/agents/` with YAML frontmatter for model + permission.
+- The `task` tool allows one agent to invoke another, but permission enforcement is at the opencode level (tool whitelist), not the hierarchy level.
+- The hierarchy is encoded in the prompts (`odin.md` says "you must dispatch to Tyr, not execute yourself") but not enforced.
 
-**Shipped in v4.7.0**:
-- `logger.mjs` — JSON structured logger (debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL` env var).
-- `console.log/error` in `routes/*.mjs` replaced with structured logger.
-- Remaining 6 empty catches in `memory-lightrag.mjs` rate-limited through the logger.
-- **Remaining**: Full correlation-id propagation (`X-Request-ID`) and `process.env`-based log filtering across CLI side (R11 partial).
+**Target state**:
+- An orchestrator-side check: when agent X dispatches agent Y, X must be a parent of Y in the hierarchy. Anything else is rejected.
+- Permissions are inherited downward with constraints (a Tyr session can spawn Thor but not Heimdall; a Thor session can spawn Heimdall but not Vidarr).
+- A Tyr session attempting to use a tool it shouldn't (e.g., a write tool when scoped to design) is rejected by the orchestrator, not the prompt.
 
-#### S-R7: Metrics endpoint ✓ [v4.7.0]
+**Implementation milestones**:
+1. **Hierarchy schema** — `config/agents/hierarchy.yaml` declaring parent-child relationships. (Tier 1, ~3 days)
+2. **Orchestrator enforcement** — dispatch validation, permission inheritance. (Tier 1, ~1 week)
+3. **Per-agent scope declarations** — what files, what tools, what models each agent can touch. (Tier 1, ~1 week)
+4. **Hierarchy violation telemetry** — log every rejection with reasoning. (Tier 1, ~3 days)
+5. **Hierarchy dashboard** — visualize the current execution tree for any active session. (Tier 2, ~1 week)
 
-**Shipped in v4.7.0**:
-- `metrics.mjs` — Prometheus-style counters, gauges, histograms.
-- `GET /metrics` endpoint mounted before auth (so Prometheus scrapers don't need a token).
-- `http_requests_total{route,method,status}` counter middleware.
-- `ws_clients` gauge tracking active WebSocket connections.
-- **Remaining**: Histograms for request duration and WS message size are scaffolded but not yet wired into every hot path.
-#### S-R8: Centralize path-safe utility
-`lib/path-safe.mjs` exists. Currently used in `routes/fs.mjs:28-34` and `memory-store.mjs:320,347`. Audit all `fs.readFile`/`writeFile` calls in the server and route them through `resolveSafePath`.
+**Open questions**:
+- Should the hierarchy be hard (cannot dispatch outside it) or soft (warn but allow)?
+- How do we handle ad-hoc agent invocations (user explicitly asks for `@vidarr` even when not in hierarchy)?
+- What's the escape hatch for a real edge case where the hierarchy is wrong?
 
-#### S-R9: Validate WS messages
-Type-check inbound WS messages (`{ type, payload }`). Reject malformed messages with a close frame. Currently no schema validation.
+### 5.4 Pillar 4: Agent Council
 
-#### S-R10: Process.env hygiene
-After env-var key rotation (`providers-store.mjs:526-557`), `process.env` contains the temp key. *v4.5.0 partial fix*: env-var manager landed at `~/.config/bizar/env.json` (mode 0600) — keys no longer land in `opencode.json`. Process teardown still pending.
+**What it means**: for high-stakes decisions, N agents vote with structured reasoning. Decision is made by majority / consensus / quorum depending on action class. Disagreements are escalated, not averaged.
 
-#### S-R11: Single 0600 secret path
-`auth.mjs` writes to `~/.config/bizar/dashboard-secret` (0600). `v2-auth-file.mjs` to `~/.cache/bizarharness/dash-auth.json` (0600). Consolidate.
+**Current state**:
+- Forseti as a plan auditor is a prompt instruction (`odin.md:111-117`), not a runtime gate.
+- No voting, no quorum, no escalation framework.
 
----
+**Target state**:
+- An `action_class` taxonomy: `trivial` (solo) / `standard` (peer review) / `significant` (trio, majority) / `critical` (quorum, unanimous-or-escalate).
+- Every autonomous action declares its `action_class`. The orchestrator either executes solo or convenes a council.
+- Councils are short-lived: members are spawned, vote, return. Votes + reasoning are logged.
+- A disagreement is an escalation, not a failure. The human is consulted with the disagreement already framed.
 
-## Section 6: Improvements — Dashboard Web (Frontend)
+**Implementation milestones**:
+1. **Action class taxonomy** — `config/orchestrator/action-classes.yaml` with defaults. (Tier 1, ~1 week)
+2. **Council primitive in orchestrator** — spawn N voters, collect structured votes, apply decision rule. (Tier 1, ~2 weeks)
+3. **Council audit log** — every council's votes + reasoning in `~/.local/share/bizar/orchestrator/councils/`. (Tier 1, ~3 days)
+4. **Default mappings** — which actions are trivial / standard / significant / critical? Defaults ship; users override. (Tier 2, ~1 week)
+5. **Council escalation UI** — when a council escalates, the human sees a structured summary of the disagreement. (Tier 2, ~1 week)
 
-Source: `.obsidian/projects/dashboard-web-frontend-analysis.md` (595 lines).
+**Open questions**:
+- Should the council be a paid feature? (See §8 Open Questions.)
+- What's the default N for a "significant" council — 3 or 5?
+- How do we prevent rubber-stamp councils (all 3 agents trained the same way voting identically)?
+- What's the tiebreaker for an even-numbered council? Escalate by default?
 
-### 6.1 TypeScript `any` Audit
+### 5.5 Pillar 5: Constant Self-Improvement
 
-| File | Issue | Line | Fix |
-|------|-------|------|-----|
-| `lib/types.ts` | `Settings.data: any` | ~270 | Type as `Record<string, unknown>` or `unknown` and validate at parse time |
-| `lib/types.ts` | `Settings.plan: any` | ~270 | Add `Plan` interface |
-| `lib/types.ts` | `Snapshot: [k: string]: unknown` | ~150 | Replace with explicit fields |
-| `views/History.tsx` | `HistoryEvent: [k: string]: unknown` | ~50 | Same |
-| `views/Overview.tsx` | `(e as any).target`, `(data as any)`, `(err as any).message` | scattered | Type `Event` parameter, type `api.get<KnownShape>()` |
-| `views/Settings.tsx` | `(e as any).target` | scattered | Type input change events |
-| `views/Schedules.tsx` | `(err as any).message` | ~200 | `catch (err: unknown) { if (err instanceof Error) ... }` |
-| `views/Artifacts.tsx` | `(window as any).__ARTIFACT_CONFIG__` | ~14 | Declare in `lib/global.d.ts` |
+**What it means**: outcomes → patterns → rules → applied rules → better outcomes. Closed loop. The system gets measurably better with use.
 
-### 6.2 Stale Closures / useEffect Deps
+**Current state**:
+- `.bizar/AGENTS_SELF_IMPROVEMENT.md` is a 1,139-line append-only log. Agents read it at session start (per `odin.md` and `bizar` skill).
+- No automatic extraction, no clustering, no rule validation, no automated promotion.
 
-F4 fixed `MiniMaxUsage` `timeRange` deps. Other suspects:
+**Target state**:
+- Every task outcome is structured: `{ task_id, agents_used, cost, duration, success, failure_reason, human_corrections }`. Stored in `~/.local/share/bizar/orchestrator/outcomes/`.
+- A periodic pattern extractor clusters outcomes, identifies recurring lessons, and proposes rules.
+- A rule validator tests proposed rules against a held-out corpus of past tasks. Rules that improve outcomes are promoted; rules that don't are dropped.
+- Active rules are injected into agent context at session start, surfaced as warnings when relevant, and re-evaluated as new evidence arrives.
 
-| View | Effect | Missing Dep | Impact |
-|------|--------|-------------|--------|
-| `useChat.ts` SSE listener | `[]` | `processChunk`, `dispatch` | Stale messages on rapid route change |
-| `useAutoGrowTextarea.ts` | resize effect | `value` | Textarea doesn't grow when content changes |
-| `Chat.tsx` | session effect | `sessionId`, `activeProject` | Already in deps — verify |
-| `App.tsx` refresh | `[refreshSnapshot]` | `refreshSnapshot` is `useCallback([])` | Captures initial closure (currently safe but fragile) |
+**Implementation milestones**:
+1. **Structured outcome recording** — every orchestrator-spawned task emits a structured outcome record. (Tier 1, ~1 week — ships with the orchestrator)
+2. **Pattern extractor** — clustering + topic modeling on outcomes. (Tier 3, ~3 weeks)
+3. **Rule proposer + validator** — turns clusters into candidate rules, tests against held-out corpus. (Tier 3, ~4 weeks — most research-y piece)
+4. **Active rules runtime** — promote / demote / inject / surface. (Tier 3, ~2 weeks)
+5. **Self-improvement dashboard** — see active rules, see proposed rules, see rules under evaluation, see rules demoted with reason. (Tier 3, ~1 week)
+6. **Regression tests for rules** — given a rule, can we construct a task where the rule is relevant and verify the agent applies it? (Tier 3, ~2 weeks)
 
-Rule of thumb: any state read inside an effect must be in the dep array, OR use a ref.
-
-### 6.3 AbortController Coverage
-
-F5 added AbortSignal to 4 views. Remaining:
-
-| View | Pattern | Fetches |
-|------|---------|---------|
-| `Agents.tsx` | `api.get(...).then(...)` no cancel | `/api/agents` |
-| `Tasks.tsx` | same | `/api/tasks` |
-| `Mods.tsx` | same | `/api/mods` |
-| `Memory.tsx` | same | `/api/memory/*` |
-| `History.tsx` | same | `/api/history` |
-| `Providers.tsx` | same | `/api/providers` |
-| `MiniMaxUsage.tsx` | same | `/api/usage` |
-| `BackgroundAgents.tsx` | same | `/api/background-agents` |
-| `MemoryOverview.tsx` | same | `/api/memory/overview` |
-
-**Effort**: 1 hour with grep + sed. Pattern:
-```ts
-useEffect(() => {
-  const ctrl = new AbortController();
-  api.get('/path', { signal: ctrl.signal }).then(...).catch(...);
-  return () => ctrl.abort();
-}, [deps]);
-```
-
-### 6.4 Memory Leaks
-
-Beyond the no-AbortController pattern:
-- **WebSocket message queue**: dropped messages while disconnected (B-M7) — *open*
-- **EventSource on unmount**: `useChat.ts` should close EventSource in cleanup — *v4.5.0 partial fix*: SSE reconnect-with-backoff + per-session event gating reduced leak risk; explicit `EventSource.close()` in cleanup still pending
-- **Stale snapshot intervals**: `MobileApp.tsx:71` `setInterval(refreshSnapshot, 10000)` — verify cancel on unmount — *open*
-- ✓ [v4.5.2] Removed redundant `api.get('/snapshot')` refetch on WS file-change events (F26)
-
-### 6.5 Accessibility — WCAG 2.2 AA Gaps
-
-**What's done well:** Modal focus trap, semantic ARIA on Modal/MobileModal/Toast/EmptyState, `:focus-visible` rings, dark theme contrast ~7:1.
-
-**Gaps (with status as of v4.7.0):**
-
-| Issue | Location | Status | Fix |
-|-------|----------|--------|-----|
-| No `<label>` on form inputs | `Settings.tsx` (entire file uses inline styles + placeholders) | partial | Color inputs now have `aria-label`s (v4.7.0); Tailscale checkbox properly associated (v4.7.0). Bulk of form inputs still unlabeled. |
-| Topbar tabs missing `role="tablist"` / `aria-selected` | `Topbar.tsx` ~150 | ✓ [v4.5.2 — F25] | `role="tablist"` + `role="tab"` + `aria-selected` |
-| `Toast` has no `role="alert"` for errors | `Toast.tsx` | ✓ [v4.5.2 — F23] | `role="alert" aria-live="assertive" aria-atomic="true"` |
-| Activity feed no `aria-live` | `Overview.tsx` activity banner | open | Add `aria-live="polite"` to the activity list container |
-| WS status dot color-only | `Topbar.tsx` | open | Add `aria-label="Connected"` or text alongside dot |
-| Settings 1823-line scroll has no skip-nav | `Settings.tsx` | open | Add `aria-label` landmark + sub-nav |
-| Mobile bottom nav no keyboard path | `MobileApp.tsx` | open | Ensure `tabindex` flows to all interactive items |
-| GlyphRenderer 5s timeout no live region | `glyphs/components.tsx` | open | Add `aria-live="polite"` to status region |
-| Color-only status indicators | `StatusBadge` and ad-hoc `.badge` | open | Add accessible text or `aria-label` |
-| `SearchModal` has no `role="search"` | `SearchModal.tsx` | ✓ [v4.7.0] | `role="search"` + `aria-label="Search"` |
-
-### 6.6 Performance — Concrete Wins
-
-| Issue | File | Status | Fix |
-|-------|------|--------|-----|
-| All views re-render every 5s on `snapshot` prop | `App.tsx:635-647` | ✓ [v4.5.2 — F28] | `React.memo()` on `Tasks`, `Settings`, `Memory`, `Overview`, `Skills`, `MiniMaxUsage` |
-| No virtual scrolling | activity/history/chat lists | ✓ [v4.7.0] | New `<VirtualList>` component (hand-rolled, no deps); used in `ChatThread`, `Overview`, `Activity`, `History` |
-| No code splitting | `App.tsx` static imports | partial — F24 | `Suspense` wrapper added (v4.5.2); per-view `React.lazy()` still pending |
-| Inline styles in Settings | `Settings.tsx` ~1823 lines | open | Extract to CSS classes, components — *Active Focus #2* |
-| 228 KB CSS | `main.css` 8901 lines | open | Split per-view CSS, run `purgecss` against actual selectors |
-| CSS animations without `will-change` | many | open | `will-change: transform` on streaming bubbles, spinners |
-| No `content-visibility: auto` on long lists | activity feed, chat | ✓ [v4.5.2 — F27] | `content-visibility: auto` on `.activity-item`, `.task-card`, `.chat-message` |
-
-### 6.7 CSS Maintainability
-
-**Already fixed** (F6): duplicate `:root` block in `main.css:159-167 vs 219-221` and status colors `132-138 vs 208-211`.
-
-**Remaining**:
-- `main.css` is 8901 lines — split into:
-  - `tokens.css` (variables, themes)
-  - `reset.css`
-  - `shell.css` (Topbar, Sidebar, App)
-  - `views/*.css` (one per view, already partially exists in `styles/`)
-- Add `@layer` declarations so cascade is predictable: `@layer reset, tokens, base, components, utilities, overrides;`
-- Settings.tsx inline styles (1823 lines) → extract to CSS classes / CSS modules — *Active Focus #3*
-- Mobile CSS (29 KB) is reasonable but mobile JS (476 KB) > desktop (372 KB) — investigate imports — *[DEFERRED to v4.8]*
-
-### 6.8 Component Reuse Gaps
-
-- **Modal system exists but unused in `BacklogPanel`** (uses native `confirm()` — B-M3) — *open*
-- **Error boundary** doesn't exist → ✓ added in v4.5.2 prep (F7): `ViewErrorBoundary` class wraps `{renderedView}` in `App.tsx`
-- **`<Spinner/>` component exists** but some views still render raw CSS spinners — *open*
-
-### 6.9 Chat Dual Implementation
-
-Two systems exist:
-- **Legacy**: `ChatBubble`, `ChatComposer`, `ChatThread.legacy` (in `_legacy.ts`)
-- **Modern**: `MessageBlock`, `FloatingComposer`, `ChatRail`, `ChatTopBar`
-
-**Recommendation**: Delete `_legacy.ts`, audit references, remove dead components. Single source of truth for chat. Track as a 1-week task.
-
-**v4.5.0 chat overhaul (in scope)**: `useChat.ts` SSE rewrite (reconnect-with-backoff, optimistic-send dedupe); `useChat.ts` was already modern path; SSE per-session event gating fixes F29/F30. Legacy deletion still open.
-
-### 6.10 Mobile vs Desktop Parity
-
-| Feature | Desktop | Mobile | Gap |
-|---------|---------|--------|-----|
-| Chat streaming | ✓ (`useChat` SSE) | ✓ (`MobileChat`) | Parity ✓ |
-| Settings | ✓ (1,823 lines) | ✓ (subset) | Mobile is partial ✓ |
-| Tasks | ✓ (5 columns) | ✓ (`MobileTasks`) | Parity ✓ |
-| Artifact canvas | ✓ (`VisCanvas`) | ✓ (`MobileArtifactCanvas`) | Parity ✓ |
-| Mods | ✓ | ✓ | Parity ✓ |
-| Plans | ✓ | ✓ | Parity ✓ |
-| Bundle size | 372 KB JS | **476 KB JS** | Mobile 28% larger (B-MOBILE-1) — *[DEFERRED to v4.8]* |
-
-### 6.11 Priority Recommendations (P0–P3)
-
-#### P0 — Fix Immediately
-1. **Error boundaries** around each view — ✓ **DONE (v4.5.2 prep — F7)** main boundary added; per-view boundaries still pending
-2. **AbortController** in all `useEffect` API calls — ✓ **DONE (v4.5.2 prep — F5)** 4/15+ views; remaining ~11 views still open
-3. **Fix `useAutoGrowTextarea` deps** (B-M1) — *open*
-
-#### P1 — High Impact
-4. **`[k: string]: unknown` → typed interfaces** in Snapshot, HistoryEvent, Settings — *open*
-5. **`React.memo()` on view components** receiving snapshot — ✓ **DONE (v4.5.2 — F28)** 6 heavy views wrapped
-6. **Replace `confirm()` in BacklogPanel** with modal system — *open*
-7. **Add `<label>` to all form inputs`** (Settings especially) — partial [v4.7.0] — color inputs labeled, Tailscale checkbox associated; bulk still unlabeled
-8. **Add `role="tab"`/tablist to Topbar** + `aria-selected` — ✓ **DONE (v4.5.2 — F25)**
-
-#### P2 — Medium Impact
-9. **`React.lazy()` for views** — code-splitting — *open* (Suspense wrapper landed — F24)
-10. **`react-window` for chat/activity/history** — virtual scroll — ✓ **DONE (v4.7.0)** — hand-rolled `<VirtualList>` in `ChatThread`, `Overview`, `Activity`, `History`
-11. **`will-change: transform`** on animated elements — *open*
-12. **`aria-live="polite"`** on activity/task/chat regions — *open*
-13. **Break `main.css` into per-view CSS** files — *open*
-
-#### P3 — Nice to Have
-14. **`vitest + @testing-library/react`** for unit/integration tests — ✓ **DONE (v4.7.0)** — 75 tests (10 component, 7 hook, 36 lib, plus setup); `npm run test:web`
-15. **`content-visibility: auto`** on long lists — ✓ **DONE (v4.5.2 — F27)**
-16. **Extract Settings inline styles** to CSS classes — *open — Active Focus #2*
-17. **Unify chat dual implementation** — delete legacy — *open*
-18. **WS message queue** for offline resilience — *open*
-19. **Document mobile/desktop split architecture** in `README.md` — *open*
-20. **i18n infrastructure** (i18next + `i18n/en.json` resource bundles) — partial [v4.7.0] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 foundation strings); full migration still pending
+**Open questions**:
+- How do we prevent rules from accumulating forever? (Demotion criteria: usage, impact, conflicts.)
+- What's the right evaluation metric for "better outcomes"? (Success rate? Human-correction rate? Cost? Latency?)
+- Should active rules be visible to the user? (Yes — transparency is the point.)
+- How do we avoid rules that game the metric? (Multiple metrics, periodic human review.)
 
 ---
 
-## Section 7: Improvements — Cross-Cutting (Security, Perf, A11y, Build)
+### 5.6 Pillar 6: Specialist Research Agents
 
-Source: `.obsidian/projects/cross-cutting-audit-2026-07-05.md` (428 lines).
+**What it means**: a tier of specialist agents — Mimir, Veritas, Codex, Praxis — whose primary capability is web search, source evaluation, and information synthesis. Research agents are not general-purpose assistants. They are deep specialists in finding, verifying, and synthesizing external knowledge. Every claim they make is cited; every citation is ranked; every synthesis flags when information may be stale.
 
-### 7.1 Security — Top Concerns
+**Current state**: Mimir exists in `config/agents/mimir.md` with basic websearch and webfetch capability. There are no specialist variants (Veritas, Codex, Praxis), no source ranking, no confidence scoring, no dashboard tab, no synthesis tooling, no `~/.bizar_memory/research/` namespace, and no recurring feed system. Mimir today is a prototype; Pillar 6 is the product.
 
-| # | Concern | Severity | Status |
-|---|---------|----------|--------|
-| 1 | vitest CVE-2025-30208 (arbitrary file read via Vitest UI) | CRITICAL | **FIXED (F1)** — bumped to 4.1.9 |
-| 2 | API keys in plaintext on disk (`opencode.json`) | HIGH | Known tradeoff; prefer env-var rotation (`providers-store.mjs:526-557`) |
-| 3 | Dashboard token in URL query params (SSE/WS) | MEDIUM | Mitigated via `replaceState` (api.ts:81-86); see B-M6 |
-| 4 | Plain-text secrets in `providers-store.mjs:1185` | HIGH | Same as #2; ✓ [v4.5.0] EnvVarManager landed at `~/.config/bizar/env.json` (mode 0600) |
-| 5 | `curl ... | sh` pattern (no hash verification) | MEDIUM | install.sh:180,188,195,217; install.mjs:396-397 — *open* |
-| 6 | v1 dashboard server open (`:4097`) | HIGH | See B-H5 — *deferred per v4.5.2 changelog; Tailscale handles auth* |
-| 7 | `/api/auth/reveal` returns token in body | LOW | See B-M8 — *open* |
+**Target state**:
+- Four research specialist agents, each with a defined role and toolbelt.
+- A Research tab in the dashboard with query input, source panel, synthesis panel, save-to-memory, and schedule recurring.
+- Structured research outputs in `~/.bizar_memory/research/<slug>.md` with frontmatter (query, sources, confidence, recency, date).
+- Research agents usable by other pillars: councils query Veritas before voting; the orchestrator queries Praxis when knowledge is stale.
+- Citation accuracy > 90%, source freshness < 6 months for "current best practice" queries.
 
-**Recommendations**:
-- For installer scripts, add `--verify-sha256 <hash>` flag for known hashes, or wrap in `gpg --verify`.
-- For dashboard secrets, consider `keytar` / OS keychain integration (Linux: secret-service; macOS: Keychain; Windows: DPAPI).
-- For API keys, the env-var rotation pattern is the right long-term direction — keep nudging users toward it. ✓ [v4.5.0] `getUsageLimitsForAgent()` + env-var manager shipped.
+**Implementation milestones**:
 
-### 7.2 Performance — Bundle Sizes
+1. **Specialist agent definitions** — Veritas, Codex, and Praxis defined in `config/agents/`. Mimir is updated with query-planning capability. Each has YAML frontmatter (model, permissions, tools, trigger conditions). (Tier 1, ~1 week total — 2-3 days each)
+2. **Research toolbelt in plugins** — shared research tools in `plugins/bizar/src/tools/`: `bizar_web_search` (parallel N-query execution), `bizar_fetch_and_extract` (fetch + content extraction from arbitrary URLs), `bizar_rank_sources` (relevance × recency × credibility scoring), `bizar_verify_claim` (cross-check a claim against N sources), `bizar_synthesize` (turn N ranked sources into a cited synthesis). (Tier 1, ~2 weeks)
+3. **Research tab in dashboard** — `bizar-dash/src/web/views/Research.tsx` + components: query input, active session list, source panel with per-source confidence/relevance/recency, synthesis panel with inline citations, "Save to memory" button, "Schedule recurring" picker. Ships as shell in Tier 1; backend-wired in Tier 2. (Tier 1 shell, Tier 2 full)
+4. **Backend route group `/api/research/*`** — REST endpoints for research sessions (create, status, result), sources (list with scores), claims (list with citations), and schedule (create/update/delete recurring feeds). Wires the Research tab to the orchestrator. (Tier 1, ~1 week)
+5. **`~/.bizar_memory/research/` vault namespace** — directory structure with structured frontmatter. "Save to memory" writes here. Praxis reads here. Integrates with the existing memory service (`bizar-dash/src/server/memory-store.mjs`). (Tier 2, ~1 week)
+6. **Recurring research feed scheduler** — Praxis runs on the existing schedule system (`routes/schedules.mjs`). Users set an interval per feed; the system schedules a Mimir/Codex research agent on that cron. Feeds write to `~/.bizar_memory/research/<slug>.md` with `last_checked` frontmatter updated each run. Stale feeds (no update in 2× interval) trigger an alert. (Tier 2, ~2 weeks)
 
-| Asset | Size | Issue | Status |
-|-------|------|-------|--------|
-| `main-*.js` (desktop) | 372 KB | OK | ✓ |
-| `mobile-*.js` (mobile) | **476 KB** | Larger than desktop (B-MOBILE-1) | [DEFERRED to v4.8] |
-| `main-*.css` | 228 KB | Very large — needs purgecss audit | open |
-| `mobile-*.css` | 29 KB | OK | ✓ |
-| Source maps | 1.17 MB / 1.88 MB | In npm tarball | ✓ [v4.5.2 — F21] `sourcemap: 'hidden'`; ✓ [v4.5.2 — F22] `.npmignore` excludes `dist/**/*.map` |
+**Open questions**:
 
-**Action items**:
-1. ✓ **[DONE v4.5.2 — F21]** Set `vite.config.ts:15` `sourcemap: 'hidden'`
-2. ✓ **[DONE v4.5.2 — F22]** Add `.npmignore` rule for `bizar-dash/dist/*.map`
-3. [DEFERRED to v4.8] — Audit `mobile.tsx` imports — why is it 28% larger?
-4. *open* — Run purgecss / lighthouse-ci for CSS pruning
-
-### 7.3 Performance — Synchronous I/O on Server
-
-| Hot Path | File | I/O | Cost | Status |
-|----------|------|-----|------|--------|
-| Log tail via WS (1s tick) | `server.mjs:536-607` | `statSync`+`readSync` per tick | Low freq, OK | ✓ |
-| `buildSnapshot` per WS connection | `server.mjs:724-753` | `readFileSync` | Blocks many connections | ✓ [v4.5.2 — F18] now uses cached read |
-| `safeReadJSON` per `list()` | `providers-store.mjs:49-58` | `readFileSync`+`JSON.parse` per call | N+1 reads | ✓ [v4.5.2 — F17] 1s debounced cache |
-| Providers `list()` | `providers-store.mjs:868-886` | re-parses same JSON | Add 1s debounced cache | ✓ [v4.5.2 — F17] |
-
-### 7.4 Accessibility — WCAG 2.2 AA Gaps (Full List)
-
-Source §3 of cross-cutting audit + §6.5 of frontend analysis.
-
-1. No `<label>` associations in Settings (1763 lines of form fields). — partial [v4.7.0] — color inputs labeled; Tailscale checkbox associated; bulk unlabeled
-2. **Topbar tabs lack `role="tablist"`** — ✓ [v4.5.2 — F25]
-3. **Toast notifications lack `role="alert"` on errors** — ✓ [v4.5.2 — F23]
-4. Activity feed has no `aria-live`. — *open*
-5. WS status dot is color-only — no accessible text. — *open*
-6. No global `:focus-visible` ring. — *open*
-7. SearchModal has no `role="search"`. — ✓ [v4.7.0]
-8. Mobile bottom nav no keyboard path. — *open*
-9. Color inputs (Settings) lack proper labels. — ✓ [v4.7.0]
-10. Confirm dialogs use native `confirm()`. — *open* (B-M3)
-
-### 7.5 Internationalization
-
-- **Translation infrastructure**: partial [v4.7.0] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 foundation strings). Full migration still pending.
-- **No `Intl.*` wrappers** for dates/numbers.
-- **Zero RTL support**: no `dir="auto"`, no logical CSS properties.
-
-For a CLI developer tool this is acceptable. For wider adoption, plan:
-- Migrate all user-facing strings to `locales/<lang>.json` resource bundles.
-- Add `i18next` or `react-intl` with locale switcher.
-- Use CSS `dir="rtl"` for Arabic/Hebrew.
-
-### 7.6 Testing Gaps
-
-| Domain | Coverage | Status |
-|--------|----------|--------|
-| SDK | Moderate (3 files) | ✓ |
-| Plugin | Excellent (24 files) | ✓ |
-| Memory/Secrets | Good | ✓ |
-| Dashboard server | Weak (most route files lack tests) | partial — server-bugfixes.test.mjs (v4.5.2, 13 tests) |
-| CLI | Moderate (doctor, install, artifact, service tests) | partial — cli-bugfixes.test.mjs (v4.5.2, 9 tests) |
-| **Web frontend** | 75 tests across 10 components / 7 hooks / 36 lib | ✓ [v4.7.0] — `vitest + jsdom + RTL`; `npm run test:web`; 10 component tests (Card, Button, Toast, Modal, Spinner, StatusBadge), 7 hook tests (useToast, useModal), 36 lib tests (i18n, utils, formatRelative, formatTime, cn) |
-| Accessibility | **Zero — no aXe, Lighthouse, or Playwright a11y tests** | *open* |
-| i18n | Foundation only — `locales/en.json` 30 strings | partial [v4.7.0] |
-| Performance | **Zero — no bundle analysis, no perf regression tests** | *open* |
-| Memory store concurrent writes | No test | *open* |
-| Path-safe symlink traversal | No test | ✓ (path-safe.test.mjs exists) |
-
-**Action**: Add `vitest` + `@testing-library/react` to `bizar-dash/`. ✓ **DONE in v4.7.0**. Next: aXe / Playwright a11y tests at 60% target coverage over 3 sprints.
-
-**Test totals (post-v4.7.0)**: `npm test` → **388 pass / 0 fail** + `npm run test:web` → **75 pass / 0 fail** = **463 total / 0 fail**.
-
-### 7.7 Observability
-
-- **Logging**: ✓ [v4.7.0] `logger.mjs` JSON structured logger (debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL`). `console.*` in `routes/*.mjs` replaced. Remaining: correlation-id propagation and full CLI-side convention.
-- **Metrics**: ✓ [v4.7.0] `metrics.mjs` Prometheus-style counters/gauges/histograms + `GET /metrics` endpoint (mounted before auth). `http_requests_total{route,method,status}` counter + `ws_clients` gauge wired.
-- **Tracing**: None. No OpenTelemetry, no DTrace probes. *open* — see F-NEW-23 — *Active Focus #3*.
-- **Error reporting**: Local crash handlers but no Sentry/DataDog/Honeycomb integration. *open* — see F-NEW-25.
-- **Empty catches**: ✓ ~49 of ~55 fixed (F3 + F20 + v4.7.0 logger); *~6 remain* in `memory-lightrag.mjs` (rate-limited).
-
-### 7.8 Build / Packaging
-
-- ✓ [v4.5.2 — F21] **Source maps shipped**: `vite.config.ts:15` set to `sourcemap: 'hidden'`.
-- ✓ [v4.5.2 — F22] **`.npmignore`**: excludes `dist/**/*.map`, `**/__tests__/`, `**/*.test.{mjs,ts,tsx}`.
-- **`files` array in `package.json`**: Includes `bizar-dash/` which ships `src/` + `dist/` together (double size). — *open*
-- **Cross-platform**: ✓ [v4.5.2] `install.sh`/`install.ps1` both fixed (B-C2/B-C3). `/proc/net/tcp` Linux-only (F2 fixed).
-
-### 7.9 Top 10 Critical Issues
-
-| # | Issue | File | Severity | Status |
-|---|-------|------|----------|--------|
-| 1 | vitest CVE | `package.json:87` | CRITICAL | **FIXED (F1, v4.5.2 prep)** |
-| 2 | API keys in plaintext | `providers-store.mjs:1185` | HIGH | partial — ✓ [v4.5.0] EnvVarManager at `~/.config/bizar/env.json` (mode 0600); env-var rotation with cooldown tracking landed. Open — keys still readable if user keeps them in `opencode.json`. |
-| 3 | Token in URL | `auth.mjs:187-189`, `ws.ts:29` | MEDIUM | Open — see B-M6 |
-| 4 | No metrics/tracing/log levels | server-wide | MEDIUM | ✓ [v4.7.0] — `logger.mjs` (S-R6) + `metrics.mjs` + `/metrics` endpoint (S-R7). Remaining: OpenTelemetry export (F-NEW-23). |
-| 5 | Mobile bundle > desktop | vite build | MEDIUM | [DEFERRED to v4.8] — see B-MOBILE-1 |
-| 6 | `/proc/net/tcp` hardcoded | `headroom.mjs:121` | MEDIUM | **FIXED (F2, v4.5.2 prep)** |
-| 7 | Source maps shipped | `vite.config.ts:15` | LOW | **FIXED (F21, v4.5.2)** — `sourcemap: 'hidden'` |
-| 8 | 228 KB CSS | Vite build | LOW | Open — purgecss pending |
-| 9 | Zero i18n | UI-wide | LOW | partial [v4.7.0] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 strings) foundation |
-| 10 | Empty catches | server files | MEDIUM | ~49 of ~55 fixed across v4.5.2 + v4.7.0; **~6 rate-limited remain** in `memory-lightrag.mjs` |
+- Should research always go through the agent hierarchy (Mimir → Veritas → Codex) or can users call a specialist directly? The hierarchy path adds rigor; direct access adds speed. Likely: direct for Tier 1, hierarchy-path as a mode for Tier 2+.
+- How do we handle paywalled sources? Some of the best information (academic papers, premium APIs) is behind paywalls. Options: skip and note the gap; use cached/archived versions; integrate with a user's existing subscriptions. No decision needed for Tier 1 scaffolding, but the architecture should not assume all sources are freely accessible.
+- How do we attribute conflicting sources? When Veritas finds three sources that say different things, the output should track the conflict with provenance — not pick a winner. The consumer (council, orchestrator, user) decides. This has implications for how claims are structured in the data model.
+- What's the trust threshold for "verified" vs. "asserted"? A claim supported by 3 independent credible sources is verified. A claim supported by 1 blog post is asserted. What about 2 blog posts? 1 academic paper vs. 3 blog posts? We need a configurable threshold, not a hard rule.
+- How does temporal awareness work in practice? "This was true in 2023 but superseded in 2025" requires Veritas to know the publication dates of sources and flag when a claim depends on an outdated source. This is a query-planning problem as much as a synthesis problem — and it is hard to automate fully.
 
 ---
 
-## Section 8: Improvements — Opencode Plugin & SDK
+## 6. Backlog (P0 / P1 / P2)
 
-Stream 4 had limited findings but the following gaps are noteworthy. *No v4.5.0/v4.5.1/v4.5.2/v4.7.0 release closed items in this section — all open.*
+Carry-over bugs and small features from the current-state analysis. Tagged by which tier they block.
 
-### 8.1 Tool Catalog Coverage
+### P0 — Blocks Tier 1
 
-Plugin lives at `plugins/bizar` with 24+ test files (excellent coverage). Tool catalog appears complete for install/update/repair cycle. Gaps:
+These must be resolved before or as part of Tier 1 work.
 
-- **No tool for "agent list"**: The dashboard knows about agents but there's no plugin-side query for "what agents are installed for project X?". Currently the plugin reads `~/.config/opencode/agents/` directly.
-- **No tool for "schedule status"**: Schedules live in `routes/schedules.mjs`. Plugin should query/list them.
+| ID | Item | Source | Notes |
+|---|---|---|---|
+| B-H4 | `parseWithModsFlag` doesn't validate mod ID pattern | `cli/bin.mjs:1086-1095` | Bogus IDs reach the dashboard. 1 hour. |
+| B-M7 | WebSocket has no message queue | `bizar-dash/src/web/lib/ws.ts` | Messages dropped while disconnected. Critical for orchestrator WS. |
+| B-M6 | SSE/WS token in URL lands in browser history | `api.ts:74-91`, `auth.mjs:187-189`, `ws.ts:29` | Move to `document.cookie`. 2 hours. |
+| B-MOBILE-1 | Mobile bundle (476 KB) > desktop (372 KB) | `vite.config.ts` + `mobile.tsx` | Investigate imports. 1 day. Block: orchestrator mobile UI. |
+| B-M1 | `useAutoGrowTextarea` deps missing `value` | `bizar-dash/src/web/components/chat/useAutoGrowTextarea.ts` | Textarea doesn't grow on content change. 30 min. |
 
-### 8.2 Hook Coverage
+### P1 — Blocks Tier 2
 
-Opencode plugin provides hooks for session lifecycle, command execution, and key rotation. Possible additions:
+| ID | Item | Source | Notes |
+|---|---|---|---|
+| B-M3 | `BacklogPanel` uses native `confirm()` | `bizar-dash/src/web/components/tasks/BacklogPanel.tsx` | Use `useModal().showConfirm(...)`. 1 hour. |
+| B-M4 | `BacklogPanel` promote doesn't trigger refresh | same | 1 hour. |
+| B-M5 | Schedules "Other..." timezone has no UI | `bizar-dash/src/web/views/Schedules.tsx:40-48` | Free-form input. 2 hours. |
+| B-M8 | `/api/auth/reveal` returns token in plaintext | `bizar-dash/src/server/routes/auth.mjs:57` | Return only "abc...xyz" with copy UI. 1 hour. |
+| B-M9 | 15 instances of `Math.random()` for IDs | various | Replace with `crypto.randomUUID()`. 1 hour. |
+| B-L4 | Stale port file read in `bin.mjs:395` | `cli/bin.mjs:395` | PID liveness check. 1 hour. |
+| B-L6 | 6 rate-limited empty catches remain in `memory-lightrag.mjs` | `bizar-dash/src/server/memory-lightrag.mjs` | Apply logger pattern. 1 hour. |
 
-- **`task-complete` hook**: Fire when an agent task finishes (not just session close).
-- **`artifact-create` hook**: Allow post-processing on artifact save (linting, validation, snapshot).
-- **`tool-error` hook**: Capture tool errors centrally for telemetry.
+### P2 — Blocks Tier 3 / nice to have
 
-### 8.3 SDK Public API
-
-`packages/sdk` (~3 test files). Public API surface is small. Could expose:
-
-- `BizarSDK.listProjects()` — currently only available via REST
-- `BizarSDK.watchMemory(callback)` — filesystem watcher already exists in plugin; SDK wrapper would help external tools
-- `BizarSDK.createArtifact(spec)` — programmatic artifact creation without HTTP
-
-### 8.4 Agent Briefs / Handoffs
-
-Agent briefs (`.bizar/briefs/*.md`) exist but the handoff protocol is loose. Specifically:
-
-- **No structured handoff schema**: When `@tyr` hands to `@frigg`, the brief is markdown but the receiving agent must infer format. Add a JSON schema for briefs.
-- **No brief validation**: A malformed brief is processed as text. Add a `bizar brief validate <path>` command and a schema check.
-
-### 8.5 Documentation Gaps
-
-- **`packages/sdk/README.md`** is sparse — only a usage example.
-- **No architectural diagram** of plugin ↔ opencode ↔ dashboard.
-- **Hook reference** is buried in JSDoc — extract to `docs/hooks.md`.
-
----
-
-## Section 9: Improvements — Skills, Docs, Templates
-
-Stream 5 findings. *Several skills shipped in v4.5.0 and v4.5.1; publishing skill shipped in v4.7.0 — see §13 and the table below.*
-
-### 9.1 Skills Coverage Gaps
-
-`< 70 lines of body content` skills flagged as "thin". Status indicates what landed in v4.5.0/v4.5.1:
-
-| Skill | Path | Status (post-v4.5.0/v4.5.1) | Issue |
-|-------|------|----------------------------|-------|
-| `agent-baseline` | `~/.opencode/skills/agent-baseline/` | ✓ [always-on] | Auto-loaded |
-| `browser-harness` | `~/.opencode/skills/browser-harness/` | ✓ good | |
-| `find-skills` | `~/.agents/skills/find-skills/` | ✓ [v4.5.0] — implicit in skills-cli | short |
-| `decision-mapping` | `~/.agents/skills/decision-mapping/` | thin | open |
-| `grill-me` | thin | open |
-| `grill-with-docs` | thin | open |
-| `grilling` | thin | open |
-| `loop-me` | thin | open |
-| `teach` | thin | open |
-| `qa` | thin | open |
-| `bizar` | `~/.opencode/skills/bizar/` | ✓ [v4.5.0] | shipped |
-| `self-improvement` | `~/.opencode/skills/self-improvement/` | ✓ [v4.5.0] | shipped |
-| `obsidian` | extended | ✓ [v4.5.1] extended with Memory tab docs | |
-| `lightrag` | extended | ✓ [v4.5.1] extended with Memory tab docs | |
-| `minimax` | shipped | ✓ [v4.5.0] | |
-| `providers` | shipped | ✓ [v4.5.0] | |
-| `chat` | shipped | ✓ [v4.5.0] | |
-| `usage` | shipped | ✓ [v4.5.0] | |
-| `skills-cli` | shipped | ✓ [v4.5.0] | |
-| `sdk` | shipped | ✓ [v4.5.0] | |
-| `headroom` | new | ✓ [v4.5.1] — `bizar-dash/skills/headroom/SKILL.md` | |
-| `publishing` | new | ✓ [v4.7.0] — `bizar-dash/skills/publishing/SKILL.md` | release-process guidance |
-| 12 shipped total | (see §13) | ✓ |
-
-A "thin" skill is one whose `SKILL.md` is < 70 lines of body content. Add expanded examples, decision matrices, or rename to clearly indicate minimal-depth (e.g., `grilling-quick` vs `grilling-deep`).
-
-### 9.2 Outdated Docs
-
-- ✓ [v4.5.1 — F34] `.opencode/instructions/bizar-tools.md` — broken `headroom plan --tokens` reference replaced with accurate Headroom 0.30.0 commands.
-- `wiki/` — needs a fresh audit. The wiki may be stale relative to v4.5.x. *open*
-- `docs/installation.md` — may reference old `install.sh` patterns from pre-provisioner era. *open*
-- `docs/architecture.md` — pre-dates the v1/v2 server split. *open*
-
-### 9.3 Wiki Pages to Refresh
-
-- `wiki/getting-started.md` — update for v4.5+ command surface. *open*
-- `wiki/configuration.md` — document 5 config roots (§5.1). *open*
-- `wiki/dashboard-vs-cli.md` — only v2 is current. *open*
-- `wiki/troubleshooting.md` — add sections for the bugs fixed this session. *open*
-
-### 9.4 Templates to Add
-
-Currently: `templates/plan/htmx.min.js` is the only one. Add:
-
-- **`templates/artifact/`** — starter MDX for artifact files (already exists in `artifact.mjs` but extracted). *open*
-- **`templates/agent-brief.md`** — structured handoff template (see §8.4). *open*
-- **`templates/skill/SKILL.md`** — starter skill file. *open*
-- **`templates/mod/manifest.json`** — for community mod publishing (see §10 plugin marketplace). *open*
-
-### 9.5 Rules Files
-
-`config/agents/_shared/AGENT_BASELINE.md` exists. Add per-language conventions:
-
-- `rules/typescript.md` — codegen discipline, `any` policy, error boundaries. *open*
-- `rules/css.md` — token use, no inline styles, layer ordering. *open*
-- `rules/testing.md` — minimum coverage thresholds per directory. *open*
+| ID | Item | Source | Notes |
+|---|---|---|---|
+| B-M2 | `Providers._expanded` state lost on snapshot refresh | `bizar-dash/src/web/views/Providers.tsx` | Move to API or localStorage. 2 hours. |
+| B-L1 | 228 KB CSS bundle — no tree-shaking verification | `vite.config.ts` | Run purgecss, audit selectors. 1 day. |
+| B-L2 | No global `:focus-visible` ring | `bizar-dash/src/web/styles/main.css` | Add a global rule. 30 min. |
+| B-L3 | `console.log` vs `console.error` mix | many | Full CLI-side convention. 2 hours. |
+| B-H5 | v1 dashboard routes have no auth | `bizar-dash/src/server/server.mjs` | Deferred — Tailscale handles auth. Re-evaluate for Tier 3 enterprise. |
+| (old) | OpenTelemetry export | `bizar-dash/src/server/server.mjs` | Skeleton in v4.9, not wired. 1 week. Block: Tier 3 telemetry. |
+| (old) | WCAG 2.2 AA compliance gaps | various | Settings form labels, aria-live, color-only. Ongoing. |
+| (old) | LightRAG index rebuild (`bizar memory reindex` returns stub) | `bizar-dash/src/server/memory-lightrag.mjs` | Wire the rebuild. 1 week. |
+| (old) | Voice note auto-transcription (Whisper API only) | `bizar-dash/src/server/voice.mjs` | 1 week. |
+| (old) | Settings inline styles → CSS classes | `bizar-dash/src/web/views/Settings.tsx` (1823 lines) | Refactor. 1 sprint. |
+| R-P2-1 | Mimir research output lacks source ranking / credibility scoring | `config/agents/mimir.md` | Tier 1 scaffolding only; full ranking in §5.6 milestone 2. |
+| R-P2-2 | No dashboard tab for active research sessions | `bizar-dash/src/web/views/` | Shell ships in Tier 1; full wiring in Tier 2. |
+| R-P2-3 | No `~/.bizar_memory/research/` namespace for storing research outputs | `bizar-dash/src/server/memory-store.mjs` | Tier 2 deliverable; no namespace exists today. |
 
 ---
 
-## Section 10: Completely New Features (Future)
+## 7. Out of Scope / Deprioritized
 
-15-25 genuinely useful new features for an AI agent orchestrator dashboard. Each labeled with effort (S/M/L) and impact (S/M/L).
+Items from the old `ROADMAP.md` §10 that no longer fit the new direction. The cut is ruthless — anything that doesn't ladder up to a pillar is deprioritized.
 
-### AI / Agent Features
+| Old item | Source | Reason for deprioritization |
+|---|---|---|
+| F-NEW-7: Multi-user / Team Workspaces | old §10 | Not a pillar. Punted to Tier 4 (enterprise). |
+| F-NEW-8: Multi-Project Dashboards | old §10 | Tier 4. |
+| F-NEW-11: Live cursors in artifact canvas | old §10 | Doesn't ladder up. Cutting. |
+| F-NEW-12: Voice Notes → Transcripts | old §10 | Useful but not a pillar. Defer to P2 / community. |
+| F-NEW-13: Screenshot → OCR + Note | old §10 | Same. |
+| F-NEW-14: Web Clipper Extension | old §10 | Same. |
+| F-NEW-16: Memory Graph Visualization | old §10 | Useful for browsing, but doesn't advance autonomy. Defer. |
+| F-NEW-17: One-Click Deploy (Vercel/Cloudflare/Fly) | old §10 | Doesn't ladder up. Defer to community. |
+| F-NEW-18: Self-Hosted Dashboard (Docker) | old §10 | Tier 4. |
+| F-NEW-19: Backup / Restore | old §10 | Tier 4 / P2. |
+| F-NEW-20: Multi-Project SaaS | old §10 | Tier 4. |
+| F-NEW-21: React Native mobile app | old §10 | The mobile sub-app is sufficient. Defer. |
+| F-NEW-22: Metrics endpoint | old §10 | **DONE in v4.7.0** (`/metrics`). |
+| F-NEW-23: OpenTelemetry export | old §10 | P2 — keep on backlog. |
+| F-NEW-24: Audit Log Viewer | old §10 | P2. |
+| F-NEW-25: Sentry integration | old §10 | P2. |
+| F-NEW-26: Custom Themes | old §10 | Cutting. |
+| F-NEW-27: Keyboard Shortcut Customizer | old §10 | P2. |
+| F-NEW-28: Plugin Marketplace | old §10 | Part of Tier 4. |
+| F-NEW-29: Webhook Integrations | old §10 | P2. |
+| F-NEW-30: CLI for Everything | old §10 | Tier 2 will close most gaps. |
+| F-NEW-31/32/33: GitHub / Linear / Notion Sync | old §10 | Doesn't ladder up. Defer to community. |
+| F-NEW-34/35: Slack / Discord Notifications | old §10 | P2. |
+| v4.6+ `parseWithModsFlag` extraction (R12) | old §4 | Shipped as part of v4.5.2. Crossed out. |
+| v4.6+ `cache detectState()` (R9) | old §4 | P2 perf cleanup. |
+| v4.6+ R11 logging convention | old §4 | Mostly done in v4.7.0. Remaining: CLI side. |
 
-#### F-NEW-1: Agent Composition / Handoffs
-Define agent graphs (DAGs) where output of one feeds the next. E.g., `@mimir (research) → @tyr (design) → @thor (implement)`. Stored as `briefs/graph.yaml` per project. UI: visual graph editor (React Flow), automatic brief chaining.
-*Why*: Currently handoffs are copy-paste-driven. Graphing them makes planning legible.
-*Effort*: **M** (1 sprint). *Impact*: **M**.
-
-#### F-NEW-2: Multi-Agent Debate / Voting
-Run the same prompt against 3 agents in parallel (`@mimir`, `@tyr`, `@vidarr`); have a 4th agent (`@forseti`) vote on best output. Surface dissenting views.
-*Why*: Decision quality improves when alternatives are compared.
-*Effort*: **L** (3+ sprints — needs parallel scheduling infra). *Impact*: **H**.
-
-#### F-NEW-3: Eval Framework Integration
-`bizar eval run <suite>`. Load golden-file fixtures, run an agent, score outputs (regex match / embedding similarity / LLM-as-judge). Store eval history in `~/.bizar/evals/`.
-*Why*: "Move fast and verify things" is the loop every agent tool needs.
-*Effort*: **M**. *Impact*: **H**.
-
-#### F-NEW-4: Prompt Playground with A/B Testing
-Side-by-side message composer that sends the same prompt with different model/system-prompt/agent configs. Compare responses in a diff view.
-*Why*: Configuration tuning is guesswork today.
-*Effort*: **M**. *Impact*: **M**.
-
-#### F-NEW-5: RLHF-style Thumbs Up/Down
-Add 👍/👎 to chat messages. Store as `~/.bizar/feedback/{chatId}/votes.jsonl`. Periodically fine-tune prompts based on negative feedback density.
-*Why*: Dataset creation is the bottleneck for prompt iteration.
-*Effort*: **S** for UI + storage; **L** for fine-tuning pipeline. *Impact*: **M**.
-
-#### F-NEW-6: Cost Predictor Before Running
-Estimate token cost (input length × rate + estimated output) before pressing send. Show "≈$0.13, 2,100 output tokens" inline. Configurable rates per provider.
-*Why*: Avoid surprise bills on long-running jobs.
-*Effort*: **S**. *Impact*: **M**.
-
-### Collaboration / Multi-User
-
-#### F-NEW-7: Shared Task Boards
-Multi-user visibility on `Tasks.tsx`. Each user has identity (local account or git-tracked). Comments on tasks. Auth via existing dashboard secret system.
-*Why*: Currently single-operator. Teams need shared state.
-*Effort*: **L**. *Impact*: **H**.
-
-#### F-NEW-8: Team Workspaces
-Multi-project grouping. A workspace contains N projects with shared permissions, schedules, and memory vault. Stored at `~/.bizar/workspaces/{name}/`.
-*Why*: Tenant isolation is required for any team deployment.
-*Effort*: **L**. *Impact*: **H**.
-
-#### F-NEW-9: @-mentions and Notifications
-In chat/comments/tasks, `@tyr` notifies that agent (queues a task if offline). Dashboard notification bell shows aggregate.
-*Why*: Current notification model is fire-and-display. Mentions make it actionable.
-*Effort*: **M**. *Impact*: **M**.
-
-#### F-NEW-10: Comment Threads on Artifacts
-Artifacts already have rich content. Add comments sidebar (`comments.jsonl` per artifact). Markdown comments with `@mentions`.
-*Why*: Review workflow needs first-class threading.
-*Effort*: **M**. *Impact*: **M**.
-
-#### F-NEW-11: Live Cursors in Artifact Canvas
-WebSocket-based cursor tracking so multiple users see each other's pointer while editing a canvas artifact.
-*Why*: Real-time collaboration is table stakes for shared editors.
-*Effort*: **L** (CRDT or OT required). *Impact*: **L** (niche).
-
-### Memory / Knowledge
-
-#### F-NEW-12: Voice Notes → Transcripts
-Mobile-app record button. Audio uploaded to server, transcribed via Whisper (local or API), saved as note in memory vault.
-*Why*: Voice capture is faster than typing for ideation.
-*Effort*: **M**. *Impact*: **H**.
-
-#### F-NEW-13: Screenshot → OCR + Note
-Paste/upload an image. Run OCR (Tesseract or cloud). Save extracted text + image to a memory note. Searchable via full-text search.
-*Why*: Visual references (screenshots, whiteboard photos) are common but text-search-invisible today.
-*Effort*: **M**. *Impact*: **M**.
-
-#### F-NEW-14: Web Clipper Extension
-Browser extension (Chrome + Firefox) that captures the current page (DOM/selection/article-mode) and saves to the dashboard memory vault.
-*Why*: Default to the existing web-clipper UX from Obsidian/Notion/Evernote.
-*Effort*: **M**. *Impact*: **H**.
-
-#### F-NEW-15: Auto-Generated Weekly Digests
-Every Sunday 00:00, the server generates a memory note summarising the week's session activity, tasks completed, agents used, costs incurred.
-*Why*: Auto-recap saves explicit review time.
-*Effort*: **S**. *Impact*: **M**.
-
-#### F-NEW-16: Memory Graph Visualization
-A force-directed graph (e.g., `vis-network` or `d3-force`) showing notes as nodes, links as edges. Click a node to open. Already powered by the `lightrag` knowledge index.
-*Why*: Connections are hard to read in linear note lists.
-*Effort*: **M**. *Impact*: **M**.
-
-### DevOps / Deployment
-
-#### F-NEW-17: One-Click Deploy
-`bizar deploy --to vercel|cloudflare|fly|render`. Reads `bizar` config, generates appropriate infra (wrangler.toml, vercel.json, Dockerfile), deploys.
-*Why*: Cuts a deployment step from 30 min to 30 sec.
-*Effort*: **M**. *Impact*: **H**.
-
-#### F-NEW-18: Self-Hosted Dashboard (Docker)
-`docker run -p 4097:4097 polderlabs/bizar-dash`. Single image, mount vault dir as volume. Healthcheck. Logs to stdout.
-*Why*: Self-hosting is required for many enterprise policies.
-*Effort*: **S**. *Impact*: **H**.
-
-#### F-NEW-19: Backup / Restore Dashboard State
-`bizar backup --to <path>` creates a tarball of all state (`.bizar/`, `~/.config/bizar/`, `~/.cache/bizarharness/`). `bizar restore <tarball>` validates checksum and restores.
-*Why*: Recovery story matters for any production tool.
-*Effort*: **S**. *Impact*: **H**.
-
-#### F-NEW-20: Multi-Project Dashboards
-Spin up N dashboard instances behind a single host entry (`projects/{name}.bizar.dev`). Single sign-on, shared config.
-*Why*: SaaS offering requires multi-tenant.
-*Effort*: **L**. *Impact*: **H**.
-
-#### F-NEW-21: Mobile Companion App (React Native)
-The current "mobile" is a responsive web subapp. Native iOS/Android app with push notifications and background sync of memory notes.
-*Why*: Push notifications + camera/voice access need native.
-*Effort*: **L**. *Impact*: **M**.
-
-### Observability
-
-#### F-NEW-22: Metrics Endpoint (Prometheus)
-`/metrics` returns Prometheus text format: `bizar_http_requests_total{route}`, `bizar_ws_clients`, `bizar_opencode_json_size_bytes`, etc.
-*Why*: Standard observability integration path.
-*Effort*: **S**. *Impact*: **M**.
-
-#### F-NEW-23: OpenTelemetry Export
-Wrap all HTTP/WS calls in OTel spans. Export to any OTLP-compatible backend (Jaeger, Honeycomb, Tempo).
-*Why*: Distributed tracing for cross-service debugging.
-*Effort*: **M**. *Impact*: **M**.
-
-#### F-NEW-24: Audit Log Viewer
-Dashboard view of `~/.bizar/audit.log` with filtering by user, action, time range. Currently no UI for this.
-*Why*: Compliance + debugging needs.
-*Effort*: **S**. *Impact*: **M**.
-
-#### F-NEW-25: Error Tracking Integration (Sentry)
-DSN config in env vars; auto-report unhandled exceptions and WS errors.
-*Why*: Production debugging without access to user machines.
-*Effort*: **S**. *Impact*: **H**.
-
-### Power User
-
-#### F-NEW-26: Custom Themes
-User can pick from a theme gallery or load a CSS file. Currently dark + light only.
-*Why*: Personalization drives lock-in.
-*Effort*: **M**. *Impact*: **L**.
-
-#### F-NEW-27: Keyboard Shortcut Customizer
-`/` to focus search. Add remappable per-action shortcuts, persisted in settings.
-*Why*: Power users live in the keyboard.
-*Effort*: **M**. *Impact*: **L**.
-
-#### F-NEW-28: Plugin Marketplace
-A registry of mods/plugins (centralized or federated). `bizar mod install <id>` pulls from registry, validates manifest, installs.
-*Why*: Community contributions accelerate feature pace.
-*Effort*: **L**. *Impact*: **H**.
-
-#### F-NEW-29: Webhook Integrations
-User defines webhooks (URL + payload template + trigger event). On event, server POSTs to URL. Trigger events: `task.complete`, `agent.idle`, `schedule.fire`.
-*Why*: External automation (Slack, CI/CD, monitoring).
-*Effort*: **M**. *Impact*: **H**.
-
-#### F-NEW-30: CLI for Everything
-Every dashboard action should be available via `bizar ...`. Currently many views have no CLI equivalent.
-*Why*: Scriptability.
-*Effort*: **L** (ongoing). *Impact*: **M**.
-
-### Integrations
-
-#### F-NEW-31: GitHub Issues Sync
-Bidirectional sync between dashboard tasks and GitHub Issues. PR labels map to task status.
-*Why*: Most open-source projects track work in GH.
-*Effort*: **M**. *Impact*: **H**.
-
-#### F-NEW-32: Linear Sync
-Same as F-NEW-31 but for Linear.
-*Effort*: **M**. *Impact*: **M**.
-
-#### F-NEW-33: Notion Sync
-Push memory notes to a Notion database. Pull Notion pages as notes.
-*Why*: Many users live in Notion.
-*Effort*: **M**. *Impact*: **M**.
-
-#### F-NEW-34: Slack Notifications
-Per-project channel subscriptions. When a task moves or an agent finishes, post to Slack.
-*Why*: Async-first teams.
-*Effort*: **S**. *Impact*: **M**.
-
-#### F-NEW-35: Discord Webhooks
-Same as Slack but for Discord.
-*Effort*: **S**. *Impact*: **L**.
+**The discipline**: if a feature doesn't advance Loops, Multi-Agent Validation, Agent Hierarchy, Agent Council, or Constant Self-Improvement, it goes on the P2 backlog at best. The exception is work that unblocks Tier 1 (the v6.0 orchestrator); that work is P0 regardless of pillar.
 
 ---
 
-## Section 11: Roadmap (Updated 2026-07-05 — post-v5.0.1)
+## 8. Open Questions for Maintainers
 
-### ✓ Shipped
+These need human judgment. Listed so we can address them in order.
 
-- **v4.5.0** — Settings overhaul, provider backup keys, usage analytics
-- **v4.5.1** — Headroom default compression + full Memory tab
-- **v4.5.2** — Bug-fix sweep (16 fixes)
-- **v4.7.0** — CLI refactor + logger + metrics + 75 vitest tests
-- **v4.7.1** — CLI error visibility
-- **v4.7.2** — Symlink-broken `bizar` CRITICAL FIX
-- **v4.8.0** — Backup/restore + rate-limit + Settings refactor + digests + a11y
-- **v4.9.0** — Mobile + OTel + Memory graph + Docker + Settings search
-- **v5.0.0** — Multi-user + plugin marketplace + eval + deploy + voice + clipper + OCR
-- **v5.0.1** — Settings redesign + Doctor + Auto-save + chat fixes + vault default + MiniMax models + layout fix + compaction
-
-### Remaining (post-v5.0.1)
-
-- [ ] OTLP trace export (skeleton exists in v4.9, needs more spans)
-- [ ] Full WCAG 2.2 AA audit (mostly done in v4.8, gaps remain)
-- [ ] Mobile bundle further reduction (currently 140 KB)
-- [ ] Plugin marketplace registry (registry.json needs to be published)
-- [ ] Eval framework golden fixtures expansion
-- [ ] Voice note auto-transcription (currently Whisper API only)
-
-### Future (v5.1+)
-
-- [ ] Multi-user workspace UI improvements (member management)
-- [ ] Plugin permissions UI
-- [ ] Self-hosted dashboard with Tailscale integration
-- [ ] Eval report web UI
-- [ ] Deploy previews for Vercel
+1. **Is the agent council a paid feature?** Tiers 1-2 of the council primitive are core; the enterprise version (audit log, custom rule sets, compliance reports) is a natural product boundary. Decision needed before v7.0 scope lock.
+2. **Do we keep voice notes?** Shipped in v5.0.0. Not a pillar. Either (a) commit to a Tier 4 product wedge, (b) treat as community-maintained, or (c) deprecate.
+3. **How aggressive should we be about auto-updates to agents?** Tier 1 makes agent definitions runtime-mutable. Tier 3 self-improvement mutates them automatically. What's the rollback story? Staged rollout? Human approval for rule promotion?
+4. **What's the open-source vs. commercial split?** The runtime orchestrator and self-improvement loop are valuable IP. Do we open-source them? Offer a managed service? Both? Decision needed before v6.0 ships publicly.
+5. **Should the dashboard become a desktop app?** Tauri/Electron would unlock notifications, file system access, and "always-on" behavior that web can't match. A long-running agent platform probably wants a desktop presence. Decision needed before Tier 2 dashboard work.
+6. **Memory service — when does it graduate from a Bizar-specific system to a generic product?** Three vault modes, git sync, secret scanning — it's already a product-shaped thing. A v2 of the memory service could be a standalone offering.
 
 ---
 
-## Section 12: Effort vs Impact Matrix (Updated 2026-07-05)
+## 9. Contributing
 
-All improvements from §3–§10, ranked. Status column added — `✓` = done in v4.5.0/1/2, `[~]` = partial, `[ ]` = remaining.
+This roadmap needs help in specific areas. If any of these match your skills, the work is real and the path is clear.
 
-### Quick Wins Done (S effort, ≥ M impact) — ✓
+**Most needed** (Tier 1 bottlenecks):
 
-| # | Item | Source | Effort | Impact | Status |
-|---|------|--------|--------|--------|--------|
-| 1 | Add `--json` global flag (R6) | §4 | S | M | ✓ [v4.5.2] |
-| 2 | Add `--debug` global flag (R7) | §4 | S | M | ✓ [v4.5.2] |
-| 3 | `sourcemap: 'hidden'` (R3 of build) | §7 | S | M | ✓ [v4.5.2 — F21] |
-| 4 | `.npmignore` `*.map` | §7 | S | L | ✓ [v4.5.2 — F22] |
-| 5 | Centralize `bizarConfigDir()` (R5) | §4 | S | M | ✓ [v4.7.0] |
-| 6 | Centralize `which()` (R4) | §4 | S | L | ✓ [v4.7.0] |
-| 7 | AbortController on remaining ~11 views | §6 | S | M | [PARTIAL] 4 of 15+ (F5) |
-| 8 | Replace `Math.random()` IDs with `crypto.randomUUID()` (B-M9) | §3 | S | L | [ ] |
-| 9 | Set `cache-control` headers on API | §7 | S | L | ✓ [v4.7.0] — `/api/settings` and `/api/snapshot` |
-| 10 | Replace `confirm()` in BacklogPanel (B-M3) | §3 | S | L | [ ] |
-| 11 | Cost predictor before send (F-NEW-6) | §10 | S | M | [ ] |
-| 12 | Backup/restore (F-NEW-19) | §10 | S | H | [ ] |
-| 13 | Prometheus `/metrics` (F-NEW-22) | §10 | S | M | ✓ [v4.7.0] |
-| 14 | Sentry integration (F-NEW-25) | §10 | S | H | [ ] |
-| 15 | Slack notifications (F-NEW-34) | §10 | S | M | [ ] |
-| 16 | Auto weekly digests (F-NEW-15) | §10 | S | M | [ ] |
-| 17 | Audit log viewer UI (F-NEW-24) | §10 | S | M | [ ] |
-| 18 | Standardize exit codes (R8) | §4 | S | L | ✓ [v4.5.2] |
-| 19 | Purgecss audit (B-L1) | §7 | S | M | [ ] |
-| 20 | `*:focus-visible` global ring (B-L2) | §7 | S | M | [ ] |
+- **Distributed systems / agent runtime engineering.** The orchestrator is the Tier 1 unlock. Comfort with Node.js, persistent state machines, queue/scheduling, and the subtleties of LLM-driven control flow.
+- **Prompt engineering at scale.** The 12 agent definitions are Tier 0 / Tier 1. Tier 3 needs validated, measurable prompts. Comfort with evaluation methodology, LLM-as-judge, and adversarial testing.
+- **Eval framework design.** The self-improvement loop needs ground truth. Building the test suite that rules are validated against is its own discipline.
+- **Web platform engineering.** The dashboard becomes the primary surface for visualizing long-running agent work. 17 views today; the orchestrator view alone is a major addition. React + TypeScript + WebSocket.
 
-### Medium Effort, High Impact
+**Helpful but less critical** (Tier 2-3):
 
-| # | Item | Source | Effort | Impact | Status |
-|---|------|--------|--------|--------|--------|
-| 21 | Split `bin.mjs` into `cli/commands/` (R1) | §4 | M | H | ✓ [v4.7.0] |
-| 22 | Split `artifact.mjs` into 3 files (R2) | §4 | M | H | ✓ [v4.7.0] |
-| 23 | Remove or auth-protect v1 server (B-H5) | §3/§5 | M | H | [ ] Deferred — Tailscale handles auth |
-| 24 | React.lazy() per-view | §6 | M | H | [PARTIAL] Suspense landed (F24); per-view lazy pending |
-| 25 | Web frontend test infra + smoke tests | §7 | M | H | ✓ [v4.7.0] — vitest + RTL; 75 tests |
-| 26 | `<label>` on Settings inputs (a11y) | §7 | M | H | [PARTIAL] color inputs labeled; Tailscale checkbox associated (v4.7.0); bulk unlabeled |
-| 27 | `React.memo()` on snapshot receivers | §6 | M | M | ✓ [v4.5.2 — F28] |
-| 28 | virtual scrolling (react-window) | §6 | M | M | ✓ [v4.7.0] — hand-rolled `<VirtualList>` in 4 views |
-| 29 | Structured logging + correlation IDs (S-R6) | §5 | M | H | ✓ [v4.7.0] — `logger.mjs`; correlation IDs still pending |
-| 30 | Rate limiting (S-R3) | §5 | M | M | [ ] |
-| 31 | `oauth` for V2 — actually, env-var key rotation already exists | §5 | M | M | [PARTIAL] EnvVarManager + provider backup keys landed v4.5.0; full ACL system still pending |
-| 32 | i18n infrastructure (i18next) | §7 | M | H | [PARTIAL] — `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 strings) foundation (v4.7.0) |
-| 33 | Voice notes → transcripts (F-NEW-12) | §10 | M | H | [ ] |
-| 34 | Screenshot OCR (F-NEW-13) | §10 | M | M | [ ] |
-| 35 | Web clipper extension (F-NEW-14) | §10 | M | H | [ ] |
-| 36 | Memory graph viz (F-NEW-16) | §10 | M | M | [ ] |
-| 37 | Webhook integrations (F-NEW-29) | §10 | M | H | [ ] |
-| 38 | Eval framework (F-NEW-3) | §10 | M | H | [ ] |
-| 39 | A/B prompt playground (F-NEW-4) | §10 | M | M | [ ] |
-| 40 | One-click deploy (F-NEW-17) | §10 | M | H | [ ] |
-| 41 | `aria-live` on activity/task/chat regions | §6 | S | M | [ ] |
-| 42 | Settings.tsx → sub-components (a11y + scoping) | §6 | M | M | [ ] Active Focus #2 |
-| 43 | Mobile bundle > desktop (B-MOBILE-1) | §6 | M | M | [DEFERRED to v4.8] Active Focus #1 |
-| 44 | `content-visibility: auto` on long lists | §6 | S | M | ✓ [v4.5.2 — F27] |
-| 45 | WS message queue | §6 | M | M | [ ] |
-| 46 | Per-view CSS splitting (main.css 8901 lines) | §6 | M | M | [ ] |
-| 47 | Headroom full integration | §4–§5 | L | M | ✓ [v4.5.1] |
-| 48 | Full Memory tab | §5 | L | M | ✓ [v4.5.1] |
-| 49 | Settings overhaul + EnvVarManager | §5 | L | H | ✓ [v4.5.0] |
-| 50 | Provider catalog + backup keys | §5 | L | H | ✓ [v4.5.0] |
-| 51 | Usage analytics (JSONL + chart + per-model table) | §5 | L | H | ✓ [v4.5.0] |
-| 52 | Chat overhaul (SSE, useChat rewrite) | §5 | L | H | ✓ [v4.5.0] |
-| 53 | Tasks kanban board | §5 | M | M | ✓ [v4.5.0] |
+- **Knowledge graph / RAG.** The memory service grows up in Tier 3. LightRAG scaffolding exists; real index work is needed.
+- **Security / sandboxing.** The mods system has a v1 security layer; Tier 3 wants a real `vm` sandbox. Work that requires careful adversarial thinking.
+- **Observability.** OpenTelemetry export, correlation IDs, distributed tracing. Boring infrastructure; everyone needs it; few people love it.
+- **Research engineering.** Search infrastructure, source ranking algorithms, citation management, temporal knowledge tracking, paywall handling. The Pillar 6 work is the most research-adjacent engineering in the project — good for people who want to work at the intersection of information retrieval and AI agents.
 
-### Larger Investments (L effort; gate behind roadmap)
+**Process for contributing**:
 
-| # | Item | Source | Effort | Impact |
-|---|------|--------|--------|--------|
-| 54 | Multi-user / team workspaces (F-NEW-7/8) | §10 | L | H |
-| 55 | Plugin marketplace (F-NEW-28) | §10 | L | H |
-| 56 | React Native mobile (F-NEW-21) | §10 | L | M |
-| 57 | Multi-agent debate (F-NEW-2) | §10 | L | H |
-| 58 | Live cursors in canvas (F-NEW-11) | §10 | L | L |
-| 59 | GitHub Issues sync (F-NEW-31) | §10 | L | H |
-| 60 | Multi-project dashboards (F-NEW-20) | §10 | L | H |
-| 61 | CLI for everything (F-NEW-30) | §10 | L | M |
+1. Read `FINAL_GOAL.md` and this file end to end.
+2. Read `.bizar/AGENTS_SELF_IMPROVEMENT.md` for the active rules every agent follows.
+3. Pick a P0 from §6 or a milestone from §5.
+4. Read the relevant file:line refs.
+5. Open a PR. The test gate is `npm test` + `npm run test:web` + `bizar test-gate`.
 
-### Quick-Win → Roadmap Mapping (Updated 2026-07-05)
-
-- **v4.7.0** ✓ items 5, 6, 9, 13, 21, 22, 25, 26 (partial), 28, 29, 32 (partial) (CLI refactor + observability + tests + perf + a11y polish)
-- **v4.8** [ ] items 24, 30, 41, 43, 46 (perf + a11y + CSS) + items 33-40 (memory features)
-- **v5.0** [ ] items 54-61 (collaboration)
-- **Carry-over (deferred)**: item 23 (Tailscale handles auth); items 8, 10, 14, 15-17, 19, 20, 31, 42, 45 (quick wins)
-- **Shipped (✓)**: items 1-4, 7 (partial), 18, 27, 44, 47-53 (v4.5.0/v4.5.1/v4.5.2) + items 5, 6, 9, 13, 21, 22, 25, 28, 29 (v4.7.0)
+The self-improvement log is the project's living memory. If you find a lesson worth recording, add an entry. The format is in `.bizar/AGENTS_SELF_IMPROVEMENT.md`'s existing entries.
 
 ---
 
-## Section 13: What's Done
+## 10. Changelog → Roadmap
 
-This section tracks the work completed across v4.5.0 → v4.7.0. Items marked "✓ DONE" in §3-§10 below reference this section.
+**Note on the new structure.**
 
-### v4.5.0 — Settings + Provider + Usage + Chat overhaul
+The old `ROADMAP.md` (1,549 lines) was a "findings document" oriented toward dashboard feature work. The 35 features in old §10, the 50+ bug entries in old §3, and the per-release retrospectives in old §13 were useful when the platform was small. They are not useful at the scale we are now operating.
 
-**Settings overhaul:**
-- ✓ Config tab merged into Settings (was §4 R12 / §6)
-- ✓ Settings restructured with section nav: General / Env Vars / Providers / Memory / System LLM / Updates / Skills / Dashboard
-- ✓ EnvVarManager component for BIZAR_* env vars at ~/.config/bizar/env.json (mode 0600)
-- ✓ SettingsSearch component + global search modal scope
-- ✓ No plaintext API keys — every key reference is a managed env var
+The new structure splits these concerns:
 
-**Provider subsystem:**
-- ✓ PROVIDER_CATALOG with 13 entries (opencode, anthropic, openai, google, minimax, groq, mistral, cohere, openrouter, deepseek, ollama, lmstudio, custom)
-- ✓ Fuzzy search + single-key auto-add wizard (`POST /api/providers/auto`)
-- ✓ Backup keys per provider with auto-rotation on auth/quota/rate-limit/429/5xx
-- ✓ Key cooldown tracking, status management
-- ✓ LightRAG defaults to free opencode Zen models
-- ✓ Memory settings tab (LightRAG + Obsidian + git repo)
+- **`FINAL_GOAL.md`** — the vision. The why. Read this first.
+- **`ROADMAP.md`** (this file) — the strategy. The what and when. Read this second.
+- **`.obsidian/projects/current-state-analysis-2026-07-06.md`** — the baseline. What exists, what's missing. Read this when you need the gory details.
+- **`CHANGELOG.md`** — what shipped in each release. The who/what/when of features and fixes.
+- **`.bizar/AGENTS_SELF_IMPROVEMENT.md`** — the lessons learned. The institutional memory.
 
-**Usage monitoring:**
-- ✓ JSONL store at ~/.local/share/bizar/usage.jsonl
-- ✓ Tracks prompt/completion/cached/reasoning tokens, requests, errors, latency
-- ✓ Interactive SVG chart (hand-rolled, no library)
-- ✓ Per-model breakdown table with sortable columns
-- ✓ Time-range picker (24h/7d/30d/custom)
-- ✓ `getUsageLimitsForAgent(providerId)` — agents know their limits
-- ✓ CLI: `bizar usage [range]`
+The old ROADMAP.md is preserved in git history. Detailed bug-fix lists and feature requests have moved to `CHANGELOG.md` and the issues tracker. New findings should be filed as issues with a tier tag (P0/P1/P2) and a pillar tag (loops/validation/hierarchy/council/self-improvement), not appended to this file.
 
-**Chat overhaul:**
-- ✓ Fixed "can't open an opencode session" (SSE reconnect + per-session event gating)
-- ✓ Fixed "can't create a new session" (was bare `fetch('/chat/sessions')` → 404)
-- ✓ `useChat.ts` rewrite with SSE reconnect-with-backoff, optimistic-send dedupe
-- ✓ POST/PATCH/DELETE /api/opencode-sessions[/...] for create/rename/delete
-- ✓ MobileChat.tsx overhaul
-
-**Tasks.tsx:**
-- ✓ Agent picker removed from task creation
-- ✓ Backlog/Todo/In-progress/Done/Failed kanban board
-- ✓ Move/retry/edit/delete actions
-
-**Skills tab:**
-- ✓ Skills tab shows Bizar skills (was only showing `skills` CLI output)
-- ✓ Search output fixed (no more terminal ASCII garbage)
-- ✓ 11 shipped skills: bizar, agent-baseline, self-improvement, obsidian, minimax, providers, chat, usage, skills-cli, lightrag, sdk
-
-**Update flow:**
-- ✓ `bizar update` gains --check, --channel, --no-restart
-- ✓ /api/updates/{status,check,apply} with WS progress events
-
-**UI consistency:**
-- ✓ --spacing-xs/-sm/-md/-lg/-xl tokens added
-- ✓ Compact-mode overrides
-
-### v4.5.1 — Headroom + Memory tab
-
-**Headroom full integration:**
-- ✓ `bizar-dash/src/server/headroom.mjs` — getHeadroomStatus, getHeadroomStats, installHeadroom, wrapOpencode, etc.
-- ✓ /api/headroom/* endpoints (status, stats, install, wrap, unwrap, proxy start/stop, auto-route)
-- ✓ Settings → Headroom section with all toggles + action buttons
-- ✓ Auto-install/wrap/start on dashboard startup (try/catch)
-- ✓ `bizar headroom status|stats|install|wrap|unwrap|start|stop|doctor`
-- ✓ Dedicated Headroom skill at bizar-dash/skills/headroom/SKILL.md
-- ✓ Doc fix: .opencode/instructions/bizar-tools.md (was §9 outdated reference)
-
-**Full Memory tab:**
-- ✓ Dedicated tab between Skills and Settings (Sidebar + Topbar)
-- ✓ 5 panels: Overview / LightRAG / Obsidian / Git Sync / Semantic Search / Config
-- ✓ MemoryStatusCard on Overview
-- ✓ 11 new endpoints (health, storage, git diff, lightrag stats/reindex/rebuild, obsidian tree/backlinks/notes, semantic-search)
-- ✓ Obsidian façade at bizar-dash/src/server/memory-obsidian.mjs
-- ✓ Skills: obsidian and lightrag extended with Memory tab docs
-
-**Tasks:**
-- ✓ Two tasks added to Bizar task store (tsk_b1c8add787, tsk_abb21919a5)
-
-### v4.5.2 — Bug-fix sweep (16 fixes)
-
-**CLI + installer (10):**
-- ✓ parseWithModsFlag: error on empty value (was silent return [])
-- ✓ `dashboard` deprecation → stdout instead of stderr
-- ✓ install.ps1 syntax errors fixed (extra `}`, broken elseif)
-- ✓ install.ps1 Start-Process splatting fixed
-- ✓ install.sh banner moved to after provisioner succeeds
-- ✓ npm install gets 10-min timeout
-- ✓ check-deps.mjs: Windows path.join(), new deps (pip, python3, headroom, semble, skills, jq, gh), --json flag
-- ✓ artifact.mjs: WSL browser detection → cmd.exe /c start
-- ✓ Global --json flag (doctor, usage, memory status)
-- ✓ Global --debug flag (DEBUG=bizar:*)
-- ✓ Standardized exit codes (0=OK, 1=ERROR, 2=USAGE, 3=MISSING_DEP, 4=TIMEOUT)
-
-**Dashboard server (4):**
-- ✓ providers-store.mjs: 1s debounced cache for opencode.json (with mtime/size stamp check)
-- ✓ server.mjs buildSnapshot uses cached read
-- ✓ routes/chat.mjs: per-session delta buffer cap (1000)
-- ✓ memory-lightrag.mjs: console.warn on all silent catches
-
-**Dashboard web + build (6 fixes + 2 perf):**
-- ✓ vite.config.ts: sourcemap 'hidden' (drops ~3 MB from npm tarball)
-- ✓ .npmignore: excludes dist/**/*.map, **/__tests__/, **/*.test.{mjs,ts,tsx}
-- ✓ Toast.tsx: role="alert" aria-live="assertive"
-- ✓ App.tsx: Suspense wrapper with Spinner fallback
-- ✓ Tasks/Settings/Memory/Overview/Skills/MiniMaxUsage wrapped in React.memo
-- ✓ Topbar.tsx: role="tablist" + role="tab" + aria-selected
-- ✓ App.tsx: removed redundant /snapshot refetch on file-change
-- ✓ main.css: content-visibility: auto on activity/task/chat lists
-
-**Bug fixes already done in v4.5.2 prep (cross-cutting audit):**
-- ✓ vitest CVE-2025-30208 — bumped ^2.1.0 → ^4.1.9
-- ✓ /proc/net/tcp macOS — platform guard
-- ✓ 27 empty catch blocks filled with console.warn
-- ✓ MiniMaxUsage stale closure — added customFrom/customTo deps
-- ✓ AbortController added to Skills/Settings/MemoryOverview/Overview
-- ✓ CSS token duplication — merged duplicate :root blocks
-- ✓ ViewErrorBoundary added to App.tsx
-
-### Tests added in v4.5.0 + v4.5.1 + v4.5.2
-
-- 56 v4.5.0 tests (env-vars, lightrag, provider search, usage store, chat-usage, skills, chat session, tasks, update)
-- 24 Headroom tests + 40 Memory tests (v4.5.1)
-- 9 CLI + 13 server + 26 frontend bugfix tests (v4.5.2)
-- 48 new bug-fix tests
-- Total `npm test` after v4.5.2: 388 pass / 0 fail
-
-### v4.7.0 — v4.6 + v4.7: Quality & Stability + Performance & Polish
-
-**CLI refactor — split the monoliths:**
-- ✓ bin.mjs 1498→275 lines; artifact.mjs 2121→63 lines (re-export)
-- ✓ 10 new command modules under `cli/commands/`
-- ✓ 3 new artifact modules (`artifact-cli/server/render.mjs`)
-- ✓ Centralized `which()` and `bizarConfigDir()` into `cli/utils.mjs`
-- ✓ Fixed `--help` / `--version` global flag handling
-
-**Structured logging + metrics:**
-- ✓ `logger.mjs` — JSON structured logger with debug/info/warn/error, `child()`, `BIZAR_LOG_LEVEL`
-- ✓ `metrics.mjs` — Prometheus-style counters/gauges/histograms
-- ✓ `GET /metrics` endpoint (mounted before auth)
-- ✓ `http_requests_total{route,method,status}` counter middleware
-- ✓ `ws_clients` gauge tracking active WebSocket connections
-- ✓ `Cache-Control: no-cache` headers on `/api/settings` and `/api/snapshot`
-- ✓ Replaced `console.log/error` in `routes/*.mjs` with structured logger
-- ✓ Rate-limited remaining 6 empty catches in `memory-lightrag.mjs`
-
-**Web frontend test infrastructure:**
-- ✓ `vitest + jsdom + RTL` setup (`bizar-dash/vitest.config.ts` + `tests/setup.ts`)
-- ✓ 75 new tests (10 component, 7 hook, 36 lib, plus setup)
-- ✓ `npm run test:web` script
-- ✓ 4 new devDependencies (`@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom`)
-
-**Virtual scrolling + i18n + a11y:**
-- ✓ `<VirtualList>` hand-rolled (no deps) — used in 4 views (`ChatThread`, `Overview`, `Activity`, `History`)
-- ✓ `i18n.ts` + `useI18n.ts` + `locales/en.json` (30 foundation strings)
-- ✓ `SearchModal` `role="search"` + `aria-label="Search"`
-- ✓ Settings color inputs labeled; Tailscale checkbox properly associated
-
-**Publishing guide:**
-- ✓ `docs/RELEASING.md` (692 lines) — comprehensive release guide
-- ✓ `bizar-dash/skills/publishing/SKILL.md` (145 lines) — agent-loadable skill
-
-### Tests added in v4.7.0
-
-- 17 new tests for logger + metrics
-- 75 new vitest tests for web components/hooks/lib
-- 9 CLI bugfix + 13 server bugfix tests (carried from v4.5.2)
-- Total `npm test`: 388 pass
-- Total `npm run test:web`: 75 pass
-- Combined: 463 tests pass, 0 fail
-
-### v5.0.1 — Settings redesign, Doctor page, Auto-save, Compaction, Model fixes, Layout polish
-
-**Settings redesign (Issue 1):**
-- ✓ Settings mode toggles full sidebar nav showing all sections
-- ✓ `<SettingsNav>` component with 4 collapsible groups (General, Core, Experience, Data)
-- ✓ Settings sections persist selected section across navigation
-
-**Doctor page (Issue 2):**
-- ✓ New full-page Doctor view at `/api/doctor` + dashboard route
-- ✓ 5 panels: System Health, Services, Counts, Recent Errors, Actions
-- ✓ 30s auto-refresh via cheap `/api/doctor/health` poll
-- ✓ `<DoctorPanel>` reusable component
-- ✓ StatusBadge extended with ok/warn/fail variants
-- ✓ Sidebar entry between Overview and Settings
-
-**Settings auto-save (Issue 3):**
-- ✓ `useAutosave` hook with debounced save + flush on unmount
-- ✓ `<AutosaveField>` generic wrapper with status indicator
-- ✓ Subtle save animation (pulse on save, fade on saved)
-- ✓ Text inputs: 800ms debounce + blur immediate save
-- ✓ Textareas: 1500ms debounce
-- ✓ Wired into GeneralSection, AgentSection
-
-**Opencode chat network error fix (Issue 4):**
-- ✓ Proper error handling: 503 plugin_offline / 503 directory_unknown / 502 opencode_error
-- ✓ `resolveSessionDirectory()` falls back across worktrees
-- ✓ Frontend shows structured error with Retry button
-- ✓ `cause` field identifies network/timeout/HTTP errors
-
-**Default memory vault location (Issue 5):**
-- ✓ `DEFAULT_MEMORY_VAULT = ~/.local/share/bizar/memory` (mode 0700)
-- ✓ Auto-creates + git-inits vault on first server start
-- ✓ ConfigPanel + MemorySection simplified — only git remote URL is editable
-
-**Removed "Coming soon" placeholders (Issue 6):**
-- ✓ Deleted 5 placeholder files (BackupSection, EnvVarsSection, ProvidersSection, SkillsSection, MemorySection)
-- ✓ Removed 5 entries from Settings.tsx section list
-
-**Replaced free models with MiniMax (Issue 7):**
-- ✓ 6 agent files updated from `opencode/deepseek-v4-flash-free` → `minimax/MiniMax-M2.7`
-- ✓ `quick.md` uses `MiniMax-M2.7-Flash` (simple tasks)
-- ✓ `tyr/odin/forseti/vidarr` use `MiniMax-M3` (complex)
-- ✓ `PROVIDER_CATALOG` has MiniMax with 4 models
-- ✓ Settings default model updated
-
-**Layout/padding fix (Issue 10):**
-- ✓ `.view` / `.page` containers get 32px top padding
-- ✓ Card gaps increased to 16-20px
-- ✓ View header gets 24px bottom margin + bottom border
-- ✓ All pages audited and fixed
-
-**Compaction at 50% context (Issue 9):**
-- ✓ New `plugins/bizar/src/compaction.mjs` (built from scratch)
-- ✓ `shouldCompact()` returns true at 50% usage
-- ✓ `setCompactionThreshold()` configurable 0.1-1.0
-- ✓ `maybeCompactSession()` triggers compaction with preserve_recent=10
-- ✓ Config in `config/opencode.json`: `compaction.threshold = 0.5`
-
-### Tests added in v5.0.1
-
-- 388 npm tests pass
-- 178 vitest tests pass
-- TypeScript: 0 errors
-- Build succeeds
-
-### Auth note (v4.5.2)
-
-Auth-related items were intentionally skipped per the v4.5.2 changelog: "Auth-related items intentionally skipped — Tailscale handles auth." Items that remain open on this front: B-H5 (v1 server open on :4097), B-M6 (token in URL), B-M8 (`/api/auth/reveal` echoes token).
+If the three top-level documents (`FINAL_GOAL.md`, `ROADMAP.md`, this current-state analysis) ever disagree, `FINAL_GOAL.md` wins. The roadmap is execution; the goal is the truth.
 
 ---
 
-## Final Notes
+## Appendix A: Tier Summary
 
-This document is the deliverable for the research session on 2026-07-05, updated same-day after v4.5.0/v4.5.1/v4.5.2/v4.7.0 shipped. Next research sweep is suggested in 3-4 months. All file:line references are accurate as of the session; new features and bugs that land in the meantime should be appended to §13 "What's Done", not folded into the bug lists.
+| Tier | Version | Theme | Effort | Key unlock |
+|---|---|---|---|---|
+| **0** | v5.0.2 / v5.1 | Polish + close v5 | 2-3 weeks | Stable v5 |
+| **1** | v6.0 | Runtime Foundation | 8-12 weeks | Orchestrator + persistence |
+| **2** | v6.x | Long-Horizon | 6-8 weeks after T1 | DAG execution + interrupt + replay |
+| **3** | v7.x | Intelligence | 10-14 weeks | Validation + Council + Self-Improvement |
+| **4** | v8.x+ | Scale | TBD | Fork-join scale + cost + enterprise |
 
-For sprint planning, start with Section 12 (Effort vs Impact Matrix) and §11 (Roadmap v4.8 onwards). Items marked ✓ in §3-§10 are closed; remaining work is tracked in §3 (Bugs), §10 (Features), and §11 (Roadmap).
+## Appendix B: Pillar-to-Tier Mapping
 
----
+| Pillar | Tier 1 | Tier 2 | Tier 3 |
+|---|---|---|---|
+| Loops | Loop primitive | Refinement + exploration | Convergence detection |
+| Multi-Agent Validation | Primitive + comparison types | Default for high-stakes | Telemetry + cost metering |
+| Agent Hierarchy | Schema + enforcement | Dashboard tree view | Per-scope file/tool access |
+| Agent Council | Action class taxonomy + primitive | Default mappings + escalation UI | Tiebreakers + audit-grade logging |
+| Constant Self-Improvement | Outcome recording | Dashboard visibility | Pattern extractor + rule validator |
+| Specialist Research | Agent definitions + toolbelt + Research tab shell | Live agents + vault pipeline + scheduled feeds | Cross-council verification + stale-knowledge auto-trigger |
 
-**Summary**: `/home/drb0rk/Projects/BizarHarness/ROADMAP.md` updated to reflect four shipped releases (v4.5.0, v4.5.1, v4.5.2, v4.7.0). Top 5 remaining priorities (post-v4.7.0): (1) Investigate mobile bundle > desktop size discrepancy (476 KB vs 372 KB); (2) Refactor Settings.tsx (1823 lines) into sub-components; (3) OpenTelemetry export; (4) Complete WCAG 2.2 AA compliance (focus on remaining form labels, color contrast, focus management); (5) v4.8 features: voice notes, web clipper, memory graph visualization.
+## Appendix C: Key File References
+
+For the implementer. The canonical locations for the work.
+
+- **Orchestrator entry point**: `bizar-orchestrator/` (new, to be created in Tier 1)
+- **Agent definitions**: `config/agents/*.md` (12 files)
+- **Background agent system**: `plugins/bizar/src/background.ts` (1250 lines)
+- **Loop guard**: `plugins/bizar/src/loop.ts`
+- **Compaction gate**: `plugins/bizar/src/compaction.mjs` (192 lines)
+- **Plan approval (to be replaced)**: `plugins/bizar/src/tools/wait-for-feedback.ts`, `plugins/bizar/src/tools/plan-action.ts`
+- **Memory service**: `bizar-dash/src/server/memory-store.mjs`, `memory-lightrag.mjs`, `memory-obsidian.mjs`
+- **Dashboard server**: `bizar-dash/src/server/server.mjs`, `routes/*.mjs`
+- **Web app entry**: `bizar-dash/src/web/App.tsx`
+- **CLI entry**: `cli/bin.mjs` (275 lines post-v4.7.0)
+- **Self-improvement log**: `.bizar/AGENTS_SELF_IMPROVEMENT.md` (1,139 lines)
+- **Config root**: `config/opencode.json`
+- **Current-state baseline**: `.obsidian/projects/current-state-analysis-2026-07-06.md`

@@ -1,5 +1,67 @@
 # Changelog
 
+## v5.5.0 — Background agents dashboard + memory system + installer overhaul
+
+### Highlights
+
+Three parallel implementation streams shipped in one release: **background agents full dashboard integration** (WS streaming, pause/resume, mid-task steering, tool call history), **memory system full integration** (4 new plugin tools, session hooks, auto-reindex, LightRAG no-ollama fallback), and **installer end-to-end overhaul** (LightRAG auto-install, service.env 11-var population, Headroom companion service, post-install smoke test, Alpine/NixOS/Void support, idempotency hardening). Plus an 8-issue bug-fix sweep and strategic docs rewrite.
+
+### What's New
+
+**Stream A — Background agents full dashboard integration:**
+- New plugin tools: `bizar_pause`, `bizar_resume`, `bizar_send_message`, `bizar_report_progress`
+- Dashboard spawn UI (`SpawnAgentModal.tsx`) — was CLI-only
+- WebSocket streaming output — replaced 2s polling interval
+- Pause/resume support for long-running tasks
+- Mid-task steering via kill+respawn with `[STEERED <ts>]` marker (v0.9.x will add true mid-flight prompt swap)
+- Tool call history in status output (was just a counter)
+- Active session persistence across restart (adopt alive subprocesses)
+- Progress reporting pipeline
+
+**Stream B — Memory system full integration:**
+- New plugin tools: `bizar_memory_search`, `bizar_memory_read`, `bizar_memory_write`, `bizar_memory_list`
+- Session-start memory injection hook (auto-pulls relevant past context into system prompt)
+- Session-end memory write hook (auto-writes session summaries)
+- LightRAG reindex fallback — no longer requires ollama; auto-detects available LLM via env vars
+- Auto-reindex on every note write (`reindexSingleNote` incremental)
+- `/memory/semantic-search` verified to use LightRAG with FTS fallback
+
+**Stream C — Installer end-to-end:**
+- LightRAG auto-install via `uv tool install "lightrag-hku[api]"`
+- Full `service.env` population (3 vars → 11 vars including auto-generated `OPENCODE_SERVER_PASSWORD`)
+- Headroom companion service (separate systemd/launchd unit + Windows scheduled task)
+- Post-install smoke test — 6 checks (vault, doctor, dashboard HTTP, WS, bg list, lightrag binary) wired to `bizar doctor smoke`
+- Alpine/NixOS/Void Linux support (was hard-fail)
+- Idempotency hardening via `~/.config/bizar/installed.json` marker (auto-detects re-install)
+- API key bootstrap warning
+
+**Bug-fix sweep (8 issues from issues.md):**
+- Settings sidebar styling + button fixes
+- Marketplace now distinct from Overview
+- Schedules tab-btn CSS
+- Memory default path → `~/.bizar_memory`
+- Auto-start LightRAG + Headroom
+- Installer service restart flow
+- UI consistency fixes across multiple views
+
+**Strategic docs:**
+- `ROADMAP.md` fully rewritten (1498 → 498 lines, now a strategic doc)
+- `FINAL_GOAL.md` created (vision: fully autonomous long-horizon HITL platform, 6 pillars)
+- `.bizar/PROJECT.md` updated with Final Goal section
+
+### Tests
+
+- Backend `node --test`: 395 pass / 0 fail
+- Web vitest: 319 pass / 5 pre-existing a11y failures (not from this release)
+- Plugin bun: 633 pass / 3 pre-existing failures (config drift, mutex timing — not from this release)
+- `npx tsc --noEmit`: 0 errors
+- `npm run build`: success
+- Total new tests: ~30 across background agents, memory hooks, installer
+
+### Upgrade
+
+`npm install -g @polderlabs/bizar@5.5.0`
+
 ## v5.4.1 — Mobile UI bug fixes
 
 ### Bug fixes

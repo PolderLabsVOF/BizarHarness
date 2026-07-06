@@ -101,6 +101,7 @@ function showHelp() {
     dash <subcommand>   Manage the dashboard (start/stop/status/cleanup/tui)
     memory <subcommand> Manage project memory (Bizar Memory Service)
     headroom <subcommand> Manage Headroom context compression
+    lightrag <subcommand> Manage the LightRAG knowledge-graph server (status/start/autostart)
     minimax <subcommand>   Manage MiniMax Token Plan integration
     tailscale <subcommand> Manage Tailscale integration (auth, serve, status)
     mod <subcommand>       Manage mods (install/upgrade/list via the dashboard API)
@@ -279,6 +280,21 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'headroom');
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      dbg('command returned:', cmd);
+      break;
+    }
+
+    case 'lightrag': {
+      // v5.x — LightRAG management CLI (issue #6).
+      // Subcommands: status, start, autostart.
+      const mod = await importCommand('lightrag');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load lightrag command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'lightrag');
       await mod.run(cmd, cmdArgs, isHelpRequest);
       dbg('command returned:', cmd);
       break;

@@ -265,8 +265,15 @@ export async function run(name, args, isHelpRequest) {
     case 'doctor':
       if (isHelpRequest) showDoctorHelp();
       else {
-        const { runDoctor } = await import('../doctor.mjs');
         const wantJson = args.includes('--json');
+        if (args[0] === 'smoke') {
+          // `bizar doctor smoke` — run post-install smoke test
+          const { runSmokeTest } = await import('../post-install-smoke.mjs');
+          const result = await runSmokeTest();
+          if (wantJson) process.stdout.write(JSON.stringify(result) + '\n');
+          process.exit(result.ok ? 0 : 1);
+        }
+        const { runDoctor } = await import('../doctor.mjs');
         const result = await runDoctor({ silent: wantJson, json: wantJson });
         if (wantJson) process.stdout.write(JSON.stringify(result) + '\n');
         if (result.failed > 0) process.exit(1);

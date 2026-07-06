@@ -390,7 +390,7 @@ describe('bizar memory setup CLI', () => {
       `memoryRepo.remote should match the requested URL — got ${cfg.memoryRepo.remote}`);
     assert.strictEqual(cfg.gitRemote, remote,
       `top-level gitRemote should also be set so cmdPush works — got ${cfg.gitRemote}`);
-    // Vault path lives under ~/.local/share/bizar/memory/<repo-name>
+    // Vault path lives under ~/.bizar_memory/<repo-name> (v5.x — was ~/.local/share/bizar/memory)
     assert.ok(cfg.memoryRepo.path.endsWith(repo), `vault path should end with ${repo}`);
   });
 

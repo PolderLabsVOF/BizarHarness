@@ -770,6 +770,49 @@ pre,
   margin-bottom: var(--space-6);
 }
 
+/* v4.x.x — View title row with section tabs (used by Schedules, etc.) */
+.view-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.view-section-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+/* Section tab buttons (used in Schedules and similar views) */
+.tab-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+
+.tab-btn:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+.tab-btn-active {
+  background: var(--accent-bg);
+  color: var(--accent-2);
+  border-color: var(--accent-border);
+}
+
+.tab-btn-active:hover {
+  background: var(--accent-bg);
+  color: var(--accent-2);
+}
+
 /* ─── Cards ────────────────────────────────────────────────────────── */
 
 .card {

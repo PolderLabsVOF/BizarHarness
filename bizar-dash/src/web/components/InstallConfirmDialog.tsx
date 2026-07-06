@@ -27,7 +27,7 @@ export function InstallConfirmDialog({ plugin, onConfirm, onCancel, installing }
 
     modal.open({
       title: `Install ${plugin.name}?`,
-      width: 480,
+      width: 560,
       onClose: () => {
         openedForRef.current = null;
         onCancel();

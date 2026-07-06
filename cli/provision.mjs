@@ -64,6 +64,7 @@ export const OPENCODE_DIR =
 const SERVICE_PID_FILE = join(BIZAR_HOME, 'service.pid');
 const DASHBOARD_PID_FILE = join(BIZAR_HOME, 'dashboard.pid');
 const DASHBOARD_PORT_FILE = join(BIZAR_HOME, 'dashboard.port');
+const INSTALL_MARKER_FILE = join(BIZAR_HOME, 'installed.json');
 
 // ─── Tiny utilities ──────────────────────────────────────────────────────────
 
@@ -154,6 +155,35 @@ export async function killAndWait(pid, { timeoutMs = 5000, label = 'process' } =
     if (err.code === 'ESRCH') return true;
     console.log(chalk.red(`    ✗ could not force-kill ${label} (pid ${pid}): ${err.message}`));
     return false;
+  }
+}
+
+// ─── Install marker ──────────────────────────────────────────────────────────
+
+/**
+ * Read the install marker file. Returns null if missing.
+ * Marker shape: { version, installedAt, repoPath, serviceUnit }
+ */
+export function readInstallMarker() {
+  return readJsonSafe(INSTALL_MARKER_FILE, null);
+}
+
+/**
+ * Write the install marker file.
+ */
+export function writeInstallMarker({ version, repoPath, serviceUnit }) {
+  const marker = {
+    version: version || currentVersion(PKG_MAIN) || 'unknown',
+    installedAt: new Date().toISOString(),
+    repoPath: repoPath || REPO_ROOT,
+    serviceUnit: serviceUnit || null,
+  };
+  try {
+    mkdirSync(BIZAR_HOME, { recursive: true });
+    writeFileSync(INSTALL_MARKER_FILE, JSON.stringify(marker, null, 2) + '\n');
+    return { ok: true, marker };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 }
 
@@ -727,6 +757,55 @@ export async function runDoctor({ silent = false } = {}) {
 }
 
 /**
+ * Run the post-install smoke test.
+ */
+export async function runSmokeTest({ silent = false } = {}) {
+  try {
+    const { runSmokeTest: smokeFn } = await import('./post-install-smoke.mjs');
+    const result = await smokeFn();
+    return result;
+  } catch (err) {
+    return {
+      ok: false,
+      checks: [{ name: 'smoke-test', ok: false, message: err.message }],
+      passed: 0,
+      failed: 1,
+    };
+  }
+}
+
+/**
+ * v5.x — Install LightRAG via uv tool.
+ * Called from the provisioner in case the shell script (install.sh)
+ * was skipped (e.g. Windows without WSL). Idempotent — safe to re-run.
+ * Fails gracefully if uv is not available.
+ */
+export async function installLightragProvision({ dryRun = false } = {}) {
+  if (dryRun) {
+    return { ok: true, message: '[dry-run] would run: uv tool install "lightrag-hku[api]"' };
+  }
+  // Check if already installed
+  if (haveCmd('lightrag-server')) {
+    return { ok: true, message: 'lightrag-server already on PATH' };
+  }
+  if (!haveCmd('uv')) {
+    return { ok: false, message: 'uv not found — LightRAG not installed (install uv to enable)' };
+  }
+  try {
+    const r = spawnSync('uv', ['tool', 'install', 'lightrag-hku[api]'], {
+      stdio: 'inherit',
+      timeout: 120_000,
+    });
+    if (r.status === 0 || r.status === null) {
+      return { ok: true, message: 'lightrag-hku[api] installed via uv' };
+    }
+    return { ok: false, message: `uv tool install failed (exit ${r.status})` };
+  } catch (err) {
+    return { ok: false, message: `lightrag install error: ${err.message}` };
+  }
+}
+
+/**
  * v4.4.11 — The mods step. By default, NEVER install or upgrade mods
  * during `bizar install` or `bizar update`. The step just reports the
  * current mod list so the user can see what's installed.
@@ -960,6 +1039,28 @@ export async function runProvision(opts = {}) {
     console.log(chalk.dim('  --dry-run set: no installs, kills, or restarts will be performed.\n'));
   }
 
+  // ── 0.5. Idempotency: detect existing install ─────────────────────────
+  // v5.x — If a marker file exists and we're in 'install' mode (not 'update'),
+  // treat this as a re-install. In non-interactive mode, auto-upgrade.
+  // In interactive mode, prompt the user.
+  const marker = readInstallMarker();
+  if (mode === 'install' && marker && !dryRun) {
+    if (yes) {
+      // Non-interactive: auto-switch to update mode
+      console.log(chalk.yellow('  ⚠ Existing install detected (marker found).'));
+      console.log(chalk.yellow('  Auto-switching to update mode due to --yes flag.'));
+      console.log('');
+      // Re-call runProvision with update mode
+      return runProvision({ ...opts, mode: 'update' });
+    } else {
+      // Interactive: warn and continue
+      console.log(chalk.yellow('  ⚠ Existing install detected (marker found at ~/.config/bizar/installed.json).'));
+      console.log(chalk.yellow(`    Last installed: ${marker.installedAt || 'unknown'}`));
+      console.log(chalk.yellow('    To update an existing install, use `bizar update` or re-run with --update.'));
+      console.log('');
+    }
+  }
+
   // ── 1. Detect state ──────────────────────────────────────────────────
   const state = detectState();
 
@@ -1036,6 +1137,9 @@ export async function runProvision(opts = {}) {
     await runStep('system-deps + service', () => ensureSystemDeps({ dryRun, mode }));
   }
 
+  // ── 6.5. LightRAG install (Node-side, in case shell script skipped) ─
+  await runStep('lightrag-server', () => installLightragProvision({ dryRun }));
+
   // ── 7-9. Sync agent files, commands, skills, plugin, opencode.json ──
   console.log('');
   await runStep('agent files + slash commands + skills', () =>
@@ -1052,6 +1156,34 @@ export async function runProvision(opts = {}) {
     copyPluginToOpencode({ dryRun, force }),
   );
   await runStep('opencode.json plugin entry', () => patchOpencodeJson({ dryRun, force }));
+
+  // ── 9.5. v5.x — issue #7. Restart the system service so it picks up
+  // the freshly-installed binary. We do this AFTER the npm upgrade
+  // (so the new code is on disk) and AFTER the file sync (so the
+  // service won't try to read stale files on boot). The service has
+  // already been killed in step 4 (mode==='update' branch).
+  // This is also called on first install: if the service was registered
+  // before the npm upgrade, restart is a no-op (unit content matches
+  // and the service is already running with the old code).
+  if (mode === 'update' && !dryRun) {
+    try {
+      const { restartService } = await import('./service-controller.mjs');
+      const restart = restartService({ force: false, dryRun: false });
+      if (restart.ok) {
+        console.log(chalk.green('  ✓ Background service restarted with new code.'));
+        stepResults.push({ label: 'service-restart', ok: true, message: 'restarted' });
+      } else {
+        // Non-fatal: the service may have been killed but failed to
+        // restart, or it may not have been installed. The OS will
+        // attempt to start it on next login either way.
+        console.log(chalk.yellow(`  ⚠ Service restart: ${restart.error || 'unknown'}`));
+        stepResults.push({ label: 'service-restart', ok: false, message: restart.error || 'restart failed' });
+      }
+    } catch (err) {
+      console.log(chalk.yellow(`  ⚠ Service restart skipped: ${err?.message || err}`));
+      stepResults.push({ label: 'service-restart', ok: false, message: err?.message || 'skipped' });
+    }
+  }
 
   // ── 10. (update) Restart dashboard ──────────────────────────────────
   if (mode === 'update' && restart && state.dashboard.running) {
@@ -1072,6 +1204,18 @@ export async function runProvision(opts = {}) {
   const modsStep = await runModsStep({ mode, dryRun, force, withMods, state });
   stepResults.push({ label: 'mods', ...modsStep });
 
+  // ── 11.5. Write install marker (v5.x idempotency) ──────────────────
+  if (!dryRun) {
+    const markerWrite = writeInstallMarker({
+      version: state.pkgVersion || null,
+      repoPath: REPO_ROOT,
+      serviceUnit: state.service.unitPath,
+    });
+    if (markerWrite.ok) {
+      console.log(chalk.dim('  ✓ install marker updated'));
+    }
+  }
+
   // ── 12. Doctor health check ───────────────────────────────────────
   console.log('');
   const doctor = await runDoctor({ silent: true });
@@ -1087,6 +1231,12 @@ export async function runProvision(opts = {}) {
     console.log(chalk.green('  ✓ Doctor: all checks passed'));
   }
 
+  // ── 12.5. Smoke test ──────────────────────────────────────────────
+  console.log('');
+  console.log(chalk.bold('  → Smoke test'));
+  const smoke = await runSmokeTest({ silent: false });
+  stepResults.push({ label: 'smoke-test', ok: smoke.ok, message: `${smoke.passed} passed, ${smoke.failed} failed` });
+
   // ── 12. Summary ─────────────────────────────────────────────────────
   console.log('');
   console.log('  Summary:');
@@ -1100,6 +1250,33 @@ export async function runProvision(opts = {}) {
     console.log(chalk.yellow('\n  Some steps had issues. See messages above.'));
   } else {
     console.log(chalk.green(`\n  ✓ ${mode === 'update' ? 'Update' : 'Install'} complete\n`));
+  }
+
+  // ── 13. API key bootstrap warning ────────────────────────────────────
+  // v5.x — After a successful install, check whether any API keys are
+  // configured. If not, surface a prominent warning (but don't block —
+  // many users configure keys later).
+  if (mode === 'install' && !dryRun && !anyFail) {
+    const envJsonPath = join(BIZAR_HOME, 'env.json');
+    const marker = readInstallMarker();
+    const hasApiKeys = Boolean(
+      process.env.OPENAI_API_KEY ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.MINIMAX_API_KEY ||
+      (existsSync(envJsonPath) && (() => {
+        try {
+          const env = JSON.parse(readFileSync(envJsonPath, 'utf8'));
+          return Boolean(env?.OPENAI_API_KEY || env?.ANTHROPIC_API_KEY || env?.MINIMAX_API_KEY);
+        } catch { return false; }
+      })())
+    );
+    if (!hasApiKeys) {
+      console.log(chalk.yellow('  ⚠  No API keys configured.'));
+      console.log(chalk.yellow('     Run `bizar connect` to add providers.'));
+      const dashPort = process.env.BIZAR_DASHBOARD_PORT || '4097';
+      console.log(chalk.yellow(`     Or visit http://localhost:${dashPort}/connect after starting the dashboard.`));
+      console.log('');
+    }
   }
 
   return {

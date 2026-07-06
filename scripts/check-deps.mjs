@@ -58,6 +58,9 @@ function detectLinuxDistro() {
     if (id === 'fedora' || id === 'rhel' || id === 'centos' || idLike.includes('fedora')) return 'fedora';
     if (id === 'arch' || idLike.includes('arch')) return 'arch';
     if (id === 'opensuse' || id === 'opensuse-leap' || id === 'opensuse-tumbleweed' || idLike.includes('suse')) return 'suse';
+    if (id === 'alpine') return 'alpine';
+    if (id === 'nixos' || id === 'NixOS') return 'nixos';
+    if (id === 'void' || id === 'void_linux') return 'void';
     return id;
   } catch {
     return 'unknown';
@@ -212,10 +215,26 @@ function macInstallCmd(name) {
 }
 
 function linuxInstallCmd(name) {
+  if (LINUX_DISTRO === 'nixos') {
+    // NixOS: everything via nix-shell or nix-env
+    switch (name) {
+      case 'node':   return 'nix-shell -p nodejs';
+      case 'python3': return 'nix-shell -p python3';
+      case 'jq':     return 'nix-shell -p jq';
+      case 'git':    return 'nix-shell -p git';
+      case 'gh':     return 'nix-shell -p gh';
+      case 'headroom':
+      case 'semble':
+      case 'skills': return `nix-env -iA nixpkgs.${name}`;
+      default: return null;
+    }
+  }
   const pm = LINUX_DISTRO === 'debian' ? 'apt-get' :
              LINUX_DISTRO === 'fedora' ? 'dnf' :
              LINUX_DISTRO === 'arch'   ? 'pacman' :
-             LINUX_DISTRO === 'suse'   ? 'zypper' : null;
+             LINUX_DISTRO === 'suse'   ? 'zypper' :
+             LINUX_DISTRO === 'alpine' ? 'apk' :
+             LINUX_DISTRO === 'void'   ? 'xbps-install' : null;
   if (!pm) return null;
 
   const sudo = process.getuid?.() === 0 ? '' : 'sudo ';
@@ -234,12 +253,20 @@ function linuxInstallCmd(name) {
     case 'git':
       return `${sudo}${pm} install -y git`;
     case 'python3':
+      if (LINUX_DISTRO === 'alpine') return `${sudo}apk add --no-cache python3 py3-pip`;
+      if (LINUX_DISTRO === 'void') return `${sudo}xbps-install -S python3 python3-pip`;
       return `${sudo}${pm} install -y python3 python3-pip`;
     case 'pip':
+      if (LINUX_DISTRO === 'alpine') return `${sudo}apk add --no-cache py3-pip || ${sudo}python3 -m pip install --upgrade pip`;
+      if (LINUX_DISTRO === 'void') return `${sudo}xbps-install -S python3-pip || ${sudo}python3 -m pip install --upgrade pip`;
       return `${sudo}${pm} install -y python3-pip || ${sudo}python3 -m pip install --upgrade pip`;
     case 'jq':
+      if (LINUX_DISTRO === 'alpine') return `${sudo}apk add --no-cache jq`;
+      if (LINUX_DISTRO === 'void') return `${sudo}xbps-install -S jq`;
       return `${sudo}${pm} install -y jq`;
     case 'gh':
+      if (LINUX_DISTRO === 'alpine') return `${sudo}apk add --no-cache gh`;
+      if (LINUX_DISTRO === 'void') return `${sudo}xbps-install -S gh`;
       return `${sudo}${pm} install -y gh`;
     case 'headroom':
     case 'semble':

@@ -19,6 +19,8 @@ const {
   stats,
   recordQuery,
   rebuildGraph,
+  detectAvailableLLM,
+  reindexSingleNote,
 } = await import('../src/server/memory-lightrag.mjs');
 
 let tmpRoot;
@@ -158,5 +160,134 @@ describe('rebuildGraph', () => {
     assert.ok(result);
     assert.equal(typeof result.ok, 'boolean');
     // workingDir should have been wiped and re-created (or attempted).
+  });
+});
+
+describe('detectAvailableLLM', () => {
+  const ORIG_OPENAI = process.env.OPENAI_API_KEY;
+  const ORIG_ANTHROPIC = process.env.ANTHROPIC_API_KEY;
+  const ORIG_MINIMAX = process.env.MINIMAX_API_KEY;
+
+  afterEach(() => {
+    if (ORIG_OPENAI === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = ORIG_OPENAI;
+    if (ORIG_ANTHROPIC === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = ORIG_ANTHROPIC;
+    if (ORIG_MINIMAX === undefined) delete process.env.MINIMAX_API_KEY;
+    else process.env.MINIMAX_API_KEY = ORIG_MINIMAX;
+  });
+
+  test('returns null when llmBinding is ollama, no API keys set, and ollama is unreachable', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.MINIMAX_API_KEY;
+    const cfg = resolveLightRAGConfig(tmpRoot);
+    cfg.llmBinding = 'ollama';
+    cfg.llmBindingHost = 'http://localhost:59999'; // nothing listening
+    const result = await detectAvailableLLM(cfg);
+    // When ollama is the binding but unreachable, and no API keys are set, returns null.
+    assert.equal(result, null);
+  });
+
+  test('returns openai-available when llmBinding is ollama but OPENAI_API_KEY is set (ollama fallback)', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.MINIMAX_API_KEY;
+    process.env.OPENAI_API_KEY = 'sk-test-key';
+    const cfg = resolveLightRAGConfig(tmpRoot);
+    cfg.llmBinding = 'ollama';
+    cfg.llmBindingHost = 'http://localhost:59999'; // unreachable
+    const result = await detectAvailableLLM(cfg);
+    assert.ok(result);
+    assert.equal(result.provider, 'openai');
+    assert.equal(result.available, true);
+  });
+
+  test('returns anthropic-available when llmBinding is anthropic and ANTHROPIC_API_KEY is set', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.MINIMAX_API_KEY;
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    const cfg = resolveLightRAGConfig(tmpRoot);
+    cfg.llmBinding = 'anthropic';
+    const result = await detectAvailableLLM(cfg);
+    assert.ok(result);
+    assert.equal(result.provider, 'anthropic');
+    assert.equal(result.available, true);
+  });
+
+  test('returns minimax-available when llmBinding is minimax and MINIMAX_API_KEY is set', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    process.env.MINIMAX_API_KEY = 'minimax-test-key';
+    const cfg = resolveLightRAGConfig(tmpRoot);
+    cfg.llmBinding = 'minimax';
+    const result = await detectAvailableLLM(cfg);
+    assert.ok(result);
+    assert.equal(result.provider, 'minimax');
+    assert.equal(result.available, true);
+  });
+
+  test('returns null when llmBinding is openai but no API key is set', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.MINIMAX_API_KEY;
+    const cfg = resolveLightRAGConfig(tmpRoot);
+    cfg.llmBinding = 'openai';
+    const result = await detectAvailableLLM(cfg);
+    assert.equal(result, null);
+  });
+});
+
+describe('reindexSingleNote', () => {
+  test('returns error when memory not initialized', async () => {
+    mkdirSync(join(tmpRoot, '.bizar'), { recursive: true });
+    // No memory.json
+    const r = await reindexSingleNote(tmpRoot, 'notes/test.md');
+    assert.equal(r.ok, false);
+    assert.ok(r.error.includes('not initialized'));
+  });
+
+  test('returns error when note does not exist', async () => {
+    mkdirSync(join(tmpRoot, '.bizar'), { recursive: true });
+    writeFileSync(join(tmpRoot, '.bizar', 'memory.json'), JSON.stringify({
+      projectId: 'testproj',
+      memoryRepo: { mode: 'local-only' },
+    }));
+    const r = await reindexSingleNote(tmpRoot, 'notes/nonexistent.md');
+    assert.equal(r.ok, false);
+    assert.ok(r.error.includes('not found'));
+  });
+
+  test('returns error on path traversal attempt', async () => {
+    mkdirSync(join(tmpRoot, '.bizar', 'memory', 'projects', 'testproj'), { recursive: true });
+    writeFileSync(join(tmpRoot, '.bizar', 'memory.json'), JSON.stringify({
+      projectId: 'testproj',
+      memoryRepo: {
+        mode: 'managed',
+        path: join(tmpRoot, '.bizar', 'memory'),
+      },
+    }));
+    // Attempt path traversal
+    const r = await reindexSingleNote(tmpRoot, '../../../etc/passwd');
+    assert.equal(r.ok, false);
+    assert.ok(r.error.includes('traversal'));
+  });
+
+  test('returns structured result when note exists and lightrag disabled', async () => {
+    mkdirSync(join(tmpRoot, '.bizar', 'memory', 'projects', 'testproj'), { recursive: true });
+    writeFileSync(join(tmpRoot, '.bizar', 'memory.json'), JSON.stringify({
+      projectId: 'testproj',
+      memoryRepo: {
+        mode: 'managed',
+        path: join(tmpRoot, '.bizar', 'memory'),
+      },
+      lightrag: { enabled: false },
+    }));
+    writeFileSync(
+      join(tmpRoot, '.bizar', 'memory', 'projects', 'testproj', 'test.md'),
+      '---\ntitle: Test\n---\n\nBody.',
+    );
+    const r = await reindexSingleNote(tmpRoot, 'test.md');
+    assert.equal(r.ok, false);
+    assert.ok(r.error.includes('disabled'));
   });
 });

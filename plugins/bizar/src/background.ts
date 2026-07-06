@@ -61,12 +61,23 @@
  *     map is never left in a half-state.
  */
 
-import type { BackgroundState, BackgroundStateStore, Logger } from "./background-state.js";
-import { TERMINAL_STATUSES } from "./background-state.js";
+import type {
+  BackgroundState,
+  BackgroundStateStore,
+  Logger,
+  ToolCallEntry,
+} from "./background-state.js";
+import {
+  MAX_TOOL_CALL_HISTORY,
+  MAX_TOOL_ARG_CHARS,
+  TERMINAL_STATUSES,
+} from "./background-state.js";
 import type { HttpClient } from "./http-client.js";
 import type { EventStream, StreamEvent, SessionEventHandler } from "./event-stream.js";
 import type { ServeLifecycle } from "./serve.js";
 import { researchInterventionPrompt } from "./research-prompt.js";
+
+import * as opencodeRunner from "./opencode-runner.js";
 
 // --- Public surface -------------------------------------------------------
 
@@ -89,6 +100,21 @@ export interface InstanceView {
   interventionCount?: number;
   interventionAt?: number;
   interventionReason?: string;
+  // v5.x — extended surface for dashboard integration
+  /** Tool call history (cap 100). Each entry has name, args, status, timing. */
+  toolCalls?: ToolCallEntry[];
+  /** Progress percentage (0..100; -1 = indeterminate). */
+  progress?: number;
+  /** Progress message (free-form). */
+  progressMessage?: string;
+  /** PID of the opencode run subprocess, if known. */
+  processId?: number;
+  /** Current runner state (one of "starting"|"running"|"done"|"failed"|"killed"). */
+  runnerState?: string;
+  /** Tags from spawn (free-form). */
+  tags?: string[];
+  /** When the instance was paused (epoch ms), if paused. */
+  pausedAt?: number;
 }
 
 /** The return shape of `bizar_collect`. */
@@ -706,9 +732,22 @@ export class InstanceManager {
 
   /**
    * Scan the bg directory, load every instance, and rebuild the in-memory
-   * map. Any `running` or `pending` instance is marked `failed` because
-   * the serve child is new and the opencode sessions are gone.
-   * Historical records (done, failed, killed, timed_out) are preserved.
+   * map. Any `running` or `pending` instance is checked for liveness:
+   *
+   *   - If the instance has a `processId` AND the opencode run subprocess
+   *     is still alive (per `opencodeRunner.isAlive()`), we RE-ADOPT it:
+   *     status flips back to `running`, `runnerState: "adopted"`, and the
+   *     the manager continues to monitor via the existing
+   *     `onExit` callback registered at spawn time.
+   *   - If the subprocess is gone (or there was no PID on file), we mark
+   *     the instance `failed` with reason "subprocess died during restart".
+   *
+   * Historical terminal records (done, failed, killed, timed_out, steered)
+   * are preserved as-is.
+   *
+   * Best-effort: liveness check uses `process.kill(pid, 0)` which is fast
+   * (no signal is sent) and safe (returns false on EPERM / ESRCH without
+   * raising to us).
    */
   async rebuildInMemoryMap(): Promise<void> {
     let all: BackgroundState[];
@@ -724,14 +763,27 @@ export class InstanceManager {
     }
     let rebuilt = 0;
     let failed = 0;
+    let adopted = 0;
     for (const inst of all) {
       this.instances.set(inst.instanceId, inst);
       rebuilt += 1;
       if (inst.status === "running" || inst.status === "pending") {
-        const message =
-          inst.status === "pending"
-            ? "plugin restarted while instance was pending"
-            : "plugin restarted; serve child is new";
+        // Try to adopt a still-alive subprocess.
+        const pid = inst.processId;
+        const alive = typeof pid === "number" && opencodeRunner.isAlive(pid);
+        if (alive) {
+          await this.update(inst.instanceId, {
+            status: "running",
+            completedAt: undefined,
+            runnerState: "adopted",
+          });
+          adopted += 1;
+          this.logger.info(
+            `bizar: adopted still-alive subprocess for instance ${inst.instanceId} (pid=${pid})`,
+          );
+          continue;
+        }
+        const message = "subprocess died during restart";
         await this.update(inst.instanceId, {
           status: "failed",
           error: message,
@@ -742,7 +794,7 @@ export class InstanceManager {
     }
     if (rebuilt > 0) {
       this.logger.info(
-        `bizar: rebuilt in-memory map (${rebuilt} instances, ${failed} marked failed)`,
+        `bizar: rebuilt in-memory map (${rebuilt} instances, ${adopted} adopted, ${failed} marked failed)`,
       );
     }
   }
@@ -991,6 +1043,192 @@ export class InstanceManager {
     await this._maybeAutoRestart(instanceId);
   }
 
+  // --- v5.x — pause / resume / progress / tool-call instrumentation -------
+
+  /**
+   * Pause a running instance. Sends SIGSTOP to the opencode run subprocess
+   * (POSIX only — returns `{ ok: false, error: "..." }` on Windows and
+   * for processes we can't signal). On success, the in-memory status
+   * flips to `"paused"` and `pausedAt` is stamped.
+   *
+   * Already-terminal instances return `{ ok: false, error: "already_terminal" }`.
+   * Already-paused instances return `{ ok: true }` (no-op).
+   */
+  async pause(instanceId: string): Promise<{ ok: boolean; error?: string }> {
+    const inst = this.instances.get(instanceId);
+    if (!inst) return { ok: false, error: "instance_not_found" };
+    if (TERMINAL_STATUSES.has(inst.status)) {
+      return { ok: false, error: "already_terminal" };
+    }
+    if (inst.status === "paused") return { ok: true };
+    if (inst.processId === undefined) {
+      // No PID on file — for v0.8.0 the runner is the only owner of the
+      // subprocess. Try the runner's registry as a fallback before giving up.
+      const runnerStatus = opencodeRunner.getStatus(NaN as unknown as number);
+      if (runnerStatus === null) {
+        return { ok: false, error: "no_subprocess" };
+      }
+    }
+    const pid = inst.processId;
+    if (pid === undefined) {
+      return { ok: false, error: "no_subprocess" };
+    }
+    const res = opencodeRunner.pauseAgent(pid);
+    if (!res.ok) return { ok: false, error: res.error || "pause_failed" };
+    await this.update(instanceId, {
+      status: "paused",
+      pausedAt: Date.now(),
+    });
+    this.logger.info(
+      `bizar: paused background instance ${instanceId} (pid=${pid})`,
+    );
+    return { ok: true };
+  }
+
+  /**
+   * Resume a paused instance. Sends SIGCONT to the subprocess and flips
+   * status back to `"running"`. Idempotent: resuming a non-paused
+   * instance is a no-op that returns `{ ok: true }`.
+   */
+  async resume(instanceId: string): Promise<{ ok: boolean; error?: string }> {
+    const inst = this.instances.get(instanceId);
+    if (!inst) return { ok: false, error: "instance_not_found" };
+    if (inst.status !== "paused") return { ok: true };
+    if (inst.processId === undefined) {
+      return { ok: false, error: "no_subprocess" };
+    }
+    const res = opencodeRunner.resumeAgent(inst.processId);
+    if (!res.ok) return { ok: false, error: res.error || "resume_failed" };
+    await this.update(instanceId, {
+      status: "running",
+      pausedAt: undefined,
+    });
+    this.logger.info(
+      `bizar: resumed background instance ${instanceId} (pid=${inst.processId})`,
+    );
+    return { ok: true };
+  }
+
+  /**
+   * Update progress (and optional message) for an instance. Called by the
+   * `bizar_report_progress` tool. Pinned to [0, 100] unless `indeterminate`
+   * is true, in which case we set progress to -1.
+   */
+  async updateProgress(
+    instanceId: string,
+    step: number,
+    total: number,
+    message?: string,
+    indeterminate = false,
+  ): Promise<{ ok: boolean; progress?: number; error?: string }> {
+    const inst = this.instances.get(instanceId);
+    if (!inst) return { ok: false, error: "instance_not_found" };
+    if (TERMINAL_STATUSES.has(inst.status)) {
+      return { ok: false, error: "already_terminal" };
+    }
+    let pct: number;
+    if (indeterminate) {
+      pct = -1;
+    } else {
+      const safeTotal = Math.max(1, Math.floor(total));
+      const safeStep = Math.max(0, Math.floor(step));
+      pct = Math.max(0, Math.min(100, Math.round((safeStep / safeTotal) * 100)));
+    }
+    const patch: Partial<BackgroundState> = {
+      progress: pct,
+      progressAt: Date.now(),
+    };
+    if (message !== undefined) patch.progressMessage = message.slice(0, 500);
+    await this.update(instanceId, patch);
+    return { ok: true, progress: pct };
+  }
+
+  /**
+   * Record a tool-call start. Returns the generated id so callers can
+   * pass it to `completeToolCall()` later. Caps the history at
+   * `MAX_TOOL_CALL_HISTORY` entries.
+   */
+  async recordToolCallStart(
+    instanceId: string,
+    name: string,
+    args: unknown,
+  ): Promise<string> {
+    const id = `tc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const inst = this.instances.get(instanceId);
+    if (!inst) return id;
+    const entry: ToolCallEntry = {
+      id,
+      name: String(name ?? "").slice(0, 200),
+      args: truncateForToolHistory(args),
+      status: "running",
+      startedAt: Date.now(),
+    };
+    const existing = (inst.toolCalls ?? []).slice(-MAX_TOOL_CALL_HISTORY + 1);
+    const next = [...existing, entry].slice(-MAX_TOOL_CALL_HISTORY);
+    await this.update(instanceId, { toolCalls: next });
+    return id;
+  }
+
+  /**
+   * Mark a tool-call complete. `result` and `error` are both truncated.
+   * A no-op if no matching entry is found (the cap may have rolled it off).
+   */
+  async completeToolCall(
+    instanceId: string,
+    id: string,
+    result?: string,
+    error?: string,
+  ): Promise<void> {
+    const inst = this.instances.get(instanceId);
+    if (!inst || !Array.isArray(inst.toolCalls)) return;
+    const idx = inst.toolCalls.findIndex((t) => t.id === id);
+    if (idx < 0) return;
+    const cur = inst.toolCalls[idx];
+    if (!cur) return;
+    const next = inst.toolCalls.slice();
+    const updated: ToolCallEntry = {
+      ...cur,
+      status: error ? "error" : "ok",
+      endedAt: Date.now(),
+    };
+    if (error !== undefined) {
+      updated.error = String(error).slice(0, MAX_TOOL_ARG_CHARS);
+    } else if (result !== undefined) {
+      updated.result = String(result).slice(0, MAX_TOOL_ARG_CHARS);
+    }
+    next[idx] = updated;
+    await this.update(instanceId, { toolCalls: next });
+  }
+
+  /**
+   * Public accessor used by the opencode-runner when it wants to surface
+   * the recorded tool-call list (read-only). Returns a copy.
+   */
+  listToolCalls(instanceId: string): ToolCallEntry[] {
+    const inst = this.instances.get(instanceId);
+    if (!inst || !Array.isArray(inst.toolCalls)) return [];
+    return inst.toolCalls.slice();
+  }
+
+  /**
+   * Public: mark an instance as "adopted" — used by `rebuildInMemoryMap`
+   * when a previously running instance's subprocess is still alive. The
+   * status flips back to "running" and the runner is resumed.
+   */
+  async adoptInstance(instanceId: string): Promise<void> {
+    const inst = this.instances.get(instanceId);
+    if (!inst) return;
+    if (!TERMINAL_STATUSES.has(inst.status)) {
+      // Already alive in our map; nothing to adopt.
+      return;
+    }
+    await this.update(instanceId, {
+      status: "running",
+      completedAt: undefined,
+      runnerState: "adopted",
+    });
+  }
+
   /** v0.5.5 — Attempt an auto-restart for a persistent failed instance. */
   private async _maybeAutoRestart(instanceId: string): Promise<void> {
     const inst = this.instances.get(instanceId);
@@ -1063,6 +1301,59 @@ export class InstanceManager {
       if (patch.status === "failed") {
         await this._maybeAutoRestart(instanceId);
         return;
+      }
+    }
+
+    // --- v5.x — Tool call history recording -----------------------------
+    // The tool part re-fires on every state transition (pending ->
+    // running -> completed). We key the history entry by `partID` so
+    // the same call's "running" and "completed" messages converge to
+    // one row. When a part has no entry yet, we record a fresh "running"
+    // entry; when it already exists, we update status/result/error.
+    if (part.type === "tool") {
+      const toolName = readToolName(part);
+      const existing = Array.isArray(inst.toolCalls)
+        ? inst.toolCalls.find((t) => t.id === ev.partID)
+        : undefined;
+      if (existing === undefined) {
+        // Fresh tool call — record start.
+        const tcId = ev.partID;
+        const entry: ToolCallEntry = {
+          id: tcId,
+          name: toolName,
+          args: readToolArgs(part),
+          status: readToolStatus(part),
+          startedAt: Date.now(),
+        };
+        const merged = [...(inst.toolCalls ?? []), entry].slice(
+          -MAX_TOOL_CALL_HISTORY,
+        );
+        await this.update(instanceId, { toolCalls: merged });
+      } else {
+        // Existing entry — update status/result/error.
+        const next = (inst.toolCalls ?? []).slice();
+        const idx = next.findIndex((t) => t.id === ev.partID);
+        if (idx >= 0) {
+          const cur = next[idx];
+          if (cur) {
+            const status = readToolStatus(part);
+            const updated: ToolCallEntry = {
+              ...cur,
+              status,
+              endedAt: status === "ok" || status === "error" ? Date.now() : cur.endedAt,
+            };
+            const errText = readToolError(part);
+            if (errText) updated.error = errText.slice(0, MAX_TOOL_ARG_CHARS);
+            // If the part carries a result string in `state.output` or
+            // a result-shaped field, surface it. The opencode schema
+            // is loose here — we accept either `state.output` or raw
+            // `output`.
+            const output = readToolOutput(part);
+            if (output) updated.result = output.slice(0, MAX_TOOL_ARG_CHARS);
+            next[idx] = updated;
+            await this.update(instanceId, { toolCalls: next });
+          }
+        }
       }
     }
 
@@ -1221,6 +1512,16 @@ function toView(inst: BackgroundState): InstanceView {
     if (inst.interventionAt !== undefined) v.interventionAt = inst.interventionAt;
     if (inst.interventionReason !== undefined) v.interventionReason = inst.interventionReason;
   }
+  // v5.x — extended dashboard surface.
+  if (Array.isArray(inst.toolCalls) && inst.toolCalls.length > 0) {
+    v.toolCalls = inst.toolCalls.slice();
+  }
+  if (typeof inst.progress === "number") v.progress = inst.progress;
+  if (inst.progressMessage !== undefined) v.progressMessage = inst.progressMessage;
+  if (inst.processId !== undefined) v.processId = inst.processId;
+  if (inst.runnerState !== undefined) v.runnerState = inst.runnerState;
+  if (Array.isArray(inst.tags) && inst.tags.length > 0) v.tags = inst.tags.slice();
+  if (inst.pausedAt !== undefined) v.pausedAt = inst.pausedAt;
   return v;
 }
 
@@ -1237,6 +1538,66 @@ function readToolError(part: { error?: string; state?: { error?: string } }): st
   return null;
 }
 
+/**
+ * v5.x — Read the tool name from a tool part. opencode's wire format
+ * is loose: the tool name may live on `part.tool`, `part.name`, or as
+ * the value of the first entries. Returns "unknown" when nothing
+ * matches.
+ */
+function readToolName(part: { tool?: unknown; name?: unknown; [k: string]: unknown }): string {
+  const candidates = [part.tool, part.name];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.length > 0) return c.slice(0, 200);
+  }
+  return "unknown";
+}
+
+/**
+ * v5.x — Read the tool args from a tool part. opencode may carry
+ * `args`, `input`, or a JSON-stringified `arguments`. Returns "" when
+ * nothing useful is found.
+ */
+function readToolArgs(part: { args?: unknown; input?: unknown; arguments?: unknown; [k: string]: unknown }): string {
+  const candidates = [part.args, part.input, part.arguments];
+  for (const c of candidates) {
+    if (c === undefined || c === null) continue;
+    if (typeof c === "string") return c.slice(0, MAX_TOOL_ARG_CHARS);
+    try {
+      return JSON.stringify(c).slice(0, MAX_TOOL_ARG_CHARS);
+    } catch {
+      // fall through
+    }
+  }
+  return "";
+}
+
+/**
+ * v5.x — Map the part's state.status (or top-level status) to our
+ * ToolCallEntry status enum.
+ */
+function readToolStatus(part: { state?: { status?: unknown }; status?: unknown }): "running" | "ok" | "error" {
+  const s = part.state?.status ?? part.status;
+  if (typeof s !== "string") return "running";
+  const lower = s.toLowerCase();
+  if (lower === "ok" || lower === "success" || lower === "completed" || lower === "done") return "ok";
+  if (lower === "error" || lower === "failed") return "error";
+  return "running";
+}
+
+function readToolOutput(part: { state?: { output?: unknown; result?: unknown; status?: unknown; error?: unknown }; output?: unknown; result?: unknown }): string {
+  const candidates = [part.state?.output, part.state?.result, part.output, part.result];
+  for (const c of candidates) {
+    if (c === undefined || c === null) continue;
+    if (typeof c === "string") return c;
+    try {
+      return JSON.stringify(c);
+    } catch {
+      // fall through
+    }
+  }
+  return "";
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   const timeout = new Promise<never>((_, reject) => {
@@ -1247,4 +1608,21 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   } finally {
     if (timer !== null) clearTimeout(timer);
   }
+}
+
+/**
+ * Serialize an unknown tool-args value into a string suitable for the
+ * `toolCalls` history. JSON-serializes objects, truncates to
+ * {@link MAX_TOOL_ARG_CHARS}. Returns `""` for empty/undefined.
+ */
+function truncateForToolHistory(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  let s: string;
+  try {
+    s = typeof value === "string" ? value : JSON.stringify(value);
+  } catch {
+    s = String(value);
+  }
+  if (s.length > MAX_TOOL_ARG_CHARS) s = s.slice(0, MAX_TOOL_ARG_CHARS) + "…";
+  return s;
 }

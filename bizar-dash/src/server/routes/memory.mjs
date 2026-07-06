@@ -198,6 +198,10 @@ export function createMemoryRouter({ projectRoot }) {
     try {
       const note = writeNote(projectRoot, relPath, { frontmatter: frontmatter || {}, body: body || '' });
       res.status(201).json(note);
+      // v5.x — auto-reindex the written note in the background (fire-and-forget).
+      getMemoryLightrag().then((m) => {
+        void m.reindexSingleNote(projectRoot, relPath).catch(() => {});
+      });
     } catch (err) {
       if (err.code === 'SCHEMA_VALIDATION_FAILED' || err.code === 'SECRET_DETECTED') {
         res.status(400).json({ error: err.code, message: err.message, findings: err.findings });
@@ -1276,6 +1280,10 @@ export function createMemoryRouter({ projectRoot }) {
     try {
       const note = writeNote(projectRoot, relPath, { frontmatter: frontmatter || {}, body: body || '' });
       res.json(note);
+      // v5.x — auto-reindex the updated note in the background (fire-and-forget).
+      getMemoryLightrag().then((m) => {
+        void m.reindexSingleNote(projectRoot, relPath).catch(() => {});
+      });
     } catch (err) {
       if (err.code === 'SCHEMA_VALIDATION_FAILED' || err.code === 'SECRET_DETECTED') {
         res.status(400).json({ error: err.code, message: err.message, findings: err.findings });

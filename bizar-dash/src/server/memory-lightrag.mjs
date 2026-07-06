@@ -218,6 +218,69 @@ function redactLightRAG(cfg) {
 }
 
 /**
+ * v5.x — Detect which LLM provider is available for LightRAG.
+ *
+ * Decision order:
+ *   1. If `llmBinding === 'ollama'`, do a quick async probe of
+ *      localhost:11434 (or the configured `llmBindingHost`).
+ *      If reachable → ollama available. If unreachable but an API key
+ *      is configured for OpenAI / Anthropic / MiniMax → use that instead.
+ *   2. For cloud bindings (openai / anthropic / minimax / etc.),
+ *      check whether the corresponding env var is set. If yes → available.
+ *   3. If no provider is detectable, return null and the caller logs
+ *      a warning and skips reindex.
+ *
+ * Returns { provider, available, detail } or null.
+ */
+export async function detectAvailableLLM(config) {
+  const binding = config.llmBinding || 'ollama';
+
+  if (binding === 'ollama') {
+    const ollamaHost = config.llmBindingHost || 'http://localhost:11434';
+    // Quick async probe — give it 1.5s to connect.
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 1500);
+      const res = await fetch(`${ollamaHost}/`, {
+        method: 'HEAD',
+        signal: controller.signal,
+      });
+      clearTimeout(t);
+      if (res.ok || res.status < 500) {
+        return { provider: 'ollama', available: true, detail: ollamaHost };
+      }
+    } catch {
+      // Fall through — ollama not reachable.
+    }
+    // ollama not reachable; check for cloud API keys as fallback.
+    const hasOpenAI = !!(process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_2);
+    const hasAnthropic = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY_2);
+    const hasMinimax = !!(process.env.MINIMAX_API_KEY || process.env.MINIMAX_API_KEY_2);
+    if (hasOpenAI || hasAnthropic || hasMinimax) {
+      const provider = hasOpenAI ? 'openai' : hasAnthropic ? 'anthropic' : 'minimax';
+      return { provider, available: true, detail: `${provider} (ollama unreachable, using API key)` };
+    }
+    return null; // no ollama, no API key
+  }
+
+  // Cloud bindings — available if API key is set.
+  const apiKeyEnvVars = {
+    openai: ['OPENAI_API_KEY', 'OPENAI_API_KEY_2'],
+    anthropic: ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY_2'],
+    minimax: ['MINIMAX_API_KEY', 'MINIMAX_API_KEY_2'],
+    azure_openai: ['AZURE_OPENAI_API_KEY'],
+    gemini: ['GEMINI_API_KEY'],
+  };
+  const relevantKeys = apiKeyEnvVars[binding] || [];
+  const hasKey = relevantKeys.some((k) => process.env[k]);
+  if (hasKey) {
+    return { provider: binding, available: true, detail: binding };
+  }
+
+  return null; // configured binding but no key detected
+}
+
+/**
  * Resolve the LightRAG config for a project.
  * Pulls from `.bizar/memory.json` (lightrag block) and applies defaults.
  *
@@ -539,6 +602,11 @@ export async function stopServer(config, { logger } = {}) {
 /**
  * Idempotent: returns immediately if the server is healthy. Otherwise
  * starts it. Returns { ok, started, pid?, error? }.
+ *
+ * v5.x — Before starting, calls `detectAvailableLLM` to check whether
+ * the configured LLM provider is reachable. If no provider is detected
+ * (ollama unreachable + no API key), returns { ok: false } with a
+ * descriptive error rather than starting LightRAG in a broken state.
  */
 export async function ensureRunning(config, opts) {
   if (!config.enabled) {
@@ -547,8 +615,114 @@ export async function ensureRunning(config, opts) {
   if (await isRunning(config)) {
     return { ok: true, started: false };
   }
+  // v5.x — probe LLM availability before attempting to start.
+  const llm = await detectAvailableLLM(config);
+  if (!llm) {
+    const binding = config.llmBinding || 'ollama';
+    return {
+      ok: false,
+      started: false,
+      error: `lightrag cannot start: ${binding} is not reachable and no API key is configured. `
+        + `Set an API key env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, or MINIMAX_API_KEY) `
+        + `or ensure ollama is running, then try again.`,
+    };
+  }
   const r = await startServer(config, opts);
   return { ok: r.ok, started: r.ok, pid: r.pid, error: r.error };
+}
+
+/**
+ * v5.x — LightRAG startup hook (issue #6).
+ *
+ * Called by server.mjs on dashboard boot (and exposed via
+ * `bizar lightrag autostart`). Reads the active project from
+ * `state.projectRoot` (or whatever is passed in), resolves the
+ * LightRAG config, and starts the server if the user's settings
+ * allow it.
+ *
+ * Decision flow:
+ *   1. Resolve config from .bizar/memory.json — if `lightrag.enabled`
+ *      is `false`, skip silently (return ok=true, started=false,
+ *      reason='disabled').
+ *   2. Read the env override `BIZAR_LIGHTRAG_AUTOSTART` — if set to
+ *      '0' / 'false' / 'no', skip.
+ *   3. Check if the server is already running — if so, return
+ *      ok=true, started=false, reason='already-running'.
+ *   4. Otherwise call `startServer(config)` and return its result.
+ *
+ * Errors are caught and logged as warnings — startup must not fail
+ * the dashboard just because LightRAG couldn't be started (the user
+ * may not have the binary installed, may be running the dashboard
+ * in an environment where LightRAG isn't needed, etc.).
+ *
+ * @param {string} projectRoot — path to the active project root
+ *   (where `.bizar/memory.json` lives). When omitted, the hook
+ *   returns ok=false with reason='no-project' (the caller didn't
+ *   tell us where to look).
+ * @param {{ logger?: { info?: Function, warn?: Function } }} [opts]
+ * @returns {Promise<{ ok: boolean, started: boolean, pid?: number|null, reason?: string, error?: string }>}
+ */
+export async function lightragStartupHook(projectRoot, opts = {}) {
+  const log = (...a) => opts?.logger?.info?.('[lightrag]', ...a) || console.log('[lightrag]', ...a);
+  const warn = (...a) => opts?.logger?.warn?.('[lightrag]', ...a) || console.warn('[lightrag]', ...a);
+
+  // 1. No project → can't resolve config.
+  if (!projectRoot || typeof projectRoot !== 'string') {
+    return { ok: false, started: false, reason: 'no-project' };
+  }
+
+  // 2. Resolve config (from .bizar/memory.json).
+  let config;
+  try {
+    config = resolveLightRAGConfig(projectRoot);
+  } catch (err) {
+    warn('startup hook: failed to resolve config:', err?.message || err);
+    return { ok: false, started: false, error: err?.message || String(err) };
+  }
+
+  // 3. Check lightrag.enabled flag.
+  if (config.enabled === false) {
+    log('startup hook: lightrag disabled in .bizar/memory.json, skipping');
+    return { ok: true, started: false, reason: 'disabled' };
+  }
+
+  // 4. Check env-var override.
+  const envAuto = process.env.BIZAR_LIGHTRAG_AUTOSTART;
+  if (typeof envAuto === 'string' && /^(0|false|no|off)$/i.test(envAuto.trim())) {
+    log(`startup hook: BIZAR_LIGHTRAG_AUTOSTART=${envAuto}, skipping`);
+    return { ok: true, started: false, reason: 'env-disabled' };
+  }
+
+  // 5. Already running? Nothing to do.
+  try {
+    if (await isRunning(config)) {
+      log('startup hook: lightrag already running');
+      return { ok: true, started: false, reason: 'already-running' };
+    }
+  } catch (err) {
+    warn('startup hook: isRunning probe failed:', err?.message || err);
+  }
+
+  // 6. Try to start.
+  try {
+    const r = await startServer(config, opts);
+    if (r.ok) {
+      if (r.alreadyRunning) {
+        log(`startup hook: lightrag already running (pid=${r.pid})`);
+        return { ok: true, started: false, reason: 'already-running', pid: r.pid };
+      }
+      log(`startup hook: lightrag started (pid=${r.pid})`);
+      return { ok: true, started: true, pid: r.pid };
+    }
+    warn(`startup hook: start failed: ${r.error || 'unknown'}`);
+    return { ok: false, started: false, error: r.error || 'start failed' };
+  } catch (err) {
+    // Catch-all: dashboard boot must not fail because LightRAG couldn't
+    // start. Common causes: binary missing (lightrag-server not on PATH),
+    // port already in use, working-dir not writable.
+    warn('startup hook: caught error:', err?.message || err);
+    return { ok: false, started: false, error: err?.message || String(err) };
+  }
 }
 
 // ── Document insertion ────────────────────────────────────────────────────
@@ -781,6 +955,74 @@ export async function reindexVault(projectRoot, opts = {}) {
     noteCount: notes.length,
     markerPath,
     startedAt,
+  };
+}
+
+/**
+ * v5.x — Re-index a single note into LightRAG.
+ *
+ * Use this for incremental updates (e.g. after a note is written or
+ * updated via the REST API). Unlike `reindexVault` which walks the entire
+ * vault, this only inserts one document.
+ *
+ * Returns { ok, inserted, failed, error? }.
+ */
+export async function reindexSingleNote(projectRoot, relPath, opts = {}) {
+  const config = resolveLightRAGConfig(projectRoot);
+  if (!config.enabled) {
+    return { ok: false, error: 'lightrag disabled' };
+  }
+
+  // Resolve vault path (same logic as reindexVault).
+  const memPath = join(projectRoot, '.bizar', 'memory.json');
+  if (!existsSync(memPath)) {
+    return { ok: false, error: 'memory not initialized' };
+  }
+  const mem = JSON.parse(readFileSync(memPath, 'utf8'));
+  const mode = mem.memoryRepo?.mode || 'local-only';
+  let vaultRoot;
+  const projectId = mem.projectId || basename(projectRoot);
+  if (mode === 'local-only') {
+    vaultRoot = join(projectRoot, '.obsidian');
+  } else {
+    const rawPath = mem.memoryRepo?.path || '';
+    let expanded;
+    if (!rawPath) {
+      expanded = join(projectRoot, '.bizar', 'memory');
+    } else if (rawPath.startsWith('~')) {
+      expanded = join(homedir(), rawPath.slice(1));
+    } else if (rawPath.startsWith('/')) {
+      expanded = rawPath;
+    } else {
+      expanded = join(projectRoot, rawPath);
+    }
+    vaultRoot = join(expanded, 'projects', projectId);
+  }
+
+  const fullPath = join(vaultRoot, relPath);
+  if (!fullPath.startsWith(vaultRoot)) {
+    return { ok: false, error: 'path traversal attempt blocked' };
+  }
+  if (!existsSync(fullPath)) {
+    return { ok: false, error: `note not found: ${relPath}` };
+  }
+
+  // Ensure server is running (uses the same LLM-detection logic as reindexVault).
+  const runResult = await ensureRunning(config, opts);
+  if (!runResult.ok) {
+    return { ok: false, error: runResult.error || 'lightrag server unavailable' };
+  }
+
+  const raw = readFileSync(fullPath, 'utf8');
+  const { frontmatter, body } = parseFrontmatter(raw);
+  const note = { relPath, frontmatter, body };
+  const r = await insertNote(config, projectId, note);
+
+  return {
+    ok: r.ok,
+    inserted: r.ok ? 1 : 0,
+    failed: r.ok ? 0 : 1,
+    error: r.error,
   };
 }
 

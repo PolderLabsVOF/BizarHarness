@@ -245,6 +245,10 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         persistent: args.persistent ?? false,
         maxRestarts: args.maxRestarts ?? 3,
         restartCount: 0,
+        // v5.x — progress reporting seed. Agents update via
+        // `bizar_report_progress`; the dashboard renders the bar.
+        progress: 0,
+        toolCalls: [],
       };
       const addRes = await deps.instanceManager.add(draft);
       if (addRes === "cap_reached") {
@@ -333,14 +337,17 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         const { onExit } = await import("../opencode-runner.js");
         onExit(spawnRes.processId, (status) => {
           // Map runner states to BackgroundStatus. The runner reports
-          // "starting" | "running" | "done" | "failed" | "killed";
-          // BackgroundStatus has "pending" | "running" | "done" |
-          // "failed" | "killed" | "timed_out". "starting" maps to
-          // "running" (in-flight, no terminal state).
-          const mapped: "pending" | "running" | "done" | "failed" | "killed" =
+          // "starting" | "running" | "paused" | "done" | "failed" | "killed";
+          // BackgroundStatus has "pending" | "running" | "paused" | "done" |
+          // "failed" | "killed" | "timed_out" | "steered". "starting"
+          // maps to "running" (in-flight, no terminal state). "paused"
+          // is preserved so pause/resume survives subprocess reconnects.
+          const mapped: "pending" | "running" | "paused" | "done" | "failed" | "killed" =
             status.state === "starting" || status.state === "running"
               ? "running"
-              : status.state;
+              : status.state === "paused"
+                ? "paused"
+                : status.state;
 
           const update: Parameters<InstanceManager["update"]>[1] = {
             status: mapped,

@@ -155,5 +155,15 @@ export function createLightragRouter({ projectRoot }) {
     });
   }));
 
+  // POST /api/lightrag/autostart — v5.x — issue #6.
+  // Runs lightragStartupHook() against the dashboard's projectRoot.
+  // Used by `bizar lightrag autostart` (CLI) and by `install.sh` to
+  // ensure the LightRAG server is up after install/update.
+  router.post('/lightrag/autostart', wrap(async (_req, res) => {
+    const { lightragStartupHook } = await import('../memory-lightrag.mjs');
+    const r = await lightragStartupHook(projectRoot);
+    res.status(r.ok ? 200 : 503).json(r);
+  }));
+
   return router;
 }

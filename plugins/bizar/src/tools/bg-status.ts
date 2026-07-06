@@ -95,5 +95,15 @@ function toViewShape(inst: import("../background-state.js").BackgroundState): In
     if (inst.interventionAt !== undefined) v.interventionAt = inst.interventionAt;
     if (inst.interventionReason !== undefined) v.interventionReason = inst.interventionReason;
   }
+  // v5.x — extended dashboard surface.
+  if (Array.isArray(inst.toolCalls) && inst.toolCalls.length > 0) {
+    v.toolCalls = inst.toolCalls.slice();
+  }
+  if (typeof inst.progress === "number") v.progress = inst.progress;
+  if (inst.progressMessage !== undefined) v.progressMessage = inst.progressMessage;
+  if (inst.processId !== undefined) v.processId = inst.processId;
+  if (inst.runnerState !== undefined) v.runnerState = inst.runnerState;
+  if (Array.isArray(inst.tags) && inst.tags.length > 0) v.tags = inst.tags.slice();
+  if (inst.pausedAt !== undefined) v.pausedAt = inst.pausedAt;
   return v;
 }
