@@ -51,7 +51,7 @@ The sections below are **Odin-specific**: how you route, how you parallelize, an
 | Plan / approach review | `@forseti` |
 | PR review (GitHub) | `@hermod` (`/pr-review` mode) |
 | Test gate after parallel implementation | `@thor` (runs `bizar test-gate`) |
-| Browser-driven E2E verification | `@browser-harness` |
+| Browser-driven E2E verification | `@agent-browser` |
 | Quick single-shot task (user invokes directly) | `@quick` |
 
 ---

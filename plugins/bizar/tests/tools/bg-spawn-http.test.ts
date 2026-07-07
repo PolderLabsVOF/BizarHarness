@@ -219,7 +219,7 @@ describe("bizar_spawn_background — delegation helpers (re-pinned)", () => {
   it("PRIMARY_AGENTS is unchanged", () => {
     expect(PRIMARY_AGENTS.has("odin")).toBe(true);
     expect(PRIMARY_AGENTS.has("quick")).toBe(true);
-    expect(PRIMARY_AGENTS.has("browser-harness")).toBe(true);
+    expect(PRIMARY_AGENTS.has("agent-browser")).toBe(true);
     expect(PRIMARY_AGENTS.has("mimir")).toBe(false);
   });
   it("needsDelegationWrapper mirrors PRIMARY_AGENTS", () => {

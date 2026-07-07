@@ -23,7 +23,7 @@ describe("PRIMARY_AGENTS — set of agents accepted by cline run --agent", () =>
   it("contains the three primary agents from config/agents/*.md", () => {
     expect(PRIMARY_AGENTS.has("odin")).toBe(true);
     expect(PRIMARY_AGENTS.has("quick")).toBe(true);
-    expect(PRIMARY_AGENTS.has("browser-harness")).toBe(true);
+    expect(PRIMARY_AGENTS.has("agent-browser")).toBe(true);
   });
 
   it("does NOT contain any subagent", () => {
@@ -70,7 +70,7 @@ describe("needsDelegationWrapper", () => {
   it("returns false for primary agents", () => {
     expect(needsDelegationWrapper("odin")).toBe(false);
     expect(needsDelegationWrapper("quick")).toBe(false);
-    expect(needsDelegationWrapper("browser-harness")).toBe(false);
+    expect(needsDelegationWrapper("agent-browser")).toBe(false);
   });
 
   it("returns true for subagents", () => {

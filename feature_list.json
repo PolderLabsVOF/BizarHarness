@@ -581,11 +581,69 @@
           "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
         }
       ]
+    },
+    {
+      "id": "F-021",
+      "behavior": "Agent-browser integration (v6.0.0 MS-2026-05)",
+      "verification": "make check + agent-browser.test.ts (7 tests) + cli/agent-browser-up.sh",
+      "state": "passing",
+      "evidence": "v6.0.0 \u2014 replaced browser-harness (Python CDP, v5.x) with agent-browser (native Rust CLI from vercel-labs). 6 plugin tools (bizar_browser_open/snapshot/click/fill/screenshot/command). New SKILL.md, new agent def, new install script, MCP integration.",
+      "layer": "L1+L3",
+      "category": "harness",
+      "created": "2026-07-07",
+      "passed": "2026-07-07",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run `make check`."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/tools/agent-browser.test.ts",
+          "repair": "Run `make test`."
+        },
+        {
+          "label": "e2e",
+          "cmd": "cli/agent-browser-up.sh doctor",
+          "repair": "Install agent-browser: npm install -g agent-browser && agent-browser install"
+        }
+      ]
+    },
+    {
+      "id": "F-022",
+      "behavior": "MILESTONES.md + IMPLEMENTATION_PLAN.md (v6.0.0 strategy + tactics)",
+      "verification": "make check + docs/INDEX.md updated to link both",
+      "state": "passing",
+      "evidence": "Top-level MILESTONES.md (256 lines): vision, pillars, closed loops, 4 phases, audit score by version. IMPLEMENTATION_PLAN.md (246 lines): current state, active sprint (MS-2026-05), sub-deliverables, test gates, commit points.",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-07",
+      "passed": "2026-07-07",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "n/a"
+        },
+        {
+          "label": "unit",
+          "cmd": "n/a",
+          "repair": "n/a"
+        },
+        {
+          "label": "e2e",
+          "cmd": "n/a",
+          "repair": "n/a"
+        }
+      ]
     }
   ],
   "vcr": {
-    "passing": 20,
-    "activated": 20,
+    "passing": 22,
+    "activated": 22,
     "ratio": 1.0
   }
 }

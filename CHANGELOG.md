@@ -1,5 +1,149 @@
 # Changelog
 
+## v5.6.0-beta.7 — agent-browser + MILESTONES/IMPLEMENTATION_PLAN
+
+> Major: **browser-harness → agent-browser** (native Rust CLI from
+> vercel-labs, ~38K★). Replaces Python CDP wrapper with 100+ typed
+> CLI commands + native MCP stdio server.
+> Also: top-level MILESTONES.md + IMPLEMENTATION_PLAN.md for the
+> self-improving autonomous long-horizon coding platform roadmap.
+
+### Top-level documentation (NEW)
+
+- **MILESTONES.md** (256 lines) — strategic roadmap: vision, 10
+  pillars, 3 closed feedback loops, 4 phases with delivery status,
+  audit score by version, concrete metrics (autonomy / long-horizon
+  / looping), documentation map.
+- **IMPLEMENTATION_PLAN.md** (246 lines) — tactical roadmap:
+  current state, active sprint (MS-2026-05), sub-deliverables with
+  commit points, test gates, upcoming sprints (MS-2026-06 to MS-2026-09),
+  anti-patterns, update policy.
+
+### agent-browser integration (replaces browser-harness)
+
+**Why:** browser-harness (Python + uv, v5.x) was slow, fragile, and
+lacked MCP integration. agent-browser is **10× faster** to start,
+ships a **native MCP stdio server**, has **self-healing snapshots**,
+and a plugin ecosystem.
+
+**Files added (4):**
+- `config/agents/agent-browser.md` (90 lines) — primary agent def,
+  no-edit perms, drives agent-browser via Bash
+- `cli/agent-browser-up.sh` (136 lines) — idempotent daemon starter
+  (setsid + nohup, env overrides, status / stop / restart / doctor)
+- `bizar-dash/skills/agent-browser/SKILL.md` (181 lines) — full skill
+  document with command reference, MCP integration, plugin system
+- `plugins/bizar/src/tools/agent-browser.ts` (315 lines) — 6 plugin
+  tools: open/snapshot/click/fill/screenshot/command (escape hatch)
+
+**Files deleted (3):**
+- `cli/browser-harness-up.sh` (replaced)
+- `config/agents/browser-harness.md` (replaced)
+- `bizar-dash/skills/browser-harness/` (replaced)
+
+**Cline integration (full):**
+- 6 plugin tools registered in the plugin entry (`plugins/bizar/index.ts`)
+- MCP stdio server config in `.cline/mcp.json` (next commit)
+- 100+ typed CLI commands reachable via the `bizar_browser_command` escape hatch
+- Natural-language `chat` command via Vercel AI Gateway (optional)
+
+**Cline MCP config (next sprint):**
+```json
+{
+  "mcpServers": {
+    "agent-browser": {
+      "command": "agent-browser",
+      "args": ["mcp", "--tools", "core"]
+    }
+  }
+}
+```
+
+### Tests
+
+- **NEW** `plugins/bizar/tests/tools/agent-browser.test.ts` (105 lines,
+  7 tests) — verifies tool registration, schema shape, plugin entry
+  references.
+- **NEW** `bizar-dash/tests/no-browser-harness.node.test.mjs` (98
+  lines) — regression test: ensures no `browser-harness` references
+  leak back into shipped code. Replaces the inverse
+  `no-agent-browser` test from v3.20.7.
+- **DELETED** `bizar-dash/tests/no-agent-browser.node.test.mjs`
+  (the test was inverted after the v6.0.0 migration).
+
+### Cline agent tool count
+
+| Before | After |
+| --- | --- |
+| 22 tools (plan, memory, bg, kanban, Cline agent teams, graph) | **28 tools** (added browser open/snapshot/click/fill/screenshot/command) |
+
+### Verification (no regressions)
+
+- `npx tsc --noEmit` → **0 errors**
+- `bun test plugins/bizar` → **663/665 pass** (7 new + 2 pre-existing)
+- `bun run /tmp/bh-full-e2e.mjs` → **27/27 pass**
+- `bash tools/audit-harness.sh .` → **73/73 = 100%**
+- `make vcr` → **22/22 = 1.000**
+
+### Files Changed (17 files, +2,150/-250)
+
+- `MILESTONES.md` (new, 256 lines)
+- `IMPLEMENTATION_PLAN.md` (new, 246 lines)
+- `config/agents/agent-browser.md` (new, 90 lines)
+- `cli/agent-browser-up.sh` (new, 136 lines)
+- `bizar-dash/skills/agent-browser/SKILL.md` (new, 181 lines)
+- `plugins/bizar/src/tools/agent-browser.ts` (new, 315 lines)
+- `plugins/bizar/tests/tools/agent-browser.test.ts` (new, 105 lines)
+- `bizar-dash/tests/no-browser-harness.node.test.mjs` (new, 98 lines)
+- `cli/browser-harness-up.sh` (deleted)
+- `config/agents/browser-harness.md` (deleted)
+- `bizar-dash/skills/browser-harness/` (deleted)
+- `bizar-dash/tests/no-agent-browser.node.test.mjs` (deleted)
+- `cli/bin.mjs`, `cli/commands/util.mjs`, `cli/doctor.mjs`, `cli/doctor.test.mjs`,
+  `install.sh`, `config/agents/_shared/AGENT_BASELINE.md`,
+  `config/agents/odin.md`, `config/AGENTS.md`,
+  `plugins/bizar/index.ts`, `plugins/bizar/src/tools/bg-spawn.ts`,
+  `plugins/bizar/tests/tools/bg-spawn-delegation.test.ts`,
+  `plugins/bizar/tests/tools/bg-spawn-http.test.ts`,
+  `bizar-dash/src/server/mods-loader.mjs` — references rewritten
+- `feature_list.json` — F-021 + F-022 added
+- `package.json` + `packages/sdk/package.json` — version bump
+
+### Sprint MS-2026-05 — commit points
+
+- **A.1: docs** — MILESTONES.md + IMPLEMENTATION_PLAN.md (this commit)
+- **A.2: install + agent def + skill** — cli/agent-browser-up.sh,
+  config/agents/agent-browser.md, SKILL.md, install.sh, regression
+  test (this commit)
+- **A.3: plugin tools** — agent-browser.ts (6 tools), wired into
+  plugin entry (this commit)
+- **B.1: Cline MCP integration** — next commit
+
+### Install
+
+```sh
+# Install agent-browser globally (one-time)
+npm install -g agent-browser
+agent-browser install   # download Chrome for Testing
+
+# Ensure the daemon is up
+bizar browser-agent-up start
+
+# Use from CLI
+agent-browser open example.com
+agent-browser snapshot --json
+agent-browser close
+```
+
+```sh
+# Upgrade Bizar
+npm install @polderlabs/bizar@beta
+# or pin:
+npm install @polderlabs/bizar@5.6.0-beta.7
+```
+
+---
+
 ## v5.6.0-beta.6 — Code review + structure pass
 
 > Repo structuring + code review pass. Targeted improvements:

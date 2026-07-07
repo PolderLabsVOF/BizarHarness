@@ -90,6 +90,15 @@ import { createReadGlyphFeedbackTool } from "./src/tools/read-glyph-feedback.js"
 import { createTeamSpawnTool } from "./src/tools/team-spawn.js";
 import { createTeamStatusTool } from "./src/tools/team-status.js";
 import { createGraphQueryTool, createGraphPathTool, createGraphExplainTool } from "./src/tools/graph-query.js";
+import {
+  createBrowserOpenTool,
+  createBrowserSnapshotTool,
+  createBrowserClickTool,
+  createBrowserFillTool,
+  createBrowserScreenshotTool,
+  createBrowserCommandTool,
+  type AgentBrowserDeps,
+} from "./src/tools/agent-browser.js";
 import { checkDangerous, getDangerousPatternStats, listDangerousPatterns } from "./src/dangerous-patterns.js";
 import { createSkillCurator } from "./src/hooks/skill-curator.js";
 import { createMemoryFlushOnCompact } from "./src/hooks/memory-flush-on-compact.js";
@@ -507,7 +516,20 @@ function buildTools(ctx: RuntimeContext, instanceManager: InstanceManager | null
     createGraphPathTool({ worktree: ctx.worktree, logger: ctx.logger }) as unknown as AgentTool,
     createGraphExplainTool({ worktree: ctx.worktree, logger: ctx.logger }) as unknown as AgentTool,
   ];
-  return [...basePlanTools, ...bgTools, ...teamTools, ...graphTools];
+  // v6.0.0 — agent-browser CLI tools (replaces v5.x browser-harness).
+  // Thin wrappers around the agent-browser Rust CLI; see
+  // plugins/bizar/src/tools/agent-browser.ts and
+  // config/agents/agent-browser.md for the browser-primary agent.
+  const browserDeps: AgentBrowserDeps = { logger: ctx.logger };
+  const browserTools: AgentTool[] = [
+    createBrowserOpenTool(browserDeps) as unknown as AgentTool,
+    createBrowserSnapshotTool(browserDeps) as unknown as AgentTool,
+    createBrowserClickTool(browserDeps) as unknown as AgentTool,
+    createBrowserFillTool(browserDeps) as unknown as AgentTool,
+    createBrowserScreenshotTool(browserDeps) as unknown as AgentTool,
+    createBrowserCommandTool(browserDeps) as unknown as AgentTool,
+  ];
+  return [...basePlanTools, ...bgTools, ...teamTools, ...graphTools, ...browserTools];
 }
 
 function bgDisabledTools(logger: Logger): AgentTool[] {

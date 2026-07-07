@@ -978,7 +978,7 @@ async function fetchInstructionDir(baseUrl, destDir) {
   const candidates = [
     'thor.md', 'tyr.md', 'odin.md', 'heimdall.md', 'mimir.md',
     'frigg.md', 'vor.md', 'hermod.md', 'baldr.md', 'forseti.md',
-    'vidarr.md', 'quick.md', 'browser-harness.md', 'semble-search.md',
+    'vidarr.md', 'quick.md', 'agent-browser.md', 'semble-search.md',
     'plan.md', 'review.md', 'audit.md', 'init.md', 'learn.md',
     'explain.md', 'visual-plan.md', 'tailscale-serve.md',
     'README.md', 'AGENTS.md', 'COMMANDS.md', 'INSTRUCTIONS.md',

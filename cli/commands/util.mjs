@@ -3,7 +3,7 @@
  *
  * Miscellaneous utility commands:
  *   audit, init, export, test-gate, dev-link, dev-unlink,
- *   doctor, repair, heads-up, bg, browser-harness-up, providers detect,
+ *   doctor, repair, heads-up, bg, agent-browser-up, providers detect,
  *   backup, restore
  */
 import chalk from 'chalk';
@@ -423,11 +423,11 @@ export async function run(name, args, isHelpRequest) {
       }
       break;
 
-    case 'browser-harness-up': {
+    case 'agent-browser-up': {
       const { execFileSync } = await import('node:child_process');
       const sub = args[0] || 'start';
       const __dirname = fileURLToPath(new URL('.', import.meta.url));
-      const scriptPath = join(__dirname, '..', 'browser-harness-up.sh');
+      const scriptPath = join(__dirname, '..', 'agent-browser-up.sh');
       try {
         const out = execFileSync('bash', [scriptPath, sub], {
           encoding: 'utf8',
@@ -435,7 +435,7 @@ export async function run(name, args, isHelpRequest) {
         });
         if (out) process.stdout.write(out);
       } catch (err) {
-        console.error(chalk.red(`  ✗ browser-harness-up ${sub} failed (exit ${err.status ?? 1})`));
+        console.error(chalk.red(`  ✗ agent-browser-up ${sub} failed (exit ${err.status ?? 1})`));
         process.exit(err.status || 1);
       }
       break;

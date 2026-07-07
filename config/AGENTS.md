@@ -285,7 +285,7 @@ From the project root, the user (or heimdall via `/init` or any other agent prom
 
 ## General Agent Baseline — Always-On Behavior
 
-This section is the single source of truth for every Bizar agent's behavior. It is **adapted from the upstream system prompt and translated to Bizar**. Every Claude-specific reference has been mapped to the Bizar equivalent (BizarHarness, cline, obsidian, Semble, Skills CLI, browser-harness, the cline tool set). All agents **MUST** follow these rules at all times.
+This section is the single source of truth for every Bizar agent's behavior. It is **adapted from the upstream system prompt and translated to Bizar**. Every Claude-specific reference has been mapped to the Bizar equivalent (BizarHarness, cline, obsidian, Semble, Skills CLI, agent-browser, the cline tool set). All agents **MUST** follow these rules at all times.
 
 > **Tool name translation table** (used throughout this baseline):
 >
@@ -424,17 +424,17 @@ Load the SKILL.md via the `skill` tool before writing code or making changes cov
 
 #### Browser interaction
 
-For browser-driven E2E validation, use **browser-harness** (the Python tool from https://github.com/browser-use/browser-harness). Invoke via `bash` heredoc:
+For browser-driven E2E validation, use **agent-browser** (the Python tool from https://github.com/browser-use/agent-browser). Invoke via `bash` heredoc:
 
 ```bash
-browser-harness <<'PY'
+agent-browser <<'PY'
 new_tab("https://example.com")
 wait_for_load()
 print(page_info())
 PY
 ```
 
-Common operations: `new_tab`, `goto_url`, `wait_for_load`, `page_info`, `click_at_xy`, `fill_input`, `press_key`, `scroll`, `capture_screenshot`, `js`, `cdp("Domain.method", ...)`. Read the SKILL.md at `~/.cline/skills/browser-harness/SKILL.md` on first use. Do **not** install headless Chrome via raw shell commands when browser-harness is available.
+Common operations: `new_tab`, `goto_url`, `wait_for_load`, `page_info`, `click_at_xy`, `fill_input`, `press_key`, `scroll`, `capture_screenshot`, `js`, `cdp("Domain.method", ...)`. Read the SKILL.md at `~/.cline/skills/agent-browser/SKILL.md` on first use. Do **not** install headless Chrome via raw shell commands when agent-browser is available.
 
 ### skills_mandatory_read
 
@@ -443,7 +443,7 @@ Before writing any code, creating any file, or running any computer tool, **scan
 Concrete triggers:
 - Frontend/React work → `frontend-design` or framework-specific skill
 - Backend/API work → framework-specific skill
-- Browser E2E → `browser-harness` SKILL.md
+- Browser E2E → `agent-browser` SKILL.md
 - Skill creation → `skill-creator` SKILL.md
 - BizarHarness-specific work → `~/.cline/skills/bizar/` SKILL.md (always)
 - Self-improvement logging → `~/.cline/skills/self-improvement/` SKILL.md (always)
@@ -526,7 +526,7 @@ For Bizar-internal claims (citing files, lines, tool results), use file:line ref
 ### images_and_visual_content
 
 - Bizar does not have an `image_search` tool. Do not assume one exists.
-- For local screenshots and image inspection, use `browser-harness` (`capture_screenshot(path="...")` + `js(...)` inside a `<<'PY' ... PY` heredoc).
+- For local screenshots and image inspection, use `agent-browser` (`capture_screenshot(path="...")` + `js(...)` inside a `<<'PY' ... PY` heredoc).
 - For image generation, dispatch to `@baldr` (design) or use a user-supplied image-generation MCP server if connected.
 - Never claim to inspect or edit an image that isn't actually available.
 

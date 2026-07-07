@@ -14,7 +14,7 @@
 # package manager:
 #
 #   - Linux:  ensure node is installed (apt/dnf/pacman/zypper), install uv,
-#             python3.12, jq, gh, browser-harness, Chrome runtime libs.
+#             python3.12, jq, gh, agent-browser, Chrome runtime libs.
 #   - macOS:  ensure homebrew is installed; everything else is via brew.
 #   - Windows: a stub that prints "use install.ps1".
 #

@@ -157,6 +157,8 @@ A session is "clean" when ALL FIVE dimensions pass:
 
 ## Topic documents
 
+- [MILESTONES.md](MILESTONES.md) — strategic roadmap (vision, 4 phases)
+- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — tactical plan (current state + sprints)
 - [docs/INDEX.md](docs/INDEX.md) — documentation map (start here)
 - [docs/architecture.md](docs/architecture.md) — layer model, module map
 - [docs/quality-document.md](docs/quality-document.md) — module health (A/B/C/D)

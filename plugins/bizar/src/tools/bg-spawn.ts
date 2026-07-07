@@ -72,7 +72,7 @@ const TIMEOUT_DEFAULT_MS = 300_000;
 export const PRIMARY_AGENTS: ReadonlySet<string> = new Set([
   "odin",
   "quick",
-  "browser-harness",
+  "agent-browser",
 ]);
 
 /**

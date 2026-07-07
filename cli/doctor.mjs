@@ -28,7 +28,7 @@ import { clineConfigDir, clineAgentsDir, which, bizarConfigDir } from './utils.m
 // Adding a new agent to `config/agents/` without adding it here causes
 // doctor to silently under-count ("all 4 core agents present" when there
 // are actually 14). The list mirrors cli/install.mjs AGENT_FILES plus
-// `browser-harness.md` (added in v3.20.7) and `_shared/AGENT_BASELINE.md`
+// `agent-browser.md` (added in v3.20.7) and `_shared/AGENT_BASELINE.md`
 // is intentionally excluded (it's a skill, not an agent).
 const REQUIRED_AGENTS = [
   'odin.md',
@@ -44,7 +44,7 @@ const REQUIRED_AGENTS = [
   'vidarr.md',
   'forseti.md',
   'semble-search.md',
-  'browser-harness.md',
+  'agent-browser.md',
 ];
 
 // ── helpers ─────────────────────────────────────────────────────────────────

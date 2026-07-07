@@ -1,18 +1,19 @@
 /**
- * no-agent-browser.node.test.mjs — regression test for the v3.20.7 cleanup.
+ * no-browser-harness.node.test.mjs — regression test for the v6.0.0 migration.
  *
- * The `agent-browser` MCP tool was the previous browser-automation path.
- * v3.20.7 replaced it with `browser-harness` (the Python tool from
- * https://github.com/browser-use/browser-harness). This test ensures
- * no agent-browser references leak back into the shipped config or
- * the install/bootstrap scripts.
+ * v6.0.0 replaces the v5.x `browser-harness` (Python tool from
+ * https://github.com/browser-use/browser-harness) with `agent-browser`
+ * (native Rust CLI from vercel-labs, ~38K★ — https://github.com/vercel-labs/agent-browser).
+ *
+ * This test ensures no `browser-harness` references leak back into the
+ * shipped config, the install/bootstrap scripts, or the dashboard code.
  *
  * Allowed exceptions:
- *   - .bizar/AGENTS_SELF_IMPROVEMENT.md (historical rule entry documenting
- *     the v3.20.7 migration)
+ *   - .bizar/AGENTS_SELF_IMPROVEMENT.md (historical rule entry)
  *   - CHANGELOG.md (historical release notes)
+ *   - docs/migration-guide.md (documents the v5.x → v6.0.0 migration)
  *
- * Run with: node --test tests/no-agent-browser.node.test.mjs
+ * Run with: node --test tests/no-browser-harness.node.test.mjs
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,6 +25,7 @@ const REPO = resolve(import.meta.dirname, '..', '..');
 const SCAN_DIRS = [
   'config',
   'cli',
+  'plugins',
   'bizar-dash/src',
   'install.sh',
 ];
@@ -31,10 +33,13 @@ const SCAN_EXTENSIONS = ['.mjs', '.ts', '.tsx', '.json', '.sh', '.md', '.mdx', '
 const ALLOW_FILES = new Set([
   '.bizar/AGENTS_SELF_IMPROVEMENT.md', // historical rule entry
   'CHANGELOG.md',                       // historical release notes
+  'docs/migration-guide.md',            // documents the migration rationale
+  'MILESTONES.md',                      // strategic roadmap (references legacy)
+  'IMPLEMENTATION_PLAN.md',             // tactical plan (references legacy)
 ]);
 const PATTERNS = [
-  /agent[-_]?browser/i,                 // agent-browser, agent_browser, agentBrowser
-  /agent_browser_/i,                    // agent_browser_open etc.
+  /browser[-_]?harness/i,               // browser-harness, browser_harness, browserHarness
+  /browser_harness_/i,                  // browser_harness_open etc.
 ];
 
 function isAllowed(relPath) {
@@ -49,7 +54,6 @@ function* walkFiles(root) {
     return;
   }
   if (!stat.isDirectory()) return;
-  // Skip noise
   if (root.includes('node_modules')) return;
   if (root.includes('.git')) return;
   for (const entry of readdirSync(root)) {
@@ -57,7 +61,7 @@ function* walkFiles(root) {
   }
 }
 
-describe('no agent-browser references in shipped code', () => {
+describe('no browser-harness references in shipped code (v6.0.0+ uses agent-browser)', () => {
   const violations = [];
 
   for (const target of SCAN_DIRS) {
@@ -80,19 +84,15 @@ describe('no agent-browser references in shipped code', () => {
     }
   }
 
-  it('reports zero violations', () => {
-    if (violations.length > 0) {
-      const msg = violations
-        .map((v) => `  ${v.file}: matched "${v.match}"`)
-        .join('\n');
-      assert.fail(`agent-browser references found in shipped code:\n${msg}`);
-    }
-  });
+  if (violations.length > 0) {
+    const lines = violations.map((v) => `  - ${v.file}: matched "${v.match}"`);
+    assert.fail(
+      `Found ${violations.length} browser-harness reference(s) in shipped code:\n${lines.join('\n')}\n` +
+      `Use agent-browser instead. See docs/migration-guide.md.`
+    );
+  }
 
-  it('documents the explicit allow-list', () => {
-    // Sanity: the allow-list itself shouldn't be empty (we have real
-    // historical references that should be preserved).
-    assert.ok(ALLOW_FILES.size >= 2,
-      'expected ALLOW_FILES to include at least AGENTS_SELF_IMPROVEMENT.md + CHANGELOG.md');
+  it('has no browser-harness references in shipped config / code / install scripts', () => {
+    assert.equal(violations.length, 0);
   });
 });

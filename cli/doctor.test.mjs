@@ -295,7 +295,7 @@ describe('runDoctor() with fixture HOME', () => {
       'odin.md', 'vor.md', 'frigg.md', 'quick.md',
       'mimir.md', 'heimdall.md', 'hermod.md', 'thor.md', 'baldr.md',
       'tyr.md', 'vidarr.md', 'forseti.md',
-      'semble-search.md', 'browser-harness.md',
+      'semble-search.md', 'agent-browser.md',
     );
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'agent-files-installed');
