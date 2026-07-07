@@ -30,9 +30,7 @@ import { Tasks } from './views/Tasks';
 import { Activity } from './views/Activity';
 import { Config } from './views/Config';
 import { SettingsView } from './views/Settings';
-import { Marketplace } from './views/Marketplace';
 import { Mods } from './views/Mods';
-import { Plugins } from './views/Plugins';
 import { ModView, type ModView as ModViewType } from './views/ModView';
 import { Schedules } from './views/Schedules';
 import { Skills } from './views/Skills';
@@ -93,13 +91,11 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   background: BackgroundAgents,
   config: Config,
   settings: SettingsView,
-  marketplace: Marketplace,
   mods: Mods,
   schedules: Schedules,
   skills: Skills,
   history: History,
   minimax: MiniMaxUsage,
-  plugins: Plugins,
   // v6.0.0 — Doctor page (system health + diagnostics surface).
   // Registered here so the tab id 'doctor' from Topbar.tsx TABS
   // resolves to a real view instead of falling back to Overview.

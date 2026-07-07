@@ -31,7 +31,6 @@ import { createTasksRouter } from './routes/tasks.mjs';
 import { createArtifactsRouter } from './routes/artifacts.mjs';
 import { createSchedulesRouter } from './routes/schedules.mjs';
 import { createModsRouter } from './routes/mods.mjs';
-import { createPluginsRouter } from './routes/plugins.mjs';
 import { createAgentsRouter } from './routes/agents.mjs';
 import { createBackgroundRouter } from './routes/background.mjs';
 import { createActivityRouter } from './routes/activity.mjs';
@@ -113,10 +112,6 @@ export async function createApiRouter({
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
   router.use(createSchedulesRouter({ broadcast }));
   router.use(createModsRouter());
-  // v5.0.0 — Plugin marketplace routes. Mounted right after mods so
-  // the related-domain grouping is visible in the route table. The
-  // router is factory-created; no shared deps needed.
-  router.use(createPluginsRouter());
   router.use(createAgentsRouter({ state, broadcast }));
   router.use(createBackgroundRouter({ broadcast }));
   router.use(createActivityRouter({ state }));

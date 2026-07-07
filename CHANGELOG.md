@@ -1,5 +1,55 @@
 # Changelog
 
+## v5.6.0-beta.3 — Remove Plugins from dashboard (Mods only)
+
+> Small follow-up to v5.6.0-beta.2. The dashboard's external plugin
+> system (Plugins view, Marketplace, Mobile variants) is removed.
+> Mods is the only extension mechanism in the dashboard now.
+
+### What changed
+
+- **Topbar TABS:** removed `plugins` and `marketplace` entries.
+  Mods remains the only extension surface.
+- **Views deleted:** `views/Plugins.tsx`, `views/Marketplace.tsx`,
+  `mobile/MobilePlugins.tsx`, `mobile/MobileMarketplace.tsx`.
+- **Components deleted:** `PluginCard.tsx`, `PluginPermissions.tsx`,
+  `MarketplacePluginCard.tsx`, `InstallConfirmDialog.tsx`.
+- **Server side:** `routes/plugins.mjs` and the entire
+  `server/plugins/` directory (registry, store, sandbox, permission-audit)
+  removed. The plugins router is no longer mounted in `api.mjs`.
+- **Tests deleted:** `plugins-registry.test.mjs`, `plugins-sandbox.test.mjs`,
+  `plugins-store.test.mjs`, `plugins-registry-fallback.test.mjs`,
+  `plugins-permissions.test.mjs`, `views/Marketplace.test.tsx`,
+  `a11y/navigation.test.tsx`, `a11y/components.test.tsx`,
+  `mobile-misc.test.tsx`, `components/marketplace-plugin-card.test.tsx`,
+  `components/plugin-permissions.test.tsx`.
+- **CSS cleaned:** removed `.view-plugins`, `.plugin-permissions`,
+  `.mobile-marketplace*`, `.mobile-plugins*`, `.mobile-plugin-card*`,
+  `.plugin-grid*`, `.plugins-toolbar*`, and the marketplace v5.3.0
+  section.
+- **Bundle:** main bundle dropped from 425 KB → 414 KB (-11 KB).
+
+### Files Changed
+
+- `bizar-dash/src/web/components/Topbar.tsx` — removed plugins/marketplace
+  tabs; removed `Store` from lucide imports (Puzzle still used by Mods)
+- `bizar-dash/src/web/App.tsx` — removed `Plugins` + `Marketplace` imports
+  and VIEW_MAP entries
+- `bizar-dash/src/server/api.mjs` — removed `createPluginsRouter` import + mount
+- `bizar-dash/src/web/styles/main.css` — removed plugin/marketplace CSS
+- 10 files deleted (see above)
+- 11 test files deleted (see above)
+
+### Install
+
+```sh
+npm install @polderlabs/bizar@beta
+# or pin:
+npm install @polderlabs/bizar@5.6.0-beta.3
+```
+
+---
+
 ## v5.6.0-beta.2 — Dashboard UI v6.0.0 polish (Cline release)
 
 > This is a small follow-up to v5.6.0-beta.1 that updates the dashboard UI

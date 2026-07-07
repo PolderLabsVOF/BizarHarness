@@ -26,7 +26,6 @@ import {
   Brain,
   Stethoscope,
   ClipboardCheck,
-  Store,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -53,10 +52,7 @@ export const TABS: TabDef[] = [
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'mods', label: 'Mods', icon: Puzzle },
-  // v5.3.0 — Plugin marketplace browse + install UI.
-  { id: 'marketplace', label: 'Marketplace', icon: Store },
   { id: 'schedules', label: 'Schedules', icon: Clock },
-  { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'history', label: 'History', icon: HistoryIcon },
   { id: 'minimax', label: 'Usage', icon: Coins },
   // v5.2.0 — Eval framework UI. Lives next to Doctor (both are
