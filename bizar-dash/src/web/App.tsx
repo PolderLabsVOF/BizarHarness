@@ -41,6 +41,7 @@ import { History } from './views/History';
 import { MiniMaxUsage } from './views/MiniMaxUsage';
 import { BackgroundAgents } from './views/BackgroundAgents';
 import { Doctor } from './views/Doctor';
+import { Harness } from './views/Harness';
 import { Eval } from './views/Eval';
 import { EvalReport } from './views/EvalReport';
 import { SettingsNav } from './components/SettingsNav';
@@ -103,6 +104,8 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   // Registered here so the tab id 'doctor' from Topbar.tsx TABS
   // resolves to a real view instead of falling back to Overview.
   doctor: Doctor,
+  // v6.0.0 — Harness engineering dashboard (audit score, subsystem status, quick actions).
+  harness: Harness,
   // v5.2.0 — Eval framework web UI. `eval` is the sidebar tab
   // (recent runs summary), `evalReport` is reachable from the
   // Eval view's "Open Eval Report" button (full report + diff).
@@ -110,7 +113,7 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   evalReport: EvalReport,
 };
 
-const VERSION = 'v4.5.0';
+const VERSION = 'v6.0.0';
 
 /**
  * Render the active view. If `activeTab` matches a built-in tab id,
@@ -669,6 +672,15 @@ function Shell() {
   }, [modViews]);
 
   // Surface the underlying view for the active tab (built-in or mod).
+
+  // v6.0.0 — ClineCore is in-process; reflect that in the topbar badge.
+  // The plugin's setup() always brings up ClineCore (or fails fast), so
+  // by the time the dashboard renders, the runtime is active.
+  const clineStatus = useMemo(() => ({
+    state: 'active' as const,
+    label: 'in-process',
+    detail: 'ClineCore running in-process (v6.0.0, no subprocess)',
+  }), []);
   // Declared AFTER refreshSnapshot so its useMemo factory can capture it.
   const renderedView = useMemo(() => {
     if (snapshot && settings) {
@@ -782,6 +794,7 @@ function Shell() {
           notificationsSlot={<Notifications wsSubscribe={subscribeToWs} />}
           showTabs={layout === 'topnav'}
           extraTabs={mergedTabs}
+          clineStatus={clineStatus}
         />
       )}
       {stuckAgents.length > 0 && !stuckBannerDismissed && (

@@ -35,6 +35,7 @@ import {
   RefreshCw,
   Send,
   Inbox,
+  Sparkles,
   Edit2,
   RotateCw,
   Bot,
@@ -460,6 +461,12 @@ function TaskCard({
         {task.tags && task.tags.length > 0 && task.tags.slice(0, 3).map((tag) => (
           <Tag key={tag}>{tag}</Tag>
         ))}
+        {/* v6.0.0 — Cline agent team indicator. */}
+        {(task.tags || []).some((t) => t.startsWith('team:')) && (
+          <span className="task-card-badge team" title="Cline agent team">
+            <Sparkles size={10} /> team
+          </span>
+        )}
       </div>
       <div className="task-card-footer">
         <span className="task-card-time tabular-nums muted">

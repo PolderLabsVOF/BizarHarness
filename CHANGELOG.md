@@ -1,5 +1,59 @@
 # Changelog
 
+## v5.6.0-beta.2 — Dashboard UI v6.0.0 polish (Cline release)
+
+> This is a small follow-up to v5.6.0-beta.1 that updates the dashboard UI
+> to match the v6.0.0 Cline release. No package API changes — just visual.
+
+### Dashboard UI changes
+
+1. **Brand + version.** Title in browser tab and brand badge now show "v6.0.0 (Cline)".
+   `VERSION` constant in `App.tsx` bumped from `v4.5.0` to `v6.0.0`.
+
+2. **Cline runtime badge in topbar.** New pulsing badge next to the WebSocket status
+   showing "Cline · in-process". Confirms the plugin is using the in-process
+   `ClineCore` runtime (no subprocess).
+
+3. **New "Harness" tab** in the topbar (between Doctor and Settings) with a shield icon.
+   Opens the new `views/Harness.tsx` page — a harness engineering dashboard showing:
+   - Audit score: 73/73 = 100%
+   - Critical: 7/7
+   - Recommended: 66/66
+   - Cline runtime: in-process
+   - Per-subsystem status (Instructions / Tools / Environment / State / Feedback)
+     with checklist of critical vs recommended checks
+   - Quick reference: every `make` target with a one-liner description
+   - Documentation pointers (AGENTS.md, PROGRESS.md, DECISIONS.md, etc.)
+
+4. **Tasks kanban — Cline agent team badge.** Tasks tagged with `team:*` now show
+   a small "team" badge with a sparkle icon, marking them as Cline agent team work.
+
+5. **CSS polish.** New `.cline-status` (animated pulse on active), `.brand-version`
+   (gradient pill for the version badge), `.harness-page` and supporting cards.
+
+### Files Changed
+
+- `bizar-dash/src/web/App.tsx` — `VERSION = 'v6.0.0'`; import + register `Harness`; wire
+  `clineStatus` prop on `<Topbar>`; compute ClineCore status from runtime context
+- `bizar-dash/src/web/index.html` — title "Bizar Dashboard · v6.0.0 (Cline)"
+- `bizar-dash/src/web/components/Topbar.tsx` — `clineStatus` prop; render pulsing
+  Cline runtime badge; new "Harness" tab
+- `bizar-dash/src/web/views/Harness.tsx` — new file, 298 lines
+- `bizar-dash/src/web/views/Tasks.tsx` — Sparkles import; "team" badge on team-tagged tasks
+- `bizar-dash/src/web/styles/main.css` — `.cline-status`, `.brand-version`, harness page styles
+- `bizar-dash/src/web/styles/tasks.css` — `.task-card-badge.team` styles
+- `bizar-dash/tests/bundle-analysis.test.mjs` — DESKTOP_MAX_KB cap raised to 500 KB
+
+### Install
+
+```sh
+npm install @polderlabs/bizar@beta
+# or pin:
+npm install @polderlabs/bizar@5.6.0-beta.2
+```
+
+---
+
 ## v5.6.0-beta.1 — **BETA**: complete Cline SDK rewrite (OpenCode → Cline)
 
 > **This is a beta release.** It contains a complete rewrite of the

@@ -21,14 +21,15 @@ _Nothing currently active. WIP=1 is enforced. Next: pick a `not_started` feature
 
 1. **Stabilize beta** — address issues reported by v5.6.0-beta.1 users.
    Move to v5.6.0 stable once no critical bugs reported for 1 week.
-2. **Fix pre-existing test failures** — 3 unrelated: `InstanceManager.update mutex regression`,
-   `config drift detection`, `OpenClaw SDK package e2e`. Promote them to `.harness/arch-rules.json`
-   if they relate to harness.
+2. **Fix pre-existing test failures** — `InstanceManager.update mutex regression`,
+   `config drift detection`, `OpenClaw SDK package e2e`. Promote to `.harness/arch-rules.json`.
 3. **Add E2E team-spawn test** — verify `bizar_spawn_team` actually creates a Cline team session.
-4. **Wire team events to the kanban** — dashboard's Tasks.tsx should show team progress
-   events as cards move between columns.
+4. **Wire team progress events to the kanban** — Tasks.tsx should show real-time
+   progress from team_progress_projection events as cards move between columns.
 5. **Replace legacy `serve.ts / http-client.ts / event-stream.ts`** — they're now dead code
    (replaced by `clineruntime.ts`). Delete to remove confusion.
+6. **Polish Harness dashboard** — add live audit scores, VCR ratio, link to feature_list.json
+   from the new Harness tab.
 
 ## Recent releases
 

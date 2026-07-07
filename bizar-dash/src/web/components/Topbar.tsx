@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Power,
   Sparkles,
+  Shield,
   Activity,
   Radio,
   Coins,
@@ -67,6 +68,8 @@ export const TABS: TabDef[] = [
   // home screen and from the settings surface (where an operator
   // typically arrives after something looks off).
   { id: 'doctor', label: 'Doctor', icon: Stethoscope },
+  // v6.0.0 — Harness engineering dashboard.
+  { id: 'harness', label: 'Harness', icon: Shield },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 
@@ -99,6 +102,12 @@ export type TopbarProps = {
    * the mod view id (e.g. 'graphify:web').
    */
   extraTabs?: TabDef[];
+  /** v6.0.0 — Cline runtime status (in-process core status). */
+  clineStatus?: {
+    state: 'active' | 'idle' | 'unavailable' | 'unknown';
+    label: string;
+    detail?: string;
+  } | null;
 };
 
 export function Topbar({
@@ -116,6 +125,7 @@ export function Topbar({
   notificationsSlot,
   showTabs = true,
   extraTabs,
+  clineStatus = null,
 }: TopbarProps) {
   return (
     <header className="topbar">
@@ -147,6 +157,16 @@ export function Topbar({
         <div className="topbar-right">
           {notificationsSlot}
           {rightSlot}
+          {clineStatus && (
+            <div
+              className={cn('cline-status', `cline-${clineStatus.state}`)}
+              title={clineStatus.detail || `Cline ${clineStatus.label}`}
+              aria-label={`Cline runtime: ${clineStatus.label}`}
+            >
+              <span className="cline-dot" />
+              <span className="cline-label">Cline · {clineStatus.label}</span>
+            </div>
+          )}
           <div className={cn('ws-status', `ws-${wsStatus}`)} title={`WebSocket: ${wsStatus}`}>
             <span className="ws-dot" />
             <span className="ws-label">{wsStatus}</span>
