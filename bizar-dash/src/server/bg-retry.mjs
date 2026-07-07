@@ -7,7 +7,7 @@
  * Why this exists:
  *   Before v3.11.0, the task delegator's
  *   `dispatchToBackground(main, subtasks, …)` short-circuited when
- *   `pingOpencodeServe()` returned false. The bg state file was
+ *   `pingClineServe()` returned false. The bg state file was
  *   written with `dispatchPending: true` and a tmux session was
  *   never created. The only recovery path was the user manually
  *   hitting `POST /api/tasks/:id/start` (or restarting the
@@ -22,7 +22,7 @@
  *     `toolCallCount === 0` AND `startedAt` is older than the
  *     30-second grace window, attempt to re-dispatch by:
  *       1. Reading serve-info (the v3.11.0 fix makes this lenient).
- *       2. POSTing `/api/session` to the opencode serve child.
+ *       2. POSTing `/api/session` to the cline serve child.
  *       3. POSTing `/api/session/{id}/prompt` with the recorded
  *          prompt.
  *       4. Wrapping the agent run in a tmux session via
@@ -49,7 +49,7 @@
  *     non-existent) tmux session — `spawnTmuxFor` already handles
  *     pre-existing sessions via its `note: 'session already existed'`
  *     return path.
- *   - The opencode plugin's own bg state. The retry only writes the
+ *   - The cline plugin's own bg state. The retry only writes the
  *     dashboard's view of the bg instance. The plugin will pick up
  *     the new dispatch on its next `GET /api/session` poll.
  */
@@ -68,9 +68,9 @@ import { homedir } from 'node:os';
 import { backgroundStore } from './background-store.mjs';
 import {
   readServeInfo,
-  pingOpencodeServe,
-  createOpencodeSession,
-  sendOpencodePrompt,
+  pingClineServe,
+  createClineSession,
+  sendClinePrompt,
 } from './serve-info.mjs';
 import { tasksStore } from './tasks-store.mjs';
 import {
@@ -84,7 +84,7 @@ const HOME = homedir();
 // Mirrors background-store.mjs BG_DIRS + task-delegator.mjs BG_DIRS.
 const BG_DIRS = [
   join(HOME, '.cache', 'bizar', 'bg'),
-  join(HOME, '.config', 'opencode', 'bg'),
+  join(HOME, '.config', 'cline', 'bg'),
   join(HOME, '.bizar', 'bg'),
 ];
 
@@ -144,9 +144,9 @@ function findBgFile(instanceId) {
  *   - `retryCount < MAX_DISPATCH_RETRIES` (we don't retry past cap)
  *   - The instance is "stuck": either `dispatchPending === true`,
  *     OR `sessionId` is missing/empty (a sentinel for "spawn never
- *     returned an opencode session"). The user's actual stuck
+ *     returned an cline session"). The user's actual stuck
  *     `bgr_738FFSKMAT5SP58SVF5HQW.json` does NOT have a
- *     `dispatchPending` field — it was written by the opencode
+ *     `dispatchPending` field — it was written by the cline
  *     plugin itself, not by the dashboard's task-delegator, so
  *     its stuckness is encoded as `sessionId: ""` instead.
  *
@@ -167,7 +167,7 @@ export function shouldRetryDispatch(inst, now = Date.now()) {
   if (now - startedAt < DISPATCH_GRACE_MS) return false;
   // Stuckness detector — either the dashboard marked this as
   // dispatchPending, OR the plugin wrote an empty sessionId
-  // (meaning the opencode session was never created).
+  // (meaning the cline session was never created).
   const sessionId = inst.sessionId;
   const emptySession = sessionId === null || sessionId === undefined || sessionId === '';
   if (inst.dispatchPending !== true && !emptySession) return false;
@@ -177,8 +177,8 @@ export function shouldRetryDispatch(inst, now = Date.now()) {
 /**
  * Repair a bg instance's `logPath` if it is missing or broken
  * (empty / not absolute / contains `//`). The plugin writes the
- * logPath as `${worktree}/.opencode/log/<id>.log` — when worktree
- * was missing, the resulting path becomes `//.opencode/log/<id>.log`
+ * logPath as `${worktree}/.cline/log/<id>.log` — when worktree
+ * was missing, the resulting path becomes `//.cline/log/<id>.log`
  * and is unusable. We rebuild from a sane source: serve.json's
  * `worktree` first, then the instance's existing worktree field,
  * then `~/.cache/bizar/logs` as the last-resort fallback.
@@ -269,7 +269,7 @@ export async function retryDispatchOnce(instanceId) {
     return { ok: false, reason: 'serve_unavailable', retryCount };
   }
 
-  const reachable = await pingOpencodeServe(serveInfo);
+  const reachable = await pingClineServe(serveInfo);
   if (!reachable) {
     const updated = {
       ...inst,
@@ -287,7 +287,7 @@ export async function retryDispatchOnce(instanceId) {
   let createRes;
   let sendRes;
   try {
-    createRes = await createOpencodeSession(
+    createRes = await createClineSession(
       serveInfo,
       {
         title: inst.promptPreview || `bg: ${instanceId}`,
@@ -326,7 +326,7 @@ export async function retryDispatchOnce(instanceId) {
   const sessionId = createRes.sessionId;
   try {
     const promptText = buildReplayPromptText(inst);
-    sendRes = await sendOpencodePrompt(
+    sendRes = await sendClinePrompt(
       serveInfo,
       {
         sessionId,
@@ -339,7 +339,7 @@ export async function retryDispatchOnce(instanceId) {
     const message = err instanceof Error ? err.message : String(err);
     // Session was created but prompt failed. Mark the instance as
     // running-with-sessionId so the operator can interact with it via
-    // opencode directly; the next retry tick will re-issue the prompt
+    // cline directly; the next retry tick will re-issue the prompt
     // only if toolCallCount stays at 0.
     const updated = {
       ...inst,
@@ -390,7 +390,7 @@ export async function retryDispatchOnce(instanceId) {
 
   try {
     const tmuxName = `bg_${(sessionId || instanceId).slice(0, 16)}`;
-    // v3.11.1 — Bug fix: the previous code tailed `${worktree}/.opencode/log/<id>.log`,
+    // v3.11.1 — Bug fix: the previous code tailed `${worktree}/.cline/log/<id>.log`,
     // a path nothing writes to. The plugin's `LogWriter` writes to
     // `${logDir}/${sessionId}.log` (default `~/.cache/bizar/logs`).
     // Use the real path so the operator sees activity.

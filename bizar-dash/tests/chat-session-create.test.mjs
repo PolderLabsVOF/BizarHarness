@@ -1,13 +1,13 @@
 /**
  * tests/chat-session-create.test.mjs — v4.2.5
  *
- * Tests the session-mutation endpoints on the opencode-sessions router:
+ * Tests the session-mutation endpoints on the cline-sessions router:
  *
- *   POST   /api/opencode-sessions/new
- *   PATCH  /api/opencode-sessions/:id
- *   DELETE /api/opencode-sessions/:id
+ *   POST   /api/cline-sessions/new
+ *   PATCH  /api/cline-sessions/:id
+ *   DELETE /api/cline-sessions/:id
  *
- * Strategy: stand up a fake opencode serve child on a random port,
+ * Strategy: stand up a fake cline serve child on a random port,
  * point readServeInfo() at it by writing a tmp serve.json to
  * ~/.cache/bizar/serve.json. The fake serves:
  *
@@ -34,9 +34,9 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import express from 'express';
 
-import { createOpencodeSessionsRouter } from '../src/server/routes/opencode-sessions.mjs';
+import { createClineSessionsRouter } from '../src/server/routes/cline-sessions.mjs';
 
-// ── fake upstream (opencode serve child) ──────────────────────────────────
+// ── fake upstream (cline serve child) ──────────────────────────────────
 
 let upstreamServer, upstreamPort;
 const upstream = {
@@ -134,7 +134,7 @@ function startUpstream() {
 async function startDashboard() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
-  app.use('/api', createOpencodeSessionsRouter());
+  app.use('/api', createClineSessionsRouter());
   dashboardServer = createServer(app);
   await new Promise((r) => dashboardServer.listen(0, '127.0.0.1', r));
   dashboardBaseUrl = `http://127.0.0.1:${dashboardServer.address().port}`;
@@ -149,7 +149,7 @@ before(async () => {
   process.env.BIZAR_SERVE_JSON_PATH = SERVE_JSON_PATH;
   await startUpstream();
   await startDashboard();
-  tmpDir = mkdtempSync(join(tmpdir(), 'opencode-sessions-create-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'cline-sessions-create-'));
   if (existsSync(SERVE_JSON_PATH)) {
     originalServeJson = readFileSync(SERVE_JSON_PATH, 'utf8');
   }
@@ -202,10 +202,10 @@ function moveServeJsonAside() {
 
 // ── tests ─────────────────────────────────────────────────────────────────
 
-test('POST /api/opencode-sessions/new returns 201 with id+title+agent on happy path', async () => {
+test('POST /api/cline-sessions/new returns 201 with id+title+agent on happy path', async () => {
   writeServeJson();
   upstream.nextCreateId = 'sess-fresh-1';
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/new`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/new`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: 'Hello world', agent: 'odin' }),
@@ -222,9 +222,9 @@ test('POST /api/opencode-sessions/new returns 201 with id+title+agent on happy p
   assert.equal(upstream.createHits[0].body.agent, 'odin');
 });
 
-test('POST /api/opencode-sessions/new returns 400 when body is missing', async () => {
+test('POST /api/cline-sessions/new returns 400 when body is missing', async () => {
   writeServeJson();
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/new`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/new`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -233,9 +233,9 @@ test('POST /api/opencode-sessions/new returns 400 when body is missing', async (
   assert.match(body.message, /agent.*required/i);
 });
 
-test('POST /api/opencode-sessions/new returns 400 when agent missing', async () => {
+test('POST /api/cline-sessions/new returns 400 when agent missing', async () => {
   writeServeJson();
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/new`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/new`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: 'no-agent' }),
@@ -243,9 +243,9 @@ test('POST /api/opencode-sessions/new returns 400 when agent missing', async () 
   assert.equal(r.status, 400);
 });
 
-test('POST /api/opencode-sessions/new returns 400 when agent is invalid', async () => {
+test('POST /api/cline-sessions/new returns 400 when agent is invalid', async () => {
   writeServeJson();
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/new`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/new`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agent: 'has space and !' }),
@@ -253,24 +253,24 @@ test('POST /api/opencode-sessions/new returns 400 when agent is invalid', async 
   assert.equal(r.status, 400);
 });
 
-test('POST /api/opencode-sessions/new returns 502 when upstream 500s', async () => {
+test('POST /api/cline-sessions/new returns 502 when upstream 500s', async () => {
   writeServeJson();
   upstream.failNextCreate = true;
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/new`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/new`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agent: 'odin' }),
   });
   assert.equal(r.status, 502);
   const body = await r.json();
-  assert.equal(body.error, 'opencode_error');
+  assert.equal(body.error, 'cline_error');
   assert.ok(body.message.length > 0);
 });
 
-test('POST /api/opencode-sessions/new returns 503 plugin_offline when no serve.json', async () => {
+test('POST /api/cline-sessions/new returns 503 plugin_offline when no serve.json', async () => {
   moveServeJsonAside();
   try {
-    const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/new`, {
+    const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/new`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agent: 'odin' }),
@@ -284,10 +284,10 @@ test('POST /api/opencode-sessions/new returns 503 plugin_offline when no serve.j
   }
 });
 
-test('POST /api/opencode-sessions/new defaults title to "Chat: <agent>"', async () => {
+test('POST /api/cline-sessions/new defaults title to "Chat: <agent>"', async () => {
   writeServeJson();
   upstream.nextCreateId = 'sess-defaulted-1';
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/new`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/new`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agent: 'tyr' }),
@@ -298,10 +298,10 @@ test('POST /api/opencode-sessions/new defaults title to "Chat: <agent>"', async 
   assert.equal(upstream.createHits[0].body.title, 'Chat: tyr');
 });
 
-test('PATCH /api/opencode-sessions/:id renames the session (200)', async () => {
+test('PATCH /api/cline-sessions/:id renames the session (200)', async () => {
   writeServeJson();
   const r = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-1`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-1`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -316,10 +316,10 @@ test('PATCH /api/opencode-sessions/:id renames the session (200)', async () => {
   assert.equal(upstream.patchHits[0].body.title, 'New title');
 });
 
-test('PATCH /api/opencode-sessions/:id returns 400 when title missing', async () => {
+test('PATCH /api/cline-sessions/:id returns 400 when title missing', async () => {
   writeServeJson();
   const r = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-1`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-1`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -329,10 +329,10 @@ test('PATCH /api/opencode-sessions/:id returns 400 when title missing', async ()
   assert.equal(r.status, 400);
 });
 
-test('PATCH /api/opencode-sessions/:id returns 400 when title is empty', async () => {
+test('PATCH /api/cline-sessions/:id returns 400 when title is empty', async () => {
   writeServeJson();
   const r = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-1`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-1`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -342,10 +342,10 @@ test('PATCH /api/opencode-sessions/:id returns 400 when title is empty', async (
   assert.equal(r.status, 400);
 });
 
-test('PATCH /api/opencode-sessions/:id returns 404 when upstream 404s', async () => {
+test('PATCH /api/cline-sessions/:id returns 404 when upstream 404s', async () => {
   writeServeJson();
   const r = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-missing`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-missing`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -355,10 +355,10 @@ test('PATCH /api/opencode-sessions/:id returns 404 when upstream 404s', async ()
   assert.equal(r.status, 404);
 });
 
-test('DELETE /api/opencode-sessions/:id returns 200 with { deleted: true }', async () => {
+test('DELETE /api/cline-sessions/:id returns 200 with { deleted: true }', async () => {
   writeServeJson();
   const r = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-1`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-1`,
     { method: 'DELETE' },
   );
   assert.equal(r.status, 200);
@@ -367,13 +367,13 @@ test('DELETE /api/opencode-sessions/:id returns 200 with { deleted: true }', asy
   assert.equal(upstream.deleteHits.length, 1);
 });
 
-test('DELETE /api/opencode-sessions/:id is idempotent (returns 200 even when upstream 404s)', async () => {
+test('DELETE /api/cline-sessions/:id is idempotent (returns 200 even when upstream 404s)', async () => {
   // Idempotent semantics: a "session already gone" response is the
   // desired terminal state — we don't surface that to the client as
   // an error.
   writeServeJson();
   const r = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-gone`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-gone`,
     { method: 'DELETE' },
   );
   assert.equal(r.status, 200);
@@ -381,10 +381,10 @@ test('DELETE /api/opencode-sessions/:id is idempotent (returns 200 even when ups
   assert.deepEqual(body, { id: 'sess-gone', deleted: true });
 });
 
-test('DELETE /api/opencode-sessions/:id returns 400 when id is invalid', async () => {
+test('DELETE /api/cline-sessions/:id returns 400 when id is invalid', async () => {
   writeServeJson();
   const r = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/has space`,
+    `${dashboardBaseUrl}/api/cline-sessions/has space`,
     { method: 'DELETE' },
   );
   assert.equal(r.status, 400);

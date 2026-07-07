@@ -3,7 +3,7 @@
  *
  * Tests for `readPlanComments` — the pure read function extracted from
  * `bg-get-comments.ts` so the file-system code path can be exercised
- * without spinning up a tool framework or an opencode host.
+ * without spinning up a tool framework or an cline host.
  *
  * The tool wrapper (`createBgGetCommentsTool`) is a thin Zod schema
  * + JSON.stringify around this function; testing the wrapper itself

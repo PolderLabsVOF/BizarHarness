@@ -66,7 +66,7 @@ describe('skills search', () => {
       {
         dir: 'chat',
         name: 'chat',
-        description: 'Chat and opencode session integration. Real-time SSE streaming, message history.',
+        description: 'Chat and cline session integration. Real-time SSE streaming, message history.',
       },
       {
         dir: 'usage',

@@ -5,7 +5,7 @@
  *
  * Why a separate file from `state.ts` (spec §3.1):
  *   - The existing per-session `SessionState` is keyed on `sessionId` and
- *     contains loop-detection fields tied to the opencode session lifecycle.
+ *     contains loop-detection fields tied to the cline session lifecycle.
  *   - Background instances have a different lifecycle: `instanceId`
  *     (plugin-generated `bgr_<ulid>`), spawn source, parent, model override,
  *     terminal status separate from session status.
@@ -78,7 +78,7 @@ export const MAX_TOOL_CALL_HISTORY = 100;
 export const MAX_TOOL_ARG_CHARS = 1_000;
 
 /**
- * Background instance status. Maps opencode events and lifecycle transitions
+ * Background instance status. Maps cline events and lifecycle transitions
  * to a small, stable set of terminal and in-flight states.
  *
  * v5.x — `paused` added for pause/resume support. `steered` added for
@@ -103,7 +103,7 @@ export type BackgroundStatus =
  * Field-by-field notes (spec §3.2):
  *   - `instanceId` — plugin identifier, `bgr_<ulid>`. Returned to callers.
  *     Used as the filename stem.
- *   - `sessionId` — opencode session ID returned from POST /session. Used
+ *   - `sessionId` — cline session ID returned from POST /session. Used
  *     for all HTTP calls. Also the key for the existing per-session state,
  *     log, and loop detection.
  *   - `status` — see {@link BackgroundStatus} for the lifecycle.
@@ -152,22 +152,22 @@ export type BackgroundStatus =
  *     auto-restarted (not including the original spawn). Default 0.
  *   - `maxRestarts` — cap; default 3.
    * - `lastRestartAt` — epoch ms of the most recent auto-restart.
-   * - `processId` (v0.8.0) — PID of the opencode run subprocess. Set
-   *   by the opencode-runner after `Bun.spawn` returns. Optional
+   * - `processId` (v0.8.0) — PID of the cline run subprocess. Set
+   *   by the cline-runner after `Bun.spawn` returns. Optional
    *   for backward compat.
-   * - `exitCode` (v0.8.0) — exit code of the opencode run
+   * - `exitCode` (v0.8.0) — exit code of the cline run
    *   subprocess. Populated when the process exits.
    * - `runnerState` (v0.8.0) — free-form status from the runner
    *   ("starting" | "running" | "done" | "failed" | "killed").
    *   Allows the dashboard to show runner-level state separately
    *   from the higher-level `status`.
-   * - `runnerError` (v0.8.0) — opencode run subprocess error (e.g.
-   *   "opencode run exited with code 1").
+   * - `runnerError` (v0.8.0) — cline run subprocess error (e.g.
+   *   "cline run exited with code 1").
    * - `spawnMessage` (v0.8.0) — "you can continue" message returned
    *   to the LLM by the spawn tool. Surfaces in the dashboard.
    * - `spawnNextSteps` (v0.8.0) — list of next-step hints returned
    *   to the LLM by the spawn tool.
-   * - `sessionIdAt` (v0.8.0) — when the opencode sessionId was
+   * - `sessionIdAt` (v0.8.0) — when the cline sessionId was
    *   first observed in the subprocess stderr.
    * - `runnerStartedAt` / `runnerEndedAt` — when the subprocess
    *   started / ended (subset of `startedAt`/`completedAt`).
@@ -243,14 +243,14 @@ export interface BackgroundState {
    * `{ ok: false }`. Cleared on a successful restart.
    */
   restartError?: string;
-  // v0.8.0 — process tracking (see opencode-runner.ts).
+  // v0.8.0 — process tracking (see cline-runner.ts).
   processId?: number;
   exitCode?: number;
   // v5.5.1 — `liveSession: true` means this instance is backed by an
-  // opencode serve SDK session managed by the dashboard (not by an OS
+  // cline serve SDK session managed by the dashboard (not by an OS
   // subprocess). The plugin's bg-kill/bg-pause/bg-resume tools check
   // this flag and delegate to the dashboard HTTP API instead of
-  // touching the (now-stubbed) opencode-runner. Optional for backward
+  // touching the (now-stubbed) cline-runner. Optional for backward
   // compat — pre-v5.5.1 state files leave it unset / false.
   liveSession?: boolean;
   // v5.5.1 — instanceId assigned by the dashboard (may differ from the

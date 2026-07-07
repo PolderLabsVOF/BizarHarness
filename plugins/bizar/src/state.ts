@@ -10,7 +10,7 @@ import path from "node:path";
 import os from "node:os";
 
 /**
- * Minimal Logger interface compatible with opencode's client.app.log shape.
+ * Minimal Logger interface compatible with cline's client.app.log shape.
  * Matches what Tyr defines in logger.ts.
  */
 export interface Logger {

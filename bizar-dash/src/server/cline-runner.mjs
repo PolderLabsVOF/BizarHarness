@@ -1,14 +1,14 @@
 /**
- * bizar-dash/src/server/opencode-runner.mjs
+ * bizar-dash/src/server/cline-runner.mjs
  *
- * v3.11.1 — Node child_process version of the opencode-runner.
+ * v3.11.1 — Node child_process version of the cline-runner.
  *
- * The plugin uses Bun.spawn (see plugins/bizar/src/opencode-runner.ts);
+ * The plugin uses Bun.spawn (see plugins/bizar/src/cline-runner.ts);
  * the dashboard runs under Node and uses child_process.spawn. This
  * module keeps the two implementations in sync — same surface, same
  * log-format parsing, same exit semantics.
  *
- * See plugins/bizar/src/opencode-runner.ts for the design rationale
+ * See plugins/bizar/src/cline-runner.ts for the design rationale
  * and the structured-log wire format we parse.
  */
 import { spawn } from 'node:child_process';
@@ -48,7 +48,7 @@ import { dirname } from 'node:path';
 const agents = new Map();
 
 /**
- * Spawn a single `opencode run` process. Resolves once the opencode
+ * Spawn a single `cline run` process. Resolves once the cline
  * child has reported its session id in the structured log stream
  * (or once the process exits before that).
  *
@@ -85,14 +85,14 @@ export function spawnAgent(opts) {
   // 3. Spawn the process.
   let proc;
   try {
-    proc = spawn('opencode', args, {
+    proc = spawn('cline', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...(opts.env || {}) },
     });
   } catch (err) {
     return Promise.resolve({
       ok: false,
-      error: `failed to spawn opencode run: ${err.message}`,
+      error: `failed to spawn cline run: ${err.message}`,
     });
   }
 
@@ -171,11 +171,11 @@ export function spawnAgent(opts) {
         rec.status.state = 'done';
       } else {
         rec.status.state = 'failed';
-        rec.status.error = rec.status.error || `opencode run exited with code ${exitCode}`;
+        rec.status.error = rec.status.error || `cline run exited with code ${exitCode}`;
       }
     }
     if (!sessionId) {
-      resolveSpawnIfReady(rec.status.error || 'opencode run exited before reporting session id');
+      resolveSpawnIfReady(rec.status.error || 'cline run exited before reporting session id');
     }
     const cbs = rec.onExit.splice(0);
     for (const cb of cbs) {
@@ -199,7 +199,7 @@ export function spawnAgent(opts) {
     setTimeout(() => {
       if (!sessionId) {
         resolveSpawnIfReady(
-          `opencode run did not report a session id within ${sessionIdTimeoutMs}ms`,
+          `cline run did not report a session id within ${sessionIdTimeoutMs}ms`,
         );
       }
     }, sessionIdTimeoutMs);

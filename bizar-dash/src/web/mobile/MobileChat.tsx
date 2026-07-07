@@ -84,15 +84,15 @@ export function MobileChat({
         <main className="chat-main">
           <ChatThread
             messages={
-              chat.activeSource === 'opencode'
-                ? chat.opencodeMessages
+              chat.activeSource === 'cline'
+                ? chat.clineMessages
                 : chat.bizarMessages
             }
             loading={chat.loading}
             activeProject={snapshot.activeProject}
             sessionId={
-              chat.activeSource === 'opencode'
-                ? chat.activeOpencodeSessionId ?? chat.sessionId
+              chat.activeSource === 'cline'
+                ? chat.activeClineSessionId ?? chat.sessionId
                 : chat.sessionId
             }
             pinned={chat.pinned}

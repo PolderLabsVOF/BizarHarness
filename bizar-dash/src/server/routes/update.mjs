@@ -23,7 +23,7 @@
  *     files in the global install dir while the dashboard runs from its
  *     own already-loaded module graph. The next `bizar dash start`
  *     picks up the new code, just like the CLI flow.
- *   - It does NOT touch the opencode plugin in-place. That lives in the
+ *   - It does NOT touch the cline plugin in-place. That lives in the
  *     CLI flow because the plugin path is dev-symlinked in this repo.
  *
  * Safety:
@@ -49,7 +49,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const KNOWN_PACKAGES = [
   { id: 'bizar',         npmName: '@polderlabs/bizar',         label: 'Bizar CLI' },
   { id: 'bizar-dash',    npmName: '@polderlabs/bizar-dash',    label: 'Dashboard' },
-  { id: 'bizar-plugin',  npmName: '@polderlabs/bizar-plugin',  label: 'Opencode Plugin' },
+  { id: 'bizar-plugin',  npmName: '@polderlabs/bizar-plugin',  label: 'Cline Plugin' },
 ];
 
 const KNOWN_BY_ID = new Map(KNOWN_PACKAGES.map((p) => [p.id, p]));

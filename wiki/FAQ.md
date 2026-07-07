@@ -12,13 +12,13 @@ Bizar is short for "Bizarre" — a nod to the Norse-pantheon theme (Baldr, Odin,
 
 Naming agents after Norse deities gives each one a memorable identity and a single-character rune (ᛟ ᚠ ᛢ ᛗ ᚹ ᚱ ᚦ ᛒ ᛏ ᛉ ᚨ) that fits in a single column. The metaphor is loose — Tyr doesn't actually represent law and war in BizarHarness, he just represents complex implementation work. The metaphor is a mnemonic, not a model.
 
-### Is this a fork of opencode?
+### Is this a fork of cline?
 
-No. BizarHarness is a configuration layer on top of [opencode](https://opencode.ai). It ships agent definitions, a plugin, and a CLI. opencode provides the runtime, the TUI, the permission system, the hook system, and the MCP integration. BizarHarness would not exist without opencode.
+No. BizarHarness is a configuration layer on top of [cline](https://docs.cline.bot). It ships agent definitions, a plugin, and a CLI. cline provides the runtime, the TUI, the permission system, the hook system, and the MCP integration. BizarHarness would not exist without cline.
 
 ### Is the Bizar plugin required?
 
-No. You can disable the Bizar plugin by removing the entry from `opencode.json` or by setting `BIZAR_DISABLE=1` in the environment. The agents will work without the plugin — you'll lose loop detection, status logging, and the handoff mechanism, but routing still functions.
+No. You can disable the Bizar plugin by removing the entry from `cline.json` or by setting `BIZAR_DISABLE=1` in the environment. The agents will work without the plugin — you'll lose loop detection, status logging, and the handoff mechanism, but routing still functions.
 
 See the [Bizar Plugin](Bizar-Plugin) page for details on disabling.
 
@@ -34,7 +34,7 @@ Yes. BizarHarness does not use Anthropic models at all. The default stack is Dee
 
 ### Can I add my own agents?
 
-Yes. Drop a new `<name>.md` file in `config/agents/` (or in `~/.config/opencode/agents/` for a per-user install) and re-run the installer. The file should have YAML frontmatter (`name`, `model`) and a Markdown   body that includes:
+Yes. Drop a new `<name>.md` file in `config/agents/` (or in `~/.config/cline/agents/` for a per-user install) and re-run the installer. The file should have YAML frontmatter (`name`, `model`) and a Markdown   body that includes:
 
 - A `## Role` section describing what the agent does.
 - A `## When to Use` section with example invocations.
@@ -45,14 +45,14 @@ Odin will pick up the new agent via the `task` tool with `subagent_type: <your-a
 
 ### Can I change the model per agent?
 
-Yes. Edit the agent's `.md` file and change the `model:` field. Then re-run the installer to copy the updated file into `~/.config/opencode/agents/`. The new model takes effect on the next opencode restart.
+Yes. Edit the agent's `.md` file and change the `model:` field. Then re-run the installer to copy the updated file into `~/.config/cline/agents/`. The new model takes effect on the next cline restart.
 
 ### Can I disable the plugin?
 
 Yes. Three options:
 
-- **Temporarily:** Set `BIZAR_DISABLE=1` in the environment before launching opencode.
-- **Permanently for a session:** Remove the plugin entry from `opencode.json`.
+- **Temporarily:** Set `BIZAR_DISABLE=1` in the environment before launching cline.
+- **Permanently for a session:** Remove the plugin entry from `cline.json`.
 - **Permanently:** Delete the `plugins/bizar/` directory.
 
 See the [Bizar Plugin](Bizar-Plugin) page for the full list of env-var toggles (`BIZAR_DISABLE_LOOP`, `BIZAR_DISABLE_LOG`, `BIZAR_LOG_LEVEL`).
@@ -71,11 +71,11 @@ The most common Windows-specific issues are documented in the [Troubleshooting](
 
 ### Does this work with Claude Code / Cursor / Copilot?
 
-The Bizar plugin is opencode-specific (it uses opencode's plugin API and hook surface). The agent definitions and the BizarHarness CLI can be adapted to other harnesses via `bizar export <target>`, but the bundled plugin only works in opencode.
+The Bizar plugin is cline-specific (it uses cline's plugin API and hook surface). The agent definitions and the BizarHarness CLI can be adapted to other harnesses via `bizar export <target>`, but the bundled plugin only works in cline.
 
 ### Does this work with local models (Ollama, LM Studio)?
 
-In principle, yes. The agent files accept any `<provider>/<model>` string. Configure the local model in opencode's `/connect`, then edit the target agent's `.md` file to use it. The free tier (DeepSeek V4 Flash) is just one choice — local models can fill the same slot.
+In principle, yes. The agent files accept any `<provider>/<model>` string. Configure the local model in cline's `/connect`, then edit the target agent's `.md` file to use it. The free tier (DeepSeek V4 Flash) is just one choice — local models can fill the same slot.
 
 ## Operations
 
@@ -93,7 +93,7 @@ After the npm package updates, re-run the installer:
 bizar
 ```
 
-The installer is idempotent — it preserves your existing config and only copies new or changed files. If a config conflict arises, it backs up the existing file to `opencode.json.bak` first.
+The installer is idempotent — it preserves your existing config and only copies new or changed files. If a config conflict arises, it backs up the existing file to `cline.json.bak` first.
 
 To update from source (for contributors):
 
@@ -141,7 +141,7 @@ Not directly. The closest you can get is to read the agent's prompt and estimate
 ### How do I cite BizarHarness in a paper / blog post?
 
 ```
-BizarHarness: Norse-pantheon multi-agent system for opencode.
+BizarHarness: Norse-pantheon multi-agent system for cline.
 https://github.com/DrB0rk/BizarHarness
 ```
 
@@ -160,7 +160,7 @@ MIT. See the [LICENSE](https://github.com/DrB0rk/BizarHarness/blob/main/LICENSE)
 ### What's the difference between v0.3, v0.4, v0.5?
 
 - **v0.3.x** — loop guard, status reporting, handoff. Single tool surface (per-session, per-tool fingerprint). The original release.
-- **v0.4.x** — adds background agents (`bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`). Single `opencode serve` child. State on disk.
+- **v0.4.x** — adds background agents (`bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`). Single `cline serve` child. State on disk.
 - **v0.5.0** — adds plan side-effects (`/plan new|add|comment|status`), `bizar_plan_action`, `bizar_get_plan_comments`, `bizar_wait_for_feedback`, stall and thinking-loop detection. Plan files at `~/.cache/bizar/state/bg/<instanceId>.json`.
 - **v0.5.1** — fixes the empty-sessionId bug in `bizar_spawn_background`. The regression test in `plugins/bizar/tests/attach-handler-bug.test.ts` would have caught this. Test count: 488 → 491.
 
@@ -170,15 +170,15 @@ The plugin's `dispose()` handler runs on `SIGTERM` or `SIGINT` (or on process ex
 
 1. Marks all `running` and `pending` background instances as `failed` with `error: "shutdown"`.
 2. Calls `POST /session/{id}/abort` on each.
-3. Sends `SIGTERM` to the `opencode serve` child (if alive).
+3. Sends `SIGTERM` to the `cline serve` child (if alive).
 4. Closes the SSE stream.
 5. Calls `process.exit(0)`.
 
-State files at `~/.cache/bizar/state/bg/*.json` are **preserved** — they are the recovery surface for the next opencode launch.
+State files at `~/.cache/bizar/state/bg/*.json` are **preserved** — they are the recovery surface for the next cline launch.
 
 ### How do I add a new loop-guard threshold?
 
-Edit the plugin options in `opencode.json`:
+Edit the plugin options in `cline.json`:
 
 ```jsonc
 "plugin": [
@@ -199,13 +199,13 @@ The plugin clamps and reorders the values: `warn < escalate < block`, and `block
 
 ### How do I see all available slash commands?
 
-Type `/help` in opencode. The plugin's `/help` returns its own command list; the opencode-built-in `/help` returns the broader set including user-level and project-level commands.
+Type `/help` in cline. The plugin's `/help` returns its own command list; the cline-built-in `/help` returns the broader set including user-level and project-level commands.
 
 The full list is on the [Commands Reference](Commands-Reference) page.
 
 ### How do I add a project-specific slash command?
 
-Drop a markdown file in `<project>/.opencode/commands/<name>.md` with this frontmatter:
+Drop a markdown file in `<project>/.cline/commands/<name>.md` with this frontmatter:
 
 ```markdown
 ---
@@ -217,11 +217,11 @@ description: One-line description
 Body of the command — the prompt the model sees.
 ```
 
-Restart opencode. The command is now scoped to that project.
+Restart cline. The command is now scoped to that project.
 
 ### How do I add a global slash command for all my projects?
 
-Drop a markdown file in `~/.config/opencode/commands/<name>.md` (same format). It's available in every opencode session.
+Drop a markdown file in `~/.config/cline/commands/<name>.md` (same format). It's available in every cline session.
 
 ### What's the difference between /plan and /visual-plan?
 

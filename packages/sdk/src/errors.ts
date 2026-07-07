@@ -1,7 +1,7 @@
 /**
  * Discriminated error model for the BizarHarness SDK.
  *
- * Errors are RETURNED (not thrown) by default, matching the opencode SDK
+ * Errors are RETURNED (not thrown) by default, matching the cline SDK
  * pattern. Set `throwOnError: true` in the client config to opt into
  * throwing.
  *
@@ -51,15 +51,15 @@ export type APIError = {
   };
 };
 
-export type OpencodeConnectionError = {
-  name: "OpencodeConnectionError";
+export type ClineConnectionError = {
+  name: "ClineConnectionError";
   data: {
     message: string;
     cause?: unknown;
   };
 };
 
-export type BizarError = PluginError | DashboardError | ConnectionError | APIError | OpencodeConnectionError;
+export type BizarError = PluginError | DashboardError | ConnectionError | APIError | ClineConnectionError;
 
 /**
  * Type guard: narrows `unknown` to `BizarError`.
@@ -73,7 +73,7 @@ export function isBizarError(value: unknown): value is BizarError {
     v.name === "DashboardError" ||
     v.name === "ConnectionError" ||
     v.name === "APIError" ||
-    v.name === "OpencodeConnectionError"
+    v.name === "ClineConnectionError"
   );
 }
 

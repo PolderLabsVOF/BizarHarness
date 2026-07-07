@@ -1,11 +1,11 @@
 ---
 name: headroom
-description: Headroom — context compression layer for AI agents. Routes opencode and other LLM clients through a local proxy that compresses tool outputs, logs, RAG chunks, and conversation history by 60–95%.
+description: Headroom — context compression layer for AI agents. Routes cline and other LLM clients through a local proxy that compresses tool outputs, logs, RAG chunks, and conversation history by 60–95%.
 ---
 
 # Headroom
 
-Headroom is a context compression layer that sits between opencode (or any LLM client) and the upstream provider. It intercepts tool call outputs, conversation history, and RAG chunks and compresses them before they reach the model — typically reducing token usage by 60–95% with no loss in answer quality.
+Headroom is a context compression layer that sits between cline (or any LLM client) and the upstream provider. It intercepts tool call outputs, conversation history, and RAG chunks and compresses them before they reach the model — typically reducing token usage by 60–95% with no loss in answer quality.
 
 ## When to Use
 
@@ -17,7 +17,7 @@ Headroom is a context compression layer that sits between opencode (or any LLM c
 ## Architecture
 
 ```
-opencode → headroom proxy (localhost:8787) → LLM provider
+cline → headroom proxy (localhost:8787) → LLM provider
              ↓
         compresses tool outputs, logs, RAG chunks
         caches responses
@@ -30,13 +30,13 @@ opencode → headroom proxy (localhost:8787) → LLM provider
 The fraction of tokens Headroom eliminates. A 0.85 compression ratio means 85% of the tokens were removed before reaching the provider.
 
 ### Wrapped vs unwrapped
-`headroom wrap opencode` modifies `~/.config/opencode/opencode.json` to route traffic through the proxy. `headroom unwrap opencode` restores the original configuration.
+`headroom wrap cline` modifies `~/.config/cline/cline.json` to route traffic through the proxy. `headroom unwrap cline` restores the original configuration.
 
 ### Proxy vs wrap
 - **Proxy** (`headroom proxy`): The actual HTTP proxy server running on port 8787.
-- **Wrap** (`headroom wrap opencode`): The act of configuring opencode to use the proxy.
+- **Wrap** (`headroom wrap cline`): The act of configuring cline to use the proxy.
 
-You can run the proxy standalone (`headroom proxy`) and point any OpenAI-compatible client at it. The wrap command is just a convenience for opencode.
+You can run the proxy standalone (`headroom proxy`) and point any OpenAI-compatible client at it. The wrap command is just a convenience for cline.
 
 ## Dashboard Integration
 
@@ -50,8 +50,8 @@ API endpoints:
 - `GET /api/headroom/status` — live status
 - `GET /api/headroom/stats?hours=24` — compression statistics
 - `POST /api/headroom/install` — install headroom
-- `POST /api/headroom/wrap` — wrap opencode
-- `POST /api/headroom/unwrap` — unwrap opencode
+- `POST /api/headroom/wrap` — wrap cline
+- `POST /api/headroom/unwrap` — unwrap cline
 - `POST /api/headroom/proxy/start` — start proxy
 - `POST /api/headroom/proxy/stop` — stop proxy
 - `POST /api/headroom/auto-route` — configure all providers to route through the proxy
@@ -61,7 +61,7 @@ CLI:
 bizar headroom status   # live status
 bizar headroom stats    # compression stats
 bizar headroom install  # install headroom
-bizar headroom wrap     # wrap opencode
+bizar headroom wrap     # wrap cline
 bizar headroom unwrap   # unwrap
 bizar headroom start    # start proxy
 bizar headroom stop     # stop proxy
@@ -81,9 +81,9 @@ bizar headroom doctor   # health check
 
 ## Common Gotchas
 
-1. **Proxy must be running before opencode starts**: If the proxy is down when opencode launches, opencode will fail to make LLM calls. Start the proxy first, or enable `autoStart` in Headroom settings.
+1. **Proxy must be running before cline starts**: If the proxy is down when cline launches, cline will fail to make LLM calls. Start the proxy first, or enable `autoStart` in Headroom settings.
 
-2. **`headroom wrap` edits opencode.json**: The wrap command modifies `~/.config/opencode/opencode.json`. If you use version control for this file, you'll see a diff on every wrap. Use `headroom unwrap` before committing, or ignore the changes.
+2. **`headroom wrap` edits cline.json**: The wrap command modifies `~/.config/cline/cline.json`. If you use version control for this file, you'll see a diff on every wrap. Use `headroom unwrap` before committing, or ignore the changes.
 
 3. **Headroom 0.30.0 doesn't have `headroom plan --tokens`**: This command was removed. Use `headroom perf --hours 24` for actual token savings data.
 

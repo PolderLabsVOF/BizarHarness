@@ -1,11 +1,11 @@
 /**
  * http-client.ts
  *
- * Typed fetch wrapper for plugin → opencode serve calls (v0.4.2 spec §1, §2.3).
+ * Typed fetch wrapper for plugin → cline serve calls (v0.4.2 spec §1, §2.3).
  *
  * Responsibilities:
- *   - Auth header on every call: `Authorization: Basic base64("opencode:<password>")`
- *     (spec §6.1; this is the spec's best understanding of opencode serve's
+ *   - Auth header on every call: `Authorization: Basic base64("cline:<password>")`
+ *     (spec §6.1; this is the spec's best understanding of cline serve's
  *     auth scheme and is verified by integration test in BizarHarness-dev).
  *   - `directory` query param on every per-instance call (spec §1.7).
  *   - 30s default timeout via `AbortController` (spec §2.3 / §6.1 env
@@ -14,10 +14,10 @@
  *     callers can log + surface a clear error to the agent without an
  *     unhandled rejection (spec §2.3 last paragraph).
  *
- * v0.4.3 — v2 API migration (see `.bizar/opencode-sse-investigation.md`):
+ * v0.4.3 — v2 API migration (see `.bizar/cline-sse-investigation.md`):
  *   - The v1 session routes (`/session`, `/session/{id}/prompt_async`,
  *     `/session/{id}/abort`, `/session/{id}/message`) hang indefinitely
- *     against opencode serve 1.17.7. We migrated to the v2 API:
+ *     against cline serve 1.17.7. We migrated to the v2 API:
  *
  *     | Method     | Old (v1, hangs)            | New (v2)                           |
  *     |------------|----------------------------|------------------------------------|
@@ -46,11 +46,11 @@
  * Node, those are available as globals in Node 20+; in Bun they are
  * always available.
  *
- * Note on auth scheme: opencode serve's exact auth scheme is opencode-
+ * Note on auth scheme: cline serve's exact auth scheme is cline-
  * dependent. The current best understanding, based on v0.4 research, is
- * `Authorization: Basic` with username `opencode`. This must be verified
- * by reading opencode's serve-side code or by integration test. If
- * opencode uses a different scheme (e.g. a custom `x-opencode-password`
+ * `Authorization: Basic` with username `cline`. This must be verified
+ * by reading cline's serve-side code or by integration test. If
+ * cline uses a different scheme (e.g. a custom `x-cline-password`
  * header), this file is the single place to change.
  */
 
@@ -115,7 +115,7 @@ export type HttpResult<T> =
   | { ok: false; error: string; status?: number };
 
 /**
- * Typed HTTP client for the opencode serve child. All methods take a
+ * Typed HTTP client for the cline serve child. All methods take a
  * `directory` argument (spec §1.7) so the same client works for the
  * plugin's own worktree and any future multi-worktree setups.
  */
@@ -134,9 +134,9 @@ export class HttpClient {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
     this.logger = opts.logger;
     this.timeoutMs = Math.max(1000, Math.floor(opts.timeoutMs ?? 30_000));
-    // Basic auth: "opencode:<password>" base64-encoded.
+    // Basic auth: "cline:<password>" base64-encoded.
     // (spec §6.1; see module-level note re: scheme verification.)
-    const credentials = `opencode:${opts.password}`;
+    const credentials = `cline:${opts.password}`;
     this.authHeader = `Basic ${btoa(credentials)}`;
   }
 
@@ -145,14 +145,14 @@ export class HttpClient {
   /**
    * POST /api/session — create a new background session (v2 route).
    *
-   * v0.4.3 migration: v1 `POST /session` hangs against opencode 1.17.7.
+   * v0.4.3 migration: v1 `POST /session` hangs against cline 1.17.7.
    * The v2 endpoint returns `{data: {id, ...}}`; we unwrap `.data` so
    * the public interface stays `{id: string}`.
    *
    * Body (verified via OpenAPI spec):
    *   { parentID?, title, agent, model? }
    *
-   * The `agent` field is REQUIRED — without it opencode spawns the
+   * The `agent` field is REQUIRED — without it cline spawns the
    * default agent instead of the requested one.
    */
   async createSession(
@@ -229,7 +229,7 @@ export class HttpClient {
    * POST /api/session/{id}/abort — kill a running session (v2 route).
    *
    * v0.4.3 migration: v1 `POST /session/{id}/abort` likely hangs (the
-   * v1 session routes all hang on opencode 1.17.7). The OpenAPI
+   * v1 session routes all hang on cline 1.17.7). The OpenAPI
    * investigation did not surface a documented v2 abort endpoint, so
    * this is a best-effort call against the v2-mirrored path. If the
    * server returns a 404, we log a warning via the result `error`

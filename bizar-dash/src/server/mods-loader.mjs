@@ -7,25 +7,25 @@
  * `~/.config/bizar/mods/<mod-id>/` and exposes a list of valid mods.
  *
  * Mods can contribute:
- *   - agents    (markdown files with frontmatter — installed to opencode config)
- *   - commands  (markdown files with frontmatter — installed to opencode config)
- *   - INSTRUCTIONS.md (top-level — installed as an opencode skill)
- *   - skills/<name>/SKILL.md (installed as opencode skills)
+ *   - agents    (markdown files with frontmatter — installed to cline config)
+ *   - commands  (markdown files with frontmatter — installed to cline config)
+ *   - INSTRUCTIONS.md (top-level — installed as an cline skill)
+ *   - skills/<name>/SKILL.md (installed as cline skills)
  *   - routes    (Node.js modules that export `register({ app, state })`)
  *   - views     (declarative metadata — actual rendering done by host)
  *   - tui       (declarative metadata)
  *   - hooks     (declarative metadata)
  *
  * Mod installation copies agent/command/skill instruction files into the
- * user's opencode config (`~/.config/opencode/agents/`, `~/.config/opencode/commands/`,
- * `~/.opencode/skills/`) so they are picked up at session start. Uninstall removes them.
+ * user's cline config (`~/.config/cline/agents/`, `~/.config/cline/commands/`,
+ * `~/.cline/skills/`) so they are picked up at session start. Uninstall removes them.
  *
  * For v3 MVP, the loader only:
  *   - Lists installed mods (manifest)
  *   - Enables / disables (writes enabled flag back to mod.json)
  *   - Installs a mod from a local path (copies files into the mods dir)
- *   - Installs mod instructions into opencode config
- *   - Uninstalls (removes the mod folder AND the opencode-config copies)
+ *   - Installs mod instructions into cline config
+ *   - Uninstalls (removes the mod folder AND the cline-config copies)
  *
  * The dashboard can render a "Hello" tab for any mod whose manifest type
  * is `view` and that registers a route. v3 keeps this minimal.
@@ -371,7 +371,7 @@ export const modsLoader = {
     fresh.id = fresh.id || id;
     fresh._integrity = computeModHash(target);
     writeFileSync(join(target, 'mod.json'), JSON.stringify(fresh, null, 2) + '\n', 'utf8');
-    // v3.20 — install mod instructions into the user's opencode config
+    // v3.20 — install mod instructions into the user's cline config
     // (agents/, commands/, skills/). This makes the mod's rules binding
     // on every agent at session start.
     installModInstructions(id, target);
@@ -400,7 +400,7 @@ export const modsLoader = {
   uninstall(id) {
     const dir = join(MODS_DIR, id);
     if (!existsSync(dir)) return false;
-    // v3.20 — uninstall mod instructions from opencode config FIRST
+    // v3.20 — uninstall mod instructions from cline config FIRST
     // (so we know which files were installed by this mod).
     uninstallModInstructions(id);
     rmSync(dir, { recursive: true, force: true });
@@ -523,7 +523,7 @@ export const modsLoader = {
    *   1. Read the existing installed mod's version (for the report).
    *   2. Optionally back it up to ~/.config/bizar/mods/.backup/<id>-<ts>/
    *      (off by default — pass { backup: true } to enable).
-   *   3. Uninstall the existing mod (removes opencode-config copies via
+   *   3. Uninstall the existing mod (removes cline-config copies via
    *      uninstallModInstructions so the new install can re-create them).
    *   4. Install the latest version from the registry.
    *   5. Return { from, to, backupPath?, mod } for the dashboard.
@@ -549,7 +549,7 @@ export const modsLoader = {
       cpSync(dir, backupPath, { recursive: true });
     }
 
-    // 2. Uninstall the existing copy (also removes its opencode instructions).
+    // 2. Uninstall the existing copy (also removes its cline instructions).
     this.uninstall(id);
 
     // 3. Install the latest from the registry.
@@ -642,7 +642,7 @@ export const modsLoader = {
     } catch {
       /* optional — web view is mod-defined */
     }
-    // v3.20 — install mod instructions into the user's opencode config
+    // v3.20 — install mod instructions into the user's cline config
     // (agents/, commands/, skills/). Triggered on registry install too.
     installModInstructions(id, target);
     // v4.4.11 — Smoke-test the mod before reporting success. We
@@ -732,7 +732,7 @@ export const modsLoader = {
    * @param {Function} ctx.broadcast
    * @param {object} ctx.state
    * @param {string} ctx.projectRoot
-   * @param {string} ctx.opencodeConfigDir
+   * @param {string} ctx.clineConfigDir
    */
   async loadModRouters(ctx = {}) {
     const mods = this.list().filter((m) => m.enabled && m.entry?.route);
@@ -900,7 +900,7 @@ export const modsLoader = {
 
   /**
    * v3.20 — List the instruction files a mod installed into the user's
-   * opencode config. Returns paths grouped by category.
+   * cline config. Returns paths grouped by category.
    *
    *   { agents: ['<id>__thor.md', ...],
    *     commands: ['<id>__plan.md', ...],
@@ -911,25 +911,25 @@ export const modsLoader = {
     const prefix = `${modId}__`;
     const skillPrefix = `${modId}-`;
     const out = { agents: [], commands: [], skills: [] };
-    if (existsSync(OPENCODE_AGENTS_DIR)) {
+    if (existsSync(CLINE_AGENTS_DIR)) {
       try {
-        out.agents = readdirSync(OPENCODE_AGENTS_DIR)
+        out.agents = readdirSync(CLINE_AGENTS_DIR)
           .filter((f) => f.startsWith(prefix));
       } catch (err) {
         console.warn('swallowed in agents readdir:', err.message);
       }
     }
-    if (existsSync(OPENCODE_COMMANDS_DIR)) {
+    if (existsSync(CLINE_COMMANDS_DIR)) {
       try {
-        out.commands = readdirSync(OPENCODE_COMMANDS_DIR)
+        out.commands = readdirSync(CLINE_COMMANDS_DIR)
           .filter((f) => f.startsWith(prefix));
       } catch (err) {
         console.warn('swallowed in commands readdir:', err.message);
       }
     }
-    if (existsSync(OPENCODE_SKILLS_DIR)) {
+    if (existsSync(CLINE_SKILLS_DIR)) {
       try {
-        out.skills = readdirSync(OPENCODE_SKILLS_DIR, { withFileTypes: true })
+        out.skills = readdirSync(CLINE_SKILLS_DIR, { withFileTypes: true })
           .filter((e) => e.isDirectory() && e.name.startsWith(skillPrefix))
           .map((e) => e.name);
       } catch (err) {
@@ -1027,24 +1027,24 @@ async function fetchSkillsDir(baseUrl, destDir) {
 
 // ─────────────────────────────────────────────────────────────────────
 // v3.20 — Mod instructions: install/uninstall a mod's instruction files
-// into the user's opencode config so they auto-load at session start.
+// into the user's cline config so they auto-load at session start.
 //
-// Mapping (mod path → opencode config path):
+// Mapping (mod path → cline config path):
 //
-//   <mod>/INSTRUCTIONS.md            → ~/.opencode/skills/<id>-instructions/SKILL.md
-//   <mod>/agents/<agent>.md          → ~/.config/opencode/agents/<id>__<agent>.md
-//   <mod>/commands/<cmd>.md          → ~/.config/opencode/commands/<id>__<cmd>.md
-//   <mod>/skills/<name>/SKILL.md     → ~/.opencode/skills/<id>-<name>/SKILL.md
+//   <mod>/INSTRUCTIONS.md            → ~/.cline/skills/<id>-instructions/SKILL.md
+//   <mod>/agents/<agent>.md          → ~/.config/cline/agents/<id>__<agent>.md
+//   <mod>/commands/<cmd>.md          → ~/.config/cline/commands/<id>__<cmd>.md
+//   <mod>/skills/<name>/SKILL.md     → ~/.cline/skills/<id>-<name>/SKILL.md
 //
 // All installed files are prefixed with `<mod-id>__` (or `<mod-id>-` for skills)
 // so uninstall can find exactly what this mod installed and remove it without
 // touching files installed by other mods or by the base Bizar install.
 // ─────────────────────────────────────────────────────────────────────
 
-const OPENCODE_CONFIG_DIR = join(HOME, '.config', 'opencode');
-const OPENCODE_AGENTS_DIR = join(OPENCODE_CONFIG_DIR, 'agents');
-const OPENCODE_COMMANDS_DIR = join(OPENCODE_CONFIG_DIR, 'commands');
-const OPENCODE_SKILLS_DIR = join(HOME, '.opencode', 'skills');
+const CLINE_CONFIG_DIR = join(HOME, '.config', 'cline');
+const CLINE_AGENTS_DIR = join(CLINE_CONFIG_DIR, 'agents');
+const CLINE_COMMANDS_DIR = join(CLINE_CONFIG_DIR, 'commands');
+const CLINE_SKILLS_DIR = join(HOME, '.cline', 'skills');
 
 /**
  * Copy a single file, creating the destination directory if needed.
@@ -1113,7 +1113,7 @@ function walkFiles(dir, prefix = '') {
 
 /**
  * Install all instruction files from a mod folder into the user's
- * opencode config. Idempotent — safe to call multiple times for the
+ * cline config. Idempotent — safe to call multiple times for the
  * same mod (overwrites in place).
  *
  * Returns { agents, commands, skills, instructions } counts.
@@ -1122,37 +1122,37 @@ function installModInstructions(modId, modDir) {
   if (!modId || !modDir) return { agents: 0, commands: 0, skills: 0, instructions: 0 };
   const counts = { agents: 0, commands: 0, skills: 0, instructions: 0 };
 
-  // 1. agents/ → ~/.config/opencode/agents/<id>__<agent>.md
+  // 1. agents/ → ~/.config/cline/agents/<id>__<agent>.md
   const agentsDir = join(modDir, 'agents');
   if (existsSync(agentsDir)) {
     for (const f of readdirSync(agentsDir)) {
       if (!f.endsWith('.md')) continue;
       const src = join(agentsDir, f);
-      const dest = join(OPENCODE_AGENTS_DIR, `${modId}__${f}`);
+      const dest = join(CLINE_AGENTS_DIR, `${modId}__${f}`);
       if (copyFileSafe(src, dest)) counts.agents += 1;
     }
   }
 
-  // 2. commands/ → ~/.config/opencode/commands/<id>__<cmd>.md
+  // 2. commands/ → ~/.config/cline/commands/<id>__<cmd>.md
   const commandsDir = join(modDir, 'commands');
   if (existsSync(commandsDir)) {
     for (const f of readdirSync(commandsDir)) {
       if (!f.endsWith('.md')) continue;
       const src = join(commandsDir, f);
-      const dest = join(OPENCODE_COMMANDS_DIR, `${modId}__${f}`);
+      const dest = join(CLINE_COMMANDS_DIR, `${modId}__${f}`);
       if (copyFileSafe(src, dest)) counts.commands += 1;
     }
   }
 
-  // 3. INSTRUCTIONS.md → ~/.opencode/skills/<id>-instructions/SKILL.md
+  // 3. INSTRUCTIONS.md → ~/.cline/skills/<id>-instructions/SKILL.md
   const instructionsSrc = join(modDir, 'INSTRUCTIONS.md');
   if (existsSync(instructionsSrc)) {
-    const destDir = join(OPENCODE_SKILLS_DIR, `${modId}-instructions`);
+    const destDir = join(CLINE_SKILLS_DIR, `${modId}-instructions`);
     const dest = join(destDir, 'SKILL.md');
     if (copyFileSafe(instructionsSrc, dest)) counts.instructions += 1;
   }
 
-  // 4. skills/<name>/SKILL.md → ~/.opencode/skills/<id>-<name>/SKILL.md
+  // 4. skills/<name>/SKILL.md → ~/.cline/skills/<id>-<name>/SKILL.md
   const skillsDir = join(modDir, 'skills');
   if (existsSync(skillsDir)) {
     let entries;
@@ -1165,7 +1165,7 @@ function installModInstructions(modId, modDir) {
       if (!e.isDirectory()) continue;
       const skillMd = join(skillsDir, e.name, 'SKILL.md');
       if (!existsSync(skillMd)) continue;
-      const destDir = join(OPENCODE_SKILLS_DIR, `${modId}-${e.name}`);
+      const destDir = join(CLINE_SKILLS_DIR, `${modId}-${e.name}`);
       const dest = join(destDir, 'SKILL.md');
       if (copyFileSafe(skillMd, dest)) counts.skills += 1;
     }
@@ -1184,46 +1184,46 @@ function uninstallModInstructions(modId) {
   const counts = { agents: 0, commands: 0, skills: 0, instructions: 0 };
 
   // 1. agents/ — remove every <id>__*.md
-  if (existsSync(OPENCODE_AGENTS_DIR)) {
+  if (existsSync(CLINE_AGENTS_DIR)) {
     let entries;
     try {
-      entries = readdirSync(OPENCODE_AGENTS_DIR);
+      entries = readdirSync(CLINE_AGENTS_DIR);
     } catch {
       entries = [];
     }
     for (const f of entries) {
       if (f.startsWith(`${modId}__`) && f.endsWith('.md')) {
-        if (removeSafe(join(OPENCODE_AGENTS_DIR, f))) counts.agents += 1;
+        if (removeSafe(join(CLINE_AGENTS_DIR, f))) counts.agents += 1;
       }
     }
   }
 
   // 2. commands/ — remove every <id>__*.md
-  if (existsSync(OPENCODE_COMMANDS_DIR)) {
+  if (existsSync(CLINE_COMMANDS_DIR)) {
     let entries;
     try {
-      entries = readdirSync(OPENCODE_COMMANDS_DIR);
+      entries = readdirSync(CLINE_COMMANDS_DIR);
     } catch {
       entries = [];
     }
     for (const f of entries) {
       if (f.startsWith(`${modId}__`) && f.endsWith('.md')) {
-        if (removeSafe(join(OPENCODE_COMMANDS_DIR, f))) counts.commands += 1;
+        if (removeSafe(join(CLINE_COMMANDS_DIR, f))) counts.commands += 1;
       }
     }
   }
 
   // 3. INSTRUCTIONS.md — remove <id>-instructions/ skill
-  const instructionsDest = join(OPENCODE_SKILLS_DIR, `${modId}-instructions`);
+  const instructionsDest = join(CLINE_SKILLS_DIR, `${modId}-instructions`);
   if (removeSafe(instructionsDest)) counts.instructions += 1;
 
   // 4. skills/ — remove every <id>-<name>/ skill dir that this mod installed.
   // We only remove dirs that look like `<id>-*` and aren't the agent-baseline
   // or other base-installed skills.
-  if (existsSync(OPENCODE_SKILLS_DIR)) {
+  if (existsSync(CLINE_SKILLS_DIR)) {
     let entries;
     try {
-      entries = readdirSync(OPENCODE_SKILLS_DIR, { withFileTypes: true });
+      entries = readdirSync(CLINE_SKILLS_DIR, { withFileTypes: true });
     } catch {
       entries = [];
     }
@@ -1234,7 +1234,7 @@ function uninstallModInstructions(modId) {
       const prefix = `${modId}-`;
       if (e.name === `${modId}-instructions`) continue; // handled above
       if (e.name.startsWith(prefix)) {
-        if (removeSafe(join(OPENCODE_SKILLS_DIR, e.name))) counts.skills += 1;
+        if (removeSafe(join(CLINE_SKILLS_DIR, e.name))) counts.skills += 1;
       }
     }
   }

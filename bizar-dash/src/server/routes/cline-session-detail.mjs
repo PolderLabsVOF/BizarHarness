@@ -1,29 +1,29 @@
 /**
- * src/server/routes/opencode-session-detail.mjs
+ * src/server/routes/cline-session-detail.mjs
  *
- * v4.2.4 — Per-session deep-linking for the opencode sessions list.
+ * v4.2.4 — Per-session deep-linking for the cline sessions list.
  *
- * The dashboard's /api/opencode-sessions endpoint (see opencode-sessions.mjs)
+ * The dashboard's /api/cline-sessions endpoint (see cline-sessions.mjs)
  * returns a flat list of session metadata. When the user clicks a session
  * we need the dashboard to:
  *   1. Render the existing chat UI inside the dashboard tab — not a 404
- *      to /opencode/session/:id on the opencode serve child.
+ *      to /cline/session/:id on the cline serve child.
  *   2. Fetch the message history for that session.
  *   3. Send new user prompts.
  *   4. Stream live updates (assistant tokens, part updates, idle, errors)
  *      filtered to the chosen session.
  *
- * This router exposes three endpoints that sit on top of the opencode
+ * This router exposes three endpoints that sit on top of the cline
  * serve child described in serve-info.mjs:
  *
- *   GET  /api/opencode-sessions/:id/messages
- *   POST /api/opencode-sessions/:id/send
- *   GET  /api/opencode-sessions/:id/stream   (SSE proxy)
+ *   GET  /api/cline-sessions/:id/messages
+ *   POST /api/cline-sessions/:id/send
+ *   GET  /api/cline-sessions/:id/stream   (SSE proxy)
  *
  * The SSE proxy follows the same wire format as `routes-v2/events.mjs`
  * (one event per `event:` + `data:` block, separated by a blank line).
- * The upstream is opencode's global `/event?directory=...` stream — we
- * unwrap each event with `unwrapOpencodeSseEvent` and forward only the
+ * The upstream is cline's global `/event?directory=...` stream — we
+ * unwrap each event with `unwrapClineSseEvent` and forward only the
  * ones whose `sessionID` matches the requested id.
  *
  * Concurrency: a module-level counter caps the number of concurrent
@@ -33,7 +33,7 @@
  *
  * The directory resolver lives in `serve-info.mjs` as
  * `resolveSessionDirectory(sessionId, serveInfo)` and is shared with
- * `routes/opencode-sessions.mjs`. It probes the recorded worktree
+ * `routes/cline-sessions.mjs`. It probes the recorded worktree
  * first (cheap), then falls back to listing every session and
  * matching on id. If neither yields a directory we 503 with
  * `directory_unknown`.
@@ -46,20 +46,20 @@
 import { Router } from 'express';
 import {
   readServeInfo,
-  listOpencodeMessages,
+  listClineMessages,
   resolveSessionDirectory,
-  sendOpencodePrompt,
-  unwrapOpencodeSseEvent,
+  sendClinePrompt,
+  unwrapClineSseEvent,
   buildAuthHeader,
-  extractContentFromOpencodeMessage,
+  extractContentFromClineMessage,
 } from '../serve-info.mjs';
 import { child as loggerChild } from '../logger.mjs';
 import { tracer, withSpan, setCommonAttributes } from '../otel.mjs';
 import { recordTrace } from '../metrics.mjs';
 import { wrap } from './_shared.mjs';
 
-/** Structured logger scoped to this route — emits `{module:'opencode-session-detail', ...}` on every line. */
-const logger = loggerChild({ module: 'opencode-session-detail' });
+/** Structured logger scoped to this route — emits `{module:'cline-session-detail', ...}` on every line. */
+const logger = loggerChild({ module: 'cline-session-detail' });
 
 /** Maximum number of concurrent SSE subscribers on this dashboard process. */
 const MAX_SSE_SUBSCRIBERS = 50;
@@ -75,14 +75,14 @@ const LIST_MESSAGES_TIMEOUT_MS = 8_000;
 const SEND_PROMPT_TIMEOUT_MS = 12_000;
 
 /**
- * Normalize an opencode message into the dashboard's chat shape:
+ * Normalize an cline message into the dashboard's chat shape:
  *   { id, role, content, ts }
  *
- * Mirrors `normalizeOpencodeMessage` in serve-info.mjs but is inlined
+ * Mirrors `normalizeClineMessage` in serve-info.mjs but is inlined
  * here because the inline shape lets us cheaply build the response
  * without re-parsing the parts twice.
  *
- * @param {object} msg  one entry from `listOpencodeMessages().messages`
+ * @param {object} msg  one entry from `listClineMessages().messages`
  * @returns {{id:string, role:string, content:string, ts:number}}
  */
 function toChatMessage(msg) {
@@ -97,7 +97,7 @@ function toChatMessage(msg) {
   return {
     id: String(id),
     role: String(role),
-    content: extractContentFromOpencodeMessage(msg),
+    content: extractContentFromClineMessage(msg),
     ts: typeof ts === 'number' ? ts : Date.now(),
   };
 }
@@ -105,35 +105,35 @@ function toChatMessage(msg) {
 /**
  * @returns {import('express').Router}
  */
-export function createOpencodeSessionDetailRouter() {
+export function createClineSessionDetailRouter() {
   const router = Router();
 
   // ---------------------------------------------------------------------
-  // GET /opencode-sessions/:id/messages
+  // GET /cline-sessions/:id/messages
   //
   // Returns the message history for a session in the dashboard's
   // ChatMessage shape: { id, role, content, ts }.
   // ---------------------------------------------------------------------
-  router.get('/opencode-sessions/:id/messages', wrap(withSpan('opencode.session.messages', async (span, req, res) => {
+  router.get('/cline-sessions/:id/messages', wrap(withSpan('cline.session.messages', async (span, req, res) => {
     const sessionId = String(req.params?.id || '');
     setCommonAttributes(span, {
       ip: req.ip || req.socket?.remoteAddress,
       userAgent: req.headers?.['user-agent'],
     });
-    span.setAttribute('opencode.session_id', sessionId);
+    span.setAttribute('cline.session_id', sessionId);
     if (!sessionId) {
       res.status(400).json({ error: 'bad_request', message: 'session id is required' });
-      recordTrace('opencode.session.messages', { outcome: 'missing_session_id' });
+      recordTrace('cline.session.messages', { outcome: 'missing_session_id' });
       return;
     }
     const info = readServeInfo();
     if (!info) {
       res.status(503).json({
         error: 'plugin_offline',
-        message: 'opencode plugin is not running',
-        suggestion: 'Run `bizar doctor` for diagnostics, or start opencode with `opencode serve`',
+        message: 'cline plugin is not running',
+        suggestion: 'Run `bizar doctor` for diagnostics, or start cline with `cline serve`',
       });
-      recordTrace('opencode.session.messages', { outcome: 'plugin_offline' });
+      recordTrace('cline.session.messages', { outcome: 'plugin_offline' });
       return;
     }
     const directory = await resolveSessionDirectory(sessionId, info);
@@ -141,16 +141,16 @@ export function createOpencodeSessionDetailRouter() {
       res.status(503).json({
         error: 'directory_unknown',
         message:
-          'Cannot determine the opencode session directory; ensure the opencode plugin is running with serve.json containing worktree.',
-        suggestion: 'Create a new session or restart opencode serve.',
+          'Cannot determine the cline session directory; ensure the cline plugin is running with serve.json containing worktree.',
+        suggestion: 'Create a new session or restart cline serve.',
       });
-      recordTrace('opencode.session.messages', { outcome: 'directory_unknown' });
+      recordTrace('cline.session.messages', { outcome: 'directory_unknown' });
       return;
     }
-    span.setAttribute('opencode.worktree', directory);
-    const result = await listOpencodeMessages(info, sessionId, directory, LIST_MESSAGES_TIMEOUT_MS);
+    span.setAttribute('cline.worktree', directory);
+    const result = await listClineMessages(info, sessionId, directory, LIST_MESSAGES_TIMEOUT_MS);
     if (!result?.ok) {
-      const errMsg = result?.error || 'unknown error from opencode serve';
+      const errMsg = result?.error || 'unknown error from cline serve';
       // v5.0.0 — bug #4: prefer the structured `cause` field if the
       // helper surfaced one (it carries `ECONNREFUSED` / `UND_ERR_*`
       // from the underlying fetch); fall back to substring inference
@@ -160,7 +160,7 @@ export function createOpencodeSessionDetailRouter() {
         if (errMsg.includes('timed out')) cause = 'timeout';
         else if (errMsg.includes('network error') || errMsg.includes('fetch failed')) cause = 'network';
       }
-      logger.warn('opencode listMessages failed (expected when serve is gone)', {
+      logger.warn('cline listMessages failed (expected when serve is gone)', {
         sessionId,
         worktree: directory,
         servePort: info.port,
@@ -168,65 +168,65 @@ export function createOpencodeSessionDetailRouter() {
         cause,
         err: errMsg,
       });
-      span.setAttribute('opencode.error_cause', cause);
-      span.setAttribute('opencode.upstream_status', result?.status ?? 0);
+      span.setAttribute('cline.error_cause', cause);
+      span.setAttribute('cline.upstream_status', result?.status ?? 0);
       res.status(502).json({
-        error: 'opencode_error',
+        error: 'cline_error',
         message: errMsg,
         cause,
         status: result?.status ?? undefined,
-        suggestion: 'Check that the opencode serve child is running. Try `bizar doctor` or restart the plugin.',
+        suggestion: 'Check that the cline serve child is running. Try `bizar doctor` or restart the plugin.',
       });
-      recordTrace('opencode.session.messages', { outcome: 'opencode_error', cause });
+      recordTrace('cline.session.messages', { outcome: 'cline_error', cause });
       return;
     }
     const messages = Array.isArray(result.messages) ? result.messages.map(toChatMessage) : [];
-    span.setAttribute('opencode.message_count', messages.length);
+    span.setAttribute('cline.message_count', messages.length);
     res.json({ messages });
-    recordTrace('opencode.session.messages', { outcome: 'ok', message_count_bucket: messages.length === 0 ? '0' : messages.length < 50 ? '1-49' : '50+' });
+    recordTrace('cline.session.messages', { outcome: 'ok', message_count_bucket: messages.length === 0 ? '0' : messages.length < 50 ? '1-49' : '50+' });
   })));
 
   // ---------------------------------------------------------------------
-  // POST /opencode-sessions/:id/send
+  // POST /cline-sessions/:id/send
   //
   // Body: { message: string, agent: string } — both required.
   // Returns { ok: true, messageId } or an error envelope.
   // ---------------------------------------------------------------------
-  router.post('/opencode-sessions/:id/send', wrap(withSpan('opencode.session.send', async (span, req, res) => {
+  router.post('/cline-sessions/:id/send', wrap(withSpan('cline.session.send', async (span, req, res) => {
     const sessionId = String(req.params?.id || '');
     setCommonAttributes(span, {
       ip: req.ip || req.socket?.remoteAddress,
       userAgent: req.headers?.['user-agent'],
     });
-    span.setAttribute('opencode.session_id', sessionId);
+    span.setAttribute('cline.session_id', sessionId);
     if (!sessionId) {
       res.status(400).json({ error: 'bad_request', message: 'session id is required' });
-      recordTrace('opencode.session.send', { outcome: 'missing_session_id' });
+      recordTrace('cline.session.send', { outcome: 'missing_session_id' });
       return;
     }
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     const agent = typeof body.agent === 'string' ? body.agent.trim() : '';
-    span.setAttribute('opencode.message_length', message.length);
-    if (agent) span.setAttribute('opencode.agent', agent);
+    span.setAttribute('cline.message_length', message.length);
+    if (agent) span.setAttribute('cline.agent', agent);
     if (!message) {
       res.status(400).json({ error: 'bad_request', message: '`message` is required' });
-      recordTrace('opencode.session.send', { outcome: 'missing_message' });
+      recordTrace('cline.session.send', { outcome: 'missing_message' });
       return;
     }
     if (!agent) {
       res.status(400).json({ error: 'bad_request', message: '`agent` is required' });
-      recordTrace('opencode.session.send', { outcome: 'missing_agent' });
+      recordTrace('cline.session.send', { outcome: 'missing_agent' });
       return;
     }
     const info = readServeInfo();
     if (!info) {
       res.status(503).json({
         error: 'plugin_offline',
-        message: 'opencode plugin is not running',
-        suggestion: 'Run `bizar doctor` for diagnostics, or start opencode with `opencode serve`',
+        message: 'cline plugin is not running',
+        suggestion: 'Run `bizar doctor` for diagnostics, or start cline with `cline serve`',
       });
-      recordTrace('opencode.session.send', { outcome: 'plugin_offline' });
+      recordTrace('cline.session.send', { outcome: 'plugin_offline' });
       return;
     }
     const directory = await resolveSessionDirectory(sessionId, info);
@@ -234,31 +234,31 @@ export function createOpencodeSessionDetailRouter() {
       res.status(503).json({
         error: 'directory_unknown',
         message:
-          'Cannot determine the opencode session directory; ensure the opencode plugin is running with serve.json containing worktree.',
-        suggestion: 'Create a new session or restart opencode serve.',
+          'Cannot determine the cline session directory; ensure the cline plugin is running with serve.json containing worktree.',
+        suggestion: 'Create a new session or restart cline serve.',
       });
-      recordTrace('opencode.session.send', { outcome: 'directory_unknown' });
+      recordTrace('cline.session.send', { outcome: 'directory_unknown' });
       return;
     }
-    span.setAttribute('opencode.worktree', directory);
+    span.setAttribute('cline.worktree', directory);
     // Synthesize a unique messageID so the client can correlate the
-    // prompt with the SSE events that opencode emits for it.
+    // prompt with the SSE events that cline emits for it.
     const messageID = `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-    span.setAttribute('opencode.message_id', messageID);
-    const result = await sendOpencodePrompt(
+    span.setAttribute('cline.message_id', messageID);
+    const result = await sendClinePrompt(
       info,
       { sessionId, agent, text: message, messageID },
       directory,
       SEND_PROMPT_TIMEOUT_MS,
     );
     if (!result?.ok) {
-      const errMsg = result?.error || 'unknown error from opencode serve';
+      const errMsg = result?.error || 'unknown error from cline serve';
       let cause = result?.cause || 'unknown';
       if (cause === 'unknown') {
         if (errMsg.includes('timed out')) cause = 'timeout';
         else if (errMsg.includes('network error') || errMsg.includes('fetch failed')) cause = 'network';
       }
-      logger.error('opencode sendPrompt failed', {
+      logger.error('cline sendPrompt failed', {
         sessionId,
         worktree: directory,
         servePort: info.port,
@@ -266,26 +266,26 @@ export function createOpencodeSessionDetailRouter() {
         cause,
         err: errMsg,
       });
-      span.setAttribute('opencode.error_cause', cause);
+      span.setAttribute('cline.error_cause', cause);
       res.status(502).json({
-        error: 'opencode_error',
+        error: 'cline_error',
         message: errMsg,
         cause,
         status: result?.status ?? undefined,
-        suggestion: 'Check that the opencode serve child is running. Try `bizar doctor` or restart the plugin.',
+        suggestion: 'Check that the cline serve child is running. Try `bizar doctor` or restart the plugin.',
       });
-      recordTrace('opencode.session.send', { outcome: 'opencode_error', cause });
+      recordTrace('cline.session.send', { outcome: 'cline_error', cause });
       return;
     }
-    span.setAttribute('opencode.ack_message_id', result.messageId || '');
+    span.setAttribute('cline.ack_message_id', result.messageId || '');
     res.json({ ok: true, messageId: result.messageId });
-    recordTrace('opencode.session.send', { outcome: 'ok' });
+    recordTrace('cline.session.send', { outcome: 'ok' });
   })));
 
   // ---------------------------------------------------------------------
-  // GET /opencode-sessions/:id/stream  (SSE proxy)
+  // GET /cline-sessions/:id/stream  (SSE proxy)
   //
-  // Opens ONE upstream connection to opencode's `/event?directory=...`
+  // Opens ONE upstream connection to cline's `/event?directory=...`
   // and forwards only the events whose `sessionID === :id` to the client.
   //
   // Concurrency is capped per-process. A 25s heartbeat keeps the
@@ -294,7 +294,7 @@ export function createOpencodeSessionDetailRouter() {
   // Implementation notes:
   //   - We DON'T import plugins/bizar/src/event-stream.ts because it
   //     lives outside this package and is TypeScript. The unwrap logic
-  //     is ported to serve-info.mjs (`unwrapOpencodeSseEvent`).
+  //     is ported to serve-info.mjs (`unwrapClineSseEvent`).
   //   - We DO mirror the response shape used by `routes-v2/events.mjs`:
   //     `event: <type>\ndata: <json>\n\n`.
   //   - v5.1.0 — span lifecycle is manual (`startSpan` + `span.end()`)
@@ -303,11 +303,11 @@ export function createOpencodeSessionDetailRouter() {
   //     before the actual SSE close. We pin the same tracer for
   //     consistency with the rest of this module.
   // ---------------------------------------------------------------------
-  router.get('/opencode-sessions/:id/stream', (req, res) => {
+  router.get('/cline-sessions/:id/stream', (req, res) => {
     const sessionId = String(req.params?.id || '');
-    const span = tracer.startSpan('opencode.session.stream', {
+    const span = tracer.startSpan('cline.session.stream', {
       attributes: {
-        'opencode.session_id': sessionId,
+        'cline.session_id': sessionId,
         'http.client_ip': req.ip || req.socket?.remoteAddress || '',
         'http.user_agent': (req.headers && req.headers['user-agent']) || '',
       },
@@ -341,11 +341,11 @@ export function createOpencodeSessionDetailRouter() {
         message: `SSE subscriber cap reached (${MAX_SSE_SUBSCRIBERS}); try again later.`,
       });
       try {
-        span.setAttribute('opencode.stream.outcome', 'too_many_subscribers');
+        span.setAttribute('cline.stream.outcome', 'too_many_subscribers');
         span.setStatus({ code: 2 /* ERROR */, message: 'too_many_subscribers' });
         span.end();
       } catch { /* ignore */ }
-      recordTrace('opencode.session.stream', { outcome: 'too_many_subscribers' });
+      recordTrace('cline.session.stream', { outcome: 'too_many_subscribers' });
       return;
     }
 
@@ -362,13 +362,13 @@ export function createOpencodeSessionDetailRouter() {
     if (!info) {
       res.write(`event: error\ndata: ${JSON.stringify({ error: 'plugin_offline' })}\n\n`);
       res.end();
-      endSpan({ 'opencode.stream.outcome': 'plugin_offline' });
-      recordTrace('opencode.session.stream', { outcome: 'plugin_offline' });
+      endSpan({ 'cline.stream.outcome': 'plugin_offline' });
+      recordTrace('cline.session.stream', { outcome: 'plugin_offline' });
       return;
     }
 
     activeSubscribers += 1;
-    span.setAttribute('opencode.stream.active_subscribers', activeSubscribers);
+    span.setAttribute('cline.stream.active_subscribers', activeSubscribers);
 
     // Upstream fetch + line-buffered SSE parser. Aborted on client
     // disconnect or when the upstream closes.
@@ -397,10 +397,10 @@ export function createOpencodeSessionDetailRouter() {
       }
       const lifetimeMs = Date.now() - startTs;
       endSpan({
-        'opencode.stream.outcome': closedReason || 'closed',
-        'opencode.stream.lifetime_ms': lifetimeMs,
+        'cline.stream.outcome': closedReason || 'closed',
+        'cline.stream.lifetime_ms': lifetimeMs,
       });
-      recordTrace('opencode.session.stream', {
+      recordTrace('cline.session.stream', {
         outcome: closedReason || 'closed',
         lifetime_bucket: lifetimeMs < 1_000 ? '<1s' : lifetimeMs < 60_000 ? '<60s' : '60s+',
       });
@@ -466,7 +466,7 @@ export function createOpencodeSessionDetailRouter() {
 let activeSubscribers = 0;
 
 /**
- * Pump an upstream SSE ReadableStream, parse blocks, unwrap opencode
+ * Pump an upstream SSE ReadableStream, parse blocks, unwrap cline
  * events, filter by sessionID, and forward to `res`.
  *
  * SSE blocks are separated by a blank line (`\n\n` or `\r\n\r\n`).
@@ -530,10 +530,10 @@ function handleSseBlock(block, res, sessionId) {
   } catch {
     return; // non-JSON data: drop silently
   }
-  const evt = unwrapOpencodeSseEvent(eventName, parsed);
+  const evt = unwrapClineSseEvent(eventName, parsed);
   if (!evt || !evt.type) return;
   // Filter to the requested session. Events without a sessionID
-  // (e.g. opencode's own server-wide pings) are dropped.
+  // (e.g. cline's own server-wide pings) are dropped.
   if (!evt.sessionID || evt.sessionID !== sessionId) return;
   if (res.writableEnded || res.destroyed) return;
   const payload = JSON.stringify({
@@ -545,7 +545,7 @@ function handleSseBlock(block, res, sessionId) {
   });
   try {
     // Forward a single canonical envelope per upstream event. The
-    // dashboard's stream listeners consume the opencode event names
+    // dashboard's stream listeners consume the cline event names
     // (`message.part.updated`, `session.idle`, `message.updated`, …)
     // directly — emitting redundant `chat:delta` / `chat:status` aliases
     // here would duplicate events and (e.g.) cause an idle event to

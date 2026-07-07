@@ -57,7 +57,7 @@ skills info my-skill
 Skills are `.md` files named `SKILL.md` inside a skill directory:
 
 ```
-~/.opencode/skills/my-skill/
+~/.cline/skills/my-skill/
   SKILL.md   ← the skill content
 ```
 

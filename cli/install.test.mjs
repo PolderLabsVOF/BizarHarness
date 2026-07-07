@@ -5,7 +5,7 @@
  * the node_modules copy step added in the "make the plugin-install fix
  * durable" change.
  *
- * Strategy: mock HOME so opencodeConfigDir() resolves inside a tmpdir,
+ * Strategy: mock HOME so clineConfigDir() resolves inside a tmpdir,
  * and pass `opts.sourceDir` to bypass the `npm root -g` lookup with a
  * caller-supplied fake plugin source.
  *
@@ -31,14 +31,14 @@ const ORIG_HOME = process.env.HOME;
 const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
- * Point HOME at a fresh tmpdir so the module's opencodeConfigDir()
- * resolves inside it (via the fallback `<HOME>/.config/opencode`).
+ * Point HOME at a fresh tmpdir so the module's clineConfigDir()
+ * resolves inside it (via the fallback `<HOME>/.config/cline`).
  * Returns the tmpdir path.
  *
- * We deliberately do NOT set XDG_CONFIG_HOME. opencodeConfigDir() treats
+ * We deliberately do NOT set XDG_CONFIG_HOME. clineConfigDir() treats
  * a set XDG_CONFIG_HOME as the direct parent (so `~/.config` →
- * `~/.config/opencode`); setting it to a raw tmpdir would produce
- * `<tmpdir>/opencode` instead of `<tmpdir>/.config/opencode` and break
+ * `~/.config/cline`); setting it to a raw tmpdir would produce
+ * `<tmpdir>/cline` instead of `<tmpdir>/.config/cline` and break
  * path alignment with the rest of the test.
  */
 function freshHome() {
@@ -50,7 +50,7 @@ function freshHome() {
 
 /** Path to the deployed plugin dir under the mocked HOME. */
 function pluginDest(home) {
-  return join(home, '.config', 'opencode', 'plugins', 'bizar');
+  return join(home, '.config', 'cline', 'plugins', 'bizar');
 }
 
 /**

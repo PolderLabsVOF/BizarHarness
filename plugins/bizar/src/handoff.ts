@@ -5,7 +5,7 @@
  *   - §5.4 — the three canonical messages emitted at thresholds 5, 8, and 12.
  *   - §7.2 — prompt-injection invariant. The ONLY value interpolated into any
  *     of these strings is the tool name (`<tool>`), which comes from the
- *     opencode tool registry and is a short, well-known identifier (e.g.
+ *     cline tool registry and is a short, well-known identifier (e.g.
  *     `read`, `bash`, `edit`). It is never user content, never LLM output,
  *     never an agent-controlled string. No other interpolation is permitted
  *     in this file. A PR that adds any other interpolation is rejected.
@@ -63,7 +63,7 @@ export function escalateMessage(tool: string): string {
 
 /**
  * Threshold-12 message: thrown from `tool.execute.before`. Surfaces in the
- * TUI as a tool error. The plugin's hard-block runs BEFORE opencode's
+ * TUI as a tool error. The plugin's hard-block runs BEFORE cline's
  * `doom_loop` recovery (spec §3.3), so the plugin wins.
  */
 export function blockMessage(tool: string): string {

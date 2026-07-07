@@ -27,7 +27,7 @@ export type {
   DashboardError,
   ConnectionError,
   APIError,
-  OpencodeConnectionError,
+  ClineConnectionError,
 } from "./errors.js";
 
 export type {
@@ -63,20 +63,20 @@ export type {
 
 export { SDK_VERSION } from "./version.js";
 
-// Opencode SDK — wraps the opencode serve child with a typed interface.
-// Tries `@opencode-ai/sdk` first; falls back to a thin fetch wrapper.
-export { createOpencodeSdk } from "./opencode.js";
-export type { OpencodeSdk, OpencodeSdkConfig } from "./opencode.js";
+// Cline SDK — wraps the cline serve child with a typed interface.
+// Tries `@cline/sdk` first; falls back to a thin fetch wrapper.
+export { createClineSdk } from "./cline.js";
+export type { ClineSdk, ClineSdkConfig } from "./cline.js";
 
-export { subscribeOpencodeEvents } from "./opencode-events.js";
+export { subscribeClineEvents } from "./cline-events.js";
 export type {
-  OpencodeEventEnvelope,
-  OpencodeEventSubscribeOptions,
-} from "./opencode-events.js";
+  ClineEventEnvelope,
+  ClineEventSubscribeOptions,
+} from "./cline-events.js";
 
 export type {
-  OpencodeSession,
-  OpencodeMessage,
-  OpencodePart,
-  OpencodeEvent,
-} from "./opencode-types.js";
+  ClineSession,
+  ClineMessage,
+  ClinePart,
+  ClineEvent,
+} from "./cline-types.js";

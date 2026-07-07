@@ -234,7 +234,7 @@ Concrete requirements for long-horizon support:
 | Requirement | Why it matters |
 |---|---|
 | **Checkpoint / resume** | A 4-hour task that crashes at 3h55m must not restart from zero. |
-| **Session persistence across restarts** | The dashboard, server, and opencode can all be killed. Work must survive. |
+| **Session persistence across restarts** | The dashboard, server, and cline can all be killed. Work must survive. |
 | **Decoupled human availability** | The human can be offline for hours or days. The system cannot block. |
 | **Budget enforcement** | Long tasks can burn through money. A budget ceiling is mandatory. |
 | **Deadline management** | Some tasks have soft deadlines. The system needs to know which. |
@@ -285,7 +285,7 @@ What is in place:
 - CLI (15+ command modules, `install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate/...`)
 - Dashboard server (v1 on `:4097`, v2 on `:4098`, 18 memory endpoints, mods loader with security layer, task delegator, background agent retry loop, structured logging, Prometheus metrics)
 - Dashboard web (17 views, kanban tasks, plan canvas, settings with auto-save, memory tab with 5 panels, doctor page, 178 vitest tests)
-- Opencode plugin (7 custom tools, background agent system with stall detection, loop guard, compaction gate at 50% context)
+- Cline plugin (7 custom tools, background agent system with stall detection, loop guard, compaction gate at 50% context)
 - Memory service (3 vault modes, 11 CLI subcommands, 18 REST endpoints, Obsidian-compatible Markdown, git-backed sync, secret scanning)
 - Self-improvement log (1,139 lines of lessons learned, read by agents at session start)
 
@@ -373,7 +373,7 @@ Bizar is a focused platform. The things we are **not** building:
 
 - **A RAG-only product.** Memory is a tool, not the product. We do not sell "vector search for your docs."
 - **An agent framework for end users.** Bizar is the platform we use to ship Bizar. We are not building a low-code agent builder for non-developers.
-- **A replacement for an IDE.** Bizar orchestrates work; humans still write code in their preferred editor. We integrate with opencode; we do not replace it.
+- **A replacement for an IDE.** Bizar orchestrates work; humans still write code in their preferred editor. We integrate with cline; we do not replace it.
 - **A general-purpose AI assistant.** Bizar is for engineering work. It is not a chatbot.
 - **A model provider.** We use existing models. We do not train or fine-tune our own (though the self-improvement loop may *suggest* fine-tuning data — a different thing).
 - **AGI.** We are not building a generally intelligent system. We are building a focused platform that does engineering work well, with human escalation when judgment is needed.

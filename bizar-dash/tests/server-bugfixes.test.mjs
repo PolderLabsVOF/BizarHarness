@@ -4,9 +4,9 @@
  *
  * Covers:
  *   - Bug S1 — providers-store.mjs 1-second debounced cache
- *       • readOpencodeJsonCached() returns cached value within TTL
- *       • readOpencodeJsonCached() re-reads after TTL expires
- *       • invalidateOpencodeJsonCache() clears the cache
+ *       • readClineJsonCached() returns cached value within TTL
+ *       • readClineJsonCached() re-reads after TTL expires
+ *       • invalidateClineJsonCache() clears the cache
  *       • list() / listAll() use the cache (no second disk hit)
  *       • Writes (add / update / saveConfig) invalidate the cache
  *   - Bug S3 — chat.mjs per-session delta cap
@@ -15,7 +15,7 @@
  *
  * Strategy: redirect HOME to a tempdir and bust the import cache so the
  * modules under test re-evaluate `homedir()` and pick up the new
- * opencode.json location. Mirrors providers-store-backup-keys pattern.
+ * cline.json location. Mirrors providers-store-backup-keys pattern.
  *
  * Run with: node --test tests/server-bugfixes.test.mjs
  */
@@ -38,9 +38,9 @@ let SANDBOX_HOME;
 let ORIGINAL_HOME;
 let providersStore;
 let saveConfig;
-let readOpencodeJsonCached;
-let invalidateOpencodeJsonCache;
-let OPENCODE_JSON_CACHE_TTL_MS;
+let readClineJsonCached;
+let invalidateClineJsonCache;
+let CLINE_JSON_CACHE_TTL_MS;
 
 before(() => {
   SANDBOX_HOME = mkdtempSync(join(tmpdir(), `bizar-bugfixes-test-${Date.now()}-`));
@@ -62,14 +62,14 @@ async function loadProvidersStore() {
   return mod;
 }
 
-function writeOpencodeJson(obj) {
-  const cfgDir = join(SANDBOX_HOME, '.config', 'opencode');
+function writeClineJson(obj) {
+  const cfgDir = join(SANDBOX_HOME, '.config', 'cline');
   mkdirSync(cfgDir, { recursive: true });
-  writeFileSync(join(cfgDir, 'opencode.json'), JSON.stringify(obj, null, 2));
+  writeFileSync(join(cfgDir, 'cline.json'), JSON.stringify(obj, null, 2));
 }
 
-function readOpencodeJsonRaw() {
-  const file = join(SANDBOX_HOME, '.config', 'opencode', 'opencode.json');
+function readClineJsonRaw() {
+  const file = join(SANDBOX_HOME, '.config', 'cline', 'cline.json');
   if (!existsSync(file)) return null;
   return JSON.parse(readFileSync(file, 'utf8'));
 }
@@ -78,81 +78,81 @@ beforeEach(async () => {
   const mod = await loadProvidersStore();
   providersStore = mod.providersStore;
   saveConfig = mod.saveConfig;
-  readOpencodeJsonCached = mod.readOpencodeJsonCached;
-  invalidateOpencodeJsonCache = mod.invalidateOpencodeJsonCache;
-  OPENCODE_JSON_CACHE_TTL_MS = mod.OPENCODE_JSON_CACHE_TTL_MS;
-  assert.equal(typeof OPENCODE_JSON_CACHE_TTL_MS, 'number');
-  assert.ok(OPENCODE_JSON_CACHE_TTL_MS >= 100 && OPENCODE_JSON_CACHE_TTL_MS <= 5000,
-    `expected TTL in [100,5000]ms, got ${OPENCODE_JSON_CACHE_TTL_MS}`);
+  readClineJsonCached = mod.readClineJsonCached;
+  invalidateClineJsonCache = mod.invalidateClineJsonCache;
+  CLINE_JSON_CACHE_TTL_MS = mod.CLINE_JSON_CACHE_TTL_MS;
+  assert.equal(typeof CLINE_JSON_CACHE_TTL_MS, 'number');
+  assert.ok(CLINE_JSON_CACHE_TTL_MS >= 100 && CLINE_JSON_CACHE_TTL_MS <= 5000,
+    `expected TTL in [100,5000]ms, got ${CLINE_JSON_CACHE_TTL_MS}`);
 });
 
 // ─── Bug S1 — providers-store cache ──────────────────────────────────────
 
 describe('Bug S1 — providers-store 1s debounced cache', () => {
   it('returns the cached value within TTL when file is unchanged', () => {
-    writeOpencodeJson({ provider: { foo: { name: 'foo', apiKey: 'k1' } } });
-    invalidateOpencodeJsonCache();
+    writeClineJson({ provider: { foo: { name: 'foo', apiKey: 'k1' } } });
+    invalidateClineJsonCache();
 
-    const a = readOpencodeJsonCached();
+    const a = readClineJsonCached();
     // Read again without modifying the file. Cache should hold.
-    const b = readOpencodeJsonCached();
+    const b = readClineJsonCached();
     assert.equal(b.provider.foo.apiKey, 'k1');
     assert.equal(a, b, 'cache should return identical reference within TTL');
   });
 
   it('re-reads when file mtime/size changes within TTL (external mutation)', () => {
-    writeOpencodeJson({ provider: { foo: { name: 'foo', apiKey: 'k1' } } });
-    invalidateOpencodeJsonCache();
+    writeClineJson({ provider: { foo: { name: 'foo', apiKey: 'k1' } } });
+    invalidateClineJsonCache();
 
-    const a = readOpencodeJsonCached();
+    const a = readClineJsonCached();
     assert.equal(a.provider.foo.apiKey, 'k1');
 
     // External writer (editor, another process, etc.) — different
     // file size, so the stamp check must invalidate the cache.
-    writeOpencodeJson({ provider: { foo: { name: 'foo', apiKey: 'k2' } } });
-    const b = readOpencodeJsonCached();
+    writeClineJson({ provider: { foo: { name: 'foo', apiKey: 'k2' } } });
+    const b = readClineJsonCached();
     assert.equal(b.provider.foo.apiKey, 'k2',
       'external file change must invalidate cache within TTL');
   });
 
   it('re-reads after the TTL window expires', async () => {
-    writeOpencodeJson({ provider: { foo: { name: 'foo', apiKey: 'v1' } } });
-    invalidateOpencodeJsonCache();
+    writeClineJson({ provider: { foo: { name: 'foo', apiKey: 'v1' } } });
+    invalidateClineJsonCache();
 
-    const a = readOpencodeJsonCached();
+    const a = readClineJsonCached();
     assert.equal(a.provider.foo.apiKey, 'v1');
 
     // Mutate the on-disk file.
-    writeOpencodeJson({ provider: { foo: { name: 'foo', apiKey: 'v2' } } });
+    writeClineJson({ provider: { foo: { name: 'foo', apiKey: 'v2' } } });
 
     // Wait past the TTL.
-    await new Promise((r) => setTimeout(r, OPENCODE_JSON_CACHE_TTL_MS + 50));
+    await new Promise((r) => setTimeout(r, CLINE_JSON_CACHE_TTL_MS + 50));
 
-    const b = readOpencodeJsonCached();
+    const b = readClineJsonCached();
     assert.equal(b.provider.foo.apiKey, 'v2', 'read after TTL must reflect on-disk change');
     assert.notEqual(a, b, 'cache should re-read after TTL');
   });
 
-  it('invalidateOpencodeJsonCache() clears the cache', () => {
-    writeOpencodeJson({ provider: { foo: { name: 'foo', apiKey: 'a' } } });
-    const a = readOpencodeJsonCached();
+  it('invalidateClineJsonCache() clears the cache', () => {
+    writeClineJson({ provider: { foo: { name: 'foo', apiKey: 'a' } } });
+    const a = readClineJsonCached();
     assert.equal(a.provider.foo.apiKey, 'a');
 
-    writeOpencodeJson({ provider: { foo: { name: 'foo', apiKey: 'b' } } });
-    invalidateOpencodeJsonCache();
+    writeClineJson({ provider: { foo: { name: 'foo', apiKey: 'b' } } });
+    invalidateClineJsonCache();
 
-    const b = readOpencodeJsonCached();
+    const b = readClineJsonCached();
     assert.equal(b.provider.foo.apiKey, 'b', 'invalidate must force re-read');
   });
 
   it('list() uses the cache when file is unchanged', () => {
     // Use a long key so it survives the display mask; assert on `name`
     // instead of `apiKey` to avoid masking noise.
-    writeOpencodeJson({ provider: { foo: { name: 'snapshot-name', apiKey: 'longer-key-for-test-1' } } });
-    invalidateOpencodeJsonCache();
+    writeClineJson({ provider: { foo: { name: 'snapshot-name', apiKey: 'longer-key-for-test-1' } } });
+    invalidateClineJsonCache();
 
     // Prime the cache.
-    readOpencodeJsonCached();
+    readClineJsonCached();
 
     // No external mutation. list() should read from cache.
     const list = providersStore.list();
@@ -162,9 +162,9 @@ describe('Bug S1 — providers-store 1s debounced cache', () => {
   });
 
   it('listAll() merges sources and reads base config', async () => {
-    writeOpencodeJson({ provider: { foo: { name: 'cached-snapshot', apiKey: 'longer-key-for-test-3' } } });
-    invalidateOpencodeJsonCache();
-    readOpencodeJsonCached(); // prime
+    writeClineJson({ provider: { foo: { name: 'cached-snapshot', apiKey: 'longer-key-for-test-3' } } });
+    invalidateClineJsonCache();
+    readClineJsonCached(); // prime
 
     // No external mutation. listAll() reads from cache.
     const all = await providersStore.listAll();
@@ -174,83 +174,83 @@ describe('Bug S1 — providers-store 1s debounced cache', () => {
   });
 
   it('writes invalidate the cache (subsequent read sees new data)', () => {
-    writeOpencodeJson({ provider: {} });
-    invalidateOpencodeJsonCache();
-    readOpencodeJsonCached(); // prime
+    writeClineJson({ provider: {} });
+    invalidateClineJsonCache();
+    readClineJsonCached(); // prime
 
     // Adding a provider via the store should invalidate the cache.
     providersStore.add({ id: 'bar', name: 'bar', apiKey: 'bz' });
 
-    const fresh = readOpencodeJsonCached();
+    const fresh = readClineJsonCached();
     assert.ok(fresh.provider && fresh.provider.bar,
       'post-write read should see the new provider');
     assert.equal(fresh.provider.bar.apiKey, 'bz');
   });
 
   it('update() invalidates the cache', () => {
-    writeOpencodeJson({ provider: {} });
+    writeClineJson({ provider: {} });
     providersStore.add({ id: 'bar', name: 'bar', apiKey: 'old' });
-    invalidateOpencodeJsonCache();
-    readOpencodeJsonCached(); // prime
+    invalidateClineJsonCache();
+    readClineJsonCached(); // prime
 
     providersStore.update('bar', { apiKey: 'new' });
 
-    const fresh = readOpencodeJsonCached();
+    const fresh = readClineJsonCached();
     assert.equal(fresh.provider.bar.apiKey, 'new');
   });
 
   it('remove() invalidates the cache', () => {
-    writeOpencodeJson({ provider: {} });
+    writeClineJson({ provider: {} });
     providersStore.add({ id: 'baz', name: 'baz', apiKey: 'k' });
-    invalidateOpencodeJsonCache();
-    readOpencodeJsonCached(); // prime
+    invalidateClineJsonCache();
+    readClineJsonCached(); // prime
 
     providersStore.remove('baz');
 
-    const fresh = readOpencodeJsonCached();
+    const fresh = readClineJsonCached();
     assert.ok(!fresh.provider || !fresh.provider.baz,
       'remove should clear the entry from cache');
   });
 
   it('saveConfig() invalidates the cache', () => {
-    writeOpencodeJson({ provider: {} });
-    invalidateOpencodeJsonCache();
-    readOpencodeJsonCached(); // prime
+    writeClineJson({ provider: {} });
+    invalidateClineJsonCache();
+    readClineJsonCached(); // prime
 
     // saveConfig is exported as a module-level function (not a method
     // on providersStore). It writes + invalidates the cache.
     saveConfig({ provider: { direct: { name: 'direct', apiKey: 'longer-key-for-save' } } });
 
-    const fresh = readOpencodeJsonCached();
+    const fresh = readClineJsonCached();
     assert.ok(fresh.provider && fresh.provider.direct,
       'saveConfig should invalidate cache and make new entry visible');
     assert.equal(fresh.provider.direct.name, 'direct');
   });
 
-  it('cache works with a different file path (custom opencodeConfigDir)', async () => {
-    // The buildSnapshot in server.mjs passes its own opencodeConfigDir;
+  it('cache works with a different file path (custom clineConfigDir)', async () => {
+    // The buildSnapshot in server.mjs passes its own clineConfigDir;
     // verify the cache handles path changes correctly.
     const altDir = join(SANDBOX_HOME, 'alt-config');
     mkdirSync(altDir, { recursive: true });
-    const altFile = join(altDir, 'opencode.json');
+    const altFile = join(altDir, 'cline.json');
     writeFileSync(altFile, JSON.stringify({ provider: { alt: { name: 'alt', apiKey: 'aaaaaa' } } }));
 
-    invalidateOpencodeJsonCache();
+    invalidateClineJsonCache();
 
-    const a = readOpencodeJsonCached(altFile);
+    const a = readClineJsonCached(altFile);
     assert.equal(a.provider.alt.apiKey, 'aaaaaa');
 
     // Read again with the same file (no change) — should hit cache.
-    const b = readOpencodeJsonCached(altFile);
+    const b = readClineJsonCached(altFile);
     assert.equal(a, b, 'same file, same content — should hit cache');
 
     // Modify file — stamp changes — cache should re-read.
     writeFileSync(altFile, JSON.stringify({ provider: { alt: { name: 'alt', apiKey: 'bbbbbb' } } }));
-    const c = readOpencodeJsonCached(altFile);
+    const c = readClineJsonCached(altFile);
     assert.equal(c.provider.alt.apiKey, 'bbbbbb', 'file change must invalidate cache');
 
-    invalidateOpencodeJsonCache();
-    const d = readOpencodeJsonCached(altFile);
+    invalidateClineJsonCache();
+    const d = readClineJsonCached(altFile);
     assert.equal(d.provider.alt.apiKey, 'bbbbbb', 'after invalidate, should re-read');
   });
 });
@@ -301,7 +301,7 @@ describe('Bug S3 — chat.mjs per-session delta cap', () => {
 
     // The chat module's noteChatDelta is internal. To exercise it
     // end-to-end we need a real POST /chat flow, which requires a
-    // running opencode serve. Skip that and rely on inspection of
+    // running cline serve. Skip that and rely on inspection of
     // the cap constant.
     //
     // Verify the constant directly via a dynamic read of the source.

@@ -29,8 +29,8 @@ import crypto from 'node:crypto';
 const BACKUP_PATHS = [
   { src: '~/.config/bizar/', label: 'config', required: true },
   { src: '~/.config/bizar/env.json', label: 'env', required: false },
-  { src: '~/.config/opencode/opencode.json', label: 'opencode', required: false },
-  { src: '~/.config/opencode/projects/', label: 'projects', required: false },
+  { src: '~/.config/cline/cline.json', label: 'cline', required: false },
+  { src: '~/.config/cline/projects/', label: 'projects', required: false },
   // v5.x — Default memory vault moved from `~/.local/share/bizar/memory` to
   // `~/.bizar_memory`. Back up the new default; the legacy path is only
   // used when the user has set `BIZAR_MEMORY_VAULT` to it, in which case
@@ -43,7 +43,7 @@ const BACKUP_PATHS = [
 // Project-level paths (resolved relative to projectRoot at call time)
 const PROJECT_BACKUP_PATHS = [
   { src: '.bizar/', label: 'project-state', required: false },
-  { src: '.opencode/skills/', label: 'project-skills', required: false },
+  { src: '.cline/skills/', label: 'project-skills', required: false },
   { src: '.agents/skills/', label: 'project-agents', required: false },
 ];
 

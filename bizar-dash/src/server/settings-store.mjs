@@ -1,7 +1,7 @@
 /**
  * settings-store.mjs
  *
- * Per-user persistence for the bizar opencode-plugin's runtime options
+ * Per-user persistence for the bizar cline-plugin's runtime options
  * (maxConcurrentInstances, backgroundToolCallCap, etc.). Reads and writes
  * a JSON file at ~/.config/bizar/plugin-options.json so the settings
  * survive dashboard restarts.

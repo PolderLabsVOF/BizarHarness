@@ -61,4 +61,4 @@ When Odin tells you to run the test gate after parallel implementation work:
 
 You are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase` — that is @hermod's job.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

@@ -18,7 +18,7 @@
 #   - macOS:  ensure homebrew is installed; everything else is via brew.
 #   - Windows: a stub that prints "use install.ps1".
 #
-# Agent files / plugin copy / opencode.json patching / service registration /
+# Agent files / plugin copy / cline.json patching / service registration /
 # skills install / doctor check are ALL handled by the unified provisioner
 # after this script returns.
 #
@@ -85,7 +85,7 @@ Usage:
 
 This script handles platform-specific system dependencies (apt/dnf/pacman/
 zypper on Linux, brew on macOS) and then shells to `node cli/provision.mjs`,
-which performs agent-file sync, plugin copy, opencode.json patching,
+which performs agent-file sync, plugin copy, cline.json patching,
 service registration, skills install, and the post-install doctor check.
 EOF
 }
@@ -341,8 +341,8 @@ print_banner() {
   echo -e "${BOLD}${CYAN}│${NC}  Dashboard: ${CYAN}$dashboard_url${NC}                                    │"
   echo -e "${BOLD}${CYAN}│${NC}                                                          │"
   echo -e "${BOLD}${CYAN}│${NC}  ${DIM}Next:${NC}                                                            │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  1. Restart opencode to pick up new config${NC}                     │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  2. Run /connect in opencode to add API keys${NC}                   │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  1. Restart cline to pick up new config${NC}                     │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  2. Run /connect in cline to add API keys${NC}                   │"
   echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  3. Run 'bizar dash start' to launch the dashboard${NC}             │"
   echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  4. Visit $dashboard_url in your browser${NC}                │"
   echo -e "${BOLD}${CYAN}└────────────────────────────────────────────────────────────┘${NC}"
@@ -404,7 +404,7 @@ main() {
   esac
 
   # ── Hand off to the unified provisioner (Node) ─────────────────────────
-  # All cross-OS work (agent files, plugin copy, opencode.json patching,
+  # All cross-OS work (agent files, plugin copy, cline.json patching,
   # skills install, doctor check) lives in `cli/provision.mjs:runProvision`.
   # It's idempotent — skipping it (e.g. via --install-only-system) is fine
   # for first-boot scenarios where the npm package isn't yet set up.
@@ -431,7 +431,7 @@ main() {
     fi
     print_banner
   else
-    warn "cli/provision.mjs not found — agent files / plugin / opencode.json"
+    warn "cli/provision.mjs not found — agent files / plugin / cline.json"
     warn "    were NOT synced. Run \`bizar install\` from a checkout to fix."
   fi
 }

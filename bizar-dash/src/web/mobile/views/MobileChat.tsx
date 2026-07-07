@@ -1,7 +1,7 @@
 // src/web/mobile/views/MobileChat.tsx — mobile chat (v4.2.5).
 //
-// v4.2.5 — matches Chat.tsx overhaul: opencode session-create via the
-// new endpoint, source-routed composer (opencode send vs. local chat),
+// v4.2.5 — matches Chat.tsx overhaul: cline session-create via the
+// new endpoint, source-routed composer (cline send vs. local chat),
 // source indicator badge, rename / delete / export on the info panel,
 // and matching busy flags.
 
@@ -157,13 +157,13 @@ export function MobileChat({
         >
           <SessionList
             sessions={chat.sessions}
-            opencodeSessions={chat.opencodeSessions}
+            clineSessions={chat.clineSessions}
             activeSessionId={chat.sessionId}
-            activeOpencodeSessionId={chat.activeOpencodeSessionId}
+            activeClineSessionId={chat.activeClineSessionId}
             activeProject={snapshot.activeProject}
             onCreateSession={handleCreateSession}
             onSelectSession={chat.selectBizarSession}
-            onSelectOpencodeSession={(s) => chat.loadOpencodeSession(s.id)}
+            onSelectClineSession={(s) => chat.loadClineSession(s.id)}
             creating={chat.busy.create}
           />
         </aside>
@@ -171,15 +171,15 @@ export function MobileChat({
         <main className="chat-main">
           <ChatThread
             messages={
-              chat.activeSource === 'opencode'
-                ? chat.opencodeMessages
+              chat.activeSource === 'cline'
+                ? chat.clineMessages
                 : chat.bizarMessages
             }
             loading={chat.loading}
             activeProject={snapshot.activeProject}
             sessionId={
-              chat.activeSource === 'opencode'
-                ? chat.activeOpencodeSessionId ?? chat.sessionId
+              chat.activeSource === 'cline'
+                ? chat.activeClineSessionId ?? chat.sessionId
                 : chat.sessionId
             }
             pinned={chat.pinned}
@@ -225,13 +225,13 @@ export function MobileChat({
         >
           <InfoPanel
             sessionId={
-              chat.activeSource === 'opencode'
-                ? chat.activeOpencodeSessionId ?? chat.sessionId
+              chat.activeSource === 'cline'
+                ? chat.activeClineSessionId ?? chat.sessionId
                 : chat.sessionId
             }
             messages={
-              chat.activeSource === 'opencode'
-                ? chat.opencodeMessages
+              chat.activeSource === 'cline'
+                ? chat.clineMessages
                 : chat.bizarMessages
             }
             pinned={chat.pinned}
@@ -243,8 +243,8 @@ export function MobileChat({
             activeSource={chat.activeSource}
             onDelete={() => {
               const id =
-                chat.activeSource === 'opencode'
-                  ? chat.activeOpencodeSessionId
+                chat.activeSource === 'cline'
+                  ? chat.activeClineSessionId
                   : chat.sessionId;
               if (!id) return;
               handleDeleteSession(id, id);

@@ -1,12 +1,12 @@
 /**
  * BizarHarness SDK client factory.
  *
- * Mirrors the opencode SDK pattern: a single `createBizarClient(config)`
+ * Mirrors the cline SDK pattern: a single `createBizarClient(config)`
  * call returns a typed client with resource-grouped methods. The client
  * handles auth header injection, response unwrapping, and error mapping
  * via the discriminated BizarError union.
  *
- * Reference: https://opencode.ai/docs/sdk/ (createOpencodeClient).
+ * Reference: https://docs.cline.bot/docs/sdk/ (createClineClient).
  */
 
 import {
@@ -178,10 +178,10 @@ export function createBizarClient(config: BizarClientConfig): BizarClient {
 
 /**
  * Build the `Authorization: Basic …` header value.
- * Username is `opencode` per the opencode convention used by BizarHarness.
+ * Username is `cline` per the cline convention used by BizarHarness.
  */
 function makeAuthHeader(password: string): string {
-  const credentials = `opencode:${password}`;
+  const credentials = `cline:${password}`;
   // Buffer.from is available in both Node (≥ 16) and Bun.
   const encoded = Buffer.from(credentials, "utf-8").toString("base64");
   return `Basic ${encoded}`;

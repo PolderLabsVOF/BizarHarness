@@ -32,11 +32,11 @@ description: Use when working with X. Covers Y and Z.
 
 | Path | Source | Priority | Notes |
 |---|---|---|---|
-| `~/.opencode/skills/<name>/SKILL.md` | User / System | Highest | User-overridable builtins |
+| `~/.cline/skills/<name>/SKILL.md` | User / System | Highest | User-overridable builtins |
 | `~/.agents/skills/<name>/SKILL.md` | User-added | High | Installed via `skills add` |
 | `bizar-dash/skills/<name>/SKILL.md` | Shipped | Medium | Ships with BizarHarness package |
 | `.agents/skills/<name>/SKILL.md` | Project | Low | Project-local skills |
-| `.opencode/skills/<name>/SKILL.md` | Project | Lowest | Project-local skills |
+| `.cline/skills/<name>/SKILL.md` | Project | Lowest | Project-local skills |
 
 When the same skill name appears in multiple places, the highest-priority source wins.
 
@@ -76,10 +76,10 @@ These skills ship with BizarHarness and are available immediately:
 | `obsidian` | Bizar Memory Service (Obsidian + Git + LightRAG) |
 | `minimax` | MiniMax provider, multi-key rotation, usage tracking |
 | `providers` | Provider subsystem, backup keys, auto-add wizard |
-| `chat` | Chat + opencode session integration |
+| `chat` | Chat + cline session integration |
 | `usage` | Token usage monitoring, cost estimation, MiniMax usage dashboard |
 | `skills-cli` | skills CLI reference, skill repos, discovery protocol |
-| `lightrag` | LightRAG integration, opencode-free defaults, indexing |
+| `lightrag` | LightRAG integration, cline-free defaults, indexing |
 | `sdk` | @polderlabs/bizar-sdk on Cloudflare Workers |
 
 ## Skill Loading

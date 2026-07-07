@@ -1,11 +1,11 @@
 ---
 name: biz
-description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system for opencode. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
+description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system for cline. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
 ---
 
 # Bizar
 
-Norse-pantheon multi-agent system for opencode. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
+Norse-pantheon multi-agent system for cline. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
 
 ## Architecture
 
@@ -89,17 +89,17 @@ Or via the dashboard API:
 - `GET /api/headroom/status` — live status
 - `GET /api/headroom/stats` — compression stats
 - `POST /api/headroom/install` — install headroom
-- `POST /api/headroom/wrap` — wrap opencode
+- `POST /api/headroom/wrap` — wrap cline
 - `POST /api/headroom/proxy/start` — start proxy
 
-Headroom is a context compression layer that sits between opencode and LLM providers, compressing tool outputs, logs, RAG chunks, and conversation history by 60–95%.
+Headroom is a context compression layer that sits between cline and LLM providers, compressing tool outputs, logs, RAG chunks, and conversation history by 60–95%.
 
 ## Troubleshooting
 
 ### Odin Self-Handles Instead of Routing
 **Symptoms:** Odin runs bash, glob, grep, edit, or write directly.
 
-**Fix:** Remove those permissions from `~/.config/opencode/agents/odin.md`:
+**Fix:** Remove those permissions from `~/.config/cline/agents/odin.md`:
 ```yaml
 permission:
   task: allow

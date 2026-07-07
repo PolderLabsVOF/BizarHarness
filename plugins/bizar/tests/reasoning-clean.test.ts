@@ -4,13 +4,13 @@
  * Covers the inline-think-block stripper used by the global fetch
  * wrapper. The wrapper exists to defeat the M3-via-MiniMax pattern
  * where the model emits its chain-of-thought in BOTH the structured
- * `reasoning` field AND inline in `message.content`. opencode's
+ * `reasoning` field AND inline in `message.content`. cline's
  * MiniMax-compatible SDK renders the structured field as a separate "Thought"
  * panel, but it does NOT strip the inline blocks — so the user sees
  * the same thinking twice. The wrapper post-processes the response
  * stream to drop the inline blocks.
  *
- * Tests here cover the pure functions in isolation (no opencode, no
+ * Tests here cover the pure functions in isolation (no cline, no
  * fetch, no networking):
  *   1. `stripInlineThinkBlocks` — regex strip on a full string.
  *   2. The streaming `ThinkStripper` state machine — verified via the

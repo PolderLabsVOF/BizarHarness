@@ -54,7 +54,7 @@ class FakeHttpClient {
   }
 
   get authHeader(): string {
-    return `Basic ${Buffer.from(`opencode:${this.password}`).toString("base64")}`;
+    return `Basic ${Buffer.from(`cline:${this.password}`).toString("base64")}`;
   }
 
   /** POST /session */
@@ -141,7 +141,7 @@ describe("HttpClient.createSession", () => {
   it("sends Authorization header with every request", () => {
     const client = new FakeHttpClient("http://127.0.0.1:4096", "my-secret");
     expect(client.authHeader).toContain("Basic");
-    expect(client.authHeader).toContain(Buffer.from("opencode:my-secret").toString("base64"));
+    expect(client.authHeader).toContain(Buffer.from("cline:my-secret").toString("base64"));
   });
 
   it("POST body includes agent field (HIGH-1 / NEW-H6)", async () => {
@@ -153,7 +153,7 @@ describe("HttpClient.createSession", () => {
       agent: "thor",
       directory: "/tmp",
     });
-    // Without the agent field, opencode would spawn the default agent
+    // Without the agent field, cline would spawn the default agent
     // With the agent field, it spawns the requested one
     expect(session).toBeDefined();
   });

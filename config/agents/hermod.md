@@ -61,4 +61,4 @@ When Odin asks for `@hermod /pr-review` or a PR review:
 
 Your unique rule: you are the only git writer. All other agents are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase`.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

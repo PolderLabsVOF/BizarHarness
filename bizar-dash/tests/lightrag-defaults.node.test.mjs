@@ -2,7 +2,7 @@
  * lightrag-defaults.node.test.mjs — regression tests for the v4.6.0
  * LightRAG defaults.
  *
- * The memory service's lightrag subsystem starts with the free opencode
+ * The memory service's lightrag subsystem starts with the free cline
  * Zen models by default (no API key required). Operators can override
  * via env vars `BIZAR_LIGHTRAG_LLM` and `BIZAR_LIGHTRAG_EMBEDDING`.
  *
@@ -44,22 +44,22 @@ after(() => {
 import { join } from 'node:path';
 
 describe('LIGHTRAG_DEFAULT_* constants (v4.6.0)', () => {
-  it('default LLM is opencode/gpt-5-nano', () => {
-    assert.equal(memoryStore.LIGHTRAG_DEFAULT_LLM, 'opencode/gpt-5-nano');
+  it('default LLM is cline/gpt-5-nano', () => {
+    assert.equal(memoryStore.LIGHTRAG_DEFAULT_LLM, 'cline/gpt-5-nano');
   });
-  it('default embedding is opencode/text-embedding-3-small', () => {
-    assert.equal(memoryStore.LIGHTRAG_DEFAULT_EMBEDDING, 'opencode/text-embedding-3-small');
+  it('default embedding is cline/text-embedding-3-small', () => {
+    assert.equal(memoryStore.LIGHTRAG_DEFAULT_EMBEDDING, 'cline/text-embedding-3-small');
   });
 });
 
 describe('getDefaultLightRAGConfig()', () => {
-  it('returns opencode-free defaults when no env overrides', () => {
+  it('returns cline-free defaults when no env overrides', () => {
     delete process.env.BIZAR_LIGHTRAG_LLM;
     delete process.env.BIZAR_LIGHTRAG_EMBEDDING;
     const cfg = memoryStore.getDefaultLightRAGConfig();
-    assert.equal(cfg.llm, 'opencode/gpt-5-nano');
-    assert.equal(cfg.embedding, 'opencode/text-embedding-3-small');
-    assert.equal(cfg.source, 'opencode-free');
+    assert.equal(cfg.llm, 'cline/gpt-5-nano');
+    assert.equal(cfg.embedding, 'cline/text-embedding-3-small');
+    assert.equal(cfg.source, 'cline-free');
     assert.equal(cfg.llmSource, 'default');
     assert.equal(cfg.embeddingSource, 'default');
   });
@@ -68,7 +68,7 @@ describe('getDefaultLightRAGConfig()', () => {
     process.env.BIZAR_LIGHTRAG_LLM = 'anthropic/claude-haiku-4-5';
     const cfg = memoryStore.getDefaultLightRAGConfig();
     assert.equal(cfg.llm, 'anthropic/claude-haiku-4-5');
-    assert.equal(cfg.embedding, 'opencode/text-embedding-3-small');
+    assert.equal(cfg.embedding, 'cline/text-embedding-3-small');
     assert.equal(cfg.source, 'env');
     assert.equal(cfg.llmSource, 'env');
     assert.equal(cfg.embeddingSource, 'default');
@@ -78,7 +78,7 @@ describe('getDefaultLightRAGConfig()', () => {
   it('env BIZAR_LIGHTRAG_EMBEDDING overrides the default embedding', () => {
     process.env.BIZAR_LIGHTRAG_EMBEDDING = 'openai/text-embedding-3-large';
     const cfg = memoryStore.getDefaultLightRAGConfig();
-    assert.equal(cfg.llm, 'opencode/gpt-5-nano');
+    assert.equal(cfg.llm, 'cline/gpt-5-nano');
     assert.equal(cfg.embedding, 'openai/text-embedding-3-large');
     assert.equal(cfg.embeddingSource, 'env');
     delete process.env.BIZAR_LIGHTRAG_EMBEDDING;
@@ -101,18 +101,18 @@ describe('getDefaultLightRAGConfig()', () => {
     process.env.BIZAR_LIGHTRAG_LLM = '';
     process.env.BIZAR_LIGHTRAG_EMBEDDING = '   ';
     const cfg = memoryStore.getDefaultLightRAGConfig();
-    assert.equal(cfg.llm, 'opencode/gpt-5-nano');
-    assert.equal(cfg.embedding, 'opencode/text-embedding-3-small');
+    assert.equal(cfg.llm, 'cline/gpt-5-nano');
+    assert.equal(cfg.embedding, 'cline/text-embedding-3-small');
     delete process.env.BIZAR_LIGHTRAG_LLM;
     delete process.env.BIZAR_LIGHTRAG_EMBEDDING;
   });
 });
 
 describe('memory-lightrag.mjs LIGHTRAG_DEFAULTS (v4.6.0)', () => {
-  it('default llmModel matches the opencode-Zen-free default', () => {
-    assert.equal(memoryLightrag.LIGHTRAG_DEFAULTS.llmModel, 'opencode/gpt-5-nano');
+  it('default llmModel matches the cline-Zen-free default', () => {
+    assert.equal(memoryLightrag.LIGHTRAG_DEFAULTS.llmModel, 'cline/gpt-5-nano');
   });
-  it('default embeddingModel matches the opencode-Zen-free default', () => {
-    assert.equal(memoryLightrag.LIGHTRAG_DEFAULTS.embeddingModel, 'opencode/text-embedding-3-small');
+  it('default embeddingModel matches the cline-Zen-free default', () => {
+    assert.equal(memoryLightrag.LIGHTRAG_DEFAULTS.embeddingModel, 'cline/text-embedding-3-small');
   });
 });

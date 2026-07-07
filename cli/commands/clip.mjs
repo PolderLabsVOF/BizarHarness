@@ -19,7 +19,7 @@ async function apiGet(path) {
   const baseUrl = `http://127.0.0.1:${port}`;
   const url = `${baseUrl}${path}`;
   const headers = { accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const res = await fetch(url, { method: 'GET', headers });
   const text = await res.text();
   let data = null;
@@ -33,7 +33,7 @@ async function apiDel(path) {
   const baseUrl = `http://127.0.0.1:${port}`;
   const url = `${baseUrl}${path}`;
   const headers = { accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const res = await fetch(url, { method: 'DELETE', headers });
   const text = await res.text();
   let data = null;

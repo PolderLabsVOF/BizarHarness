@@ -50,4 +50,4 @@ This surfaces prior lessons that apply to the current work.
 
 ## Skill File Location
 
-The skill instructions are at `~/.opencode/skills/self-improvement/SKILL.md`. Load with the `skill` tool when setting up or debugging the system.
+The skill instructions are at `~/.cline/skills/self-improvement/SKILL.md`. Load with the `skill` tool when setting up or debugging the system.

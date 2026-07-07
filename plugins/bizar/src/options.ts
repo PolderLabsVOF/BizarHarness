@@ -24,7 +24,7 @@
 import path from "node:path";
 import os from "node:os";
 
-/** Raw plugin options as they appear in `opencode.json` (before clamping). */
+/** Raw plugin options as they appear in `cline.json` (before clamping). */
 export interface RawOptions {
   loopThresholdWarn?: unknown;
   loopThresholdEscalate?: unknown;

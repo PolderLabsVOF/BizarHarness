@@ -57,4 +57,4 @@ Be specific in your corrections: name the file, the line range, the issue, and t
 
 Your role-specific override: you never write or edit. You only review. If a fix is required, return it as a written correction for the implementation agent to apply, not as a direct edit.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

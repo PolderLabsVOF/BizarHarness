@@ -10,7 +10,7 @@
  *     logDir of ~/.cache/bizar/logs).
  *   - BIZAR_LOG_DIR env override is honored.
  *   - Path sanitizer strips unsafe characters from the session id.
- *   - The old phantom path (`<worktree>/.bizar/opencode.log`) is NOT
+ *   - The old phantom path (`<worktree>/.bizar/cline.log`) is NOT
  *     returned — regression guard for the bug fixed in v3.11.1.
  *   - deriveAbsoluteBgLogPath still returns the historical worktree-
  *     based path (so we don't accidentally break callers depending on
@@ -72,26 +72,26 @@ test('getActualBgLogPath uses BIZAR_LOG_DIR env override', () => {
   assert.equal(p, pathResolve('/tmp/bizar-test', 'ses_xyz.log'));
 });
 
-test('getActualBgLogPath does NOT return the phantom .bizar/opencode.log path (regression guard)', () => {
+test('getActualBgLogPath does NOT return the phantom .bizar/cline.log path (regression guard)', () => {
   // The old code at task-delegator.mjs:605 tailed
-  // `<worktree>/.bizar/opencode.log` — a path nothing writes to.
+  // `<worktree>/.bizar/cline.log` — a path nothing writes to.
   // The new function must NOT return anything under `.bizar/` or
-  // `.opencode/log/`.
+  // `.cline/log/`.
   const p = getActualBgLogPath({ sessionId: 'ses_regression' });
   assert.ok(!p.includes('/.bizar/'), `phantom '.bizar/' path leaked: ${p}`);
-  assert.ok(!p.includes('/.opencode/log/'), `phantom '.opencode/log/' path leaked: ${p}`);
+  assert.ok(!p.includes('/.cline/log/'), `phantom '.cline/log/' path leaked: ${p}`);
 });
 
 test('deriveAbsoluteBgLogPath still returns the historical worktree-based path', () => {
   // The bg-retry loop still uses this to repair stale logPath fields.
   // Make sure the behavior didn't change as part of the v3.11.1 fix.
   const p = deriveAbsoluteBgLogPath('/tmp/worktree', 'bgr_abc');
-  assert.equal(p, pathResolve('/tmp/worktree', '.opencode', 'log', 'bgr_abc.log'));
+  assert.equal(p, pathResolve('/tmp/worktree', '.cline', 'log', 'bgr_abc.log'));
 });
 
 test('deriveAbsoluteBgLogPath falls back to FALLBACK_LOG_DIR when worktree missing', () => {
   const p = deriveAbsoluteBgLogPath('', 'bgr_xyz');
-  assert.equal(p, pathResolve(FALLBACK, '.opencode', 'log', 'bgr_xyz.log'));
+  assert.equal(p, pathResolve(FALLBACK, '.cline', 'log', 'bgr_xyz.log'));
 });
 
 test('getActualBgLogPath is preferred over deriveAbsoluteBgLogPath for operator-facing tail targets', () => {

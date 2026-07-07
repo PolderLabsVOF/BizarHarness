@@ -4,10 +4,10 @@
  * Tests for the `bizar doctor` subcommand. Uses Node's built-in
  * node:test (no external test framework).
  *
- * Strategy: mock HOME so opencodeConfigDir() resolves inside a
- * tmpdir, and craft the opencode.json + agents/ directory to drive
+ * Strategy: mock HOME so clineConfigDir() resolves inside a
+ * tmpdir, and craft the cline.json + agents/ directory to drive
  * specific pass/fail outcomes. For checks that depend on global
- * npm-installed packages or external CLIs (e.g. opencode --version,
+ * npm-installed packages or external CLIs (e.g. cline --version,
  * npm root -g, which headroom), we accept that they may pass or fail
  * depending on the test environment and just verify the framework
  * returns the right shape.
@@ -37,12 +37,12 @@ const ORIG_HOME = process.env.HOME;
 const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
- * Mock HOME so opencodeConfigDir() resolves to `<tmpdir>/.config/opencode`.
+ * Mock HOME so clineConfigDir() resolves to `<tmpdir>/.config/cline`.
  * Returns the tmpdir path.
  *
  * We don't set XDG_CONFIG_HOME here for the same reason as dev-link.test.mjs:
  * the helper treats a set XDG_CONFIG_HOME as the direct parent (so
- * `XDG_CONFIG_HOME=~/.config` → `~/.config/opencode`).
+ * `XDG_CONFIG_HOME=~/.config` → `~/.config/cline`).
  */
 function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-doctor-'));
@@ -115,7 +115,7 @@ describe('runDoctor() shape', () => {
   });
 
   test('silent mode suppresses ALL output when nothing fails', async () => {
-    // Build a fully healthy environment. We can't make opencode reachable
+    // Build a fully healthy environment. We can't make cline reachable
     // or headroom installed without modifying PATH, so we settle for: no failures
     // means no output at all. Since we know some checks will fail in a
     // bare tmpdir, this test is structured to assert the negative case
@@ -181,15 +181,15 @@ describe('runDoctor() with fixture HOME', () => {
     if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
   });
 
-  function writeOpencodeConfig(json) {
-    const cfgDir = join(home, '.config', 'opencode');
+  function writeClineConfig(json) {
+    const cfgDir = join(home, '.config', 'cline');
     mkdirSync(cfgDir, { recursive: true });
-    writeFileSync(join(cfgDir, 'opencode.json'), JSON.stringify(json), 'utf8');
+    writeFileSync(join(cfgDir, 'cline.json'), JSON.stringify(json), 'utf8');
     return cfgDir;
   }
 
   function writeAgents(...files) {
-    const agentsDir = join(home, '.config', 'opencode', 'agents');
+    const agentsDir = join(home, '.config', 'cline', 'agents');
     mkdirSync(agentsDir, { recursive: true });
     for (const f of files) {
       writeFileSync(join(agentsDir, f), `# ${f}`, 'utf8');
@@ -202,67 +202,67 @@ describe('runDoctor() with fixture HOME', () => {
   }
 
   test('config-valid passes for parseable JSON', async () => {
-    writeOpencodeConfig({ provider: {} });
+    writeClineConfig({ provider: {} });
     const result = await runDoctor({ silent: true });
-    const r = findCheck(result, 'opencode-config-valid');
+    const r = findCheck(result, 'cline-config-valid');
     assert.equal(r.ok, true, `expected config-valid to pass: ${r.message}`);
   });
 
-  test('config-valid fails for missing opencode.json', async () => {
-    // No opencode.json written.
+  test('config-valid fails for missing cline.json', async () => {
+    // No cline.json written.
     const result = await runDoctor({ silent: true });
-    const r = findCheck(result, 'opencode-config-valid');
+    const r = findCheck(result, 'cline-config-valid');
     assert.equal(r.ok, false);
     assert.match(r.message, /not found/);
   });
 
   test('config-valid fails for invalid JSON', async () => {
-    const cfgDir = writeOpencodeConfig({});
+    const cfgDir = writeClineConfig({});
     // Overwrite with garbage
-    writeFileSync(join(cfgDir, 'opencode.json'), '{ this is not json', 'utf8');
+    writeFileSync(join(cfgDir, 'cline.json'), '{ this is not json', 'utf8');
     const result = await runDoctor({ silent: true });
-    const r = findCheck(result, 'opencode-config-valid');
+    const r = findCheck(result, 'cline-config-valid');
     assert.equal(r.ok, false);
     assert.match(r.message, /invalid JSON/);
   });
 
   test('plugin-entry-present fails when plugin[] is empty', async () => {
-    writeOpencodeConfig({ plugin: [] });
+    writeClineConfig({ plugin: [] });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'plugin-entry-present');
     assert.equal(r.ok, false);
   });
 
   test('plugin-entry-present fails when plugin[] has no bizar', async () => {
-    writeOpencodeConfig({ plugin: ['something-else'] });
+    writeClineConfig({ plugin: ['something-else'] });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'plugin-entry-present');
     assert.equal(r.ok, false);
   });
 
   test('plugin-entry-present passes when plugin[] has bizar string', async () => {
-    writeOpencodeConfig({ plugin: ['bizar'] });
+    writeClineConfig({ plugin: ['bizar'] });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'plugin-entry-present');
     assert.equal(r.ok, true, r.message);
   });
 
   test('plugin-entry-present passes when plugin[] has bizar object', async () => {
-    writeOpencodeConfig({ plugin: [{ name: 'bizar', path: './plugins/bizar' }] });
+    writeClineConfig({ plugin: [{ name: 'bizar', path: './plugins/bizar' }] });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'plugin-entry-present');
     assert.equal(r.ok, true, r.message);
   });
 
   test('plugin-entry-present passes when plugin[] has [path, options] tuple', async () => {
-    writeOpencodeConfig({ plugin: [['./plugins/bizar/index.ts', { loopThresholdWarn: 5 }]] });
+    writeClineConfig({ plugin: [['./plugins/bizar/index.ts', { loopThresholdWarn: 5 }]] });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'plugin-entry-present');
     assert.equal(r.ok, true, r.message);
   });
 
   test('plugin-entry-present fails when tuple path does not contain "bizar"', async () => {
-    writeOpencodeConfig({ plugin: [['./plugins/other/index.ts', {}]] });
+    writeClineConfig({ plugin: [['./plugins/other/index.ts', {}]] });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'plugin-entry-present');
     assert.equal(r.ok, false);
@@ -270,17 +270,17 @@ describe('runDoctor() with fixture HOME', () => {
 
   test('plugin-path-resolves passes when tuple path resolves', async () => {
     const home = process.env.HOME;
-    const pluginsDir = join(home, '.config', 'opencode', 'plugins', 'bizar');
+    const pluginsDir = join(home, '.config', 'cline', 'plugins', 'bizar');
     mkdirSync(pluginsDir, { recursive: true });
     writeFileSync(join(pluginsDir, 'index.ts'), '// fake plugin\n', 'utf8');
-    writeOpencodeConfig({ plugin: [['./plugins/bizar/index.ts', {}]] });
+    writeClineConfig({ plugin: [['./plugins/bizar/index.ts', {}]] });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'plugin-path-resolves');
     assert.equal(r.ok, true, r.message);
   });
 
   test('agent-files-installed fails when core agents missing', async () => {
-    writeOpencodeConfig({});
+    writeClineConfig({});
     writeAgents('odin.md'); // missing the other 13
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'agent-files-installed');
@@ -289,7 +289,7 @@ describe('runDoctor() with fixture HOME', () => {
   });
 
   test('agent-files-installed passes when all 14 agents present', async () => {
-    writeOpencodeConfig({});
+    writeClineConfig({});
     // v3.20.11: doctor now expects all 14 agents (was 4 in v3.20.10).
     writeAgents(
       'odin.md', 'vor.md', 'frigg.md', 'quick.md',
@@ -305,7 +305,7 @@ describe('runDoctor() with fixture HOME', () => {
   test('provider-config-sanity warns (not fails) without minimax block', async () => {
     // v5.x: checkProviderConfigSanity warns instead of throwing when the
     // provider.minimax block is missing, since provision.mjs auto-adds it.
-    writeOpencodeConfig({ provider: {} });
+    writeClineConfig({ provider: {} });
     const result = await runDoctor({ silent: true });
     const r = findCheck(result, 'provider-config-sanity');
     assert.equal(r.ok, true, 'should pass with warning, not throw');
@@ -313,7 +313,7 @@ describe('runDoctor() with fixture HOME', () => {
   });
 
   test('provider-config-sanity fails when models lack interleaved+reasoning', async () => {
-    writeOpencodeConfig({
+    writeClineConfig({
       provider: {
         minimax: {
           models: { 'some-model': { id: 'foo' } },
@@ -327,7 +327,7 @@ describe('runDoctor() with fixture HOME', () => {
   });
 
   test('provider-config-sanity passes with interleaved+reasoning', async () => {
-    writeOpencodeConfig({
+    writeClineConfig({
       provider: {
         minimax: {
           models: {

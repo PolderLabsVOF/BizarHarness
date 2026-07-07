@@ -54,7 +54,7 @@ async function runUsageCommand(args, wantJson = false) {
   const { port, secret } = readDashboardConn();
   const url = `http://127.0.0.1:${port}/api/usage?range=${range}`;
   const headers = { accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   try {
     const resp = await fetch(url, { method: 'GET', headers });
     const text = await resp.text();

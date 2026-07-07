@@ -1,8 +1,8 @@
 /**
- * tests/opencode-sessions-detail.test.mjs — v4.2.4
+ * tests/cline-sessions-detail.test.mjs — v4.2.4
  *
- * Tests the opencode session-detail router (GET messages, POST send,
- * GET stream SSE proxy). Strategy: stand up a fake opencode serve child
+ * Tests the cline session-detail router (GET messages, POST send,
+ * GET stream SSE proxy). Strategy: stand up a fake cline serve child
  * on a random port, point readServeInfo() at it by writing a tmp
  * serve.json to the first candidate path (~/.cache/bizar/serve.json).
  * For the "plugin offline" case, move our tmp serve.json aside so
@@ -28,9 +28,9 @@ import { tmpdir, homedir } from 'node:os';
 import { createServer } from 'node:http';
 import express from 'express';
 
-import { createOpencodeSessionDetailRouter } from '../src/server/routes/opencode-session-detail.mjs';
+import { createClineSessionDetailRouter } from '../src/server/routes/cline-session-detail.mjs';
 
-// ── fake upstream (opencode serve child) ──────────────────────────────────
+// ── fake upstream (cline serve child) ──────────────────────────────────
 
 let upstreamServer, upstreamPort;
 const upstream = { promptHits: [], lastPromptBody: null, streamChunks: [] };
@@ -109,7 +109,7 @@ function startUpstream() {
 async function startDashboard() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
-  app.use('/api', createOpencodeSessionDetailRouter());
+  app.use('/api', createClineSessionDetailRouter());
   dashboardServer = createServer(app);
   await new Promise((r) => dashboardServer.listen(0, '127.0.0.1', r));
   dashboardBaseUrl = `http://127.0.0.1:${dashboardServer.address().port}`;
@@ -124,7 +124,7 @@ before(async () => {
   process.env.BIZAR_SERVE_JSON_PATH = SERVE_JSON_PATH;
   await startUpstream();
   await startDashboard();
-  tmpDir = mkdtempSync(join(tmpdir(), 'opencode-sessions-detail-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'cline-sessions-detail-'));
   if (existsSync(SERVE_JSON_PATH)) {
     originalServeJson = readFileSync(SERVE_JSON_PATH, 'utf8');
   }
@@ -192,7 +192,7 @@ function parseSseStream(text) {
 test('GET messages returns 503 plugin_offline when no serve.json', async () => {
   moveServeJsonAside();
   try {
-    const res = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-1/messages`);
+    const res = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-1/messages`);
     assert.equal(res.status, 503);
     assert.equal((await res.json()).error, 'plugin_offline');
   } finally {
@@ -203,7 +203,7 @@ test('GET messages returns 503 plugin_offline when no serve.json', async () => {
 
 test('GET messages returns 200 with normalized message list', async () => {
   writeServeJson('/tmp/session-worktree');
-  const res = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-1/messages`);
+  const res = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-1/messages`);
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.messages.length, 2);
@@ -218,7 +218,7 @@ test('GET messages returns 200 with normalized message list', async () => {
 
 test('POST send returns 400 when body is empty', async () => {
   writeServeJson('/tmp/session-worktree');
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-1/send`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-1/send`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
   });
   assert.equal(r.status, 400);
@@ -226,7 +226,7 @@ test('POST send returns 400 when body is empty', async () => {
 
 test('POST send returns 400 when agent is missing', async () => {
   writeServeJson('/tmp/session-worktree');
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-1/send`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-1/send`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'hi' }),
   });
   assert.equal(r.status, 400);
@@ -234,7 +234,7 @@ test('POST send returns 400 when agent is missing', async () => {
 
 test('POST send returns 400 when message is empty string', async () => {
   writeServeJson('/tmp/session-worktree');
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-1/send`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-1/send`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '', agent: 'odin' }),
   });
   assert.equal(r.status, 400);
@@ -242,7 +242,7 @@ test('POST send returns 400 when message is empty string', async () => {
 
 test('POST send returns ok=true with synthesized messageId', async () => {
   writeServeJson('/tmp/session-worktree');
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-1/send`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-1/send`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'hello there', agent: 'odin' }),
   });
   assert.equal(r.status, 200);
@@ -255,14 +255,14 @@ test('POST send returns ok=true with synthesized messageId', async () => {
   assert.equal(upstream.lastPromptBody.id, body.messageId);
 });
 
-test('POST send returns 502 opencode_error when upstream 404s', async () => {
+test('POST send returns 502 cline_error when upstream 404s', async () => {
   writeServeJson('/tmp/session-worktree');
-  const r = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-fail/send`, {
+  const r = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-fail/send`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'hi', agent: 'odin' }),
   });
   assert.equal(r.status, 502);
   const body = await r.json();
-  assert.equal(body.error, 'opencode_error');
+  assert.equal(body.error, 'cline_error');
   assert.ok(body.message.length > 0);
 });
 
@@ -273,7 +273,7 @@ test('SSE stream forwards only events for the requested session', async () => {
     'event: message.updated\ndata: {"type":"message.updated","properties":{"sessionID":"OTHER-id","messageID":"m9"}}\n\n',
     'event: sync\ndata: {"type":"sync","syncEvent":{"type":"session.idle.1","data":{"sessionID":"our-id"}}}\n\n',
   ];
-  const res = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/our-id/stream`);
+  const res = await fetch(`${dashboardBaseUrl}/api/cline-sessions/our-id/stream`);
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/event-stream/);
   assert.match(res.headers.get('cache-control'), /no-cache/);
@@ -293,7 +293,7 @@ test('SSE stream unwraps sync envelopes and strips version suffix', async () => 
   upstream.streamChunks = [
     'event: sync\ndata: {"type":"sync","syncEvent":{"type":"message.updated.1","data":{"sessionID":"our-id","messageID":"m3"}}}\n\n',
   ];
-  const res = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/our-id/stream`);
+  const res = await fetch(`${dashboardBaseUrl}/api/cline-sessions/our-id/stream`);
   assert.equal(res.status, 200);
   const events = parseSseStream(await res.text());
   assert.equal(events.length, 1);
@@ -308,9 +308,9 @@ test('SSE stream unwraps sync envelopes and strips version suffix', async () => 
 test('GET messages returns 503 directory_unknown when worktree missing and session not found', async () => {
   writeServeJsonWithoutWorktree();
   try {
-    // Request a non-existent session ID so listOpencodeSessions doesn't find it,
+    // Request a non-existent session ID so listClineSessions doesn't find it,
     // and with no worktree in serve.json, resolveSessionDirectory returns null.
-    const res = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/no-such-session/messages`);
+    const res = await fetch(`${dashboardBaseUrl}/api/cline-sessions/no-such-session/messages`);
     assert.equal(res.status, 503);
     const body = await res.json();
     assert.equal(body.error, 'directory_unknown');
@@ -322,12 +322,12 @@ test('GET messages returns 503 directory_unknown when worktree missing and sessi
   }
 });
 
-test('GET messages returns 502 opencode_error when upstream returns 500', async () => {
+test('GET messages returns 502 cline_error when upstream returns 500', async () => {
   writeServeJson('/tmp/session-worktree');
-  const res = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-upstream-500/messages`);
+  const res = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-upstream-500/messages`);
   assert.equal(res.status, 502);
   const body = await res.json();
-  assert.equal(body.error, 'opencode_error');
+  assert.equal(body.error, 'cline_error');
   assert.ok(body.message.length > 0);
   assert.ok(body.cause === 'unknown' || typeof body.cause === 'string');
   assert.ok(typeof body.suggestion === 'string');
@@ -337,7 +337,7 @@ test('GET messages uses suggestion field in error responses', async () => {
   // Test that the plugin_offline response includes suggestion.
   moveServeJsonAside();
   try {
-    const res = await fetch(`${dashboardBaseUrl}/api/opencode-sessions/sess-1/messages`);
+    const res = await fetch(`${dashboardBaseUrl}/api/cline-sessions/sess-1/messages`);
     assert.equal(res.status, 503);
     const body = await res.json();
     assert.equal(body.error, 'plugin_offline');
@@ -358,16 +358,16 @@ test('GET messages 502 envelope includes cause/status/suggestion on upstream fai
   // so the front-end ChatInfoPanel can render actionable UI.
   writeServeJson('/tmp/session-worktree');
   const res = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-upstream-500/messages`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-upstream-500/messages`,
   );
   assert.equal(res.status, 502);
   const body = await res.json();
-  assert.equal(body.error, 'opencode_error');
+  assert.equal(body.error, 'cline_error');
   assert.equal(typeof body.message, 'string');
   assert.ok(body.message.length > 0);
   // Upstream 500 → cause stays 'unknown' (no network code), and the
   // route forwards the upstream's HTTP status so the operator can
-  // tell whether it's opencode that's broken vs. the dashboard.
+  // tell whether it's cline that's broken vs. the dashboard.
   assert.ok(typeof body.cause === 'string');
   assert.equal(body.status, 500);
   assert.ok(typeof body.suggestion === 'string');
@@ -381,14 +381,14 @@ test('GET messages 503 plugin_offline envelope includes suggestion (operator gui
   moveServeJsonAside();
   try {
     const res = await fetch(
-      `${dashboardBaseUrl}/api/opencode-sessions/sess-1/messages`,
+      `${dashboardBaseUrl}/api/cline-sessions/sess-1/messages`,
     );
     assert.equal(res.status, 503);
     const body = await res.json();
     assert.equal(body.error, 'plugin_offline');
     assert.ok(typeof body.suggestion === 'string');
     assert.ok(body.suggestion.length > 0);
-    assert.match(body.suggestion, /bizar doctor|opencode serve/i);
+    assert.match(body.suggestion, /bizar doctor|cline serve/i);
   } finally {
     writeServeJson('/tmp/session-worktree');
   }
@@ -398,7 +398,7 @@ test('GET messages 503 directory_unknown envelope includes suggestion', async ()
   writeServeJsonWithoutWorktree();
   try {
     const res = await fetch(
-      `${dashboardBaseUrl}/api/opencode-sessions/no-such-session/messages`,
+      `${dashboardBaseUrl}/api/cline-sessions/no-such-session/messages`,
     );
     assert.equal(res.status, 503);
     const body = await res.json();
@@ -425,7 +425,7 @@ test('GET messages uses worktree fast-path when session exists in recorded workt
   // route should succeed even though the session isn't in the list.
   writeServeJson('/tmp/session-worktree');
   const res = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/sess-1/messages`,
+    `${dashboardBaseUrl}/api/cline-sessions/sess-1/messages`,
   );
   assert.equal(res.status, 200);
   const body = await res.json();

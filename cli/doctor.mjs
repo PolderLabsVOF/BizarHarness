@@ -3,7 +3,7 @@
  *
  * v3.12.2 — `bizar doctor` subcommand.
  *
- * Runs a battery of health checks against the local Bizar / opencode
+ * Runs a battery of health checks against the local Bizar / cline
  * install and reports pass/fail for each. Returns a structured summary
  * suitable for callers (e.g. `bizar update`) that want to act on the
  * result without re-printing the per-check output.
@@ -22,7 +22,7 @@ import chalk from 'chalk';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { opencodeConfigDir, opencodeAgentsDir, which, bizarConfigDir } from './utils.mjs';
+import { clineConfigDir, clineAgentsDir, which, bizarConfigDir } from './utils.mjs';
 
 // v3.20.11: list every agent the install script is expected to deploy.
 // Adding a new agent to `config/agents/` without adding it here causes
@@ -68,19 +68,19 @@ async function runCheck(name, fn) {
 
 // ── individual checks ───────────────────────────────────────────────────────
 
-async function checkOpencodeReachable() {
-  const r = spawnSync('opencode', ['--version'], {
+async function checkClineReachable() {
+  const r = spawnSync('cline', ['--version'], {
     encoding: 'utf8',
     timeout: 5000,
   });
   if (r.status !== 0) {
-    throw new Error(`opencode --version exited ${r.status}`);
+    throw new Error(`cline --version exited ${r.status}`);
   }
-  return (r.stdout || r.stderr || '').trim().split('\n')[0] || 'opencode available';
+  return (r.stdout || r.stderr || '').trim().split('\n')[0] || 'cline available';
 }
 
 async function checkConfigValid() {
-  const cfgPath = join(opencodeConfigDir(), 'opencode.json');
+  const cfgPath = join(clineConfigDir(), 'cline.json');
   if (!existsSync(cfgPath)) {
     throw new Error(`not found at ${cfgPath}`);
   }
@@ -89,15 +89,15 @@ async function checkConfigValid() {
   } catch (err) {
     throw new Error(`invalid JSON: ${err.message}`);
   }
-  return 'opencode.json parses';
+  return 'cline.json parses';
 }
 
 async function checkPluginEntryPresent() {
-  const cfgPath = join(opencodeConfigDir(), 'opencode.json');
+  const cfgPath = join(clineConfigDir(), 'cline.json');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const plugins = Array.isArray(cfg.plugin) ? cfg.plugin : [];
   if (plugins.length === 0) {
-    throw new Error('no plugin entries in opencode.json');
+    throw new Error('no plugin entries in cline.json');
   }
   const hasBizar = plugins.some((p) => {
     if (typeof p === 'string') return p.includes('bizar');
@@ -120,7 +120,7 @@ async function checkPluginEntryPresent() {
 }
 
 async function checkPluginPathResolves() {
-  const cfgPath = join(opencodeConfigDir(), 'opencode.json');
+  const cfgPath = join(clineConfigDir(), 'cline.json');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const plugins = Array.isArray(cfg.plugin) ? cfg.plugin : [];
   let lastChecked = null;
@@ -134,7 +134,7 @@ async function checkPluginPathResolves() {
     }
     if (!entryPath) continue;
     const isAbs = entryPath.startsWith('/') || /^[a-z]:[\\/]/i.test(entryPath);
-    const resolved = isAbs ? entryPath : join(opencodeConfigDir(), entryPath);
+    const resolved = isAbs ? entryPath : join(clineConfigDir(), entryPath);
     lastChecked = resolved;
     if (!existsSync(resolved)) {
       throw new Error(`plugin path does not exist: ${resolved}`);
@@ -163,7 +163,7 @@ async function checkDeployedPluginPresent() {
 }
 
 async function checkAgentFilesInstalled() {
-  const dir = opencodeAgentsDir();
+  const dir = clineAgentsDir();
   if (!existsSync(dir)) {
     throw new Error(`agents dir missing: ${dir}`);
   }
@@ -215,15 +215,15 @@ async function checkDashboardReachable() {
 }
 
 async function checkProviderConfigSanity() {
-  const cfgPath = join(opencodeConfigDir(), 'opencode.json');
+  const cfgPath = join(clineConfigDir(), 'cline.json');
   if (!existsSync(cfgPath)) {
-    throw new Error('opencode.json missing');
+    throw new Error('cline.json missing');
   }
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const minimax = cfg.provider && cfg.provider.minimax;
   if (!minimax) {
     // Warn instead of throw — provision.mjs auto-adds this block on
-    // install/update, but users with an older pre-v5 opencode.json
+    // install/update, but users with an older pre-v5 cline.json
     // may not have it yet.
     return 'warn: provider.minimax block missing (run `bizar update` to patch)';
   }
@@ -245,8 +245,8 @@ async function checkProviderConfigSanity() {
 }
 
 const CHECKS = [
-  ['opencode-reachable', checkOpencodeReachable],
-  ['opencode-config-valid', checkConfigValid],
+  ['cline-reachable', checkClineReachable],
+  ['cline-config-valid', checkConfigValid],
   ['plugin-entry-present', checkPluginEntryPresent],
   ['plugin-path-resolves', checkPluginPathResolves],
   ['deployed-plugin-present', checkDeployedPluginPresent],

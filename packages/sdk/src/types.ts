@@ -18,7 +18,7 @@ export type SessionStatus =
 
 export type Session = {
   id: string;
-  opencodeSessionId?: string;
+  clineSessionId?: string;
   agent: string;
   status: SessionStatus;
   parentId?: string;

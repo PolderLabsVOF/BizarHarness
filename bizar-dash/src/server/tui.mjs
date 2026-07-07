@@ -430,7 +430,7 @@ function renderConfig(state) {
     return '{gray-fg}Loading config…{/}';
   }
   const lines = [];
-  lines.push(`{bold}opencode.json{/bold}  {gray-fg}${truncate(config.path || '', 80)}{/}`);
+  lines.push(`{bold}cline.json{/bold}  {gray-fg}${truncate(config.path || '', 80)}{/}`);
   if (!config.exists) {
     lines.push('  {yellow-fg}(file does not exist yet){/}');
     return lines.join('\n');
@@ -554,7 +554,7 @@ class DashboardSocket {
  * @param {object} opts
  * @param {number} opts.port
  * @param {string} [opts.projectRoot]
- * @param {string} [opts.opencodeConfigDir]
+ * @param {string} [opts.clineConfigDir]
  * @param {string} [opts.bizarRoot]
  */
 export async function launchTui(opts = {}) {
@@ -905,9 +905,9 @@ if (isMain) {
   const { server, close } = await createServer({
     port,
     projectRoot: process.cwd(),
-    opencodeConfigDir: process.platform === 'win32'
-      ? join(process.env.APPDATA || HOME, 'opencode')
-      : join(HOME, '.config', 'opencode'),
+    clineConfigDir: process.platform === 'win32'
+      ? join(process.env.APPDATA || HOME, 'cline')
+      : join(HOME, '.config', 'cline'),
     bizarRoot: dirname(__dirname),
   });
   await new Promise((resolve, reject) => {

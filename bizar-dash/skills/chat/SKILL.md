@@ -1,15 +1,15 @@
 ---
 name: chat
-description: How chat and opencode session integration works in BizarHarness - session management, message history, opencode session detail, and the chat view.
+description: How chat and cline session integration works in BizarHarness - session management, message history, cline session detail, and the chat view.
 ---
 
-# Chat + OpenCode Session Integration
+# Chat + Cline Session Integration
 
-The chat view in BizarHarness integrates with opencode sessions to provide a conversational interface for agent interactions.
+The chat view in BizarHarness integrates with cline sessions to provide a conversational interface for agent interactions.
 
 ## Session Management
 
-Each opencode session has a unique session ID. The chat router (`bizar-dash/src/server/routes/chat.mjs`) manages:
+Each cline session has a unique session ID. The chat router (`bizar-dash/src/server/routes/chat.mjs`) manages:
 - Listing active and historical sessions
 - Streaming message events via SSE
 - Session termination
@@ -37,9 +37,9 @@ interface Message {
 }
 ```
 
-## OpenCode Session Detail
+## Cline Session Detail
 
-`bizar-dash/src/server/routes/opencode-session-detail.mjs` exposes per-session metadata:
+`bizar-dash/src/server/routes/cline-session-detail.mjs` exposes per-session metadata:
 - Agent chain (which agents handled this message)
 - Token usage breakdown
 - Tool calls made

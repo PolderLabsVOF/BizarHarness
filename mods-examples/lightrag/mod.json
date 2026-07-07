@@ -49,7 +49,7 @@
     "llmModel": {
       "type": "string",
       "default": "minimax/MiniMax-M3",
-      "description": "LLM model to use for entity-relation extraction and query synthesis. Uses the opencode provider format."
+      "description": "LLM model to use for entity-relation extraction and query synthesis. Uses the cline provider format."
     },
     "embeddingModel": {
       "type": "string",

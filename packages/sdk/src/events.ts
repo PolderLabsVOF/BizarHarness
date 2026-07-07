@@ -1,14 +1,14 @@
 /**
  * SSE event subscriber for the BizarHarness SDK.
  *
- * Wraps the opencode-style SSE format:
+ * Wraps the cline-style SSE format:
  *
  *   event: <type>
  *   data: {"type": "<type>", "properties": { ... }}
  *
  * Returns an async iterable + close handle.
  *
- * Reference: opencode SDK pattern (`for await (const event of events.stream)`).
+ * Reference: cline SDK pattern (`for await (const event of events.stream)`).
  */
 
 import type { DashboardEvent } from "./types.js";
@@ -71,7 +71,7 @@ export async function subscribeEvents(
 /**
  * Parse an SSE byte stream into a typed async iterable.
  *
- * Handles the opencode SSE format: lines starting with `event:` and `data:`.
+ * Handles the cline SSE format: lines starting with `event:` and `data:`.
  * Lines beginning with `:` are comments (ignored). Empty lines delimit events.
  *
  * Yields parsed events as `{ type, properties, ... }` objects (the JSON

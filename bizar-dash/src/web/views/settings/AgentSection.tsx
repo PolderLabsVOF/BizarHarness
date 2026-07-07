@@ -29,7 +29,7 @@ export function AgentSection({ settings, patchAgents, patchDashboard, autoSave }
   const onSavePluginOptions = async () => {
     try {
       await api.put('/settings/plugin-options', pluginOptions);
-      toast.success('Saved — restart opencode for changes to take effect.');
+      toast.success('Saved — restart cline for changes to take effect.');
     } catch (err) {
       toast.error(`Save failed: ${(err as Error).message}`);
     }

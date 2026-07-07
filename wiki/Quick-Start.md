@@ -2,16 +2,16 @@
 
 A five-minute tour of BizarHarness. This page assumes you've already run the installer — see [Getting Started](Getting-Started) if you haven't.
 
-## Open opencode in a project
+## Open cline in a project
 
-Start opencode from the root of any project that has a `.bizar/` folder (run `bizar init` first if you don't have one):
+Start cline from the root of any project that has a `.bizar/` folder (run `bizar init` first if you don't have one):
 
 ```bash
 cd ~/my-project
-opencode
+cline
 ```
 
-The opencode TUI loads. You'll see the agent list — Odin is the default, and the others (Frigg, Vör, Quick, Mimir, Heimdall, Hermod, Thor, Baldr, Tyr, Vidarr, Forseti) are available for direct selection.
+The cline TUI loads. You'll see the agent list — Odin is the default, and the others (Frigg, Vör, Quick, Mimir, Heimdall, Hermod, Thor, Baldr, Tyr, Vidarr, Forseti) are available for direct selection.
 
 ## See the router
 
@@ -133,7 +133,7 @@ If you want to expose a local service on your tailnet (e.g. a dev dashboard, a t
 # 1. Start your local service on a port (e.g. 8765)
 npm run dev  # or any server
 
-# 2. In opencode, type:
+# 2. In cline, type:
 /tailscale-serve 8765
 ```
 

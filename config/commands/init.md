@@ -4,7 +4,7 @@ agent: heimdall
 ---
 Run `bizar init` from the project root to:
 1. Detect the project stack (language, framework, database, tools)
-2. Install relevant skills from the opencode skills registry
+2. Install relevant skills from the cline skills registry
 3. Create `.bizar/PROJECT.md` with stack and conventions
 4. Create `.bizar/AGENTS_SELF_IMPROVEMENT.md` (only if missing)
 5. Build the per-project knowledge graph in `.bizar/graph/` (powered by graphify; skipped gracefully if graphify is not installed)

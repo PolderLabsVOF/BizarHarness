@@ -4,7 +4,7 @@
  *
  * v3.11.1 — `bizar bg` (background agent) CLI.
  *
- * Manages and inspects background agents spawned by the opencode
+ * Manages and inspects background agents spawned by the cline
  * plugin (plugins/bizar/src/tools/bg-spawn.ts) and the dashboard
  * (bizar-dash/src/server/task-delegator.mjs).
  *
@@ -30,7 +30,7 @@ import { whichPath } from './utils.mjs';
 
 const BG_DIRS = [
   join(homedir(), '.cache', 'bizar', 'bg'),
-  join(homedir(), '.config', 'opencode', 'bg'),
+  join(homedir(), '.config', 'cline', 'bg'),
   join(homedir(), '.bizar', 'bg'),
 ];
 
@@ -67,7 +67,7 @@ function readAllBgInstances() {
 }
 
 /**
- * Map an opencode sessionId to the tmux session name used by
+ * Map a Cline sessionId to the tmux session name used by
  * task-delegator.mjs: `bgr_<first 16 chars of sessionId>`.
  */
 function tmuxSessionForSessionId(sessionId) {
@@ -424,7 +424,7 @@ function showHelp() {
     bizar bg logs <id>           Tail the agent's log file
 
   Description:
-    "background agents" are opencode run subprocesses spawned by the
+    "background agents" are cline run subprocesses spawned by the
     plugin's bizar_spawn_background tool or by the dashboard's task
     delegator. Each gets its own tmux session (named bgr_<sessionId16>)
     and a log file (default ~/.cache/bizar/logs/<sessionId>.log).

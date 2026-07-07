@@ -14,14 +14,14 @@
  *     pre-validates args against the tool's Zod schema, and invokes
  *     the tool's `execute()` directly.
  *   - `buildSyntheticToolContext` — constructs the `ToolContext` shape
- *     that opencode's tool framework requires (per R6).
+ *     that cline's tool framework requires (per R6).
  *   - `validateToolArgs`       — wraps the tool's `ZodRawShape` into
  *     a `z.object(...)` and runs `safeParse` (per C2).
  *
  * The split keeps the parser pure (no I/O, no tool imports, no
  * ToolContext) and concentrates the runtime dependencies in one
  * module that the chat hook imports. The parser remains testable
- * without Bun, the opencode SDK, or a real worktree.
+ * without Bun, the cline SDK, or a real worktree.
  *
  * Error handling:
  *   - All functions return a structured `ExecuteResult` and NEVER
@@ -441,7 +441,7 @@ export function validateToolArgs(
 // --- Helpers -------------------------------------------------------------
 
 /**
- * Stringify a tool's result. The opencode tool contract allows
+ * Stringify a tool's result. The cline tool contract allows
  * either a plain string or a `{ title?, output, metadata?, attachments? }`
  * object. We always return the `output` field (or the string itself).
  *

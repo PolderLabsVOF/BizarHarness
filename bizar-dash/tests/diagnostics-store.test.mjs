@@ -103,9 +103,9 @@ describe('runCheck', () => {
 
   it('returns the same set of names registered', async () => {
     // Smoke test: a system check name (memory) and a config check
-    // name (opencode-config) and a service check name (dashboard)
+    // name (cline-config) and a service check name (dashboard)
     // must all be reachable.
-    for (const name of ['memory', 'opencode-config', 'dashboard']) {
+    for (const name of ['memory', 'cline-config', 'dashboard']) {
       const r = await STORE.runCheck(name);
       assert.notStrictEqual(r.message, 'unknown check', `${name} should be a known check`);
       assert.ok(['ok', 'warn', 'fail'].includes(r.status));
@@ -153,11 +153,11 @@ describe('collectDiagnostics', () => {
     assert.ok(snap.services.dashboard);
     assert.ok(snap.services.headroom);
     assert.ok(snap.services.lightrag);
-    assert.ok(snap.services.opencode);
+    assert.ok(snap.services.cline);
     assert.ok(snap.counts);
     assert.ok(Array.isArray(snap.recentErrors));
     assert.ok(Array.isArray(snap.configHealth));
-    assert.ok(snap.opencode);
+    assert.ok(snap.cline);
     assert.ok(snap.checks);
     assert.ok(snap.health);
   });

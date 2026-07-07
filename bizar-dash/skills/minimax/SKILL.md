@@ -18,7 +18,7 @@ The `MiniMax-M3` model is the primary high-tier agent (Tyr, Forseti). The `MiniM
 
 ## Provider Configuration
 
-Do NOT set `baseURL` on the `minimax` provider - opencode ships a built-in MiniMax provider that resolves the correct API endpoint. Adding an explicit baseURL is a common cause of 404s.
+Do NOT set `baseURL` on the `minimax` provider - cline ships a built-in MiniMax provider that resolves the correct API endpoint. Adding an explicit baseURL is a common cause of 404s.
 
 ```json
 {

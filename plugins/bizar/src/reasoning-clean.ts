@@ -11,14 +11,14 @@
  * Some reasoning models (e.g. MiniMax M-series models) emit their chain
  * of thought BOTH:
  *   1. In the structured `reasoning` / `reasoning_details` field, which
- *      opencode already extracts and renders as a separate "thought"
+ *      cline already extracts and renders as a separate "thought"
  *      chunk, AND
- *   2. Inlined in `content` as `` blocks, which opencode would also
+ *   2. Inlined in `content` as `` blocks, which cline would also
  *      render as plain text — producing the duplicate "Thought: … + the
  *      same text in the assistant message" the user sees.
  *
- * opencode's openai-compatible SDK for MiniMax does not strip the inline think
- * blocks from `content`. The opencode-level `interleaved` config that
+ * cline's openai-compatible SDK for MiniMax does not strip the inline think
+ * blocks from `content`. The cline-level `interleaved` config that
  * could solve this only applies to the `@ai-sdk/openai-compatible` SDK.
  * Wrapping `provider.options.fetch` in the `config` hook is the only
  * hook surface where the response body can be post-processed.

@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 
-import { opencodeAgentsDir, opencodeConfigDir } from './utils.mjs';
+import { clineAgentsDir, clineConfigDir } from './utils.mjs';
 import { runPostInstall } from './install.mjs';
 
 /**
@@ -26,8 +26,8 @@ import { runPostInstall } from './install.mjs';
  * If ANY are missing → setup is needed.
  */
 const SETUP_MARKERS = [
-  join(opencodeAgentsDir(), 'odin.md'),           // core agent installed
-  join(opencodeConfigDir(), 'plugins', 'bizar'),   // plugin installed
+  join(clineAgentsDir(), 'odin.md'),           // core agent installed
+  join(clineConfigDir(), 'plugins', 'bizar'),   // plugin installed
 ];
 
 /**

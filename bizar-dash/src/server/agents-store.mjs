@@ -6,7 +6,7 @@
  *          tags + category exposed via list().
  *
  * Each agent is a markdown file with frontmatter at:
- *   ~/.config/opencode/agents/<name>.md
+ *   ~/.config/cline/agents/<name>.md
  *
  * The store reads / writes these files. The format is:
  *   ---
@@ -35,7 +35,7 @@ import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 
 const HOME = homedir();
-const AGENTS_DIR = join(HOME, '.config', 'opencode', 'agents');
+const AGENTS_DIR = join(HOME, '.config', 'cline', 'agents');
 
 // v3.2.0 — agent hierarchy. Odin sits at the top as router; Tyr/Thor/
 // Hermod/Baldr/Mimir report directly to Odin; Forseti is peer-to-Odin
@@ -330,7 +330,7 @@ export const agentsStore = {
 
   /**
    * v3.1.0 — Update the runtime status for a single agent. Used by
-   * the opencode plugin (via POST /api/agents/:name/status) and the
+   * the cline plugin (via POST /api/agents/:name/status) and the
    * task lifecycle (when an agent starts/finishes a task).
    *
    * Status: 'idle' | 'working' | 'error' | 'stuck'.

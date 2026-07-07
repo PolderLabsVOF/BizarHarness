@@ -152,7 +152,7 @@ async function callDashboardAutostart() {
   } catch { /* ignore */ }
   const url = `http://127.0.0.1:${port}/api/lightrag/autostart`;
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const res = await fetch(url, {
     method: 'POST',
     headers,

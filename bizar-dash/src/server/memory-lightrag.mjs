@@ -125,11 +125,11 @@ export const LIGHTRAG_DEFAULTS = Object.freeze({
   startupTimeoutMs: 30_000,
   llmBinding: 'ollama',     // ollama | openai | lollms | azure_openai | bedrock | gemini
   embeddingBinding: 'ollama', // ollama | openai | azure_openai | bedrock | jina | gemini | voyageai
-  // v4.6.0 — Default to free opencode Zen models (no API key required).
+  // v4.6.0 — Default to free cline Zen models (no API key required).
   // Per-project overrides via .bizar/memory.json#lightrag.{llmModel,embeddingModel}
   // or env vars BIZAR_LIGHTRAG_LLM / BIZAR_LIGHTRAG_EMBEDDING.
-  llmModel: 'opencode/gpt-5-nano',
-  embeddingModel: 'opencode/text-embedding-3-small',
+  llmModel: 'cline/gpt-5-nano',
+  embeddingModel: 'cline/text-embedding-3-small',
   llmBindingHost: null,    // for non-ollama bindings
   embeddingBindingHost: null,
   apiKey: 'env',           // 'env' means read from env var; any other string is written to file

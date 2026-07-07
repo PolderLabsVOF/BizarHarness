@@ -51,7 +51,7 @@ describe('GET /api/doctor', () => {
     for (const key of [
       'timestamp', 'bizarVersion', 'nodeVersion', 'platform', 'arch',
       'uptime', 'memory', 'disk', 'services', 'counts',
-      'recentErrors', 'configHealth', 'opencode', 'checks', 'health',
+      'recentErrors', 'configHealth', 'cline', 'checks', 'health',
     ]) {
       assert.ok(key in body, `expected ${key} in snapshot`);
     }
@@ -145,7 +145,7 @@ describe('POST /api/doctor/check', () => {
   });
 
   it('accepts multiple known check names', async () => {
-    for (const checkName of ['memory', 'opencode-config', 'dashboard']) {
+    for (const checkName of ['memory', 'cline-config', 'dashboard']) {
       const r = await fetch(`${baseUrl}/api/doctor/check`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

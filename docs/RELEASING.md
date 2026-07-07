@@ -81,13 +81,13 @@ npx tsc --noEmit
 npm run test:sdk
 # Expected: 75 tests pass, 0 fail (post-v4.7.0)
 
-# 3. Bun (opencode plugin)
+# 3. Bun (cline plugin)
 bun test plugins/bizar/tests/loop.test.ts \
           plugins/bizar/tests/block.test.ts \
           plugins/bizar/tests/stall-think.test.ts \
           plugins/bizar/tests/tools/bg-get-comments.test.ts \
           plugins/bizar/tests/tools/bg-spawn-delegation.test.ts \
-          plugins/bizar/tests/tools/opencode-runner.test.ts \
+          plugins/bizar/tests/tools/cline-runner.test.ts \
           plugins/bizar/tests/settings.test.ts \
           plugins/bizar/tests/commands.test.ts \
           plugins/bizar/tests/commands-impl.test.ts \
@@ -317,7 +317,7 @@ BizarHarness uses **four** distinct test runners because each runner targets a d
 |---|---|---|---|
 | `node --test` | Dashboard server (HTTP routes, memory store, providers-store, mods loader, etc.) | Node's built-in test runner — no extra deps, runs anywhere | 388 |
 | `vitest` | Web components, hooks, lib utilities (jsdom + RTL) | Vitest with jsdom is the only sane way to test React components without a full browser | 75 |
-| `bun test` | opencode plugin (background agents, commands, tools, key rotation, settings) | Plugin code uses Bun-specific APIs (`Bun.file`, `Bun.serve`, etc.) | 295 |
+| `bun test` | cline plugin (background agents, commands, tools, key rotation, settings) | Plugin code uses Bun-specific APIs (`Bun.file`, `Bun.serve`, etc.) | 295 |
 | `node bizar-dash/tests/smoke-v2.mjs` | End-to-end smoke (server starts, snapshot loads, basic API calls) | The integration test that proves the parts work together | 7 |
 
 **Total: 765 tests.** If any single runner fails, the release is blocked.

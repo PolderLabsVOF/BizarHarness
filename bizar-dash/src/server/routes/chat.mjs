@@ -2,16 +2,16 @@
  * src/server/routes/chat.mjs
  *
  * /api/chat                              — get chat history (per session)
- * /api/chat (POST)                       — send a message; dispatches to opencode plugin
+ * /api/chat (POST)                       — send a message; dispatches to cline plugin
  * /api/chat/sessions                     — list sessions for the active project
  * /api/chat/sessions (POST)              — create a new session
  * /api/chat/regenerate (POST)            — re-dispatch the last user message
  *
  * v0.1.0 — POST /api/chat now streams tokens in real time via SSE.
  * Instead of polling for up to 90s, the handler:
- *   1. Persists the user message + resolves/creates the opencode session (unchanged).
- *   2. Returns 200 immediately with `{ accepted, session, opencodeSessionId }`.
- *   3. Subscribes to opencode's SSE `/event?directory=…` filtered by sessionID.
+ *   1. Persists the user message + resolves/creates the cline session (unchanged).
+ *   2. Returns 200 immediately with `{ accepted, session, clineSessionId }`.
+ *   3. Subscribes to cline's SSE `/event?directory=…` filtered by sessionID.
  *   4. Streams `message.part.updated` deltas over the WebSocket as `chat:delta` envelopes.
  *   5. On `session.idle`, persists the final assistant message and broadcasts
  *      `chat:message`, then closes the subscription.
@@ -39,11 +39,11 @@ import { join } from 'node:path';
 import { projectsStore } from '../projects-store.mjs';
 import {
   readServeInfo,
-  createOpencodeSession,
-  sendOpencodePrompt,
-  listOpencodeMessages,
-  extractContentFromOpencodeMessage,
-  unwrapOpencodeSseEvent,
+  createClineSession,
+  sendClinePrompt,
+  listClineMessages,
+  extractContentFromClineMessage,
+  unwrapClineSseEvent,
   buildAuthHeader,
 } from '../serve-info.mjs';
 import { wrap } from './_shared.mjs';
@@ -53,7 +53,7 @@ const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
 
 /**
  * Maximum concurrent SSE subscriptions for chat streaming.
- * Mirrors the cap in opencode-session-detail.mjs.
+ * Mirrors the cap in cline-session-detail.mjs.
  */
 const MAX_CHAT_SUBSCRIPTIONS = 50;
 let activeChatSubscriptions = 0;
@@ -101,7 +101,7 @@ export function createChatRouter({ state, broadcast }) {
 
   // v4.8.0 — Per-IP token bucket. Chat endpoints are the most expensive
   // thing the dashboard does (each POST kicks off an SSE subscription +
-  // opencode prompt dispatch), so the default budget is conservative:
+  // cline prompt dispatch), so the default budget is conservative:
   // 60 requests / minute / IP, refilling at 1 token per second.
   // Operators can tune via BIZAR_RATE_LIMIT_CHAT_CAPACITY /
   // BIZAR_RATE_LIMIT_CHAT_REFILL.
@@ -142,7 +142,7 @@ export function createChatRouter({ state, broadcast }) {
   // ── POST /api/chat ─────────────────────────────────────────────────────
   //
   // Flow (changes from v0.1.0):
-  //   1-4: unchanged (persist user message, resolve/opencode session, POST prompt).
+  //   1-4: unchanged (persist user message, resolve/cline session, POST prompt).
   //   5: Instead of polling, subscribe to SSE and stream deltas via WS.
   //   6: On session.idle, persist + broadcast final message, return 200.
   //
@@ -262,23 +262,23 @@ export function createChatRouter({ state, broadcast }) {
         }
 
         const sessionsDir = join(projectsStore.ensureProjectDir(active.id), 'sessions');
-        const sidecarPath = join(sessionsDir, `${chatSessionId}.opencode.json`);
+        const sidecarPath = join(sessionsDir, `${chatSessionId}.cline.json`);
 
-        // 4. Resolve or create the opencode session that backs this chat.
-        let opencodeSessionId = null;
+        // 4. Resolve or create the cline session that backs this chat.
+        let clineSessionId = null;
         try {
           if (existsSync(sidecarPath)) {
             const sidecar = JSON.parse(readFileSync(sidecarPath, 'utf8'));
-            opencodeSessionId = sidecar?.opencodeSessionId || null;
+            clineSessionId = sidecar?.clineSessionId || null;
           }
         } catch {
-          opencodeSessionId = null;
+          clineSessionId = null;
         }
-        span.setAttribute('chat.opencode_session_id', opencodeSessionId || '');
+        span.setAttribute('chat.cline_session_id', clineSessionId || '');
 
-        if (!opencodeSessionId) {
+        if (!clineSessionId) {
           const agentName = body.agent || active.defaultAgent || 'odin';
-          const create = await createOpencodeSession(
+          const create = await createClineSession(
             serveInfo,
             { title: `Chat: ${agentName}`, agent: agentName },
             active.path || serveInfo.worktree,
@@ -286,15 +286,15 @@ export function createChatRouter({ state, broadcast }) {
           if (!create.ok || !create.sessionId) {
             res.status(502).json({
               error: 'create_session_failed',
-              message: create.error || 'failed to create opencode session',
+              message: create.error || 'failed to create cline session',
               session: chatSessionId,
             });
             return;
           }
-          opencodeSessionId = create.sessionId;
+          clineSessionId = create.sessionId;
           try {
             const sidecar = {
-              opencodeSessionId,
+              clineSessionId,
               agent: agentName,
               createdAt: Date.now(),
               chatSessionId,
@@ -307,10 +307,10 @@ export function createChatRouter({ state, broadcast }) {
 
         // 5. POST the prompt.
         const agentName = body.agent || active.defaultAgent || 'odin';
-        const send = await sendOpencodePrompt(
+        const send = await sendClinePrompt(
           serveInfo,
           {
-            sessionId: opencodeSessionId,
+            sessionId: clineSessionId,
             agent: agentName,
             text: message,
             messageID: record.id,
@@ -320,9 +320,9 @@ export function createChatRouter({ state, broadcast }) {
         if (!send.ok) {
           res.status(502).json({
             error: 'send_prompt_failed',
-            message: send.error || 'failed to send prompt to opencode',
+            message: send.error || 'failed to send prompt to cline',
             session: chatSessionId,
-            opencodeSessionId,
+            clineSessionId,
           });
           return;
         }
@@ -334,7 +334,7 @@ export function createChatRouter({ state, broadcast }) {
             message: `Chat subscription cap (${MAX_CHAT_SUBSCRIPTIONS}) reached; try again later.`,
             accepted: true,
             session: chatSessionId,
-            opencodeSessionId,
+            clineSessionId,
           });
           return;
         }
@@ -344,16 +344,16 @@ export function createChatRouter({ state, broadcast }) {
         res.json({
           accepted: true,
           session: chatSessionId,
-          opencodeSessionId,
+          clineSessionId,
           userMessage: record,
         });
 
-        // 8. Subscribe to opencode SSE and forward deltas via WS broadcast.
+        // 8. Subscribe to cline SSE and forward deltas via WS broadcast.
         //    On session.idle: persist the final message, broadcast chat:message,
         //    then decrement the counter.
-        void streamOpencodeSession({
+        void streamClineSession({
           serveInfo,
-          opencodeSessionId,
+          clineSessionId,
           directory: active.path || serveInfo.worktree,
           chatSessionId,
           agentName,
@@ -568,7 +568,7 @@ export function createChatRouter({ state, broadcast }) {
     });
     res.json({
       ok: true,
-      note: 'audit dispatched — see command.audit in config/opencode.json.template',
+      note: 'audit dispatched — see command.audit in config/cline.json.template',
       audit: { status: 'queued' },
     });
     recordTrace('chat.audit', { outcome: 'queued' });
@@ -580,12 +580,12 @@ export function createChatRouter({ state, broadcast }) {
 // ── SSE streaming helper ──────────────────────────────────────────────────────
 
 /**
- * Subscribe to opencode's SSE stream for a session, forward deltas via WS
+ * Subscribe to cline's SSE stream for a session, forward deltas via WS
  * broadcast, and persist the final assistant message on idle.
  *
  * @param {object} opts
  * @param {import('../serve-info.mjs').ServeInfo} opts.serveInfo
- * @param {string} opts.opencodeSessionId
+ * @param {string} opts.clineSessionId
  * @param {string} opts.directory
  * @param {string} opts.chatSessionId
  * @param {string} opts.agentName
@@ -595,9 +595,9 @@ export function createChatRouter({ state, broadcast }) {
  * @param {object} opts.state
  * @param {Function} opts.onDone  called when the stream ends (for counter cleanup)
  */
-async function streamOpencodeSession({
+async function streamClineSession({
   serveInfo,
-  opencodeSessionId,
+  clineSessionId,
   directory,
   chatSessionId,
   agentName,
@@ -644,7 +644,7 @@ async function streamOpencodeSession({
         onDone();
         return;
       }
-      await pumpSseForChat(r.body, controller, opencodeSessionId, {
+      await pumpSseForChat(r.body, controller, clineSessionId, {
         onDelta(envelope) {
           // Forward text part deltas as chat:delta
           const textDelta = extractTextDelta(envelope);
@@ -672,9 +672,9 @@ async function streamOpencodeSession({
           // Fetch the final message list and extract the assistant reply.
           void (async () => {
             try {
-              const list = await listOpencodeMessages(
+              const list = await listClineMessages(
                 serveInfo,
-                opencodeSessionId,
+                clineSessionId,
                 directory,
               );
               if (list?.ok && Array.isArray(list.messages)) {
@@ -695,8 +695,8 @@ async function streamOpencodeSession({
                       ts: new Date(created || Date.now()).toISOString(),
                       role: 'assistant',
                       agent: agentName,
-                      content: extractContentFromOpencodeMessage(m),
-                      opencodeSessionId,
+                      content: extractContentFromClineMessage(m),
+                      clineSessionId,
                       inReplyTo: record.id,
                     };
                     break;
@@ -739,7 +739,7 @@ async function streamOpencodeSession({
 }
 
 /**
- * Pump an opencode SSE stream, filtering by sessionID and dispatching to
+ * Pump an cline SSE stream, filtering by sessionID and dispatching to
  * the appropriate callback.
  *
  * @param {ReadableStream<Uint8Array>} body
@@ -800,7 +800,7 @@ function handleChatSseBlock(block, sessionId, handlers) {
   } catch {
     return;
   }
-  const evt = unwrapOpencodeSseEvent(eventName, parsed);
+  const evt = unwrapClineSseEvent(eventName, parsed);
   if (!evt || !evt.type) return;
   if (evt.sessionID && evt.sessionID !== sessionId) return;
 
@@ -812,10 +812,10 @@ function handleChatSseBlock(block, sessionId, handlers) {
 }
 
 /**
- * Extract a text delta from an opencode SSE event envelope.
+ * Extract a text delta from an cline SSE event envelope.
  * Returns null if no text delta is present.
  *
- * @param {object} envelope  from unwrapOpencodeSseEvent
+ * @param {object} envelope  from unwrapClineSseEvent
  * @returns {{ delta: string } | null}
  */
 function extractTextDelta(envelope) {

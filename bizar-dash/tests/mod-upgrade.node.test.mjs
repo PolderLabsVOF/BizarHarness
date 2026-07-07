@@ -121,7 +121,7 @@ function stubInstallFromRegistry(id, latestVersion, regDir) {
     const { cpSync } = await import('node:fs');
     mkdirSync(target, { recursive: true });
     cpSync(regDir, target, { recursive: true });
-    // Mirror installFromUrl's behaviour: install instructions into opencode config.
+    // Mirror installFromUrl's behaviour: install instructions into cline config.
     const { modsLoader: _ignored } = await import(LOADER);
     const innerLoader = await import(LOADER);
     // Call the internal installModInstructions by going through reinstallInstructions
@@ -135,9 +135,9 @@ function stubInstallFromRegistry(id, latestVersion, regDir) {
 }
 
 before(() => {
-  mkdirSync(join(SANDBOX_HOME, '.config/opencode/agents'), { recursive: true });
-  mkdirSync(join(SANDBOX_HOME, '.config/opencode/commands'), { recursive: true });
-  mkdirSync(join(SANDBOX_HOME, '.opencode/skills'), { recursive: true });
+  mkdirSync(join(SANDBOX_HOME, '.config/cline/agents'), { recursive: true });
+  mkdirSync(join(SANDBOX_HOME, '.config/cline/commands'), { recursive: true });
+  mkdirSync(join(SANDBOX_HOME, '.cline/skills'), { recursive: true });
   mkdirSync(join(SANDBOX_HOME, '.config/bizar/mods'), { recursive: true });
   // Pin the registry URL to a local stub we'll override per test.
 });
@@ -147,7 +147,7 @@ after(() => {
 });
 
 beforeEach(() => {
-  // Clear installed mods + opencode instruction prefixes between tests.
+  // Clear installed mods + cline instruction prefixes between tests.
   for (const prefix of [TEST_MOD_ID, OTHER_MOD_ID]) {
     const modDir = join(SANDBOX_HOME, '.config/bizar/mods', prefix);
     rmSync(modDir, { recursive: true, force: true });
@@ -186,14 +186,14 @@ describe('upgradeFromRegistry — end-to-end with stubbed registry', () => {
       assert.equal(result.mod.id, TEST_MOD_ID);
       assert.equal(result.mod.version, '2.0.0');
       assert.equal(result.backupPath, null);
-      // The new instructions are installed in opencode config under the
+      // The new instructions are installed in cline config under the
       // `<modId>__` prefix.
       assert.ok(
-        existsSync(join(SANDBOX_HOME, '.config/opencode/agents', `${TEST_MOD_ID}__thor.md`)),
+        existsSync(join(SANDBOX_HOME, '.config/cline/agents', `${TEST_MOD_ID}__thor.md`)),
         'agents/<modId>__thor.md should exist after upgrade',
       );
       assert.ok(
-        existsSync(join(SANDBOX_HOME, '.config/opencode/commands', `${TEST_MOD_ID}__plan.md`)),
+        existsSync(join(SANDBOX_HOME, '.config/cline/commands', `${TEST_MOD_ID}__plan.md`)),
         'commands/<modId>__plan.md should exist after upgrade',
       );
     } finally {

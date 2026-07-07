@@ -2,7 +2,7 @@
 
 BizarHarness can be installed three ways: from npm, from source, or per-project. The npm install is right for almost everyone; the source install is for contributors; the per-project install is for CI or sandboxed environments.
 
-> **v4.0.0:** `@polderlabs/bizar` ships as a single package — the dashboard server, opencode plugin, and typed SDK are bundled inside. There is no separate `@polderlabs/bizar-dash` install step.
+> **v4.0.0:** `@polderlabs/bizar` ships as a single package — the dashboard server, cline plugin, and typed SDK are bundled inside. There is no separate `@polderlabs/bizar-dash` install step.
 
 ## npm (recommended)
 
@@ -67,16 +67,16 @@ chmod +x install.sh
 
 The script:
 
-1. Creates `~/.config/opencode/agents/` if it doesn't exist.
+1. Creates `~/.config/cline/agents/` if it doesn't exist.
 2. Copies every file from `config/agents/*.md` into that directory.
-3. Copies the master `config/AGENTS.md` to `~/.config/opencode/AGENTS.md`.
-4. Installs bundled skills (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF) to `~/.opencode/skills/`.
-5. Copies the bundled plugin from `plugins/bizar/` to `~/.config/opencode/plugins/bizar/`, excluding `node_modules`, `dist`, and `*.log`.
-6. Merges the template `config/opencode.json` into your existing `~/.config/opencode/opencode.json` using `jq`. If `jq` is missing, it falls back to a copy. If a config already exists, it's backed up to `opencode.json.bak` first.
+3. Copies the master `config/AGENTS.md` to `~/.config/cline/AGENTS.md`.
+4. Installs bundled skills (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF) to `~/.cline/skills/`.
+5. Copies the bundled plugin from `plugins/bizar/` to `~/.config/cline/plugins/bizar/`, excluding `node_modules`, `dist`, and `*.log`.
+6. Merges the template `config/cline.json` into your existing `~/.config/cline/cline.json` using `jq`. If `jq` is missing, it falls back to a copy. If a config already exists, it's backed up to `cline.json.bak` first.
 7. Idempotently ensures the Bizar plugin entry is in the `plugin` array, even if the merge step replaced the array.
-8. Prints next steps (edit `opencode.json`, restart opencode, `/connect`).
+8. Prints next steps (edit `cline.json`, restart cline, `/connect`).
 
-After the script runs, restart opencode and run `/connect`.
+After the script runs, restart cline and run `/connect`.
 
 ## Per-project install (bizar init)
 
@@ -96,7 +96,7 @@ bizar init
 - Prompts for the memory backend mode (`local-only` is the default; pick `managed` if you want memory shared across projects).
 - Initializes project memory: `bizar memory init` creates `.bizar/memory.json` and the project's vault at `.obsidian/` (local-only) or links to `~/.local/share/bizar/memory/<repoName>/` (managed).
 
-`init` does **not** copy agent files into `~/.config/opencode/`. It assumes the global install already happened (so all the agents are available), and just configures the project for use with BizarHarness.
+`init` does **not** copy agent files into `~/.config/cline/`. It assumes the global install already happened (so all the agents are available), and just configures the project for use with BizarHarness.
 
 ### Memory bootstrap step
 
@@ -121,16 +121,16 @@ Then clean up the artifacts it left behind:
 
 ```bash
 # Agent definitions
-rm -rf ~/.config/opencode/agents/
+rm -rf ~/.config/cline/agents/
 
 # Master AGENTS.md (verify no other harness needs it first)
-rm -f ~/.config/opencode/AGENTS.md
+rm -f ~/.config/cline/AGENTS.md
 
 # Bizar plugin
-rm -rf ~/.config/opencode/plugins/bizar/
+rm -rf ~/.config/cline/plugins/bizar/
 
-# Plugin entry from opencode.json (manual edit; or restore from backup)
-cp ~/.config/opencode/opencode.json.bak ~/.config/opencode/opencode.json
+# Plugin entry from cline.json (manual edit; or restore from backup)
+cp ~/.config/cline/cline.json.bak ~/.config/cline/cline.json
 ```
 
 If you used a per-project install, delete the `.bizar/` folder from the project root:
@@ -160,21 +160,21 @@ Your npm global bin directory is not on `$PATH`. Find it with `npm config get pr
 
 You installed Node with sudo and npm can't write to the global directory. Fix the permissions on the npm prefix, or use a version manager (nvm, fnm) to install Node in your home directory.
 
-**Installer hangs on "Detecting opencode".**
+**Installer hangs on "Detecting cline".**
 
-The pre-flight check runs `opencode --version`. If opencode isn't on `$PATH`, the check should fail gracefully and prompt to continue. If it hangs, cancel with Ctrl-C and check `which opencode`.
+The pre-flight check runs `cline --version`. If cline isn't on `$PATH`, the check should fail gracefully and prompt to continue. If it hangs, cancel with Ctrl-C and check `which cline`.
 
 **`jq: command not found` during `./install.sh`.**
 
-The install script falls back to copying the template `opencode.json` instead of merging. You'll lose any custom config you had. Install `jq` (`brew install jq`, `apt install jq`) and re-run the script — it will preserve your existing config on the second run.
+The install script falls back to copying the template `cline.json` instead of merging. You'll lose any custom config you had. Install `jq` (`brew install jq`, `apt install jq`) and re-run the script — it will preserve your existing config on the second run.
 
 **Plugin copy fails with "no such file or directory" on Windows.**
 
 The `find` command in `install.sh` uses POSIX semantics. On Windows, use Git Bash or WSL, not cmd.exe.
 
-**`opencode` restarts but the new agents don't appear.**
+**`cline` restarts but the new agents don't appear.**
 
-The opencode TUI caches the agent list at startup. After running the installer, fully quit opencode (Ctrl-C twice) and start it again — `/agents` should now show Odin, Thor, Tyr, etc.
+The cline TUI caches the agent list at startup. After running the installer, fully quit cline (Ctrl-C twice) and start it again — `/agents` should now show Odin, Thor, Tyr, etc.
 
 **`bizar init` doesn't detect my stack.**
 

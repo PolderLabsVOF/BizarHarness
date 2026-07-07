@@ -2,7 +2,7 @@
 
 # BizarHarness ᛟ
 
-**Norse-pantheon multi-agent system for opencode**
+**Norse-pantheon multi-agent system for cline**
 
 12 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
 
@@ -11,7 +11,7 @@
 [![Semble](https://img.shields.io/badge/semble-integrated-0ea5e9)](https://github.com/semble-ai/semble)
 [![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![OpenCode](https://img.shields.io/badge/opencode-%E2%9C%93-6366f1)](https://opencode.ai)
+[![Cline](https://img.shields.io/badge/cline-%E2%9C%93-6366f1)](https://docs.cline.bot)
 [![Agents](https://img.shields.io/badge/agents-12-10b981)](#-the-pantheon)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
@@ -142,9 +142,9 @@ npm install @polderlabs/bizar
 npx bizar
 ```
 
-The interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts opencode.
+The interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts cline.
 
-> **v4.0.0:** `@polderlabs/bizar` is now a single package — the dashboard server, the opencode plugin, and the typed SDK all ship inside it. No more separate `@polderlabs/bizar-dash` install.
+> **v4.0.0:** `@polderlabs/bizar` is now a single package — the dashboard server, the cline plugin, and the typed SDK all ship inside it. No more separate `@polderlabs/bizar-dash` install.
 
 > **Windows users:** the `npm install -g @polderlabs/bizar` command above is the recommended path on Windows. The installer uses `irm | iex` for uv, `py -m pip` for the pip fallback, `taskkill` for forced kills, and JS `setTimeout` instead of `sleep` — so it works on both Windows PowerShell and POSIX shells. See the [Windows](#-windows) section below for prerequisites, known limitations, and the optional graph feature install.
 
@@ -157,7 +157,7 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Copies agent definitions and config to `~/.config/opencode/`, merges `opencode.json`, and prints next steps. Use this if you want to hack on BizarHarness itself.
+Copies agent definitions and config to `~/.config/cline/`, merges `cline.json`, and prints next steps. Use this if you want to hack on BizarHarness itself.
 
 > This `install.sh` script is bash-only and does **not** run on Windows natively. Windows contributors should use the npm path above instead.
 
@@ -201,12 +201,12 @@ bizar graph build
 - The `blessed` TUI library may render with quirks inside Windows Terminal; if you see garbled output in the TUI, use the browser UI via `bizar dash start --bg` and open http://localhost:4321 instead.
 - Some shell scripts under `config/skills/embedded-esp-idf/` are bash-only and require Git Bash (or WSL).
 - The bash `install.sh` does not run on Windows cmd/PowerShell; use the `npm install -g` path above.
-- Headroom ships a Python/npm installer. On Windows, install it manually: `pip install "headroom-ai[all]"` or `npm install -g headroom-ai`, then run `headroom wrap opencode`.
+- Headroom ships a Python/npm installer. On Windows, install it manually: `pip install "headroom-ai[all]"` or `npm install -g headroom-ai`, then run `headroom wrap cline`.
 
 ### Prerequisites
 
-- [opencode CLI](https://opencode.ai) installed and on `$PATH`
-- Provider connections (via `/connect` in opencode TUI)
+- [cline CLI](https://docs.cline.bot) installed and on `$PATH`
+- Provider connections (via `/connect` in cline TUI)
 - [Headroom](https://github.com/headroomlabs-ai/headroom) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
 - [Semble](https://github.com/semble-ai/semble) (recommended) — AI-powered code search (used by Mimir agent)
 - [Skills CLI](https://www.skills.sh) (recommended) — Agent skill package manager (`npx skills add <owner/repo>`)
@@ -225,13 +225,13 @@ pip install "headroom-ai[all]"
 npm install -g headroom-ai
 ```
 
-Enable for opencode:
+Enable for cline:
 
 ```bash
-headroom wrap opencode
+headroom wrap cline
 ```
 
-After setup, `headroom wrap opencode` injects config into `opencode.json` and starts a proxy. The LLM receives compact output, saving 60-90% on token costs. The wrapping is durable — all subsequent opencode sessions route through the headroom proxy.
+After setup, `headroom wrap cline` injects config into `cline.json` and starts a proxy. The LLM receives compact output, saving 60-90% on token costs. The wrapping is durable — all subsequent cline sessions route through the headroom proxy.
 
 ### Semble Setup
 
@@ -264,7 +264,7 @@ npx skills find              # Browse the skills directory
 npx skills add <owner/repo>  # Install a skill from GitHub
 ```
 
-Available for all major AI coding agents including OpenCode, Claude Code, Cursor, Copilot, Gemini, and more.
+Available for all major AI coding agents including Cline, Claude Code, Cursor, Copilot, Gemini, and more.
 
 ---
 
@@ -275,7 +275,7 @@ BizarHarness agents **proactively discover and install skills** during execution
 1. **Assess** whether a skill might exist for the task (framework-specific work, domain tasks, tool usage)
 2. **Check installed** with `skills list --json` to see what's already available
 3. **Install from known repos** based on the task domain — e.g., `skills add supabase/agent-skills --all -y` for database work, `skills add vercel-labs/agent-skills --all -y` for frontend
-4. **Use** the skill's instructions at `~/.opencode/skills/<name>/SKILL.md` via the `skill` tool
+4. **Use** the skill's instructions at `~/.cline/skills/<name>/SKILL.md` via the `skill` tool
 
 This happens automatically and on-demand — agents self-discover capabilities without manual configuration.
 
@@ -365,11 +365,11 @@ Every note passing through `bizar memory sync` is scanned against 12 secret patt
 
 ## 🔑 Provider Setup
 
-After installation, run `/connect` in opencode to add API keys:
+After installation, run `/connect` in cline to add API keys:
 
 | Provider | Models | Auth |
 |---|---|---|
-| **OpenCode Zen** | `opencode/deepseek-v4-flash-free` | Free API key from [opencode.ai](https://opencode.ai) — create account, get key, no charges |
+| **Cline Zen** | `cline/deepseek-v4-flash-free` | Free API key from [cline.ai](https://docs.cline.bot) — create account, get key, no charges |
 | **MiniMax (direct)** | `minimax/MiniMax-M2.7`, `minimax/MiniMax-M3` | API key from [MiniMax](https://platform.minimaxi.com) |
 | **OpenAI** | `openai/gpt-5.5` | ChatGPT subscription (OAuth) |
 
@@ -453,8 +453,8 @@ PRs welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 Development of BizarHarness uses a separate sandbox repo for Docker/dev tooling.
 See [DrB0rk/BizarHarness-dev](https://github.com/DrB0rk/BizarHarness-dev) (private)
-for the local dev environment, including the Docker-based opencode sandbox used to
-test config and plugin changes without touching the system opencode install.
+for the local dev environment, including the Docker-based cline sandbox used to
+test config and plugin changes without touching the system cline install.
 
 > **Note:** When you push BizarHarness-dev to GitHub, update the URL above to match
 > the actual repo location.

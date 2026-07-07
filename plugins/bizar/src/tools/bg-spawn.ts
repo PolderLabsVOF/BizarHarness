@@ -3,20 +3,20 @@
  *
  * v5.5.1 — `bizar_spawn_background` tool, refactored to delegate to the
  * dashboard's SDK-based spawner (`POST /api/background`) instead of
- * spawning `opencode run` subprocesses directly.
+ * spawning `cline run` subprocesses directly.
  *
- * Why the plugin now talks to the dashboard instead of running `opencode run`:
- *   - The v5.5.0 design (opencode-runner.ts) spawned one `opencode run`
+ * Why the plugin now talks to the dashboard instead of running `cline run`:
+ *   - The v5.5.0 design (cline-runner.ts) spawned one `cline run`
  *     subprocess per agent. Steering a running agent required
  *     kill+respawn with a `[STEERED <ts>]` marker — a poor approximation
  *     of "true mid-flight prompt".
- *   - opencode's serve child exposes long-lived SDK sessions that accept
+ *   - cline's serve child exposes long-lived SDK sessions that accept
  *     new prompts via `POST /api/session/{id}/prompt`. Steering is then
  *     a real mid-flight redirect: the same session keeps running, the
  *     new prompt becomes the next user turn.
- *   - The dashboard already owns the opencode SDK (see
- *     `bizar-dash/src/server/opencode-sdk.mjs`); it can mediate between
- *     the plugin's many bg instances and the single opencode serve child.
+ *   - The dashboard already owns the cline SDK (see
+ *     `bizar-dash/src/server/cline-sdk.mjs`); it can mediate between
+ *     the plugin's many bg instances and the single cline serve child.
  *
  * This tool therefore:
  *   1. Validates the request (Odin-only check, model parsing,
@@ -54,7 +54,7 @@ const TIMEOUT_DEFAULT_MS = 300_000;
 
 /**
  * Agents whose `mode` is `primary` and therefore accepted by
- * opencode's `--agent` flag.
+ * cline's `--agent` flag.
  *
  * Exported for testability — the test asserts the set is in sync with
  * the agent configs.
@@ -267,7 +267,7 @@ async function postJsonToDashboard(
 export function createBgSpawnTool(deps: BgSpawnDeps) {
   return tool({
     description:
-      "Spawn a background agent that runs asynchronously as a long-lived opencode serve session " +
+      "Spawn a background agent that runs asynchronously as a long-lived cline serve session " +
       "(SDK-backed via the dashboard). " +
       "Only Odin may call this tool. " +
       "Returns an instanceId immediately (sub-second), then the agent runs to completion in the background. " +
@@ -329,7 +329,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         if (m === null) {
           return {
             output: JSON.stringify({
-              error: `model must be in "providerID/modelID" format (e.g. "opencode/deepseek-v4-flash-free"). Omit to use the agent's default.`,
+              error: `model must be in "providerID/modelID" format (e.g. "cline/deepseek-v4-flash-free"). Omit to use the agent's default.`,
             }),
           };
         }
@@ -390,7 +390,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       }
 
       // 6. POST to the dashboard. The dashboard owns the SDK and the
-      //    underlying opencode session; we mirror its instanceId.
+      //    underlying cline session; we mirror its instanceId.
       const dashboardUrl = `${resolveDashboardUrl()}/api/background`;
       let spawnRes: { instanceId: string; sessionId: string | null; status?: string; liveSession?: boolean };
       try {
@@ -458,18 +458,18 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       }
 
       // 8. Return the spawn result. v5.5.1 message: the agent is
-      //    running in the background on an opencode serve session; Odin
+      //    running in the background on an cline serve session; Odin
       //    should return control to the user immediately.
       return {
         output: JSON.stringify({
           instanceId,
           dashboardInstanceId: spawnRes.instanceId,
           sessionId: spawnRes.sessionId,
-          processId: null, // no subprocess; the opencode serve child owns the session
+          processId: null, // no subprocess; the cline serve child owns the session
           status: "running",
           liveSession: true,
           message:
-            "Background agent started. It runs as an opencode serve SDK session managed by the Bizar dashboard. " +
+            "Background agent started. It runs as an cline serve SDK session managed by the Bizar dashboard. " +
             "Use `bizar_status <instanceId>` to check progress, `bizar_collect <instanceId>` to wait for the result, " +
             "`bizar_send_message <instanceId> <msg>` for true mid-flight steering, " +
             "or `bizar_kill <instanceId>` to stop it. Run `bizar bg view` in another terminal to watch all running agents live.",

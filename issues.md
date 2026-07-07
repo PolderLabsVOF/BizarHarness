@@ -3,6 +3,6 @@
 - marketplace just has the same content as the overview tab
 - schedules page has unstyled buttons
 - memory page cant find a path. make the default path a secial folder in the user home folder something like .bizar_memory
-- make sure things like the lightrag and headroom are automatically started and used when the dashboard or opencode starts.
+- make sure things like the lightrag and headroom are automatically started and used when the dashboard or cline starts.
 - make the bizar install / update script install the system service that auto starts the dash. when updating properly kill any dashboard instanced, update, and redeploy the updated dash and update the system service.
 - go over every page and fix ui inconsistencies. some elements are too close to eachother or overlapping. some popup windows are too small. and overall content in pages can use more horizontal space

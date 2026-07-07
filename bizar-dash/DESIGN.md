@@ -1,6 +1,6 @@
 # Chat UI — Design Spec
 
-> Implementation reference for the chat UI overhaul. The detailed audit is at `/tmp/opencode/chat-ui-deep-audit.md`. This file is the brief — read the audit for line-level detail.
+> Implementation reference for the chat UI overhaul. The detailed audit is at `/tmp/cline/chat-ui-deep-audit.md`. This file is the brief — read the audit for line-level detail.
 
 ## Vision
 
@@ -130,7 +130,7 @@ Modify:
 
 ## Reference
 
-- Deep audit: `/tmp/opencode/chat-ui-deep-audit.md`
-- Research notes: `/tmp/opencode/chat-ui-research.md`
+- Deep audit: `/tmp/cline/chat-ui-deep-audit.md`
+- Research notes: `/tmp/cline/chat-ui-research.md`
 - Inspiration: Gemini Advanced "Hello, [name]" screen (dark minimal, gradient greeting, suggestion cards, pill composer)
-- E2E screenshots: `/tmp/opencode/chat-ui-e2e/`
+- E2E screenshots: `/tmp/cline/chat-ui-e2e/`

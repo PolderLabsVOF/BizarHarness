@@ -59,4 +59,4 @@ One short preamble (1-2 sentences) explaining what you found in the codebase tha
 
 The baseline's `.bizar/` maintenance duty (§10) does **not** apply to you.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

@@ -19,7 +19,7 @@
  *   * `install` is idempotent. When the on-disk unit already matches the
  *     would-be content, we return `{ok: true, alreadyInstalled: true}` and
  *     skip the shell-out entirely.
- *   * The opencode password is never written into the unit file. Runtime
+ *   * The cline password is never written into the unit file. Runtime
  *     secrets come from a 0600 env file (`~/.config/bizar/service.env`).
  *   * All process spawning uses `spawnSync(command, args, {shell: false})`
  *     with explicit arg arrays. There is no string concatenation into a
@@ -191,7 +191,7 @@ function linuxHeadroomUnitContent() {
     '[Service]',
     'Type=simple',
     `EnvironmentFile=${envPath}`,
-    'ExecStart=/bin/sh -c "command -v headroom >/dev/null 2>&1 && headroom proxy opencode || exit 0"',
+    'ExecStart=/bin/sh -c "command -v headroom >/dev/null 2>&1 && headroom proxy cline || exit 0"',
     'Restart=on-failure',
     'RestartSec=10',
     'TimeoutStopSec=15',
@@ -223,7 +223,7 @@ function darwinHeadroomPlistContent({ nodePath, projectRoot }) {
     '  <array>',
     `    <string>${xmlEscape(nodePath)}</string>`,
     '    <string>-c</string>',
-    '    <string>command -v headroom >/dev/null 2>&1 && headroom proxy opencode || exit 0</string>',
+    '    <string>command -v headroom >/dev/null 2>&1 && headroom proxy cline || exit 0</string>',
     '  </array>',
     '  <key>EnvironmentVariables</key>',
     '  <dict>',

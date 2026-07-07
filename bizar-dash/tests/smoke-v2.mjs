@@ -48,7 +48,7 @@ async function main() {
   const port = server.address().port;
   const baseUrl = `http://127.0.0.1:${port}`;
   const authHeader =
-    'Basic ' + Buffer.from(`opencode:${v2Auth.password}`).toString('base64');
+    'Basic ' + Buffer.from(`cline:${v2Auth.password}`).toString('base64');
 
   console.log(`\nSmoke test server listening on ${baseUrl}`);
   console.log(`Auth: ${authHeader.slice(0, 32)}...\n`);

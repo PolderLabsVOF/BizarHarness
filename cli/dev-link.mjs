@@ -3,13 +3,13 @@
  *
  * v3.12.2 — `bizar dev-link` / `bizar dev-unlink` subcommands.
  *
- * The Bizar opencode plugin lives at:
- *   ~/.config/opencode/plugins/bizar   (the deployed copy, written by installPluginFromGlobal)
+ * The Bizar cline plugin lives at:
+ *   ~/.config/cline/plugins/bizar   (the deployed copy, written by installPluginFromGlobal)
  *
  * When developing the plugin source under <repo>/plugins/bizar/, edits
- * don't auto-propagate to opencode because the deployed copy is a real
+ * don't auto-propagate to cline because the deployed copy is a real
  * directory. `bizar dev-link` creates a symlink so that source edits
- * are picked up on the next opencode session. `bizar dev-unlink`
+ * are picked up on the next cline session. `bizar dev-unlink`
  * restores the deployed copy from the npm package.
  *
  * Symlink guard: installPluginFromGlobal refuses to overwrite a
@@ -29,18 +29,18 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
-import { opencodeConfigDir } from './utils.mjs';
+import { clineConfigDir } from './utils.mjs';
 
 /**
  * Path of the deployed plugin. Reads XDG_CONFIG_HOME / HOME at call
  * time so tests can mock HOME.
  */
 function pluginDest() {
-  return join(opencodeConfigDir(), 'plugins', 'bizar');
+  return join(clineConfigDir(), 'plugins', 'bizar');
 }
 
 /**
- * Create a symlink from ~/.config/opencode/plugins/bizar to the
+ * Create a symlink from ~/.config/cline/plugins/bizar to the
  * local source dir (default: <cwd>/plugins/bizar).
  *
  * Behavior:
@@ -71,7 +71,7 @@ export function createDevLink(sourceDir = null, opts = {}) {
   const dest = pluginDest();
   const parentDir = join(dest, '..');
 
-  // Make sure ~/.config/opencode/plugins/ exists.
+  // Make sure ~/.config/cline/plugins/ exists.
   if (!existsSync(parentDir)) {
     mkdirSync(parentDir, { recursive: true });
   }
@@ -113,7 +113,7 @@ export function createDevLink(sourceDir = null, opts = {}) {
   );
   console.log(
     chalk.dim(
-      `    Edits to the source dir will now propagate to opencode on next session.`,
+      `    Edits to the source dir will now propagate to cline on next session.`,
     ),
   );
   return true;

@@ -5,7 +5,7 @@
  *   assignee, parent, dependencies, timeSpent, recurring, attachments,
  *   comments, activity
  *
- * Storage: per-project `~/.config/opencode/projects/<id>/tasks.json`
+ * Storage: per-project `~/.config/cline/projects/<id>/tasks.json`
  *
  * Backward compat: if no active project is set, fall back to the legacy
  * global location (`~/.config/bizar/tasks.json`).

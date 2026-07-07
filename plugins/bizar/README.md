@@ -1,6 +1,6 @@
-# Bizar opencode plugin
+# Bizar cline plugin
 
-A BizarHarness-bundled opencode plugin that gives Odin better visibility into
+A BizarHarness-bundled cline plugin that gives Odin better visibility into
 subagent activity and a mechanism to stop or reassign agents that are stuck.
 It does three things:
 
@@ -17,13 +17,13 @@ tool, and wait-for-feedback tool).
 
 ## Install
 
-The plugin is copied to `<project>/.opencode/plugins/bizar/` by the
+The plugin is copied to `<project>/.cline/plugins/bizar/` by the
 BizarHarness install script. After install, the layout is:
 
 ```
 <project-root>/
-└── .opencode/
-    ├── opencode.json
+└── .cline/
+    ├── cline.json
     └── plugins/
         └── bizar/
             ├── package.json
@@ -50,13 +50,13 @@ BizarHarness install script. After install, the layout is:
                 └── integration.test.ts
 ```
 
-`opencode.json` references the plugin via the relative path
+`cline.json` references the plugin via the relative path
 `./plugins/bizar/index.ts` (relative to the config directory).
 
 ## Options
 
 Plugin options are passed as the second element of the `plugin` tuple in
-`opencode.json`:
+`cline.json`:
 
 ```jsonc
 "plugin": [
@@ -116,7 +116,7 @@ fingerprints in the window crosses a threshold, the plugin acts:
 | 8 (default) | Inject a stronger system message via `experimental.chat.system.transform`. | Subagent sees it on its next turn. |
 | 12 (default) | **Block.** Throw from `tool.execute.before`. | Surfaces in the TUI as a tool error. |
 
-The plugin's hard-block at threshold 12 runs BEFORE opencode's soft
+The plugin's hard-block at threshold 12 runs BEFORE cline's soft
 `doom_loop` recovery. The plugin wins. See `.bizar/plugin-architecture-v0.3.md`
 §3.3 for the interaction with the `doom_loop` permission.
 
@@ -126,18 +126,18 @@ The plugin's hard-block at threshold 12 runs BEFORE opencode's soft
 - It does **not** call external APIs (no LLM calls, no telemetry).
 - It does **not** override agent prompts (only injects ephemeral system
   messages into the current turn's context).
-- It does **not** manage subagent lifecycle (opencode does that).
+- It does **not** manage subagent lifecycle (cline does that).
 - It does **not** read environment variables other than the four listed above.
 - It does **not** write outside `~/.cache/bizar/` by default.
 - It does **not** register slash commands in v0.1.
 
 ## Background Agents
 
-v0.4 adds **background agents** — asynchronous subagent execution via a single long-running `opencode serve` instance. Background agents enable Odin to parallelize independent work without blocking the main conversation.
+v0.4 adds **background agents** — asynchronous subagent execution via a single long-running `cline serve` instance. Background agents enable Odin to parallelize independent work without blocking the main conversation.
 
 ### Architecture
 
-The plugin starts one `opencode serve` process on init (single-serve, multi-session). All background sessions share this process. Each background instance is tracked in `BackgroundState` at `~/.cache/bizar/bg/<instanceId>.json`.
+The plugin starts one `cline serve` process on init (single-serve, multi-session). All background sessions share this process. Each background instance is tracked in `BackgroundState` at `~/.cache/bizar/bg/<instanceId>.json`.
 
 ### The 4 tools
 
@@ -191,8 +191,8 @@ await bizarre_kill({ instanceId: "bgr_01ARSH..." }, ctx);
 
 ### Security Model
 
-- **Localhost only** — `opencode serve` binds to `127.0.0.1`, never exposed externally.
-- **Random shared secret** — a 32-byte secret is generated at plugin init and passed as `OPENCODE_SERVER_PASSWORD` to the serve child. Every HTTP call from the plugin authenticates with `Authorization: Basic base64("opencode:<secret>")`.
+- **Localhost only** — `cline serve` binds to `127.0.0.1`, never exposed externally.
+- **Random shared secret** — a 32-byte secret is generated at plugin init and passed as `CLINE_SERVER_PASSWORD` to the serve child. Every HTTP call from the plugin authenticates with `Authorization: Basic base64("cline:<secret>")`.
 - **Password is in-memory only** — not written to disk. On process exit, the serve child is killed and the secret becomes invalid.
 - **`--dangerously-skip-permissions` opt-in** — by default the serve child respects the user's agent permission config. Set `BIZAR_BACKGROUND_SKIP_PERMISSIONS=1` to skip (not recommended).
 - **Odin-only spawn** — only Odin can spawn background agents. Other agents (Vör, Frigg, Mimir, etc.) can call `bizar_status` (read-only).
@@ -228,7 +228,7 @@ This nudges the agent out of pure thinking and toward concrete progress. The int
 6. **Serve child is per-process.** Multiple worktrees in the same plugin process share one SSE subscription — not supported for multi-worktree setups.
 7. **Password is in-memory only.** Restarting the plugin generates a new password; old `BackgroundState` files point to sessions in the old serve child.
 8. **`bizar_collect` on a killed/failed instance returns the partial result.** It does not retry.
-9. **The `model` parameter is not validated.** opencode will reject unknown providers/models with a 4xx.
+9. **The `model` parameter is not validated.** cline will reject unknown providers/models with a 4xx.
 10. **Custom agents without loop-guard instructions will not see the marker as a task cue.**
 11. **v0.3.0 — Stall and thinking-loop detection has a 15-second polling latency.** The periodic checker runs every 15 seconds, so the actual detection happens within `timeout + 15s`. Adjust the timeouts downward if you need tighter SLAs.
 12. **v0.3.0 — A stalled-but-already-closing serve child may briefly show `failed` with the stall message.** The abort call is best-effort; if the serve child has just died, the stall message is the user-visible reason. The underlying cause is captured in the plugin log.
@@ -269,7 +269,7 @@ The agent uses two new tools to interact with the plan:
 
 - `bizar_plan_action` — CRUD on the canvas (add elements, comments,
   connections, set plan status). Pure file I/O — does not require the
-  `opencode serve` child, so it works in any environment.
+  `cline serve` child, so it works in any environment.
 - `bizar_wait_for_feedback` — polls every 2 seconds until a new comment
   appears, status becomes `approved` / `rejected`, or the timeout fires.
   Default timeout 10 minutes; range `[5 s, 30 min]`.
@@ -380,7 +380,7 @@ contract; custom integrations must work around them, not against them.
 
 7. **Stale session cleanup is best-effort.** If `client.session.list()`
    fails, the age-based cleanup still runs but the "session no longer in
-   opencode" branch is skipped.
+   cline" branch is skipped.
 
 8. **Single-host state.** State files are local to `~/.cache/bizar/`.
    A user with multiple machines will have separate state on each.
@@ -429,7 +429,7 @@ plugins/bizar/
     ├── state.test.ts
     ├── event.test.ts
     ├── options.test.ts
-    └── integration.test.ts   (Docker-based; runs against a real opencode install)
+    └── integration.test.ts   (Docker-based; runs against a real cline install)
 ```
 
 To run the unit tests:

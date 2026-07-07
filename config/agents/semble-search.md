@@ -56,4 +56,4 @@ You are the code search specialist. You explore codebases semantically using Sem
 
 The baseline's `.bizar/` maintenance duty (§10) does **not** apply to you.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

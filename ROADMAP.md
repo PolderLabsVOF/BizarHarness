@@ -10,7 +10,7 @@ This is the **strategic** roadmap. Bug-fix lists, deployment notes, and per-rele
 
 ## 1. TL;DR
 
-- **What Bizar is**: a Norse-pantheon multi-agent platform for opencode. 12 agent definitions, a CLI, a dashboard, a memory service, and an opencode plugin — all in one npm package (`@polderlabs/bizar`).
+- **What Bizar is**: a Norse-pantheon multi-agent platform for cline. 12 agent definitions, a CLI, a dashboard, a memory service, and an cline plugin — all in one npm package (`@polderlabs/bizar`).
 - **Where it is**: v5.0.1, 566 tests passing, ~25k lines of code, mature CLI/dashboard/plugin subsystems. Solid for one-shot and short-horizon work. **L2 on the autonomy scale** (semi-autonomous, multi-step with checkpoints).
 - **Where it's going**: **L4 by v6.x** (autonomous with HITL escalations), **L5 by v7.x** (fully autonomous long-horizon with strategic HITL), plus **Pillar 6: Specialist Research Agents** — a tier of research specialists (Mimir, Veritas, Codex, Praxis) with a dedicated dashboard tab for evidence-based work across all other pillars. See `FINAL_GOAL.md` §2 and `ROADMAP.md` §5.6.
 - **Top 3 in flight**: (1) wrapping up the v5.x quality/polish line (issues #1-#8 fixed, MiniMax swap, dashboard layout pass); (2) designing the runtime agent orchestrator (the Tier 1 unlock); (3) growing the self-improvement loop into a measured, automated system.
@@ -27,7 +27,7 @@ Brief. For the full inventory, see `.obsidian/projects/current-state-analysis-20
 - CLI: 15+ command modules, install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate — analysis §3
 - Dashboard server: v1 on `:4097`, v2 on `:4098`, 18 memory endpoints, structured logging, Prometheus `/metrics` — analysis §3
 - Dashboard web: 17 views (Overview, Chat, Tasks, Memory, Doctor, …) with auto-save settings, kanban tasks, plan canvas — analysis §3
-- Opencode plugin: 7 custom tools, background agent system (stall detection, loop guard, tool-call cap, 8-instance cap), 50% context compaction — analysis §3
+- Cline plugin: 7 custom tools, background agent system (stall detection, loop guard, tool-call cap, 8-instance cap), 50% context compaction — analysis §3
 - Memory service: 3 vault modes (off/local-only/managed/linked), 11 CLI subcommands, 18 REST endpoints, Obsidian-compatible Markdown, git-backed sync, secret scanning — analysis §3 / §7
 - Self-improvement: `.bizar/AGENTS_SELF_IMPROVEMENT.md` (1,139 lines, 15 active rules) — analysis §7
 - 566 tests (388 npm + 178 vitest), 0 failing
@@ -85,11 +85,11 @@ Organized by horizon: Now (Tier 0), Next (Tiers 1-2), Later (Tier 3), Future (Ti
   - Settings sidebar styling + functional buttons
   - Marketplace differentiation from Overview
   - Schedules page button styling
-  - Default memory vault path (`~/.local/share/bizar/memory` — `config/opencode.json` and `bizar-dash/src/server/memory-store.mjs`)
+  - Default memory vault path (`~/.local/share/bizar/memory` — `config/cline.json` and `bizar-dash/src/server/memory-store.mjs`)
   - Headroom + LightRAG auto-start on dashboard boot (`bizar-dash/src/server/headroom.mjs`, `bizar-dash/src/server/server.mjs` startup hooks)
   - System service auto-start on install/update (`cli/provision.mjs` service install + `cli/commands/update.mjs` kill-update-redeploy sequence)
   - UI consistency audit pass on every page (32px top padding, 16-20px card gaps — `bizar-dash/src/web/styles/main.css`)
-- **MiniMax swap** — 6 agent files updated from `opencode/deepseek-v4-flash-free` to `minimax/MiniMax-M2.7` / `MiniMax-M3` (see `config/agents/{tyr,odin,forseti,vidarr,quick,frigg,vor,heimdall,hermod,thor,baldr,mimir}.md`).
+- **MiniMax swap** — 6 agent files updated from `cline/deepseek-v4-flash-free` to `minimax/MiniMax-M2.7` / `MiniMax-M3` (see `config/agents/{tyr,odin,forseti,vidarr,quick,frigg,vor,heimdall,hermod,thor,baldr,mimir}.md`).
 - **Doctor page stabilization** — 30s auto-refresh, 5 health panels (`bizar-dash/src/web/views/Doctor.tsx`).
 - **Settings auto-save** — `useAutosave` hook + `<AutosaveField>` wired into General + Agent sections (`bizar-dash/src/web/components/hooks/useAutosave.ts`).
 
@@ -99,7 +99,7 @@ Organized by horizon: Now (Tier 0), Next (Tiers 1-2), Later (Tier 3), Future (Ti
 
 ### Tier 1 — Next: Runtime Foundation (v6.0)
 
-**Goal**: the big pivot. Replace "agents as prompts running sequentially in an opencode session" with "agents as services dispatched by a runtime orchestrator."
+**Goal**: the big pivot. Replace "agents as prompts running sequentially in an cline session" with "agents as services dispatched by a runtime orchestrator."
 
 **Key deliverables** (all blocks the others):
 
@@ -245,7 +245,7 @@ One section per pillar. Each section: what it means concretely, current state (f
 
 **Current state**:
 - 12 agent definitions in `config/agents/` with YAML frontmatter for model + permission.
-- The `task` tool allows one agent to invoke another, but permission enforcement is at the opencode level (tool whitelist), not the hierarchy level.
+- The `task` tool allows one agent to invoke another, but permission enforcement is at the cline level (tool whitelist), not the hierarchy level.
 - The hierarchy is encoded in the prompts (`odin.md` says "you must dispatch to Tyr, not execute yourself") but not enforced.
 
 **Target state**:
@@ -538,5 +538,5 @@ For the implementer. The canonical locations for the work.
 - **Web app entry**: `bizar-dash/src/web/App.tsx`
 - **CLI entry**: `cli/bin.mjs` (275 lines post-v4.7.0)
 - **Self-improvement log**: `.bizar/AGENTS_SELF_IMPROVEMENT.md` (1,139 lines)
-- **Config root**: `config/opencode.json`
+- **Config root**: `config/cline.json`
 - **Current-state baseline**: `.obsidian/projects/current-state-analysis-2026-07-06.md`

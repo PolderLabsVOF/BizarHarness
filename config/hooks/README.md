@@ -1,6 +1,6 @@
 # Hook System
 
-BizarHarness uses **behavioral hooks** — agent-level instructions that simulate hook behavior. Since opencode doesn't have a native hook runtime, all hooks are implemented as agent behavioral patterns.
+BizarHarness uses **behavioral hooks** — agent-level instructions that simulate hook behavior. Since cline doesn't have a native hook runtime, all hooks are implemented as agent behavioral patterns.
 
 ## Available Hooks
 
@@ -26,4 +26,4 @@ Each hook is enforced by agent instructions in the agent `.md` files:
 
 ## Customization
 
-To disable a hook, remove its instruction from the relevant agent `.md` file(s) in `~/.config/opencode/agents/`.
+To disable a hook, remove its instruction from the relevant agent `.md` file(s) in `~/.config/cline/agents/`.

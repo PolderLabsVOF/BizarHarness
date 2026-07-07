@@ -311,7 +311,7 @@ function SkillsInner({ snapshot, refreshSnapshot }: Props) {
         <footer className="view-footer">
           <span className="text-sm muted">
             Skills are discovered from{' '}
-            <code>~/.opencode/skills/</code>,{' '}
+            <code>~/.cline/skills/</code>,{' '}
             <code>~/.agents/skills/</code>,{' '}
             <code>bizar-dash/skills/</code>, and project-local directories.
           </span>

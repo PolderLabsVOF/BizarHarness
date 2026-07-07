@@ -24,7 +24,7 @@ export function AuditDialog({ data, onClose }: AuditDialogProps) {
     setResult(null);
     try {
       // The audit is run by posting to /api/chat with an /audit message,
-      // which forwards to the opencode serve child where the plugin handles it.
+      // which forwards to the cline serve child where the plugin handles it.
       // We poll for a response via the chat session.
       const res = await api.post<AuditResult>('/chat/audit', {});
       setResult(res);

@@ -1,8 +1,8 @@
 /**
  * tests/chat-session-stream.test.mjs — v4.2.5
  *
- * End-to-end tests for the opencode SSE streaming endpoints. The
- * opencode-session-detail router proxies the upstream
+ * End-to-end tests for the cline SSE streaming endpoints. The
+ * cline-session-detail router proxies the upstream
  * `/event?directory=...` stream and forwards one canonical
  * envelope per upstream event, filtered by `sessionID`.
  *
@@ -17,7 +17,7 @@
  *      configured SSE_HEARTBEAT_MS (default 25s — we set it to 250ms
  *      via env override so the test runs in well under a second).
  *
- * Strategy: stand up a fake opencode serve child on a random port,
+ * Strategy: stand up a fake cline serve child on a random port,
  * point readServeInfo() at it. The fake emits three events then
  * holds the connection open long enough for the heartbeat to land.
  */
@@ -38,7 +38,7 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import express from 'express';
 
-import { createOpencodeSessionDetailRouter } from '../src/server/routes/opencode-session-detail.mjs';
+import { createClineSessionDetailRouter } from '../src/server/routes/cline-session-detail.mjs';
 
 // ── fake upstream ─────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ function startUpstream() {
 async function startDashboard() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
-  app.use('/api', createOpencodeSessionDetailRouter());
+  app.use('/api', createClineSessionDetailRouter());
   dashboardServer = createServer(app);
   await new Promise((r) => dashboardServer.listen(0, '127.0.0.1', r));
   dashboardBaseUrl = `http://127.0.0.1:${dashboardServer.address().port}`;
@@ -98,7 +98,7 @@ before(async () => {
   process.env.BIZAR_SERVE_JSON_PATH = SERVE_JSON_PATH;
   await startUpstream();
   await startDashboard();
-  tmpDir = mkdtempSync(join(tmpdir(), 'opencode-stream-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'cline-stream-'));
   if (existsSync(SERVE_JSON_PATH)) {
     originalServeJson = readFileSync(SERVE_JSON_PATH, 'utf8');
   }
@@ -179,7 +179,7 @@ test('SSE forwards message.updated for the requested session, drops others', asy
     'event: sync\ndata: {"type":"sync","syncEvent":{"type":"message.updated.1","data":{"sessionID":"our-id","messageID":"m3"}}}\n\n',
   ];
   const res = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/our-id/stream`,
+    `${dashboardBaseUrl}/api/cline-sessions/our-id/stream`,
   );
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/event-stream/);
@@ -207,7 +207,7 @@ test('SSE unwraps sync envelopes and strips the version suffix from the event na
     'event: sync\ndata: {"type":"sync","syncEvent":{"type":"session.idle.1","data":{"sessionID":"our-id"}}}\n\n',
   ];
   const res = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/our-id/stream`,
+    `${dashboardBaseUrl}/api/cline-sessions/our-id/stream`,
   );
   assert.equal(res.status, 200);
   const events = parseSseStream(await res.text());
@@ -228,7 +228,7 @@ test('SSE does NOT emit redundant chat:delta / chat:status aliases (only canonic
     'event: sync\ndata: {"type":"sync","syncEvent":{"type":"session.idle.1","data":{"sessionID":"our-id"}}}\n\n',
   ];
   const res = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/our-id/stream`,
+    `${dashboardBaseUrl}/api/cline-sessions/our-id/stream`,
   );
   const events = parseSseStream(await res.text());
   // Only 2 events expected — one part.updated and one session.idle.
@@ -252,7 +252,7 @@ test('SSE emits a heartbeat (": keepalive") within BIZAR_SSE_HEARTBEAT_MS', asyn
   ];
   const t0 = Date.now();
   const res = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/our-id/stream`,
+    `${dashboardBaseUrl}/api/cline-sessions/our-id/stream`,
   );
   const text = await res.text();
   const elapsed = Date.now() - t0;
@@ -273,7 +273,7 @@ test('SSE returns the response in <50ms when upstream immediately errors (plugin
   try {
     const t0 = Date.now();
     const res = await fetch(
-      `${dashboardBaseUrl}/api/opencode-sessions/our-id/stream`,
+      `${dashboardBaseUrl}/api/cline-sessions/our-id/stream`,
     );
     const elapsed = Date.now() - t0;
     assert.equal(res.status, 200);
@@ -296,7 +296,7 @@ test('SSE handles whitespace-only session id gracefully (no 500 crash)', async (
   // to a single space, which is non-empty; the proxy tries to filter
   // events and never matches → empty stream, but never 5xx.
   const res = await fetch(
-    `${dashboardBaseUrl}/api/opencode-sessions/%20/stream`,
+    `${dashboardBaseUrl}/api/cline-sessions/%20/stream`,
   );
   // The handler may return 200 (empty stream) or 503 (directory
   // unknown because the worktree doesn't contain ` ` session).

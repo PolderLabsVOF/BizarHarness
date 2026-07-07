@@ -2,7 +2,7 @@
  * src/server/serve-info.mjs
  *
  * v3.5.4 (bug #3) — Out-of-process reader for the plugin's `serve.json`
- * (see plugins/bizar/src/serve-info.ts). The plugin owns the `opencode serve`
+ * (see plugins/bizar/src/serve-info.ts). The plugin owns the `cline serve`
  * child process; this module lets the dashboard server talk to the same
  * child so it can abort sessions, list sessions, etc.
  *
@@ -12,8 +12,8 @@
  *   lowest-cost bridge and keeps the plugin as the single source of truth
  *   for the on-disk contract.
  *
- * Opencode HTTP API contract (verified against opencode serve 1.17.x):
- *   - Auth: `Authorization: Basic base64("opencode:<password>")`. opencode
+ * Cline HTTP API contract (verified against cline serve 1.17.x):
+ *   - Auth: `Authorization: Basic base64("cline:<password>")`. cline
  *     serves the realm "Secure Area" with Basic auth.
  *   - `POST /api/session/{sessionId}/abort?directory={worktree}`
  *       — Aborts the session. The directory query param scopes the call to
@@ -21,7 +21,7 @@
  *         all per-session endpoints). 2xx on success; 404 if the session
  *         is unknown; 401 if auth fails.
  *   - `GET /api/session`
- *       — Lists every session in the opencode database, regardless of who
+ *       — Lists every session in the cline database, regardless of who
  *         started it. Response shape: `{data: Array<SessionView>}` where
  *         SessionView is {id, projectID, parentID?, title, agent, model,
  *         time:{created,updated,archived}, location:{directory,...}, ...}.
@@ -42,7 +42,7 @@
  * Discovery:
  *   We walk the same multi-path list as BG_DIRS (see background-store.mjs):
  *     - ~/.cache/bizar/serve.json (default stateDir)
- *     - ~/.config/opencode/serve.json (fallback)
+ *     - ~/.config/cline/serve.json (fallback)
  *     - ~/.bizar/serve.json (legacy)
  *   First file that parses successfully wins.
  *
@@ -63,7 +63,7 @@ const HOME = homedir();
 // Mirrors plugins/bizar/src/serve-info.ts → BG_DIRS pattern.
 const DEFAULT_SERVE_INFO_FILES = [
   join(HOME, '.cache', 'bizar', 'serve.json'),
-  join(HOME, '.config', 'opencode', 'serve.json'),
+  join(HOME, '.config', 'cline', 'serve.json'),
   join(HOME, '.bizar', 'serve.json'),
 ];
 
@@ -86,7 +86,7 @@ function serveInfoFiles() {
  * @typedef {Object} ServeInfo
  * @property {string} baseUrl     e.g. "http://127.0.0.1:4097"
  * @property {number} port
- * @property {string} password    OPENCODE_SERVER_PASSWORD (base64 secret)
+ * @property {string} password    CLINE_SERVER_PASSWORD (base64 secret)
  * @property {string} worktree    the plugin's cwd at start time
  * @property {number} pid
  * @property {number} startedAt   epoch ms
@@ -179,7 +179,7 @@ function isLoopbackHostname(hostname) {
  */
 
 /**
- * POST /api/session/{sessionId}/abort?directory={worktree} on the opencode
+ * POST /api/session/{sessionId}/abort?directory={worktree} on the cline
  * serve child described by `info`. Best-effort; never throws.
  *
  * Idempotent: if the session is already gone (404), we treat it as success
@@ -198,7 +198,7 @@ export async function abortSession(info, sessionId, worktreeOverride, timeoutMs 
   const url = `${info.baseUrl}/api/session/${encodeURIComponent(sessionId)}/abort?directory=${encodeURIComponent(
     worktreeOverride || info.worktree || '',
   )}`;
-  const auth = `Basic ${Buffer.from(`opencode:${info.password}`).toString('base64')}`;
+  const auth = `Basic ${Buffer.from(`cline:${info.password}`).toString('base64')}`;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
@@ -242,7 +242,7 @@ export async function abortSession(info, sessionId, worktreeOverride, timeoutMs 
 }
 
 /**
- * @typedef {Object} OpencodeSession
+ * @typedef {Object} ClineSession
  * @property {string} id
  * @property {string} projectID
  * @property {string|null} parentID
@@ -254,21 +254,21 @@ export async function abortSession(info, sessionId, worktreeOverride, timeoutMs 
  */
 
 /**
- * GET /api/session on the opencode serve child. Returns the raw session
- * list (each entry is a SessionView from opencode). Returns null when
+ * GET /api/session on the cline serve child. Returns the raw session
+ * list (each entry is a SessionView from cline). Returns null when
  * no serve is reachable or auth fails. Never throws.
  *
- * Used by Bug #5 to merge sessions started directly from opencode (CLI,
+ * Used by Bug #5 to merge sessions started directly from cline (CLI,
  * MCP, etc.) into the dashboard's bg-instance list.
  *
  * @param {ServeInfo} info
  * @param {number} [timeoutMs]
- * @returns {Promise<OpencodeSession[]|null>}
+ * @returns {Promise<ClineSession[]|null>}
  */
-export async function listOpencodeSessions(info, timeoutMs = 5000) {
+export async function listClineSessions(info, timeoutMs = 5000) {
   if (!info) return null;
   const url = `${info.baseUrl}/api/session`;
-  const auth = `Basic ${Buffer.from(`opencode:${info.password}`).toString('base64')}`;
+  const auth = `Basic ${Buffer.from(`cline:${info.password}`).toString('base64')}`;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
@@ -324,29 +324,29 @@ export const SERVE_INFO_FILE_PATHS = DEFAULT_SERVE_INFO_FILES;
 
 // ── v5.0.0 — bug #4 — directory resolver (shared between route modules) ──
 //
-// Both `routes/opencode-sessions.mjs` and `routes/opencode-session-detail.mjs`
+// Both `routes/cline-sessions.mjs` and `routes/cline-session-detail.mjs`
 // need the same logic: given a sessionId and the plugin's serve-info, figure
 // out which `directory` (worktree) to pass as a `?directory=…` query param
-// to opencode's HTTP API. We previously had two copies of this resolver
+// to cline's HTTP API. We previously had two copies of this resolver
 // inline in each route; now there's one in serve-info.mjs so a fix here
 // reaches both routes.
 //
 // Strategy (per issue #4 brief):
 //   1. If serve.json has a `worktree` AND a fast probe (`GET
 //      /api/session/{id}?directory=<worktree>`) succeeds (HTTP 200), use
-//      the worktree — no need to list every opencode session.
+//      the worktree — no need to list every cline session.
 //   2. Otherwise, list every session via `GET /api/session` and find the
 //      one whose id matches. Use its `location.directory` (or the legacy
 //      `worktree` field, if present) as the directory.
 //   3. If neither yields a directory, return null — callers should 503
 //      so the UI can show "directory unknown" rather than sending the
-//      request with a blank `?directory=` (opencode 400s on that).
+//      request with a blank `?directory=` (cline 400s on that).
 //
 // `worktreeHasSession` is a small `GET /api/session/{id}?directory=...`
 // probe used as a fast-path so we don't pay the cost of listing every
 // session on every listMessages call. The endpoint returns 200 when the
 // session exists in that worktree, 404 when it doesn't. We treat 2xx
-// other than 200 as success (opencode has shipped both `200` and `204`
+// other than 200 as success (cline has shipped both `200` and `204`
 // on this endpoint across versions).
 
 /**
@@ -391,7 +391,7 @@ async function worktreeHasSession(info, sessionId, worktree, timeoutMs = 2_500) 
 }
 
 /**
- * Resolve the opencode `directory` (worktree) for a session.
+ * Resolve the cline `directory` (worktree) for a session.
  *
  * Per the brief:
  *   1. If we have a worktree AND a fast probe confirms the session
@@ -423,7 +423,7 @@ export async function resolveSessionDirectory(sessionId, serveInfo) {
 
   // Slower fallback: list every session and find the match.
   try {
-    const sessions = await listOpencodeSessions(serveInfo, 5_000);
+    const sessions = await listClineSessions(serveInfo, 5_000);
     if (Array.isArray(sessions)) {
       const entry = sessionId
         ? sessions.find(
@@ -434,7 +434,7 @@ export async function resolveSessionDirectory(sessionId, serveInfo) {
       if (entry) {
         const dir = entry?.location?.directory;
         if (typeof dir === 'string' && dir.length > 0) return dir;
-        // Defensive: some opencode builds store the worktree on the
+        // Defensive: some cline builds store the worktree on the
         // session at the top level instead of under `location`.
         const legacy = entry?.worktree;
         if (typeof legacy === 'string' && legacy.length > 0) return legacy;
@@ -447,14 +447,14 @@ export async function resolveSessionDirectory(sessionId, serveInfo) {
         return serveInfo.worktree;
       }
     } else if (typeof serveInfo.worktree === 'string' && serveInfo.worktree.length > 0) {
-      // listOpencodeSessions returned null (serve offline / auth fail).
+      // listClineSessions returned null (serve offline / auth fail).
       // Fall back to the worktree so we at least try the same
       // directory the plugin recorded — the upstream 404/502 will
       // surface a clearer error than a 503 directory_unknown.
       return serveInfo.worktree;
     }
   } catch (err) {
-    loggerWarn('resolveSessionDirectory: listOpencodeSessions failed', {
+    loggerWarn('resolveSessionDirectory: listClineSessions failed', {
       sessionId: sessionId || null,
       err: err instanceof Error ? err.message : String(err),
     });
@@ -471,8 +471,8 @@ export async function resolveSessionDirectory(sessionId, serveInfo) {
 // spawn silently failed and subtasks got stuck at `doing 5% Dispatched`
 // forever.
 //
-// The fix is to talk to the opencode serve child the plugin owns directly
-// — the plugin already spawns `opencode serve` on init and publishes the
+// The fix is to talk to the cline serve child the plugin owns directly
+// — the plugin already spawns `cline serve` on init and publishes the
 // port + password via serve-info. The endpoints below mirror what the
 // plugin's own `bizar_spawn_background` MCP tool does in-process
 // (plugins/bizar/src/http-client.ts → `createSession` + `sendPrompt`).
@@ -484,16 +484,16 @@ export async function resolveSessionDirectory(sessionId, serveInfo) {
 const DEFAULT_TIMEOUT_MS = 8_000;
 
 /**
- * Build the Authorization header for the opencode serve child. The wire
- * format is `Basic base64("opencode:<password>")` (matches what the
+ * Build the Authorization header for the cline serve child. The wire
+ * format is `Basic base64("cline:<password>")` (matches what the
  * plugin's own HttpClient uses; see plugins/bizar/src/http-client.ts).
  *
- * v4.2.4 — exported so the SSE proxy in `routes/opencode-session-detail.mjs`
+ * v4.2.4 — exported so the SSE proxy in `routes/cline-session-detail.mjs`
  * can authenticate upstream fetches without duplicating the formula.
  */
 export function buildAuthHeader(info) {
   if (!info || typeof info.password !== 'string') return '';
-  const creds = `opencode:${info.password}`;
+  const creds = `cline:${info.password}`;
   return `Basic ${Buffer.from(creds).toString('base64')}`;
 }
 
@@ -510,7 +510,7 @@ export function buildAuthHeader(info) {
  * @param {number} [timeoutMs]
  * @returns {Promise<{ok:true,sessionId:string}|{ok:false,error:string,status?:number}>}
  */
-export async function createOpencodeSession(info, opts, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
+export async function createClineSession(info, opts, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
   if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
   if (!opts || typeof opts.agent !== 'string' || opts.agent.length === 0) {
     return { ok: false, error: 'agent is required' };
@@ -576,7 +576,7 @@ export async function createOpencodeSession(info, opts, directory, timeoutMs = D
  * @param {number} [timeoutMs]
  * @returns {Promise<{ok:true,messageId:string}|{ok:false,error:string,status?:number}>}
  */
-export async function sendOpencodePrompt(info, opts, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
+export async function sendClinePrompt(info, opts, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
   if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
   if (!opts || !opts.sessionId || !opts.agent || !opts.text) {
     return { ok: false, error: 'sessionId, agent, and text are required' };
@@ -640,18 +640,18 @@ export async function sendOpencodePrompt(info, opts, directory, timeoutMs = DEFA
 // ── v3.5.5 — chat + artifact integration ──────────────────────────────
 //
 // The chat endpoint (POST /api/chat) and the bg-poller both need to
-// read the opencode session's message list so they can:
+// read the cline session's message list so they can:
 //   1. Capture the assistant's reply to a user prompt (chat polling).
 //   2. Scan the final assistant message for an `html-artifact` block
 //      that the agent emitted to declare a tangible artifact.
 //
-// `listOpencodeMessages` is a thin fetch wrapper over
+// `listClineMessages` is a thin fetch wrapper over
 // `GET /api/session/{id}/message?directory=...`. The response shape
 // (per the plugin's own http-client.ts → listMessages()) is either a
 // raw `Array<{ info, parts }>` or `{ data: Array<{ info, parts }> }`.
 // We accept both.
 //
-// `extractContentFromOpencodeMessage` flattens the `parts[]` array
+// `extractContentFromClineMessage` flattens the `parts[]` array
 // into a single string for chat persistence and artifact detection.
 
 /**
@@ -666,7 +666,7 @@ export async function sendOpencodePrompt(info, opts, directory, timeoutMs = DEFA
  * @param {number} [timeoutMs]
  * @returns {Promise<{ok:true,messages:Array}|{ok:false,error:string,status?:number}>}
  */
-export async function listOpencodeMessages(info, sessionId, directory, timeoutMs = 8_000) {
+export async function listClineMessages(info, sessionId, directory, timeoutMs = 8_000) {
   if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
   if (!sessionId) return { ok: false, error: 'sessionId is required' };
   const dir = directory || info.worktree || '';
@@ -725,21 +725,21 @@ export async function listOpencodeMessages(info, sessionId, directory, timeoutMs
 }
 
 /**
- * Flatten an opencode message's `parts[]` into a single string.
+ * Flatten an cline message's `parts[]` into a single string.
  *
- * Opencode v2 messages look like:
+ * Cline v2 messages look like:
  *   { info: { id, role, time }, parts: [{type, text}, {type, text}, ...] }
  *
  * We concatenate every `text` part in order, joined by `\n\n`. Non-text
  * parts (tool calls, etc.) are skipped — they don't contribute to a
  * human-readable chat or artifact scan.
  *
- * @param {object} msg  one entry from `listOpencodeMessages().messages`
+ * @param {object} msg  one entry from `listClineMessages().messages`
  * @returns {string}
  */
-export function extractContentFromOpencodeMessage(msg) {
+export function extractContentFromClineMessage(msg) {
   if (!msg) return '';
-  // Some opencode v1 builds put text directly on the message itself.
+  // Some cline v1 builds put text directly on the message itself.
   if (typeof msg.text === 'string') return finalizeText(msg.text);
   if (typeof msg.content === 'string') return finalizeText(msg.content);
   const parts = Array.isArray(msg.parts) ? msg.parts : [];
@@ -753,7 +753,7 @@ export function extractContentFromOpencodeMessage(msg) {
 /**
  * Strip `<thinking>...</thinking>` blocks from model output.
  *
- * Some opencode builds (and the M3 model specifically) emit inline
+ * Some cline builds (and the M3 model specifically) emit inline
  * `<thinking>` reasoning tags directly in the assistant text content.
  * React-markdown renders those as visible escaped HTML, so the chat UI
  * ends up showing the raw tag. The reasoning itself is also captured
@@ -784,16 +784,16 @@ function finalizeText(text) {
 }
 
 /**
- * Normalize an opencode message into the dashboard's chat shape:
+ * Normalize an cline message into the dashboard's chat shape:
  *   { id, role, content, ts, agent? }
  *
- * Used by GET /api/tasks/:id/chat to surface a bg instance's opencode
+ * Used by GET /api/tasks/:id/chat to surface a bg instance's cline
  * session inside the chat UI.
  *
  * @param {object} msg
  * @returns {{id:string,role:string,content:string,ts:number}}
  */
-export function normalizeOpencodeMessage(msg) {
+export function normalizeClineMessage(msg) {
   if (!msg) return { id: '', role: 'assistant', content: '', ts: Date.now() };
   const id = msg?.info?.id || msg?.id || '';
   const role = msg?.info?.role || msg?.role || 'assistant';
@@ -804,14 +804,14 @@ export function normalizeOpencodeMessage(msg) {
   return {
     id: String(id),
     role: String(role),
-    content: extractContentFromOpencodeMessage(msg),
+    content: extractContentFromClineMessage(msg),
     ts: typeof ts === 'number' ? ts : Date.now(),
   };
 }
 
 /**
  * `DELETE /api/session/{id}?directory=...` — delete a session on the
- * opencode serve child. v4.2.4 dashboard feature parity: the rail
+ * cline serve child. v4.2.4 dashboard feature parity: the rail
  * menu offers delete and the chat info panel can prune finished
  * sessions from inside the dashboard.
  *
@@ -823,7 +823,7 @@ export function normalizeOpencodeMessage(msg) {
  * @param {number} [timeoutMs]
  * @returns {Promise<{ok:true,status:number}|{ok:false,error:string,status?:number}>}
  */
-export async function deleteOpencodeSession(info, sessionId, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
+export async function deleteClineSession(info, sessionId, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
   if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
   if (!sessionId) return { ok: false, error: 'sessionId is required' };
   const dir = directory || info.worktree || '';
@@ -863,7 +863,7 @@ export async function deleteOpencodeSession(info, sessionId, directory, timeoutM
 
 /**
  * `PATCH /api/session/{id}?directory=...` — update session fields
- * (currently just `title`) on the opencode serve child. Used by the
+ * (currently just `title`) on the cline serve child. Used by the
  * rail row-menu "Rename" affordance.
  *
  * @param {ServeInfo} info
@@ -873,7 +873,7 @@ export async function deleteOpencodeSession(info, sessionId, directory, timeoutM
  * @param {number} [timeoutMs]
  * @returns {Promise<{ok:true,session:object}|{ok:false,error:string,status?:number}>}
  */
-export async function updateOpencodeSession(info, sessionId, patch, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
+export async function updateClineSession(info, sessionId, patch, directory, timeoutMs = DEFAULT_TIMEOUT_MS) {
   if (!info) return { ok: false, error: 'serve-info not available — plugin is not running' };
   if (!sessionId) return { ok: false, error: 'sessionId is required' };
   if (!patch || typeof patch !== 'object') return { ok: false, error: 'patch is required' };
@@ -932,17 +932,17 @@ export async function updateOpencodeSession(info, sessionId, patch, directory, t
  * v3.11.0 — Replaced the HTTP `GET /health` probe with a TCP-connect
  * port-open check via `net.createConnection`. Rationale:
  *   - The pre-v3.11.0 implementation sent `GET /health` with the
- *     Basic-auth header from `serve.json`. If the opencode serve
+ *     Basic-auth header from `serve.json`. If the cline serve
  *     instance rejected the auth (e.g. a stale password file, a
  *     plugin version mismatch, or a 401 from a different auth realm),
- *     the probe returned `false` even when the opencode process was
+ *     the probe returned `false` even when the cline process was
  *     perfectly healthy and answering other requests. That cascaded
  *     into every background dispatch short-circuiting on the
  *     `if (serveInfo && serveReachable)` guard at
  *     `task-delegator.mjs:563` and being marked `dispatchPending: true`.
  *   - TCP-connect is the standard "is this port alive" check. It does
- *     not depend on HTTP auth, the opencode version's endpoint shape,
- *     or the path being correct. If the opencode process is bound to
+ *     not depend on HTTP auth, the cline version's endpoint shape,
+ *     or the path being correct. If the cline process is bound to
  *     the port, we can talk to it (auth on the actual endpoints will
  *     still be validated when we issue those calls).
  *   - 1.5s default timeout — long enough to survive a slow CI host,
@@ -953,7 +953,7 @@ export async function updateOpencodeSession(info, sessionId, patch, directory, t
  * @param {number} [timeoutMs]
  * @returns {Promise<boolean>}
  */
-export function pingOpencodeServe(info, timeoutMs = 1_500) {
+export function pingClineServe(info, timeoutMs = 1_500) {
   return new Promise((resolve) => {
     if (!info || typeof info.port !== 'number') {
       resolve(false);
@@ -992,17 +992,17 @@ export function pingOpencodeServe(info, timeoutMs = 1_500) {
 
 // ── v4.2.4 — SSE event unwrap (port from plugins/bizar/src/event-stream.ts) ──
 //
-// The dashboard's chat UI subscribes to opencode's `/event?directory=...`
+// The dashboard's chat UI subscribes to cline's `/event?directory=...`
 // SSE stream to receive live updates for a chosen session. The wire
-// format has changed across opencode versions; this helper normalizes
+// format has changed across cline versions; this helper normalizes
 // both shapes into a single `{type, sessionID?, messageID?, part?, data}`
 // envelope that the SSE proxy can filter on `sessionID` and forward.
 //
-// Wire format 1 (direct, older opencode):
+// Wire format 1 (direct, older cline):
 //   event: session.created
 //   data: {"type":"session.created","properties":{"sessionID":"abc","title":"…"}}
 //
-// Wire format 2 (sync envelope, newer opencode):
+// Wire format 2 (sync envelope, newer cline):
 //   event: sync
 //   data: {"type":"sync","syncEvent":{"type":"session.created.1","data":{"sessionID":"abc"}}}
 //
@@ -1018,22 +1018,22 @@ export function pingOpencodeServe(info, timeoutMs = 1_500) {
 // here so the dashboard server can use it without importing TS code.
 
 /**
- * Unwrap and normalize a raw opencode SSE event payload.
+ * Unwrap and normalize a raw cline SSE event payload.
  *
  * v0.4.3 wire formats accepted (see plugins/bizar/src/event-stream.ts:365-400):
- *   1. Direct: `{type, properties: {sessionID, ...}}` — newer opencode uses
+ *   1. Direct: `{type, properties: {sessionID, ...}}` — newer cline uses
  *      `data` instead of `properties`. We accept either field name.
  *   2. Sync envelope: `{type: "sync", syncEvent: {type: "x.y.1", data: {...}}}`.
  *      Unwrap to inner data; strip the `.1` version suffix from the type.
  *
- * Returns `null` if the event isn't a recognizable opencode event shape
+ * Returns `null` if the event isn't a recognizable cline event shape
  * (e.g. non-object, missing type).
  *
  * @param {string|null} eventName  the SSE `event:` field (may be null)
  * @param {unknown} data           the parsed JSON `data:` payload
  * @returns {{type:string, sessionID?:string, messageID?:string, part?:object, data?:object}|null}
  */
-export function unwrapOpencodeSseEvent(eventName, data) {
+export function unwrapClineSseEvent(eventName, data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
   let obj = /** @type {Record<string, unknown>} */ (data);
 

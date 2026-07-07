@@ -854,7 +854,7 @@ function OnboardingWizard({ step, setStep, keyDraft, setKeyDraft, showKey, setSh
               both the <strong>5-hour rolling</strong> and <strong>weekly</strong> windows.
             </p>
             <ul className="minimax-wizard-list">
-              <li>Stored in <code>~/.local/share/opencode/auth.json</code>.</li>
+              <li>Stored in <code>~/.local/share/cline/auth.json</code>.</li>
               <li>Read fresh on every dashboard load.</li>
               <li>Never logged in full.</li>
             </ul>
@@ -933,7 +933,7 @@ function OnboardingWizard({ step, setStep, keyDraft, setKeyDraft, showKey, setSh
 
         <div className="minimax-wizard-footer">
           <ShieldCheck size={11} />
-          <span>Key written to <code>~/.local/share/opencode/auth.json</code> with mode 0600.</span>
+          <span>Key written to <code>~/.local/share/cline/auth.json</code> with mode 0600.</span>
         </div>
       </Card>
     </div>

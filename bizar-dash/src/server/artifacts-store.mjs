@@ -12,7 +12,7 @@
  *
  * Storage locations, in order of preference:
  *   1. <projectRoot>/.bizar/artifacts/<slug>      (worktree, project-scoped)
- *   2. ~/.config/opencode/artifacts/<slug>       (global fallback)
+ *   2. ~/.config/cline/artifacts/<slug>       (global fallback)
  */
 import {
   existsSync,
@@ -29,7 +29,7 @@ import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
 const HOME = homedir();
-const GLOBAL_PLANS_DIR = join(HOME, '.config', 'opencode', 'artifacts');
+const GLOBAL_PLANS_DIR = join(HOME, '.config', 'cline', 'artifacts');
 
 // Atomic JSON write: serialize to a sibling temp file, then rename into
 // place. `rename` is atomic on POSIX (same filesystem), so a crash

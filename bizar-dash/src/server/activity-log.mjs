@@ -5,7 +5,7 @@
  * and canvas-node detail panels.
  *
  * Storage:
- *   ~/.config/opencode/activity.jsonl    (one JSON object per line)
+ *   ~/.config/cline/activity.jsonl    (one JSON object per line)
  *
  * Why JSONL:
  *   - Cheap append (write one line, no full-file rewrite).
@@ -37,7 +37,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 
 const HOME = homedir();
-const LOG_FILE = join(HOME, '.config', 'opencode', 'activity.jsonl');
+const LOG_FILE = join(HOME, '.config', 'cline', 'activity.jsonl');
 
 // Hard cap on retained entries (the file is rotated/truncated by the
 // caller; we just stop reading past this many in `recent()`).

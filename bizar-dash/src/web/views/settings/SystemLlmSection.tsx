@@ -23,7 +23,7 @@ export function SystemLlmSection({ settings, patchTop }: Props) {
           type="checkbox"
           checked={!!settings.systemLlm?.enabled}
           onChange={(e) => {
-            const cur = settings.systemLlm || { enabled: true, provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' };
+            const cur = settings.systemLlm || { enabled: true, provider: 'cline', model: 'cline/deepseek-v4-flash-free' };
             patchTop('systemLlm', { ...cur, enabled: e.target.checked });
           }}
         />
@@ -35,13 +35,13 @@ export function SystemLlmSection({ settings, patchTop }: Props) {
         <select
           id="set-system-llm-provider"
           className="select"
-          value={settings.systemLlm?.provider || 'opencode'}
+          value={settings.systemLlm?.provider || 'cline'}
           onChange={(e) => {
-            const cur = settings.systemLlm || { enabled: true, provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' };
+            const cur = settings.systemLlm || { enabled: true, provider: 'cline', model: 'cline/deepseek-v4-flash-free' };
             patchTop('systemLlm', { ...cur, provider: e.target.value });
           }}
         >
-          <option value="opencode">Opencode</option>
+          <option value="cline">Cline</option>
           <option value="openrouter">OpenRouter</option>
           <option value="minimax">MiniMax</option>
         </select>
@@ -53,10 +53,10 @@ export function SystemLlmSection({ settings, patchTop }: Props) {
           id="set-system-llm-model"
           className="input mono"
           type="text"
-          placeholder="opencode/deepseek-v4-flash-free"
-          value={settings.systemLlm?.model || 'opencode/deepseek-v4-flash-free'}
+          placeholder="cline/deepseek-v4-flash-free"
+          value={settings.systemLlm?.model || 'cline/deepseek-v4-flash-free'}
           onChange={(e) => {
-            const cur = settings.systemLlm || { enabled: true, provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' };
+            const cur = settings.systemLlm || { enabled: true, provider: 'cline', model: 'cline/deepseek-v4-flash-free' };
             patchTop('systemLlm', { ...cur, model: e.target.value });
           }}
         />

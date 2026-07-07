@@ -42,14 +42,14 @@ if [ $LEAK_FOUND -eq 1 ]; then
 fi
 
 # Block per-machine state from being committed
-MACHINE_FILES=$(echo "$STAGED" | grep -E "(^|/)\.bizar/|config/opencode\.json$" || true)
+MACHINE_FILES=$(echo "$STAGED" | grep -E "(^|/)\.bizar/|config/cline\.json$" || true)
 if [ -n "$MACHINE_FILES" ]; then
   echo "" >&2
   echo "❌ Refusing to commit — these files are per-machine state and must never be tracked:" >&2
   echo "$MACHINE_FILES" | sed 's/^/    /' >&2
   echo "" >&2
   echo "  .bizar/ contains per-project state (memory.json, graph/, plans, scripts)." >&2
-  echo "  config/opencode.json contains per-user opencode config (model API tokens)." >&2
+  echo "  config/cline.json contains per-user cline config (model API tokens)." >&2
   echo "" >&2
   echo "  If you want to ship a default file, put it under config/defaults/ instead." >&2
   echo "  To override (NOT recommended): git commit --no-verify" >&2

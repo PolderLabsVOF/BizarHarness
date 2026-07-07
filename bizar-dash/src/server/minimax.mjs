@@ -4,17 +4,17 @@
  * v4.5.0 — MiniMax API client.
  *
  * Owns the network calls to platform.minimax.io for the Bizar
- * dashboard. The Subscription Key is read from opencode's canonical
- * auth store (`~/.local/share/opencode/auth.json`) so the user only
- * enters the key once (via opencode's `/connect` command) and the
+ * dashboard. The Subscription Key is read from cline's canonical
+ * auth store (`~/.local/share/cline/auth.json`) so the user only
+ * enters the key once (via cline's `/connect` command) and the
  * dashboard picks it up automatically.
  *
  * Key resolution chain (in order, first match wins):
  *   1. process.env.MINIMAX_API_KEY
  *   2. process.env.ANTHROPIC_API_KEY     (MiniMax accepts Anthropic keys)
- *   3. ~/.local/share/opencode/auth.json → "minimax" → "key"
- *   4. ~/.config/opencode/opencode.json → provider.minimax.options.apiKey
- *   5. ~/.config/opencode/opencode.json → provider.minimax.apiKey
+ *   3. ~/.local/share/cline/auth.json → "minimax" → "key"
+ *   4. ~/.config/cline/cline.json → provider.minimax.options.apiKey
+ *   5. ~/.config/cline/cline.json → provider.minimax.apiKey
  *
  * Two surfaces:
  *   - fetchRemains()       — Token Plan quota (5h + weekly per model)
@@ -31,8 +31,8 @@ import { homedir } from 'node:os';
 
 const HOME = homedir();
 const BIZAR_HOME = join(HOME, '.config', 'bizar');
-const OPENCODE_AUTH_FILE = join(HOME, '.local', 'share', 'opencode', 'auth.json');
-const OPENCODE_CONFIG_FILE = join(HOME, '.config', 'opencode', 'opencode.json');
+const CLINE_AUTH_FILE = join(HOME, '.local', 'share', 'cline', 'auth.json');
+const CLINE_CONFIG_FILE = join(HOME, '.config', 'cline', 'cline.json');
 const CACHE_DIR = join(BIZAR_HOME, 'minimax');
 const CACHE_FILE = join(CACHE_DIR, 'remains-cache.json');
 
@@ -74,19 +74,19 @@ function safeReadJson(file, fallback = null) {
 }
 
 /**
- * Resolve the MiniMax Subscription Key from opencode's canonical store.
+ * Resolve the MiniMax Subscription Key from cline's canonical store.
  * Returns `{ key: string|null, source: string, groupId: string }`.
  *
  * `source` is one of:
  *   - 'env:MINIMAX_API_KEY'
  *   - 'env:ANTHROPIC_API_KEY'
  *   - 'auth.json'
- *   - 'opencode.json:options.apiKey'
- *   - 'opencode.json:apiKey'
+ *   - 'cline.json:options.apiKey'
+ *   - 'cline.json:apiKey'
  *   - 'none'
  */
 export function resolveApiKey() {
-  // 1. Env vars — opencode reads MINIMAX_API_KEY first
+  // 1. Env vars — cline reads MINIMAX_API_KEY first
   if (process.env.MINIMAX_API_KEY && process.env.MINIMAX_API_KEY.trim()) {
     return {
       key: process.env.MINIMAX_API_KEY.trim(),
@@ -102,8 +102,8 @@ export function resolveApiKey() {
       groupId: 'default',
     };
   }
-  // 3. ~/.local/share/opencode/auth.json
-  const auth = safeReadJson(OPENCODE_AUTH_FILE, null);
+  // 3. ~/.local/share/cline/auth.json
+  const auth = safeReadJson(CLINE_AUTH_FILE, null);
   if (auth && typeof auth === 'object' && auth.minimax && auth.minimax.key) {
     return {
       key: String(auth.minimax.key).trim(),
@@ -111,21 +111,21 @@ export function resolveApiKey() {
       groupId: String(auth.minimax.group_id || 'default'),
     };
   }
-  // 4. opencode.json → provider.minimax.options.apiKey
-  const cfg = safeReadJson(OPENCODE_CONFIG_FILE, null);
+  // 4. cline.json → provider.minimax.options.apiKey
+  const cfg = safeReadJson(CLINE_CONFIG_FILE, null);
   const minimax = cfg?.provider?.minimax;
   if (minimax?.options?.apiKey) {
     return {
       key: String(minimax.options.apiKey).trim(),
-      source: 'opencode.json:options.apiKey',
+      source: 'cline.json:options.apiKey',
       groupId: String(cfg.provider.minimax.group_id || 'default'),
     };
   }
-  // 5. opencode.json → provider.minimax.apiKey
+  // 5. cline.json → provider.minimax.apiKey
   if (minimax?.apiKey) {
     return {
       key: String(minimax.apiKey).trim(),
-      source: 'opencode.json:apiKey',
+      source: 'cline.json:apiKey',
       groupId: String(cfg.provider.minimax.group_id || 'default'),
     };
   }
@@ -135,11 +135,11 @@ export function resolveApiKey() {
 /**
  * Base URL resolution. The Token Plan endpoint lives on www.minimax.io;
  * the chat completions live on api.minimax.io/v1. If the user has
- * set a custom base URL in opencode.json's `options.baseURL`, that
+ * set a custom base URL in cline.json's `options.baseURL`, that
  * wins (with path-aware logic — we extract the host).
  */
 export function resolveBaseUrls() {
-  const cfg = safeReadJson(OPENCODE_CONFIG_FILE, null);
+  const cfg = safeReadJson(CLINE_CONFIG_FILE, null);
   const minimaxOpts = cfg?.provider?.minimax?.options || {};
   let tokenBase = DEFAULT_BASE_URL;
   let chatBase = DEFAULT_CHAT_BASE_URL;
@@ -219,26 +219,26 @@ async function fetchWithTimeout(url, opts = {}, timeoutMs = 10_000) {
 // ─── Auth-file writer (for onboarding) ─────────────────────────────────
 
 /**
- * Write the MiniMax key to opencode's auth store at the canonical
+ * Write the MiniMax key to cline's auth store at the canonical
  * path. Returns the path that was written. Used by the dashboard's
  * onboarding wizard so the user only enters the key once.
  */
 export function writeAuthFile(key, groupId = 'default') {
-  mkdirSync(dirname(OPENCODE_AUTH_FILE), { recursive: true });
-  const cur = safeReadJson(OPENCODE_AUTH_FILE, {}) || {};
+  mkdirSync(dirname(CLINE_AUTH_FILE), { recursive: true });
+  const cur = safeReadJson(CLINE_AUTH_FILE, {}) || {};
   cur.minimax = {
     type: 'api',
     key: String(key).trim(),
   };
   if (groupId) cur.minimax.group_id = groupId;
-  writeFileSync(OPENCODE_AUTH_FILE, JSON.stringify(cur, null, 2) + '\n', 'utf8');
-  return OPENCODE_AUTH_FILE;
+  writeFileSync(CLINE_AUTH_FILE, JSON.stringify(cur, null, 2) + '\n', 'utf8');
+  return CLINE_AUTH_FILE;
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────
 
 /**
- * Read the dashboard-side config that opencode doesn't own:
+ * Read the dashboard-side config that cline doesn't own:
  *   - the onboarding "dismissed" flag (so we don't keep nagging the
  *     user with the first-run wizard after they've seen it once)
  *   - the per-model enabled flag (so the user can hide a model

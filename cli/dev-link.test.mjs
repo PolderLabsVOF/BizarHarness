@@ -4,12 +4,12 @@
  * Tests for the `bizar dev-link` / `bizar dev-unlink` subcommands.
  * Uses Node's built-in node:test (no external test framework).
  *
- * Strategy: mock HOME (and XDG_CONFIG_HOME) so opencodeConfigDir() in
+ * Strategy: mock HOME (and XDG_CONFIG_HOME) so clineConfigDir() in
  * cli/utils.mjs returns a path inside a tmpdir, and exercise the
  * create/remove symlink behavior against a controlled filesystem.
  *
  * Note: We mock HOME *before* importing dev-link.mjs because the module
- * imports opencodeConfigDir transitively from utils.mjs. The path is
+ * imports clineConfigDir transitively from utils.mjs. The path is
  * resolved at call time, though, so the mock just needs to be in place
  * when the functions run.
  */
@@ -40,16 +40,16 @@ const ORIG_HOME = process.env.HOME;
 const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
- * Point HOME at a fresh tmpdir so the module's opencodeConfigDir()
- * resolves inside it (via the fallback `<HOME>/.config/opencode`).
+ * Point HOME at a fresh tmpdir so the module's clineConfigDir()
+ * resolves inside it (via the fallback `<HOME>/.config/cline`).
  * Returns the tmpdir path.
  *
  * Note: we deliberately do NOT set XDG_CONFIG_HOME here. The
- * opencodeConfigDir() helper treats a set XDG_CONFIG_HOME as the
- * direct parent (so `XDG_CONFIG_HOME=~/.config` → `~/.config/opencode`,
+ * clineConfigDir() helper treats a set XDG_CONFIG_HOME as the
+ * direct parent (so `XDG_CONFIG_HOME=~/.config` → `~/.config/cline`,
  * matching the standard layout). Setting it to a raw tmpdir would
- * produce `<tmpdir>/opencode` instead of the expected
- * `<tmpdir>/.config/opencode` and break path alignment with the test.
+ * produce `<tmpdir>/cline` instead of the expected
+ * `<tmpdir>/.config/cline` and break path alignment with the test.
  */
 function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-devlink-'));
@@ -60,7 +60,7 @@ function freshHome() {
 
 /** Path to the deployed plugin dir under the mocked HOME. */
 function pluginDest(home) {
-  return join(home, '.config', 'opencode', 'plugins', 'bizar');
+  return join(home, '.config', 'cline', 'plugins', 'bizar');
 }
 
 after(() => {
@@ -166,7 +166,7 @@ describe('createDevLink()', () => {
     assert.ok(linkTarget.endsWith('/plugins/bizar'));
   });
 
-  test('creates the opencode config parent if missing', () => {
+  test('creates the cline config parent if missing', () => {
     const dest = pluginDest(home);
     assert.equal(existsSync(dirname(dest)), false, 'precondition');
     const ok = createDevLink(sourceDir);

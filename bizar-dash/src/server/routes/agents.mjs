@@ -81,7 +81,7 @@ export function createAgentsRouter({ state, broadcast }) {
     res.status(202).json({ accepted: true, agent: name });
   }));
 
-  // v3.1.0 — Agent status (idle / working / error / stuck). The opencode
+  // v3.1.0 — Agent status (idle / working / error / stuck). The cline
   // plugin pings this when it picks up or finishes a task; the dashboard
   // also calls it on the lifecycle hooks below.
   router.post('/agents/:name/status', wrap(async (req, res) => {

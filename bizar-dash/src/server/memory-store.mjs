@@ -935,16 +935,16 @@ export {
 
 // ── v4.6.0 LightRAG default model helpers ──────────────────────────────────
 //
-// Free opencode Zen defaults — no API key required for free-tier models.
+// Free cline Zen defaults — no API key required for free-tier models.
 // Operators can override per-project via:
 //   - env:  BIZAR_LIGHTRAG_LLM, BIZAR_LIGHTRAG_EMBEDDING
 //   - config: .bizar/memory.json#lightrag.llmModel / .embeddingModel
 //
 // The dashboard surfaces these via /api/lightrag/defaults so the
-// settings view can show "currently using: opencode/gpt-5-nano (free)".
+// settings view can show "currently using: cline/gpt-5-nano (free)".
 
-export const LIGHTRAG_DEFAULT_LLM = 'opencode/gpt-5-nano';
-export const LIGHTRAG_DEFAULT_EMBEDDING = 'opencode/text-embedding-3-small';
+export const LIGHTRAG_DEFAULT_LLM = 'cline/gpt-5-nano';
+export const LIGHTRAG_DEFAULT_EMBEDDING = 'cline/text-embedding-3-small';
 
 /**
  * Build a wikilink link graph from all .md notes in the vault.
@@ -1069,9 +1069,9 @@ function resolveWikilinkTarget(targetName, notes) {
 
 /**
  * Return the effective LightRAG model defaults, applying env-var
- * overrides on top of the built-in opencode-Zen-free defaults.
+ * overrides on top of the built-in cline-Zen-free defaults.
  *
- * @returns {{ llm: string, embedding: string, source: 'opencode-free' | 'env', llmSource: 'default' | 'env', embeddingSource: 'default' | 'env' }}
+ * @returns {{ llm: string, embedding: string, source: 'cline-free' | 'env', llmSource: 'default' | 'env', embeddingSource: 'default' | 'env' }}
  */
 export function getDefaultLightRAGConfig() {
   const llmEnv = typeof process.env.BIZAR_LIGHTRAG_LLM === 'string' && process.env.BIZAR_LIGHTRAG_LLM.trim()
@@ -1082,7 +1082,7 @@ export function getDefaultLightRAGConfig() {
     : null;
   const llm = llmEnv || LIGHTRAG_DEFAULT_LLM;
   const embedding = embEnv || LIGHTRAG_DEFAULT_EMBEDDING;
-  const source = (llmEnv || embEnv) ? 'env' : 'opencode-free';
+  const source = (llmEnv || embEnv) ? 'env' : 'cline-free';
   return {
     llm,
     embedding,

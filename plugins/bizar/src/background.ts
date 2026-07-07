@@ -16,7 +16,7 @@
  *     calls go through {@link HttpClient}.
  *   - `rebuildInMemoryMap()` is called on init (spec §5.4). Any in-flight
  *     `running` or `pending` instance is marked `failed` because the
- *     serve child is new and the opencode sessions are gone.
+ *     serve child is new and the cline sessions are gone.
  *   - `shutdownAll()` is called on `dispose` / SIGTERM. Marks all in-memory
  *     instances `failed` with `error: "plugin shutting down"`, aborts
  *     each via `POST /session/{id}/abort` (best-effort, 5s timeout per
@@ -77,14 +77,14 @@ import type { EventStream, StreamEvent, SessionEventHandler } from "./event-stre
 import type { ServeLifecycle } from "./serve.js";
 import { researchInterventionPrompt } from "./research-prompt.js";
 
-import * as opencodeRunner from "./opencode-runner.js";
+import * as clineRunner from "./cline-runner.js";
 
 // --- v5.5.1 — dashboard HTTP helpers -------------------------------------
 //
-// Background agents run as opencode serve SDK sessions managed by the
+// Background agents run as cline serve SDK sessions managed by the
 // dashboard. The plugin's `pause`/`resume` (and the tool layer's
 // `kill`/`send-message`) therefore talk to the dashboard over HTTP
-// instead of touching the OS or the opencode SDK directly.
+// instead of touching the OS or the cline SDK directly.
 //
 // These helpers are intentionally tiny — they only need to do POSTs
 // for `pause`/`resume`. The token + URL resolution matches what
@@ -201,7 +201,7 @@ export interface InstanceView {
   progress?: number;
   /** Progress message (free-form). */
   progressMessage?: string;
-  /** PID of the opencode run subprocess, if known. */
+  /** PID of the cline run subprocess, if known. */
   processId?: number;
   /** Current runner state (one of "starting"|"running"|"done"|"failed"|"killed"). */
   runnerState?: string;
@@ -266,9 +266,9 @@ export class InstanceManager {
   private toolCallCap: number;
   private logger: Logger;
   // v0.8.0 — `serve`, `http`, `stream` are nullable to support the
-  // bg-only mode used when the opencode serve child is unavailable
+  // bg-only mode used when the cline serve child is unavailable
   // (BIZAR_SERVE_DISABLE=1, startup failure) or when this process IS a
-  // bg-spawned `opencode run` subprocess. In bg-only mode, every method
+  // bg-spawned `cline run` subprocess. In bg-only mode, every method
   // that would otherwise call `this.http.X` or `this.stream.X` is a
   // no-op; state transitions still happen via the runner's `onExit`
   // callback (see src/tools/bg-spawn.ts).
@@ -332,7 +332,7 @@ export class InstanceManager {
   }
 
   /** True iff the manager was constructed without an HTTP client (no
-   *  opencode serve child reachable). HTTP-dependent operations are
+   *  cline serve child reachable). HTTP-dependent operations are
    *  no-ops in this mode. */
   get isBgOnly(): boolean {
     return this.http === null;
@@ -557,7 +557,7 @@ export class InstanceManager {
   // --- Kill ---------------------------------------------------------------
 
   /**
-   * Abort the opencode session and mark the instance `killed`. If the
+   * Abort the cline session and mark the instance `killed`. If the
    * instance is already in a terminal state, this is a no-op (spec §1.5,
    * MEDIUM-40).
    *
@@ -606,7 +606,7 @@ export class InstanceManager {
       return;
     }
     // v0.8.0 — bg-only mode has no HTTP client. The subprocess is
-    // already owned by opencode-runner.ts (see src/tools/bg-spawn.ts);
+    // already owned by cline-runner.ts (see src/tools/bg-spawn.ts);
     // mark the instance killed in-memory and let the runner notice the
     // status change when the process eventually exits. We do NOT try
     // to kill the OS process from here — that's the runner's job and
@@ -614,7 +614,7 @@ export class InstanceManager {
     // (the runner does, but it lives in a separate module).
     if (this.http === null) {
       this.logger.warn(
-        `bizar: kill(${instanceId}) in bg-only mode: marking killed; subprocess will be reaped by opencode-runner.ts on exit`,
+        `bizar: kill(${instanceId}) in bg-only mode: marking killed; subprocess will be reaped by cline-runner.ts on exit`,
       );
       await this.update(instanceId, {
         status: "killed",
@@ -671,7 +671,7 @@ export class InstanceManager {
       prompt: existing.prompt,
       parentAgent: existing.parentAgent,
       parentInstanceId: instanceId,
-      logPath: `${this.worktree}/.opencode/log/${newInstanceId}.log`,
+      logPath: `${this.worktree}/.cline/log/${newInstanceId}.log`,
       timeoutMs: existing.timeoutMs,
       toolCallCount: 0,
       // v0.5.5 — persist the auto-restart fields
@@ -831,7 +831,7 @@ export class InstanceManager {
       }
     }
 
-    // 2. Build the result. Fetch messages from the opencode server and
+    // 2. Build the result. Fetch messages from the cline server and
     //    concatenate the assistant text parts. In bg-only mode there is
     //    no HTTP client to ask, so we fall back to whatever
     //    `resultPreview` was captured during the run (often empty
@@ -860,7 +860,7 @@ export class InstanceManager {
    * map. Any `running` or `pending` instance is checked for liveness:
    *
    *   - v5.5.1: bg instances no longer have OS subprocesses — they live
-   *     as opencode serve SDK sessions on the dashboard. `opencodeRunner.
+   *     as cline serve SDK sessions on the dashboard. `clineRunner.
    *     isAlive(pid)` always returns `false`, so the adoption branch is
    *     effectively dead code; we keep it for the rare case a state file
    *     from v5.5.0 (with a real pid) survives an upgrade. We mark the
@@ -912,7 +912,7 @@ export class InstanceManager {
         }
         // Pre-v5.5.1 subprocess fallback (rare; the runner is stubbed).
         const pid = inst.processId;
-        const alive = typeof pid === "number" && opencodeRunner.isAlive(pid);
+        const alive = typeof pid === "number" && clineRunner.isAlive(pid);
         if (alive) {
           await this.update(inst.instanceId, {
             status: "running",
@@ -995,7 +995,7 @@ export class InstanceManager {
 
   /**
    * Mark an instance `failed` with the canonical stall message and
-   * fire-and-forget the opencode abort call. The stall timeout is
+   * fire-and-forget the cline abort call. The stall timeout is
    * intentionally short enough that an abort that fails gracefully
    * (the serve child is dead, etc.) does not leave the user waiting.
    */
@@ -1173,8 +1173,8 @@ export class InstanceManager {
   }
 
   /**
-   * v0.8.0 — Public version of `_maybeAutoRestart`. The opencode-runner
-   * (see src/opencode-runner.ts) calls this from its onExit callback
+   * v0.8.0 — Public version of `_maybeAutoRestart`. The cline-runner
+   * (see src/cline-runner.ts) calls this from its onExit callback
    * when a `bizar_spawn_background` subprocess exits. Without this,
    * persistent instances would never auto-restart under the new
    * subprocess-based path (the SSE event handler that previously
@@ -1191,7 +1191,7 @@ export class InstanceManager {
    * Pause a running instance. In v5.5.1 (SDK-backed) this delegates to
    * the dashboard's `POST /api/background/:id/pause`, which performs an
    * OUTPUT pause (stops forwarding events to the WS bus; the underlying
-   * opencode serve session keeps running). For pre-v5.5.1 instances
+   * cline serve session keeps running). For pre-v5.5.1 instances
    * that still carry a `processId`, fall back to the old SIGSTOP path
    * via the (now stubbed) runner — best-effort, returns ok:false if the
    * runner reports the OS no longer supports it.
@@ -1231,7 +1231,7 @@ export class InstanceManager {
       return { ok: false, error: "no_subprocess" };
     }
     const pid = inst.processId;
-    const res = opencodeRunner.pauseAgent(pid);
+    const res = clineRunner.pauseAgent(pid);
     if (!res.ok) return { ok: false, error: res.error || "pause_failed" };
     await this.update(instanceId, {
       status: "paused",
@@ -1275,7 +1275,7 @@ export class InstanceManager {
     if (inst.processId === undefined) {
       return { ok: false, error: "no_subprocess" };
     }
-    const res = opencodeRunner.resumeAgent(inst.processId);
+    const res = clineRunner.resumeAgent(inst.processId);
     if (!res.ok) return { ok: false, error: res.error || "resume_failed" };
     await this.update(instanceId, {
       status: "running",
@@ -1379,7 +1379,7 @@ export class InstanceManager {
   }
 
   /**
-   * Public accessor used by the opencode-runner when it wants to surface
+   * Public accessor used by the cline-runner when it wants to surface
    * the recorded tool-call list (read-only). Returns a copy.
    */
   listToolCalls(instanceId: string): ToolCallEntry[] {
@@ -1523,7 +1523,7 @@ export class InstanceManager {
             const errText = readToolError(part);
             if (errText) updated.error = errText.slice(0, MAX_TOOL_ARG_CHARS);
             // If the part carries a result string in `state.output` or
-            // a result-shaped field, surface it. The opencode schema
+            // a result-shaped field, surface it. The cline schema
             // is loose here — we accept either `state.output` or raw
             // `output`.
             const output = readToolOutput(part);
@@ -1717,7 +1717,7 @@ function readToolError(part: { error?: string; state?: { error?: string } }): st
 }
 
 /**
- * v5.x — Read the tool name from a tool part. opencode's wire format
+ * v5.x — Read the tool name from a tool part. cline's wire format
  * is loose: the tool name may live on `part.tool`, `part.name`, or as
  * the value of the first entries. Returns "unknown" when nothing
  * matches.
@@ -1731,7 +1731,7 @@ function readToolName(part: { tool?: unknown; name?: unknown; [k: string]: unkno
 }
 
 /**
- * v5.x — Read the tool args from a tool part. opencode may carry
+ * v5.x — Read the tool args from a tool part. cline may carry
  * `args`, `input`, or a JSON-stringified `arguments`. Returns "" when
  * nothing useful is found.
  */

@@ -21,7 +21,7 @@
  *      declared `fs:read:<path>` / `fs:write:<path>` permissions.
  *      Path-traversal attacks (e.g. `../`) are blocked.
  *   3. **Subprocess allowlist** — only whitelisted binaries
- *      (`bizar`, `opencode`, `python3`, `graphify`, `git`, `node`,
+ *      (`bizar`, `cline`, `python3`, `graphify`, `git`, `node`,
  *      `npm`, `pip`, `pipx`, `uv`, `headroom`) can be spawned. Custom
  *      binaries require an explicit `process:spawn:<bin>` permission.
  *   4. **Audit log** — every privileged operation (fs read/write,
@@ -60,8 +60,8 @@ import { homedir } from 'node:os';
  */
 export const ALLOWED_BINARIES = new Set([
   'bizar',
-  'opencode',
-  'opencode-ai',
+  'cline',
+  'cline',
   'python3',
   'python',
   'graphify',
@@ -92,7 +92,7 @@ export const SENSITIVE_PATHS = [
   '~/.ssh',
   '~/.aws',
   '~/.config/bizar/auth.json',
-  '~/.config/opencode/auth.json',
+  '~/.config/cline/auth.json',
   '~/.gnupg',
 ];
 

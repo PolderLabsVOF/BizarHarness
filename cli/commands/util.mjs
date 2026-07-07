@@ -44,7 +44,7 @@ export function showExportHelp() {
   bizar export — Export agents/rules to another harness
 
   Usage:
-    bizar export [claude|cursor|opencode]
+    bizar export [claude|cursor|cline]
 
   Description:
     Copies installed Bizar agents and rules into another harness format.
@@ -59,19 +59,19 @@ export function showTestGateHelp() {
 
 export function showDevLinkHelp() {
   console.log(`
-  bizar dev-link / dev-unlink — Manage a symlink from the opencode plugin dir
-  to a local source checkout, so edits propagate to opencode on next session.
+  bizar dev-link / dev-unlink — Manage a symlink from the cline plugin dir
+  to a local source checkout, so edits propagate to cline on next session.
 
   Usage:
     bizar dev-link [source-dir]    Symlink source-dir (default: ./plugins/bizar)
-                                   to ~/.config/opencode/plugins/bizar
+                                   to ~/.config/cline/plugins/bizar
     bizar dev-link --force         Replace an existing deployed copy
     bizar dev-unlink               Remove the dev symlink + restore from npm
     bizar dev-unlink --force       Remove even if not a symlink (destructive)
 
   Description:
-    By default, opencode loads the Bizar plugin from
-    ~/.config/opencode/plugins/bizar, which is a real directory copied
+    By default, cline loads the Bizar plugin from
+    ~/.config/cline/plugins/bizar, which is a real directory copied
     from the npm package. Edits to plugins/bizar/ in the BizarHarness
     repo don't propagate until you re-run the installer.
 
@@ -101,8 +101,8 @@ export function showDoctorHelp() {
 
   Description:
     Runs a battery of health checks against the local install:
-      • opencode CLI reachable
-      • ~/.config/opencode/opencode.json parses as JSON
+      • cline CLI reachable
+      • ~/.config/cline/cline.json parses as JSON
       • the Bizar plugin is registered
       • plugin path resolves
       • @polderlabs/bizar-plugin is installed globally
@@ -113,7 +113,7 @@ export function showDoctorHelp() {
 
     Prints ✓/✗ for each check and a final summary. Exits non-zero
     if any check fails. Use \`bizar doctor\` after a manual config
-    edit or to diagnose "why is opencode misbehaving?" questions.
+    edit or to diagnose "why is cline misbehaving?" questions.
 
   Related:
     bizar update              Update + auto-run doctor on success
@@ -142,7 +142,7 @@ export function showBackupHelp() {
     bizar backup delete <path>  Delete a backup
 
   Description:
-    Backs up config (~/.config/bizar/, ~/.config/opencode/), memory,
+    Backs up config (~/.config/bizar/, ~/.config/cline/), memory,
     usage logs, and optionally project-level state (.bizar/, skills/).
     Backups are stored under ~/.local/share/bizar/backups/.
 

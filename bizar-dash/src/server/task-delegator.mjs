@@ -26,7 +26,7 @@
  *
  * New path:
  *   1. Read the plugin's serve-info file (port + password + worktree).
- *   2. POST /api/session on the plugin's opencode serve child.
+ *   2. POST /api/session on the plugin's cline serve child.
  *   3. POST /api/session/{id}/prompt to fire the task prompt.
  *   4. Write a state file under ~/.cache/bizar/bg/ so the dashboard's
  *      background-store can list and kill it.
@@ -50,13 +50,13 @@ import { randomBytes } from 'node:crypto';
 
 const HOME = homedir();
 
-// Background state directory — defaults to what the opencode plugin
+// Background state directory — defaults to what the cline plugin
 // actually uses (see plugins/bizar/src/background-state.ts: stateDir
 // defaults to `~/.cache/bizar` so instances live at
 // `~/.cache/bizar/bg/<instanceId>.json`).
 const BG_DIRS = [
   join(HOME, '.cache', 'bizar', 'bg'),
-  join(HOME, '.config', 'opencode', 'bg'),
+  join(HOME, '.config', 'cline', 'bg'),
   join(HOME, '.bizar', 'bg'),
 ];
 
@@ -71,7 +71,7 @@ function genShortHex(bytes = 6) {
 /**
  * v3.5.4 — Synthesize the prompt text for a subtask. Combines the
  * subtask title and description in the same shape the plugin's own
- * `bizar_spawn_background` tool uses internally, so an opencode agent
+ * `bizar_spawn_background` tool uses internally, so an cline agent
  * receives the same brief whether it was dispatched via MCP or via
  * the dashboard's HTTP bridge.
  */
@@ -94,7 +94,7 @@ function buildPromptText(sub) {
  * so the existing merge + dedupe logic works without changes.
  *
  * Idempotent: writes are atomic via tmp + rename. Failures are logged
- * but do NOT throw — the opencode session is already running.
+ * but do NOT throw — the cline session is already running.
  */
 function writeBgStateFile(instanceId, payload) {
   const dir = pickBgDir();
@@ -461,7 +461,7 @@ export const taskDelegator = {
 
   /**
    * v3.5.4 (bug: dispatch stuck) — Best-effort dispatch to the background
-   * agent infrastructure. Talks to the plugin's opencode serve child via
+   * agent infrastructure. Talks to the plugin's cline serve child via
    * HTTP (createSession + sendPrompt) and writes a per-instance state
    * file under BG_DIRS so the dashboard's `backgroundStore.list()` and
    * `kill()` paths find the instance.
@@ -503,7 +503,7 @@ export const taskDelegator = {
     const runningCount = await runningBgCount();
     const slotsAvailable = Math.max(0, maxParallel - runningCount);
 
-    // v3.5.4 (bug: dispatch stuck) — Resolve the opencode serve child
+    // v3.5.4 (bug: dispatch stuck) — Resolve the cline serve child
     // the plugin owns. If the plugin is not running we record a warning
     // and skip the actual spawn (subtasks still flip to `doing` so the
     // user can see them, but `metadata.dispatchPending = true` tells
@@ -511,16 +511,16 @@ export const taskDelegator = {
     let serveInfo = null;
     let serveReachable = false;
     try {
-      const { readServeInfo, pingOpencodeServe } = await import('./serve-info.mjs');
+      const { readServeInfo, pingClineServe } = await import('./serve-info.mjs');
       serveInfo = readServeInfo();
       if (!serveInfo) {
         result.warnings.push('serve-info not found — the bizar plugin is not running. Tasks will be marked queued; retry via POST /api/tasks/:id/start once the plugin is up.');
         console.warn('[task-delegator] serve-info missing — plugin may not be running. Dispatch will be deferred.');
       } else {
-        serveReachable = await pingOpencodeServe(serveInfo);
+        serveReachable = await pingClineServe(serveInfo);
         if (!serveReachable) {
-          result.warnings.push(`opencode serve at ${serveInfo.baseUrl} is not reachable. Tasks will be marked queued; retry via POST /api/tasks/:id/start.`);
-          console.warn(`[task-delegator] opencode serve not reachable at ${serveInfo.baseUrl}`);
+          result.warnings.push(`cline serve at ${serveInfo.baseUrl} is not reachable. Tasks will be marked queued; retry via POST /api/tasks/:id/start.`);
+          console.warn(`[task-delegator] cline serve not reachable at ${serveInfo.baseUrl}`);
         }
       }
     } catch (err) {
@@ -564,16 +564,16 @@ export const taskDelegator = {
       let dispatchPending = false;
 
       // v3.11.1 — Active dispatch path. We no longer depend on the
-      // opencode serve child's HTTP API to drive the agent loop
-      // (per the opencode docs, that API is passive — it needs a
+      // cline serve child's HTTP API to drive the agent loop
+      // (per the cline docs, that API is passive — it needs a
       // TUI/web client connected to actually process prompts).
-      // Instead we spawn one `opencode run` subprocess per subtask
+      // Instead we spawn one `cline run` subprocess per subtask
       // and capture its output to the LogWriter's log file. The
-      // plugin's opencode-runner.ts and this dashboard's
-      // opencode-runner.mjs share the same wire format.
+      // plugin's cline-runner.ts and this dashboard's
+      // cline-runner.mjs share the same wire format.
       if (serveInfo && serveReachable) {
         try {
-          const { spawnAgent } = await import('./opencode-runner.mjs');
+          const { spawnAgent } = await import('./cline-runner.mjs');
           // v3.11.0 — Fall back to projectRoot when serve-info is
           // missing `worktree` (older plugin builds only wrote
           // `{password, pid, port}`).
@@ -597,14 +597,14 @@ export const taskDelegator = {
           });
 
           if (!spawnRes.ok || !spawnRes.sessionId) {
-            dispatchError = spawnRes.error || 'opencode run failed before reporting session id';
+            dispatchError = spawnRes.error || 'cline run failed before reporting session id';
           } else {
             sessionId = spawnRes.sessionId;
             bgInstanceId = predictedInstanceId;
 
             // v3.5.5 — Wrap the agent run in a tmux session so
             // operators can `tmux attach -t bizar-bg-<id>` and watch
-            // the opencode process in real time.
+            // the cline process in real time.
             try {
               const tmuxRes = backgroundStore.spawnTmuxFor(
                 `bg_${sessionId.slice(0, 16)}`,
@@ -631,7 +631,7 @@ export const taskDelegator = {
 
       // v3.5.4 (bug: dispatch stuck) — Generate a bg instance ID even on
       // failure so the dashboard can track attempts. Successful dispatches
-      // get a deterministic id derived from the opencode session ID.
+      // get a deterministic id derived from the cline session ID.
       bgInstanceId = sessionId
         ? `bg_${sessionId.slice(0, 16)}`
         : `bg_${genShortHex(8)}`;

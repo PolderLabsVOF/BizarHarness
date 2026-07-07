@@ -14,9 +14,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
-import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartOpenCode } from './prompts.mjs';
-import { detectOpenCode, detectHeadroom, detectSemble, detectSkillsCli, detectUv, buildSummary, opencodeAgentsDir, opencodeConfigDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installOpencodeJson, installBizarFolder, installPluginBizar, installHeadroom, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
+import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartCline } from './prompts.mjs';
+import { detectCline, detectHeadroom, detectSemble, detectSkillsCli, detectUv, buildSummary, clineAgentsDir, clineConfigDir, repoPath } from './utils.mjs';
+import { installAgents, installAgentsMd, installSkill, installClineJson, installBizarFolder, installPluginBizar, installHeadroom, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'quick.md',
@@ -26,8 +26,8 @@ const AGENT_FILES = [
 ];
 
 /**
- * Install the Bizar opencode plugin from this package's own
- * `plugins/bizar/` directory into `~/.config/opencode/plugins/bizar/`.
+ * Install the Bizar cline plugin from this package's own
+ * `plugins/bizar/` directory into `~/.config/cline/plugins/bizar/`.
  *
  * v4.0.0 consolidated everything into one npm package, so the plugin
  * source ships with `@polderlabs/bizar` itself — no separate
@@ -43,7 +43,7 @@ const AGENT_FILES = [
  * workspace-internal package not on the public registry. After copying
  * the plugin files, this function ALSO copies the source's `node_modules/`
  * to the deployed `node_modules/` so Bun can resolve the import when the
- * plugin is loaded from `~/.config/opencode/plugins/bizar/`. Without
+ * plugin is loaded from `~/.config/cline/plugins/bizar/`. Without
  * this, the plugin silently fails to load.
  *
  * Pass `{ silent: true }` to suppress the warning prints; the function
@@ -64,7 +64,7 @@ export async function installPluginFromGlobal(opts = {}) {
   // A plain copy would dereference the symlink and silently break the
   // dev workflow. Print a hint unless silent, or honour an explicit
   // --force from the caller.
-  const destDir = join(opencodeConfigDir(), 'plugins', 'bizar');
+  const destDir = join(clineConfigDir(), 'plugins', 'bizar');
   let destIsSymlink = false;
   try {
     destIsSymlink = lstatSync(destDir).isSymbolicLink();
@@ -80,7 +80,7 @@ export async function installPluginFromGlobal(opts = {}) {
     }
     console.log(
       chalk.yellow(
-        '  ⚠ ~/.config/opencode/plugins/bizar is a dev symlink — skipping copy.',
+        '  ⚠ ~/.config/cline/plugins/bizar is a dev symlink — skipping copy.',
       ),
     );
     console.log(
@@ -140,7 +140,7 @@ export async function installPluginFromGlobal(opts = {}) {
   // The plugin imports `@polderlabs/bizar-sdk`, a workspace-internal package
   // not on the public registry. The npm source bundles the SDK into its
   // own `node_modules/`, so loading from `$(npm root -g)/...` resolves
-  // correctly. The deployed copy at `~/.config/opencode/plugins/bizar/`
+  // correctly. The deployed copy at `~/.config/cline/plugins/bizar/`
   // has no `node_modules`, so Bun can't resolve the import — without this
   // copy the plugin silently fails to load. This used to be papered over
   // by a manual `cp -r $(npm root -g)/.../node_modules ~/.config/...` step
@@ -206,7 +206,7 @@ export async function installPluginFromGlobal(opts = {}) {
  * runInstaller — v4.4.7 thin wrapper around the unified provisioner.
  *
  * `bizar install` and `bizar update` are now the SAME code path with
- * different `mode` flags. Everything (deps, plugin copy, opencode.json
+ * different `mode` flags. Everything (deps, plugin copy, cline.json
  * patching, service registration, agent files, skills, doctor) is
  * owned by `cli/provision.mjs:runProvision`. This file just parses the
  * flags and forwards.
@@ -469,30 +469,30 @@ export async function runPostInstall() {
   const { mkdirSync, copyFileSync, existsSync } = await import('node:fs');
   const { execSync } = await import('node:child_process');
 
-  const dest = join(opencodeConfigDir(), 'opencode.json');
-  const templateSrc = repoPath('config', 'opencode.json');
+  const dest = join(clineConfigDir(), 'cline.json');
+  const templateSrc = repoPath('config', 'cline.json');
   if (!existsSync(dest)) {
     if (existsSync(templateSrc)) {
-      mkdirSync(opencodeConfigDir(), { recursive: true });
+      mkdirSync(clineConfigDir(), { recursive: true });
       copyFileSync(templateSrc, dest);
-      console.log('  ✓ opencode.json bootstrapped from package template');
+      console.log('  ✓ cline.json bootstrapped from package template');
     }
   }
 
   // Install Bizar commands to commands-bizar/ (separate from ECC's commands symlink)
   await installCommandsBizar();
 
-  const env = await detectOpenCode();
+  const env = await detectCline();
   if (!env.exists) {
-    mkdirSync(opencodeConfigDir(), { recursive: true });
-    console.log(`BizarHarness: created ${opencodeConfigDir()}/`);
+    mkdirSync(clineConfigDir(), { recursive: true });
+    console.log(`BizarHarness: created ${clineConfigDir()}/`);
   }
 
-  mkdirSync(opencodeAgentsDir(), { recursive: true });
+  mkdirSync(clineAgentsDir(), { recursive: true });
 
   for (const file of AGENT_FILES) {
     const src = repoPath('config', 'agents', file);
-    const dest = join(opencodeAgentsDir(), file);
+    const dest = join(clineAgentsDir(), file);
     if (!existsSync(dest)) {
       copyFileSync(src, dest);
     }
@@ -511,14 +511,14 @@ export async function runPostInstall() {
           'pip install --user "headroom-ai[all]"',
           { stdio: 'pipe', timeout: 60000 },
         );
-        execSync('headroom wrap opencode', { stdio: 'pipe' });
+        execSync('headroom wrap cline', { stdio: 'pipe' });
         console.log('BizarHarness: Headroom installed and configured.');
       }
     } catch {
       // Fall back to npm
       try {
         execSync('npm install -g headroom-ai', { stdio: 'pipe', timeout: 60000 });
-        execSync('headroom wrap opencode', { stdio: 'pipe' });
+        execSync('headroom wrap cline', { stdio: 'pipe' });
         console.log('BizarHarness: Headroom installed (npm) and configured.');
       } catch {
         console.log('BizarHarness: Headroom install failed. Install manually: pip install "headroom-ai[all]" or npm install -g headroom-ai');
@@ -526,10 +526,10 @@ export async function runPostInstall() {
     }
   } else {
     try {
-      execSync('headroom wrap opencode', { stdio: 'pipe' });
-      console.log('BizarHarness: Headroom configured for opencode.');
+      execSync('headroom wrap cline', { stdio: 'pipe' });
+      console.log('BizarHarness: Headroom configured for cline.');
     } catch {
-      console.log('BizarHarness: could not configure Headroom. Run `headroom wrap opencode` manually.');
+      console.log('BizarHarness: could not configure Headroom. Run `headroom wrap cline` manually.');
     }
   }
 

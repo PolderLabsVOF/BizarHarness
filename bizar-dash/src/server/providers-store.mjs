@@ -1,22 +1,22 @@
 /**
  * src/server/providers-store.mjs
  *
- * v3.0.0 — OpenCode providers and MCPs management.
+ * v3.0.0 — Cline providers and MCPs management.
  *
- * Reads / writes the opencode.json at ~/.config/opencode/opencode.json
+ * Reads / writes the cline.json at ~/.config/cline/cline.json
  * under the `provider` and `mcp` keys.
  *
  * v3.5.6 — `listAll()` falls back to inferring providers from agent
  * `.md` frontmatter (the `model: provider/model-name` line) so the
  * dashboard can surface the providers that are actually in use even
- * when the user's opencode.json has no top-level `provider` key.
- * Also tries the running `opencode serve` HTTP API for the canonical
+ * when the user's cline.json has no top-level `provider` key.
+ * Also tries the running `cline serve` HTTP API for the canonical
  * list. API keys are never echoed back in full — the response masks them.
  *
  * v4.6.0 — Backup keys: each provider now exposes a `keys[]` array with
  * `{envVar, label, status, lastError, errorCount, lastUsed}`. The
  * legacy `apiKey` / `backupApiKey` scalar fields are still read and
- * written for back-compat with opencode itself and existing tests;
+ * written for back-compat with cline itself and existing tests;
  * they are derived from the active key on load. Rotation helpers:
  *   - `getActiveKey(providerId)` — highest-priority usable key
  *   - `markKeyError(providerId, envVar, error)` — bumps errorCount,
@@ -44,8 +44,8 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
 const HOME = homedir();
-const OPENCODE_JSON = join(HOME, '.config', 'opencode', 'opencode.json');
-const OPENCODE_AGENTS_DIR = join(HOME, '.config', 'opencode', 'agents');
+const CLINE_JSON = join(HOME, '.config', 'cline', 'cline.json');
+const CLINE_AGENTS_DIR = join(HOME, '.config', 'cline', 'agents');
 
 function safeReadJSON(file, fallback = {}) {
   try {
@@ -67,7 +67,7 @@ function atomicWriteJson(filePath, data) {
   renameSync(tmp, filePath);
 }
 
-// v5.0.0 — Bug S1: 1-second debounced cache for opencode.json reads.
+// v5.0.0 — Bug S1: 1-second debounced cache for cline.json reads.
 // `list()`/`listAll()` and other consumers call `loadConfig()` on every
 // WS poll (every ~5s per client) and on every route hit. With N clients
 // that becomes O(N) reads per minute. The cache collapses all reads
@@ -81,17 +81,17 @@ function atomicWriteJson(filePath, data) {
 //
 // The cache also tracks the file's mtime+size and invalidates if the
 // on-disk file has been modified externally (e.g. an editor saving
-// opencode.json, or a test setup writing a fresh file). This prevents
+// cline.json, or a test setup writing a fresh file). This prevents
 // stale reads when the file changes outside our write paths.
-const OPENCODE_JSON_CACHE_GLOBAL_KEY = '__bizar_opencode_json_cache__';
-function _opencodeCacheSlot() {
-  if (!globalThis[OPENCODE_JSON_CACHE_GLOBAL_KEY]) {
-    globalThis[OPENCODE_JSON_CACHE_GLOBAL_KEY] = { entry: null, at: 0 };
+const CLINE_JSON_CACHE_GLOBAL_KEY = '__bizar_cline_json_cache__';
+function _clineCacheSlot() {
+  if (!globalThis[CLINE_JSON_CACHE_GLOBAL_KEY]) {
+    globalThis[CLINE_JSON_CACHE_GLOBAL_KEY] = { entry: null, at: 0 };
   }
-  return globalThis[OPENCODE_JSON_CACHE_GLOBAL_KEY];
+  return globalThis[CLINE_JSON_CACHE_GLOBAL_KEY];
 }
 
-const OPENCODE_JSON_CACHE_TTL_MS = 1000;
+const CLINE_JSON_CACHE_TTL_MS = 1000;
 
 function _fileStamp(filePath) {
   // Best-effort stat — if stat fails (file missing, etc.), the caller
@@ -104,12 +104,12 @@ function _fileStamp(filePath) {
   }
 }
 
-function readOpencodeJsonCached(filePath = OPENCODE_JSON) {
-  const slot = _opencodeCacheSlot();
+function readClineJsonCached(filePath = CLINE_JSON) {
+  const slot = _clineCacheSlot();
   const now = Date.now();
   if (slot.entry && slot.entry.filePath === filePath) {
     const age = now - slot.at;
-    if (age < OPENCODE_JSON_CACHE_TTL_MS) {
+    if (age < CLINE_JSON_CACHE_TTL_MS) {
       // Fast path: still within TTL. Verify the file hasn't been
       // modified externally (e.g. another process, an editor, or a
       // test that writes the file directly). The stamp check is cheap
@@ -127,31 +127,31 @@ function readOpencodeJsonCached(filePath = OPENCODE_JSON) {
   return data;
 }
 
-function invalidateOpencodeJsonCache() {
-  const slot = _opencodeCacheSlot();
+function invalidateClineJsonCache() {
+  const slot = _clineCacheSlot();
   slot.entry = null;
   slot.at = 0;
 }
 
 function loadConfig() {
-  return readOpencodeJsonCached(OPENCODE_JSON);
+  return readClineJsonCached(CLINE_JSON);
 }
 
 function saveConfig(data) {
-  mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
-  atomicWriteJson(OPENCODE_JSON, data);
-  invalidateOpencodeJsonCache();
+  mkdirSync(dirname(CLINE_JSON), { recursive: true });
+  atomicWriteJson(CLINE_JSON, data);
+  invalidateClineJsonCache();
 }
 
 // v4.6.0 — expose the on-disk load/save helpers so route modules can
-// patch the same opencode.json (e.g. the /api/llm/system-llm endpoint
+// patch the same cline.json (e.g. the /api/llm/system-llm endpoint
 // in routes/config.mjs). Prior sessions had a blocker where these
 // were not exported and config.mjs referenced them implicitly.
 export { loadConfig, saveConfig };
 
 // v5.0.0 — expose cache helpers for tests and other consumers that need
 // to force a re-read (e.g. settings-store after a write).
-export { readOpencodeJsonCached, invalidateOpencodeJsonCache, OPENCODE_JSON_CACHE_TTL_MS };
+export { readClineJsonCached, invalidateClineJsonCache, CLINE_JSON_CACHE_TTL_MS };
 
 // ── v4.6.0 Backup-key rotation constants ────────────────────────────────────
 //
@@ -168,7 +168,7 @@ export { readOpencodeJsonCached, invalidateOpencodeJsonCache, OPENCODE_JSON_CACH
 //
 // ROTATION_ERROR_PATTERNS: substring match against the lowercased error
 // message — used as a fallback when no structured `status` is present
-// (e.g. opencode-runner's pre-throw errors). Order matters only for
+// (e.g. cline-runner's pre-throw errors). Order matters only for
 // readability — first match wins.
 const ERROR_COOLDOWN_THRESHOLD = 3;
 const MAX_ROTATION_ATTEMPTS = 5;
@@ -216,7 +216,7 @@ export function isRetryableError(err) {
   const code = typeof e.error === 'string' ? e.error : '';
   if (/^http_(401|403|408|409|425|429)$/.test(code)) return true;
   if (/^http_5\d{2}$/.test(code)) return true;
-  // Fall back to message-substring match — covers opencode-runner
+  // Fall back to message-substring match — covers cline-runner
   // errors and unknown callers.
   const msg = (e.message || e.toString?.() || '').toString();
   if (!msg) return false;
@@ -246,7 +246,7 @@ export function isRetryableError(err) {
 //   - lastUsed:     number | null — epoch ms of last successful use
 //
 // The legacy `apiKey`/`backupApiKey` string fields are still kept on disk
-// for back-compat with opencode itself (which reads them) and the
+// for back-compat with cline itself (which reads them) and the
 // existing test suite. `migrateKeysShape()` synthesizes a `keys[]` from
 // those fields whenever the provider is loaded.
 
@@ -318,7 +318,7 @@ export function syncLegacyKeys(p) {
   const standby = p.keys.find((k) => k.status === 'standby');
   // We DO NOT write the actual key value to `apiKey` — that lives in
   // the env var. We only mirror whether a key is configured (truthy
-  // string) so opencode's `options.apiKey` check sees a key present.
+  // string) so cline's `options.apiKey` check sees a key present.
   // Existing code that reads `apiKey`/`backupApiKey` and treats
   // truthy-as-configured continues to work.
   next.apiKey = active && active.envVar ? `<env:${active.envVar}>` : '';
@@ -345,12 +345,12 @@ export const MINIMAX_DEFAULT = 'MiniMax-M2.7';
 
 export const PROVIDER_CATALOG = Object.freeze([
   Object.freeze({
-    id: 'opencode',
-    name: 'OpenCode Zen',
-    baseURL: 'https://opencode.ai/zen/v1',
+    id: 'cline',
+    name: 'Cline Zen',
+    baseURL: 'https://docs.cline.bot/zen/v1',
     keyPattern: /^sk-[A-Za-z0-9]{20,}$/,
     keyHint: 'sk-…',
-    docs: 'https://opencode.ai/zen',
+    docs: 'https://docs.cline.bot/zen',
     models: [
       'gpt-5.5', 'gpt-5.5-pro', 'gpt-5.4', 'gpt-5.4-pro', 'gpt-5.4-mini', 'gpt-5.4-nano',
       'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2', 'gpt-5.2-codex',
@@ -941,7 +941,7 @@ function preserveOrReplace(stored, incoming) {
 }
 
 export const providersStore = {
-  OPENCODE_JSON,
+  CLINE_JSON,
 
   list() {
     const cfg = loadConfig();
@@ -966,12 +966,12 @@ export const providersStore = {
   /**
    * v3.5.6 — Robust provider discovery. Tries three sources in order
    * and merges them so the dashboard shows every provider that is
-   * actually in use, even when opencode.json has no `provider` key.
+   * actually in use, even when cline.json has no `provider` key.
    *
-   *  1. opencode.json `provider` / `providers` key — explicit config.
+   *  1. cline.json `provider` / `providers` key — explicit config.
    *  2. Agent `.md` frontmatter — every `model: provider/model` line
    *     implies a usable provider + model pair.
-   *  3. opencode serve HTTP `/api/providers` (best-effort, 1.5s timeout).
+   *  3. cline serve HTTP `/api/providers` (best-effort, 1.5s timeout).
    *
    * Each source contributes providers; duplicates (by id) are merged so
    * the explicit config wins on baseURL/apiKey and the inferred sources
@@ -1013,7 +1013,7 @@ export const providersStore = {
       byId.set(id, next);
     };
 
-    // Source 1: opencode.json provider/providers key
+    // Source 1: cline.json provider/providers key
     try {
       const cfg = loadConfig();
       const explicit = cfg.provider || cfg.providers || {};
@@ -1043,10 +1043,10 @@ export const providersStore = {
 
     // Source 2: agent .md frontmatter
     try {
-      if (existsSync(OPENCODE_AGENTS_DIR)) {
-        for (const file of readdirSync(OPENCODE_AGENTS_DIR)) {
+      if (existsSync(CLINE_AGENTS_DIR)) {
+        for (const file of readdirSync(CLINE_AGENTS_DIR)) {
           if (!file.endsWith('.md')) continue;
-          const full = join(OPENCODE_AGENTS_DIR, file);
+          const full = join(CLINE_AGENTS_DIR, file);
           let raw;
           try {
             raw = readFileSync(full, 'utf8');
@@ -1074,12 +1074,12 @@ export const providersStore = {
       /* best-effort */
     }
 
-    // Source 3: opencode serve HTTP API
+    // Source 3: cline serve HTTP API
     try {
       const { readServeInfo } = await import('./serve-info.mjs');
       const info = readServeInfo();
       if (info && info.baseUrl) {
-        const auth = 'Basic ' + Buffer.from(`opencode:${info.password || ''}`).toString('base64');
+        const auth = 'Basic ' + Buffer.from(`cline:${info.password || ''}`).toString('base64');
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 1500);
         try {
@@ -1133,7 +1133,7 @@ export const providersStore = {
 
   /**
    * v3.5.6 — Return the currently configured default provider + model.
-   * Reads from opencode.json (`model`, `provider`, `small_model`).
+   * Reads from cline.json (`model`, `provider`, `small_model`).
    * Falls back to scanning agents to find the default_agent's model.
    *
    * Returns: { providerId, modelId, source, agent?, smallModel? } or
@@ -1151,12 +1151,12 @@ export const providersStore = {
         const slashIdx = m.indexOf('/');
         providerId = m.slice(0, slashIdx);
         modelId = m.slice(slashIdx + 1);
-        source = 'opencode.json';
+        source = 'cline.json';
       } else if (cfg.provider && typeof cfg.provider === 'object') {
         const firstId = Object.keys(cfg.provider)[0];
         if (firstId) {
           providerId = firstId;
-          source = 'opencode.json:provider';
+          source = 'cline.json:provider';
         }
       }
 
@@ -1169,9 +1169,9 @@ export const providersStore = {
 
       // If we got a providerId but no modelId, look up the default_agent's model
       let agentModel = null;
-      if (providerId && !modelId && defaultAgent && existsSync(OPENCODE_AGENTS_DIR)) {
+      if (providerId && !modelId && defaultAgent && existsSync(CLINE_AGENTS_DIR)) {
         try {
-          const file = join(OPENCODE_AGENTS_DIR, `${defaultAgent}.md`);
+          const file = join(CLINE_AGENTS_DIR, `${defaultAgent}.md`);
           if (existsSync(file)) {
             const raw = readFileSync(file, 'utf8');
             const match = raw.match(/^model:\s*([^\s#]+)/m);
@@ -1206,12 +1206,12 @@ export const providersStore = {
 
     // Last-resort: scan all agents, pick the most-referenced provider/model
     try {
-      if (existsSync(OPENCODE_AGENTS_DIR)) {
+      if (existsSync(CLINE_AGENTS_DIR)) {
         const counts = new Map(); // 'provider/model' -> count
-        for (const file of readdirSync(OPENCODE_AGENTS_DIR)) {
+        for (const file of readdirSync(CLINE_AGENTS_DIR)) {
           if (!file.endsWith('.md')) continue;
           try {
-            const raw = readFileSync(join(OPENCODE_AGENTS_DIR, file), 'utf8');
+            const raw = readFileSync(join(CLINE_AGENTS_DIR, file), 'utf8');
             const m = raw.match(/^model:\s*([^\s#]+)/m);
             if (m) {
               const ref = m[1].trim();
@@ -1350,7 +1350,7 @@ export const providersStore = {
         message: `Key doesn't match expected pattern for ${spec.name} (${spec.keyPattern}).`,
       };
     }
-    const finalId = spec.id; // always use the canonical id (e.g. "minimax", "opencode")
+    const finalId = spec.id; // always use the canonical id (e.g. "minimax", "cline")
     const baseURL = spec.baseURL;
     const finalName = spec.name;
 
@@ -1535,8 +1535,8 @@ export const providersStore = {
     {
       // v4.5.0 — MiniMax provider, fully implemented. The dashboard
       // onboarding wizard writes the Subscription Key to
-      // ~/.local/share/opencode/auth.json (the canonical store written
-      // by opencode's `/connect` command). The MiniMax key has a
+      // ~/.local/share/cline/auth.json (the canonical store written
+      // by cline's `/connect` command). The MiniMax key has a
       // variable-length format; valid prefixes are `sk-cp-` (Token
       // Plan + Coding Plan), `sk-ant-` (Anthropic-format compatible),
       // and `sk-or-` (OpenRouter-style). The chat completions host
@@ -1556,25 +1556,25 @@ export const providersStore = {
       ],
     },
     {
-      // v4.4.14 — OpenCode Zen. Free tier (per-model free quota + paid
-      // top-up). The user signs in to https://opencode.ai/auth and gets
+      // v4.4.14 — Cline Zen. Free tier (per-model free quota + paid
+      // top-up). The user signs in to https://docs.cline.bot/auth and gets
       // an API key, but the dashboard does NOT require a key to add the
       // provider — we generate a placeholder that the user replaces via
       // `bizar minimax config` or the dashboard's edit modal. The base
       // URL is the public Zen endpoint; the model list is from the docs
       // and refreshes on each provider add (probes /v1/models).
-      id: 'opencode',
-      name: 'OpenCode Zen',
-      envKeys: ['OPENCODE_API_KEY'],
-      backupEnvKeys: ['OPENCODE_API_KEY_BACKUP'],
-      baseURL: 'https://opencode.ai/zen/v1',
+      id: 'cline',
+      name: 'Cline Zen',
+      envKeys: ['CLINE_API_KEY'],
+      backupEnvKeys: ['CLINE_API_KEY_BACKUP'],
+      baseURL: 'https://docs.cline.bot/zen/v1',
       keyPattern: /^sk-[A-Za-z0-9]{20,}$/,
       // Zen uses two base URLs depending on model family:
       //   - OpenAI-compatible: /v1/chat/completions  (M3, M2.x, GLM, Kimi, Grok, DeepSeek, Gemini 3 Flash, Big Pickle, MiMo, North, Nemotron)
       //   - Anthropic-format:  /v1/messages          (Claude family, Qwen3.7, Kimi K2.7)
       //   - Gemini vertex:     /v1/models/gemini-3.5-flash, gemini-3.1-pro, gemini-3-flash
       // The baseURL we store is the OpenAI-compatible path. Mods from
-      // Anthropic/Gemini are still selectable (opencode routes internally
+      // Anthropic/Gemini are still selectable (cline routes internally
       // to the right URL per model). Users with their own OpenAI/
       // Anthropic keys can also use Zen as a pass-through.
       defaultModel: 'gpt-5.5',
@@ -1717,14 +1717,14 @@ export const providersStore = {
 };
 
 export const mcpsStore = {
-  OPENCODE_JSON,
+  CLINE_JSON,
 
   list() {
     const cfg = loadConfig();
     const mcps = cfg.mcp || {};
     return Object.entries(mcps).map(([id, m]) => {
       const isRemote = m?.type === 'remote';
-      // Local MCP: command is an array in newer opencode.json. Older
+      // Local MCP: command is an array in newer cline.json. Older
       // format had separate `command` (string) + `args` (array). Normalize.
       const command = isRemote
         ? ''

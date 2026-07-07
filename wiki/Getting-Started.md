@@ -8,11 +8,11 @@ You need three things before you start:
 
 - **Node.js 20 or newer.** The CLI uses ESM-only modules and `node:fs/promises`. Run `node --version` to check. If you're on an older release, use [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm) to upgrade.
 - **Git.** For cloning the repo if you want to install from source, and for the agent-driven git operations you'll be running.
-- **An editor or terminal you're comfortable in.** opencode runs in your terminal; you'll be reading its output.
+- **An editor or terminal you're comfortable in.** cline runs in your terminal; you'll be reading its output.
 
 Optional but recommended:
 
-- **[opencode CLI](https://opencode.ai)** on your `$PATH` — BizarHarness targets opencode, and the installer will detect it.
+- **[cline CLI](https://docs.cline.bot)** on your `$PATH` — BizarHarness targets cline, and the installer will detect it.
 - **Provider API keys** for the model tiers you want to use. The free DeepSeek tier is the easiest starting point.
 
 ## Install
@@ -32,35 +32,35 @@ bizar
 
 The first run opens the interactive installer. It walks you through:
 
-1. **Pre-flight checks** — detects opencode, Headroom, Semble, and the Skills CLI. Missing optional tools are installed automatically.
-2. **Component selection** — pick what to install: agent definitions, the `AGENTS.md` master config, the `opencode.json` template, the Bizar plugin, optional rules/hooks/commands, bundled skills (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF), and the `.bizar/` folder.
+1. **Pre-flight checks** — detects cline, Headroom, Semble, and the Skills CLI. Missing optional tools are installed automatically.
+2. **Component selection** — pick what to install: agent definitions, the `AGENTS.md` master config, the `cline.json` template, the Bizar plugin, optional rules/hooks/commands, bundled skills (BizarHarness, self-improvement, C++ coding standards, C++ testing, Embedded ESP-IDF), and the `.bizar/` folder.
 3. **Agent selection** — choose which of the twelve agents to enable. The default is to install all of them.
-4. **Install mode** — merge into your existing `~/.config/opencode/` or install into a project-local `.opencode/` directory.
+4. **Install mode** — merge into your existing `~/.config/cline/` or install into a project-local `.cline/` directory.
 5. **Memory backend mode** — pick `local-only` (default; per-project vault at `.obsidian/`) or `managed` (one shared repo at `~/.local/share/bizar/memory/<name>/` with three namespaces — `projects/<id>/`, `global/bizar/`, `users/<id>/`). The managed mode is the right choice if you want memory shared across projects; you can switch later with `bizar memory link` / `bizar memory unlink`.
 6. **Skill packs** — pick from curated skills.sh packs (e.g., `vercel-labs/agent-skills` for React, `supabase/agent-skills` for Postgres).
-7. **API keys** — optional. You can also set them later with `/connect` inside opencode.
-8. **Restart** — the installer offers to restart opencode so the new agents and plugin load immediately.
+7. **API keys** — optional. You can also set them later with `/connect` inside cline.
+8. **Restart** — the installer offers to restart cline so the new agents and plugin load immediately.
 
 ## What the installer does
 
 Behind the scenes, the installer:
 
-- Copies the agent definitions from `config/agents/*.md` into `~/.config/opencode/agents/`.
-- Copies the master `AGENTS.md` (with the routing table, skill discovery protocol, and Memory Service protocol) into `~/.config/opencode/`.
-- Merges the Bizar plugin entry into `~/.config/opencode/opencode.json`. If a config already exists, the installer backs it up to `opencode.json.bak` and uses `jq` for a deep merge.
-- Installs the bundled Bizar plugin (loop guard, status logging, handoff) into `~/.config/opencode/plugins/bizar/`.
-- Installs [Headroom](https://github.com/headroomlabs-ai/headroom) if missing, then runs `headroom wrap opencode` to wire token compression into the shell.
+- Copies the agent definitions from `config/agents/*.md` into `~/.config/cline/agents/`.
+- Copies the master `AGENTS.md` (with the routing table, skill discovery protocol, and Memory Service protocol) into `~/.config/cline/`.
+- Merges the Bizar plugin entry into `~/.config/cline/cline.json`. If a config already exists, the installer backs it up to `cline.json.bak` and uses `jq` for a deep merge.
+- Installs the bundled Bizar plugin (loop guard, status logging, handoff) into `~/.config/cline/plugins/bizar/`.
+- Installs [Headroom](https://github.com/headroomlabs-ai/headroom) if missing, then runs `headroom wrap cline` to wire token compression into the shell.
 - Installs [Semble](https://github.com/semble-ai/semble) if missing — used by Mimir for codebase search.
 - Installs the [Skills CLI](https://www.skills.sh) if missing — used by every implementation agent for on-demand skill discovery.
 - Adds the selected skill packs from skills.sh.
 
-## Restart opencode and connect providers
+## Restart cline and connect providers
 
-When the installer finishes, restart opencode so the new agents and plugin load. Then run `/connect` inside the TUI to add API keys for the providers you want to use:
+When the installer finishes, restart cline so the new agents and plugin load. Then run `/connect` inside the TUI to add API keys for the providers you want to use:
 
 | Provider | Models | Auth |
 |---|---|---|
-| **OpenCode Zen** | `opencode/deepseek-v4-flash-free` | Free API key from [opencode.ai](https://opencode.ai) — no charges |
+| **Cline Zen** | `cline/deepseek-v4-flash-free` | Free API key from [cline.ai](https://docs.cline.bot) — no charges |
 | **MiniMax (direct)** | `minimax/MiniMax-M2.7`, `minimax/MiniMax-M3` | API key from [MiniMax](https://platform.minimaxi.com) |
 | **OpenAI** | `openai/gpt-5.5` | ChatGPT subscription (OAuth) |
 

@@ -16,4 +16,4 @@ Toggle the Bizar visual plan canvas or check its current status.
 
 The visual plan canvas shows plans as interactive node graphs. When enabled, plan elements appear as draggable nodes on a canvas that agents can manipulate directly. This is useful for visual thinkers or when planning complex multi-step work.
 
-This is a session-level toggle — it affects the current opencode session only.
+This is a session-level toggle — it affects the current cline session only.

@@ -1,14 +1,14 @@
 /**
  * serve.ts
  *
- * ServeLifecycle — owns the `opencode serve` child process.
+ * ServeLifecycle — owns the `cline serve` child process.
  *
  * Spec contract (v0.4.2 §1.1, §5, §6.1):
- *   - `Bun.spawn(["opencode", "serve", "--port", String(port), "--hostname", "127.0.0.1"], …)`
- *   - `OPENCODE_SERVER_PASSWORD` set in the child env to a 32-byte secret
+ *   - `Bun.spawn(["cline", "serve", "--port", String(port), "--hostname", "127.0.0.1"], …)`
+ *   - `CLINE_SERVER_PASSWORD` set in the child env to a 32-byte secret
  *     base64-encoded.
  *   - All subsequent HTTP calls include `Authorization: Basic <b64>` with
- *     username "opencode".
+ *     username "cline".
  *   - `--hostname 127.0.0.1` is hardcoded; not configurable.
  *   - `--dangerously-skip-permissions` is NOT in the default args. It is
  *     added only when `BIZAR_BACKGROUND_SKIP_PERMISSIONS=1`.
@@ -62,7 +62,7 @@ export interface ServeInfo {
 }
 
 /**
- * Lifecycle owner for one `opencode serve` child process.
+ * Lifecycle owner for one `cline serve` child process.
  *
  * Public surface (the interface contract for Thor's tests):
  *   - `start()` — spawn the child, wait for the listening line, health-check.
@@ -125,15 +125,15 @@ export class ServeLifecycle {
    *
    * Sequence (spec §5.1):
    *   1. Generate 32-byte secret (NEW-H9: `Buffer.from(...).toString("base64")`).
-   *   2. `Bun.spawn(["opencode", "serve", "--port", String(port), "--hostname", "127.0.0.1"], …)`.
-   *   3. Read stdout line-by-line until "opencode server listening on http://127.0.0.1:<port>".
+   *   2. `Bun.spawn(["cline", "serve", "--port", String(port), "--hostname", "127.0.0.1"], …)`.
+   *   3. Read stdout line-by-line until "cline server listening on http://127.0.0.1:<port>".
    *      Parse the bound port (the OS may have remapped 0 → <random>).
    *   4. Health-check: `GET /health` with 100ms interval, 5s timeout.
    *   5. Attach `proc.exited` for crash recovery.
    *   6. Return `{ pid, port, password }`.
    *
    * Errors:
-   *   - ENOENT (opencode not on PATH) → log, set `pid = null`, throw.
+   *   - ENOENT (cline not on PATH) → log, set `pid = null`, throw.
    *   - EACCES → same.
    *   - Listening line not seen in 5s → log, set `pid = null`, throw.
    *   - Health check fails in 5s → log, kill child, throw.
@@ -147,7 +147,7 @@ export class ServeLifecycle {
 
     const skipPerms = process.env.BIZAR_BACKGROUND_SKIP_PERMISSIONS === "1";
     const args = [
-      "opencode",
+      "cline",
       "serve",
       "--port",
       String(initialPort),
@@ -161,21 +161,21 @@ export class ServeLifecycle {
       proc = Bun.spawn(args, {
         stdout: "pipe",
         stderr: "pipe",
-        env: { ...process.env, OPENCODE_SERVER_PASSWORD: password },
+        env: { ...process.env, CLINE_SERVER_PASSWORD: password },
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
         this._logger.error(
-          "bizar: opencode binary not found on PATH; background agents disabled",
+          "bizar: cline binary not found on PATH; background agents disabled",
         );
       } else if (code === "EACCES") {
         this._logger.error(
-          `bizar: cannot execute opencode binary: ${msg}; background agents disabled`,
+          `bizar: cannot execute cline binary: ${msg}; background agents disabled`,
         );
       } else {
-        this._logger.error(`bizar: failed to spawn opencode serve: ${msg}`);
+        this._logger.error(`bizar: failed to spawn cline serve: ${msg}`);
       }
       this._pid = null;
       throw err;
@@ -192,7 +192,7 @@ export class ServeLifecycle {
       boundPort = await waitForListeningLine(proc, this._logger, 5_000);
     } catch (err: unknown) {
       this._logger.error(
-        `bizar: opencode serve did not announce listening line: ${
+        `bizar: cline serve did not announce listening line: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
@@ -204,15 +204,15 @@ export class ServeLifecycle {
     // Health check loop.
     const healthy = await pollHealthCheck(boundPort, password, 5_000);
     if (!healthy) {
-      this._logger.error("bizar: opencode serve did not pass health check in 5s");
+      this._logger.error("bizar: cline serve did not pass health check in 5s");
       this.cleanupOnStartFailure();
-      throw new Error("opencode serve failed health check");
+      throw new Error("cline serve failed health check");
     }
 
     this.attachExitHandler();
     const startedAt = Date.now();
     this._logger.info(
-      `bizar: opencode serve ready on http://127.0.0.1:${boundPort} (pid=${proc.pid})`,
+      `bizar: cline serve ready on http://127.0.0.1:${boundPort} (pid=${proc.pid})`,
     );
 
     return {
@@ -379,7 +379,7 @@ function generatePassword(): string {
 
 /**
  * Read stdout from `proc` line-by-line and resolve with the bound port
- * when we see the "opencode server listening on http://127.0.0.1:<port>"
+ * when we see the "cline server listening on http://127.0.0.1:<port>"
  * line. The actual port may differ from the requested port (especially
  * when port=0 for OS-assigned).
  *
@@ -396,15 +396,15 @@ async function waitForListeningLine(
   // is not always narrow enough.
   const stdout = proc.stdout as ReadableStream<Uint8Array> | number | null | undefined;
   if (stdout === null || stdout === undefined) {
-    throw new Error("opencode serve: no stdout pipe");
+    throw new Error("cline serve: no stdout pipe");
   }
   if (typeof stdout === "number") {
-    throw new Error(`opencode serve: stdout is fd=${stdout}; expected a stream`);
+    throw new Error(`cline serve: stdout is fd=${stdout}; expected a stream`);
   }
   const reader = stdout.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-  const portRegex = /opencode server listening on http:\/\/127\.0\.0\.1:(\d+)/;
+  const portRegex = /cline server listening on http:\/\/127\.0\.0\.1:(\d+)/;
   try {
     const deadline = Date.now() + timeoutMs;
     while (true) {
@@ -427,7 +427,7 @@ async function waitForListeningLine(
           return port;
         }
         throw new Error(
-          `opencode serve exited before listening line. Last stdout: ${buffer.slice(-200)}`,
+          `cline serve exited before listening line. Last stdout: ${buffer.slice(-200)}`,
         );
       }
       const chunk = decoder.decode(readResult.value as Uint8Array, { stream: true });
@@ -458,7 +458,7 @@ async function pollHealthCheck(
   totalMs: number,
 ): Promise<boolean> {
   const deadline = Date.now() + totalMs;
-  const authHeader = `Basic ${btoa(`opencode:${password}`)}`;
+  const authHeader = `Basic ${btoa(`cline:${password}`)}`;
   while (Date.now() < deadline) {
     const remaining = Math.max(50, deadline - Date.now());
     const ac = new AbortController();

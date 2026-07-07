@@ -1,7 +1,7 @@
 // src/components/chat/ChatComposer.tsx — bottom composer pill (v4.2.5).
 //
 // v4.2.5 — small refinement: the pill's border picks up the
-// activeSource color (opencode → accent border; bizar → neutral),
+// activeSource color (cline → accent border; bizar → neutral),
 // so the user has visual confirmation that their next message will
 // land in the right backend.
 
@@ -24,7 +24,7 @@ interface Props {
   agents: Array<{ name: string }>;
   onAttach: () => void;
   /** Which stream will receive the next message. */
-  activeSource?: 'bizar' | 'opencode' | null;
+  activeSource?: 'bizar' | 'cline' | null;
   /** Backward-compat — used to be page-level panel toggles. Ignored. */
   sessionsOpen?: boolean;
   /** Backward-compat — see sessionsOpen. */
@@ -59,8 +59,8 @@ export function ChatComposer(props: Props) {
         <span>
           <kbd>/</kbd> commands
         </span>
-        {activeSource === 'opencode' && (
-          <span className="chat-composer-source-hint">→ opencode</span>
+        {activeSource === 'cline' && (
+          <span className="chat-composer-source-hint">→ cline</span>
         )}
         {activeSource === 'bizar' && (
           <span className="chat-composer-source-hint">→ bizar chat</span>

@@ -1,8 +1,8 @@
 /**
  * src/server/routes/config.mjs
  *
- * /api/config                           — read ~/.config/opencode/opencode.json
- * /api/config (PUT)                     — write opencode.json
+ * /api/config                           — read ~/.config/cline/cline.json
+ * /api/config (PUT)                     — write cline.json
  * /api/config/reload (POST)             — re-read
  * /api/config/providers                 — list providers
  * /api/config/providers (POST)          — add
@@ -15,7 +15,7 @@
  * /api/config/mcps/:id (PUT)            — update
  * /api/config/mcps/:id (DELETE)         — remove
  *
- * Two stores are involved: the on-disk opencode.json (read+write)
+ * Two stores are involved: the on-disk cline.json (read+write)
  * and the providersStore/mcpsStore in-memory registries. /api/config
  * is the former; /api/config/providers and /api/config/mcps are
  * the latter. /api/providers (without the config/ prefix) is the
@@ -30,7 +30,7 @@ import {
   loadConfig,
   saveConfig,
 } from '../providers-store.mjs';
-import { OPENCODE_JSON, atomicWriteJson, safeReadJSON, wrap } from './_shared.mjs';
+import { CLINE_JSON, atomicWriteJson, safeReadJSON, wrap } from './_shared.mjs';
 
 /**
  * @param {object} deps
@@ -42,12 +42,12 @@ export function createConfigRouter({ state, watcher }) {
   const router = Router();
 
   router.get('/config', wrap(async (_req, res) => {
-    const data = safeReadJSON(OPENCODE_JSON, null);
+    const data = safeReadJSON(CLINE_JSON, null);
     res.json({
-      path: OPENCODE_JSON,
+      path: CLINE_JSON,
       data,
       raw: data === null ? '' : JSON.stringify(data, null, 2),
-      exists: existsSync(OPENCODE_JSON),
+      exists: existsSync(CLINE_JSON),
     });
   }));
 
@@ -67,20 +67,20 @@ export function createConfigRouter({ state, watcher }) {
       res.status(400).json({ error: 'bad_request', message: 'body must be JSON' });
       return;
     }
-    mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
-    atomicWriteJson(OPENCODE_JSON, parsed);
+    mkdirSync(dirname(CLINE_JSON), { recursive: true });
+    atomicWriteJson(CLINE_JSON, parsed);
     state.appendActivity({ kind: 'config.update' });
-    watcher.poke('change', OPENCODE_JSON);
-    res.json({ path: OPENCODE_JSON, data: parsed, exists: true, raw: JSON.stringify(parsed, null, 2) });
+    watcher.poke('change', CLINE_JSON);
+    res.json({ path: CLINE_JSON, data: parsed, exists: true, raw: JSON.stringify(parsed, null, 2) });
   }));
 
   router.post('/config/reload', wrap(async (_req, res) => {
-    const data = safeReadJSON(OPENCODE_JSON, null);
+    const data = safeReadJSON(CLINE_JSON, null);
     res.json({
-      path: OPENCODE_JSON,
+      path: CLINE_JSON,
       data,
       raw: data === null ? '' : JSON.stringify(data, null, 2),
-      exists: existsSync(OPENCODE_JSON),
+      exists: existsSync(CLINE_JSON),
     });
   }));
 
@@ -137,7 +137,7 @@ export function createConfigRouter({ state, watcher }) {
   }));
 
   // v4.4.14 — System LLM settings. The dashboard reads / writes the
-  // opencode.json#systemLlm block via this thin surface. The block
+  // cline.json#systemLlm block via this thin surface. The block
   // controls which provider+model is used for the dashboard's own
   // /api/llm/* calls (auto-title, enhance-prompt, summarization).
   router.get('/llm/system-llm', wrap(async (_req, res) => {

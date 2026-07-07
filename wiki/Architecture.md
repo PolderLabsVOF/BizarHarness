@@ -1,6 +1,6 @@
 # Architecture
 
-BizarHarness is a thin orchestration layer on top of [opencode](https://opencode.ai). opencode provides the agent runtime; BizarHarness provides the router, the agent hierarchy, the cost-aware dispatch, the Bizar Memory Service, and the loop-guard plugin. This page describes how the pieces fit together.
+BizarHarness is a thin orchestration layer on top of [cline](https://docs.cline.bot). cline provides the agent runtime; BizarHarness provides the router, the agent hierarchy, the cost-aware dispatch, the Bizar Memory Service, and the loop-guard plugin. This page describes how the pieces fit together.
 
 ## The Norse-pantheon metaphor
 
@@ -30,7 +30,7 @@ Models are grouped by capability and cost into five tiers. Every BizarHarness ag
 
 | Tier | Model | Cost | Used by |
 |---|---|---|---|
-| **0 (free)** | DeepSeek V4 Flash (OpenCode Zen) | $0 | Frigg, Vör, Quick, Mimir, Heimdall |
+| **0 (free)** | DeepSeek V4 Flash (Cline Zen) | $0 | Frigg, Vör, Quick, Mimir, Heimdall |
 | **1 (low)** | MiniMax M2.7 | $0.30/M in, $1.20/M out | Hermod, Thor, Baldr |
 | **2 (mid)** | MiniMax M3 | $0.30/M in, $1.20/M out | Odin, Tyr, Forseti |
 | **3 (high)** | MiniMax M3 (auditor) | $0.30/M in, $1.20/M out | Forseti (M3 with edit-deny) |
@@ -208,7 +208,7 @@ The folder is the contract between the developer and the agents. Edit `PROJECT.m
 
 ## The Bizar plugin
 
-The bundled Bizar plugin runs as an opencode plugin. It does three things:
+The bundled Bizar plugin runs as an cline plugin. It does three things:
 
 1. **Loop detection** — fingerprints tool calls and warn/block on repetition. Defaults: warn at 5, escalate at 8, block at 12.
 2. **Periodic status reporting** — logs every tool call (metadata only) to `~/.cache/bizar/logs/<sessionId>.log`.
@@ -218,7 +218,7 @@ The plugin is read-only on the project, makes no outbound network calls, and wri
 
 ## Background agents (experimental)
 
-v0.4 of the plugin adds **background agents** — asynchronous subagent execution via a single long-running `opencode serve` instance. Background agents let Odin parallelize independent work without blocking the main conversation. The four custom tools are `bizar_spawn_background`, `bizar_status`, `bizar_collect`, and `bizar_kill`. See [Background Agents](Background-Agents).
+v0.4 of the plugin adds **background agents** — asynchronous subagent execution via a single long-running `cline serve` instance. Background agents let Odin parallelize independent work without blocking the main conversation. The four custom tools are `bizar_spawn_background`, `bizar_status`, `bizar_collect`, and `bizar_kill`. See [Background Agents](Background-Agents).
 
 ## System diagram
 

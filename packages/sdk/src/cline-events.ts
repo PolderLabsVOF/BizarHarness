@@ -1,7 +1,7 @@
 /**
- * SSE event iteration helper for the opencode serve child.
+ * SSE event iteration helper for the cline serve child.
  *
- * Subscribes to the opencode SSE stream at `/event?directory=…`, filters
+ * Subscribes to the cline SSE stream at `/event?directory=…`, filters
  * by `sessionID` when provided, and yields parsed typed events.
  *
  * This module is consumed by the SDK's `events.subscribe()` and by the
@@ -12,9 +12,9 @@ import { parseSseStream } from "./events.js";
 import type { EventSubscription } from "./events.js";
 
 /**
- * Options for subscribing to the opencode event stream.
+ * Options for subscribing to the cline event stream.
  */
-export interface OpencodeEventSubscribeOptions {
+export interface ClineEventSubscribeOptions {
   /** AbortSignal to cancel the subscription early. */
   signal?: AbortSignal;
   /**
@@ -37,9 +37,9 @@ export interface OpencodeEventSubscribeOptions {
 }
 
 /**
- * A single parsed opencode SSE event envelope.
+ * A single parsed cline SSE event envelope.
  */
-export interface OpencodeEventEnvelope {
+export interface ClineEventEnvelope {
   type: string;
   sessionID?: string;
   messageID?: string;
@@ -48,16 +48,16 @@ export interface OpencodeEventEnvelope {
 }
 
 /**
- * Subscribe to opencode's SSE `/event` endpoint.
+ * Subscribe to cline's SSE `/event` endpoint.
  *
  * @param baseUrl  e.g. "http://127.0.0.1:4097"
  * @param authHeader  `Authorization: Basic …` value
  * @param opts
  */
-export async function subscribeOpencodeEvents(
+export async function subscribeClineEvents(
   baseUrl: string,
   authHeader: string,
-  opts: OpencodeEventSubscribeOptions = {},
+  opts: ClineEventSubscribeOptions = {},
 ): Promise<EventSubscription> {
   const fetchImpl = opts.fetch ?? fetch;
   const controller = new AbortController();
@@ -77,13 +77,13 @@ export async function subscribeOpencodeEvents(
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`opencode event subscribe failed: ${response.status} ${response.statusText}`);
+    throw new Error(`cline event subscribe failed: ${response.status} ${response.statusText}`);
   }
 
-  // Cast through unknown so the AsyncIterable<OpencodeEventEnvelope> satisfies
+  // Cast through unknown so the AsyncIterable<ClineEventEnvelope> satisfies
   // the AsyncIterable<DashboardEvent> constraint from the existing EventSubscription type.
-  // The actual events flowing through are OpencodeEventEnvelope-shaped.
-  const filteredStream = filterOpencodeSseStream(response.body, controller, opts.sessionID);
+  // The actual events flowing through are ClineEventEnvelope-shaped.
+  const filteredStream = filterClineSseStream(response.body, controller, opts.sessionID);
   return {
     stream: filteredStream as unknown as EventSubscription["stream"],
     close: () => controller.abort(),
@@ -93,15 +93,15 @@ export async function subscribeOpencodeEvents(
 /**
  * Wrap `parseSseStream` with optional sessionID filtering.
  */
-async function* filterOpencodeSseStream(
+async function* filterClineSseStream(
   body: ReadableStream<Uint8Array>,
   controller: AbortController,
   sessionID?: string,
-): AsyncIterable<OpencodeEventEnvelope> {
-  for await (const raw of parseSseStream<OpencodeEventEnvelope>(body, controller)) {
+): AsyncIterable<ClineEventEnvelope> {
+  for await (const raw of parseSseStream<ClineEventEnvelope>(body, controller)) {
     if (!raw || typeof raw !== "object") continue;
     const evt = raw as unknown as Record<string, unknown>;
-    // Unwrap sync envelope if present (mirrors serve-info.mjs:unwrapOpencodeSseEvent)
+    // Unwrap sync envelope if present (mirrors serve-info.mjs:unwrapClineSseEvent)
     let unwrapped = evt;
     if (evt.type === "sync" && evt.syncEvent && typeof evt.syncEvent === "object") {
       const se = evt.syncEvent as Record<string, unknown>;

@@ -1,11 +1,11 @@
 ---
 name: bizar
-description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system for opencode. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
+description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system for cline. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
 ---
 
 # Bizar
 
-Norse-pantheon multi-agent system for opencode. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
+Norse-pantheon multi-agent system for cline. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
 
 ## Installation
 
@@ -119,7 +119,7 @@ After reading the feedback, regenerate the glyph's `artifact.mdx` to address eve
 - Odin has executable tool permissions (`bash`, `glob`, `grep`, `edit`, `write`)
 - The model defaults to self-handling when tools are available
 
-**Fix:** Remove those permissions from Odin's `~/.config/opencode/agents/odin.md`:
+**Fix:** Remove those permissions from Odin's `~/.config/cline/agents/odin.md`:
 ```yaml
 permission:
   task: allow
@@ -138,21 +138,21 @@ permission:
 
 **Causes:** The agent's `model:` field in its `.md` file is wrong or the provider isn't configured.
 
-**Fix:** Check `~/.config/opencode/agents/<name>.md` for the `model:` field. Valid models:
-- `opencode/deepseek-v4-flash-free` — free
+**Fix:** Check `~/.config/cline/agents/<name>.md` for the `model:` field. Valid models:
+- `cline/deepseek-v4-flash-free` — free
 - `minimax/MiniMax-M2.7` — M2.7
 - `minimax/MiniMax-M3` — M3
 - `openai/gpt-5.5` — GPT-5.5
 
 ### MiniMax direct provider 404 errors
 
-When using the `minimax/MiniMax-M3` or `minimax/MiniMax-M2.7` model ids, do NOT set a custom `baseURL` on the `minimax` provider — opencode ships a built-in MiniMax provider that resolves the correct API endpoint. Adding an explicit baseURL is a common cause of 404s.
+When using the `minimax/MiniMax-M3` or `minimax/MiniMax-M2.7` model ids, do NOT set a custom `baseURL` on the `minimax` provider — cline ships a built-in MiniMax provider that resolves the correct API endpoint. Adding an explicit baseURL is a common cause of 404s.
 
 ### MiniMax rate-limit / quota failures
 
 **Symptoms:** A session dies with HTTP 429, 402, or 5xx from the MiniMax API. The user has multiple MiniMax accounts and wants them to share the load.
 
-**Cause:** opencode has no built-in multi-key rotation; it reads one key from `auth.json` and uses it for the entire session. Hitting that key's rate limit or quota is fatal.
+**Cause:** cline has no built-in multi-key rotation; it reads one key from `auth.json` and uses it for the entire session. Hitting that key's rate limit or quota is fatal.
 
 **Fix:** Set additional keys via env vars. The `bizar` plugin rotates through them on 429/402/5xx automatically.
 
@@ -172,7 +172,7 @@ Rotation policy:
 - Does NOT trigger on other 4xx (client error — the request itself is bad)
 - Network errors (ECONNRESET etc.) DO trigger rotation
 - Caps at N attempts where N = number of configured keys (try each once)
-- If all keys fail, the last error response is returned so opencode surfaces it normally
+- If all keys fail, the last error response is returned so cline surfaces it normally
 - Round-robin on success: the next request starts on the next key, spreading load across accounts
 
 Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rotation env vars at all), the plugin works exactly as before.
@@ -195,17 +195,17 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
 
 | File | Purpose |
 |---|---|
-| `~/.config/opencode/opencode.json` | Main config (no external baseURL needed) |
-| `~/.config/opencode/AGENTS.md` | Routing table and conventions |
-| `~/.config/opencode/agents/odin.md` | Primary router agent |
-| `~/.config/opencode/agents/mimir.md` | Research agent |
-| `~/.config/opencode/agents/heimdall.md` | Simple tasks agent |
-| `~/.config/opencode/agents/hermod.md` | Git operations agent |
-| `~/.config/opencode/agents/thor.md` | Moderate implementation agent |
-| `~/.config/opencode/agents/tyr.md` | Complex implementation agent |
-| `~/.config/opencode/agents/vidarr.md` | Last resort agent |
-| `~/.config/opencode/agents/forseti.md` | Plan auditor agent |
-| `~/.config/opencode/agents/semble-search.md` | Code search tool definition |
+| `~/.config/cline/cline.json` | Main config (no external baseURL needed) |
+| `~/.config/cline/AGENTS.md` | Routing table and conventions |
+| `~/.config/cline/agents/odin.md` | Primary router agent |
+| `~/.config/cline/agents/mimir.md` | Research agent |
+| `~/.config/cline/agents/heimdall.md` | Simple tasks agent |
+| `~/.config/cline/agents/hermod.md` | Git operations agent |
+| `~/.config/cline/agents/thor.md` | Moderate implementation agent |
+| `~/.config/cline/agents/tyr.md` | Complex implementation agent |
+| `~/.config/cline/agents/vidarr.md` | Last resort agent |
+| `~/.config/cline/agents/forseti.md` | Plan auditor agent |
+| `~/.config/cline/agents/semble-search.md` | Code search tool definition |
 
 ## Quick Reference
 

@@ -5,7 +5,7 @@
  *
  * Mounted at /api/lightrag/*. Used by the Settings view (handled by
  * the sibling thor-settings agent) to surface and override the
- * free-tier opencode Zen defaults that lightrag starts with.
+ * free-tier cline Zen defaults that lightrag starts with.
  *
  * Endpoints:
  *   GET  /lightrag/defaults      — current default models + provenance

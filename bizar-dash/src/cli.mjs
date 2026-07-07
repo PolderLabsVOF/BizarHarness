@@ -70,9 +70,9 @@ function showHelp() {
     bizar --help             Show this help
 
   Notes:
-    The dashboard reads your opencode config at
-    ~/.config/opencode/. The per-project state lives in
-    ~/.config/opencode/projects/<id>/. Mods are installed to
+    The dashboard reads your cline config at
+    ~/.config/cline/. The per-project state lives in
+    ~/.config/cline/projects/<id>/. Mods are installed to
     ~/.config/bizar/mods/.
 
   Install:
@@ -105,7 +105,7 @@ function isPortFree(net, port) {
   });
 }
 
-async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot, bg = false } = {}) {
+async function startDashboard({ port, projectRoot, clineConfigDir, bizarRoot, bg = false } = {}) {
   const { createServer } = await import('./server/server.mjs');
   const { launchBrowser } = await import('./server/browser.mjs');
 
@@ -136,10 +136,10 @@ async function startDashboard({ port, projectRoot, opencodeConfigDir, bizarRoot,
   const { server, close } = await createServer({
     port: usePort,
     projectRoot: projectRoot || process.cwd(),
-    opencodeConfigDir: opencodeConfigDir || (
+    clineConfigDir: clineConfigDir || (
       process.platform === 'win32'
-        ? join(process.env.APPDATA || homedir(), 'opencode')
-        : join(homedir(), '.config', 'opencode')
+        ? join(process.env.APPDATA || homedir(), 'cline')
+        : join(homedir(), '.config', 'cline')
     ),
     bizarRoot: bizarRoot || join(__dirname, '..', '..'),
   });
@@ -417,10 +417,10 @@ async function runTui({ launchWeb } = {}) {
   const { server, close: closeServer } = await createServer({
     port,
     projectRoot: process.cwd(),
-    opencodeConfigDir: (
+    clineConfigDir: (
       process.platform === 'win32'
-        ? join(process.env.APPDATA || homedir(), 'opencode')
-        : join(homedir(), '.config', 'opencode')
+        ? join(process.env.APPDATA || homedir(), 'cline')
+        : join(homedir(), '.config', 'cline')
     ),
     bizarRoot: join(__dirname, '..', '..'),
   });

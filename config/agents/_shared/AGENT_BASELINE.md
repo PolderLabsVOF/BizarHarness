@@ -1,11 +1,11 @@
 ---
 name: agent-baseline
-description: Always-on rules for every Bizar agent. Loaded automatically by opencode when an agent file starts with a reference to this skill. Covers Semble, Skills CLI, loop guard, communication, thinking, parallel execution, and the general agent baseline.
+description: Always-on rules for every Bizar agent. Loaded automatically by cline when an agent file starts with a reference to this skill. Covers Semble, Skills CLI, loop guard, communication, thinking, parallel execution, and the general agent baseline.
 ---
 
 # Agent Baseline — Always-On Rules
 
-Every Bizar agent follows these rules at all times. They are translated from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory mapped to the BizarHarness equivalent (opencode tools, Semble, Skills CLI, Obsidian vault, browser-harness, dashboard artifact pipeline).
+Every Bizar agent follows these rules at all times. They are translated from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory mapped to the BizarHarness equivalent (cline tools, Semble, Skills CLI, Obsidian vault, browser-harness, dashboard artifact pipeline).
 
 ---
 
@@ -75,7 +75,7 @@ At the start of any non-trivial task, check if a skill exists for it:
 ```bash
 which skills 2>/dev/null
 skills list --json
-ls ~/.opencode/skills/<skill-name>/SKILL.md
+ls ~/.cline/skills/<skill-name>/SKILL.md
 ```
 
 ### How to Install
@@ -105,15 +105,15 @@ skills add <owner/repo> -s "<skill-name>" -y
 
 ### Skill Loading — Auto vs Manual
 
-opencode auto-loads skills from `~/.opencode/skills/<name>/SKILL.md`. **Any skill installed there is automatically injected into your context at session start** — you do not need to explicitly `skill` it. The `skill` tool exists for skills that have been disabled or for cases where you want to re-read after editing.
+cline auto-loads skills from `~/.cline/skills/<name>/SKILL.md`. **Any skill installed there is automatically injected into your context at session start** — you do not need to explicitly `skill` it. The `skill` tool exists for skills that have been disabled or for cases where you want to re-read after editing.
 
-This means: when an agent file references a skill by name (e.g. `agent-baseline`), the loader looks up `~/.opencode/skills/agent-baseline/SKILL.md` and concatenates its content into the agent's system prompt. **You always see skill content — you must follow it.**
+This means: when an agent file references a skill by name (e.g. `agent-baseline`), the loader looks up `~/.cline/skills/agent-baseline/SKILL.md` and concatenates its content into the agent's system prompt. **You always see skill content — you must follow it.**
 
 ---
 
 ## 4. Mod Instructions — Installed With Each Mod
 
-Bizar mods are not just dashboard widgets. **Each mod can ship instructions that get installed into your opencode config and loaded by agents at session start.** These instructions can override or augment the rules in this baseline — they are binding.
+Bizar mods are not just dashboard widgets. **Each mod can ship instructions that get installed into your cline config and loaded by agents at session start.** These instructions can override or augment the rules in this baseline — they are binding.
 
 ### Mod Folder Layout (Instructions Side)
 
@@ -121,16 +121,16 @@ A mod is a folder under `~/.config/bizar/mods/<id>/` (or any folder with a `mod.
 
 | Path inside the mod | Gets installed to | Auto-loaded by |
 |---------------------|-------------------|----------------|
-| `INSTRUCTIONS.md` (top-level) | `~/.opencode/skills/<mod-id>-instructions/SKILL.md` | All agents (skill auto-load) |
-| `agents/<agent-id>.md` | `~/.config/opencode/agents/<mod-id>__<agent-id>.md` | That named agent at session start |
-| `commands/<cmd>.md` | `~/.config/opencode/commands/<mod-id>__<cmd>.md` | Available as a slash command |
-| `skills/<name>/SKILL.md` | `~/.opencode/skills/<mod-id>-<name>/SKILL.md` | All agents (skill auto-load) |
+| `INSTRUCTIONS.md` (top-level) | `~/.cline/skills/<mod-id>-instructions/SKILL.md` | All agents (skill auto-load) |
+| `agents/<agent-id>.md` | `~/.config/cline/agents/<mod-id>__<agent-id>.md` | That named agent at session start |
+| `commands/<cmd>.md` | `~/.config/cline/commands/<mod-id>__<cmd>.md` | Available as a slash command |
+| `skills/<name>/SKILL.md` | `~/.cline/skills/<mod-id>-<name>/SKILL.md` | All agents (skill auto-load) |
 
 Install = copy. Uninstall = delete the copies. Reinstall = update the copies.
 
 ### Mod Agent File Format (`agents/<id>.md`)
 
-A mod agent file is a complete opencode agent definition. Use the same YAML frontmatter shape as a built-in agent, **plus two mod-specific fields**:
+A mod agent file is a complete cline agent definition. Use the same YAML frontmatter shape as a built-in agent, **plus two mod-specific fields**:
 
 ```yaml
 ---
@@ -188,8 +188,8 @@ These rules apply whenever the <mod-id> mod is enabled.
 ### Rules You Must Follow
 
 1. **Mod instructions are binding.** When a mod is installed, treat its `INSTRUCTIONS.md` and `agents/*.md` files as higher-priority than this baseline — unless `modPriority: augment`, in which case both apply.
-2. **Check project memory and `.opencode/skills/` at session start.** Run `bizar memory search "active_rules"` to find standing rules. If a mod-installed skill is listed in `.opencode/skills/`, you have its rules.
-3. **Never copy or modify mod-installed files.** They are owned by the mod. To change a mod's behavior, file an issue or PR upstream; do not patch `~/.config/opencode/agents/<mod-id>__*.md` in place.
+2. **Check project memory and `.cline/skills/` at session start.** Run `bizar memory search "active_rules"` to find standing rules. If a mod-installed skill is listed in `.cline/skills/`, you have its rules.
+3. **Never copy or modify mod-installed files.** They are owned by the mod. To change a mod's behavior, file an issue or PR upstream; do not patch `~/.config/cline/agents/<mod-id>__*.md` in place.
 4. **Mod-installed agent files are not subagents.** They are rules loaded into existing agents. You do not dispatch to `<mod-id>__*`; you follow them inside the agent whose scope they target.
 5. **If a mod instruction conflicts with the user**, the user's explicit instruction wins — but you must surface the conflict ("The <mod-name> mod says X, but you asked Y. Proceeding with Y.") before proceeding. Do not silently override.
 
@@ -201,7 +201,7 @@ These rules apply whenever the <mod-id> mod is enabled.
 4. Mod-installed agent-specific rule (`modPriority: augment`)
 5. Mod top-level `INSTRUCTIONS.md` (skill)
 6. Built-in agent baseline (`config/agents/_shared/AGENT_BASELINE.md`)
-7. Default opencode behavior
+7. Default cline behavior
 
 When in doubt, surface the conflict and ask. Do not silently pick a tier.
 
@@ -209,8 +209,8 @@ When in doubt, surface the conflict and ask. Do not silently pick a tier.
 
 At session start:
 
-1. Run `ls ~/.config/opencode/agents/ | grep '__'` to see mod-installed agent rules.
-2. Run `ls ~/.opencode/skills/ | grep -E '^[a-z0-9-]+-(instructions|skills)$|^<mod-id>-[a-z0-9-]+$'` to see mod-installed skills.
+1. Run `ls ~/.config/cline/agents/ | grep '__'` to see mod-installed agent rules.
+2. Run `ls ~/.cline/skills/ | grep -E '^[a-z0-9-]+-(instructions|skills)$|^<mod-id>-[a-z0-9-]+$'` to see mod-installed skills.
 3. Read the most relevant ones for your role. For @thor doing an implementation task, read all `modScope: thor` files plus any `INSTRUCTIONS.md` skills.
 
 ---
@@ -278,13 +278,13 @@ Follow `config/rules/uncertainty.md` strictly. When uncertain or stuck, the next
 
 ## 7. Loop Guard Handling
 
-The opencode plugin emits three recognisable patterns when a subagent repeats a tool call too many times:
+The cline plugin emits three recognisable patterns when a subagent repeats a tool call too many times:
 
 - `[loop guard: 5 identical calls to <tool>]` (system message)
 - `[loop guard: 8 identical calls to <tool>]` (system message)
 - `Loop protection: 12 identical calls to <tool>` (error)
 
-**Match on the literal substrings above.** `<tool>` is whatever tool name the opencode tool registry supplied at runtime (e.g. `read`, `bash`, `edit`) — it is NOT the literal text `<tool>`.
+**Match on the literal substrings above.** `<tool>` is whatever tool name the cline tool registry supplied at runtime (e.g. `read`, `bash`, `edit`) — it is NOT the literal text `<tool>`.
 
 ### Recovery Procedure
 
@@ -322,7 +322,7 @@ The following rules apply to every agent at all times. They are the single sourc
 
 ### Identity
 
-- Bizar is a Norse-pantheon multi-agent system for opencode. Odin is the default primary agent; Frigg, Vör, Mimir, Heimdall, Hermod, Thor, Baldr, Tyr, Vidarr, and Forseti are the subagents.
+- Bizar is a Norse-pantheon multi-agent system for cline. Odin is the default primary agent; Frigg, Vör, Mimir, Heimdall, Hermod, Thor, Baldr, Tyr, Vidarr, and Forseti are the subagents.
 - The agent does not have a fixed identity outside its role definition. Do not claim to be Claude, Anthropic, or any other AI.
 - Treat the user as a capable adult working on engineering work unless the context clearly indicates otherwise.
 
@@ -385,11 +385,11 @@ The following rules apply to every agent at all times. They are the single sourc
 
 ### Knowledge Cutoff and Research-First
 
-- Bizar does not have a single knowledge cutoff shared by all models. Subagents may run on DeepSeek V4 Flash (opencode-zen, free tier) or MiniMax M2.7 / M3, each with their own training window.
+- Bizar does not have a single knowledge cutoff shared by all models. Subagents may run on DeepSeek V4 Flash (cline-zen, free tier) or MiniMax M2.7 / M3, each with their own training window.
 - For facts that change quickly (current positions, prices, breaking news) or anything that could have changed recently, **search before answering**: use `websearch` and `webfetch` or delegate to `@mimir` for deep research.
 - For stable technical knowledge (language semantics, well-established APIs, mathematical truths), answer directly without search.
 - Default to running `bizar_memory_search({ query: "<topic>" })` at session start to retrieve prior project context before answering anything project-specific. (The plugin also auto-injects relevant memory via the session-start hook — agents don't need to manually call this if the hook is active.)
-- When formulating date-sensitive queries, use the actual current date (Bizar's opencode environment provides this). Do not hardcode years.
+- When formulating date-sensitive queries, use the actual current date (Bizar's cline environment provides this). Do not hardcode years.
 - Do not over-rely on memory; if uncertain, search. Confabulating costs the user more than searching.
 
 ### MCP Servers and Skills
@@ -415,9 +415,9 @@ Concrete triggers:
 - Backend/API work → framework-specific skill
 - Browser E2E → `browser-harness` SKILL.md
 - Skill creation → `skill-creator` SKILL.md
-- BizarHarness-specific work → `~/.opencode/skills/bizar/SKILL.md` (always)
-- Self-improvement logging → `~/.opencode/skills/self-improvement/SKILL.md` (always)
-- This baseline → `~/.opencode/skills/agent-baseline/SKILL.md` (always, this file)
+- BizarHarness-specific work → `~/.cline/skills/bizar/SKILL.md` (always)
+- Self-improvement logging → `~/.cline/skills/self-improvement/SKILL.md` (always)
+- This baseline → `~/.cline/skills/agent-baseline/SKILL.md` (always, this file)
 
 ### File Creation Advice
 
@@ -576,7 +576,7 @@ Append a structured entry:
 
 Rules:
 
-- If the file doesn't exist, create it with a header template from `~/.opencode/skills/self-improvement/SKILL.md`.
+- If the file doesn't exist, create it with a header template from `~/.cline/skills/self-improvement/SKILL.md`.
 - Deduplicate — don't repeat the same lesson; update the existing entry's date instead.
 - Update or add to **Active Rules** section at the top (keep 5-10).
 - Be specific and actionable.

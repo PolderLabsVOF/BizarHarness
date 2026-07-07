@@ -23,7 +23,7 @@ dist
 # ── Per-project Bizar state ─────────────────────────────────────────────────
 .bizar
 .obsidian
-.opencode
+.cline
 
 # ── Backup / scratch ────────────────────────────────────────────────────────
 *.md.bak

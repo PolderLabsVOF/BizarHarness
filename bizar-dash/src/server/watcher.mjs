@@ -30,7 +30,7 @@ export function createWatcher({ paths, onChange, options = {} }) {
     // Ignore: any path segment named `node_modules` (anywhere), and any
     // file/dir whose IMMEDIATE basename starts with `.` (covers .DS_Store,
     // .swp, .bak, etc.). We must NOT walk the whole path — the watched
-    // root `~/.config/opencode/agents` contains the segment `.config`
+    // root `~/.config/cline/agents` contains the segment `.config`
     // which would otherwise match and silently disable the watch.
     ignored: (p) => {
       const s = String(p);

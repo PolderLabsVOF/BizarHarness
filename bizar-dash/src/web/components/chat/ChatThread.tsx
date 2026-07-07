@@ -1,7 +1,7 @@
 // src/components/chat/ChatThread.tsx — message list, welcome screen, loading skeleton.
 //
 // v4.2.5 — accepts `activeSource` so the loading skeleton can hint
-// which stream is loading and the welcome variant for "opencode"
+// which stream is loading and the welcome variant for "cline"
 // can differ from the local chat welcome.
 
 import { useEffect, useRef } from 'react';
@@ -29,7 +29,7 @@ interface Props {
    *  uses `unknown` so we don't pull in a tight coupling; the value
    *  is reflected back into the loading skeleton and welcome screen
    *  via data attributes so CSS can style accordingly. */
-  activeSource?: 'bizar' | 'opencode' | null;
+  activeSource?: 'bizar' | 'cline' | null;
   onPickSuggestion: (text: string) => void;
   onCopy: (m: Message) => void;
   onDelete: (idx: number) => void;
@@ -70,7 +70,7 @@ export function ChatThread({
     if (!wrapped) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  const stream: 'bizar' | 'opencode' = activeSource === 'opencode' ? 'opencode' : 'bizar';
+  const stream: 'bizar' | 'cline' = activeSource === 'cline' ? 'cline' : 'bizar';
 
   if (loading) {
     return (

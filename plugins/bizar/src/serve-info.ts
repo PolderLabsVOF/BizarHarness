@@ -1,20 +1,20 @@
 /**
  * serve-info.ts
  *
- * v0.5.4 (bug #3) — Publish the opencode-serve connection details to a
+ * v0.5.4 (bug #3) — Publish the cline-serve connection details to a
  * small on-disk file so out-of-process consumers (the Bizar dashboard
- * server, the TUI, hooks, etc.) can talk to the same opencode serve child
+ * server, the TUI, hooks, etc.) can talk to the same cline serve child
  * the plugin owns.
  *
  * Why this exists:
- *   The plugin owns the `opencode serve` child process. It picks a
+ *   The plugin owns the `cline serve` child process. It picks a
  *   random port (or the operator's `BIZAR_SERVE_PORT`) and generates
- *   a 32-byte `OPENCODE_SERVER_PASSWORD` on every start. Until now the
+ *   a 32-byte `CLINE_SERVER_PASSWORD` on every start. Until now the
  *   only consumer of that child was the plugin itself (via
  *   {@link HttpClient} / {@link EventStream}). The dashboard, which
  *   lives in a separate process, had no way to reach the child — its
  *   `DELETE /background/:id` could only kill a tmux attach, never the
- *   underlying opencode session.
+ *   underlying cline session.
  *
  * What this writes:
  *   `<stateDir>/serve.json` containing:
@@ -29,7 +29,7 @@
  *
  * The dashboard's `serve-info.mjs` looks for this file in the same
  * multi-path pattern as `BG_DIRS` and uses it to issue
- * `POST /api/session/{id}/abort` against the same opencode child the
+ * `POST /api/session/{id}/abort` against the same cline child the
  * plugin is using.
  *
  * Lifecycle:
@@ -57,7 +57,7 @@ import { expandHome, findSecretDirMatch } from "./options.js";
 // --- Public types ---------------------------------------------------------
 
 /**
- * Connection info for one running `opencode serve` child. See the
+ * Connection info for one running `cline serve` child. See the
  * module header for the wire format.
  */
 export interface ServeInfo {

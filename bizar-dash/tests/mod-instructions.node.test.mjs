@@ -54,9 +54,9 @@ function buildTestMod() {
 }
 
 before(() => {
-  mkdirSync(join(SANDBOX_HOME, '.config/opencode/agents'), { recursive: true });
-  mkdirSync(join(SANDBOX_HOME, '.config/opencode/commands'), { recursive: true });
-  mkdirSync(join(SANDBOX_HOME, '.opencode/skills'), { recursive: true });
+  mkdirSync(join(SANDBOX_HOME, '.config/cline/agents'), { recursive: true });
+  mkdirSync(join(SANDBOX_HOME, '.config/cline/commands'), { recursive: true });
+  mkdirSync(join(SANDBOX_HOME, '.cline/skills'), { recursive: true });
   mkdirSync(join(SANDBOX_HOME, '.config/bizar/mods'), { recursive: true });
 });
 
@@ -77,15 +77,15 @@ describe('mod instructions install/uninstall', () => {
     assert.equal(counts.instructions, 1);
     assert.equal(counts.skills, 1);
 
-    const agentsDir = join(SANDBOX_HOME, '.config/opencode/agents');
+    const agentsDir = join(SANDBOX_HOME, '.config/cline/agents');
     assert.ok(existsSync(join(agentsDir, `${TEST_MOD_ID}__thor.md`)));
     assert.ok(existsSync(join(agentsDir, `${TEST_MOD_ID}__tyr.md`)));
     assert.equal(existsSync(join(agentsDir, 'thor.md')), false);
 
-    const commandsDir = join(SANDBOX_HOME, '.config/opencode/commands');
+    const commandsDir = join(SANDBOX_HOME, '.config/cline/commands');
     assert.ok(existsSync(join(commandsDir, `${TEST_MOD_ID}__plan.md`)));
 
-    const skillsDir = join(SANDBOX_HOME, '.opencode/skills');
+    const skillsDir = join(SANDBOX_HOME, '.cline/skills');
     assert.ok(existsSync(join(skillsDir, `${TEST_MOD_ID}-instructions`, 'SKILL.md')));
     assert.ok(existsSync(join(skillsDir, `${TEST_MOD_ID}-my-skill`, 'SKILL.md')));
 
@@ -94,7 +94,7 @@ describe('mod instructions install/uninstall', () => {
 
   it('does not touch files installed by other mods or base agents', () => {
     const modDir = buildTestMod();
-    const agentsDir = join(SANDBOX_HOME, '.config/opencode/agents');
+    const agentsDir = join(SANDBOX_HOME, '.config/cline/agents');
     writeFileSync(join(agentsDir, 'othermod__thor.md'), '# othermod thor');
     writeFileSync(join(agentsDir, 'odin.md'), '# base odin');
 
@@ -113,7 +113,7 @@ describe('mod instructions install/uninstall', () => {
     const modDir = buildTestMod();
     modsLoader.reinstallInstructions(TEST_MOD_ID);
 
-    const agentsDir = join(SANDBOX_HOME, '.config/opencode/agents');
+    const agentsDir = join(SANDBOX_HOME, '.config/cline/agents');
     writeFileSync(join(agentsDir, 'othermod__thor.md'), '# othermod');
     writeFileSync(join(agentsDir, 'odin.md'), '# base odin');
 
@@ -122,9 +122,9 @@ describe('mod instructions install/uninstall', () => {
 
     assert.equal(existsSync(join(agentsDir, `${TEST_MOD_ID}__thor.md`)), false);
     assert.equal(existsSync(join(agentsDir, `${TEST_MOD_ID}__tyr.md`)), false);
-    const commandsDir = join(SANDBOX_HOME, '.config/opencode/commands');
+    const commandsDir = join(SANDBOX_HOME, '.config/cline/commands');
     assert.equal(existsSync(join(commandsDir, `${TEST_MOD_ID}__plan.md`)), false);
-    const skillsDir = join(SANDBOX_HOME, '.opencode/skills');
+    const skillsDir = join(SANDBOX_HOME, '.cline/skills');
     assert.equal(existsSync(join(skillsDir, `${TEST_MOD_ID}-instructions`)), false);
     assert.equal(existsSync(join(skillsDir, `${TEST_MOD_ID}-my-skill`)), false);
 
@@ -138,7 +138,7 @@ describe('mod instructions install/uninstall', () => {
   it('install/uninstall round-trips cleanly', () => {
     for (let i = 0; i < 2; i++) {
       const modDir = buildTestMod();
-      const agentsDir = join(SANDBOX_HOME, '.config/opencode/agents');
+      const agentsDir = join(SANDBOX_HOME, '.config/cline/agents');
 
       const counts = modsLoader.reinstallInstructions(TEST_MOD_ID);
       assert.equal(counts.agents, 2);
@@ -178,8 +178,8 @@ describe('mod instructions install/uninstall', () => {
     assert.equal(counts.agents, 2);
     assert.equal(counts.commands, 1);
 
-    const agentsDir = join(SANDBOX_HOME, '.config/opencode/agents');
-    const commandsDir = join(SANDBOX_HOME, '.config/opencode/commands');
+    const agentsDir = join(SANDBOX_HOME, '.config/cline/agents');
+    const commandsDir = join(SANDBOX_HOME, '.config/cline/commands');
     assert.equal(existsSync(join(agentsDir, `${TEST_MOD_ID}__thor.txt`)), false);
     assert.equal(existsSync(join(commandsDir, `${TEST_MOD_ID}__plan.txt`)), false);
 

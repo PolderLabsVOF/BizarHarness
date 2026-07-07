@@ -8,7 +8,7 @@
     1. Installs Windows-specific system deps (Node.js, git, jq) via
        winget → choco → npm fallback.
     2. Shells to `node cli/provision.mjs --mode=install` for everything
-       else (agent files, plugin copy, opencode.json patching, skills
+       else (agent files, plugin copy, cline.json patching, skills
        install, service registration via Task Scheduler, doctor check).
 
   v5.x — issue #7: On first install, registers the system service that
@@ -218,8 +218,8 @@ Write-Host "┌─────────────────────�
 Write-Host "│  BizarHarness ready.                                       │"
 Write-Host "│                                                            │"
 Write-Host "│  Next:                                                     │"
-Write-Host "│    1. Restart opencode to pick up new config                │"
-Write-Host "│    2. Run /connect in opencode to add API keys              │"
+Write-Host "│    1. Restart cline to pick up new config                │"
+Write-Host "│    2. Run /connect in cline to add API keys              │"
 Write-Host "│    3. Run 'bizar dash start' to launch the dashboard        │"
 Write-Host "│    4. Visit http://localhost:4321 in your browser            │"
 Write-Host "└────────────────────────────────────────────────────────────┘"

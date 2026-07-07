@@ -5,7 +5,7 @@
  *
  * `bizar install` and `bizar update` used to be two separate code paths
  * (install.sh + cli/install.mjs for install, cli/update.mjs for update)
- * with massive overlap: both copied agents, both patched opencode.json,
+ * with massive overlap: both copied agents, both patched cline.json,
  * both ran the plugin copy, both kicked off the service, both called
  * `bizar doctor` at the end. The two paths diverged over time, and the
  * user-visible bug was that `update` tried to install separate npm
@@ -21,8 +21,8 @@
  *            doctor. Does NOT kill running instances (fresh install
  *            has none).
  *   update:   refresh an existing install. Kills running instances,
- *            upgrades @polderlabs/bizar + opencode-ai via npm, re-copies
- *            agent files / plugin / skills, re-patches opencode.json
+ *            upgrades @polderlabs/bizar + cline via npm, re-copies
+ *            agent files / plugin / skills, re-patches cline.json
  *            (idempotent), restarts the dashboard, runs doctor.
  *
  * Both modes are safe to re-run — every step is idempotent and skips
@@ -56,10 +56,10 @@ export const REPO_ROOT = join(__dirname, '..');
 export const PKG_MAIN = '@polderlabs/bizar';
 
 export const BIZAR_HOME = bizarConfigDir();
-export const OPENCODE_DIR =
+export const CLINE_DIR =
   process.platform === 'win32'
-    ? join(process.env.APPDATA || HOME, 'opencode')
-    : join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'opencode');
+    ? join(process.env.APPDATA || HOME, 'cline')
+    : join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'cline');
 
 const SERVICE_PID_FILE = join(BIZAR_HOME, 'service.pid');
 const DASHBOARD_PID_FILE = join(BIZAR_HOME, 'dashboard.pid');
@@ -199,10 +199,10 @@ export function writeInstallMarker({ version, repoPath, serviceUnit }) {
  *     pkgVersion: string|null, // installed @polderlabs/bizar version
  *     pkgLatest: string|null,  // latest @polderlabs/bizar version on npm
  *     plugin: { sourceDir, destDir, installed, upToDate, symlink },
- *     opencodeJson: { path, hasPluginEntry, exists },
+ *     clineJson: { path, hasPluginEntry, exists },
  *     service: { installed, running, unitPath },
  *     dashboard: { running, pid, port },
- *     opencodeCli: { version, latest },
+ *     clineCli: { version, latest },
  *     headsUpState: { ok, blockerCount, warningCount },
  *     gitRepo: boolean,        // are we running from a git checkout?
  *   }
@@ -219,9 +219,9 @@ export function detectState({ cwd = process.cwd() } = {}) {
   const pkgVersion = globalRoot ? currentVersion(PKG_MAIN) : null;
   const pkgLatest = latestVersion(PKG_MAIN);
 
-  // ── Plugin copy (deployed to ~/.config/opencode/plugins/bizar) ──
+  // ── Plugin copy (deployed to ~/.config/cline/plugins/bizar) ──
   const pluginSourceDir = pkgRoot ? join(pkgRoot, 'plugins', 'bizar') : null;
-  const pluginDestDir = join(OPENCODE_DIR, 'plugins', 'bizar');
+  const pluginDestDir = join(CLINE_DIR, 'plugins', 'bizar');
   let pluginInstalled = false;
   let pluginUpToDate = false;
   let pluginSymlink = false;
@@ -245,12 +245,12 @@ export function detectState({ cwd = process.cwd() } = {}) {
     pluginInstalled = false;
   }
 
-  // ── opencode.json plugin entry ───────────────────────────────────────
-  const opencodeJsonPath = join(OPENCODE_DIR, 'opencode.json');
-  const opencodeJson = readJsonSafe(opencodeJsonPath, null);
+  // ── cline.json plugin entry ───────────────────────────────────────
+  const clineJsonPath = join(CLINE_DIR, 'cline.json');
+  const clineJson = readJsonSafe(clineJsonPath, null);
   let hasPluginEntry = false;
-  if (opencodeJson && Array.isArray(opencodeJson.plugin)) {
-    hasPluginEntry = opencodeJson.plugin.some(
+  if (clineJson && Array.isArray(clineJson.plugin)) {
+    hasPluginEntry = clineJson.plugin.some(
       (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
     );
   }
@@ -272,10 +272,10 @@ export function detectState({ cwd = process.cwd() } = {}) {
   const dashboardPid = readLivePid(DASHBOARD_PID_FILE);
   const dashboardPort = parseInt(readTextSafe(DASHBOARD_PORT_FILE, '').trim(), 10) || null;
 
-  // ── opencode CLI version ───────────────────────────────────────────
-  const opencodeCli = {
-    version: currentVersion('opencode-ai'),
-    latest: latestVersion('opencode-ai'),
+  // ── cline CLI version ───────────────────────────────────────────
+  const clineCli = {
+    version: currentVersion('cline'),
+    latest: latestVersion('cline'),
   };
 
   // ── Heads-up gate (.bizar/PRE_PUSH_NOTES.md) ───────────────────────
@@ -309,9 +309,9 @@ export function detectState({ cwd = process.cwd() } = {}) {
       upToDate: pluginUpToDate,
       symlink: pluginSymlink,
     },
-    opencodeJson: {
-      path: opencodeJsonPath,
-      exists: !!opencodeJson,
+    clineJson: {
+      path: clineJsonPath,
+      exists: !!clineJson,
       hasPluginEntry,
     },
     service: {
@@ -325,7 +325,7 @@ export function detectState({ cwd = process.cwd() } = {}) {
       pid: dashboardPid,
       port: dashboardPort,
     },
-    opencodeCli,
+    clineCli,
     headsUpState,
     gitRepo,
     installedMods,
@@ -475,40 +475,40 @@ export async function ensureNpmPackage(pkg, { mode, dryRun, force }) {
   return { ok: true, message: `${pkg} updated`, installed: latestVersion(pkg) };
 }
 
-export async function updateOpencodeCli({ dryRun, force }) {
-  const current = currentVersion('opencode-ai');
-  const latest = latestVersion('opencode-ai');
+export async function updateClineCli({ dryRun, force }) {
+  const current = currentVersion('cline');
+  const latest = latestVersion('cline');
 
   if (current && current === latest && !force) {
-    return { ok: true, message: `opencode-ai@${current} up to date`, installed: current };
+    return { ok: true, message: `cline@${current} up to date`, installed: current };
   }
 
   if (dryRun) {
-    return { ok: true, message: '[dry-run] opencode-ai upgrade' };
+    return { ok: true, message: '[dry-run] cline upgrade' };
   }
 
-  // Prefer the upstream installer (`opencode upgrade`). Falls back to npm.
-  const r1 = spawnSync('opencode', ['upgrade'], { stdio: 'inherit' });
+  // Prefer the upstream installer (`cline upgrade`). Falls back to npm.
+  const r1 = spawnSync('cline', ['upgrade'], { stdio: 'inherit' });
   if (r1.status === 0) {
-    return { ok: true, message: 'opencode updated via `opencode upgrade`' };
+    return { ok: true, message: 'cline updated via `cline upgrade`' };
   }
-  console.log(chalk.dim('  opencode upgrade not available; falling back to npm'));
-  const r2 = spawnSync('npm', ['install', '-g', 'opencode-ai@latest'], { stdio: 'inherit', timeout: 600000 });
+  console.log(chalk.dim('  cline upgrade not available; falling back to npm'));
+  const r2 = spawnSync('npm', ['install', '-g', 'cline@latest'], { stdio: 'inherit', timeout: 600000 });
   if (r2.status === null && r2.error?.code === 'ETIMEDOUT') {
-    return { ok: false, message: 'opencode install timed out after 10 minutes' };
+    return { ok: false, message: 'cline install timed out after 10 minutes' };
   }
   if (r2.status === 0) {
-    return { ok: true, message: 'opencode updated via npm' };
+    return { ok: true, message: 'cline updated via npm' };
   }
-  return { ok: false, message: 'opencode update failed' };
+  return { ok: false, message: 'cline update failed' };
 }
 
 /**
  * Copy `plugins/bizar/` from the npm-installed package into
- * `~/.config/opencode/plugins/bizar/`. Skips if the dest is a dev symlink
+ * `~/.config/cline/plugins/bizar/`. Skips if the dest is a dev symlink
  * (set by `bizar dev-link`). Idempotent — safe to re-run.
  */
-export async function copyPluginToOpencode({ dryRun, force }) {
+export async function copyPluginToCline({ dryRun, force }) {
   const state = detectState();
   const src = state.plugin.sourceDir;
   const dest = state.plugin.destDir;
@@ -548,7 +548,7 @@ export async function copyPluginToOpencode({ dryRun, force }) {
     });
     // Copy the SDK into the deployed plugin's node_modules so Bun can
     // resolve @polderlabs/bizar-sdk when loading the plugin from
-    // ~/.config/opencode/plugins/bizar/.
+    // ~/.config/cline/plugins/bizar/.
     const sdkSrc = join(state.pkgRoot, 'node_modules', '@polderlabs', 'bizar-sdk');
     const sdkDst = join(dest, 'node_modules', '@polderlabs', 'bizar-sdk');
     if (existsSync(sdkSrc)) {
@@ -562,24 +562,24 @@ export async function copyPluginToOpencode({ dryRun, force }) {
 }
 
 /**
- * Ensure the Bizar plugin entry exists in `~/.config/opencode/opencode.json`.
+ * Ensure the Bizar plugin entry exists in `~/.config/cline/cline.json`.
  * Idempotent: if the entry already exists, no-op.
  */
-export async function patchOpencodeJson({ dryRun, force }) {
-  const cfgPath = join(OPENCODE_DIR, 'opencode.json');
+export async function patchClineJson({ dryRun, force }) {
+  const cfgPath = join(CLINE_DIR, 'cline.json');
   if (!existsSync(cfgPath)) {
     if (dryRun) {
       return { ok: true, message: `[dry-run] would bootstrap ${cfgPath}` };
     }
-    mkdirSync(OPENCODE_DIR, { recursive: true });
-    const templateSrc = join(REPO_ROOT, 'config', 'opencode.json');
+    mkdirSync(CLINE_DIR, { recursive: true });
+    const templateSrc = join(REPO_ROOT, 'config', 'cline.json');
     if (existsSync(templateSrc)) {
       const { copyFileSync } = await import('node:fs');
       copyFileSync(templateSrc, cfgPath);
       return { ok: true, message: `${cfgPath} bootstrapped from package template` };
     }
     writeFileSync(cfgPath, JSON.stringify({
-      $schema: 'https://opencode.ai/config.json',
+      $schema: 'https://docs.cline.bot/config.json',
       plugin: [],
     }, null, 2));
     return { ok: true, message: `${cfgPath} created` };
@@ -619,11 +619,11 @@ export async function patchOpencodeJson({ dryRun, force }) {
   }
 
   if (hasEntry && !force && !addedProvider) {
-    return { ok: true, message: 'opencode.json already has Bizar plugin entry' };
+    return { ok: true, message: 'cline.json already has Bizar plugin entry' };
   }
 
   if (dryRun) {
-    return { ok: true, message: `[dry-run] would patch opencode.json with plugin entry${addedProvider ? ' + provider.minimax' : ''}` };
+    return { ok: true, message: `[dry-run] would patch cline.json with plugin entry${addedProvider ? ' + provider.minimax' : ''}` };
   }
 
   if (!hasEntry) {
@@ -640,18 +640,18 @@ export async function patchOpencodeJson({ dryRun, force }) {
   return {
     ok: true,
     message: addedProvider
-      ? 'opencode.json patched with provider.minimax (plugin entry was already present)'
-      : 'opencode.json patched with Bizar plugin entry + provider.minimax',
+      ? 'cline.json patched with provider.minimax (plugin entry was already present)'
+      : 'cline.json patched with Bizar plugin entry + provider.minimax',
   };
 }
 
 /**
- * Copy `config/agents/*.md` into `~/.config/opencode/agents/`. Idempotent.
+ * Copy `config/agents/*.md` into `~/.config/cline/agents/`. Idempotent.
  * Doesn't overwrite existing files unless `force: true`.
  */
 export async function syncAgentFiles({ dryRun, force }) {
   const srcDir = join(REPO_ROOT, 'config', 'agents');
-  const dstDir = join(OPENCODE_DIR, 'agents');
+  const dstDir = join(CLINE_DIR, 'agents');
   if (!existsSync(srcDir)) {
     return { ok: true, message: 'no bundled agents to sync' };
   }
@@ -692,14 +692,14 @@ export async function syncAgentFiles({ dryRun, force }) {
 }
 
 /**
- * Copy slash commands + skills to the opencode config dir.
+ * Copy slash commands + skills to the cline config dir.
  */
 export async function syncConfigExtras({ dryRun }) {
   if (dryRun) {
     return { ok: true, message: '[dry-run] would sync commands + skills' };
   }
 
-  const dst = OPENCODE_DIR;
+  const dst = CLINE_DIR;
   mkdirSync(join(dst, 'command'), { recursive: true });
   mkdirSync(join(dst, 'commands'), { recursive: true });
   mkdirSync(join(dst, 'skill'), { recursive: true });
@@ -939,7 +939,7 @@ async function installModViaDashboard(id, { dryRun }) {
   // supply a token via BIZAR_DASHBOARD_TOKEN.
   const headers = { 'content-type': 'application/json' };
   const token = process.env.BIZAR_DASHBOARD_TOKEN;
-  if (token) headers['authorization'] = `Basic ${Buffer.from(`opencode:${token}`).toString('base64')}`;
+  if (token) headers['authorization'] = `Basic ${Buffer.from(`cline:${token}`).toString('base64')}`;
   const url = `http://127.0.0.1:${port}/api/mods`;
   const res = await fetch(url, {
     method: 'POST',
@@ -1038,11 +1038,11 @@ export function spawnFreshDashboard({ port } = {}) {
  *   2. (update only) Show installed-vs-latest version matrix.
  *   3. (update only) Heads-up gate.
  *   4. Kill running instances (update only — installs have none).
- *   5. Upgrade npm packages (bizar + opencode-ai).
+ *   5. Upgrade npm packages (bizar + cline).
  *   6. Shell to install.sh for system-deps + service registration.
  *   7. Sync agent files, slash commands, skills.
- *   8. Copy plugin to ~/.config/opencode/plugins/bizar/.
- *   9. Patch opencode.json with the Bizar plugin entry.
+ *   8. Copy plugin to ~/.config/cline/plugins/bizar/.
+ *   9. Patch cline.json with the Bizar plugin entry.
  *  10. (update only) Restart dashboard.
  *  11. Doctor health check.
  *  12. Summary.
@@ -1098,7 +1098,7 @@ export async function runProvision(opts = {}) {
   if (mode === 'update') {
     console.log('  Installed vs. latest:');
     printVersionMatrix([
-      { label: 'opencode-ai', current: state.opencodeCli.version, latest: state.opencodeCli.latest },
+      { label: 'cline', current: state.clineCli.version, latest: state.clineCli.latest },
       { label: PKG_MAIN, current: state.pkgVersion, latest: state.pkgLatest },
     ]);
     console.log('');
@@ -1157,7 +1157,7 @@ export async function runProvision(opts = {}) {
   };
 
   if (mode === 'update') {
-    await runStep('opencode-ai', () => updateOpencodeCli({ dryRun, force }));
+    await runStep('cline', () => updateClineCli({ dryRun, force }));
   }
   await runStep(PKG_MAIN, () => ensureNpmPackage(PKG_MAIN, { mode, dryRun, force }));
 
@@ -1170,7 +1170,7 @@ export async function runProvision(opts = {}) {
   // ── 6.5. LightRAG install (Node-side, in case shell script skipped) ─
   await runStep('lightrag-server', () => installLightragProvision({ dryRun }));
 
-  // ── 7-9. Sync agent files, commands, skills, plugin, opencode.json ──
+  // ── 7-9. Sync agent files, commands, skills, plugin, cline.json ──
   console.log('');
   await runStep('agent files + slash commands + skills', () =>
     Promise.all([
@@ -1182,10 +1182,10 @@ export async function runProvision(opts = {}) {
       return { ok: allOk, message: msgs || 'synced' };
     }),
   );
-  await runStep('plugin → ~/.config/opencode/plugins/bizar/', () =>
-    copyPluginToOpencode({ dryRun, force }),
+  await runStep('plugin → ~/.config/cline/plugins/bizar/', () =>
+    copyPluginToCline({ dryRun, force }),
   );
-  await runStep('opencode.json plugin entry', () => patchOpencodeJson({ dryRun, force }));
+  await runStep('cline.json plugin entry', () => patchClineJson({ dryRun, force }));
 
   // ── 9.5. v5.x — issue #7. Restart the system service so it picks up
   // the freshly-installed binary. We do this AFTER the npm upgrade
@@ -1395,7 +1395,7 @@ export async function runCheck(channel = 'stable') {
 
   const state = detectState();
   printVersionMatrix([
-    { label: 'opencode-ai', current: state.opencodeCli.version, latest: state.opencodeCli.latest },
+    { label: 'cline', current: state.clineCli.version, latest: state.clineCli.latest },
     { label: PKG_MAIN, current: state.pkgVersion, latest: state.pkgLatest },
   ]);
 

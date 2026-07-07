@@ -5,7 +5,7 @@
  *
  * CRUD on the v2 canvas (`plans/<slug>/plan.json`) and on the plan
  * metadata (`plans/<slug>/meta.json`). Pure file I/O — does not require
- * the `opencode serve` child, so it works in any environment, even
+ * the `cline serve` child, so it works in any environment, even
  * when background agents are disabled.
  *
  * Actions:
@@ -252,7 +252,7 @@ export interface PlanActionArgs {
  * result; never throws.
  *
  * Extracted from the tool factory so tests can drive the same code path
- * without needing the opencode tool framework.
+ * without needing the cline tool framework.
  */
 export function planAction(
   worktree: string,

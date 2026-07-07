@@ -29,7 +29,7 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
 };
 
 /**
- * Minimal client surface the logger depends on. The real opencode client's
+ * Minimal client surface the logger depends on. The real cline client's
  * `app.log` is a generated SDK method with a complex Options<T> type; we
  * accept any object with a compatible `app.log` method and treat the body
  * as an opaque `unknown` at the boundary. The logger internally shapes the
@@ -88,9 +88,9 @@ function readEnvLevel(): string | undefined {
 const SERVICE_NAME = "bizar";
 
 /**
- * Construct a Logger bound to the opencode client.
+ * Construct a Logger bound to the cline client.
  *
- * @param client    The opencode client (we use only `client.app.log`).
+ * @param client    The cline client (we use only `client.app.log`).
  * @param envLevel  Optional override for `BIZAR_LOG_LEVEL`. If omitted, the
  *                  env var is read once. Env vars are read at plugin init;
  *                  mid-session changes are ignored (spec §6.5).

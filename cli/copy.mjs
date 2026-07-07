@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import ora from 'ora';
 import chalk from 'chalk';
-import { repoPath, opencodeConfigDir, opencodeAgentsDir, detectRtk, detectSemble, detectUv, detectSkillsCli } from './utils.mjs';
+import { repoPath, clineConfigDir, clineAgentsDir, detectRtk, detectSemble, detectUv, detectSkillsCli } from './utils.mjs';
 
 async function fileExists(path) {
   try {
@@ -32,7 +32,7 @@ async function atomicWriteText(filePath, content) {
 
 export async function installAgents(agentFiles, mode) {
   const spinner = ora({ text: 'Installing agent definitions...', color: 'magenta' }).start();
-  const destDir = opencodeAgentsDir();
+  const destDir = clineAgentsDir();
   await mkdir(destDir, { recursive: true });
 
   let count = 0;
@@ -54,14 +54,14 @@ export async function installAgents(agentFiles, mode) {
 export async function installAgentsMd(mode) {
   const spinner = ora({ text: 'Installing AGENTS.md routing table...', color: 'magenta' }).start();
   const src = repoPath('config', 'AGENTS.md');
-  const dest = join(opencodeConfigDir(), 'AGENTS.md');
+  const dest = join(clineConfigDir(), 'AGENTS.md');
 
   if (mode === 'merge' && await fileExists(dest)) {
     spinner.warn(chalk.yellow('AGENTS.md already exists — skipping (use fresh mode to overwrite)'));
     return false;
   }
 
-  await mkdir(opencodeConfigDir(), { recursive: true });
+  await mkdir(clineConfigDir(), { recursive: true });
   await copyFile(src, dest);
   spinner.succeed(chalk.green('AGENTS.md installed'));
   return true;
@@ -78,7 +78,7 @@ export async function installSkill(name) {
     return false;
   }
 
-  const skillsDir = join(homedir(), '.opencode', 'skills');
+  const skillsDir = join(homedir(), '.cline', 'skills');
   const dstDir = join(skillsDir, name);
   await mkdir(dstDir, { recursive: true });
 
@@ -114,22 +114,22 @@ async function readdirRecursive(dir) {
   return files;
 }
 
-export async function installOpencodeJson(mode) {
-  const spinner = ora({ text: 'Configuring opencode.json...', color: 'yellow' }).start();
-  const template = repoPath('config', 'opencode.json');
-  const dest = join(opencodeConfigDir(), 'opencode.json');
-  await mkdir(opencodeConfigDir(), { recursive: true });
+export async function installClineJson(mode) {
+  const spinner = ora({ text: 'Configuring cline.json...', color: 'yellow' }).start();
+  const template = repoPath('config', 'cline.json');
+  const dest = join(clineConfigDir(), 'cline.json');
+  await mkdir(clineConfigDir(), { recursive: true });
 
   const templateRaw = await readFile(template, 'utf-8');
   let templateObj;
   try { templateObj = JSON.parse(templateRaw); } catch {
-    spinner.fail(chalk.red('Invalid opencode.json template'));
+    spinner.fail(chalk.red('Invalid cline.json template'));
     return false;
   }
 
   if (mode === 'fresh' || !(await fileExists(dest))) {
     await atomicWriteText(dest, JSON.stringify(templateObj, null, 2) + '\n');
-    spinner.succeed(chalk.green('opencode.json configured'));
+    spinner.succeed(chalk.green('cline.json configured'));
     return true;
   }
 
@@ -139,20 +139,20 @@ export async function installOpencodeJson(mode) {
     const existing = JSON.parse(existingRaw);
     const merged = deepMerge(existing, templateObj);
     await atomicWriteText(dest, JSON.stringify(merged, null, 2) + '\n');
-    spinner.succeed(chalk.green('opencode.json merged (existing keys preserved)'));
+    spinner.succeed(chalk.green('cline.json merged (existing keys preserved)'));
     return true;
   } catch {
     // If existing is invalid JSON, backup and overwrite
     const backup = dest + '.bak';
     await copyFile(dest, backup);
     await atomicWriteText(dest, JSON.stringify(templateObj, null, 2) + '\n');
-    spinner.succeed(chalk.green('opencode.json written (backup at opencode.json.bak)'));
+    spinner.succeed(chalk.green('cline.json written (backup at cline.json.bak)'));
     return true;
   }
 }
 
 /**
- * The 7 BizarHarness tool keys that must be enabled in the user's opencode.json.
+ * The 7 BizarHarness tool keys that must be enabled in the user's cline.json.
  * These are merged idempotently — existing tool keys are never overwritten.
  */
 const BIZAR_TOOLS = {
@@ -167,12 +167,12 @@ const BIZAR_TOOLS = {
 
 /**
  * Idempotently merge the 7 BizarHarness tool keys into the user's
- * `~/.config/opencode/opencode.json` (or the platform-equivalent config dir).
+ * `~/.config/cline/cline.json` (or the platform-equivalent config dir).
  * Does NOT overwrite any other user config.
  * Logs a diff of what was added.
  */
 export async function mergeToolsIntoUserConfig() {
-  const dest = join(opencodeConfigDir(), 'opencode.json');
+  const dest = join(clineConfigDir(), 'cline.json');
 
   // If user has no config yet, nothing to merge into
   if (!(await fileExists(dest))) {
@@ -245,32 +245,32 @@ export async function installBizarFolder() {
 }
 
 /**
- * Install the Bizar plugin into a project's .opencode/ directory.
+ * Install the Bizar plugin into a project's .cline/ directory.
  *
  * Per spec §9.2:
- *   - Copies plugins/bizar/ → <project>/.opencode/plugins/bizar/
+ *   - Copies plugins/bizar/ → <project>/.cline/plugins/bizar/
  *   - Excludes: node_modules/, dist/, *.log, .DS_Store
  *   - Returns { copied: number, errors: string[] }
  *
  * INSTALL PATH CONCLUSION (step 5 of the Heimdall wiring task):
- * The install target is INSIDE the project at <project>/.opencode/plugins/bizar/,
- * NOT in the system config dir (~/.config/opencode/plugins/bizar/).
+ * The install target is INSIDE the project at <project>/.cline/plugins/bizar/,
+ * NOT in the system config dir (~/.config/cline/plugins/bizar/).
  * Rationale:
  *   1. Per-project isolation — each project pins its own plugin version
  *      (spec §9.1: "Per-project isolation (each project can pin its own
  *      plugin version)").
- *   2. Follows opencode's project-local config convention — the config file
- *      is at <project>/.opencode/opencode.json and the plugin ref is
+ *   2. Follows cline's project-local config convention — the config file
+ *      is at <project>/.cline/cline.json and the plugin ref is
  *      `./plugins/bizar/index.ts` relative to that config dir.
  *   3. Mirrors the .bizar/ folder pattern (project-local, not system-wide).
- *   4. Not "polluting" — the .opencode/ directory is the standard location
- *      for project-local opencode config (analogous to .vscode/).
+ *   4. Not "polluting" — the .cline/ directory is the standard location
+ *      for project-local cline config (analogous to .vscode/).
  *   5. In the Docker sandbox (BizarHarness-dev), the host project is mounted
- *      at /project, so /project/.opencode/plugins/bizar/ resolves correctly
- *      relative to /project/.opencode/opencode.json.
+ *      at /project, so /project/.cline/plugins/bizar/ resolves correctly
+ *      relative to /project/.cline/cline.json.
  *
  * The source (<repo>/plugins/bizar/) is copied FROM the harness repo INTO
- * the project's .opencode/ directory. After install, the harness repo is no
+ * the project's .cline/ directory. After install, the harness repo is no
  * longer the authoritative source — the project has its own copy.
  *
  * See spec §9.1 for the canonical layout diagram.
@@ -297,7 +297,7 @@ export async function installPluginBizar(projectRoot) {
   }
 
   try {
-    const destDir = join(projectRoot, '.opencode', 'plugins', 'bizar');
+    const destDir = join(projectRoot, '.cline', 'plugins', 'bizar');
     await mkdir(destDir, { recursive: true });
 
     // Exclude patterns per spec §9.2
@@ -346,12 +346,12 @@ export async function installHeadroom() {
 
   const already = await detectRtk();
   if (already) {
-    const spinner = ora({ text: 'Configuring Headroom for opencode...', color: 'magenta' }).start();
+    const spinner = ora({ text: 'Configuring Headroom for cline...', color: 'magenta' }).start();
     try {
-      execSync('headroom wrap opencode', { stdio: 'pipe' });
-      spinner.succeed(chalk.green('Headroom configured for opencode'));
+      execSync('headroom wrap cline', { stdio: 'pipe' });
+      spinner.succeed(chalk.green('Headroom configured for cline'));
     } catch {
-      spinner.warn(chalk.yellow('Could not auto-configure Headroom — run `headroom wrap opencode` manually'));
+      spinner.warn(chalk.yellow('Could not auto-configure Headroom — run `headroom wrap cline` manually'));
     }
     return true;
   }
@@ -368,17 +368,17 @@ export async function installHeadroom() {
       'pip install --user "headroom-ai[all]"',
       { stdio: 'pipe', timeout: 60000 },
     );
-    spinner.text = 'Configuring Headroom for opencode...';
-    execSync('headroom wrap opencode', { stdio: 'pipe' });
-    spinner.succeed(chalk.green('Headroom installed and configured for opencode'));
+    spinner.text = 'Configuring Headroom for cline...';
+    execSync('headroom wrap cline', { stdio: 'pipe' });
+    spinner.succeed(chalk.green('Headroom installed and configured for cline'));
     return true;
   } catch {
     // Fall back to npm
     try {
       execSync('npm install -g headroom-ai', { stdio: 'pipe', timeout: 60000 });
-      spinner.text = 'Configuring Headroom for opencode...';
-      execSync('headroom wrap opencode', { stdio: 'pipe' });
-      spinner.succeed(chalk.green('Headroom installed (npm) and configured for opencode'));
+      spinner.text = 'Configuring Headroom for cline...';
+      execSync('headroom wrap cline', { stdio: 'pipe' });
+      spinner.succeed(chalk.green('Headroom installed (npm) and configured for cline'));
       return true;
     } catch {
       spinner.fail(chalk.red('Headroom install failed. Install manually: pip install "headroom-ai[all]" or npm install -g headroom-ai'));
@@ -511,7 +511,7 @@ export async function installCuratedSkills(packs) {
 
 export async function installRules() {
   const src = repoPath('config', 'rules');
-  const dest = join(opencodeConfigDir(), 'rules');
+  const dest = join(clineConfigDir(), 'rules');
   const { mkdirSync, readdirSync, copyFileSync } = await import('node:fs');
   mkdirSync(dest, { recursive: true });
   let count = 0;
@@ -524,7 +524,7 @@ export async function installRules() {
 
 export async function installHooks() {
   const src = repoPath('config', 'hooks');
-  const dest = join(opencodeConfigDir(), 'hooks');
+  const dest = join(clineConfigDir(), 'hooks');
   const { mkdirSync, readdirSync, copyFileSync } = await import('node:fs');
   mkdirSync(dest, { recursive: true });
   let count = 0;
@@ -537,7 +537,7 @@ export async function installHooks() {
 
 export async function installCommands() {
   const src = repoPath('config', 'commands');
-  const dest = join(opencodeConfigDir(), 'commands');
+  const dest = join(clineConfigDir(), 'commands');
   const { mkdirSync, readdirSync, copyFileSync } = await import('node:fs');
   mkdirSync(dest, { recursive: true });
   let count = 0;
@@ -562,7 +562,7 @@ export async function installCommands() {
  */
 export async function installCommandsBizar() {
   const src = repoPath('config', 'commands');
-  const dest = join(opencodeConfigDir(), 'commands-bizar');
+  const dest = join(clineConfigDir(), 'commands-bizar');
   const { mkdirSync, readdirSync, copyFileSync, lstatSync } = await import('node:fs');
 
   // Guard: skip if dest is a symlink (don't follow other packages' symlinks)

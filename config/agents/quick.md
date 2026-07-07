@@ -44,4 +44,4 @@ You do **not** have `task` permission. If work needs a subagent, refuse and tell
 
 Keep replies short. The user picked you for speed, not depth.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

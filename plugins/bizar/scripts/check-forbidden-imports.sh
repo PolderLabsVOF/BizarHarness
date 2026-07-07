@@ -7,7 +7,7 @@
 #
 # Exception (NEW-H1 / HIGH-24): `node:crypto` is allowed ONLY in
 # `src/serve.ts`, where the 32-byte password is generated for the
-# opencode serve child's authentication. The legacy `src/fingerprint.ts`
+# cline serve child's authentication. The legacy `src/fingerprint.ts`
 # also uses `node:crypto` (for SHA-256 hashing) and is allowed as a
 # pre-existing exception; any NEW use of `node:crypto` outside serve.ts
 # and fingerprint.ts fails the check.

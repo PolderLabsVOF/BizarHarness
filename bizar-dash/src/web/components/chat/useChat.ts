@@ -3,12 +3,12 @@
 //
 // v4.2.5 — Chat overhaul. Supports two parallel message streams:
 //   - bizar     (GET /api/chat)
-//   - opencode  (GET /api/opencode-sessions/:id/messages + SSE)
+//   - cline  (GET /api/cline-sessions/:id/messages + SSE)
 //
-// v5.0.0 — bug #4 fix: `loadOpencodeSession` failure path now extracts
+// v5.0.0 — bug #4 fix: `loadClineSession` failure path now extracts
 // structured `code`, `cause`, `status`, and `suggestion` from the
 // server's ApiError.data envelope and exposes them via a new
-// `opencodeErrorInfo` field. `ChatInfoPanel` consumes that field to
+// `clineErrorInfo` field. `ChatInfoPanel` consumes that field to
 // render a structured "Couldn't load session" panel with the server's
 // `suggestion` verbatim, plus a Retry button.
 //
@@ -17,23 +17,23 @@
 //     each error up to a cap). Closes cleanly on unmount and on
 //     session-switch (no leaked EventSource).
 //   * Optimistic send uses a stable `msg_*` ID and is deduped when
-//     opencode echoes the message back via SSE `message.updated`/`message.user.*`.
-//   * `opencodeMessages` keeps server-provided IDs distinct from
+//     cline echoes the message back via SSE `message.updated`/`message.user.*`.
+//   * `clineMessages` keeps server-provided IDs distinct from
 //     optimistic IDs so the merge is unambiguous (server echo
 //     replaces optimistic by matching messageID; otherwise both stick
 //     around briefly until the user/session state catches up).
-//   * `onSend` routes to `/opencode-sessions/:id/send` when an
-//     opencode session is active, `/chat` otherwise. Errors surface
+//   * `onSend` routes to `/cline-sessions/:id/send` when an
+//     cline session is active, `/chat` otherwise. Errors surface
 //     via toast + we always remove the optimistic placeholder.
 //   * Sessions are managed by source:
 //       - `bizarSessions`  → local .jsonl store, POST /chat/sessions
-//       - `opencodeSessions` → opencode serve, GET /opencode-sessions
+//       - `clineSessions` → cline serve, GET /cline-sessions
 //     The rail shows both side-by-side with a source indicator and
 //     uses separate rename/delete endpoints per source.
 //   * All async actions surface a single `busy: { create, send, rename, delete }`
 //     so the rail can disable buttons properly.
 //   * No `any` leaks — all SSE event shapes are typed via
-//     `OpencodeSseEnvelope`.
+//     `ClineSseEnvelope`.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
@@ -67,21 +67,21 @@ export interface ChatBusyState {
 }
 
 /**
- * Structured error envelope surfaced by `loadOpencodeSession` when
- * the upstream `/api/opencode-sessions/:id/messages` call fails.
+ * Structured error envelope surfaced by `loadClineSession` when
+ * the upstream `/api/cline-sessions/:id/messages` call fails.
  *
  * - `code` mirrors the server's `error` field (`plugin_offline`,
- *   `directory_unknown`, `opencode_error`, `bad_request`).
+ *   `directory_unknown`, `cline_error`, `bad_request`).
  * - `cause` is the server's structured cause (`network`, `timeout`,
  *   `unknown`, or a raw ECONNREFUSED-style string).
  * - `suggestion` is the operator-friendly hint from the server
  *   (e.g. "Run `bizar doctor` for diagnostics").
  * - `canRetry` is `true` whenever the failure is transient (network
  *   error, upstream 502) — i.e. the user can fix it by trying again
- *   after starting the plugin / waiting for opencode to come back.
+ *   after starting the plugin / waiting for cline to come back.
  *   False for hard failures (bad_request).
  */
-export interface OpencodeErrorInfo {
+export interface ClineErrorInfo {
   type: 'session_load_failed';
   code: string;
   message: string;
@@ -91,8 +91,8 @@ export interface OpencodeErrorInfo {
   canRetry: boolean;
 }
 
-/** Shape of one opencode SSE envelope after unwrapping. */
-interface OpencodeSseEnvelope {
+/** Shape of one cline SSE envelope after unwrapping. */
+interface ClineSseEnvelope {
   type: string;
   sessionID?: string;
   messageID?: string;
@@ -104,7 +104,7 @@ interface OpencodeSseEnvelope {
  * The chat hook returns a stable bag of state + actions used by
  * both Chat.tsx (desktop) and MobileChat.tsx (mobile).
  *
- * The hook owns the lifecycle of the opencode SSE stream. Callers
+ * The hook owns the lifecycle of the cline SSE stream. Callers
  * should never instantiate their own EventSource for the same
  * session — they should always go through this hook.
  */
@@ -121,20 +121,20 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     delete: false,
   });
 
-  // ── Opencode stream ─────────────────────────────────────────────────────────
-  const [opencodeSessions, setOpencodeSessions] = useState<ChatSession[]>([]);
-  const [opencodeMessages, setOpencodeMessages] = useState<ChatMessage[]>([]);
-  const [activeSource, setActiveSource] = useState<'bizar' | 'opencode' | null>(null);
-  const [activeOpencodeSessionId, setActiveOpencodeSessionId] = useState<string | null>(null);
-  const [opencodeError, setOpencodeError] = useState<string | null>(null);
-  const [opencodeSuggestion, setOpencodeSuggestion] = useState<string | null>(null);
+  // ── Cline stream ─────────────────────────────────────────────────────────
+  const [clineSessions, setClineSessions] = useState<ChatSession[]>([]);
+  const [clineMessages, setClineMessages] = useState<ChatMessage[]>([]);
+  const [activeSource, setActiveSource] = useState<'bizar' | 'cline' | null>(null);
+  const [activeClineSessionId, setActiveClineSessionId] = useState<string | null>(null);
+  const [clineError, setClineError] = useState<string | null>(null);
+  const [clineSuggestion, setClineSuggestion] = useState<string | null>(null);
   /**
-   * Structured error info for the opencode session load path. New in
+   * Structured error info for the cline session load path. New in
    * v5.0.0 — `ChatInfoPanel` consumes this to render its own error
    * section (in addition to the chat-thread-header error already
    * rendered by Chat.tsx). `null` when no error.
    */
-  const [opencodeErrorInfo, setOpencodeErrorInfo] = useState<OpencodeErrorInfo | null>(null);
+  const [clineErrorInfo, setClineErrorInfo] = useState<ClineErrorInfo | null>(null);
 
   // ── v3.22 — session-state, unread, tree per session ────────────────────────
   const [sessionStates, setSessionStates] = useState<Record<string, SessionDisplayState>>({});
@@ -142,8 +142,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   const [newMessageCount, setNewMessageCount] = useState(0);
 
   // Set of messageIDs the user has already accepted (or that arrived
-  // via SSE) — used by the opencode path to dedupe optimistic + echo.
-  const [seenOpencodeMessages, setSeenOpencodeMessages] = useState<Set<string>>(new Set());
+  // via SSE) — used by the cline path to dedupe optimistic + echo.
+  const [seenClineMessages, setSeenClineMessages] = useState<Set<string>>(new Set());
 
   // Backwards-compat alias (chat.sendSession delete etc. used `pinned` historically).
   const [pinned, setPinned] = useState<Set<number>>(new Set());
@@ -160,7 +160,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   >(null);
 
   // ── SSE lifecycle refs ──────────────────────────────────────────────────────
-  const opencodeEsRef = useRef<EventSource | null>(null);
+  const clineEsRef = useRef<EventSource | null>(null);
   const sseReconnectAttemptRef = useRef(0);
   const sseReconnectTimerRef = useRef<number | null>(null);
   // The id of the session we're CURRENTLY streaming. When the user
@@ -171,15 +171,15 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   // Set to false on explicit disconnect (session switch / unmount).
   const sseAutoReconnectRef = useRef(false);
 
-  /** Append `msg` to `opencodeMessages`, replacing any prior
+  /** Append `msg` to `clineMessages`, replacing any prior
    *  optimistic entry whose content matches or whose ID matches. */
-  const appendOpencodeMessage = useCallback((msg: ChatMessage) => {
+  const appendClineMessage = useCallback((msg: ChatMessage) => {
     if (!msg) return;
-    setOpencodeMessages((cur) => {
+    setClineMessages((cur) => {
       // Existing exact-ID match: skip.
       if (msg.id && cur.some((m) => m.id === msg.id)) return cur;
       // Optimistic placeholder (starts with msg_) with the same role
-      // and content: replace it. This is how opencode's echo of our
+      // and content: replace it. This is how cline's echo of our
       // own message gets deduplicated against the optimistic copy.
       const idx = cur.findIndex(
         (m) =>
@@ -200,7 +200,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   /** Mark a messageID as seen — used to dedupe echo rounds. */
   const markSeen = useCallback((id: string | undefined) => {
     if (!id) return;
-    setSeenOpencodeMessages((cur) => {
+    setSeenClineMessages((cur) => {
       if (cur.has(id)) return cur;
       const next = new Set(cur);
       next.add(id);
@@ -283,28 +283,28 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     }
   }, []);
 
-  const refreshOpencodeSessions = useCallback(async () => {
+  const refreshClineSessions = useCallback(async () => {
     try {
       const data = await api.get<{ sessions: ChatSession[] }>(
-        '/opencode-sessions',
+        '/cline-sessions',
       );
       // Enrich with source marker.
       const enriched: ChatSession[] = (data.sessions || []).map((s) => ({
         ...s,
-        source: 'opencode' as const,
+        source: 'cline' as const,
         title: s.title || s.id,
       }));
-      setOpencodeSessions(enriched);
+      setClineSessions(enriched);
     } catch {
       /* best-effort */
     }
   }, []);
 
-  // ── Opencode SSE connection ─────────────────────────────────────────────────
+  // ── Cline SSE connection ─────────────────────────────────────────────────
   //
   // Single source of truth for the EventSource lifecycle. Callers:
-  //   - `loadOpencodeSession(id)`  — close any current, open a new one.
-  //   - `closeOpencodeSession()`   — close and stop auto-reconnect.
+  //   - `loadClineSession(id)`  — close any current, open a new one.
+  //   - `closeClineSession()`   — close and stop auto-reconnect.
   //   - unmount                    — close and stop.
   //
   // On error / network drop, the EventSource triggers `onerror`. We
@@ -315,13 +315,13 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   const openSseForSession = useCallback(
     (id: string) => {
       // Close any existing connection first.
-      if (opencodeEsRef.current) {
+      if (clineEsRef.current) {
         try {
-          opencodeEsRef.current.close();
+          clineEsRef.current.close();
         } catch {
           /* noop */
         }
-        opencodeEsRef.current = null;
+        clineEsRef.current = null;
       }
       if (sseReconnectTimerRef.current !== null) {
         clearTimeout(sseReconnectTimerRef.current);
@@ -333,24 +333,24 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       // optional, but harmless).
       const tok = api.getToken();
       const url = tok
-        ? `/api/opencode-sessions/${encodeURIComponent(id)}/stream?token=${encodeURIComponent(tok)}`
-        : `/api/opencode-sessions/${encodeURIComponent(id)}/stream`;
+        ? `/api/cline-sessions/${encodeURIComponent(id)}/stream?token=${encodeURIComponent(tok)}`
+        : `/api/cline-sessions/${encodeURIComponent(id)}/stream`;
 
       sseCurrentSessionIdRef.current = id;
       sseAutoReconnectRef.current = true;
       sseReconnectAttemptRef.current = 0;
-      setOpencodeError(null);
-      setOpencodeSuggestion(null);
-      setOpencodeErrorInfo(null);
+      setClineError(null);
+      setClineSuggestion(null);
+      setClineErrorInfo(null);
 
       const connect = () => {
         if (!sseAutoReconnectRef.current) return;
         if (sseCurrentSessionIdRef.current !== id) return;
         const es = new EventSource(url);
-        opencodeEsRef.current = es;
+        clineEsRef.current = es;
 
         // Helper: dispatch one parsed envelope to local state.
-        const onEnvelope = (evt: OpencodeSseEnvelope | null) => {
+        const onEnvelope = (evt: ClineSseEnvelope | null) => {
           if (!evt || !evt.type) return;
           // Drop events for OTHER sessions even though the proxy
           // already filters — defense in depth.
@@ -366,7 +366,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
             const payload = evt.data as
               | { messageID?: string; data?: { content?: string } }
               | undefined;
-            appendOpencodeMessage({
+            appendClineMessage({
               id: payload?.messageID ?? evt.messageID,
               role: 'user',
               content: payload?.data?.content ?? '',
@@ -382,7 +382,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
             const payload = evt.data as
               | { messageID?: string; data?: { content?: string } }
               | undefined;
-            appendOpencodeMessage({
+            appendClineMessage({
               id: payload?.messageID ?? evt.messageID,
               role: 'assistant',
               content: payload?.data?.content ?? '',
@@ -402,7 +402,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
               | undefined;
             const text = payload?.part?.text ?? '';
             if (!text) return;
-            appendOpencodeMessage({
+            appendClineMessage({
               id: payload?.id ?? payload?.messageID ?? evt.messageID,
               role: 'assistant',
               content: text,
@@ -429,9 +429,9 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
             return;
           }
           if (evt.type === 'session.error') {
-            setOpencodeError(
+            setClineError(
               (evt.data as { message?: string } | undefined)?.message ||
-                'opencode session error',
+                'cline session error',
             );
             return;
           }
@@ -443,7 +443,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         // Stable parser — the server may send both `{type: "x"}` and
         // `sync` envelopes with a `.<n>` version suffix. We accept both.
         const parseData = (raw: string | null | undefined):
-          | OpencodeSseEnvelope
+          | ClineSseEnvelope
           | null => {
           if (!raw) return null;
           try {
@@ -536,7 +536,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
             } catch {
               /* noop */
             }
-            opencodeEsRef.current = null;
+            clineEsRef.current = null;
             return;
           }
           try {
@@ -544,7 +544,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
           } catch {
             /* noop */
           }
-          opencodeEsRef.current = null;
+          clineEsRef.current = null;
 
           const nextAttempt = sseReconnectAttemptRef.current + 1;
           sseReconnectAttemptRef.current = nextAttempt;
@@ -568,18 +568,18 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         es.onopen = () => {
           // Successful (re)connect — reset backoff.
           sseReconnectAttemptRef.current = 0;
-          setOpencodeError(null);
-          setOpencodeSuggestion(null);
-          setOpencodeErrorInfo(null);
+          setClineError(null);
+          setClineSuggestion(null);
+          setClineErrorInfo(null);
         };
       };
 
       connect();
     },
-    [appendOpencodeMessage, markSeen, markSessionStreaming, setSessionDisplayState],
+    [appendClineMessage, markSeen, markSessionStreaming, setSessionDisplayState],
   );
 
-  const closeOpencodeSession = useCallback(() => {
+  const closeClineSession = useCallback(() => {
     // Disable auto-reconnect first so the onerror handler short-circuits.
     sseAutoReconnectRef.current = false;
     sseCurrentSessionIdRef.current = null;
@@ -587,59 +587,59 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       clearTimeout(sseReconnectTimerRef.current);
       sseReconnectTimerRef.current = null;
     }
-    if (opencodeEsRef.current) {
+    if (clineEsRef.current) {
       try {
-        opencodeEsRef.current.close();
+        clineEsRef.current.close();
       } catch {
         /* noop */
       }
-      opencodeEsRef.current = null;
+      clineEsRef.current = null;
     }
-    setOpencodeMessages([]);
-    setSeenOpencodeMessages(new Set());
-    setOpencodeError(null);
-    setOpencodeSuggestion(null);
-    setOpencodeErrorInfo(null);
-    setActiveOpencodeSessionId(null);
+    setClineMessages([]);
+    setSeenClineMessages(new Set());
+    setClineError(null);
+    setClineSuggestion(null);
+    setClineErrorInfo(null);
+    setActiveClineSessionId(null);
     setActiveSource('bizar');
   }, []);
 
-  const loadOpencodeSession = useCallback(
+  const loadClineSession = useCallback(
     async (id: string) => {
-      // Close any previous opencode session cleanly.
+      // Close any previous cline session cleanly.
       sseAutoReconnectRef.current = false;
-      if (opencodeEsRef.current) {
+      if (clineEsRef.current) {
         try {
-          opencodeEsRef.current.close();
+          clineEsRef.current.close();
         } catch {
           /* noop */
         }
-        opencodeEsRef.current = null;
+        clineEsRef.current = null;
       }
       if (sseReconnectTimerRef.current !== null) {
         clearTimeout(sseReconnectTimerRef.current);
         sseReconnectTimerRef.current = null;
       }
 
-      setOpencodeError(null);
-      setOpencodeSuggestion(null);
-      setOpencodeErrorInfo(null);
+      setClineError(null);
+      setClineSuggestion(null);
+      setClineErrorInfo(null);
       setLoading(true);
 
       try {
         const data = await api.get<{ messages: ChatMessage[] }>(
-          `/opencode-sessions/${encodeURIComponent(id)}/messages`,
+          `/cline-sessions/${encodeURIComponent(id)}/messages`,
         );
-        setOpencodeMessages(data.messages || []);
+        setClineMessages(data.messages || []);
       } catch (err) {
         const msg = (err as Error).message;
         // v5.0.0 — bug #4: surface the server's structured error
         // envelope so the UI can render a useful suggestion instead
         // of the raw upstream error string. The server returns
         // `{error, message, cause?, status?, suggestion?}` for every
-        // non-2xx response (see serve-info.mjs + routes/opencode-
+        // non-2xx response (see serve-info.mjs + routes/cline-
         // session-detail.mjs).
-        let info: OpencodeErrorInfo | null = null;
+        let info: ClineErrorInfo | null = null;
         if (err instanceof ApiError && err.data && typeof err.data === 'object') {
           const d = err.data as {
             error?: string;
@@ -677,25 +677,25 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         }
         // Legacy fields — kept so the existing Chat.tsx thread-header
         // error display continues to work unchanged.
-        setOpencodeError(
+        setClineError(
           info
-            ? `Opencode session load failed (${info.code}): ${info.message}`
-            : `Opencode session load failed: ${msg}`,
+            ? `Cline session load failed (${info.code}): ${info.message}`
+            : `Cline session load failed: ${msg}`,
         );
-        setOpencodeSuggestion(info?.suggestion ?? null);
-        setOpencodeErrorInfo(info);
+        setClineSuggestion(info?.suggestion ?? null);
+        setClineErrorInfo(info);
         toastRef.current?.error(
           info
-            ? `Opencode session load failed: ${info.message}`
-            : `Opencode session load failed: ${msg}`,
+            ? `Cline session load failed: ${info.message}`
+            : `Cline session load failed: ${msg}`,
         );
-        setOpencodeMessages([]);
+        setClineMessages([]);
       } finally {
         setLoading(false);
       }
 
-      setActiveOpencodeSessionId(id);
-      setActiveSource('opencode');
+      setActiveClineSessionId(id);
+      setActiveSource('cline');
       markSessionStreaming(id, false);
       openSseForSession(id);
     },
@@ -705,27 +705,27 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   // ── Select a bizar session ──────────────────────────────────────────────────
   const selectBizarSession = useCallback(
     (sid: string) => {
-      closeOpencodeSession();
+      closeClineSession();
       setSessionId(sid);
       setActiveSource('bizar');
       loadChat(sid);
       // Reset unread for the session being opened.
       setSessionDisplayState(sid, { unread: 0 });
     },
-    [closeOpencodeSession, loadChat, setSessionDisplayState],
+    [closeClineSession, loadChat, setSessionDisplayState],
   );
 
-  // ── Create session (opencode primary; bizar fallback) ──────────────────────
+  // ── Create session (cline primary; bizar fallback) ──────────────────────
   const onCreateSession = useCallback(async (): Promise<{
     ok: boolean;
-    source?: 'bizar' | 'opencode';
+    source?: 'bizar' | 'cline';
     id?: string;
   }> => {
     if (busy.create) return { ok: false };
     const agent = settings.defaultAgent || 'odin';
     setBusy((b) => ({ ...b, create: true }));
     try {
-      // Try to create a real opencode session first. This is the
+      // Try to create a real cline session first. This is the
       // primary create path: it gives the user a full conversation
       // roundtrip with SSE streaming, abort, etc.
       try {
@@ -735,20 +735,20 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
           agent: string;
           directory: string;
           createdAt: number;
-        }>('/opencode-sessions/new', { agent });
-        await refreshOpencodeSessions();
+        }>('/cline-sessions/new', { agent });
+        await refreshClineSessions();
         // Open the newly created session right away so the user is
         // dropped into a fresh empty thread, not stuck on the
         // previous one.
-        await loadOpencodeSession(created.id);
+        await loadClineSession(created.id);
         toastRef.current?.success(`Session ${created.id} created.`);
-        return { ok: true, source: 'opencode', id: created.id };
-      } catch (opencodeErr) {
-        // Opencode plugin offline (503) — fall back to the local
+        return { ok: true, source: 'cline', id: created.id };
+      } catch (clineErr) {
+        // Cline plugin offline (503) — fall back to the local
         // per-project .jsonl session. Otherwise, surface the error.
-        if (!(opencodeErr instanceof ApiError) || opencodeErr.status !== 503) {
+        if (!(clineErr instanceof ApiError) || clineErr.status !== 503) {
           toastRef.current?.error(
-            `Create failed: ${(opencodeErr as Error).message}`,
+            `Create failed: ${(clineErr as Error).message}`,
           );
           return { ok: false };
         }
@@ -780,8 +780,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     busy.create,
     settings.defaultAgent,
     snapshot.activeProject,
-    refreshOpencodeSessions,
-    loadOpencodeSession,
+    refreshClineSessions,
+    loadClineSession,
     loadChat,
     refreshSessions,
     setSessionDisplayState,
@@ -799,8 +799,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       const trimmed = message.trim();
       if (!trimmed) return { ok: false };
 
-      if (activeSource === 'opencode' && activeOpencodeSessionId) {
-        const sid = activeOpencodeSessionId;
+      if (activeSource === 'cline' && activeClineSessionId) {
+        const sid = activeClineSessionId;
         const optimisticId = `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
         const optimistic: ChatMessage = {
           id: optimisticId,
@@ -809,12 +809,12 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
           agent,
           ts: new Date().toISOString(),
         };
-        appendOpencodeMessage(optimistic);
+        appendClineMessage(optimistic);
         markSeen(optimisticId);
         setBusy((b) => ({ ...b, send: true }));
         try {
           await api.post<{ ok: boolean; messageId: string }>(
-            `/opencode-sessions/${encodeURIComponent(sid)}/send`,
+            `/cline-sessions/${encodeURIComponent(sid)}/send`,
             {
               message: trimmed,
               agent,
@@ -824,7 +824,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
           return { ok: true };
         } catch (err) {
           // Remove optimistic on failure.
-          setOpencodeMessages((cur) => cur.filter((m) => m.id !== optimisticId));
+          setClineMessages((cur) => cur.filter((m) => m.id !== optimisticId));
           toastRef.current?.error(
             `Send failed: ${(err as Error).message}`,
           );
@@ -882,8 +882,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     },
     [
       activeSource,
-      activeOpencodeSessionId,
-      appendOpencodeMessage,
+      activeClineSessionId,
+      appendClineMessage,
       markSeen,
       markSessionStreaming,
       sessionId,
@@ -911,8 +911,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
 
   const deleteMessage = useCallback(
     (idx: number) => {
-      if (activeSource === 'opencode') {
-        setOpencodeMessages((cur) => cur.filter((_, i) => i !== idx));
+      if (activeSource === 'cline') {
+        setClineMessages((cur) => cur.filter((_, i) => i !== idx));
       } else {
         setBizarMessages((cur) => cur.filter((_, i) => i !== idx));
       }
@@ -970,16 +970,16 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
           toastRef.current?.error('Title cannot be empty.');
           return false;
         }
-        // Try the opencode path first if this id is in the opencode
+        // Try the cline path first if this id is in the cline
         // session list, otherwise the local path. We dispatch by
         // inspecting the in-memory set (avoids a round trip).
-        const isOpencode = opencodeSessions.some((s) => s.id === id);
-        if (isOpencode) {
+        const isCline = clineSessions.some((s) => s.id === id);
+        if (isCline) {
           await api.patch<{ id: string; title: string }>(
-            `/opencode-sessions/${encodeURIComponent(id)}`,
+            `/cline-sessions/${encodeURIComponent(id)}`,
             { title: trimmed },
           );
-          setOpencodeSessions((cur) =>
+          setClineSessions((cur) =>
             cur.map((s) => (s.id === id ? { ...s, title: trimmed } : s)),
           );
         } else {
@@ -1002,7 +1002,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         setBusy((b) => ({ ...b, rename: false }));
       }
     },
-    [busy.rename, opencodeSessions],
+    [busy.rename, clineSessions],
   );
 
   const deleteSession = useCallback(
@@ -1010,12 +1010,12 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       if (busy.delete) return false;
       setBusy((b) => ({ ...b, delete: true }));
       try {
-        const isOpencode = opencodeSessions.some((s) => s.id === id);
-        if (isOpencode) {
-          await api.del(`/opencode-sessions/${encodeURIComponent(id)}`);
-          setOpencodeSessions((cur) => cur.filter((s) => s.id !== id));
-          if (activeOpencodeSessionId === id) {
-            closeOpencodeSession();
+        const isCline = clineSessions.some((s) => s.id === id);
+        if (isCline) {
+          await api.del(`/cline-sessions/${encodeURIComponent(id)}`);
+          setClineSessions((cur) => cur.filter((s) => s.id !== id));
+          if (activeClineSessionId === id) {
+            closeClineSession();
           }
         } else {
           await api.del(`/chat/sessions/${encodeURIComponent(id)}`);
@@ -1043,9 +1043,9 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     },
     [
       busy.delete,
-      opencodeSessions,
-      activeOpencodeSessionId,
-      closeOpencodeSession,
+      clineSessions,
+      activeClineSessionId,
+      closeClineSession,
       sessionId,
     ],
   );
@@ -1060,7 +1060,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bizarMessages, opencodeMessages]);
+  }, [bizarMessages, clineMessages]);
 
   // ── Cleanup SSE on unmount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -1071,13 +1071,13 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         clearTimeout(sseReconnectTimerRef.current);
         sseReconnectTimerRef.current = null;
       }
-      if (opencodeEsRef.current) {
+      if (clineEsRef.current) {
         try {
-          opencodeEsRef.current.close();
+          clineEsRef.current.close();
         } catch {
           /* noop */
         }
-        opencodeEsRef.current = null;
+        clineEsRef.current = null;
       }
     };
   }, []);
@@ -1089,7 +1089,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     } else {
       loadChat();
     }
-    refreshOpencodeSessions();
+    refreshClineSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1127,34 +1127,34 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   return {
     // ── State ────────────────────────────────────────────────────────────────
     messages:
-      activeSource === 'opencode' ? opencodeMessages : bizarMessages,
+      activeSource === 'cline' ? clineMessages : bizarMessages,
     bizarMessages,
-    opencodeMessages,
+    clineMessages,
     sessions,
-    opencodeSessions,
+    clineSessions,
     sessionId,
     setSessionId,
     loading,
     sending: busy.send,
     pinned,
     listRef,
-    // ── Opencode state ──────────────────────────────────────────────────────
+    // ── Cline state ──────────────────────────────────────────────────────
     activeSource,
-    activeOpencodeSessionId,
-    opencodeError,
-    opencodeSuggestion,
+    activeClineSessionId,
+    clineError,
+    clineSuggestion,
     /**
      * v5.0.0 — bug #4: structured error info consumed by
      * `ChatInfoPanel`. `null` when no error is active.
      */
-    opencodeErrorInfo,
+    clineErrorInfo,
     /**
      * v5.0.0 — bug #4: retry helper exposed for `ChatInfoPanel`'s
-     * Retry button. Calls `loadOpencodeSession` on the currently
-     * active opencode session (or no-op if none is active).
+     * Retry button. Calls `loadClineSession` on the currently
+     * active cline session (or no-op if none is active).
      */
-    retryOpencodeSession: () => {
-      if (activeOpencodeSessionId) void loadOpencodeSession(activeOpencodeSessionId);
+    retryClineSession: () => {
+      if (activeClineSessionId) void loadClineSession(activeClineSessionId);
     },
     // ── v3.22 — per-session display state ──────────────────────────────────
     sessionStates,
@@ -1177,9 +1177,9 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     loadChat,
     loadTaskChat,
     refreshSessions,
-    refreshOpencodeSessions,
-    loadOpencodeSession,
-    closeOpencodeSession,
+    refreshClineSessions,
+    loadClineSession,
+    closeClineSession,
     selectBizarSession,
     onCreateSession,
     onSend,
@@ -1189,6 +1189,6 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     copyMessage,
     renameSession,
     deleteSession,
-    seenOpencodeMessages,
+    seenClineMessages,
   };
 }

@@ -1,6 +1,6 @@
 # BizarHarness
 
-Norse-pantheon multi-agent system for opencode. 12 agents across 4 cost tiers with cost-aware routing.
+Norse-pantheon multi-agent system for cline. 12 agents across 4 cost tiers with cost-aware routing.
 
 ## Final Goal
 
@@ -39,13 +39,13 @@ See [`../FINAL_GOAL.md`](../FINAL_GOAL.md) for the full vision document. The goa
  - Project data lives in `.bizar/` folder (not at project root). See `.bizar/README.md` for the canonical subdirectory layout.
 - Self-improvement entries appended at every task completion
 - Memory setup: per-project Hindsight bank with `bank_id: "<project-name>"` — default bank reserved for general/system knowledge only
-- MiniMax models require `interleaved: { field: "reasoning_details" }` and `reasoning: true` in opencode.json provider config — without it, thinking tokens leak into visible output
+- MiniMax models require `interleaved: { field: "reasoning_details" }` and `reasoning: true` in cline.json provider config — without it, thinking tokens leak into visible output
 - CLI structure: single `bizar` binary, no `bizar-dash` binary. Dashboard commands under `bizar dash <sub>`.
 - In-process imports: cross-package integration uses named exports and direct imports, not subprocess spawn. See `bizar-dash/package.json#exports` for the `dash-cli` subpath.
 
 ## Entry Points
 - Install: `./install.sh`
-- Config: `~/.config/opencode/`
+- Config: `~/.config/cline/`
 - Repo: `github.com/DrB0rk/BizarHarness`
 
 ## Current Version
@@ -58,10 +58,10 @@ See [`../FINAL_GOAL.md`](../FINAL_GOAL.md) for the full vision document. The goa
 - Settings page merged with Config; EnvVarManager + SettingsSearch components
 - Bizar env vars at `~/.config/bizar/env.json` (mode 0600), managed via dashboard
 - Provider catalog with 13 entries, backup keys with auto-rotation, auto-add wizard
-- LightRAG defaults to free OpenCode Zen models
+- LightRAG defaults to free Cline Zen models
 - Memory settings tab (LightRAG + Obsidian + git repo config)
 - Usage monitoring: JSONL store, SVG charts, time-range picker, per-model table, agent awareness
-- Chat overhaul: opencode session fix (open + create), SSE reconnect-with-backoff, source-aware UI
+- Chat overhaul: cline session fix (open + create), SSE reconnect-with-backoff, source-aware UI
 - Tasks.tsx: agent picker removed, kanban board with backlog/todo/in-progress/done/failed
 - Skills tab: shipped/user/project tabs, fuzzy search (no ASCII garbage), 11 shipped skills
 - Update flow: `--check`, `--channel`, `--no-restart` flags + `/api/updates/*` endpoints with WS progress
@@ -71,9 +71,9 @@ See [`../FINAL_GOAL.md`](../FINAL_GOAL.md) for the full vision document. The goa
 
 - **Headroom full integration.** Core module at `bizar-dash/src/server/headroom.mjs` with `getHeadroomStatus`, `getHeadroomStats`, `installHeadroom`, `wrapOpencode`, `unwrapOpencode`, `startProxy`, `stopProxy`, `headroomStartupHook`. REST endpoints at `/api/headroom/*`. Settings → Headroom section with all toggles + install/wrap/start/stop buttons. Auto-install/wrap/start on dashboard startup. CLI: `bizar headroom status|stats|install|wrap|unwrap|start|stop|doctor`. Skills: `bizar-dash/skills/headroom/SKILL.md` + section in canonical `bizar` skill.
 - **Full Memory tab.** Dedicated tab in sidebar (between Skills and Settings). 5 panels: Overview (composite health), LightRAG (start/stop/reindex/rebuild + stats + quick search), Obsidian Vault (tree + note list + edit modal + backlinks), Git Sync (pull/push/commit/fetch + diff), Semantic Search (cross-source LightRAG + Obsidian), Config. Overview tab gets a `<MemoryStatusCard>`. 11 new endpoints in `routes/memory.mjs`. Obsidian façade at `bizar-dash/src/server/memory-obsidian.mjs`.
-- **Tasks added.** Two tasks in the Bizar task store (`~/.config/opencode/projects/BizarHarness/tasks.json`): `tsk_b1c8add787` (Headroom full integration) and `tsk_abb21919a5` (Full Memory tab).
+- **Tasks added.** Two tasks in the Bizar task store (`~/.config/cline/projects/BizarHarness/tasks.json`): `tsk_b1c8add787` (Headroom full integration) and `tsk_abb21919a5` (Full Memory tab).
 - **Fix.** `cli/bin.mjs` syntax error — single quote opened a string but backtick closed it on line 915. Now compiles.
-- **Doc fix.** `.opencode/instructions/bizar-tools.md` — replaced broken `headroom plan --tokens` reference with accurate Headroom 0.30.0 commands (proxy, wrap, doctor, perf, savings, memory, dashboard).
+- **Doc fix.** `.cline/instructions/bizar-tools.md` — replaced broken `headroom plan --tokens` reference with accurate Headroom 0.30.0 commands (proxy, wrap, doctor, perf, savings, memory, dashboard).
 
 ### Tests (v4.5.1)
 - 24 Headroom tests (status, install, settings)
@@ -108,12 +108,12 @@ See [`../FINAL_GOAL.md`](../FINAL_GOAL.md) for the full vision document. The goa
 - **Settings redesign.** New persistent sidebar nav (`<SettingsNav>`) with 4 collapsible groups (General, Core, Experience, Data). Settings mode toggles to show all sections; exit returns to normal sidebar. Selected section persists across navigation.
 - **Doctor page.** Full-page Doctor view at `/api/doctor` with 5 panels (System Health, Services, Counts, Recent Errors, Actions). Reusable `<DoctorPanel>` component. 30s auto-refresh via cheap `/api/doctor/health` poll. `<StatusBadge>` extended with `ok`/`warn`/`fail` variants. New sidebar entry between Overview and Settings.
 - **Settings auto-save.** `useAutosave` hook with debounced save + flush on unmount. `<AutosaveField>` generic wrapper with status indicator (subtle pulse on save, fade on saved). Text inputs 800ms debounce + blur immediate save; textareas 1500ms. Wired into GeneralSection and AgentSection.
-- **Opencode chat error handling.** Proper 503 (plugin_offline / directory_unknown) and 502 (opencode_error) responses with structured `cause` field identifying network/timeout/HTTP errors. `resolveSessionDirectory()` falls back across worktrees. Frontend shows structured error with Retry button.
+- **Cline chat error handling.** Proper 503 (plugin_offline / directory_unknown) and 502 (cline_error) responses with structured `cause` field identifying network/timeout/HTTP errors. `resolveSessionDirectory()` falls back across worktrees. Frontend shows structured error with Retry button.
 - **Default memory vault location.** `DEFAULT_MEMORY_VAULT = ~/.local/share/bizar/memory` (mode 0700). Auto-creates and git-inits vault on first server start. ConfigPanel + MemorySection simplified — only git remote URL is editable.
 - **Removed "Coming soon" placeholders.** Deleted 5 placeholder section files (BackupSection, EnvVarsSection, ProvidersSection, SkillsSection, MemorySection) and removed 5 entries from Settings.tsx section list.
-- **Replaced free models with MiniMax.** 6 agent files updated from `opencode/deepseek-v4-flash-free` → `minimax/MiniMax-M2.7`. `quick.md` uses `MiniMax-M2.7-Flash` (simple tasks); `tyr`/`odin`/`forseti`/`vidarr` use `MiniMax-M3` (complex). `PROVIDER_CATALOG` has MiniMax with 4 models. Settings default model updated.
+- **Replaced free models with MiniMax.** 6 agent files updated from `cline/deepseek-v4-flash-free` → `minimax/MiniMax-M2.7`. `quick.md` uses `MiniMax-M2.7-Flash` (simple tasks); `tyr`/`odin`/`forseti`/`vidarr` use `MiniMax-M3` (complex). `PROVIDER_CATALOG` has MiniMax with 4 models. Settings default model updated.
 - **Layout/padding fix.** `.view` / `.page` containers get 32px top padding; card gaps increased to 16–20px; view header gets 24px bottom margin + bottom border. All pages audited.
-- **Compaction at 50% context.** New `plugins/bizar/src/compaction.mjs` built from scratch. `shouldCompact()` returns true at 50% usage. `setCompactionThreshold()` configurable 0.1–1.0. `maybeCompactSession()` triggers compaction with `preserve_recent=10`. `config/opencode.json` has `compaction.threshold = 0.5`.
+- **Compaction at 50% context.** New `plugins/bizar/src/compaction.mjs` built from scratch. `shouldCompact()` returns true at 50% usage. `setCompactionThreshold()` configurable 0.1–1.0. `maybeCompactSession()` triggers compaction with `preserve_recent=10`. `config/cline.json` has `compaction.threshold = 0.5`.
 
 ### Tests (v5.0.1)
 - 388 npm tests pass

@@ -40,8 +40,8 @@ import { createConfigRouter } from './routes/config.mjs';
 import { createProvidersRouter } from './routes/providers.mjs';
 import { createSettingsRouter } from './routes/settings.mjs';
 import { createChatRouter } from './routes/chat.mjs';
-import { createOpencodeSessionsRouter } from './routes/opencode-sessions.mjs';
-import { createOpencodeSessionDetailRouter } from './routes/opencode-session-detail.mjs';
+import { createClineSessionsRouter } from './routes/cline-sessions.mjs';
+import { createClineSessionDetailRouter } from './routes/cline-session-detail.mjs';
 import { createDialogsRouter } from './routes/dialogs.mjs';
 import { createSkillsRouter } from './routes/skills.mjs';
 import { createObsidianRouter } from './routes/obsidian.mjs';
@@ -67,7 +67,7 @@ import { attachUserContext } from './auth.mjs';
  * @param {object} deps.state
  * @param {object} deps.watcher
  * @param {string} deps.projectRoot
- * @param {string} deps.opencodeConfigDir
+ * @param {string} deps.clineConfigDir
  * @param {string} deps.bizarRoot
  * @param {Function} [deps.broadcast]
  * @returns {import('express').Router}
@@ -76,7 +76,7 @@ export async function createApiRouter({
   state,
   watcher,
   projectRoot,
-  opencodeConfigDir,
+  clineConfigDir,
   bizarRoot,
   broadcast = () => {},
 }) {
@@ -107,7 +107,7 @@ export async function createApiRouter({
   // v3.20.14 — pass projectRoot to the artifacts router so /api/artifacts
   // returns the worktree artifacts (not just the global fallback).
   // Previously this router was mounted without projectRoot, which meant
-  // artifactsStore.list(undefined) only checked ~/.config/opencode/artifacts
+  // artifactsStore.list(undefined) only checked ~/.config/cline/artifacts
   // (always empty for projects that have an artifacts/ folder) and the
   // UI showed "0 artifacts" even though the snapshot had the full list.
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
@@ -129,8 +129,8 @@ export async function createApiRouter({
   router.use(createUpdateRouter({ broadcast }));
   router.use(createSettingsRouter({ state, broadcast }));
   router.use(createChatRouter({ state, broadcast }));
-  router.use(createOpencodeSessionsRouter());
-  router.use(createOpencodeSessionDetailRouter());
+  router.use(createClineSessionsRouter());
+  router.use(createClineSessionDetailRouter());
   router.use(createDialogsRouter({ broadcast }));
   router.use(createSkillsRouter({ broadcast }));
   router.use(await createObsidianRouter({ projectRoot }));

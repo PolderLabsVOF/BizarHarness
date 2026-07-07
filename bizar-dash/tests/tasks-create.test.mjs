@@ -27,9 +27,9 @@ before(async () => {
   SANDBOX_HOME = mkdtempSync(join(tmpdir(), `bizar-tasks-test-${Date.now()}-`));
   ORIGINAL_HOME = process.env.HOME;
   process.env.HOME = SANDBOX_HOME;
-  // tasksStore writes to ~/.config/opencode/projects/<id>/tasks.json
+  // tasksStore writes to ~/.config/cline/projects/<id>/tasks.json
   // (projects-store.mjs:PROJECTS_DIR).
-  tasksFilePath = join(SANDBOX_HOME, '.config', 'opencode', 'projects', 'test-proj', 'tasks.json');
+  tasksFilePath = join(SANDBOX_HOME, '.config', 'cline', 'projects', 'test-proj', 'tasks.json');
 });
 
 after(() => {

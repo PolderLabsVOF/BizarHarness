@@ -4,11 +4,11 @@
  * v5.5.1 — `bizar_send_message` tool. TRUE mid-flight steer.
  *
  * In v5.5.0 this tool returned `unavailable_in_subprocess_mode` because
- * `opencode run` is a one-shot CLI. v5.5.1 switched bg agents to
- * long-lived opencode serve SDK sessions, so this tool now delegates
+ * `cline run` is a one-shot CLI. v5.5.1 switched bg agents to
+ * long-lived cline serve SDK sessions, so this tool now delegates
  * to `POST /api/background/<id>/steer` on the dashboard. The dashboard
  * calls `sdk.sessions.prompt()` on the live session, which the
- * opencode serve child picks up mid-loop as the next user turn.
+ * cline serve child picks up mid-loop as the next user turn.
  *
  * Wire contract (mirrors `bizar-dash/src/server/routes/background.mjs`):
  *   - Request: `POST /api/background/:id/steer` with body `{ message }`.
@@ -130,9 +130,9 @@ export function createBgSendMessageTool(deps: BgSendMessageDeps) {
   return tool({
     description:
       "Send a follow-up message to a running background agent. " +
-      "v5.5.1: TRUE mid-flight steer via the opencode serve SDK. " +
+      "v5.5.1: TRUE mid-flight steer via the cline serve SDK. " +
       "The same instance keeps running; the new message becomes the next user turn " +
-      "of the running opencode session. No kill+respawn, no [STEERED <ts>] marker, " +
+      "of the running cline session. No kill+respawn, no [STEERED <ts>] marker, " +
       "no loss of agent context.",
     args: {
       instanceId: z
@@ -158,8 +158,8 @@ export function createBgSendMessageTool(deps: BgSendMessageDeps) {
       }
 
       // 2. v5.5.1 — delegate to the dashboard. The dashboard owns the
-      //    opencode SDK and calls `sdk.sessions.prompt({...})` on the
-      //    live session, which the opencode serve child picks up
+      //    cline SDK and calls `sdk.sessions.prompt({...})` on the
+      //    live session, which the cline serve child picks up
       //    mid-loop as the next user turn.
       const dashboardUrl = `${resolveDashboardUrl()}/api/background/${encodeURIComponent(args.instanceId)}/steer`;
       try {
@@ -186,7 +186,7 @@ export function createBgSendMessageTool(deps: BgSendMessageDeps) {
             instanceId: args.instanceId,
             steerCount: data.steerCount ?? 0,
             message:
-              "Steer delivered to the running opencode session. The agent will pick up your message as the next user turn — no kill+respawn was performed, no context was lost.",
+              "Steer delivered to the running cline session. The agent will pick up your message as the next user turn — no kill+respawn was performed, no context was lost.",
           }),
         };
       } catch (err: unknown) {

@@ -1,7 +1,7 @@
 /**
  * event-stream.ts
  *
- * Global SSE subscription for opencode serve events (v0.4.2 spec §2.1, §4).
+ * Global SSE subscription for cline serve events (v0.4.2 spec §2.1, §4).
  *
  * Design contract:
  *   - ONE `GET /event?directory=<worktree>` connection per plugin process.
@@ -14,8 +14,8 @@
  *   - `disconnect()` closes the stream and prevents further reconnects.
  *
  * v0.4.3 — CloudEvents-style schema support (see
- * `.bizar/opencode-sse-investigation.md`):
- *   - The actual event schema on opencode serve 1.17.7 has two flavors:
+ * `.bizar/cline-sse-investigation.md`):
+ *   - The actual event schema on cline serve 1.17.7 has two flavors:
  *
  *     1) **Direct events** (flat JSON, native `type` field):
  *        ```
@@ -65,7 +65,7 @@ export interface Logger {
  * The subset of session lifecycle events the plugin cares about. Each
  * variant carries a `sessionID` plus the event-specific payload.
  *
- * The `type` field follows opencode's event namespacing
+ * The `type` field follows cline's event namespacing
  * (`session.created`, `session.idle`, `message.part.updated`, …).
  *
  * Note: there is no catch-all variant on purpose. The catch-all would
@@ -349,7 +349,7 @@ export class EventStream {
   }
 
   /**
-   * Map a raw opencode event to a `StreamEvent` and dispatch to handlers.
+   * Map a raw cline event to a `StreamEvent` and dispatch to handlers.
    *
    * v0.4.3: handles two wire formats.
    *   1) Direct events — `{type, properties: {sessionID, ...}}`.
@@ -536,7 +536,7 @@ export class EventStream {
 // --- Helpers --------------------------------------------------------------
 
 /**
- * Extract the `sessionID` from an opencode event payload.
+ * Extract the `sessionID` from an cline event payload.
  *
  * v0.4.3: this is called AFTER sync unwrapping, so the `obj` we receive
  * is either:

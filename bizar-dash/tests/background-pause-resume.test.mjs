@@ -4,7 +4,7 @@
  * v5.x — Tests for POST /api/background/:id/pause and .../resume.
  *
  * Validates the spawner's pure-logic surface WITHOUT spawning a real
- * opencode subprocess (which would block on `opencode run` exiting).
+ * cline subprocess (which would block on `cline run` exiting).
  * The pause/resume registry helpers are tested via error paths:
  *   - unknown instance → "instance_not_tracked"
  *   - paused state survives round-trip after a real spawn (skipped — see notes)

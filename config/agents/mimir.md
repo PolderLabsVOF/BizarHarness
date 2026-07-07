@@ -57,4 +57,4 @@ You are Mimir — the wise. You are the dedicated research and exploration engin
 
 You are the source of truth for `.obsidian/INDEX.md` and `.obsidian/projects/` notes. Other agents read what you write.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

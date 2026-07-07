@@ -16,7 +16,7 @@
  * SDK factory reads serve-info and constructs a real SDK instance —
  * for this test we provide a fetch that returns a small SSE stream.
  *
- * Because the opencode-sdk module's `_sdk` is module-scoped and we
+ * Because the cline-sdk module's `_sdk` is module-scoped and we
  * can't easily inject a mock after-the-fact, this test focuses on the
  * FORWARDING LOGIC (the part that converts SDK events to broadcast
  * messages) by exposing it as a small helper we exercise directly.
@@ -62,12 +62,12 @@ test('module exports are present (sanity)', async () => {
   }
 });
 
-// The full subscribe+forward flow requires a live opencode serve child.
+// The full subscribe+forward flow requires a live cline serve child.
 // That's covered by the smoke script. The unit-level helper
 // `forwardEvents` is private; we don't re-export it for testing.
 // What we CAN pin here is that:
 test('subscribeToSession returns null when SDK is unreachable (no serve-info)', async () => {
-  const { subscribeToSession } = await import('../src/server/opencode-sdk.mjs');
+  const { subscribeToSession } = await import('../src/server/cline-sdk.mjs');
   const sub = await subscribeToSession('ses_anything');
   // Without serve-info the SDK is null, so subscribeToSession returns null.
   assert.equal(sub, null);

@@ -1,25 +1,25 @@
 /**
- * Opencode SDK factory.
+ * Cline SDK factory.
  *
- * Tries to load `@opencode-ai/sdk` dynamically. If the package is
- * installed, `createOpencodeClient` from that package is used and its
+ * Tries to load `@cline/sdk` dynamically. If the package is
+ * installed, `createClineClient` from that package is used and its
  * result is re-wrapped. If the import fails (package not installed), a
  * thin fetch-based fallback is returned that hits the same REST endpoints.
  *
- * Auth: `Basic base64("opencode:<password>")` — matches the convention
- * used by the opencode serve child.
+ * Auth: `Basic base64("cline:<password>")` — matches the convention
+ * used by the cline serve child.
  *
- * Reference: https://opencode.ai/docs/sdk/
+ * Reference: https://docs.cline.bot/docs/sdk/
  */
 
 import { parseSseStream } from "./events.js";
 import { connectionErrorFrom, type BizarError } from "./errors.js";
 import type { EventSubscription } from "./events.js";
-import type { OpencodeEventEnvelope } from "./opencode-events.js";
+import type { ClineEventEnvelope } from "./cline-events.js";
 
-export interface OpencodeSdkConfig {
+export interface ClineSdkConfig {
   baseUrl: string;
-  /** Password for the opencode serve child. */
+  /** Password for the cline serve child. */
   password?: string;
   /** Injectable fetch for testing. */
   fetch?: typeof fetch;
@@ -28,10 +28,10 @@ export interface OpencodeSdkConfig {
 }
 
 /**
- * Thin fetch-based opencode client, used when `@opencode-ai/sdk` is not
+ * Thin fetch-based cline client, used when `@cline/sdk` is not
  * installed in the consumer's project.
  */
-interface FallbackOpencodeClient {
+interface FallbackClineClient {
   sessions: {
     list(): Promise<unknown[]>;
     get(input: { sessionId: string }): Promise<unknown>;
@@ -61,17 +61,17 @@ interface FallbackOpencodeClient {
 }
 
 /**
- * The SDK instance returned by `createOpencodeSdk`.
+ * The SDK instance returned by `createClineSdk`.
  */
-export interface OpencodeSdk {
-  sessions: FallbackOpencodeClient["sessions"];
-  events: FallbackOpencodeClient["events"];
-  health: FallbackOpencodeClient["health"];
-  server: FallbackOpencodeClient["server"];
+export interface ClineSdk {
+  sessions: FallbackClineClient["sessions"];
+  events: FallbackClineClient["events"];
+  health: FallbackClineClient["health"];
+  server: FallbackClineClient["server"];
 }
 
 function makeAuthHeader(password: string): string {
-  const encoded = Buffer.from(`opencode:${password}`, "utf-8").toString("base64");
+  const encoded = Buffer.from(`cline:${password}`, "utf-8").toString("base64");
   return `Basic ${encoded}`;
 }
 
@@ -97,7 +97,7 @@ async function fetchJson<T>(
       data: {
         statusCode: response.status,
         isRetryable: response.status >= 500 || response.status === 429,
-        message: `opencode API returned ${response.status}`,
+        message: `cline API returned ${response.status}`,
         responseBody: text,
       },
     };
@@ -111,7 +111,7 @@ async function fetchJson<T>(
   }
 }
 
-function createFallbackClient(config: OpencodeSdkConfig): FallbackOpencodeClient {
+function createFallbackClient(config: ClineSdkConfig): FallbackClineClient {
   const { baseUrl, password = "", fetch: fetchImpl = fetch, throwOnError = false } = config;
   const auth = makeAuthHeader(password);
 
@@ -194,8 +194,8 @@ function createFallbackClient(config: OpencodeSdkConfig): FallbackOpencodeClient
           sessionID,
           // Cast through unknown to satisfy the AsyncIterable<DashboardEvent> constraint
           // from the existing events.ts EventSubscription type. The actual yielded
-          // values are OpencodeEventEnvelope objects which are compatible.
-          stream: parseSseStream<OpencodeEventEnvelope>(
+          // values are ClineEventEnvelope objects which are compatible.
+          stream: parseSseStream<ClineEventEnvelope>(
             response.body,
             controller,
           ) as unknown as EventSubscription["stream"],
@@ -216,7 +216,7 @@ function createFallbackClient(config: OpencodeSdkConfig): FallbackOpencodeClient
               data: {
                 statusCode: r.status,
                 isRetryable: r.status >= 500 || r.status === 429,
-                message: `opencode health check returned ${r.status}`,
+                message: `cline health check returned ${r.status}`,
                 responseBody: text,
               },
             };
@@ -236,20 +236,25 @@ function createFallbackClient(config: OpencodeSdkConfig): FallbackOpencodeClient
 }
 
 /**
- * Create an opencode SDK instance.
+ * Create an cline SDK instance.
  *
- * Tries to use `@opencode-ai/sdk`'s `createOpencodeClient` if installed;
+ * Tries to use `@cline/sdk`'s `createClineClient` if installed;
  * falls back to a thin fetch-based client otherwise.
  *
  * @param opts  `{ baseUrl, password?, fetch?, throwOnError? }`
  */
-export async function createOpencodeSdk(
-  opts: OpencodeSdkConfig,
-): Promise<OpencodeSdk> {
+export async function createClineSdk(
+  opts: ClineSdkConfig,
+): Promise<ClineSdk> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mod = await import("@opencode-ai/sdk/v2/client") as any;
-    const createClient = mod.createOpencodeClient;
+    // `@cline/sdk` is an optional peer dep. If absent, the dynamic import
+    // resolves to a rejected promise and we fall back to the fetch wrapper
+    // below. TODO(cline-migration): rewrite this body to use Cline's
+    // in-process `Agent` / `ClineCore` APIs from `@cline/sdk` instead of
+    // mirroring the Cline v2 client shape.
+    // @ts-expect-error -- optional peer dep, may be absent at build time
+    const mod = await import("@cline/sdk") as any;
+    const createClient = mod.createClineClient;
     if (typeof createClient !== "function") throw new Error("not a function");
 
     const headers: Record<string, string> = {};
@@ -265,11 +270,11 @@ export async function createOpencodeSdk(
       // The upstream SDK accepts different options; ignore unknown ones.
     } as any) as any;
 
-    // The @opencode-ai/sdk client has a very different internal structure
+    // The @cline/sdk client has a very different internal structure
     // (HeyApi pattern with .session.list(), .session.create(), etc.).
-    // We wrap it to match the FallbackOpencodeClient interface expected
+    // We wrap it to match the FallbackClineClient interface expected
     // by the dashboard.
-    const wrapped: OpencodeSdk = {
+    const wrapped: ClineSdk = {
       sessions: {
         list: async () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -329,7 +334,7 @@ export async function createOpencodeSdk(
     };
     return wrapped;
   } catch {
-    // `@opencode-ai/sdk` not installed or incompatible — use the fallback.
+    // `@cline/sdk` not installed or incompatible — use the fallback.
     return createFallbackClient(opts);
   }
 }

@@ -41,4 +41,4 @@ Odin sends you tasks that are:
 
 Do not duplicate the baseline rules in this file. If a rule changes, update the shared file once and every agent picks it up.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

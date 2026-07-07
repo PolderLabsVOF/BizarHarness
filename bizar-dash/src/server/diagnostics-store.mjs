@@ -202,13 +202,13 @@ async function probeHeadroom() {
 }
 
 /**
- * v6.0.0 — Probe whether the opencode plugin's `serve-info.json` is
+ * v6.0.0 — Probe whether the cline plugin's `serve-info.json` is
  * reachable on disk and parseable. The dashboard reads serve-info to
  * dispatch agent tasks; if it's missing or stale, the Doctor page
  * flags it as a warning (not a failure) since some installs don't use
  * the plugin.
  */
-function opencodeServeInfo() {
+function clineServeInfo() {
   const candidates = [
     join(HOME, '.cache', 'bizar', 'serve.json'),
     join(HOME, '.cache', 'bizar', 'serve-info.json'),
@@ -292,16 +292,16 @@ function collectCounts() {
  * Used by `health()` and exposed individually via `runCheck(name)`.
  */
 async function runConfigChecks() {
-  const opencodeConfig = providersStore.OPENCODE_JSON;
+  const clineConfig = providersStore.CLINE_JSON;
   const agentsDir = agentsStore.AGENTS_DIR;
   const checks = [];
   checks.push({
-    name: 'opencode-config',
-    status: existsSync(opencodeConfig) ? 'ok' : 'fail',
-    message: existsSync(opencodeConfig) ? `present at ${opencodeConfig}` : `${opencodeConfig} not found`,
+    name: 'cline-config',
+    status: existsSync(clineConfig) ? 'ok' : 'fail',
+    message: existsSync(clineConfig) ? `present at ${clineConfig}` : `${clineConfig} not found`,
   });
   checks.push({
-    name: 'opencode-agents',
+    name: 'cline-agents',
     status: existsSync(agentsDir) ? 'ok' : 'warn',
     message: existsSync(agentsDir) ? `${agentsDir} present` : `${agentsDir} missing — agents will fall back to defaults`,
   });
@@ -322,13 +322,13 @@ async function runConfigChecks() {
 
 /**
  * v6.0.0 — Service health checks. TCP probes for headroom and
- * lightrag (both best-effort), opencode plugin file probe, and the
+ * lightrag (both best-effort), cline plugin file probe, and the
  * dashboard itself (always `ok` — we're running because we got here).
  */
 async function runServiceChecks() {
   const headroom = await probeHeadroom();
   const lightrag = await probeLightRAG();
-  const serveInfo = opencodeServeInfo();
+  const serveInfo = clineServeInfo();
   const checks = [
     {
       name: 'dashboard',
@@ -350,7 +350,7 @@ async function runServiceChecks() {
         : `not running${lightrag.port ? ` on port ${lightrag.port}` : ''}${lightrag.error ? ` (${lightrag.error})` : ''}`,
     },
     {
-      name: 'opencode',
+      name: 'cline',
       status: serveInfo.reachable ? 'ok' : 'warn',
       message: serveInfo.reachable
         ? `serve-info at ${serveInfo.path}${serveInfo.port ? ` (port ${serveInfo.port})` : ''}`
@@ -447,11 +447,11 @@ export async function health() {
  *   uptime: number,
  *   memory: NodeJS.MemoryUsage,
  *   disk: { exists: boolean, path: string, sizeBytes: number },
- *   services: { dashboard: object, headroom: object, lightrag: object, opencode: object },
+ *   services: { dashboard: object, headroom: object, lightrag: object, cline: object },
  *   counts: ReturnType<typeof collectCounts>,
  *   recentErrors: ReturnType<typeof getRecentErrors>,
  *   configHealth: Array<{ name: string, status: string, message: string }>,
- *   opencode: { configExists: boolean, agentsDir: string, agentFiles: string[], dashboardConnected: boolean },
+ *   cline: { configExists: boolean, agentsDir: string, agentFiles: string[], dashboardConnected: boolean },
  *   checks: { system: Array, config: Array, services: Array },
  *   health: { status: string, issues: Array }
  * }>}
@@ -469,8 +469,8 @@ export async function collectDiagnostics() {
   else if (issues.length > 0) status = 'warn';
   const headroom = await probeHeadroom();
   const lightrag = await probeLightRAG();
-  const serveInfo = opencodeServeInfo();
-  const opencodeConfig = providersStore.OPENCODE_JSON;
+  const serveInfo = clineServeInfo();
+  const clineConfig = providersStore.CLINE_JSON;
   const agentsDir = agentsStore.AGENTS_DIR;
   let agentFiles = [];
   try {
@@ -507,14 +507,14 @@ export async function collectDiagnostics() {
       },
       headroom,
       lightrag,
-      opencode: serveInfo,
+      cline: serveInfo,
     },
     counts,
     recentErrors: getRecentErrors({ since: Date.now() - 3600_000, limit: 50 }),
     configHealth: config,
-    opencode: {
-      configExists: existsSync(opencodeConfig),
-      configPath: opencodeConfig,
+    cline: {
+      configExists: existsSync(clineConfig),
+      configPath: clineConfig,
       agentsDir,
       agentFiles,
       dashboardConnected: serveInfo.reachable,
@@ -572,14 +572,14 @@ export const diagnosticsStore = {
       detail: dirname(projectsFile),
     });
     checks.push({
-      name: 'opencode-agents',
+      name: 'cline-agents',
       ok: existsSync(agentsStore.AGENTS_DIR),
       detail: agentsStore.AGENTS_DIR,
     });
     checks.push({
-      name: 'opencode-config',
-      ok: existsSync(providersStore.OPENCODE_JSON),
-      detail: providersStore.OPENCODE_JSON,
+      name: 'cline-config',
+      ok: existsSync(providersStore.CLINE_JSON),
+      detail: providersStore.CLINE_JSON,
     });
     const modsDir = modsLoader.MOD_DIR || modsLoader.MOD_DIR;
     checks.push({

@@ -10,7 +10,7 @@
  *   1. Updates the linked task's `status` to `done` / `blocked`.
  *   2. Kills the tmux session (Task 3 integration) if one is alive.
  *   3. For `done` instances, scans the final assistant message from
- *      the opencode session for an `html-artifact` fenced block and,
+ *      the cline session for an `html-artifact` fenced block and,
  *      when found, saves it via the artifacts store and links the
  *      artifact id onto the task's `metadata` (Task 5 + 6).
  *   4. Broadcasts a `tasks:change` event so the UI updates in real
@@ -30,7 +30,7 @@ import { backgroundStore } from './background-store.mjs';
 import { tasksStore } from './tasks-store.mjs';
 import { projectsStore } from './projects-store.mjs';
 import { artifactsStore, extractArtifactFromMessage } from './artifacts-store.mjs';
-import { readServeInfo, listOpencodeMessages, extractContentFromOpencodeMessage, abortSession } from './serve-info.mjs';
+import { readServeInfo, listClineMessages, extractContentFromClineMessage, abortSession } from './serve-info.mjs';
 import { execFileSync } from 'node:child_process';
 
 const POLL_INTERVAL_MS = 3_000;
@@ -79,10 +79,10 @@ function recordPollerFailure(scope, taskId, instanceId, err) {
 let _interval = null;
 
 /**
- * Read the artifact for a finished bg instance from the opencode
+ * Read the artifact for a finished bg instance from the cline
  * session. Returns the { html, name } pair or null when:
  *   - the plugin is offline
- *   - the opencode session has no messages
+ *   - the cline session has no messages
  *   - the final assistant message has no html-artifact block
  *
  * @returns {Promise<{html:string,name:string|null}|null>}
@@ -92,11 +92,11 @@ async function scanForArtifact(bg) {
   const serveInfo = readServeInfo();
   if (!serveInfo) return null;
   // v3.5.5 — `active.path` is the project root; that's the worktree
-  // the opencode session was created in. Fall back to the plugin's
+  // the cline session was created in. Fall back to the plugin's
   // recorded worktree when the active project has been removed.
   const active = projectsStore.active();
   const directory = bg.worktree || (active && active.path) || serveInfo.worktree || '';
-  const list = await listOpencodeMessages(serveInfo, bg.sessionId, directory, ARTIFACT_SCAN_TIMEOUT_MS);
+  const list = await listClineMessages(serveInfo, bg.sessionId, directory, ARTIFACT_SCAN_TIMEOUT_MS);
   if (!list.ok || !Array.isArray(list.messages) || list.messages.length === 0) {
     return null;
   }
@@ -109,7 +109,7 @@ async function scanForArtifact(bg) {
       return tb - ta;
     });
   for (const m of assistants) {
-    const text = extractContentFromOpencodeMessage(m);
+    const text = extractContentFromClineMessage(m);
     const found = extractArtifactFromMessage(text);
     if (found) return found;
   }
@@ -191,7 +191,7 @@ async function tick() {
         recordPollerFailure('task-update', taskId, bg.instanceId, err);
       }
 
-      // Best-effort: abort the opencode session. Idempotent — a
+      // Best-effort: abort the cline session. Idempotent — a
       // already-finished session just returns 404 and we move on.
       if (bg.sessionId) {
         try {

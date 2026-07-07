@@ -3,7 +3,7 @@
  *
  * Verifies:
  *   1. Every `bizar_*` tool registered in `plugins/bizar/index.ts`
- *      is also present in `config/opencode.json` `tools: { ... }`.
+ *      is also present in `config/cline.json` `tools: { ... }`.
  *   2. No `bizarre_*` (double-r) typos remain in `plugins/bizar/src/`.
  *   3. `plugins/bizar/package.json` version is `0.8.3`.
  */
@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 const BIZAR_PLUGIN_ROOT = join(__dirname, "..");
 const PLUGIN_INDEX = join(BIZAR_PLUGIN_ROOT, "index.ts");
-const CONFIG_OPENCODE = join(__dirname, "..", "..", "..", "config", "opencode.json");
+const CONFIG_CLINE = join(__dirname, "..", "..", "..", "config", "cline.json");
 const PKG_JSON = join(BIZAR_PLUGIN_ROOT, "package.json");
 const SRC_DIR = join(BIZAR_PLUGIN_ROOT, "src");
 
@@ -38,7 +38,7 @@ function extractPluginToolKeys(indexContent: string): string[] {
 }
 
 /**
- * Extract `tools: { ... }` keys from config/opencode.json.
+ * Extract `tools: { ... }` keys from config/cline.json.
  */
 function extractConfigToolKeys(configContent: string): string[] {
   const parsed = JSON.parse(configContent) as { tools?: Record<string, unknown> };
@@ -53,7 +53,7 @@ function extractConfigToolKeys(configContent: string): string[] {
 describe("config drift detection", () => {
   test("plugin_tool_keys ⊆ config_tools_keys (R4 audit)", () => {
     const indexContent = readFileSync(PLUGIN_INDEX, "utf-8");
-    const configContent = readFileSync(CONFIG_OPENCODE, "utf-8");
+    const configContent = readFileSync(CONFIG_CLINE, "utf-8");
 
     const pluginKeys = extractPluginToolKeys(indexContent);
     const configKeys = extractConfigToolKeys(configContent);

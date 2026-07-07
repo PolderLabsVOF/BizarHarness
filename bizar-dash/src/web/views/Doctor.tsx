@@ -226,9 +226,9 @@ function DoctorInner({
           category="services"
           checks={data.checks.services}
           meta={
-            data.services.opencode?.reachable
-              ? `opencode on ${data.services.opencode.port ?? '?'}`
-              : 'opencode not connected'
+            data.services.cline?.reachable
+              ? `cline on ${data.services.cline.port ?? '?'}`
+              : 'cline not connected'
           }
         />
         <DoctorPanel

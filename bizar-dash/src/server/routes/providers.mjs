@@ -6,7 +6,7 @@
  * Endpoints (all mounted under /api):
  *
  *   Aggregated list (read-only):
- *     GET  /providers                         — opencode.json + agents + serve HTTP
+ *     GET  /providers                         — cline.json + agents + serve HTTP
  *     GET  /providers/active                  — current default provider + model
  *     GET  /providers/auto-detect             — env+config detection
  *
@@ -52,10 +52,10 @@ export function createProvidersRouter() {
   // ── Aggregated read-only endpoints (preserved from previous versions) ──
 
   // Surface-everything endpoint the dashboard uses to populate the
-  // Providers card on the Overview tab. Reads from opencode.json +
-  // agent frontmatter + (best-effort) the running opencode serve HTTP
+  // Providers card on the Overview tab. Reads from cline.json +
+  // agent frontmatter + (best-effort) the running cline serve HTTP
   // API, so the list is non-empty even on installs that don't declare
-  // a top-level `provider` key in opencode.json.
+  // a top-level `provider` key in cline.json.
   router.get('/providers', wrap(async (_req, res) => {
     const providers = await providersStore.listAll();
     res.json({ providers, count: providers.length });
@@ -93,10 +93,10 @@ export function createProvidersRouter() {
 
   // ── v4.6.0 provider CRUD (rotation-aware) ──────────────────────────────
 
-  // GET /providers/list — list configured providers from opencode.json.
+  // GET /providers/list — list configured providers from cline.json.
   // (Distinct path from /providers because /providers returns the
   // aggregated discovery view; /providers/list returns the persisted
-  // opencode.json shape.)
+  // cline.json shape.)
   router.get('/providers/list', wrap(async (_req, res) => {
     res.json({ providers: providersStore.list() });
   }));
@@ -144,7 +144,7 @@ export function createProvidersRouter() {
       id: providerId,
       name: entry.name,
       baseURL: typeof body.baseURL === 'string' && body.baseURL.trim() ? body.baseURL.trim() : entry.baseURL,
-      apiKey: `<env:${envVar}>`, // marker — opencode sees a non-empty key
+      apiKey: `<env:${envVar}>`, // marker — cline sees a non-empty key
       keys: [
         {
           envVar,

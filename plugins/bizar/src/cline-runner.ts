@@ -1,18 +1,18 @@
 /**
- * plugins/bizar/src/opencode-runner.ts
+ * plugins/bizar/src/cline-runner.ts
  *
  * v5.5.1 — DEAD CODE stub.
  *
- * Background agents no longer run as `opencode run` subprocesses. They
- * run as long-lived opencode serve SDK sessions, managed by the
+ * Background agents no longer run as `cline run` subprocesses. They
+ * run as long-lived cline serve SDK sessions, managed by the
  * Bizar dashboard (`bizar-dash/src/server/bg-spawner.mjs`). The plugin
  * delegates to the dashboard via HTTP (`bg-spawn.ts`,
  * `bg-send-message.ts`, …) instead of spawning anything directly.
  *
  * This module is kept as a stub for two reasons:
  *
- *   1. `buildOpencodeRunArgs` and the `SpawnAgentOptions` type are
- *      still imported by `plugins/bizar/tests/tools/opencode-runner.test.ts`
+ *   1. `buildClineRunArgs` and the `SpawnAgentOptions` type are
+ *      still imported by `plugins/bizar/tests/tools/cline-runner.test.ts`
  *      and serve as a regression pin for the argv layout that USED to
  *      be passed to `Bun.spawn`. The test suite stays green because
  *      the pure helpers are unchanged.
@@ -54,7 +54,7 @@ export interface SpawnAgentOptions {
   agent: string;
   /** Optional model override in "providerID/modelID" format. */
   model?: { providerID: string; modelID: string };
-  /** Working directory for the opencode run. */
+  /** Working directory for the cline run. */
   worktree: string;
   /** Absolute path to the log file (the LogWriter's output path). */
   logPath: string;
@@ -83,14 +83,14 @@ type ExitCallback = (status: AgentStatus) => void;
  * mode.)
  *
  * @param opts
- * @returns argv that USED to be passed to `Bun.spawn(["opencode", "run", …])`
+ * @returns argv that USED to be passed to `Bun.spawn(["cline", "run", …])`
  */
-export function buildOpencodeRunArgs(opts: SpawnAgentOptions): string[] {
+export function buildClineRunArgs(opts: SpawnAgentOptions): string[] {
   if (!opts.agent) {
     throw new Error("bizar_spawn_background: agent is required");
   }
   const args: string[] = [
-    "opencode",
+    "cline",
     "run",
     "--dir", opts.worktree,
     "--print-logs",
@@ -106,8 +106,8 @@ export function buildOpencodeRunArgs(opts: SpawnAgentOptions): string[] {
 }
 
 /**
- * v5.5.1 — STUB. Background agents run on the opencode serve SDK,
- * not as `opencode run` subprocesses. Returns an error directing the
+ * v5.5.1 — STUB. Background agents run on the cline serve SDK,
+ * not as `cline run` subprocesses. Returns an error directing the
  * caller to the dashboard HTTP API.
  *
  * The plugin's `bg-spawn.ts` no longer calls this; it's kept for any
@@ -117,7 +117,7 @@ export async function spawnAgent(_opts: SpawnAgentOptions): Promise<SpawnAgentRe
   return {
     ok: false,
     error:
-      "spawnAgent removed in v5.5.1 — bg agents now run as opencode serve sessions " +
+      "spawnAgent removed in v5.5.1 — bg agents now run as cline serve sessions " +
       "managed by the Bizar dashboard. POST /api/background instead. " +
       "See plugins/bizar/src/tools/bg-spawn.ts.",
   };

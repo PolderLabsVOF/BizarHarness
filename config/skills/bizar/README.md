@@ -1,9 +1,9 @@
 # BizarHarness Skill
 
-Norse-pantheon multi-agent system skill for opencode.
+Norse-pantheon multi-agent system skill for cline.
 
-Copy to `~/.opencode/skills/bizar/SKILL.md` to install.
+Copy to `~/.cline/skills/bizar/SKILL.md` to install.
 
 ```
-cp SKILL.md ~/.opencode/skills/bizar/SKILL.md
+cp SKILL.md ~/.cline/skills/bizar/SKILL.md
 ```

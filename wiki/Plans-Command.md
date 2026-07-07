@@ -148,7 +148,7 @@ git commit -m "docs(plan): draft oauth-integration plan"
 bizar plan open oauth-integration
 
 # 5. Once the plan is approved, dispatch implementation
-#    (in opencode, with BizarHarness routing)
+#    (in cline, with BizarHarness routing)
 @tyr execute plans/oauth-integration/plan.mdx
 
 # 6. When done, archive or delete
@@ -157,9 +157,9 @@ bizar plan delete oauth-integration
 
 The plan lives in your repo as long as the work is in flight. Once the implementation is merged, you can delete the plan directory (or keep it as a record of the design).
 
-## v0.5+ — Plugin-driven plan canvas (in-opencode)
+## v0.5+ — Plugin-driven plan canvas (in-cline)
 
-As of v0.5.0, the Bizar plugin ships its own plan canvas that runs **inside opencode**, accessible via the `/plan` slash command family. This is the recommended path for new work; the CLI tool above is still supported for power users and CI integration.
+As of v0.5.0, the Bizar plugin ships its own plan canvas that runs **inside cline**, accessible via the `/plan` slash command family. This is the recommended path for new work; the CLI tool above is still supported for power users and CI integration.
 
 The plugin-driven plan is a single source of truth at `plans/<slug>/plan.json` with a sidecar `meta.json` for status. The plugin's `bizar_plan_action` tool handles all reads and writes. The plugin tool surface is exposed to the agent through a synthetic `ToolContext`, and the agent invokes the tool in response to `/plan new|add|comment|status` slash commands.
 
@@ -178,7 +178,7 @@ The plugin-driven plan is a single source of truth at `plans/<slug>/plan.json` w
 | `/plan wait <slug>` | `bizar_wait_for_feedback` | Defers — agent pauses for human feedback. Returns `feedback_received`, `approved`, `rejected`, or `timed_out`. |
 | `/help` | (plugin) | Lists the plugin's own commands. |
 
-The two implementations (`bizar plan` CLI vs `/plan` slash command) read and write the same `plan.json` format. You can mix and match: use the CLI for CI or batch operations, use the slash command for in-opencode work. The slash command is the recommended path because it stays in the agent's context and supports comments and status.
+The two implementations (`bizar plan` CLI vs `/plan` slash command) read and write the same `plan.json` format. You can mix and match: use the CLI for CI or batch operations, use the slash command for in-cline work. The slash command is the recommended path because it stays in the agent's context and supports comments and status.
 
 For the full reference, see [Commands Reference → Bizar plugin commands](Commands-Reference#bizar-plugin-commands).
 

@@ -33,7 +33,7 @@ export async function promptComponents() {
       { name: 'Hook system (behavioral hooks)', value: 'hooks', checked: true },
       { name: 'Slash commands (/explain, /audit, /learn, /pr-review, /init)', value: 'commands', checked: true },
       new inquirer.Separator(),
-      { name: 'opencode.json (provider + MCP config)', value: 'opencode-json', checked: true },
+      { name: 'cline.json (provider + MCP config)', value: 'cline-json', checked: true },
       { name: '.bizar/ folder (self-improvement log)', value: 'bizar', checked: true },
       new inquirer.Separator(),
       { name: 'Bizar plugin (loop guard, status, handoff signal)', value: 'plugin-bizar', checked: true },
@@ -87,8 +87,8 @@ export async function promptApiKeys() {
   const keys = await inquirer.prompt([
     {
       type: 'password',
-      name: 'opencodeZen',
-      message: 'OpenCode Zen API key (DeepSeek V4 Flash Free):',
+      name: 'clineZen',
+      message: 'Cline Zen API key (DeepSeek V4 Flash Free):',
       mask: '*',
       validate: v => v.length > 0 || 'Required for free-tier agents (Mimir, Heimdall, Vör)',
     },
@@ -102,7 +102,7 @@ export async function promptApiKeys() {
     {
       type: 'password',
       name: 'openai',
-      message: 'OpenAI / opencode-zen API key (optional — for non-default agents):',
+      message: 'OpenAI / cline-zen API key (optional — for non-default agents):',
       mask: '*',
     },
     {
@@ -132,11 +132,11 @@ export async function promptConfirmInstall(summary) {
   return ok;
 }
 
-export async function promptRestartOpenCode() {
+export async function promptRestartCline() {
   const { restart } = await inquirer.prompt([{
     type: 'confirm',
     name: 'restart',
-    message: 'Restart opencode now to pick up changes?',
+    message: 'Restart cline now to pick up changes?',
     default: true,
   }]);
   return restart;

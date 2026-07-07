@@ -1,6 +1,6 @@
 # C++ Coding Standards Skill
 
-Modern C++17/20 standards skill for opencode. Loads when an agent is writing, reviewing, or refactoring C++ code. Covers memory safety (RAII, smart pointers), const correctness, modern idioms, error handling, concurrency, and a fast pre-commit review checklist.
+Modern C++17/20 standards skill for cline. Loads when an agent is writing, reviewing, or refactoring C++ code. Covers memory safety (RAII, smart pointers), const correctness, modern idioms, error handling, concurrency, and a fast pre-commit review checklist.
 
 ## What it provides
 
@@ -21,8 +21,8 @@ Modern C++17/20 standards skill for opencode. Loads when an agent is writing, re
 ## Manual install
 
 ```bash
-# Copy whole folder to opencode's skills dir
-cp -R SKILL.md references agents ~/.opencode/skills/cpp-coding-standards/
+# Copy whole folder to cline's skills dir
+cp -R SKILL.md references agents ~/.cline/skills/cpp-coding-standards/
 ```
 
 The BizarHarness installer can also install this automatically — select the **C++ coding standards** component.

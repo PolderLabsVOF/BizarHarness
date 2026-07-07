@@ -2,13 +2,13 @@ import chalk from 'chalk';
 import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { opencodeConfigDir } from './utils.mjs';
+import { clineConfigDir } from './utils.mjs';
 
 const HOME = homedir();
-const CONFIG_DIR = opencodeConfigDir();
+const CONFIG_DIR = clineConfigDir();
 
 export async function runExport(target) {
-  const validTargets = ['claude', 'cursor', 'opencode'];
+  const validTargets = ['claude', 'cursor', 'cline'];
   if (target && !validTargets.includes(target)) {
     console.log(chalk.red(`  Unknown target "${target}". Valid: ${validTargets.join(', ')}`));
     return;
@@ -87,8 +87,8 @@ ${content}
       break;
     }
 
-    case 'opencode': {
-      console.log(chalk.dim('  Already configured for opencode. Run `bizar` for interactive setup.'));
+    case 'cline': {
+      console.log(chalk.dim('  Already configured for cline. Run `bizar` for interactive setup.'));
       break;
     }
   }

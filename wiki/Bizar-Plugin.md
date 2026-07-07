@@ -1,6 +1,6 @@
 # Bizar Plugin
 
-The Bizar plugin is an opencode plugin bundled with BizarHarness. It runs inside opencode alongside the agents and does three things: detects subagent loops, reports per-session activity, and injects handoff messages so a stuck subagent can be reassigned. It is the only piece of BizarHarness that runs *as* a plugin (not as an agent).
+The Bizar plugin is an cline plugin bundled with BizarHarness. It runs inside cline alongside the agents and does three things: detects subagent loops, reports per-session activity, and injects handoff messages so a stuck subagent can be reassigned. It is the only piece of BizarHarness that runs *as* a plugin (not as an agent).
 
 ## What it does
 
@@ -21,7 +21,7 @@ The plugin fingerprints each `tool.execute.before` call as a stable hash of the 
 | 8 (escalate) | Inject stronger system message | Subagent sees it on its next turn |
 | 12 (block) | **Block.** Throw from `tool.execute.before` | Surfaces in the TUI as a tool error |
 
-The plugin's hard block at threshold 12 runs **before** opencode's built-in `doom_loop` recovery. The plugin wins.
+The plugin's hard block at threshold 12 runs **before** cline's built-in `doom_loop` recovery. The plugin wins.
 
 ## Log location and format
 
@@ -59,13 +59,13 @@ The plugin injects one of three static message templates depending on the thresh
 | 8 | `[loop guard: 8 identical calls to <tool>]. Consider using the task tool to report back to your parent with what you've learned and what you need.` |
 | 12 (throw) | `Loop protection: 12 identical calls to <tool>. Use task to escalate.` |
 
-The only interpolation is `<tool>`, which is the tool name from opencode's tool registry (e.g., `read`, `bash`, `edit`). It is not user-controlled content.
+The only interpolation is `<tool>`, which is the tool name from cline's tool registry (e.g., `read`, `bash`, `edit`). It is not user-controlled content.
 
 Odin matches on these literal substrings. Every BizarHarness subagent prompt includes a `## Loop Guard Handling` section that tells the agent to recognize these strings and use the `task` tool to escalate. The section is byte-identical across all twelve subagents.
 
 ## Configuration
 
-Plugin options are passed in the `opencode.json` `plugin` array:
+Plugin options are passed in the `cline.json` `plugin` array:
 
 ```jsonc
 "plugin": [
@@ -114,7 +114,7 @@ These are documented in the plugin spec and are part of the release contract. Cu
 4. **Custom agents without the `## Loop Guard Handling` section will loop indefinitely past threshold 12.** The plugin throws at threshold 12, but a subagent that doesn't recognize the message and use `task` will simply retry. All BizarHarness subagents include the canonical section. **Users who add custom agents without this section will experience infinite-block loops.** This warning is mandatory. See [Limitations](#limitations) for the full list.
 5. **Corrupt state files are not auto-recovered.** A corrupt JSON file is logged and ignored; the session starts with empty state. The corrupt file is preserved for forensic inspection.
 6. **Out-of-worktree paths are hashed, not stored.** A loop involving files outside the worktree produces stable fingerprints across runs (good) but the original path is not recoverable from the log.
-7. **Stale session cleanup is best-effort.** If `client.session.list()` fails, the age-based cleanup still runs but the "session no longer in opencode" branch is skipped.
+7. **Stale session cleanup is best-effort.** If `client.session.list()` fails, the age-based cleanup still runs but the "session no longer in cline" branch is skipped.
 8. **Single-host state.** State files are local to `~/.cache/bizar/`. Cross-host loop detection is out of scope.
 9. **Env var changes mid-session are ignored.** Env vars are read once at plugin init.
 10. **Log rotation is best-effort.** If a `renameSync` fails, that step is skipped and a warning is logged. The log may grow past `logRotationBytes` in degenerate cases.
@@ -122,25 +122,25 @@ These are documented in the plugin spec and are part of the release contract. Cu
 
 ## Disabling the plugin
 
-To disable the plugin for a single session, set `BIZAR_DISABLE=1` in the environment before launching opencode:
+To disable the plugin for a single session, set `BIZAR_DISABLE=1` in the environment before launching cline:
 
 ```bash
-BIZAR_DISABLE=1 opencode
+BIZAR_DISABLE=1 cline
 ```
 
 To disable only the loop guard (status reporting still active):
 
 ```bash
-BIZAR_DISABLE_LOOP=1 opencode
+BIZAR_DISABLE_LOOP=1 cline
 ```
 
 To disable only status reporting (loop guard still active):
 
 ```bash
-BIZAR_DISABLE_LOG=1 opencode
+BIZAR_DISABLE_LOG=1 cline
 ```
 
-To disable the plugin permanently, remove the entry from the `plugin` array in `opencode.json` and remove the `plugins/bizar/` directory from `~/.config/opencode/`.
+To disable the plugin permanently, remove the entry from the `plugin` array in `cline.json` and remove the `plugins/bizar/` directory from `~/.config/cline/`.
 
 ## Security
 
@@ -159,13 +159,13 @@ The forbidden-import check is enforced by `scripts/check-forbidden-imports.sh` i
 
 The plugin also runs an asynchronous subagent system. See [Background Agents](Background-Agents) for the full reference. Briefly:
 
-- **`bizar_spawn_background`** (Odin only) — spawns a subagent on a shared `opencode serve` instance. Returns an `instanceId` immediately.
+- **`bizar_spawn_background`** (Odin only) — spawns a subagent on a shared `cline serve` instance. Returns an `instanceId` immediately.
 - **`bizar_status`** (any agent) — read-only list of instances and their state.
 - **`bizar_collect`** (Odin only) — blocks until the instance completes or times out.
 - **`bizar_kill`** (Odin only) — aborts a running instance via `POST /session/{id}/abort`.
 - **`bizar_wait_for_feedback`** — blocks on user feedback for a plan (or a timeout).
 
-The plugin tracks each instance's state on disk in `~/.cache/bizar/state/bg/<instanceId>.json` so it survives an opencode restart. Recovery on restart: any instance still in `running` or `pending` is marked `failed` with `error: "recovered after restart"`.
+The plugin tracks each instance's state on disk in `~/.cache/bizar/state/bg/<instanceId>.json` so it survives an cline restart. Recovery on restart: any instance still in `running` or `pending` is marked `failed` with `error: "recovered after restart"`.
 
 ## Recent fixes
 
@@ -187,13 +187,13 @@ The plugin tracks each instance's state on disk in `~/.cache/bizar/state/bg/<ins
 
 ### v0.5.1 — `install.sh` now deploys `commands/` and `hooks/`
 
-The original `install.sh` only copied `agents/`, `skills/`, and the Bizar plugin to `~/.config/opencode/`. Slash commands and hooks were not deployed, so commands like `/init` and `/learn` had to be set up manually. The updated `install.sh` adds two new copy blocks for `config/commands/*.md` and `config/hooks/*` (recursive, so the `post-tool-use.md` and `pre-tool-use.md` files are included).
+The original `install.sh` only copied `agents/`, `skills/`, and the Bizar plugin to `~/.config/cline/`. Slash commands and hooks were not deployed, so commands like `/init` and `/learn` had to be set up manually. The updated `install.sh` adds two new copy blocks for `config/commands/*.md` and `config/hooks/*` (recursive, so the `post-tool-use.md` and `pre-tool-use.md` files are included).
 
 ## Limitations (v0.5+ additions)
 
 The full [Limitations](#limitations) list is above. Two v0.5+-specific ones to be aware of:
 
-12. **Plugin has no hot-reload.** Once opencode loads the plugin, source changes don't take effect until you restart opencode. This makes the install-then-iterate loop slow. There is no fix planned — restarting opencode is reliable and the cycle is short. See [Troubleshooting](Troubleshooting#installed-plugin-source-changes-arent-taking-effect).
+12. **Plugin has no hot-reload.** Once cline loads the plugin, source changes don't take effect until you restart cline. This makes the install-then-iterate loop slow. There is no fix planned — restarting cline is reliable and the cycle is short. See [Troubleshooting](Troubleshooting#installed-plugin-source-changes-arent-taking-effect).
 
 13. **`install.sh` is not idempotent against source changes.** If you `git pull` updated plugin source, you must re-run `bash install.sh` to deploy it. The script does not detect that the installed copy is older than the source. There is a proposed fix in [Self-Improvement](Self-Improvement#active-rules) to add a `git rev-parse` check at the top of `install.sh`.
 

@@ -1,10 +1,10 @@
 /**
  * tests/strip-thinking.test.mjs
  *
- * Unit tests for `stripThinkingTags` and `extractContentFromOpencodeMessage`
+ * Unit tests for `stripThinkingTags` and `extractContentFromClineMessage`
  * in src/server/serve-info.mjs. The M3 model emits `<thinking>...</thinking>`
  * inline in the assistant text; these tags must be stripped from any string
- * that flows out of `extractContentFromOpencodeMessage` so that
+ * that flows out of `extractContentFromClineMessage` so that
  * react-markdown (desktop + mobile chat) renders clean text.
  *
  * Run with: node --test tests/strip-thinking.test.mjs
@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 
 import {
   stripThinkingTags,
-  extractContentFromOpencodeMessage,
+  extractContentFromClineMessage,
 } from '../src/server/serve-info.mjs';
 
 test('stripThinkingTags: passes through plain text untouched', () => {
@@ -105,22 +105,22 @@ test('stripThinkingTags: handles nested-looking but separate blocks', () => {
   assert.equal(stripThinkingTags(input), 'middlevisible');
 });
 
-test('extractContentFromOpencodeMessage: returns empty string for null/undefined', () => {
-  assert.equal(extractContentFromOpencodeMessage(null), '');
-  assert.equal(extractContentFromOpencodeMessage(undefined), '');
+test('extractContentFromClineMessage: returns empty string for null/undefined', () => {
+  assert.equal(extractContentFromClineMessage(null), '');
+  assert.equal(extractContentFromClineMessage(undefined), '');
 });
 
-test('extractContentFromOpencodeMessage: strips thinking from msg.text', () => {
+test('extractContentFromClineMessage: strips thinking from msg.text', () => {
   const msg = { text: '<thinking>reasoning</thinking>final answer' };
-  assert.equal(extractContentFromOpencodeMessage(msg), 'final answer');
+  assert.equal(extractContentFromClineMessage(msg), 'final answer');
 });
 
-test('extractContentFromOpencodeMessage: strips thinking from msg.content', () => {
+test('extractContentFromClineMessage: strips thinking from msg.content', () => {
   const msg = { content: '<thinking>reasoning</thinking>final answer' };
-  assert.equal(extractContentFromOpencodeMessage(msg), 'final answer');
+  assert.equal(extractContentFromClineMessage(msg), 'final answer');
 });
 
-test('extractContentFromOpencodeMessage: strips thinking from each text part', () => {
+test('extractContentFromClineMessage: strips thinking from each text part', () => {
   const msg = {
     parts: [
       { type: 'text', text: '<thinking>step 1</thinking>first part' },
@@ -128,12 +128,12 @@ test('extractContentFromOpencodeMessage: strips thinking from each text part', (
     ],
   };
   assert.equal(
-    extractContentFromOpencodeMessage(msg),
+    extractContentFromClineMessage(msg),
     'first part\n\nsecond part'
   );
 });
 
-test('extractContentFromOpencodeMessage: skips non-text parts', () => {
+test('extractContentFromClineMessage: skips non-text parts', () => {
   const msg = {
     parts: [
       { type: 'text', text: 'visible' },
@@ -142,17 +142,17 @@ test('extractContentFromOpencodeMessage: skips non-text parts', () => {
     ],
   };
   assert.equal(
-    extractContentFromOpencodeMessage(msg),
+    extractContentFromClineMessage(msg),
     'visible\n\nalso visible'
   );
 });
 
-test('extractContentFromOpencodeMessage: returns empty for empty parts', () => {
-  assert.equal(extractContentFromOpencodeMessage({ parts: [] }), '');
-  assert.equal(extractContentFromOpencodeMessage({}), '');
+test('extractContentFromClineMessage: returns empty for empty parts', () => {
+  assert.equal(extractContentFromClineMessage({ parts: [] }), '');
+  assert.equal(extractContentFromClineMessage({}), '');
 });
 
-test('extractContentFromOpencodeMessage: real-world M3 message shape', () => {
+test('extractContentFromClineMessage: real-world M3 message shape', () => {
   // Approximate shape of an interleaved-thinking assistant message
   const msg = {
     info: { id: 'm1', role: 'assistant', time: { created: 1000 } },
@@ -169,7 +169,7 @@ test('extractContentFromOpencodeMessage: real-world M3 message shape', () => {
     ],
   };
   assert.equal(
-    extractContentFromOpencodeMessage(msg),
+    extractContentFromClineMessage(msg),
     'Here is my answer.\n\nIt covers A, B, C.'
   );
 });

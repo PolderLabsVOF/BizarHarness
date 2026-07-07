@@ -34,12 +34,12 @@ export function defaultBizarEnv() {
     BIZAR_HEADROOM_AUTOSTART: '1',
     BIZAR_LIGHTRAG_AUTOSTART: '1',
     BIZAR_MEMORY_VAULT: join(home, '.bizar_memory'),
-    OPENCODE_SERVER_PASSWORD: '',
+    CLINE_SERVER_PASSWORD: '',
   };
 }
 
 /**
- * Generate a fresh `OPENCODE_SERVER_PASSWORD` using the platform's
+ * Generate a fresh `CLINE_SERVER_PASSWORD` using the platform's
  * secure random source.
  */
 function generatePassword() {
@@ -110,12 +110,12 @@ export function buildServiceEnvFile({ bizarHome, repoPath, headroomAutoStart = t
   const existingPath = process.env.PATH || '/usr/local/bin:/usr/bin:/bin';
   env.PATH = existingPath.includes(localBin) ? existingPath : `${localBin}:${existingPath}`;
 
-  // OPENCODE_SERVER_PASSWORD: honour existing env, otherwise generate fresh
-  const password = process.env.OPENCODE_SERVER_PASSWORD
+  // CLINE_SERVER_PASSWORD: honour existing env, otherwise generate fresh
+  const password = process.env.CLINE_SERVER_PASSWORD
     || process.env.BIZAR_REDACT_PASSWORD === '1' ? ''
-    : (process.env.OPENCODE_SERVER_PASSWORD || generatePassword());
+    : (process.env.CLINE_SERVER_PASSWORD || generatePassword());
   if (password) {
-    env.OPENCODE_SERVER_PASSWORD = password;
+    env.CLINE_SERVER_PASSWORD = password;
   }
 
   const lines = [
@@ -132,7 +132,7 @@ export function buildServiceEnvFile({ bizarHome, repoPath, headroomAutoStart = t
     `BIZAR_MEMORY_VAULT=${env.BIZAR_MEMORY_VAULT}`,
   ];
   if (password) {
-    lines.push(`OPENCODE_SERVER_PASSWORD=${password}`);
+    lines.push(`CLINE_SERVER_PASSWORD=${password}`);
   }
 
   return lines.join('\n') + '\n';

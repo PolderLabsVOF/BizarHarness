@@ -137,9 +137,9 @@ describe("bizar_spawn_background — model parsing (HIGH-3, LOW-34)", () => {
     expect(result).toEqual({ providerID: "minimax", modelID: "minimax-m3" });
   });
 
-  it('"opencode/deepseek-v4-flash-free" parses correctly', () => {
-    const result = parseModel("opencode/deepseek-v4-flash-free");
-    expect(result).toEqual({ providerID: "opencode", modelID: "deepseek-v4-flash-free" });
+  it('"cline/deepseek-v4-flash-free" parses correctly', () => {
+    const result = parseModel("cline/deepseek-v4-flash-free");
+    expect(result).toEqual({ providerID: "cline", modelID: "deepseek-v4-flash-free" });
   });
 
   it('"minimax-m3" (no /) is rejected', () => {
@@ -259,7 +259,7 @@ describe("bizar_spawn_background — prompt forwarding (HIGH-2, HIGH-7)", () => 
   });
 
   it("metadata.bizar includes instanceId, parentAgent, spawnSource (HIGH-7)", () => {
-    // Metadata is stored in BackgroundState, not on the opencode session
+    // Metadata is stored in BackgroundState, not on the cline session
     // This test verifies the structure is captured
     expect(true).toBe(true);
   });

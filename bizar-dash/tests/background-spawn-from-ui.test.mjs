@@ -2,11 +2,11 @@
  * tests/background-spawn-from-ui.test.mjs
  *
  * v5.x — Validates the spawner's input-validation surface only —
- * doesn't actually launch `opencode run` (that would block).
+ * doesn't actually launch `cline run` (that would block).
  *
  * The full happy-path test lives in a manual run-script (see
  * scripts/bg-spawn-smoke.mjs, future work) because the dashboard
- * sandbox can't guarantee opencode is installed + auth'd.
+ * sandbox can't guarantee cline is installed + auth'd.
  */
 
 import { test } from 'node:test';

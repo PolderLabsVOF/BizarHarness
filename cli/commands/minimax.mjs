@@ -35,7 +35,7 @@ async function minimaxApi(path, opts = {}) {
   const { port, secret } = readDashboardConn();
   const url = `http://127.0.0.1:${port}${path}`;
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const method = (opts.method || 'GET').toUpperCase();
   try {
     const resp = await fetch(url, { method, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
@@ -60,16 +60,16 @@ export function showMinimaxHelp() {
   Usage:
     bizar minimax status              Show whether the Subscription Key is configured
                                        and where it was resolved from (auth.json,
-                                       opencode.json, env var, or none).
+                                       cline.json, env var, or none).
     bizar minimax remains              Fetch the live 5-hour + weekly remaining
                                        quota per model. Shows reset times.
     bizar minimax test                 Smoke-test the key with a one-shot chat
                                        completion. Prints the usage block.
     bizar minimax config <key>         Save a new Subscription Key to
-                                       ~/.local/share/opencode/auth.json. The
+                                       ~/.local/share/cline/auth.json. The
                                        key never leaves this machine.
     bizar minimax clear                Remove the Subscription Key from
-                                       opencode's auth.json.
+                                       cline's auth.json.
     bizar minimax reset-onboarding    Re-trigger the first-run wizard. Use
                                        this if the key was changed outside the
                                        dashboard and you want to re-enter it.
@@ -204,7 +204,7 @@ async function runMinimaxCommand(minimaxArgs) {
       console.error(chalk.red('  ✗ Key does not look like a MiniMax key (expected sk-cp-…, sk-ant-…, or sk-or-… prefix)'));
       process.exit(1);
     }
-    console.log(chalk.dim('  Saving to opencode auth.json…'));
+    console.log(chalk.dim('  Saving to cline auth.json…'));
     const r = await minimaxApi('/api/minimax/onboarding/save-key', {
       method: 'POST',
       body: { key, groupId: 'default' },
@@ -225,7 +225,7 @@ async function runMinimaxCommand(minimaxArgs) {
 
   if (sub === 'clear' || sub === 'remove') {
     if (!yes) {
-      console.log(chalk.yellow(`  ⚠ This will remove the MiniMax Subscription Key from opencode's auth.json.`));
+      console.log(chalk.yellow(`  ⚠ This will remove the MiniMax Subscription Key from cline's auth.json.`));
       console.log(chalk.dim('  Continue? [y/N]'));
       const buf = [];
       process.stdin.setEncoding('utf8');
@@ -237,7 +237,7 @@ async function runMinimaxCommand(minimaxArgs) {
         return;
       }
     }
-    const authFile = join(HOME, '.local', 'share', 'opencode', 'auth.json');
+    const authFile = join(HOME, '.local', 'share', 'cline', 'auth.json');
     let auth = {};
     try {
       if (existsSync(authFile)) auth = JSON.parse(readFileSync(authFile, 'utf8'));

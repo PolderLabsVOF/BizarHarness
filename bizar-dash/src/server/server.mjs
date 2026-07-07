@@ -24,7 +24,7 @@ import { agentsStore } from './agents-store.mjs';
 import { tasksStore } from './tasks-store.mjs';
 import { schedulesStore } from './schedules-store.mjs';
 import { providersStore, mcpsStore } from './providers-store.mjs';
-import { readOpencodeJsonCached } from './providers-store.mjs';
+import { readClineJsonCached } from './providers-store.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
 import { startBgRetryLoop, stopBgRetryLoop } from './bg-retry.mjs';
@@ -141,13 +141,13 @@ function mobileRedirectTarget(req) {
  * @param {object} opts
  * @param {number} opts.port
  * @param {string} opts.projectRoot
- * @param {string} opts.opencodeConfigDir
+ * @param {string} opts.clineConfigDir
  * @param {string} opts.bizarRoot
  */
 export async function createServer({
   port,
   projectRoot,
-  opencodeConfigDir,
+  clineConfigDir,
   bizarRoot,
 }) {
   installProcessHandlers();
@@ -236,7 +236,7 @@ export async function createServer({
   // comes from the X-RateLimit-Scope header set by the per-route
   // limiter middleware (chat / event); if no scope header is
   // present, log the 429 with scope=unknown (it may be an upstream
-  // 429 proxied from the opencode plugin).
+  // 429 proxied from the cline plugin).
   //
   // v5.1.0 — Also opens an HTTP-server root span on every request
   // via the OpenTelemetry tracer. The span is created inside
@@ -316,7 +316,7 @@ export async function createServer({
     },
   );
 
-  const state = createState({ projectRoot, opencodeConfigDir, bizarRoot });
+  const state = createState({ projectRoot, clineConfigDir, bizarRoot });
 
   // v3.0.4 — Auto-detect the user's cwd as a project on startup. This is
   // idempotent and safe to call on every boot. The first time a user runs
@@ -392,13 +392,13 @@ export async function createServer({
   }
 
   const watchPaths = [
-    state.paths.opencodeJson,
+    state.paths.clineJson,
     state.paths.agentsDir,
     state.paths.commandsDir,
     state.paths.bizarDir,
     state.paths.plansDir,
     state.paths.globalPlansDir,
-    join(opencodeConfigDir, 'projects.json'),
+    join(clineConfigDir, 'projects.json'),
   ].filter((p) => existsSafe(p));
 
   const watcher = createWatcher({
@@ -455,7 +455,7 @@ export async function createServer({
     state,
     watcher,
     projectRoot,
-    opencodeConfigDir,
+    clineConfigDir,
     bizarRoot,
     broadcast: localBroadcast,
   });
@@ -566,7 +566,7 @@ export async function createServer({
 
   // ── Mod route mounting ──────────────────────────────────────────────
   {
-    const modCtx = { broadcast: localBroadcast, state, projectRoot, opencodeConfigDir };
+    const modCtx = { broadcast: localBroadcast, state, projectRoot, clineConfigDir };
     const modRouters = await modsLoader.loadModRouters(modCtx);
     for (const { id, router: modRouter, mountPath } of modRouters) {
       app.use(mountPath, modRouter);
@@ -818,7 +818,7 @@ export async function createServer({
         JSON.stringify({
           type: 'snapshot',
           ts: Date.now(),
-          data: buildSnapshotSafe(state, opencodeConfigDir),
+          data: buildSnapshotSafe(state, clineConfigDir),
         }),
       );
     } catch (err) {
@@ -859,7 +859,7 @@ export async function createServer({
   // `dispatchPending: true` with `toolCallCount === 0`. Before this
   // existed, the only unstick path was the user manually hitting
   // `POST /api/tasks/:id/start`. The retry loop walks every bg
-  // state file every 30s, attempts to re-dispatch via the opencode
+  // state file every 30s, attempts to re-dispatch via the cline
   // serve child, and caps each instance at MAX_DISPATCH_RETRIES
   // (10) before marking it `failed`.
   try {
@@ -917,17 +917,17 @@ export async function createServer({
   return { app, server, wss, state, watcher, port, close };
 }
 
-function buildSnapshotSafe(state, opencodeConfigDir) {
+function buildSnapshotSafe(state, clineConfigDir) {
   try {
-    return buildSnapshot(state, opencodeConfigDir);
+    return buildSnapshot(state, clineConfigDir);
   } catch (err) {
     return { error: 'snapshot_failed', message: err.message };
   }
 }
 
-function buildSnapshot(state, opencodeConfigDir) {
-  const cfgFile = join(opencodeConfigDir, 'opencode.json');
-  // v5.0.0 — Bug S2: read opencode.json via the 1s-debounced cache in
+function buildSnapshot(state, clineConfigDir) {
+  const cfgFile = join(clineConfigDir, 'cline.json');
+  // v5.0.0 — Bug S2: read cline.json via the 1s-debounced cache in
   // providers-store.mjs. WS clients connect on snapshot delivery; with N
   // clients the readFileSync here was the main per-connection blocker.
   // The cache collapses all reads within a 1-second window to a single
@@ -935,7 +935,7 @@ function buildSnapshot(state, opencodeConfigDir) {
   // invalidate the cache, so the snapshot always reflects the latest
   // state within at most 1s.
   const exists = existsSync(cfgFile);
-  const cfg = readOpencodeJsonCached();
+  const cfg = readClineJsonCached();
   const activeProject = projectsStore.active();
   return {
     overview: state.getOverview(),

@@ -38,7 +38,7 @@ The current Active Rules for the BizarHarness project itself (from `.bizar/AGENT
 4. **Schema + secret scan gate commits** — `bizar memory commit` validates frontmatter and blocks HIGH-severity secrets. Use `.template` for reference files; never commit a live secret.
 5. **AMS Studio bank populated** — 40+ documents migrated from Hindsight default to ams-studio bank (legacy project-specific note; preserved for history).
 6. **Re-run `install.sh` after every `git pull`** — the script does not detect when the installed plugin is older than the source. Pre-v0.5.1, this was masked by the fact that the source rarely changed; post-v0.5.1, source changes land frequently and a stale installed plugin produces silent failures.
-7. **Plugin has no hot-reload** — opencode loads the plugin at process start. Restart opencode to pick up source changes.
+7. **Plugin has no hot-reload** — cline loads the plugin at process start. Restart cline to pick up source changes.
 8. **Real tests for real bugs** — when fixing a bug, write at least one regression test that uses the **real** module, not a hand-rolled fake. The BUGFIX v0.5.1 was missed by the existing test suite because the `bg-spawn.test.ts` and `background.test.ts` fakes mirrored the API but didn't exercise the real `add()` path.
 
 These are the rules BizarHarness follows. Your project's `.bizar/AGENTS_SELF_IMPROVEMENT.md` will have its own Active Rules section, populated by the lessons from that project.

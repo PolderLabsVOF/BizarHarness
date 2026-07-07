@@ -61,7 +61,7 @@ Never do any of the following:
 
 ### Loop Guard Is The Last Resort
 
-The runtime loop guard in `opencode.json` (`loopThresholdWarn: 5`, `loopThresholdEscalate: 8`, `loopThresholdBlock: 12`) is a safety net for when this rule fails. It is not the primary defense.
+The runtime loop guard in `cline.json` (`loopThresholdWarn: 5`, `loopThresholdEscalate: 8`, `loopThresholdBlock: 12`) is a safety net for when this rule fails. It is not the primary defense.
 
 If the loop guard fires, the rule failed first. Agents must self-correct before the guard kicks in. A trigger at 5 identical calls means the agent should have stopped at 2 and researched.
 

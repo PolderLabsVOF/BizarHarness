@@ -48,7 +48,7 @@ describe('PROVIDER_CATALOG (v4.6.0)', () => {
 
   it('contains the headline providers we expect', () => {
     const ids = mod.PROVIDER_CATALOG.map((p) => p.id);
-    for (const expected of ['opencode', 'anthropic', 'openai', 'google', 'minimax', 'groq', 'mistral', 'cohere', 'ollama', 'lmstudio', 'custom']) {
+    for (const expected of ['cline', 'anthropic', 'openai', 'google', 'minimax', 'groq', 'mistral', 'cohere', 'ollama', 'lmstudio', 'custom']) {
       assert.ok(ids.includes(expected), `catalog missing ${expected}`);
     }
   });
@@ -113,7 +113,7 @@ describe('searchProviders (v4.6.0)', () => {
     assert.ok(ids.includes('minimax'));
   });
 
-  it('name match: "GPT" finds openai/opencode (curated names)', () => {
+  it('name match: "GPT" finds openai/cline (curated names)', () => {
     const result = mod.searchProviders('claude');
     const ids = result.map((r) => r.id);
     assert.ok(ids.includes('anthropic'));

@@ -32,10 +32,10 @@ export function showInstallHelp() {
        python3.12, jq, gh on Linux; brew on macOS) + service registration
        (systemd / launchd / Task Scheduler).
     3. Syncs agent files, slash commands, and bundled skills into
-       ~/.config/opencode/.
+       ~/.config/cline/.
     4. Copies plugins/bizar/ from the npm install into
-       ~/.config/opencode/plugins/bizar/ (preserves dev symlinks).
-    5. Patches ~/.config/opencode/opencode.json with the Bizar plugin
+       ~/.config/cline/plugins/bizar/ (preserves dev symlinks).
+    5. Patches ~/.config/cline/cline.json with the Bizar plugin
        entry (skipped if already present).
     6. Runs 'bizar doctor' as a post-install health check.
 
@@ -45,7 +45,7 @@ export function showInstallHelp() {
 
 export function showUpdateHelp() {
   console.log(`
-  bizar update — Update opencode + @polderlabs/bizar (which bundles the
+  bizar update — Update cline + @polderlabs/bizar (which bundles the
   plugin and dashboard). Detects what's installed and only touches what's
   missing or out of date.
 
@@ -61,7 +61,7 @@ export function showUpdateHelp() {
     bizar update --help                Show this help
 
   Components updated:
-    opencode-ai   the opencode CLI itself
+    cline   the cline CLI itself
     @polderlabs/bizar    this CLI + dashboard + plugin (one package)
 
   Behavior (v4.4.7+):
@@ -79,7 +79,7 @@ export function showUpdateHelp() {
       fresh detached dashboard process with the new code (skipped with
       --no-restart).
     • Runs 'bizar doctor' after a successful update to catch config
-      regressions before opencode tries to start.
+      regressions before cline tries to start.
     • With --check: prints the version matrix and release-notes excerpt
       between current and latest, exits non-zero if an update is available.
 

@@ -14,7 +14,7 @@ import type { DoctorCheck } from '../../src/web/lib/types';
 const checks: DoctorCheck[] = [
   { name: 'node', status: 'ok', message: 'v22.16.0 on linux/x64' },
   { name: 'memory', status: 'warn', message: 'rss 612.4 MB' },
-  { name: 'opencode', status: 'fail', message: 'serve-info missing' },
+  { name: 'cline', status: 'fail', message: 'serve-info missing' },
 ];
 
 describe('DoctorPanel', () => {
@@ -27,7 +27,7 @@ describe('DoctorPanel', () => {
     render(<DoctorPanel category="services" checks={checks} />);
     expect(screen.getByText('node')).toBeInTheDocument();
     expect(screen.getByText('memory')).toBeInTheDocument();
-    expect(screen.getByText('opencode')).toBeInTheDocument();
+    expect(screen.getByText('cline')).toBeInTheDocument();
     expect(screen.getByText('v22.16.0 on linux/x64')).toBeInTheDocument();
     expect(screen.getByText('rss 612.4 MB')).toBeInTheDocument();
     expect(screen.getByText('serve-info missing')).toBeInTheDocument();

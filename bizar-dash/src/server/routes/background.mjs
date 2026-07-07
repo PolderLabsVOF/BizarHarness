@@ -14,7 +14,7 @@
  * /api/background/:id/retry (POST)         — manual unstick (v3.11.0)
  * /api/background/:id (DELETE)             — kill
  *
- * Backed by the opencode-plugin's bg instance store. Imports the
+ * Backed by the cline-plugin's bg instance store. Imports the
  * store lazily so this module loads even when the plugin is offline.
  *
  * v5.5.1: the spawner is now SDK-based (see ../bg-spawner.mjs).
@@ -115,7 +115,7 @@ export function createBackgroundRouter({ broadcast }) {
 
   // v5.x — Tool-call history. The state file carries a `toolCalls`
   // array populated by the plugin's InstanceManager as it observes
-  // opencode events. This endpoint is read-only; the plugin owns the
+  // cline events. This endpoint is read-only; the plugin owns the
   // shape.
   router.get('/background/:id/tool-calls', wrap(async (req, res) => {
     const { backgroundStore } = await import('../background-store.mjs');
@@ -153,7 +153,7 @@ export function createBackgroundRouter({ broadcast }) {
   }));
 
   // v5.5.1 — Steer is now TRUE mid-flight: the dashboard calls
-  // sdk.sessions.prompt() on the live opencode session. No kill+respawn.
+  // sdk.sessions.prompt() on the live cline session. No kill+respawn.
   // The response shape is the same `{ ok, newInstanceId?, processId? }` —
   // `newInstanceId` is omitted (the same instance is reused); the
   // `mode` field tells the dashboard this was a true mid-flight steer.
@@ -289,7 +289,7 @@ export function createBackgroundRouter({ broadcast }) {
 
     const { backgroundStore } = await import('../background-store.mjs');
     // v3.5.4 (bug #3) — `kill()` is now async (it awaits the abortSession
-    // HTTP call to opencode serve, then deletes the state file, then
+    // HTTP call to cline serve, then deletes the state file, then
     // best-effort tmux). The result includes a `steps[]` array so the UI
     // can report exactly what happened.
     //

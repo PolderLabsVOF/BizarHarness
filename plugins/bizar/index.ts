@@ -1,5 +1,5 @@
 /**
- * Bizar plugin — opencode plugin entry point.
+ * Bizar plugin — cline plugin entry point.
  *
  * Spec contract (cumulative):
  *   v0.3.1:
@@ -63,7 +63,7 @@
  *       recognize out-of-band calls.
  *     - §v5.3 — tool key names use the `bizar_*` form (single `r`)
  *       throughout the plugin, matching the docs and
- *       `config/opencode.json`. The earlier `bizarre_*` typo silently
+ *       `config/cline.json`. The earlier `bizarre_*` typo silently
  *       disabled the plan tools at runtime; the rename brings the
  *       runtime registry back in sync.
  *     - §v5.4 — subcommand form: `/plan get|add|update|delete|comment|
@@ -73,7 +73,7 @@
  *       a clear "use bizar_wait_for_feedback directly" response.
  *
  *   v0.4.2 (background agents):
- *     - §1 — start `opencode serve` on init; spawn background sessions
+ *     - §1 — start `cline serve` on init; spawn background sessions
  *       via `POST /session` + `POST /session/{id}/prompt_async`.
  *     - §2.1 — open ONE global SSE subscription to `GET /event`.
  *     - §2.2 — `InstanceManager.add()` is atomic.
@@ -154,7 +154,7 @@ import { join as pathJoin } from "node:path";
 import { homedir } from "node:os";
 
 // v0.6.3 — Compaction gate. Configures the compaction threshold from
-// `rawOptions.compaction.threshold` (default 0.5) and wires two opencode
+// `rawOptions.compaction.threshold` (default 0.5) and wires two cline
 // hooks: `experimental.session.compacting` (push a Bizar-policy note onto
 // the compaction prompt) and `experimental.compaction.autocontinue`
 // (skip the synthetic "continue" turn when our policy decides to compact).
@@ -272,7 +272,7 @@ let keyRotationInstalled = false;
  * leaving the structured `reasoning` / `reasoning_details` fields
  * intact.
  *
- * This is the workaround for the fact that opencode 1.17.9 does not
+ * This is the workaround for the fact that cline 1.17.9 does not
  * fire the `config` hook in this runtime (the SDK type declares it, but
  * the host never calls it). By the time the host would call `config`,
  * the plugin would already be past init — and the AI SDK is already
@@ -304,7 +304,7 @@ function installFetchReasoningCleanup(logger: Logger): void {
 }
 
 /**
- * v3.14.0 — Multi-key rotation for the MiniMax provider. opencode has
+ * v3.14.0 — Multi-key rotation for the MiniMax provider. cline has
  * no built-in support for multiple API keys per provider; this wrapper
  * closes that gap by reading N keys from env vars and rotating through
  * them on 429 / 402 / 5xx responses. See `src/key-rotation.ts` for the
@@ -373,7 +373,7 @@ interface RuntimeContext {
   /** §Memory — sessionIDs that have already received memory context. */
   injectedSessions: Set<string>;
   /** v0.7.0-alpha.1 — Dashboard publisher (or null if disabled/not started).
-   *  Used by the `event` hook to forward opencode session lifecycle
+   *  Used by the `event` hook to forward cline session lifecycle
    *  events to the v2 dashboard via the @polderlabs/bizar-sdk. */
   dashboardPublisher: DashboardPublisher | null;
   /** §Memory — injects relevant memory context at session start. */
@@ -394,7 +394,7 @@ interface RuntimeContext {
 /**
  * Default-exported Plugin function. The whole body is wrapped in try/catch
  * so that any initialization error logs via the SDK and returns empty
- * hooks — opencode never crashes on a broken plugin (spec §8.1).
+ * hooks — cline never crashes on a broken plugin (spec §8.1).
  */
 const plugin: Plugin = async (
   input: PluginInput,
@@ -486,7 +486,7 @@ async function init(
   // ``...</think>` blocks in chat completions responses
   // from the minimax provider are stripped from `content` even
   // when the model also emits structured reasoning. The `config` hook
-  // in the opencode plugin API is declared in the SDK type but does NOT
+  // in the cline plugin API is declared in the SDK type but does NOT
   // fire in 1.17.9 (confirmed via debug probe 2026-06-24), so we wrap
   // fetch globally as a fallback. Idempotent — only the first call in
   // this process actually wraps.
@@ -564,7 +564,7 @@ let bgAvailable = false;
         logger,
         timeoutMs: httpTimeoutMs,
       });
-      const authHeader = `Basic ${btoa(`opencode:${serveInfo.password}`)}`;
+      const authHeader = `Basic ${btoa(`cline:${serveInfo.password}`)}`;
       stream = new EventStream({
         baseUrl: `http://127.0.0.1:${serveInfo.port}`,
         directory: input.worktree,
@@ -575,7 +575,7 @@ let bgAvailable = false;
       streamHandle = stream;
 
       // v0.7.0-alpha.1 — Wire dashboard publisher to the EventStream so
-      // every opencode SSE event is also published to the v2 dashboard.
+      // every cline SSE event is also published to the v2 dashboard.
       // The publisher gracefully degrades if the dashboard is unreachable
       // (queues, retries, warns; never throws into the plugin).
       try {
@@ -585,10 +585,10 @@ let bgAvailable = false;
         await pub.start();
         dashboardPublisher = pub;
         stream.onEvent((event) => {
-          // Translate opencode StreamEvent → DashboardEvent shape.
+          // Translate cline StreamEvent → DashboardEvent shape.
           // The dashboard only cares about the wire-level (type, properties)
           // so we forward { type, properties } directly. Cast through
-          // `unknown` because the opencode event shape doesn't exactly
+          // `unknown` because the cline event shape doesn't exactly
           // match the SDK's discriminated DashboardEvent — it's a
           // forward-compatible passthrough.
           const dashEvent = {
@@ -802,7 +802,7 @@ function installSignalHandlers(
  * resolves in time; throws a labeled `Error` otherwise.
  *
  * The original promise is intentionally NOT cancelled (we don't have
- * an `AbortSignal` to pass to the opencode client). If the underlying
+ * an `AbortSignal` to pass to the cline client). If the underlying
  * call eventually rejects after we've already returned, the caller
  * should attach a no-op `.catch(() => undefined)` to suppress the
  * unhandled-rejection warning.
@@ -832,7 +832,7 @@ export async function withTimeout<T>(
 // --- Hooks ----------------------------------------------------------------
 
 /**
- * Best-effort read of valid session IDs from opencode. If `client.session`
+ * Best-effort read of valid session IDs from cline. If `client.session`
  * is unavailable or the call fails or times out, return an empty set —
  * the age-based branch of the cleanup still runs (spec §4.6).
  *
@@ -946,7 +946,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   // Some reasoning models (notably MiniMax M-series models) emit
   // their chain-of-thought in BOTH the structured `reasoning` /
   // `reasoning_details` field AND inline as `` blocks inside
-  // `message.content`. opencode's MiniMax provider SDK extracts the structured
+  // `message.content`. cline's MiniMax provider SDK extracts the structured
   // reasoning correctly and renders it as a separate "Thought" panel,
   // but it does NOT strip the inline blocks from `content`, so the user
   // sees the same thinking text twice — once in the proper panel and
@@ -959,7 +959,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   //      `src/reasoning-clean.ts`. The wrap strips the inline ``
   //      blocks from chat-completions responses to the `minimax` provider while leaving the structured reasoning fields
   //      alone. This is the only layer that fixes the CURRENT
-  //      response in-flight. The opencode plugin API in 1.17.9 declares
+  //      response in-flight. The cline plugin API in 1.17.9 declares
   //      a `config` hook in the SDK type but does not actually fire it
   //      (confirmed via debug probe 2026-06-24), so we wrap fetch
   //      globally instead.
@@ -981,7 +981,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     "",
     "When reasoning is enabled for this conversation, output your thinking",
     "ONLY in the model's structured reasoning field. Do NOT emit `` blocks",
-    "inline inside your message content — the opencode host extracts the",
+    "inline inside your message content — the cline host extracts the",
     "reasoning field and renders it as a separate, collapsable \"Thought\"",
     "panel. If you also emit the same text inline, the user will see your",
     "thinking twice (once in the panel and once as visible message body).",
@@ -999,7 +999,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   // file I/O — no serve child required.
   //
   // v0.5.0 — renamed `bizarre_*` → `bizar_*` (single `r`) to match
-  // the docs and `config/opencode.json`. The earlier typo silently
+  // the docs and `config/cline.json`. The earlier typo silently
   // disabled the plan tools at runtime; this fix brings the registry
   // in sync.
   const basePlanTools = {
@@ -1052,8 +1052,8 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     ? {
         ...basePlanTools,
         // v0.8.0 — bg-spawn no longer needs the HTTP client. It
-        // spawns an `opencode run` subprocess per agent (see
-        // src/opencode-runner.ts). The serve child is still
+        // spawns an `cline run` subprocess per agent (see
+        // src/cline-runner.ts). The serve child is still
         // available for the dashboard's v2 protocol and for any
         // TUI/web client that wants to attach to it.
         //
@@ -1103,7 +1103,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
   return {
     // Push a persistent system-prompt directive that tells reasoning
     // models to put their thinking in the structured reasoning field
-    // (rendered as a separate "Thought" panel by opencode) rather than
+    // (rendered as a separate "Thought" panel by cline) rather than
     // also emitting it inline as `` blocks in the content. The MiniMax direct
     // SDK does not strip the inline `` blocks, so without this
     // directive the user sees the reasoning twice — once in the proper
@@ -1171,7 +1171,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // the post-processing layer that fixes the CURRENT response in cases
     // where the model emits its chain-of-thought in BOTH the structured
     // `reasoning` field AND inline in `content` (the MiniMax-direct
-    // leak). opencode's MiniMax provider SDK does not strip the inline blocks,
+    // leak). cline's MiniMax provider SDK does not strip the inline blocks,
     // so we do it here at the boundary between the SDK output and the
     // UI rendering. The `config` hook that the SDK type declares for
     // fetch-level wrapping does NOT fire in 1.17.9, and the AI SDK
@@ -1205,11 +1205,11 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // `chat.message` seed, per spec §4.5.1).
     event: async ({ event }) => {
       try {
-        // v0.7.0-alpha.1 — opencode's event object has { type: string,
+        // v0.7.0-alpha.1 — cline's event object has { type: string,
         // properties: { sessionID: string, ... } }. The legacy plugin
         // assumed `event.sessionID` was top-level (which is wrong), so
         // the hook returned early for every event. We extract from
-        // BOTH locations to be robust across opencode versions, and
+        // BOTH locations to be robust across cline versions, and
         // publish to the dashboard regardless.
         const ev = event as {
           type?: string;
@@ -1220,8 +1220,8 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
         const sessionID = ev.sessionID ?? ev.properties?.sessionID;
         if (!type) return;
 
-        // v0.7.0-alpha.1 — Forward every opencode event to the dashboard.
-        // The plugin SDK does NOT translate opencode events to the SDK's
+        // v0.7.0-alpha.1 — Forward every cline event to the dashboard.
+        // The plugin SDK does NOT translate cline events to the SDK's
         // discriminated DashboardEvent shape (it's a forward-compatible
         // passthrough — the dashboard is happy with any {type, properties}
         // event object). The publish is fire-and-forget; failures are
@@ -1264,7 +1264,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
             ? ev2.properties.startedAt
             : Date.now();
           ctx.sessionStartTimes.set(sessionID, startedAt);
-          // Extract the first user message text — different opencode versions
+          // Extract the first user message text — different cline versions
           // surface this in different places; try several keys.
           const firstMessage =
             typeof ev2.messageText === "string"
@@ -1309,7 +1309,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
 
     // §4.5 — seed session state on first user message per session.
     // The hook key is the literal string "chat.message" (with a dot) per
-    // the opencode plugin API.
+    // the cline plugin API.
     //
     // §v4.1 (v0.4.0) — Slash command detection happens FIRST, before the
     // existing state-seeding logic. If the user typed a slash command we:
@@ -1322,7 +1322,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     //   - Throwing is the same pattern `tool.execute.before` uses for
     //     loop-detection blocks (see §5.4). It's well-tested in production.
     //   - Mutating `output.parts` / `output.message` is brittle — the
-    //     shapes differ between opencode versions, and the host may not
+    //     shapes differ between cline versions, and the host may not
     //     honor a synthetic `text` part from a hook.
     "chat.message": async (input, output) => {
       const sessionID = input.sessionID;
@@ -1518,7 +1518,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
           state.blocksTriggered += 1;
           await ctx.stateStore.save(state);
           // Throw from the hook — surfaces as a tool error in the TUI
-          // and runs BEFORE opencode's doom_loop recovery (§3.3).
+          // and runs BEFORE cline's doom_loop recovery (§3.3).
           throw new Error(decision.reason);
         }
 
@@ -1594,9 +1594,9 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
     // v0.4.2 — register the 4 background tools.
     tool: tools,
 
-    // v0.6.3 — Compaction gate. Called by opencode BEFORE it starts a
+    // v0.6.3 — Compaction gate. Called by cline BEFORE it starts a
     // session compaction. We append a one-line Bizar policy note so the
-    // model summarises with our threshold in mind (the default opencode
+    // model summarises with our threshold in mind (the default cline
     // compaction prompt doesn't know about our 50% trigger). The threshold
     // itself was set during `init()` from `rawOptions.compaction.threshold`.
     "experimental.session.compacting": async (_input, output) => {
@@ -1614,7 +1614,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       }
     },
 
-    // v0.6.3 — Compaction auto-continue gate. Called by opencode AFTER
+    // v0.6.3 — Compaction auto-continue gate. Called by cline AFTER
     // compaction succeeds and BEFORE it injects a synthetic user "continue"
     // message. We disable auto-continue when compaction was actually
     // triggered (so the user sees the compacted state and can drive the
@@ -1636,7 +1636,7 @@ function buildHooks(ctx: RuntimeContext, bg: BgDeps): Hooks {
       }
     },
 
-    // v0.4.2 — dispose hook. Opencode calls this when the plugin is
+    // v0.4.2 — dispose hook. Cline calls this when the plugin is
     // being torn down. We do a best-effort cleanup similar to the
     // signal trap, but we do NOT call `process.exit` — that's the
     // signal handler's job.
@@ -1702,7 +1702,7 @@ function bgDisabledTools(logger: Logger): Hooks["tool"] {
       logger.debug(`bizar: ${name} called but background agents are disabled`);
       return {
         output: JSON.stringify({
-          error: "background agents are disabled (opencode serve unavailable). See plugin logs.",
+          error: "background agents are disabled (cline serve unavailable). See plugin logs.",
         }),
       };
     };

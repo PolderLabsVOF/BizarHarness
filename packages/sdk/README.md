@@ -3,7 +3,7 @@
 Typed SDK for the BizarHarness plugin ↔ dashboard communication protocol.
 
 This package is the **shared types + client library** used by both:
-- The Bizar opencode plugin (`@polderlabs/bizar-plugin`) — publishes events to the dashboard.
+- The Bizar cline plugin (`@polderlabs/bizar-plugin`) — publishes events to the dashboard.
 - The Bizar dashboard (`@polderlabs/bizar-dash`) — exposes REST + SSE endpoints and consumes events.
 
 It replaces the legacy file-based `serve.json` bridge with a typed HTTP + SSE protocol sourced from an OpenAPI 3.1 spec.
@@ -28,7 +28,7 @@ const client = createBizarClient({
 const sessions = await client.sessions.list({ status: "running" });
 const session = await client.sessions.create({
   agent: "mimir",
-  prompt: "Research the latest opencode serve API.",
+  prompt: "Research the latest cline serve API.",
 });
 
 // SSE — async iterable
@@ -50,7 +50,7 @@ if ("name" in result && result.name === "DashboardError") {
 
 ```
                 ┌────────────────────────────┐
-                │ opencode + Bizar plugin    │
+                │ cline + Bizar plugin    │
                 │  (publishes events)        │
                 └──────────────┬─────────────┘
                                │ HTTP + SSE

@@ -24,7 +24,7 @@ The provider subsystem manages LLM API credentials and model routing. It is comp
 
 ## Provider Config File
 
-Providers are configured via `~/.config/opencode/providers.json` or via the dashboard UI:
+Providers are configured via `~/.config/cline/providers.json` or via the dashboard UI:
 
 ```json
 {

@@ -1266,8 +1266,8 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
 }
 .chat-sessions-item-meta { font-size: 0.6875rem; color: var(--text-muted); }
-.chat-sessions-item-opencode { opacity: 0.8; }
-.chat-sessions-item-opencode .chat-sessions-item-id { font-family: var(--font-sans); }
+.chat-sessions-item-cline { opacity: 0.8; }
+.chat-sessions-item-cline .chat-sessions-item-id { font-family: var(--font-sans); }
 .chat-sessions-item-icon { flex-shrink: 0; color: var(--text-muted); margin-top: 2px; }
 .chat-sessions-empty {
   flex: 1; display: flex; align-items: center; justify-content: center; padding: 1rem;
@@ -1611,7 +1611,7 @@
    don't override any of the legacy rules above.
    ============================================================ */
 
-/* ---- source badge (opencode / bizar chat) ---- */
+/* ---- source badge (cline / bizar chat) ---- */
 .chat-source-badge {
   display: inline-flex; align-items: center;
   padding: 2px 8px;
@@ -1621,7 +1621,7 @@
   text-transform: uppercase;
   border: 1px solid transparent;
 }
-.chat-source-opencode {
+.chat-source-cline {
   background: rgba(139, 92, 246, 0.12);
   color: var(--accent);
   border-color: rgba(139, 92, 246, 0.4);
@@ -1707,13 +1707,13 @@
 .btn-ghost.btn-sm { padding: 4px 6px; font-size: 11px; }
 
 /* ---- composer: source-tinted pill border + hint line ---- */
-.chat-composer-source-opencode .chat-composer-pill {
+.chat-composer-source-cline .chat-composer-pill {
   border-color: rgba(139, 92, 246, 0.35);
 }
-.chat-composer-source-opencode .chat-composer-pill:focus-within {
+.chat-composer-source-cline .chat-composer-pill:focus-within {
   border-color: var(--accent);
 }
-.chat-composer-source-opencode::before {
+.chat-composer-source-cline::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;

@@ -34,7 +34,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Frigg (ask)
 
 - **Rune:** ᚠ
-- **Model:** `opencode/deepseek-v4-flash-free`
+- **Model:** `cline/deepseek-v4-flash-free`
 - **Cost:** Free
 - **Role:** Read-only Q&A. Answers questions about the project with file references. Never modifies any files.
 - **Tools:** `read`, `glob`, `grep`, Memory Service MCP tools, Semble MCP tools. No `edit`, `write`, or `bash`.
@@ -46,7 +46,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Vör (clarify)
 
 - **Rune:** ᛢ
-- **Model:** `opencode/deepseek-v4-flash-free`
+- **Model:** `cline/deepseek-v4-flash-free`
 - **Cost:** Free
 - **Role:** Clarifies ambiguous or incomplete requests. Uses a **research-first protocol** — reads `.bizar/PROJECT.md` and the project's Memory Service vault before asking any questions. Asks only when research has been exhausted, and questions must reference actual project files, frameworks, or patterns.
 - **Tools:** `read`, `glob`, `grep`, Memory Service MCP tools, Semble MCP tools, `question`. No `edit`, `write`, or `bash`.
@@ -58,7 +58,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Quick (quick)
 
 - **Rune:** ᛟ
-- **Model:** `opencode/deepseek-v4-flash-free`
+- **Model:** `cline/deepseek-v4-flash-free`
 - **Cost:** Free
 - **Role:** Single-shot fast path. Skips decomposition and delegation. Good for trivial asks that don't need parallel work.
 - **Tools:** Full read/write tool surface, including `bash`, `edit`, `write`.
@@ -70,7 +70,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Mimir (research)
 
 - **Rune:** ᛗ
-- **Model:** `opencode/deepseek-v4-flash-free`
+- **Model:** `cline/deepseek-v4-flash-free`
 - **Cost:** Free
 - **Role:** Deep codebase research. Uses Semble as its primary search tool and falls back to `grep` only when Semble is unavailable. Produces structured findings with file:line references.
 - **Tools:** `read`, `glob`, `grep`, Semble MCP tools, Memory Service MCP tools. No `edit` or `write`.
@@ -82,7 +82,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 ## Heimdall (simple)
 
 - **Rune:** ᚹ
-- **Model:** `opencode/deepseek-v4-flash-free`
+- **Model:** `cline/deepseek-v4-flash-free`
 - **Cost:** Free
 - **Role:** File operations, mechanical edits, quick changes. The "do the boring thing fast" agent.
 - **Tools:** Full read/write tool surface.
@@ -144,7 +144,7 @@ This page documents every agent in the BizarHarness pantheon. Each agent is a si
 - **Rune:** ᛉ
 - **Model:** `openai/gpt-5.5`
 - **Cost:** OpenAI ChatGPT subscription
-- **Role:** Last-resort fallback. Invoked when Tyr stalls, debugging is stuck, or the problem is genuinely novel and the opencode model tiers have all failed. **Default disabled** — must be explicitly enabled in `opencode.json`.
+- **Role:** Last-resort fallback. Invoked when Tyr stalls, debugging is stuck, or the problem is genuinely novel and the cline model tiers have all failed. **Default disabled** — must be explicitly enabled in `cline.json`.
 - **Tools:** Full read/write tool surface.
 - **Memory access via `.bizar/memory.json` config; reads from `projects/<projectId>/` and `global/bizar/` namespaces; writes go to `projects/<projectId>/`.**
 - **When to use:** When nothing else has worked. Postmortem of failed attempts. Novel problem domains.

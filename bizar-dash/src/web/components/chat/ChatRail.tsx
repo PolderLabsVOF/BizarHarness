@@ -45,14 +45,14 @@ export interface DisplaySession extends ChatSession {
 
 interface Props {
   sessions: DisplaySession[];
-  opencodeSessions?: DisplaySession[];
+  clineSessions?: DisplaySession[];
   activeSessionId: string;
-  activeOpencodeSessionId: string | null;
+  activeClineSessionId: string | null;
   activeProject: { name: string } | null;
   creating: boolean;
   onCreateSession: () => void;
   onSelectSession: (id: string) => void;
-  onSelectOpencodeSession: (s: DisplaySession) => void;
+  onSelectClineSession: (s: DisplaySession) => void;
   /** Optional: rename / delete handlers. When omitted, those buttons
    *  in the menu fall back to no-op + toast hint. */
   onRenameSession?: (id: string, title: string) => void;
@@ -141,21 +141,21 @@ function SessionStateIndicator({
 
 export function ChatRail({
   sessions,
-  opencodeSessions = [],
+  clineSessions = [],
   activeSessionId,
-  activeOpencodeSessionId,
+  activeClineSessionId,
   activeProject,
   creating,
   onCreateSession,
   onSelectSession,
-  onSelectOpencodeSession,
+  onSelectClineSession,
   onRenameSession,
   onDeleteSession,
   groupBy,
 }: Props) {
   const allSessions = useMemo<DisplaySession[]>(
-    () => [...sessions, ...opencodeSessions],
-    [sessions, opencodeSessions],
+    () => [...sessions, ...clineSessions],
+    [sessions, clineSessions],
   );
   const sorted = useMemo(
     () => [...allSessions].sort((a, b) => Number(b.mtime ?? 0) - Number(a.mtime ?? 0)),
@@ -191,7 +191,7 @@ export function ChatRail({
     setOpenMenuId(id);
     setMenuMode(mode);
     if (mode === 'rename') {
-      const s = [...sessions, ...opencodeSessions].find((x) => x.id === id);
+      const s = [...sessions, ...clineSessions].find((x) => x.id === id);
       setRenameDraft(s?.title ?? s?.id ?? '');
     }
   };
@@ -203,8 +203,8 @@ export function ChatRail({
   };
 
   const handleSelect = (s: DisplaySession) => {
-    if (s.source === 'opencode') {
-      onSelectOpencodeSession(s);
+    if (s.source === 'cline') {
+      onSelectClineSession(s);
       return;
     }
     onSelectSession(s.id);
@@ -268,15 +268,15 @@ export function ChatRail({
             <div key={group} className="chat-rail-group">
               <div className="chat-rail-group-label">{group}</div>
               {items.map((s) => {
-                const isOpencode = s.source === 'opencode';
-                const isActive = isOpencode
-                  ? activeOpencodeSessionId === s.id
+                const isCline = s.source === 'cline';
+                const isActive = isCline
+                  ? activeClineSessionId === s.id
                   : activeSessionId === s.id;
                 const tree = s.tree;
                 const hasChildren = !!(tree?.root?.children && tree.root.children.length > 0);
                 const treeOpen = isTreeOpen(s.id);
                 return (
-                  <Fragment key={isOpencode ? `oc-${s.id}` : s.id}>
+                  <Fragment key={isCline ? `oc-${s.id}` : s.id}>
                     <div
                       ref={(el) => {
                         rowRefs.current[s.id] = el;
@@ -300,7 +300,7 @@ export function ChatRail({
                             ★
                           </span>
                         )}
-                        {isOpencode && (
+                        {isCline && (
                           <ExternalLink
                             size={11}
                             style={{ color: 'var(--text-muted)', flexShrink: 0 }}
@@ -368,7 +368,7 @@ export function ChatRail({
           session={{
             id: menuAnchor.id,
             title:
-              [...sessions, ...opencodeSessions].find((x) => x.id === menuAnchor.id)
+              [...sessions, ...clineSessions].find((x) => x.id === menuAnchor.id)
                 ?.title ?? menuAnchor.id,
           }}
           mode={menuMode}

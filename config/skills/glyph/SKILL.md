@@ -15,7 +15,7 @@ artifacts/<slug>/
 └── comments.json      ← free-placed pins (mutable)
 ```
 
-Two locations: `<projectRoot>/.bizar/artifacts/` (preferred) and `~/.config/opencode/artifacts/` (global).
+Two locations: `<projectRoot>/.bizar/artifacts/` (preferred) and `~/.config/cline/artifacts/` (global).
 
 ## Frontmatter
 

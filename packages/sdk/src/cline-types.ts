@@ -1,14 +1,14 @@
 /**
- * Typed wrappers for opencode SDK entities.
+ * Typed wrappers for cline SDK entities.
  *
  * We declare shapes structurally so that:
- *   1. The package compiles even when `@opencode-ai/sdk` is not installed.
+ *   1. The package compiles even when `@cline/sdk` is not installed.
  *   2. The shapes are stable regardless of which version of the upstream
  *      SDK is installed (the upstream types are very complex and couple us
  *      to internal class structure we don't need).
  */
 
-export interface OpencodeSession {
+export interface ClineSession {
   id: string;
   slug?: string;
   projectID?: string;
@@ -31,7 +31,7 @@ export interface OpencodeSession {
   };
 }
 
-export interface OpencodeMessage {
+export interface ClineMessage {
   info?: {
     id?: string;
     role?: string;
@@ -41,12 +41,12 @@ export interface OpencodeMessage {
   };
   id?: string;
   role?: string;
-  parts?: OpencodePart[];
+  parts?: ClinePart[];
   text?: string;
   content?: string;
 }
 
-export type OpencodePart =
+export type ClinePart =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "tool_call"; name: string; input: unknown }
@@ -56,11 +56,11 @@ export type OpencodePart =
   | { type: "file"; path: string; content?: string }
   | { type: "step_start" | "step_finish" | "snapshot" | "patch" | "retry" | "compaction"; [key: string]: unknown };
 
-export interface OpencodeEvent {
+export interface ClineEvent {
   type: string;
   sessionID?: string;
   messageID?: string;
-  part?: OpencodePart;
+  part?: ClinePart;
   data?: Record<string, unknown>;
   properties?: Record<string, unknown>;
 }

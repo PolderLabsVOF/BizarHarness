@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { opencodeConfigDir } from './utils.mjs';
+import { clineConfigDir } from './utils.mjs';
 
-const CONFIG_DIR = opencodeConfigDir();
+const CONFIG_DIR = clineConfigDir();
 
 export async function runAudit() {
   console.log(chalk.bold.hex('#ef4444')('\n  ⚔  BIZARHARNESS AUDIT ⚔\n'));
@@ -77,7 +77,7 @@ export async function runAudit() {
     if (modelMatch) {
       const model = modelMatch[1].trim();
       const validModels = [
-        'opencode/deepseek-v4-flash-free',
+        'cline/deepseek-v4-flash-free',
         'minimax/MiniMax-M2.7',
         'minimax/MiniMax-M3',
       ];

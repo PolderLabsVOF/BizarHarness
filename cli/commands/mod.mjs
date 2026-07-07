@@ -44,9 +44,9 @@ export function showModHelp() {
     \`bizar mod upgrade <id>\` will:
       1. Snapshot the existing version of the mod
       2. Optionally back up the folder (--backup)
-      3. Remove the existing copy (and its opencode-config instructions)
+      3. Remove the existing copy (and its cline-config instructions)
       4. Install the latest version from the registry
-      5. Re-install the new mod's instruction files into opencode config
+      5. Re-install the new mod's instruction files into cline config
       6. Print from-version → to-version
   `);
 }

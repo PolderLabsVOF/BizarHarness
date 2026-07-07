@@ -8,8 +8,8 @@
  * becomes the id.
  *
  * Storage:
- *   ~/.config/opencode/projects.json         — registry (list + active id)
- *   ~/.config/opencode/projects/<id>/        — per-project data dir
+ *   ~/.config/cline/projects.json         — registry (list + active id)
+ *   ~/.config/cline/projects/<id>/        — per-project data dir
  *     tasks.json, plans.json, schedules.json, mods.json, state.json,
  *     sessions/ (chat sessions)
  *
@@ -32,9 +32,9 @@ import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
 const HOME = homedir();
-const OPENCODE_DIR = join(HOME, '.config', 'opencode');
-const PROJECTS_FILE = join(OPENCODE_DIR, 'projects.json');
-const PROJECTS_DIR = join(OPENCODE_DIR, 'projects');
+const CLINE_DIR = join(HOME, '.config', 'cline');
+const PROJECTS_FILE = join(CLINE_DIR, 'projects.json');
+const PROJECTS_DIR = join(CLINE_DIR, 'projects');
 
 /**
  * v3.6.0 — Markers that identify a directory as a "project root".
@@ -68,7 +68,7 @@ function safeReadJSON(file, fallback = null) {
 
 function ensureProjectsDir() {
   mkdirSync(PROJECTS_DIR, { recursive: true });
-  mkdirSync(OPENCODE_DIR, { recursive: true });
+  mkdirSync(CLINE_DIR, { recursive: true });
 }
 
 function atomicWriteJson(filePath, data) {
@@ -126,7 +126,7 @@ function uniqueProjectId(absPath, reg) {
  */
 export const projectsStore = {
   HOME,
-  OPENCODE_DIR,
+  CLINE_DIR,
   PROJECTS_DIR,
   PROJECTS_FILE,
 

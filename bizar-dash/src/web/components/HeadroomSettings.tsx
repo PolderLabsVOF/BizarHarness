@@ -104,7 +104,7 @@ export function HeadroomSettingsCard({ settings, onPatch }: Props) {
     try {
       const r = await api.post<{ ok: boolean }>('/headroom/wrap', { port: settings.port });
       if (r.ok) {
-        toast.success('opencode wrapped with Headroom.');
+        toast.success('cline wrapped with Headroom.');
         await loadStatus();
       } else {
         toast.error('Wrap failed.');
@@ -121,7 +121,7 @@ export function HeadroomSettingsCard({ settings, onPatch }: Props) {
     try {
       const r = await api.post<{ ok: boolean }>('/headroom/unwrap');
       if (r.ok) {
-        toast.success('opencode unwrapped from Headroom.');
+        toast.success('cline unwrapped from Headroom.');
         await loadStatus();
       } else {
         toast.error('Unwrap failed.');
@@ -227,7 +227,7 @@ export function HeadroomSettingsCard({ settings, onPatch }: Props) {
             ) : (
               <XCircle size={12} style={{ color: 'var(--text-dim)' }} />
             )}
-            <span>opencode {wrapped ? 'wrapped' : 'not wrapped'}</span>
+            <span>cline {wrapped ? 'wrapped' : 'not wrapped'}</span>
           </div>
         </div>
 
@@ -263,10 +263,10 @@ export function HeadroomSettingsCard({ settings, onPatch }: Props) {
                 size="sm"
                 onClick={handleWrap}
                 disabled={wrapping || wrapped}
-                title={wrapped ? 'opencode is already wrapped' : 'Wrap opencode to route through Headroom proxy'}
+                title={wrapped ? 'cline is already wrapped' : 'Wrap cline to route through Headroom proxy'}
               >
                 {wrapping ? <span className="btn-spinner" /> : <Zap size={13} />}
-                {wrapping ? 'Wrapping…' : wrapped ? 'Wrapped ✓' : 'Wrap opencode'}
+                {wrapping ? 'Wrapping…' : wrapped ? 'Wrapped ✓' : 'Wrap cline'}
               </Button>
               {wrapped && (
                 <Button variant="ghost" size="sm" onClick={handleUnwrap} disabled={unwrapping}>
@@ -334,7 +334,7 @@ export function HeadroomSettingsCard({ settings, onPatch }: Props) {
               checked={settings.autoWrap}
               onChange={(e) => onPatch({ autoWrap: e.target.checked })}
             />
-            <span>Auto-wrap opencode on dashboard startup</span>
+            <span>Auto-wrap cline on dashboard startup</span>
           </label>
           <label className="checkbox-row">
             <input

@@ -27,7 +27,7 @@ describe('skills-store', () => {
   let invalidateCache;
 
   // Skill directory fixtures
-  let FIXTURE_USER_OPENCODE;
+  let FIXTURE_USER_CLINE;
   let FIXTURE_USER_AGENTS;
   let FIXTURE_SHIPPED;
   let FIXTURE_PROJECT;
@@ -54,10 +54,10 @@ describe('skills-store', () => {
     skillFile(projectAgents, 'project-skill', `---\nname: Project Skill\ndescription: A project-local skill.\n---\n# Project Skill\n`);
     skillFile(projectAgents, 'chat', `---\nname: chat\ndescription: Chat integration.\n---\n# Chat\n`);
 
-    // Set up project-local .opencode/skills
-    const projectOpencode = join(TEST_ROOT, '.opencode', 'skills');
-    mkdirSync(projectOpencode, { recursive: true });
-    skillFile(projectOpencode, 'usage', `---\nname: usage\ndescription: Usage monitoring.\n---\n# Usage\n`);
+    // Set up project-local .cline/skills
+    const projectCline = join(TEST_ROOT, '.cline', 'skills');
+    mkdirSync(projectCline, { recursive: true });
+    skillFile(projectCline, 'usage', `---\nname: usage\ndescription: Usage monitoring.\n---\n# Usage\n`);
 
     // Set up shipped path (relative to project root)
     FIXTURE_SHIPPED = shipped;

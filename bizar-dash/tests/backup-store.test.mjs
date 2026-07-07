@@ -21,24 +21,24 @@ const BACKUP_STORE = await import('../src/server/backup-store.mjs').then((m) => 
 describe('backup-store', () => {
   let backupRoot;
   let configDir;
-  let opencodeDir;
+  let clineDir;
   let memoryDir;
 
   beforeEach(() => {
     const id = `bizar-backup-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     backupRoot = join(tmpdir(), id, 'backups');
     configDir = join(tmpdir(), id, 'config', 'bizar');
-    opencodeDir = join(tmpdir(), id, 'config', 'opencode');
+    clineDir = join(tmpdir(), id, 'config', 'cline');
     memoryDir = join(tmpdir(), id, 'local', 'share', 'bizar', 'memory');
 
     mkdirSync(configDir, { recursive: true });
-    mkdirSync(opencodeDir, { recursive: true });
+    mkdirSync(clineDir, { recursive: true });
     mkdirSync(memoryDir, { recursive: true });
     mkdirSync(backupRoot, { recursive: true });
 
     // Create some test files
     writeFileSync(join(configDir, 'settings.json'), JSON.stringify({ theme: { mode: 'dark' } }), { mode: 0o600 });
-    writeFileSync(join(opencodeDir, 'opencode.json'), JSON.stringify({ models: [] }), { mode: 0o600 });
+    writeFileSync(join(clineDir, 'cline.json'), JSON.stringify({ models: [] }), { mode: 0o600 });
     writeFileSync(join(memoryDir, 'test.md'), '# Test memory', { mode: 0o600 });
   });
 

@@ -1,6 +1,6 @@
 # Background Agents
 
-Background agents are asynchronous subagents that Odin can spawn without blocking the main conversation. They run on a single shared `opencode serve` instance, are managed by the Bizar plugin, and are designed for independent work that doesn't need a tight coordination loop with the main agent.
+Background agents are asynchronous subagents that Odin can spawn without blocking the main conversation. They run on a single shared `cline serve` instance, are managed by the Bizar plugin, and are designed for independent work that doesn't need a tight coordination loop with the main agent.
 
 This page documents the v0.4+ implementation, including the v0.5.x fixes. See [Bizar Plugin](Bizar-Plugin) for the underlying loop-detection and handoff machinery.
 
@@ -53,7 +53,7 @@ Only Odin can spawn, collect, or kill background agents. Vör, Frigg, and Quick 
                                 │
                                 ▼
                 ┌──────────────────────────────┐
-                │  opencode serve (one child)  │
+                │  cline serve (one child)  │
                 │  --port <port>               │
                 │  --hostname 127.0.0.1        │
                 │  Bound to 127.0.0.1 only     │
@@ -68,9 +68,9 @@ Only Odin can spawn, collect, or kill background agents. Vör, Frigg, and Quick 
         └──────────┘    └──────────┘    └──────────┘
 ```
 
-The plugin starts **one** `opencode serve` process on init. All background sessions share this process. The plugin subscribes to a single SSE event stream on init and dispatches incoming events to the in-memory instance map. There are no per-instance HTTP connections — the single SSE stream handles all event delivery.
+The plugin starts **one** `cline serve` process on init. All background sessions share this process. The plugin subscribes to a single SSE event stream on init and dispatches incoming events to the in-memory instance map. There are no per-instance HTTP connections — the single SSE stream handles all event delivery.
 
-The serve child binds to `127.0.0.1` (never `0.0.0.0`) and authenticates with a random 32-byte secret generated on plugin init. The secret is passed via the `OPENCODE_SERVER_PASSWORD` env var to the serve child and is held in memory only — never written to disk. When the plugin process exits, the serve child is killed and the secret becomes invalid.
+The serve child binds to `127.0.0.1` (never `0.0.0.0`) and authenticates with a random 32-byte secret generated on plugin init. The secret is passed via the `CLINE_SERVER_PASSWORD` env var to the serve child and is held in memory only — never written to disk. When the plugin process exits, the serve child is killed and the secret becomes invalid.
 
 ## Spawning a background agent
 
@@ -85,7 +85,7 @@ const result = await bizarre_spawn_background({
 }, ctx);
 
 console.log(result.instanceId);    // "bgr_01ARSH3J5V..."
-console.log(result.sessionId);     // opencode session ID
+console.log(result.sessionId);     // cline session ID
 console.log(result.status);        // "pending"
 ```
 
@@ -107,7 +107,7 @@ The status response includes `instanceId`, `agent`, `status`, `startedAt`, `tool
 
 The status translation table:
 
-| opencode event | bg `BackgroundState.status` |
+| cline event | bg `BackgroundState.status` |
 |---|---|
 | `EventSessionIdle` | `done` |
 | `EventSessionStatus` with `idle` | `done` |
@@ -134,7 +134,7 @@ console.log(r.toolCallCount);   // how many tool calls the instance made
 console.log(r.durationMs);      // wall-clock time
 ```
 
-On collect, the plugin fetches all assistant messages from the opencode session, concatenates the text parts in order, and returns the result. Tool parts, reasoning parts, step parts, and snapshots are skipped.
+On collect, the plugin fetches all assistant messages from the cline session, concatenates the text parts in order, and returns the result. Tool parts, reasoning parts, step parts, and snapshots are skipped.
 
 If the threshold-12 loop-guard throw was captured during the instance's run, the result is prepended with `[loop guard: 12 identical calls to <tool>]` as a marker. Treat the instance as failed.
 
@@ -148,7 +148,7 @@ await bizar_kill({ instanceId: "bgr_01ARSH..." }, ctx);
 
 `bizar_kill` calls `POST /session/{id}/abort` (operationId `session.abort`, returns `200: boolean`). It does **not** delete the session record. After abort, the next event is `EventSessionIdle` (or `EventSessionError`); the plugin updates the instance status to `killed`.
 
-Note: `bizar_kill` aborts the opencode session, not the plugin's in-memory tracking. Both are updated.
+Note: `bizar_kill` aborts the cline session, not the plugin's in-memory tracking. Both are updated.
 
 ## Limits and security
 
@@ -198,7 +198,7 @@ The `prompt` argument to `bizar_spawn_background` is sent verbatim to the LLM in
 6. **Serve child is per-process.** Multiple worktrees in the same plugin process share one SSE subscription — not supported for multi-worktree setups.
 7. **Password is in-memory only.** Restarting the plugin generates a new password; old `BackgroundState` files point to sessions in the old serve child.
 8. **`bizar_collect` on a killed/failed instance returns the partial result.** It does not retry.
-9. **The `model` parameter is not validated.** opencode will reject unknown providers/models with a 4xx.
+9. **The `model` parameter is not validated.** cline will reject unknown providers/models with a 4xx.
 10. **Custom agents without loop-guard instructions will not see the marker as a task cue.**
 
 ## v0.5+ changes
@@ -224,7 +224,7 @@ Long-running background sessions are now monitored for two failure modes:
 - **Stall timeout** (default 180s) — no SSE event for this long → the instance is marked `failed` with a stall error. The check runs on a periodic interval.
 - **Thinking-loop timeout** (default 300s) — repeated `thinking` parts with no tool or text output → after `maxInterventions` (default 1) prompt intervention, the instance is aborted as a thinking loop.
 
-Both are configurable via `opencode.json` plugin options (`backgroundStallTimeoutMs`, `backgroundThinkingLoopTimeoutMs`, `backgroundMaxInterventions`) or env vars (`BIZAR_STALL_TIMEOUT_MS`).
+Both are configurable via `cline.json` plugin options (`backgroundStallTimeoutMs`, `backgroundThinkingLoopTimeoutMs`, `backgroundMaxInterventions`) or env vars (`BIZAR_STALL_TIMEOUT_MS`).
 
 ### v0.5.1 — `bizar_spawn_background` empty-sessionId fix
 
@@ -260,7 +260,7 @@ const [a, b, c] = await Promise.all([
 ]);
 ```
 
-All three run concurrently on the same `opencode serve` instance. Each has its own session. The cap is 8 by default; configurable up to 32.
+All three run concurrently on the same `cline serve` instance. Each has its own session. The cap is 8 by default; configurable up to 32.
 
 ### Recover from a stuck instance
 
@@ -287,4 +287,4 @@ const result = await bizar_collect({ instanceId, timeoutMs: 5_000 }, odinCtx);
 
 ## Next steps
 
-Next: [Dev Sandbox](Dev-Sandbox) — the Docker-based development environment for testing changes to the harness and plugin without touching your real `~/.config/opencode/`.
+Next: [Dev Sandbox](Dev-Sandbox) — the Docker-based development environment for testing changes to the harness and plugin without touching your real `~/.config/cline/`.

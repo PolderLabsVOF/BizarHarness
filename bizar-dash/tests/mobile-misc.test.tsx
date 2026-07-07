@@ -288,7 +288,7 @@ describe('MobileDoctor', () => {
   it('renders fail status with issues', async () => {
     vi.mocked(api.get).mockResolvedValue({
       status: 'fail',
-      issues: [{ name: 'OpenCode', status: 'fail', message: 'Not reachable' }],
+      issues: [{ name: 'Cline', status: 'fail', message: 'Not reachable' }],
     });
     render(<MobileDoctor />);
     await waitFor(() => {

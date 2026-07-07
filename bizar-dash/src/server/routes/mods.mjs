@@ -222,19 +222,19 @@ export function createModsRouter() {
       agents: installed.agents.map((f) => ({
         filename: f,
         path: join('agents', f),
-        fullPath: `~/.config/opencode/agents/${f}`,
-        content: tryRead(`~/.config/opencode/agents/${f}`),
+        fullPath: `~/.config/cline/agents/${f}`,
+        content: tryRead(`~/.config/cline/agents/${f}`),
       })),
       commands: installed.commands.map((f) => ({
         filename: f,
         path: join('commands', f),
-        fullPath: `~/.config/opencode/commands/${f}`,
-        content: tryRead(`~/.config/opencode/commands/${f}`),
+        fullPath: `~/.config/cline/commands/${f}`,
+        content: tryRead(`~/.config/cline/commands/${f}`),
       })),
       skills: installed.skills.map((d) => ({
         name: d,
-        fullPath: `~/.opencode/skills/${d}`,
-        content: tryRead(`~/.opencode/skills/${d}/SKILL.md`),
+        fullPath: `~/.cline/skills/${d}`,
+        content: tryRead(`~/.cline/skills/${d}/SKILL.md`),
       })),
     };
     res.json({
@@ -245,7 +245,7 @@ export function createModsRouter() {
     });
   }));
 
-  // v3.20 — Force-reinstall the mod's instructions into opencode config
+  // v3.20 — Force-reinstall the mod's instructions into cline config
   // (useful after editing files inside the mod's agents/commands/skills).
   router.post('/mods/:id/instructions/reinstall', wrap(async (req, res) => {
     const counts = modsLoader.reinstallInstructions(req.params.id);

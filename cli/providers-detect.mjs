@@ -2,14 +2,14 @@
  * cli/providers-detect.mjs
  *
  * v3.16.0 — Auto-detect providers from environment variables and
- * opencode.json. Surfaces which providers have working API keys,
+ * cline.json. Surfaces which providers have working API keys,
  * which have keys in unexpected formats, and which need configuration.
  *
  * Usage:
  *   bizar providers detect                  — probe + print
  *   bizar providers detect --no-probe       — skip the /models probe
  *   bizar providers detect --json           — machine-readable
- *   bizar providers detect --install <id>   — auto-add to opencode.json
+ *   bizar providers detect --install <id>   — auto-add to cline.json
  *
  * Recognised env vars: ANTHROPIC_API_KEY, OPENAI_API_KEY,
  * GEMINI_API_KEY, GOOGLE_API_KEY, MISTRAL_API_KEY, GROQ_API_KEY,
@@ -22,7 +22,7 @@ import { homedir } from 'node:os';
 import chalk from 'chalk';
 
 const HOME = homedir();
-const OPENCODE_JSON = join(HOME, '.config', 'opencode', 'opencode.json');
+const CLINE_JSON = join(HOME, '.config', 'cline', 'cline.json');
 
 const KNOWN_PROVIDERS = [
   { id: 'anthropic', name: 'Anthropic', envKeys: ['ANTHROPIC_API_KEY'], baseURL: 'https://api.anthropic.com/v1', keyPattern: /^sk-ant-[A-Za-z0-9_-]{20,}$/ },
@@ -36,20 +36,20 @@ const KNOWN_PROVIDERS = [
   { id: 'minimax', name: 'MiniMax', envKeys: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'], baseURL: 'https://api.minimax.chat/v1', keyPattern: /^[A-Za-z0-9]{20,}$/ },
 ];
 
-function loadOpencodeConfig() {
+function loadClineConfig() {
   try {
-    if (!existsSync(OPENCODE_JSON)) return {};
-    return JSON.parse(readFileSync(OPENCODE_JSON, 'utf8')) || {};
+    if (!existsSync(CLINE_JSON)) return {};
+    return JSON.parse(readFileSync(CLINE_JSON, 'utf8')) || {};
   } catch {
     return {};
   }
 }
 
-function saveOpencodeConfig(cfg) {
-  mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
-  const tmp = `${OPENCODE_JSON}.tmp.${process.pid}`;
+function saveClineConfig(cfg) {
+  mkdirSync(dirname(CLINE_JSON), { recursive: true });
+  const tmp = `${CLINE_JSON}.tmp.${process.pid}`;
   writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
-  renameSync(tmp, OPENCODE_JSON);
+  renameSync(tmp, CLINE_JSON);
 }
 
 async function probe(spec, apiKey) {
@@ -78,7 +78,7 @@ async function probe(spec, apiKey) {
 }
 
 async function detect({ probe: doProbe }) {
-  const cfg = loadOpencodeConfig();
+  const cfg = loadClineConfig();
   const out = [];
   for (const spec of KNOWN_PROVIDERS) {
     let apiKey = '';
@@ -176,7 +176,7 @@ function installProvider(id) {
     console.error(chalk.red(`  ✗ no API key found in env (${spec.envKeys.join(', ')})`));
     process.exit(1);
   }
-  const cfg = loadOpencodeConfig();
+  const cfg = loadClineConfig();
   cfg.provider = cfg.provider || {};
   cfg.provider[spec.id] = {
     name: spec.name,
@@ -184,8 +184,8 @@ function installProvider(id) {
     apiKey,
     enabled: true,
   };
-  saveOpencodeConfig(cfg);
-  console.log(chalk.green(`  ✓ ${spec.name} (${spec.id}) added to opencode.json`));
+  saveClineConfig(cfg);
+  console.log(chalk.green(`  ✓ ${spec.name} (${spec.id}) added to cline.json`));
 }
 
 function showHelp() {
@@ -193,10 +193,10 @@ function showHelp() {
   ${chalk.bold('bizar providers detect')} — auto-detect provider API keys
 
   Usage:
-    bizar providers detect                  Probe env + opencode.json, print table
+    bizar providers detect                  Probe env + cline.json, print table
     bizar providers detect --no-probe       Skip the /models probe
     bizar providers detect --json           Print JSON instead of a table
-    bizar providers detect --install <id>   Add a configured provider to opencode.json
+    bizar providers detect --install <id>   Add a configured provider to cline.json
 
   Recognised env vars:
     ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY,

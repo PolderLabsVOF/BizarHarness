@@ -11,12 +11,12 @@
  *   GET  /api/minimax/cache          — read the on-disk cache file (for debugging)
  *   DELETE /api/minimax/cache        — clear cache
  *   POST /api/minimax/onboarding     — onboarding wizard state (dismissed, hiddenModels)
- *   POST /api/minimax/onboarding/save-key  — write the user's key to opencode's
+ *   POST /api/minimax/onboarding/save-key  — write the user's key to cline's
  *                                           auth.json (the canonical place)
  *
- * The MiniMax key is read from opencode's auth store, NOT from
+ * The MiniMax key is read from cline's auth store, NOT from
  * settings.json. The dashboard's onboarding wizard writes the key
- * directly to ~/.local/share/opencode/auth.json so opencode itself
+ * directly to ~/.local/share/cline/auth.json so cline itself
  * can pick it up — that way the user only enters the key once.
  */
 import { Router } from 'express';
@@ -60,7 +60,7 @@ export function createMinimaxRouter({ state, broadcast }) {
     res.json(next);
   }));
 
-  // POST /onboarding/save-key — write the key to opencode's auth.json
+  // POST /onboarding/save-key — write the key to cline's auth.json
   router.post('/minimax/onboarding/save-key', wrap(async (req, res) => {
     const { key, groupId } = req.body || {};
     if (typeof key !== 'string' || !key.trim()) {

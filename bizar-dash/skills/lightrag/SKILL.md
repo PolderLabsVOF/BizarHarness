@@ -1,6 +1,6 @@
 ---
 name: lightrag
-description: LightRAG integration with BizarHarness. Covers setup, opencode-free defaults, querying, indexing, and the memory service integration.
+description: LightRAG integration with BizarHarness. Covers setup, cline-free defaults, querying, indexing, and the memory service integration.
 ---
 
 # LightRAG Integration
@@ -11,7 +11,7 @@ LightRAG provides fast full-text and keyword search over Obsidian vault content.
 
 - **LightRAG** - a lightweight RAG (Retrieval-Augmented Generation) server that indexes Markdown files
 - **Bizar Memory Service** - three-layer system: Markdown (truth) → Git (collaboration) → LightRAG (index)
-- **opencode-free defaults** - LightRAG runs without opencode, accessible to any HTTP client
+- **cline-free defaults** - LightRAG runs without cline, accessible to any HTTP client
 
 ## Setup
 
@@ -24,12 +24,12 @@ Or via the Bizar dashboard: navigate to Settings → LightRAG and configure the 
 
 ## Configuration
 
-LightRAG settings are stored in `~/.config/opencode/lightrag.json`:
+LightRAG settings are stored in `~/.config/cline/lightrag.json`:
 
 ```json
 {
   "serverUrl": "http://localhost:8724",
-  "indexRoot": "~/.config/opencode/memory",
+  "indexRoot": "~/.config/cline/memory",
   "autoIndex": true,
   "embeddingModel": "bge-m3"
 }

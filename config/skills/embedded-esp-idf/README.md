@@ -1,6 +1,6 @@
 # Embedded ESP-IDF Skill
 
-ESP-IDF v5.x C++ firmware patterns for opencode. Covers the `idf.py` workflow, FreeRTOS, IRAM/DRAM/PSRAM memory model, packed binary protocols with `static_assert`, Kconfig, drivers (I2C/SPI/GPIO/ADC/NVS/BLE/ESP-NOW), power management, and host-side tests that compile firmware headers without `idf.py`.
+ESP-IDF v5.x C++ firmware patterns for cline. Covers the `idf.py` workflow, FreeRTOS, IRAM/DRAM/PSRAM memory model, packed binary protocols with `static_assert`, Kconfig, drivers (I2C/SPI/GPIO/ADC/NVS/BLE/ESP-NOW), power management, and host-side tests that compile firmware headers without `idf.py`.
 
 ## What it provides
 
@@ -34,8 +34,8 @@ This skill was first authored for the AMS7 ambulatory-monitoring firmware at `/p
 ## Manual install
 
 ```bash
-cp -R SKILL.md references scripts ~/.opencode/skills/embedded-esp-idf/
-chmod +x ~/.opencode/skills/embedded-esp-idf/scripts/*.sh
+cp -R SKILL.md references scripts ~/.cline/skills/embedded-esp-idf/
+chmod +x ~/.cline/skills/embedded-esp-idf/scripts/*.sh
 ```
 
 The BizarHarness installer can also install this automatically — select the **Embedded ESP-IDF** component.

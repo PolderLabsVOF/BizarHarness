@@ -97,10 +97,10 @@ do_status() {
     fi
     if command -v browser-harness >/dev/null 2>&1; then
       echo "  ✓ browser-harness: $(browser-harness --version 2>&1 | head -1)"
-      if [ -f "$HOME/.opencode/skills/browser-harness/SKILL.md" ]; then
-        echo "  ✓ Skill registered at ~/.opencode/skills/browser-harness/SKILL.md"
+      if [ -f "$HOME/.cline/skills/browser-harness/SKILL.md" ]; then
+        echo "  ✓ Skill registered at ~/.cline/skills/browser-harness/SKILL.md"
       else
-        echo "  ! Skill not yet registered — run: browser-harness skill > ~/.opencode/skills/browser-harness/SKILL.md"
+        echo "  ! Skill not yet registered — run: browser-harness skill > ~/.cline/skills/browser-harness/SKILL.md"
       fi
     else
       echo "  ! browser-harness not installed — run: uv tool install --python 3.12 --upgrade --force browser-harness"

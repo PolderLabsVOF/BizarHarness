@@ -11,7 +11,7 @@
  * and the agent session dies — there is no way to swap keys mid-session
  * because the provider reads its key from auth.json once at init.
  *
- * opencode has no built-in multi-key rotation. This wrapper fills the gap:
+ * cline has no built-in multi-key rotation. This wrapper fills the gap:
  *
  *   • Read N keys from env vars (MINIMAX_API_KEY, MINIMAX_API_KEY_2,
  *     ..., or MINIMAX_API_KEYS=key1,key2,...)
@@ -33,7 +33,7 @@
  * • On a successful response, the "current key" index advances by one so
  *   the next incoming request starts on a different key, spreading load.
  * • On all-keys-exhausted, the last error response is returned so the
- *   opencode SDK surfaces it normally — no special handling required
+ *   cline SDK surfaces it normally — no special handling required
  *   downstream.
  *
  * Concurrency

@@ -1,6 +1,6 @@
 # C++ Testing Skill
 
-C++ testing patterns for opencode. Covers unit, integration, and host-side tests, framework selection (GoogleTest / Catch2 / doctest), mocking strategies, TDD workflow, and the 80% coverage gate.
+C++ testing patterns for cline. Covers unit, integration, and host-side tests, framework selection (GoogleTest / Catch2 / doctest), mocking strategies, TDD workflow, and the 80% coverage gate.
 
 ## What it provides
 
@@ -22,7 +22,7 @@ C++ testing patterns for opencode. Covers unit, integration, and host-side tests
 ## Manual install
 
 ```bash
-cp -R SKILL.md references ~/.opencode/skills/cpp-testing/
+cp -R SKILL.md references ~/.cline/skills/cpp-testing/
 ```
 
 The BizarHarness installer can also install this automatically — select the **C++ testing** component.

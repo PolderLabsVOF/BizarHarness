@@ -6,7 +6,7 @@
  * GET  /api/v2/event  — subscribe (text/event-stream, sends dashboard.connected first)
  * POST /api/v2/event  — publish (returns 204)
  *
- * Matches the opencode SSE wire format:
+ * Matches the cline SSE wire format:
  *   event: <type>
  *   data: {"type": "<type>", "properties": {...}}
  *
@@ -20,7 +20,7 @@ export function createV2EventsRouter({ eventBus }) {
   const router = express.Router();
 
   // v4.8.0 — Per-IP token bucket. The v2 event endpoint accepts
-  // arbitrary publishes from the opencode plugin, so we cap it
+  // arbitrary publishes from the cline plugin, so we cap it
   // higher than chat to keep automation pipelines flowing under
   // burst. Defaults: 120 requests / minute / IP, 2 tokens/sec refill.
   // Operators can tune via BIZAR_RATE_LIMIT_EVENT_CAPACITY /

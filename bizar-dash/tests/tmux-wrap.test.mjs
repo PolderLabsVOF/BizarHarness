@@ -3,8 +3,8 @@
  *
  * Regression tests for the bug where the dashboard's tmux wrap
  * (`task-delegator.mjs:605`, `bg-retry.mjs:392`) tailed a phantom
- * log file (`<worktree>/.bizar/opencode.log` or
- * `<worktree>/.opencode/log/<id>.log`) — paths nothing in the
+ * log file (`<worktree>/.bizar/cline.log` or
+ * `<worktree>/.cline/log/<id>.log`) — paths nothing in the
  * system writes to.
  *
  * The fix uses `getActualBgLogPath()` (path-safe.mjs) which returns
@@ -57,19 +57,19 @@ function killTmuxSession(name) {
   spawnSync('tmux', ['kill-session', '-t', name], { stdio: 'pipe' });
 }
 
-test('tmux wrap points at the actual LogWriter path, not the phantom .bizar/opencode.log', () => {
+test('tmux wrap points at the actual LogWriter path, not the phantom .bizar/cline.log', () => {
   const sessionId = 'ses_wrap_test';
   // The dispatch code in task-delegator.mjs:605 calls
   // getActualBgLogPath({ sessionId }) to get the tmux tail target.
   const logFile = getActualBgLogPath({ sessionId });
 
   // The historical phantom path (v3.11.0 and earlier):
-  const phantomPath = pathResolve(process.cwd(), '.bizar', 'opencode.log');
+  const phantomPath = pathResolve(process.cwd(), '.bizar', 'cline.log');
 
   assert.notEqual(
     logFile,
     phantomPath,
-    'tmux wrap must NOT tail the phantom .bizar/opencode.log path',
+    'tmux wrap must NOT tail the phantom .bizar/cline.log path',
   );
   // The actual path is the LogWriter's output.
   assert.ok(

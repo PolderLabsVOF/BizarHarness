@@ -14,19 +14,19 @@ export function repoPath(...parts) {
   return join(REPO_ROOT, ...parts);
 }
 
-export function opencodeConfigDir() {
+export function clineConfigDir() {
   if (isWin) {
     return process.env.APPDATA
-      ? join(process.env.APPDATA, 'opencode')
-      : join(homedir(), '.config', 'opencode');
+      ? join(process.env.APPDATA, 'cline')
+      : join(homedir(), '.config', 'cline');
   }
   return process.env.XDG_CONFIG_HOME
-    ? join(process.env.XDG_CONFIG_HOME, 'opencode')
-    : join(homedir(), '.config', 'opencode');
+    ? join(process.env.XDG_CONFIG_HOME, 'cline')
+    : join(homedir(), '.config', 'cline');
 }
 
-export function opencodeAgentsDir() {
-  return join(opencodeConfigDir(), 'agents');
+export function clineAgentsDir() {
+  return join(clineConfigDir(), 'agents');
 }
 
 async function tryReadVersion(filePath) {
@@ -46,9 +46,9 @@ function commandExists(command) {
   return probe.status === 0;
 }
 
-export async function detectOpenCode() {
-  const configDir = opencodeConfigDir();
-  const agentsDir = opencodeAgentsDir();
+export async function detectCline() {
+  const configDir = clineConfigDir();
+  const agentsDir = clineAgentsDir();
 
   let exists = false;
   let version = '';
@@ -59,12 +59,12 @@ export async function detectOpenCode() {
 
     if (isWin) {
       const winPaths = [
-        join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'opencode', 'package.json'),
-        join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'opencode-ai', 'package.json'),
-        join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'opencode', 'package.json'),
-        join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'opencode-ai', 'package.json'),
-        join(homedir(), 'node_modules', 'opencode', 'package.json'),
-        join(homedir(), 'node_modules', 'opencode-ai', 'package.json'),
+        join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'cline', 'package.json'),
+        join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'cline', 'package.json'),
+        join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'cline', 'package.json'),
+        join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'cline', 'package.json'),
+        join(homedir(), 'node_modules', 'cline', 'package.json'),
+        join(homedir(), 'node_modules', 'cline', 'package.json'),
       ];
       for (const p of winPaths) {
         version = await tryReadVersion(p);
@@ -72,16 +72,16 @@ export async function detectOpenCode() {
       }
     } else {
       const posixPaths = [
-        join(homedir(), '.local', 'share', 'opencode', 'package.json'),
-        join(homedir(), '.local', 'share', 'opencode-ai', 'package.json'),
-        '/usr/local/lib/node_modules/opencode/package.json',
-        '/usr/local/lib/node_modules/opencode-ai/package.json',
-        '/usr/lib/node_modules/opencode/package.json',
-        '/usr/lib/node_modules/opencode-ai/package.json',
-        join(homedir(), '.npm-global', 'lib', 'node_modules', 'opencode', 'package.json'),
-        join(homedir(), '.npm-global', 'lib', 'node_modules', 'opencode-ai', 'package.json'),
-        join(homedir(), 'node_modules', 'opencode', 'package.json'),
-        join(homedir(), 'node_modules', 'opencode-ai', 'package.json'),
+        join(homedir(), '.local', 'share', 'cline', 'package.json'),
+        join(homedir(), '.local', 'share', 'cline', 'package.json'),
+        '/usr/local/lib/node_modules/cline/package.json',
+        '/usr/local/lib/node_modules/cline/package.json',
+        '/usr/lib/node_modules/cline/package.json',
+        '/usr/lib/node_modules/cline/package.json',
+        join(homedir(), '.npm-global', 'lib', 'node_modules', 'cline', 'package.json'),
+        join(homedir(), '.npm-global', 'lib', 'node_modules', 'cline', 'package.json'),
+        join(homedir(), 'node_modules', 'cline', 'package.json'),
+        join(homedir(), 'node_modules', 'cline', 'package.json'),
       ];
       for (const p of posixPaths) {
         version = await tryReadVersion(p);
@@ -121,7 +121,7 @@ export async function detectSkillsCli() {
 }
 
 export async function detectInstalledAgents() {
-  const agentsDir = opencodeAgentsDir();
+  const agentsDir = clineAgentsDir();
   try {
     await access(agentsDir, constants.F_OK);
     return agentsDir;
@@ -136,7 +136,7 @@ export function buildSummary(components, agents, target, skillPacks = []) {
   if (components.includes('agents-md')) parts.push('AGENTS.md');
   if (components.includes('skill-bizar')) parts.push('bizar skill');
   if (components.includes('skill-improve')) parts.push('self-improvement skill');
-  if (components.includes('opencode-json')) parts.push('opencode.json');
+  if (components.includes('cline-json')) parts.push('cline.json');
   if (components.includes('bizar')) parts.push('.bizar/ folder');
   if (components.includes('plugin-bizar')) parts.push('Bizar plugin');
   if (components.includes('rules')) parts.push('rules');

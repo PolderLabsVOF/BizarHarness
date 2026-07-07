@@ -8,7 +8,7 @@ BizarHarness uses a five-tier model hierarchy. Every agent maps to exactly one t
 
 | Tier | Cost label | Model | Used by | When to use |
 |---|---|---|---|---|
-| **0 (free)** | Free | DeepSeek V4 Flash (OpenCode Zen) | Frigg, Vör, Quick, Mimir, Heimdall | Read-only Q&A, mechanical edits, codebase search |
+| **0 (free)** | Free | DeepSeek V4 Flash (Cline Zen) | Frigg, Vör, Quick, Mimir, Heimdall | Read-only Q&A, mechanical edits, codebase search |
 | **1 (low)** | $ | MiniMax M2.7 | Hermod, Thor, Baldr | Moderate implementation, git ops, design plans |
 | **2 (mid)** | $$ | MiniMax M3 | Odin, Tyr | Complex implementation, architecture, deep debugging |
 | **3 (auditor)** | $$ | MiniMax M3 (edit-deny) | Forseti | Adversarial plan review |
@@ -41,11 +41,11 @@ The model for each agent is set in its Markdown frontmatter. The full list:
 | Agent | Model string in frontmatter |
 |---|---|
 | Odin | `minimax/MiniMax-M3` |
-| Frigg | `opencode/deepseek-v4-flash-free` |
-| Vör | `opencode/deepseek-v4-flash-free` |
-| Quick | `opencode/deepseek-v4-flash-free` |
-| Mimir | `opencode/deepseek-v4-flash-free` |
-| Heimdall | `opencode/deepseek-v4-flash-free` |
+| Frigg | `cline/deepseek-v4-flash-free` |
+| Vör | `cline/deepseek-v4-flash-free` |
+| Quick | `cline/deepseek-v4-flash-free` |
+| Mimir | `cline/deepseek-v4-flash-free` |
+| Heimdall | `cline/deepseek-v4-flash-free` |
 | Hermod | `minimax/MiniMax-M2.7` |
 | Thor | `minimax/MiniMax-M2.7` |
 | Baldr | `minimax/MiniMax-M2.7` |
@@ -53,11 +53,11 @@ The model for each agent is set in its Markdown frontmatter. The full list:
 | Vidarr | `openai/gpt-5.5` |
 | Forseti | `minimax/MiniMax-M3` |
 
-The format is `<provider>/<model>` (e.g., `minimax/MiniMax-M3`). This is the opencode model identifier. To change an agent's model, edit its `.md` file in `config/agents/` and re-run the installer.
+The format is `<provider>/<model>` (e.g., `minimax/MiniMax-M3`). This is the cline model identifier. To change an agent's model, edit its `.md` file in `config/agents/` and re-run the installer.
 
 ## Override model per task
 
-To run a single task with a different model, pass `--model` to the subagent dispatch (the `task` tool) when invoking it from Odin. The syntax is opencode-native:
+To run a single task with a different model, pass `--model` to the subagent dispatch (the `task` tool) when invoking it from Odin. The syntax is cline-native:
 
 ```
 @odin:task --model minimax/MiniMax-M3 research the auth module
@@ -71,7 +71,7 @@ For direct agent invocations, the model is fixed by the agent's frontmatter. If 
 
 To add a new model (e.g., for a different provider), three steps:
 
-1. **Connect the provider in opencode.** Run `/connect` in the TUI and add the provider. Verify with `/models`.
+1. **Connect the provider in cline.** Run `/connect` in the TUI and add the provider. Verify with `/models`.
 
 2. **Add a model entry in the agent's frontmatter.** Edit the target agent's `.md` file:
 
@@ -84,7 +84,7 @@ To add a new model (e.g., for a different provider), three steps:
 
 3. **Update `config/AGENTS.md` if the model is in a new tier.** The routing table documents which agents use which models. Keep it in sync with the agent files.
 
-Models are matched by the `<provider>/<model>` string. If the string doesn't match a connected provider, opencode returns an error at dispatch time. Use `/models` in the TUI to confirm the model is available before assigning it.
+Models are matched by the `<provider>/<model>` string. If the string doesn't match a connected provider, cline returns an error at dispatch time. Use `/models` in the TUI to confirm the model is available before assigning it.
 
 ## Disable a model tier
 
@@ -92,7 +92,7 @@ To disable a tier entirely, remove the agent definitions that use it. For exampl
 
 1. Delete or move `config/agents/vidarr.md` out of the agents directory.
 2. Re-run `./install.sh` or `bizar`.
-3. Restart opencode.
+3. Restart cline.
 
 Odin will skip Vidarr in its routing table. The escape hatch is gone — Tier 4 work will simply fail rather than escalate to GPT-5.5.
 
@@ -100,4 +100,4 @@ To temporarily disable Vidarr without removing the file, set its `model:` to a l
 
 ## Next steps
 
-Next: [Bizar Plugin](Bizar-Plugin) — the bundled opencode plugin that detects subagent loops, reports per-session activity, and injects handoff messages.
+Next: [Bizar Plugin](Bizar-Plugin) — the bundled cline plugin that detects subagent loops, reports per-session activity, and injects handoff messages.

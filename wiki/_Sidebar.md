@@ -1,6 +1,6 @@
 # BizarHarness Wiki
 
-Norse-pantheon multi-agent system for opencode.
+Norse-pantheon multi-agent system for cline.
 
 ## Getting Started
 

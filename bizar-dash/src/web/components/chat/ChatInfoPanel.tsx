@@ -7,7 +7,7 @@
 // actions wired to the parent.
 //
 // v5.0.0 — bug #4 fix: the panel now renders a structured error
-// section when the opencode session load fails. The chat-thread
+// section when the cline session load fails. The chat-thread
 // header (rendered by Chat.tsx) also shows the error inline; the
 // info-panel error makes it impossible to miss when the right
 // sidebar is in view, and exposes the server's `suggestion` and a
@@ -38,7 +38,7 @@ interface Props {
   mcps: Array<{ id: string; command?: string; enabled?: boolean }>;
   allCommands: Array<{ cmd: string; desc: string; mod?: string }>;
   /** Which stream is currently displayed. */
-  activeSource?: 'bizar' | 'opencode' | null;
+  activeSource?: 'bizar' | 'cline' | null;
   /** Optional rename/delete/export handlers wired by Chat.tsx. */
   onRename?: () => void;
   onDelete?: () => void;
@@ -46,7 +46,7 @@ interface Props {
   /** Per-action busy flags — disable buttons while pending. */
   busy?: { rename?: boolean; delete?: boolean };
   /**
-   * v5.0.0 — bug #4: structured error envelope from `loadOpencodeSession`.
+   * v5.0.0 — bug #4: structured error envelope from `loadClineSession`.
    * When present, the panel renders an error section above the Session
    * section so the operator can see what went wrong without scrolling.
    */
@@ -59,7 +59,7 @@ interface Props {
   /**
    * v5.0.0 — bug #4: retry handler invoked when the operator clicks
    * the Retry button on the error section. Wired to
-   * `chat.retryOpencodeSession` by Chat.tsx.
+   * `chat.retryClineSession` by Chat.tsx.
    */
   onRetry?: () => void;
 }
@@ -75,7 +75,7 @@ function formatNumber(n: number): string {
   return n.toLocaleString();
 }
 
-/** Map a model id like "opencode/deepseek-v4-flash-free" → "opencode". */
+/** Map a model id like "cline/deepseek-v4-flash-free" → "cline". */
 function providerFromModel(model: string): string {
   if (!model) return '';
   if (!model.includes('/')) return '';
@@ -116,7 +116,7 @@ export function ChatInfoPanel({
   onRetry,
 }: Props) {
   // Best-effort: pull usage summary from the MiniMax usage endpoint
-  // when the session is opencode. Falls back silently if the module
+  // when the session is cline. Falls back silently if the module
   // isn't installed yet.
   const [usage, setUsage] = useState<UsageRow | null>(null);
   useEffect(() => {
@@ -207,7 +207,7 @@ export function ChatInfoPanel({
             className={`chat-source-badge chat-source-${activeSource ?? 'none'}`}
             style={{ marginLeft: 'auto' }}
           >
-            {activeSource === 'opencode' ? 'opencode' : 'bizar chat'}
+            {activeSource === 'cline' ? 'cline' : 'bizar chat'}
           </span>
         </div>
         <div className="chat-info-mono chat-ellipsis" title={sessionId}>

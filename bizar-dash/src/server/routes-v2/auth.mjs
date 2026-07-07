@@ -3,7 +3,7 @@
  *
  * v0.7.0-alpha.1 — HTTP Basic auth middleware for /api/v2/* routes.
  *
- * Username: `opencode` (per opencode convention used elsewhere in Bizar).
+ * Username: `cline` (per cline convention used elsewhere in Bizar).
  * Password: the dashboard-generated secret in ~/.cache/bizarharness/dash-auth.json.
  */
 
@@ -46,7 +46,7 @@ export function v2BasicAuth(getPassword) {
     const user = colonIdx === -1 ? decoded : decoded.slice(0, colonIdx);
     const pass = colonIdx === -1 ? '' : decoded.slice(colonIdx + 1);
 
-    if (user !== 'opencode' || pass !== expected) {
+    if (user !== 'cline' || pass !== expected) {
       res.setHeader('WWW-Authenticate', `Basic realm="${V2_AUTH_REALM}"`);
       return res.status(401).json({
         name: 'DashboardError',

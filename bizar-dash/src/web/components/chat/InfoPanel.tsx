@@ -24,7 +24,7 @@ interface Props {
   agents: Array<{ name: string; model?: string; mode?: string }>;
   mcps: Array<{ id: string; command?: string; enabled?: boolean }>;
   allCommands: Array<{ cmd: string; desc: string; mod?: string }>;
-  activeSource?: 'bizar' | 'opencode' | null;
+  activeSource?: 'bizar' | 'cline' | null;
   /** Optional rename handler — when omitted the rename button is hidden. */
   onRename?: () => void;
   /** Optional delete handler — when omitted the delete button is hidden. */
@@ -51,7 +51,7 @@ export function InfoPanel({
   const visibleCommands = showCommands ? allCommands : allCommands.slice(0, 4);
 
   // Derive a friendly provider from the model id (e.g.
-  // "opencode/deepseek-v4-flash-free" → provider "opencode").
+  // "cline/deepseek-v4-flash-free" → provider "cline").
   const provider = model.includes('/') ? model.split('/')[0] : '';
 
   return (
@@ -63,7 +63,7 @@ export function InfoPanel({
             className={`chat-source-badge chat-source-${activeSource ?? 'none'}`}
             style={{ marginLeft: 'auto' }}
           >
-            {activeSource === 'opencode' ? 'opencode' : 'bizar chat'}
+            {activeSource === 'cline' ? 'cline' : 'bizar chat'}
           </span>
         </div>
         <dl className="env-table">

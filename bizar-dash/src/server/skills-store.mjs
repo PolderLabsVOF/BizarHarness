@@ -4,11 +4,11 @@
 // sources rather than relying on the `skills` CLI npm registry.
 //
 // Sources (in priority order for conflicts):
-//   1. ~/.opencode/skills/<name>/SKILL.md    - user-overridable builtins
+//   1. ~/.cline/skills/<name>/SKILL.md    - user-overridable builtins
 //   2. ~/.agents/skills/<name>/SKILL.md      - user-added skills
 //   3. bizar-dash/skills/<name>/SKILL.md     - BizarHarness shipped
 //   4. .agents/skills/<name>/SKILL.md        - project-local
-//   5. .opencode/skills/<name>/SKILL.md      - project-local
+//   5. .cline/skills/<name>/SKILL.md      - project-local
 //
 // Each SKILL.md is parsed for YAML frontmatter (description:) and
 // the first # H1 heading (display name fallback).  No external deps.
@@ -33,11 +33,11 @@ export function setProjectRoot(p) { PROJECT_ROOT = p; }
 /** All SKILL.md scan roots in priority order (first wins for conflicts). */
 function sourceRoots() {
   return [
-    { dir: join(HOME, '.opencode', 'skills'),   source: 'user'    },
+    { dir: join(HOME, '.cline', 'skills'),   source: 'user'    },
     { dir: join(HOME, '.agents', 'skills'),     source: 'user'    },
     { dir: join(PROJECT_ROOT, 'bizar-dash', 'skills'), source: 'shipped' },
     { dir: join(PROJECT_ROOT, '.agents', 'skills'),   source: 'project' },
-    { dir: join(PROJECT_ROOT, '.opencode', 'skills'), source: 'project' },
+    { dir: join(PROJECT_ROOT, '.cline', 'skills'), source: 'project' },
   ];
 }
 

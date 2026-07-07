@@ -18,16 +18,16 @@ BizarHarness/
 │   ├── utils.mjs         # path detection, env detection
 │   ├── banner.mjs        # ASCII art
 │   └── plan.test.mjs     # plan unit tests
-├── config/               # opencode config templates (copied by installer)
+├── config/               # cline config templates (copied by installer)
 │   ├── agents/           # the 12 agent definitions + semble-search helper
 │   ├── rules/            # always-on rules (general, javascript, python, git, testing)
-│   ├── hooks/            # opencode hooks
+│   ├── hooks/            # cline hooks
 │   ├── commands/         # slash commands
 │   ├── skills/           # bundled skills
 │   ├── AGENTS.md         # master routing config (copied verbatim)
-│   └── opencode.json     # the opencode.json template
+│   └── cline.json     # the cline.json template
 ├── plugins/
-│   └── bizar/            # the bundled opencode plugin
+│   └── bizar/            # the bundled cline plugin
 │       ├── index.ts      # plugin entry
 │       ├── src/          # source modules
 │       ├── tests/        # unit tests
@@ -69,7 +69,7 @@ For trivial changes (typo fixes, formatting, single-file edits), skip the spec a
 
 All plugin and config changes should be tested in the dev sandbox before opening a PR. The sandbox:
 
-- Uses a separate `~/.config/opencode/` inside the container, so changes don't affect your real install.
+- Uses a separate `~/.config/cline/` inside the container, so changes don't affect your real install.
 - Mounts your project at `/project`, so edits are visible instantly.
 - Strips Vidarr and Hindsight by default, so you only need a MiniMax API key.
 
@@ -79,7 +79,7 @@ Quick test loop:
 cd BizarHarness-dev
 ./scripts/dev.sh
 # edit files in BizarHarness on the host — visible inside the container
-# rerun ./scripts/dev.sh to restart opencode with the new config
+# rerun ./scripts/dev.sh to restart cline with the new config
 ```
 
 After the change is verified, commit and open a PR.

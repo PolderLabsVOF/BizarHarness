@@ -20,8 +20,8 @@ interface Props {
   sessionsOpen: boolean;
   infoOpen: boolean;
   /** Which stream will receive the next message — propagates the
-   *  pill border color and a small "→ opencode" hint. */
-  activeSource?: 'bizar' | 'opencode' | null;
+   *  pill border color and a small "→ cline" hint. */
+  activeSource?: 'bizar' | 'cline' | null;
 }
 
 export function FloatingComposer(props: Props) {

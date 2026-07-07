@@ -3,13 +3,13 @@
  * Inline smoke tests for the v3.11.0 background-agent dispatch fix.
  *
  * Tests:
- *   1. pingOpencodeServe returns true for the user's live opencode
+ *   1. pingClineServe returns true for the user's live cline
  *      serve instance (TCP-connect on port 45451).
- *   2. pingOpencodeServe returns false for an unreachable port
+ *   2. pingClineServe returns false for an unreachable port
  *      (use a definitely-closed port 1).
  *   3. readServeInfo accepts the partial `{password, pid, port}`
  *      shape and derives `baseUrl`.
- *   4. isBrokenBgLogPath detects `//.opencode/log/...` correctly.
+ *   4. isBrokenBgLogPath detects `//.cline/log/...` correctly.
  *   5. deriveAbsoluteBgLogPath always returns an absolute path
  *      and falls back to `~/.cache/bizar/logs/<id>.log`.
  *   6. shouldRetryDispatch returns true for the user's stuck
@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 const ROOT = join(import.meta.dirname, '..');
 
 const {
-  pingOpencodeServe,
+  pingClineServe,
   readServeInfo,
 } = await import(join(ROOT, 'src/server/serve-info.mjs'));
 const {
@@ -40,20 +40,20 @@ const {
   shouldRetryDispatch,
 } = await import(join(ROOT, 'src/server/bg-retry.mjs'));
 
-// ── Test 1: pingOpencodeServe on the user's live serve (port 45451) ───
+// ── Test 1: pingClineServe on the user's live serve (port 45451) ───
 {
   const info = { port: 45451, password: 'irrelevant', baseUrl: 'http://127.0.0.1:45451' };
-  const ok = await pingOpencodeServe(info, 1500);
-  assert.equal(ok, true, 'pingOpencodeServe should return true for a live opencode serve on port 45451');
-  console.log('Test 1 PASS: pingOpencodeServe(45451) → true');
+  const ok = await pingClineServe(info, 1500);
+  assert.equal(ok, true, 'pingClineServe should return true for a live cline serve on port 45451');
+  console.log('Test 1 PASS: pingClineServe(45451) → true');
 }
 
-// ── Test 2: pingOpencodeServe on a closed port (use 1) ────────────────
+// ── Test 2: pingClineServe on a closed port (use 1) ────────────────
 {
   const info = { port: 1, password: 'irrelevant', baseUrl: 'http://127.0.0.1:1' };
-  const ok = await pingOpencodeServe(info, 500);
-  assert.equal(ok, false, 'pingOpencodeServe should return false for port 1');
-  console.log('Test 2 PASS: pingOpencodeServe(1) → false');
+  const ok = await pingClineServe(info, 500);
+  assert.equal(ok, false, 'pingClineServe should return false for port 1');
+  console.log('Test 2 PASS: pingClineServe(1) → false');
 }
 
 // ── Test 3: readServeInfo accepts partial {password, pid, port} ───────
@@ -82,17 +82,17 @@ const {
 // ── Test 4: isBrokenBgLogPath detects the user's broken path ──────────
 {
   // The user's actual broken logPath from bgr_738FFSKMAT5SP58SVF5HQW.json
-  const broken = '//.opencode/log/bgr_738FFSKMAT5SP58SVF5HQW.log';
-  assert.equal(isBrokenBgLogPath(broken), true, 'must detect //.opencode/log/... as broken');
+  const broken = '//.cline/log/bgr_738FFSKMAT5SP58SVF5HQW.log';
+  assert.equal(isBrokenBgLogPath(broken), true, 'must detect //.cline/log/... as broken');
   // Also test the empty / missing cases
   assert.equal(isBrokenBgLogPath(''), true, 'empty path must be broken');
   assert.equal(isBrokenBgLogPath(null), true, 'null must be broken');
   assert.equal(isBrokenBgLogPath(undefined), true, 'undefined must be broken');
   assert.equal(isBrokenBgLogPath(42), true, 'non-string must be broken');
   // A normal absolute path is fine
-  assert.equal(isBrokenBgLogPath('/home/user/.opencode/log/bgr_X.log'), false, 'absolute path with one slash is fine');
+  assert.equal(isBrokenBgLogPath('/home/user/.cline/log/bgr_X.log'), false, 'absolute path with one slash is fine');
   // A relative path is also broken (not absolute)
-  assert.equal(isBrokenBgLogPath('.opencode/log/bgr_X.log'), true, 'relative path is broken');
+  assert.equal(isBrokenBgLogPath('.cline/log/bgr_X.log'), true, 'relative path is broken');
   console.log('Test 4 PASS: isBrokenBgLogPath correctly detects double-slash and non-absolute');
 }
 
@@ -108,7 +108,7 @@ const {
 
   const withHome = deriveAbsoluteBgLogPath(home, 'bgr_TEST456');
   assert.ok(withHome.startsWith(home), `expected home-prefixed, got: ${withHome}`);
-  assert.ok(withHome.includes('.opencode/log/bgr_TEST456.log'), `expected .opencode/log/<id>.log, got: ${withHome}`);
+  assert.ok(withHome.includes('.cline/log/bgr_TEST456.log'), `expected .cline/log/<id>.log, got: ${withHome}`);
 
   const withRelative = deriveAbsoluteBgLogPath('relative/path', 'bgr_TEST789');
   assert.ok(withRelative.startsWith('/'), 'relative worktree must still produce absolute path');
@@ -131,16 +131,16 @@ const {
   };
   assert.equal(shouldRetryDispatch(stuck, now), true, 'stuck dashboard-marked instance qualifies');
 
-  // Stuck "opencode-spawned" instance — the user's actual case
-  const opencodeStuck = {
-    instanceId: 'bgr_OPENCODE',
+  // Stuck "cline-spawned" instance — the user's actual case
+  const clineStuck = {
+    instanceId: 'bgr_CLINE',
     toolCallCount: 0,
     startedAt: now - 60_000,
     status: 'pending',
     sessionId: '', // empty sessionId is the stuckness signal
   };
-  assert.equal(shouldRetryDispatch(opencodeStuck, now), true,
-    'opencode-spawned instance with empty sessionId qualifies');
+  assert.equal(shouldRetryDispatch(clineStuck, now), true,
+    'cline-spawned instance with empty sessionId qualifies');
 
   const tooFresh = { ...stuck, startedAt: now - 5_000 };
   assert.equal(shouldRetryDispatch(tooFresh, now), false, 'instance within grace window must NOT retry');
@@ -210,7 +210,7 @@ const {
     interventionCount: 0,
     lastEventAt: now - 60_000,
     lastToolOrTextAt: now - 60_000,
-    logPath: '//.opencode/log/bgr_738FFSKMAT5SP58SVF5HQW.log', // user's actual broken path
+    logPath: '//.cline/log/bgr_738FFSKMAT5SP58SVF5HQW.log', // user's actual broken path
     model: 'agent-default',
     parentAgent: 'odin',
     promptPreview: 'Install vLLM as a Python package. Do NOT actually run `vllm serve` — just i...',
@@ -220,7 +220,7 @@ const {
     timeoutMs: 1800000,
     toolCallCount: 0,
     // NOTE: no `dispatchPending` field — this file was written by the
-    // opencode plugin itself, not by the dashboard. The stuckness
+    // cline plugin itself, not by the dashboard. The stuckness
     // signal is `sessionId: ""`.
   };
 
@@ -230,7 +230,7 @@ const {
 
   // Confirm the broken logPath is detected as broken
   assert.equal(isBrokenBgLogPath(userBgr.logPath), true,
-    "user's //.opencode/log path must be detected as broken");
+    "user's //.cline/log path must be detected as broken");
 
   // Confirm the repaired logPath is absolute and sane
   const repaired = deriveAbsoluteBgLogPath('', userBgr.instanceId);

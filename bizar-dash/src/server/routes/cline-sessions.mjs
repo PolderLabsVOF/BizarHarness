@@ -1,26 +1,26 @@
 /**
- * src/server/routes/opencode-sessions.mjs
+ * src/server/routes/cline-sessions.mjs
  *
- * /api/opencode-sessions           — list opencode sessions
- * POST /api/opencode-sessions/new  — create a new opencode session
- * PATCH /api/opencode-sessions/:id — rename an opencode session
- * DELETE /api/opencode-sessions/:id — delete an opencode session
+ * /api/cline-sessions           — list cline sessions
+ * POST /api/cline-sessions/new  — create a new cline session
+ * PATCH /api/cline-sessions/:id — rename an cline session
+ * DELETE /api/cline-sessions/:id — delete an cline session
  *
- * The list endpoint reads from the opencode SQLite database
- * (~/.local/share/opencode/opencode.db). The mutating endpoints
- * talk to the opencode serve child via the helpers in
- * `../serve-info.mjs` (see `createOpencodeSession`,
- * `updateOpencodeSession`, `deleteOpencodeSession`).
+ * The list endpoint reads from the cline SQLite database
+ * (~/.local/share/cline/cline.db). The mutating endpoints
+ * talk to the cline serve child via the helpers in
+ * `../serve-info.mjs` (see `createClineSession`,
+ * `updateClineSession`, `deleteClineSession`).
  *
  * Both surfaces share directory-resolution logic: we discover the
- * session's directory from `listOpencodeSessions()` and fall back to
+ * session's directory from `listClineSessions()` and fall back to
  * `info.worktree` so a freshly created session (not yet listed) can
  * still be addressed using the active project's path or the plugin's
  * recorded cwd.
  *
  * v4.2.5 — Added POST/PATCH/DELETE so the dashboard's "New session"
  * button, the rail row menu (rename / delete), and the info-panel
- * actions all work end-to-end against the opencode serve child.
+ * actions all work end-to-end against the cline serve child.
  * Sessions are filtered to non-archived (time_archived IS NULL) and
  * ordered by most recently updated.
  */
@@ -34,20 +34,20 @@ import { wrap } from './_shared.mjs';
 import { tracer } from '../otel.mjs';
 import {
   readServeInfo,
-  listOpencodeSessions,
-  createOpencodeSession,
-  updateOpencodeSession,
-  deleteOpencodeSession,
+  listClineSessions,
+  createClineSession,
+  updateClineSession,
+  deleteClineSession,
 } from '../serve-info.mjs';
 
-const DB_PATH = join(homedir(), '.local', 'share', 'opencode', 'opencode.db');
+const DB_PATH = join(homedir(), '.local', 'share', 'cline', 'cline.db');
 
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
 const AGENT_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const TITLE_MAX = 200;
 
 /**
- * Resolve the opencode `directory` for a known session. Used by
+ * Resolve the cline `directory` for a known session. Used by
  * PATCH and DELETE so a session started from any worktree is
  * addressed through its own scope.
  *
@@ -58,7 +58,7 @@ const TITLE_MAX = 200;
 async function resolveSessionDirectory(info, sessionId) {
   if (!info) return null;
   try {
-    const sessions = await listOpencodeSessions(info, 5_000);
+    const sessions = await listClineSessions(info, 5_000);
     if (Array.isArray(sessions)) {
       const entry = sessions.find((s) => s && s.id === sessionId);
       const dir = entry?.location?.directory;
@@ -76,10 +76,10 @@ async function resolveSessionDirectory(info, sessionId) {
 /**
  * @returns {import('express').Router}
  */
-export function createOpencodeSessionsRouter() {
+export function createClineSessionsRouter() {
   const router = Router();
 
-  router.get('/opencode-sessions', wrap(async (_req, res) => {
+  router.get('/cline-sessions', wrap(async (_req, res) => {
     let db;
     try {
       db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
@@ -108,19 +108,19 @@ export function createOpencodeSessionsRouter() {
     }
   }));
 
-  // ── POST /api/opencode-sessions/new ───────────────────────────────────
+  // ── POST /api/cline-sessions/new ───────────────────────────────────
   //
   // Body: { title?: string, agent: string, directory?: string }.
-  // When `directory` is omitted we use the opencode plugin's recorded
+  // When `directory` is omitted we use the cline plugin's recorded
   // worktree (the active project's path on disk).
   //
   // Returns 201 with `{ id, title, agent, directory, createdAt }`.
   // Returns 400 when the body is missing / invalid.
-  // Returns 502 when the upstream opencode serve errors.
-  // Returns 503 when the opencode plugin is offline.
+  // Returns 502 when the upstream cline serve errors.
+  // Returns 503 when the cline plugin is offline.
   // ────────────────────────────────────────────────────────────────────
-  router.post('/opencode-sessions/new', wrap(async (req, res) => {
-    return tracer.startActiveSpan('opencode.session.create', async (span) => {
+  router.post('/cline-sessions/new', wrap(async (req, res) => {
+    return tracer.startActiveSpan('cline.session.create', async (span) => {
       let spanEnded = false;
       const finishSpan = () => {
         if (spanEnded) return;
@@ -143,8 +143,8 @@ export function createOpencodeSessionsRouter() {
           ? body.title.trim().slice(0, TITLE_MAX)
           : null;
         const agent = typeof body.agent === 'string' ? body.agent.trim() : '';
-        span.setAttribute('opencode.session.agent', agent);
-        span.setAttribute('opencode.session.title_length', title === null ? 0 : title.length);
+        span.setAttribute('cline.session.agent', agent);
+        span.setAttribute('cline.session.title_length', title === null ? 0 : title.length);
         if (!agent) {
           res.status(400).json({ error: 'bad_request', message: '`agent` is required' });
           return;
@@ -162,7 +162,7 @@ export function createOpencodeSessionsRouter() {
         if (!info) {
           res.status(503).json({
             error: 'plugin_offline',
-            message: 'opencode plugin is not running',
+            message: 'cline plugin is not running',
           });
           return;
         }
@@ -170,10 +170,10 @@ export function createOpencodeSessionsRouter() {
         const directory = typeof body.directory === 'string' && body.directory.length > 0
           ? body.directory
           : (info.worktree || '');
-        span.setAttribute('opencode.session.directory', directory);
+        span.setAttribute('cline.session.directory', directory);
 
         const finalTitle = title || `Chat: ${agent}`;
-        const result = await createOpencodeSession(
+        const result = await createClineSession(
           info,
           { title: finalTitle, agent },
           directory,
@@ -181,13 +181,13 @@ export function createOpencodeSessionsRouter() {
         if (!result.ok || !result.sessionId) {
           const status = result.status === 404 ? 404 : 502;
           res.status(status).json({
-            error: 'opencode_error',
-            message: result.error || 'failed to create opencode session',
+            error: 'cline_error',
+            message: result.error || 'failed to create cline session',
           });
           return;
         }
 
-        span.setAttribute('opencode.session.id', result.sessionId);
+        span.setAttribute('cline.session.id', result.sessionId);
         res.status(201).json({
           id: result.sessionId,
           title: finalTitle,
@@ -207,13 +207,13 @@ export function createOpencodeSessionsRouter() {
     });
   }));
 
-  // ── PATCH /api/opencode-sessions/:id ──────────────────────────────────
+  // ── PATCH /api/cline-sessions/:id ──────────────────────────────────
   //
   // Body: { title: string } — required, non-empty, ≤ 200 chars.
   // Returns 200 with `{ id, title }` on success.
   // 400 / 404 (unknown) / 502 / 503 / 504 (timeouts).
   // ────────────────────────────────────────────────────────────────────
-  router.patch('/opencode-sessions/:id', wrap(async (req, res) => {
+  router.patch('/cline-sessions/:id', wrap(async (req, res) => {
     const sessionId = String(req.params?.id || '');
     if (!SESSION_ID_RE.test(sessionId)) {
       res.status(400).json({ error: 'bad_request', message: 'invalid session id' });
@@ -232,34 +232,34 @@ export function createOpencodeSessionsRouter() {
 
     const info = readServeInfo();
     if (!info) {
-      res.status(503).json({ error: 'plugin_offline', message: 'opencode plugin is not running' });
+      res.status(503).json({ error: 'plugin_offline', message: 'cline plugin is not running' });
       return;
     }
     const directory = await resolveSessionDirectory(info, sessionId);
     if (!directory) {
       res.status(503).json({
         error: 'directory_unknown',
-        message: 'cannot determine the opencode session directory',
+        message: 'cannot determine the cline session directory',
       });
       return;
     }
 
-    const result = await updateOpencodeSession(info, sessionId, { title }, directory);
+    const result = await updateClineSession(info, sessionId, { title }, directory);
     if (!result.ok) {
       const status = result.status === 404 ? 404 : 502;
-      res.status(status).json({ error: 'opencode_error', message: result.error || 'rename failed' });
+      res.status(status).json({ error: 'cline_error', message: result.error || 'rename failed' });
       return;
     }
     res.json({ id: sessionId, title });
   }));
 
-  // ── DELETE /api/opencode-sessions/:id ─────────────────────────────────
+  // ── DELETE /api/cline-sessions/:id ─────────────────────────────────
   //
   // No body. Returns 200 on success or if the session was already gone.
   // 400 (invalid id) / 404 (unknown — surfaces when upstream says so) /
   // 502 / 503.
   // ────────────────────────────────────────────────────────────────────
-  router.delete('/opencode-sessions/:id', wrap(async (req, res) => {
+  router.delete('/cline-sessions/:id', wrap(async (req, res) => {
     const sessionId = String(req.params?.id || '');
     if (!SESSION_ID_RE.test(sessionId)) {
       res.status(400).json({ error: 'bad_request', message: 'invalid session id' });
@@ -267,21 +267,21 @@ export function createOpencodeSessionsRouter() {
     }
     const info = readServeInfo();
     if (!info) {
-      res.status(503).json({ error: 'plugin_offline', message: 'opencode plugin is not running' });
+      res.status(503).json({ error: 'plugin_offline', message: 'cline plugin is not running' });
       return;
     }
     const directory = await resolveSessionDirectory(info, sessionId);
     if (!directory) {
       res.status(503).json({
         error: 'directory_unknown',
-        message: 'cannot determine the opencode session directory',
+        message: 'cannot determine the cline session directory',
       });
       return;
     }
-    const result = await deleteOpencodeSession(info, sessionId, directory);
+    const result = await deleteClineSession(info, sessionId, directory);
     if (!result.ok) {
       const status = result.status === 404 ? 404 : 502;
-      res.status(status).json({ error: 'opencode_error', message: result.error || 'delete failed' });
+      res.status(status).json({ error: 'cline_error', message: result.error || 'delete failed' });
       return;
     }
     res.json({ id: sessionId, deleted: true });

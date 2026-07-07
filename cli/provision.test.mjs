@@ -27,7 +27,7 @@ function freshHome() {
   process.env.HOME = home;
   delete process.env.XDG_CONFIG_HOME;
   delete process.env.BIZAR_DASHBOARD_PORT;
-  delete process.env.OPENCODE_SERVER_PASSWORD;
+  delete process.env.CLINE_SERVER_PASSWORD;
   delete process.env.BIZAR_MEMORY_VAULT;
   return home;
 }
@@ -134,7 +134,7 @@ describe('buildServiceEnvFile()', () => {
     const content = buildServiceEnvFile({ repoPath: '/repo' });
     const required = [
       'BIZAR_HOME', 'BIZAR_REPO', 'PATH',
-      'OPENCODE_SERVER_PASSWORD', 'BIZAR_DASHBOARD_PORT',
+      'CLINE_SERVER_PASSWORD', 'BIZAR_DASHBOARD_PORT',
       'BIZAR_DASHBOARD_HOST', 'BIZAR_LOG_LEVEL',
       'BIZAR_HEADROOM_AUTOSTART', 'BIZAR_LIGHTRAG_AUTOSTART',
       'BIZAR_MEMORY_VAULT',
@@ -147,12 +147,12 @@ describe('buildServiceEnvFile()', () => {
     }
   });
 
-  test('generates OPENCODE_SERVER_PASSWORD when not set', async () => {
+  test('generates CLINE_SERVER_PASSWORD when not set', async () => {
     const { buildServiceEnvFile } = await import('./service-env.mjs');
     const content = buildServiceEnvFile({ repoPath: '/repo' });
     const lines = content.split('\n');
-    const pwdLine = lines.find(l => l.startsWith('OPENCODE_SERVER_PASSWORD='));
-    assert.ok(pwdLine, 'OPENCODE_SERVER_PASSWORD line should exist');
+    const pwdLine = lines.find(l => l.startsWith('CLINE_SERVER_PASSWORD='));
+    assert.ok(pwdLine, 'CLINE_SERVER_PASSWORD line should exist');
     const pwd = pwdLine.split('=')[1];
     assert.ok(pwd.length > 0, 'password should be non-empty');
   });

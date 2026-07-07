@@ -213,8 +213,8 @@ export type ConfigResponse = {
 
 export interface SystemLlmConfig {
   enabled: boolean;
-  provider: string;     // e.g. "opencode"
-  model: string;        // e.g. "opencode/deepseek-v4-flash-free"
+  provider: string;     // e.g. "cline"
+  model: string;        // e.g. "cline/deepseek-v4-flash-free"
   // api key is read from auth.json for the provider, not stored here
 }
 
@@ -344,10 +344,10 @@ export type ChatSession = {
   file: string;
   mtime: number;
   size: number;
-  /** 'bizar' sessions come from the per-project .jsonl store; 'opencode' come from opencode.db */
-  source?: 'bizar' | 'opencode';
-  /** Filled when source === 'opencode' — the URL to open that session in the opencode web UI */
-  opencodeUrl?: string;
+  /** 'bizar' sessions come from the per-project .jsonl store; 'cline' come from cline.db */
+  source?: 'bizar' | 'cline';
+  /** Filled when source === 'cline' — the URL to open that session in the cline web UI */
+  clineUrl?: string;
   /** Display title; defaults to id when absent */
   title?: string;
 };
@@ -593,7 +593,7 @@ export type DoctorServices = {
   dashboard: DoctorService;
   headroom: DoctorService;
   lightrag: DoctorService;
-  opencode: DoctorService;
+  cline: DoctorService;
 };
 
 export type DoctorRecentError = {
@@ -602,7 +602,7 @@ export type DoctorRecentError = {
   tsMs: number | null;
 };
 
-export type DoctorOpencode = {
+export type DoctorCline = {
   configExists: boolean;
   configPath: string;
   agentsDir: string;
@@ -629,7 +629,7 @@ export type DoctorSnapshot = {
   counts: DoctorCounts;
   recentErrors: DoctorRecentError[];
   configHealth: DoctorCheck[];
-  opencode: DoctorOpencode;
+  cline: DoctorCline;
   checks: DoctorChecks;
   health: { status: DoctorStatus; issues: DoctorCheck[] };
 };
@@ -719,9 +719,9 @@ export type BgInstance = {
   lastEventAt?: number;
   taskId?: string;
   // v5.x — extended dashboard surface
-  /** PID of the opencode run subprocess (for pause/resume/steer). */
+  /** PID of the cline run subprocess (for pause/resume/steer). */
   processId?: number;
-  /** Free-form runner state from the opencode-runner. */
+  /** Free-form runner state from the cline-runner. */
   runnerState?: string;
   /** Tags from spawn. */
   tags?: string[];

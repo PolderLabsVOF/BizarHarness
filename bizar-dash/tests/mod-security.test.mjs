@@ -96,7 +96,7 @@ describe('authorizeFsPath', () => {
 
 describe('authorizeSpawn', () => {
   it('allows whitelisted binaries without explicit perm', () => {
-    for (const bin of ['bizar', 'opencode', 'python3', 'git', 'node', 'npm']) {
+    for (const bin of ['bizar', 'cline', 'python3', 'git', 'node', 'npm']) {
       expect(() => authorizeSpawn(new Set(), () => {}, bin)).not.toThrow();
     }
   });

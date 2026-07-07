@@ -2,8 +2,8 @@
  * Delegation wrapper unit tests.
  *
  * `bizar_spawn_background` silently fell back to odin for any
- * subagent request because opencode 1.17.x rejects
- * `opencode run --agent <subagent>` with "agent X is a subagent,
+ * subagent request because cline 1.17.x rejects
+ * `cline run --agent <subagent>` with "agent X is a subagent,
  * not a primary agent". The fix routes subagent requests through
  * odin with a directive delegation prompt.
  *
@@ -19,7 +19,7 @@ import {
   buildDelegationPrompt,
 } from "../../src/tools/bg-spawn";
 
-describe("PRIMARY_AGENTS — set of agents accepted by opencode run --agent", () => {
+describe("PRIMARY_AGENTS — set of agents accepted by cline run --agent", () => {
   it("contains the three primary agents from config/agents/*.md", () => {
     expect(PRIMARY_AGENTS.has("odin")).toBe(true);
     expect(PRIMARY_AGENTS.has("quick")).toBe(true);
@@ -82,7 +82,7 @@ describe("needsDelegationWrapper", () => {
     expect(needsDelegationWrapper("forseti")).toBe(true);
   });
 
-  it("returns true for unknown agent names (defensive — let opencode reject)", () => {
+  it("returns true for unknown agent names (defensive — let cline reject)", () => {
     expect(needsDelegationWrapper("xyz-unknown-agent")).toBe(true);
     expect(needsDelegationWrapper("")).toBe(true);
   });
@@ -112,7 +112,7 @@ describe("buildDelegationPrompt", () => {
     expect(prompt).toMatch(/Do NOT route to any other agent/i);
   });
 
-  it("instructs Odin to use the task tool (opencode's delegation mechanism)", () => {
+  it("instructs Odin to use the task tool (cline's delegation mechanism)", () => {
     const prompt = buildDelegationPrompt("mimir", "research X");
     expect(prompt).toMatch(/task tool/i);
     expect(prompt).toMatch(/agent="mimir"/);

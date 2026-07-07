@@ -27,7 +27,7 @@ async function apiGet(path) {
   const baseUrl = `http://127.0.0.1:${port}`;
   const url = `${baseUrl}${path}`;
   const headers = { accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const res = await fetch(url, { method: 'GET', headers });
   const text = await res.text();
   let data = null;
@@ -41,7 +41,7 @@ async function apiPost(path, body = {}) {
   const baseUrl = `http://127.0.0.1:${port}`;
   const url = `${baseUrl}${path}`;
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   const text = await res.text();
   let data = null;

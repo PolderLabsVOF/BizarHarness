@@ -39,9 +39,9 @@ const DASHBOARD_VERSION = readDashboardVersion();
 /** Home dir, cached at module load (homedir() doesn't change mid-process). */
 export const HOME = homedir();
 
-/** Opencode config dir. Same convention used by api.mjs. */
-export const OPENCODE_DIR = join(HOME, '.config', 'opencode');
-export const OPENCODE_JSON = join(OPENCODE_DIR, 'opencode.json');
+/** Cline config dir. Same convention used by api.mjs. */
+export const CLINE_DIR = join(HOME, '.config', 'cline');
+export const CLINE_JSON = join(CLINE_DIR, 'cline.json');
 
 /** Bizar home + settings file path. */
 export const BIZAR_HOME = join(HOME, '.config', 'bizar');
@@ -149,7 +149,7 @@ export const DEFAULT_SETTINGS = {
     chatBaseUrl: 'https://api.minimax.io/v1',
   },
   // v5.0.0 — Headroom context compression integration.
-  // Headroom sits between opencode and LLM providers, compressing tool
+  // Headroom sits between cline and LLM providers, compressing tool
   // outputs, logs, RAG chunks, and conversation history by 60–95%.
   headroom: {
     enabled: true,

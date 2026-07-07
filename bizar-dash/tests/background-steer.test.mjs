@@ -8,7 +8,7 @@
  * Validation surface (empty message, missing instance) is the same
  * shape as v5.5.0 — `steerBgAgent` still rejects empty input and
  * unknown instances with structured errors. The success path is
- * covered by the smoke script because it requires a live opencode
+ * covered by the smoke script because it requires a live cline
  * serve child.
  */
 
@@ -39,7 +39,7 @@ test('steerBgAgent with missing instance returns not_found (or unavailable)', as
   try {
     const r = await steerBgAgent('bgr_definitely_missing', 'go faster');
     assert.equal(r.ok, false);
-    assert.match(r.error || '', /instance_not_found|opencode_serve_unavailable|file/);
+    assert.match(r.error || '', /instance_not_found|cline_serve_unavailable|file/);
   } finally {
     process.env.HOME = originalHome;
   }

@@ -10,11 +10,11 @@ import {
   getHeadroomStatus,
   getHeadroomStats,
   installHeadroom,
-  wrapOpencode,
-  unwrapOpencode,
+  wrapCline,
+  unwrapCline,
   startProxy,
   stopProxy,
-  getOpencodeConfig,
+  getClineConfig,
   headroomStartupHook,
 } from '../headroom.mjs';
 import { wrap } from './_shared.mjs';
@@ -45,7 +45,7 @@ export function createHeadroomRouter() {
   // POST /api/headroom/wrap
   router.post('/wrap', wrap(async (req, res) => {
     const { port } = req.body || {};
-    const result = await wrapOpencode({
+    const result = await wrapCline({
       port: port ? Math.max(1, Math.min(parseInt(port, 10), 65535)) : 8787,
     });
     res.json(result);
@@ -53,7 +53,7 @@ export function createHeadroomRouter() {
 
   // POST /api/headroom/unwrap
   router.post('/unwrap', wrap(async (_req, res) => {
-    const result = await unwrapOpencode();
+    const result = await unwrapCline();
     res.json(result);
   }));
 
@@ -73,9 +73,9 @@ export function createHeadroomRouter() {
     res.json(result);
   }));
 
-  // GET /api/headroom/opencode-config
-  router.get('/opencode-config', wrap(async (_req, res) => {
-    const config = await getOpencodeConfig();
+  // GET /api/headroom/cline-config
+  router.get('/cline-config', wrap(async (_req, res) => {
+    const config = await getClineConfig();
     res.json(config);
   }));
 

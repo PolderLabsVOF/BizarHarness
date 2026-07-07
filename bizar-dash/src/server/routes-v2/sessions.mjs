@@ -4,7 +4,7 @@
  * v0.7.0-alpha.1 — Sessions CRUD for /api/v2/sessions/*.
  *
  * Stores sessions in-memory (Map). The plugin is the source of truth for
- * session state (it owns opencode serve); the dashboard reflects what the
+ * session state (it owns cline serve); the dashboard reflects what the
  * plugin publishes via the event bus + REST.
  *
  * For v0.7.0-alpha.1 this is a minimal implementation sufficient for the

@@ -86,7 +86,7 @@ describe('B7 — check-deps.mjs which() uses path.join()', () => {
     const { checkDeps } = await import('../../scripts/check-deps.mjs');
     const result = await checkDeps({ strict: false });
     const names = [...result.present, ...result.missing].map(d => d.name);
-    const required = ['node', 'bun', 'opencode', 'tmux', 'git', 'python3', 'pip', 'jq', 'gh', 'headroom', 'semble', 'skills'];
+    const required = ['node', 'bun', 'cline', 'tmux', 'git', 'python3', 'pip', 'jq', 'gh', 'headroom', 'semble', 'skills'];
     for (const dep of required) {
       assert.ok(names.includes(dep), `expected ${dep} to be checked`);
     }

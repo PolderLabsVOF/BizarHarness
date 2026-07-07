@@ -1,7 +1,7 @@
 /**
  * src/server/background-store.mjs
  *
- * v3.2.0 — Bridge from the dashboard to the opencode plugin's
+ * v3.2.0 — Bridge from the dashboard to the cline plugin's
  * background-agent infrastructure.
  *
  * What this store actually does:
@@ -39,7 +39,7 @@ const HOME = homedir();
 // Matches plugins/bizar/src/background-state.ts (default `~/.cache/bizar`).
 const BG_DIRS = [
   join(HOME, '.cache', 'bizar', 'bg'),
-  join(HOME, '.config', 'opencode', 'bg'),
+  join(HOME, '.config', 'cline', 'bg'),
   join(HOME, '.bizar', 'bg'),
 ];
 
@@ -177,7 +177,7 @@ export const backgroundStore = {
   /**
    * Best-effort: kill the tmux session for an instance.
    * The plugin's session is HTTP-based, so this only stops the
-   * terminal attach; the underlying opencode session continues
+   * terminal attach; the underlying cline session continues
    * unless the operator also aborts it.
    */
   async kill(instanceId) {
@@ -211,7 +211,7 @@ export const backgroundStore = {
         steps.push({ step: 'abort-session', ok: false, error: err instanceof Error ? err.message : String(err) });
       }
     } else {
-      steps.push({ step: 'abort-session', ok: true, note: 'no opencode session id present' });
+      steps.push({ step: 'abort-session', ok: true, note: 'no cline session id present' });
     }
 
     if (inst._file && existsSync(inst._file)) {
@@ -264,7 +264,7 @@ export const backgroundStore = {
   /**
    * v3.5.5 — Spawn a tmux session that wraps the agent run. Used
    * by the task delegator so operators can `tmux attach -t …` and
-   * watch the opencode process in real time. The session is named
+   * watch the cline process in real time. The session is named
    * `bizar-bg-<id>` and runs the supplied shell command inside
    * the optional `cwd`.
    *

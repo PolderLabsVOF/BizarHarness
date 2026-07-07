@@ -4,7 +4,7 @@
  * v3.9.0 — Schedules registry.
  *
  * Each project has its own schedules.json at
- *   ~/.config/opencode/projects/<id>/schedules.json
+ *   ~/.config/cline/projects/<id>/schedules.json
  *
  * A schedule is a recurring task: { name, type, schedule, action, enabled, ... }.
  * Supported types:

@@ -2,7 +2,7 @@
  * bg-spawn-http.test.ts
  *
  * v5.5.1 — Tests that `bizar_spawn_background` delegates to the dashboard
- * via `POST /api/background` (instead of spawning `opencode run`
+ * via `POST /api/background` (instead of spawning `cline run`
  * subprocesses directly). The dashboard POST is mocked so we don't need
  * a live server.
  *

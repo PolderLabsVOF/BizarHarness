@@ -2,13 +2,13 @@
  * src/server/bg-spawner.mjs
  *
  * v5.5.1 — Dashboard-side background agent spawner, rewired to use the
- * opencode SDK (sessions + promptAsync) instead of `opencode run` subprocesses.
+ * cline SDK (sessions + promptAsync) instead of `cline run` subprocesses.
  *
- * Background agents run as long-lived opencode-serve SDK sessions, which:
+ * Background agents run as long-lived cline-serve SDK sessions, which:
  *   - Accept mid-flight prompts (the "true mid-flight steer" promised in
  *     v0.9.x / v5.5.0).
  *   - Don't need an OS subprocess per agent (we used to fork one
- *     `opencode run` per agent).
+ *     `cline run` per agent).
  *   - Are portable across POSIX and Windows (no signals).
  *
  * What this module owns:
@@ -18,9 +18,9 @@
  *     without any migration. `processId` is left `null`; the schema field
  *     stays (backwards compat) but is no longer the source of truth for
  *     liveness — we use `liveSession === true` to mark "this instance is
- *     backed by a live opencode session".
+ *     backed by a live cline session".
  *   - Event subscription: `sdk.events.subscribe({ sessionID })` yields
- *     opencode SSE envelopes which we forward to the WS bus as
+ *     cline SSE envelopes which we forward to the WS bus as
  *     `bg:output` / `background:change` / `bg:tool-call` events.
  *
  * Public surface (kept identical to v5.5.0):
@@ -35,7 +35,7 @@
  *
  * Note on `pauseBgAgent`:
  *   In subprocess mode, pause sent SIGSTOP to the underlying OS process.
- *   The opencode serve child doesn't expose an HTTP pause — there's no
+ *   The cline serve child doesn't expose an HTTP pause — there's no
  *   documented "freeze the agent loop" endpoint. We therefore implement
  *   pause as "stop forwarding events to the dashboard" (output pause).
  *   The session keeps running; events that arrive while paused are
@@ -58,7 +58,7 @@ import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { resolve as pathResolve } from "node:path";
 
-import { getOpencodeSdkOrThrow } from "./opencode-sdk.mjs";
+import { getClineSdkOrThrow } from "./cline-sdk.mjs";
 
 /** Same shape the plugin uses for instance IDs. */
 function generateInstanceId() {
@@ -85,7 +85,7 @@ function generateInstanceId() {
 const HOME = homedir();
 const BG_DIR_CANDIDATES = [
   pathResolve(HOME, ".cache", "bizar", "bg"),
-  pathResolve(HOME, ".config", "opencode", "bg"),
+  pathResolve(HOME, ".config", "cline", "bg"),
   pathResolve(HOME, ".bizar", "bg"),
 ];
 const LOG_DIR_CANDIDATES = [
@@ -150,7 +150,7 @@ export function configureSpawner(ctx) {
 }
 
 /**
- * Spawn one opencode serve SDK session for the bg agent. Mirrors the
+ * Spawn one cline serve SDK session for the bg agent. Mirrors the
  * v5.5.0 plugin-side `bg-spawn.ts` semantics on the input/output side:
  *
  *   - Generates an instanceId.
@@ -183,13 +183,13 @@ export async function spawnBgAgent(opts) {
   // Resolve the SDK early so a missing serve fails fast with a clear error.
   let sdk;
   try {
-    sdk = await getOpencodeSdkOrThrow();
+    sdk = await getClineSdkOrThrow();
   } catch (err) {
     return {
       instanceId: "",
       sessionId: null,
       processId: null,
-      error: `opencode_serve_unavailable: ${err instanceof Error ? err.message : String(err)}`,
+      error: `cline_serve_unavailable: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 
@@ -228,7 +228,7 @@ export async function spawnBgAgent(opts) {
     tags: Array.isArray(opts.tags) ? opts.tags.slice(0, 10) : undefined,
     source: "dashboard",
     // v5.5.1 — explicit flag so the state file carries the "this is a
-    // live opencode session, not a subprocess" marker. Dashboard
+    // live cline session, not a subprocess" marker. Dashboard
     // reconciliation reads this to decide whether to call SDK abort
     // vs the legacy `proc.kill` path.
     liveSession: true,
@@ -261,7 +261,7 @@ export async function spawnBgAgent(opts) {
     });
     const sessionId = created?.id || "";
     if (!sessionId) {
-      const msg = "opencode sessions.create returned no id";
+      const msg = "cline sessions.create returned no id";
       await patchState(instanceId, {
         status: "failed",
         error: msg,
@@ -340,7 +340,7 @@ export async function spawnBgAgent(opts) {
  * Forward SDK SSE events to the dashboard's WS bus. Resolves when the
  * subscription ends (the session terminated or the SSE connection died).
  *
- * Translates opencode event types to dashboard shapes:
+ * Translates cline event types to dashboard shapes:
  *   - `session.idle`   → `background:change { status: 'done' }`
  *   - `session.error`  → `background:change { status: 'failed' }`
  *   - `message.part.updated` (text/tool) → `bg:output` + tool-call bookkeeping
@@ -487,7 +487,7 @@ async function forwardEvents(rec, stream) {
 }
 
 /**
- * Kill an instance's opencode session. Aborts the SDK session; best-effort.
+ * Kill an instance's cline session. Aborts the SDK session; best-effort.
  * @param {string} instanceId
  * @param {{signal?: 'SIGTERM' | 'SIGKILL', reason?: string}} [_opts]  — `signal` accepted for compat but ignored (sessions are aborted via SDK)
  * @returns {{ ok: boolean, error?: string }}
@@ -498,7 +498,7 @@ export async function killBgAgent(instanceId, _opts = {}) {
   if (rec.endedAt) return { ok: true, note: "already_exited" };
 
   try {
-    const sdk = await getOpencodeSdkOrThrow();
+    const sdk = await getClineSdkOrThrow();
     await sdk.sessions.abort({ sessionId: rec.sessionId });
   } catch (err) {
     // Best-effort: even if abort fails, mark the state so the UI
@@ -531,7 +531,7 @@ export async function killBgAgent(instanceId, _opts = {}) {
 
 /**
  * Pause an instance's event forwarding. In v5.5.1 (SDK-based) we can't
- * freeze the underlying opencode agent loop without a documented pause
+ * freeze the underlying cline agent loop without a documented pause
  * endpoint; pause is therefore an OUTPUT pause — events that arrive
  * while paused are buffered; resume drains them.
  *
@@ -616,7 +616,7 @@ export function resumeBgAgent(instanceId) {
 
 /**
  * v5.5.1 — TRUE mid-flight steer. Sends a follow-up prompt to the
- * running opencode session via the SDK. NO kill+respawn; the same
+ * running cline session via the SDK. NO kill+respawn; the same
  * instanceId and sessionId are reused.
  *
  * Returns `{ ok: true, instanceId, mode: 'true_midflight' }`.
@@ -635,11 +635,11 @@ export async function steerBgAgent(instanceId, message) {
 
   let sdk;
   try {
-    sdk = await getOpencodeSdkOrThrow();
+    sdk = await getClineSdkOrThrow();
   } catch (err) {
     return {
       ok: false,
-      error: `opencode_serve_unavailable: ${err instanceof Error ? err.message : String(err)}`,
+      error: `cline_serve_unavailable: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 

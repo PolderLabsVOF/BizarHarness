@@ -42,8 +42,8 @@ export function showHeadroomHelp() {
     bizar headroom status              Show live status (installed, proxy, wrapped)
     bizar headroom stats              Show compression stats for the last 24h
     bizar headroom install            Install headroom via pip or npm
-    bizar headroom wrap               Wrap opencode to route through the proxy
-    bizar headroom unwrap             Unwrap opencode
+    bizar headroom wrap               Wrap cline to route through the proxy
+    bizar headroom unwrap             Unwrap cline
     bizar headroom start              Start the proxy server
     bizar headroom stop              Stop the proxy server
     bizar headroom doctor            Run headroom doctor health check
@@ -63,7 +63,7 @@ async function apiGet(path) {
   const baseUrl = `http://127.0.0.1:${port}`;
   const url = `${baseUrl}${path}`;
   const headers = { accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const res = await fetch(url, { method: 'GET', headers });
   const text = await res.text();
   let data = null;
@@ -77,7 +77,7 @@ async function apiPost(path, body = {}) {
   const baseUrl = `http://127.0.0.1:${port}`;
   const url = `${baseUrl}${path}`;
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
-  if (secret) headers.authorization = `Basic ${Buffer.from(`opencode:${secret}`).toString('base64')}`;
+  if (secret) headers.authorization = `Basic ${Buffer.from(`cline:${secret}`).toString('base64')}`;
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   const text = await res.text();
   let data = null;
@@ -149,7 +149,7 @@ async function runHeadroomCommand(headroomArgs) {
     const port = parseInt(positional[0], 10) || 8787;
     const r = await apiPost('/api/headroom/wrap', { port });
     if (r.ok) {
-      console.log(chalk.green(`  ✓ opencode wrapped with Headroom on port ${port}`));
+      console.log(chalk.green(`  ✓ cline wrapped with Headroom on port ${port}`));
     } else {
       console.log(chalk.red(`  ✗ Wrap failed: ${r.log || 'unknown error'}`));
     }
@@ -159,7 +159,7 @@ async function runHeadroomCommand(headroomArgs) {
   if (sub === 'unwrap') {
     const r = await apiPost('/api/headroom/unwrap');
     if (r.ok) {
-      console.log(chalk.green('  ✓ opencode unwrapped from Headroom'));
+      console.log(chalk.green('  ✓ cline unwrapped from Headroom'));
     } else {
       console.log(chalk.red('  ✗ Unwrap failed'));
     }

@@ -4,18 +4,18 @@
  * v1.0.0 — Headroom CLI integration for the Bizar dashboard.
  *
  * Headroom (headroom-ai) is a context compression layer that sits between
- * opencode and LLM providers. It compresses tool outputs, logs, RAG chunks,
+ * cline and LLM providers. It compresses tool outputs, logs, RAG chunks,
  * and conversation history by 60–95% before they reach the model.
  *
  * This module wraps the `headroom` CLI and exposes:
  *   - getHeadroomStatus()       — live status (installed, version, proxy, wrapped)
  *   - getHeadroomStats()        — compression statistics
  *   - installHeadroom()         — pip/npm install
- *   - wrapOpencode()           — run `headroom wrap opencode`
- *   - unwrapOpencode()          — run `headroom unwrap opencode`
+ *   - wrapCline()           — run `headroom wrap cline`
+ *   - unwrapCline()          — run `headroom unwrap cline`
  *   - startProxy()              — spawn `headroom proxy` as detached child
  *   - stopProxy()               — kill the proxy process
- *   - getOpencodeConfig()       — read opencode.json headroom status
+ *   - getClineConfig()       — read cline.json headroom status
  *   - withHeadroomProxy(url)    — prepend Headroom proxy URL if enabled
  *   - headroomStartupHook()     — auto-install/start/wrap on dashboard boot
  */
@@ -31,7 +31,7 @@ import { readSettings } from './routes/_shared.mjs';
 const HOME = homedir();
 const BIZAR_CACHE = join(HOME, '.cache', 'bizar');
 const HEADROOM_PORT_FILE = join(BIZAR_CACHE, 'headroom.port');
-const OPENCODE_JSON = join(HOME, '.config', 'opencode', 'opencode.json');
+const CLINE_JSON = join(HOME, '.config', 'cline', 'cline.json');
 const DEFAULT_HEADROOM_PORT = 8787;
 const DEFAULT_HEADROOM_HOST = '127.0.0.1';
 
@@ -213,15 +213,15 @@ export async function getHeadroomStatus() {
     messages.push('Proxy not started yet.');
   }
 
-  // 3. Check if opencode is wrapped (opencode.json has headroom provider)
-  const { configPath, hasHeadroomProvider } = await getOpencodeConfig();
+  // 3. Check if cline is wrapped (cline.json has headroom provider)
+  const { configPath, hasHeadroomProvider } = await getClineConfig();
   const wrapped = hasHeadroomProvider;
 
   if (!wrapped && installed) {
-    messages.push('opencode is not wrapped with Headroom. Run `headroom wrap opencode` or use Settings.');
+    messages.push('cline is not wrapped with Headroom. Run `headroom wrap cline` or use Settings.');
     healthy = healthy === 'ok' ? 'warn' : healthy;
   } else if (wrapped) {
-    messages.push('opencode is wrapped with Headroom.');
+    messages.push('cline is wrapped with Headroom.');
   }
 
   if (healthy === 'ok') {
@@ -340,18 +340,18 @@ export async function installHeadroom({ force = false } = {}) {
 // ── Wrap / Unwrap ───────────────────────────────────────────────────────────
 
 /**
- * Run `headroom wrap opencode --port <port>` and persist the port.
+ * Run `headroom wrap cline --port <port>` and persist the port.
  *
  * @param {{ port?: number }} [opts]
  * @returns {Promise<{ ok: boolean, port: number, pid?: number, log: string }>}
  */
-export async function wrapOpencode({ port = DEFAULT_HEADROOM_PORT } = {}) {
+export async function wrapCline({ port = DEFAULT_HEADROOM_PORT } = {}) {
   mkdirSync(BIZAR_CACHE, { recursive: true });
   writeFileSync(HEADROOM_PORT_FILE, String(port), 'utf8');
 
   const { stdout, stderr, exitCode } = await runCmd(
     'headroom',
-    ['wrap', 'opencode', '--port', String(port)],
+    ['wrap', 'cline', '--port', String(port)],
     { timeout: 30000 },
   );
 
@@ -364,14 +364,14 @@ export async function wrapOpencode({ port = DEFAULT_HEADROOM_PORT } = {}) {
 }
 
 /**
- * Run `headroom unwrap opencode`.
+ * Run `headroom unwrap cline`.
  *
  * @returns {Promise<{ ok: boolean, log: string }>}
  */
-export async function unwrapOpencode() {
+export async function unwrapCline() {
   const { stdout, stderr, exitCode } = await runCmd(
     'headroom',
-    ['unwrap', 'opencode'],
+    ['unwrap', 'cline'],
     { timeout: 30000 },
   );
 
@@ -498,15 +498,15 @@ export async function stopProxy() {
   return { ok: killed.length > 0, killed };
 }
 
-// ── Opencode config ─────────────────────────────────────────────────────────
+// ── Cline config ─────────────────────────────────────────────────────────
 
 /**
- * Read opencode.json and check for Headroom provider entry.
+ * Read cline.json and check for Headroom provider entry.
  *
  * @returns {Promise<{ configPath: string, hasHeadroomProvider: boolean, baseURL: string | null }>}
  */
-export async function getOpencodeConfig() {
-  const configPath = OPENCODE_JSON;
+export async function getClineConfig() {
+  const configPath = CLINE_JSON;
   if (!existsSync(configPath)) {
     return { configPath, hasHeadroomProvider: false, baseURL: null };
   }
@@ -574,7 +574,7 @@ export function withHeadroomProxy(url, { port = DEFAULT_HEADROOM_PORT } = {}) {
  *
  * If `headroom.autoInstall` is true and Headroom is missing: install.
  * If `headroom.autoStart` is true and proxy isn't running: start proxy.
- * If `headroom.autoWrap` is true and opencode isn't wrapped: wrap.
+ * If `headroom.autoWrap` is true and cline isn't wrapped: wrap.
  * If `headroom.routeAllProviders` is true: configure providers to use proxy.
  *
  * All errors are caught and logged — startup must not fail if Headroom
@@ -619,14 +619,14 @@ export async function headroomStartupHook(headroomSettings) {
       }
     }
 
-    // 3. Auto-wrap opencode
+    // 3. Auto-wrap cline
     if (headroomSettings.autoWrap && !statusAfter.wrapped) {
       try {
         const port = headroomSettings.port || DEFAULT_HEADROOM_PORT;
-        const wrapped = await wrapOpencode({ port });
+        const wrapped = await wrapCline({ port });
         result.wrapped = wrapped.ok;
         if (wrapped.ok) {
-          console.log('[headroom] opencode wrapped on port', port);
+          console.log('[headroom] cline wrapped on port', port);
         }
       } catch (err) {
         console.warn('[headroom] Auto-wrap failed:', err?.message || err);

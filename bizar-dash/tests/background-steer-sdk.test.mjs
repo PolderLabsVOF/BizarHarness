@@ -5,7 +5,7 @@
  * `sdk.sessions.prompt()` on the live session — NOT a kill+respawn
  * (the v5.5.0 contract). Validation tests cover the negative paths.
  *
- * We can't easily mock the opencode SDK module without a side-channel,
+ * We can't easily mock the cline SDK module without a side-channel,
  * so this test focuses on:
  *   - Validation (empty message, missing instance)
  *   - The state file written by `steerBgAgent` carries `steerCount`
@@ -48,11 +48,11 @@ test('steerBgAgent does NOT throw on missing instance — returns structured err
   const r = await steerBgAgent('bgr_definitely_missing', 'go faster');
   assert.equal(r.ok, false);
   // No SDK + no tracked instance → either instance_not_found OR
-  // opencode_serve_unavailable. Either is acceptable; what matters is
+  // cline_serve_unavailable. Either is acceptable; what matters is
   // that we DON'T silently succeed (which would be a regression from
   // the validation surface).
   assert.ok(
-    /instance_not_found|opencode_serve_unavailable/.test(r.error || ''),
+    /instance_not_found|cline_serve_unavailable/.test(r.error || ''),
     `expected structured error, got ${r.error}`,
   );
 });

@@ -6,7 +6,7 @@
  * Odin-only — only Odin may kill background instances.
  *
  * Calls `POST /session/{id}/abort` (NOT `DELETE /session/{id}`). The
- * session record is preserved in opencode for history; the running
+ * session record is preserved in cline for history; the running
  * loop is stopped.
  *
  * After abort, the next event for that session is `EventSessionIdle`

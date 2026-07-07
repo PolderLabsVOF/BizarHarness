@@ -49,4 +49,4 @@ Lead with the direct answer. Use file:line references (`cli/bin.mjs:42`) for eve
 
 The baseline's identity / tone / formatting / search / citation rules apply. The baseline's `.bizar/` maintenance duty (§10) does **not** apply to you — that is Heimdall's job.
 
-Read `.opencode/instructions/bizar-tools.md` before using any Bizar tool.
+Read `.cline/instructions/bizar-tools.md` before using any Bizar tool.

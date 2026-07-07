@@ -15,7 +15,7 @@ describe("createBizarClient", () => {
     m = makeFetchMock();
   });
 
-  it("attaches HTTP basic auth header with username 'opencode'", async () => {
+  it("attaches HTTP basic auth header with username 'cline'", async () => {
     m.respondWith("GET", "/sessions", { status: 200, body: "[]" });
 
     const client = createBizarClient({
@@ -28,7 +28,7 @@ describe("createBizarClient", () => {
     expect(isBizarError(result)).toBe(false);
     expect(m.lastRequest).not.toBeNull();
     expect(m.lastRequest!.headers["Authorization"]).toBe(
-      `Basic ${Buffer.from("opencode:secret123").toString("base64")}`,
+      `Basic ${Buffer.from("cline:secret123").toString("base64")}`,
     );
   });
 

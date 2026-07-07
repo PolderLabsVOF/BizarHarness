@@ -1,14 +1,14 @@
 # Dev Sandbox
 
-The dev sandbox is a Docker-based development environment for testing changes to BizarHarness — agent definitions, the plugin, the CLI — without touching your real `~/.config/opencode/` install. It lives in a sibling project called `BizarHarness-dev`, checked out next to the main `BizarHarness` repo in your projects directory.
+The dev sandbox is a Docker-based development environment for testing changes to BizarHarness — agent definitions, the plugin, the CLI — without touching your real `~/.config/cline/` install. It lives in a sibling project called `BizarHarness-dev`, checked out next to the main `BizarHarness` repo in your projects directory.
 
 ## What it is
 
 The dev sandbox is:
 
-- A `Dockerfile` that builds an image with `opencode`, `node`, `jq`, `uv`, and the npm packages BizarHarness depends on.
+- A `Dockerfile` that builds an image with `cline`, `node`, `jq`, `uv`, and the npm packages BizarHarness depends on.
 - A `docker-compose.yml` that mounts your project as `/project` and your `auth.json` read-only.
-- A `scripts/dev.sh` entry point that builds the image (on first run) and drops you into `opencode` inside the container.
+- A `scripts/dev.sh` entry point that builds the image (on first run) and drops you into `cline` inside the container.
 - A `scripts/sandbox-disable-extras.sh` that strips Vidarr (the GPT-5.5 agent) and the Hindsight MCP server on every container start, so the default sandbox works with just a MiniMax API key.
 
 The sandbox uses the same code you have on disk — your edits in `config/agents/thor.md` are visible inside the container instantly, no rebuild needed.
@@ -20,9 +20,9 @@ cd BizarHarness-dev
 ./scripts/dev.sh
 ```
 
-First run builds the Docker image automatically (1-2 minutes), then drops you into `opencode` inside the container. The project directory is mounted at `/project` — any edits you make on the host are visible inside the container, and vice versa.
+First run builds the Docker image automatically (1-2 minutes), then drops you into `cline` inside the container. The project directory is mounted at `/project` — any edits you make on the host are visible inside the container, and vice versa.
 
-The container starts `opencode` directly. To get a shell inside the container instead:
+The container starts `cline` directly. To get a shell inside the container instead:
 
 ```bash
 ./scripts/dev.sh bash
@@ -39,14 +39,14 @@ To rebuild the image (after changing `Dockerfile` or `package.json`):
 The image is built from a `Dockerfile` in the dev sandbox project. It includes:
 
 - `node` 20+
-- `opencode` CLI
-- `jq` (for `opencode.json` merging in the install script)
+- `cline` CLI
+- `jq` (for `cline.json` merging in the install script)
 - `uv` (for installing `semble[mcp]`)
 - `git`, `bash`, `curl`, `ca-certificates`
 
 The image is persistent across runs — it's only rebuilt when you ask (`--rebuild`) or when it doesn't exist yet. Most iterations are just a `./scripts/dev.sh` away with near-instant startup.
 
-A named Docker volume `bizar-dev-cache` is mounted at `~/.cache` inside the container. It includes `~/.cache/opencode/` and `~/.cache/bizar/`. The volume is **isolated from the host** — nothing leaks into your real `~/.cache/`. Use `./scripts/dev.sh --clean` to wipe it.
+A named Docker volume `bizar-dev-cache` is mounted at `~/.cache` inside the container. It includes `~/.cache/cline/` and `~/.cache/bizar/`. The volume is **isolated from the host** — nothing leaks into your real `~/.cache/`. Use `./scripts/dev.sh --clean` to wipe it.
 
 ## .env configuration
 
@@ -64,7 +64,7 @@ The key variables:
 | Variable | Required? | Purpose |
 |---|---|---|
 | `MINIMAX_API_KEY` | No (but model calls fail without it) | M2.7 and M3 model access (Thor, Tyr, Hermod, Baldr, Forseti) |
-| `OPENCODE_API_KEY` | No | opencode platform auth (alternative to `auth.json`) |
+| `CLINE_API_KEY` | No | cline platform auth (alternative to `auth.json`) |
 | `OPENAI_API_KEY` | No (sandbox default strips Vidarr) | GPT-5.5 access (only if you re-enable Vidarr) |
 | `HINDSIGHT_API_KEY` | No (sandbox default strips Hindsight) | Hindsight memory service (only if you re-enable) |
 | `BIZAR_LOG_LEVEL` | No | Plugin log verbosity (`debug`, `info`, `warn`, `error`) |
@@ -87,8 +87,8 @@ The dev sandbox deliberately ships **without** two features that the main BizarH
 
 Every time the container starts, the entrypoint runs `scripts/sandbox-disable-extras.sh`, which:
 
-1. Removes `vidarr.md` from `~/.config/opencode/agents/`.
-2. Removes the `hindsight` MCP entry from `opencode.json`.
+1. Removes `vidarr.md` from `~/.config/cline/agents/`.
+2. Removes the `hindsight` MCP entry from `cline.json`.
 3. Strips any remaining Anthropic model references.
 
 This means `OPENAI_API_KEY` and `HINDSIGHT_API_KEY` are not used in the default sandbox. The sandbox works with just `MINIMAX_API_KEY` (for M2.7/M3).
@@ -98,10 +98,10 @@ To re-enable Vidarr inside the container:
 ```bash
 ./scripts/dev.sh bash
 # inside the container:
-cp /project/config/agents/vidarr.md ~/.config/opencode/agents/
+cp /project/config/agents/vidarr.md ~/.config/cline/agents/
 ```
 
-To re-enable Hindsight, edit `~/.config/opencode/opencode.json` and add the `hindsight` entry back under `mcp` (see the template at `/project/config/opencode.json`).
+To re-enable Hindsight, edit `~/.config/cline/cline.json` and add the `hindsight` entry back under `mcp` (see the template at `/project/config/cline.json`).
 
 To skip the disable script entirely (e.g., for a full-feature test):
 
@@ -109,7 +109,7 @@ To skip the disable script entirely (e.g., for a full-feature test):
 docker compose -f docker-compose.yml run --entrypoint /bin/bash --rm dev
 # then inside:
 /project/install.sh
-opencode
+cline
 ```
 
 ## When to use the sandbox vs system install
@@ -120,18 +120,18 @@ opencode
 | Edit `plugins/bizar/src/loop.ts` and test the change | **Sandbox** — same, just rerun |
 | Edit `cli/install.mjs` and test the install flow | **Sandbox** — same |
 | Test a clean install of a published npm version | **Sandbox** — `./scripts/dev.sh --clean` for a fresh state |
-| Develop on your daily opencode setup with the new agent | **System install** — `./install.sh` in BizarHarness |
+| Develop on your daily cline setup with the new agent | **System install** — `./install.sh` in BizarHarness |
 | Test that a plugin change works in production config | **Sandbox** with the disable script skipped (full feature set) |
 
-The rule of thumb: the sandbox is for development and testing. The system install is for your daily opencode.
+The rule of thumb: the sandbox is for development and testing. The system install is for your daily cline.
 
 ## Commands reference
 
 ```bash
-# Normal usage — run opencode in the sandbox (builds image on first run)
+# Normal usage — run cline in the sandbox (builds image on first run)
 ./scripts/dev.sh
 
-# Get a shell instead of opencode
+# Get a shell instead of cline
 ./scripts/dev.sh bash
 
 # Rebuild the Docker image first
@@ -140,7 +140,7 @@ The rule of thumb: the sandbox is for development and testing. The system instal
 # Force a no-cache Docker build
 ./scripts/dev.sh --no-cache
 
-# Wipe the cache volume (resets plugin state, opencode cache, npm cache)
+# Wipe the cache volume (resets plugin state, cline cache, npm cache)
 ./scripts/dev.sh --clean
 
 # Combine flags
@@ -153,7 +153,7 @@ The rule of thumb: the sandbox is for development and testing. The system instal
 ./scripts/dev-clean.sh
 ```
 
-Runs `opencode run --pure "echo ready"` inside the container to verify that opencode loads, the npm install is sound, and the binary responds. It does not require a PTY and exits immediately with a pass/fail message.
+Runs `cline run --pure "echo ready"` inside the container to verify that cline loads, the npm install is sound, and the binary responds. It does not require a PTY and exits immediately with a pass/fail message.
 
 Use this after changing `Dockerfile` or `package.json` dependencies.
 
@@ -162,7 +162,7 @@ Use this after changing `Dockerfile` or `package.json` dependencies.
 | You changed... | Action |
 |---|---|
 | `config/agents/*.md` | Just rerun `./scripts/dev.sh` |
-| `config/opencode.json` | Just rerun `./scripts/dev.sh` |
+| `config/cline.json` | Just rerun `./scripts/dev.sh` |
 | `cli/*.mjs` | Just rerun `./scripts/dev.sh` |
 | `plugins/bizar/src/*` | Just rerun `./scripts/dev.sh` |
 | `install.sh` or `package.json` | Just rerun `./scripts/dev.sh` |
@@ -172,22 +172,22 @@ Use this after changing `Dockerfile` or `package.json` dependencies.
 
 ## Auth.json mount
 
-Your host has API auth stored at `~/.local/share/opencode/auth.json`. This file is mounted **read-only** at the same path inside the container:
+Your host has API auth stored at `~/.local/share/cline/auth.json`. This file is mounted **read-only** at the same path inside the container:
 
 ```
-host: ~/.local/share/opencode/auth.json
-  → container: /home/dev/.local/share/opencode/auth.json (ro)
+host: ~/.local/share/cline/auth.json
+  → container: /home/dev/.local/share/cline/auth.json (ro)
 ```
 
-- opencode inside the sandbox can **read** your API keys.
+- cline inside the sandbox can **read** your API keys.
 - The sandbox can **never modify** `auth.json` — no risk of corrupting your real config.
-- Other files in `~/.local/share/opencode/` (opencode.db, snapshots, repos) are not mounted, so they start fresh and are ephemeral.
+- Other files in `~/.local/share/cline/` (cline.db, snapshots, repos) are not mounted, so they start fresh and are ephemeral.
 
 ## Troubleshooting
 
 **"docker: command not found"** — Install Docker from https://docs.docker.com/engine/install/
 
-**"auth.json missing — sandbox will work but auth will fail"** — Log into opencode on the host first (`opencode` → `/connect`) to generate `~/.local/share/opencode/auth.json`, or set `MINIMAX_API_KEY` directly in `.env`.
+**"auth.json missing — sandbox will work but auth will fail"** — Log into cline on the host first (`cline` → `/connect`) to generate `~/.local/share/cline/auth.json`, or set `MINIMAX_API_KEY` directly in `.env`.
 
 **"Permission denied" on mounted files** — Your host UID is detected automatically (default 1000). If your UID is different:
 

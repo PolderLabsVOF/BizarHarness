@@ -4,14 +4,14 @@
 //   * 3-column grid preserved (rail / thread / info).
 //   * Composer goes through `chat.onSend`, which transparently routes
 //     to the right backend endpoint based on `activeSource`:
-//       - opencode session active → POST /api/opencode-sessions/:id/send
+//       - cline session active → POST /api/cline-sessions/:id/send
 //       - otherwise                → POST /api/chat
 //   * "New session" button calls `chat.onCreateSession` which tries
-//     POST /api/opencode-sessions/new first (so the new session is a
-//     fully-fledged opencode session, scoped to the active worktree),
-//     falling back to the local jsonl store when the opencode plugin
+//     POST /api/cline-sessions/new first (so the new session is a
+//     fully-fledged cline session, scoped to the active worktree),
+//     falling back to the local jsonl store when the cline plugin
 //     is offline.
-//   * Top-of-thread badge shows the active source ("opencode" or
+//   * Top-of-thread badge shows the active source ("cline" or
 //     "bizar chat") so the user always knows where messages are going.
 //   * Info panel gets session metadata + rename/delete actions.
 //
@@ -197,7 +197,7 @@ export function Chat({
       title: 'Delete session?',
       children: (
         <p style={{ margin: 0 }}>
-          Delete <strong>{title}</strong>? Messages on the opencode serve
+          Delete <strong>{title}</strong>? Messages on the cline serve
           will be removed. This cannot be undone.
         </p>
       ),
@@ -224,13 +224,13 @@ export function Chat({
   // ── Export transcript ────────────────────────────────────────────────────
   const handleExport = () => {
     const sessionId =
-      chat.activeSource === 'opencode'
-        ? chat.activeOpencodeSessionId
+      chat.activeSource === 'cline'
+        ? chat.activeClineSessionId
         : chat.sessionId;
     if (!sessionId) return;
     const msgs =
-      chat.activeSource === 'opencode'
-        ? chat.opencodeMessages
+      chat.activeSource === 'cline'
+        ? chat.clineMessages
         : chat.bizarMessages;
     const text = msgs
       .map((m) => {
@@ -256,29 +256,29 @@ export function Chat({
     () => chat.sessions.map((s) => chat.getSessionDisplay(s)),
     [chat.sessions, chat.getSessionDisplay],
   );
-  const displayOpencodeSessions = useMemo(
-    () => chat.opencodeSessions.map((s) => chat.getSessionDisplay(s)),
-    [chat.opencodeSessions, chat.getSessionDisplay],
+  const displayClineSessions = useMemo(
+    () => chat.clineSessions.map((s) => chat.getSessionDisplay(s)),
+    [chat.clineSessions, chat.getSessionDisplay],
   );
 
   // ── Current session for the thread head subtitle ────────────────────────
   const activeSessionDisplay = useMemo(() => {
     const id =
-      chat.activeSource === 'opencode'
-        ? chat.activeOpencodeSessionId ?? ''
+      chat.activeSource === 'cline'
+        ? chat.activeClineSessionId ?? ''
         : chat.sessionId;
     if (!id) return null;
     return (
       displaySessions.find((s) => s.id === id) ??
-      displayOpencodeSessions.find((s) => s.id === id) ??
+      displayClineSessions.find((s) => s.id === id) ??
       null
     );
   }, [
     chat.activeSource,
-    chat.activeOpencodeSessionId,
+    chat.activeClineSessionId,
     chat.sessionId,
     displaySessions,
-    displayOpencodeSessions,
+    displayClineSessions,
   ]);
 
   const threadSubtitle = (() => {
@@ -289,9 +289,9 @@ export function Chat({
     return `${base} · idle`;
   })();
 
-  // The badge in the thread head: "opencode" or "bizar chat".
+  // The badge in the thread head: "cline" or "bizar chat".
   const sourceLabel =
-    chat.activeSource === 'opencode' ? 'opencode' : 'bizar chat';
+    chat.activeSource === 'cline' ? 'cline' : 'bizar chat';
 
   return (
     <div className="chat-shell">
@@ -308,17 +308,17 @@ export function Chat({
         {/* ── rail ──────────────────────────────────────────────────────── */}
         <ChatRail
           sessions={displaySessions}
-          opencodeSessions={displayOpencodeSessions}
+          clineSessions={displayClineSessions}
           activeSessionId={chat.sessionId}
-          activeOpencodeSessionId={chat.activeOpencodeSessionId}
+          activeClineSessionId={chat.activeClineSessionId}
           activeProject={snapshot.activeProject}
           creating={chat.busy.create}
           onCreateSession={handleCreateSession}
           onSelectSession={chat.selectBizarSession}
-          onSelectOpencodeSession={(s) => chat.loadOpencodeSession(s.id)}
+          onSelectClineSession={(s) => chat.loadClineSession(s.id)}
           onRenameSession={handleRename}
           onDeleteSession={(id) => {
-            const s = chat.sessions.find((s) => s.id === id) ?? chat.opencodeSessions.find((s) => s.id === id);
+            const s = chat.sessions.find((s) => s.id === id) ?? chat.clineSessions.find((s) => s.id === id);
             handleDeleteSession(id, s?.title ?? '');
           }}
         />
@@ -336,8 +336,8 @@ export function Chat({
                     chat.activeSource ?? 'none'
                   }`}
                   title={
-                    chat.activeSource === 'opencode'
-                      ? 'Messages go to the opencode serve child'
+                    chat.activeSource === 'cline'
+                      ? 'Messages go to the cline serve child'
                       : 'Messages go to the local chat store'
                   }
                 >
@@ -352,18 +352,18 @@ export function Chat({
                 <span className="chat-thread-dot" />
                 {threadSubtitle}
               </div>
-              {chat.opencodeError && (
+              {chat.clineError && (
                 <div className="chat-thread-error" role="alert">
-                  <p className="chat-error-message">{chat.opencodeError}</p>
-                  {chat.opencodeSuggestion && (
-                    <p className="chat-error-suggestion">{chat.opencodeSuggestion}</p>
+                  <p className="chat-error-message">{chat.clineError}</p>
+                  {chat.clineSuggestion && (
+                    <p className="chat-error-suggestion">{chat.clineSuggestion}</p>
                   )}
-                  {chat.activeOpencodeSessionId && (
+                  {chat.activeClineSessionId && (
                     <button
                       className="btn btn-sm"
                       type="button"
                       onClick={() =>
-                        chat.loadOpencodeSession(chat.activeOpencodeSessionId!)
+                        chat.loadClineSession(chat.activeClineSessionId!)
                       }
                     >
                       Retry
@@ -429,15 +429,15 @@ export function Chat({
           >
             <ChatThread
               messages={
-                chat.activeSource === 'opencode'
-                  ? chat.opencodeMessages
+                chat.activeSource === 'cline'
+                  ? chat.clineMessages
                   : chat.bizarMessages
               }
               loading={chat.loading}
               activeProject={snapshot.activeProject}
               sessionId={
-                chat.activeSource === 'opencode'
-                  ? chat.activeOpencodeSessionId ?? chat.sessionId
+                chat.activeSource === 'cline'
+                  ? chat.activeClineSessionId ?? chat.sessionId
                   : chat.sessionId
               }
               pinned={chat.pinned}
@@ -491,13 +491,13 @@ export function Chat({
         {/* ── info panel ──────────────────────────────────────────────── */}
         <ChatInfoPanel
           sessionId={
-            chat.activeSource === 'opencode'
-              ? chat.activeOpencodeSessionId ?? chat.sessionId
+            chat.activeSource === 'cline'
+              ? chat.activeClineSessionId ?? chat.sessionId
               : chat.sessionId
           }
           messages={
-            chat.activeSource === 'opencode'
-              ? chat.opencodeMessages
+            chat.activeSource === 'cline'
+              ? chat.clineMessages
               : chat.bizarMessages
           }
           pinned={chat.pinned}

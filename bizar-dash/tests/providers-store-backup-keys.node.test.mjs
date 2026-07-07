@@ -4,8 +4,8 @@
  *
  * The dashboard's Providers card + the API provider config now support
  * a second `backupApiKey` slot per provider. Operators can:
- *   - Set primary in opencode.json (`apiKey`)
- *   - Set backup in opencode.json (`backupApiKey`)
+ *   - Set primary in cline.json (`apiKey`)
+ *   - Set backup in cline.json (`backupApiKey`)
  *   - Set primary via env (`MINIMAX_API_KEY`, etc.)
  *   - Set backup via env (`MINIMAX_API_KEY_BACKUP`, etc.)
  *   - Have a backup without a primary (rare; valid)
@@ -58,18 +58,18 @@ after(() => {
   try { rmSync(SANDBOX_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 
-async function writeOpencodeJson(obj) {
+async function writeClineJson(obj) {
   const { mkdirSync } = await import('node:fs');
-  const cfgDir = join(SANDBOX_HOME, '.config', 'opencode');
+  const cfgDir = join(SANDBOX_HOME, '.config', 'cline');
   mkdirSync(cfgDir, { recursive: true });
-  writeFileSync(join(cfgDir, 'opencode.json'), JSON.stringify(obj, null, 2));
+  writeFileSync(join(cfgDir, 'cline.json'), JSON.stringify(obj, null, 2));
 }
 
-async function resetOpencodeJson() {
+async function resetClineJson() {
   const { mkdirSync } = await import('node:fs');
-  const cfgDir = join(SANDBOX_HOME, '.config', 'opencode');
+  const cfgDir = join(SANDBOX_HOME, '.config', 'cline');
   mkdirSync(cfgDir, { recursive: true });
-  writeFileSync(join(cfgDir, 'opencode.json'), '{}');
+  writeFileSync(join(cfgDir, 'cline.json'), '{}');
 }
 
 describe('providers-store — backup keys (v3.20.10)', () => {
@@ -127,7 +127,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
       delete process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY_BACKUP;
       delete process.env.ANTHROPIC_API_KEY;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
 
     it('reports no backup when no env keys and no config', async () => {
@@ -143,7 +143,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     });
 
     it('detects primary from env and backup from config', async () => {
-      writeOpencodeJson({
+      writeClineJson({
         provider: {
           minimax: {
             apiKey: '',
@@ -177,7 +177,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     });
 
     it('prefers config over env for both primary and backup', async () => {
-      writeOpencodeJson({
+      writeClineJson({
         provider: {
           minimax: {
             apiKey: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
@@ -230,9 +230,9 @@ describe('providers-store — backup keys (v3.20.10)', () => {
       delete process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY_BACKUP;
       delete process.env.ANTHROPIC_API_KEY;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
-    it('persists backupApiKey in opencode.json', async () => {
+    it('persists backupApiKey in cline.json', async () => {
       const store = await loadStore();
       await store.add({
         id: 'minimax',
@@ -241,7 +241,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
         backupApiKey: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       });
       // Re-read from disk to confirm persistence.
-      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/opencode/opencode.json'), 'utf8'));
+      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/cline/cline.json'), 'utf8'));
       assert.equal(raw.provider.minimax.apiKey, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
       assert.equal(raw.provider.minimax.backupApiKey, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
     });
@@ -278,7 +278,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
       });
       assert.equal(updated.name, 'MiniMax (renamed)');
       // Stored values must be preserved — mask-keep semantics.
-      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/opencode/opencode.json'), 'utf8'));
+      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/cline/cline.json'), 'utf8'));
       assert.equal(raw.provider.minimax.apiKey, 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');
       assert.equal(raw.provider.minimax.backupApiKey, 'ffffffffffffffffffffffffffffffffffffffffff');
     });
@@ -293,7 +293,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
       await store.update('minimax', {
         backupApiKey: 'iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii',
       });
-      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/opencode/opencode.json'), 'utf8'));
+      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/cline/cline.json'), 'utf8'));
       assert.equal(raw.provider.minimax.backupApiKey, 'iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii');
       assert.equal(raw.provider.minimax.apiKey, 'gggggggggggggggggggggggggggggggggggggg');
     });
@@ -307,14 +307,14 @@ describe('providers-store — backup keys (v3.20.10)', () => {
       });
       // Operator clears the backup field.
       await store.update('minimax', { backupApiKey: '' });
-      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/opencode/opencode.json'), 'utf8'));
+      const raw = JSON.parse(readFileSync(join(SANDBOX_HOME, '.config/cline/cline.json'), 'utf8'));
       assert.equal(raw.provider.minimax.backupApiKey, '');
     });
   });
 
   describe('listAll — backup key surfaced', () => {
     it('reports backupApiKey (masked) and source', async () => {
-      writeOpencodeJson({
+      writeClineJson({
         provider: {
           minimax: {
             apiKey: 'llllllllllllllllllllllllllllllllllllllll',
@@ -352,7 +352,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     beforeEach(async () => {
       delete process.env.MINIMAX_API_KEY;
       delete process.env.MINIMAX_API_KEY_BACKUP;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
 
     it('legacy apiKey is exposed as a keys[] entry on list()', async () => {
@@ -410,7 +410,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     beforeEach(async () => {
       delete process.env.MINIMAX_API_KEY;
       delete process.env.MINIMAX_API_KEY_BACKUP;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
 
     it('returns null when the provider does not exist', async () => {
@@ -472,7 +472,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     beforeEach(async () => {
       delete process.env.MINIMAX_API_KEY;
       delete process.env.MINIMAX_API_KEY_BACKUP;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
 
     it('records errorCount + lastError on the named envVar', async () => {
@@ -534,7 +534,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     beforeEach(async () => {
       delete process.env.MINIMAX_API_KEY;
       delete process.env.MINIMAX_API_KEY_BACKUP;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
 
     it('promotes the next standby key', async () => {
@@ -574,7 +574,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     beforeEach(async () => {
       delete process.env.MINIMAX_API_KEY;
       delete process.env.MINIMAX_API_KEY_BACKUP;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
 
     it('addBackupKey appends a new standby key', async () => {
@@ -638,7 +638,7 @@ describe('providers-store — backup keys (v3.20.10)', () => {
     beforeEach(async () => {
       delete process.env.MINIMAX_API_KEY;
       delete process.env.MINIMAX_API_KEY_BACKUP;
-      await resetOpencodeJson();
+      await resetClineJson();
     });
 
     it('returns the fn result on first success', async () => {

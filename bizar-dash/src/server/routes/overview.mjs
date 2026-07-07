@@ -17,7 +17,7 @@ import { providersStore, mcpsStore } from '../providers-store.mjs';
 import { modsLoader } from '../mods-loader.mjs';
 import { error as logError } from '../logger.mjs';
 import {
-  OPENCODE_JSON,
+  CLINE_JSON,
   readSettings,
   safeReadJSON,
   wrap,
@@ -65,7 +65,7 @@ export function createOverviewRouter({ state }) {
   });
 
   function buildSnapshot() {
-    const cfg = safeReadJSON(OPENCODE_JSON, null);
+    const cfg = safeReadJSON(CLINE_JSON, null);
     const active = projectsStore.active();
     return {
       overview: state.getOverview(),
@@ -74,10 +74,10 @@ export function createOverviewRouter({ state }) {
       projects: projectsStore.list().projects,
       activeProject: active,
       config: {
-        path: OPENCODE_JSON,
+        path: CLINE_JSON,
         data: cfg,
         raw: cfg === null ? '' : JSON.stringify(cfg, null, 2),
-        exists: existsSync(OPENCODE_JSON),
+        exists: existsSync(CLINE_JSON),
       },
       settings: readSettings(),
       tasks: active ? tasksStore.loadTasks(active.id) : [],

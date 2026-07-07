@@ -9,7 +9,7 @@ Three-layer persistent memory for project knowledge.
 
 ## Architecture
 
-1. **Markdown (truth)** - Obsidian-compatible `.md` files with YAML frontmatter, wikilinks, and callouts. Stored in per-project vaults under `~/.config/opencode/memory/<project>/`.
+1. **Markdown (truth)** - Obsidian-compatible `.md` files with YAML frontmatter, wikilinks, and callouts. Stored in per-project vaults under `~/.config/cline/memory/<project>/`.
 2. **Git (collaboration)** - Vaults are Git-tracked and synced. The vault path is unique per project, enabling team sharing via normal Git workflow.
 3. **LightRAG (derived index, Phase 2)** - When the LightRAG server runs, the memory service indexes all vault entries for fast full-text retrieval.
 
@@ -20,7 +20,7 @@ At session start, call `obsidian_list_vaults` (via the Obsidian MCP tool or CLI)
 ## Vault Structure
 
 ```
-~/.config/opencode/memory/<project>/
+~/.config/cline/memory/<project>/
   .obsidian/         # Obsidian config (workspace.json etc.)
   index.md           # Entry point: links to recent, important, pinned notes
   projects/          # Project-specific notes

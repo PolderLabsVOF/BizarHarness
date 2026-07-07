@@ -17,7 +17,7 @@
  * Auto-instrumentation is intentionally NOT enabled. The dashboard
  * already has structured logger + Prometheus for the "what" metrics, so
  * distributed tracing is only interesting for the multi-step flows
- * where request correlation matters (chat SSE pump, opencode session
+ * where request correlation matters (chat SSE pump, cline session
  * creation, plugin install, workspace invites, etc).
  *
  * Off by default. Enable with one of:

@@ -6,7 +6,7 @@
  * (MEDIUM-42), BIZAR_SERVE_DISABLE=1 (LOW-43), restart with backoff (HIGH-9).
  *
  * We mock Bun.spawn to return a fake subprocess so tests are deterministic
- * and do not actually spawn opencode serve.
+ * and do not actually spawn cline serve.
  */
 
 import { describe, it, expect, beforeEach, vi } from "bun:test";
@@ -87,7 +87,7 @@ describe("ServeLifecycle spawn args", () => {
   it("uses --port 0 by default (random OS-assigned port)", async () => {
     const fake = new FakeServeLifecycle();
     await fake.start();
-    // The real implementation would call Bun.spawn with ["opencode", "serve", "--port", "0", "--hostname", "127.0.0.1"]
+    // The real implementation would call Bun.spawn with ["cline", "serve", "--port", "0", "--hostname", "127.0.0.1"]
     expect(fake.port).toBe(4096); // fake sets this; real impl reads from stdout
   });
 
@@ -97,7 +97,7 @@ describe("ServeLifecycle spawn args", () => {
     expect(fake.baseUrl).toContain("127.0.0.1");
   });
 
-  it("passes OPENCODE_SERVER_PASSWORD in env (HIGH-24)", async () => {
+  it("passes CLINE_SERVER_PASSWORD in env (HIGH-24)", async () => {
     const fake = new FakeServeLifecycle();
     await fake.start();
     expect(fake.password).toBeTruthy();

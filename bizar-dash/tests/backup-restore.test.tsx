@@ -68,7 +68,7 @@ const mockBackups = [
       version: '4.8.0',
       createdAt: '2025-07-05T12:00:00.000Z',
       label: null,
-      paths: ['config', 'opencode'],
+      paths: ['config', 'cline'],
     },
   },
 ];

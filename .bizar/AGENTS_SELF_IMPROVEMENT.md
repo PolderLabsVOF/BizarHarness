@@ -17,7 +17,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 11. **Schema tolerance for external state files** — files written by sibling processes MUST be parsed defensively. Use an additive schema: require only the fields you need.
 12. **Health probes must not depend on auth** — use TCP-connect (`net.createConnection`, 1.5s timeout), not HTTP.
 13. **Before declaring a subsystem "done," exercise a full write/read/search/delete round-trip.** Unit tests prove the parts work; round-trip proves the system works. Non-negotiable.
-14. **Always pass `--agent` explicitly when spawning sub-agents via `opencode run`.** The `--title` is UI-only; `--agent` is the sole discriminator for model routing.
+14. **Always pass `--agent` explicitly when spawning sub-agents via `cline run`.** The `--title` is UI-only; `--agent` is the sole discriminator for model routing.
 15. **The user's "it should just be X" usually means config drift** — sweep the whole codebase, not just one file, when model/provider complaints arise.
 16. **Background agents MUST stream live visibility (WS progress, tool call history, active session markers).** State files alone are insufficient — the operator cannot trust an invisible process. Every background agent dispatch must produce real-time status the dashboard can render.
 17. **Debug persistent "loading..." indicators—they are never OK.** If a loader shows forever, the underlying fetch or state init is broken. Add timeout fallbacks and error states; don't ship a spinner that can hang indefinitely.
@@ -29,12 +29,12 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Task**: Ship four parallel streams — steering followup (true mid-flight SDK sessions), settings UI restructure (13 independent tabs), memory vault path fix, server log fixes + registry URL correction + browser extension cleanup.
 - **Approach**: Parallel implementation (@thor/@tyr) + @hermod commit/push/publish.
 - **Lessons learned**:
-  - **SDK sessions enable true mid-flight steering.** Rewriting `bg-spawner.mjs` to use `sdk.sessions.create()` + `sdk.sessions.promptAsync()` and delegating plugin tools to dashboard HTTP eliminates the subprocess isolation that blocked mid-flight steering. The `opencode-runner.ts` stub prevents future accidental subprocess spawning for background agents.
+  - **SDK sessions enable true mid-flight steering.** Rewriting `bg-spawner.mjs` to use `sdk.sessions.create()` + `sdk.sessions.promptAsync()` and delegating plugin tools to dashboard HTTP eliminates the subprocess isolation that blocked mid-flight steering. The `cline-runner.ts` stub prevents future accidental subprocess spawning for background agents.
   - **Persistent "loading..." is never acceptable.** The memory vault path was stuck "loading..." because the `/memory/status` fetch was never called or its result never processed. Every async state init needs a timeout fallback and an error state — not just a spinner that can hang forever.
   - **LightRAG ECONNREFUSED spam is a UX regression.** The warn log was spamming the operator's terminal because `isRunning()` kept trying to connect to a server that wasn't installed. The `_lightRAGNotInstalled` flag short-circuits the check and the rate-limited log prevents noise without suppressing useful signals.
   - **MV3 browser extension `sendMessage` can throw synchronously.** Chrome terminates service workers at will, making disconnected ports throw sync errors on `postMessage`. Every extension message call must be wrapped in try/catch with both sync and async paths.
   - **Registry URL drift breaks the marketplace.** The `DrB0rk/bizar-plugins` repo was renamed to `DrB0rk/bizar-mods` — a 404 on every marketplace load until corrected.
-- **Files changed**: 32 modified + 6 new + 4 deleted (`SettingsNav.tsx`, `settings-layout.test.tsx`, `settings-mode-wiring.test.tsx`, `settings-nav.test.tsx`). Key paths: `bg-spawner.mjs`, `bg-spawn.ts`, `bg-send-message.ts`, `opencode-runner.ts`, `background.ts`, `background-state.ts`, `server.mjs`, `memory-lightrag.mjs`, `headroom.mjs`, `registry.mjs`, `content.js`, settings sidebar/tab components.
+- **Files changed**: 32 modified + 6 new + 4 deleted (`SettingsNav.tsx`, `settings-layout.test.tsx`, `settings-mode-wiring.test.tsx`, `settings-nav.test.tsx`). Key paths: `bg-spawner.mjs`, `bg-spawn.ts`, `bg-send-message.ts`, `cline-runner.ts`, `background.ts`, `background-state.ts`, `server.mjs`, `memory-lightrag.mjs`, `headroom.mjs`, `registry.mjs`, `content.js`, settings sidebar/tab components.
 - **Agents used**: Odin (router), Thor/Tyr (parallel impl), Hermod (commit/push/publish).
 - **Published**: `@polderlabs/bizar@5.5.1` (pending — this entry appended pre-publish).
 
@@ -44,21 +44,21 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Approach**: Three parallel implementation streams (@thor/@tyr) + bug-fix sweep + strategic docs (@mimir) + @forseti audit → @hermod commit/push/publish.
 - **Lessons learned**:
   - **WS streaming replaces polling for live agent visibility.** The 2s polling interval was replaced with WebSocket streaming — every tool call, progress update, and state change pushes immediately to the dashboard. The operator no longer needs to guess what a background agent is doing.
-  - **LightRAG no longer requires ollama as a hard dependency.** The auto-detect logic now checks `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `MINIMAX_API_KEY`, and `OPENCODE_API_KEY` env vars and uses whichever is available, falling back to FTS. Fresh installs no longer need a separate ollama process.
+  - **LightRAG no longer requires ollama as a hard dependency.** The auto-detect logic now checks `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `MINIMAX_API_KEY`, and `CLINE_API_KEY` env vars and uses whichever is available, falling back to FTS. Fresh installs no longer need a separate ollama process.
   - **Auto-reindex on every note write keeps the LightRAG index current.** Incremental `reindexSingleNote` runs after each `bizar_memory_write`, so semantic search never returns stale results. The alternative (full reindex on startup) was too slow for large vaults.
   - **Installer idempotency via `installed.json` marker.** Re-running install.sh now detects a previous install and skips re-populating env vars, preventing accidental overwrites of user-configured values. The marker also gates the Headroom companion service setup.
-  - **Mid-task steering uses kill+respawn with `[STEERED <ts>]` marker.** True mid-flight prompt injection requires opencode internals (v0.9.x); the current implementation kills the subprocess and respawns with the new system prompt, preserving continuity via the timestamp marker.
+  - **Mid-task steering uses kill+respawn with `[STEERED <ts>]` marker.** True mid-flight prompt injection requires cline internals (v0.9.x); the current implementation kills the subprocess and respawns with the new system prompt, preserving continuity via the timestamp marker.
 - **Files changed**: 38 modified + 27 new (background agents: `plugins/bizar/src/tools/bg-pause.ts`, `bg-resume.ts`, `bg-send-message.ts`, `bg-report-progress.ts`, `bg-spawner.mjs`, `BackgroundAgents.tsx`, `SpawnAgentModal.tsx`; memory: `plugins/bizar/src/tools/memory-{search,read,write,list}.ts`, `hooks/`, `memory-lightrag.mjs`, `memory-store.mjs`; installer: `install.sh`, `install.ps1`, `service-controller.mjs`, `service-env.mjs`, `post-install-smoke.mjs`, `lightrag.mjs`; docs: `ROADMAP.md`, `FINAL_GOAL.md`, `PROJECT.md`, `CHANGELOG.md`).
 - **Agents used**: Odin (router), Thor/Tyr (parallel impl streams), Heimdall (docs, self-improvement log), Mimir (strategic docs), Forseti (audit), Hermod (commit/push/publish).
 - **Published**: `@polderlabs/bizar@5.5.0` (pending — this entry appended pre-publish).
 
 ### 2026-06-26: v3.20.10 — Comprehensive auto-installer + API provider backup keys
 - **Task**: Make `install.sh` a complete one-shot installer that fetches every system dep (uv, Python 3.12, chrome-headless-shell, jq, browser-harness, BizarHarness npm packages, mod registry) + write install-state.json for migrations. Add `backupApiKey` slot per provider + `backupEnvKeys` env var detection. Fix pre-existing "patch without apiKey loses the stored key" bug.
-- **Approach**: One Odin turn. Rewrote install.sh (535 lines) as a comprehensive auto-installer with single status banner — no manual next steps, no API key collection, no opencode reload hint. Added `preserveOrReplace()` helper to providers-store so `update()` keeps the stored apiKey when the patch omits it. Added 14 tests covering the backup-keys contract.
+- **Approach**: One Odin turn. Rewrote install.sh (535 lines) as a comprehensive auto-installer with single status banner — no manual next steps, no API key collection, no cline reload hint. Added `preserveOrReplace()` helper to providers-store so `update()` keeps the stored apiKey when the patch omits it. Added 14 tests covering the backup-keys contract.
 - **Lessons learned**:
   - **Installer should never collect secrets.** Asking for API keys during install breaks CI / scripted deployments and leaks secrets into installer logs. The user can configure keys via `/connect` after install. The installer's job is "files + processes + chrome + skills"; secrets are the user's responsibility on their machine.
   - **`unmask(stored, undefined) === undefined` is a footgun.** When a form re-submits with the masked `***short***` placeholder, the existing `unmask()` correctly preserves the stored value. But when the patch omits the field entirely, `unmask` returns `undefined` — losing the stored key on every partial-update. The fix: short-circuit undefined to keep the stored value, since "field not in patch" semantically means "don't touch this field". The `preserveOrReplace()` helper makes this explicit.
-  - **Backup keys, not automatic rotation.** Some "smart" APIs auto-failover between keys. opencode doesn't — it uses one key per provider. So `backupApiKey` is a manual swap, not a rotation: the operator sees both keys in the dashboard, and if the primary hits a rate limit, they edit opencode.json to swap them. The dashboard UI shows both with their respective status / source so the swap is one click.
+  - **Backup keys, not automatic rotation.** Some "smart" APIs auto-failover between keys. cline doesn't — it uses one key per provider. So `backupApiKey` is a manual swap, not a rotation: the operator sees both keys in the dashboard, and if the primary hits a rate limit, they edit cline.json to swap them. The dashboard UI shows both with their respective status / source so the swap is one click.
   - **MiniMax accepts 3 backup envKeys.** ANTHROPIC_API_KEY already serves as a fallback for MiniMax's Anthropic-format API (per providers-detect.mjs). For backup, MINIMAX_API_KEY_BACKUP, MINIMAX_BACKUP_API_KEY, and ANTHROPIC_API_KEY_BACKUP are all conventional. The naming-convention check accepts both `_API_KEY_BACKUP` and `_BACKUP_API_KEY` so the test doesn't lock out either spelling.
 - **Files changed**: `install.sh` (rewritten, 535 lines), `bizar-dash/src/server/providers-store.mjs` (+282 / -197), `bizar-dash/tests/providers-store-backup-keys.node.test.mjs` (new, 14 tests), `package.json` (test script entry).
 - **Agents used**: Odin (direct; task tool still broken in this env).
@@ -68,8 +68,8 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Task**: Uninstall `agent-browser` npm package + scrub every `agent_browser_*` reference from shipped config and the user's installed config. The browser-harness Python tool (v3.20.7) is now the canonical browser-automation path.
 - **Approach**: One Odin turn. `npm uninstall -g agent-browser` first (package + bin shim), then sweep 4 source files + sync to 2 user-installed mirrors + add a drift test that points at the violating files.
 - **Lessons learned**:
-  - **Sweep for tool-removals, not just one file.** `agent-browser` was referenced in 7 files: source (4) + shipped-skill (1) + user's installed config (2). Updating only `config/agents/browser-harness.md` would have left the agent-baseline skill and the user's `~/.config/opencode/AGENTS.md` pointing at the dead tool. Always grep across `config/`, `cli/`, `install.sh`, `*.md`, AND the user's `~/.config/` mirrors.
-  - **The shipped `~/.config/opencode/` mirrors the source tree.** opencode's installer copies the source files into the user's config dir at install time, but if the source changes later, the user's copy doesn't auto-sync. The fix is to manually re-`cp` on tool-removal — or have the installer re-run. Document this asymmetry in the user's release notes.
+  - **Sweep for tool-removals, not just one file.** `agent-browser` was referenced in 7 files: source (4) + shipped-skill (1) + user's installed config (2). Updating only `config/agents/browser-harness.md` would have left the agent-baseline skill and the user's `~/.config/cline/AGENTS.md` pointing at the dead tool. Always grep across `config/`, `cli/`, `install.sh`, `*.md`, AND the user's `~/.config/` mirrors.
+  - **The shipped `~/.config/cline/` mirrors the source tree.** cline's installer copies the source files into the user's config dir at install time, but if the source changes later, the user's copy doesn't auto-sync. The fix is to manually re-`cp` on tool-removal — or have the installer re-run. Document this asymmetry in the user's release notes.
   - **A drift test beats a manual grep.** `no-agent-browser.node.test.mjs` walks the source tree, fails with a clear "agent-browser references found in shipped code: <files>" message. Future contributors who re-introduce `agent-browser` (or any other deprecated tool) get an immediate, actionable error at test time — no more "huh, why is this still here?" archaeology.
   - **NPM package uninstall + PATH check, both.** `npm uninstall -g agent-browser` removes the package + bin shim, but `which agent-browser` is the canonical "is it gone?" check. Run both — the test confirms the file system state, not the runtime PATH.
 - **Files changed**: 4 source files (config/agents/browser-harness.md, config/agents/_shared/AGENT_BASELINE.md, config/AGENTS.md, install.sh) + 1 sync (`cp` to user's installed configs) + 1 test (no-agent-browser.node.test.mjs) + 1 package.json script update + 1 npm uninstall.
@@ -119,8 +119,8 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Approach:** Three parallel research streams (@mimir for slash commands, schedules, background system) → four parallel implementation streams (@thor for installer + slash-command dialogs, @tyr for OpenRouter migration + schedules overhaul, @heimdall for background UX) → @forseti audit → fix dispatch for 3 CRITICAL + 4 HIGH findings → @thor test gate → Odin does housekeeping inline (version bump, CHANGELOG entry, this entry) → @hermod release commit + push + tag.
 
 - **Lessons learned:**
-  - **The plugin `chat.message` hook silently hijacks every `/`-prefixed message** including commands that opencode would have dispatched natively. The "Unknown command" branch in `commands.ts` returned `handled: true`, swallowing `/audit`, `/explain`, `/init`, `/learn`, `/pr-review`, `/tailscale-serve` — the agent files referenced by `command:` in `opencode.json` were never reached. Fix: only intercept commands that need plugin-side effects (`/visual-plan`, `/plan`, `/bizar`); let the rest fall through.
-  - **`throw new Error(text)` from `chat.message` is a footgun.** It looks like an error, but opencode treats it as the assistant response — the user sees the thrown string as a chat bubble. Any plugin that wants to communicate something to the UI without producing a chat reply must write to a side channel (file bus or WS), not throw.
+  - **The plugin `chat.message` hook silently hijacks every `/`-prefixed message** including commands that cline would have dispatched natively. The "Unknown command" branch in `commands.ts` returned `handled: true`, swallowing `/audit`, `/explain`, `/init`, `/learn`, `/pr-review`, `/tailscale-serve` — the agent files referenced by `command:` in `cline.json` were never reached. Fix: only intercept commands that need plugin-side effects (`/visual-plan`, `/plan`, `/bizar`); let the rest fall through.
+  - **`throw new Error(text)` from `chat.message` is a footgun.** It looks like an error, but cline treats it as the assistant response — the user sees the thrown string as a chat bubble. Any plugin that wants to communicate something to the UI without producing a chat reply must write to a side channel (file bus or WS), not throw.
   - **A "deferred to vX.Y" comment is technical debt that ages into a bug.** `schedules-runner.mjs:107-111` had `"agent dispatch (deferred to v3.1)"` — three minor versions later it was still a stub logging success for a no-op. Audit cycles need to specifically flag TODO comments with version numbers and either ship them or remove them.
   - **Cron libraries are worth the dependency.** The hand-rolled 5-field cron evaluator (`nextCronMinute`) worked for simple patterns but had no timezone support and would have been wrong on the very feature the user asked for (Sunday 1pm ET). `croner` (10KB gzipped, built-in IANA TZ, single `.nextRun()` API) replaced 40 lines and added timezone, validation, and iterator support. Don't roll your own cron.
   - **`restartCount` on the child instance is not enough.** When persistent instances auto-restart, each child has its own counter starting fresh — a chain can exceed `maxRestarts` indefinitely. The fix is to walk the `parentInstanceId` chain and sum all counters, cycle-safe.
@@ -158,7 +158,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Context**: AMS Studio memories were scattered across 75 docs in the default bank instead of the ams-studio bank. All 10 agent files said "use default bank".
 - **Lesson**: Per-project bank policy was documented but not enforced — agents kept writing to default. Need explicit bank selection logic at session start.
 - **Pattern**: At session start: (1) `hindsight_list_banks` (2) determine project name (3) `hindsight_recall` with correct `bank_id` (4) create bank if missing
-- **Files**: ~/.config/opencode/AGENTS.md, ~/.config/opencode/agents/odin.md, heimdall.md, mimir.md, vor.md, hermod.md, thor.md, baldr.md, tyr.md, vidarr.md, forseti.md
+- **Files**: ~/.config/cline/AGENTS.md, ~/.config/cline/agents/odin.md, heimdall.md, mimir.md, vor.md, hermod.md, thor.md, baldr.md, tyr.md, vidarr.md, forseti.md
 - **Agent**: thor, tyr
 - **Details**: 40+ ams-studio docs migrated via `hindsight_sync_retain`. All agent files updated to use per-project banks with `bank_id` parameter. AGENTS.md now has bank selection rules table. Odin updated with session-start bank workflow.
 
@@ -206,13 +206,13 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - `scripts/dev.sh`: rewrote to use sibling-relative path resolution (`dirname dirname BASH_SOURCE` → `../BizarHarness`)
 - **Agents used**: heimdall (Docker setup), hermod (repo split + remotes), thor (quick agent + name research)
 - **Lessons learned**:
-  - opencode config is **always** merged from global + project + env. There is no "skip global" flag. Only Docker gives true clean-install isolation. For daily dev, harness scripts in a temp dir + symlinks are fast and inherit API keys.
+  - cline config is **always** merged from global + project + env. There is no "skip global" flag. Only Docker gives true clean-install isolation. For daily dev, harness scripts in a temp dir + symlinks are fast and inherit API keys.
   - When splitting a repo, copy first, commit, then `git rm` from source. Use local file paths for the remotes (not GitHub URLs) — developer can swap to GitHub when ready.
-  - The dev sandbox's `dev.sh` should validate that the sibling project exists before launching (`test -f $PROJECT_DIR/opencode.json`) so misconfig fails fast.
-- **Pattern to follow next time**: For any opencode config/plugin project, default architecture is two repos — the main (shipped) and a `-dev` sibling (Docker sandbox + dev scripts). Use bidirectional file-path remotes; swap to GitHub URLs when pushing.
+  - The dev sandbox's `dev.sh` should validate that the sibling project exists before launching (`test -f $PROJECT_DIR/cline.json`) so misconfig fails fast.
+- **Pattern to follow next time**: For any cline config/plugin project, default architecture is two repos — the main (shipped) and a `-dev` sibling (Docker sandbox + dev scripts). Use bidirectional file-path remotes; swap to GitHub URLs when pushing.
 
-### 2026-06-17: Built Bizar opencode plugin (v0.1 → v0.3.1 spec → implementation)
-- **Task**: User wanted loop detection, agent status reporting, and handoff-to-Odin for stuck subagents. Built the `bizar` opencode plugin in 7 source files, 7 test files, 112 tests passing.
+### 2026-06-17: Built Bizar cline plugin (v0.1 → v0.3.1 spec → implementation)
+- **Task**: User wanted loop detection, agent status reporting, and handoff-to-Odin for stuck subagents. Built the `bizar` cline plugin in 7 source files, 7 test files, 112 tests passing.
 - **Files changed** (under `plugins/bizar/`):
   - `index.ts` — Plugin entry, hook wiring, init try/catch, per-session mutex
   - `src/fingerprint.ts` — Canonical key sort, worktree-relative path normalization, sha256 hash
@@ -228,7 +228,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Files changed** (wiring):
   - `cli/copy.mjs` — `installPluginBizar()` function (86 lines)
   - `cli/install.mjs`, `cli/prompts.mjs`, `cli/utils.mjs` — wired as install component
-  - `config/opencode.json` — added `plugin` array with bizar entry + options
+  - `config/cline.json` — added `plugin` array with bizar entry + options
   - `install.sh` — plugin copy section + post-merge jq injection (idempotent)
 - **Files changed** (agent prompts):
   - All 11 subagent files got byte-identical `## Loop Guard Handling` section (verified via SHA256)
@@ -241,12 +241,12 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - **`tool.execute.before` does NOT carry the agent name**. Drop per-call agent attribution; track per-session only. Agent identity comes from `chat.message` history.
   - **Bun is single-threaded but async I/O interleaves** — you need a per-session mutex (chain of pending Promises) to prevent re-entrancy corruption in `tool.execute.after`.
   - **Use `experimental.chat.system.transform`** for handoff message injection. NOT `chat.message` (which fires for every user message, not just on dispatch) and NOT mutating `output.parts` (risky).
-  - **opencode agent file name IS the TUI display name** — the `name:` frontmatter field is silently ignored. For user-visible function descriptors in agent names, the only viable separator is hyphen (`odin-orchestrator.md`, NOT `odin (orchestrator).md` which would show parens literally). User input needed to decide on naming.
+  - **cline agent file name IS the TUI display name** — the `name:` frontmatter field is silently ignored. For user-visible function descriptors in agent names, the only viable separator is hyphen (`odin-orchestrator.md`, NOT `odin (orchestrator).md` which would show parens literally). User input needed to decide on naming.
   - **Per-session mutex is necessary but not free** — `bun test` default 5s timeout can hit if the mutex test is real I/O. Use in-memory locks for unit tests.
   - **When two parallel agents (Thor + Tyr) both implement `options.ts`**, the second must delete theirs and re-create to match the first's naming. Interface contracts in the task prompt prevent this; explicit naming matters.
   - **`jq -s '.[0] * .[1]'` does NOT deep-merge arrays** — it REPLACES them. For `install.sh`, after the merge, post-inject the plugin entry to handle the case where the existing config has `plugin: []` that would wipe the template's plugin array.
 - **Pattern to follow next time**:
-  - For any new opencode plugin: 3-phase flow (spec → Forseti audit → parallel impl by Thor+Tyr). Skip audit for trivial plugins (<100 lines, no security implications).
+  - For any new cline plugin: 3-phase flow (spec → Forseti audit → parallel impl by Thor+Tyr). Skip audit for trivial plugins (<100 lines, no security implications).
   - Always define interface contracts explicitly in the task prompt when dispatching parallel agents to the same file area. Naming collisions are the #1 cause of merge conflicts in parallel work.
   - The `## Loop Guard Handling` section text must be **byte-identical** across all subagents — verified by SHA256 after the edit. One canonical text, never paraphrased.
   - When writing spec sections, run a self-audit pass after each changelog: check that no test bullet contradicts any lifecycle claim. The v0.3 → v0.3.1 fix was an internal contradiction between §4.5.1 and §12.1 — caught only because Tyr explicitly flagged it.
@@ -260,7 +260,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 ### 2026-06-18: SECURITY INCIDENT — Hindsight bearer token leaked
 
-**Context**: A Hindsight API bearer token was committed to `config/opencode.json` on Jun 16 (commit `f167aec`) and shipped in npm versions 1.0.0, 1.1.0, 1.2.0, 1.2.1, 1.2.2, and 2.0.0. Detected during a v2.1.0 audit on Jun 18. Fixed in commit `6fe76df` (replaced with placeholder).
+**Context**: A Hindsight API bearer token was committed to `config/cline.json` on Jun 16 (commit `f167aec`) and shipped in npm versions 1.0.0, 1.1.0, 1.2.0, 1.2.1, 1.2.2, and 2.0.0. Detected during a v2.1.0 audit on Jun 18. Fixed in commit `6fe76df` (replaced with placeholder).
 
 **Timeline**:
 - Jun 16 20:58 — token introduced in commit `f167aec`
@@ -270,9 +270,9 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - Jun 18 — incident response: npm deprecate, BFG history scrub, gitignore + pre-commit hook
 
 **Lessons learned**:
-- **Audit files before pushing them.** The token was in `config/opencode.json` since v1.2.1; multiple audit passes during v2.0.0 development should have caught this BEFORE pushing to GitHub and npm. They didn't.
+- **Audit files before pushing them.** The token was in `config/cline.json` since v1.2.1; multiple audit passes during v2.0.0 development should have caught this BEFORE pushing to GitHub and npm. They didn't.
 - **Never commit tokens to a repo, even private ones.** Tokens belong in environment variables or gitignored local files. The "private repo is safe" assumption failed here — even a private repo's history is a leak surface.
-- **Add `.gitignore` BEFORE the first commit, not after.** The fix should be: `config/opencode.json` was never tracked.
+- **Add `.gitignore` BEFORE the first commit, not after.** The fix should be: `config/cline.json` was never tracked.
 - **Pre-commit hooks catch what humans miss.** A token-scanning pre-commit hook would have blocked the original commit.
 - **Audit responses must include git history cleanup**, not just file fixes. The file fix doesn't remove the token from history.
 - **npm deprecate is not enough** — old tarballs remain downloadable. The token must be REVOKED at the provider regardless.
@@ -284,8 +284,8 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - If a leak is found post-push, the response is: revoke + deprecate + scrub history + add preventive measures
 
 **Files changed in response**:
-- `config/opencode.json` — removed from tracking (replaced with `config/opencode.json.template`)
-- `.gitignore` — added `config/opencode.json`
+- `config/cline.json` — removed from tracking (replaced with `config/cline.json.template`)
+- `.gitignore` — added `config/cline.json`
 - `scripts/git-hooks/pre-commit` — new hook that scans staged changes for secrets
 - `scripts/install-hooks.sh` — new script to install the hook per-clone
 - npm: deprecated versions 1.0.0–2.0.0 with security warning
@@ -294,7 +294,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 **Agent(s) used**: heimdall
 
 ### 2026-06-18: Added 3 C++ skills to BizarHarness (cpp-coding-standards, cpp-testing, embedded-esp-idf)
-- **Context**: User asked to fill gaps in the opencode skills bundle and then ship them in BizarHarness. Authored 3 skills in `~/.opencode/skills/`, copied them to `BizarHarness/config/skills/`, wired the installer, and forward-tested on `feature_flags.cpp` in `/projects/ams7_esp32/`.
+- **Context**: User asked to fill gaps in the cline skills bundle and then ship them in BizarHarness. Authored 3 skills in `~/.cline/skills/`, copied them to `BizarHarness/config/skills/`, wired the installer, and forward-tested on `feature_flags.cpp` in `/projects/ams7_esp32/`.
 - **Lesson**: Forward-testing is non-negotiable for non-trivial skills. The first pass of `$embedded-esp-idf` buried NVS and logging under FreeRTOS and IRAM, which the forward test immediately flagged as wrong-priority for review tasks. A 1-line task-to-reference index in the Resources section fixes this without restructuring SKILL.md.
 - **Pattern**: For any new skill with 5+ references, add a task-to-reference table near the Resources section. Tests showed agents waste context loading the wrong reference (~5KB each) when no index exists.
 - **Files**: `BizarHarness/config/skills/{cpp-coding-standards,cpp-testing,embedded-esp-idf}/`, `cli/prompts.mjs`, `cli/install.mjs`, `install.sh`, `wiki/Getting-Started.md`, `wiki/Installation.md`, `.bizar/PROJECT.md`
@@ -305,7 +305,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - `embedded-esp-idf` (421 lines, 7 references + 2 scripts) — ESP-IDF v5.x C++ patterns with AMS7 extensions tagged `(AMS7)`. Includes `scripts/idf_env.sh` and `scripts/size_check.sh`. Trigger on idf.py, FreeRTOS, IRAM/DRAM/PSRAM, packed structs, NVS, BLE/ESP-NOW, Kconfig, host tests.
   - Forward-test on `/projects/ams7_esp32/main/runtime/feature_flags.cpp` found 9 real issues: VLA in `Configuration::GetString` (gcc extension), virtual destructor with no base class, unused `<fstream>`/`<list>` headers, hardcoded `"DEBUG"` log tag, missing `const` on query functions, swallowed `nvs_set_*` errors, `nvs_flash_init()` called on every operation, fragile `FeatureFlag::Count`-sized array, and a missing test file.
   - Skills improved post-test: added `references/nvs.md` to embedded-esp-idf (NVS init anti-patterns, error handling, AMS7 `"ams7cfg"` namespace); added task-to-reference index; added 2 quick-start checklist items to cpp-coding-standards (virtual destructor without base, unused standard-library headers).
-  - BizarHarness installer now exposes all 3 as opt-in components (`skill-cpp-std`, `skill-cpp-test`, `skill-esp-idf`) plus the new `install.sh` skills loop that copies all 5 bundled skills to `~/.opencode/skills/`. `install.sh` previously did NOT copy any skills — this was a gap-fill.
+  - BizarHarness installer now exposes all 3 as opt-in components (`skill-cpp-std`, `skill-cpp-test`, `skill-esp-idf`) plus the new `install.sh` skills loop that copies all 5 bundled skills to `~/.cline/skills/`. `install.sh` previously did NOT copy any skills — this was a gap-fill.
 
 ### 2026-06-21: API auth + api.mjs split (v3.6.0)
 - **Context**: Addressed two deferred audit items for `@polderlabs/bizar-dash`: (1) bearer-token auth on the dashboard API + secure defaults (localhost bind), and (2) split the 2,395-line `api.mjs` monolith into per-domain router modules under `src/server/routes/`.
@@ -329,7 +329,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 - **Context:** User reported two parallel agents colliding on git operations in the same project. The harness had no mechanism to inform a subagent that sibling agents were running concurrently. Subagents shared the working directory and `.git/` directory and could (and did) race on `.git/index.lock`, branch contention, and silent file overwrites.
 
-- **Root cause:** Odin's system prompt told it to dispatch 2+ agents in parallel via `task` calls but did not require it to inform each subagent about its siblings. Subagent prompts contained no parallel-awareness language. The shared `AGENTS.md` baseline had no universal parallel rules. No git worktree isolation exists (OpenCode upstream support not yet available).
+- **Root cause:** Odin's system prompt told it to dispatch 2+ agents in parallel via `task` calls but did not require it to inform each subagent about its siblings. Subagent prompts contained no parallel-awareness language. The shared `AGENTS.md` baseline had no universal parallel rules. No git worktree isolation exists (Cline upstream support not yet available).
 
 - **Fix (prompt-level only — no infrastructure changes):**
   - Added "Parallel Dispatch Coordination" to both copies of `odin.md`: pre-dispatch checklist, sibling-awareness block template with placeholders, sequential fallback for monolithic tasks.
@@ -339,10 +339,10 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Pattern for next time:** When the orchestrator dispatches parallel agents, it MUST prepend a `## PARALLEL EXECUTION CONTEXT` block listing siblings + file scopes + git rules. Subagents MUST treat the file scope as a hard boundary. Only Hermod performs write-level git. If a task cannot be decomposed into disjoint file scopes, do not parallelize — dispatch sequentially.
 
 - **Files changed:**
-  - `~/.config/opencode/agents/odin.md` (runtime)
+  - `~/.config/cline/agents/odin.md` (runtime)
   - `config/agents/odin.md` (source)
   - `config/AGENTS.md` (shared baseline)
-  - `~/.config/opencode/agents/{thor,tyr,heimdall,mimir,vidarr,baldr,forseti,hermod}.md` (runtime, 8 files)
+  - `~/.config/cline/agents/{thor,tyr,heimdall,mimir,vidarr,baldr,forseti,hermod}.md` (runtime, 8 files)
   - `config/agents/{thor,tyr,heimdall,mimir,vidarr,baldr,forseti,hermod}.md` (source, 8 files)
 
 - **Agents used:** @mimir (audit + research), @thor (Odin + shared baseline), @tyr (subagent prompts), @heimdall (verification + self-improvement).
@@ -350,7 +350,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Follow-ups:**
   - Pre-existing drift between runtime and source agent files (different model identifiers, permission lists) — out of scope for this fix but worth a future `bizar install` review.
   - Heimdall may need an explicit exception for writing to `.bizar/AGENTS_SELF_IMPROVEMENT.md` when dispatched in parallel — currently the "scope is sacred" rule could conflict.
-  - OpenCode upstream `isolation: worktree` support (PR #21680) is the long-term fix; this prompt-level discipline is the bridge.
+  - Cline upstream `isolation: worktree` support (PR #21680) is the long-term fix; this prompt-level discipline is the bridge.
 
 ### 2026-06-22 — graphify per-project knowledge graph integration
 
@@ -377,33 +377,33 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 **Follow-ups:**
 - `bizar init` shells out to `npx bizar graph build` which requires either a global `@polderlabs/bizar` install or `node_modules/.bin/bizar`. The robust fallback is `node <repo>/cli/bin.mjs graph build`. If this proves flaky in real use, swap the spawn call.
 - graphify is per-project by default but supports a global cross-project graph (`graphify global add <tag>`). A future enhancement could add `bizar graph global` to manage this from the harness.
-- The OpenCode skill/plugin auto-install via `graphify install --platform opencode --project` is exposed through `bizar graph install` but not yet wired into `bizar init`. Consider adding it as a follow-up so init drops the OpenCode skill alongside building the graph.
+- The Cline skill/plugin auto-install via `graphify install --platform cline --project` is exposed through `bizar graph install` but not yet wired into `bizar init`. Consider adding it as a follow-up so init drops the Cline skill alongside building the graph.
 
 ### 2026-06-23 — Concise thinking rule + MiniMax interleaved fix
 
-**Context:** User reported two issues: (1) agents ramble for 15+ minutes with informal self-talk ("oh but what if", "actually this is better"), (2) thinking output shows up as raw `<thinking>...</thinking>` text instead of native thinking blocks in opencode, mostly when using MiniMax via openrouter.
+**Context:** User reported two issues: (1) agents ramble for 15+ minutes with informal self-talk ("oh but what if", "actually this is better"), (2) thinking output shows up as raw `<thinking>...</thinking>` text instead of native thinking blocks in cline, mostly when using MiniMax via openrouter.
 
 **Root causes:**
 - (1) Agent .md files described themselves as "reasoning engines" with no concision constraints. Combined with `variant: "high"` + `reasoning: true` on the model, thinking was unbounded.
-- (2) opencode's `interleaved` provider config was missing. Without it, opencode does not extract thinking from MiniMax's `reasoning_details` field on openrouter, so the raw tokens leak into the visible response.
+- (2) cline's `interleaved` provider config was missing. Without it, cline does not extract thinking from MiniMax's `reasoning_details` field on openrouter, so the raw tokens leak into the visible response.
 
 **Files changed:**
 - `config/rules/thinking.md` (NEW, 56 lines) — concise thinking rule with hard bans on informal self-talk, 80-word cap, one-shot decision pattern, BAD/GOOD examples
 - `config/AGENTS.md` — added thinking rule to the rule files table + new "Thinking Rule" subsection
 - `config/agents/*.md` (12 files) — added "## Thinking style" section that references the new rule
-- `config/opencode.json.template` — added `provider.minimax.models` and `provider.openrouter.models` blocks with `interleaved: { field: "reasoning_details" }` and `reasoning: true` for MiniMax-M3, MiniMax-M2.7, minimax-m3, minimax-m2.7, owl-alpha (live `config/opencode.json` is gitignored — regenerated by `install.sh` on next run)
+- `config/cline.json.template` — added `provider.minimax.models` and `provider.openrouter.models` blocks with `interleaved: { field: "reasoning_details" }` and `reasoning: true` for MiniMax-M3, MiniMax-M2.7, minimax-m3, minimax-m2.7, owl-alpha (live `config/cline.json` is gitignored — regenerated by `install.sh` on next run)
 - `install.sh` — added post-install warning about lowering `variant: "high"` on odin/tyr/forseti
 
 **Agents used:** Thor (concise thinking rules) + Tyr (provider config)
 
 **Lessons learned:**
 - When a model has `reasoning: true` and `variant: "high"`, the prompt must explicitly cap thinking length and ban informal phrases — otherwise the model interprets "be a reasoning engine" as license to ramble.
-- opencode's `interleaved` field is required for any model that streams thinking in a non-standard field (MiniMax uses `reasoning_details`, DeepSeek uses `reasoning_content`). Without it, the raw tokens leak into output.
+- cline's `interleaved` field is required for any model that streams thinking in a non-standard field (MiniMax uses `reasoning_details`, DeepSeek uses `reasoning_content`). Without it, the raw tokens leak into output.
 - The project's `minimax/MiniMax-M3` model ID format differs from the user's actual `minimax/minimax-m3` setup. Provider config must cover BOTH to work for fresh installs and existing user setups.
 
 **Pattern to follow next time:**
 - Every agent .md file should reference `config/rules/thinking.md` in a "## Thinking style" section, not duplicate the rule text.
-- When adding a new model to `config/opencode.json.template`, also add it to `provider.<providerID>.models` with the correct `interleaved` field for that model's thinking stream.
+- When adding a new model to `config/cline.json.template`, also add it to `provider.<providerID>.models` with the correct `interleaved` field for that model's thinking stream.
 - Use `interleaved: { field: "reasoning_details" }` for MiniMax models on openrouter.
 - Install script should warn about `variant: "high"` being a verbosity multiplier.
 
@@ -472,7 +472,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Root causes** (all three contributed to the same failure):
   1. **Strict serve-info schema** — `readServeInfo()` required 6 fields (`baseUrl`, `port`, `password`, `worktree`, `pid`, `startedAt`) but the user's `serve.json` only had 3 (`password`, `pid`, `port`). Returned `null`, which cascaded into the dispatch path's `if (serveInfo && serveReachable)` guard short-circuiting. Every new bg instance was marked `dispatchPending: true` forever.
   2. **Auth-dependent health probe** — `pingOpencodeServe()` did `HTTP GET /health` with Basic auth. Even after fixing the schema, the probe would have returned 401 in many configurations.
-  3. **Broken logPath** — `path.join(worktree, '.opencode', 'log', id)` with empty `worktree` produced `//.opencode/log/...` (double slash, missing homedir).
+  3. **Broken logPath** — `path.join(worktree, '.cline', 'log', id)` with empty `worktree` produced `//.cline/log/...` (double slash, missing homedir).
 
 - **Fix**: Relaxed `serve-info.mjs` schema — `readServeInfo()` now requires only `password` (string) + `port` (number); derives `baseUrl` from port when missing; defaults `worktree` and `startedAt` to empty/zero when missing. Replaced HTTP probe with TCP-connect via `net.createConnection` (1.5s timeout) — no auth dependency, no false negatives. New `deriveAbsoluteBgLogPath()` always returns an absolute path with sensible fallback to `~/.cache/bizar/logs/`. New `bg-retry.mjs` (569 lines) — periodic 30s retry loop that walks `~/.cache/bizar/bg/`, finds stuck instances, repairs broken logPath atomically, re-issues the dispatch. First tick fires on `setImmediate` so existing stuck instances recover immediately on next dashboard boot. Caps at `MAX_DISPATCH_RETRIES=10`. New `POST /api/background/:id/retry` endpoint for manual unstick. `task-delegator.mjs` falls back to `projectRoot` when `serveInfo.worktree` is empty.
 
@@ -481,7 +481,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Agents used**: @mimir (research), @heimdall (environment check), @tyr (M3, fix), @thor (M2.7, test gate + live E2E), @hermod (commit).
 
 - **Lessons learned**:
-  - **External state files need defensive schemas.** Files written by sibling processes (opencode plugin → `serve.json`) evolve independently. Strict schemas create silent failures. Always require only what you need, derive the rest.
+  - **External state files need defensive schemas.** Files written by sibling processes (cline plugin → `serve.json`) evolve independently. Strict schemas create silent failures. Always require only what you need, derive the rest.
   - **Health probes must not depend on auth.** Use `net.createConnection` for "is this process alive?" — not an authenticated HTTP GET. Auth-gated endpoints can return 401 even when the service is healthy.
   - **State machines need a recovery story, not just a happy path.** The Jun 19 E2E test fixtures were the canary — 6 instances in `dispatchPending: true` for 4+ days told us no one was watching this transition. Recovery mechanisms belong in the same PR as the state machine, not as a follow-up.
   - **Log every transition failure with enough context to diagnose from the file alone.** The user had no way to know WHY their instances were stuck. The bg file just said `dispatchPending: true` — no error, no log line, no broadcast. The new retry loop logs every attempt with instance id, retry count, and failure reason.
@@ -493,17 +493,17 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Task**: Run full install → update → use → integration test of the v0.7.0-alpha.1 refactor inside the bizarharness-dev Docker sandbox. Fix any issues found.
 - **Files changed**: 7 files (bizar-dash/{cli.mjs, server.mjs, v2-auth-file.mjs, routes-v2/index.mjs}; plugins/bizar/{index.ts, src/event-stream.ts}; scripts/bizar-sim.sh)
 - **Agents used**: Direct execution (Odin) — Tyr/Thor task-tool routing still broken this session
-- **Approach**: Single bash script in the container: install bizar to user prefix, copy plugin source, npm install plugin deps, start dashboard from LOCAL source (npm v3.11.0 lacks v2 routes), curl v2 routes, subscribe SSE, run opencode, run all test suites. Iteration: fixed three real bugs discovered during the simulation (route order, auth-file port, CLI arg parsing).
+- **Approach**: Single bash script in the container: install bizar to user prefix, copy plugin source, npm install plugin deps, start dashboard from LOCAL source (npm v3.11.0 lacks v2 routes), curl v2 routes, subscribe SSE, run cline, run all test suites. Iteration: fixed three real bugs discovered during the simulation (route order, auth-file port, CLI arg parsing).
 - **Test results in container**: 157 tests green (28 SDK vitest + 6 plugin dashboard-client bun + 7 dashboard smoke + 116 existing plugin tests). Zero regressions.
 - **Critical bugs found and fixed**:
   1. **Route order** — `/api/v2` mounted after `/api/apiRouter` was swallowed by apiRouter's internal 404 catch-all (api.mjs:109). Fix: mount v2 BEFORE apiRouter.
   2. **Auth-file port drift** — dashboard's auth file persisted `port: 0` from a previous run because my `loadOrCreateAuth` was reading `parsed.port` instead of using the current `port` arg. Fix: always use current port, rewrite file when persisted differs.
   3. **CLI arg parsing** — `dashboard dash start --port 4098` silently ignored `--port`. Fix: parse `--port` and `--bind` in cli.mjs `main()`.
-- **Pre-existing bug fixed (not from my refactor)**: plugin's `event` hook assumed `event.sessionID` was top-level but opencode's events have `sessionID` inside `properties.sessionID`. Result: hook returned early for every event. Fixed in plugins/bizar/index.ts.
-- **Opencode `run` mode doesn't emit lifecycle events** — `event` hook only fires for long-running TUI/server sessions. The simulation's `opencode run <prompt>` is too short-lived. The v2 protocol itself verified end-to-end via the SDK smoke test (which POSTs to `/api/v2/event` and the SSE subscriber receives it).
+- **Pre-existing bug fixed (not from my refactor)**: plugin's `event` hook assumed `event.sessionID` was top-level but cline's events have `sessionID` inside `properties.sessionID`. Result: hook returned early for every event. Fixed in plugins/bizar/index.ts.
+- **Cline `run` mode doesn't emit lifecycle events** — `event` hook only fires for long-running TUI/server sessions. The simulation's `cline run <prompt>` is too short-lived. The v2 protocol itself verified end-to-end via the SDK smoke test (which POSTs to `/api/v2/event` and the SSE subscriber receives it).
 - **Lessons learned**:
   - **Add request-log middleware to HTTP servers during integration testing.** A one-line `console.log(\`[v2-req] ${req.method} ${req.originalUrl}\`)` middleware is the fastest way to confirm "is the client even reaching us?" Static startup logs don't show mid-run traffic.
-  - **Dev container has stale opencode.json model names** (`openrouter/minimax/minimax-m3` doesn't exist in opencode-ai 1.17.7). Use `--model opencode/deepseek-v4-flash-free` for the free tier. The model's actual ID was `MiniMax-M3` per opencode's suggestion, but that was a non-existent model in this container.
+  - **Dev container has stale cline.json model names** (`openrouter/minimax/minimax-m3` doesn't exist in cline 1.17.7). Use `--model cline/deepseek-v4-flash-free` for the free tier. The model's actual ID was `MiniMax-M3` per cline's suggestion, but that was a non-existent model in this container.
   - **`npm install -g` fails with EACCES in dev containers** where the Dockerfile installs packages as root but the runtime user is `dev`. Workaround: `npm install -g --prefix=~/.local`. The `~/.local/bin` is then in PATH.
   - **Cache volumes in dev containers persist auth files across runs** — `bizarharness-dev-cache:/home/dev/.cache` keeps stale `dash-auth.json` with `port: 0` from a previous run. Always delete or rewrite.
 - **Pattern to follow next time**: For any HTTP+SSE refactor, the simulation harness (scripts/bizar-sim.sh) is the right shape:
@@ -511,12 +511,12 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   2. Use `--prefix=~/.local` for npm installs to avoid EACCES
   3. Run dashboard from LOCAL source (npm-published may be older than working tree)
   4. Add request-log middleware to BOTH ends (client SDK logs + server route logs)
-  5. Run an SDK smoke test (publishes + subscribes via curl) BEFORE testing organic opencode events — confirms the protocol works independently of opencode lifecycle timing
-  6. Then test organic events with a real opencode session
+  5. Run an SDK smoke test (publishes + subscribes via curl) BEFORE testing organic cline events — confirms the protocol works independently of cline lifecycle timing
+  6. Then test organic events with a real cline session
   7. Commit each fix as you discover it (otherwise you lose track of which fix solved which issue)
 
 ### 2026-06-24: Plugin↔Dashboard v2 Protocol — HTTP+SSE via @polderlabs/bizar-sdk
-- **Task**: Rebuild plugin↔dashboard communication per three target sources (zenobi-us/bun-module, opencode SDK, opencode server). Full implementation + tests + iterations + push + publish. Tyr/Thor task-tool routing was broken this session, so Odin executed end-to-end directly.
+- **Task**: Rebuild plugin↔dashboard communication per three target sources (zenobi-us/bun-module, cline SDK, cline server). Full implementation + tests + iterations + push + publish. Tyr/Thor task-tool routing was broken this session, so Odin executed end-to-end directly.
 - **Files changed**: 42 files, +5300 lines (new: `packages/sdk/*`, `bizar-dash/src/server/routes-v2/*`, `bizar-dash/src/server/v2-*`, `.bizar/research/*`, plugin dashboard-client + tests; modified: CHANGELOG, root + plugin package.json, dashboard server.mjs)
 - **Scope change**: Initial draft was `@bizarharness/sdk`. User corrected to `@polderlabs/bizar-sdk` to match the existing `@polderlabs/{bizar,bizar-dash,bizar-plugin}` naming. Renamed across all files and re-ran all tests.
 - **Agents used**: Direct execution (Odin), research by @mimir + @vor + @general
@@ -532,7 +532,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - **`bun test tests/foo.test.ts` treats the path as a name filter** — must use `./tests/foo.test.ts` (or run from the dir) to ensure it's treated as a path. Adds 5 minutes of confusion otherwise.
   - **Path resolution under routes-v2/ is fragile** — `__dirname/../../..` from `src/server/routes-v2/` gives `bizar-dash/`, then `..` (one up) gives the repo root, NOT `..` twice. Always enumerate candidate paths explicitly rather than computing "the right number of `..`". Search paths made the smoke test pass on the first try after the bug.
   - **Background agents and direct execution are NOT mutually exclusive on infrastructure failure** — when task-tool subagent routing silently fails (Tyr/Thor's OpenRouter routing was 500ing), the user said "continue" which meant: take it yourself. Odin can execute end-to-end with `read/write/edit/bash` when the agent tier is unavailable, but loses the parallel-dispatch advantage.
-  - **Opencode v1 session routes are broken upstream** (`/session`, `/session/{id}/prompt_async` etc. all hang indefinitely per `.bizar/opencode-sse-investigation.md`) — the plugin's v0.4.1 background-agent spec calls them. Pinning to v2 (`/api/session/*`) is mandatory. The plugin refactor for this is still pending (deferred to v0.8.0).
+  - **Cline v1 session routes are broken upstream** (`/session`, `/session/{id}/prompt_async` etc. all hang indefinitely per `.bizar/cline-sse-investigation.md`) — the plugin's v0.4.1 background-agent spec calls them. Pinning to v2 (`/api/session/*`) is mandatory. The plugin refactor for this is still pending (deferred to v0.8.0).
 - **Pattern to follow next time**:
   1. When `task` tool fails for tier-3/tier-4 agents, **verify** with a minimal prompt first (`task thor "say hi"`) before assuming the issue is prompt-size. If minimal works, escalate to larger prompts via background agents (`bizar_spawn_background`).
   2. For every SDK design, **smoke-test the 204 path explicitly** in the first test pass. Fetch spec gotchas (no body for 204/205/304) only surface at runtime.
@@ -586,15 +586,15 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Task**: User reported `bizar_spawn_background` (and the dashboard's bg dispatch) create sessions in the bg state file and spawn tmux sessions, but the agents never do any work. Investigate root cause, fix, and add regression tests.
 - **Files changed**: `bizar-dash/src/server/lib/path-safe.mjs` (added `getBgLogDir` + `getActualBgLogPath`); `bizar-dash/src/server/task-delegator.mjs:605` (use real log path); `bizar-dash/src/server/bg-retry.mjs:392` (use real log path); `bizar-dash/src/server/background-store.mjs` (added `killTmuxFor`, wired into `cleanup`); `bizar-dash/tests/path-safe.test.mjs` (NEW, 9 tests); `bizar-dash/tests/tmux-wrap.test.mjs` (NEW, 3 tests, end-to-end smoke with real tmux); `BizarHarness-dev/Dockerfile` (added `tmux` to apt); `scripts/pass11-bg-spawn.sh` (NEW, empirical test); `package.json` (added new tests to `npm test`); `CHANGELOG.md` (documented the fix + the agent-loop architecture issue).
 - **Two root causes found**:
-  1. **Phantom log file** — `task-delegator.mjs:605` tailed `<worktree>/.bizar/opencode.log`; `bg-retry.mjs:392` tailed `<worktree>/.opencode/log/<id>.log`. **Nothing in the system writes to either path.** The plugin's `LogWriter` (plugins/bizar/src/report.ts:147) writes to `~/.cache/bizar/logs/<sessionId>.log` (default `logDir` in options.ts:88). The tmux panes showed `tail: cannot open ... for reading: No such file or directory` in an infinite retry loop. The user correctly interpreted "session spawned, tmux empty" as "agent doing nothing."
-  2. **Agent-loop architecture** — `opencode serve` is a passive HTTP server (per the opencode docs: "the TUI is the client that talks to the server"). The plugin POSTs prompts via `POST /api/session/{id}/prompt` and the server admits them, but no agent loop processes the prompt unless a TUI/web client is connected. This is a **fundamental design issue** with the plugin's "headless" model. Documented in `task-delegator.mjs:596-624`; fix is planned for v0.8.0 (spawn `opencode run` per spawn instead of relying on the HTTP API).
+  1. **Phantom log file** — `task-delegator.mjs:605` tailed `<worktree>/.bizar/cline.log`; `bg-retry.mjs:392` tailed `<worktree>/.cline/log/<id>.log`. **Nothing in the system writes to either path.** The plugin's `LogWriter` (plugins/bizar/src/report.ts:147) writes to `~/.cache/bizar/logs/<sessionId>.log` (default `logDir` in options.ts:88). The tmux panes showed `tail: cannot open ... for reading: No such file or directory` in an infinite retry loop. The user correctly interpreted "session spawned, tmux empty" as "agent doing nothing."
+  2. **Agent-loop architecture** — `cline serve` is a passive HTTP server (per the cline docs: "the TUI is the client that talks to the server"). The plugin POSTs prompts via `POST /api/session/{id}/prompt` and the server admits them, but no agent loop processes the prompt unless a TUI/web client is connected. This is a **fundamental design issue** with the plugin's "headless" model. Documented in `task-delegator.mjs:596-624`; fix is planned for v0.8.0 (spawn `cline run` per spawn instead of relying on the HTTP API).
 - **Empirical method**:
-  1. Started `opencode serve` in the dev container as a daemon
+  1. Started `cline serve` in the dev container as a daemon
   2. Subscribed to SSE (`/api/event`) to capture the event stream
   3. POSTed `/api/session` (success — got `ses_...` id)
   4. POSTed `/api/session/{id}/prompt` (success — got `{"data":{"admittedSeq":1, ...}}`)
   5. Waited 30s, captured SSE: only `server.connected`, `session.created`, `session.next.prompt.admitted`. No agent activity.
-  6. Spawned a tmux session with the dashboard's actual command (`tail -F /project/.bizar/opencode.log`): pane showed `tail: cannot open ... for reading: No such file or directory` repeating forever.
+  6. Spawned a tmux session with the dashboard's actual command (`tail -F /project/.bizar/cline.log`): pane showed `tail: cannot open ... for reading: No such file or directory` repeating forever.
 - **Fixes**:
   - `getActualBgLogPath({ sessionId })` returns the path the LogWriter writes to. Honors `BIZAR_LOG_DIR` env override. Falls back to `~/.cache/bizar/logs`. Sanitizes unsafe characters in the session id.
   - Both call sites (dispatch + retry) now use it.
@@ -605,8 +605,8 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - `tmux-wrap.test.mjs`: 3 tests including an **end-to-end smoke** that spawns a real tmux session, writes a log line, captures the pane, and asserts the content is visible (NOT a `cannot open` error). This test would have failed pre-fix and would have caught the bug.
 - **Lessons learned**:
   - **Always empirically test the user's complaint, not just the code path.** Mimir's research said "tmux wraps a non-existent file" — useful, but it took a real `tail -F` in a real tmux pane to confirm the user-facing symptom. The user's complaint was correct; the bug was real; the fix is straightforward.
-  - **Cross-check log paths across the codebase.** The plugin records a log path in its state file (`<worktree>/.opencode/log/<id>.log`), the dashboard has its own repair function (`deriveAbsoluteBgLogPath`), the dashboard's dispatch uses a different hardcoded path (`.bizar/opencode.log`), and the LogWriter actually writes to a third path (`~/.cache/bizar/logs/<sessionId>.log`). **Four different log paths, three of which are phantoms.** Centralize in `getActualBgLogPath`.
-  - **Read the upstream docs before designing a "headless" integration.** The opencode docs explicitly say `opencode serve` needs a TUI client. The plugin's design assumed `opencode serve` would do work on its own. The fix is either to spawn `opencode run` per spawn (v0.8.0) or to require a TUI connection (current).
+  - **Cross-check log paths across the codebase.** The plugin records a log path in its state file (`<worktree>/.cline/log/<id>.log`), the dashboard has its own repair function (`deriveAbsoluteBgLogPath`), the dashboard's dispatch uses a different hardcoded path (`.bizar/cline.log`), and the LogWriter actually writes to a third path (`~/.cache/bizar/logs/<sessionId>.log`). **Four different log paths, three of which are phantoms.** Centralize in `getActualBgLogPath`.
+  - **Read the upstream docs before designing a "headless" integration.** The cline docs explicitly say `cline serve` needs a TUI client. The plugin's design assumed `cline serve` would do work on its own. The fix is either to spawn `cline run` per spawn (v0.8.0) or to require a TUI connection (current).
   - **The `tail -F` flag is double-edged.** It "follows" the file (good for hot-reloading) but it does NOT show an error when the file doesn't exist — it just sits there. That's why a phantom file showed nothing in the pane rather than a clear "missing file" message. The fix is to point at a real path; `-F` will then do its job correctly.
 - **Pattern to follow next time**:
   1. **When a user reports "X happens but nothing visible happens," check the visibility layer first.** The spawn might work; the dashboard might say "running"; the state file might be correct — but the operator-visibility layer (logs, tmux, SSE UI) might be broken.
@@ -617,29 +617,29 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 ### 2026-06-24d: v0.8.0 — Background agent architecture rewrite (FIX 3)
 - **Task**: User asked "fix 3. Architectural issue" — the bg-spawn-sessions-but-do-nothing bug. Implement the v0.8.0 path that replaces the passive HTTP API with an active subprocess path, plus add `bizar bg view` for live monitoring, plus ensure Odin goes idle after spawning.
-- **Files changed**: 11 files. `plugins/bizar/src/opencode-runner.ts` (NEW, 361 lines, Bun.spawn-based); `plugins/bizar/src/tools/bg-spawn.ts` (rewritten to use runner); `plugins/bizar/src/background-state.ts` (added 11 optional runner fields); `plugins/bizar/src/background.ts` (added public `maybeAutoRestart`); `plugins/bizar/index.ts` (BgSpawnDeps no longer needs http); `bizar-dash/src/server/opencode-runner.mjs` (NEW, 230 lines, Node child_process); `bizar-dash/src/server/task-delegator.mjs` (refactored dispatch to use runner); `cli/bg.mjs` (NEW, 360 lines, list/view/status/logs/kill subcommands); `cli/bin.mjs` (wired `bizar bg` into CLI); `config/agents/odin.md` (added "go idle after spawning" guidance); `package.json` (added opencode-runner test to npm test); `CHANGELOG.md`; `scripts/pass12-bg-architecture.sh` (NEW e2e test).
-- **Architecture shift**: from passive HTTP API to active subprocess. Each background agent now spawns one `opencode run <prompt>` process that drives the agent loop to completion. Captures stdout+stderr to the LogWriter's log file. Parses the sessionId from the structured stderr log stream (`message=created id=(ses_[A-Za-z0-9_]+)`).
+- **Files changed**: 11 files. `plugins/bizar/src/cline-runner.ts` (NEW, 361 lines, Bun.spawn-based); `plugins/bizar/src/tools/bg-spawn.ts` (rewritten to use runner); `plugins/bizar/src/background-state.ts` (added 11 optional runner fields); `plugins/bizar/src/background.ts` (added public `maybeAutoRestart`); `plugins/bizar/index.ts` (BgSpawnDeps no longer needs http); `bizar-dash/src/server/cline-runner.mjs` (NEW, 230 lines, Node child_process); `bizar-dash/src/server/task-delegator.mjs` (refactored dispatch to use runner); `cli/bg.mjs` (NEW, 360 lines, list/view/status/logs/kill subcommands); `cli/bin.mjs` (wired `bizar bg` into CLI); `config/agents/odin.md` (added "go idle after spawning" guidance); `package.json` (added cline-runner test to npm test); `CHANGELOG.md`; `scripts/pass12-bg-architecture.sh` (NEW e2e test).
+- **Architecture shift**: from passive HTTP API to active subprocess. Each background agent now spawns one `cline run <prompt>` process that drives the agent loop to completion. Captures stdout+stderr to the LogWriter's log file. Parses the sessionId from the structured stderr log stream (`message=created id=(ses_[A-Za-z0-9_]+)`).
 - **The "view" subcommand**: `bizar bg view` creates a tmux control session (`bgr_view`) with N panes (one per running agent), each `tail -F` of the agent's log. Then opens a desktop window attached to it. Cross-platform via:
   - macOS: `osascript -e 'tell app "Terminal" to do script "tmux attach -t bgr_view"'`
   - Linux: `gnome-terminal` / `konsole` / `xterm` (whichever is found)
   - Windows: `wt.exe` / `cmd`
   - Fallback: print the attach command for the user to run manually
 - **The "go idle" prompt update**: Odin's prompt now explicitly tells the LLM "acknowledge the spawn, return control to the user, do NOT call `bizar_collect` unless the user explicitly asked for the result". The previous trap was that the LLM called `bizar_collect` immediately after spawn and waited for the result, leaving the user staring at a frozen conversation.
-- **Test results (post-fix)**: 510 plugin tests + 28 SDK tests + 7 dashboard v2 smoke + 19 dashboard unit tests (path-safe 9, tmux-wrap 3, opencode-runner 7) + 116 root typecheck — all green. Pass 12 in the dev container verifies the active-spawn path end-to-end: opencode serve starts, dashboard starts, task submitted, runner spawns `opencode run`, bg state file written, log file written with structured stderr, `bizar bg list` shows the agent.
+- **Test results (post-fix)**: 510 plugin tests + 28 SDK tests + 7 dashboard v2 smoke + 19 dashboard unit tests (path-safe 9, tmux-wrap 3, cline-runner 7) + 116 root typecheck — all green. Pass 12 in the dev container verifies the active-spawn path end-to-end: cline serve starts, dashboard starts, task submitted, runner spawns `cline run`, bg state file written, log file written with structured stderr, `bizar bg list` shows the agent.
 - **Empirical proof of the fix** (from dev container):
   - Pre-fix: SSE shows only `server.connected`, `session.created`, `session.next.prompt.admitted` — no agent activity. Sessions sit forever in admitted state.
-  - Post-fix: `opencode-runner.mjs` directly spawns `opencode run`, gets a sessionId, captures `loop session.id=ses_... step=0/1/2/...` events in the log, and the `onExit` callback fires when the subprocess exits.
+  - Post-fix: `cline-runner.mjs` directly spawns `cline run`, gets a sessionId, captures `loop session.id=ses_... step=0/1/2/...` events in the log, and the `onExit` callback fires when the subprocess exits.
 - **Lessons learned**:
   - **The "stops and does nothing" trap is an LLM UX issue, not a code issue.** Once the runner actually works, the user-facing problem is solved by making sure the LLM doesn't call `bizar_collect` immediately and block. The prompt update is as important as the code fix.
-  - **`opencode run` vs `opencode serve`**: I learned from the opencode docs that the serve child is passive and needs a TUI client. The plugin should NEVER have used the HTTP API as the work driver. This is a fundamental design issue with v0.4-v0.7. v0.8.0 fixes it.
-  - **Cross-runtime runner**: The plugin is Bun-native (uses `Bun.spawn` and `ReadableStream<Uint8Array>`), the dashboard is Node (uses `child_process.spawn` and stream 'data' events). I had to write two implementations that share the same wire format and same test surface. Keeping them in sync via the CHANGELOG and the opencode-runner.test.mjs tests is critical.
+  - **`cline run` vs `cline serve`**: I learned from the cline docs that the serve child is passive and needs a TUI client. The plugin should NEVER have used the HTTP API as the work driver. This is a fundamental design issue with v0.4-v0.7. v0.8.0 fixes it.
+  - **Cross-runtime runner**: The plugin is Bun-native (uses `Bun.spawn` and `ReadableStream<Uint8Array>`), the dashboard is Node (uses `child_process.spawn` and stream 'data' events). I had to write two implementations that share the same wire format and same test surface. Keeping them in sync via the CHANGELOG and the cline-runner.test.mjs tests is critical.
   - **The `maybeAutoRestart` was private** to `InstanceManager`. The new runner-based path needed to call it from outside, so I had to make it public. The original code's auto-restart logic was tied to the SSE event handler; the new logic is tied to the runner's onExit. Both paths converge on the same `_maybeAutoRestart` private helper.
   - **Tmux as a control session**: Instead of opening N separate windows (one per agent), `bizar bg view` creates a single tmux session with N panes, tiled. Then any one terminal window can show all of them. This is the right UX for parallel monitoring.
 - **Pattern to follow next time**:
   1. **When fixing a "spawns but does nothing" bug, look at THREE layers**: the spawn (does it work?), the persistence (is the work being done?), and the visibility (can the user see it?). All three must work for the user to be satisfied.
   2. **For "active" vs "passive" APIs, prefer the active path.** If a tool needs to drive work, spawn a subprocess rather than POSTing to a passive server. The subprocess is the source of truth for status.
   3. **For "go idle" agent prompts, add explicit anti-patterns.** "Do NOT call `bizar_collect` immediately after spawn" is more effective than "return control to the user" because the LLM can interpret the latter as "then wait for the user to ask".
-  4. **Cross-runtime code should be tested in BOTH environments.** The opencode-runner has a TS version (Bun) and an mjs version (Node). Both need integration tests with real `opencode run` subprocesses. We can't rely on mocks because the wire format (timestamp=... level=... message=...) is opencode-specific and version-dependent.
+  4. **Cross-runtime code should be tested in BOTH environments.** The cline-runner has a TS version (Bun) and an mjs version (Node). Both need integration tests with real `cline run` subprocesses. We can't rely on mocks because the wire format (timestamp=... level=... message=...) is cline-specific and version-dependent.
   5. **Cross-platform desktop launchers are a wheel-reinvention-tax.** macOS uses osascript, Linux has 4+ different terminal emulators, Windows has wt.exe vs cmd. We try 3-4 candidates in order of preference, fall back to printing a command for the user to run manually. This is the only way to do it without a 500-line cross-platform abstraction.
 
 ### 2026-06-24e: Background-spawn fix — 4 bugs in parallel work streams
@@ -648,17 +648,17 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 - **Approach**: Four work streams in parallel: (A) added `buildOpencodeRunArgs()` with explicit `--agent` flag + model migration to `openrouter/minimax/minimax-m3` format; (B) made `InstanceManager` serve/http/stream nullable for bg-only mode; (C) decoupled tool registration from serve child availability; (D) ran E2E smoke test to validate model ID format end-to-end.
 
 - **Lessons learned**:
-  1. **`--agent` was silently omitted from `opencode run` argv.** `opencode-runner.ts` constructed the `Bun.spawn` args but never included `--agent <name>`. The spawned process ran the *default* agent (loading the wrong model and system prompt) instead of the requested one. The agent identity was embedded only in the `--title` string, which opencode ignores for routing. Fixed by extracting `buildOpencodeRunArgs()` — a pure function that unit tests can assert against — and always appending `--agent` at line 138. The `SpawnAgentOptions.agent` field is now validated: empty string throws at arg-build time rather than silently degrading at runtime.
-  2. **OpenRouter changed the MiniMax model ID format.** `openrouter/minimax-m3` no longer resolves. The correct form on OpenRouter is `openrouter/minimax/minimax-m3` (with the provider name as a path segment, routing through OpenRouter's provider routing). The direct `minimax` provider expects `MiniMax-M3` (uppercase M). The migration initially set `minimax/minimax-m3` (lowercase) across `config/opencode.json.template` and `config/AGENTS.md`, which hits the *direct* provider rather than OpenRouter, producing `ProviderModelNotFoundError`. The fix is `openrouter/minimax/minimax-m3`.
-  3. **Unit tests on the arg builder caught format but not semantics.** `buildOpencodeRunArgs` tests assert the args string contains `--agent` and `--model openrouter/minimax/minimax-m3`. They pass whether the model ID is correct or not — they only inspect the string construction, not whether `opencode run` accepts the ID. **The end-to-end smoke test caught the case-sensitivity bug.** The lesson: when changing model IDs, run `opencode run --model <new-id> -- "Reply with PONG"` against the installed binary BEFORE merging. Make the E2E smoke test a required step in every model-ID migration PR.
-  4. **Plugin init gated `bizar_spawn_background` on `opencode serve` child availability.** The entire bg subsystem (lines 346-500 of `index.ts`) was wrapped in a `try` block that called `serve.start()` → `HttpClient` → `EventStream`. If any of these failed (or `BIZAR_SERVE_DISABLE=1` was set), `instanceManager` stayed `null` and `buildHooks` registered only `basePlanTools` — the background spawn/kill/status/collect tools were simply absent. **The v0.8.0 refactor uses `Bun.spawn(["opencode","run",...])` and doesn't need serve at all.** The fix: create `InstanceManager` even when serve is unavailable, passing `serve: null, http: null, stream: null`. The manager enters bg-only mode (`isBgOnly` → `true`), HTTP-dependent operations become no-ops, and the runner's `onExit` callback drives state transitions.
+  1. **`--agent` was silently omitted from `cline run` argv.** `cline-runner.ts` constructed the `Bun.spawn` args but never included `--agent <name>`. The spawned process ran the *default* agent (loading the wrong model and system prompt) instead of the requested one. The agent identity was embedded only in the `--title` string, which cline ignores for routing. Fixed by extracting `buildOpencodeRunArgs()` — a pure function that unit tests can assert against — and always appending `--agent` at line 138. The `SpawnAgentOptions.agent` field is now validated: empty string throws at arg-build time rather than silently degrading at runtime.
+  2. **OpenRouter changed the MiniMax model ID format.** `openrouter/minimax-m3` no longer resolves. The correct form on OpenRouter is `openrouter/minimax/minimax-m3` (with the provider name as a path segment, routing through OpenRouter's provider routing). The direct `minimax` provider expects `MiniMax-M3` (uppercase M). The migration initially set `minimax/minimax-m3` (lowercase) across `config/cline.json.template` and `config/AGENTS.md`, which hits the *direct* provider rather than OpenRouter, producing `ProviderModelNotFoundError`. The fix is `openrouter/minimax/minimax-m3`.
+  3. **Unit tests on the arg builder caught format but not semantics.** `buildOpencodeRunArgs` tests assert the args string contains `--agent` and `--model openrouter/minimax/minimax-m3`. They pass whether the model ID is correct or not — they only inspect the string construction, not whether `cline run` accepts the ID. **The end-to-end smoke test caught the case-sensitivity bug.** The lesson: when changing model IDs, run `cline run --model <new-id> -- "Reply with PONG"` against the installed binary BEFORE merging. Make the E2E smoke test a required step in every model-ID migration PR.
+  4. **Plugin init gated `bizar_spawn_background` on `cline serve` child availability.** The entire bg subsystem (lines 346-500 of `index.ts`) was wrapped in a `try` block that called `serve.start()` → `HttpClient` → `EventStream`. If any of these failed (or `BIZAR_SERVE_DISABLE=1` was set), `instanceManager` stayed `null` and `buildHooks` registered only `basePlanTools` — the background spawn/kill/status/collect tools were simply absent. **The v0.8.0 refactor uses `Bun.spawn(["cline","run",...])` and doesn't need serve at all.** The fix: create `InstanceManager` even when serve is unavailable, passing `serve: null, http: null, stream: null`. The manager enters bg-only mode (`isBgOnly` → `true`), HTTP-dependent operations become no-ops, and the runner's `onExit` callback drives state transitions.
 
 - **Pattern to follow**:
-  - Always pass `--agent` explicitly when constructing `opencode run` argv from a sub-agent dispatcher. The `--title` field is UI-only; `--agent` is the sole discriminator for model routing and system prompt selection.
-  - When migrating model IDs, run `opencode run --model <new-id> -- "Reply with PONG"` as a smoke test against the actual installed binary BEFORE merging. Unit tests on arg strings are necessary but not sufficient — only E2E catches provider routing and case-sensitivity bugs.
+  - Always pass `--agent` explicitly when constructing `cline run` argv from a sub-agent dispatcher. The `--title` field is UI-only; `--agent` is the sole discriminator for model routing and system prompt selection.
+  - When migrating model IDs, run `cline run --model <new-id> -- "Reply with PONG"` as a smoke test against the actual installed binary BEFORE merging. Unit tests on arg strings are necessary but not sufficient — only E2E catches provider routing and case-sensitivity bugs.
   - Decouple tool availability from auxiliary child processes. If a tool uses `Bun.spawn` and doesn't actually need a separate HTTP server, the init should not gate the tool on that server. Register unconditionally; fail at runtime if the binary isn't found.
 
-- **Files changed**: 30 modified, 1 new (`plugins/bizar/tests/tools/opencode-runner.test.ts`). Key files: `plugins/bizar/src/opencode-runner.ts` (added `buildOpencodeRunArgs` + `--agent` flag), `plugins/bizar/src/background.ts` (serve/http/stream nullable, bg-only mode), `plugins/bizar/src/tools/bg-spawn.ts` (uses runner instead of HTTP), `plugins/bizar/index.ts` (passes `worktree` directly), `config/opencode.json.template` (migrated to `openrouter/minimax/minimax-*`), `config/AGENTS.md` (model IDs in agent table), plus 24 more across wiki, tests, and config files.
+- **Files changed**: 30 modified, 1 new (`plugins/bizar/tests/tools/cline-runner.test.ts`). Key files: `plugins/bizar/src/cline-runner.ts` (added `buildOpencodeRunArgs` + `--agent` flag), `plugins/bizar/src/background.ts` (serve/http/stream nullable, bg-only mode), `plugins/bizar/src/tools/bg-spawn.ts` (uses runner instead of HTTP), `plugins/bizar/index.ts` (passes `worktree` directly), `config/cline.json.template` (migrated to `openrouter/minimax/minimax-*`), `config/AGENTS.md` (model IDs in agent table), plus 24 more across wiki, tests, and config files.
 
 - **Agents used**: mimir (research), general (implementation across 2 parallel + 1 follow-up streams), heimdall (end-to-end smoke test)
 
@@ -681,7 +681,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
   - Hide-not-delete is the right model for "hide from overview": the entry stays in the full log under Settings, and a one-click restore is always available. Files on disk: `~/.cache/bizar/activity-hidden.json` (Set<string> serialized as array).
   - Mount new routers in `api.mjs` in registration order alongside the most-similar existing one (overview → activity is a natural pair).
 - **Files changed**: 7 dashboard files (`CHANGELOG.md`, `package.json`, `routes/activity.mjs`, `styles/main.css`, `views/Overview.tsx`, `views/Settings.tsx`, `components/CollapsibleSection.tsx`). New: `routes/activity.mjs` (1 file, ~120 lines).
-- **Agents used**: none — `task` tool broken (`no such column: replacement_seq`) and `bizar_spawn_background` returns an instance ID but the opencode subprocess exits with code 1 (opencode CLI not wired up in this Odin environment). Work proceeded directly with `edit`/`write`/`bash`.
+- **Agents used**: none — `task` tool broken (`no such column: replacement_seq`) and `bizar_spawn_background` returns an instance ID but the cline subprocess exits with code 1 (cline CLI not wired up in this Odin environment). Work proceeded directly with `edit`/`write`/`bash`.
 - **Sibling awareness**: No siblings active this turn — direct-edit mode.
 
 ## 2026-06-25 — v3.16.0 dashboard overhaul (settings subnav + chat floating + mods registry + provider auto-detect)
@@ -809,14 +809,14 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 
 ## 2026-06-26 — v3.20.0: Mod instructions protocol + 14-agent modular refactor
 
-- **Lesson**: 14 Bizar agent files contained ~1500 lines of duplicated "always-on rules" content (Semble, Skills CLI, Obsidian vault, loop guard, communication, parallel execution, general baseline). Extracting them into a shared `_shared/AGENT_BASELINE.md` (508 lines) and reducing each agent to ~50-65 lines cut total content from 2023→1554 lines (23% reduction) with zero behavior change. The shared file gets installed as `~/.opencode/skills/agent-baseline/SKILL.md` by `install.sh`, so opencode auto-loads it for every agent.
-- **Lesson**: Mods were a closed world — they only contributed dashboard routes/views, never rules. v3.20 opens mods to also contribute instruction files: `INSTRUCTIONS.md` (top-level skill), `agents/<name>.md` (agent-specific overrides), `commands/<name>.md` (slash commands), `skills/<name>/SKILL.md` (additional skills). The loader copies these into the user's opencode config with `<mod-id>__` / `<mod-id>-` prefixes so uninstall removes exactly what each mod installed.
+- **Lesson**: 14 Bizar agent files contained ~1500 lines of duplicated "always-on rules" content (Semble, Skills CLI, Obsidian vault, loop guard, communication, parallel execution, general baseline). Extracting them into a shared `_shared/AGENT_BASELINE.md` (508 lines) and reducing each agent to ~50-65 lines cut total content from 2023→1554 lines (23% reduction) with zero behavior change. The shared file gets installed as `~/.cline/skills/agent-baseline/SKILL.md` by `install.sh`, so cline auto-loads it for every agent.
+- **Lesson**: Mods were a closed world — they only contributed dashboard routes/views, never rules. v3.20 opens mods to also contribute instruction files: `INSTRUCTIONS.md` (top-level skill), `agents/<name>.md` (agent-specific overrides), `commands/<name>.md` (slash commands), `skills/<name>/SKILL.md` (additional skills). The loader copies these into the user's cline config with `<mod-id>__` / `<mod-id>-` prefixes so uninstall removes exactly what each mod installed.
 - **Lesson**: `modScope` + `modPriority` frontmatter fields let a mod target a specific Bizar agent (`thor`, `tyr`, etc.) and choose its rule interaction (`replace`, `augment`, `guard`). This makes "Ponytail teaches Thor to be lazier" a one-line frontmatter addition, not a fork of Thor's prompt.
 - **Lesson**: `Bun` runtime caches `os.homedir()` at startup, so `process.env.HOME = sandbox` in `bun:test` doesn't sandbox the loader. Solution: use `node --test` for tests that need HOME redirection. Existing `bun:test` tests (mod-security) stay on Bun. Both runners are invoked separately.
 - **Lesson**: `await import()` at module top-level runs once — the loader captures `HOME`/`MODS_DIR` as `const` values at first import, so per-test env changes are ignored. Use a single import at file top with `beforeAll` for setup; don't re-import inside tests.
 - **Pattern to follow**:
-  - For shared agent content: put it in `_shared/<topic>.md` and install via `install.sh` as `~/.opencode/skills/<topic>/SKILL.md`. Each agent file ends with a one-liner pointer to the shared file. Single source of truth.
-  - For mod instructions: always ship a top-level `INSTRUCTIONS.md` with the SKILL.md frontmatter so opencode auto-loads it. Use `agents/<name>.md` with `modScope` + `modPriority` for agent-specific rules. Use the `<mod-id>__` prefix on agent/command files and `<mod-id>-` prefix on skills so uninstall can be precise.
+  - For shared agent content: put it in `_shared/<topic>.md` and install via `install.sh` as `~/.cline/skills/<topic>/SKILL.md`. Each agent file ends with a one-liner pointer to the shared file. Single source of truth.
+  - For mod instructions: always ship a top-level `INSTRUCTIONS.md` with the SKILL.md frontmatter so cline auto-loads it. Use `agents/<name>.md` with `modScope` + `modPriority` for agent-specific rules. Use the `<mod-id>__` prefix on agent/command files and `<mod-id>-` prefix on skills so uninstall can be precise.
   - For test sandboxes: prefer `node --test` when you need HOME redirection or env-var-based sandboxing. Use `bun:test` only when testing Bun-specific behavior. Don't try to make one runner do both.
   - For multi-target tests: write the test in the runner that supports the env-var behavior you need. Accept that you have 2 test files (one per runner), not one that runs everywhere.
 - **Files changed**: 14 agent files reduced from 2023→1046 lines + new `config/agents/_shared/AGENT_BASELINE.md` (508 lines), 1 new file `bizar-dash/tests/mod-instructions.node.test.mjs` (6 tests), 3 new INSTRUCTIONS.md files (graphify, ponytail, impeccable) + 1 mod agent file (ponytail/agents/thor.md). Mods loader gained `installModInstructions`/`uninstallModInstructions`/`listModInstructions`/`reinstallInstructions` and `fetchInstructionDir`/`fetchSkillsDir` for registry installs.
@@ -851,9 +851,9 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 ## 2026-06-26 — openrouter routing rolled back; minimax-only restored
 
 - **Context**: The earlier "use openrouter as provider for minimax models temporarily for now" change was rolled back the same day. User reverted to minimax direct provider exclusively.
-- **Lesson**: When the same user reverses a config change within hours, the original provider is the right default. The brief openrouter detour surfaced that opencode's lookup logic prefers the first matching provider in the config, so two providers with overlapping model names creates ambiguity (subagent sessions silently routed to the wrong provider).
+- **Lesson**: When the same user reverses a config change within hours, the original provider is the right default. The brief openrouter detour surfaced that cline's lookup logic prefers the first matching provider in the config, so two providers with overlapping model names creates ambiguity (subagent sessions silently routed to the wrong provider).
 - **Lesson**: A single-provider config is simpler to debug. The dual-provider template is fine as a reference, but the live config should hold only one provider at a time.
-- **Files reverted**: `config/opencode.json.template` (back to `minimax/MiniMax-M*`), `config/opencode.json` (descriptions + model fields), `~/.config/opencode/opencode.json` (restored `provider.minimax`, removed `provider.openrouter`), `.bizar/AGENTS_SELF_IMPROVEMENT.md` (this entry).
+- **Files reverted**: `config/cline.json.template` (back to `minimax/MiniMax-M*`), `config/cline.json` (descriptions + model fields), `~/.config/cline/cline.json` (restored `provider.minimax`, removed `provider.openrouter`), `.bizar/AGENTS_SELF_IMPROVEMENT.md` (this entry).
 - **Verification**:
   - All three configs valid JSON
   - Zero remaining `"openrouter"` strings in the three configs
@@ -972,7 +972,7 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 
 **Behavioral change.** v4.1.0 codifies a mandatory session-start memory check: every agent, at the start of EVERY new session, must run `bizar memory status && bizar memory search "<topic>"` BEFORE doing any other work. The mandatory framing is enforced by a drift-prevention test (`bizar-dash/tests/memory-protocol-drift.test.mjs`) that fails CI if the MANDATORY wording is removed.
 
-**Files changed (v4.1.0).** 17 source files: 3 server (`api.mjs`, `server.mjs`, `memory-store.mjs`, `memory-lightrag.mjs` new), 1 CLI (`cli/memory.mjs` write subcommand, `cli/bin.mjs` route), 1 config (`config/opencode.json` permission cleanup), 4 docs (`config/agents/_shared/AGENT_BASELINE.md`, `config/skills/obsidian/SKILL.md`, `~/.opencode/skills/obsidian/SKILL.md`, `config/AGENTS.md`), 4 release-meta (`package.json`, `CHANGELOG.md`, `wiki/Changelog.md`, `.bizar/PROJECT.md`), 2 self-meta (`.bizar/AGENTS_SELF_IMPROVEMENT.md`, `.bizar/PROJECT.md`). Plus 4 new test files (`memory-cli.test.mjs`, `memory-lightrag.test.mjs`, `memory-config.test.mjs`, `memory-protocol-drift.test.mjs`) and 1 new skill (`config/skills/memory-protocol/SKILL.md`).
+**Files changed (v4.1.0).** 17 source files: 3 server (`api.mjs`, `server.mjs`, `memory-store.mjs`, `memory-lightrag.mjs` new), 1 CLI (`cli/memory.mjs` write subcommand, `cli/bin.mjs` route), 1 config (`config/cline.json` permission cleanup), 4 docs (`config/agents/_shared/AGENT_BASELINE.md`, `config/skills/obsidian/SKILL.md`, `~/.cline/skills/obsidian/SKILL.md`, `config/AGENTS.md`), 4 release-meta (`package.json`, `CHANGELOG.md`, `wiki/Changelog.md`, `.bizar/PROJECT.md`), 2 self-meta (`.bizar/AGENTS_SELF_IMPROVEMENT.md`, `.bizar/PROJECT.md`). Plus 4 new test files (`memory-cli.test.mjs`, `memory-lightrag.test.mjs`, `memory-config.test.mjs`, `memory-protocol-drift.test.mjs`) and 1 new skill (`config/skills/memory-protocol/SKILL.md`).
 
 **Agents used.** mimir (research), thor (live round-trip test + verification), forseti (plan audit, caught 5 blockers), heimdall (config + docs), tyr (CLI write subcommand + tests).
 
@@ -1033,7 +1033,7 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 - Tests: 189 → 205 (+16 net). 5 new in `memory-cli-readlistdelete.test.mjs` (read/list/delete CLI), 1 new regression test for dangling-symlink case, FINDING tests flipped to REGRESSION tests in 3 files
 - All 205/205 passing in 30s
 - Live CLI smoke: `init` → `write` → `read` → `list` (with `--json` and dir filter) → `delete` → `list empty` → `read missing` → all correct
-- Symlink attack via CLI rejected: dangling symlink test in `/tmp/opencode/final-smoke` confirmed no leak
+- Symlink attack via CLI rejected: dangling symlink test in `/tmp/cline/final-smoke` confirmed no leak
 - Vault unchanged: 15 notes, clean git state
 
 **Bugs found DURING implementation (not in original list).**
@@ -1068,7 +1068,7 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 
 ### 2026-07-05 — v4.5.0 Settings + Provider + Usage + Chat + Skills + Update release
 **Context:** Six parallel implementation streams completed a 17-item backlog in `implement_next.md` for BizarHarness v4.5.0.
-**Files changed:** 40+ files across `bizar-dash/src/{server,web}/`, `cli/`, `bizar-dash/skills/`, `config/`, `~/.opencode/skills/bizar/`.
+**Files changed:** 40+ files across `bizar-dash/src/{server,web}/`, `cli/`, `bizar-dash/skills/`, `config/`, `~/.cline/skills/bizar/`.
 **Agents used:** thor-settings, tyr-providers, thor-usage, tyr-chat, thor-skills, tyr-update (parallel); thor-cleanup (sequential).
 **Lessons learned:**
 - Parallel implementation requires strict disjoint file scopes; pre-defined sibling scopes prevent 90% of collisions.
@@ -1095,7 +1095,7 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 - Headroom is partially integrated already (cli/install.mjs, cli/utils.mjs, cli/doctor.mjs, mod-security.mjs). The dashboard was the missing piece — adding `/api/headroom/*` endpoints + Settings UI + auto-wrap on startup completed it.
 - Sibling collisions in shared files are still a risk: `cli/bin.mjs` had a syntax error (unmatched single quote/backtick) introduced by thor-headroom. tyr-memory detected it but couldn't fix it (read-only sibling rule). Lesson: when modifying a shared file, ALWAYS run `node --check` before declaring done.
 - Memory tab is genuinely large (5 panels + 11 endpoints + obsidian façade). Splitting into overview + 5 panel subcomponents kept each file <300 lines.
-- The user's "add to the tasks list" was interpreted correctly as adding to the Bizar task store (`~/.config/opencode/projects/<project>/tasks.json`), not as a todowrite. Confirmed visible via `GET /api/tasks`.
+- The user's "add to the tasks list" was interpreted correctly as adding to the Bizar task store (`~/.config/cline/projects/<project>/tasks.json`), not as a todowrite. Confirmed visible via `GET /api/tasks`.
 
 **Pattern to follow next time:**
 - When adding a tab to the sidebar, edit BOTH Sidebar.tsx and Topbar.tsx (TABS array). The TABS array drives routing; missing entry = 404 when clicking the sidebar button.
@@ -1194,10 +1194,10 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 
 ### 2026-07-06 — v5.5.1 — True mid-flight steering + settings UI overhaul + server log fixes
 
-**Context:** v5.5.1 patch release on top of v5.5.0. Three parallel streams plus a steering followup and a UI batch. Replaced `opencode run` subprocess bg agents with opencode serve SDK sessions—steering now calls `sdk.sessions.prompt()` for true mid-flight control (no kill+respawn). Plugin `bg-spawn.ts` and `bg-send-message.ts` rewritten to POST `/api/background` instead of spawning subprocesses; `bg-spawner.mjs` rewritten (574→686 lines) using SDK + event subscription. Pause semantics changed to output buffering (buffer events while paused, drain on resume) since SDK sessions can't be signal-paused. Pre-v5.5.0 state files remain readable (additive `liveSession`/`dashboardInstanceId` fields). Settings restructured so each section is its own sidebar tab (13 sections: theme/general/layout/network/notifications/auth/env-vars/agents/system-llm/headroom/updates/activity-log/workspaces)—deleted `SettingsNav.tsx`, removed `settingsMode` toggle, removed sidebar/topbar layout selector. Settings sidebar now uses `.sidebar-tab` classes matching the main sidebar. Memory vault path fixed from stuck "loading..." to actual `/memory/status` fetch—shows real path, allows editing, init button when uninitialised. Marketplace UI added loading state with URL, cached notice, friendly empty/error states, Refresh button, better category filtering. Server log fixes: TDZ bug (`Cannot access 'readSettings' before initialization`) fixed by replacing static import with dynamic `await import()` in `server.mjs:37`; LightRAG ECONNREFUSED spam fixed with `_lightragNotInstalled` flag (isRunning returns false immediately, warn log rate-limited to 60s); registry URL changed from `bizar-plugins` → `bizar-mods` in `routes/plugins.mjs` and `cli/commands/marketplace.mjs`; `/api/activity/stream` SSE endpoint added in `routes/activity.mjs` (snapshot on connect, 5s poll, 25s heartbeat); DEP0190 `shell:true` → `shell:false` in `headroom.mjs` (all callers already pass array args); `opencode listMessages` downgraded from `error` to `warn` with "expected when serve is gone" message. Browser extension MV3 cleanup: added `safeSendMessage()` helper wrapping `chrome.runtime.sendMessage` in try/catch with silent fallback to direct `fetch()` to dashboard API.
+**Context:** v5.5.1 patch release on top of v5.5.0. Three parallel streams plus a steering followup and a UI batch. Replaced `cline run` subprocess bg agents with cline serve SDK sessions—steering now calls `sdk.sessions.prompt()` for true mid-flight control (no kill+respawn). Plugin `bg-spawn.ts` and `bg-send-message.ts` rewritten to POST `/api/background` instead of spawning subprocesses; `bg-spawner.mjs` rewritten (574→686 lines) using SDK + event subscription. Pause semantics changed to output buffering (buffer events while paused, drain on resume) since SDK sessions can't be signal-paused. Pre-v5.5.0 state files remain readable (additive `liveSession`/`dashboardInstanceId` fields). Settings restructured so each section is its own sidebar tab (13 sections: theme/general/layout/network/notifications/auth/env-vars/agents/system-llm/headroom/updates/activity-log/workspaces)—deleted `SettingsNav.tsx`, removed `settingsMode` toggle, removed sidebar/topbar layout selector. Settings sidebar now uses `.sidebar-tab` classes matching the main sidebar. Memory vault path fixed from stuck "loading..." to actual `/memory/status` fetch—shows real path, allows editing, init button when uninitialised. Marketplace UI added loading state with URL, cached notice, friendly empty/error states, Refresh button, better category filtering. Server log fixes: TDZ bug (`Cannot access 'readSettings' before initialization`) fixed by replacing static import with dynamic `await import()` in `server.mjs:37`; LightRAG ECONNREFUSED spam fixed with `_lightragNotInstalled` flag (isRunning returns false immediately, warn log rate-limited to 60s); registry URL changed from `bizar-plugins` → `bizar-mods` in `routes/plugins.mjs` and `cli/commands/marketplace.mjs`; `/api/activity/stream` SSE endpoint added in `routes/activity.mjs` (snapshot on connect, 5s poll, 25s heartbeat); DEP0190 `shell:true` → `shell:false` in `headroom.mjs` (all callers already pass array args); `cline listMessages` downgraded from `error` to `warn` with "expected when serve is gone" message. Browser extension MV3 cleanup: added `safeSendMessage()` helper wrapping `chrome.runtime.sendMessage` in try/catch with silent fallback to direct `fetch()` to dashboard API.
 
 **Lessons learned:**
-- **True mid-flight steering via SDK sessions, not kill+respawn.** The old approach killed the subprocess, respawned, and lost agent state. Using `sdk.sessions.prompt()` on a live opencode serve session injects the prompt into the running agent loop—no state loss, no respawn delay. (`plugins/bizar/src/bg-spawner.mjs:574-686`)
+- **True mid-flight steering via SDK sessions, not kill+respawn.** The old approach killed the subprocess, respawned, and lost agent state. Using `sdk.sessions.prompt()` on a live cline serve session injects the prompt into the running agent loop—no state loss, no respawn delay. (`plugins/bizar/src/bg-spawner.mjs:574-686`)
 - **Static imports can produce cryptic TDZ errors.** `Cannot access 'readSettings' before initialization` was caused by a static `import { readSettings }` at the top of `server.mjs` where the module graph had a circular dependency. Switched to dynamic `await import(...)` inside the startup scan function. A 50ms `node --check` would NOT catch this—only running the actual module reveals it. (`bizar-dash/src/server/server.mjs:37`)
 - **SSE endpoints are not automatically mounted.** `/api/activity/stream` returned 404 because the route existed in `activity.mjs` but was never registered in `api.mjs`. Every new endpoint—including SSE—must go through explicit router registration and a `curl` verification. (`bizar-dash/src/server/routes/activity.mjs`)
 - **Rate-limited warnings prevent log spam at scale.** LightRAG was polling the health endpoint every few seconds even when the server wasn't installed. A `_lightragNotInstalled` flag that short-circuits `isRunning()` immediately and rate-limits the warn log to 60s reduced log noise from infinite to one line per minute. (`bizar-dash/src/server/memory-lightrag.mjs`)
@@ -1206,7 +1206,7 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 - **Pause semantics differ between subprocess and SDK sessions.** Subprocess agents can be signal-paused (SIGSTOP/SIGCONT). SDK sessions cannot. The new pause semantics buffer events during pause and drain on resume—same user-visible effect, different implementation.
 
 **Pattern:**
-- For background agent steering: use SDK sessions (`opencode serve`) + `sdk.sessions.prompt()` instead of kill+respawn of `opencode run` subprocesses. The SDK path preserves agent state (no state file loss) and avoids the spawn overhead.
+- For background agent steering: use SDK sessions (`cline serve`) + `sdk.sessions.prompt()` instead of kill+respawn of `cline run` subprocesses. The SDK path preserves agent state (no state file loss) and avoids the spawn overhead.
 - For SSE endpoints in `routes/*.mjs`: always register the route in `api.mjs` and verify with a `curl` against the real path before declaring done. SSE endpoints are invisible to typechecking and module-load verification.
 - For Manifest V3 browser extensions: wrap every `chrome.runtime.sendMessage` in a try/catch `safeSendMessage()` helper that falls back to an alternative communication channel (direct HTTP fetch) when the service worker port is disconnected.
 

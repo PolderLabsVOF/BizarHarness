@@ -1,7 +1,7 @@
 /**
  * tests/headroom-install.test.mjs
  *
- * Tests for installHeadroom(), wrapOpencode(), unwrapOpencode(), startProxy(), stopProxy().
+ * Tests for installHeadroom(), wrapCline(), unwrapCline(), startProxy(), stopProxy().
  * Uses real commands when available, mocks when not.
  */
 
@@ -65,9 +65,9 @@ test('installHeadroom.force reinstalls even when already installed', async () =>
 
 // ── Wrap / Unwrap tests ─────────────────────────────────────────────────────
 
-test('wrapOpencode returns correct shape', async () => {
-  const { wrapOpencode } = await import('../src/server/headroom.mjs');
-  const result = await wrapOpencode({ port: 8787 });
+test('wrapCline returns correct shape', async () => {
+  const { wrapCline } = await import('../src/server/headroom.mjs');
+  const result = await wrapCline({ port: 8787 });
 
   assert.ok(typeof result.ok === 'boolean', 'ok is boolean');
   assert.ok(typeof result.port === 'number', 'port is number');
@@ -75,9 +75,9 @@ test('wrapOpencode returns correct shape', async () => {
   assert.strictEqual(result.port, 8787, 'port is 8787');
 });
 
-test('unwrapOpencode returns correct shape', async () => {
-  const { unwrapOpencode } = await import('../src/server/headroom.mjs');
-  const result = await unwrapOpencode();
+test('unwrapCline returns correct shape', async () => {
+  const { unwrapCline } = await import('../src/server/headroom.mjs');
+  const result = await unwrapCline();
 
   assert.ok(typeof result.ok === 'boolean', 'ok is boolean');
   assert.ok(typeof result.log === 'string', 'log is string');
@@ -103,15 +103,15 @@ test('stopProxy returns correct shape', async () => {
   assert.ok(Array.isArray(result.killed), 'killed is array');
 });
 
-// ── getOpencodeConfig tests ──────────────────────────────────────────────────
+// ── getClineConfig tests ──────────────────────────────────────────────────
 
-test('getOpencodeConfig returns correct shape', async () => {
-  const { getOpencodeConfig } = await import('../src/server/headroom.mjs');
-  const result = await getOpencodeConfig();
+test('getClineConfig returns correct shape', async () => {
+  const { getClineConfig } = await import('../src/server/headroom.mjs');
+  const result = await getClineConfig();
 
   assert.ok(typeof result.configPath === 'string', 'configPath is string');
   assert.ok(typeof result.hasHeadroomProvider === 'boolean', 'hasHeadroomProvider is boolean');
-  assert.ok(result.configPath.includes('opencode.json'), 'configPath points to opencode.json');
+  assert.ok(result.configPath.includes('cline.json'), 'configPath points to cline.json');
 });
 
 // ── withHeadroomProxy tests ──────────────────────────────────────────────────

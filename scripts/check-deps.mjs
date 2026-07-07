@@ -5,7 +5,7 @@
  * v3.22.0 — Cross-platform dependency detector for BizarHarness.
  *
  * Exports a single async function `checkDeps({ strict })` that probes the
- * environment for required tools (node, bun, opencode, tmux, git) and returns
+ * environment for required tools (node, bun, cline, tmux, git) and returns
  * a structured JSON report.  Also runs as a CLI entry: `node check-deps.mjs`.
  *
  * Design:
@@ -120,8 +120,8 @@ function readBunVersion() {
   return m ? m[1] : raw.split(' ')[0];
 }
 
-function readOpencodeVersion() {
-  const raw = safeExec('opencode');
+function readClineVersion() {
+  const raw = safeExec('cline');
   if (!raw) return null;
   const m = raw.match(/(\d+\.\d+\.\d+)/);
   return m ? m[1] : raw.split(' ')[0];
@@ -182,7 +182,7 @@ function windowsInstallCmd(name) {
   switch (name) {
     case 'node':   return 'winget install OpenJS.NodeJS.LTS 2>nul || choco install nodejs -y 2>nul || npm install -g n 2>nul';
     case 'bun':    return 'powershell -c "iwr bun.sh/install.ps1 -useb | iex"';
-    case 'opencode': return 'winget install OpenCodeAI.OpenCode 2>nul || npm install -g @opencode-ai/cli 2>nul';
+    case 'cline': return 'winget install ClineAI.Cline 2>nul || npm install -g @cline/cli 2>nul';
     case 'tmux':   return 'winget install mintty.tmux 2>nul || choco install tmux -y 2>nul';
     case 'git':    return 'winget install Git.Git 2>nul || choco install git -y 2>nul';
     case 'python3': return 'winget install Python.Python.3.12 2>nul || choco install python -y 2>nul';
@@ -200,7 +200,7 @@ function macInstallCmd(name) {
   switch (name) {
     case 'node':   return 'brew install node@18';
     case 'bun':    return 'brew install oven-sh/bun/bun';
-    case 'opencode': return 'brew install opencodeai/tap/opencode';
+    case 'cline': return 'brew install clineai/tap/cline';
     case 'tmux':   return 'brew install tmux';
     case 'git':    return null; // pre-installed on macOS
     case 'python3': return 'brew install python@3.12';
@@ -246,8 +246,8 @@ function linuxInstallCmd(name) {
     }
     case 'bun':
       return 'curl -fsSL https://bun.sh/install | bash';
-    case 'opencode':
-      return 'curl -fsSL https://opencode.ai/install | sh';
+    case 'cline':
+      return 'curl -fsSL https://docs.cline.bot/install | sh';
     case 'tmux':
       return `${sudo}${pm} install -y tmux`;
     case 'git':
@@ -282,7 +282,7 @@ function linuxInstallCmd(name) {
 const REQUIRED = {
   node:    { raw: '>=18',    min: '18.0.0' },
   bun:     { raw: '>=1.0.0', min: '1.0.0' },
-  opencode: { raw: '>=0.4.0', min: '0.4.0' },
+  cline: { raw: '>=0.4.0', min: '0.4.0' },
 };
 
 // ── Main check ─────────────────────────────────────────────────────────────────
@@ -329,17 +329,17 @@ export async function checkDeps({ strict = false } = {}) {
     }
   }
 
-  // --- opencode ---
+  // --- cline ---
   {
-    const current = readOpencodeVersion();
-    const entry = { name: 'opencode', status: 'missing', current, required: REQUIRED.opencode.raw };
+    const current = readClineVersion();
+    const entry = { name: 'cline', status: 'missing', current, required: REQUIRED.cline.raw };
     if (!current) {
       entry.status = 'missing';
-      entry.installCmd = installCmdFor('opencode');
+      entry.installCmd = installCmdFor('cline');
       missing.push(entry);
-    } else if (!satisfies(current, REQUIRED.opencode.min)) {
+    } else if (!satisfies(current, REQUIRED.cline.min)) {
       entry.status = 'outdated';
-      entry.installCmd = installCmdFor('opencode');
+      entry.installCmd = installCmdFor('cline');
       missing.push(entry);
     } else {
       entry.status = 'present';

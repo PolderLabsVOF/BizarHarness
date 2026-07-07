@@ -171,9 +171,9 @@ export function isDotRoot(resolvedPath, home = homedir()) {
 // --- Background-agent logPath reconstruction ------------------------------
 //
 // The plugin's `bgr_<id>.json` state files include a `logPath` field
-// built as `${worktree}/.opencode/log/${id}.log`. If `worktree` was
+// built as `${worktree}/.cline/log/${id}.log`. If `worktree` was
 // empty or `/` when the bg instance was spawned, the resulting
-// `logPath` is broken (e.g. `//.opencode/log/...`) and no log file
+// `logPath` is broken (e.g. `//.cline/log/...`) and no log file
 // can ever be written. The bg-retry loop calls into this helper to
 // repair the field before re-dispatching.
 //
@@ -188,7 +188,7 @@ export function isDotRoot(resolvedPath, home = homedir()) {
 //   to `${logDir}/${sessionId}.log` where `logDir` defaults to
 //   `~/.cache/bizar/logs` (plugins/bizar/src/options.ts:88). The
 //   bg-spawn tool records a DIFFERENT path —
-//   `${worktree}/.opencode/log/${instanceId}.log` — in the state
+//   `${worktree}/.cline/log/${instanceId}.log` — in the state
 //   file. Nothing ever writes to that path. This module's
 //   `deriveAbsoluteBgLogPath` historically returned the same broken
 //   path; the new `getActualBgLogPath` below returns the path the
@@ -200,7 +200,7 @@ const FALLBACK_LOG_DIR = pathResolve(homedir(), '.cache', 'bizar', 'logs');
 /**
  * Resolve the per-session log directory used by the plugin's
  * `LogWriter`. The plugin's default is `~/.cache/bizar/logs`
- * (configurable via the `logDir` option in `opencode.json`). We
+ * (configurable via the `logDir` option in `cline.json`). We
  * honor the `BIZAR_LOG_DIR` env var first, fall back to the
  * plugin's default, and never throw.
  *
@@ -229,7 +229,7 @@ export function getBgLogDir({ env } = {}) {
  * string and sanitize it.
  *
  * @param {object} [opts]
- * @param {string} [opts.sessionId]  — the opencode session id (or any unique key)
+ * @param {string} [opts.sessionId]  — the cline session id (or any unique key)
  * @param {string} [opts.env]        — env-var bag to read
  * @returns {string} absolute path that exists or will exist once the plugin writes
  */
@@ -252,7 +252,7 @@ export function deriveAbsoluteBgLogPath(worktree, instanceId) {
   const base = typeof worktree === 'string' && worktree.length > 0 && isAbsolute(worktree)
     ? pathResolve(worktree)
     : FALLBACK_LOG_DIR;
-  return pathResolve(base, '.opencode', 'log', `${safeId}.log`);
+  return pathResolve(base, '.cline', 'log', `${safeId}.log`);
 }
 
 /**
@@ -272,7 +272,7 @@ export function isBrokenBgLogPath(logPath) {
   if (typeof logPath !== 'string' || logPath.length === 0) return true;
   if (!isAbsolute(logPath)) return true;
   // Look for `//` not at the protocol position. Cheap heuristic that
-  // catches the user's `//.opencode/log/...` case without requiring
+  // catches the user's `//.cline/log/...` case without requiring
   // a full URL parser.
   const idx = logPath.indexOf('//');
   if (idx === -1) return false;

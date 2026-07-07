@@ -9,45 +9,45 @@ import type { ChatSession } from '../../lib/types';
 
 interface Props {
   sessions: ChatSession[];
-  opencodeSessions: ChatSession[];
+  clineSessions: ChatSession[];
   activeSessionId: string;
-  /** The opencode session currently displayed, or null. */
-  activeOpencodeSessionId: string | null;
+  /** The cline session currently displayed, or null. */
+  activeClineSessionId: string | null;
   activeProject: { name: string } | null;
   creating: boolean;
   onCreateSession: () => void;
   /** Called when a bizar session is selected. */
   onSelectSession: (id: string) => void;
-  /** Called when an opencode session is selected — renders it in-dash. */
-  onSelectOpencodeSession: (s: ChatSession) => void;
+  /** Called when an cline session is selected — renders it in-dash. */
+  onSelectClineSession: (s: ChatSession) => void;
 }
 
 export function SessionList({
   sessions,
-  opencodeSessions,
+  clineSessions,
   activeSessionId,
-  activeOpencodeSessionId,
+  activeClineSessionId,
   activeProject,
   creating,
   onCreateSession,
   onSelectSession,
-  onSelectOpencodeSession,
+  onSelectClineSession,
 }: Props) {
   const [view, setView] = useState<'bizar' | 'all'>('all');
   const [showAll, setShowAll] = useState(false);
   const VISIBLE_LIMIT = 30;
 
   const allSorted = view === 'all'
-    ? [...sessions, ...opencodeSessions].sort((a, b) => Number(b.mtime) - Number(a.mtime))
+    ? [...sessions, ...clineSessions].sort((a, b) => Number(b.mtime) - Number(a.mtime))
     : sessions;
   const displayedSessions = showAll ? allSorted : allSorted.slice(0, VISIBLE_LIMIT);
 
-  const totalOpencode = opencodeSessions.length;
+  const totalCline = clineSessions.length;
 
   const handleSelectSession = (s: ChatSession) => {
-    if (s.source === 'opencode') {
-      // Render opencode session in-dash — no window.open redirect
-      onSelectOpencodeSession(s);
+    if (s.source === 'cline') {
+      // Render cline session in-dash — no window.open redirect
+      onSelectClineSession(s);
       return;
     }
     onSelectSession(s.id);
@@ -60,7 +60,7 @@ export function SessionList({
         <span className="chat-sessions-count">{displayedSessions.length}</span>
       </div>
 
-      {totalOpencode > 0 && (
+      {totalCline > 0 && (
         <div className="chat-sessions-toggle">
           <button
             type="button"
@@ -74,7 +74,7 @@ export function SessionList({
             className={`chat-sessions-toggle-btn ${view === 'all' ? 'active' : ''}`}
             onClick={() => setView('all')}
           >
-            All ({totalOpencode} opencode)
+            All ({totalCline} cline)
           </button>
         </div>
       )}
@@ -121,18 +121,18 @@ export function SessionList({
       ) : (
         <ul className="chat-sessions-list">
           {displayedSessions.map((s) => {
-            const isOpencode = s.source === 'opencode';
-            const isActive = isOpencode
-              ? activeOpencodeSessionId === s.id
+            const isCline = s.source === 'cline';
+            const isActive = isCline
+              ? activeClineSessionId === s.id
               : activeSessionId === s.id;
             return (
               <li
-                key={isOpencode ? `oc-${s.id}` : s.id}
-                className={`chat-sessions-item ${isActive ? 'active' : ''} ${isOpencode ? 'chat-sessions-item-opencode' : ''}`}
+                key={isCline ? `oc-${s.id}` : s.id}
+                className={`chat-sessions-item ${isActive ? 'active' : ''} ${isCline ? 'chat-sessions-item-cline' : ''}`}
                 onClick={() => handleSelectSession(s)}
-                title={isOpencode ? `Open in dashboard: ${s.title || s.id}` : s.id}
+                title={isCline ? `Open in dashboard: ${s.title || s.id}` : s.id}
               >
-                {isOpencode && (
+                {isCline && (
                   <ExternalLink size={10} className="chat-sessions-item-icon" />
                 )}
                 <span className="chat-sessions-item-id">

@@ -77,7 +77,7 @@ if (
 // ── Banner ─────────────────────────────────────────────────────────────────────
 
 function showBanner() {
-  console.log(chalk.bold.cyan('  ᛭ Bizar — Norse Pantheon Agent System for opencode'));
+  console.log(chalk.bold.cyan('  ᛭ Bizar — Norse Pantheon Agent System for cline'));
   console.log();
 }
 
@@ -96,7 +96,7 @@ function showHelp() {
     export [target]     Export agents/rules to another harness
     artifact <subcommand>  Manage visual artifacts
     test-gate           Detect & run the project's test suite
-    update              Auto-update everything (opencode + bizar + dash + plugin)
+    update              Auto-update everything (cline + bizar + dash + plugin)
     service             Manage the background service daemon
     dash <subcommand>   Manage the dashboard (start/stop/status/cleanup/tui)
     memory <subcommand> Manage project memory (Bizar Memory Service)
@@ -108,7 +108,7 @@ function showHelp() {
     usage                 Show compact usage analytics summary (24h rolling)
     doctor              Check the BizarHarness install for health issues
     repair              Fix common install issues
-    dev-link            Symlink local plugin source into opencode's plugin dir
+    dev-link            Symlink local plugin source into cline's plugin dir
     dev-unlink          Remove the dev symlink and restore the deployed copy
     heads-up <subcommand>  Manage pre-push / pre-release heads-ups
     bg <subcommand>     Manage background agents (list/view/kill/logs)
@@ -116,7 +116,7 @@ function showHelp() {
     plugin <subcommand> Manage marketplace plugins (search/install/config/invoke)
     marketplace <subcommand>  Browse and install plugins from the public marketplace
     browser-harness-up  Start Chromium for browser-harness (start/stop/status)
-    providers detect    Auto-detect provider API keys from env + opencode.json
+    providers detect    Auto-detect provider API keys from env + cline.json
     clip <subcommand>       Manage web clipper saved clips (list/delete/configure)
     ocr <subcommand>        OCR operations on images (list/process/configure)
 
