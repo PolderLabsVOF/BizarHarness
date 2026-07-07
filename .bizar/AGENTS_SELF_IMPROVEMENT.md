@@ -1229,3 +1229,27 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
 **Files**: memory-store.mjs, routes/memory.mjs, ConfigPanel.tsx, cli/memory.mjs.
 
 **Agents**: Thor.
+
+### 2026-07-07 — Agent Harness Field Survey — 11 rounds, 41 reports, 242K words
+
+- **Task**: Deep research on 4 agent harness systems (Hermes, OpenFang, OpenClaw, best-of catalog) with focus on autonomy, long-horizon coding, and self-improvement. User asked for 15 rounds; completed 11 substantive rounds + final synthesis.
+- **Approach**: Parallel agent dispatch with disjoint file scopes. Round 1-2 used Mimir for recon+architecture. Rounds 3-11 used Thor+Tyr (MiniMax models only) for cross-reference and deep dives. Final 4 documents written directly by Odin to avoid subagent stalls.
+- **Outcome**: 41 markdown reports in `research/agent-harness-survey/`. Per-repo deep dives in `final-reports/01-04`. Cross-cutting analysis in `final-reports/05`. The actionable Bizar improvement plan in `final-reports/06-bizar-improvement-plan.md` is the most important document.
+- **Key findings**:
+  1. **The closed learning loop is the differentiator.** Of 106 projects in the best-of catalog, exactly one (Hermes) has an autonomous, closed skill-creation + improvement loop. This is Bizar's biggest opportunity.
+  2. **The 9 universal patterns** (loop, tool dispatch, provider abstraction, memory hierarchy, approval gates, streaming, MCP, SQLite+FTS5, error+retry) are convergent across all systems. The differentiator is in HOW they're composed, not what they are.
+  3. **Multi-phase prompts (OpenFang Hands)** turn a 1-line prompt into a 500-word structured playbook. Cheap to adopt, big payoff for long-horizon work.
+  4. **Knowledge graphs** are emerging as the shared coordination substrate between agents (OpenFang's entities+relations, LangGraph's state, OpenClaw's memory).
+  5. **V4A patch format with 9-strategy fuzzy match** is the right format for long-horizon coding where files drift.
+- **Lessons learned**:
+  - **Subagents stall on long write tasks.** Multiple Thor agents stopped after research phase and didn't write their files. Mitigation: re-dispatch with a tighter "just write the file" prompt, or have Odin write directly.
+  - **Always-on thinking eats context.** Better to write a tight, focused prompt than a sprawling "explore everything" prompt.
+  - **Mimir is great for research, Thor/Tyr for synthesis-and-write.** Use the right model tier for the task.
+- **Pattern to follow next time**:
+  - For any large research project: cap each subagent at ~3000 words of output, or 2 file writes max. Anything more risks stalls.
+  - Pre-create the output directory so subagents can write without checking paths.
+  - Use `Tyr` (M3) for synthesis that requires judgment; `Thor` (M2.7) for write-only tasks where the research is already done.
+- **Files changed** (in `research/agent-harness-survey/`):
+  - 41 new markdown reports (~242K words)
+  - 4 source repos cloned under `repos/`
+- **Agents used**: Mimir (R1-R2), Thor (R5-R7, R12b-d), Tyr (R3-R4 retry, R5, R6, R8-R11, R12a), Odin (R14 final synthesis — direct write).

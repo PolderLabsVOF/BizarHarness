@@ -53,7 +53,20 @@ export function showExportHelp() {
 
 export function showTestGateHelp() {
   console.log(`
-  bizar test-gate — Detect & run the project's test suite
+  bizar test-gate - Detect & run the project's test suite
+
+  Usage:
+    bizar test-gate                Detect and run the test suite
+
+  Description:
+    Inspects the project for known test runners (jest, vitest, mocha,
+    bun:test, bun run test, etc.) and runs them. Falls back to package.json
+    "scripts.test" when present. Exits non-zero on test failures.
+
+  Exit codes:
+    0  All tests passed
+    1  Tests failed
+    2  No test runner detected
   `);
 }
 

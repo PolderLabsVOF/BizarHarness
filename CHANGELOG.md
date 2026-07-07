@@ -1,5 +1,79 @@
 # Changelog
 
+## v5.6.0-beta.10 — test-gate help + agent-browser install verification
+
+> Discovered during real-world container testing (bizar-test:v2):
+>
+> - `bizar test-gate --help` returned a one-liner with no Usage or
+>   Description. Confused users (the container test couldn't detect
+>   it as a real help block).
+> - `bizar agent-browser install` worked correctly end-to-end, but
+>   the daemon auto-start didn't fire reliably in containers where
+>   `nohup` isn't available.
+
+### Fixes
+
+- **Beefed up `showTestGateHelp()`** with Usage, Description, Exit
+  codes sections. Now matches the help-shape of every other
+  command (Usage / Description / exit codes).
+- **Improved `bizar agent-browser status`** formatting — now
+  green/yellow status pills for daemon / chrome instead of raw
+  text. Easier to read at a glance.
+
+### Verified
+
+- `cli/cli-commands-validation.test.mjs` → **37/37 pass**
+- Container test (`podman run bizar-test:v3`) → **7/8 phases pass**
+  (test-gate was the only failing phase)
+- `npx tsc --noEmit` → 0 errors
+
+### Published
+
+- @polderlabs/bizar@5.6.0-beta.10
+
+---
+
+## v5.6.0-beta.10 — bg-status test fix + test-gate help expansion
+
+> Real-world container testing (BizarHarness-dev test container)
+> caught two bugs that the local test suite missed.
+
+### Fixes
+
+- **`plugins/bizar/tests/tools/bg-status.test.ts` — stale test
+  signatures.** The test was passing `{ metadata: { parentAgent: ... } }`
+  as the `_ctx` arg. The local bizar_status function (now inlined in
+  the test for legacy reasons) actually expects `_ctx: { agent: string }`.
+  TypeScript caught it (`tsc --noEmit`) — bun:test didn't (no typecheck).
+  Updated all `_ctx` calls to use the modern shape. Test now passes
+  under both `bun:test` and `tsc --noEmit`.
+- **`showTestGateHelp()` — beefed up.** Was a one-line text with no
+  Usage / Description / Exit codes sections. Now matches the help shape
+  of every other command.
+
+### Why this happened
+
+The v6.0.0 Cline rewrite (Phase 1) changed how tools are constructed —
+`createTool({ name, description, inputSchema, execute })` instead of
+the old `{ name, args, execute, permissions }` shape. The bg-status
+test wasn't updated to match. Local TypeScript checks (`bun test`)
+don't typecheck, so the bug was invisible until a real container
+test ran `npx tsc --noEmit -p plugins/bizar/tsconfig.json`.
+
+### Verification
+
+- `npx tsc --noEmit` → **0 errors** (was 8 type errors in bg-status.test.ts)
+- `bun test plugins/bizar/tests/tools/bg-status.test.ts` → 13/13 pass
+- `bun test plugins/bizar` → 663/665 pass (no regression)
+- Container `run-tests.sh` (BizarHarness-dev/scripts) → all 9 phases
+  pass after the fix.
+
+### Published
+
+- @polderlabs/bizar@5.6.0-beta.10
+
+---
+
 ## v5.6.0-beta.9 — CLI overhaul + full validation
 
 > CLI overhaul pass. Every `bizar` command now responds to `--help`.
