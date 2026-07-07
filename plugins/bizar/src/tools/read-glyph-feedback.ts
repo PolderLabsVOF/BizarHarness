@@ -18,14 +18,23 @@
  *   - `bizar_plan_action`      — CRUD on the v2 canvas
  *
  * Read-only — available to ALL agents. Never throws.
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_READ_GLYPH_FEEDBACK_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...).shape` over the same fields as before.
+ *   - Returns structured `{ ok: true, found, ... }` / `{ ok: false, error, ... }`
+ *     instead of `{ output: JSON.stringify(...) }`.
  */
 
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Logger } from "../logger.js";
+
+export const BIZAR_READ_GLYPH_FEEDBACK_TOOL_NAME = "bizar_read_glyph_feedback";
 
 export interface ReadGlyphFeedbackDeps {
   /** The project's working directory (e.g. /home/user/proj). `artifacts/` is here. */
@@ -69,6 +78,18 @@ export type ReadGlyphFeedbackOutcome =
   | ReadGlyphFeedbackResult
   | ReadGlyphFeedbackMissing
   | ReadGlyphFeedbackError;
+
+export type BizarReadGlyphFeedbackInput = z.infer<typeof bizarReadGlyphFeedbackSchema>;
+export type BizarReadGlyphFeedbackOutput = ReadGlyphFeedbackOutcome;
+
+const bizarReadGlyphFeedbackSchema = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Must match ^[a-z0-9][a-z0-9-]{0,63}$")
+    .describe("The artifact slug (e.g., 'dashboard-stale-pid-fix')."),
+});
 
 // --- Pure core: readGlyphFeedback ----------------------------------------
 
@@ -140,31 +161,30 @@ export function readGlyphFeedback(
 // --- Tool factory --------------------------------------------------------
 
 /**
- * Build the `read_glyph_feedback` tool. The plugin wires the result
- * into `Hooks.tool`. The `deps` closure carries the worktree and logger.
+ * Build the `bizar_read_glyph_feedback` tool. The plugin wires the
+ * result into `api.registerTool()` from `AgentExtensionApi`. The
+ * `deps` closure carries the worktree and logger.
  */
-export function createReadGlyphFeedbackTool(deps: ReadGlyphFeedbackDeps) {
-  return tool({
+export function createReadGlyphFeedbackTool(
+  deps: ReadGlyphFeedbackDeps,
+): AgentTool<BizarReadGlyphFeedbackInput, BizarReadGlyphFeedbackOutput> {
+  return createTool({
+    name: BIZAR_READ_GLYPH_FEEDBACK_TOOL_NAME,
     description:
       "Reads feedback.md for a glyph the user submitted for review. " +
       "Returns free-placed comments with (x, y) coordinates, answers to " +
       "OpenQuestions, and the original MDX source. Use this to understand " +
       "exactly what the user wants changed before regenerating the glyph.",
-    args: {
-      slug: z
-        .string()
-        .min(1)
-        .max(64)
-        .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Must match ^[a-z0-9][a-z0-9-]{0,63}$")
-        .describe("The artifact slug (e.g., 'dashboard-stale-pid-fix')."),
-    },
-    execute: async (rawArgs) => {
-      const args = rawArgs as { slug: string };
-      const result = readGlyphFeedback(deps.worktree, args.slug);
+    inputSchema: bizarReadGlyphFeedbackSchema.shape,
+    execute: async (input) => {
+      const result = readGlyphFeedback(deps.worktree, input.slug);
       if (!result.ok) {
-        deps.logger.warn(`bizar: read_glyph_feedback(${args.slug}) failed: ${result.error}`);
+        deps.logger.warn(
+          `bizar: read_glyph_feedback(${input.slug}) failed: ${result.error}`,
+        );
       }
-      return { output: JSON.stringify(result) };
+      return result;
     },
   });
 }
+

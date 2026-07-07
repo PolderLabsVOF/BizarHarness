@@ -35,8 +35,16 @@
  * `liveSession: true` flag indicates the new SDK-backed mode.
  *
  * Spec §1, §6.3, §7.1.
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_SPAWN_BACKGROUND_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...).shape` over the same fields as before.
+ *   - Returns structured `{ instanceId, sessionId, ... }` /
+ *     `{ error, ... }` instead of `{ output: JSON.stringify(...) }`.
+ *   - `ctx.agent` becomes `context.metadata.parentAgent` look-up.
  */
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 
 import { generateInstanceId } from "../background.js";
@@ -46,6 +54,8 @@ import { resolve as pathResolve } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+
+export const BIZAR_SPAWN_BACKGROUND_TOOL_NAME = "bizar_spawn_background";
 
 /** Spec §7.3: `timeoutMs` clamped to [1000, 1800000] (1s..30min). */
 const TIMEOUT_MIN_MS = 1000;
@@ -133,6 +143,52 @@ export interface BgSpawnDeps {
    */
   _dashboardPost?: (url: string, init: { headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 }
+
+export type BizarBgSpawnInput = z.infer<typeof bizarBgSpawnSchema>;
+
+export type BizarBgSpawnSuccess = {
+  instanceId: string;
+  dashboardInstanceId: string | undefined;
+  sessionId: string | null;
+  processId: null;
+  status: string;
+  liveSession: true;
+  message: string;
+  nextSteps: string[];
+  model?: string;
+};
+
+export type BizarBgSpawnOutput =
+  | BizarBgSpawnSuccess
+  | { error: string; instanceId?: string; sessionId?: string | null; status?: string };
+
+const bizarBgSpawnSchema = z.object({
+  agent: z.string().min(1).describe("Agent name to spawn (e.g. 'mimir', 'thor', 'tyr')."),
+  prompt: z.string().min(1).describe("User prompt for the background session."),
+  model: z
+    .string()
+    .optional()
+    .describe("Optional model override in 'providerID/modelID' format."),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Collect-time timeout in ms (1s..30min, default 5min)."),
+  persistent: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("When true, auto-restart on terminal failure (up to maxRestarts)."),
+  maxRestarts: z
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .optional()
+    .default(3)
+    .describe("Number of auto-restart attempts before giving up."),
+});
 
 /**
  * Compute the LogWriter's actual log path for a given instanceId. Mirrors
@@ -261,11 +317,15 @@ async function postJsonToDashboard(
 
 /**
  * Build the `bizar_spawn_background` tool. The plugin wires the
- * result into `Hooks.tool`. The `deps` closure carries the
- * per-process state (InstanceManager, worktree, logger).
+ * result into `api.registerTool()` from `AgentExtensionApi`. The
+ * `deps` closure carries the per-process state (InstanceManager,
+ * worktree, logger).
  */
-export function createBgSpawnTool(deps: BgSpawnDeps) {
-  return tool({
+export function createBgSpawnTool(
+  deps: BgSpawnDeps,
+): AgentTool<BizarBgSpawnInput, BizarBgSpawnOutput> {
+  return createTool({
+    name: BIZAR_SPAWN_BACKGROUND_TOOL_NAME,
     description:
       "Spawn a background agent that runs asynchronously as a long-lived cline serve session " +
       "(SDK-backed via the dashboard). " +
@@ -275,83 +335,44 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       "Use `bizar_bg_view` (CLI) to watch all running agents in a tmux split window. " +
       "Steering is TRUE mid-flight via `bizar_send_message` (no kill+respawn). " +
       "IMPORTANT: do NOT block waiting for the agent. Return control to the user right after spawning.",
-    args: {
-      agent: z.string().min(1).describe("Agent name to spawn (e.g. 'mimir', 'thor', 'tyr')."),
-      prompt: z.string().min(1).describe("User prompt for the background session."),
-      model: z
-        .string()
-        .optional()
-        .describe("Optional model override in 'providerID/modelID' format."),
-      timeoutMs: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Collect-time timeout in ms (1s..30min, default 5min)."),
-      persistent: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("When true, auto-restart on terminal failure (up to maxRestarts)."),
-      maxRestarts: z
-        .number()
-        .int()
-        .min(1)
-        .max(10)
-        .optional()
-        .default(3)
-        .describe("Number of auto-restart attempts before giving up."),
-    },
-    execute: async (rawArgs, ctx) => {
+    inputSchema: bizarBgSpawnSchema.shape,
+    execute: async (input, context) => {
       // 1. Odin-only (MEDIUM-26).
-      if (ctx.agent !== "odin") {
+      const parentAgent =
+        (context.metadata as { parentAgent?: string } | undefined)?.parentAgent ?? null;
+      if (parentAgent !== "odin") {
         return {
-          output: JSON.stringify({
-            error:
-              "Only Odin can spawn background agents. Use the task tool for sync work, or ask Odin to spawn a background agent.",
-          }),
+          error:
+            "Only Odin can spawn background agents. Use the task tool for sync work, or ask Odin to spawn a background agent.",
         };
       }
 
-      const args = rawArgs as {
-        agent: string;
-        prompt: string;
-        model?: string;
-        timeoutMs?: number;
-        persistent?: boolean;
-        maxRestarts?: number;
-      };
-
       // 2. Validate the model parameter (LOW-34 / §1.4).
       let modelOverride: ModelOverride | undefined;
-      if (args.model !== undefined && args.model !== "") {
-        const m = parseModel(args.model);
+      if (input.model !== undefined && input.model !== "") {
+        const m = parseModel(input.model);
         if (m === null) {
           return {
-            output: JSON.stringify({
-              error: `model must be in "providerID/modelID" format (e.g. "cline/deepseek-v4-flash-free"). Omit to use the agent's default.`,
-            }),
+            error: `model must be in "providerID/modelID" format (e.g. "cline/deepseek-v4-flash-free"). Omit to use the agent's default.`,
           };
         }
         modelOverride = m;
       }
 
       // 3. Clamp timeoutMs (MEDIUM-33 / §7.3).
-      const requested = args.timeoutMs ?? TIMEOUT_DEFAULT_MS;
+      const requested = input.timeoutMs ?? TIMEOUT_DEFAULT_MS;
       if (requested < TIMEOUT_MIN_MS || requested > TIMEOUT_MAX_MS) {
         return {
-          output: JSON.stringify({
-            error: `timeoutMs must be between ${TIMEOUT_MIN_MS} (1s) and ${TIMEOUT_MAX_MS} (30min). Got ${requested}.`,
-          }),
+          error: `timeoutMs must be between ${TIMEOUT_MIN_MS} (1s) and ${TIMEOUT_MAX_MS} (30min). Got ${requested}.`,
         };
       }
       const timeoutMs = requested;
 
       // 4. Build the delegation wrapper (mirrors bg-spawn.ts pre-v5.5.1).
-      const isPrimary = PRIMARY_AGENTS.has(args.agent);
+      const isPrimary = PRIMARY_AGENTS.has(input.agent);
       const wrapperPrompt = isPrimary
-        ? args.prompt
-        : buildDelegationPrompt(args.agent, args.prompt);
+        ? input.prompt
+        : buildDelegationPrompt(input.agent, input.prompt);
 
       // 5. Pre-allocate the instanceId so we can track BEFORE the
       //    dashboard call (track-before-HTTP, HIGH-21). The dashboard
@@ -364,18 +385,18 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       const draft = {
         instanceId,
         sessionId: "", // filled in once the dashboard returns the sessionId
-        agent: args.agent,
+        agent: input.agent,
         model: modelOverride
           ? `${modelOverride.providerID}/${modelOverride.modelID}`
           : "agent-default",
-        promptPreview: args.prompt.slice(0, 200),
-        prompt: args.prompt, // store full prompt for restart support
-        parentAgent: ctx.agent,
+        promptPreview: input.prompt.slice(0, 200),
+        prompt: input.prompt, // store full prompt for restart support
+        parentAgent,
         logPath,
         timeoutMs,
         toolCallCount: 0,
-        persistent: args.persistent ?? false,
-        maxRestarts: args.maxRestarts ?? 3,
+        persistent: input.persistent ?? false,
+        maxRestarts: input.maxRestarts ?? 3,
         restartCount: 0,
         progress: 0,
         toolCalls: [],
@@ -383,9 +404,7 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       const addRes = await deps.instanceManager.add(draft);
       if (addRes === "cap_reached") {
         return {
-          output: JSON.stringify({
-            error: `Max concurrent instances reached. Wait for one to finish or call bizar_kill.`,
-          }),
+          error: `Max concurrent instances reached. Wait for one to finish or call bizar_kill.`,
         };
       }
 
@@ -397,16 +416,16 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
         spawnRes = (await postJsonToDashboard(
           dashboardUrl,
           {
-            agent: args.agent,
+            agent: input.agent,
             prompt: wrapperPrompt,
             model: modelOverride
               ? `${modelOverride.providerID}/${modelOverride.modelID}`
               : undefined,
             worktree: deps.worktree,
             timeoutMs,
-            persistent: Boolean(args.persistent),
-            maxRestarts: args.maxRestarts ?? 3,
-            tags: [`spawned-by:${ctx.agent}`, `plugin-instance:${instanceId}`],
+            persistent: Boolean(input.persistent),
+            maxRestarts: input.maxRestarts ?? 3,
+            tags: [`spawned-by:${parentAgent}`, `plugin-instance:${instanceId}`],
           },
           deps.logger,
           deps._dashboardPost,
@@ -419,12 +438,10 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
           completedAt: Date.now(),
         });
         return {
-          output: JSON.stringify({
-            error: `spawn failed: dashboard unreachable (${msg}). Make sure the Bizar dashboard is running.`,
-            instanceId,
-            sessionId: null,
-            status: "failed",
-          }),
+          error: `spawn failed: dashboard unreachable (${msg}). Make sure the Bizar dashboard is running.`,
+          instanceId,
+          sessionId: null,
+          status: "failed",
         };
       }
 
@@ -461,26 +478,24 @@ export function createBgSpawnTool(deps: BgSpawnDeps) {
       //    running in the background on an cline serve session; Odin
       //    should return control to the user immediately.
       return {
-        output: JSON.stringify({
-          instanceId,
-          dashboardInstanceId: spawnRes.instanceId,
-          sessionId: spawnRes.sessionId,
-          processId: null, // no subprocess; the cline serve child owns the session
-          status: "running",
-          liveSession: true,
-          message:
-            "Background agent started. It runs as an cline serve SDK session managed by the Bizar dashboard. " +
-            "Use `bizar_status <instanceId>` to check progress, `bizar_collect <instanceId>` to wait for the result, " +
-            "`bizar_send_message <instanceId> <msg>` for true mid-flight steering, " +
-            "or `bizar_kill <instanceId>` to stop it. Run `bizar bg view` in another terminal to watch all running agents live.",
-          nextSteps: [
-            "Tell the user the agent is running and approximately how long they should expect to wait",
-            "If the user wants the result now, call `bizar_collect <instanceId>` (with a reasonable timeout)",
-            "If the user wants to redirect the agent, call `bizar_send_message <instanceId> <msg>` — this is TRUE mid-flight",
-            "If the user wants to stop the agent, call `bizar_kill <instanceId>`",
-            "Do NOT block waiting for the result unless the user explicitly asked for it",
-          ],
-        }),
+        instanceId,
+        dashboardInstanceId: spawnRes.instanceId,
+        sessionId: spawnRes.sessionId,
+        processId: null, // no subprocess; the cline serve child owns the session
+        status: "running",
+        liveSession: true,
+        message:
+          "Background agent started. It runs as an cline serve SDK session managed by the Bizar dashboard. " +
+          "Use `bizar_status <instanceId>` to check progress, `bizar_collect <instanceId>` to wait for the result, " +
+          "`bizar_send_message <instanceId> <msg>` for true mid-flight steering, " +
+          "or `bizar_kill <instanceId>` to stop it. Run `bizar bg view` in another terminal to watch all running agents live.",
+        nextSteps: [
+          "Tell the user the agent is running and approximately how long they should expect to wait",
+          "If the user wants the result now, call `bizar_collect <instanceId>` (with a reasonable timeout)",
+          "If the user wants to redirect the agent, call `bizar_send_message <instanceId> <msg>` — this is TRUE mid-flight",
+          "If the user wants to stop the agent, call `bizar_kill <instanceId>`",
+          "Do NOT block waiting for the result unless the user explicitly asked for it",
+        ],
       };
     },
   });

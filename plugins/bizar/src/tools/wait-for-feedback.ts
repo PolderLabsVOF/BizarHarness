@@ -23,14 +23,23 @@
  *
  * v0.4.0 MVP — this is the polling version. A future v0.5.0 will
  * switch to SSE-based push notifications from the plan server.
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_WAIT_FOR_FEEDBACK_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...).shape` over the same fields as before.
+ *   - Returns structured `{ ok, status, ... }` / `{ ok: false, error, ... }`
+ *     instead of `{ output: JSON.stringify(...) }`.
  */
 
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Logger } from "../logger.js";
+
+export const BIZAR_WAIT_FOR_FEEDBACK_TOOL_NAME = "bizar_wait_for_feedback";
 
 // --- On-disk shapes (subset) ---------------------------------------------
 
@@ -105,8 +114,6 @@ export interface WaitError {
 
 export type WaitForFeedbackResult = WaitResult | WaitError;
 
-// --- Pure core: waitForFeedback ------------------------------------------
-
 export interface WaitForFeedbackArgs {
   planSlug: string;
   timeoutMs?: number;
@@ -127,6 +134,36 @@ export interface WaitForFeedbackDeps {
   now?: () => number;
 }
 
+export type BizarWaitForFeedbackInput = z.infer<typeof bizarWaitForFeedbackSchema>;
+export type BizarWaitForFeedbackOutput = WaitForFeedbackResult;
+
+const bizarWaitForFeedbackSchema = z.object({
+  planSlug: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Must match ^[a-z0-9][a-z0-9-]{0,63}$")
+    .describe("The plan's slug (e.g. 'my-feature')."),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .min(TIMEOUT_MIN_MS)
+    .max(TIMEOUT_MAX_MS)
+    .optional()
+    .describe(
+      `How long to wait, in milliseconds. Default ${TIMEOUT_DEFAULT_MS} (10 min). ` +
+        `Range [${TIMEOUT_MIN_MS}, ${TIMEOUT_MAX_MS}] (5 s..30 min).`,
+    ),
+  sinceTimestamp: z
+    .string()
+    .optional()
+    .describe(
+      "Optional ISO timestamp. Only comments with `created` strictly " +
+        "after this value count as feedback. If omitted, the first poll " +
+        "returns any existing non-empty comment set as feedback.",
+    ),
+});
 function clampTimeout(raw: number | undefined): number {
   if (raw === undefined) return TIMEOUT_DEFAULT_MS;
   if (!Number.isFinite(raw) || raw < TIMEOUT_MIN_MS) return TIMEOUT_MIN_MS;
@@ -341,10 +378,14 @@ export async function waitForFeedback(
 
 /**
  * Build the `bizar_wait_for_feedback` tool. The plugin wires the result
- * into `Hooks.tool`. The `deps` closure carries the worktree and logger.
+ * into `api.registerTool()` from `AgentExtensionApi`. The `deps`
+ * closure carries the worktree and logger.
  */
-export function createWaitForFeedbackTool(deps: WaitForFeedbackDeps) {
-  return tool({
+export function createWaitForFeedbackTool(
+  deps: WaitForFeedbackDeps,
+): AgentTool<BizarWaitForFeedbackInput, BizarWaitForFeedbackOutput> {
+  return createTool({
+    name: BIZAR_WAIT_FOR_FEEDBACK_TOOL_NAME,
     description:
       "Block until the user provides feedback on a plan, approves it, " +
       "rejects it, or the timeout is reached. Polls every 2 seconds. " +
@@ -352,51 +393,23 @@ export function createWaitForFeedbackTool(deps: WaitForFeedbackDeps) {
       "present the plan for approval. Returns when feedback arrives, " +
       "when meta.json.status changes to approved/rejected, or on timeout. " +
       "Never throws. Available to all agents (heavy poll — Odin preferred).",
-    args: {
-      planSlug: z
-        .string()
-        .min(1)
-        .max(64)
-        .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Must match ^[a-z0-9][a-z0-9-]{0,63}$")
-        .describe("The plan's slug (e.g. 'my-feature')."),
-      timeoutMs: z
-        .number()
-        .int()
-        .positive()
-        .min(TIMEOUT_MIN_MS)
-        .max(TIMEOUT_MAX_MS)
-        .optional()
-        .describe(
-          `How long to wait, in milliseconds. Default ${TIMEOUT_DEFAULT_MS} (10 min). ` +
-            `Range [${TIMEOUT_MIN_MS}, ${TIMEOUT_MAX_MS}] (5 s..30 min).`,
-        ),
-      sinceTimestamp: z
-        .string()
-        .optional()
-        .describe(
-          "Optional ISO timestamp. Only comments with `created` strictly " +
-            "after this value count as feedback. If omitted, the first poll " +
-            "returns any existing non-empty comment set as feedback.",
-        ),
-    },
-    execute: async (rawArgs) => {
-      const args = rawArgs as WaitForFeedbackArgs;
+    inputSchema: bizarWaitForFeedbackSchema.shape,
+    execute: async (input) => {
       try {
-        const result = await waitForFeedback(deps, args);
-        return { output: JSON.stringify(result) };
+        const result = await waitForFeedback(deps, input);
+        return result;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         deps.logger.warn(`bizar: wait_for_feedback crashed: ${msg}`);
         return {
-          output: JSON.stringify({
-            ok: false,
-            status: "error",
-            planSlug: args.planSlug,
-            error: `Internal error: ${msg}`,
-            waitedMs: 0,
-          }),
+          ok: false as const,
+          status: "error",
+          planSlug: input.planSlug,
+          error: `Internal error: ${msg}`,
+          waitedMs: 0,
         };
       }
     },
   });
 }
+

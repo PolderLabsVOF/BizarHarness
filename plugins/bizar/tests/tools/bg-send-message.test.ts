@@ -17,10 +17,7 @@ const silentLogger: Logger = {
   log() {},
 };
 
-function decode(result: unknown): any {
-  if (typeof result === "string") return JSON.parse(result);
-  return JSON.parse((result as { output: string }).output);
-}
+function decode(result: unknown): any { const r = result as any; if (r && typeof r === "object" && "output" in r) { return typeof r.output === "string" ? JSON.parse(r.output) : r.output; } if (typeof result === "string") return JSON.parse(result); return result; }
 
 describe("bg-send-message tool", () => {
   it("returns instance_not_found for missing", async () => {
@@ -28,7 +25,7 @@ describe("bg-send-message tool", () => {
     const tool = createBgSendMessageTool({ instanceManager: mgr, logger: silentLogger });
     const r = await tool.execute(
       { instanceId: "bgr_missing", message: "hi" } as any,
-      { agent: "odin" } as any,
+      { metadata: { parentAgent: "odin" } } as any,
     );
     expect(decode(r)).toMatchObject({ error: "instance_not_found" });
   });
@@ -63,7 +60,7 @@ describe("bg-send-message tool", () => {
     } as any);
     const r = await tool.execute(
       { instanceId: "bgr_x", message: "go faster" } as any,
-      { agent: "odin" } as any,
+      { metadata: { parentAgent: "odin" } } as any,
     );
     // Verify the dashboard was hit with the right URL + body.
     expect(capturedUrl).toContain("/api/background/bgr_x/steer");
@@ -91,7 +88,7 @@ describe("bg-send-message tool", () => {
     } as any);
     const r = await tool.execute(
       { instanceId: "bgr_y", message: "halt" } as any,
-      { agent: "odin" } as any,
+      { metadata: { parentAgent: "odin" } } as any,
     );
     const out = decode(r);
     expect(out.error).toContain("dashboard_down");
@@ -111,7 +108,7 @@ describe("bg-send-message tool", () => {
     } as any);
     const r = await tool.execute(
       { instanceId: "bgr_z", message: "halt" } as any,
-      { agent: "odin" } as any,
+      { metadata: { parentAgent: "odin" } } as any,
     );
     const out = decode(r);
     expect(out.error).toContain("ECONNREFUSED");

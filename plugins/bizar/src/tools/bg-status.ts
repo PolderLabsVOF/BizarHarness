@@ -8,59 +8,80 @@
  * filtered by `instanceId`. The result is the `InstanceView` shape
  * (subset of `BackgroundState`); see `background.ts` for the type.
  *
- * Returns:
- *   `Array<{ instanceId, agent, status, startedAt, toolCallCount,
- *             promptPreview, resultPreview?, error?, parentAgent,
- *             parentInstanceId? }>`
+ * Cline SDK port (Phase 2):
+ *   - Imports `createTool` and `AgentTool` from `@cline/sdk`.
+ *   - Adds the required `name` field on every tool.
+ *   - `args` (ZodRawShape) is wrapped in `z.object(...)` for `inputSchema`
+ *     so Cline's runtime can resolve it.
+ *   - `execute(input, context)` no longer takes a `rawArgs`-shaped bag
+ *     with a side-channel context — `input` is the parsed object and
+ *     `context` is Cline's `AgentToolContext`.
+ *   - Return shape is the parsed value directly; Cline wraps it in
+ *     `AgentToolResult.output` automatically.
  */
 
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 
 import type { InstanceManager, InstanceView } from "../background.js";
 import type { Logger } from "../logger.js";
+
+export const BIZAR_STATUS_TOOL_NAME = "bizar_status";
 
 export interface BgStatusDeps {
   instanceManager: InstanceManager;
   logger: Logger;
 }
 
+export type BizarStatusInput = z.infer<typeof bizarStatusSchema>;
+export type BizarStatusOutput =
+  | { ok: true; instances: InstanceView[] }
+  | { ok: false; error: string; instanceId?: string };
+
+const bizarStatusSchema = z.object({
+  instanceId: z
+    .string()
+    .optional()
+    .describe("Optional instanceId. If omitted, all instances are returned."),
+});
+
 /**
  * Build the `bizar_status` tool. The plugin wires the result into
- * `Hooks.tool`. The `deps` closure carries the InstanceManager.
+ * `api.registerTool()` from `AgentExtensionApi`. The `deps` closure
+ * carries the InstanceManager.
  */
-export function createBgStatusTool(deps: BgStatusDeps) {
-  return tool({
+export function createBgStatusTool(
+  deps: BgStatusDeps,
+): AgentTool<BizarStatusInput, BizarStatusOutput> {
+  return createTool({
+    name: BIZAR_STATUS_TOOL_NAME,
     description:
       "List background instances. Read-only; available to all agents. " +
       "Pass an instanceId to inspect one instance.",
-    args: {
-      instanceId: z
-        .string()
-        .optional()
-        .describe("Optional instanceId. If omitted, all instances are returned."),
-    },
-    execute: async (rawArgs) => {
-      const args = rawArgs as { instanceId?: string };
+    inputSchema: bizarStatusSchema.shape,
+    execute: async (input) => {
       try {
-        if (args.instanceId) {
-          const inst = await deps.instanceManager.get(args.instanceId);
+        if (input.instanceId) {
+          const inst = await deps.instanceManager.get(input.instanceId);
           if (!inst) {
             return {
-              output: JSON.stringify({ error: `instance not found`, instanceId: args.instanceId }),
+              ok: false as const,
+              error: "instance_not_found",
+              instanceId: input.instanceId,
             };
           }
           const view: InstanceView = toViewShape(inst);
-          return { output: JSON.stringify([view]) };
+          return { ok: true as const, instances: [view] };
         }
         const list = await deps.instanceManager.list();
-        return { output: JSON.stringify(list) };
+        return { ok: true as const, instances: list };
       } catch (err: unknown) {
         deps.logger.warn(
           `bizar: status failed: ${err instanceof Error ? err.message : String(err)}`,
         );
         return {
-          output: JSON.stringify({ error: `status failed: ${err instanceof Error ? err.message : String(err)}` }),
+          ok: false as const,
+          error: err instanceof Error ? err.message : String(err),
         };
       }
     },

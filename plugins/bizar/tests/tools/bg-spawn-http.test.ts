@@ -32,8 +32,18 @@ const silentLogger: Logger = {
 };
 
 function decode(result: unknown): any {
+  // Cline SDK port (Phase 2): the tool now returns structured objects
+  // directly instead of `{ output: JSON.stringify(...) }`. The agent
+  // runtime wraps the returned value in AgentToolResult, but
+  // `tool.execute()` (called directly in tests) hands the structured
+  // object back as-is.
   if (typeof result === "string") return JSON.parse(result);
-  return JSON.parse((result as { output: string }).output);
+  if (result && typeof result === "object" && "output" in result) {
+    const out = (result as { output: unknown }).output;
+    if (typeof out === "string") return JSON.parse(out);
+    return out;
+  }
+  return result;
 }
 
 /** Capture the dashboard POST so the test can assert its shape. */
@@ -82,7 +92,7 @@ describe("bizar_spawn_background — HTTP delegation (v5.5.1)", () => {
     });
     const r = await tool.execute(
       { agent: "mimir", prompt: "hi" } as any,
-      { agent: "frigg" } as any,
+      { metadata: { parentAgent: "frigg" } } as any,
     );
     expect(decode(r).error).toContain("Only Odin");
   });
@@ -108,7 +118,7 @@ describe("bizar_spawn_background — HTTP delegation (v5.5.1)", () => {
         model: "minimax/minimax-m3",
         timeoutMs: 60_000,
       } as any,
-      { agent: "odin", sessionID: "ses_parent" } as any,
+      { metadata: { parentAgent: "odin" }, sessionID: "ses_parent" } as any,
     );
     expect(calls).toHaveLength(1);
     const call = calls[0]!;
@@ -146,7 +156,7 @@ describe("bizar_spawn_background — HTTP delegation (v5.5.1)", () => {
     });
     await tool.execute(
       { agent: "odin", prompt: "raw prompt here" } as any,
-      { agent: "odin", sessionID: "ses_parent" } as any,
+      { metadata: { parentAgent: "odin" }, sessionID: "ses_parent" } as any,
     );
     const call = calls[0]!;
     expect(call.body.agent).toBe("odin");
@@ -166,7 +176,7 @@ describe("bizar_spawn_background — HTTP delegation (v5.5.1)", () => {
     });
     const r = await tool.execute(
       { agent: "mimir", prompt: "hi" } as any,
-      { agent: "odin", sessionID: "ses_parent" } as any,
+      { metadata: { parentAgent: "odin" }, sessionID: "ses_parent" } as any,
     );
     const out = decode(r);
     expect(out.error).toContain("ECONNREFUSED");
@@ -182,7 +192,7 @@ describe("bizar_spawn_background — HTTP delegation (v5.5.1)", () => {
     });
     const r = await tool.execute(
       { agent: "mimir", prompt: "hi", model: "no-slash" } as any,
-      { agent: "odin", sessionID: "ses_parent" } as any,
+      { metadata: { parentAgent: "odin" }, sessionID: "ses_parent" } as any,
     );
     expect(decode(r).error).toContain("providerID/modelID");
   });
@@ -196,7 +206,7 @@ describe("bizar_spawn_background — HTTP delegation (v5.5.1)", () => {
     });
     const r = await tool.execute(
       { agent: "mimir", prompt: "hi", timeoutMs: 100 } as any,
-      { agent: "odin", sessionID: "ses_parent" } as any,
+      { metadata: { parentAgent: "odin" }, sessionID: "ses_parent" } as any,
     );
     expect(decode(r).error).toContain("timeoutMs must be between");
   });

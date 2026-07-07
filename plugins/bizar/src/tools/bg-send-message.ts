@@ -15,8 +15,15 @@
  *   - Response: `{ ok, mode: 'true_midflight', newInstanceId: null, instanceId, steerCount }`.
  *
  * Errors surface as `{ ok: false, error }` so callers can react.
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_SEND_MESSAGE_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...)` over the same fields as before.
+ *   - Returns structured `{ ok, mode, instanceId, steerCount, message }`
+ *     instead of `{ output: JSON.stringify(...) }`.
  */
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 
 import type { InstanceManager } from "../background.js";
@@ -24,6 +31,8 @@ import type { Logger } from "../logger.js";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+
+export const BIZAR_SEND_MESSAGE_TOOL_NAME = "bizar_send_message";
 
 export interface BgSendMessageDeps {
   instanceManager: InstanceManager;
@@ -35,6 +44,28 @@ export interface BgSendMessageDeps {
    */
   _dashboardPost?: (url: string, init: { headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 }
+
+export type BizarSendMessageInput = z.infer<typeof bizarSendMessageSchema>;
+export type BizarSendMessageOutput =
+  | {
+      ok: true;
+      mode: string;
+      instanceId: string;
+      steerCount: number;
+      message: string;
+    }
+  | { ok: false; error: string; instanceId?: string };
+
+const bizarSendMessageSchema = z.object({
+  instanceId: z
+    .string()
+    .min(1)
+    .describe("Instance id returned by bizar_spawn_background."),
+  message: z
+    .string()
+    .min(1)
+    .describe("The follow-up instruction to send."),
+});
 
 // --- Dashboard URL + token (mirrors bg-spawn.ts) ------------------------
 
@@ -126,34 +157,26 @@ async function postJsonToDashboard(
   }
 }
 
-export function createBgSendMessageTool(deps: BgSendMessageDeps) {
-  return tool({
+export function createBgSendMessageTool(
+  deps: BgSendMessageDeps,
+): AgentTool<BizarSendMessageInput, BizarSendMessageOutput> {
+  return createTool({
+    name: BIZAR_SEND_MESSAGE_TOOL_NAME,
     description:
       "Send a follow-up message to a running background agent. " +
       "v5.5.1: TRUE mid-flight steer via the cline serve SDK. " +
       "The same instance keeps running; the new message becomes the next user turn " +
       "of the running cline session. No kill+respawn, no [STEERED <ts>] marker, " +
       "no loss of agent context.",
-    args: {
-      instanceId: z
-        .string()
-        .min(1)
-        .describe("Instance id returned by bizar_spawn_background."),
-      message: z
-        .string()
-        .min(1)
-        .describe("The follow-up instruction to send."),
-    },
-    execute: async (rawArgs, _ctx) => {
-      const args = rawArgs as { instanceId: string; message: string };
+    inputSchema: bizarSendMessageSchema.shape,
+    execute: async (input, _context) => {
       // 1. Verify the instance exists so we don't silently accept bogus ids.
-      const inst = await deps.instanceManager.get(args.instanceId);
+      const inst = await deps.instanceManager.get(input.instanceId);
       if (!inst) {
         return {
-          output: JSON.stringify({
-            error: "instance_not_found",
-            instanceId: args.instanceId,
-          }),
+          ok: false as const,
+          error: "instance_not_found",
+          instanceId: input.instanceId,
         };
       }
 
@@ -161,42 +184,38 @@ export function createBgSendMessageTool(deps: BgSendMessageDeps) {
       //    cline SDK and calls `sdk.sessions.prompt({...})` on the
       //    live session, which the cline serve child picks up
       //    mid-loop as the next user turn.
-      const dashboardUrl = `${resolveDashboardUrl()}/api/background/${encodeURIComponent(args.instanceId)}/steer`;
+      const dashboardUrl = `${resolveDashboardUrl()}/api/background/${encodeURIComponent(input.instanceId)}/steer`;
       try {
         const data = (await postJsonToDashboard(
           dashboardUrl,
-          { message: args.message },
+          { message: input.message },
           deps._dashboardPost,
         )) as { ok: boolean; mode?: string; steerCount?: number; error?: string };
         if (!data || data.ok !== true) {
           return {
-            output: JSON.stringify({
-              error: data?.error || "steer_failed",
-              instanceId: args.instanceId,
-            }),
+            ok: false as const,
+            error: data?.error || "steer_failed",
+            instanceId: input.instanceId,
           };
         }
         deps.logger.info(
-          `bizar: sendMessage(${args.instanceId}) — TRUE mid-flight steer #${data.steerCount ?? "?"} accepted`,
+          `bizar: sendMessage(${input.instanceId}) — TRUE mid-flight steer #${data.steerCount ?? "?"} accepted`,
         );
         return {
-          output: JSON.stringify({
-            ok: true,
-            mode: data.mode || "true_midflight",
-            instanceId: args.instanceId,
-            steerCount: data.steerCount ?? 0,
-            message:
-              "Steer delivered to the running cline session. The agent will pick up your message as the next user turn — no kill+respawn was performed, no context was lost.",
-          }),
+          ok: true as const,
+          mode: data.mode || "true_midflight",
+          instanceId: input.instanceId,
+          steerCount: data.steerCount ?? 0,
+          message:
+            "Steer delivered to the running cline session. The agent will pick up your message as the next user turn — no kill+respawn was performed, no context was lost.",
         };
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        deps.logger.warn(`bizar: sendMessage(${args.instanceId}) failed: ${msg}`);
+        deps.logger.warn(`bizar: sendMessage(${input.instanceId}) failed: ${msg}`);
         return {
-          output: JSON.stringify({
-            error: `steer_failed: ${msg}`,
-            instanceId: args.instanceId,
-          }),
+          ok: false as const,
+          error: `steer_failed: ${msg}`,
+          instanceId: input.instanceId,
         };
       }
     },

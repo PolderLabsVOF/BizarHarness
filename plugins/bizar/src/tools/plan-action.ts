@@ -25,16 +25,23 @@
  *   - Corrupt plan.json → `{ error: "Failed to read plan.json: ..." }`
  *   - Missing element/connection/comment → `{ error: "Element not found: ..." }`
  *
- * The tool NEVER throws. All errors are returned as JSON.
+ * The tool NEVER throws. All errors are returned as structured objects.
  *
  * Concurrency:
  *   - All writes go through a per-store async mutex (see `withLock`).
  *   - Writes are atomic via `writeFileSync(tmp) + renameSync(tmp, final)`.
  *
  * Read-only counterpart: `bizar_get_plan_comments` (see bg-get-comments.ts).
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_PLAN_ACTION_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...).shape` over the same fields as before.
+ *   - Returns structured `{ ok: true, ... }` / `{ ok: false, error, ... }`
+ *     instead of `{ output: JSON.stringify(...) }`.
  */
 
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 import {
   existsSync,
@@ -233,6 +240,11 @@ function ensurePlanDir(planDir: string): boolean {
 }
 
 // --- Pure core: planAction (extracted for testing) ------------------------
+
+export const BIZAR_PLAN_ACTION_TOOL_NAME = "bizar_plan_action";
+
+export type BizarPlanActionInput = z.infer<typeof bizarPlanActionSchema>;
+export type BizarPlanActionOutput = PlanActionResult;
 
 export interface PlanActionArgs {
   action: string;
@@ -703,63 +715,69 @@ const replySchema = z
   })
   .passthrough();
 
+// Combined schema for the `bizar_plan_action` tool. The inner action
+// handlers (`doAddElement`, etc.) extract values via the typed
+// `PlanActionArgs` shape and are unaffected by the Zod layer.
+const bizarPlanActionSchema = z.object({
+  action: z.enum([
+    "get_canvas",
+    "add_element",
+    "update_element",
+    "delete_element",
+    "add_connection",
+    "delete_connection",
+    "add_comment",
+    "reply_to_comment",
+    "set_status",
+  ]),
+  planSlug: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Must match ^[a-z0-9][a-z0-9-]{0,63}$")
+    .describe("The plan's slug (e.g. 'my-feature')."),
+  element: elementSchema.optional(),
+  elementId: z.string().optional(),
+  connection: connectionSchema.optional(),
+  connectionId: z.string().optional(),
+  comment: commentSchema.optional(),
+  commentId: z.string().optional(),
+  reply: replySchema.optional(),
+  status: z.enum(PLAN_STATUSES).optional(),
+});
+
 // --- Tool factory ---------------------------------------------------------
 
 /**
  * Build the `bizar_plan_action` tool. The plugin wires the result into
- * `Hooks.tool`. The `deps` closure carries the worktree, logger, and a
- * shared per-plan mutex map (one mutex map per plugin instance).
+ * `api.registerTool()` from `AgentExtensionApi`. The `deps` closure
+ * carries the worktree, logger, and a shared per-plan mutex map (one
+ * mutex map per plugin instance).
  */
-export function createPlanActionTool(deps: PlanActionDeps) {
+export function createPlanActionTool(
+  deps: PlanActionDeps,
+): AgentTool<BizarPlanActionInput, BizarPlanActionOutput> {
   const locks = new Map<string, Promise<unknown>>();
-  return tool({
+  return createTool({
+    name: BIZAR_PLAN_ACTION_TOOL_NAME,
     description:
       "CRUD on a Bizar Plan canvas. Use this to add elements, update " +
       "their content, post comments, reply to comments, and set the " +
       "plan's status. Pure file I/O — does not require any background " +
       "agent or local server. Available to all agents.",
-    args: {
-      action: z.enum([
-        "get_canvas",
-        "add_element",
-        "update_element",
-        "delete_element",
-        "add_connection",
-        "delete_connection",
-        "add_comment",
-        "reply_to_comment",
-        "set_status",
-      ]),
-      planSlug: z
-        .string()
-        .min(1)
-        .max(64)
-        .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Must match ^[a-z0-9][a-z0-9-]{0,63}$")
-        .describe("The plan's slug (e.g. 'my-feature')."),
-      element: elementSchema.optional(),
-      elementId: z.string().optional(),
-      connection: connectionSchema.optional(),
-      connectionId: z.string().optional(),
-      comment: commentSchema.optional(),
-      commentId: z.string().optional(),
-      reply: replySchema.optional(),
-      status: z.enum(PLAN_STATUSES).optional(),
-    },
-    execute: async (rawArgs) => {
-      const args = rawArgs as PlanActionArgs;
+    inputSchema: bizarPlanActionSchema.shape,
+    execute: async (input, _context) => {
       try {
-        const result = await planAction(deps.worktree, deps.logger, locks, args);
-        return { output: JSON.stringify(result) };
+        const result = await planAction(deps.worktree, deps.logger, locks, input);
+        return result;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        deps.logger.warn(`bizar: plan_action(${args.action}) crashed: ${msg}`);
+        deps.logger.warn(`bizar: plan_action(${input.action}) crashed: ${msg}`);
         return {
-          output: JSON.stringify({
-            ok: false,
-            action: args.action,
-            planSlug: args.planSlug,
-            error: `Internal error: ${msg}`,
-          }),
+          ok: false,
+          action: input.action,
+          planSlug: input.planSlug,
+          error: `Internal error: ${msg}`,
         };
       }
     },

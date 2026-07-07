@@ -9,67 +9,89 @@
  * the action via SIGCONT.
  *
  * Odin-only — same auth model as the rest of the bg tools.
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_PAUSE_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...)` over the same fields as before.
+ *   - Returns structured `{ ok, instanceId, status }` instead of
+ *     `{ output: JSON.stringify(...) }`.
+ *   - `ctx.agent` becomes `context.metadata.parentAgent` look-up.
  */
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 
 import type { InstanceManager } from "../background.js";
 import type { Logger } from "../logger.js";
+
+export const BIZAR_PAUSE_TOOL_NAME = "bizar_pause";
 
 export interface BgPauseDeps {
   instanceManager: InstanceManager;
   logger: Logger;
 }
 
-export function createBgPauseTool(deps: BgPauseDeps) {
-  return tool({
+export type BizarPauseInput = z.infer<typeof bizarPauseSchema>;
+export type BizarPauseOutput =
+  | { ok: true; instanceId: string; status: string }
+  | { ok: false; error: string; instanceId?: string };
+
+const bizarPauseSchema = z.object({
+  instanceId: z
+    .string()
+    .min(1)
+    .describe("Instance id returned by bizar_spawn_background."),
+});
+
+/**
+ * Build the `bizar_pause` tool. The plugin wires the result into
+ * `api.registerTool()` from `AgentExtensionApi`. The `deps` closure
+ * carries the InstanceManager.
+ */
+export function createBgPauseTool(
+  deps: BgPauseDeps,
+): AgentTool<BizarPauseInput, BizarPauseOutput> {
+  return createTool({
+    name: BIZAR_PAUSE_TOOL_NAME,
     description:
       "Pause a running background agent by sending SIGSTOP to its subprocess. " +
       "Only Odin may pause. No-op on already-paused instances. " +
       "POSIX only — on Windows this returns an `unsupported_on_win32` error.",
-    args: {
-      instanceId: z
-        .string()
-        .min(1)
-        .describe("Instance id returned by bizar_spawn_background."),
-    },
-    execute: async (rawArgs, ctx) => {
-      if (ctx.agent !== "odin") {
+    inputSchema: bizarPauseSchema.shape,
+    execute: async (input, context) => {
+      const parentAgent =
+        (context.metadata as { parentAgent?: string } | undefined)?.parentAgent ?? null;
+      if (parentAgent !== "odin") {
         return {
-          output: JSON.stringify({
-            error:
-              "Only Odin can pause background agents. Use bizar_status to inspect or ask Odin to pause.",
-          }),
+          ok: false as const,
+          error:
+            "Only Odin can pause background agents. Use bizar_status to inspect or ask Odin to pause.",
         };
       }
-      const args = rawArgs as { instanceId: string };
       try {
-        const result = await deps.instanceManager.pause(args.instanceId);
+        const result = await deps.instanceManager.pause(input.instanceId);
         if (!result.ok) {
           return {
-            output: JSON.stringify({
-              error: result.error || "pause failed",
-              instanceId: args.instanceId,
-            }),
+            ok: false as const,
+            error: result.error || "pause failed",
+            instanceId: input.instanceId,
           };
         }
         return {
-          output: JSON.stringify({
-            instanceId: args.instanceId,
-            status: "paused",
-          }),
+          ok: true as const,
+          instanceId: input.instanceId,
+          status: "paused",
         };
       } catch (err: unknown) {
         deps.logger.warn(
-          `bizar: pause(${args.instanceId}) threw: ${
+          `bizar: pause(${input.instanceId}) threw: ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
         return {
-          output: JSON.stringify({
-            error: `pause threw: ${err instanceof Error ? err.message : String(err)}`,
-            instanceId: args.instanceId,
-          }),
+          ok: false as const,
+          error: `pause threw: ${err instanceof Error ? err.message : String(err)}`,
+          instanceId: input.instanceId,
         };
       }
     },

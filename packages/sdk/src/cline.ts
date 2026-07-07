@@ -252,7 +252,6 @@ export async function createClineSdk(
     // below. TODO(cline-migration): rewrite this body to use Cline's
     // in-process `Agent` / `ClineCore` APIs from `@cline/sdk` instead of
     // mirroring the Cline v2 client shape.
-    // @ts-expect-error -- optional peer dep, may be absent at build time
     const mod = await import("@cline/sdk") as any;
     const createClient = mod.createClineClient;
     if (typeof createClient !== "function") throw new Error("not a function");

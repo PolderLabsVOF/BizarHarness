@@ -14,10 +14,17 @@
  *   - On ENOENT, tries `xdg-open "obsidian://open?path=<vaultPath>"`
  *   - On no display server, prints the path so the user can `cd` to it
  *
- * No args. Returns a JSON string with { ok, vaultPath, opened, method }.
+ * No args. Returns a structured object with { ok, vaultPath, opened, method }.
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_OPEN_KB_TOOL_NAME`.
+ *   - `inputSchema` is the empty `z.object().shape` (no args).
+ *   - Returns structured `{ ok, ... }` / `{ error, ... }` instead of
+ *     `{ output: JSON.stringify(...) }`.
  */
 
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -26,10 +33,17 @@ import { spawn } from "node:child_process";
 
 import type { Logger } from "../logger.js";
 
+export const BIZAR_OPEN_KB_TOOL_NAME = "bizar_open_kb";
+
 export interface OpenKbDeps {
   worktree: string;
   logger: Logger;
 }
+
+export type BizarOpenKbInput = z.infer<typeof bizarOpenKbSchema>;
+export type BizarOpenKbOutput =
+  | { ok: true; vaultPath: string; opened: true; method: "obsidian" | "xdg-open"; message: string }
+  | { ok: false; error: string; vaultPath?: string; message: string; config?: MemoryJson };
 
 interface MemoryJson {
   version?: number;
@@ -48,6 +62,8 @@ interface MemoryJson {
     user?: string;
   };
 }
+
+const bizarOpenKbSchema = z.object({});
 
 function loadMemoryJson(worktree: string): MemoryJson | null {
   const p = join(worktree, ".bizar", "memory.json");
@@ -78,25 +94,26 @@ function resolveVaultPath(worktree: string, cfg: MemoryJson | null): string | nu
   return join(expanded, "projects", projectId);
 }
 
-export function createOpenKbTool(deps: OpenKbDeps) {
-  return tool({
+export function createOpenKbTool(
+  deps: OpenKbDeps,
+): AgentTool<BizarOpenKbInput, BizarOpenKbOutput> {
+  return createTool({
+    name: BIZAR_OPEN_KB_TOOL_NAME,
     description:
       "Open the Bizar Memory vault in Obsidian. Resolves the vault path " +
       "from .bizar/memory.json and spawns Obsidian with the path. " +
       "If Obsidian isn't installed, prints the vault path so the user " +
       "can open it manually. Available to all agents.",
-    args: {},
+    inputSchema: bizarOpenKbSchema.shape,
     execute: async () => {
       const cfg = loadMemoryJson(deps.worktree);
 
       if (!cfg) {
         return {
-          output: JSON.stringify({
-            ok: false,
-            error: "memory_not_initialized",
-            message:
-              "Run `bizar memory init` first to set up the Bizar Memory vault.",
-          }),
+          ok: false as const,
+          error: "memory_not_initialized",
+          message:
+            "Run `bizar memory init` first to set up the Bizar Memory vault.",
         };
       }
 
@@ -104,23 +121,19 @@ export function createOpenKbTool(deps: OpenKbDeps) {
 
       if (!vaultPath) {
         return {
-          output: JSON.stringify({
-            ok: false,
-            error: "vault_path_unresolved",
-            message: "Could not resolve vault path from .bizar/memory.json",
-            config: cfg,
-          }),
+          ok: false as const,
+          error: "vault_path_unresolved",
+          message: "Could not resolve vault path from .bizar/memory.json",
+          config: cfg,
         };
       }
 
       if (!existsSync(vaultPath)) {
         return {
-          output: JSON.stringify({
-            ok: false,
-            error: "vault_not_found",
-            vaultPath,
-            message: `Vault directory does not exist at ${vaultPath}. Run \`bizar memory init\` to create it.`,
-          }),
+          ok: false as const,
+          error: "vault_not_found",
+          vaultPath,
+          message: `Vault directory does not exist at ${vaultPath}. Run \`bizar memory init\` to create it.`,
         };
       }
 
@@ -137,13 +150,11 @@ export function createOpenKbTool(deps: OpenKbDeps) {
 
         // Give it a beat — if spawn succeeded, assume success
         return {
-          output: JSON.stringify({
-            ok: true,
-            vaultPath,
-            opened: true,
-            method: "obsidian",
-            message: `Opened vault in Obsidian at ${vaultPath}`,
-          }),
+          ok: true as const,
+          vaultPath,
+          opened: true as const,
+          method: "obsidian" as const,
+          message: `Opened vault in Obsidian at ${vaultPath}`,
         };
       } catch (err) {
         deps.logger.warn(
@@ -165,25 +176,21 @@ export function createOpenKbTool(deps: OpenKbDeps) {
         child.unref();
 
         return {
-          output: JSON.stringify({
-            ok: true,
-            vaultPath,
-            opened: true,
-            method: "xdg-open",
-            message: `Opened vault via xdg-open at ${vaultPath}`,
-          }),
+          ok: true as const,
+          vaultPath,
+          opened: true as const,
+          method: "xdg-open" as const,
+          message: `Opened vault via xdg-open at ${vaultPath}`,
         };
       } catch (err) {
         // Last resort: just print the path
         return {
-          output: JSON.stringify({
-            ok: false,
-            error: "no_obsidian",
-            vaultPath,
-            message:
-              `Could not launch Obsidian. Vault path: ${vaultPath}\n` +
-              `Install Obsidian (https://obsidian.md) and try again, or open the vault manually with \`obsidian ${vaultPath}\`.`,
-          }),
+          ok: false as const,
+          error: "no_obsidian",
+          vaultPath,
+          message:
+            `Could not launch Obsidian. Vault path: ${vaultPath}\n` +
+            `Install Obsidian (https://obsidian.md) and try again, or open the vault manually with \`obsidian ${vaultPath}\`.`,
         };
       }
     },

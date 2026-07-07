@@ -96,13 +96,13 @@ function makeCompletedState(overrides: Partial<BackgroundState> = {}): Backgroun
 
 describe("bizar_status — list all", () => {
   it("returns all instances when called with no args", () => {
-    const result = bizar_status(undefined, { agent: "odin" }, instances);
+    const result = bizar_status(undefined, { metadata: { parentAgent: "odin" } }, instances);
     expect(Array.isArray(result)).toBe(true);
     expect((result as BackgroundState[]).length).toBe(3);
   });
 
   it("includes all documented fields per instance (§7.1)", () => {
-    const all = bizar_status(undefined, { agent: "odin" }, instances) as BackgroundState[];
+    const all = bizar_status(undefined, { metadata: { parentAgent: "odin" } }, instances) as BackgroundState[];
     const first = all[0];
     expect(first).toHaveProperty("instanceId");
     expect(first).toHaveProperty("agent");
@@ -116,7 +116,7 @@ describe("bizar_status — list all", () => {
   });
 
   it("returns instances in any order (stable map iteration)", () => {
-    const all = bizar_status(undefined, { agent: "odin" }, instances) as BackgroundState[];
+    const all = bizar_status(undefined, { metadata: { parentAgent: "odin" } }, instances) as BackgroundState[];
     const ids = all.map((i) => i.instanceId);
     expect(ids).toContain("bgr_01");
     expect(ids).toContain("bgr_02");
@@ -137,14 +137,14 @@ describe("bizar_status — list all", () => {
 
 describe("bizar_status — single instance", () => {
   it("returns the requested instance", () => {
-    const result = bizar_status({ instanceId: "bgr_02" }, { agent: "odin" }, instances);
+    const result = bizar_status({ instanceId: "bgr_02" }, { metadata: { parentAgent: "odin" } }, instances);
     expect((result as BackgroundState).instanceId).toBe("bgr_02");
     expect((result as BackgroundState).agent).toBe("thor");
     expect((result as BackgroundState).status).toBe("done");
   });
 
   it("returns error for unknown instanceId", () => {
-    const result = bizar_status({ instanceId: "bgr_unknown" }, { agent: "odin" }, instances);
+    const result = bizar_status({ instanceId: "bgr_unknown" }, { metadata: { parentAgent: "odin" } }, instances);
     expect(result).toHaveProperty("error");
     expect((result as { error: string }).error).toContain("not found");
   });
@@ -156,19 +156,19 @@ describe("bizar_status — single instance", () => {
 
 describe("bizar_status — status values", () => {
   it("running instance shows running status", () => {
-    const result = bizar_status({ instanceId: "bgr_01" }, { agent: "odin" }, instances) as BackgroundState;
+    const result = bizar_status({ instanceId: "bgr_01" }, { metadata: { parentAgent: "odin" } }, instances) as BackgroundState;
     expect(result.status).toBe("running");
     expect(result.resultPreview).toBeUndefined();
   });
 
   it("done instance shows resultPreview", () => {
-    const result = bizar_status({ instanceId: "bgr_02" }, { agent: "odin" }, instances) as BackgroundState;
+    const result = bizar_status({ instanceId: "bgr_02" }, { metadata: { parentAgent: "odin" } }, instances) as BackgroundState;
     expect(result.status).toBe("done");
     expect(result.resultPreview).toBe("Done!");
   });
 
   it("failed instance shows error", () => {
-    const result = bizar_status({ instanceId: "bgr_03" }, { agent: "odin" }, instances) as BackgroundState;
+    const result = bizar_status({ instanceId: "bgr_03" }, { metadata: { parentAgent: "odin" } }, instances) as BackgroundState;
     expect(result.status).toBe("failed");
     expect(result.error).toContain("Loop protection");
   });
@@ -181,14 +181,14 @@ describe("bizar_status — status values", () => {
 describe("bizar_status — no instances", () => {
   it("returns empty array when no instances exist", () => {
     const emptyMap = new Map<string, BackgroundState>();
-    const result = bizar_status(undefined, { agent: "odin" }, emptyMap);
+    const result = bizar_status(undefined, { metadata: { parentAgent: "odin" } }, emptyMap);
     expect(Array.isArray(result)).toBe(true);
     expect((result as BackgroundState[]).length).toBe(0);
   });
 
   it("returns error for unknown instanceId when map is empty", () => {
     const emptyMap = new Map<string, BackgroundState>();
-    const result = bizar_status({ instanceId: "bgr_anything" }, { agent: "odin" }, emptyMap);
+    const result = bizar_status({ instanceId: "bgr_anything" }, { metadata: { parentAgent: "odin" } }, emptyMap);
     expect(result).toHaveProperty("error");
   });
 });

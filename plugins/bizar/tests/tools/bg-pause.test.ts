@@ -16,10 +16,7 @@ const silentLogger: Logger = {
 };
 
 /** Extract a JSON-decoded payload from `ToolResult = string | { output: string }`. */
-function decode(result: unknown): any {
-  if (typeof result === "string") return JSON.parse(result);
-  return JSON.parse((result as { output: string }).output);
-}
+function decode(result: unknown): any { const r = result as any; if (r && typeof r === "object" && "output" in r) { return typeof r.output === "string" ? JSON.parse(r.output) : r.output; } if (typeof result === "string") return JSON.parse(result); return result; }
 
 describe("bg-pause tool", () => {
   it("rejects non-Odin callers", async () => {
@@ -31,7 +28,7 @@ describe("bg-pause tool", () => {
       instanceManager: mgr,
       logger: silentLogger,
     });
-    const r = await tool.execute({ instanceId: "bgr_x" } as any, { agent: "frigg" } as any);
+    const r = await tool.execute({ instanceId: "bgr_x" } as any, { metadata: { parentAgent: "frigg" } } as any);
     const payload = decode(r);
     expect(payload.error).toContain("Only Odin");
   });
@@ -45,8 +42,8 @@ describe("bg-pause tool", () => {
       instanceManager: mgr,
       logger: silentLogger,
     });
-    const r = await tool.execute({ instanceId: "bgr_x" } as any, { agent: "odin" } as any);
-    expect(decode(r)).toEqual({ instanceId: "bgr_x", status: "paused" });
+    const r = await tool.execute({ instanceId: "bgr_x" } as any, { metadata: { parentAgent: "odin" } } as any);
+    expect(decode(r)).toEqual({ ok: true, instanceId: "bgr_x", status: "paused" });
   });
 
   it("propagates errors", async () => {
@@ -58,7 +55,7 @@ describe("bg-pause tool", () => {
       instanceManager: mgr,
       logger: silentLogger,
     });
-    const r = await tool.execute({ instanceId: "bgr_x" } as any, { agent: "odin" } as any);
+    const r = await tool.execute({ instanceId: "bgr_x" } as any, { metadata: { parentAgent: "odin" } } as any);
     expect(decode(r)).toMatchObject({ error: "no_subprocess" });
   });
 });

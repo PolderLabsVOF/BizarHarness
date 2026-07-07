@@ -7,9 +7,17 @@
  *
  * The `path` is relative to the vault root (e.g. "decisions/foo.md"
  * or "projects/myproj/sessions/2025-07-06.md").
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_MEMORY_READ_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...)` over the same fields as before.
+ *   - Returns structured `{ ok, path, content, frontmatter, mtime, size }`
+ *     / `{ ok: false, error, message, path }` instead of
+ *     `{ output: JSON.stringify(...) }`.
  */
 
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,10 +25,31 @@ import { homedir } from "node:os";
 
 import type { Logger } from "../logger.js";
 
+export const BIZAR_MEMORY_READ_TOOL_NAME = "bizar_memory_read";
+
 export interface MemoryReadDeps {
   worktree: string;
   logger: Logger;
 }
+
+export type BizarMemoryReadInput = z.infer<typeof bizarMemoryReadSchema>;
+export type BizarMemoryReadOutput =
+  | {
+      ok: true;
+      path: string;
+      content: string;
+      frontmatter: Record<string, unknown>;
+      mtime: number | null;
+      size: number | null;
+    }
+  | { ok: false; error: string; message: string; path: string };
+
+const bizarMemoryReadSchema = z.object({
+  path: z
+    .string()
+    .min(1)
+    .describe("Vault-relative path of the note to read (e.g. 'decisions/foo.md')."),
+});
 
 async function resolveDashboardPort(): Promise<number | null> {
   const portFile = join(homedir(), ".config", "bizar", "dashboard.port");
@@ -41,43 +70,43 @@ async function resolveDashboardPort(): Promise<number | null> {
   return null;
 }
 
-export function createMemoryReadTool(deps: MemoryReadDeps) {
-  return tool({
+/**
+ * Build the `bizar_memory_read` tool. The plugin wires the result into
+ * `api.registerTool()` from `AgentExtensionApi`. The `deps` closure
+ * carries the worktree and logger.
+ */
+export function createMemoryReadTool(
+  deps: MemoryReadDeps,
+): AgentTool<BizarMemoryReadInput, BizarMemoryReadOutput> {
+  return createTool({
+    name: BIZAR_MEMORY_READ_TOOL_NAME,
     description:
       "Read a single note from the Bizar Memory vault. " +
       "The path is relative to the vault root (e.g. 'decisions/foo.md'). " +
       "Returns { path, content, frontmatter, mtime } or { error } on failure. " +
       "Available to all agents.",
-    args: {
-      path: z
-        .string()
-        .min(1)
-        .describe("Vault-relative path of the note to read (e.g. 'decisions/foo.md')."),
-    },
-    execute: async (rawArgs) => {
-      const args = rawArgs as { path: string };
+    inputSchema: bizarMemoryReadSchema.shape,
+    execute: async (input) => {
       const { logger } = deps;
 
       // Basic path safety: no absolute paths, no traversal above vault root
-      const normalized = args.path.replace(/\\/g, "/").replace(/^\/+/, "");
+      const normalized = input.path.replace(/\\/g, "/").replace(/^\/+/, "");
       if (normalized.includes("..") || normalized.startsWith(".")) {
         return {
-          output: JSON.stringify({
-            error: "invalid_path",
-            message: "Path must be a simple relative vault path (no '..' or absolute paths).",
-            path: args.path,
-          }),
+          ok: false as const,
+          error: "invalid_path",
+          message: "Path must be a simple relative vault path (no '..' or absolute paths).",
+          path: input.path,
         };
       }
 
       const port = await resolveDashboardPort();
       if (!port) {
         return {
-          output: JSON.stringify({
-            error: "dashboard_not_running",
-            message: "The Bizar dashboard is not running. Start it with `bizar dash start`.",
-            path: args.path,
-          }),
+          ok: false as const,
+          error: "dashboard_not_running",
+          message: "The Bizar dashboard is not running. Start it with `bizar dash start`.",
+          path: input.path,
         };
       }
 
@@ -88,11 +117,10 @@ export function createMemoryReadTool(deps: MemoryReadDeps) {
 
         if (res.status === 404) {
           return {
-            output: JSON.stringify({
-              error: "not_found",
-              message: `Note not found at path: ${normalized}`,
-              path: normalized,
-            }),
+            ok: false as const,
+            error: "not_found",
+            message: `Note not found at path: ${normalized}`,
+            path: normalized,
           };
         }
 
@@ -100,11 +128,10 @@ export function createMemoryReadTool(deps: MemoryReadDeps) {
           const text = await res.text().catch(() => "");
           logger.warn(`bizar: memory-read(${normalized}) HTTP ${res.status}: ${text.slice(0, 200)}`);
           return {
-            output: JSON.stringify({
-              error: "read_failed",
-              message: `HTTP ${res.status}: ${text.slice(0, 200)}`,
-              path: normalized,
-            }),
+            ok: false as const,
+            error: "read_failed",
+            message: `HTTP ${res.status}: ${text.slice(0, 200)}`,
+            path: normalized,
           };
         }
 
@@ -118,23 +145,21 @@ export function createMemoryReadTool(deps: MemoryReadDeps) {
         };
 
         return {
-          output: JSON.stringify({
-            path: data.relPath ?? normalized,
-            content: data.body ?? "",
-            frontmatter: data.frontmatter ?? {},
-            mtime: data.mtime ?? null,
-            size: data.size ?? null,
-          }),
+          ok: true as const,
+          path: data.relPath ?? normalized,
+          content: data.body ?? "",
+          frontmatter: data.frontmatter ?? {},
+          mtime: data.mtime ?? null,
+          size: data.size ?? null,
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.warn(`bizar: memory-read(${normalized}) failed: ${msg}`);
         return {
-          output: JSON.stringify({
-            error: "read_failed",
-            message: msg,
-            path: normalized,
-          }),
+          ok: false as const,
+          error: "read_failed",
+          message: msg,
+          path: normalized,
         };
       }
     },

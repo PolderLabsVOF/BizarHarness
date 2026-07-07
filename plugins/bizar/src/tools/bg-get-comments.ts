@@ -49,20 +49,55 @@
  *
  * The "worktree" passed in via deps is the directory the plugin was
  * loaded for; `plans/` lives at the root of the project.
+ *
+ * Cline SDK port (Phase 2):
+ *   - Uses `createTool` from `@cline/sdk` directly.
+ *   - Adds `name: BIZAR_GET_PLAN_COMMENTS_TOOL_NAME`.
+ *   - `inputSchema` is `z.object(...)` over the same fields as before.
+ *   - Returns structured `{ ok, comments, planSlug }` / `{ ok: false, error, planSlug }`
+ *     instead of `{ output: JSON.stringify(...) }`.
  */
 
-import { tool } from "@opencode-ai/plugin";
+import { createTool, type AgentTool } from "@cline/sdk";
 import { z } from "zod";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Logger } from "../logger.js";
 
+export const BIZAR_GET_PLAN_COMMENTS_TOOL_NAME = "bizar_get_plan_comments";
+
 export interface BgGetCommentsDeps {
   /** The project's working directory (e.g. /home/user/proj). `plans/` is here. */
   worktree: string;
   logger: Logger;
 }
+
+export type BizarGetPlanCommentsInput = z.infer<typeof bizarGetPlanCommentsSchema>;
+export type BizarGetPlanCommentsOutput =
+  | { ok: true; comments: PlanComment[]; planSlug: string }
+  | { ok: false; error: string; planSlug: string };
+
+const bizarGetPlanCommentsSchema = z.object({
+  planSlug: z
+    .string()
+    .min(1)
+    .max(64)
+    .describe(
+      "The plan's slug (lowercase, hyphens, e.g. 'my-feature'). " +
+        "Matches the directory under plans/<slug>/.",
+    ),
+  elementId: z
+    .string()
+    .optional()
+    .describe(
+      "Optional element id (e.g. 'el_abc123'). If provided, only " +
+        "comments pinned to that element are returned. Omit to " +
+        "get all comments on the plan. Pass an empty string, " +
+        "'nil', or 'null' to get comments pinned to the canvas " +
+        "(no element).",
+    ),
+});
 
 // --- On-disk shapes ---------------------------------------------------------
 
@@ -194,46 +229,38 @@ export function readPlanComments(
 
 /**
  * Build the `bizar_get_plan_comments` tool. The plugin wires the result
- * into `Hooks.tool`. The `deps` closure carries the worktree and logger.
+ * into `api.registerTool()` from `AgentExtensionApi`. The `deps`
+ * closure carries the worktree and logger.
  */
-export function createBgGetCommentsTool(deps: BgGetCommentsDeps) {
-  return tool({
+export function createBgGetCommentsTool(
+  deps: BgGetCommentsDeps,
+): AgentTool<BizarGetPlanCommentsInput, BizarGetPlanCommentsOutput> {
+  return createTool({
+    name: BIZAR_GET_PLAN_COMMENTS_TOOL_NAME,
     description:
       "Read the comments pinned to elements on a Bizar Plan canvas. " +
       "Use this to pick up user feedback while implementing changes. " +
       "Read-only; available to all agents. " +
       "Returns an array of comment objects with id, x, y, elementId, " +
       "author, text, created, and a thread of replies.",
-    args: {
-      planSlug: z
-        .string()
-        .min(1)
-        .max(64)
-        .describe(
-          "The plan's slug (lowercase, hyphens, e.g. 'my-feature'). " +
-            "Matches the directory under plans/<slug>/.",
-        ),
-      elementId: z
-        .string()
-        .optional()
-        .describe(
-          "Optional element id (e.g. 'el_abc123'). If provided, only " +
-            "comments pinned to that element are returned. Omit to " +
-            "get all comments on the plan. Pass an empty string, " +
-            "'nil', or 'null' to get comments pinned to the canvas " +
-            "(no element).",
-        ),
-    },
-    execute: async (rawArgs) => {
-      const args = rawArgs as { planSlug: string; elementId?: string };
-      const result = readPlanComments(deps.worktree, args.planSlug, args.elementId);
+    inputSchema: bizarGetPlanCommentsSchema.shape,
+    execute: async (input) => {
+      const result = readPlanComments(deps.worktree, input.planSlug, input.elementId);
       if (!result.ok) {
         deps.logger.warn(
-          `bizar: get_plan_comments(${args.planSlug}) failed: ${result.error}`,
+          `bizar: get_plan_comments(${input.planSlug}) failed: ${result.error}`,
         );
-        return { output: JSON.stringify({ error: result.error, planSlug: args.planSlug }) };
+        return {
+          ok: false as const,
+          error: result.error,
+          planSlug: input.planSlug,
+        };
       }
-      return { output: JSON.stringify(result.comments) };
+      return {
+        ok: true as const,
+        comments: result.comments,
+        planSlug: result.planSlug,
+      };
     },
   });
 }

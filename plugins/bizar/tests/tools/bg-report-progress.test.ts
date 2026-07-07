@@ -14,10 +14,7 @@ const silentLogger: Logger = {
   log() {},
 };
 
-function decode(result: unknown): any {
-  if (typeof result === "string") return JSON.parse(result);
-  return JSON.parse((result as { output: string }).output);
-}
+function decode(result: unknown): any { const r = result as any; if (r && typeof r === "object" && "output" in r) { return typeof r.output === "string" ? JSON.parse(r.output) : r.output; } if (typeof result === "string") return JSON.parse(result); return result; }
 
 describe("bg-report-progress tool", () => {
   it("computes progress percent", async () => {
@@ -30,9 +27,9 @@ describe("bg-report-progress tool", () => {
     const tool = createBgReportProgressTool({ instanceManager: mgr, logger: silentLogger });
     const r = await tool.execute(
       { instanceId: "bgr_x", step: 3, total: 10, message: "step 3 of 10" } as any,
-      { agent: "mimir" } as any,
+      { metadata: { parentAgent: "mimir" } } as any,
     );
-    expect(decode(r)).toEqual({ instanceId: "bgr_x", progress: 30 });
+    expect(decode(r)).toEqual({ ok: true, instanceId: "bgr_x", progress: 30 });
   });
 
   it("caps at 100", async () => {
@@ -46,7 +43,7 @@ describe("bg-report-progress tool", () => {
     const tool = createBgReportProgressTool({ instanceManager: mgr, logger: silentLogger });
     const r = await tool.execute(
       { instanceId: "bgr_x", step: 200, total: 100 } as any,
-      { agent: "mimir" } as any,
+      { metadata: { parentAgent: "mimir" } } as any,
     );
     expect(decode(r)).toMatchObject({ progress: 100 });
   });
@@ -62,7 +59,7 @@ describe("bg-report-progress tool", () => {
     const tool = createBgReportProgressTool({ instanceManager: mgr, logger: silentLogger });
     const r = await tool.execute(
       { instanceId: "bgr_x", step: 1, total: 10, indeterminate: true } as any,
-      { agent: "mimir" } as any,
+      { metadata: { parentAgent: "mimir" } } as any,
     );
     expect(decode(r)).toMatchObject({ progress: -1 });
     expect(captured).toBe(-1);
@@ -75,7 +72,7 @@ describe("bg-report-progress tool", () => {
     const tool = createBgReportProgressTool({ instanceManager: mgr, logger: silentLogger });
     const r = await tool.execute(
       { instanceId: "bgr_x", step: 1, total: 10 } as any,
-      { agent: "mimir" } as any,
+      { metadata: { parentAgent: "mimir" } } as any,
     );
     expect(decode(r)).toMatchObject({ error: "instance_not_found" });
   });
