@@ -18,7 +18,6 @@
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { process } from 'node:process';
 
 export function showLightragHelp() {
   console.log(`

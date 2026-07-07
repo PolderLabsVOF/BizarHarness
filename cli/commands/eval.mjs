@@ -15,7 +15,25 @@ import chalk from 'chalk';
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { readDashboardConn } from './headroom.mjs';
+
+// Mirror `readDashboardConn` from clip.mjs / minimax.mjs / usage.mjs.
+function readDashboardConn() {
+  const cfgDir = process.env.XDG_CONFIG_HOME
+    ? join(process.env.XDG_CONFIG_HOME, 'bizar')
+    : join(homedir(), '.config', 'bizar');
+  const portPath = join(cfgDir, 'dashboard.port');
+  const secretPath = join(cfgDir, 'dashboard.secret');
+  const port = existsSync(portPath)
+    ? parseInt(readFileSync(portPath, 'utf8').trim(), 10)
+    : 4321;
+  const secret = existsSync(secretPath)
+    ? readFileSync(secretPath, 'utf8').trim()
+    : '';
+  return {
+    port: Number.isFinite(port) && port > 0 ? port : 4321,
+    secret,
+  };
+}
 
 const HOME = homedir();
 const TEMPLATES_DIR = join(HOME, '.config', 'bizar', 'templates', 'eval-fixtures');

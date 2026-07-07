@@ -132,5 +132,21 @@ case "${1:-start}" in
   status)  ensure_binary; print_status ;;
   doctor)  ensure_binary; $AB_BIN doctor ;;
   install) ensure_binary; ensure_chrome; $AB_BIN install ;;
+  help|--help|-h)
+    cat <<'AGENT_BROWSER_UP_HELP'
+agent-browser-up -- start/stop the agent-browser daemon
+
+Usage: cli/agent-browser-up.sh <command>
+
+Commands:
+  start    Start the daemon (idempotent)
+  stop     Stop the daemon
+  restart  Stop + start
+  status   Print daemon status
+  doctor   Run agent-browser doctor
+  install  Install agent-browser + download Chrome
+AGENT_BROWSER_UP_HELP
+    exit 0
+    ;;
   *)       fail "unknown command: $1 (use start|stop|restart|status|doctor|install)" ;;
 esac

@@ -105,5 +105,9 @@ async function runUsageCommand(args, wantJson = false) {
 }
 
 export async function run(name, args, isHelpRequest) {
+  if (isHelpRequest || args.length === 0) {
+    showUsageHelp();
+    return;
+  }
   await runUsageCommand(args, false);
 }

@@ -10,7 +10,24 @@
  */
 
 import chalk from 'chalk';
-import { readDashboardConn } from './headroom.mjs';
+// Mirror `readDashboardConn` from clip.mjs / minimax.mjs / usage.mjs.
+function readDashboardConn() {
+  const cfgDir = process.env.XDG_CONFIG_HOME
+    ? require_('node:path').join(process.env.XDG_CONFIG_HOME, 'bizar')
+    : require_('node:path').join(require_('node:os').homedir(), '.config', 'bizar');
+  const portPath = require_('node:path').join(cfgDir, 'dashboard.port');
+  const secretPath = require_('node:path').join(cfgDir, 'dashboard.secret');
+  const port = require_('node:fs').existsSync(portPath)
+    ? parseInt(require_('node:fs').readFileSync(portPath, 'utf8').trim(), 10)
+    : 4321;
+  const secret = require_('node:fs').existsSync(secretPath)
+    ? require_('node:fs').readFileSync(secretPath, 'utf8').trim()
+    : '';
+  return {
+    port: Number.isFinite(port) && port > 0 ? port : 4321,
+    secret,
+  };
+}
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 

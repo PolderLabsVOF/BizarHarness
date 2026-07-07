@@ -1,5 +1,104 @@
 # Changelog
 
+## v5.6.0-beta.9 — CLI overhaul + full validation
+
+> CLI overhaul pass. Every `bizar` command now responds to `--help`.
+> Wired up 6 previously-unreachable commands (`backup`, `restore`,
+> `digest`, `voice`, `workspace`, `eval`). Fixed multiple broken
+> imports and missing help texts. **All 37 CLI commands validated
+> end-to-end (37/37 pass).**
+
+### Bugs found and fixed
+
+1. **`cli/bin.mjs` --help pre-dispatch tried `importCommand(cmd)` for
+   every command.** Failed for util-based commands (like `backup`,
+   `restore`, `digest`) because they don't have their own module
+   file — they live in `cli/commands/util.mjs`. Fixed by adding a
+   `UTIL_COMMANDS` set that maps to `importCommand('util')`.
+2. **`clip.mjs`, `ocr.mjs`, `eval.mjs` all had broken
+   `import { readDashboardConn } from './headroom.mjs'`.**
+   `headroom.mjs` doesn't export that function. Replaced each with
+   a local inline `readDashboardConn()` that reads
+   `~/.config/bizar/dashboard.{port,secret}`. Pattern matches the
+   existing helpers in `minimax.mjs`, `usage.mjs`, `clip.mjs`.
+3. **`lightrag.mjs` had `import { process } from 'node:process'`.**
+   `process` is a default export, not a named one. Removed the
+   import (process is already a global in Node.js).
+4. **`digest.mjs` had `showDigestHelp` defined locally but never
+   exported.** `bizar digest --help` crashed with "showDigestHelp
+   is not a function". Now exported.
+5. **`providers` had no --help handler.** Added a complete
+   `showProvidersHelp()` with usage / description / examples.
+6. **`update` had no --help handler in util.mjs.** Proxy added:
+   `bizar update --help` now delegates to
+   `cli/commands/install.mjs:showUpdateHelp()`.
+7. **`usage.run()` ignored `isHelpRequest`.** Now prints help
+   on `--help` or no-args.
+8. **`agent-browser-up.sh` only accepted `start|stop|...`.**
+   Added `help|--help|-h` to print the subcommand list. This makes
+   the bash script behave consistently with the rest of the CLI.
+
+### Commands wired up
+
+| Command | Before | After |
+| --- | --- | --- |
+| `bizar backup` | ❌ module-not-found | ✅ --help shows usage |
+| `bizar restore` | ❌ module-not-found | ✅ --help shows usage |
+| `bizar digest` | ❌ module-not-found | ✅ --help works |
+| `bizar voice` | ❌ not dispatched | ✅ --help works |
+| `bizar workspace` | ❌ not dispatched | ✅ --help works |
+| `bizar eval` | ❌ broken import | ✅ --help works |
+| `bizar dashboard` | ❌ module-not-found | ✅ --help works (deprecation notice) |
+| `bizar update` | ❌ silent exit | ✅ --help works |
+| `bizar usage` | ❌ tried fetch | ✅ --help works |
+
+### Help text accuracy
+
+Before beta.9:
+- help text listed 25 commands
+- bin.mjs dispatched 31 (6 reachable, 25 not documented)
+
+After beta.9:
+- help text lists 31 commands (all now wired)
+- bin.mjs dispatches 33 (all 33 handle --help)
+- util.mjs routes 18 commands
+- 6 voice/workspace/eval/clip/ocr/{lightrag,install,memory,...}
+  each have their own module file
+
+### Test results
+
+- `cli/cli-commands-validation.test.mjs` (NEW) — 37/37 pass
+- `bun test plugins/bizar` → 663/665 pass (no regression)
+- `node --test cli/doctor.test.mjs` → 19/19 pass
+- `node --test cli/dev-link.test.mjs` → 13/13 pass
+- `node --test cli/install.test.mjs` → 1/1 pass
+- `node --test cli/agent-browser-update.test.mjs` → 8/8 pass
+- `bun run /tmp/bh-full-e2e.mjs` → 27/27 pass
+- `npx tsc --noEmit` → 0 errors
+
+### Files Changed (10 files)
+
+**Updated (9):**
+- `cli/bin.mjs` — UTIL_COMMANDS + UTIL_ALIASES sets in --help pre-dispatch
+- `cli/commands/util.mjs` — showProvidersHelp + 'update' case
+- `cli/commands/clip.mjs` — inline readDashboardConn (same as eval/ocr)
+- `cli/commands/ocr.mjs` — inline readDashboardConn
+- `cli/commands/eval.mjs` — inline readDashboardConn
+- `cli/commands/lightrag.mjs` — remove broken `import { process }`
+- `cli/commands/usage.mjs` — handle isHelpRequest in run()
+- `cli/digest.mjs` — export showDigestHelp
+- `cli/agent-browser-up.sh` — add --help subcommand
+
+**New (1):**
+- `cli/cli-commands-validation.test.mjs` — 37-command E2E test
+
+### Published
+
+- `@polderlabs/bizar@5.6.0-beta.9`
+- `@polderlabs/bizar-sdk@0.2.0-beta.9`
+
+---
+
 ## v5.6.0-beta.8 — Installer + updater for agent-browser
 
 > The full installer / updater pipeline now handles agent-browser

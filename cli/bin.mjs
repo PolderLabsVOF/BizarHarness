@@ -13,7 +13,8 @@
  * Commands:
  *   install, audit, init, export, artifact, update, test-gate, service, dash,
  *   memory, headroom, minimax, usage, mod, doctor, repair, dev-link, dev-unlink,
- *   heads-up, bg, agent-browser, agent-browser-up, providers, deploy, plugin, marketplace
+ *   heads-up, bg, agent-browser, agent-browser-up, providers, deploy, plugin,
+ *   marketplace, plan, digest, backup, restore, clip, ocr, voice, workspace, eval
  */
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'node:fs';
@@ -120,6 +121,13 @@ function showHelp() {
     providers detect    Auto-detect provider API keys from env + cline.json
     clip <subcommand>       Manage web clipper saved clips (list/delete/configure)
     ocr <subcommand>        OCR operations on images (list/process/configure)
+    digest                 Manage weekly digests (list/view/generate)
+    backup                 Create / list / verify / delete backups of BizarHarness state
+    restore                Restore BizarHarness from a backup
+    voice                  Manage voice notes (via the dashboard's HTTP API)
+    workspace              Manage workspaces (via the dashboard's HTTP API)
+    eval                   Evaluate AI agent outputs against golden fixtures
+    plan                   [v6.0.0+] Reserved for future plan management
 
   Examples:
     bizar install
@@ -189,8 +197,30 @@ async function main() {
   }
 
   if (isHelpRequest && !cmd.startsWith('-')) {
-    // Pass --help to the command
-    const mod = await importCommand(cmd);
+    // Pass --help to the command. Commands dispatched through util.mjs
+    // (audit, init, export, doctor, backup, restore, etc.) don't have
+    // their own cli/commands/<name>.mjs — they all live in util.mjs.
+    const UTIL_COMMANDS = new Set([
+      'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
+      'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
+      'agent-browser', 'update', 'providers', 'plan',
+    ]);
+    const UTIL_ALIASES = new Set(['dashboard', 'agent-browser-up']);
+    let mod;
+    if (UTIL_COMMANDS.has(cmd)) {
+      // util-based commands: audit, init, etc.
+      mod = await importCommand('util');
+    } else if (UTIL_ALIASES.has(cmd)) {
+      // util aliases: dashboard → dash, agent-browser-up → bash script
+      if (cmd === 'dashboard') {
+        mod = await importCommand('dash');
+      } else if (cmd === 'agent-browser-up') {
+        // Run via util.mjs's `agent-browser-up` case
+        mod = await importCommand('util');
+      }
+    } else {
+      mod = await importCommand(cmd);
+    }
     if (mod && typeof mod.run === 'function') {
       await mod.run(cmd, cmdArgs, true);
       return;
@@ -430,6 +460,8 @@ async function main() {
     case 'heads-up':
     case 'bg':
     case 'digest':
+    case 'backup':
+    case 'restore':
     case 'agent-browser':
     case 'agent-browser-up':
     case 'providers':
@@ -448,6 +480,20 @@ async function main() {
         showHelp();
         process.exit(EXIT_ERROR);
       }
+      break;
+    }
+
+    case 'voice':
+    case 'workspace':
+    case 'eval': {
+      // Each of these has its own module file in cli/commands/.
+      const mod = await importCommand(cmd);
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load ${cmd} command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      if (mod.run) await mod.run(cmd, cmdArgs, isHelpRequest);
       break;
     }
 

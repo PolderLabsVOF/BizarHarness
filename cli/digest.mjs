@@ -13,7 +13,7 @@
 import chalk from 'chalk';
 import { readFileSync, existsSync } from 'node:fs';
 
-function showDigestHelp() {
+export function showDigestHelp() {
   console.log(`
   bizar digest — Manage weekly digests
 

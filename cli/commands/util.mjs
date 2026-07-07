@@ -154,6 +154,24 @@ export function showBackupHelp() {
   `);
 }
 
+export function showProvidersHelp() {
+  console.log(`
+  bizar providers - Auto-detect provider API keys
+
+  Usage:
+    bizar providers detect     Auto-detect provider API keys from env + cline.json
+    bizar providers --help     Show this help
+
+  Description:
+    Scans process.env + ~/.config/cline/cline.json for known provider
+    API keys (OpenAI, Anthropic, OpenRouter, MiniMax, etc.) and reports
+    what's available. Useful before the first \`bizar install\` to verify
+    credentials are picked up.
+
+  No API keys are sent over the network - detection is local.
+  `);
+}
+
 export function showRestoreHelp() {
   console.log(`
   bizar restore — Restore BizarHarness from a backup
@@ -209,6 +227,18 @@ export async function runTestGate() {
 
 export async function run(name, args, isHelpRequest) {
   switch (name) {
+    case 'update':
+      // `bizar update` lives in commands/install.mjs (the install/update
+      // pair share a code path). Proxy to it.
+      if (isHelpRequest) {
+        const { showUpdateHelp } = await import('./install.mjs');
+        showUpdateHelp();
+      } else {
+        const { runUpdate } = await import('./install.mjs');
+        await runUpdate(args, {});
+      }
+      break;
+
     case 'audit':
       if (isHelpRequest) showAuditHelp();
       else {
@@ -506,6 +536,10 @@ export async function run(name, args, isHelpRequest) {
     }
 
     case 'providers':
+      if (isHelpRequest || args.length === 0) {
+        showProvidersHelp();
+        break;
+      }
       if (args[0] === 'detect') {
         const { runProvidersDetect } = await import('../providers-detect.mjs');
         await runProvidersDetect(args.slice(1));
