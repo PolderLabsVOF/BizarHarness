@@ -1,5 +1,96 @@
 # Changelog
 
+## v5.6.0-beta.8 — Installer + updater for agent-browser
+
+> The full installer / updater pipeline now handles agent-browser
+> end-to-end: install, update, version detection, daemon management.
+
+### What's new
+
+- **New: `cli/agent-browser-update.mjs`** (317 lines) — single source
+  of truth for the agent-browser CLI. Exposes `detectState()`,
+  `install()`, `update()`, `ensureRunning()`, `printStatus()`.
+  All idempotent. The `install()` function uses `npm install -g
+  agent-browser@<channel>` and runs `agent-browser install` to
+  download Chrome for Testing. The `update()` function prefers
+  `agent-browser upgrade` and falls back to `npm update -g`.
+- **New: `cli/agent-browser-update.test.mjs`** (8 tests) — verifies
+  detectState shape, dryRun mode, env-var override, printStatus
+  non-throwability.
+- **New CLI command: `bizar agent-browser <sub>`** — rich installer
+  + updater (vs the simpler `bizar agent-browser-up` daemon manager).
+  Subcommands: `status` (default), `install`, `update`, `detect`,
+  `start`, `stop`.
+- **`cli/provision.mjs:ensureAgentBrowser()`** (NEW) — wired into
+  `runProvision()` so every `bizar install` and `bizar update` now
+  installs/updates agent-browser automatically.
+- **`install.sh:install_agent_browser()`** (NEW) — bash-side
+  equivalent for when the npm package isn't yet bootstrapped. Called
+  from `install_linux()` and `install_macos()`. Bumps the installer
+  banner from v4.4.7 → v6.0.0.
+- **`install.ps1:Install-AgentBrowser()`** (NEW) — PowerShell
+  equivalent for Windows. Called from the main flow after
+  `Install-WindowsDeps`.
+
+### Verified behavior
+
+```sh
+# Manual usage
+bizar agent-browser status       # one-line status
+bizar agent-browser install      # install + download Chrome
+bizar agent-browser update       # upgrade to latest
+bizar agent-browser start        # start daemon
+bizar agent-browser stop         # stop daemon
+bizar agent-browser detect       # JSON state (for scripts)
+
+# During install
+./install.sh                    # installs agent-browser
+# OR
+bizar install                    # also installs agent-browser
+
+# During update
+bizar update                     # upgrades agent-browser
+```
+
+### Test results
+
+- `cli/agent-browser-update.test.mjs` → **8/8 pass**
+- `bun test plugins/bizar` → 663/665 pass (no regression)
+- `npx tsc --noEmit` → 0 errors
+- `bun run /tmp/bh-full-e2e.mjs` → 27/27 pass
+
+### Files Changed
+
+**New (3):**
+- `cli/agent-browser-update.mjs` (317 lines) — installer/updater
+- `cli/agent-browser-update.test.mjs` (8 tests, 105 lines)
+- (the agent-browser-up.sh is the bash wrapper for daemon mgmt)
+
+**Updated (5):**
+- `cli/provision.mjs` — `ensureAgentBrowser()` step wired into runProvision
+- `cli/commands/util.mjs` — `bizar agent-browser` subcommand dispatcher
+- `cli/bin.mjs` — help text + dispatcher updated
+- `install.sh` — `install_agent_browser()` function + Linux/macOS hooks
+- `install.ps1` — `Install-AgentBrowser()` function
+
+**No behavioral changes to other components.** The browser tools
+themselves (`plugins/bizar/src/tools/agent-browser.ts`) are unchanged
+from v5.6.0-beta.7.
+
+### Install
+
+```sh
+# Manual
+bizar agent-browser install    # one command
+# OR during a full install
+npm install -g @polderlabs/bizar@beta
+bizar install
+# OR
+npm install -g @polderlabs/bizar@5.6.0-beta.8
+```
+
+---
+
 ## v5.6.0-beta.7 — agent-browser + MILESTONES/IMPLEMENTATION_PLAN
 
 > Major: **browser-harness → agent-browser** (native Rust CLI from

@@ -151,6 +151,40 @@ function Install-WindowsDeps {
 }
 
 # ── Service registration (delegated to Node) ───────────────────────────────
+function Install-AgentBrowser {
+  <#
+  .SYNOPSIS
+    v6.0.0 — Install agent-browser (native Rust CLI from vercel-labs).
+  .DESCRIPTION
+    Replaces the v5.x browser-harness (Python CDP wrapper). Installed via npm.
+    Soft-fail: agent-browser is optional. The Node-side provisioner
+    (`cli/provision.mjs:ensureAgentBrowser`) will retry on first run.
+  #>
+  if (Have-Cmd agent-browser) {
+    $ver = (& agent-browser --version 2>$null) -join '' -replace "`n",''
+    Write-Note "agent-browser $ver already installed"
+    return
+  }
+  if (-not (Have-Cmd npm)) {
+    Write-Warn "npm not available - skipping agent-browser install"
+    return
+  }
+  Write-Action "Installing agent-browser via npm..."
+  if ($DryRun) {
+    Write-Dim "  [DRY RUN] would run: npm install -g agent-browser"
+    return
+  }
+  try {
+    & npm install -g agent-browser 2>&1 | Out-Null
+    $ver = (& agent-browser --version 2>$null) -join '' -replace "`n",''
+    Write-Note "agent-browser $ver installed"
+    & agent-browser install 2>&1 | Out-Null
+    Write-Note "Chrome for Testing downloaded"
+  } catch {
+    Write-Warn "agent-browser install failed - the browser tools will not be available"
+  }
+}
+
 function Install-Service {
   Write-Section "Installing background service"
   $bin = Join-Path $RepoDir 'cli\bin.mjs'
@@ -181,7 +215,7 @@ function Install-Service {
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "  ⚡ BizarHarness Installer v4.4.7" -ForegroundColor Cyan
+Write-Host "  ⚡ BizarHarness Installer v6.0.0" -ForegroundColor Cyan
 if ($Update) { Write-Host "  Update mode" -ForegroundColor DarkGray }
 Write-Host ""
 
@@ -189,6 +223,7 @@ $os = (Get-CimInstance Win32_OperatingSystem).Caption
 Write-Note "Detected $os"
 
 Install-WindowsDeps
+Install-AgentBrowser
 Install-Service
 
 # ── Hand off to the unified provisioner ────────────────────────────────────

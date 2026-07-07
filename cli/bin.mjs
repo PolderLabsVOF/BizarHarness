@@ -13,7 +13,7 @@
  * Commands:
  *   install, audit, init, export, artifact, update, test-gate, service, dash,
  *   memory, headroom, minimax, usage, mod, doctor, repair, dev-link, dev-unlink,
- *   heads-up, bg, agent-browser-up, providers, deploy, plugin, marketplace
+ *   heads-up, bg, agent-browser, agent-browser-up, providers, deploy, plugin, marketplace
  */
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'node:fs';
@@ -115,7 +115,8 @@ function showHelp() {
     deploy              One-click deploy to Vercel, Cloudflare, Fly.io, or Docker
     plugin <subcommand> Manage marketplace plugins (search/install/config/invoke)
     marketplace <subcommand>  Browse and install plugins from the public marketplace
-    agent-browser-up  Start Chromium for agent-browser (start/stop/status)
+    agent-browser      Install / update / verify the agent-browser CLI
+    agent-browser-up    Start Chromium for agent-browser (start/stop/status)
     providers detect    Auto-detect provider API keys from env + cline.json
     clip <subcommand>       Manage web clipper saved clips (list/delete/configure)
     ocr <subcommand>        OCR operations on images (list/process/configure)
@@ -429,6 +430,7 @@ async function main() {
     case 'heads-up':
     case 'bg':
     case 'digest':
+    case 'agent-browser':
     case 'agent-browser-up':
     case 'providers':
     case 'plan': {

@@ -14,8 +14,8 @@
 # package manager:
 #
 #   - Linux:  ensure node is installed (apt/dnf/pacman/zypper), install uv,
-#             python3.12, jq, gh, agent-browser, Chrome runtime libs.
-#   - macOS:  ensure homebrew is installed; everything else is via brew.
+#             python3.12, jq, gh, agent-browser (npm), Chrome for Testing.
+#   - macOS:  ensure homebrew is installed; everything else is via brew/npm.
 #   - Windows: a stub that prints "use install.ps1".
 #
 # Agent files / plugin copy / cline.json patching / service registration /
@@ -189,6 +189,41 @@ check_deps() {
   fi
 }
 
+install_agent_browser() {
+  # v6.0.0 — agent-browser (native Rust CLI from vercel-labs). Replaces
+  # the v5.x browser-harness (Python CDP wrapper). Installs via npm.
+  #
+  # If npm is not available, this is a soft-fail: agent-browser is
+  # optional, and `cli/provision.mjs:ensureAgentBrowser` will retry it
+  # once npm is available.
+  if have_cmd agent-browser; then
+    local ab_ver
+    ab_ver="$(agent-browser --version 2>/dev/null || echo 'unknown')"
+    note "agent-browser ${ab_ver} already installed"
+    return 0
+  fi
+  action "Installing agent-browser via npm..."
+  if ! have_cmd npm; then
+    warn "npm not available — skipping agent-browser install"
+    warn "    Install later: npm install -g agent-browser"
+    return 0
+  fi
+  if dry npm install -g agent-browser 2>&1; then
+    local ab_ver
+    ab_ver="$(agent-browser --version 2>/dev/null || echo 'unknown')"
+    note "agent-browser ${ab_ver} installed"
+    # Download Chrome for Testing
+    if dry agent-browser install 2>&1; then
+      note "Chrome for Testing downloaded"
+    else
+      warn "Chrome download failed — retry later: agent-browser install"
+    fi
+  else
+    warn "agent-browser install failed — the browser tools will not be available"
+    warn "    Install later: npm install -g agent-browser"
+  fi
+}
+
 install_lightrag() {
   # LightRAG is optional but recommended. Install via uv tool.
   # uv tools install to ~/.local/bin/ — ensure that's on PATH.
@@ -359,6 +394,7 @@ install_linux() {
   ensure_node
   check_deps
   install_missing_deps_linux
+  install_agent_browser
   install_service
 }
 
@@ -366,6 +402,7 @@ install_macos() {
   note "Detected macOS ($(uname -m))"
   check_deps
   install_missing_deps_macos
+  install_agent_browser
   install_service
 }
 
@@ -380,7 +417,7 @@ main() {
   fi
 
   echo ""
-  echo -e "${BOLD}${CYAN}  ⚡ BizarHarness Installer v4.4.7${NC}"
+  echo -e "${BOLD}${CYAN}  ⚡ BizarHarness Installer v6.0.0${NC}"
   if [ "$UPDATE_MODE" -eq 1 ]; then
     echo -e "  ${DIM}Update mode${NC}"
   fi

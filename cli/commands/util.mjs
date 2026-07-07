@@ -3,7 +3,7 @@
  *
  * Miscellaneous utility commands:
  *   audit, init, export, test-gate, dev-link, dev-unlink,
- *   doctor, repair, heads-up, bg, agent-browser-up, providers detect,
+ *   doctor, repair, heads-up, bg, agent-browser, agent-browser-up, providers detect,
  *   backup, restore
  */
 import chalk from 'chalk';
@@ -437,6 +437,70 @@ export async function run(name, args, isHelpRequest) {
       } catch (err) {
         console.error(chalk.red(`  ✗ agent-browser-up ${sub} failed (exit ${err.status ?? 1})`));
         process.exit(err.status || 1);
+      }
+      break;
+    }
+
+    case 'agent-browser': {
+      // v6.0.0 — install / update / verify the agent-browser CLI.
+      // (The 'agent-browser-up' sibling is the bash wrapper that just
+      // manages the daemon process; this is the rich installer + updater.)
+      const { install, update, detectState, ensureRunning, printStatus } =
+        await import('../agent-browser-update.mjs');
+      const sub = args[0] || 'status';
+      switch (sub) {
+        case 'status':
+          printStatus();
+          break;
+        case 'install': {
+          const s = install({ silent: false });
+          console.log(chalk.green('\n  agent-browser ready.'));
+          console.log(`    version:    ${s.version}`);
+          console.log(`    daemon:     ${s.daemonRunning ? 'running' : 'stopped'}`);
+          console.log(`    profile:    ${s.profileDir}`);
+          break;
+        }
+        case 'update': {
+          const s = update({ silent: false });
+          console.log(chalk.green('\n  agent-browser up-to-date.'));
+          console.log(`    version:    ${s.version}`);
+          console.log(`    daemon:     ${s.daemonRunning ? 'running' : 'stopped'}`);
+          break;
+        }
+        case 'detect': {
+          const s = detectState();
+          console.log(JSON.stringify(s, null, 2));
+          break;
+        }
+        case 'start':
+          ensureRunning({ silent: false });
+          break;
+        case 'stop': {
+          const { spawnSync } = await import('node:child_process');
+          const killed = spawnSync('pkill', ['-f', 'agent-browser serve'], { stdio: 'ignore' });
+          if (killed.status === 0) {
+            console.log(chalk.green('  ✓ daemon stopped'));
+          } else {
+            console.log(chalk.dim('  daemon was not running'));
+          }
+          break;
+        }
+        default:
+          console.log(`bizar agent-browser <sub>
+
+  Subcommands:
+    status   one-line status (default)
+    install  install agent-browser + download Chrome
+    update   upgrade to the latest version
+    detect   JSON state (for scripts)
+    start    start the daemon
+    stop     stop the daemon
+
+  Examples:
+    bizar agent-browser status
+    bizar agent-browser install
+    bizar agent-browser update
+    bizar agent-browser start`);
       }
       break;
     }

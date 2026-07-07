@@ -836,6 +836,44 @@ export async function installLightragProvision({ dryRun = false } = {}) {
 }
 
 /**
+ * v6.0.0 — Ensure `agent-browser` (native Rust CLI from vercel-labs) is
+ * installed and the daemon is up. agent-browser replaces the v5.x
+ * `browser-harness` (Python CDP wrapper). The CLI is installed via
+ * `npm install -g agent-browser`; Chrome for Testing is downloaded by
+ * `agent-browser install`; the daemon is started by
+ * `agent-browser serve --headless --port <port> --profile <dir>`.
+ *
+ * Idempotent. Returns { ok, message, version?, daemonRunning? }.
+ */
+export async function ensureAgentBrowser({ dryRun = false, mode = 'install' } = {}) {
+  const ab = await import('./agent-browser-update.mjs');
+  const before = ab.detectState();
+  if (dryRun) {
+    return {
+      ok: true,
+      message: `[dry-run] agent-browser: ${before.installed ? 'installed' : 'not installed'}` +
+               (before.installed ? ` (v${before.version})` : ''),
+      version: before.version,
+      daemonRunning: before.daemonRunning,
+    };
+  }
+  try {
+    const after = mode === 'update' && before.installed
+      ? ab.update({ silent: true, startDaemon: true })
+      : ab.install({ silent: true, startDaemon: true });
+    return {
+      ok: true,
+      message: `agent-browser: ${after.installed ? `v${after.version}` : 'install attempted'}` +
+               ` · daemon: ${after.daemonRunning ? 'running' : 'stopped'}`,
+      version: after.version,
+      daemonRunning: after.daemonRunning,
+    };
+  } catch (err) {
+    return { ok: false, message: `agent-browser install failed: ${err.message}` };
+  }
+}
+
+/**
  * v4.4.11 — The mods step. By default, NEVER install or upgrade mods
  * during `bizar install` or `bizar update`. The step just reports the
  * current mod list so the user can see what's installed.
