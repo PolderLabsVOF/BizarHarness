@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Write(plugins/**)",
+      "Write(packages/**)",
+      "Write(bizar-dash/**)",
+      "Write(scripts/**)",
+      "Write(templates/**)",
+      "Write(docs/**)",
+      "Write(feature_list.json)",
+      "Write(PROGRESS.md)",
+      "Write(DECISIONS.md)",
+      "Write(.harness/**)",
+      "Edit(plugins/**)",
+      "Edit(packages/**)",
+      "Edit(bizar-dash/**)",
+      "Edit(scripts/**)",
+      "Edit(templates/**)",
+      "Edit(docs/**)",
+      "Edit(feature_list.json)",
+      "Edit(PROGRESS.md)",
+      "Edit(DECISIONS.md)",
+      "Edit(.harness/**)",
+      "Bash(make:*)",
+      "Bash(bun:*)",
+      "Bash(bunx:*)",
+      "Bash(git:*)",
+      "Bash(rtk:*)",
+      "Bash(./scripts/*)",
+      "Bash(curl:*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Write(.env)",
+      "Write(.env.*)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)"
+    ]
+  },
+  "tools": {
+    "integrations": {
+      "cline-sdk": {
+        "package": "@cline/sdk",
+        "capabilities": ["tools", "hooks", "agentTeams"]
+      },
+      "cline-core": {
+        "package": "@cline/core",
+        "capabilities": ["inProcessClineCore", "subscribe", "send", "abort"]
+      },
+      "bizar-sdk": {
+        "package": "@polderlabs/bizar-sdk",
+        "capabilities": ["httpClient", "events"]
+      }
+    }
+  }
+}

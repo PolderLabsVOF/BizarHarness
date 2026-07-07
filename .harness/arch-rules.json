@@ -1,0 +1,69 @@
+{
+  "$schema": "https://bizar.dev/schemas/arch-rules.v1.json",
+  "description": "Architectural rule registry for Bizar Harness. Each rule has what/why/fix fields. Rules are run by scripts/check-arch.sh.",
+  "rules": [
+    {
+      "id": "ARCH-001",
+      "description": "Plugin must not import from dashboard (cross-layer violation)",
+      "check": "! grep -rEn 'from.*bizar-dash' plugins/bizar/src --include='*.ts' --include='*.tsx' --include='*.mjs' 2>/dev/null",
+      "expect": "pass",
+      "what": "A file in plugins/bizar/src/ imports from bizar-dash/.",
+      "why": "The plugin (Layer 0) and dashboard (Layer 1) communicate via the ClineCore SDK. A direct import couples the layers and breaks the plugin's portability (e.g. running inside Cline without the dashboard).",
+      "fix": "Move the shared code to packages/sdk/ and import from there. The plugin should only depend on @cline/sdk, @cline/core, and packages/sdk/."
+    },
+    {
+      "id": "ARCH-002",
+      "description": "Plugin must not call dashboard HTTP for memory operations",
+      "check": "! grep -rEn \"fetch\\('http://127\\\\.0\\\\.0\\\\.1.*api/memory\" plugins/bizar/src --include='*.ts' --include='*.tsx' 2>/dev/null",
+      "expect": "pass",
+      "what": "A memory tool in the plugin calls the dashboard's /api/memory HTTP endpoint.",
+      "why": "The plugin must work without the dashboard running. Memory is on disk at ~/.bizar_memory/ \u2014 reading/writing directly avoids a network hop and a runtime dependency.",
+      "fix": "Use the in-process vault helpers from plugins/bizar/src/memory-vault.ts (readNote, writeNote, listNotes, searchNotes)."
+    },
+    {
+      "id": "ARCH-003",
+      "description": "Plugin must not spawn cline serve subprocess",
+      "check": "! grep -rEn \"^[^/]*Bun\\.spawn\\(\\s*\\[\\s*\"cline\"\" plugins/bizar/src --include=\"*.ts\" --include=\"*.tsx\" 2>/dev/null",
+      "expect": "pass",
+      "what": "Plugin code spawns the cline serve child subprocess.",
+      "why": "The subprocess hangs in headless test environments (no cline CLI, no creds). The plugin embeds ClineCore in-process via ClineRuntime instead.",
+      "fix": "Replace serve.ts with clineruntime.ts; remove the bun.spawn([\"cline\",\"serve\",...]) call. Use ClineRuntime.startSession / send / abort / subscribe instead."
+    },
+    {
+      "id": "ARCH-004",
+      "description": "All tools must use createTool from @cline/sdk (no manual AgentTool shape)",
+      "check": "! grep -rEn 'name:.*inputSchema:.*execute:' plugins/bizar/src/tools --include='*.ts' 2>/dev/null | grep -v 'createTool\\|inputSchema:' | head -1; true",
+      "expect": "pass",
+      "what": "A tool in plugins/bizar/src/tools/ is hand-rolled instead of using createTool().",
+      "why": "createTool() handles inputSchema validation, the AgentTool wrapper, and metadata. Hand-rolled tools drift from the Cline SDK contract over time.",
+      "fix": "Import createTool from @cline/sdk and call it with { name, description, inputSchema: z.object({...}).shape, execute }."
+    },
+    {
+      "id": "ARCH-005",
+      "description": "No debug artifacts in src/ (console.log / debugger / .only())",
+      "check": "! grep -rEn '(console\\\\.log|debugger|\\\\.only\\\\()' plugins/bizar/src packages/sdk/src bizar-dash/src --include='*.ts' --include='*.tsx' --include='*.mjs' 2>/dev/null | grep -v test | grep -v '\\\\.test\\\\.' | head -1; true",
+      "expect": "pass",
+      "what": "Debug artifact found in src/ (console.log, debugger, or .only()).",
+      "why": "Debug artifacts leak into production, slow down startup, and pollute logs. The clean-state check enforces their absence.",
+      "fix": "Remove console.log/debugger/.only(). Use logger.debug() if logging is intentional. For tests, remove .only() before commit."
+    },
+    {
+      "id": "ARCH-006",
+      "description": "Memory vault location must be configurable via BIZAR_MEMORY_VAULT env var",
+      "check": "grep -q 'BIZAR_MEMORY_VAULT' plugins/bizar/src/memory-vault.ts",
+      "expect": "pass",
+      "what": "Memory vault location is hardcoded; BIZAR_MEMORY_VAULT env var not honored.",
+      "why": "Users may want a different vault location (e.g. project-local .obsidian/). The env var lets them override without code changes.",
+      "fix": "Use resolveVaultRoot() from plugins/bizar/src/memory-vault.ts \u2014 it checks process.env.BIZAR_MEMORY_VAULT first, then falls back to ~/.bizar_memory/."
+    },
+    {
+      "id": "ARCH-007",
+      "description": "All 17 + 2 = 19 tools must be registered in the plugin entry",
+      "check": "test $(grep -c 'create.*Tool' plugins/bizar/index.ts | head -1) -ge 19",
+      "expect": "pass",
+      "what": "Fewer than 19 tools registered in the plugin entry.",
+      "why": "The harness ships 17 core tools + 2 Cline agent team tools = 19. New tools must be added to the buildTools() function in plugins/bizar/index.ts.",
+      "fix": "Add the tool factory call in buildTools() and import it at the top of plugins/bizar/index.ts."
+    }
+  ]
+}

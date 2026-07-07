@@ -37,3 +37,4 @@ bizar-mods/
 # ── OS files ────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.dbbizar-dash/undefined/
+.harness/traces/

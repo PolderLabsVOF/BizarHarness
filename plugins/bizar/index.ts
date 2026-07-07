@@ -686,3 +686,56 @@ async function handleRunFinished(event: Extract<AgentRuntimeEvent, { type: "run-
   void ctx.memoryWriteOnEnd(sessionID, { sessionID, agent: (event.snapshot as { agentRole?: string }).agentRole ?? "unknown", startedAt, endedAt, status: event.type === "run-failed" ? "error" : "idle", error: errorMsg }, "");
   ctx.sessionStartTimes.delete(sessionID);
 }
+
+// --- Legacy exports (kept for backwards compat with tests) ----------------
+
+/**
+ * Race a promise against a timeout. If `promise` doesn't resolve within
+ * `ms`, reject with an Error labeled with `label`.
+ *
+ * @deprecated Used only by pre-Phase-2 init-helpers tests.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`bizar: ${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+/**
+ * Read the set of valid session IDs from the client (with a 1s timeout).
+ *
+ * @deprecated Used only by pre-Phase-2 init-helpers tests.
+ */
+interface LegacyPluginInput {
+  client?: {
+    session?: {
+      list?: () => Promise<unknown>;
+    };
+  };
+}
+
+export async function readValidSessionIds(input: LegacyPluginInput | unknown): Promise<Set<string>> {
+  const client = (input as LegacyPluginInput | null | undefined)?.client;
+  const listFn = client?.session?.list;
+  if (typeof listFn !== "function") return new Set<string>();
+  try {
+    const result = await withTimeout(Promise.resolve().then(() => listFn()), 1000, "client.session.list");
+    // Normalize: accept either an array or an object with .data
+    let items: unknown[] = [];
+    if (Array.isArray(result)) items = result;
+    else if (result && typeof result === "object" && Array.isArray((result as { data?: unknown }).data)) items = (result as { data: unknown[] }).data;
+    else return new Set<string>();
+    const ids = new Set<string>();
+    for (const item of items) {
+      if (typeof item === "string") ids.add(item);
+      else if (item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string") ids.add((item as { id: string }).id);
+    }
+    return ids;
+  } catch {
+    return new Set<string>();
+  }
+}
