@@ -7,6 +7,7 @@
 import { useState, useRef } from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { Button } from './Button';
+import { logger } from '../lib/logger';
 
 export type VoiceRecorderProps = {
   /** Vault path to store the transcript under */
@@ -50,7 +51,7 @@ export function VoiceRecorder({ vaultPath, onSaved }: VoiceRecorderProps) {
       setRecording(true);
     } catch (err) {
       // getUserMedia not available or permission denied
-      console.error('[VoiceRecorder] failed to start recording:', err);
+      logger.error('[VoiceRecorder] failed to start recording:', err);
     }
   };
 
@@ -69,14 +70,14 @@ export function VoiceRecorder({ vaultPath, onSaved }: VoiceRecorderProps) {
       form.append('vaultPath', vaultPath || '');
       const res = await fetch('/api/voice/upload', { method: 'POST', body: form });
       if (!res.ok) {
-        console.error('[VoiceRecorder] upload failed:', res.status, await res.text());
+        logger.error('[VoiceRecorder] upload failed:', res.status, await res.text());
         setTranscribing(false);
         return;
       }
       const { notePath, transcription } = await res.json();
       onSaved?.(notePath, transcription);
     } catch (err) {
-      console.error('[VoiceRecorder] upload error:', err);
+      logger.error('[VoiceRecorder] upload error:', err);
     } finally {
       setTranscribing(false);
     }

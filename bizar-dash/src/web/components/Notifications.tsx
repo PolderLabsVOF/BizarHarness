@@ -7,6 +7,7 @@ import { useToast } from './Toast';
 import { api } from '../lib/api';
 import { cn, formatRelative } from '../lib/utils';
 import type { Notification, NotificationStats, WsMessage } from '../lib/types';
+import { logger } from '../lib/logger';
 
 const ICONS: Record<string, typeof Info> = {
   info: Info,
@@ -43,8 +44,8 @@ export function Notifications({ onCountChange, wsSubscribe }: Props) {
       onCountChange?.(unreadRef.current);
     } catch (err) {
       // Soft-fail: the bell just shows no items.
-      // eslint-disable-next-line no-console
-      console.warn('[notifications] reload failed:', (err as Error).message);
+      
+      logger.warn('[notifications] reload failed:', (err as Error).message);
     } finally {
       setLoading(false);
     }

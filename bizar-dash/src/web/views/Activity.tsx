@@ -42,6 +42,7 @@ import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import type { Settings, Snapshot, Task, Agent } from '../lib/types';
 import { openArtifactViewer } from '../components/ArtifactViewer';
+import { logger } from '../lib/logger';
 
 type Props = {
   snapshot: Snapshot;
@@ -283,7 +284,7 @@ export function Activity({ snapshot, refreshSnapshot }: Props) {
       setBgInstances(bgRes.instances || []);
       setEvents(evRes.events || []);
     } catch (err) {
-      console.warn('activity reload failed:', err);
+      logger.warn('activity reload failed:', err);
     } finally {
       setLoading(false);
     }

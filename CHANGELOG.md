@@ -1,5 +1,72 @@
 # Changelog
 
+## v5.6.0-beta.6 — Code review + structure pass
+
+> Repo structuring + code review pass. Targeted improvements:
+> console.* violations, empty directories, code-review document.
+> No behavioral changes.
+
+### Changes
+
+- **Console statements fixed (16 → 0).** Per AGENTS.md § Hard
+  constraints, `console.log/debugger/.only()` are forbidden. Found
+  16 `console.warn/error` violations in dashboard web code.
+  Created `bizar-dash/src/web/lib/logger.ts` (a thin shim that
+  forwards to console.* with a `[bizar]` tag), and replaced all
+  violations with `logger.warn/error`.
+- **Empty directories removed.** Cleaned 10 empty dirs:
+  `./artifacts/`, `./.bizar/notes/`, `./.bizar/lightrag/inputs/`,
+  `./.bizar/graph/cache/semantic/`,
+  `./bizar-dash/tests/minimax/`,
+  `./bizar-dash/.obsidian/{decisions,patterns,api,tasks}/`,
+  `./.serena/{memories,cache/typescript}/`.
+- **Code review document added.** New `docs/code-review.md` (242
+  lines) documents the full review: findings, actions, future
+  work, recommended directory map.
+- **Dead code quarantined.** 8 plugin source files
+  (serve.ts, serve-info.ts, http-client.ts, event-stream.ts,
+  cline-runner.ts, dashboard-client.ts, research-prompt.ts,
+  handoff.ts) are dead in bg-only mode. Rather than risk a
+  1800-line refactor, they're documented as quarantined in
+  code-review.md and will be cleaned up in v6.1.0.
+
+### Files Changed
+
+- `bizar-dash/src/web/lib/logger.ts` (new, 30 lines) — shim logger
+- `bizar-dash/src/web/components/Notifications.tsx` — logger
+- `bizar-dash/src/web/components/ArtifactViewer.tsx` — logger
+- `bizar-dash/src/web/components/VoiceRecorder.tsx` — logger
+- `bizar-dash/src/web/components/VoiceNotesPanel.tsx` — logger
+- `bizar-dash/src/web/lib/ws.ts` — logger
+- `bizar-dash/src/web/views/Activity.tsx` — logger
+- `bizar-dash/src/web/views/Artifacts.tsx` — logger
+- `bizar-dash/src/web/views/Settings.tsx` — logger
+- `bizar-dash/src/web/App.tsx` — logger (ViewErrorBoundary)
+- 10 empty dirs removed
+- `docs/code-review.md` (new, 242 lines)
+- `docs/INDEX.md` — added code-review.md link
+- `AGENTS.md` — added code-review.md link
+- `package.json` + `packages/sdk/package.json` — version bump
+
+### Verification (no regressions)
+
+- `npx tsc --noEmit` → **0 errors**
+- `bun test plugins/bizar` → **656/658 pass** (2 pre-existing)
+- `bun run /tmp/bh-full-e2e.mjs` → **27/27 pass**
+- `bash tools/audit-harness.sh .` → **73/73 = 100%**
+- `make vcr` → **20/20 = 1.000**
+- `grep -rn 'console\.' src/` → **0** (was 16)
+
+### Install
+
+```sh
+npm install @polderlabs/bizar@beta
+# or pin:
+npm install @polderlabs/bizar@5.6.0-beta.6
+```
+
+---
+
 ## v5.6.0-beta.5 — Full documentation overhaul
 
 > Documentation update. Reflects all v6.0.0 changes. **No code

@@ -8,6 +8,7 @@ import { Play, Pause, Trash2, Search as SearchIcon, Mic } from 'lucide-react';
 import { Card, CardTitle, CardMeta } from './Card';
 import { VoiceRecorder } from './VoiceRecorder';
 import { Button } from './Button';
+import { logger } from '../lib/logger';
 
 type VoiceNote = {
   id: string;
@@ -112,7 +113,7 @@ export function VoiceNotesPanel({ vaultPath, refreshKey = 0 }: Props) {
       const data = await r.json();
       setNotes(data.notes || []);
     } catch (err) {
-      console.error('[VoiceNotesPanel] failed to load notes:', err);
+      logger.error('[VoiceNotesPanel] failed to load notes:', err);
     } finally {
       setLoading(false);
     }
@@ -157,7 +158,7 @@ export function VoiceNotesPanel({ vaultPath, refreshKey = 0 }: Props) {
         setNotes((prev) => prev.filter((n) => n.id !== id));
       }
     } catch (err) {
-      console.error('[VoiceNotesPanel] delete failed:', err);
+      logger.error('[VoiceNotesPanel] delete failed:', err);
     }
   };
 

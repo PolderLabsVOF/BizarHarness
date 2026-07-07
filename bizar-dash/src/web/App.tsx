@@ -46,6 +46,7 @@ import { SettingsNav } from './components/SettingsNav';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
 import { AlertTriangle, Globe, LayoutTemplate, X } from 'lucide-react';
+import { logger } from './lib/logger';
 import './styles/main.css';
 import './styles/settings.css';
 
@@ -889,7 +890,7 @@ class ViewErrorBoundary extends Component<
   }
   componentDidCatch(err: Error, info: { componentStack?: string }) {
     // eslint-disable-next-line no-console
-    console.error('[ViewErrorBoundary] caught render error:', err, info?.componentStack);
+    logger.error('[ViewErrorBoundary] caught render error:', err, info?.componentStack);
   }
   reset = () => this.setState({ err: null });
   override render() {

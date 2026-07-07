@@ -6,6 +6,7 @@
 // connection URL. The server (auth.mjs) accepts both forms.
 import type { WsMessage, WsStatus } from './types';
 import { TOKEN_KEY } from './api';
+import { logger } from '../lib/logger';
 
 type Handler = (msg: WsMessage) => void;
 type StatusHandler = (status: WsStatus) => void;
@@ -104,7 +105,7 @@ export class Ws {
       socket = new WebSocket(url);
       this.ws = socket;
     } catch (err) {
-      console.warn('[ws] construct failed:', err);
+      logger.warn('[ws] construct failed:', err);
       this.scheduleReconnect();
       return;
     }
@@ -131,21 +132,21 @@ export class Ws {
     socket.addEventListener('error', () => {
       if (this.ws !== socket) return;
       // 'close' will follow — keep this for logs
-      console.warn('[ws] error');
+      logger.warn('[ws] error');
     });
     socket.addEventListener('message', (e) => {
       let msg: WsMessage;
       try {
         msg = JSON.parse(e.data);
       } catch {
-        console.warn('[ws] bad message');
+        logger.warn('[ws] bad message');
         return;
       }
       for (const h of this.handlers) {
         try {
           h(msg);
         } catch (err) {
-          console.error('[ws] handler error:', err);
+          logger.error('[ws] handler error:', err);
         }
       }
     });
@@ -169,7 +170,7 @@ export class Ws {
       try {
         h(s);
       } catch (err) {
-        console.error('[ws] status handler error:', err);
+        logger.error('[ws] status handler error:', err);
       }
     }
   }

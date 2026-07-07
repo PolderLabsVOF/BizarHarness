@@ -45,6 +45,7 @@ import { useModal } from '../components/Modal';
 import { CanvasContextMenu, type ContextMenuState } from '../components/CanvasContextMenu';
 import { api } from '../lib/api';
 import { cn, formatRelative, truncate } from '../lib/utils';
+import { logger } from '../lib/logger';
 import type {
   Canvas,
   CanvasComment,
@@ -538,7 +539,7 @@ function PlanEditor({
       await api.put(`/artifacts/${encodeURIComponent(slug)}/position`, { positions });
     } catch (err) {
       // non-fatal
-      console.warn('Position update failed', err);
+      logger.warn('Position update failed', err);
     }
   };
 

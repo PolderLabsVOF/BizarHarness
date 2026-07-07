@@ -4,6 +4,7 @@ import { X, ExternalLink, Download, FileText } from 'lucide-react';
 import { useModal } from './Modal';
 import { Spinner } from './Spinner';
 import { api } from '../lib/api';
+import { logger } from '../lib/logger';
 
 type ArtifactMeta = {
   id: string;
@@ -38,7 +39,7 @@ export function ArtifactViewer({ artifactId, onClose }: Props) {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('Failed to load artifact:', err);
+          logger.error('Failed to load artifact:', err);
         }
       } finally {
         if (!cancelled) setLoading(false);

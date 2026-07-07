@@ -21,6 +21,7 @@ import { HeadroomSection } from './settings/HeadroomSection';
 import { ActivitySection } from './settings/ActivitySection';
 import { WorkspacesSection } from './settings/WorkspacesSection';
 import { EnvVarsSection } from './settings/EnvVarsSection';
+import { logger } from '../lib/logger';
 
 type Props = {
   snapshot: Snapshot;
@@ -160,7 +161,7 @@ function SettingsViewInner({ settings: initial, refreshSnapshot, settingsMode, s
       try {
         await api.put('/settings', { ...settings, [key]: value });
       } catch (err) {
-        console.error('autoSave failed', err);
+        logger.error('autoSave failed', err);
       }
     }, 300);
   }, [settings]);

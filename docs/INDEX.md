@@ -132,6 +132,7 @@ the relevant topic doc below.
 - [AGENTS.md](../AGENTS.md) — entry point + L01–L12 sections
 - [PROGRESS.md](../PROGRESS.md) — current state (73/73 audit)
 - [docs/quality-document.md](quality-document.md) — A/B/C/D scores
+- [docs/code-review.md](code-review.md) — code review findings + actions
 - [templates/sprint-contract.md](../templates/sprint-contract.md) —
   L11 Observability
 - [templates/evaluator-rubric.md](../templates/evaluator-rubric.md) —

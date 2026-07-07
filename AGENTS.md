@@ -160,6 +160,7 @@ A session is "clean" when ALL FIVE dimensions pass:
 - [docs/INDEX.md](docs/INDEX.md) — documentation map (start here)
 - [docs/architecture.md](docs/architecture.md) — layer model, module map
 - [docs/quality-document.md](docs/quality-document.md) — module health (A/B/C/D)
+- [docs/code-review.md](docs/code-review.md) — code review findings + actions
 - [docs/safety.md](docs/safety.md) — DANGEROUS_PATTERNS reference (v6.0.0)
 - [docs/curator.md](docs/curator.md) — Skill curator reference (v6.0.0)
 - [docs/graph-tools.md](docs/graph-tools.md) — Knowledge graph tools (v6.0.0)
