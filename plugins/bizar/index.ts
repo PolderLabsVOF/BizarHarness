@@ -89,6 +89,10 @@ import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
 import { createReadGlyphFeedbackTool } from "./src/tools/read-glyph-feedback.js";
 import { createTeamSpawnTool } from "./src/tools/team-spawn.js";
 import { createTeamStatusTool } from "./src/tools/team-status.js";
+import { createGraphQueryTool, createGraphPathTool, createGraphExplainTool } from "./src/tools/graph-query.js";
+import { checkDangerous, getDangerousPatternStats, listDangerousPatterns } from "./src/dangerous-patterns.js";
+import { createSkillCurator } from "./src/hooks/skill-curator.js";
+import { createMemoryFlushOnCompact } from "./src/hooks/memory-flush-on-compact.js";
 import {
   stripInlineThinkBlocks,
   wrapFetchForReasoningCleanup,
@@ -497,7 +501,13 @@ function buildTools(ctx: RuntimeContext, instanceManager: InstanceManager | null
         createTeamStatusTool({ runtime: clineRuntime, logger: ctx.logger }) as unknown as AgentTool,
       ]
     : [];
-  return [...basePlanTools, ...bgTools, ...teamTools];
+  // v6.0.0 — Knowledge graph tools (always available; reads .bizar/graph/graph.json).
+  const graphTools: AgentTool[] = [
+    createGraphQueryTool({ worktree: ctx.worktree, logger: ctx.logger }) as unknown as AgentTool,
+    createGraphPathTool({ worktree: ctx.worktree, logger: ctx.logger }) as unknown as AgentTool,
+    createGraphExplainTool({ worktree: ctx.worktree, logger: ctx.logger }) as unknown as AgentTool,
+  ];
+  return [...basePlanTools, ...bgTools, ...teamTools, ...graphTools];
 }
 
 function bgDisabledTools(logger: Logger): AgentTool[] {
@@ -517,6 +527,21 @@ function buildHooksForCtx(ctx: RuntimeContext): AgentExtensionHooks {
       const tool = toolCtx.tool.name;
       if (!sessionID || !tool) return undefined;
       const args = toolCtx.input;
+      // v6.0.0 — Dangerous-patterns approval gate (Hermes + OpenFang pattern).
+      // Blocks rm -rf, sudo, prompt injection, SSRF, etc. See
+      // src/dangerous-patterns.ts for the full list. Tool calls with
+      // `decision: deny` are stopped before they reach the host.
+      try {
+        const safety = checkDangerous(args as Record<string, unknown>);
+        if (safety.decision === "deny") {
+          ctx.logger.warn(
+            `bizar: blocked tool '${tool}' — dangerous pattern '${safety.pattern}': ${safety.reason}`,
+          );
+          return { stop: true, reason: `dangerous_pattern:${safety.pattern}:${safety.reason}` };
+        }
+      } catch {
+        // safety checks are best-effort; never fail the tool call here
+      }
       return await ctx.stateStore.withLock(sessionID, async () => {
         const state = await ctx.stateStore.load(sessionID);
         if (state.startedAt === 0) {
@@ -586,6 +611,39 @@ function buildHooksForCtx(ctx: RuntimeContext): AgentExtensionHooks {
     beforeModel: async (modelCtx) => {
       const sessionID = (modelCtx.snapshot as { sessionId?: string }).sessionId ?? (modelCtx.snapshot as { agentId?: string }).agentId ?? "";
       if (!sessionID) return undefined;
+      // v6.0.0 — Pre-compaction memory flush (OpenClaw `flush-plan.ts` pattern).
+      // When usage crosses the compaction threshold, write a snapshot to the
+      // memory vault BEFORE the host summarizes the conversation. This closes
+      // the durability gap where compaction drops context before persistence.
+      try {
+        const snap = (modelCtx.snapshot as { usage?: { total?: number; input?: number; output?: number; cached?: number }; maxContext?: number });
+        if (snap?.usage?.total && snap.maxContext) {
+          const flusher = createMemoryFlushOnCompact({
+            worktree: ctx.worktree,
+            logger: ctx.logger,
+            enabled: true,
+          });
+          await flusher.maybeFlush({
+            sessionId: sessionID,
+            usage: snap.usage as { total: number },
+            maxContext: snap.maxContext,
+            recentMessages: (modelCtx.request.messages ?? []).slice(-10).map((m) => {
+              const msg = m as { role?: string; content?: unknown };
+              let text = '';
+              if (typeof msg.content === 'string') text = msg.content;
+              else if (Array.isArray(msg.content)) {
+                text = msg.content
+                  .filter((p) => p && typeof p === 'object' && (p as { type?: string }).type === 'text')
+                  .map((p) => (p as { text?: string }).text ?? '')
+                  .join('\n');
+              }
+              return { role: String(msg.role ?? 'unknown'), content: text };
+            }),
+          });
+        }
+      } catch {
+        // best-effort
+      }
       const sysParts: string[] = [];
       const baseSys = modelCtx.request.systemPrompt ?? "";
       if (!baseSys.includes(REASONING_DIRECTIVE_MARKER)) sysParts.push(REASONING_DIRECTIVE);

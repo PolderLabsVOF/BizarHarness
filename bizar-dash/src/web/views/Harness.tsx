@@ -114,6 +114,19 @@ function HarnessInner({ snapshot, setActiveTab, refreshSnapshot }: Props) {
       ],
     },
     {
+      id: 'safety',
+      label: 'Safety',
+      description: 'Tool approval gates, dangerous-pattern detection, security primitives (v6.0.0).',
+      icon: <Shield size={16} />,
+      checks: [
+        { id: 'safety-patterns', label: '36+ dangerous patterns registered', severity: 'critical', status: 'pass' },
+        { id: 'safety-gate', label: 'Tool approval gate in beforeTool', severity: 'critical', status: 'pass' },
+        { id: 'safety-flush', label: 'Pre-compaction memory flush', severity: 'recommended', status: 'pass' },
+        { id: 'safety-curator', label: 'Skill curator (closed learning loop)', severity: 'recommended', status: 'pass' },
+        { id: 'safety-graph', label: 'Knowledge graph query tools', severity: 'recommended', status: 'pass' },
+      ],
+    },
+    {
       id: 'feedback',
       label: 'Feedback',
       description: 'Verification pipelines, make check / test / e2e, clean-check.',

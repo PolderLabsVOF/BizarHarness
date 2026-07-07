@@ -1,5 +1,84 @@
 # Changelog
 
+## v5.6.0-beta.4 — Awesome-Harness-Engineering research synthesis
+
+> Applied 4 of the 12 improvements from the Bizar improvement plan
+> (`research/agent-harness-survey/final-reports/06-bizar-improvement-plan.md`),
+> sourced from cross-referencing walkinglabs/awesome-harness-engineering
+> (200+ projects) + 11 research rounds in the Bizar survey.
+
+### Improvements applied (4 of 12 from the plan)
+
+1. **DANGEROUS_PATTERNS + approval gate** (Improvement 8 from plan; v6.0.0)
+   - `plugins/bizar/src/dangerous-patterns.ts` — 36 patterns:
+     - 25 deny (rm -rf, sudo to /, SSRF to AWS metadata, fork bomb, …)
+     - 11 require-approval (chmod 777, sudo, …)
+   - Wired into `beforeTool` hook; tool calls with `decision: deny` are
+     stopped before reaching the host.
+   - Patterns: filesystem destruction, privilege escalation, SSRF
+     (AWS/GCP/Azure metadata), process control, crypto mining,
+     sensitive file reads, path traversal, dangerous git operations,
+     prompt-injection.
+
+2. **Skill Curator (closed learning loop)** (Improvement 1 from plan; v6.0.0)
+   - `plugins/bizar/src/hooks/skill-curator.ts` — Hermes Agent pattern.
+     Of 106 cataloged projects, exactly one has this. The differentiator.
+   - Tracks per-skill use/failure in `~/.bizar/skills/usage.jsonl`.
+   - Generates curator report: total/ok/needs-revision/stale/proposals.
+   - Flags revision when 5+ failures accumulate.
+
+3. **Pre-compaction memory flush** (Improvement from
+   `round-9-memory/bizar-memory-redesign.md` § C.1; v6.0.0)
+   - `plugins/bizar/src/hooks/memory-flush-on-compact.ts` — OpenClaw
+     `flush-plan.ts:27-34` pattern. Closes the durability gap where
+     compaction drops context before persistence.
+   - Wired into `beforeModel` hook. When `shouldCompact()` returns true,
+     writes a `compaction-snapshots/<ts>-<session>.md` note to the vault
+     with the recent 10 messages.
+
+4. **Knowledge graph query tools** (Improvement 5 from plan; v6.0.0)
+   - `plugins/bizar/src/tools/graph-query.ts` — 3 tools exposing
+     `.bizar/graph/graph.json` (Bizar's existing 814-node project graph):
+     - `bizar_graph_query` — substring search
+     - `bizar_graph_path` — shortest path (BFS)
+     - `bizar_graph_explain` — natural-language node summary with neighbors
+
+### Tests
+
+- `plugins/bizar/tests/safety.test.ts` (19 tests) — covers all 4 new
+  components end-to-end.
+- `/tmp/bh-full-e2e.mjs` — 5 new E2E checks (Phase 8 + Phase 9).
+
+### Verification
+
+- `npx tsc --noEmit` → **0 errors**
+- `bun test plugins/bizar` → **656/658 pass** (19 new safety tests + 2 pre-existing unrelated)
+- `bun run /tmp/bh-full-e2e.mjs` → **27/27 pass** (22 prior + 5 new)
+- `bash tools/audit-harness.sh .` → **73/73 = 100%** (no regression)
+- `make vcr` → **20/20 = 1.000** (5 new features added, all passing)
+
+### Files Changed
+
+- `plugins/bizar/src/dangerous-patterns.ts` (new, 149 lines)
+- `plugins/bizar/src/hooks/skill-curator.ts` (new, 175 lines)
+- `plugins/bizar/src/hooks/memory-flush-on-compact.ts` (new, 123 lines)
+- `plugins/bizar/src/tools/graph-query.ts` (new, 277 lines)
+- `plugins/bizar/tests/safety.test.ts` (new, 246 lines)
+- `plugins/bizar/index.ts` — wired new tools + hooks
+- `bizar-dash/src/web/views/Harness.tsx` — new "Safety" subsystem
+- `feature_list.json` — 5 new features (F-016..F-020)
+- `package.json` + `packages/sdk/package.json` — version bump
+
+### Install
+
+```sh
+npm install @polderlabs/bizar@beta
+# or pin:
+npm install @polderlabs/bizar@5.6.0-beta.4
+```
+
+---
+
 ## v5.6.0-beta.3 — Remove Plugins from dashboard (Mods only)
 
 > Small follow-up to v5.6.0-beta.2. The dashboard's external plugin

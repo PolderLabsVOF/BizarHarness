@@ -436,11 +436,156 @@
       ],
       "passed": "2026-07-07",
       "commit": "3511390"
+    },
+    {
+      "id": "F-016",
+      "behavior": "Tool approval gate (dangerous-pattern detection)",
+      "verification": "make check + 36+ patterns registered, beforeTool blocks deny",
+      "state": "passing",
+      "evidence": "plugins/bizar/src/dangerous-patterns.ts registered; 36 patterns (25 deny + 11 require-approval); test coverage in safety.test.ts",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-07",
+      "passed": "2026-07-07",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run `make check` and fix TypeScript errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
+          "repair": "Run `make test` and fix failing tests."
+        },
+        {
+          "label": "e2e",
+          "cmd": "bun run /tmp/bh-full-e2e.mjs",
+          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
+        }
+      ]
+    },
+    {
+      "id": "F-017",
+      "behavior": "Skill curator (closed learning loop, Hermes pattern)",
+      "verification": "make check + safety.test.ts (5 tests)",
+      "state": "passing",
+      "evidence": "plugins/bizar/src/hooks/skill-curator.ts created; tracks use/failure; flags revisions after 5 failures; per-skill JSONL at ~/.bizar/skills/usage.jsonl",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-07",
+      "passed": "2026-07-07",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run `make check` and fix TypeScript errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
+          "repair": "Run `make test` and fix failing tests."
+        },
+        {
+          "label": "e2e",
+          "cmd": "bun run /tmp/bh-full-e2e.mjs",
+          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
+        }
+      ]
+    },
+    {
+      "id": "F-018",
+      "behavior": "Pre-compaction memory flush (OpenClaw pattern)",
+      "verification": "make check + safety.test.ts (3 tests)",
+      "state": "passing",
+      "evidence": "plugins/bizar/src/hooks/memory-flush-on-compact.ts; writes pre-compact snapshot to vault when shouldCompact() returns true; wired into beforeModel",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-07",
+      "passed": "2026-07-07",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run `make check` and fix TypeScript errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
+          "repair": "Run `make test` and fix failing tests."
+        },
+        {
+          "label": "e2e",
+          "cmd": "bun run /tmp/bh-full-e2e.mjs",
+          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
+        }
+      ]
+    },
+    {
+      "id": "F-019",
+      "behavior": "Knowledge graph query tools (bizar_graph_query, _path, _explain)",
+      "verification": "make check + safety.test.ts (3 tests) + E2E (3 tests)",
+      "state": "passing",
+      "evidence": "plugins/bizar/src/tools/graph-query.ts created; 3 tools registered (BFS path, label search, neighbor explain); reads .bizar/graph/graph.json (814 nodes in BizarHarness graph)",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-07",
+      "passed": "2026-07-07",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run `make check` and fix TypeScript errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
+          "repair": "Run `make test` and fix failing tests."
+        },
+        {
+          "label": "e2e",
+          "cmd": "bun run /tmp/bh-full-e2e.mjs",
+          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
+        }
+      ]
+    },
+    {
+      "id": "F-020",
+      "behavior": "Harness research synthesis \u2014 apply walkinglabs/awesome-harness-engineering + Bizar improvement plan",
+      "verification": "make check + 4 new components + 19 new tests + 5 new E2E checks",
+      "state": "passing",
+      "evidence": "Cross-referenced 200+ projects in awesome-harness-engineering + 11 research rounds in research/agent-harness-survey; applied 4 P0/P1 improvements from the 12 in the improvement plan",
+      "layer": "L1+L3",
+      "category": "harness",
+      "created": "2026-07-07",
+      "passed": "2026-07-07",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run `make check` and fix TypeScript errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
+          "repair": "Run `make test` and fix failing tests."
+        },
+        {
+          "label": "e2e",
+          "cmd": "bun run /tmp/bh-full-e2e.mjs",
+          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
+        }
+      ]
     }
   ],
   "vcr": {
-    "passing": 15,
-    "activated": 15,
+    "passing": 20,
+    "activated": 20,
     "ratio": 1.0
   }
 }
