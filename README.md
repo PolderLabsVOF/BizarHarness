@@ -2,18 +2,21 @@
 
 # BizarHarness ᛟ
 
-**Norse-pantheon multi-agent system for cline**
+**Cline-based multi-agent coding harness with a closed learning loop.**
 
-12 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
+13 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
+ClineCore in-process — no subprocess, no port, no serve-info file.
 
-[![npm](https://img.shields.io/npm/v/bizar?color=cb3837)](https://www.npmjs.com/package/bizar)
-[![Headroom](https://img.shields.io/badge/headroom-integrated-8A2BE2)](https://github.com/headroomlabs-ai/headroom)
-[![Semble](https://img.shields.io/badge/semble-integrated-0ea5e9)](https://github.com/semble-ai/semble)
-[![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@polderlabs/bizar?color=cb3837)](https://www.npmjs.com/package/@polderlabs/bizar)
+[![v6.0.0](https://img.shields.io/badge/v6.0.0-Cline-6366f1)](https://github.com/DrB0rk/BizarHarness)
 [![Cline](https://img.shields.io/badge/cline-%E2%9C%93-6366f1)](https://docs.cline.bot)
-[![Agents](https://img.shields.io/badge/agents-12-10b981)](#-the-pantheon)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+[![Audit 73/73](https://img.shields.io/badge/audit-73%2F73-10b981)](https://github.com/DrB0rk/BizarHarness)
+[![Harness](https://img.shields.io/badge/harness-L01--L12-8A2BE2)](docs/INDEX.md)
+[![Safety](https://img.shields.io/badge/safety-36%20patterns-ff6b6b)](docs/safety.md)
+[![Mimir](https://img.shields.io/badge/mimir-deep--research-0ea5e9)](plugins/bizar/skills)
+[![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
+[![Headroom](https://img.shields.io/badge/headroom-integrated-8A2BE2)](https://github.com/headroomlabs-ai/headroom)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 `npm install @polderlabs/bizar` · `npx bizar`
 
@@ -23,16 +26,69 @@
 
 ## Table of Contents
 
+- [What's new in v6.0.0](#-whats-new-in-v600)
+- [Quick start](#-quick-start)
 - [The Pantheon](#-the-pantheon)
 - [Architecture](#-architecture)
-- [Installation](#-installation)
-- [Provider Setup](#-provider-setup)
-- [Skill Discovery](#-skill-discovery)
-- [Memory Service](#-memory-service)
-- [Routing](#-routing)
-- [Self-Improvement](#-self-improvement)
+- [Tools (22 total)](#-tools-22-total)
+- [Hooks (4 + 2 safety)](#-hooks-4--2-safety)
+- [Safety — DANGEROUS_PATTERNS](#-safety--dangerous-patterns)
+- [Skill Curator — closed learning loop](#-skill-curator--closed-learning-loop)
+- [Knowledge Graph Tools](#-knowledge-graph-tools)
+- [Harness engineering audit (73/73)](#-harness-engineering-audit-7373)
+- [Documentation](#-documentation)
+- [Migration from v5.5.x](#-migration-from-v55x)
 - [Contributing](#-contributing)
 - [License](#-license)
+
+---
+
+## ✨ What's new in v6.0.0
+
+v6.0.0 is a **complete rewrite** of the plugin framework from OpenCode
+to Cline. The plugin embeds ClineCore in-process — no subprocess spawn,
+no port, no password, no serve-info file. Plugin `setup()` returns in
+~3ms (was: 30s+ timeout).
+
+| Feature | Description |
+| --- | --- |
+| **In-process ClineCore** | `ClineRuntime` wrapper replaces the subprocess. No port, no password. |
+| **22 tools, 4 hooks** | All use `createTool()` from `@cline/sdk`. 0 compat shims. |
+| **Cline agent teams** | New `bizar_spawn_team` + `bizar_team_status` tools. |
+| **Knowledge graph tools** | New `bizar_graph_query/path/explain` over `.bizar/graph/graph.json`. |
+| **DANGEROUS_PATTERNS gate** | 36 patterns (25 deny + 11 require-approval) checked in `beforeTool`. |
+| **Skill curator** | Per-skill use/failure tracking. The differentiator (1/106 projects). |
+| **Pre-compaction memory flush** | Durable snapshot before summarizer. Closes the durability gap. |
+| **In-process memory vault** | Tools read/write `~/.bizar_memory/` directly. No dashboard needed. |
+| **Harness audit 73/73** | Full L01–L12 compliance. `make check-arch` enforces 7 rules. |
+| **Removed: Plugins view** | Use **Mods** only. v5.6.0-beta.3. |
+
+See the full [CHANGELOG.md](CHANGELOG.md) for v5.6.0-beta.1 → beta.4.
+
+---
+
+## 🚀 Quick start
+
+```bash
+# Install (stable v5.5.6)
+npm install @polderlabs/bizar
+
+# Or try the v6.0.0 beta (Cline rewrite)
+npm install @polderlabs/bizar@beta
+
+# Run
+npx bizar
+```
+
+The installer handles:
+
+- Cloning the dashboard repo
+- Configuring the Cline plugin
+- Setting up Semble (code search MCP) and Skills CLI
+- Headroom (token-saving proxy)
+
+If you'd rather install manually, see
+[docs/migration-guide.md](docs/migration-guide.md).
 
 ---
 
@@ -44,402 +100,233 @@
                ├─────────────┤
                │Router (M3)  │
                └─────────────┘
-
  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌──────────┐
  │ᛢ VÖR    │ │ᛗ MIMIR  │ │ᚹ HEIMDALL│ │ᚱ HERMOD │ │ᚦ THOR   │ │ᛒ BALDR  │ │ᛏ TYR    │ │ᛉ VIDARR  │
  ├─────────┤ ├─────────┤ ├─────────┤ ├─────────┤ ├─────────┤ ├─────────┤ ├─────────┤ ├──────────┤
- │Clarify  │ │Research │ │Simple   │ │GitOps   │ │Medium   │ │Design   │ │Complex  │ │Last      │
- │DeepSeek │ │DeepSeek │ │DeepSeek │ │M2.7     │ │M2.7     │ │M2.7     │ │M3       │ │GPT-5.5   │
- │FREE     │ │FREE     │ │FREE     │ │$        │ │$        │ │$        │ │$$       │ │$$$       │
+ │Clarifier│ │Research │ │Simple   │ │Git ops  │ │Mid impl │ │Design   │ │High impl│ │Reasoning │
+ │(M2.7)   │ │(M2.7)   │ │(M2.7)   │ │(M2.7)   │ │(M2.7)   │ │(M2.7)   │ │(M3)     │ │(M3-Reason)│
  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └──────────┘
-
-                                                                        ┌─────────────┐
-                                                                        │ᚨ FORSETI    │
-                                                                        ├─────────────┤
-                                                                        │Auditor (M3) │
-                                                                        │edit: deny   │
-                                                                        └─────────────┘
+                                              ↑                        ↑
+                                          Forseti audits          Forseti audits
+                                          all Tier 4/5 work
 ```
 
-> _Generated by PlantUML ASCII art (`plantuml -utxt`)_
+Odin is the only primary agent. Every request hits him first. He
+**never executes work** — he decomposes into parallel streams and
+dispatches to subagents. The Forseti gate audits all Tier 4/5 work
+(Tyr, Vidarr) before execution.
 
-### Agents
-
-| Agent | Rune | Model | Cost | Role |
-|---|---|---|---|---|
-| **Odin** | ᛟ | MiniMax M3 | $0.30/M · $1.20/M out | Primary router — never executes, only delegates |
-| **Frigg** | ᚠ | DeepSeek V4 Flash | **Free** | Read-only Q&A — ask questions, get answers, never modifies |
-| **Vör** | ᛢ | DeepSeek V4 Flash | **Free** | Clarifies ambiguous requests — asks questions until task is well-defined |
-| **Mimir** | ᛗ | DeepSeek V4 Flash | **Free** | Research & codebase exploration (Semble-first) |
-| **Heimdall** | ᚹ | DeepSeek V4 Flash | **Free** | Simple tasks, quick edits, file operations |
-| **Hermod** | ᚱ | MiniMax M2.7 | $0.30/M · $1.20/M out | Git & GitHub operations (commit, PR, merge, rebase) |
-| **Thor** | ᚦ | MiniMax M2.7 | $0.30/M · $1.20/M out | Moderate implementation, debugging, refactoring |
-| **Baldr** | ᛒ | MiniMax M2.7 | $0.30/M · $1.20/M out | UI/UX design system (DESIGN.md plans, visual audits) |
-| **Tyr** | ᛏ | MiniMax M3 | $0.30/M · $1.20/M out | Complex implementation, architecture, deep debugging |
-| **Vidarr** | ᛉ | GPT-5.5 | Subscription | Last resort — GPT-5.5 |
-| **Forseti** | ᚨ | MiniMax M3 | $0.30/M · $1.20/M out | Adversarial plan reviewer (edit: deny, audit-only) |
+See [plugins/bizar/ARCHITECTURE.md](plugins/bizar/ARCHITECTURE.md) for
+the full agent roster and routing rules.
 
 ---
 
 ## ⚙ Architecture
 
-### Request Flow
-
 ```
-   User     Odin ᛟ          Subagent       Forseti ᚨ
-    │         │                │              │
-    │─Request─>│                │              │
-    │         │                │              │
-    │         │─ Decompose ────│              │
-    │         │  into parallel │              │
-    │         │  streams      │              │
-    │         │                │              │
-    │         │─ task ────────>│              │
-    │         │─ task ────────>│              │
-    │         │                │              │
-    │         │     plan review (when complex)│
-    │         │──────────────────────────────>│
-    │         │    approve / changes required │
-    │         │<──────────────────────────────│
-    │         │                │              │
-    │         │<─── results ───│              │
-    │<─ synth ─│                │              │
+┌────────────────────────────────────────────────────────────────────┐
+│ Layer 1: UI (bizar-dash/)                                          │
+│   - React + TypeScript dashboard (17 tabs)                        │
+│   - Express server (HTTP + WS)                                     │
+│   - In-process ClineCore via @cline/sdk (replaces cline serve)    │
+│   - Harness engineering dashboard view                             │
+│   - Kanban board (5 columns + backlog)                             │
+└────────────────────────────────────────────────────────────────────┘
+                              ↕ HTTP REST + WebSocket
+┌────────────────────────────────────────────────────────────────────┐
+│ Layer 0: Core (plugins/bizar/)                                     │
+│   - Cline plugin entry (AgentPlugin from @cline/sdk)              │
+│   - 22 tools + 4 hooks + 1 approval gate                          │
+│   - In-process ClineRuntime (wraps ClineCore.create())            │
+│   - In-process memory vault                                       │
+│   - DANGEROUS_PATTERNS approval gate                               │
+│   - Skill curator (closed learning loop)                           │
+│   - Pre-compaction memory flush                                   │
+└────────────────────────────────────────────────────────────────────┘
+                              ↕ Cline SDK
+┌────────────────────────────────────────────────────────────────────┐
+│ Substrate: ClineCore (@cline/core)                                 │
+│   - In-process runtime, no subprocess                              │
+│   - startSession / send / abort / subscribe                        │
+│   - Session storage, model dispatch, agent team tools              │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key behaviors:**
-- **Odin never executes work** — stripped of `bash`, `glob`, `grep`, `edit`, `write`, `question`
-- **Vör handles ambiguity** — Odin cannot ask questions; routes unclear requests to Vör
-- **Always parallel** — every request splits into 2+ simultaneous `task` calls
-- **Implementation splits across Thor + Tyr** frontend/backend, file split, impl+tests
-- **Forseti gates all Tier 4/5 work** — Tyr and Vidarr plans audited before execution
-- **Bizar Memory Service** — local Obsidian-compatible Markdown + Git-shared sync. Three namespaces: `projects/<id>/`, `global/bizar/`, `users/<id>/`. No external memory service required.
+See [docs/architecture.md](docs/architecture.md) for the full layer
+model, module map, and inter-component contracts.
 
 ---
 
-## 🚀 Installation
+## 🛠 Tools (22 total)
 
-### Quick — npm (recommended)
-
-Published on [npmjs.com/package/bizar](https://www.npmjs.com/package/bizar).
-
-Run without installing:
-
-```bash
-npx bizar
-```
-
-Or install globally:
-
-```bash
-npm install -g @polderlabs/bizar
-bizar
-```
-
-Or add to a project:
-
-```bash
-npm install @polderlabs/bizar
-npx bizar
-```
-
-The interactive installer walks you through component selection, agent choice, install mode, API key setup, and auto-restarts cline.
-
-> **v4.0.0:** `@polderlabs/bizar` is now a single package — the dashboard server, the cline plugin, and the typed SDK all ship inside it. No more separate `@polderlabs/bizar-dash` install.
-
-> **Windows users:** the `npm install -g @polderlabs/bizar` command above is the recommended path on Windows. The installer uses `irm | iex` for uv, `py -m pip` for the pip fallback, `taskkill` for forced kills, and JS `setTimeout` instead of `sleep` — so it works on both Windows PowerShell and POSIX shells. See the [Windows](#-windows) section below for prerequisites, known limitations, and the optional graph feature install.
-
-### Source — git clone (Linux/macOS contributors)
-
-```bash
-git clone git@github.com:DrB0rk/BizarHarness.git
-cd BizarHarness
-chmod +x install.sh
-./install.sh
-```
-
-Copies agent definitions and config to `~/.config/cline/`, merges `cline.json`, and prints next steps. Use this if you want to hack on BizarHarness itself.
-
-> This `install.sh` script is bash-only and does **not** run on Windows natively. Windows contributors should use the npm path above instead.
-
-### Windows
-
-The `bizar` CLI is cross-platform — the npm install runs a Node.js installer that handles `curl | sh` redirects, signal handling, and temp paths on Windows PowerShell automatically.
-
-**Prerequisites**
-
-- [Node.js 18+](https://nodejs.org/) on `PATH`
-- [Python 3.10+](https://www.python.org/downloads/windows/) (only required for the optional `bizar graph` knowledge-graph feature)
-- [Git for Windows](https://git-scm.com/download/win) — only needed if you want to run the bash `install.sh` from a Git Bash shell
-
-**Install**
-
-```powershell
-npm install -g @polderlabs/bizar
-bizar
-```
-
-**Optional: graph feature (knowledge graph + per-project .bizar/)**
-
-The `bizar graph build` subcommand uses [graphify](https://github.com/bretbhomas/graphify). Install uv and graphify from PowerShell:
-
-```powershell
-# Install uv (Python package manager) — Windows-native PowerShell installer
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Install graphify
-uv tool install graphifyy
-```
-
-Then build the project graph from any repo:
-
-```powershell
-bizar graph build
-```
-
-**Known Windows limitations**
-
-- The `blessed` TUI library may render with quirks inside Windows Terminal; if you see garbled output in the TUI, use the browser UI via `bizar dash start --bg` and open http://localhost:4321 instead.
-- Some shell scripts under `config/skills/embedded-esp-idf/` are bash-only and require Git Bash (or WSL).
-- The bash `install.sh` does not run on Windows cmd/PowerShell; use the `npm install -g` path above.
-- Headroom ships a Python/npm installer. On Windows, install it manually: `pip install "headroom-ai[all]"` or `npm install -g headroom-ai`, then run `headroom wrap cline`.
-
-### Prerequisites
-
-- [cline CLI](https://docs.cline.bot) installed and on `$PATH`
-- Provider connections (via `/connect` in cline TUI)
-- [Headroom](https://github.com/headroomlabs-ai/headroom) (recommended) — CLI proxy that reduces LLM token consumption by 60-90%
-- [Semble](https://github.com/semble-ai/semble) (recommended) — AI-powered code search (used by Mimir agent)
-- [Skills CLI](https://www.skills.sh) (recommended) — Agent skill package manager (`npx skills add <owner/repo>`)
-
-### Headroom Setup
-
-[Headroom](https://github.com/headroomlabs-ai/headroom) filters and compresses command output before it reaches the LLM context. It saves ~80% on common operations like `ls`, `git status`, `cargo test`, and `git diff`.
-
-Install:
-
-```bash
-# Python (recommended)
-pip install "headroom-ai[all]"
-
-# npm
-npm install -g headroom-ai
-```
-
-Enable for cline:
-
-```bash
-headroom wrap cline
-```
-
-After setup, `headroom wrap cline` injects config into `cline.json` and starts a proxy. The LLM receives compact output, saving 60-90% on token costs. The wrapping is durable — all subsequent cline sessions route through the headroom proxy.
-
-### Semble Setup
-
-[Semble](https://github.com/semble-ai/semble) provides AI-powered code search. It indexes your codebase and enables natural-language queries like "where is authentication handled" without relying on grep. The Mimir research agent uses Semble as its primary search tool.
-
-The BizarHarness installer handles this automatically. To install manually:
-
-```bash
-# Install uv if not present
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install Semble with MCP support
-uv tool install "semble[mcp]"
-```
-
-### Skills CLI Setup
-
-[Skills CLI](https://www.skills.sh) is a package manager for AI agent skills — like npm for agent capabilities. Install skills from any public GitHub repo with `npx skills add <owner/repo>`.
-
-The BizarHarness installer handles this automatically. To install manually:
-
-```bash
-npm install -g skills
-```
-
-Then discover and install skills:
-
-```bash
-npx skills find              # Browse the skills directory
-npx skills add <owner/repo>  # Install a skill from GitHub
-```
-
-Available for all major AI coding agents including Cline, Claude Code, Cursor, Copilot, Gemini, and more.
+| Category | Count | Tools |
+| --- | --- | --- |
+| **Background agents** | 9 | `bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`, `bizar_pause`, `bizar_resume`, `bizar_send_message`, `bizar_get_comments`, `bizar_report_progress` |
+| **Memory** | 4 | `bizar_memory_list`, `bizar_memory_read`, `bizar_memory_write`, `bizar_memory_search` |
+| **Plan / Glyphs** | 4 | `bizar_plan_action`, `bizar_open_kb`, `bizar_wait_for_feedback`, `bizar_read_glyph_feedback` |
+| **Cline agent teams** | 2 | `bizar_spawn_team`, `bizar_team_status` |
+| **Knowledge graph** | 3 | `bizar_graph_query`, `bizar_graph_path`, `bizar_graph_explain` |
+| **Total** | **22** | All use `createTool` from `@cline/sdk` directly |
 
 ---
 
-## ᛉ Skill Discovery
+## 🪝 Hooks (4 + 2 safety)
 
-BizarHarness agents **proactively discover and install skills** during execution using the Skills CLI. When Heimdall, Thor, Tyr, or Vidarr receives a task, they:
+| Hook | Purpose |
+| --- | --- |
+| `beforeTool` | Loop guard + **DANGEROUS_PATTERNS gate** |
+| `afterTool` | Per-tool-call log to `LogWriter` |
+| `beforeModel` | **Pre-compaction memory flush** (writes snapshot to vault) |
+| `onEvent` | `message-added` (slash commands) + `run-finished`/`run-failed` (memory write) |
 
-1. **Assess** whether a skill might exist for the task (framework-specific work, domain tasks, tool usage)
-2. **Check installed** with `skills list --json` to see what's already available
-3. **Install from known repos** based on the task domain — e.g., `skills add supabase/agent-skills --all -y` for database work, `skills add vercel-labs/agent-skills --all -y` for frontend
-4. **Use** the skill's instructions at `~/.cline/skills/<name>/SKILL.md` via the `skill` tool
-
-This happens automatically and on-demand — agents self-discover capabilities without manual configuration.
-
-### Known Skill Repositories by Domain
-
-| Domain | Repos |
-|--------|-------|
-| General (find-skills, skill-creator) | `vercel-labs/skills` |
-| Frontend (React, a11y, web-design) | `vercel-labs/agent-skills`, `shadcn/ui` |
-| Backend (Supabase, Postgres, auth) | `supabase/agent-skills` |
-| Testing (TDD, E2E, Playwright) | `mattpocock/skills`, `microsoft/playwright-cli` |
-| Design (frontend-design, UI/UX) | `anthropics/skills`, `leonxlnx/taste-skill` |
+| Safety component | Purpose |
+| --- | --- |
+| `skill-curator` (manual) | Reports skill usage + flags revisions |
+| `memory-flush-on-compact` (auto) | Writes snapshot to vault when `shouldCompact()` returns true |
 
 ---
 
+## 🛡 Safety — DANGEROUS_PATTERNS
 
+**36 patterns** checked on every tool call. 25 deny + 11 require-approval.
 
----
+| Category | Examples |
+| --- | --- |
+| **Filesystem destruction** | `rm -rf /`, `rm -rf /etc`, `mkfs`, `dd of=/dev/sda`, fork bomb |
+| **Privilege escalation** | `sudo`, `su - root`, `chmod 777`, `chown root` |
+| **SSRF** | `http://169.254.169.254/*` (AWS metadata), `metadata.google.internal`, `metadata.azure.com` |
+| **Process control** | `kill -9 1`, `shutdown`, `reboot`, `init 0` |
+| **Sensitive file reads** | `~/.ssh/`, `~/.aws/credentials`, `~/.config/gcloud`, `/proc/<pid>/environ` |
+| **Network exfiltration** | `wget ... \| sh`, `curl ... \| sh` |
+| **Dangerous git** | `git push --force origin main`, `git reset --hard`, `git clean -fd` |
+| **Prompt injection** | `ignore previous instructions`, `reveal your system prompt` |
 
-## 🧠 Memory Service
+**Always-on.** No env var to disable. Source patterns from
+[Hermes](https://github.com/walkinglabs/awesome-harness-engineering) +
+[OpenFang](https://github.com/RightNow-AI/openfang) +
+[OpenClaw](https://github.com/openclaw/openclaw).
 
-The **Bizar Memory Service** is a local-first, file-based memory subsystem that replaces the previously-disabled Hindsight MCP. Notes are Obsidian-compatible Markdown with strict YAML frontmatter, stored in a Git-managed vault, and synced via standard `git pull/push/commit`. No external API keys, no external service, no network calls.
-
-### Architecture (three-layer model)
-
-```
-   ┌─────────────────────────────────────────────┐
-   │ Layer 1: Markdown is truth                  │  ← canonical store
-   │   .obsidian/  or  ~/.local/share/bizar/…    │     (frontmatter + body)
-   ├─────────────────────────────────────────────┤
-   │ Layer 2: Git is collaboration               │  ← sync + version control
-   │   bizar memory pull / commit / push / sync  │     (branches, conflict)
-   ├─────────────────────────────────────────────┤
-   │ Layer 3: LightRAG is derived index (P2)     │  ← semantic retrieval
-   │   bizar memory reindex                       │     (stub in Phase 1)
-   └─────────────────────────────────────────────┘
-```
-
-The LightRAG layer ships as a stub in Phase 1 (`bizar memory reindex` returns a "not yet implemented" notice) and will be wired into the existing `mods-examples/lightrag/` server in Phase 2. The Markdown layer is the canonical source of truth — reindexing rebuilds the index from Markdown at any time, never the other way around.
-
-### Modes
-
-| Mode | Vault location | Cross-project sharing | Default? |
-|---|---|---|---|
-| `local-only` | `<project>/.obsidian/` | No — per-project vault | **Yes** |
-| `managed` | `~/.local/share/bizar/memory/<repoName>/` | Yes — one shared repo with three namespaces | Opt-in |
-
-Pick `managed` at `bizar init` time, or run `bizar memory link ~/.local/share/bizar/memory/<repoName>/` to convert an existing project to managed mode.
-
-### Namespaces
-
-The `managed` repo is split into three top-level directories. Every note lives in exactly one:
-
-| Namespace | Purpose | Example path |
-|---|---|---|
-| `projects/<projectId>/` | Per-project memory — conventions, ADRs, bugs, commands | `projects/bizarharness/architecture_decision__lightrag-stub.md` |
-| `global/bizar/` | Cross-project knowledge — agent patterns, Bizar internals | `global/bizar/coding_convention__plan-then-forseti.md` |
-| `users/<userId>/` | Personal scratch — user preferences, todos, draft thoughts | `users/drb0rk/user_preference__tabs-not-spaces.md` |
-
-### CLI commands
-
-The `bizar memory <sub>` family has 11 subcommands:
-
-| Subcommand | Purpose | Example |
-|---|---|---|
-| `init` | Create `.bizar/memory.json` and the per-project vault | `bizar memory init --memory-mode local-only` |
-| `status` | Show mode, link target, dirty files, last sync | `bizar memory status` |
-| `link <path>` | Bind the project to a managed memory repo | `bizar memory link ~/.local/share/bizar/memory/work/` |
-| `unlink` | Detach from managed mode (vault stays on disk) | `bizar memory unlink` |
-| `pull` | `git pull` the linked memory repo | `bizar memory pull` |
-| `commit` | Stage dirty notes + run secret scan + `git commit` | `bizar memory commit -m "add auth ADR"` |
-| `push` | `git push` the linked memory repo | `bizar memory push` |
-| `sync` | pull → reindex → commit → push (the common path) | `bizar memory sync` |
-| `reindex` | Rebuild the derived LightRAG index (Phase 2 stub) | `bizar memory reindex` |
-| `conflicts` | List notes with merge conflicts awaiting resolution | `bizar memory conflicts` |
-| `doctor` | Run schema + secrets + Git health checks | `bizar memory doctor` |
-
-### Dashboard routes
-
-The dashboard exposes 18 REST endpoints under `/api/memory/*` for note CRUD, schema validation, secret scanning, Git sync, search, and health checks. The legacy `/api/obsidian/*` routes are preserved with back-compat response shapes.
-
-### Secrets and schema
-
-Every note passing through `bizar memory sync` is scanned against 12 secret patterns (HIGH/MEDIUM). HIGH-severity matches block the commit; MEDIUM matches warn but allow. Required frontmatter is 8 fields (`memory_id`, `type`, `project_id`, `status`, `confidence`, `created`, `updated`, `tags`); 11 memory types are recognized, 6 statuses, 3 confidence levels.
+See [docs/safety.md](docs/safety.md) for the full reference.
 
 ---
 
-## 🔑 Provider Setup
+## 🧠 Skill Curator — closed learning loop
 
-After installation, run `/connect` in cline to add API keys:
+**The differentiator.** Of 106 cataloged agent-harness projects, exactly
+one (Hermes Agent) has this. Bizar is now the second.
 
-| Provider | Models | Auth |
-|---|---|---|
-| **Cline Zen** | `cline/deepseek-v4-flash-free` | Free API key from [cline.ai](https://docs.cline.bot) — create account, get key, no charges |
-| **MiniMax (direct)** | `minimax/MiniMax-M2.7`, `minimax/MiniMax-M3` | API key from [MiniMax](https://platform.minimaxi.com) |
-| **OpenAI** | `openai/gpt-5.5` | ChatGPT subscription (OAuth) |
+Tracks per-skill use/failure in `~/.bizar/skills/usage.jsonl`:
 
-Then run `/models` to verify connectivity.
+```ts
+import { recordSkillUse, generateCuratorReport } from "bizar/hooks/skill-curator";
 
----
-
-## 🧭 Routing
-
-| Task Type | Agent |
-|---|---|
-| Ambiguous or incomplete requests | @vör (free, asks clarifying questions) |
-| File lookup, quick edits, boilerplate | @heimdall (free) |
-| Codebase research, documentation analysis | @mimir (free, Semble-first) |
-| Git commit, PR, merge, rebase, conflict resolution | @hermod (M2.7) |
-| Moderate implementation, debugging, code review | @thor (M2.7) |
-| Design systems, DESIGN.md, visual audits | @baldr (M2.7, plans only) |
-| Complex features, architecture, deep debugging | @tyr (M3, audited by @forseti) |
-| Stuck debugging, novel problems, postmortems | @vidarr (GPT-5.5, last resort) |
-| Plan audit, adversarial review | @forseti (M3, edit: deny) |
-
-**Cost escalation:** `Free → $Mid (M2.7) → $$High (M3) → $$$Ultra (GPT-5.5)`
-
----
-
-## 📝 Self-Improvement
-
-Every task records what was learned to `.bizar/AGENTS_SELF_IMPROVEMENT.md` at the project root. Odin reads it at session start and applies past patterns to current routing.
-
-```
-### 2026-06-16: Fixed routing issue
-- **Context**: Odin was self-handling instead of routing
-- **Lesson**: Stripped bash/glob/grep/edit from Odin — forces delegation
-- **Pattern**: Primary agents should never have executable tools
-- **Agent**: heimdall
+recordSkillUse("pump-then-test", "failure");
+recordSkillUse("pump-then-test", "failure");
+const report = generateCuratorReport({ worktree, logger });
+// { totalSkills: 14, needsRevision: 1, stale: 0, ... }
 ```
 
+The closed loop:
+
+```
+Tasks run → recordSkillUse(skill, success|failure)
+          → usage.jsonl accumulates
+          → generateCuratorReport() identifies:
+             - skills with 5+ failures (needs-revision)
+             - skills with 0 uses in 30 days (stale)
+             - new skills (proposals)
+          → next sprint addresses the report
+```
+
+See [docs/curator.md](docs/curator.md) for the full reference.
+
 ---
 
-## 📋 Plans
+## 🕸 Knowledge Graph Tools
 
-BizarHarness includes a built-in visual plan editor for drafting architectural decisions, feature designs, and project plans. Plans are stored as MDX source files with an auto-generated HTML viewer/editor.
+Three tools expose the existing `.bizar/graph/graph.json` (built by
+`graphify`) to agents:
+
+| Tool | Use case |
+| --- | --- |
+| `bizar_graph_query` | Substring search across node id, label, source file |
+| `bizar_graph_path` | BFS shortest path between two nodes |
+| `bizar_graph_explain` | Natural-language node summary with neighbors |
+
+The BizarHarness project graph has **814 nodes** (mostly code
+symbols + docs). Path queries work once `graphify` adds edges.
+
+See [docs/graph-tools.md](docs/graph-tools.md) for the full reference.
+
+---
+
+## 🛡 Harness engineering audit (73/73)
+
+v6.0.0 passes the full L01–L12 audit at **73/73 = 100%**:
+
+| Subsystem | Score |
+| --- | --- |
+| 1. Instructions | 11/11 (entry + hard constraints + state files + clock-in/out) |
+| 2. Tools | 2/2 (`.claude/settings.json` + MCP integrations) |
+| 3. Environment | 5/5 (lockfile + `.nvmrc` + Makefile + setup + dev) |
+| 4. State | 4/4 (`PROGRESS.md` + `DECISIONS.md` + `feature_list.json`) |
+| 5. Feedback | 7/7 (`make check/test/e2e/clean-check/arch/vcr/session-*`) |
+| 6. L05 Cross-session | 6/6 (Current State + clock-in/out + context anxiety) |
+| 7. L03 System of record | 4/4 (ACID: Durability, Consistency, Atomicity, Proximity) |
+| 8. L07 WIP=1 + VCR | 3/3 (WIP=1 + `make vcr` + VCR 20/20 = 1.0) |
+| 9. L08 Feature list | 6/6 (evidence + verify-feature + granularity + state machine) |
+| 10. L09 DoD | 5/5 (3-layer verification + runtime signals + repair instructions) |
+| 11. L10 E2E + Arch | 8/8 (`make e2e` + `make check-arch` + 7 arch rules + E2E requirement) |
+| 12. L11 Observability | 7/7 (sprint contract + rubric + session-trace + make session-*) |
+| 13. L12 Clean State | 5/5 (5-dimension checklist + clean-check + quality doc + dual-mode) |
 
 ```bash
-# Create a new plan
-bizar plan new my-feature
-
-# Open an existing plan
-bizar plan open my-feature
-
-# List all plans
-bizar plan list
-
-# Export plan to standalone file
-bizar plan export my-feature > my-feature.mdx
-
-# Delete a plan (with confirmation)
-bizar plan delete my-feature
+bash tools/audit-harness.sh .
+# Total:       73 / 73 harness components present
+# Critical:    7 / 7
+# Recommended: 66 / 66
 ```
 
-Plans are stored in `plans/<slug>/` with four files:
+See [PROGRESS.md](PROGRESS.md) § Current State and the
+[Harness tab](bizar-dash/src/web/views/Harness.tsx) in the dashboard.
 
-| File | Purpose | In git? |
-|---|---|---|
-| `plan.mdx` | Source content (the plan) | ✓ Yes |
-| `plan.html` | Viewer/editor (auto-generated) | ✗ No |
-| `comments.json` | Section comments | ✗ No |
-| `meta.json` | Title, status, author, timestamps | ✓ Yes |
+---
 
-The HTML viewer runs a tiny local HTTP server (`localhost:4321`) — no network, no sharing. Edit mode toggles all sections to textareas; comments appear in a side panel per section.
+## 📚 Documentation
+
+| What | Where |
+| --- | --- |
+| **Documentation index** | [docs/INDEX.md](docs/INDEX.md) |
+| Entry point (agents) | [AGENTS.md](AGENTS.md) |
+| Current state | [PROGRESS.md](PROGRESS.md) |
+| Decisions (ADRs) | [DECISIONS.md](DECISIONS.md) |
+| Architecture | [docs/architecture.md](docs/architecture.md) |
+| Safety | [docs/safety.md](docs/safety.md) |
+| Skill curator | [docs/curator.md](docs/curator.md) |
+| Graph tools | [docs/graph-tools.md](docs/graph-tools.md) |
+| Quality scores | [docs/quality-document.md](docs/quality-document.md) |
+| Migration guide | [docs/migration-guide.md](docs/migration-guide.md) |
+| Plugin module | [plugins/bizar/ARCHITECTURE.md](plugins/bizar/ARCHITECTURE.md) |
+| Plugin constraints | [plugins/bizar/CONSTRAINTS.md](plugins/bizar/CONSTRAINTS.md) |
+| Dashboard module | [bizar-dash/ARCHITECTURE.md](bizar-dash/ARCHITECTURE.md) |
+| SDK module | [packages/sdk/ARCHITECTURE.md](packages/sdk/ARCHITECTURE.md) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
+
+---
+
+## 🔄 Migration from v5.5.x
+
+Upgrading from the OpenCode-based v5.5.x? See
+[docs/migration-guide.md](docs/migration-guide.md) for:
+
+- Breaking changes (tool shape, hook shape)
+- New tools (Cline agent teams, graph tools, curator)
+- Removed tools (Plugins → Mods)
+- Verification commands
+
+TL;DR: `npm install @polderlabs/bizar@beta` and update any custom
+slash commands that consumed the old `{ output: JSON.stringify(...) }`
+shape.
 
 ---
 
@@ -447,23 +334,38 @@ The HTML viewer runs a tiny local HTTP server (`localhost:4321`) — no network,
 
 PRs welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
----
+The harness engineering protocol:
 
-## Development
+1. **Before:** Fill [templates/sprint-contract.md](templates/sprint-contract.md)
+   (scope, DoD, exclusions).
+2. **During:** Run `make session-start` to record session start.
+3. **After:** Score against [templates/evaluator-rubric.md](templates/evaluator-rubric.md)
+   (every dim B+).
+4. **End of session:** Run `make clean-check` and `make check`. Commit
+   with a WHY-focused message.
 
-Development of BizarHarness uses a separate sandbox repo for Docker/dev tooling.
-See [DrB0rk/BizarHarness-dev](https://github.com/DrB0rk/BizarHarness-dev) (private)
-for the local dev environment, including the Docker-based cline sandbox used to
-test config and plugin changes without touching the system cline install.
+### Development
 
-> **Note:** When you push BizarHarness-dev to GitHub, update the URL above to match
-> the actual repo location.
+Development of BizarHarness uses a separate sandbox repo for Docker/dev
+tooling. See [DrB0rk/BizarHarness-dev](https://github.com/DrB0rk/BizarHarness-dev)
+(private) for the local dev environment, including the Docker-based
+Cline sandbox used to test config and plugin changes without touching
+the system Cline install.
 
 ---
 
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## Acknowledgments
+
+Inspired by the [walkinglabs/learn-harness-engineering](https://github.com/walkinglabs/learn-harness-engineering)
+course and the [awesome-harness-engineering](https://github.com/walkinglabs/awesome-harness-engineering)
+curated list. Built on [Cline](https://docs.cline.bot) and
+[@cline/sdk](https://www.npmjs.com/package/@cline/sdk).
 
 ---
 

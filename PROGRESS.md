@@ -11,7 +11,7 @@
 - **`make test`:** 637/639 plugin + 71/74 SDK pass (2 pre-existing unrelated on plugin + 3 in research/)
 - **`make e2e`:** 22/22 pass via `/tmp/bh-full-e2e.mjs`
 - **Branch:** `migrate/cline-replacement`
-- **Phase:** v6.0.0 — Phase 4 complete (full harness audit 73/73); **v5.6.0-beta.1 published**
+- **Phase:** v6.0.0 — Phase 4 complete; **full documentation updated**; v5.6.0-beta.4 published
 
 ## In Progress
 

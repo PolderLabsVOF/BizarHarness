@@ -1,7 +1,9 @@
 # packages/sdk/ — Architecture
 
-> TypeScript SDK wrapper for the Bizar Harness. Provides typed access
-> to the Cline events and HTTP responses.
+> TypeScript SDK wrapper for the Bizar Harness. Provides typed
+> access to Cline events and HTTP responses. The plugin (Layer 0)
+> embeds ClineCore in-process and does NOT use this SDK; the
+> dashboard's HTTP client uses this SDK for legacy compat.
 
 ## Top-level layout
 
@@ -43,9 +45,22 @@ for await (const event of events) {
   in-process for both plugin and dashboard.
 - Discriminated error model via `isBizarError(event)`.
 - Event shapes are versioned (current: `runtime.team.progress.v1`).
-- Tests use vitest (`bun test` doesn't pick them up — see test files).
+- Tests use vitest (`bun test` doesn't pick them up — see
+  test files for vitest config).
+
+## Versioning
+
+- `@polderlabs/bizar-sdk` follows semver.
+- Beta releases: `0.x.0-beta.N` (e.g. `0.2.0-beta.4`).
+- Stable releases: `0.x.0` once v0.2 stabilizes.
 
 ## Verification
 
 - `make check` — TS compile + tests (incl. vitest)
-- `make e2e` — SDK wrapper integration (plugin ↔ dashboard roundtrip)
+- `make e2e` — SDK wrapper integration (plugin ↔ dashboard
+  roundtrip)
+
+## See also
+
+- [docs/architecture.md](../../docs/architecture.md) — layer model
+- [@polderlabs/bizar-sdk on npm](https://www.npmjs.com/package/@polderlabs/bizar-sdk)

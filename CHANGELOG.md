@@ -1,5 +1,115 @@
 # Changelog
 
+## v5.6.0-beta.5 — Full documentation overhaul
+
+> Documentation update. Reflects all v6.0.0 changes. **No code
+> changes** — read-only doc update.
+
+### What was rewritten / created
+
+**Top-level (4 files)**
+
+- `README.md` — complete rewrite (375 lines). v6.0.0 headline,
+  What's new section, 17-tab nav, 22 tools + 4 hooks, safety
+  primitives (36 patterns), skill curator (closed learning
+  loop), knowledge graph tools, harness audit 73/73, full
+  documentation map.
+- `AGENTS.md` — added 5 new doc references (INDEX, safety,
+  curator, graph-tools, migration-guide, tests README).
+- `PROGRESS.md` — current state reflects v6.0.0-beta.4.
+- `DECISIONS.md` — full ADR index with 10 ADRs, each linking
+  to the individual ADR file.
+
+**Topic docs (5 new + 2 updated)**
+
+- `docs/INDEX.md` (new, 178 lines) — top-level documentation
+  map. By role, by topic, quick links, update policy.
+- `docs/safety.md` (new, 184 lines) — DANGEROUS_PATTERNS
+  reference. 36 patterns in 11 categories.
+- `docs/curator.md` (new, 138 lines) — Skill curator reference.
+  Data model, API, thresholds, design notes.
+- `docs/graph-tools.md` (new, 124 lines) — Knowledge graph
+  tools reference. 3 tools, edge cases, v6.1.0 roadmap.
+- `docs/migration-guide.md` (new, 175 lines) — OpenCode → Cline
+  upgrade. What changed, install, breaking changes.
+- `docs/architecture.md` (updated, 274 lines) — added safety
+  layer, curator, pre-compaction flush, graph tools, 22 tools.
+- `docs/quality-document.md` (updated) — A/B/C/D scores for all
+  v6.0.0 components (16 modules × 5 dimensions = 80 cells).
+
+**ADRs (10 new files in docs/decisions/)**
+
+- DEC-001: Complete rewrite (OpenCode → Cline)
+- DEC-002: In-process ClineCore (no `cline serve` subprocess)
+- DEC-003: In-process memory vault (no dashboard HTTP)
+- DEC-004: Cline agent teams integration (`bizar_spawn_team`)
+- DEC-005: Background agents via dashboard HTTP + in-process Cline
+- DEC-006: Kanban board (Tasks.tsx + `/api/tasks`)
+- DEC-007: Tool approval gate (DANGEROUS_PATTERNS) — **NEW v6.0.0**
+- DEC-008: Skill curator (closed learning loop) — **NEW v6.0.0**
+- DEC-009: Pre-compaction memory flush — **NEW v6.0.0**
+- DEC-010: Knowledge graph query tools — **NEW v6.0.0**
+
+**Module docs (4 updated)**
+
+- `plugins/bizar/ARCHITECTURE.md` (updated) — 22 tools table,
+  4+2 hooks, full module layout, v6.0.0 highlights.
+- `plugins/bizar/CONSTRAINTS.md` (updated) — 11 hard rules
+  including 2 new safety rules (DANGEROUS_PATTERNS gate,
+  pre-compaction flush).
+- `bizar-dash/ARCHITECTURE.md` (updated) — 17 tabs, all server
+  files, v6.0.0 highlights (Cline badge, Harness tab, team
+  badge).
+- `packages/sdk/ARCHITECTURE.md` (updated) — versioning notes,
+  current state.
+
+**Test docs (1 new)**
+
+- `plugins/bizar/tests/README.md` (new, 99 lines) — test
+  reference. Categories, running, test patterns, isolation.
+
+### Doc statistics
+
+| Doc | Lines | Status |
+| --- | --- | --- |
+| README.md | 377 | rewritten |
+| AGENTS.md | 215 | updated |
+| PROGRESS.md | 70 | updated |
+| DECISIONS.md | 55 | updated |
+| docs/INDEX.md | 178 | new |
+| docs/architecture.md | 274 | rewritten |
+| docs/safety.md | 184 | new |
+| docs/curator.md | 138 | new |
+| docs/graph-tools.md | 124 | new |
+| docs/migration-guide.md | 175 | new |
+| docs/quality-document.md | 74 | rewritten |
+| docs/decisions/DEC-001 to DEC-010 | ~100 each | new |
+| plugins/bizar/ARCHITECTURE.md | 142 | rewritten |
+| plugins/bizar/CONSTRAINTS.md | 67 | rewritten |
+| plugins/bizar/tests/README.md | 99 | new |
+| bizar-dash/ARCHITECTURE.md | 197 | rewritten |
+| packages/sdk/ARCHITECTURE.md | 66 | rewritten |
+
+**Total: ~3,200 lines of new/rewritten documentation.**
+
+### Verification
+
+- `npx tsc --noEmit` → **0 errors**
+- `bun test plugins/bizar` → **656/658 pass** (no regression)
+- `bun run /tmp/bh-full-e2e.mjs` → **27/27 pass** (no regression)
+- `bash tools/audit-harness.sh .` → **73/73 = 100%** (no regression)
+- `make vcr` → **20/20 = 1.000** (no regression)
+
+### Install
+
+```sh
+npm install @polderlabs/bizar@beta
+# or pin:
+npm install @polderlabs/bizar@5.6.0-beta.5
+```
+
+---
+
 ## v5.6.0-beta.4 — Awesome-Harness-Engineering research synthesis
 
 > Applied 4 of the 12 improvements from the Bizar improvement plan

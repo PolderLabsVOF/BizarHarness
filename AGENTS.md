@@ -6,7 +6,7 @@
 # AGENTS.md — Bizar Harness
 
 > **Bizar Harness** is a Cline-based multi-agent coding harness for the Bizar project.
-> It embeds ClineCore in-process, exposes 19 agent tools (plan, memory, kanban,
+> It embeds ClineCore in-process, exposes 22 agent tools (plan, memory, kanban,
 > background agents, Cline agent teams), and ships a TypeScript dashboard with a
 > kanban task board and live background-agent viewer.
 
@@ -157,11 +157,17 @@ A session is "clean" when ALL FIVE dimensions pass:
 
 ## Topic documents
 
+- [docs/INDEX.md](docs/INDEX.md) — documentation map (start here)
 - [docs/architecture.md](docs/architecture.md) — layer model, module map
-- [docs/quality-document.md](docs/quality-document.md) — module health
+- [docs/quality-document.md](docs/quality-document.md) — module health (A/B/C/D)
+- [docs/safety.md](docs/safety.md) — DANGEROUS_PATTERNS reference (v6.0.0)
+- [docs/curator.md](docs/curator.md) — Skill curator reference (v6.0.0)
+- [docs/graph-tools.md](docs/graph-tools.md) — Knowledge graph tools (v6.0.0)
+- [docs/migration-guide.md](docs/migration-guide.md) — OpenCode → Cline upgrade
 - [docs/decisions/](docs/decisions/) — individual ADRs (see DECISIONS.md)
 - [plugins/bizar/ARCHITECTURE.md](plugins/bizar/ARCHITECTURE.md) — plugin module
 - [plugins/bizar/CONSTRAINTS.md](plugins/bizar/CONSTRAINTS.md) — plugin hard rules
+- [plugins/bizar/tests/README.md](plugins/bizar/tests/README.md) — test reference
 - [bizar-dash/ARCHITECTURE.md](bizar-dash/ARCHITECTURE.md) — dashboard module
 - [packages/sdk/ARCHITECTURE.md](packages/sdk/ARCHITECTURE.md) — SDK module
 
