@@ -211,24 +211,24 @@ describe("executeToolInvocation — happy path", () => {
     const slug = "inv-get-canvas";
     await executeSideEffect({ kind: "create_plan", slug, template: null }, ctx(), optsWith(planTools()));
 
-    const realPlanTool = planTools().bizar_plan_action;
+    const realPlanTool = planTools().bizar_plan_action!;
     let capturedCtx: AgentToolContext | null = null;
     let capturedArgs: unknown = null;
     const spy: AgentTool = createTool({
-      name: realPlanTool.name,
-      description: realPlanTool.description,
-      inputSchema: (realPlanTool as unknown as { inputSchema: Record<string, unknown> }).inputSchema,
+      name: realPlanTool!.name,
+      description: realPlanTool!.description,
+      inputSchema: (realPlanTool! as unknown as { inputSchema: Record<string, unknown> }).inputSchema,
       execute: async (a, c) => {
         capturedCtx = c;
         capturedArgs = a;
-        return (realPlanTool.execute as (a: unknown, c: unknown) => Promise<unknown>)(a, c);
+        return (realPlanTool!.execute as (a: unknown, c: unknown) => Promise<unknown>)(a, c);
       },
     });
 
     const tools: Record<string, AgentTool> = {
       bizar_plan_action: spy,
-      bizar_get_plan_comments: planTools().bizar_get_plan_comments,
-      bizar_wait_for_feedback: planTools().bizar_wait_for_feedback,
+      bizar_get_plan_comments: planTools().bizar_get_plan_comments!,
+      bizar_wait_for_feedback: planTools().bizar_wait_for_feedback!,
     };
 
     const sideEffect: SideEffect = { kind: "tool_invocation", toolName: "bizar_plan_action", args: { action: "get_canvas", planSlug: slug } };

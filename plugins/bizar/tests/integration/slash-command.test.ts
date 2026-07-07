@@ -1,3 +1,4 @@
+import { type AgentTool } from "@cline/sdk";
 /**
  * slash-command.test.ts — Integration tests for the full slash-command
  * hook → parser → side-effect → file-I/O path.
@@ -82,9 +83,9 @@ function makeCtx(): ExecutorContext {
 function makeOpts(): ExecuteOptions {
   return {
     tools: {
-      bizar_plan_action: createPlanActionTool({ worktree, logger }),
-      bizar_get_plan_comments: createBgGetCommentsTool({ worktree, logger }),
-      bizar_wait_for_feedback: createWaitForFeedbackTool({ worktree, logger }),
+      bizar_plan_action: createPlanActionTool({ worktree, logger }) as unknown as AgentTool<unknown, unknown>,
+      bizar_get_plan_comments: createBgGetCommentsTool({ worktree, logger }) as unknown as AgentTool<unknown, unknown>,
+      bizar_wait_for_feedback: createWaitForFeedbackTool({ worktree, logger }) as unknown as AgentTool<unknown, unknown>,
     },
     defaultTemplate: "blank",
     defaultPort: 4321,

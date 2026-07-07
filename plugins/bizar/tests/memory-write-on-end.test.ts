@@ -21,7 +21,7 @@ const {
 
 describe("createMemoryWriteOnEnd — factory", () => {
   test("returns an object with memoryWriteOnEnd function", () => {
-    const logger = { debug: () => {}, warn: () => {}, info: () => {} };
+    const logger = { log: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
     const { memoryWriteOnEnd } = createMemoryWriteOnEnd({
       worktree: "/tmp/fake",
       logger,
@@ -33,7 +33,7 @@ describe("createMemoryWriteOnEnd — factory", () => {
 
 describe("createMemoryWriteOnEnd — disabled path", () => {
   test("returns immediately without fetching when enabled=false", async () => {
-    const logger = { debug: () => {}, warn: () => {}, info: () => {} };
+    const logger = { log: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
     const { memoryWriteOnEnd } = createMemoryWriteOnEnd({
       worktree: "/tmp/fake",
       logger,
@@ -62,7 +62,7 @@ describe("createMemoryWriteOnEnd — idempotency", () => {
     // (which will fail), but the second call with the same sessionID should
     // skip the fetch entirely due to the in-memory Set guard.
     process.env.BIZAR_DASHBOARD_PORT = "59999";
-    const logger = { debug: () => {}, warn: () => {}, info: () => {} };
+    const logger = { log: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
     const { memoryWriteOnEnd } = createMemoryWriteOnEnd({
       worktree: "/tmp/fake",
       logger,

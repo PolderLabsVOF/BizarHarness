@@ -1,5 +1,61 @@
 # Changelog
 
+## v5.6.0-beta.11 — TypeScript fixes from container testing
+
+> All 9 phases of the BizarHarness-dev test container reproducer
+> PASS. Real-world testing caught 14 TypeScript errors that local
+> `bun test` doesn't surface.
+
+### Fixes
+
+- **`plugins/bizar/tests/safety.test.ts`** (8 errors) — the test
+  wasn't passing the required `iteration: number` field of
+  `AgentToolContext`. Fixed all call sites. Also added a non-null
+  guard for `r.nodes[0]` and `r.neighbors[0]` which TypeScript
+  flagged as `possibly 'undefined'`.
+- **`plugins/bizar/tests/commands-impl.test.ts`** (5 errors) —
+  `realPlanTool`, `planTools().bizar_get_plan_comments`, etc. could
+  be undefined. Added `!` non-null assertions.
+- **`plugins/bizar/tests/integration/slash-command.test.ts`** (3
+  errors) — the `tools` field of `ExecuteOptions` expects
+  `AgentTool<unknown, unknown>` but the actual tools are typed
+  more narrowly. Cast each through `unknown`. Also added the
+  missing `import { type AgentTool } from "@cline/sdk"` since
+  the new cast syntax needed it.
+- **`plugins/bizar/tests/memory-write-on-end.test.ts`** (3 errors)
+  — the inline fake logger was missing the `log` and `error`
+  fields that the `Logger` interface requires. Fixed.
+- **`plugins/bizar/src/tools/read-glyph-feedback.ts`** (2 errors)
+  — `RegExpMatchArray[0]` and `[1]` could be undefined. Replaced
+  with `?? ""` and `!` assertions where appropriate.
+
+### Test results
+
+- `npx tsc --noEmit -p plugins/bizar/tsconfig.json` → **0 errors**
+  (was 14)
+- `bun test plugins/bizar` → 663/665 pass (no regression)
+- `node --test cli/cli-commands-validation.test.mjs` → 37/37 pass
+- `bun run /tmp/bh-full-e2e.mjs` → 27/27 pass
+- **Container test (BizarHarness-dev/scripts/run-tests.sh):**
+  **9/9 phases PASS** (was 6/9 in v5.6.0-beta.9)
+
+### What the container test caught that local tests didn't
+
+1. Stale `_ctx: { metadata: { parentAgent } }` signatures in
+   `safety.test.ts` (was passing bun:test because bun doesn't
+   typecheck).
+2. Stale tool type assertions in `commands-impl.test.ts`.
+3. Stale inline-typed `tools` field in `slash-command.test.ts`.
+4. Missing `log` + `error` methods on the test's fake logger.
+5. `RegExpMatchArray[0]` non-null assumption in
+   read-glyph-feedback.ts.
+
+### Published
+
+- @polderlabs/bizar@5.6.0-beta.11
+
+---
+
 ## v5.6.0-beta.10 — test-gate help + agent-browser install verification
 
 > Discovered during real-world container testing (bizar-test:v2):

@@ -136,11 +136,12 @@ export function readGlyphFeedback(
   const fm = raw.match(/^---\n([\s\S]+?)\n---/);
   let body = raw;
   if (fm) {
-    for (const line of fm[1].split("\n")) {
+    const yaml = fm[1] ?? "";
+    for (const line of yaml.split("\n")) {
       const m = line.match(/^(\w+):\s*(.*)$/);
-      if (m) meta[m[1]] = m[2];
+      if (m) meta[m[1]!] = m[2]!;
     }
-    body = raw.slice(fm[0].length).replace(/^\s+/, "");
+    if (fm[0]) body = raw.slice(fm[0].length).replace(/^\s+/, "");
   }
 
   const commentCount = parseInt(meta.commentCount || "0", 10) || 0;

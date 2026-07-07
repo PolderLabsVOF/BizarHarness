@@ -219,18 +219,20 @@ describe("graph-query", () => {
   it("returns ok for known nodes", async () => {
     const { createGraphQueryTool } = await import("../src/tools/graph-query.js");
     const tool = createGraphQueryTool({ worktree: tmpWork, logger: silentLogger as never });
-    const r = await tool.execute({ query: "Module" }, { sessionId: "s", agentId: "a", metadata: { worktree: tmpWork } });
+    const r = await tool.execute({ query: "Module" }, { sessionId: "s", agentId: "a", iteration: 1, metadata: { worktree: tmpWork } });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.count).toBe(1);
-      expect(r.nodes[0].id).toBe("a");
+      const firstNode = r.nodes[0];
+      expect(firstNode).toBeDefined();
+      expect(firstNode?.id).toBe("a");
     }
   });
 
   it("finds the shortest path", async () => {
     const { createGraphPathTool } = await import("../src/tools/graph-query.js");
     const tool = createGraphPathTool({ worktree: tmpWork, logger: silentLogger as never });
-    const r = await tool.execute({ from: "a", to: "c" }, { sessionId: "s", agentId: "a", metadata: { worktree: tmpWork } });
+    const r = await tool.execute({ from: "a", to: "c" }, { sessionId: "s", agentId: "a", iteration: 1, metadata: { worktree: tmpWork } });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.hops).toBe(2);
@@ -241,12 +243,14 @@ describe("graph-query", () => {
   it("explains a node with its neighbors", async () => {
     const { createGraphExplainTool } = await import("../src/tools/graph-query.js");
     const tool = createGraphExplainTool({ worktree: tmpWork, logger: silentLogger as never });
-    const r = await tool.execute({ node: "a" }, { sessionId: "s", agentId: "a", metadata: { worktree: tmpWork } });
+    const r = await tool.execute({ node: "a" }, { sessionId: "s", agentId: "a", iteration: 1, metadata: { worktree: tmpWork } });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.node.id).toBe("a");
       expect(r.neighbors.length).toBe(1);
-      expect(r.neighbors[0].node.id).toBe("b");
+      const firstNeighbor = r.neighbors[0];
+    expect(firstNeighbor).toBeDefined();
+    expect(firstNeighbor?.node.id).toBe("b");
     }
   });
 });
