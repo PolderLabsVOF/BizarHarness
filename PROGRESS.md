@@ -6,12 +6,12 @@
 
 ## Current State
 
-- **Last commit:** 3511390 (Phase 3)
+- **Last commit:** 0fcdec2 (Phase 4)
 - **`make check`:** passing (22/22 E2E, 0 TS errors)
 - **`make test`:** 637/639 plugin + 71/74 SDK pass (2 pre-existing unrelated on plugin + 3 in research/)
 - **`make e2e`:** 22/22 pass via `/tmp/bh-full-e2e.mjs`
 - **Branch:** `migrate/cline-replacement`
-- **Phase:** v6.0.0 — Phase 3 complete (in-process ClineRuntime + agent teams + memory vault)
+- **Phase:** v6.0.0 — Phase 4 complete (full harness audit 73/73); **v5.6.0-beta.1 published**
 
 ## In Progress
 
@@ -19,14 +19,23 @@ _Nothing currently active. WIP=1 is enforced. Next: pick a `not_started` feature
 
 ## Next Steps (priority order)
 
-1. **Fix pre-existing test failures** — 3 unrelated: `InstanceManager.update mutex regression`,
+1. **Stabilize beta** — address issues reported by v5.6.0-beta.1 users.
+   Move to v5.6.0 stable once no critical bugs reported for 1 week.
+2. **Fix pre-existing test failures** — 3 unrelated: `InstanceManager.update mutex regression`,
    `config drift detection`, `OpenClaw SDK package e2e`. Promote them to `.harness/arch-rules.json`
    if they relate to harness.
-2. **Add E2E team-spawn test** — verify `bizar_spawn_team` actually creates a Cline team session.
-3. **Wire team events to the kanban** — dashboard's Tasks.tsx should show team progress
+3. **Add E2E team-spawn test** — verify `bizar_spawn_team` actually creates a Cline team session.
+4. **Wire team events to the kanban** — dashboard's Tasks.tsx should show team progress
    events as cards move between columns.
-4. **Replace legacy `serve.ts / http-client.ts / event-stream.ts`** — they're now dead code
+5. **Replace legacy `serve.ts / http-client.ts / event-stream.ts`** — they're now dead code
    (replaced by `clineruntime.ts`). Delete to remove confusion.
+
+## Recent releases
+
+| Version         | Date       | Type   | Notes                                          |
+| --------------- | ---------- | ------ | ---------------------------------------------- |
+| v5.6.0-beta.1   | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)            |
+| v5.5.6          | 2026-07-07 | stable | new `/plow-through` slash command              |
 
 ## Blockers
 

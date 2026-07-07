@@ -1,5 +1,138 @@
 # Changelog
 
+## v5.6.0-beta.1 — **BETA**: complete Cline SDK rewrite (OpenCode → Cline)
+
+> **This is a beta release.** It contains a complete rewrite of the
+> plugin framework from OpenCode to Cline (4 phases of work across
+> commits `97ddb19`..`0fcdec2`). All 17 tools + 2 new Cline agent
+> team tools are registered via `createTool` from `@cline/sdk`.
+> ClineCore runs **in-process** (no `cline serve` subprocess).
+>
+> **Breaking changes from v5.5.6:**
+> - Plugin framework: `@opencode-ai/plugin` → `@cline/sdk` (in-process)
+> - Tool shape: `{ output: JSON.stringify(...) }` → structured `{ ok, ... }`
+> - Hook shape: tool arrays → Cline discrete hook bag (`beforeTool`,
+>   `afterTool`, `beforeModel`, `onEvent`)
+> - ClineRuntime replaces ServeLifecycle/HttpClient/EventStream
+> - Memory tools read/write the vault directly (no dashboard HTTP)
+>
+> **Install:**
+> ```sh
+> npm install @polderlabs/bizar@beta
+> # or
+> npm install @polderlabs/bizar@5.6.0-beta.1
+> ```
+
+### Highlights
+
+- **In-process ClineCore.** The plugin embeds `ClineCore` via a new `ClineRuntime`
+  wrapper. No `cline serve` subprocess, no port, no password. Plugin `setup()`
+  returns in ~3 ms (was: 30s+ timeout in headless envs).
+- **All 17 + 2 = 19 tools use `createTool` directly.** Zero compat shims.
+- **Cline agent teams.** New `bizar_spawn_team` and `bizar_team_status` tools.
+  Team lead coordinates teammates via ClineCore's `team_progress_projection`
+  and `team.lifecycle.v1` events.
+- **In-process memory vault.** New `plugins/bizar/src/memory-vault.ts` reads/writes
+  `~/.bizar_memory/` directly. No HTTP hop, no dashboard dependency.
+  Legacy `~/.local/share/bizar/memory/` still readable.
+- **Kanban board.** Tasks.tsx view (5 columns: Backlog/Todo/In-progress/Done/Failed)
+  + 12 REST endpoints at `/api/tasks` + WS `tasks:change` / `tasks:delete`.
+- **Harness engineering compliance (L01-L12).** 73/73 audit components pass.
+  Full make-based workflow: `make setup / dev / check / test / e2e / vcr /
+  verify-feature / check-arch / clean-check / session-start / session-end`.
+
+### What's New
+
+1. **`ClineRuntime`** (`plugins/bizar/src/clineruntime.ts`) — single class wrapping
+   `ClineCore.create()`. Replaces the legacy ServeLifecycle (subprocess) +
+   HttpClient (HTTP) + EventStream (SSE) trio. Methods: `start()`, `startSession()`,
+   `send()`, `abort()`, `subscribe()`, `stop()`. Idempotent.
+
+2. **All 17 tools ported to Cline's `createTool`** from `@cline/sdk`. Each tool:
+   - Has a `BIZAR_*_TOOL_NAME` constant + `Bizar*Input`/`Bizar*Output` types
+   - Uses `z.object({...}).shape` for `inputSchema`
+   - Returns structured `{ ok: true, ... } | { ok: false, error, ... }`
+   - Reads `parentAgent` from `context.metadata.parentAgent` (not `ctx.agent`)
+
+3. **Memory tools in-process** (`memory-list/read/write/search`):
+   - Read/write `~/.bizar_memory/` directly (override via `BIZAR_MEMORY_VAULT`)
+   - Legacy vault path still readable
+   - Full-text search via substring counting
+   - YAML frontmatter parser (tags, type, title, createdAt)
+
+4. **Cline agent teams** (`team-spawn.ts` + `team-status.ts`):
+   - `bizar_spawn_team` — creates a Cline session with lead-agent team
+     coordination system prompt. Returns `sessionId`, `teamName`, `missionPreview`.
+   - `bizar_team_status` — subscribes to team events; returns latest
+     `team_progress_projection` / `team.lifecycle.v1`.
+
+5. **Dashboard bg-spawner rewritten** (`bizar-dash/src/server/bg-spawner.mjs`):
+   - Uses `ClineCore` in-process (no `@polderlabs/bizar-sdk` HTTP client)
+   - `cline.start({ prompt, config })`, `cline.send()`, `cline.abort()`,
+     `cline.subscribe(listener)`.
+
+6. **Hook mapping** (OpenCode → Cline):
+   - `tool.execute.before` → `beforeTool`
+   - `tool.execute.after` → `afterTool`
+   - `experimental.chat.system.*` → `beforeModel` (system prompt + reasoning directive)
+   - `chat.message` → `onEvent(message-added)` (slash command interception)
+
+7. **SDK wrapper** (`packages/sdk/src/cline.ts`) — added peer dependency on `@cline/sdk`.
+
+8. **Harness engineering audit** — applied all improvements from
+   walkinglabs/learn-harness-engineering. Audit went from 7/70 (10%) to 73/73 (100%).
+   See `AGENTS.md` for the entry point; `make check-arch` enforces arch rules.
+
+### Files Changed
+
+- `plugins/bizar/index.ts` — full Cline `AgentPlugin` rewrite; runtime context
+  builder; 19 tools registered; 4 hooks wired; in-process ClineRuntime setup
+- `plugins/bizar/src/clineruntime.ts` — new (replaces serve/http-client/event-stream)
+- `plugins/bizar/src/memory-vault.ts` — new (Obsidian markdown vault)
+- `plugins/bizar/src/tools/*.ts` — 19 tool files, all ported to `createTool`
+- `plugins/bizar/src/tools/team-{spawn,status}.ts` — new (Cline agent teams)
+- `plugins/bizar/src/tools/memory-{list,read,write,search}.ts` — in-process vault
+- `plugins/bizar/src/commands-impl.ts` — `AgentToolContext` + `AgentTool` types
+- `bizar-dash/src/server/bg-spawner.mjs` — ClineCore in-process
+- `packages/sdk/src/cline.ts` — cleaned up (no compat shims needed)
+- `AGENTS.md` — rewritten with system description in first 10 lines
+- `PROGRESS.md` — new, cross-session state
+- `DECISIONS.md` — new, 6 ADRs
+- `feature_list.json` — new, 15 features with layers + repair instructions
+- `Makefile` — new, 11 targets (setup/dev/check/test/e2e/vcr/verify-feature/
+  check-arch/clean-check/session-start/session-end)
+- `.claude/settings.json` — new, scoped tool permissions
+- `.harness/arch-rules.json` — new, 7 architectural rules (WHAT/WHY/FIX)
+- `scripts/{verify-feature,check-arch,clean-state-check,session-trace}.sh` — new
+- `templates/{sprint-contract,evaluator-rubric,clean-state-checklist}.md` — new
+- `docs/{architecture,quality-document}.md` — new
+- `plugins/bizar/{ARCHITECTURE,CONSTRAINTS}.md` — new
+- `bizar-dash/ARCHITECTURE.md` — new
+- `packages/sdk/ARCHITECTURE.md` — new
+
+### Migration from v5.5.6
+
+If you were on v5.5.6:
+1. The plugin still loads in cline the same way — `claude plugins add @polderlabs/bizar`.
+2. Tools now return structured `{ ok, ... }` instead of `{ output: JSON.stringify(...) }`.
+   Update any custom slash commands that consumed the old shape.
+3. The plugin no longer spawns `cline serve`. If you have a separate `cline serve`
+   running, you can stop it.
+4. Memory tools no longer require the dashboard. They read/write `~/.bizar_memory/`
+   directly. The dashboard is still useful for visualizing/curating memory.
+
+### Verification
+
+- `make check` — TypeScript 0 errors
+- `make test` — 637/639 plugin pass (2 pre-existing unrelated); 71/74 SDK pass
+- `make e2e` — 22/22 pass via `/tmp/bh-full-e2e.mjs`
+- `make vcr` — VCR 15/15 = 1.000
+- `make check-arch` — 7/7 arch rules pass
+- `make clean-check` — all 5 dimensions pass
+- `bash tools/audit-harness.sh .` — 73/73 = 100%
+
+---
+
 ## v5.5.6 — Minor: new `/plow-through` slash command
 
 ### Highlights
