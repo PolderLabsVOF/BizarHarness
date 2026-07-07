@@ -56,6 +56,7 @@ import {
 } from "./src/options.js";
 
 import { ServeLifecycle } from "./src/serve.js";
+import { ClineRuntime } from "./src/clineruntime.js";
 import { writeServeInfo, clearServeInfo } from "./src/serve-info.js";
 import { HttpClient } from "./src/http-client.js";
 import { EventStream } from "./src/event-stream.js";
@@ -86,6 +87,8 @@ import { parseSlashCommand } from "./src/commands.js";
 import { createPlanActionTool } from "./src/tools/plan-action.js";
 import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
 import { createReadGlyphFeedbackTool } from "./src/tools/read-glyph-feedback.js";
+import { createTeamSpawnTool } from "./src/tools/team-spawn.js";
+import { createTeamStatusTool } from "./src/tools/team-status.js";
 import {
   stripInlineThinkBlocks,
   wrapFetchForReasoningCleanup,
@@ -324,43 +327,37 @@ async function initRuntime(
     logger.info("bizar: background agents disabled via BIZAR_SERVE_DISABLE=1");
   } else {
     try {
-      const servePort = readServePort();
+      // v6.0.0 — In-process Cline mode. The plugin embeds ClineCore
+      // (via ClineRuntime) instead of spawning a `cline serve` child.
+      // We pass nulls for serve/http/stream — InstanceManager runs in
+      // "bg-only mode" and the bg-spawn tool POSTs to the dashboard
+      // for actual session creation. The dashboard can also use
+      // ClineCore in-process (see bizar-dash/src/server/bg-spawner.mjs).
       const bgStateStore = new BackgroundStateStore(options.stateDir, logger);
-      const backgroundStateCleanup = bgStateStore.cleanup(7).catch(() => 0);
+      bgStateStore.cleanup(7).catch(() => 0);
       const maxConcurrent = readMaxConcurrent();
       const toolCallCap = readToolCallCap();
-      const httpTimeoutMs = readHttpTimeoutMs();
       const stallTimeoutMs = readStallTimeoutMs();
       const thinkingLoopTimeoutMs = readThinkingLoopTimeoutMs();
       const maxInterventions = readMaxInterventions();
 
-      serve = new ServeLifecycle({ port: servePort, worktree, logger });
-      serveHandle = serve;
-      const serveInfo = await serve.start();
-      try {
-        writeServeInfo(options.stateDir, { baseUrl: serveInfo.baseUrl, port: serveInfo.port, password: serveInfo.password, worktree: serveInfo.worktree, pid: serveInfo.pid, startedAt: serveInfo.startedAt }, logger);
-        logger.info(`[bizar] wrote serve-info to ${options.stateDir}/serve.json`);
-      } catch (err) { logger.warn(`[bizar] failed to write serve-info: ${err instanceof Error ? err.message : String(err)}`); }
-
-      const http = new HttpClient({ baseUrl: `http://127.0.0.1:${serveInfo.port}`, password: serveInfo.password, logger, timeoutMs: httpTimeoutMs });
-      const authHeader = `Basic ${btoa(`cline:${serveInfo.password}`)}`;
-      stream = new EventStream({ baseUrl: `http://127.0.0.1:${serveInfo.port}`, directory: worktree, authHeader, logger, http });
-      streamHandle = stream;
-      try {
-        const pub = createDashboardPublisher({ logger });
-        await pub.start();
-        dashboardPublisher = pub;
-        stream.onEvent((event) => { void pub.publish({ type: event.type, properties: { ...event } } as unknown as Parameters<DashboardPublisher["publish"]>[0]); });
-        const origDisconnect = stream.disconnect.bind(stream);
-        stream.disconnect = async () => { await origDisconnect(); pub.stop(); };
-      } catch (err) { logger.warn(`bizar: dashboard publisher failed: ${err instanceof Error ? err.message : String(err)}`); }
-
-      instanceManager = new InstanceManager({ stateStore: bgStateStore, maxConcurrent, toolCallCap, logger, worktree, serve, http, stream, stallTimeoutMs, thinkingLoopTimeoutMs, maxInterventions });
+      instanceManager = new InstanceManager({
+        stateStore: bgStateStore,
+        maxConcurrent,
+        toolCallCap,
+        logger,
+        worktree,
+        serve: null,
+        http: null,
+        stream: null,
+        stallTimeoutMs,
+        thinkingLoopTimeoutMs,
+        maxInterventions,
+      });
       instanceManagerHandle = instanceManager;
       await instanceManager.rebuildInMemoryMap();
-      serve.onUnexpectedExit(() => { void (async () => { try { await instanceManager?.shutdownAll(); } catch { /* ignore */ } })(); });
-      try { await stream.connect(); bgAvailable = true; } catch (err) { logger.warn(`bizar: SSE failed: ${err instanceof Error ? err.message : String(err)}`); }
-      logger.info(`bizar: background agents ready (port=${serveInfo.port}, cap=${maxConcurrent})`);
+      bgAvailable = true;
+      logger.info(`bizar: background agents ready (in-process ClineCore; cap=${maxConcurrent}, toolCallCap=${toolCallCap})`);
     } catch (err) { logger.warn(`bizar: background agents unavailable: ${err instanceof Error ? err.message : String(err)}`); }
   }
 
@@ -376,7 +373,21 @@ async function initRuntime(
     seenMessageIds: new Map(), pendingInjections: new Map(), injectedSessions,
     dashboardPublisher, memoryInject, memoryWriteOnEnd, sessionStartTimes,
   };
-  const tools = buildTools(runtimeCtx, instanceManager, logger);
+  // v6.0.0 — Try to bring up an in-process ClineRuntime for team tools
+  // and event-driven features. If ClineCore.create() fails (no
+  // @cline/core installed, or no provider credentials), we log a
+  // warning and continue without it — the non-team tools still work.
+  let clineRuntime: ClineRuntime | null = null;
+  try {
+    clineRuntime = new ClineRuntime({ logger });
+    await clineRuntime.start();
+    logger.info("bizar: ClineRuntime ready (agent teams + advanced features enabled)");
+  } catch (err) {
+    clineRuntime = null;
+    logger.warn(`bizar: ClineRuntime unavailable: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const tools = buildTools(runtimeCtx, instanceManager, logger, clineRuntime);
   return { runtimeCtx, tools };
 }
 
@@ -454,7 +465,7 @@ function findLastIndex<T>(arr: readonly T[], predicate: (item: T) => boolean): n
 
 // --- Tools builder ---------------------------------------------------
 
-function buildTools(ctx: RuntimeContext, instanceManager: InstanceManager | null, _logger: Logger): AgentTool[] {
+function buildTools(ctx: RuntimeContext, instanceManager: InstanceManager | null, _logger: Logger, clineRuntime: ClineRuntime | null = null): AgentTool[] {
   const basePlanTools: AgentTool[] = [
     createBgGetCommentsTool({ worktree: ctx.worktree, logger: ctx.logger }) as unknown as AgentTool,
     createPlanActionTool({ worktree: ctx.worktree, logger: ctx.logger }) as unknown as AgentTool,
@@ -478,7 +489,15 @@ function buildTools(ctx: RuntimeContext, instanceManager: InstanceManager | null
         createBgReportProgressTool({ instanceManager, logger: ctx.logger }) as unknown as AgentTool,
       ]
     : bgDisabledTools(ctx.logger);
-  return [...basePlanTools, ...bgTools];
+  // v6.0.0 — Cline agent teams tools. These need a ClineRuntime, so
+  // they're only registered if we have one (in-process ClineCore).
+  const teamTools: AgentTool[] = clineRuntime
+    ? [
+        createTeamSpawnTool({ runtime: clineRuntime, logger: ctx.logger }) as unknown as AgentTool,
+        createTeamStatusTool({ runtime: clineRuntime, logger: ctx.logger }) as unknown as AgentTool,
+      ]
+    : [];
+  return [...basePlanTools, ...bgTools, ...teamTools];
 }
 
 function bgDisabledTools(logger: Logger): AgentTool[] {
