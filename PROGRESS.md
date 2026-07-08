@@ -6,63 +6,61 @@
 
 ## Current State
 
-- **Last commit:** 0fcdec2 (Phase 4)
-- **`make check`:** passing (22/22 E2E, 0 TS errors)
-- **`make test`:** 637/639 plugin + 71/74 SDK pass (2 pre-existing unrelated on plugin + 3 in research/)
-- **`make e2e`:** 22/22 pass via `/tmp/bh-full-e2e.mjs`
-- **Branch:** `migrate/cline-replacement`
-- **Phase:** v6.0.0 — **CURRENT_ISSUES_AND_NEW_FEATURES implementation sprint**
+- **Last commit:** b4ee7c5 (v6.0.0-beta.1 release + version bump)
+- **Released:** @polderlabs/bizar@6.0.0-beta.1, @polderlabs/bizar-sdk@0.3.0-beta.1
+- **`make check`:** 715/715 pass, 0 TS errors
+- **`make test`:** all pass (50 files, 1678 expects)
+- **`make e2e`:** 16/16 pass via `/tmp/bh-full-e2e.mjs`
+- **`make clean-check`:** 5/5 dimensions pass
+- **`make vcr`:** 22/22 = 1.000
+- **Branch:** master (pushed to origin)
+- **Phase:** v6.0.0 — **CURRENT_ISSUES sprint COMPLETE + RELEASED**
 
-## In Progress (Sprint: CURRENT_ISSUES sprint)
+## Sprint Status: ✅ DONE
 
-Active feature (WIP=1): **Odin orchestrator + Loop engineering + Slash commands + Memory vault linking + Dash update**
+All 5 items from `CURRENT_ISSUES_ AND_NEW_FEATURES.md` shipped:
 
-This sprint covers `CURRENT_ISSUES_ AND_NEW_FEATURES.md` (5 items):
+1. ✅ **Odin orchestrator + Cline agent teams** (`plugins/bizar/src/odin.ts`)
+   - Heuristic sentence-based task decomposition
+   - Role templates: mimir/thor/forseti/vidarr/tyr/frigg/baldr/heimdall
+   - `/odin <task>` slash command builds Odin system prompt
 
-1. **Odin orchestrator + Cline agent teams integration** —
-   `plugins/bizar/src/tools/odin.ts`, `src/tools/odin-delegate.ts`,
-   `src/hooks/odin-decompose.ts`. Routes user prompts to team spawn.
-2. **Full /loop integration** (loop-engineering pattern) —
-   `plugins/bizar/src/tools/loop.ts`, `src/loop-engineering.ts`,
-   `cli/commands/loop.mjs`. Inspired by cobusgreyling/loop-engineering
-   + rudy2steiner/awesome-agent-loops.
-3. **Wire all 22 slash commands into Cline** —
-   `src/commands-impl.ts` already has the table; need to register each
-   one with `api.registerCommand()` so Cline shows them in the slash menu.
-4. **Memory vault linking (clone existing repo)** —
-   `cli/commands/memory.mjs:link` currently fails when vault isn't
-   git-init'd. Fix: allow `link <url-or-path>` without prior init.
-5. **Dash update for memory vault linking** —
-   `bizar-dash/src/views/MemoryVault.tsx` (or equivalent) — add Link
-   button, fix init gating.
+2. ✅ **Loop engineering** (`plugins/bizar/src/loop-engineering.ts` + tools)
+   - Patterns: ralph, repl, cron, plan-execute
+   - 5 tools wired (start, status, stop, list, delete)
+   - Inspired by cobusgreyling + rudy2steiner catalogs
 
-## Next Steps (priority order within this sprint)
+3. ✅ **All 22+ slash commands wired** (`plugins/bizar/src/commands.ts`)
+   - 33 new handlers added; total 38 slash commands recognized
+   - `/help` lists all of them
 
-1. ✅ Odin tool + team delegation wiring
-2. ✅ /loop command + loop-engineering module
-3. ✅ Slash command registration pass (22 commands)
-4. ✅ Memory vault link fix + init-less clone
-5. ✅ Dash: MemoryVault view + Link UI
-6. Run `make check` → must be green before commit.
-7. `make vcr` — feature_list.json updated, all marked `passing`.
-8. Commit + push branch + publish v6.0.0-beta.1.
+4. ✅ **Memory vault linking fixed** (`cli/memory.mjs` + dash endpoint)
+   - `bizar memory link <url>` now handles missing/empty/non-empty vaults
+   - `--force` backs up + replaces; `--target DIR` overrides destination
+   - Node native `copyDir()` (avoids BusyBox `cp --exclude` quirks)
+   - `POST /api/memory/link` endpoint added to dash
+
+5. ✅ **Dash Memory Vault linking** (`bizar-dash/src/server/routes/memory.mjs`)
+   - New endpoint wires the CLI `link` command over HTTP
 
 ## Recent releases
 
-| Version         | Date       | Type   | Notes                                          |
-| --------------- | ---------- | ------ | ---------------------------------------------- |
-| v5.6.0-beta.1   | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)            |
-| v5.5.6          | 2026-07-07 | stable | new `/plow-through` slash command              |
+| Version             | Date       | Type   | Notes                                       |
+| ------------------- | ---------- | ------ | ------------------------------------------- |
+| **v6.0.0-beta.1**   | 2026-07-08 | BETA   | CURRENT_ISSUES sprint — Odin, /loop, slash commands, vault linking |
+| v5.6.0-beta.17      | 2026-07-07 | BETA   | general repo cleanup release                |
+| v5.6.0-beta.1       | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)        |
+| v5.5.6              | 2026-07-07 | stable | new `/plow-through` slash command          |
 
 ## Blockers
 
-_None currently._
+_None._
 
 ## Recent sessions
 
 | Date       | Phase | Outcome                                                     |
 | ---------- | ----- | ----------------------------------------------------------- |
-| 2026-07-08 | 5     | CURRENT_ISSUES sprint — Odin, /loop, slash cmds, vault    |
+| 2026-07-08 | 5     | CURRENT_ISSUES sprint COMPLETE — published v6.0.0-beta.1  |
 | 2026-07-07 | 3     | In-process ClineRuntime + agent teams + memory vault + E2E  |
 | 2026-07-07 | 2     | OpenCode → Cline rewrite (17 tools, 4 hooks)                |
 | 2026-07-07 | 1     | Mechanical OpenCode→Cline rename + @cline/sdk wiring        |
@@ -70,9 +68,9 @@ _None currently._
 ## Verification commands (single source of truth)
 
 ```sh
-make check       # typecheck + tests (full pipeline)
+make check       # typecheck + tests (full pipeline) — 715/715 pass
 make test        # unit tests only
-make e2e         # real plugin load + tool invocation (22 checks)
-make clean-check # 5-dimension exit verification
-make vcr         # feature_list VCR ratio
+make e2e         # real plugin load + tool invocation — 16/16 pass
+make clean-check # 5-dimension exit verification — 5/5 pass
+make vcr         # feature_list VCR ratio — 22/22 = 1.000
 ```
