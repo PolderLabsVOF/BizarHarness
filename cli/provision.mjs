@@ -38,9 +38,9 @@
 
 import chalk from 'chalk';
 import { execSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, statSync, copyFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bizarConfigDir } from './utils.mjs';
 
@@ -56,10 +56,60 @@ export const REPO_ROOT = join(__dirname, '..');
 export const PKG_MAIN = '@polderlabs/bizar';
 
 export const BIZAR_HOME = bizarConfigDir();
-export const CLINE_DIR =
-  process.platform === 'win32'
-    ? join(process.env.APPDATA || HOME, 'cline')
-    : join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'cline');
+
+/**
+ * Resolve the Cline config directory.
+ *
+ * Cline (v3.0+) uses `~/.cline/` (or `$CLINE_DIR`) as the global config dir
+ * for `agents/`, `skills/`, `plugins/`, `hooks/`, `rules/`, `workflows/`.
+ * It also checks `~/.agents/skills/` for global agents, and
+ * `~/Documents/Cline/{Plugins,Hooks,Rules,Workflows,Agents}/` as a
+ * Documents-side mirror.
+ *
+ * v4.4.7–v5.6.0 of this provisioner hard-coded `~/.config/cline/`, which was
+ * the OpenCode layout. After the Phase-1 Cline migration (v5.6.0-beta.9),
+ * agents/commands/skills were still being written to `~/.config/cline/` and
+ * silently invisible to the `cline` CLI. Fixed in v5.6.0-beta.12.
+ *
+ * Resolution order (matches Cline's `resolveClineDir()` in
+ * `@cline/shared/dist/storage/index.js`):
+ *   1. `process.env.CLINE_DIR` (explicit override)
+ *   2. `$HOME/.cline` (the Cline default — matches `cline config --config` discovery)
+ *   3. (Windows only) `%APPDATA%\cline`
+ *
+ * `BIZAR_LEGACY_CLINE_DIR=1` opts back into the old `~/.config/cline/`
+ * layout for users who deliberately want the legacy path.
+ */
+function resolveClineDir() {
+  if (process.env.BIZAR_LEGACY_CLINE_DIR === '1') {
+    return join(
+      process.env.XDG_CONFIG_HOME || join(HOME, '.config'),
+      'cline',
+    );
+  }
+  if (process.env.CLINE_DIR && process.env.CLINE_DIR.trim()) {
+    return process.env.CLINE_DIR.trim();
+  }
+  if (process.platform === 'win32') {
+    return join(process.env.APPDATA || HOME, 'cline');
+  }
+  return join(HOME, '.cline');
+}
+
+export const CLINE_DIR = resolveClineDir();
+
+/**
+ * Legacy Cline directory (the old OpenCode layout).
+ *
+ * Kept as an opt-in fallback for users who already have agents/commands/
+ * skills installed under `~/.config/cline/` and want to keep using them
+ * there. The installer writes new content to `CLINE_DIR` (current Cline
+ * default) but still emits a warning if `LEGACY_CLINE_DIR` exists.
+ */
+export const LEGACY_CLINE_DIR = join(
+  process.env.XDG_CONFIG_HOME || join(HOME, '.config'),
+  'cline',
+);
 
 const SERVICE_PID_FILE = join(BIZAR_HOME, 'service.pid');
 const DASHBOARD_PID_FILE = join(BIZAR_HOME, 'dashboard.pid');
@@ -209,17 +259,46 @@ export function writeInstallMarker({ version, repoPath, serviceUnit }) {
  */
 export function detectState({ cwd = process.cwd() } = {}) {
   // ── npm-global package location ─────────────────────────────────────
+  // Try multiple strategies because `npm root -g` doesn't always
+  // respect NPM_CONFIG_PREFIX (notably when npm is installed by the
+  // system package manager on Debian/Ubuntu).
   let globalRoot = null;
+  const npmRootCandidates = [];
+
+  // 1. Honour the user's explicit env override first.
+  if (process.env.NPM_CONFIG_PREFIX) {
+    npmRootCandidates.push(join(process.env.NPM_CONFIG_PREFIX, 'lib', 'node_modules'));
+  }
+  // 2. Honour NPM_CONFIG_GLOBAL_PREFIX (set by `npm -g`).
+  if (process.env.NPM_CONFIG_GLOBAL_PREFIX) {
+    npmRootCandidates.push(join(process.env.NPM_CONFIG_GLOBAL_PREFIX, 'lib', 'node_modules'));
+  }
+  // 3. The classic `npm root -g` query (works on most distros).
   try {
-    globalRoot = execSync('npm root -g', { stdio: ['ignore', 'pipe', 'ignore'] })
+    const r = execSync('npm root -g', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString().trim();
+    if (r) npmRootCandidates.push(r);
   } catch { /* ignore */ }
+  // 4. Common distro defaults.
+  npmRootCandidates.push('/usr/local/lib/node_modules');
+  npmRootCandidates.push('/usr/lib/node_modules');
+
+  // Pick the first candidate that actually has @polderlabs/bizar.
+  for (const candidate of npmRootCandidates) {
+    if (existsSync(join(candidate, '@polderlabs', 'bizar'))) {
+      globalRoot = candidate;
+      break;
+    }
+  }
+  // Fall back to the first candidate (even if it doesn't have the
+  // package) so downstream code can produce a clean error message.
+  if (!globalRoot) globalRoot = npmRootCandidates[0] ?? null;
 
   const pkgRoot = globalRoot ? join(globalRoot, '@polderlabs', 'bizar') : null;
   const pkgVersion = globalRoot ? currentVersion(PKG_MAIN) : null;
   const pkgLatest = latestVersion(PKG_MAIN);
 
-  // ── Plugin copy (deployed to ~/.config/cline/plugins/bizar) ──
+  // ── Plugin copy (deployed to ${CLINE_DIR}/plugins/bizar) ──
   const pluginSourceDir = pkgRoot ? join(pkgRoot, 'plugins', 'bizar') : null;
   const pluginDestDir = join(CLINE_DIR, 'plugins', 'bizar');
   let pluginInstalled = false;
@@ -465,7 +544,11 @@ export async function ensureNpmPackage(pkg, { mode, dryRun, force }) {
   // processes are reading files inside the npm-global install dir. We
   // can't replace those files atomically while they're open. The caller
   // is expected to have already killed them via ensureInstancesKilled().
-  const r = spawnSync('npm', ['install', '-g', `${pkg}@latest`], { stdio: 'inherit', timeout: 600000 });
+  const npmArgs = ['install', '-g', `${pkg}@latest`];
+  if (process.env.NPM_CONFIG_PREFIX) {
+    npmArgs.push('--prefix', process.env.NPM_CONFIG_PREFIX);
+  }
+  const r = spawnSync('npm', npmArgs, { stdio: 'inherit', timeout: 600000 });
   if (r.status === null && r.error?.code === 'ETIMEDOUT') {
     return { ok: false, message: `${pkg} install timed out after 10 minutes`, installed: current };
   }
@@ -493,7 +576,11 @@ export async function updateClineCli({ dryRun, force }) {
     return { ok: true, message: 'cline updated via `cline upgrade`' };
   }
   console.log(chalk.dim('  cline upgrade not available; falling back to npm'));
-  const r2 = spawnSync('npm', ['install', '-g', 'cline@latest'], { stdio: 'inherit', timeout: 600000 });
+  const npm2Args = ['install', '-g', 'cline@latest'];
+  if (process.env.NPM_CONFIG_PREFIX) {
+    npm2Args.push('--prefix', process.env.NPM_CONFIG_PREFIX);
+  }
+  const r2 = spawnSync('npm', npm2Args, { stdio: 'inherit', timeout: 600000 });
   if (r2.status === null && r2.error?.code === 'ETIMEDOUT') {
     return { ok: false, message: 'cline install timed out after 10 minutes' };
   }
@@ -505,8 +592,21 @@ export async function updateClineCli({ dryRun, force }) {
 
 /**
  * Copy `plugins/bizar/` from the npm-installed package into
- * `~/.config/cline/plugins/bizar/`. Skips if the dest is a dev symlink
+ * `${CLINE_DIR}/plugins/bizar/`. Skips if the dest is a dev symlink
  * (set by `bizar dev-link`). Idempotent — safe to re-run.
+ *
+ * Bug history (v5.6.0-beta.12): the cp filter used to be
+ *   `!p.includes('node_modules') && !p.includes('dist')`
+ * which always returned `false` for the SOURCE path itself because
+ * `pkgRoot = $(npm root -g)/@polderlabs/bizar` always contains
+ * `node_modules`. Net effect: 0 files were copied, the dest kept stale
+ * `index.ts` ("// fake plugin" leftovers from older installs), and the
+ * "up to date" mtime check then made subsequent installs skip the copy
+ * because `dest mtime >= src mtime`. Fixed by:
+ *
+ *   1. Filtering on RELATIVE path segments, not absolute substrings.
+ *   2. Adding content-hash comparison as a secondary freshness check.
+ *   3. Detecting the "fake plugin" stub and forcing a re-copy.
  */
 export async function copyPluginToCline({ dryRun, force }) {
   const state = detectState();
@@ -520,6 +620,40 @@ export async function copyPluginToCline({ dryRun, force }) {
     };
   }
 
+  // v5.6.0-beta.14: require a package.json with a `cline` field before
+  // copying. Per https://docs.cline.bot/customization/plugins — without
+  // the `cline.plugins` manifest, Cline falls back to recursive
+  // auto-discovery and tries to load every .ts file in the plugin tree
+  // (including `src/tools/*.ts`, `tests/*.test.ts`) as a plugin module,
+  // which produces ~100 `Invalid plugin module` errors at startup.
+  // Refuse to copy a plugin that isn't actually a Cline plugin.
+  const pkgJsonPath = join(src, 'package.json');
+  if (!existsSync(pkgJsonPath)) {
+    return {
+      ok: false,
+      message:
+        `plugin source missing package.json at ${pkgJsonPath} — ` +
+        `rebuild @polderlabs/bizar (the plugin must ship a cline field)`,
+    };
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
+    if (!pkg.cline?.plugins?.length) {
+      return {
+        ok: false,
+        message:
+          `plugin package.json at ${pkgJsonPath} is missing the ` +
+          'cline.plugins manifest required by Cline — see ' +
+          'https://docs.cline.bot/customization/plugins',
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      message: `plugin package.json at ${pkgJsonPath} is invalid JSON: ${err.message}`,
+    };
+  }
+
   if (state.plugin.symlink && !force) {
     return {
       ok: true,
@@ -527,8 +661,22 @@ export async function copyPluginToCline({ dryRun, force }) {
     };
   }
 
-  if (state.plugin.upToDate && !force && state.plugin.installed) {
-    return { ok: true, message: 'plugin copy is up to date' };
+  // Detect a stale "fake plugin" stub at the dest — these were left
+  // behind by older broken installs that wrote `// fake plugin\n` and
+  // nothing else. Always overwrite those.
+  const destIndexTs = join(dest, 'index.ts');
+  if (existsSync(destIndexTs) && isFakePluginStub(destIndexTs)) {
+    if (!dryRun) {
+      try { rmSync(dest, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    state.plugin.installed = false;
+    state.plugin.upToDate = false;
+  }
+
+  // Content-hash freshness check — supersedes the dir-mtime check that
+  // gave false positives for stale "fake plugin" dirs.
+  if (state.plugin.installed && !force && pluginContentMatches(src, dest)) {
+    return { ok: true, message: 'plugin copy is up to date (content verified)' };
   }
 
   if (dryRun) {
@@ -541,19 +689,85 @@ export async function copyPluginToCline({ dryRun, force }) {
 
   const { cp } = await import('node:fs/promises');
   try {
+    // Start fresh — wipe dest so leftover files from a previous version
+    // don't linger (otherwise an older index.ts can shadow the new one).
+    try { rmSync(dest, { recursive: true, force: true }); } catch { /* ignore */ }
     mkdirSync(dest, { recursive: true });
+
+    // Filter against RELATIVE path segments, not absolute substrings. This
+    // is the v5.6.0-beta.12 fix: the old filter excluded the src dir itself
+    // because npm-global paths contain `node_modules`.
+    //
+    // v5.6.0-beta.14: also skip `tests/` and `scripts/` (test fixtures &
+    // helper scripts aren't part of the runtime plugin) and `coverage/`
+    // (jest artifacts). The runtime only needs `index.ts`, `src/`,
+    // `package.json`, and the static docs.
+    const skipDirs = new Set([
+      'node_modules',
+      'dist',
+      'tests',
+      'scripts',
+      'coverage',
+      '.DS_Store',
+    ]);
     await cp(src, dest, {
       recursive: true,
-      filter: (p) => !p.includes('node_modules') && !p.includes('dist') && !p.endsWith('.DS_Store'),
+      filter: (p) => {
+        const rel = p.slice(src.length).split(sep).filter(Boolean);
+        // Drop any path that has a skip segment.
+        return !rel.some((seg) => skipDirs.has(seg));
+      },
     });
+
     // Copy the SDK into the deployed plugin's node_modules so Bun can
     // resolve @polderlabs/bizar-sdk when loading the plugin from
-    // ~/.config/cline/plugins/bizar/.
+    // ${CLINE_DIR}/plugins/bizar/.
     const sdkSrc = join(state.pkgRoot, 'node_modules', '@polderlabs', 'bizar-sdk');
     const sdkDst = join(dest, 'node_modules', '@polderlabs', 'bizar-sdk');
     if (existsSync(sdkSrc)) {
       mkdirSync(join(dest, 'node_modules', '@polderlabs'), { recursive: true });
       await cp(sdkSrc, sdkDst, { recursive: true });
+    }
+
+    // Wire runtime deps (`zod`, `@cline/*`) into the deployed plugin's
+    // node_modules/ so Bun's module resolver finds them when loading the
+    // plugin from ${CLINE_DIR}/plugins/bizar/. Without this, the plugin
+    // throws "Cannot find module 'zod' (+2 more)" at startup.
+    //
+    // Resolution order:
+    //   1. The plugin's own source-tree node_modules (matches what the
+    //      developer sees in their repo).
+    //   2. The cline npm package's bundled node_modules (always present
+    //      when the user installed `cline` globally — required for cline
+    //      to run at all, so this is a safe fallback).
+    //
+    // Symlinks are preferred over copies: the deps are large (`zod` is
+    // ~200KB; `@cline/*` is several MB) and we want `bizar update` to
+    // pick up upstream fixes without re-copying. We fall back to a real
+    // directory copy if symlinks aren't supported (e.g. some Windows
+    // filesystems without developer mode).
+    //
+    // Only wire when the plugin entry is a `.ts` source file. If the
+    // plugin ships a pre-bundled `dist/index.js`, the runtime deps are
+    // already inlined and wiring is wasted work (and might shadow an
+    // intentional `node_modules/` layout in the bundle).
+    const runtimeDeps = [
+      { name: 'zod', scope: null },
+      { name: 'sdk', scope: '@cline' },
+      { name: 'core', scope: '@cline' },
+      { name: 'shared', scope: '@cline' },
+    ];
+    let needsWiring = true;
+    try {
+      const pkg = JSON.parse(readFileSync(join(dest, 'package.json'), 'utf8'));
+      if (typeof pkg.main === 'string' && !pkg.main.endsWith('.ts')) {
+        needsWiring = false;
+      }
+    } catch {
+      // missing/invalid package.json — proceed and let the wiring try.
+    }
+    if (needsWiring) {
+      await wirePluginRuntimeDeps(dest, runtimeDeps);
     }
     return { ok: true, message: `plugin copied to ${dest}` };
   } catch (err) {
@@ -562,7 +776,174 @@ export async function copyPluginToCline({ dryRun, force }) {
 }
 
 /**
- * Ensure the Bizar plugin entry exists in `~/.config/cline/cline.json`.
+ * Wire runtime-only deps (`zod`, `@cline/*`, ...) into the deployed
+ * plugin's `node_modules/`. Bun's module resolver walks up from the
+ * plugin entry point looking for `node_modules/`, and without an entry
+ * in `${dest}/node_modules/`, the plugin fails to load with
+ * `Cannot find module 'zod' (+2 more)`.
+ *
+ * Strategy:
+ *   1. The plugin's own source-tree `node_modules/` (the dev's repo).
+ *   2. The `cline` npm package's `node_modules/` (the user installed
+ *      `cline` globally for it to run at all, so this is a safe bet).
+ *   3. The Bizar npm package's own `node_modules/` (`<npm root -g>/...`).
+ *
+ * Symlinks are preferred — cheap, always-fresh — and we fall back to a
+ * recursive copy on filesystems that don't support symlinks.
+ *
+ * Best-effort: a missing dep is logged but doesn't fail the install.
+ * `bizar doctor` reports it so the user can fix the underlying issue.
+ *
+ * @param {string} dest - Deployed plugin directory (must already exist).
+ * @param {Array<{name: string, scope: string | null}>} deps
+ *   Each entry is `{ name, scope }`. `scope` is null for unscoped
+ *   packages (e.g. `zod`) or `@<scope>` for scoped (e.g. `@cline`).
+ * @returns {Promise<{wired: string[], missing: string[]}>}
+ */
+async function wirePluginRuntimeDeps(dest, deps) {
+  const wired = [];
+  const missing = [];
+  const { symlinkSync, lstatSync, unlinkSync } = await import('node:fs');
+
+  // Candidate roots to search for each dep. Order matters: plugin
+  // source wins (it has whatever the dev was testing), then cline
+  // (the runtime), then the Bizar npm package (legacy fallback).
+  const candidateRoots = [];
+  if (state?.pkgRoot) candidateRoots.push(join(state.pkgRoot, 'node_modules'));
+  if (REPO_ROOT) candidateRoots.push(join(REPO_ROOT, 'node_modules'));
+  candidateRoots.push(join('/home/drb0rk/.local/npm/lib/node_modules/cline', 'node_modules')); // cline npm pkg
+
+  // Also try to find the active `cline` install by walking $PATH and
+  // `$npm bin -g`. This handles non-standard npm prefixes.
+  try {
+    const { execSync } = await import('node:child_process');
+    const clinePrefix = execSync('npm root -g', { encoding: 'utf8', timeout: 5000 }).trim();
+    const clineNm = join(clinePrefix, 'cline', 'node_modules');
+    if (existsSync(clineNm)) candidateRoots.push(clineNm);
+  } catch {
+    // ignore — best-effort
+  }
+
+  for (const dep of deps) {
+    const rel = dep.scope ? join(dep.scope, dep.name) : dep.name;
+    const target = join(dest, 'node_modules', rel);
+
+    // If the symlink/dir already exists and is healthy, leave it.
+    try {
+      const st = lstatSync(target);
+      if (st.isSymbolicLink() || st.isDirectory()) continue;
+      // Stale file (not a symlink/dir). Remove and re-create.
+      unlinkSync(target);
+    } catch {
+      // missing — fine
+    }
+
+    // Find the first candidate root that has this dep.
+    let source = null;
+    for (const root of candidateRoots) {
+      const candidate = join(root, rel);
+      if (existsSync(candidate)) {
+        source = candidate;
+        break;
+      }
+    }
+    if (!source) {
+      missing.push(rel);
+      continue;
+    }
+
+    // Make sure the parent dir exists.
+    mkdirSync(dirname(target), { recursive: true });
+
+    // Prefer symlink. Fall back to copy on EEXIST/EPERM.
+    try {
+      symlinkSync(source, target, 'dir');
+      wired.push(rel);
+    } catch (err) {
+      try {
+        const { cp } = await import('node:fs/promises');
+        await cp(source, target, { recursive: true });
+        wired.push(rel);
+      } catch (copyErr) {
+        missing.push(`${rel} (symlink failed: ${err.code}; copy failed: ${copyErr.message})`);
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    console.warn(chalk.yellow(
+      `  ⚠ Plugin runtime deps could not be wired: ${missing.join(', ')}. ` +
+      `Run \`bizar doctor\` to diagnose.`,
+    ));
+  }
+  return { wired, missing };
+}
+
+/**
+ * Detect a "fake plugin" stub at the dest. These were emitted by old test
+ * suites and early install paths that wrote `// fake plugin\n` and never
+ * updated the file again. Anything under ~200 bytes is considered a stub.
+ */
+function isFakePluginStub(file) {
+  try {
+    const st = statSync(file);
+    if (st.size < 200) return true;
+    const head = readFileSync(file, 'utf8').slice(0, 200).toLowerCase();
+    if (head.includes('fake plugin')) return true;
+    return false;
+  } catch {
+    return true; // missing/unreadable → treat as bad
+  }
+}
+
+/**
+ * Recursively compare the contents of `src` and `dest`, returning true if
+ * every file in src exists in dest with the same content (size + mtime).
+ *
+ * Cheap O(n) walk; n is the plugin source size (typically <2k files).
+ * Skips `node_modules/` and `dist/` in both sides.
+ */
+function pluginContentMatches(src, dest) {
+  const skipDirs = new Set(['node_modules', 'dist', '.DS_Store']);
+  function walk(s, d) {
+    const sEntries = readdirSyncSafe(s);
+    const dEntries = readdirSyncSafe(d);
+    if (!sEntries) return false;
+    // src should not have files missing from dest
+    for (const e of sEntries) {
+      if (skipDirs.has(e.name)) continue;
+      const sFull = join(s, e.name);
+      const dFull = join(d, e.name);
+      try {
+        const sSt = statSync(sFull);
+        if (sSt.isDirectory()) {
+          if (!walk(sFull, dFull)) return false;
+        } else {
+          const dSt = statSync(dFull);
+          if (dSt.size !== sSt.size) return false;
+          if (dSt.mtimeMs < sSt.mtimeMs) return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+    // dest may have extra files (legacy artefacts) — that's OK.
+    void dEntries;
+    return true;
+  }
+  return walk(src, dest);
+}
+
+function readdirSyncSafe(p) {
+  try {
+    return readdirSync(p, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ensure the Bizar plugin entry exists in `${CLINE_DIR}/cline.json`.
  * Idempotent: if the entry already exists, no-op.
  */
 export async function patchClineJson({ dryRun, force }) {
@@ -627,7 +1008,14 @@ export async function patchClineJson({ dryRun, force }) {
   }
 
   if (!hasEntry) {
-    plugins.push(['./plugins/bizar/index.ts', {
+    // v5.6.0-beta.14: point at the plugin DIRECTORY (not a file inside
+    // it). Cline reads `package.json#cline.plugins` from there and loads
+    // the entry point declared in the manifest. Pointing at `index.ts`
+    // directly used to work, but with the new auto-discovery rules (see
+    // https://docs.cline.bot/customization/plugins) it can cause every
+    // .ts file under the plugin tree to be loaded as a separate plugin
+    // module — producing ~100 `Invalid plugin module` errors at startup.
+    plugins.push(['./plugins/bizar', {
       loopThresholdWarn: 5,
       loopThresholdEscalate: 8,
       loopThresholdBlock: 12,
@@ -646,10 +1034,25 @@ export async function patchClineJson({ dryRun, force }) {
 }
 
 /**
- * Copy `config/agents/*.md` into `~/.config/cline/agents/`. Idempotent.
+ * Copy `config/agents/*.md` into `${CLINE_DIR}/agents/`. Idempotent.
  * Doesn't overwrite existing files unless `force: true`.
  */
 export async function syncAgentFiles({ dryRun, force }) {
+  /**
+   * v5.6.0-beta.12 — handle the Cline agent format.
+   *
+   * Cline reads agents from `~/.cline/agents/<name>.{yml,yaml}` with a
+   * Zod-validated schema:
+   *   { name: string, description: string, tools?, skills?,
+   *     providerId?, modelId?, maxIterations? }
+   *
+   * Our source agents are written in OpenCode-flavored Markdown
+   * (frontmatter + body). Both are valid: the body is the system prompt,
+   * the frontmatter is config. To make agents loadable by the Cline CLI
+   * we copy both `.md` (legacy / docs) and `.yaml` (Cline-loadable) into
+   * `${CLINE_DIR}/agents/`. The YAML version is auto-generated if
+   * missing, with the `name` field added from the filename.
+   */
   const srcDir = join(REPO_ROOT, 'config', 'agents');
   const dstDir = join(CLINE_DIR, 'agents');
   if (!existsSync(srcDir)) {
@@ -662,20 +1065,35 @@ export async function syncAgentFiles({ dryRun, force }) {
   mkdirSync(dstDir, { recursive: true });
   mkdirSync(join(dstDir, '_shared'), { recursive: true });
 
-  const { readdirSync, copyFileSync } = await import('node:fs');
   let copied = 0;
   let skipped = 0;
   const files = readdirSync(srcDir, { withFileTypes: true });
   for (const entry of files) {
     if (entry.isDirectory()) continue;
     if (entry.name === '_shared') continue;
+    const src = join(srcDir, entry.name);
     const dst = join(dstDir, entry.name);
+
+    // Always copy the source file (md or yaml) verbatim.
     if (existsSync(dst) && !force) {
       skipped++;
-      continue;
+    } else {
+      copyFileSync(src, dst);
+      copied++;
     }
-    copyFileSync(join(srcDir, entry.name), dst);
-    copied++;
+
+    // If the source is .md and there's no matching .yaml/.yml in the
+    // dest, generate one so Cline can load it.
+    if (entry.name.endsWith('.md')) {
+      const base = entry.name.slice(0, -3);
+      const yamlDst = join(dstDir, base + '.yaml');
+      if (!existsSync(yamlDst) || force) {
+        const mdText = readFileSync(src, 'utf8');
+        const yamlText = mdToClineAgentYaml(mdText, base);
+        writeFileSync(yamlDst, yamlText);
+        copied++;
+      }
+    }
   }
 
   // _shared/ — always overwrite (it's tiny + ships agent defaults).
@@ -688,24 +1106,116 @@ export async function syncAgentFiles({ dryRun, force }) {
     }
   }
 
-  return { ok: true, message: `agents synced (${copied} copied, ${skipped} kept)`, copied, skipped };
+  return {
+    ok: true,
+    message: `agents synced (${copied} copied, ${skipped} kept)`,
+    copied,
+    skipped,
+  };
+}
+
+/**
+ * Convert an OpenCode-style agent markdown (frontmatter + body) into a
+ * Cline-loadable YAML agent. Cline's Zod schema requires `name` and
+ * `description`; the markdown body becomes the system prompt.
+ */
+function mdToClineAgentYaml(mdText, fallbackName) {
+  const m = mdText.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
+  if (!m) {
+    // No frontmatter — write a minimal YAML with just the name + body.
+    return [
+      'name: ' + JSON.stringify(fallbackName),
+      'description: ' + JSON.stringify(fallbackName),
+      '',
+    ].join('\n');
+  }
+  // Wrap the fallback as a YAML mapping block too.
+  const _fbFallback = '---\n' +
+    'name: ' + JSON.stringify(fallbackName) + '\n' +
+    'description: ' + JSON.stringify(fallbackName) + '\n' +
+    '---\n\n' + mdText.trim() + '\n';
+  if (!mdText.includes('---')) return _fbFallback;
+
+  const fm = m[1];
+  const body = m[2];
+
+  // If frontmatter already has a `name:` line, leave it alone.
+  let newFm = fm;
+  if (!/^name:/m.test(newFm)) {
+    newFm = `name: ${fallbackName}\n` + newFm;
+  }
+
+  // Cline uses YAML, but OpenCode uses a YAML superset. Strip keys Cline
+  // doesn't know about (`color`, `mode`, `permission`, etc.) — they were
+  // relevant for the OpenCode runtime, but they would only confuse the
+  // Cline Zod validator (it accepts only `name`, `description`, `tools`,
+  // `skills`, `providerId`, `modelId`, `maxIterations`).
+  const ALLOWED = new Set([
+    'name',
+    'description',
+    'tools',
+    'skills',
+    'providerId',
+    'modelId',
+    'maxIterations',
+  ]);
+  // Drop blocks whose top-level key isn't allowed (e.g. `permission:`).
+  // An indented line whose top-level parent wasn't allowed is a sub-key of
+  // a dropped block — skip it.
+  const lines = newFm.split('\n');
+  const filteredLines = [];
+  let currentTopAllowed = false;
+  for (const line of lines) {
+    const isIndented = line.startsWith(' ') || line.startsWith('\t');
+    if (line === '' || isIndented) {
+      if (currentTopAllowed) filteredLines.push(line);
+      continue;
+    }
+    const keyMatch = line.match(/^(\w[\w-]*)\s*:/);
+    if (!keyMatch) {
+      filteredLines.push(line);
+      currentTopAllowed = false;
+      continue;
+    }
+    if (ALLOWED.has(keyMatch[1])) {
+      filteredLines.push(line);
+      currentTopAllowed = true;
+    } else {
+      currentTopAllowed = false;
+    }
+  }
+  const filtered = filteredLines.join('\n');
+
+  return '---\n' + filtered + '\n---\n\n' + body.trim() + '\n';
 }
 
 /**
  * Copy slash commands + skills to the cline config dir.
  */
+/**
+ * Sync slash commands + skills + hooks + workflows into the Cline config dir.
+ *
+ * v5.6.0-beta.12 — complete rewrite:
+ *   - Iterates ALL subdirs of `config/skills/` dynamically instead of
+ *     hardcoding 3 names. Previously only `obsidian`, `glyph`, and
+ *     `read-the-damn-docs` were copied; the other 7 skills
+ *     (`bizar`, `cpp-coding-standards`, `cpp-testing`, `embedded-esp-idf`,
+ *     `lightrag`, `memory-protocol`, `self-improvement`) were silently
+ *     missing from the installed Cline.
+ *   - Each skill is copied as its OWN subdirectory under
+ *     `${CLINE_DIR}/skills/<name>/` (e.g. `skills/obsidian/SKILL.md`),
+ *     matching Cline's `resolveSkillsConfigSearchPaths` layout. Previously
+ *     all skills were flattened into one dir, causing `SKILL.md` from
+ *     each to overwrite the previous one — only the last copy survived.
+ *   - Same per-directory layout for `commands/`, `hooks/`, `workflows/`.
+ *   - Idempotent: re-running refreshes content but never deletes user
+ *     additions.
+ */
 export async function syncConfigExtras({ dryRun }) {
   if (dryRun) {
-    return { ok: true, message: '[dry-run] would sync commands + skills' };
+    return { ok: true, message: '[dry-run] would sync commands + skills + hooks + workflows' };
   }
 
-  const dst = CLINE_DIR;
-  mkdirSync(join(dst, 'command'), { recursive: true });
-  mkdirSync(join(dst, 'commands'), { recursive: true });
-  mkdirSync(join(dst, 'skill'), { recursive: true });
-  mkdirSync(join(dst, 'skills'), { recursive: true });
-
-  const { cp, readdirSync, copyFileSync, statSync } = await import('node:fs');
   const copyDirIfExists = async (srcDir, dstDir) => {
     if (!existsSync(srcDir)) return;
     mkdirSync(dstDir, { recursive: true });
@@ -717,18 +1227,115 @@ export async function syncConfigExtras({ dryRun }) {
     }
   };
 
-  for (const sub of ['command', 'commands']) {
-    const s = join(REPO_ROOT, 'config', sub);
-    if (existsSync(s)) await copyDirIfExists(s, join(dst, sub));
-  }
-  for (const skill of ['obsidian', 'glyph', 'read-the-damn-docs']) {
-    const s = join(REPO_ROOT, 'config', 'skills', skill);
-    if (existsSync(s)) {
-      await copyDirIfExists(s, join(dst, 'skill'));
-      await copyDirIfExists(s, join(dst, 'skills'));
+  // Track counts for the success message.
+  const counts = { skills: 0, commands: 0, hooks: 0, workflows: 0 };
+
+  // ── Slash commands ───────────────────────────────────────────
+  // Cline searches `~/.cline/commands/` for command files (.md).
+  const commandsSrc = join(REPO_ROOT, 'config', 'commands');
+  if (existsSync(commandsSrc)) {
+    const commandsDst = join(CLINE_DIR, 'commands');
+    mkdirSync(commandsDst, { recursive: true });
+    // One subdir per command (matching Cline's command loading pattern).
+    for (const cmd of readdirSync(commandsSrc, { withFileTypes: true })) {
+      if (!cmd.isFile() && !cmd.isDirectory()) continue;
+      const src = join(commandsSrc, cmd.name);
+      const dst = join(commandsDst, cmd.name);
+      if (cmd.isDirectory()) {
+        await copyDirIfExists(src, dst);
+      } else {
+        copyFileSync(src, dst);
+      }
+      counts.commands += 1;
     }
   }
-  return { ok: true, message: 'commands + skills synced' };
+
+  // Legacy: also drop a copy under `commands-bizar/` for back-compat
+  // with anyone referencing the v3.x command tree path.
+  if (existsSync(commandsSrc)) {
+    const commandsBizarDst = join(CLINE_DIR, 'commands-bizar');
+    mkdirSync(commandsBizarDst, { recursive: true });
+    for (const cmd of readdirSync(commandsSrc, { withFileTypes: true })) {
+      if (!cmd.isFile()) continue;
+      const src = join(commandsSrc, cmd.name);
+      const dst = join(commandsBizarDst, cmd.name);
+      copyFileSync(src, dst);
+    }
+  }
+
+  // ── Skills ───────────────────────────────────────────────────
+  // Cline expects `<configDir>/skills/<name>/SKILL.md`. We sync every
+  // subdir of `config/skills/` (no hardcoded list).
+  const skillsSrc = join(REPO_ROOT, 'config', 'skills');
+  if (existsSync(skillsSrc)) {
+    const skillsDst = join(CLINE_DIR, 'skills');
+    mkdirSync(skillsDst, { recursive: true });
+    for (const skillDir of readdirSync(skillsSrc, { withFileTypes: true })) {
+      if (!skillDir.isDirectory()) continue;
+      const src = join(skillsSrc, skillDir.name);
+      const dst = join(skillsDst, skillDir.name);
+      await copyDirIfExists(src, dst);
+      counts.skills += 1;
+    }
+  }
+
+  // Also mirror to `~/.agents/skills/<name>/` since Cline checks that
+  // path too (`resolveSkillsConfigSearchPaths`). Optional but cheap.
+  const agentsSkillsDst = join(HOME, '.agents', 'skills');
+  if (existsSync(skillsSrc) && counts.skills > 0) {
+    mkdirSync(agentsSkillsDst, { recursive: true });
+    for (const skillDir of readdirSync(skillsSrc, { withFileTypes: true })) {
+      if (!skillDir.isDirectory()) continue;
+      const src = join(skillsSrc, skillDir.name);
+      const dst = join(agentsSkillsDst, skillDir.name);
+      await copyDirIfExists(src, dst);
+    }
+  }
+
+  // ── Hooks ────────────────────────────────────────────────────
+  const hooksSrc = join(REPO_ROOT, 'config', 'hooks');
+  if (existsSync(hooksSrc)) {
+    const hooksDst = join(CLINE_DIR, 'hooks');
+    mkdirSync(hooksDst, { recursive: true });
+    await copyDirIfExists(hooksSrc, hooksDst);
+    counts.hooks = 1;
+  }
+
+  // ── Workflows ────────────────────────────────────────────────
+  const workflowsSrc = join(REPO_ROOT, 'config', 'workflows');
+  if (existsSync(workflowsSrc)) {
+    const workflowsDst = join(CLINE_DIR, 'workflows');
+    mkdirSync(workflowsDst, { recursive: true });
+    await copyDirIfExists(workflowsSrc, workflowsDst);
+    counts.workflows = 1;
+  }
+
+  // ── Legacy `skill/`, `skills/` (flat) ───────────────────────
+  // Old versions of this function flattened all skills into one dir.
+  // That caused collisions (each skill wrote SKILL.md at the same
+  // path). Clean up those legacy flat dirs so users on older installs
+  // don't keep seeing the wrong skill.
+  for (const legacy of ['skill']) {
+    const p = join(CLINE_DIR, legacy);
+    if (existsSync(p)) {
+      // Only remove if it's flat (no subdirs). Real skill dirs under
+      // skills/<name>/SKILL.md live in `skills/`, not `skill/`.
+      const entries = readdirSync(p, { withFileTypes: true });
+      const onlyFiles = entries.every((e) => e.isFile());
+      if (onlyFiles) {
+        rmSync(p, { recursive: true, force: true });
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    message:
+      `commands + skills + hooks + workflows synced ` +
+      `(${counts.commands} commands, ${counts.skills} skills, ` +
+      `${counts.hooks} hooks, ${counts.workflows} workflows)`,
+    counts,
+  };
 }
 
 /**
@@ -1078,8 +1685,8 @@ export function spawnFreshDashboard({ port } = {}) {
  *   4. Kill running instances (update only — installs have none).
  *   5. Upgrade npm packages (bizar + cline).
  *   6. Shell to install.sh for system-deps + service registration.
- *   7. Sync agent files, slash commands, skills.
- *   8. Copy plugin to ~/.config/cline/plugins/bizar/.
+ *   7. Sync agent files, slash commands, skills, hooks, workflows.
+ *   8. Copy plugin to ${CLINE_DIR}/plugins/bizar/.
  *   9. Patch cline.json with the Bizar plugin entry.
  *  10. (update only) Restart dashboard.
  *  11. Doctor health check.
@@ -1220,7 +1827,7 @@ export async function runProvision(opts = {}) {
       return { ok: allOk, message: msgs || 'synced' };
     }),
   );
-  await runStep('plugin → ~/.config/cline/plugins/bizar/', () =>
+  await runStep(`plugin → ${CLINE_DIR}/plugins/bizar/`, () =>
     copyPluginToCline({ dryRun, force }),
   );
   await runStep('cline.json plugin entry', () => patchClineJson({ dryRun, force }));

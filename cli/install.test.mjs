@@ -32,25 +32,24 @@ const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
  * Point HOME at a fresh tmpdir so the module's clineConfigDir()
- * resolves inside it (via the fallback `<HOME>/.config/cline`).
- * Returns the tmpdir path.
+ * resolves inside it. As of v5.6.0-beta.12, `clineConfigDir()` returns
+ * `<HOME>/.cline/` (matching Cline's own `resolveClineDir` since v3.0).
  *
- * We deliberately do NOT set XDG_CONFIG_HOME. clineConfigDir() treats
- * a set XDG_CONFIG_HOME as the direct parent (so `~/.config` →
- * `~/.config/cline`); setting it to a raw tmpdir would produce
- * `<tmpdir>/cline` instead of `<tmpdir>/.config/cline` and break
- * path alignment with the rest of the test.
+ * We also reset CLINE_DIR and BIZAR_LEGACY_CLINE_DIR so the test uses
+ * the canonical path even if the developer's env is non-default.
  */
 function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-install-'));
   process.env.HOME = home;
   delete process.env.XDG_CONFIG_HOME;
+  delete process.env.CLINE_DIR;
+  delete process.env.BIZAR_LEGACY_CLINE_DIR;
   return home;
 }
 
 /** Path to the deployed plugin dir under the mocked HOME. */
 function pluginDest(home) {
-  return join(home, '.config', 'cline', 'plugins', 'bizar');
+  return join(home, '.cline', 'plugins', 'bizar');
 }
 
 /**

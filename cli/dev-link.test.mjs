@@ -41,26 +41,27 @@ const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
  * Point HOME at a fresh tmpdir so the module's clineConfigDir()
- * resolves inside it (via the fallback `<HOME>/.config/cline`).
+ * resolves inside it (via the fallback `<HOME>/.cline`).
  * Returns the tmpdir path.
  *
  * Note: we deliberately do NOT set XDG_CONFIG_HOME here. The
  * clineConfigDir() helper treats a set XDG_CONFIG_HOME as the
- * direct parent (so `XDG_CONFIG_HOME=~/.config` → `~/.config/cline`,
+ * direct parent (so `XDG_CONFIG_HOME=~/.config` → `~/.cline`,
  * matching the standard layout). Setting it to a raw tmpdir would
  * produce `<tmpdir>/cline` instead of the expected
- * `<tmpdir>/.config/cline` and break path alignment with the test.
+ * `<tmpdir>/.cline` and break path alignment with the test.
  */
 function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-devlink-'));
   process.env.HOME = home;
-  delete process.env.XDG_CONFIG_HOME;
+  delete process.env.CLINE_DIR;
+    delete process.env.BIZAR_LEGACY_CLINE_DIR;
   return home;
 }
 
 /** Path to the deployed plugin dir under the mocked HOME. */
 function pluginDest(home) {
-  return join(home, '.config', 'cline', 'plugins', 'bizar');
+  return join(home, '.cline', 'plugins', 'bizar');
 }
 
 after(() => {
@@ -89,8 +90,12 @@ describe('createDevLink()', () => {
     if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
     if (ORIG_HOME === undefined) delete process.env.HOME;
     else process.env.HOME = ORIG_HOME;
-    if (ORIG_XDG === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = ORIG_XDG;
+    if (ORIG_XDG === undefined) {
+      delete process.env.CLINE_DIR;
+      delete process.env.BIZAR_LEGACY_CLINE_DIR;
+    } else {
+      process.env.XDG_CONFIG_HOME = ORIG_XDG;
+    }
   });
 
   test('creates a symlink when dest does not exist', () => {
@@ -188,8 +193,12 @@ describe('removeDevLink()', () => {
     if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
     if (ORIG_HOME === undefined) delete process.env.HOME;
     else process.env.HOME = ORIG_HOME;
-    if (ORIG_XDG === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = ORIG_XDG;
+    if (ORIG_XDG === undefined) {
+      delete process.env.CLINE_DIR;
+      delete process.env.BIZAR_LEGACY_CLINE_DIR;
+    } else {
+      process.env.XDG_CONFIG_HOME = ORIG_XDG;
+    }
   });
 
   test('errors when dest does not exist', async () => {
@@ -274,8 +283,12 @@ describe('symlink detection', () => {
     if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
     if (ORIG_HOME === undefined) delete process.env.HOME;
     else process.env.HOME = ORIG_HOME;
-    if (ORIG_XDG === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = ORIG_XDG;
+    if (ORIG_XDG === undefined) {
+      delete process.env.CLINE_DIR;
+      delete process.env.BIZAR_LEGACY_CLINE_DIR;
+    } else {
+      process.env.XDG_CONFIG_HOME = ORIG_XDG;
+    }
   });
 
   test('lstatSync reports isSymbolicLink()=true after createDevLink', () => {

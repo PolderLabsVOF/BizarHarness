@@ -37,25 +37,30 @@ const ORIG_HOME = process.env.HOME;
 const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
- * Mock HOME so clineConfigDir() resolves to `<tmpdir>/.config/cline`.
+ * Mock HOME so clineConfigDir() resolves to `<tmpdir>/.cline`.
  * Returns the tmpdir path.
  *
  * We don't set XDG_CONFIG_HOME here for the same reason as dev-link.test.mjs:
  * the helper treats a set XDG_CONFIG_HOME as the direct parent (so
- * `XDG_CONFIG_HOME=~/.config` → `~/.config/cline`).
+ * `XDG_CONFIG_HOME=~/.config` → `~/.cline`).
  */
 function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-doctor-'));
   process.env.HOME = home;
-  delete process.env.XDG_CONFIG_HOME;
+  delete process.env.CLINE_DIR;
+    delete process.env.BIZAR_LEGACY_CLINE_DIR;
   return home;
 }
 
 afterEach(() => {
   if (ORIG_HOME === undefined) delete process.env.HOME;
   else process.env.HOME = ORIG_HOME;
-  if (ORIG_XDG === undefined) delete process.env.XDG_CONFIG_HOME;
-  else process.env.XDG_CONFIG_HOME = ORIG_XDG;
+  if (ORIG_XDG === undefined) {
+      delete process.env.CLINE_DIR;
+      delete process.env.BIZAR_LEGACY_CLINE_DIR;
+    } else {
+      process.env.XDG_CONFIG_HOME = ORIG_XDG;
+    }
 });
 
 // ── Shape & silent-mode tests ───────────────────────────────────────────────
@@ -182,14 +187,14 @@ describe('runDoctor() with fixture HOME', () => {
   });
 
   function writeClineConfig(json) {
-    const cfgDir = join(home, '.config', 'cline');
+    const cfgDir = join(home, '.cline');
     mkdirSync(cfgDir, { recursive: true });
     writeFileSync(join(cfgDir, 'cline.json'), JSON.stringify(json), 'utf8');
     return cfgDir;
   }
 
   function writeAgents(...files) {
-    const agentsDir = join(home, '.config', 'cline', 'agents');
+    const agentsDir = join(home, '.cline', 'agents');
     mkdirSync(agentsDir, { recursive: true });
     for (const f of files) {
       writeFileSync(join(agentsDir, f), `# ${f}`, 'utf8');
@@ -270,7 +275,7 @@ describe('runDoctor() with fixture HOME', () => {
 
   test('plugin-path-resolves passes when tuple path resolves', async () => {
     const home = process.env.HOME;
-    const pluginsDir = join(home, '.config', 'cline', 'plugins', 'bizar');
+    const pluginsDir = join(home, '.cline', 'plugins', 'bizar');
     mkdirSync(pluginsDir, { recursive: true });
     writeFileSync(join(pluginsDir, 'index.ts'), '// fake plugin\n', 'utf8');
     writeClineConfig({ plugin: [['./plugins/bizar/index.ts', {}]] });

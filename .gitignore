@@ -38,3 +38,17 @@ bizar-mods/
 .DS_Store
 Thumbs.dbbizar-dash/undefined/
 .harness/traces/
+
+# ── Auto-generated from .md by cli/provision.mjs:mdToClineAgentYaml() ───
+# Source of truth is the .md file. Delete the .yaml and re-run the
+# installer (or `bizar update`) to regenerate.
+config/agents/*.yaml
+config/agents/*.yml
+
+# ── Dashboard scratch (local canvas/design artifacts, not source) ──────
+bizar-dash/.openkan/
+bizar-dash/bizar-design/
+bizar-dash/*.artifact.json
+
+# ── Personal notes (project-level scratch) ──────────────────────────────
+.clinerules

@@ -14,7 +14,35 @@ export function repoPath(...parts) {
   return join(REPO_ROOT, ...parts);
 }
 
+/**
+ * Resolve the Cline global config directory.
+ *
+ * Mirrors Cline's `resolveClineDir()` in `@cline/shared/storage`:
+ *   1. `process.env.CLINE_DIR` (explicit override)
+ *   2. `$HOME/.cline` (the Cline default since v3.0)
+ *
+ * The legacy `~/.config/cline/` path (used by OpenCode and pre-v5.6
+ * BizarHarness versions) is kept under `legacyClineConfigDir()` below
+ * for back-compat with older scripts.
+ */
 export function clineConfigDir() {
+  if (process.env.CLINE_DIR && process.env.CLINE_DIR.trim()) {
+    return process.env.CLINE_DIR.trim();
+  }
+  if (isWin) {
+    return process.env.APPDATA
+      ? join(process.env.APPDATA, 'cline')
+      : join(homedir(), '.cline');
+  }
+  return join(homedir(), '.cline');
+}
+
+/**
+ * Legacy Cline config dir (`~/.config/cline/`). Used by OpenCode and the
+ * pre-v5.6 BizarHarness installer. Exposed for back-compat with scripts
+ * and tests that hard-coded this path.
+ */
+export function legacyClineConfigDir() {
   if (isWin) {
     return process.env.APPDATA
       ? join(process.env.APPDATA, 'cline')

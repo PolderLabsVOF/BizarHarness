@@ -1,7 +1,7 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "5.6.0-beta.11",
-  "description": "Norse-pantheon multi-agent system for cline — 13 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness. v4 ships as a single npm package bundling the dashboard server, cline plugin, and typed SDK.",
+  "version": "5.6.0-beta.16",
+  "description": "Norse-pantheon multi-agent system for cline \u2014 13 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness. v4 ships as a single npm package bundling the dashboard server, cline plugin, and typed SDK.",
   "type": "module",
   "bin": {
     "bizar": "cli/bin.mjs"
@@ -76,16 +76,9 @@
     "ws": "^8.18.0",
     "zod": "4.1.8"
   },
-  "peerDependencies": {
-    "@opencode-ai/plugin": ">=1.17.0"
-  },
-  "peerDependenciesMeta": {
-    "@opencode-ai/plugin": {
-      "optional": true
-    }
-  },
+  "peerDependencies": {},
+  "peerDependenciesMeta": {},
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.17.7",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

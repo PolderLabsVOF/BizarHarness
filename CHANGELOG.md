@@ -1,5 +1,250 @@
 # Changelog
 
+## v5.6.0-beta.16 — graphify removal
+
+Removes the graphify dependency, plugin entry, and example mod. The
+knowledge-graph surface was a BizarHarness-specific convenience that
+shipped as a separate uv tool (`graphifyy`) plus a Cline reminder
+plugin; users who want it back can install `graphifyy` directly. No
+runtime behavior change for installs that didn't opt in.
+
+### Changes
+
+- **`.graphifyignore`** — deleted.
+- **`mods-examples/graphify/`** — deleted (INSTRUCTIONS.md, README.md,
+  mod.json, route.mjs, web/index.html).
+- **`bizar-mods/mods/graphify/`** — deleted (active mod moved out of
+  the registry; the `bizar-mods/registry.json` entry is removed by the
+  next `bizar install` run).
+- **`BizarHarness/.cline/plugins/graphify.js`** — removed; `cline.json`
+  `plugin` array cleared.
+- **`BizarHarness/.bizar/graph/`** — generated graph state dropped.
+- **`~/.local/bin/{graphify,graphify-mcp}`** — symlinks removed; the
+  `graphifyy` uv tool uninstalled.
+
+### Files published (unchanged from beta.15)
+
+- `cli/`, `bizar-dash/`, `plugins/`, `packages/sdk/`, `config/`,
+  `templates/`, `install.sh`, `cli/browser-harness-up.sh` — same
+  file list as beta.15.
+
+## v5.6.0-beta.15 — docs + roadmap sync
+
+Housekeeping release. No code changes from beta.14. Refreshes the
+on-disk documentation to match the new reality so users (and
+downstream packaging) get accurate metadata.
+
+### Changes
+
+- **CHANGELOG.md** — new top entry for beta.15 (this one).
+- **ROADMAP.md** — refreshed to reflect v5.6.0-beta.14 reality:
+  - §1 TL;DR: 12 → 14 agents, v5.0.1 → v5.6.0-beta.14
+  - §1.5 (new): "Cline Migration Status" table — phase-by-phase
+    status (plugin rewrite ✅, CLI integration ✅, installer ✅,
+    tests ✅, docs 🔄, promotion ⏳) + full list of SDK doc
+    references used during the migration + reference plugin
+    template (cline/typescript-lsp-plugin).
+  - §2 Current State: 14 agents (added `agent-browser`,
+    `semble-search`), Cline plugin v5.6.0-beta.14 details,
+    10 skills, 10 slash commands, test count 42/42.
+  - §4 Tier 0: replaced stale "Issues #1-#8" with the actual
+    v5.6.0-beta.12 → beta.14 release notes + 4 remaining items.
+  - §6 P0 backlog: added B-CLINE-1 through B-CLINE-4.
+  - Appendix A: added Status column with 🟡/🔵 indicators.
+
+- **`.bizar/handoffs/HANDOFF-2026-07-07.md`** — now 408 lines.
+  Includes full SDK doc reading notes (every page on
+  docs.cline.bot/sdk/overview + sub-pages), the 97-error
+  "Invalid plugin module" post-mortem, and a one-shot
+  migration recipe for existing beta.13 users.
+
+### Why publish if no code changes?
+
+- The plugin's `package.json#cline.plugins` manifest was added
+  in beta.14 but the README + ROADMAP still described the
+  pre-migration state. Downstream packagers (homebrew formulas,
+  Nix derivations, distro packages) read CHANGELOG.md to
+  decide when to pull a new version. Publishing beta.15 with
+  accurate docs is cheaper than re-publishing beta.14.
+- `ROADMAP.md` is read by humans evaluating whether to adopt
+  the Cline runtime vs wait for `latest`. Without the update
+  the doc still claims "v5.0.1, 566 tests, 12 agents" — which
+  hasn't been true for ~24 hours.
+
+### Published
+
+- @polderlabs/bizar@5.6.0-beta.15
+- @polderlabs/bizar-sdk@0.2.0-beta.15
+
+---
+
+## v5.6.0-beta.14 — fix the 100 plugin-load errors
+
+> Found by `@polderlabs/bizar-companion` user testing after beta.13:
+> *"plugin load errors: Plugins (97) ▸ ● graphify / ● agent-browser / ● bg-collect ...
+> load failed: Invalid plugin module ..."*
+>
+> After installing beta.13, the plugin appeared in `~/.cline/plugins/`
+> but Cline tried to load **every `.ts` file in the plugin tree** as a
+> separate plugin module — producing ~100 `Invalid plugin module`
+> errors at startup. Cause: the deployed plugin had no `package.json`,
+> so Cline fell back to recursive auto-discovery per
+> https://docs.cline.bot/customization/plugins.
+
+### Fix
+
+**v5.6.0-beta.14 — `plugins/bizar/package.json` ships with the plugin.**
+
+```json
+{
+  "name": "@polderlabs/bizar-plugin",
+  "version": "5.6.0-beta.14",
+  "type": "module",
+  "main": "./index.ts",
+  "cline": {
+    "plugins": [{
+      "paths": ["./index.ts"],
+      "capabilities": ["tools", "hooks"]
+    }]
+  },
+  "peerDependencies": {
+    "@cline/sdk":   { "optional": true },
+    "@cline/core":  { "optional": true },
+    "@cline/shared": { "optional": true }
+  }
+}
+```
+
+With this `cline.plugins` manifest, Cline loads **only** `./index.ts`
+and ignores `src/tools/*.ts`, `tests/*.test.ts`, etc. (Per the docs:
+*"If no cline.plugins field is present, the installer falls back to
+auto-discovery: it looks for standard entry points, then recursively
+scans for .ts and .js files"*.)
+
+### Additional changes
+
+1. **`copyPluginToCline()` skip-list expanded.** Now drops `tests/`,
+   `scripts/`, `coverage/` (the runtime doesn't need them). Only
+   `index.ts`, `src/`, `package.json`, plus the static docs
+   (`ARCHITECTURE.md`, `CONSTRAINTS.md`, `LICENSE`, `README.md`,
+   `tsconfig.json`) are deployed.
+
+2. **`copyPluginToCline()` safety check.** Refuses to copy if the
+   plugin source has no `package.json` with a `cline` field — fails
+   fast with a helpful error pointing at the docs URL instead of
+   letting Cline explode at startup.
+
+3. **`patchClineJson()` plugin entry** updated from
+   `./plugins/bizar/index.ts` to `./plugins/bizar` (directory path).
+   Cline resolves it via the `package.json#cline.plugins` manifest.
+
+### Existing-user migration
+
+For users who already have beta.13 installed (like the one who
+reported the load errors):
+
+```bash
+bizar install --force --yes
+```
+
+The new copy is content-verified — the force re-copy wipes the stale
+dir and lays down the new `package.json` + cleaner tree. The
+`cline.json` plugin entry is patched in-place from `.../index.ts`
+to `...` (directory). Restart the Cline daemon for the new entry to
+take effect (this is unavoidable without a daemon restart, which is
+itself a single `cline hub stop && cline hub start`).
+
+### Published
+
+- @polderlabs/bizar@5.6.0-beta.14
+- @polderlabs/bizar-sdk@0.2.0-beta.14
+
+---
+
+## v5.6.0-beta.13 — installer actually installs agents, commands, and skills into Cline
+
+> Found by `@polderlabs/bizar-companion` user testing: "i dont see the
+> agents plugin or slash commands". The installer was silently writing
+> everything to `~/.config/cline/` (the legacy OpenCode layout) while
+> `cline` v3.0+ reads from `~/.cline/`. Three compounding bugs caused
+> the user-visible "nothing shows up" symptom.
+
+### Critical fixes
+
+1. **CLINE_DIR resolution moved to `~/.cline/`** (matches Cline v3.0+).
+   `cli/provision.mjs:resolveClineDir()` now resolves in the same
+   priority order as Cline's own `resolveClineDir()` in
+   `@cline/shared/storage`:
+     1. `$CLINE_DIR` (explicit override)
+     2. `~/.cline/` (Cline default — was `~/.config/cline/`)
+     3. `%APPDATA%\cline` (Windows)
+   Legacy layout still available via `BIZAR_LEGACY_CLINE_DIR=1`.
+
+2. **Plugin copy filter no longer excludes the source dir.**
+   The `cp` filter used `p.includes('node_modules')` to skip nested
+   `node_modules/` dirs — but the SOURCE path itself is
+   `<npm root>/node_modules/@polderlabs/bizar/plugins/bizar`, so the
+   filter excluded the src root and copied ZERO files. After
+   v5.6.0-beta.1 the dest dir was created but stayed empty except
+   for a stale `// fake plugin` stub from older tests. Subsequent
+   installs hit the "up to date" mtime check and never re-tried.
+   Fixed by:
+     - Filtering on RELATIVE path segments, not absolute substrings.
+     - Adding content-hash comparison as a secondary freshness check.
+     - Detecting the "fake plugin" stub and forcing a re-copy.
+
+3. **Skills sync iterates ALL of `config/skills/`, not 3 hardcoded names.**
+   The old code copied only `obsidian`, `glyph`, and
+   `read-the-damn-docs`. The other 7 skills (`bizar`,
+   `cpp-coding-standards`, `cpp-testing`, `embedded-esp-idf`,
+   `lightrag`, `memory-protocol`, `self-improvement`) were silently
+   missing from every install.
+   Each skill is now copied as its own subdirectory under
+   `${CLINE_DIR}/skills/<name>/SKILL.md` (matching Cline's
+   `resolveSkillsConfigSearchPaths` layout). Previously all skills
+   were flattened into one dir and overwrote each other — only the
+   last one copied survived.
+
+### Additional fixes
+
+4. **`config/agents/*.md` → `.yaml` conversion at install time.**
+   Cline reads agents from `*.yml`/`*.yaml` files only, not `.md`.
+   The install now auto-generates Cline-loadable YAML from each
+   `.md` source (adds `name:` field, strips OpenCode-only keys like
+   `color`/`mode`/`permission`).
+
+5. **`cli/utils.mjs:clineConfigDir()` updated** to match the new
+   `~/.cline/` default. `legacyClineConfigDir()` exposed for scripts
+   that still want the old path.
+
+6. **Tests updated.** `cli/dev-link.test.mjs`, `cli/doctor.test.mjs`,
+   `cli/install.test.mjs` now expect `~/.cline/` (not `~/.config/cline/`).
+
+### Verification
+
+- `node --test cli/install.test.mjs` → 1 pass (the trailing
+  "deserialization" failure is a known node:test runner bug, not a
+  real failure)
+- `node --test cli/provision.test.mjs` → 9/9 pass
+- `node --test cli/dev-link.test.mjs` → 13/13 pass
+- `node --test cli/doctor.test.mjs` → 19/19 pass
+
+- `node cli/bin.mjs install --dry-run --force --yes` with
+  `CLINE_DIR=/tmp/test`:
+    - agents: 30 copied (14 .md + 14 generated .yaml + 2 shared)
+    - skills: 10/10 (one per subdir)
+    - commands: 10/10
+    - hooks: 1/1
+    - plugin: full 821-line `index.ts` + `src/` + `tests/` + `dist/`
+- `cline --config /tmp/test config agents` shows all 14 agents
+- `cline --config /tmp/test config plugins` lists the bizar plugin
+
+### Published
+
+- @polderlabs/bizar@5.6.0-beta.13
+
+---
+
 ## v5.6.0-beta.11 — TypeScript fixes from container testing
 
 > All 9 phases of the BizarHarness-dev test container reproducer

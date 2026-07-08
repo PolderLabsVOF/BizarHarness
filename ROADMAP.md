@@ -1,7 +1,7 @@
 # BizarHarness Roadmap
 
-**Last updated**: 2026-07-06
-**Current version**: v5.0.1
+**Last updated**: 2026-07-07
+**Current version**: v5.6.0-beta.14 (Cline migration in progress)
 **Reading order**: this file → `FINAL_GOAL.md` (the vision) → `.obsidian/projects/current-state-analysis-2026-07-06.md` (the baseline).
 
 This is the **strategic** roadmap. Bug-fix lists, deployment notes, and per-release changelogs live in `CHANGELOG.md`. The "what works today / what's missing" inventory is in the current-state analysis. This document is about where we are going and how we get there.
@@ -10,27 +10,54 @@ This is the **strategic** roadmap. Bug-fix lists, deployment notes, and per-rele
 
 ## 1. TL;DR
 
-- **What Bizar is**: a Norse-pantheon multi-agent platform for cline. 12 agent definitions, a CLI, a dashboard, a memory service, and an cline plugin — all in one npm package (`@polderlabs/bizar`).
-- **Where it is**: v5.0.1, 566 tests passing, ~25k lines of code, mature CLI/dashboard/plugin subsystems. Solid for one-shot and short-horizon work. **L2 on the autonomy scale** (semi-autonomous, multi-step with checkpoints).
+- **What Bizar is**: a Norse-pantheon multi-agent platform for Cline. 14 agent definitions, a CLI, a dashboard, a memory service, and a Cline plugin — all in one npm package (`@polderlabs/bizar`).
+- **Where it is**: v5.6.0-beta.14, ~26k lines, **Cline migration in progress** (v5.6.0-beta.9 → v5.6.0-beta.14 in the last 24 hours — see CHANGELOG.md for the installer-fix saga). 42/42 unit tests passing across `provision`, `dev-link`, `doctor`; full agent + skill + command + plugin deployment verified end-to-end on `~/.cline/`. Solid for one-shot and short-horizon work. **L2 on the autonomy scale** (semi-autonomous, multi-step with checkpoints).
 - **Where it's going**: **L4 by v6.x** (autonomous with HITL escalations), **L5 by v7.x** (fully autonomous long-horizon with strategic HITL), plus **Pillar 6: Specialist Research Agents** — a tier of research specialists (Mimir, Veritas, Codex, Praxis) with a dedicated dashboard tab for evidence-based work across all other pillars. See `FINAL_GOAL.md` §2 and `ROADMAP.md` §5.6.
-- **Top 3 in flight**: (1) wrapping up the v5.x quality/polish line (issues #1-#8 fixed, MiniMax swap, dashboard layout pass); (2) designing the runtime agent orchestrator (the Tier 1 unlock); (3) growing the self-improvement loop into a measured, automated system.
+- **Top 3 in flight**: (1) closing out the **Cline migration** (skills detection from `~/.cline/skills/` is the last open issue — see §6 P0-Beta); (2) designing the runtime agent orchestrator (the Tier 1 unlock); (3) growing the self-improvement loop into a measured, automated system.
 - **Top 1 needing help**: distributed-systems / agent-runtime engineering. The runtime orchestrator is the bottleneck for everything in Tier 1+. See §9 Contributing.
 
 ---
+
+## 1.5. Cline Migration Status
+
+> Added 2026-07-07. The v5.6.0 line is the **Cline migration** — moving from the old OpenCode runtime (pre-v5.6) to the new Cline plugin architecture per https://docs.cline.bot/sdk/overview. The migration is **mechanically complete** but has 4 open P0 issues (B-CLINE-1 through B-CLINE-4).
+
+| Phase | Status | Notes |
+|---|---|---|
+| Plugin rewrite (`AgentExtension` from `@cline/sdk`) | ✅ Done | `plugins/bizar/index.ts` rewritten to use `createTool()`, `setup(api, ctx)`, lifecycle hooks. 17+ tools, 5 hooks. |
+| CLI integration (`AgentPlugin` registration via `cline.json`) | ✅ Done | `cli/provision.mjs:patchClineJson()` adds the plugin entry. |
+| Installer correctness | ✅ Done (v5.6.0-beta.12 → .14) | CLINE_DIR resolution, plugin copy, skills sync, agent YAML conversion, package.json manifest. See §6 P0 backlog for the 4 open issues. |
+| Tests adapted for `~/.cline/` | ✅ Done | `cli/{provision,dev-link,doctor,install}.test.mjs` updated. 42/42 passing. |
+| Documentation | 🔄 Partial | This section + CHANGELOG.md + `.bizar/handoffs/HANDOFF-2026-07-07.md`. Architecture docs (`AGENTS.md`, `plugins/bizar/ARCHITECTURE.md`) still mention OpenCode in places. |
+| Promotion to `latest` | ⏳ Pending | v5.6.0-beta.14 is the candidate. Blocked on B-CLINE-1/2/3. |
+
+**SDK references used during the migration:**
+- https://docs.cline.bot/sdk/overview — SDK structure
+- https://docs.cline.bot/sdk/plugins — manifest format, directory layout
+- https://docs.cline.bot/sdk/plugin-install — install patterns
+- https://docs.cline.bot/sdk/guides/writing-plugins — authoring guide
+- https://docs.cline.bot/sdk/reference/tools-api — tool API
+- https://docs.cline.bot/sdk/plugins.md — AgentPlugin shape
+- https://docs.cline.bot/customization/plugins — manifest + dir layout (used for `package.json#cline.plugins`)
+- https://docs.cline.bot/customization/skills — `name` must match dir name
+
+**Reference plugin used as the template:** [cline/typescript-lsp-plugin](https://github.com/cline/typescript-lsp-plugin) — its `package.json#cline.plugins` shape was copied verbatim.
 
 ## 2. Current State (v5.x)
 
 Brief. For the full inventory, see `.obsidian/projects/current-state-analysis-2026-07-06.md` — this section is the executive summary.
 
 **Shipped and working** (with file:line refs into the analysis):
-- 12 agents defined in `config/agents/` (odin/frigg/vor/mimir/heimdall/hermod/thor/baldr/tyr/vidarr/forseti/quick) — analysis §4
-- CLI: 15+ command modules, install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate — analysis §3
+- **14 agents** defined in `config/agents/` (odin/frigg/vor/mimir/heimdall/hermod/thor/baldr/tyr/vidarr/forseti/quick/semble-search/agent-browser) — analysis §4. `agent-browser` and `semble-search` were added during the v5.6.0 Cline migration.
+- **Cline plugin (v5.6.0-beta.14)**: 17+ custom tools, agent-browser native CLI integration, background agent system (stall detection, loop guard, tool-call cap, 8-instance cap), 50% context compaction, `AgentExtension` runtime hooks. Plugin ships with `package.json#cline.plugins` manifest per the [Cline plugin docs](https://docs.cline.bot/customization/plugins); installer drops `tests/`, `scripts/`, `coverage/` before deploying. Full agent + skill + command + plugin deployment verified at `~/.cline/`. See `.bizar/handoffs/HANDOFF-2026-07-07.md` for the full installer-fix saga (beta.12/13/14).
+- **10 skills** in `config/skills/` (bizar, cpp-coding-standards, cpp-testing, embedded-esp-idf, glyph, lightrag, memory-protocol, obsidian, read-the-damn-docs, self-improvement), each deployed as `~/.cline/skills/<name>/SKILL.md`. Mirrored to `~/.agents/skills/<name>/` for the user's existing skills CLI integration.
+- **10 slash commands** in `config/commands/` (audit, bizar, explain, init, learn, plan, plow-through, pr-review, tailscale-serve, visual-plan), installed at `~/.cline/commands/` + `commands-bizar/` for back-compat.
+- CLI: 37+ command modules, install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate — analysis §3
 - Dashboard server: v1 on `:4097`, v2 on `:4098`, 18 memory endpoints, structured logging, Prometheus `/metrics` — analysis §3
 - Dashboard web: 17 views (Overview, Chat, Tasks, Memory, Doctor, …) with auto-save settings, kanban tasks, plan canvas — analysis §3
-- Cline plugin: 7 custom tools, background agent system (stall detection, loop guard, tool-call cap, 8-instance cap), 50% context compaction — analysis §3
 - Memory service: 3 vault modes (off/local-only/managed/linked), 11 CLI subcommands, 18 REST endpoints, Obsidian-compatible Markdown, git-backed sync, secret scanning — analysis §3 / §7
 - Self-improvement: `.bizar/AGENTS_SELF_IMPROVEMENT.md` (1,139 lines, 15 active rules) — analysis §7
-- 566 tests (388 npm + 178 vitest), 0 failing
+- **42/42 unit tests passing** as of v5.6.0-beta.14: 9 provision, 13 dev-link, 19 doctor, 1 install (1 known node:test runner deserialization bug). 388 npm + 178 vitest integration tests still passing.
 
 **The architectural gap** (analysis §12, eight gaps):
 1. No runtime agent orchestrator — agents are prompts, not services.
@@ -77,23 +104,26 @@ Organized by horizon: Now (Tier 0), Next (Tiers 1-2), Later (Tier 3), Future (Ti
 
 ### Tier 0 — Now (v5.x in flight)
 
-**Goal**: finish what's started. Polish, fix, and stabilize the v5.x line. No new architectural work.
+**Goal**: finish what's started. Polish, fix, and stabilize the v5.x line, **including the Cline runtime migration**. No new architectural work.
 
-**In flight** (active, targeted for v5.0.2 / v5.1):
+**Shipped in v5.6.0-beta.12 → v5.6.0-beta.14** (the installer-fix saga — full details in `.bizar/handoffs/HANDOFF-2026-07-07.md`):
 
-- **Issues #1-#8** (`issues.md`) — all just shipped in v5.0.1 and v5.0.2 prep:
-  - Settings sidebar styling + functional buttons
-  - Marketplace differentiation from Overview
-  - Schedules page button styling
-  - Default memory vault path (`~/.local/share/bizar/memory` — `config/cline.json` and `bizar-dash/src/server/memory-store.mjs`)
-  - Headroom + LightRAG auto-start on dashboard boot (`bizar-dash/src/server/headroom.mjs`, `bizar-dash/src/server/server.mjs` startup hooks)
-  - System service auto-start on install/update (`cli/provision.mjs` service install + `cli/commands/update.mjs` kill-update-redeploy sequence)
-  - UI consistency audit pass on every page (32px top padding, 16-20px card gaps — `bizar-dash/src/web/styles/main.css`)
-- **MiniMax swap** — 6 agent files updated from `cline/deepseek-v4-flash-free` to `minimax/MiniMax-M2.7` / `MiniMax-M3` (see `config/agents/{tyr,odin,forseti,vidarr,quick,frigg,vor,heimdall,hermod,thor,baldr,mimir}.md`).
-- **Doctor page stabilization** — 30s auto-refresh, 5 health panels (`bizar-dash/src/web/views/Doctor.tsx`).
-- **Settings auto-save** — `useAutosave` hook + `<AutosaveField>` wired into General + Agent sections (`bizar-dash/src/web/components/hooks/useAutosave.ts`).
+- **v5.6.0-beta.12** — fixed the *installer* (it was writing to the wrong dir):
+  - `CLINE_DIR` resolution moved from `~/.config/cline/` (legacy OpenCode layout) to `~/.cline/` (Cline v3.0+ default). Mirrors Cline's own `resolveClineDir()`.
+  - Plugin copy filter no longer excludes the source dir itself (was matching `node_modules` substring in the npm-global path). New filter uses relative-path segments; new `pluginContentMatches()` does content-hash freshness check; new `isFakePluginStub()` detects the stale `// fake plugin` stub from older installs.
+  - Skills sync iterates **all 10** skills in `config/skills/` (was hard-coded to 3: `obsidian`, `glyph`, `read-the-damn-docs`). Each skill gets its own subdir matching Cline's `resolveSkillsConfigSearchPaths` layout.
+- **v5.6.0-beta.13** — fixed the npm-root lookup for `NPM_CONFIG_PREFIX` (system `npm` on Debian/Ubuntu ignores the env var). Added `--prefix` flag to `npm install -g` calls when `NPM_CONFIG_PREFIX` is set.
+- **v5.6.0-beta.14** — added the missing `plugins/bizar/package.json` with `cline.plugins` manifest. This is the root cause of the "100 plugin-load errors" report: without the manifest, Cline falls back to recursive auto-discovery and tries to load every `.ts` file in the plugin tree as a separate plugin module. Pattern from [`cline/typescript-lsp-plugin`](https://github.com/cline/typescript-lsp-plugin). `copyPluginToCline()` now also drops `tests/`, `scripts/`, `coverage/` from the deployed tree and refuses to copy without a valid `cline` field. `patchClineJson()` plugin entry updated from `./plugins/bizar/index.ts` to `./plugins/bizar` (directory).
+- `config/agents/*.md` → `.yaml` conversion at install time. Cline reads agents from `.yml`/`.yaml` files only (Zod-validated `name` + `description` required); the installer now auto-generates a Cline-loadable YAML from each `.md` source via `mdToClineAgentYaml()`, stripping OpenCode-only keys (`color`, `mode`, `permission`, plus indented children — the `permission:
+  task: allow` block would otherwise parse as a nested mapping under `description` and Zod would reject).
+- Tests updated for `~/.cline/` paths; container test `phase_install()` expectation corrected.
 
-**Carry-over bugs (post-v5.0.1)** — see §6 Backlog for the full P0/P1/P2 list. Top three: B-M3 (`BacklogPanel` uses native `confirm()`), B-M7 (no WS message queue), B-MOBILE-1 (mobile bundle > desktop).
+**Remaining for Tier 0** (post-v5.6.0-beta.14):
+
+- **Issue #1 from handoff** — `~/.cline/skills/<name>/SKILL.md` is not picked up by `cline config skills` from inside project dirs (works from `$HOME`). Workaround in place: skills are mirrored to `~/.agents/skills/<name>/` where Cline picks them up. Needs a deeper look at `IC(skillsPath)` in `@cline/core/dist/index.js`.
+- **Issue #3 from handoff** — `config/cline.json` template still uses the OpenCode schema (`"https://opencode.ai/config.json"`, `type: "local"` MCP blocks, `tools.bizar_*`). Out of scope for the installer fix; should be addressed in v5.6.0-beta.15.
+- **Issue #5 from handoff** — `cli/doctor.mjs` plugin-path-resolves check probably still uses the old `~/.config/cline/` path; needs verification + patch.
+- Promote `5.6.0-beta.14 → 5.6.0 stable` once the above three are resolved.
 
 **Out of scope for Tier 0**: any new agent capability, any new HITL mechanism, any runtime work. Tier 0 is the closing of v5.
 
@@ -369,6 +399,10 @@ These must be resolved before or as part of Tier 1 work.
 | B-M6 | SSE/WS token in URL lands in browser history | `api.ts:74-91`, `auth.mjs:187-189`, `ws.ts:29` | Move to `document.cookie`. 2 hours. |
 | B-MOBILE-1 | Mobile bundle (476 KB) > desktop (372 KB) | `vite.config.ts` + `mobile.tsx` | Investigate imports. 1 day. Block: orchestrator mobile UI. |
 | B-M1 | `useAutoGrowTextarea` deps missing `value` | `bizar-dash/src/web/components/chat/useAutoGrowTextarea.ts` | Textarea doesn't grow on content change. 30 min. |
+| **B-CLINE-1** | `~/.cline/skills/<name>/SKILL.md` not loaded by `cline config skills` from project dirs | `cli/provision.mjs:syncConfigExtras()` + `@cline/core/dist/index.js:IC(skillsPath)` | Workaround: mirrored to `~/.agents/skills/`. Need to investigate `IC(skillsPath)` to understand why the per-dir layout doesn't load. Half day. |
+| **B-CLINE-2** | `config/cline.json` template still has OpenCode schema (`type: "local"` MCP, `tools.bizar_*`, `$schema: opencode.ai`) | `config/cline.json` | Cline v3.0+ uses different MCP/tools schema. Affects whether `bizar_*-tool` MCP servers register properly. 1 day. |
+| **B-CLINE-3** | `cli/doctor.mjs` plugin-path-resolves check likely uses old `~/.config/cline/` | `cli/doctor.mjs:check-plugin-path-resolves` | Doctor still passes because user manually updated cline.json, but production code path probably references the old dir. Needs verification + patch. 30 min. |
+| **B-CLINE-4** | Container test `bizarharness-test:v5` hangs ~90s in PHASE 2 (install) | `scripts/test-container/run-tests.sh` | Probable cause: `install.sh` running `apt-get update`/`apt-get install -y python3.12 jq` inside the container. The install code itself works (verified). Increase container timeouts OR move platform-deps out of the test. 1 day. |
 
 ### P1 — Blocks Tier 2
 
@@ -504,13 +538,13 @@ If the three top-level documents (`FINAL_GOAL.md`, `ROADMAP.md`, this current-st
 
 ## Appendix A: Tier Summary
 
-| Tier | Version | Theme | Effort | Key unlock |
-|---|---|---|---|---|
-| **0** | v5.0.2 / v5.1 | Polish + close v5 | 2-3 weeks | Stable v5 |
-| **1** | v6.0 | Runtime Foundation | 8-12 weeks | Orchestrator + persistence |
-| **2** | v6.x | Long-Horizon | 6-8 weeks after T1 | DAG execution + interrupt + replay |
-| **3** | v7.x | Intelligence | 10-14 weeks | Validation + Council + Self-Improvement |
-| **4** | v8.x+ | Scale | TBD | Fork-join scale + cost + enterprise |
+| Tier | Version | Theme | Effort | Key unlock | Status |
+|---|---|---|---|---|---|
+| **0** | v5.6.0-beta.14 → v5.6.0 stable | Polish + Cline migration + close v5 | 1-2 weeks remaining | Stable v5 on Cline runtime | 🟡 In progress — installer fixed (beta.14), 4 P0 issues remain (B-CLINE-1 through B-CLINE-4) |
+| **1** | v6.0 | Runtime Foundation | 8-12 weeks | Orchestrator + persistence | 🔵 Not started (gated on Tier 0 close) |
+| **2** | v6.x | Long-Horizon | 6-8 weeks after T1 | DAG execution + interrupt + replay | 🔵 Not started |
+| **3** | v7.x | Intelligence | 10-14 weeks | Validation + Council + Self-Improvement | 🔵 Not started |
+| **4** | v8.x+ | Scale | TBD | Fork-join scale + cost + enterprise | 🔵 Not started |
 
 ## Appendix B: Pillar-to-Tier Mapping
 
