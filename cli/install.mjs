@@ -196,14 +196,17 @@ export async function installPluginFromGlobal(opts = {}) {
       }
     }
 
-    // Wire runtime deps (`zod` should be in the bundled nm; `@cline/*`
-    // are peer deps expected to come from the host `cline` install).
-    // Symlink `@cline/*` from the user's cline install into the deployed
-    // plugin so Bun can resolve them. Without this the plugin throws
-    // `Cannot find module 'zod' (+2 more)` at startup — the Cline
-    // plugin loader walks the deployed plugin's `node_modules/` for
-    // both scoped and unscoped packages, but the cline runtime lives
-    // in a separate `node_modules/` tree (e.g. `cline` npm install).
+    // Wire runtime deps (`zod` plus `@cline/sdk`, `@cline/core`,
+    // `@cline/shared`) into the deployed plugin's `node_modules/`.
+    // Bun's module resolver walks up from the plugin entry point
+    // looking for `node_modules/`, and without entries there the
+    // plugin throws `Cannot find module 'zod' (+2 more)` at startup.
+    //
+    // The resolution logic lives in `cli/plugin-runtime-deps.mjs` and
+    // is shared with the modern provisioner (`cli/provision.mjs`). It
+    // searches the Bizar npm pkg's own `node_modules/`, then the
+    // `cline` npm pkg's `node_modules/`, then the dev source tree.
+    // Symlinks are preferred; recursive copy is the fallback.
     //
     // Only needed for the in-source plugin (main = "./index.ts"). The
     // published npm package has main = "./dist/index.js" (bundled, no
@@ -212,53 +215,26 @@ export async function installPluginFromGlobal(opts = {}) {
     let pluginMain = null;
     try {
       const pkgPath = join(destDir, 'package.json');
-      const pkg = JSON.parse(await import('node:fs/promises').then(fs => fs.readFile(pkgPath, 'utf8')));
+      const pkg = JSON.parse(
+        await import('node:fs/promises').then((fs) => fs.readFile(pkgPath, 'utf8')),
+      );
       pluginMain = pkg.main;
     } catch {
       // missing or unreadable — fall through; we'll skip the wiring.
     }
-    const needsWiring = typeof pluginMain === 'string' && pluginMain.endsWith('.ts');
+    const needsWiring =
+      typeof pluginMain === 'string' && pluginMain.endsWith('.ts');
     if (needsWiring) {
       try {
-        const { execSync } = await import('node:child_process');
-        const { symlinkSync, lstatSync } = await import('node:fs');
-        const clineNm = join(execSync('npm root -g', { encoding: 'utf8', timeout: 5000 }).trim(), 'cline', 'node_modules');
-        const clineDeps = ['@cline/sdk', '@cline/core', '@cline/shared'];
-        let wiredCount = 0;
-        for (const dep of clineDeps) {
-          const target = join(destDir, 'node_modules', dep);
-          const source = join(clineNm, dep);
-          try {
-            // Skip if already correctly wired.
-            const st = lstatSync(target);
-            if (st.isSymbolicLink() || st.isDirectory()) continue;
-          } catch {
-            // missing — proceed to symlink
-          }
-          if (!existsSync(source)) continue;
-          await mkdir(join(destDir, 'node_modules', dep.split('/')[0]), { recursive: true });
-          try {
-            symlinkSync(source, target, 'dir');
-            wiredCount++;
-          } catch {
-            // Fall back to copy on EEXIST/EPERM (e.g. Windows without
-            // developer mode).
-            const { cp } = await import('node:fs/promises');
-            await cp(source, target, { recursive: true });
-            wiredCount++;
-          }
-        }
-        if (wiredCount > 0) {
-          console.log(
-            chalk.green(
-              `  ✓ wired ${wiredCount} @cline/* runtime deps from cline install`,
-            ),
-          );
-        }
+        const { wirePluginRuntimeDeps } = await import(
+          './plugin-runtime-deps.mjs'
+        );
+        await wirePluginRuntimeDeps(destDir);
       } catch (err) {
         console.log(
           chalk.dim(
-            `  ℹ Could not auto-wire @cline/* deps: ${err.message} (run \`bizar doctor\` to diagnose)`,
+            `  ℹ Could not auto-wire runtime deps: ${err.message} ` +
+            `(run \`bizar doctor\` to diagnose)`,
           ),
         );
       }

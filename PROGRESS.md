@@ -14,7 +14,7 @@
 - **`make clean-check`:** 5/5 dimensions pass
 - **`make vcr`:** 22/22 = 1.000
 - **Branch:** master (pushed to origin)
-- **Phase:** v6.0.0 — **CURRENT_ISSUES sprint COMPLETE + RELEASED**
+- **Phase:** v6.0.0 — **CURRENT_ISSUES sprint COMPLETE + RELEASED** + **HOTFIX: plugin `zod` not wired**
 
 ## Sprint Status: ✅ DONE
 
@@ -51,6 +51,20 @@ All 5 items from `CURRENT_ISSUES_ AND_NEW_FEATURES.md` shipped:
 | v5.6.0-beta.17      | 2026-07-07 | BETA   | general repo cleanup release                |
 | v5.6.0-beta.1       | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)        |
 | v5.5.6              | 2026-07-07 | stable | new `/plow-through` slash command          |
+
+## In Progress
+
+- **HOTFIX: `Cannot find module 'zod' (+2 more)` on `bizar install` (legacy path)**
+  - Bug: `cli/install.mjs:installPluginFromGlobal()` wires only `@cline/*` peer deps, never
+    `zod`. The plugin's `package.json` declares `zod` as a runtime dep but the deployed
+    `node_modules/zod` is never created.
+  - Fix: factor runtime-deps wiring out of `cli/provision.mjs:wirePluginRuntimeDeps()`
+    into a shared helper that searches the Bizar npm pkg's `node_modules/`, the cline
+    pkg's `node_modules/`, and the source tree. Call it from both
+    `installPluginFromGlobal` (legacy, used by `runPostInstall`) and `copyPluginToCline`
+    (modern, used by `runProvision`).
+  - Tests: extend `cli/install.test.mjs` with a `zod` wiring assertion and an E2E that
+    confirms `bizar install` produces a `node_modules/zod` symlink/copy at the dest.
 
 ## Blockers
 

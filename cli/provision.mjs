@@ -734,29 +734,16 @@ export async function copyPluginToCline({ dryRun, force }) {
     // plugin from ${CLINE_DIR}/plugins/bizar/. Without this, the plugin
     // throws "Cannot find module 'zod' (+2 more)" at startup.
     //
-    // Resolution order:
-    //   1. The plugin's own source-tree node_modules (matches what the
-    //      developer sees in their repo).
-    //   2. The cline npm package's bundled node_modules (always present
-    //      when the user installed `cline` globally — required for cline
-    //      to run at all, so this is a safe fallback).
-    //
-    // Symlinks are preferred over copies: the deps are large (`zod` is
-    // ~200KB; `@cline/*` is several MB) and we want `bizar update` to
-    // pick up upstream fixes without re-copying. We fall back to a real
-    // directory copy if symlinks aren't supported (e.g. some Windows
-    // filesystems without developer mode).
+    // The resolution logic lives in `cli/plugin-runtime-deps.mjs` and is
+    // shared with the legacy installer (`cli/install.mjs`). It searches
+    // the Bizar npm pkg's own `node_modules/`, then the `cline` npm
+    // pkg's `node_modules/`, then the dev source tree. Symlinks are
+    // preferred; recursive copy is the fallback.
     //
     // Only wire when the plugin entry is a `.ts` source file. If the
     // plugin ships a pre-bundled `dist/index.js`, the runtime deps are
     // already inlined and wiring is wasted work (and might shadow an
     // intentional `node_modules/` layout in the bundle).
-    const runtimeDeps = [
-      { name: 'zod', scope: null },
-      { name: 'sdk', scope: '@cline' },
-      { name: 'core', scope: '@cline' },
-      { name: 'shared', scope: '@cline' },
-    ];
     let needsWiring = true;
     try {
       const pkg = JSON.parse(readFileSync(join(dest, 'package.json'), 'utf8'));
@@ -767,116 +754,13 @@ export async function copyPluginToCline({ dryRun, force }) {
       // missing/invalid package.json — proceed and let the wiring try.
     }
     if (needsWiring) {
-      await wirePluginRuntimeDeps(dest, runtimeDeps);
+      const { wirePluginRuntimeDeps } = await import('./plugin-runtime-deps.mjs');
+      await wirePluginRuntimeDeps(dest, undefined, { pkgRoot: state.pkgRoot });
     }
     return { ok: true, message: `plugin copied to ${dest}` };
   } catch (err) {
     return { ok: false, message: `plugin copy failed: ${err.message}` };
   }
-}
-
-/**
- * Wire runtime-only deps (`zod`, `@cline/*`, ...) into the deployed
- * plugin's `node_modules/`. Bun's module resolver walks up from the
- * plugin entry point looking for `node_modules/`, and without an entry
- * in `${dest}/node_modules/`, the plugin fails to load with
- * `Cannot find module 'zod' (+2 more)`.
- *
- * Strategy:
- *   1. The plugin's own source-tree `node_modules/` (the dev's repo).
- *   2. The `cline` npm package's `node_modules/` (the user installed
- *      `cline` globally for it to run at all, so this is a safe bet).
- *   3. The Bizar npm package's own `node_modules/` (`<npm root -g>/...`).
- *
- * Symlinks are preferred — cheap, always-fresh — and we fall back to a
- * recursive copy on filesystems that don't support symlinks.
- *
- * Best-effort: a missing dep is logged but doesn't fail the install.
- * `bizar doctor` reports it so the user can fix the underlying issue.
- *
- * @param {string} dest - Deployed plugin directory (must already exist).
- * @param {Array<{name: string, scope: string | null}>} deps
- *   Each entry is `{ name, scope }`. `scope` is null for unscoped
- *   packages (e.g. `zod`) or `@<scope>` for scoped (e.g. `@cline`).
- * @returns {Promise<{wired: string[], missing: string[]}>}
- */
-async function wirePluginRuntimeDeps(dest, deps) {
-  const wired = [];
-  const missing = [];
-  const { symlinkSync, lstatSync, unlinkSync } = await import('node:fs');
-
-  // Candidate roots to search for each dep. Order matters: plugin
-  // source wins (it has whatever the dev was testing), then cline
-  // (the runtime), then the Bizar npm package (legacy fallback).
-  const candidateRoots = [];
-  if (state?.pkgRoot) candidateRoots.push(join(state.pkgRoot, 'node_modules'));
-  if (REPO_ROOT) candidateRoots.push(join(REPO_ROOT, 'node_modules'));
-  candidateRoots.push(join('/home/drb0rk/.local/npm/lib/node_modules/cline', 'node_modules')); // cline npm pkg
-
-  // Also try to find the active `cline` install by walking $PATH and
-  // `$npm bin -g`. This handles non-standard npm prefixes.
-  try {
-    const { execSync } = await import('node:child_process');
-    const clinePrefix = execSync('npm root -g', { encoding: 'utf8', timeout: 5000 }).trim();
-    const clineNm = join(clinePrefix, 'cline', 'node_modules');
-    if (existsSync(clineNm)) candidateRoots.push(clineNm);
-  } catch {
-    // ignore — best-effort
-  }
-
-  for (const dep of deps) {
-    const rel = dep.scope ? join(dep.scope, dep.name) : dep.name;
-    const target = join(dest, 'node_modules', rel);
-
-    // If the symlink/dir already exists and is healthy, leave it.
-    try {
-      const st = lstatSync(target);
-      if (st.isSymbolicLink() || st.isDirectory()) continue;
-      // Stale file (not a symlink/dir). Remove and re-create.
-      unlinkSync(target);
-    } catch {
-      // missing — fine
-    }
-
-    // Find the first candidate root that has this dep.
-    let source = null;
-    for (const root of candidateRoots) {
-      const candidate = join(root, rel);
-      if (existsSync(candidate)) {
-        source = candidate;
-        break;
-      }
-    }
-    if (!source) {
-      missing.push(rel);
-      continue;
-    }
-
-    // Make sure the parent dir exists.
-    mkdirSync(dirname(target), { recursive: true });
-
-    // Prefer symlink. Fall back to copy on EEXIST/EPERM.
-    try {
-      symlinkSync(source, target, 'dir');
-      wired.push(rel);
-    } catch (err) {
-      try {
-        const { cp } = await import('node:fs/promises');
-        await cp(source, target, { recursive: true });
-        wired.push(rel);
-      } catch (copyErr) {
-        missing.push(`${rel} (symlink failed: ${err.code}; copy failed: ${copyErr.message})`);
-      }
-    }
-  }
-
-  if (missing.length > 0) {
-    console.warn(chalk.yellow(
-      `  ⚠ Plugin runtime deps could not be wired: ${missing.join(', ')}. ` +
-      `Run \`bizar doctor\` to diagnose.`,
-    ));
-  }
-  return { wired, missing };
 }
 
 /**
