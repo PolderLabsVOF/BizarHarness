@@ -1,4 +1,26 @@
 # Changelog
+## v5.6.0-beta.17 — general repo cleanup
+
+General repo cleanup, no behavioral changes. Plugin still loads in cline.
+
+### Removed
+- **Vendored skill caches** — `agent/` and `.agents/` (28 MB, 1,672 files). These are regenerable via `npx skills add` and were already in `.gitignore` but still tracked.
+- **`research/agent-harness-survey/`** — 575 MB of cloned competitor repos (hermes-agent, openfang, openclaw, best-of) used for an earlier research round.
+- **Opencode-era artifacts** — `wiki/Changelog.md`, root `install.ps1`, `scripts/install.ps1` (orphaned forwarder), `mods-examples/graphify/`, `.graphifyignore`, root `image.png` / `image-1.png` (unreferenced screenshots), `artifacts/`, `bizar-test-container/`, `.claude/`, `.openkan/`, `bizar-dash/.openkan/`, `bizar-dash/bizar-design/`, `bizar-dash/canvas.html.artifact.json`, `.clinerules`.
+- **Dead dist bundles** — `plugins/bizar/dist/index.js` (18 MB, the v0.9.0 opencode-era JS bundle; the in-source plugin loads `index.ts` directly), `packages/sdk/dist/opencode*.{js,d.ts,map}` (no matching source).
+- **Auto-generated `*.yaml`** at `config/agents/` — regenerable from the `.md` source via `cli/provision.mjs:mdToClineAgentYaml()`. Now in `.gitignore`.
+- **Root cruft** — `issues.md`, `implement_next.md` (personal notes), `bookmarklet/`, `browser-extensions/` (orphaned product artifacts).
+
+### Changed
+- **`package.json`** — dropped `@opencode-ai/plugin` from `peerDependencies` and `devDependencies`. The plugin source is fully cline-only.
+- **`plugins/bizar/package.json`** — added `zod: ^3.23.0` as a regular `dependency` (was a peer dep that nothing resolved).
+- **`cli/provision.mjs`** + **`cli/install.mjs`** — the installer now wires runtime deps (`zod`, `@cline/sdk`, `@cline/core`, `@cline/shared`) into the deployed plugin's `node_modules/` as symlinks, so Bun's module resolver finds them when loading from `~/.cline/plugins/bizar/`.
+- **`.gitignore`** — covers the new patterns (`config/agents/*.yaml`, `bizar-dash/.openkan/`, `.clinerules`, etc.).
+
+### Verified
+- Plugin loads cleanly in cline. TypeScript typecheck: 0 errors. All 17 CLI tests pass.
+- The deployed plugin's `node_modules/` has working symlinks to `zod` and `@cline/{sdk,core,shared}` from the user's global cline install.
+
 
 ## v5.6.0-beta.16 — graphify removal
 
