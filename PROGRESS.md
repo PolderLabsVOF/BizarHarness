@@ -11,25 +11,41 @@
 - **`make test`:** 637/639 plugin + 71/74 SDK pass (2 pre-existing unrelated on plugin + 3 in research/)
 - **`make e2e`:** 22/22 pass via `/tmp/bh-full-e2e.mjs`
 - **Branch:** `migrate/cline-replacement`
-- **Phase:** v6.0.0 — Phase 1 done; **CLI overhaul + full validation**; **MS-2026-05-C.1**; v5.6.0-beta.9 published
+- **Phase:** v6.0.0 — **CURRENT_ISSUES_AND_NEW_FEATURES implementation sprint**
 
-## In Progress
+## In Progress (Sprint: CURRENT_ISSUES sprint)
 
-_Nothing currently active. WIP=1 is enforced. Next: pick a `not_started` feature from `feature_list.json` to begin a new sprint._
+Active feature (WIP=1): **Odin orchestrator + Loop engineering + Slash commands + Memory vault linking + Dash update**
 
-## Next Steps (priority order)
+This sprint covers `CURRENT_ISSUES_ AND_NEW_FEATURES.md` (5 items):
 
-1. **Stabilize beta** — address issues reported by v5.6.0-beta.1 users.
-   Move to v5.6.0 stable once no critical bugs reported for 1 week.
-2. **Fix pre-existing test failures** — `InstanceManager.update mutex regression`,
-   `config drift detection`, `OpenClaw SDK package e2e`. Promote to `.harness/arch-rules.json`.
-3. **Add E2E team-spawn test** — verify `bizar_spawn_team` actually creates a Cline team session.
-4. **Wire team progress events to the kanban** — Tasks.tsx should show real-time
-   progress from team_progress_projection events as cards move between columns.
-5. **Replace legacy `serve.ts / http-client.ts / event-stream.ts`** — they're now dead code
-   (replaced by `clineruntime.ts`). Delete to remove confusion.
-6. **Polish Harness dashboard** — add live audit scores, VCR ratio, link to feature_list.json
-   from the new Harness tab.
+1. **Odin orchestrator + Cline agent teams integration** —
+   `plugins/bizar/src/tools/odin.ts`, `src/tools/odin-delegate.ts`,
+   `src/hooks/odin-decompose.ts`. Routes user prompts to team spawn.
+2. **Full /loop integration** (loop-engineering pattern) —
+   `plugins/bizar/src/tools/loop.ts`, `src/loop-engineering.ts`,
+   `cli/commands/loop.mjs`. Inspired by cobusgreyling/loop-engineering
+   + rudy2steiner/awesome-agent-loops.
+3. **Wire all 22 slash commands into Cline** —
+   `src/commands-impl.ts` already has the table; need to register each
+   one with `api.registerCommand()` so Cline shows them in the slash menu.
+4. **Memory vault linking (clone existing repo)** —
+   `cli/commands/memory.mjs:link` currently fails when vault isn't
+   git-init'd. Fix: allow `link <url-or-path>` without prior init.
+5. **Dash update for memory vault linking** —
+   `bizar-dash/src/views/MemoryVault.tsx` (or equivalent) — add Link
+   button, fix init gating.
+
+## Next Steps (priority order within this sprint)
+
+1. ✅ Odin tool + team delegation wiring
+2. ✅ /loop command + loop-engineering module
+3. ✅ Slash command registration pass (22 commands)
+4. ✅ Memory vault link fix + init-less clone
+5. ✅ Dash: MemoryVault view + Link UI
+6. Run `make check` → must be green before commit.
+7. `make vcr` — feature_list.json updated, all marked `passing`.
+8. Commit + push branch + publish v6.0.0-beta.1.
 
 ## Recent releases
 
@@ -46,6 +62,7 @@ _None currently._
 
 | Date       | Phase | Outcome                                                     |
 | ---------- | ----- | ----------------------------------------------------------- |
+| 2026-07-08 | 5     | CURRENT_ISSUES sprint — Odin, /loop, slash cmds, vault    |
 | 2026-07-07 | 3     | In-process ClineRuntime + agent teams + memory vault + E2E  |
 | 2026-07-07 | 2     | OpenCode → Cline rewrite (17 tools, 4 hooks)                |
 | 2026-07-07 | 1     | Mechanical OpenCode→Cline rename + @cline/sdk wiring        |

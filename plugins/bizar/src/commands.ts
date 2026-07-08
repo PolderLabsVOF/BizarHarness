@@ -296,6 +296,74 @@ export function parseSlashCommand(
       return handleBizar(rest, ctx);
     case "kb":
       return handleKb(rest, ctx);
+    case "odin":
+      return handleOdin(rest, ctx);
+    case "loop":
+      return handleLoop(rest, ctx);
+    case "kanban":
+      return handleKanban(rest, ctx);
+    case "review":
+      return handleReview(rest, ctx);
+    case "handoff":
+      return handleHandoff(rest, ctx);
+    case "grill":
+      return handleGrill(rest, ctx);
+    case "glyph":
+      return handleGlyph(rest, ctx);
+    case "decision":
+      return handleDecision(rest, ctx);
+    case "issue":
+      return handleIssue(rest, ctx);
+    case "digest":
+      return handleDigest(rest, ctx);
+    case "usage":
+      return handleUsage(rest, ctx);
+    case "memory":
+      return handleMemory(rest, ctx);
+    case "spawn":
+      return handleSpawn(rest, ctx);
+    case "team":
+      return handleTeam(rest, ctx);
+    case "audit":
+      return handleAudit(rest, ctx);
+    case "deploy":
+      return handleDeploy(rest, ctx);
+    case "status":
+      return handleStatus(rest, ctx);
+    case "lightrag":
+      return handleLightrag(rest, ctx);
+    case "headroom":
+      return handleHeadroom(rest, ctx);
+    case "minimax":
+      return handleMiniMax(rest, ctx);
+    case "service":
+      return handleService(rest, ctx);
+    case "dash":
+      return handleDash(rest, ctx);
+    case "mod":
+      return handleMod(rest, ctx);
+    case "init":
+      return handleInit(rest, ctx);
+    case "dev":
+      return handleDev(rest, ctx);
+    case "test":
+      return handleTest(rest, ctx);
+    case "agent-browser":
+      return handleAgentBrowser(rest, ctx);
+    case "plow-through":
+      return handlePlowThrough(rest, ctx);
+    case "tailscale":
+      return handleTailscale(rest, ctx);
+    case "providers":
+      return handleProviders(rest, ctx);
+    case "clip":
+      return handleClip(rest, ctx);
+    case "ocr":
+      return handleOcr(rest, ctx);
+    case "workspace":
+      return handleWorkspace(rest, ctx);
+    case "voice":
+      return handleVoice(rest, ctx);
     case "help":
     case "commands":
       return helpResult();
@@ -1132,10 +1200,539 @@ function handleKb(arg: string, _ctx: ParseContext): SlashCommandResult {
 
 // --- /help ----------------------------------------------------------------
 
+/**
+ * Helper: build a SlashCommandResult that invokes a Bizar tool.
+ * Most slash commands are thin shims over an existing tool.
+ */
+function toolInvocation(toolName: string, args: unknown, response: string): SlashCommandResult {
+  return {
+    handled: true,
+    response,
+    sideEffect: { kind: "tool_invocation", toolName, args },
+  };
+}
+
+/**
+ * Helper: parse `--key=value` and `--key value` flag pairs from an arg
+ * string. Returns `{ positional: string[], flags: Record<string,string> }`.
+ *
+ * NOTE: Named `parseSlashFlags` to avoid colliding with the existing
+ * `parseFlags(tokens: string[])` helper used by the legacy `/plan *`
+ * handlers.
+ */
+function parseSlashFlags(arg: string): { positional: string[]; flags: Record<string, string> } {
+  const tokens = arg.split(/\s+/).filter((t) => t.length > 0);
+  const positional: string[] = [];
+  const flags: Record<string, string> = {};
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    if (t.startsWith("--")) {
+      const eq = t.indexOf("=");
+      if (eq !== -1) {
+        flags[t.slice(2, eq)] = t.slice(eq + 1);
+        continue;
+      }
+      const key = t.slice(2);
+      const next = tokens[i + 1];
+      if (next !== undefined && !next.startsWith("--")) {
+        flags[key] = next;
+        i++;
+      } else {
+        flags[key] = "";
+      }
+    } else {
+      positional.push(t);
+    }
+  }
+  return { positional, flags };
+}
+
+/**
+ * `/odin <task>` — Spawn a Cline agent team orchestrated by Odin.
+ *
+ * v6.0.0 — Decomposes the task via `odin.decomposeTask`, builds an Odin
+ * system prompt with subtasks + roles, and dispatches via
+ * `bizar_spawn_team`. The Odin lead coordinates teammates via Cline's
+ * TeamSendMessage.
+ */
+function handleOdin(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional, flags } = parseSlashFlags(arg);
+  const task = positional.join(" ").trim();
+  if (!task) {
+    return {
+      handled: true,
+      response:
+        "Usage: /odin <task>\n\nSpawn a Cline agent team orchestrated by Odin. Odin decomposes the task and dispatches subtasks to teammates.",
+    };
+  }
+  const maxAgents = flags["max"] ? parseInt(flags["max"], 10) : 3;
+
+  // Lazy import to avoid a circular load at module init.
+  // The odin module is small and side-effect free.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { decomposeTask, buildOdinPrompt } = require("./odin.js") as typeof import("./odin.js");
+  const decomposition = decomposeTask(task, Math.max(2, Math.min(6, maxAgents)));
+  const mission = buildOdinPrompt(task, decomposition);
+
+  return toolInvocation(
+    "bizar_spawn_team",
+    {
+      teamName: "odin-squad",
+      mission,
+      maxAgents: decomposition.estimatedAgents,
+      // Pass the decomposition to the team so individual teammates can
+      // pick up their assigned subtasks.
+      metadata: {
+        odinDecomposition: decomposition,
+        originalTask: task,
+      },
+    },
+    `Spawning Odin team for: ${task} (${decomposition.subtasks.length} subtasks, ${decomposition.estimatedAgents} agents)`,
+  );
+}
+
+/**
+ * `/loop <pattern> <task>` — Start a continuous loop.
+ * Patterns: ralph | repl | cron | plan-execute
+ */
+function handleLoop(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional, flags } = parseSlashFlags(arg);
+  const [pattern, ...rest] = positional;
+  const task = rest.join(" ").trim();
+  if (!pattern) {
+    return {
+      handled: true,
+      response:
+        "Usage: /loop <pattern> <task> [options]\n\nPatterns: ralph | repl | cron | plan-execute\nOptions: --interval N (cron) | --max N (default 10)",
+    };
+  }
+  const valid = new Set(["ralph", "repl", "cron", "plan-execute"]);
+  if (!valid.has(pattern)) {
+    return { handled: true, response: `Unknown loop pattern: ${pattern}. Valid: ${[...valid].join(", ")}` };
+  }
+  if (!task) return { handled: true, response: `Usage: /loop ${pattern} <task>` };
+  return toolInvocation(
+    "bizar_loop_start",
+    {
+      pattern,
+      task,
+      interval: flags["interval"] ? parseInt(flags["interval"], 10) : undefined,
+      maxIterations: flags["max"] ? parseInt(flags["max"], 10) : 10,
+    },
+    `Starting ${pattern} loop: ${task}`,
+  );
+}
+
+/**
+ * `/kanban [list|add|move]` — Kanban board operations.
+ */
+function handleKanban(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional, flags } = parseSlashFlags(arg);
+  const sub = positional[0] || "list";
+  const args = positional.slice(1);
+  if (sub === "list") return toolInvocation("bizar_kanban_list", {}, "Listing kanban board…");
+  if (sub === "add") {
+    return toolInvocation(
+      "bizar_kanban_add",
+      { title: args.join(" "), column: flags["column"] || "todo" },
+      `Adding kanban card: ${args.join(" ")}`,
+    );
+  }
+  if (sub === "move") {
+    return toolInvocation(
+      "bizar_kanban_move",
+      { cardId: args[0], column: args[1] },
+      `Moving card ${args[0]} → ${args[1]}`,
+    );
+  }
+  return { handled: true, response: `Unknown /kanban subcommand: ${sub}. Try list|add|move.` };
+}
+
+/**
+ * `/review [scope]` — Run a code review.
+ */
+function handleReview(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const scope = arg.trim() || ".";
+  return toolInvocation("bizar_review", { scope }, `Running review on ${scope}…`);
+}
+
+/**
+ * `/handoff <text>` — Compact current session into a handoff document.
+ */
+function handleHandoff(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const text = arg.trim();
+  if (!text) return { handled: true, response: "Usage: /handoff <summary text>" };
+  return toolInvocation("bizar_handoff_write", { text }, "Writing handoff document…");
+}
+
+/**
+ * `/grill <topic>` — Run a relentless interview on a topic.
+ */
+function handleGrill(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const topic = arg.trim();
+  if (!topic) return { handled: true, response: "Usage: /grill <topic to be grilled on>" };
+  return toolInvocation("bizar_grill", { topic, mode: "grill" }, `Grilling on: ${topic}`);
+}
+
+/**
+ * `/glyph <type> <slug>` — Create a visual glyph.
+ */
+function handleGlyph(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const [type, ...rest] = positional;
+  const slug = rest.join(" ").trim();
+  if (!type || !slug) {
+    return {
+      handled: true,
+      response: "Usage: /glyph <type> <slug>\n\nTypes: plan, recap, design, postmortem, handoff",
+    };
+  }
+  return toolInvocation("bizar_glyph_create", { type, slug }, `Creating glyph: ${slug}`);
+}
+
+/**
+ * `/decision <title>` — Document an architectural decision (ADR).
+ */
+function handleDecision(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const title = arg.trim();
+  if (!title) return { handled: true, response: "Usage: /decision <ADR title>" };
+  return toolInvocation("bizar_decision_write", { title }, `Documenting decision: ${title}`);
+}
+
+/**
+ * `/issue <title>` — File an issue.
+ */
+function handleIssue(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const title = arg.trim();
+  if (!title) return { handled: true, response: "Usage: /issue <issue title>" };
+  return toolInvocation("bizar_issue_create", { title }, `Filing issue: ${title}`);
+}
+
+/**
+ * `/digest [period]` — Show or generate a digest.
+ */
+function handleDigest(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const period = arg.trim() || "weekly";
+  return toolInvocation("bizar_digest", { period, action: "show" }, `Showing ${period} digest…`);
+}
+
+/**
+ * `/usage [period]` — Show usage analytics.
+ */
+function handleUsage(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const period = arg.trim() || "24h";
+  return toolInvocation("bizar_usage", { period }, `Showing ${period} usage…`);
+}
+
+/**
+ * `/memory <subcommand>` — Memory vault operations.
+ */
+function handleMemory(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  const rest = positional.slice(1);
+  switch (sub) {
+    case "status": return toolInvocation("bizar_memory_status", {}, "Memory status…");
+    case "search": return toolInvocation(
+      "bizar_memory_search", { query: rest.join(" "), mode: "semantic" },
+      `Searching memory: ${rest.join(" ")}`,
+    );
+    case "read": return toolInvocation(
+      "bizar_memory_read", { path: rest.join(" ") },
+      `Reading memory note ${rest.join(" ")}`,
+    );
+    case "write": return toolInvocation(
+      "bizar_memory_write", { path: rest.join(" ") },
+      `Writing memory note ${rest.join(" ")}`,
+    );
+    case "list": return toolInvocation("bizar_memory_list", {}, "Listing memory notes…");
+    case "link": return toolInvocation(
+      "bizar_memory_link", { url: rest[0] },
+      `Linking memory vault to ${rest[0]}`,
+    );
+  }
+  return {
+    handled: true,
+    response: `Unknown /memory subcommand: ${sub}. Try: status|search|read|write|list|link`,
+  };
+}
+
+/**
+ * `/spawn <agent> <prompt>` — Spawn a background agent.
+ */
+function handleSpawn(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional, flags } = parseSlashFlags(arg);
+  const agent = positional[0];
+  const prompt = positional.slice(1).join(" ");
+  if (!agent || !prompt) {
+    return {
+      handled: true,
+      response: "Usage: /spawn <agent> <prompt>\n\nAgents: odin, heimdall, thor, tyr, vidarr, forseti, frigg, mimir, hermod",
+    };
+  }
+  return toolInvocation(
+    "bizar_spawn_background",
+    {
+      agent,
+      prompt,
+      timeoutMs: flags["timeout"] ? parseInt(flags["timeout"], 10) : 300000,
+    },
+    `Spawning ${agent}: ${prompt.slice(0, 80)}…`,
+  );
+}
+
+/**
+ * `/team [status|stop|list]` — Team operations.
+ */
+function handleTeam(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  switch (sub) {
+    case "status":
+      return toolInvocation("bizar_team_status", { sessionId: positional[1] }, "Team status…");
+    case "stop":
+      return toolInvocation(
+        "bizar_team_stop", { sessionId: positional[1] },
+        `Stopping team ${positional[1] || "(active)"}`,
+      );
+    case "list":
+      return toolInvocation("bizar_team_list", {}, "Listing teams…");
+  }
+  return { handled: true, response: `Unknown /team subcommand: ${sub}. Try: status|stop|list` };
+}
+
+/**
+ * `/audit` — Run security audit.
+ */
+function handleAudit(_arg: string, _ctx: ParseContext): SlashCommandResult {
+  return toolInvocation("bizar_audit", {}, "Running security audit…");
+}
+
+/**
+ * `/deploy <target>` — One-click deploy.
+ */
+function handleDeploy(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const target = arg.trim() || "vercel";
+  return toolInvocation("bizar_deploy", { target }, `Deploying to ${target}…`);
+}
+
+/**
+ * `/status` — Show current session status.
+ */
+function handleStatus(_arg: string, _ctx: ParseContext): SlashCommandResult {
+  return toolInvocation("bizar_status", {}, "Session status…");
+}
+
+/**
+ * `/lightrag <subcommand>` — LightRAG server management.
+ */
+function handleLightrag(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_lightrag", { subcommand: sub, args: positional.slice(1) },
+    `LightRAG ${sub}…`,
+  );
+}
+
+/**
+ * `/headroom <subcommand>` — Headroom context compression.
+ */
+function handleHeadroom(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_headroom", { subcommand: sub, args: positional.slice(1) },
+    `Headroom ${sub}…`,
+  );
+}
+
+/**
+ * `/minimax <subcommand>` — MiniMax Token Plan integration.
+ */
+function handleMiniMax(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_minimax", { subcommand: sub, args: positional.slice(1) },
+    `MiniMax ${sub}…`,
+  );
+}
+
+/**
+ * `/service <subcommand>` — Background service management.
+ */
+function handleService(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_service", { subcommand: sub, args: positional.slice(1) },
+    `Service ${sub}…`,
+  );
+}
+
+/**
+ * `/dash <subcommand>` — Dashboard control.
+ */
+function handleDash(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_dash", { subcommand: sub, args: positional.slice(1) },
+    `Dashboard ${sub}…`,
+  );
+}
+
+/**
+ * `/mod <subcommand>` — Mod management.
+ */
+function handleMod(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "list";
+  return toolInvocation(
+    "bizar_mod", { subcommand: sub, args: positional.slice(1) },
+    `Mod ${sub}…`,
+  );
+}
+
+/**
+ * `/init` — Initialize Bizar in the current project.
+ */
+function handleInit(_arg: string, _ctx: ParseContext): SlashCommandResult {
+  return toolInvocation(
+    "bizar_init", { projectRoot: process.cwd() },
+    "Initializing Bizar in project…",
+  );
+}
+
+/**
+ * `/dev <subcommand>` — Developer commands.
+ */
+function handleDev(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_dev", { subcommand: sub, args: positional.slice(1) },
+    `Dev ${sub}…`,
+  );
+}
+
+/**
+ * `/test` — Run the project's test suite.
+ */
+function handleTest(_arg: string, _ctx: ParseContext): SlashCommandResult {
+  return toolInvocation("bizar_test_gate", {}, "Running tests…");
+}
+
+/**
+ * `/agent-browser <subcommand>` — Browser automation.
+ */
+function handleAgentBrowser(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_agent_browser", { subcommand: sub, args: positional.slice(1) },
+    `Agent-browser ${sub}…`,
+  );
+}
+
+/**
+ * `/plow-through <task>` — Run the plow-through sprint workflow.
+ */
+function handlePlowThrough(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const task = arg.trim();
+  if (!task) return { handled: true, response: "Usage: /plow-through <task>" };
+  return toolInvocation("bizar_plow_through", { task }, `Plowing through: ${task}`);
+}
+
+/**
+ * `/tailscale <subcommand>` — Tailscale integration.
+ */
+function handleTailscale(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_tailscale", { subcommand: sub, args: positional.slice(1) },
+    `Tailscale ${sub}…`,
+  );
+}
+
+/**
+ * `/providers <subcommand>` — Provider detection.
+ */
+function handleProviders(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "detect";
+  return toolInvocation(
+    "bizar_providers", { subcommand: sub, args: positional.slice(1) },
+    `Providers ${sub}…`,
+  );
+}
+
+/**
+ * `/clip <subcommand>` — Web clipper.
+ */
+function handleClip(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "list";
+  return toolInvocation(
+    "bizar_clip", { subcommand: sub, args: positional.slice(1) },
+    `Clip ${sub}…`,
+  );
+}
+
+/**
+ * `/ocr <subcommand>` — OCR operations.
+ */
+function handleOcr(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "list";
+  return toolInvocation(
+    "bizar_ocr", { subcommand: sub, args: positional.slice(1) },
+    `OCR ${sub}…`,
+  );
+}
+
+/**
+ * `/workspace <subcommand>` — Workspace management.
+ */
+function handleWorkspace(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_workspace", { subcommand: sub, args: positional.slice(1) },
+    `Workspace ${sub}…`,
+  );
+}
+
+/**
+ * `/voice <subcommand>` — Voice notes.
+ */
+function handleVoice(arg: string, _ctx: ParseContext): SlashCommandResult {
+  const { positional } = parseSlashFlags(arg);
+  const sub = positional[0] || "status";
+  return toolInvocation(
+    "bizar_voice", { subcommand: sub, args: positional.slice(1) },
+    `Voice ${sub}…`,
+  );
+}
+
 function helpResult(): SlashCommandResult {
   return {
     handled: true,
-    response: "Available commands: /visual-plan [on|off|status], /plan new <slug> [template], /plan list, /plan open <slug>, /plan get <slug>, /plan add <slug>, /plan update <slug> <id>, /plan delete <slug> <id>, /plan comment <slug> [id] \"text\", /plan comments <slug> [id], /plan status <slug> <status>, /plan wait <slug> [--timeout N], /kb, /bizar, /bizar <args>, /help. See the dialog for full descriptions.",
+    response:
+      "Available commands — Bizar commands: /odin <task>, /loop <pattern> <task>, /kanban [list|add|move], " +
+      "/review [scope], /handoff <text>, /grill <topic>, /glyph <type> <slug>, " +
+      "/decision <title>, /issue <title>, /digest [period], /usage [period], " +
+      "/memory <sub>, /spawn <agent> <prompt>, /team <sub>, /audit, /deploy [target], " +
+      "/status, /lightrag <sub>, /headroom <sub>, /minimax <sub>, /service <sub>, " +
+      "/dash <sub>, /mod <sub>, /init, /dev <sub>, /test, /agent-browser <sub>, " +
+      "/plow-through <task>, /tailscale <sub>, /providers <sub>, /clip <sub>, " +
+      "/ocr <sub>, /workspace <sub>, /voice <sub>, " +
+      "/visual-plan [on|off|status], /plan new <slug> [template], /plan list, /plan open <slug>, " +
+      "/plan get <slug>, /plan add <slug>, /plan update <slug> <id>, /plan delete <slug> <id>, " +
+      "/plan comment <slug> [id] \"text\", /plan comments <slug> [id], /plan status <slug> <status>, " +
+      "/plan wait <slug> [--timeout N], /bizar <args>, /kb, /help.",
     dialog: {
       id: generateId(),
       title: "Bizar Commands",
@@ -1143,6 +1740,40 @@ function helpResult(): SlashCommandResult {
       component: "help",
       data: {
         commands: [
+          { cmd: "/odin <task>", desc: "Spawn a Cline agent team orchestrated by Odin" },
+          { cmd: "/loop <pattern> <task>", desc: "Start a loop (ralph/repl/cron/plan-execute)" },
+          { cmd: "/kanban [list|add|move]", desc: "Kanban board operations" },
+          { cmd: "/review [scope]", desc: "Run a code review" },
+          { cmd: "/handoff <text>", desc: "Compact current session into a handoff document" },
+          { cmd: "/grill <topic>", desc: "Run a relentless interview" },
+          { cmd: "/glyph <type> <slug>", desc: "Create a visual glyph (plan/recap/design)" },
+          { cmd: "/decision <title>", desc: "Document an architectural decision (ADR)" },
+          { cmd: "/issue <title>", desc: "File an issue" },
+          { cmd: "/digest [period]", desc: "Show or generate a digest" },
+          { cmd: "/usage [period]", desc: "Show usage analytics" },
+          { cmd: "/memory <subcommand>", desc: "Memory vault operations (status/search/read/write/list/link)" },
+          { cmd: "/spawn <agent> <prompt>", desc: "Spawn a background agent" },
+          { cmd: "/team [status|stop|list]", desc: "Team operations" },
+          { cmd: "/audit", desc: "Run security audit" },
+          { cmd: "/deploy <target>", desc: "One-click deploy (vercel/cloudflare/fly/docker)" },
+          { cmd: "/status", desc: "Show current session status" },
+          { cmd: "/lightrag <subcommand>", desc: "LightRAG server management" },
+          { cmd: "/headroom <subcommand>", desc: "Headroom context compression" },
+          { cmd: "/minimax <subcommand>", desc: "MiniMax Token Plan integration" },
+          { cmd: "/service <subcommand>", desc: "Background service management" },
+          { cmd: "/dash <subcommand>", desc: "Dashboard control" },
+          { cmd: "/mod <subcommand>", desc: "Mod management" },
+          { cmd: "/init", desc: "Initialize Bizar in current project" },
+          { cmd: "/dev <subcommand>", desc: "Developer commands (link/unlink/build)" },
+          { cmd: "/test", desc: "Run the project's test suite" },
+          { cmd: "/agent-browser <subcommand>", desc: "Browser automation" },
+          { cmd: "/plow-through <task>", desc: "Run the plow-through sprint workflow" },
+          { cmd: "/tailscale <subcommand>", desc: "Tailscale integration" },
+          { cmd: "/providers <subcommand>", desc: "Provider detection" },
+          { cmd: "/clip <subcommand>", desc: "Web clipper" },
+          { cmd: "/ocr <subcommand>", desc: "OCR operations" },
+          { cmd: "/workspace <subcommand>", desc: "Workspace management" },
+          { cmd: "/voice <subcommand>", desc: "Voice notes" },
           { cmd: "/visual-plan [on|off|status]", desc: "Toggle or view visual plan mode" },
           { cmd: "/plan new <slug> [template]", desc: "Create a new plan" },
           { cmd: "/plan list", desc: "List all plans in the worktree" },

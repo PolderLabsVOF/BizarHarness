@@ -9,8 +9,8 @@
  * addFile, addAll.
  */
 
-import { execFileSync as _execFileSync, execSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { execFileSync as _execFileSync, execSync, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -393,6 +393,45 @@ export function lsRemote(repoDir, remoteName, { timeoutMs = 5000 } = {}) {
  * @param {string} [remote='origin'] — remote name
  * @returns {{ ok: boolean, action?: 'unchanged'|'set', error?: string }}
  */
+/**
+ * Recursively copy a directory using the OS `cp -r` command.
+ * Used by `bizar memory link <local-path>` to mirror a local vault into
+ * the user's default Bizar vault location.
+ *
+ * Returns {ok: true, count} on success or {ok: false, error} on failure.
+ * The copy excludes `.git` by default (caller decides whether to also
+ * copy the git history).
+ */
+export function copyDir(srcDir, dstDir, { excludeGit = true } = {}) {
+  if (!existsSync(srcDir)) {
+    return { ok: false, error: `source does not exist: ${srcDir}` };
+  }
+  try {
+    mkdirSync(dstDir, { recursive: true });
+    // Use Node.js native recursive copy (avoids BusyBox/BSD `cp` quirks
+    // like `--exclude` not being supported). Reads the source's file
+    // list, filters out `.git` if requested, and writes each entry.
+    const entries = readdirSync(srcDir, { withFileTypes: true });
+    let copied = 0;
+    for (const entry of entries) {
+      if (excludeGit && entry.name === '.git') continue;
+      const srcPath = join(srcDir, entry.name);
+      const dstPath = join(dstDir, entry.name);
+      if (entry.isDirectory()) {
+        const r = copyDir(srcPath, dstPath, { excludeGit });
+        if (!r.ok) return r;
+      } else if (entry.isFile() || entry.isSymbolicLink()) {
+        const content = readFileSync(srcPath);
+        writeFileSync(dstPath, content);
+        copied += 1;
+      }
+    }
+    return { ok: true, copied };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+
 export function ensureUpstream(cwd, branch, remote = 'origin') {
   if (!isGitInstalled()) return { ok: false, error: 'git not installed' };
 

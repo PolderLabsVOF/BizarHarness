@@ -88,6 +88,7 @@ import { createPlanActionTool } from "./src/tools/plan-action.js";
 import { createWaitForFeedbackTool } from "./src/tools/wait-for-feedback.js";
 import { createReadGlyphFeedbackTool } from "./src/tools/read-glyph-feedback.js";
 import { createTeamSpawnTool } from "./src/tools/team-spawn.js";
+import { createLoopTools } from "./src/tools/loop-engineering.js";
 import { createTeamStatusTool } from "./src/tools/team-status.js";
 import { createGraphQueryTool, createGraphPathTool, createGraphExplainTool } from "./src/tools/graph-query.js";
 import {
@@ -529,7 +530,10 @@ function buildTools(ctx: RuntimeContext, instanceManager: InstanceManager | null
     createBrowserScreenshotTool(browserDeps) as unknown as AgentTool,
     createBrowserCommandTool(browserDeps) as unknown as AgentTool,
   ];
-  return [...basePlanTools, ...bgTools, ...teamTools, ...graphTools, ...browserTools];
+  // v6.0.0 — Loop-engineering tools (ralph / repl / cron / plan-execute).
+  // These work standalone (no clineRuntime needed) since state lives on disk.
+  const loopTools: AgentTool[] = createLoopTools({ logger: ctx.logger }) as unknown as AgentTool[];
+  return [...basePlanTools, ...bgTools, ...teamTools, ...graphTools, ...browserTools, ...loopTools];
 }
 
 function bgDisabledTools(logger: Logger): AgentTool[] {

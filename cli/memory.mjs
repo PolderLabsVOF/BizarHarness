@@ -7,10 +7,11 @@
  */
 
 import chalk from 'chalk';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { execFileSync as _execFileSync } from 'node:child_process';
 
 // Memory service modules (ESM, shared with bizar-dash)
 const SERVER_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'bizar-dash', 'src', 'server');
@@ -871,66 +872,168 @@ async function cmdStatus(_args, opts = {}) {
 
 /**
  * `bizar memory link <path|url>`
+ *
+ * v6.0.0 — Robust init-less clone. Three cases handled:
+ *
+ *   1. Default vault (`~/.bizar_memory`) does not exist → clone there.
+ *   2. Default vault exists but is empty → clone there.
+ *   3. Default vault exists with content → refuse unless `--force`; if
+ *      `--force`, move the existing dir to `<vault>.bak.<unix-ts>` and
+ *      clone fresh.
+ *
+ * For local paths, we copy (instead of clone) into the default vault
+ * location. The original path is left untouched.
+ *
+ * Examples:
+ *   bizar memory link https://github.com/me/notes.git
+ *   bizar memory link /path/to/local/notes
+ *   bizar memory link --force https://github.com/me/notes.git
  */
 async function cmdLink(args) {
   const projectRoot = getProjectRoot();
   const { loadConfig, saveConfig, resolveVault } = memoryStore;
-  const { clone, isGitInstalled } = memoryGit;
+  const { clone, isGitInstalled, copyDir } = memoryGit;
 
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`  Usage: bizar memory link [--force] <path|url>`);
+    console.log(`  Usage: bizar memory link [--force] [--target DIR] <path|url>`);
+    console.log(`  `);
     console.log(`  Link this project to a shared memory repo.`);
-    console.log(`  Use --force to overwrite an existing link.`);
+    console.log(`  `);
+    console.log(`  By default, the remote is cloned into the Bizar vault location`);
+    console.log(`  (BIZAR_MEMORY_VAULT env var, or ~/.bizar_memory).`);
+    console.log(`  Use --target DIR to override the destination.`);
+    console.log(`  Use --force to overwrite an existing vault.`);
+    console.log(`  `);
+    console.log(`  Examples:`);
+    console.log(`    bizar memory link https://github.com/me/notes.git`);
+    console.log(`    bizar memory link /path/to/local/notes`);
+    console.log(`    bizar memory link --force https://github.com/me/notes.git`);
+    console.log(`    bizar memory link --target ~/my-notes https://...`);
     return;
   }
 
   const force = args.includes('--force');
-  const { config: existing } = loadConfig(projectRoot);
+  const targetIdx = args.indexOf('--target');
+  const targetOverride = targetIdx >= 0 ? args[targetIdx + 1] : null;
+  const positional = args.filter((a, i) => !a.startsWith('--') && i !== targetIdx + 1);
+  const target = positional[0];
 
+  if (!target) {
+    error('specify a path or URL to link to (see `bizar memory link --help`)');
+    process.exit(1);
+  }
+
+  const { config: existing } = loadConfig(projectRoot);
   if (existing.mode === 'managed' && !force) {
     error('already linked — use --force to overwrite');
     process.exit(1);
   }
 
-  const target = args.filter((a) => !a.startsWith('--'))[0];
-  if (!target) {
-    error('specify a path or URL to link to');
-    process.exit(1);
+  // ── Resolve destination ───────────────────────────────────────────
+  const destRoot = targetOverride
+    ? (targetOverride.startsWith('~')
+        ? join(process.env.HOME, targetOverride.slice(1))
+        : targetOverride)
+    : (process.env.BIZAR_MEMORY_VAULT || join(process.env.HOME, '.bizar_memory'));
+
+  // ── Handle existing destination ──────────────────────────────────
+  if (existsSync(destRoot)) {
+    const entries = readdirSync(destRoot);
+    const isEmpty = entries.length === 0;
+
+    // Is it already a git repo with commits?
+    let isGitRepo = false;
+    try {
+      const r = _execFileSync('git', ['-C', destRoot, 'rev-parse', '--git-dir'], { stdio: 'pipe' });
+      isGitRepo = r && r.toString().trim().length > 0;
+    } catch {
+      isGitRepo = false;
+    }
+
+    if (isGitRepo && !force) {
+      error(
+        `destination ${destRoot} is already a git repo — refusing to overwrite.\n` +
+        `  Use --force to back it up and replace it.`,
+      );
+      process.exit(1);
+    }
+
+    if (!isEmpty && !force) {
+      error(
+        `destination ${destRoot} is not empty — refusing to overwrite.\n` +
+        `  Use --force to back it up and replace it.`,
+      );
+      process.exit(1);
+    }
+
+    if (force) {
+      const ts = Math.floor(Date.now() / 1000);
+      const backup = `${destRoot}.bak.${ts}`;
+      warn(`backing up ${destRoot} → ${backup}`);
+      try {
+        renameSync(destRoot, backup);
+      } catch (err) {
+        error(`failed to back up ${destRoot}: ${err.message}`);
+        process.exit(1);
+      }
+    }
   }
 
-  let repoPath;
-  let gitRemote = '';
+  // Ensure parent exists.
+  try {
+    mkdirSync(dirname(destRoot), { recursive: true });
+  } catch { /* ignore */ }
 
+  // ── Clone or copy ─────────────────────────────────────────────────
+  let gitRemote = '';
   if (target.startsWith('http') || target.startsWith('git')) {
-    // Clone URL
     if (!isGitInstalled()) {
       error('git is not installed — cannot clone');
       process.exit(1);
     }
-    const repoName = target.split('/').pop().replace(/\.git$/, '');
-    repoPath = join(process.env.HOME, '.local', 'share', 'bizar', 'memory', repoName);
-    info(`cloning ${target} → ${repoPath}`);
-    const result = clone(target, repoPath);
+    info(`cloning ${target} → ${destRoot}`);
+    const result = clone(target, destRoot);
     if (!result.ok) {
       error(`clone failed: ${result.error}`);
       process.exit(1);
     }
     gitRemote = target;
   } else {
-    // Local path — validate it exists
+    // Local path → recursive copy.
     if (!existsSync(target)) {
       error(`path does not exist: ${target}`);
       process.exit(1);
     }
-    repoPath = target;
+    info(`copying ${target} → ${destRoot}`);
+    const result = copyDir(target, destRoot);
+    if (!result.ok) {
+      error(`copy failed: ${result.error}`);
+      process.exit(1);
+    }
+    // If the source is a git repo, copy its .git along (so the
+    // destination becomes a working clone).
+    const srcGit = join(target, '.git');
+    if (existsSync(srcGit)) {
+      const dstGit = join(destRoot, '.git');
+      const r = copyDir(srcGit, dstGit);
+      if (r.ok) {
+        gitRemote = _execFileSync('git', ['-C', target, 'config', '--get', 'remote.origin.url'], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+          .toString()
+          .trim();
+      }
+    }
   }
 
+  // ── Save config ──────────────────────────────────────────────────
   const config = {
     ...existing,
     mode: 'managed',
-    repoName: repoPath,
+    repoName: destRoot,
     gitRemote,
     branch: existing.branch || 'main',
+    linkedAt: new Date().toISOString(),
   };
 
   const result = saveConfig(projectRoot, config);
@@ -939,7 +1042,7 @@ async function cmdLink(args) {
     process.exit(1);
   }
 
-  success(`linked to ${repoPath}`);
+  success(`linked to ${destRoot}${gitRemote ? ` (remote: ${gitRemote})` : ''}`);
 }
 
 /**

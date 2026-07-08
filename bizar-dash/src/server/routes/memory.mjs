@@ -111,6 +111,48 @@ export function createMemoryRouter({ projectRoot }) {
     res.json({ ok: true, vaultRoot: result.vaultRoot, created: result.created });
   }));
 
+  // POST /memory/link — clone or copy a remote/local path into the vault.
+  // v6.0.0 — wraps `cli/commands/memory.mjs:link` so the dash can offer
+  // the same "link an existing repo" UX as the CLI without going through
+  // the bashrc patcher. Body: { url, target?, force? }
+  router.post('/memory/link', wrap(async (req, res) => {
+    const { url, target, force } = req.body || {};
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ ok: false, error: 'url is required' });
+    }
+    // Shell out to the CLI runner so we reuse the exact same code path.
+    const { runMemory } = await import('../../../cli/memory.mjs').catch(() => ({ runMemory: null }));
+    if (!runMemory) {
+      return res.status(500).json({ ok: false, error: 'memory CLI module not available' });
+    }
+    try {
+      const args = [];
+      if (target) args.push('--target', target);
+      if (force) args.push('--force');
+      args.push(url);
+      // Capture stdout/stderr by intercepting process writes.
+      const chunks = [];
+      const origWrite = process.stdout.write.bind(process.stdout);
+      const origErrWrite = process.stderr.write.bind(process.stderr);
+      process.stdout.write = (chunk) => { chunks.push(String(chunk)); return true; };
+      process.stderr.write = (chunk) => { chunks.push(String(chunk)); return true; };
+      let exitCode = 0;
+      try {
+        await runMemory('link', args, { wantJson: false });
+      } catch (err) {
+        exitCode = err && err.message && err.message.startsWith('__exit__:')
+          ? parseInt(err.message.split(':')[1], 10)
+          : 1;
+      } finally {
+        process.stdout.write = origWrite;
+        process.stderr.write = origErrWrite;
+      }
+      res.json({ ok: exitCode === 0, output: chunks.join(''), exitCode });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err && err.message ? err.message : String(err) });
+    }
+  }));
+
   // GET /memory/config
   router.get('/memory/config', wrap(async (_req, res) => {
     const { loadConfig } = memoryStore;
