@@ -65,6 +65,23 @@ const REQUIRED_HOOKS = [
 
 const REQUIRED_RUNTIME_DEPS = ['zod', '@cline/sdk', '@cline/core', '@cline/shared'];
 
+// v6.2.3 — Built-in Cline providerIds that are safe for any
+// "OpenAI-compatible endpoint" use case. The harness warns about
+// any providerId NOT in this set (since they fail in kanban mode).
+const OPENAI_COMPATIBLE_BUILTIN_IDS = new Set([
+  'litellm', 'cline', 'ollama', 'lmstudio', 'huggingface',
+  // Plus the first-class providers (also OpenAI-compatible):
+  'openrouter', 'deepseek', 'xai', 'together', 'fireworks',
+  'groq', 'cerebras', 'sambanova', 'nebius', 'baseten',
+  'requesty', 'vercel-ai-gateway', 'v0', 'aihubmix', 'hicap',
+  'nousResearch', 'huawei-cloud-maas', 'qwen', 'qwen-code',
+  'doubao', 'zai', 'zai-coding-plan', 'moonshot', 'wandb',
+  'xiaomi', 'kilo', 'oca', 'asksage', 'sapaicore',
+  // Non-OpenAI-compatible (kept so we don't false-positive):
+  'anthropic', 'google', 'bedrock', 'vertex', 'gemini',
+  'openai', 'openai-native', 'openai-codex',
+]);
+
 function check(name, fn) {
   return Promise.resolve()
     .then(fn)
@@ -284,6 +301,50 @@ const CHECKS = {
     return `user-configured providers: ${summary.join('; ')}`;
   },
 
+  'cline-settings-provider': async () => {
+    // v6.2.3 — The Cline CLI and kanban mode read from
+    // `~/.cline/data/settings/providers.json`. The harness config
+    // (`cline.json`) is a separate thing. This check inspects the
+    // actual settings file and:
+    //   1. Warns if the user has a legacy `openai-compatible` providerId
+    //      (from the v6.0.1 Cline auto-migration shim). Kanban mode
+    //      fails on this with "Unknown or disabled provider". Run
+    //      `bizar setup-provider` to auto-migrate.
+    //   2. Reports the active `lastUsedProvider` so the user can
+    //      see which provider Cline will actually use on the next
+    //      session.
+    const file = join(homedir(), '.cline', 'data', 'settings', 'providers.json');
+    if (!existsSync(file)) {
+      return 'no settings file at ~/.cline/data/settings/providers.json — run `bizar setup-provider` to add one';
+    }
+    const settings = readJsonSafe(file);
+    if (!settings || !settings.providers) {
+      return 'settings file is empty or invalid — run `bizar setup-provider`';
+    }
+    const names = Object.keys(settings.providers);
+    if (names.length === 0) {
+      throw new Error('no providers configured in Cline settings — run `bizar setup-provider`');
+    }
+    const issues = [];
+    if (names.includes('openai-compatible')) {
+      issues.push(`legacy 'openai-compatible' providerId present (broken in kanban mode) — run \`bizar setup-provider\` to auto-migrate to 'litellm'`);
+    }
+    // Check for any providerId that's not in Cline's built-in catalog.
+    for (const n of names) {
+      if (n === 'openai-compatible') continue; // handled above
+      if (!OPENAI_COMPATIBLE_BUILTIN_IDS.has(n)) {
+        issues.push(`'${n}' providerId is NOT in Cline's built-in catalog (likely broken in kanban mode)`);
+      }
+    }
+    const lastUsed = settings.lastUsedProvider || '(none)';
+    if (issues.length > 0) {
+      // Throw so the ⚠ marker shows up; the check is in LENIENT_CHECKS
+      // so this won't cause `bizar validate` to exit non-zero.
+      throw new Error(`WARN: ${issues.join('; ')}. lastUsedProvider=${lastUsed} (${names.join(', ')})`);
+    }
+    return `lastUsedProvider=${lastUsed}; providers: ${names.join(', ')}`;
+  },
+
   '9router-reachable': async () => {
     const url = process.env.NINEROUTER_URL || 'http://localhost:20128';
     const ac = new AbortController();
@@ -371,12 +432,14 @@ const CHECK_ORDER = [
   'default-agent-set',
   'instructions-loaded',
   'provider-config',
+  'cline-settings-provider',
   '9router-reachable',
 ];
 
 const LENIENT_CHECKS = new Set([
   '9router-reachable',
   'provider-config', // v6.2.2+ — installer no longer touches provider config; user must configure
+  'cline-settings-provider', // v6.2.3 — warns about legacy/fake providerIds; non-blocking
 ]);
 
 export function showValidateHelp() {

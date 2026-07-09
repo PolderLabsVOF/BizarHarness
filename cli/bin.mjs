@@ -130,6 +130,13 @@ function showHelp() {
     plan                   [v6.0.0+] Reserved for future plan management
     validate               Validate the Bizar install (21 checks)
     setup-provider         Configure a provider in cline.json (since v6.2.2 installer doesn't touch providers)
+    config                 Show current Cline configuration (pass-through to cline config)
+    history                List session history (pass-through to cline history)
+    hub                    Manage the local hub daemon (pass-through to cline hub)
+    hook                   Handle a hook payload from stdin (pass-through to cline hook)
+    team                   Spawn an agent team from CLI (wraps cline --team-name)
+    subagent               Spawn a read-only research subagent from CLI
+    rca                    Analyze a GitHub issue (Cline CLI sample)
 
   Examples:
     bizar install
@@ -206,7 +213,8 @@ async function main() {
       'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
       'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
       'agent-browser', 'update', 'providers', 'plan', 'validate',
-      'setup-provider',
+      'setup-provider', 'config', 'history', 'hub', 'hook',
+      'team', 'subagent', 'rca',
     ]);
     const UTIL_ALIASES = new Set(['dashboard', 'agent-browser-up']);
     let mod;
@@ -525,6 +533,48 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'setup-provider');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (!found) {
+        console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
+        showHelp();
+        process.exit(EXIT_ERROR);
+      }
+      break;
+    }
+
+    case 'config':
+    case 'history':
+    case 'hub':
+    case 'hook':
+    case 'team':
+    case 'subagent': {
+      // v6.2.3 — Pass-through wrappers for Cline CLI commands.
+      // These live in cli/commands/cline-cmd.mjs.
+      const mod = await importCommand('cline-cmd');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load cline-cmd module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'cline-cmd');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (!found) {
+        console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
+        showHelp();
+        process.exit(EXIT_ERROR);
+      }
+      break;
+    }
+
+    case 'rca': {
+      // v6.2.3 — GitHub Issue RCA sample (adapted from Cline docs).
+      const mod = await importCommand('rca');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load rca command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'rca');
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (!found) {
         console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));

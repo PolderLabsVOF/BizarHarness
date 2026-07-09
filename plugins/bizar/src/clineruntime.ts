@@ -160,7 +160,7 @@ export class ClineRuntime {
       workspaceRoot: opts.workspaceRoot,
       cwd: opts.workspaceRoot,
       enableTools: true,
-      enableSpawnAgent: false,
+      enableSpawnAgent: true,
       enableAgentTeams: true,
       ...(execution ? { execution } : {}),
       ...(recovery ? { onConsecutiveMistakeLimitReached: recovery } : {}),

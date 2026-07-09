@@ -125,7 +125,7 @@ if (!existsSync(PLUGIN_PATH)) {
 }
 record('plugin entry resolves', true, PLUGIN_PATH);
 
-// ── 1. Verify enableAgentTeams in source (the v6.2.0 fix) ──────
+// ── 1. Verify enableAgentTeams + enableSpawnAgent in source (v6.2.0 / v6.2.3) ───────
 try {
   const { readFileSync } = await import('node:fs');
   const srcPath = join(REPO_ROOT, 'plugins', 'bizar', 'src', 'clineruntime.ts');
@@ -133,10 +133,17 @@ try {
     record('clineruntime.ts source present', false, `${srcPath} missing`);
   } else {
     const text = readFileSync(srcPath, 'utf8');
-    if (/enableAgentTeams:\s*true/.test(text)) {
-      record('enableAgentTeams: true in clineruntime.ts', true, 'team-spawn tool will work');
+    const teamsOk = /enableAgentTeams:\s*true/.test(text);
+    const spawnOk = /enableSpawnAgent:\s*true/.test(text);
+    if (teamsOk && spawnOk) {
+      record('enableAgentTeams + enableSpawnAgent: true in clineruntime.ts', true,
+        '/team and /subagent (use_subagents + task tool) both work');
     } else {
-      record('enableAgentTeams: true in clineruntime.ts', false, 'REGRESSION: /team will not function');
+      const missing = [];
+      if (!teamsOk) missing.push('enableAgentTeams');
+      if (!spawnOk) missing.push('enableSpawnAgent');
+      record('enableAgentTeams + enableSpawnAgent: true in clineruntime.ts', false,
+        `REGRESSION: missing ${missing.join(', ')} — /team and subagents will not function`);
     }
   }
 } catch (err) {
@@ -376,6 +383,52 @@ try {
   }
 } catch (err) {
   record('bizar validate command present', false, err.message);
+}
+
+// ── 12.6. Verify Cline CLI integration (v6.2.3) ─────────────────
+// v6.2.3 — pass-through wrappers for Cline CLI commands + sample.
+try {
+  const { existsSync } = await import('node:fs');
+  const clineCmd = join(REPO_ROOT, 'cli', 'commands', 'cline-cmd.mjs');
+  const rcaCmd = join(REPO_ROOT, 'cli', 'commands', 'rca.mjs');
+  const rcaTest = join(REPO_ROOT, 'cli', 'commands', 'rca.test.mjs');
+  const setupProviderCmd = join(REPO_ROOT, 'cli', 'commands', 'setup-provider.mjs');
+  const setupProviderTest = join(REPO_ROOT, 'cli', 'commands', 'setup-provider.test.mjs');
+  if (existsSync(clineCmd)) {
+    const text = (await import('node:fs')).readFileSync(clineCmd, 'utf8');
+    const hasConfig = /runClineConfig\b/.test(text);
+    const hasHistory = /runClineHistory\b/.test(text);
+    const hasHub = /runClineHub\b/.test(text);
+    const hasHook = /runClineHook\b/.test(text);
+    const hasTeam = /runClineTeam\b/.test(text);
+    const hasSubagent = /runClineSubagent\b/.test(text);
+    if (hasConfig && hasHistory && hasHub && hasHook && hasTeam && hasSubagent) {
+      record('bizar cline-cmd wrappers present', true, 'config, history, hub, hook, team, subagent');
+    } else {
+      const missing = [];
+      if (!hasConfig) missing.push('config');
+      if (!hasHistory) missing.push('history');
+      if (!hasHub) missing.push('hub');
+      if (!hasHook) missing.push('hook');
+      if (!hasTeam) missing.push('team');
+      if (!hasSubagent) missing.push('subagent');
+      record('bizar cline-cmd wrappers present', false, `missing: ${missing.join(', ')}`);
+    }
+  } else {
+    record('bizar cline-cmd wrappers present', false, 'cli/commands/cline-cmd.mjs missing');
+  }
+  if (existsSync(rcaCmd) && existsSync(rcaTest)) {
+    record('bizar rca (GitHub Issue RCA sample) present', true, 'cli/commands/rca.{mjs,test.mjs}');
+  } else {
+    record('bizar rca (GitHub Issue RCA sample) present', false, 'cli/commands/rca.* missing');
+  }
+  if (existsSync(setupProviderCmd) && existsSync(setupProviderTest)) {
+    record('bizar setup-provider + auto-migrate present', true, 'cli/commands/setup-provider.{mjs,test.mjs}');
+  } else {
+    record('bizar setup-provider + auto-migrate present', false, 'cli/commands/setup-provider.* missing');
+  }
+} catch (err) {
+  record('bizar cline-cmd integration present', false, err.message);
 }
 
 // ── 13. Verify package.json version is consistent ──────────────

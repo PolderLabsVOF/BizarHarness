@@ -6,15 +6,49 @@
 
 ## Current State
 
-- **Last commit:** v6.2.2 — installer no longer touches provider config; user owns it
+- **Last commit:** v6.2.3 — full Cline CLI integration: subagents + teams + pass-through commands
 - **Released:** (unreleased; on master)
-- **`make check`:** 749/749 pass, 0 TS errors
-- **`make test`:** 793/793 pass (53 plugin/sdk files + 44 CLI tests)
-- **`make e2e`:** 16/16 pass
+- **`make check`:** 750/750 pass, 0 TS errors
+- **`make test`:** 809/809 pass (53 plugin/sdk files + 59 CLI tests)
+- **`make e2e`:** 19/19 pass
 - **`make clean-check`:** 5/5 dimensions pass
 - **`make vcr`:** 27/27 = 1.000
 - **Branch:** master
-- **Phase:** v6.2.2 — **No-touch provider config**
+- **Phase:** v6.2.3 — **Full Cline CLI integration**
+
+## What landed in v6.2.3
+
+Full Cline CLI integration per the official docs:
+- [cli/cli-reference](https://docs.cline.bot/cli/cli-reference)
+- [cli/agent-teams](https://docs.cline.bot/cli/agent-teams)
+- [features/subagents](https://docs.cline.bot/features/subagents)
+- [cli/samples](https://docs.cline.bot/cli/samples/)
+
+### Patches
+
+1. **`plugins/bizar/src/clineruntime.ts:163`** — flipped
+   `enableSpawnAgent: false` → `true`. Silent v6.0.0 regression
+   that blocked Cline's `use_subagents` and `task` tool. Without
+   this, Odin could not delegate to subagents.
+2. **`cli/commands/setup-provider.mjs`** — wrote to the wrong file
+   (v6.2.2 was `~/.cline/cline.json`, fixed to
+   `~/.cline/data/settings/providers.json` which is what Cline CLI
+   + kanban mode actually read). Now also auto-migrates any legacy
+   `openai-compatible` providerId to `litellm`.
+3. **`cli/commands/cline-cmd.mjs`** (new) — pass-through wrappers:
+   - `bizar config` → `cline config`
+   - `bizar history` → `cline history`
+   - `bizar hub` → `cline hub`
+   - `bizar hook` → `cline hook`
+   - `bizar team <name> "mission"` → `cline --team-name <name> ...`
+   - `bizar subagent <agent> "task"` → research subagent
+4. **`cli/commands/rca.mjs`** (new) — `bizar rca <github-issue-url>`
+   adapted from the official Cline CLI GitHub Issue RCA sample.
+5. **`cli/commands/validate.mjs`** — new `cline-settings-provider`
+   check that warns about fake/legacy providerIds in
+   `~/.cline/data/settings/providers.json`.
+6. **`scripts/bh-full-e2e.mjs`** — added 3 new e2e checks
+   (subagent plumbing, cline-cmd wrappers, rca sample).
 
 ## What landed in v6.2.2
 

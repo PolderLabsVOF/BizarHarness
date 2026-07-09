@@ -1,5 +1,74 @@
 # Changelog
 
+## v6.2.3 — Full Cline CLI integration: subagents + teams + pass-through commands
+
+Patch release. Audits Bizar's integration with the Cline CLI per
+[the docs](https://docs.cline.bot/cli/cli-reference),
+[agent teams](https://docs.cline.bot/cli/agent-teams), and
+[subagents](https://docs.cline.bot/features/subagents).
+
+### Fixed
+
+- **`plugins/bizar/src/clineruntime.ts:163`** — flipped
+  `enableSpawnAgent: false` → `true`. This was a silent
+  regression from v6.0.0: subagents (Cline's `use_subagents` tool)
+  and the `task` tool require `enableSpawnAgent: true` to register
+  in the session config. Without it, Odin could not delegate to
+  subagents at all. Now fixed; matches the upstream Cline default
+  (which is `true` unless `--yolo` is set).
+- **`plugins/bizar/tests/clineruntime-config.test.ts`** — added
+  regression test that pins `enableSpawnAgent: true` so the
+  v6.0.0-era regression can't silently come back.
+- **`cli/commands/setup-provider.mjs`** — v6.2.2 wrote to the wrong
+  file (`~/.cline/cline.json` instead of `~/.cline/data/settings/providers.json`,
+  which is what Cline CLI + kanban mode actually read). v6.2.3
+  fixes this and auto-migrates any legacy `openai-compatible`
+  providerId entries (which break in kanban mode with
+  "Unknown or disabled provider").
+- **`cli/commands/validate.mjs`** — added `cline-settings-provider`
+  check that inspects `~/.cline/data/settings/providers.json`
+  and warns (leniently) about legacy / fake providerIds.
+
+### Added
+
+- **`cli/commands/cline-cmd.mjs`** (new) — pass-through wrappers
+  for the Cline CLI commands that Bizar didn't expose yet:
+  - `bizar config` → `cline config`
+  - `bizar history` → `cline history`
+  - `bizar hub` → `cline hub`
+  - `bizar hook` → `cline hook`
+  - `bizar team <name> "mission"` → `cline --team-name <name> "<mission>"`
+    (OUT-OF-SESSION equivalent of the `/team` slash command)
+  - `bizar subagent <agent> "task"` → spawn a read-only research
+    subagent from CLI directly
+  - Note: `bizar plugin` is already taken by the Bizar marketplace.
+    Run `cline plugin <sub>` directly for Cline plugin management.
+- **`cli/commands/rca.mjs`** (new) — `bizar rca <github-issue-url> [prompt]`.
+  Adapted from the [Cline CLI GitHub Issue RCA sample](https://docs.cline.bot/cli/samples/).
+  Fetches the issue via `gh issue view`, then asks Cline to analyze
+  it. Outputs a structured root-cause report.
+- **`scripts/bh-full-e2e.mjs`** — added 3 new checks:
+  - `enableAgentTeams + enableSpawnAgent: true in clineruntime.ts`
+  - `bizar cline-cmd wrappers present` (config, history, hub, hook, team, subagent)
+  - `bizar rca (GitHub Issue RCA sample) present`
+
+### Tests
+
+- 750 plugin/sdk tests pass (was 749; added 1 subagents regression test)
+- 59 CLI tests pass (was 44; +8 setup-provider migration tests, +8 rca tests)
+- 19 e2e checks pass (was 16; +3 new checks)
+
+### Migration
+
+Operators on a v6.2.2 install with a `litellm` provider should run
+`bizar setup-provider` once to confirm the auto-migration ran and
+their provider block is in `~/.cline/data/settings/providers.json`.
+
+Operators who manually configured a provider under the literal ID
+`openai-compatible` (from the v6.0.1 Cline auto-migration shim) will
+get an automatic one-time rename to `litellm` the next time they
+run `bizar setup-provider` (or any other `bizar` subcommand).
+
 ## v6.2.2 — Installer no longer touches provider config; user owns it
 
 Patch release. Per operator request: the installer used to add a
