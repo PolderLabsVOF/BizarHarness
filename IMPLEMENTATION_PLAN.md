@@ -69,8 +69,7 @@ Replace the `browser-harness` (Python CDP wrapper) with **agent-browser**
    daemon via `setsid + nohup`, env overrides).
 3. ⏳ **`config/agents/agent-browser.md`** — Cline primary agent with
    no-edit permissions, drives agent-browser via Bash heredocs.
-4. ⏳ **`config/opencode.json` + new cline.json** — register agent-browser as
-   the 14th agent in the pantheon.
+4. ~~⏳ `config/opencode.json` + new cline.json~~ — **REMOVED in v6.1.0**. Bizar is Cline-only; the OpenCode agent-browser registration path has been dropped. agent-browser is now wired through the Cline `bizar_browser_*` tool family.
 5. ⏳ **Reusable installer hooks in `install.sh`/`install.ps1`** — install
    agent-browser via npm (`npm install -g agent-browser`) + run
    `agent-browser install`.

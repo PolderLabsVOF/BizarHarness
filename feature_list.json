@@ -755,11 +755,40 @@
           "repair": "n/a"
         }
       ]
+    },
+    {
+      "id": "F-027",
+      "behavior": "Bizar is Cline-only (v6.1.0); OpenCode support surface removed from installer code and docs",
+      "verification": "make check (TS 0 errors) + grep -r 'legacyClineConfigDir\\|promptAndInstallOptional' cli/ returns nothing + grep -r 'opencode\\|legacyCline' ROADMAP.md IMPLEMENTATION_PLAN.md returns only historical/SUPERSEDED references",
+      "state": "passing",
+      "evidence": "cli/utils.mjs:legacyClineConfigDir() removed. cli/install.mjs:promptAndInstallOptional() removed. cli/install.mjs:runPostInstall slimmed to Cline-only bootstrap. docs/decisions/DEC-001-cline-rewrite.md + docs/migration-guide.md + docs/migrations/cline-replacement.md marked SUPERSEDED. ROADMAP.md §1.5 closed; B-CLINE-1/2/3 marked RESOLVED. IMPLEMENTATION_PLAN.md opencode.json line item marked REMOVED.",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-09",
+      "passed": "2026-07-09",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "n/a"
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar packages/sdk",
+          "repair": "n/a"
+        },
+        {
+          "label": "e2e",
+          "cmd": "n/a",
+          "repair": "n/a"
+        }
+      ]
     }
   ],
   "vcr": {
-    "passing": 26,
-    "activated": 26,
+    "passing": 27,
+    "activated": 27,
     "ratio": 1.0
   }
 }

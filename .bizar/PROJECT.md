@@ -50,6 +50,8 @@ See [`../FINAL_GOAL.md`](../FINAL_GOAL.md) for the full vision document. The goa
 
 ## Current Version
 
+- v6.1.0 — Cline-exclusive; OpenCode support removed (clean refactor; no behavior change)
+- v6.0.2 — Fix dashboard-presence check in legacy installer (post-v4.0.0 dashboard no longer ships `package.json`)
 - v6.0.1 — Cline mistake-recovery + tool-discipline + 9router gateway + rules-sync
 - v6.0.0-beta.1 — CURRENT_ISSUES sprint (Odin, /loop, slash commands, vault linking)
 - v5.5.1 — Steering followup + UI overhaul + server log fixes + browser extension cleanup

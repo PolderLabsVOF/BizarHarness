@@ -8,9 +8,10 @@ import { fileURLToPath } from 'node:url';
 // `__dirname` is a CommonJS global. ESM modules don't have it. We define it
 // at module scope so all functions in this file can use it without each
 // having to recreate the polyfill. (v4.2.3 — previously only `runInstaller`
-// had it, which caused `promptAndInstallOptional` to crash with
-// `ERR_AMBIGUOUS_MODULE_SYNTAX` when the bootstrap path fired on a fresh
-// install.)
+// had it, which caused the legacy `promptAndInstallOptional` bootstrap
+// to crash with `ERR_AMBIGUOUS_MODULE_SYNTAX`. v6.1.0 — that helper
+// has been removed; `__dirname` is still used by `runPostInstall` for
+// the same reason.)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
@@ -302,39 +303,6 @@ async function isPackageInstalled(name) {
   }
 }
 
-async function promptAndInstallOptional() {
-  // v4.4.5 — Plugin and dashboard are both shipped inside this package.
-  // No separate npm install step is required for either. The plugin
-  // copy happens via installPluginFromGlobal() in runInstaller(); the
-  // dashboard is loaded directly from this package's bizar-dash/src/.
-  // We just verify they're present here and warn loudly if not.
-  const pluginPath = join(__dirname, '..', 'plugins', 'bizar');
-  if (!existsSync(pluginPath)) {
-    console.error('');
-    console.error('  ✗ Plugin source not found at plugins/bizar/.');
-    console.error('    This package is missing the plugin source. Reinstall:');
-    console.error('      npm install -g @polderlabs/bizar --force');
-  } else {
-    console.log('  ✓ Plugin source present (plugins/bizar/)');
-  }
-
-  const dashDir = join(__dirname, '..', 'bizar-dash');
-  // v6.0.2 — Dashboard shipped as a resource directory since v4.0.0.
-  // It no longer carries its own `package.json` (it became a separate
-  // `@polderlabs/bizar-dash` npm package, then was collapsed back in
-  // for v6.x). Probe for the built artifact + server source instead.
-  const dashDistHtml = join(dashDir, 'dist', 'index.html');
-  const dashServerSrc = join(dashDir, 'src', 'server', 'api.mjs');
-  if (!existsSync(dashDistHtml) && !existsSync(dashServerSrc)) {
-    console.error('');
-    console.error('  ✗ Dashboard source not found at bizar-dash/.');
-    console.error('    This package is missing the dashboard source. Reinstall:');
-    console.error('      npm install -g @polderlabs/bizar --force');
-  } else {
-    console.log('  ✓ Dashboard source present (bizar-dash/)');
-  }
-}
-
 async function promptGraphifyInstall() {
   const { spawnSync, execSync } = await import('node:child_process');
 
@@ -511,10 +479,19 @@ async function promptGraphifyInstall() {
 }
 
 export async function runPostInstall() {
-  // Skip interactive prompts in CI / non-TTY environments
-  if (!process.env.BIZAR_SKIP_OPTIONAL_INSTALLS) {
-    await promptAndInstallOptional();
-  }
+  // v6.1.0 — Bizar is Cline-only. The legacy opencode-era
+  // `promptAndInstallOptional()` (plugin/dashboard presence probes)
+  // has been removed; `cli/provision.mjs:runProvision` covers the same
+  // surface via `runProvision({ mode: 'install' })`, which is the path
+  // used by `bizar install` and `bizar update`. This `runPostInstall`
+  // is now a thin Cline-only bootstrap that:
+  //   - copies `config/cline.json` template on first install
+  //   - runs `installCommandsBizar()` for the legacy `commands-bizar/` dir
+  //   - installs agents into `~/.cline/agents/`
+  //   - probes for headroom / semble / skills-cli
+  //   - installs Headroom via pip or npm
+  // The old OpenCode-era probes (`Plugin source present`,
+  // `Dashboard source present`) moved to `cli/doctor.mjs` as live checks.
   const { mkdirSync, copyFileSync, existsSync } = await import('node:fs');
   const { execSync } = await import('node:child_process');
 

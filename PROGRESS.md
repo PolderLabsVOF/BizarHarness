@@ -6,15 +6,15 @@
 
 ## Current State
 
-- **Last commit:** v6.0.1 — Cline mistake-recovery + tool-discipline + rules-sync + 9router gateway
+- **Last commit:** v6.1.0 — Cline-exclusive; OpenCode support removed
 - **Released:** (unreleased; on master)
 - **`make check`:** 746/746 pass, 0 TS errors (53 files; +31 vs v6.0.0-beta.1)
 - **`make test`:** all pass (53 files, 1754 expects)
 - **`make e2e`:** N/A — `/tmp/bh-full-e2e.mjs` script is missing globally (pre-existing infra gap, unrelated to this PR)
 - **`make clean-check`:** 4/5 dimensions pass; #5 (startup path) blocked by missing E2E script (pre-existing)
-- **`make vcr`:** 26/26 = 1.000
+- **`make vcr`:** 27/27 = 1.000
 - **Branch:** master
-- **Phase:** v6.0.1 — **Cline STOPPING DIAGNOSIS + FIX + 9ROUTER GATEWAY**
+- **Phase:** v6.1.0 — **Cline-exclusive cleanup**
 
 ## What landed in v6.0.1
 
@@ -86,7 +86,9 @@ endpoint (handy when 9Router runs inside a container/tunnel).
 
 | Version             | Date       | Type   | Notes                                       |
 | ------------------- | ---------- | ------ | ------------------------------------------- |
-| **v6.0.1**          | 2026-07-09 | dev    | Cline mistake-recovery + tool-discipline + rules-sync |
+| **v6.1.0**          | 2026-07-09 | dev    | Cline-exclusive; OpenCode support removed   |
+| **v6.0.2**          | 2026-07-09 | patch  | fix dashboard-presence check in legacy installer |
+| **v6.0.1**          | 2026-07-09 | dev    | Cline mistake-recovery + tool-discipline + rules-sync + 9router gateway |
 | **v6.0.0-beta.1**   | 2026-07-08 | BETA   | CURRENT_ISSUES sprint — Odin, /loop, slash commands, vault linking |
 | v5.6.0-beta.17      | 2026-07-07 | BETA   | general repo cleanup release                |
 | v5.6.0-beta.1       | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)        |

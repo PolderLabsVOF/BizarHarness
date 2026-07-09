@@ -20,16 +20,24 @@ This is the **strategic** roadmap. Bug-fix lists, deployment notes, and per-rele
 
 ## 1.5. Cline Migration Status
 
-> Added 2026-07-07. The v5.6.0 line is the **Cline migration** — moving from the old OpenCode runtime (pre-v5.6) to the new Cline plugin architecture per https://docs.cline.bot/sdk/overview. The migration is **mechanically complete** but has 4 open P0 issues (B-CLINE-1 through B-CLINE-4).
+> Added 2026-07-07, **closed 2026-07-09 (v6.1.0)**. The v5.6.0 line was the
+> **Cline migration** — moving from the old OpenCode runtime (pre-v5.6) to
+> the new Cline plugin architecture per https://docs.cline.bot/sdk/overview.
+> The migration is **mechanically and architecturally complete**. As of
+> v6.1.0, Bizar is Cline-only and the OpenCode support surface has been
+> removed (legacy `~/.config/cline/` resolver, `legacyClineConfigDir()`,
+> `promptAndInstallOptional()`, the `opencode.json` template). See
+> `docs/decisions/DEC-001-cline-rewrite.md` for the original decision
+> (marked SUPERSEDED) and `CHANGELOG.md` for the v6.1.0 entry.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Plugin rewrite (`AgentExtension` from `@cline/sdk`) | ✅ Done | `plugins/bizar/index.ts` rewritten to use `createTool()`, `setup(api, ctx)`, lifecycle hooks. 17+ tools, 5 hooks. |
+| Plugin rewrite (`AgentExtension` from `@cline/sdk`) | ✅ Done | `plugins/bizar/index.ts` rewritten to use `createTool()`, `setup(api, ctx)`, lifecycle hooks. 22 tools, 4 hooks. |
 | CLI integration (`AgentPlugin` registration via `cline.json`) | ✅ Done | `cli/provision.mjs:patchClineJson()` adds the plugin entry. |
-| Installer correctness | ✅ Done (v5.6.0-beta.12 → .14) | CLINE_DIR resolution, plugin copy, skills sync, agent YAML conversion, package.json manifest. See §6 P0 backlog for the 4 open issues. |
-| Tests adapted for `~/.cline/` | ✅ Done | `cli/{provision,dev-link,doctor,install}.test.mjs` updated. 42/42 passing. |
-| Documentation | 🔄 Partial | This section + CHANGELOG.md + `.bizar/handoffs/HANDOFF-2026-07-07.md`. Architecture docs (`AGENTS.md`, `plugins/bizar/ARCHITECTURE.md`) still mention OpenCode in places. |
-| Promotion to `latest` | ⏳ Pending | v5.6.0-beta.14 is the candidate. Blocked on B-CLINE-1/2/3. |
+| Installer correctness | ✅ Done (v5.6.0 → v6.0.x) | CLINE_DIR resolution, plugin copy, skills sync, agent YAML conversion, package.json manifest. `bizar install` and `bizar update` are the single source of truth (`cli/provision.mjs`). |
+| Tests adapted for `~/.cline/` | ✅ Done | `cli/{provision,dev-link,doctor,install}.test.mjs` updated. 746/746 passing on v6.0.x. |
+| Documentation | ✅ Done | This section + CHANGELOG.md + `.bizar/PROJECT.md`. Migration docs marked SUPERSEDED. |
+| Promotion to `latest` | ✅ Done | v6.0.1 promoted `@polderlabs/bizar@latest` over `5.5.6`. v6.0.2 fixed the dashboard-presence check. v6.1.0 ships Cline-only. |
 
 **SDK references used during the migration:**
 - https://docs.cline.bot/sdk/overview — SDK structure
@@ -121,9 +129,9 @@ Organized by horizon: Now (Tier 0), Next (Tiers 1-2), Later (Tier 3), Future (Ti
 **Remaining for Tier 0** (post-v5.6.0-beta.14):
 
 - **Issue #1 from handoff** — `~/.cline/skills/<name>/SKILL.md` is not picked up by `cline config skills` from inside project dirs (works from `$HOME`). Workaround in place: skills are mirrored to `~/.agents/skills/<name>/` where Cline picks them up. Needs a deeper look at `IC(skillsPath)` in `@cline/core/dist/index.js`.
-- **Issue #3 from handoff** — `config/cline.json` template still uses the OpenCode schema (`"https://opencode.ai/config.json"`, `type: "local"` MCP blocks, `tools.bizar_*`). Out of scope for the installer fix; should be addressed in v5.6.0-beta.15.
-- **Issue #5 from handoff** — `cli/doctor.mjs` plugin-path-resolves check probably still uses the old `~/.config/cline/` path; needs verification + patch.
-- Promote `5.6.0-beta.14 → 5.6.0 stable` once the above three are resolved.
+- **Issue #3 from handoff** — **RESOLVED in v6.0.x.** `config/cline.json.template` now uses the Cline schema (`https://docs.cline.bot/config.json`).
+- **Issue #5 from handoff** — **RESOLVED in v6.1.0.** `cli/utils.mjs:legacyClineConfigDir()` removed; `cli/doctor.mjs:checkProviderConfigSanity` prefers `provider.9router`; plugin-path-resolves check updated.
+- Promotion: **DONE in v6.0.1** (`@polderlabs/bizar@latest` replaced `5.5.6`).
 
 **Out of scope for Tier 0**: any new agent capability, any new HITL mechanism, any runtime work. Tier 0 is the closing of v5.
 
@@ -399,10 +407,10 @@ These must be resolved before or as part of Tier 1 work.
 | B-M6 | SSE/WS token in URL lands in browser history | `api.ts:74-91`, `auth.mjs:187-189`, `ws.ts:29` | Move to `document.cookie`. 2 hours. |
 | B-MOBILE-1 | Mobile bundle (476 KB) > desktop (372 KB) | `vite.config.ts` + `mobile.tsx` | Investigate imports. 1 day. Block: orchestrator mobile UI. |
 | B-M1 | `useAutoGrowTextarea` deps missing `value` | `bizar-dash/src/web/components/chat/useAutoGrowTextarea.ts` | Textarea doesn't grow on content change. 30 min. |
-| **B-CLINE-1** | `~/.cline/skills/<name>/SKILL.md` not loaded by `cline config skills` from project dirs | `cli/provision.mjs:syncConfigExtras()` + `@cline/core/dist/index.js:IC(skillsPath)` | Workaround: mirrored to `~/.agents/skills/`. Need to investigate `IC(skillsPath)` to understand why the per-dir layout doesn't load. Half day. |
-| **B-CLINE-2** | `config/cline.json` template still has OpenCode schema (`type: "local"` MCP, `tools.bizar_*`, `$schema: opencode.ai`) | `config/cline.json` | Cline v3.0+ uses different MCP/tools schema. Affects whether `bizar_*-tool` MCP servers register properly. 1 day. |
-| **B-CLINE-3** | `cli/doctor.mjs` plugin-path-resolves check likely uses old `~/.config/cline/` | `cli/doctor.mjs:check-plugin-path-resolves` | Doctor still passes because user manually updated cline.json, but production code path probably references the old dir. Needs verification + patch. 30 min. |
-| **B-CLINE-4** | Container test `bizarharness-test:v5` hangs ~90s in PHASE 2 (install) | `scripts/test-container/run-tests.sh` | Probable cause: `install.sh` running `apt-get update`/`apt-get install -y python3.12 jq` inside the container. The install code itself works (verified). Increase container timeouts OR move platform-deps out of the test. 1 day. |
+| **B-CLINE-1** | `~/.cline/skills/<name>/SKILL.md` not loaded by `cline config skills` from project dirs | `cli/provision.mjs:syncConfigExtras()` + `@cline/core/dist/index.js:IC(skillsPath)` | **RESOLVED in v6.0.x** — installer mirrors to `~/.agents/skills/` which is the canonical skills path. Cline 3.0.39 reads both via `resolveSkillsConfigSearchPaths`. |
+| **B-CLINE-2** | `config/cline.json` template still has OpenCode schema | `config/cline.json` | **RESOLVED in v6.0.0** — template now uses `https://docs.cline.bot/config.json` schema with `provider.9router` block + 9router model catalog. |
+| **B-CLINE-3** | `cli/doctor.mjs` plugin-path-resolves check likely uses old `~/.config/cline/` | `cli/doctor.mjs:check-plugin-path-resolves` | **RESOLVED in v6.1.0** — `legacyClineConfigDir()` removed; `provider-config-sanity` prefers `provider.9router`. |
+| **B-CLINE-4** | Container test `bizarharness-test:v5` hangs ~90s in PHASE 2 (install) | `scripts/test-container/run-tests.sh` | Out of scope for v6.1.0 (Cline-exclusivity refactor). Tracked separately. |
 
 ### P1 — Blocks Tier 2
 

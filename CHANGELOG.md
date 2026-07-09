@@ -1,5 +1,41 @@
 # Changelog
 
+## v6.1.0 — Cline-exclusive; OpenCode support removed
+
+Minor bump. Bizar is Cline-only as of this release; the pre-v5.6
+OpenCode-era support surface has been removed from the installer code
+path and the docs are marked SUPERSEDED.
+
+### Removed
+
+- `cli/utils.mjs:legacyClineConfigDir()` — the `~/.config/cline/` (XDG)
+  resolver. Cline 3.0+ reads `~/.cline/` exclusively via
+  `process.env.CLINE_DIR` (override) or `$HOME/.cline` (default).
+- `cli/install.mjs:promptAndInstallOptional()` — the opencode-era
+  plugin/dashboard presence probes (the "Plugin source present" / "Dashboard
+  source present" messages). Same coverage is provided by `cli/doctor.mjs`
+  live checks and `cli/provision.mjs:syncConfigExtras` install-time sync.
+- OpenCode-era code paths in `cli/install.mjs:runPostInstall` — the helper
+  is now a thin Cline-only bootstrap (cline.json template, agents, commands,
+  headroom/semble/skills-cli detection). The opencode JSONC install was
+  never wired; this just removes the comments.
+
+### Docs
+
+- `docs/decisions/DEC-001-cline-rewrite.md`, `docs/migration-guide.md`,
+  `docs/migrations/cline-replacement.md` — prepended with SUPERSEDED
+  banner pointing to v6.1.0. Kept for historical reference.
+- `ROADMAP.md` §1.5 — Cline migration status now closed (was "in progress"
+  since v5.6.0). B-CLINE-1/2/3 marked RESOLVED with their v6.x fix.
+- `IMPLEMENTATION_PLAN.md` — `config/opencode.json` line item marked
+  REMOVED with rationale.
+
+### Why this is minor (not major)
+
+Cline 3.0.39 has been the only supported runtime since v6.0.0-beta.1
+(released 2026-07-08); the OpenCode paths were already dormant in the
+codebase. This release deletes them. No user-facing API change.
+
 ## v6.0.2 — Fix dashboard-presence check in legacy installer
 
 Hotfix for a misleading error message in `cli/install.mjs`. The

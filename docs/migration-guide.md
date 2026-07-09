@@ -1,3 +1,8 @@
+> **SUPERSEDED — v6.1.0 (Cline-exclusive).** The OpenCode → Cline migration
+> described in this document landed in v5.6.0. As of v6.1.0, Bizar is
+> Cline-only and the OpenCode support surface has been removed. Kept for
+> historical reference only.
+
 # Migration Guide — OpenCode → Cline (v5.5.x → v5.6.0)
 
 > Upgrade guide for users moving from the OpenCode-based Bizar

@@ -1270,3 +1270,19 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
   - Cline SDK default for `maxConsecutiveMistakes` is 6 (in `MistakeTracker.record()`); bundled CLI overrides to 3 via `--retries`. Bizar harness now overrides CLI's 3 back to 6 AND wires the recovery callback so a single bad turn no longer kills a session.
   - The pre-existing `nohomedir` Bun behavior caches `process.env.HOME` at module load — the doctor fixture tests were already affected, this release doesn't introduce new breakage.
   - Pre-existing `npm test` failure in `v2-req GET /doc` (OpenAPI YAML route) was already failing on master pre-release.
+
+### 2026-07-09 — v6.1.0 — Cline-exclusive; OpenCode support removed
+
+- **Task**: Drop all opencode-specific code paths from Bizar (per the user's "Bizar should be made exclusively for cline" directive). Cleanup-only refactor; no behavior change.
+- **Approach**:
+  - `cli/utils.mjs` — removed `legacyClineConfigDir()` (the `~/.config/cline/` XDG resolver). Cline 3.0+ reads `~/.cline/` exclusively.
+  - `cli/install.mjs` — removed `promptAndInstallOptional()` (the opencode-era plugin/dashboard presence probes). `cli/doctor.mjs` live checks provide the same coverage.
+  - `cli/install.mjs:runPostInstall` — slimmed to a Cline-only bootstrap (cline.json template + agents + commands + headroom/semble/skills-cli detection).
+  - `docs/decisions/DEC-001-cline-rewrite.md`, `docs/migration-guide.md`, `docs/migrations/cline-replacement.md` — prepended SUPERSEDED banner pointing to v6.1.0.
+  - `ROADMAP.md §1.5` — Cline migration status closed; B-CLINE-1/2/3 marked RESOLVED.
+  - `IMPLEMENTATION_PLAN.md` — `config/opencode.json` line item marked REMOVED.
+- **Findings**:
+  - The cleanup scope was surprisingly small — most of the code already shipped Cline-only in v6.0.x. The legacy paths were dormant but still present in `cli/utils.mjs` and `cli/install.mjs`.
+  - The user has BOTH `~/.cline/` (Cline paths) and `~/.config/opencode/` (legacy OpenCode paths) on disk. The opencode paths are populated by the user's separately-installed opencode-ai package, not by Bizar.
+  - The user's `~/.agents/skills/` has 107 skills (managed by the `skills` CLI standard); Bizar's installer syncs to BOTH `~/.cline/skills/` AND `~/.agents/skills/` so Cline picks them up via `resolveSkillsConfigSearchPaths`.
+- **Note**: User runs in opencode TUI locally for development (that's how I run); the opencode TUI is NOT a Bizar target. Opencode stays as a dev environment; Cline is the only deployment target.
