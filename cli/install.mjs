@@ -319,8 +319,13 @@ async function promptAndInstallOptional() {
   }
 
   const dashDir = join(__dirname, '..', 'bizar-dash');
-  const dashPkgJson = join(dashDir, 'package.json');
-  if (!existsSync(dashPkgJson)) {
+  // v6.0.2 — Dashboard shipped as a resource directory since v4.0.0.
+  // It no longer carries its own `package.json` (it became a separate
+  // `@polderlabs/bizar-dash` npm package, then was collapsed back in
+  // for v6.x). Probe for the built artifact + server source instead.
+  const dashDistHtml = join(dashDir, 'dist', 'index.html');
+  const dashServerSrc = join(dashDir, 'src', 'server', 'api.mjs');
+  if (!existsSync(dashDistHtml) && !existsSync(dashServerSrc)) {
     console.error('');
     console.error('  ✗ Dashboard source not found at bizar-dash/.');
     console.error('    This package is missing the dashboard source. Reinstall:');

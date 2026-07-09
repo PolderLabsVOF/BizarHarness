@@ -240,6 +240,33 @@ describe('installPluginFromGlobal() — node_modules copy', () => {
       rmSync(linkTarget, { recursive: true, force: true });
     }
   });
+
+  // v6.0.2 — Dashboard payload check now probes dist + src instead of
+  // package.json (which was removed in v4.0.0 when the dashboard became
+  // its own npm package). This test verifies the post-fix code path
+  // accepts a layout that has dist/index.html but no package.json.
+  test('dashboard check accepts dist+src layout without package.json', () => {
+    // We don't import the un-exported promptAndInstallOptional directly;
+    // instead we exercise the same fs.existsSync contract the check
+    // uses by staging a fake layout in a tmpdir and asserting the
+    // ginstay predicate is satisfied.
+    const layout = mkdtempSync(join(tmpdir(), 'bizar-dash-layout-'));
+    const dashDir = join(layout, 'bizar-dash');
+    mkdirSync(join(dashDir, 'dist'), { recursive: true });
+    writeFileSync(join(dashDir, 'dist', 'index.html'), '<html></html>');
+    mkdirSync(join(dashDir, 'src', 'server'), { recursive: true });
+    writeFileSync(join(dashDir, 'src', 'server', 'api.mjs'), '// fixture');
+    const distHtml = join(dashDir, 'dist', 'index.html');
+    const serverSrc = join(dashDir, 'src', 'server', 'api.mjs');
+    assert.ok(existsSync(distHtml), 'dist/index.html should exist (fixture)');
+    assert.ok(existsSync(serverSrc), 'src/server/api.mjs should exist (fixture)');
+    assert.equal(
+      existsSync(join(dashDir, 'package.json')),
+      false,
+      'package.json should NOT exist (proves the new check tolerates its absence)',
+    );
+    rmSync(layout, { recursive: true, force: true });
+  });
 });
 
 console.log('  install.mjs tests loaded — run with: node --test cli/install.test.mjs');

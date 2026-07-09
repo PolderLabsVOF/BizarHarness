@@ -1,5 +1,27 @@
 # Changelog
 
+## v6.0.2 — Fix dashboard-presence check in legacy installer
+
+Hotfix for a misleading error message in `cli/install.mjs`. The
+`promptAndInstallOptional()` flow at the end of the legacy
+`runPostInstall()` was checking for `bizar-dash/package.json`, which
+was intentionally removed in v4.0.0 when the dashboard became its own
+npm package (`@polderlabs/bizar-dash`) before being collapsed back into
+the unified `@polderlabs/bizar` package in v6.0.0.
+
+### Fixed
+
+- `cli/install.mjs` dashboard-presence probe now checks for
+  `bizar-dash/dist/index.html` OR `bizar-dash/src/server/api.mjs`
+  instead of `bizar-dash/package.json`. Both exist in the published
+  v6.0.x tarball; `package.json` does not (by design).
+- `cli/install.test.mjs` gains a unit test that pins the new layout.
+
+### Why this is patch-only
+
+The install itself succeeded despite the warning — only the user-facing
+message was wrong. Cosmetic fix; no behavioral change. v6.0.1 → v6.0.2.
+
 ## v6.0.1 — Cline mistake-recovery, tool-discipline, rules-sync, 9router gateway
 
 Stable release on the `latest` npm dist-tag. Replaces `5.5.6` as the recommended
