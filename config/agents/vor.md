@@ -1,7 +1,7 @@
 ---
 description: Vör — Asks clarifying questions for ambiguous or incomplete requests. Reads project context first, then asks one targeted, project-specific question.
 mode: subagent
-model: minimax/MiniMax-M2.7
+model: minimaxcustom/MiniMax-M2.7
 color: "#a78bfa"
 permission:
   read: allow

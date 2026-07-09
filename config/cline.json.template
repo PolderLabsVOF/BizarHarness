@@ -1,8 +1,8 @@
 {
   "$schema": "https://docs.cline.bot/config.json",
   "instructions": [".cline/instructions/bizar-tools.md"],
-  "model": "9router/minimax/MiniMax-M3",
-  "small_model": "9router/minimax/MiniMax-M2.7",
+  "model": "minimaxcustom/MiniMax-M3",
+  "small_model": "minimaxcustom/MiniMax-M2.7",
   "default_agent": "odin",
   "permission": "allow",
   "snapshot": false,
@@ -35,7 +35,7 @@
         "threshold": 0.5,
         "preserve_recent": 10,
         "strategy": "summarize",
-        "model": "9router/minimax/MiniMax-M3"
+        "model": "minimaxcustom/MiniMax-M3"
       }
     }]
   ],
@@ -52,7 +52,7 @@
     "odin": {
       "description": "Odin — Pure router that delegates all work to subagents.",
       "mode": "primary",
-      "model": "9router/minimax/MiniMax-M3",
+      "model": "minimaxcustom/MiniMax-M3",
       "color": "#6366f1",
       "permission": {
         "task": "allow",
@@ -66,7 +66,7 @@
     "vor": {
       "description": "Vör — The Questioning One.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#8b5cf6",
       "permission": {
         "read": "allow",
@@ -77,7 +77,7 @@
     "frigg": {
       "description": "Frigg — All-knowing Q&A agent.",
       "mode": "primary",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#06b6d4",
       "permission": {
         "read": "allow",
@@ -93,7 +93,7 @@
     "quick": {
       "description": "Quick — Fast single-shot tasks.",
       "mode": "primary",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#22d3ee",
       "permission": {
         "read": "allow",
@@ -112,7 +112,7 @@
     "mimir": {
       "description": "Mimir — Research and codebase exploration agent.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#0ea5e9",
       "permission": {
         "read": "allow",
@@ -130,7 +130,7 @@
     "heimdall": {
       "description": "Heimdall — Simple, routine, deterministic tasks.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#10b981",
       "permission": {
         "read": "allow",
@@ -147,7 +147,7 @@
     "hermod": {
       "description": "Hermod — Git and GitHub operations specialist.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#06b6d4",
       "permission": {
         "read": "allow",
@@ -163,7 +163,7 @@
     "thor": {
       "description": "Thor — Medium-complexity tasks, strong and reliable.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#a855f7",
       "permission": {
         "read": "allow",
@@ -180,7 +180,7 @@
     "baldr": {
       "description": "Baldr — UI/UX design system specialist.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#ec4899",
       "permission": {
         "read": "allow",
@@ -197,7 +197,7 @@
     "tyr": {
       "description": "Tyr — Complex implementation, debugging, architecture.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M3",
+      "model": "minimaxcustom/MiniMax-M3",
       "color": "#f59e0b",
       "permission": {
         "read": "allow",
@@ -214,7 +214,7 @@
     "vidarr": {
       "description": "Vidarr — Ultimate fallback via MiniMax M3.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M3",
+      "model": "minimaxcustom/MiniMax-M3",
       "color": "#dc2626",
       "permission": {
         "read": "allow",
@@ -231,7 +231,7 @@
     "forseti": {
       "description": "Forseti — Audits and corrects plans before execution.",
       "mode": "subagent",
-      "model": "9router/minimax/MiniMax-M3",
+      "model": "minimaxcustom/MiniMax-M3",
       "color": "#ef4444",
       "permission": {
         "read": "allow",
@@ -249,7 +249,7 @@
     "browser-harness": {
       "description": "browser-harness — Primary agent for browser-driven E2E verification. No-edit permissions. Drives Chrome via CDP for end-to-end testing of web apps.",
       "mode": "primary",
-      "model": "9router/minimax/MiniMax-M2.7",
+      "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#84cc16",
       "permission": {
         "read": "allow",
@@ -332,84 +332,11 @@
       "description": "Validate the Bizar install: cline.json, plugin entry, agents, skills, hooks, rules, commands, and provider config.",
       "agent": "heimdall",
       "template": "commands-bizar/validate.md\n\n$ARGUMENTS"
-    }
-  },
-  "provider": {
-    "9router": {
-      "baseUrl": "http://localhost:20128/v1",
-      "apiKey": "${env:NINEROUTER_KEY}",
-      "models": {
-        "minimax/MiniMax-M3": {
-          "interleaved": { "field": "reasoning_details" },
-          "reasoning": true,
-          "options": {
-            "thinking": { "type": "enabled" }
-          }
-        },
-        "minimax/MiniMax-M2.7": {
-          "interleaved": { "field": "reasoning_details" },
-          "reasoning": true,
-          "options": {
-            "thinking": { "type": "enabled" }
-          }
-        },
-        "minimax/MiniMax-M2.5": {
-          "interleaved": { "field": "reasoning_details" },
-          "reasoning": true,
-          "options": {
-            "thinking": { "type": "enabled" }
-          }
-        },
-        "minimax/MiniMax-M2.1": {
-          "interleaved": { "field": "reasoning_details" },
-          "reasoning": true,
-          "options": {
-            "thinking": { "type": "enabled" }
-          }
-        },
-        "kr/auto": {
-          "reasoning": false
-        },
-        "kr/auto-thinking": {
-          "reasoning": true
-        },
-        "kr/claude-sonnet-4.5": {
-          "reasoning": false
-        },
-        "kr/claude-haiku-4.5": {
-          "reasoning": false
-        },
-        "kr/deepseek-3.2": {
-          "reasoning": false
-        },
-        "openrouter/cohere/north-mini-code:free": {
-          "reasoning": false
-        },
-        "openrouter/poolside/laguna-m.1:free": {
-          "reasoning": false
-        },
-        "openrouter/nvidia/nemotron-3-super-120b-a12b:free": {
-          "reasoning": true
-        }
-      }
     },
-    "minimax": {
-      "models": {
-        "MiniMax-M3": {
-          "interleaved": { "field": "reasoning_details" },
-          "reasoning": true,
-          "options": {
-            "thinking": { "type": "enabled" }
-          }
-        },
-        "MiniMax-M2.7": {
-          "interleaved": { "field": "reasoning_details" },
-          "reasoning": true,
-          "options": {
-            "thinking": { "type": "enabled" }
-          }
-        }
-      }
+    "setup-provider": {
+      "description": "Configure a provider in cline.json. Since v6.2.2 the installer no longer touches provider config — use this to add your own.",
+      "agent": "heimdall",
+      "template": "commands-bizar/setup-provider.md\n\n$ARGUMENTS"
     }
   }
 }

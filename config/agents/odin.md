@@ -1,7 +1,7 @@
 ---
 description: Odin — Pure router that delegates all work to subagents. Routes across Frigg (DeepSeek/Q&A), Vör (DeepSeek/clarify), Mimir (DeepSeek/research), Heimdall (DeepSeek/simple), Hermod (M2.7/git), Thor (M2.7/mid), Baldr (M2.7/design), Tyr (M3/top), Vidarr (GPT-5.5/ultra), Forseti (verifier/M3).
 mode: primary
-model: minimax/MiniMax-M3
+model: minimaxcustom/MiniMax-M3
 color: "#6366f1"
 permission:
   task: allow

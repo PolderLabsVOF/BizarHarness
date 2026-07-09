@@ -51,7 +51,7 @@ const REQUIRED_COMMANDS = [
   'audit.md', 'bizar.md', 'explain.md', 'init.md', 'learn.md',
   'plan.md', 'plow-through.md', 'pr-review.md', 'tailscale-serve.md',
   'visual-plan.md',
-  'team.md', 'test.md', 'validate.md',
+  'team.md', 'test.md', 'validate.md', 'setup-provider.md',
 ];
 
 // v6.2.1 — Cline-native hook scripts (executable, shebang, no extension).
@@ -266,20 +266,22 @@ const CHECKS = {
   },
 
   'provider-config': async () => {
+    // v6.2.2 — The installer no longer adds a provider block. The user
+    // must configure their own provider. This check is therefore
+    // ALWAYS lenient (returns a hint, never fails). It just reports
+    // what's in cline.json so the user can see the current state.
     const cfg = readJsonSafe(clineJsonPath());
-    if (!cfg?.provider) throw new Error('no provider block in cline.json');
-    const nine = cfg.provider['9router'];
-    if (nine && nine.baseUrl) {
-      const models = nine.models || {};
-      const count = Object.keys(models).length;
-      if (count === 0) throw new Error('provider.9router has no models');
-      return `provider.9router (${count} models, baseUrl=${nine.baseUrl})`;
+    if (!cfg?.provider || Object.keys(cfg.provider).length === 0) {
+      return 'no provider configured — user must add one. `bizar install` no longer touches provider config (v6.2.2+).';
     }
-    const minimax = cfg.provider.minimax;
-    if (!minimax) {
-      throw new Error('no provider.9router AND no provider.minimax');
-    }
-    return 'provider.minimax (legacy fallback)';
+    const names = Object.keys(cfg.provider);
+    const summary = names.map((n) => {
+      const p = cfg.provider[n];
+      const url = p?.baseUrl || p?.options?.baseURL || '(no baseUrl)';
+      const modelCount = Object.keys(p?.models || {}).length;
+      return `${n} (${modelCount} models, baseUrl=${url})`;
+    });
+    return `user-configured providers: ${summary.join('; ')}`;
   },
 
   '9router-reachable': async () => {
@@ -372,7 +374,10 @@ const CHECK_ORDER = [
   '9router-reachable',
 ];
 
-const LENIENT_CHECKS = new Set(['9router-reachable']);
+const LENIENT_CHECKS = new Set([
+  '9router-reachable',
+  'provider-config', // v6.2.2+ — installer no longer touches provider config; user must configure
+]);
 
 export function showValidateHelp() {
   console.log(`

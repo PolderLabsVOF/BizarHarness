@@ -860,94 +860,69 @@ export async function patchClineJson({ dryRun, force }) {
     (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
   );
 
-  // v6.2.0 — Multi-patch installer. On every install/update, ensure the
-  // full Bizar config surface is present in cline.json:
+  // v6.2.2 — Multi-patch installer. On every install/update, ensure the
+  // Bizar config surface is present in cline.json:
   //
-  //   1. provider.9router (preferred gateway since v6.0.1) — add if
-  //      missing so the install is "complete" out of the box.
-  //   2. provider.minimax (legacy fallback) — kept for back-compat.
-  //   3. default_agent — set to "odin" if missing.
-  //   4. $schema — add if missing (helps editors validate).
-  //   5. instructions — point at .cline/instructions/bizar-tools.md if
-  //      missing, so Cline loads the tool reference on every session.
-  //   6. plugin entry — add if missing (the critical one; without this
+  //   1. plugin entry — add if missing (the critical one; without this
   //      the Bizar plugin never loads).
-  //   7. permissions — set to "allow" if missing.
-  //   8. snapshot — set to false if missing.
+  //   2. default_agent — set to "odin" if missing.
+  //   3. $schema — add if missing (helps editors validate).
+  //   4. instructions — point at .cline/instructions/bizar-tools.md if
+  //      missing, so Cline loads the tool reference on every session.
+  //   5. permissions — set to "allow" if missing.
+  //   6. snapshot — set to false if missing.
+  //
+  // v6.2.2 REMOVED:
+  //   - provider.9router (was added automatically in v6.0.1–v6.2.1)
+  //   - provider.minimax (legacy fallback)
+  //
+  // Per user request: "the installer should do nothing with providers,
+  // the user has to configure it themselves." The user picks their own
+  // provider, plugs in their API key, and configures which model catalog
+  // to use. The installer just sets up the Bizar scaffolding (plugin
+  // entry, default agent, schema, instructions, etc.) and stays out of
+  // provider configuration entirely.
   //
   // All patches are additive and idempotent. We never overwrite a value
   // the user has set; the `force` flag bypasses that protection for the
   // plugin entry only.
-  let addedProvider = false;
   let addedDefaultAgent = false;
   let addedSchema = false;
   let addedInstructions = false;
   let addedPermissions = false;
   let addedSnapshot = false;
-  let added9router = false;
 
-  if (!cfg.provider) cfg.provider = {};
-
-  // 1. provider.9router — preferred gateway.
-  if (!cfg.provider['9router'] && existsSync(join(REPO_ROOT, 'config', 'cline.json'))) {
-    try {
-      const tpl = JSON.parse(readFileSync(join(REPO_ROOT, 'config', 'cline.json'), 'utf8'));
-      if (tpl.provider && tpl.provider['9router']) {
-        cfg.provider['9router'] = tpl.provider['9router'];
-        added9router = true;
-      }
-    } catch { /* ignore template parse errors */ }
-  }
-
-  // 2. provider.minimax — legacy fallback.
-  const DEFAULT_MINIMAX_BLOCK = {
-    options: {
-      baseURL: 'https://api.minimax.io/v1',
-      apiKey: '{env:MiniMax_API_KEY}',
-    },
-    models: {
-      'MiniMax-M2.7-Flash': { name: 'MiniMax M2.7 Flash', interleaved: { field: 'reasoning_details' }, reasoning: true },
-      'MiniMax-M2.7': { name: 'MiniMax M2.7', interleaved: { field: 'reasoning_details' }, reasoning: true },
-      'MiniMax-M3': { name: 'MiniMax M3', interleaved: { field: 'reasoning_details' }, reasoning: true },
-      'MiniMax-M3-Reasoning': { name: 'MiniMax M3 Reasoning', interleaved: { field: 'reasoning_details' }, reasoning: true },
-    },
-  };
-  if (!cfg.provider.minimax) {
-    cfg.provider.minimax = DEFAULT_MINIMAX_BLOCK;
-    addedProvider = true;
-  }
-
-  // 3. default_agent
+  // 1. default_agent
   if (!cfg.default_agent) {
     cfg.default_agent = 'odin';
     addedDefaultAgent = true;
   }
 
-  // 4. $schema
+  // 2. $schema
   if (!cfg.$schema) {
     cfg.$schema = 'https://docs.cline.bot/config.json';
     addedSchema = true;
   }
 
-  // 5. instructions — point at the bundled Bizar tools reference.
+  // 3. instructions — point at the bundled Bizar tools reference.
   if (!cfg.instructions || (Array.isArray(cfg.instructions) && cfg.instructions.length === 0)) {
     cfg.instructions = ['.cline/instructions/bizar-tools.md'];
     addedInstructions = true;
   }
 
-  // 6. permission
+  // 4. permission
   if (!cfg.permission) {
     cfg.permission = 'allow';
     addedPermissions = true;
   }
 
-  // 7. snapshot
+  // 5. snapshot
   if (typeof cfg.snapshot !== 'boolean') {
     cfg.snapshot = false;
     addedSnapshot = true;
   }
 
-  const anyAdded = addedProvider || added9router || addedDefaultAgent || addedSchema
+  const anyAdded = addedDefaultAgent || addedSchema
     || addedInstructions || addedPermissions || addedSnapshot;
 
   if (hasEntry && !force && !anyAdded) {
@@ -957,8 +932,6 @@ export async function patchClineJson({ dryRun, force }) {
   if (dryRun) {
     const added = [];
     if (!hasEntry) added.push('plugin entry');
-    if (added9router) added.push('provider.9router');
-    if (addedProvider) added.push('provider.minimax');
     if (addedDefaultAgent) added.push('default_agent');
     if (addedSchema) added.push('$schema');
     if (addedInstructions) added.push('instructions');
@@ -988,8 +961,6 @@ export async function patchClineJson({ dryRun, force }) {
   writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
   const added = [];
   if (!hasEntry) added.push('plugin entry');
-  if (added9router) added.push('provider.9router');
-  if (addedProvider) added.push('provider.minimax');
   if (addedDefaultAgent) added.push('default_agent');
   if (addedSchema) added.push('$schema');
   if (addedInstructions) added.push('instructions');
@@ -1973,29 +1944,33 @@ export async function runProvision(opts = {}) {
     console.log(chalk.green(`\n  ✓ ${mode === 'update' ? 'Update' : 'Install'} complete\n`));
   }
 
-  // ── 13. API key bootstrap warning ────────────────────────────────────
-  // v5.x — After a successful install, check whether any API keys are
-  // configured. If not, surface a prominent warning (but don't block —
-  // many users configure keys later).
+  // ── 13. Provider bootstrap warning ───────────────────────────────
+  // v6.2.2 — The installer no longer configures a provider. The user
+  // must add their own. After a successful install, surface a clear
+  // hint pointing them at the right places.
   if (mode === 'install' && !dryRun && !anyFail) {
-    const envJsonPath = join(BIZAR_HOME, 'env.json');
-    const marker = readInstallMarker();
-    const hasApiKeys = Boolean(
-      process.env.OPENAI_API_KEY ||
-      process.env.ANTHROPIC_API_KEY ||
-      process.env.MINIMAX_API_KEY ||
-      (existsSync(envJsonPath) && (() => {
-        try {
-          const env = JSON.parse(readFileSync(envJsonPath, 'utf8'));
-          return Boolean(env?.OPENAI_API_KEY || env?.ANTHROPIC_API_KEY || env?.MINIMAX_API_KEY);
-        } catch { return false; }
-      })())
-    );
-    if (!hasApiKeys) {
-      console.log(chalk.yellow('  ⚠  No API keys configured.'));
-      console.log(chalk.yellow('     Run `bizar connect` to add providers.'));
-      const dashPort = process.env.BIZAR_DASHBOARD_PORT || '4097';
-      console.log(chalk.yellow(`     Or visit http://localhost:${dashPort}/connect after starting the dashboard.`));
+    const cfgPath = join(CLINE_DIR, 'cline.json');
+    const cfg = readJsonSafe(cfgPath, null);
+    const hasProvider = cfg && cfg.provider && Object.keys(cfg.provider).length > 0;
+    if (!hasProvider) {
+      console.log(chalk.yellow('  ⚠  No provider configured in cline.json.'));
+      console.log(chalk.yellow('     `bizar install` no longer touches provider config (v6.2.2+).'));
+      console.log(chalk.yellow('     You must add one yourself — see the "Provider setup" section below.'));
+      console.log('');
+      console.log(chalk.cyan('  ┌─ Provider setup ─────────────────────────────────────────────┐'));
+      console.log(chalk.cyan('  │ 1. Edit ~/.cline/cline.json and add a `provider` block:        │'));
+      console.log(chalk.cyan('  │    { "provider": { "9router": {                              │'));
+      console.log(chalk.cyan('  │        "baseUrl": "http://localhost:20128/v1",                │'));
+      console.log(chalk.cyan('  │        "apiKey": "<your-key>",                                │'));
+      console.log(chalk.cyan('  │        "models": { "minimax/MiniMax-M3": {},                  │'));
+      console.log(chalk.cyan('  │                    "minimax/MiniMax-M2.7": {} } } }            │'));
+      console.log(chalk.cyan('  │                                                              │'));
+      console.log(chalk.cyan('  │ 2. Or run `bizar connect` for an interactive TUI setup.       │'));
+      console.log(chalk.cyan('  └──────────────────────────────────────────────────────────────┘'));
+      console.log('');
+      console.log(chalk.dim('  Models available at http://localhost:20128/v1/models:'));
+      console.log(chalk.dim('    minimax/MiniMax-M3, minimax/MiniMax-M2.7, nvidia/minimaxai/minimax-m3,'));
+      console.log(chalk.dim('    nvidia/z-ai/glm-5.2, nvidia/deepseek-ai/deepseek-v4-pro, etc.'));
       console.log('');
     }
   }

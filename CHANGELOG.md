@@ -1,5 +1,65 @@
 # Changelog
 
+## v6.2.2 — Installer no longer touches provider config; user owns it
+
+Patch release. Per operator request: the installer used to add a
+`provider.9router` block (and a legacy `provider.minimax` fallback)
+to `~/.cline/cline.json` on every install. That's now removed —
+the user picks their own provider, plugs in their API key, and
+configures which model catalog to use.
+
+The default gateway is the local 9Router at
+`http://localhost:20128/v1` (live catalog at `/v1/models`). Use
+`bizar setup-provider` to add it (or any other provider) in one
+command.
+
+### Removed
+
+- `config/cline.json.template` — dropped the `provider` block
+  (9router + minimax) entirely. The template is now provider-free.
+- `cli/provision.mjs:patchClineJson` — stopped auto-adding
+  `provider.9router` and `provider.minimax`. The function still
+  backfills the Bizar scaffolding (plugin entry, default_agent,
+  $schema, instructions, permission, snapshot) but does NOT touch
+  provider config.
+- `cli/commands/validate.mjs` — `provider-config` check is now
+  ALWAYS lenient (informational, never fails). It just reports
+  what's in the user's cline.json so they can see the current state.
+
+### Added
+
+- `cli/commands/setup-provider.mjs` (new) — `bizar setup-provider`
+  CLI subcommand. Writes a `provider` block to `~/.cline/cline.json`
+  with:
+  - `baseUrl` (default `http://localhost:20128/v1`)
+  - `apiKey` (literal or `${env:KEY}` reference)
+  - `models` (live catalog from `${gateway}/v1/models` — 19 models
+    in the default gateway including `minimaxcustom/MiniMax-M3`,
+    `minimaxcustom/MiniMax-M2.7`, `nvidia/minimaxai/minimax-m3`,
+    `nvidia/z-ai/glm-5.2`, `nvidia/deepseek-ai/deepseek-v4-pro`, etc.)
+  - Flags: `--list` (print catalog), `--remove <name>`, `--gateway`,
+    `--key`, `--provider`.
+- `config/commands/setup-provider.md` (new) — the matching `/setup-provider`
+  Cline slash command.
+- `config/cline.json.template` — added the `/setup-provider` command
+  entry. 14 slash commands total now.
+- All agent `model:` fields updated to use the live gateway prefix
+  `minimaxcustom/MiniMax-M3` (was stale `minimax/MiniMax-M3`).
+  Same for `model` and `small_model` in the template.
+
+### Migration
+
+After upgrading, the user's `~/.cline/cline.json` no longer has a
+`provider.9router` block. To get the same behavior as before:
+
+```sh
+bizar setup-provider
+# (or) bizar setup-provider --gateway <url> --key <key>
+```
+
+Or hand-edit cline.json to add any provider you like. `bizar validate`
+will report the new state and stay green.
+
 ## v6.2.1 — Hooks now actually work in Cline
 
 Patch release. Fixes the "I see skills but no hooks" user report.

@@ -1,7 +1,7 @@
 ---
 description: Forseti — Audits, criticizes, and corrects implementation plans before execution. No write permissions. Review only.
 mode: subagent
-model: minimax/MiniMax-M3
+model: minimaxcustom/MiniMax-M3
 color: "#ef4444"
 permission:
   read: allow

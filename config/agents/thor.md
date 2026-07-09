@@ -1,7 +1,7 @@
 ---
 description: Thor — Handles medium-complexity implementation tasks using MiniMax M2.7. New features, non-trivial debugging, refactoring, code review, and writing tests.
 mode: subagent
-model: minimax/MiniMax-M2.7
+model: minimaxcustom/MiniMax-M2.7
 color: "#a855f7"
 permission:
   read: allow

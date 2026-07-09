@@ -149,18 +149,20 @@ try {
   const tplPath = join(REPO_ROOT, 'config', 'cline.json.template');
   const tpl = JSON.parse(readFileSync(tplPath, 'utf8'));
   const hasPlugin = Array.isArray(tpl.plugin) && tpl.plugin.length > 0;
-  const has9router = tpl.provider && tpl.provider['9router'];
+  // v6.2.2 — template MUST NOT have a provider block (installer no
+  // longer touches provider config; user configures their own).
+  const hasNoProvider = !tpl.provider;
   const hasDefaultAgent = tpl.default_agent;
   const hasCommands = tpl.command && tpl.command.team && tpl.command.test && tpl.command.validate;
-  if (hasPlugin && has9router && hasDefaultAgent && hasCommands) {
-    record('cline.json.template is complete', true, 'plugin, 9router, default_agent, /team, /test, /validate');
+  if (hasPlugin && hasNoProvider && hasDefaultAgent && hasCommands) {
+    record('cline.json.template is complete (no provider — user configures their own)', true, 'plugin, default_agent, /team, /test, /validate');
   } else {
     const missing = [];
     if (!hasPlugin) missing.push('plugin[]');
-    if (!has9router) missing.push('provider.9router');
+    if (!hasNoProvider) missing.push('provider (should be absent — user configures)');
     if (!hasDefaultAgent) missing.push('default_agent');
     if (!hasCommands) missing.push('command.team/test/validate');
-    record('cline.json.template is complete', false, `missing: ${missing.join(', ')}`);
+    record('cline.json.template is complete (no provider — user configures their own)', false, `missing/wrong: ${missing.join(', ')}`);
   }
 } catch (err) {
   record('cline.json.template readable', false, err.message);

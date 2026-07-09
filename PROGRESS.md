@@ -6,15 +6,47 @@
 
 ## Current State
 
-- **Last commit:** v6.2.1 — hooks now actually work in Cline (executable scripts, not markdown)
+- **Last commit:** v6.2.2 — installer no longer touches provider config; user owns it
 - **Released:** (unreleased; on master)
 - **`make check`:** 749/749 pass, 0 TS errors
-- **`make test`:** 780/780 pass (53 plugin/sdk files + 31 CLI tests)
-- **`make e2e`:** 16/16 pass (real plugin + cline integration verification)
+- **`make test`:** 793/793 pass (53 plugin/sdk files + 44 CLI tests)
+- **`make e2e`:** 16/16 pass
 - **`make clean-check`:** 5/5 dimensions pass
 - **`make vcr`:** 27/27 = 1.000
 - **Branch:** master
-- **Phase:** v6.2.1 — **Cline hooks fix**
+- **Phase:** v6.2.2 — **No-touch provider config**
+
+## What landed in v6.2.2
+
+Per operator request: the installer used to add a `provider.9router`
+block to `~/.cline/cline.json` on every install. That's now removed —
+the user picks their own provider. New `bizar setup-provider` CLI
+command (and matching `/setup-provider` Cline slash command) make it
+easy to add a provider with the live catalog from
+`http://localhost:20128/v1/models`.
+
+### Patches
+
+1. **`config/cline.json.template`** — removed the `provider` block
+   entirely (9router + minimax). Template is now provider-free.
+2. **`cli/provision.mjs:patchClineJson`** — stopped auto-adding
+   `provider.9router` and `provider.minimax`. Still backfills the
+   Bizar scaffolding (plugin entry, default_agent, $schema,
+   instructions, permission, snapshot) but NOT provider config.
+3. **`cli/commands/setup-provider.mjs`** (new) — `bizar setup-provider`
+   subcommand. Writes a `provider` block with `baseUrl` + `apiKey` +
+   live model catalog. Flags: `--list`, `--remove`, `--gateway`,
+   `--key`, `--provider`.
+4. **`config/commands/setup-provider.md`** (new) — the matching
+   `/setup-provider` Cline slash command.
+5. **`cli/commands/validate.mjs`** — `provider-config` is now
+   ALWAYS lenient (informational, never fails). New behavior
+   reports whatever providers the user has configured.
+6. **Agent `model:` fields** — updated to use the live gateway
+   prefix `minimaxcustom/MiniMax-M3` (was stale `minimax/MiniMax-M3`).
+   Same for `model` and `small_model` in cline.json template.
+7. **Post-install hint** — when no provider is configured, the
+   installer prints a clear setup hint pointing at `bizar setup-provider`.
 
 ## What landed in v6.2.1
 

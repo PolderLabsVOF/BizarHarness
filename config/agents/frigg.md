@@ -1,7 +1,7 @@
 ---
 description: Frigg — Read-only codebase Q&A. Answers questions about the project with file references, never modifies anything. Routes to no one.
 mode: subagent
-model: minimax/MiniMax-M2.7
+model: minimaxcustom/MiniMax-M2.7
 color: "#f472b6"
 permission:
   read: allow

@@ -30,7 +30,7 @@ check:  ## Full verification pipeline (typecheck + tests)
 
 test:  ## Run all unit tests (plugin + sdk + cli)
 	bun test plugins/bizar packages/sdk
-	@node --test cli/install.test.mjs cli/provision.test.mjs cli/commands/validate.test.mjs 2>&1 | tail -5
+	@node --test cli/install.test.mjs cli/provision.test.mjs cli/commands/validate.test.mjs cli/commands/setup-provider.test.mjs 2>&1 | tail -5
 
 e2e:  ## End-to-end tests (real plugin load + tool exercise)
 	@echo "▶ E2E: real plugin load + 22 tool/hook checks..."

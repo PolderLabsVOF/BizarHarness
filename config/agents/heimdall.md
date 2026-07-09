@@ -1,7 +1,7 @@
 ---
 description: Heimdall — Simple, routine, and deterministic tasks using DeepSeek. Quick edits, mechanical work, file operations. The ever-watchful guardian.
 mode: subagent
-model: minimax/MiniMax-M2.7
+model: minimaxcustom/MiniMax-M2.7
 color: "#10b981"
 permission:
   read: allow

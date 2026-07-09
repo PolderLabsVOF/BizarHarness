@@ -1,7 +1,7 @@
 ---
 description: Quick (quick) — fast single-shot tasks. No delegation, no parallel streams. Use for small edits, mechanical changes, one-shot questions. Routes to no one.
 mode: primary
-model: minimax/MiniMax-M2.7-Flash
+model: minimaxcustom/MiniMax-M2.7-highspeed
 color: "#22d3ee"
 permission:
   read: allow

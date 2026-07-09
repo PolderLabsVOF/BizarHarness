@@ -68,7 +68,7 @@ function makeFakeClineInstall(root) {
     'audit.md', 'bizar.md', 'explain.md', 'init.md', 'learn.md',
     'plan.md', 'plow-through.md', 'pr-review.md', 'tailscale-serve.md',
     'visual-plan.md',
-    'team.md', 'test.md', 'validate.md',
+    'team.md', 'test.md', 'validate.md', 'setup-provider.md',
   ]) {
     writeFileSync(join(cmdsDir, f), '# fake command');
   }
@@ -205,28 +205,54 @@ describe('runValidate() — JSON output', () => {
     assert.equal(exitCode, 1, 'should fail when enableAgentTeams is false');
   });
 
-  test('fails when provider config is missing', async () => {
+  test('passes when no provider is configured (v6.2.2+ — user must configure)', async () => {
+    // v6.2.2: the installer no longer touches provider config. The
+    // user must add their own provider. The provider-config check
+    // is therefore ALWAYS lenient — it just reports state.
     const cfg = JSON.parse(readFileSync(join(workDir, 'cline.json'), 'utf8'));
     delete cfg.provider;
     writeFileSync(join(workDir, 'cline.json'), JSON.stringify(cfg, null, 2));
-    const { exitCode } = await captureRun({ json: true });
-    assert.equal(exitCode, 1);
+    const { exitCode, stdout } = await captureRun({ json: true });
+    assert.equal(exitCode, 0, 'no-provider must not fail validation (v6.2.2+ contract)');
+    const parsed = JSON.parse(stdout);
+    const p = parsed.results.find((r) => r.name === 'provider-config');
+    assert.ok(p, 'provider-config check should be present');
+    assert.equal(p.ok, true, 'provider-config always returns ok (lenient)');
+    assert.match(p.message, /no provider configured/);
   });
 
-  test('passes when only 9router is configured (no minimax)', async () => {
+  test('reports user-configured providers when present', async () => {
+    // User has set up their own provider (anything goes).
     const cfg = JSON.parse(readFileSync(join(workDir, 'cline.json'), 'utf8'));
-    delete cfg.provider.minimax;
+    cfg.provider = {
+      'my-custom-provider': {
+        baseUrl: 'https://my-llm.example/v1',
+        apiKey: 'sk-test',
+        models: { 'my-model-1': {}, 'my-model-2': {} },
+      },
+    };
     writeFileSync(join(workDir, 'cline.json'), JSON.stringify(cfg, null, 2));
-    const { exitCode } = await captureRun({ json: true });
+    const { exitCode, stdout } = await captureRun({ json: true });
     assert.equal(exitCode, 0);
+    const parsed = JSON.parse(stdout);
+    const p = parsed.results.find((r) => r.name === 'provider-config');
+    assert.match(p.message, /my-custom-provider/);
+    assert.match(p.message, /2 models/);
   });
 
-  test('passes when only minimax is configured (no 9router)', async () => {
+  test('reports both providers if user has multiple', async () => {
     const cfg = JSON.parse(readFileSync(join(workDir, 'cline.json'), 'utf8'));
-    delete cfg.provider['9router'];
+    cfg.provider = {
+      'a': { baseUrl: 'https://a.example/v1', models: { 'm1': {} } },
+      'b': { baseUrl: 'https://b.example/v1', models: { 'm2': {}, 'm3': {} } },
+    };
     writeFileSync(join(workDir, 'cline.json'), JSON.stringify(cfg, null, 2));
-    const { exitCode } = await captureRun({ json: true });
+    const { exitCode, stdout } = await captureRun({ json: true });
     assert.equal(exitCode, 0);
+    const parsed = JSON.parse(stdout);
+    const p = parsed.results.find((r) => r.name === 'provider-config');
+    assert.match(p.message, /\ba\b/);
+    assert.match(p.message, /\bb\b/);
   });
 
   test('default mode is lenient on 9router-unreachable', async () => {

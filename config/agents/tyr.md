@@ -1,7 +1,7 @@
 ---
 description: Tyr — Handles the most complex implementation, debugging, and architectural work using MiniMax M3. Reserved for the hardest problems. Always plan-then-Forseti-gate.
 mode: subagent
-model: minimax/MiniMax-M3
+model: minimaxcustom/MiniMax-M3
 color: "#dc2626"
 permission:
   read: allow

@@ -129,6 +129,7 @@ function showHelp() {
     eval                   Evaluate AI agent outputs against golden fixtures
     plan                   [v6.0.0+] Reserved for future plan management
     validate               Validate the Bizar install (21 checks)
+    setup-provider         Configure a provider in cline.json (since v6.2.2 installer doesn't touch providers)
 
   Examples:
     bizar install
@@ -205,6 +206,7 @@ async function main() {
       'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
       'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
       'agent-browser', 'update', 'providers', 'plan', 'validate',
+      'setup-provider',
     ]);
     const UTIL_ALIASES = new Set(['dashboard', 'agent-browser-up']);
     let mod;
@@ -506,6 +508,23 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'validate');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (!found) {
+        console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
+        showHelp();
+        process.exit(EXIT_ERROR);
+      }
+      break;
+    }
+
+    case 'setup-provider': {
+      const mod = await importCommand('setup-provider');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load setup-provider command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'setup-provider');
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (!found) {
         console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
