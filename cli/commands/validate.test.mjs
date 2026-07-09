@@ -10,7 +10,7 @@
  */
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
@@ -85,8 +85,10 @@ function makeFakeClineInstall(root) {
   }
   const hooksDir = join(root, 'hooks');
   mkdirSync(hooksDir, { recursive: true });
-  for (const h of ['pre-tool-use.md', 'post-tool-use.md', 'README.md']) {
-    writeFileSync(join(hooksDir, h), '# fake hook');
+  for (const h of ['PreToolUse', 'PostToolUse', 'TaskStart', 'TaskResume', 'UserPromptSubmit']) {
+    // Cline hooks must be executable scripts with a shebang line.
+    writeFileSync(join(hooksDir, h), '#!/usr/bin/env node\n// fake hook\n');
+    chmodSync(join(hooksDir, h), 0o755);
   }
   const pluginDir = join(root, 'plugins', 'bizar');
   mkdirSync(pluginDir, { recursive: true });

@@ -38,7 +38,7 @@
 
 import chalk from 'chalk';
 import { execSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, statSync, copyFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, statSync, copyFileSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1278,12 +1278,47 @@ export async function syncConfigExtras({ dryRun }) {
   }
 
   // ── Hooks ────────────────────────────────────────────────────
+  // v6.2.1 — Cline hooks are real executable scripts (PreToolUse,
+  // PostToolUse, TaskStart, TaskResume, UserPromptSubmit). They live in
+  // `~/.cline/hooks/` AND `~/Documents/Cline/Hooks/`. Cline only loads
+  // hooks from the second path (the first is for additional runtime
+  // hook injection via `--hooks-dir`), but we install to BOTH so:
+  //   1. `bizar validate` can verify the hooks are on disk.
+  //   2. Power users who pass `--hooks-dir ~/.cline/hooks` get them.
+  //   3. The official `~/Documents/Cline/Hooks/` location is canonical
+  //      and works without any extra config.
+  //
+  // Hooks must be `chmod +x` executable (Cline silently skips
+  // non-executable hook files per the Cline hooks contract).
   const hooksSrc = join(REPO_ROOT, 'config', 'hooks');
   if (existsSync(hooksSrc)) {
-    const hooksDst = join(CLINE_DIR, 'hooks');
-    mkdirSync(hooksDst, { recursive: true });
-    await copyDirIfExists(hooksSrc, hooksDst);
-    counts.hooks = 1;
+    const hookEntries = readdirSync(hooksSrc, { withFileTypes: true });
+    const hookFiles = hookEntries
+      .filter((e) => e.isFile() && !e.name.endsWith('.md') && !e.name.endsWith('.txt'))
+      .map((e) => e.name);
+
+    // Install to ~/.cline/hooks/ (used by --hooks-dir override)
+    const hooksDst1 = join(CLINE_DIR, 'hooks');
+    mkdirSync(hooksDst1, { recursive: true });
+    for (const hookFile of hookFiles) {
+      const src = join(hooksSrc, hookFile);
+      const dst = join(hooksDst1, hookFile);
+      copyFileSync(src, dst);
+      try { chmodSync(dst, 0o755); } catch { /* best-effort */ }
+    }
+
+    // Also install to the canonical location: ~/Documents/Cline/Hooks/
+    // (Cline's default global hooks directory per the official docs)
+    const hooksDst2 = join(HOME, 'Documents', 'Cline', 'Hooks');
+    mkdirSync(hooksDst2, { recursive: true });
+    for (const hookFile of hookFiles) {
+      const src = join(hooksSrc, hookFile);
+      const dst = join(hooksDst2, hookFile);
+      copyFileSync(src, dst);
+      try { chmodSync(dst, 0o755); } catch { /* best-effort */ }
+    }
+
+    counts.hooks = hookFiles.length;
   }
 
   // ── Rules ────────────────────────────────────────────────────

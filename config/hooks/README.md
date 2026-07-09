@@ -1,29 +1,68 @@
-# Hook System
+# Bizar Harness — Cline Hooks
 
-BizarHarness uses **behavioral hooks** — agent-level instructions that simulate hook behavior. Since cline doesn't have a native hook runtime, all hooks are implemented as agent behavioral patterns.
+This directory contains Cline-native hook scripts. They are NOT markdown
+behavioral patterns — they are real Cline hook executables that run at
+specific lifecycle events.
 
-## Available Hooks
+## Format
 
-| Hook | Type | Trigger | Behavior |
-|------|------|---------|----------|
-| `pre-tool-use` | Behavioral | Before any edit/write | Check for secrets, verify permissions |
-| `post-tool-use` | Behavioral | After any edit/write | Auto-lint, auto-format, auto-test |
-| `session-start` | Behavioral | On session start | Read .bizar/, Hindsight recall, stack detection |
-| `session-end` | Behavioral | On task completion | Append to AGENTS_SELF_IMPROVEMENT.md |
-| `pre-commit` | Behavioral | Before git commit | Check for console.log, .env leaks, lint |
-| `post-implement` | Behavioral | After parallel implementation | Run test gate, verify both agents' outputs |
+Cline hooks are executable scripts (no extension) with a shebang line:
 
-## How It Works
+```bash
+#!/usr/bin/env node
+```
 
-Each hook is enforced by agent instructions in the agent `.md` files:
+They live in two locations:
+- **Global**: `~/Documents/Cline/Hooks/` (applies to all workspaces)
+- **Workspace**: `.clinerules/hooks/` (applies to one project)
 
-- **Pre-tool-use**: All implementation agents check for exposed secrets before any `write` or `edit` call
-- **Post-tool-use**: After file modifications, agents auto-run the linter and formatter
-- **Session-start**: Odin reads `.bizar/PROJECT.md` and Hindsight; Heimdall runs `bizar init` if missing
-- **Session-end**: Odin dispatches Heimdall to auto-extract self-improvement entries
-- **Pre-commit**: Hermod checks for console.log and .env before allowing git commits
-- **Post-implement**: After Thor+Tyr complete, Odin routes to Thor for test gate
+The `bizar install` / `bizar update` commands install these scripts to
+**both** locations with `chmod +x` so Cline picks them up.
 
-## Customization
+## What each hook does
 
-To disable a hook, remove its instruction from the relevant agent `.md` file(s) in `~/.config/cline/agents/`.
+| Hook | Stage | Job |
+|------|-------|-----|
+| `TaskStart` | New task | Prime the AI with `.bizar/PROJECT.md` + memory-vault search |
+| `TaskResume` | Existing task resumed | Re-read project state, check `git log` since last run |
+| `UserPromptSubmit` | User submits prompt | Tag the prompt for routing (`/team`, `/plow-through`, etc.) |
+| `PreToolUse` | Before every tool | Block writes to `.env`, `secrets/`, `node_modules/`, lockfiles; warn on `console.log`/`debugger`/`.only()` in `src/` |
+| `PostToolUse` | After every tool | Log latency to `~/.config/bizar/hook-logs/`, remind to run `/test` after edits |
+
+## I/O contract
+
+Cline invokes each hook with **JSON on stdin** and reads **JSON on stdout**.
+
+Input shape (Cline → hook):
+
+```json
+{
+  "clineVersion": "3.0.39",
+  "hookName": "PreToolUse",
+  "taskId": "...",
+  "preToolUse": { "toolName": "write_to_file", "parameters": { "path": "src/foo.ts", ... } }
+}
+```
+
+Output shape (hook → Cline):
+
+```json
+{
+  "cancel": false,
+  "contextModification": "small note for the next AI decision"
+}
+```
+
+Set `cancel: true` to block the tool call. The optional `errorMessage`
+is shown to the user.
+
+## Disabling a hook
+
+Rename the file to add a `.disabled` suffix (e.g. `PreToolUse.disabled`)
+or remove the executable bit (`chmod -x PreToolUse`). Cline silently
+skips hooks it can't execute.
+
+## See also
+
+- [Cline hooks documentation](https://docs.cline.bot/customization/hooks)
+- `cli/commands/validate.mjs` — `bizar validate` includes a `hooks-installed` check

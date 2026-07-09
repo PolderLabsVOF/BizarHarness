@@ -1,0 +1,48 @@
+#!/usr/bin/env node
+// TaskResume — Bizar harness hook.
+//
+// Runs when an existing task is resumed. Reads JSON from stdin, outputs
+// JSON to stdout. Used to remind the model of previous progress and to
+// detect scope drift since the last run.
+
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+let raw = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { raw += chunk; });
+process.stdin.on('end', () => {
+  let input = {};
+  try { input = JSON.parse(raw); } catch { input = {}; }
+  const task = input.taskResume || {};
+  const previous = task.previousState || {};
+
+  try {
+    const logDir = path.join(os.homedir(), '.config', 'bizar', 'hook-logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const today = new Date().toISOString().slice(0, 10);
+    const logFile = path.join(logDir, `task-resume-${today}.jsonl`);
+    fs.appendFileSync(logFile, JSON.stringify({
+      ts: new Date().toISOString(),
+      taskId: input.taskId || null,
+      lastMessageTs: previous.lastMessageTs || null,
+      messageCount: previous.messageCount || null,
+    }) + '\n');
+  } catch { /* best-effort */ }
+
+  const notes = [
+    'Bizar TaskResume: re-read `.bizar/PROJECT.md` and `PROGRESS.md` before continuing.',
+    'Bizar TaskResume: check `git log --oneline -10` to see what changed since the last run.',
+  ];
+  if (previous.conversationHistoryDeleted) {
+    notes.push('Bizar TaskResume: WARNING — conversation history was deleted. Context from previous run is gone; verify scope before continuing.');
+  }
+
+  process.stdout.write(JSON.stringify({
+    cancel: false,
+    contextModification: notes.join(' '),
+  }) + '\n');
+});

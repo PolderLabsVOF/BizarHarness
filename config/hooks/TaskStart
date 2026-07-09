@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+// TaskStart — Bizar harness hook.
+//
+// Runs when a NEW task is started (not when resuming). Reads JSON from
+// stdin, outputs JSON to stdout. Used to prime the AI with project
+// context and to record the start of a session.
+
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+let raw = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { raw += chunk; });
+process.stdin.on('end', () => {
+  let input = {};
+  try { input = JSON.parse(raw); } catch { input = {}; }
+  const task = input.taskStart || {};
+  const initial = String(task.taskMetadata?.initialTask || '').slice(0, 500);
+
+  // Log task start to ~/.config/bizar/hook-logs/
+  try {
+    const logDir = path.join(os.homedir(), '.config', 'bizar', 'hook-logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const today = new Date().toISOString().slice(0, 10);
+    const logFile = path.join(logDir, `task-start-${today}.jsonl`);
+    fs.appendFileSync(logFile, JSON.stringify({
+      ts: new Date().toISOString(),
+      taskId: input.taskId || null,
+      clineVersion: input.clineVersion || null,
+      initial: initial,
+    }) + '\n');
+  } catch { /* best-effort */ }
+
+  const notes = [
+    'Bizar TaskStart: read `.bizar/PROJECT.md` (if present) before any routing decision.',
+    'Bizar TaskStart: if memory vault exists, run `bizar memory search "<topic>"` first.',
+    'Bizar TaskStart: Odin dispatches to subagents via `task` (sync) or `bizar_spawn_background` (async).',
+  ];
+
+  process.stdout.write(JSON.stringify({
+    cancel: false,
+    contextModification: notes.join(' '),
+  }) + '\n');
+});

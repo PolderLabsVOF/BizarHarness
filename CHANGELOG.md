@@ -1,5 +1,58 @@
 # Changelog
 
+## v6.2.1 — Hooks now actually work in Cline
+
+Patch release. Fixes the "I see skills but no hooks" user report.
+
+In v6.0.0 and earlier, the Bizar harness shipped its "hooks" as
+**markdown behavioral files** (`pre-tool-use.md`, `post-tool-use.md`,
+`README.md`) in `~/.cline/hooks/`. But Cline hooks are **executable
+scripts** with a shebang line, named `PreToolUse`, `PostToolUse`,
+`TaskStart`, `TaskResume`, `UserPromptSubmit` — the markdown files
+were silently ignored.
+
+v6.2.1 replaces the markdown with five real Cline-native executable
+hook scripts and installs them to **both** Cline hook directories:
+
+- `~/.cline/hooks/` (used by `--hooks-dir` override)
+- `~/Documents/Cline/Hooks/` (Cline's default global hooks location)
+
+### Fixed
+
+- `config/hooks/{PreToolUse,PostToolUse,TaskStart,TaskResume,UserPromptSubmit}`
+  (new) — five real executable Cline hook scripts with shebang lines.
+  - `PreToolUse` blocks writes to `.env`, `secrets/`, `node_modules/`,
+    `package-lock.json`, and other protected paths. Warns on
+    `console.log`/`debugger`/`.only()` in `src/`.
+  - `PostToolUse` logs tool latency to `~/.config/bizar/hook-logs/`
+    and reminds the AI to run `/test` after editing `src/`.
+  - `TaskStart` primes the AI with `.bizar/PROJECT.md` + memory-vault
+    search hints.
+  - `TaskResume` reminds the AI to re-read project state and check
+    `git log` since the last run.
+  - `UserPromptSubmit` tags the prompt for routing (special-cases
+    `/team`, `/plow-through`, `/test`, `/validate`).
+- `cli/provision.mjs:syncConfigExtras` — installs hooks to BOTH
+  `~/.cline/hooks/` AND `~/Documents/Cline/Hooks/`, with `chmod +x`.
+- `cli/commands/validate.mjs` — `hooks-installed` check now verifies
+  the hooks are real executables (shebang + executable bit), not
+  markdown. New `hooks-canonical-location` check confirms
+  `~/Documents/Cline/Hooks/` is also populated.
+- `scripts/bh-full-e2e.mjs` — new check confirms `config/hooks/`
+  has all 5 Cline-native hook scripts with shebangs.
+- Removed the obsolete `config/hooks/{pre-tool-use,post-tool-use,README}.md`
+  (markdown behavioral files that Cline never read).
+
+### Migration
+
+Re-run `bizar install` (or `bizar update`) to:
+1. Delete the old markdown files from `~/.cline/hooks/`.
+2. Install the new executable hook scripts in both `~/.cline/hooks/`
+   and `~/Documents/Cline/Hooks/`.
+3. `chmod +x` them so Cline picks them up.
+
+The next Cline session will list the hooks in its config view.
+
 ## v6.2.0 — Flawless Cline integration: /team + /test + /validate + e2e
 
 Minor bump. The Cline integration is now end-to-end flawless: every

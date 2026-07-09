@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+// UserPromptSubmit — Bizar harness hook.
+//
+// Runs when the user submits a prompt. Reads JSON from stdin, outputs
+// JSON to stdout. Used to lightly tag user prompts for routing and to
+// add a "Plow Through" prompt hint when ambiguity is detected.
+
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+let raw = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { raw += chunk; });
+process.stdin.on('end', () => {
+  let input = {};
+  try { input = JSON.parse(raw); } catch { input = {}; }
+  const submit = input.userPromptSubmit || {};
+  const prompt = String(submit.prompt || '').trim();
+
+  // Always log (no PII redaction needed — the prompt is the user's).
+  try {
+    const logDir = path.join(os.homedir(), '.config', 'bizar', 'hook-logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const today = new Date().toISOString().slice(0, 10);
+    const logFile = path.join(logDir, `user-prompt-${today}.jsonl`);
+    fs.appendFileSync(logFile, JSON.stringify({
+      ts: new Date().toISOString(),
+      taskId: input.taskId || null,
+      promptLength: prompt.length,
+    }) + '\n');
+  } catch { /* best-effort */ }
+
+  const notes = [];
+  if (prompt.length === 0) {
+    notes.push('Bizar UserPromptSubmit: empty prompt — wait for actual user input.');
+  } else if (prompt.startsWith('/team')) {
+    notes.push('Bizar UserPromptSubmit: /team — Odin will spawn a coordinated agent team. Confirm disjoint file scopes before dispatching.');
+  } else if (prompt.startsWith('/plow-through')) {
+    notes.push('Bizar UserPromptSubmit: /plow-through — autonomous mode. Dispatch 2+ parallel agents when possible. Run /test before claiming done.');
+  } else if (prompt.startsWith('/test')) {
+    notes.push('Bizar UserPromptSubmit: /test — auto-detects runner (jest/vitest/bun/pytest/cargo/go). Streams output to the user.');
+  } else if (prompt.startsWith('/validate')) {
+    notes.push('Bizar UserPromptSubmit: /validate — runs 21-point health check on the Bizar install.');
+  } else {
+    notes.push('Bizar UserPromptSubmit: if the request is complex, decompose into 2+ parallel subagent tasks (Odin) or spawn a /team.');
+  }
+
+  process.stdout.write(JSON.stringify({
+    cancel: false,
+    contextModification: notes.join(' '),
+  }) + '\n');
+});

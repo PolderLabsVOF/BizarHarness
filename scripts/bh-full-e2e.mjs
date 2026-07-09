@@ -249,6 +249,39 @@ try {
   record('config/rules/ scannable', false, err.message);
 }
 
+// ── 6.5. Verify config/hooks/ has Cline-native executable hooks ────
+// Cline hooks are real scripts (not markdown). They must have a
+// shebang line and the right names. The previous v6.x format used
+// markdown behavioral files which Cline ignored.
+try {
+  const { readFileSync, readdirSync, existsSync } = await import('node:fs');
+  const hooksDir = join(REPO_ROOT, 'config', 'hooks');
+  if (!existsSync(hooksDir)) {
+    record('config/hooks/ present', false, `${hooksDir} missing`);
+  } else {
+    const files = readdirSync(hooksDir);
+    const required = ['PreToolUse', 'PostToolUse', 'TaskStart', 'TaskResume', 'UserPromptSubmit'];
+    const missing = required.filter((f) => !files.includes(f));
+    if (missing.length > 0) {
+      record('config/hooks/ has 5 Cline-native hook scripts', false, `missing: ${missing.join(', ')}`);
+    } else {
+      // Verify each has a shebang line (Cline requires it).
+      const noShebang = [];
+      for (const f of required) {
+        const first = readFileSync(join(hooksDir, f), 'utf8').split('\n')[0] || '';
+        if (!first.startsWith('#!')) noShebang.push(f);
+      }
+      if (noShebang.length > 0) {
+        record('Cline hooks have shebang', false, `no shebang: ${noShebang.join(', ')}`);
+      } else {
+        record('config/hooks/ has 5 Cline-native executable hooks', true, required.join(', '));
+      }
+    }
+  }
+} catch (err) {
+  record('config/hooks/ scannable', false, err.message);
+}
+
 // ── 7. Verify plugin index.ts is well-formed ───────────────────
 try {
   const { readFileSync } = await import('node:fs');

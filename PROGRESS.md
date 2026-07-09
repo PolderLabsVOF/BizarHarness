@@ -6,15 +6,44 @@
 
 ## Current State
 
-- **Last commit:** v6.2.0 — flawless Cline integration: /team + /test + /validate + e2e script + installer robustness
+- **Last commit:** v6.2.1 — hooks now actually work in Cline (executable scripts, not markdown)
 - **Released:** (unreleased; on master)
-- **`make check`:** 749/749 pass (+31 CLI tests), 0 TS errors
+- **`make check`:** 749/749 pass, 0 TS errors
 - **`make test`:** 780/780 pass (53 plugin/sdk files + 31 CLI tests)
-- **`make e2e`:** 15/15 pass (real plugin + cline integration verification)
-- **`make clean-check`:** 5/5 dimensions pass (was 4/5 in v6.1.0)
+- **`make e2e`:** 16/16 pass (real plugin + cline integration verification)
+- **`make clean-check`:** 5/5 dimensions pass
 - **`make vcr`:** 27/27 = 1.000
 - **Branch:** master
-- **Phase:** v6.2.0 — **Flawless Cline integration**
+- **Phase:** v6.2.1 — **Cline hooks fix**
+
+## What landed in v6.2.1
+
+Fixes the "I see skills but no hooks" user report. v6.0.0 shipped
+"hooks" as markdown behavioral files in `~/.cline/hooks/` which Cline
+silently ignored. v6.2.1 replaces them with five real Cline-native
+executable hook scripts.
+
+### Patches
+
+1. **`config/hooks/{PreToolUse,PostToolUse,TaskStart,TaskResume,UserPromptSubmit}`** (new) —
+   five real executable hook scripts with shebang lines:
+   - `PreToolUse` blocks writes to `.env`/`secrets/`/`node_modules`/
+     lockfiles; warns on `console.log`/`debugger`/`.only()` in `src/`
+   - `PostToolUse` logs tool latency to `~/.config/bizar/hook-logs/`
+   - `TaskStart` primes the AI with project context
+   - `TaskResume` reminds the AI to re-read state + check git log
+   - `UserPromptSubmit` tags the prompt for routing
+2. **`cli/provision.mjs:syncConfigExtras`** — installs hooks to BOTH
+   `~/.cline/hooks/` AND `~/Documents/Cline/Hooks/` (Cline's default
+   global hooks location), with `chmod +x`.
+3. **`cli/commands/validate.mjs`** — `hooks-installed` now verifies
+   shebang + executable bit (not just file presence). New
+   `hooks-canonical-location` check confirms
+   `~/Documents/Cline/Hooks/` is populated.
+4. **`scripts/bh-full-e2e.mjs`** — new check verifies
+   `config/hooks/` has all 5 Cline-native hook scripts with shebangs.
+5. **Removed** the obsolete `config/hooks/{pre-tool-use,post-tool-use,README}.md`
+   (markdown behavioral files that Cline never read).
 
 ## What landed in v6.2.0
 

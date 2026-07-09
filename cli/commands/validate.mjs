@@ -54,8 +54,13 @@ const REQUIRED_COMMANDS = [
   'team.md', 'test.md', 'validate.md',
 ];
 
+// v6.2.1 — Cline-native hook scripts (executable, shebang, no extension).
+// These are real Cline hooks (https://docs.cline.bot/customization/hooks).
+// The previous v6.x hook contract was markdown behavioral files, which
+// Cline silently ignored — leading to the "I see skills but no hooks"
+// user report.
 const REQUIRED_HOOKS = [
-  'pre-tool-use.md', 'post-tool-use.md', 'README.md',
+  'PreToolUse', 'PostToolUse', 'TaskStart', 'TaskResume', 'UserPromptSubmit',
 ];
 
 const REQUIRED_RUNTIME_DEPS = ['zod', '@cline/sdk', '@cline/core', '@cline/shared'];
@@ -222,7 +227,42 @@ const CHECKS = {
     if (missing.length > 0) {
       throw new Error(`missing: ${missing.join(', ')} — run \`bizar update\``);
     }
-    return `all ${REQUIRED_HOOKS.length} hook file(s) present`;
+    // Verify hooks are executable (Cline silently skips non-executable
+    // hook files per the official contract). On Windows, chmod is a
+    // no-op so skip the check there.
+    if (process.platform !== 'win32') {
+      const { statSync } = await import('node:fs');
+      const nonExec = [];
+      for (const f of REQUIRED_HOOKS) {
+        try {
+          const st = statSync(join(dir, f));
+          // 0o755 = owner=rwx, group=r-x, other=r-x. Just check owner has x.
+          if ((st.mode & 0o100) === 0) nonExec.push(f);
+        } catch {
+          nonExec.push(f);
+        }
+      }
+      if (nonExec.length > 0) {
+        throw new Error(`hooks not executable: ${nonExec.join(', ')} — run \`chmod +x ~/.cline/hooks/*\``);
+      }
+    }
+    return `all ${REQUIRED_HOOKS.length} Cline-native hook file(s) executable in ${dir}`;
+  },
+
+  'hooks-canonical-location': async () => {
+    // Cline's default global hooks location per the official docs:
+    // `~/Documents/Cline/Hooks/`. Verify our hooks are also there
+    // (Bizar install puts them in BOTH ~/.cline/hooks/ and
+    // ~/Documents/Cline/Hooks/ for max compatibility).
+    const canonical = join(homedir(), 'Documents', 'Cline', 'Hooks');
+    if (!existsSync(canonical)) {
+      return `optional: ${canonical} does not exist yet — \`bizar install\` creates it`;
+    }
+    const missing = REQUIRED_HOOKS.filter((f) => !existsSync(join(canonical, f)));
+    if (missing.length > 0) {
+      return `optional: ${missing.length} hook(s) missing in ${canonical} — re-run \`bizar install\``;
+    }
+    return `canonical hooks dir ${canonical} has all ${REQUIRED_HOOKS.length} hook(s)`;
   },
 
   'provider-config': async () => {
@@ -325,6 +365,7 @@ const CHECK_ORDER = [
   'skills-installed',
   'rules-installed',
   'hooks-installed',
+  'hooks-canonical-location',
   'default-agent-set',
   'instructions-loaded',
   'provider-config',
