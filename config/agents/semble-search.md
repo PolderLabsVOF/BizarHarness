@@ -1,5 +1,5 @@
 ---
-description: Code search agent for exploring any codebase. Use for finding code by intent, locating implementations, understanding how something works, or discovering related code. Prefer over Bash/Read for any semantic or exploratory question.
+description: Code search agent for exploring any codebase. Use for finding code by intent, locating implementations, understanding how something works, or discovering related code. Prefer over Bash/Read for any semantic or exploratory question., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M2.7
 color: "#64748b"

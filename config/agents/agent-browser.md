@@ -1,5 +1,5 @@
 ---
-description: agent-browser — Primary agent for browser-driven E2E verification. No-edit permissions. Drives Chrome for Testing via the agent-browser CLI for end-to-end testing of web apps.
+description: agent-browser — Primary agent for browser-driven E2E verification. No-edit permissions. Drives Chrome for Testing via the agent-browser CLI for end-to-end testing of web apps. Reads `_shared/CLINE_TOOLS.md` before any tool call.
 mode: primary
 model: openrouter/minimax/minimax-m2.7
 color: "#84cc16"

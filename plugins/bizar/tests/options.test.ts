@@ -278,16 +278,16 @@ describe("readEnvFlags", () => {
 // ── clineruntimeMaxConsecutiveMistakes ───────────────────────────────────────
 
 describe("clineruntimeMaxConsecutiveMistakes (v0.3.1)", () => {
-  test("default is 6 when neither raw nor env is provided", () => {
+  test("default is 10 when neither raw nor env is provided (v6.2.4)", () => {
     delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
     const { options } = normalizeOptions({});
-    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(6);
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(10);
   });
 
   test("raw value is honored when in range", () => {
     delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
-    const { options, notes } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: 10 });
-    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(10);
+    const { options, notes } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: 15 });
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(15);
     expect(notes.some((n) => n.includes("clineruntimeMaxConsecutiveMistakes"))).toBe(false);
   });
 
@@ -321,9 +321,9 @@ describe("clineruntimeMaxConsecutiveMistakes (v0.3.1)", () => {
     delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
   });
 
-  test("non-numeric raw falls back to default", () => {
+  test("non-numeric raw falls back to default (10)", () => {
     delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
     const { options } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: "not-a-number" });
-    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(6);
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(10);
   });
 });

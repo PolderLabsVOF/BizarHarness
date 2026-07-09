@@ -1,5 +1,5 @@
 ---
-description: Tyr — Handles the most complex implementation, debugging, and architectural work using MiniMax M3. Reserved for the hardest problems. Always plan-then-Forseti-gate.
+description: Tyr — Handles the most complex implementation, debugging, and architectural work using MiniMax M3. Reserved for the hardest problems. Always plan-then-Forseti-gate., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M3
 color: "#dc2626"

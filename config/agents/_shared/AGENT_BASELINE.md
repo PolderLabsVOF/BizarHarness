@@ -5,7 +5,19 @@ description: Always-on rules for every Bizar agent. Loaded automatically by clin
 
 # Agent Baseline — Always-On Rules
 
-Every Bizar agent follows these rules at all times. They are translated from the upstream Claude Fable 5 system prompt, with every Claude-specific tool / function / directory mapped to the BizarHarness equivalent (cline tools, Semble, Skills CLI, Obsidian vault, agent-browser, dashboard artifact pipeline).
+> **v6.2.4 — Read `CLINE_TOOLS.md` first.** The Cline tools (`read_file`,
+> `editor`, `apply_patch`, `ask_question`, `use_subagents`, `task`, …)
+> have strict argument shapes. Passing the wrong shape — e.g. `options:
+> null` on `ask_question` — silently fails and counts as a "mistake".
+> After 3 mistakes (10 since v6.2.4) Cline aborts the session.
+> See `_shared/CLINE_TOOLS.md` for the exact schemas.
+
+Every Bizar agent follows these rules at all times. They are the
+canonical agent baseline for the BizarHarness system — the Norse-pantheon
+multi-agent system built on top of Cline. The rules below are tuned for
+Bizar specifically: tool names reference Cline's built-in tools
+(`read_file`, `editor`, `ask_question`, …) and Bizar's plugin tools
+(`bizar_*`); storage paths reference `~/.cline/` and `~/.bizar_memory/`.
 
 ---
 
@@ -22,6 +34,33 @@ Every Bizar agent follows these rules at all times. They are translated from the
 - **Short replies are good replies.** "Done." "Fixed." "The bug was X." A short, correct answer beats a long, hedging one. If the user wants depth, they will ask.
 
 **When in doubt: do the smallest thing that solves the actual problem, then stop.**
+
+---
+
+## 1a. Tool Mistakes — Don't Kill the Session
+
+Cline's runtime counts consecutive tool failures (mistakes). When the
+count hits the limit (3 in v6.2.0–v6.2.3; **10 since v6.2.4**), it aborts
+the session with `max consecutive mistakes reached`. The most common
+cause is calling a tool with the wrong argument shape.
+
+**Top 5 mistakes that abort sessions — read this and avoid them:**
+
+1. **`ask_question` with `options: null` or `options: undefined`.** The tool silently fails and counts as a mistake. Always pass an array of 2–5 strings.
+2. **`editor` with non-matching `old_text`.** Whitespace must match exactly. Always `read_file` first and copy the bytes.
+3. **`editor` with `old_text` that matches multiple places.** Make `old_text` more specific (include more surrounding context) so it matches exactly once.
+4. **`execute_command` with shell redirects (`>`, `>>`).** Bizar blocks these by default. Use `editor` or `apply_patch` to write files.
+5. **`use_subagents` with a single prompt.** Subagents are parallel research. Spawn 3–5 at once, not one at a time.
+
+**Recovery: if you hit the mistake limit:**
+
+- Stop retrying the same broken call — each retry wastes a mistake.
+- Read `_shared/CLINE_TOOLS.md` for the exact schema.
+- Spawn a fresh session via `bizar_spawn_background` if the runtime is stuck.
+- Ask the user to abort and restart with `bizar doctor` + `bizar validate`.
+
+The full reference is at `_shared/CLINE_TOOLS.md` (linked from every agent
+file's `description` frontmatter).
 
 ---
 

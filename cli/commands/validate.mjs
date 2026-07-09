@@ -362,6 +362,33 @@ const CHECKS = {
     }
   },
 
+  // v6.2.4 — Warn if the user's clineruntimeMaxConsecutiveMistakes is
+  // below the plugin's recommended minimum. Cline's CLI default is 3
+  // which aborts sessions on the 3rd tool mistake. The Bizar plugin
+  // recommends 10 (or `--retries N` with N ≥ 10).
+  'mistake-limit-floor': async () => {
+    const MIN = 10;
+    const cfg = readJsonSafe(clineJsonPath());
+    if (!cfg?.plugin || !Array.isArray(cfg.plugin)) {
+      return 'no plugin entries in cline.json — skip mistake-limit check';
+    }
+    const bizarEntry = cfg.plugin.find((p) => Array.isArray(p) && p[0] && p[0].includes('plugins/bizar'));
+    if (!bizarEntry) {
+      return 'Bizar plugin not registered — skip mistake-limit check';
+    }
+    const opts = (Array.isArray(bizarEntry) && bizarEntry[1]) || {};
+    const raw = opts.clineruntimeMaxConsecutiveMistakes;
+    if (typeof raw !== 'number' || raw >= MIN) {
+      return `clineruntimeMaxConsecutiveMistakes=${raw ?? 'default 10'} (≥ ${MIN}) — OK`;
+    }
+    throw new Error(
+      `clineruntimeMaxConsecutiveMistakes=${raw} is BELOW the recommended minimum (${MIN}). ` +
+      `Cline's default of 3 aborts the session on the 3rd tool mistake. ` +
+      `Edit ~/.cline/cline.json plugin[1].clineruntimeMaxConsecutiveMistakes to ${MIN}, or run ` +
+      `\`bizar install\` to reset to defaults. (See _shared/CLINE_TOOLS.md for the top-5 mistakes.)`,
+    );
+  },
+
   'default-agent-set': async () => {
     const cfg = readJsonSafe(clineJsonPath());
     if (!cfg?.default_agent) {
@@ -434,12 +461,14 @@ const CHECK_ORDER = [
   'provider-config',
   'cline-settings-provider',
   '9router-reachable',
+  'mistake-limit-floor',
 ];
 
 const LENIENT_CHECKS = new Set([
   '9router-reachable',
   'provider-config', // v6.2.2+ — installer no longer touches provider config; user must configure
   'cline-settings-provider', // v6.2.3 — warns about legacy/fake providerIds; non-blocking
+  'mistake-limit-floor', // v6.2.4 — warns about low mistake limit; non-blocking
 ]);
 
 export function showValidateHelp() {

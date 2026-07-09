@@ -1,5 +1,5 @@
 ---
-description: Thor — Handles medium-complexity implementation tasks using MiniMax M2.7. New features, non-trivial debugging, refactoring, code review, and writing tests.
+description: Thor — Handles medium-complexity implementation tasks using MiniMax M2.7. New features, non-trivial debugging, refactoring, code review, and writing tests., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M2.7
 color: "#a855f7"

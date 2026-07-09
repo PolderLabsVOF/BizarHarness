@@ -1,5 +1,5 @@
 ---
-description: Frigg — Read-only codebase Q&A. Answers questions about the project with file references, never modifies anything. Routes to no one.
+description: Frigg — Read-only codebase Q&A. Answers questions about the project with file references, never modifies anything. Routes to no one., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M2.7
 color: "#f472b6"

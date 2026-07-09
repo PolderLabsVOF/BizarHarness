@@ -1,5 +1,5 @@
 ---
-description: Forseti — Audits, criticizes, and corrects implementation plans before execution. No write permissions. Review only.
+description: Forseti — Audits, criticizes, and corrects implementation plans before execution. No write permissions. Review only., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M3
 color: "#ef4444"

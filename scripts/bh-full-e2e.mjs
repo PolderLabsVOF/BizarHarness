@@ -343,6 +343,28 @@ try {
   record('plugin hooks dir scannable', false, err.message);
 }
 
+// ── 9.5. Verify all 14 agents reference the shared docs (v6.2.4) ─────
+// Catches drift: an agent that doesn't reference AGENT_BASELINE.md or
+// CLINE_TOOLS.md won't get the always-on rules at runtime.
+try {
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync('node', ['scripts/check-agents.mjs'], {
+    encoding: 'utf8',
+    cwd: REPO_ROOT,
+    timeout: 10000,
+  });
+  if (r.status === 0) {
+    // Extract the count from the output
+    const m = /All (\d+) agents/.exec(r.stdout || '');
+    const n = m ? m[1] : '?';
+    record('all 14 agents reference AGENT_BASELINE + CLINE_TOOLS', true, `${n} agents OK`);
+  } else {
+    record('all 14 agents reference AGENT_BASELINE + CLINE_TOOLS', false, (r.stdout || r.stderr || '').trim().split('\n').slice(-3).join(' | '));
+  }
+} catch (err) {
+  record('all 14 agents reference AGENT_BASELINE + CLINE_TOOLS', false, err.message);
+}
+
 // ── 10. Verify cline CLI is on PATH and recent enough ──────────
 try {
   const { spawnSync } = await import('node:child_process');

@@ -1,5 +1,5 @@
 ---
-description: Vör — Asks clarifying questions for ambiguous or incomplete requests. Reads project context first, then asks one targeted, project-specific question.
+description: Vör — Asks clarifying questions for ambiguous or incomplete requests. Reads project context first, then asks one targeted, project-specific question., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M2.7
 color: "#a78bfa"

@@ -111,10 +111,14 @@ export const DEFAULT_OPTIONS: NormalizedOptions = {
   backgroundThinkingLoopTimeoutMs: 300_000, // 5 min
   backgroundMaxInterventions: 1,
   // v0.3.1 — ClineRuntime execution surface
-  // SDK default `??6`; CLI overrides to 3. We pick 6 so a single
-  // malformed tool call doesn't kill the session; the recovery callback
-  // (mistake-recovery.ts) gives the model guidance on the way back.
-  clineruntimeMaxConsecutiveMistakes: 6,
+  // SDK default `??6`; CLI overrides to 3. We pick 10 so several
+  // malformed tool calls don't kill the session; the recovery
+  // callback (mistake-recovery.ts) gives the model guidance on the
+  // way back. v6.2.4 — bumped from 6 → 10 because the Cline CLI's
+  // --retries default of 3 was previously overriding this entirely.
+  // Now `buildExecution` uses Math.max(plugin_default, caller_value)
+  // so this acts as a FLOOR, not a default.
+  clineruntimeMaxConsecutiveMistakes: 10,
 };
 
 const SECRET_DIRS: readonly string[] = [
@@ -380,9 +384,12 @@ export function normalizeOptions(raw: RawOptions | undefined): {
 
   // --- v0.3.1 ClineRuntime execution surface -------------------------------
 
-  // clineruntimeMaxConsecutiveMistakes: default 6, range [3, 20]
-  // CLI default is 3 which aborts sessions on the FIRST malformed tool call
-  // (editor { new_text: undefined }, ask_question { options: null }, …).
+  // clineruntimeMaxConsecutiveMistakes: default 10, range [3, 20]
+  // v6.2.4 — bumped from 6 to 10. CLI default is 3 which aborts
+  // sessions on the FIRST 3 malformed tool calls (editor { new_text:
+  // undefined }, run_commands exit code != 0, ask_question { options:
+  // null }, …). With the v6.2.4 buildExecution fix (Math.max floor),
+  // our higher default now always wins on plain `cline` invocations.
   // The harness wires a recovery callback that keeps the session alive on
   // recoverable mistakes, so we only need a slightly-larger ceiling.
   const rawMaxConsecutive = toFiniteInt(r.clineruntimeMaxConsecutiveMistakes);

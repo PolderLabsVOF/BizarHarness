@@ -1,5 +1,5 @@
 ---
-description: Hermod — Git and GitHub operations specialist using MiniMax M2.7. The only agent allowed to perform write-level git (commit, push, merge, rebase, branch) and `gh` CLI operations.
+description: Hermod — Git and GitHub operations specialist using MiniMax M2.7. The only agent allowed to perform write-level git (commit, push, merge, rebase, branch) and `gh` CLI operations., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M2.7
 color: "#f59e0b"

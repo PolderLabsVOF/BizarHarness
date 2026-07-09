@@ -1,5 +1,65 @@
 # Changelog
 
+## v6.2.4 — Mistake-limit floor + Cline tools primer
+
+Patch release. Fixes the silent v6.0.0 regression that aborted sessions
+after just 3 tool mistakes (Cline's CLI default), AND gives every Bizar
+agent a shared primer on the Cline tool argument shapes so they stop
+making the mistakes in the first place.
+
+### Fixed
+
+- **`plugins/bizar/src/clineruntime.ts`** — `buildExecution` now
+  treats the plugin's `defaultMaxConsecutiveMistakes` as a FLOOR
+  (Math.max) instead of a default that gets overridden by the CLI's
+  `--retries` flag. Previously, the Cline CLI's default of 3 would
+  silently win over our 6, aborting sessions on the 3rd tool mistake.
+- **`plugins/bizar/src/options.ts`** — bumped the plugin default from
+  6 → **10** (more lenient for tool-error retry loops).
+- **`config/agents/_shared/AGENT_BASELINE.md`** — added a "Tool
+  Mistakes — Don't Kill the Session" section with the top-5 mistake
+  patterns. Removed stale "translated from upstream Claude Fable 5"
+  sentence (Bizar has been Cline-only since v6.1.0).
+
+### Added
+
+- **`config/agents/_shared/CLINE_TOOLS.md`** (new) — comprehensive
+  reference doc with the exact schemas for `read_file`, `list_files`,
+  `search_files`, `editor`, `apply_patch`, `execute_command`,
+  `web_fetch`, `ask_question`, `use_skill`, `use_subagents`,
+  `task`. Highlights the **#1 cause of mistakes**:
+  `ask_question` with `options: null` or `options: undefined`
+  silently fails and counts as a mistake.
+- **All 14 agent files** — description frontmatter now references
+  `CLINE_TOOLS.md`. `agent-browser.md` (the only agent that
+  didn't reference `AGENT_BASELINE.md`) now references CLINE_TOOLS.md.
+- **`scripts/check-agents.mjs`** (new) — fails CI if any agent file
+  is missing the AGENT_BASELINE/CLINE_TOOLS reference.
+- **`scripts/bh-full-e2e.mjs`** — new check verifies all 14 agents
+  pass the shared-docs reference check.
+- **`cli/commands/validate.mjs`** — new `mistake-limit-floor` check
+  that warns (lenient) if `clineruntimeMaxConsecutiveMistakes` is
+  below the recommended minimum of 10.
+
+### Tests
+
+- 752 plugin/sdk tests pass (was 750; +2 mistake-limit floor tests)
+- 62 CLI tests pass (was 59; +3 validate mistake-limit-floor tests)
+- 20 e2e checks pass (was 19; +1 shared-docs reference check)
+
+### Background
+
+User report: "all writes hang after the first failure, 'Tool execution
+was interrupted before a result was produced'." Cline's runtime log
+showed `max consecutive mistakes reached (3) in yolo mode`. The model
+had tried 4 different approaches to edit a Dockerfile (editor,
+python heredoc, single-line python, sed) and all failed — likely
+because the model didn't know the right argument shapes for the
+Cline tools. With v6.2.4:
+- The plugin's higher mistake limit always wins
+- Every agent has the exact schemas in their context
+- The validator warns users who set the limit too low
+
 ## v6.2.3 — Full Cline CLI integration: subagents + teams + pass-through commands
 
 Patch release. Audits Bizar's integration with the Cline CLI per

@@ -1,5 +1,5 @@
 ---
-description: Heimdall — Simple, routine, and deterministic tasks using DeepSeek. Quick edits, mechanical work, file operations. The ever-watchful guardian.
+description: Heimdall — Simple, routine, and deterministic tasks using DeepSeek. Quick edits, mechanical work, file operations. The ever-watchful guardian., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M2.7
 color: "#10b981"

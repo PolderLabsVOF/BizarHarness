@@ -6,15 +6,59 @@
 
 ## Current State
 
-- **Last commit:** v6.2.3 — full Cline CLI integration: subagents + teams + pass-through commands
+- **Last commit:** v6.2.4 — mistake-limit floor + Cline tools primer
 - **Released:** (unreleased; on master)
-- **`make check`:** 750/750 pass, 0 TS errors
-- **`make test`:** 809/809 pass (53 plugin/sdk files + 59 CLI tests)
-- **`make e2e`:** 19/19 pass
+- **`make check`:** 752/752 pass, 0 TS errors
+- **`make test`:** 814/814 pass (53 plugin/sdk files + 62 CLI tests)
+- **`make e2e`:** 20/20 pass
 - **`make clean-check`:** 5/5 dimensions pass
 - **`make vcr`:** 27/27 = 1.000
 - **Branch:** master
-- **Phase:** v6.2.3 — **Full Cline CLI integration**
+- **Phase:** v6.2.4 — **Mistake-limit + tools primer**
+
+## What landed in v6.2.4
+
+Fixes the silent v6.0.0 mistake-limit regression AND gives every
+Bizar agent the exact schemas for Cline's tools so they stop making
+the mistakes in the first place.
+
+### Patches
+
+1. **`plugins/bizar/src/clineruntime.ts:buildExecution`** — plugin
+   defaultMaxConsecutiveMistakes is now a FLOOR (Math.max) instead
+   of a default that gets overridden by the CLI's --retries flag.
+2. **`plugins/bizar/src/options.ts`** — bumped plugin default from
+   6 → 10.
+3. **`config/agents/_shared/AGENT_BASELINE.md`** — added "Tool
+   Mistakes — Don't Kill the Session" section + removed stale
+   "translated from Claude Fable 5" sentence (Cline-only since
+   v6.1.0).
+4. **`config/agents/_shared/CLINE_TOOLS.md`** (new) — schemas for
+   `read_file`, `editor`, `ask_question`, `use_subagents`, etc.
+   Highlights the #1 mistake: `ask_question` with `options: null`.
+5. **All 14 agent files** — description frontmatter now references
+   `CLINE_TOOLS.md`. The `agent-browser.md` agent (the only one
+   that didn't reference the baseline) now does too.
+6. **`cli/commands/validate.mjs`** — new `mistake-limit-floor`
+   check (lenient warn).
+7. **`scripts/check-agents.mjs`** (new) — CI check that all 14
+   agents reference the shared docs.
+8. **`scripts/bh-full-e2e.mjs`** — runs check-agents.mjs as part
+   of e2e.
+
+### User-reported trigger
+
+> "all writes hang after the first failure, 'Tool execution was
+> interrupted before a result was produced'." — Cline's log:
+> `max consecutive mistakes reached (3) in yolo mode`. The model
+> had tried 4 different approaches to edit a Dockerfile (editor,
+> python heredoc, single-line python, sed) and all failed.
+
+The fix is two-pronged:
+- **Runtime:** the plugin's higher mistake limit (10) always wins
+  via the Math.max floor.
+- **Agent training:** every agent now has the exact tool schemas in
+  their context, so they make fewer mistakes in the first place.
 
 ## What landed in v6.2.3
 

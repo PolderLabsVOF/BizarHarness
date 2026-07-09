@@ -304,4 +304,41 @@ describe('runValidate() — JSON output', () => {
     const { exitCode } = await captureRun({ json: true, only: 'this-does-not-exist' });
     assert.equal(exitCode, 2);
   });
+
+  test('v6.2.4 — mistake-limit-floor warns when clineruntimeMaxConsecutiveMistakes is < 10', async () => {
+    const cfg = JSON.parse(readFileSync(join(workDir, 'cline.json'), 'utf8'));
+    cfg.plugin = [['./plugins/bizar', { clineruntimeMaxConsecutiveMistakes: 3 }]];
+    writeFileSync(join(workDir, 'cline.json'), JSON.stringify(cfg, null, 2));
+    const { stdout, exitCode } = await captureRun({ json: true });
+    assert.equal(exitCode, 0, 'mistake-limit-floor is lenient so exit stays 0');
+    const parsed = JSON.parse(stdout);
+    const check = parsed.results.find((r) => r.name === 'mistake-limit-floor');
+    assert.ok(check, 'mistake-limit-floor check should be present');
+    assert.equal(check.ok, false, 'low mistake limit should warn');
+    assert.match(check.message, /BELOW the recommended minimum/);
+    assert.match(check.message, /clineruntimeMaxConsecutiveMistakes=3/);
+  });
+
+  test('v6.2.4 — mistake-limit-floor OK when clineruntimeMaxConsecutiveMistakes >= 10', async () => {
+    const cfg = JSON.parse(readFileSync(join(workDir, 'cline.json'), 'utf8'));
+    cfg.plugin = [['./plugins/bizar', { clineruntimeMaxConsecutiveMistakes: 15 }]];
+    writeFileSync(join(workDir, 'cline.json'), JSON.stringify(cfg, null, 2));
+    const { stdout, exitCode } = await captureRun({ json: true });
+    assert.equal(exitCode, 0);
+    const parsed = JSON.parse(stdout);
+    const check = parsed.results.find((r) => r.name === 'mistake-limit-floor');
+    assert.equal(check.ok, true);
+    assert.match(check.message, /15/);
+  });
+
+  test('v6.2.4 — mistake-limit-floor OK when no plugin entry (legacy cline.json)', async () => {
+    const cfg = JSON.parse(readFileSync(join(workDir, 'cline.json'), 'utf8'));
+    delete cfg.plugin;
+    writeFileSync(join(workDir, 'cline.json'), JSON.stringify(cfg, null, 2));
+    const { stdout } = await captureRun({ json: true });
+    const parsed = JSON.parse(stdout);
+    const check = parsed.results.find((r) => r.name === 'mistake-limit-floor');
+    assert.match(check.message, /no plugin entries/);
+    assert.equal(check.ok, true);
+  });
 });

@@ -177,14 +177,29 @@ export class ClineRuntime {
 
   /**
    * Merge caller's `execution` block with the runtime default
-   * (`defaultMaxConsecutiveMistakes`). Returns `undefined` when neither
-   * is set, so the optional field stays out of the config payload.
+   * (`defaultMaxConsecutiveMistakes`).
+   *
+   * v6.2.4 — Plugin's defaultMaxConsecutiveMistakes is now a FLOOR,
+   * not a default. The Cline CLI's `--retries` flag defaults to 3
+   * and previously silently overrode our 6 (or higher) — leading
+   * to premature session aborts after just 3 tool errors. Now we
+   * use Math.max(plugin_default, caller_value) so the user can
+   * still raise the limit with `--retries 15`, but the plugin's
+   * higher default is honored on plain `cline` invocations.
+   *
+   * Returns `undefined` when neither is set, so the optional field
+   * stays out of the config payload.
    */
   private buildExecution(
     callerExecution: StartSessionOpts["execution"],
   ): StartSessionOpts["execution"] | undefined {
     if (!callerExecution && this.defaultMaxConsecutiveMistakes === undefined) return undefined;
-    const max = callerExecution?.maxConsecutiveMistakes ?? this.defaultMaxConsecutiveMistakes;
+    const callerMax = callerExecution?.maxConsecutiveMistakes;
+    const pluginMax = this.defaultMaxConsecutiveMistakes;
+    const max =
+      callerMax !== undefined && pluginMax !== undefined
+        ? Math.max(callerMax, pluginMax)
+        : callerMax ?? pluginMax;
     return { ...callerExecution, ...(max !== undefined ? { maxConsecutiveMistakes: max } : {}) };
   }
 

@@ -73,7 +73,7 @@ describe("ClineRuntime.startSession — execution plumbing", () => {
     };
     const runtime = new ClineRuntime({
       logger: stubLogger(),
-      defaultMaxConsecutiveMistakes: 6,
+      defaultMaxConsecutiveMistakes: 10,
       defaultOnConsecutiveMistakeLimitReached: recovery,
     });
     (runtime as unknown as { core: unknown }).core = makeFakeCore();
@@ -84,16 +84,57 @@ describe("ClineRuntime.startSession — execution plumbing", () => {
       prompt: "go",
     });
     const cfg = capturedConfig[0]!.config;
-    expect(cfg.execution).toEqual({ maxConsecutiveMistakes: 6 });
+    expect(cfg.execution).toEqual({ maxConsecutiveMistakes: 10 });
     expect(typeof cfg.onConsecutiveMistakeLimitReached).toBe("function");
     // Invoke the wire-through function and confirm it IS the recovery closure.
     const fn = cfg.onConsecutiveMistakeLimitReached as (ctx: ConsecutiveMistakeLimitContext) => unknown;
-    fn({ iteration: 1, consecutiveMistakes: 3, maxConsecutiveMistakes: 6, reason: "invalid_tool_call" });
+    fn({ iteration: 1, consecutiveMistakes: 3, maxConsecutiveMistakes: 10, reason: "invalid_tool_call" });
     expect(recoveryCalls.length).toBe(1);
     expect(recoveryCalls[0]!.reason).toBe("invalid_tool_call");
   });
 
-  test("caller-supplied execution.maxConsecutiveMistakes wins over default", async () => {
+  test("v6.2.4 — plugin default is a FLOOR; CLI default of 3 is bumped to plugin default", async () => {
+    // This is the v6.2.0 → v6.2.4 regression test. Previously the
+    // caller's maxConsecutiveMistakes (e.g. the Cline CLI's --retries
+    // default of 3) would silently override the plugin's higher
+    // default. Now we use Math.max so the plugin's 10 wins.
+    const runtime = new ClineRuntime({
+      logger: stubLogger(),
+      defaultMaxConsecutiveMistakes: 10,
+    });
+    (runtime as unknown as { core: unknown }).core = makeFakeCore();
+    await runtime.startSession({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      workspaceRoot: "/tmp",
+      prompt: "go",
+      execution: { maxConsecutiveMistakes: 3, reminderAfterIterations: 8 },
+    });
+    const cfg = capturedConfig[0]!.config;
+    expect(cfg.execution?.maxConsecutiveMistakes).toBe(10,
+      "plugin default must win over CLI default of 3 (was a v6.0 regression)");
+    expect(cfg.execution?.reminderAfterIterations).toBe(8, "other caller fields pass through");
+  });
+
+  test("caller-supplied HIGHER execution.maxConsecutiveMistakes still wins", async () => {
+    const runtime = new ClineRuntime({
+      logger: stubLogger(),
+      defaultMaxConsecutiveMistakes: 10,
+    });
+    (runtime as unknown as { core: unknown }).core = makeFakeCore();
+    await runtime.startSession({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      workspaceRoot: "/tmp",
+      prompt: "go",
+      execution: { maxConsecutiveMistakes: 20, reminderAfterIterations: 8 },
+    });
+    const cfg = capturedConfig[0]!.config;
+    expect(cfg.execution?.maxConsecutiveMistakes).toBe(20,
+      "user can still raise the limit with --retries 20");
+  });
+
+  test("caller-supplied execution.maxConsecutiveMistakes wins over default (legacy behavior)", async () => {
     const runtime = new ClineRuntime({
       logger: stubLogger(),
       defaultMaxConsecutiveMistakes: 4,

@@ -1,5 +1,5 @@
 ---
-description: Vidarr — The ultimate fallback via MiniMax M3. For the hardest problems when Tyr stalls, debugging is stuck, or novel insight is needed. Use sparingly — highest cost.
+description: Vidarr — The ultimate fallback via MiniMax M3. For the hardest problems when Tyr stalls, debugging is stuck, or novel insight is needed. Use sparingly — highest cost., Cline tool argument shapes (CLINE_TOOLS.md).
 mode: subagent
 model: minimaxcustom/MiniMax-M3
 color: "#0ea5e9"
