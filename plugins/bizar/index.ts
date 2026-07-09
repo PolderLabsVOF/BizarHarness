@@ -255,13 +255,51 @@ const REASONING_DIRECTIVE_MARKER = "BIZAR_REASONING_DIRECTIVE_v0.6.2";
 const REASONING_DIRECTIVE = [
   REASONING_DIRECTIVE_MARKER, "",
   "When reasoning is enabled for this conversation, output your thinking",
-  "ONLY in the model's structured reasoning field. Do NOT emit <think> blocks",
+  "ONLY in the model's structured reasoning field. Do NOT emit  THINK  blocks",
   "inline inside your message content — the cline host extracts the",
   "reasoning field and renders it as a separate, collapsable \"Thought\"",
   "panel. If you also emit the same text inline, the user will see your",
   "thinking twice (once in the panel and once as visible message body).",
   "Keep the actual response text in the normal content stream.",
 ].join(" ");
+
+// v6.0.1 — Tool-discipline directive (prefer built-in tools, keep bash small).
+// See plugins/bizar/src/tool-discipline.ts for the body and rationale.
+import {
+  TOOL_DISCIPLINE_DIRECTIVE,
+  TOOL_DISCIPLINE_MARKER,
+  hasToolDiscipline as _hasToolDiscipline,
+} from "./src/tool-discipline.js";
+
+function ensureToolDiscipline(sysParts: string[], baseSys: string): void {
+  if (_hasToolDiscipline(baseSys)) return;
+  if (sysParts.some((s) => s.includes(TOOL_DISCIPLINE_MARKER))) return;
+  sysParts.push(TOOL_DISCIPLINE_DIRECTIVE);
+}
+
+// v6.0.1 — Mistake-recovery callback used by team-spawn and other
+// in-process session creators. See plugins/bizar/src/mistake-recovery.ts
+// for the rationale (recover from `invalid_tool_call` /
+// `tool_execution_failed`; stop on `api_error`).
+import { buildMistakeRecovery } from "./src/mistake-recovery.js";
+
+export function makeMistakeRecoveryCallback(logger: Logger): ReturnType<typeof buildMistakeRecovery> {
+  return buildMistakeRecovery({
+    onRecovery: (ctx, guidance) => {
+      logger.warn(
+        `bizar: mistake limit reached — continuing with guidance ` +
+        `(reason=${ctx.reason}, iteration=${ctx.iteration}, ` +
+        `consecutive=${ctx.consecutiveMistakes}/${ctx.maxConsecutiveMistakes})`,
+      );
+      try {
+        const preview = guidance.replace(/\s+/g, " ").slice(0, 120);
+        logger.debug(`bizar: recovery guidance preview: ${preview}…`);
+      } catch {
+        // preview derivation is best-effort
+      }
+    },
+  });
+}
 
 // Module-level runtime context — set during setup(), read by hooks via getter.
 let _runtimeCtx: RuntimeContext | null = null;
@@ -393,9 +431,17 @@ async function initRuntime(
   // warning and continue without it — the non-team tools still work.
   let clineRuntime: ClineRuntime | null = null;
   try {
-    clineRuntime = new ClineRuntime({ logger });
+    clineRuntime = new ClineRuntime({
+      logger,
+      defaultMaxConsecutiveMistakes: options.clineruntimeMaxConsecutiveMistakes,
+      defaultOnConsecutiveMistakeLimitReached: makeMistakeRecoveryCallback(logger),
+    });
     await clineRuntime.start();
-    logger.info("bizar: ClineRuntime ready (agent teams + advanced features enabled)");
+    logger.info(
+      `bizar: ClineRuntime ready (agent teams + advanced features enabled, ` +
+      `maxConsecutiveMistakes=${options.clineruntimeMaxConsecutiveMistakes}, ` +
+      `recovery=continue-on-invalid-tool-call)`,
+    );
   } catch (err) {
     clineRuntime = null;
     logger.warn(`bizar: ClineRuntime unavailable: ${err instanceof Error ? err.message : String(err)}`);
@@ -673,6 +719,7 @@ function buildHooksForCtx(ctx: RuntimeContext): AgentExtensionHooks {
       const sysParts: string[] = [];
       const baseSys = modelCtx.request.systemPrompt ?? "";
       if (!baseSys.includes(REASONING_DIRECTIVE_MARKER)) sysParts.push(REASONING_DIRECTIVE);
+      ensureToolDiscipline(sysParts, baseSys);
       const pending = ctx.pendingInjections.get(sessionID);
       if (pending) { sysParts.push(pending); ctx.pendingInjections.delete(sessionID); }
       const memCtx = popMemoryContext(sessionID);

@@ -1253,3 +1253,20 @@ The other lesson: docs and code drift independently. The agent baseline said "Re
   - 41 new markdown reports (~242K words)
   - 4 source repos cloned under `repos/`
 - **Agents used**: Mimir (R1-R2), Thor (R5-R7, R12b-d), Tyr (R3-R4 retry, R5, R6, R8-R11, R12a), Odin (R14 final synthesis — direct write).
+
+### 2026-07-09 — v6.0.1 — Cline mistake-recovery, tool-discipline, 9router gateway, rules-sync
+
+- **Task**: Diagnose and fix "Cline keeps stopping when executing commands or writing files." Promote `6.0.0-beta.1` to a stable `6.0.1` on the `latest` npm dist-tag.
+- **Approach**: Identified root cause via `~/.cline/data/logs/cline.log` — bundled CLI's `--retries` default of 3 + no recovery callback → sessions aborted on first malformed tool call (`editor({new_text:undefined})`, `ask_question({options:null})`, `run_commands({...})`). Built four additions:
+  - `plugins/bizar/src/mistake-recovery.ts` — `buildMistakeRecovery()` distinguishes recoverable mistakes (continue + guidance) from `api_error` (stop).
+  - `plugins/bizar/src/tool-discipline.ts` — system prompt directive: required schema fields, prefer built-ins over bash, ≤600 char bash ceiling, switch tools after 2 identical failures.
+  - `plugins/bizar/src/clineruntime.ts` — `startSession` accepts `execution` block + `onConsecutiveMistakeLimitReached` plumbing; runtime constructor takes both as defaults so every session inherits.
+  - `plugins/bizar/src/options.ts` — `clineruntimeMaxConsecutiveMistakes: 6` (range [3, 20], env `BIZAR_MAX_CONSECUTIVE_MISTAKES`).
+  - `cli/provision.mjs:syncConfigExtras` — now syncs `config/rules/*.md` to `${CLINE_DIR}/rules/` (always-on rules contract was silently broken).
+  - `config/cline.json.template` — adds `provider.9router` block (baseUrl `http://localhost:20128/v1`); all 13 model-bearing agents + top-level `model`/`small_model` re-prefixed to `9router/<id>`.
+  - `config/skills/9router*/SKILL.md` — 8 capability skills (entry + chat + web-search + web-fetch + image + TTS + STT + embeddings) auto-installed.
+  - `cli/doctor.mjs` — `9router-reachable` health check + provider-config prefers 9router.
+- **Findings**:
+  - Cline SDK default for `maxConsecutiveMistakes` is 6 (in `MistakeTracker.record()`); bundled CLI overrides to 3 via `--retries`. Bizar harness now overrides CLI's 3 back to 6 AND wires the recovery callback so a single bad turn no longer kills a session.
+  - The pre-existing `nohomedir` Bun behavior caches `process.env.HOME` at module load — the doctor fixture tests were already affected, this release doesn't introduce new breakage.
+  - Pre-existing `npm test` failure in `v2-req GET /doc` (OpenAPI YAML route) was already failing on master pre-release.

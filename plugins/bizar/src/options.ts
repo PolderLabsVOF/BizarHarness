@@ -17,8 +17,8 @@
  *     `BIZAR_SERVE_DISABLE`, `BIZAR_BACKGROUND_TOOL_CALL_CAP`,
  *     `BIZAR_BACKGROUND_SKIP_PERMISSIONS`,
  *     `BIZAR_STALL_TIMEOUT_MS`, `BIZAR_THINKING_LOOP_TIMEOUT_MS`,
- *     `BIZAR_MAX_INTERVENTIONS`). Env vars are read once at init;
- *     mid-session changes are ignored.
+ *     `BIZAR_MAX_INTERVENTIONS`, `BIZAR_MAX_CONSECUTIVE_MISTAKES`).
+ *     Env vars are read once at init; mid-session changes are ignored.
  */
 
 import path from "node:path";
@@ -43,6 +43,15 @@ export interface RawOptions {
   backgroundStallTimeoutMs?: unknown;
   backgroundThinkingLoopTimeoutMs?: unknown;
   backgroundMaxInterventions?: unknown;
+  // v0.3.1 — ClineRuntime execution surface
+  /**
+   * Override Cline's `execution.maxConsecutiveMistakes` (CLI default 3;
+   * SDK default 6). Bizar ships 6 by default and additionally wires the
+   * `onConsecutiveMistakeLimitReached` recovery callback so a single
+   * bad turn doesn't abort the session. Range [3, 20]; out-of-range
+   * values are clamped and a note is emitted.
+   */
+  clineruntimeMaxConsecutiveMistakes?: unknown;
 }
 
 /**
@@ -70,6 +79,9 @@ export interface NormalizedOptions {
   backgroundThinkingLoopTimeoutMs: number;
   /** max number of research interventions sent before forcing an abort (default 1, range [1, 3]). */
   backgroundMaxInterventions: number;
+  // v0.3.1 — ClineRuntime execution surface
+  /** Override Cline's `execution.maxConsecutiveMistakes` (default 6, range [3, 20]). */
+  clineruntimeMaxConsecutiveMistakes: number;
 }
 
 /** Environment-variable override flags. */
@@ -98,6 +110,11 @@ export const DEFAULT_OPTIONS: NormalizedOptions = {
   backgroundStallTimeoutMs: 180_000,        // 3 min
   backgroundThinkingLoopTimeoutMs: 300_000, // 5 min
   backgroundMaxInterventions: 1,
+  // v0.3.1 — ClineRuntime execution surface
+  // SDK default `??6`; CLI overrides to 3. We pick 6 so a single
+  // malformed tool call doesn't kill the session; the recovery callback
+  // (mistake-recovery.ts) gives the model guidance on the way back.
+  clineruntimeMaxConsecutiveMistakes: 6,
 };
 
 const SECRET_DIRS: readonly string[] = [
@@ -361,6 +378,30 @@ export function normalizeOptions(raw: RawOptions | undefined): {
     backgroundMaxInterventions = DEFAULT_OPTIONS.backgroundMaxInterventions;
   }
 
+  // --- v0.3.1 ClineRuntime execution surface -------------------------------
+
+  // clineruntimeMaxConsecutiveMistakes: default 6, range [3, 20]
+  // CLI default is 3 which aborts sessions on the FIRST malformed tool call
+  // (editor { new_text: undefined }, ask_question { options: null }, …).
+  // The harness wires a recovery callback that keeps the session alive on
+  // recoverable mistakes, so we only need a slightly-larger ceiling.
+  const rawMaxConsecutive = toFiniteInt(r.clineruntimeMaxConsecutiveMistakes);
+  const envMaxConsecutive = toFiniteInt(process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES);
+  let clineruntimeMaxConsecutiveMistakes: number;
+  if (rawMaxConsecutive !== undefined) {
+    clineruntimeMaxConsecutiveMistakes = Math.min(Math.max(3, rawMaxConsecutive), 20);
+    if (rawMaxConsecutive !== clineruntimeMaxConsecutiveMistakes) {
+      notes.push(`clineruntimeMaxConsecutiveMistakes ${rawMaxConsecutive} clamped to ${clineruntimeMaxConsecutiveMistakes} (range [3, 20])`);
+    }
+  } else if (envMaxConsecutive !== undefined) {
+    clineruntimeMaxConsecutiveMistakes = Math.min(Math.max(3, envMaxConsecutive), 20);
+    if (envMaxConsecutive !== clineruntimeMaxConsecutiveMistakes) {
+      notes.push(`clineruntimeMaxConsecutiveMistakes ${envMaxConsecutive} (env) clamped to ${clineruntimeMaxConsecutiveMistakes} (range [3, 20])`);
+    }
+  } else {
+    clineruntimeMaxConsecutiveMistakes = DEFAULT_OPTIONS.clineruntimeMaxConsecutiveMistakes;
+  }
+
   // --- Paths (§6.1 defaults) ---
   const logDir = toStringPath(r.logDir) ?? DEFAULT_OPTIONS.logDir;
   const stateDir = toStringPath(r.stateDir) ?? DEFAULT_OPTIONS.stateDir;
@@ -383,6 +424,7 @@ export function normalizeOptions(raw: RawOptions | undefined): {
       backgroundStallTimeoutMs,
       backgroundThinkingLoopTimeoutMs,
       backgroundMaxInterventions,
+      clineruntimeMaxConsecutiveMistakes,
     },
     notes,
   };

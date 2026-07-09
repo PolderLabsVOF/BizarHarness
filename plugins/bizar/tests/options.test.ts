@@ -274,3 +274,56 @@ describe("readEnvFlags", () => {
     delete process.env.BIZAR_DISABLE_LOG;
   });
 });
+
+// ── clineruntimeMaxConsecutiveMistakes ───────────────────────────────────────
+
+describe("clineruntimeMaxConsecutiveMistakes (v0.3.1)", () => {
+  test("default is 6 when neither raw nor env is provided", () => {
+    delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
+    const { options } = normalizeOptions({});
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(6);
+  });
+
+  test("raw value is honored when in range", () => {
+    delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
+    const { options, notes } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: 10 });
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(10);
+    expect(notes.some((n) => n.includes("clineruntimeMaxConsecutiveMistakes"))).toBe(false);
+  });
+
+  test("below-range raw value is clamped to 3 (minimum)", () => {
+    delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
+    const { options, notes } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: 1 });
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(3);
+    expect(notes.some((n) => n.includes("clamped to 3"))).toBe(true);
+  });
+
+  test("above-range raw value is clamped to 20 (maximum)", () => {
+    delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
+    const { options, notes } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: 100 });
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(20);
+    expect(notes.some((n) => n.includes("clamped to 20"))).toBe(true);
+  });
+
+  test("raw option takes precedence over env (raw wins when both set)", () => {
+    process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES = "8";
+    const { options, notes } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: 12 });
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(12);
+    expect(notes.some((n) => n.includes("(env)"))).toBe(false);
+    delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
+  });
+
+  test("env var clamps when out of range", () => {
+    process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES = "999";
+    const { options, notes } = normalizeOptions({});
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(20);
+    expect(notes.some((n) => n.includes("(env) clamped"))).toBe(true);
+    delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
+  });
+
+  test("non-numeric raw falls back to default", () => {
+    delete process.env.BIZAR_MAX_CONSECUTIVE_MISTAKES;
+    const { options } = normalizeOptions({ clineruntimeMaxConsecutiveMistakes: "not-a-number" });
+    expect(options.clineruntimeMaxConsecutiveMistakes).toBe(6);
+  });
+});

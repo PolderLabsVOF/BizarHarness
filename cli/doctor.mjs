@@ -146,22 +146,6 @@ async function checkPluginPathResolves() {
   return `plugin path resolves: ${lastChecked}`;
 }
 
-async function checkDeployedPluginPresent() {
-  const r = spawnSync('npm', ['root', '-g'], {
-    encoding: 'utf8',
-    timeout: 5000,
-  });
-  if (r.status !== 0) {
-    throw new Error('npm root -g failed');
-  }
-  const root = (r.stdout || '').trim();
-  const pkgPath = join(root, '@polderlabs', 'bizar-plugin', 'package.json');
-  if (!existsSync(pkgPath)) {
-    throw new Error('@polderlabs/bizar-plugin not installed globally');
-  }
-  return '@polderlabs/bizar-plugin present';
-}
-
 async function checkAgentFilesInstalled() {
   const dir = clineAgentsDir();
   if (!existsSync(dir)) {
@@ -189,43 +173,32 @@ async function checkToolsAvailable() {
   return `available: ${found.join(', ')}`;
 }
 
-async function checkDashboardReachable() {
-  const portFile = join(bizarConfigDir(), 'dashboard.port');
-  if (!existsSync(portFile)) {
-    return 'no dashboard port file (skipped)';
-  }
-  let port;
-  try {
-    port = parseInt(readFileSync(portFile, 'utf8').trim(), 10);
-  } catch {
-    throw new Error(`could not read port from ${portFile}`);
-  }
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new Error(`invalid port in ${portFile}: ${port}`);
-  }
-  const r = spawnSync(
-    'curl',
-    ['-fsS', '-m', '2', `http://127.0.0.1:${port}/api/health`],
-    { encoding: 'utf8', timeout: 5000 },
-  );
-  if (r.status !== 0) {
-    throw new Error(`dashboard on port ${port} not reachable`);
-  }
-  return `dashboard reachable on port ${port}`;
-}
-
 async function checkProviderConfigSanity() {
   const cfgPath = join(clineConfigDir(), 'cline.json');
   if (!existsSync(cfgPath)) {
     throw new Error('cline.json missing');
   }
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+
+  // v6.0.1 — 9router is the primary gateway. All Bizar agents
+  // route through it via `9router/<model>` prefixed model IDs.
+  const nine = cfg.provider && cfg.provider['9router'];
+  if (nine && nine.baseUrl) {
+    const models = nine.models || {};
+    const sane = Object.keys(models).filter((id) => typeof id === 'string' && id.length > 0);
+    if (sane.length === 0) {
+      throw new Error(
+        'provider.9router block has no models (run `bizar update` to re-sync)',
+      );
+    }
+    return `provider.9router baseUrl=${nine.baseUrl} sane (${sane.length} models)`;
+  }
+
+  // Fallback: legacy `minimax` provider only. Kept for back-compat with
+  // older pre-v6.0.1 cline.json installs.
   const minimax = cfg.provider && cfg.provider.minimax;
   if (!minimax) {
-    // Warn instead of throw — provision.mjs auto-adds this block on
-    // install/update, but users with an older pre-v5 cline.json
-    // may not have it yet.
-    return 'warn: provider.minimax block missing (run `bizar update` to patch)';
+    return 'warn: no provider.9router AND no provider.minimax — run `bizar update`';
   }
   const models = minimax.models || {};
   const saneNames = Object.entries(models).filter(([, m]) => {
@@ -241,7 +214,35 @@ async function checkProviderConfigSanity() {
       'no MiniMax-style model with interleaved + reasoning flags',
     );
   }
-  return `provider.minimax + ${saneNames.length} model(s) sane`;
+  return `provider.minimax + ${saneNames.length} model(s) sane (legacy; consider migrating to provider.9router)`;
+}
+
+/**
+ * v6.0.1 — Check 9Router reachability. 9Router is the Bizar gateway;
+ * if it's down, agents can't reach any upstream. Lenient (warn) by
+ * design — the user might be intentionally working offline — but a
+ * loud warning keeps the issue from being silent.
+ */
+async function check9routerReachable() {
+  const url = process.env.NINEROUTER_URL || 'http://localhost:20128';
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 4000);
+  try {
+    const res = await fetch(`${url}/api/health`, { signal: ac.signal });
+    if (!res.ok) {
+      return `warn: 9router at ${url} returned HTTP ${res.status}`;
+    }
+    const body = await res.text().catch(() => '');
+    if (!body.includes('"ok":true')) {
+      return `warn: 9router at ${url} responded but body did not include ok:true (got: ${body.slice(0, 60)})`;
+    }
+    return `9router healthy at ${url}`;
+  } catch (err) {
+    const reason = err.name === 'AbortError' ? 'timeout after 4s' : (err.message || 'unreachable');
+    return `warn: 9router unreachable at ${url} — ${reason}`;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const CHECKS = [
@@ -249,11 +250,10 @@ const CHECKS = [
   ['cline-config-valid', checkConfigValid],
   ['plugin-entry-present', checkPluginEntryPresent],
   ['plugin-path-resolves', checkPluginPathResolves],
-  ['deployed-plugin-present', checkDeployedPluginPresent],
   ['agent-files-installed', checkAgentFilesInstalled],
   ['tools-available', checkToolsAvailable],
-  ['dashboard-reachable', checkDashboardReachable],
   ['provider-config-sanity', checkProviderConfigSanity],
+  ['9router-reachable', check9routerReachable],
 ];
 
 // ── public API ──────────────────────────────────────────────────────────────

@@ -1,5 +1,78 @@
 # Changelog
 
+## v6.0.1 — Cline mistake-recovery, tool-discipline, rules-sync, 9router gateway
+
+Stable release on the `latest` npm dist-tag. Replaces `5.5.6` as the recommended
+install. `6.0.0-beta.1` stays on the `beta` dist-tag for users who pinned it.
+
+### Highlights
+
+- **Cline stops aborting sessions on the first malformed tool call.** New
+  `onConsecutiveMistakeLimitReached` callback recovers from
+  `invalid_tool_call` and `tool_execution_failed` (returns
+  `{action:"continue", guidance:"..."}`); only `api_error` stops
+  (`{action:"stop"}`). Default threshold raised from 3 → 6 to give the
+  recovery callback room to fire.
+- **Tool-discipline directive** appended to every Cline system prompt via
+  `beforeModel`. Tells the model to populate required schema fields, prefer
+  built-in tools (`read_file`, `editor`, `search`, `apply_patch`,
+  `list_files`, `web_fetch`) over bash, keep `run_commands` ≤600 chars,
+  and switch tools after 2 identical failures.
+- **9Router gateway.** All 13 model-bearing Bizar agents and the top-level
+  `model` / `small_model` defaults now route through the user's local
+  9Router at `http://localhost:20128/v1` (minimax keys + auto-fallback to
+  free `kr/*` and `openrouter/*:free` models via the 9Router combo
+  catalog). 8 capability skills (`9router`, `9router-chat`,
+  `9router-web-search`, `9router-web-fetch`, `9router-image`, `9router-tts`,
+  `9router-stt`, `9router-embeddings`) installed to `~/.cline/skills/` so
+  any agent can use the full 9Router surface.
+- **Installer auto-configures Cline.** `bizar install` / `bizar update` now
+  syncs `config/rules/*.md` into `~/.cline/rules/` (was silently skipped
+  before — always-on rules contract was broken on fresh installs) and
+  injects `clineruntimeMaxConsecutiveMistakes: 6` into the plugin metadata.
+
+### What's New
+
+- `plugins/bizar/src/mistake-recovery.ts` — `buildMistakeRecovery(opts)`
+  helper. Wires the recovery callback by default through
+  `ClineRuntime({ defaultOnConsecutiveMistakeLimitReached })`.
+- `plugins/bizar/src/tool-discipline.ts` — `TOOL_DISCIPLINE_DIRECTIVE`
+  injected once via marker idempotency in `beforeModel`.
+- `plugins/bizar/src/clineruntime.ts` — `startSession` accepts `execution`
+  (`maxConsecutiveMistakes`, `reminderAfterIterations`, `reminderText`,
+  `loopDetection`) and pipes through `core.start({ config })`.
+- `plugins/bizar/src/options.ts` — adds `clineruntimeMaxConsecutiveMistakes`
+  option (default 6, range [3, 20], env `BIZAR_MAX_CONSECUTIVE_MISTAKES`).
+- `plugins/bizar/index.ts` — passes the recovery default + the
+  tool-discipline marker into `beforeModel`.
+- `cli/doctor.mjs` — new `9router-reachable` health check + `provider.9router`
+  preferred by `provider-config-sanity` (falls back to legacy
+  `provider.minimax`).
+- `cli/provision.mjs:syncConfigExtras` — copies `config/rules/*.md` to
+  `${CLINE_DIR}/rules/`.
+- `config/cline.json.template` — adds `provider.9router` block;
+  all `model: "minimax/..."` strings re-prefixed to `model: "9router/..."`.
+- `config/skills/9router*/SKILL.md` — 8 new files (auto-installed).
+
+### Upgrade
+
+```sh
+npm install -g @polderlabs/bizar@latest
+bizar install   # re-syncs provider.9router + rules + skills
+```
+
+If you run 9Router on a non-default host, set `NINEROUTER_URL` (and
+`NINEROUTER_KEY` if auth is enabled). The template's `apiKey` resolves to
+`${env:NINEROUTER_KEY}` — no key is committed.
+
+### Tests
+
+31 new tests (mistake-recovery 10, tool-discipline 9, clineruntime 6,
+options-clineruntime 6, doctor 9router check, provision.rules 2). `make
+check` clean at 746/746. One pre-existing `npm test` failure in
+`v2-req GET /doc` (OpenAPI YAML route) — tracked separately, not caused
+by this release.
+
 ## v6.0.0-beta.1 — CURRENT_ISSUES sprint (Odin, /loop, slash commands, vault linking)
 
 Implements all 5 items from `CURRENT_ISSUES_ AND_NEW_FEATURES.md`:

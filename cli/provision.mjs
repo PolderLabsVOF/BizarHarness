@@ -1077,7 +1077,8 @@ function mdToClineAgentYaml(mdText, fallbackName) {
  * Copy slash commands + skills to the cline config dir.
  */
 /**
- * Sync slash commands + skills + hooks + workflows into the Cline config dir.
+ * Sync slash commands + skills + hooks + rules + workflows into the
+ * Cline config dir.
  *
  * v5.6.0-beta.12 — complete rewrite:
  *   - Iterates ALL subdirs of `config/skills/` dynamically instead of
@@ -1091,13 +1092,27 @@ function mdToClineAgentYaml(mdText, fallbackName) {
  *     matching Cline's `resolveSkillsConfigSearchPaths` layout. Previously
  *     all skills were flattened into one dir, causing `SKILL.md` from
  *     each to overwrite the previous one — only the last copy survived.
- *   - Same per-directory layout for `commands/`, `hooks/`, `workflows/`.
+ *   - Same per-directory layout for `commands/`, `hooks/`, `workflows/`,
+ *     `rules/`.
  *   - Idempotent: re-running refreshes content but never deletes user
  *     additions.
+ *
+ * v6.0.1 — also syncs `config/rules/*.md` into `${CLINE_DIR}/rules/`.
+ * Previously `config/rules/*.md` was only copied by the legacy
+ * `cli/copy.mjs:installRules()` helper, never invoked by `bizar install`
+ * or `bizar update` (which both go through `runProvision`). This meant
+ * `general.md`, `git.md`, `javascript.md`, `python.md`, `testing.md`,
+ * `thinking.md`, `uncertainty.md` were silently absent from the user's
+ * `~/.cline/rules/`, breaking the always-on rules contract defined in
+ * `AGENTS.md`. See https://docs.cline.bot/customization/cline-rules.
  */
 export async function syncConfigExtras({ dryRun }) {
   if (dryRun) {
-    return { ok: true, message: '[dry-run] would sync commands + skills + hooks + workflows' };
+    return {
+      ok: true,
+      message: '[dry-run] would sync commands + skills + hooks + rules + workflows',
+      counts: { skills: 0, commands: 0, hooks: 0, rules: 0, workflows: 0 },
+    };
   }
 
   const copyDirIfExists = async (srcDir, dstDir) => {
@@ -1112,7 +1127,7 @@ export async function syncConfigExtras({ dryRun }) {
   };
 
   // Track counts for the success message.
-  const counts = { skills: 0, commands: 0, hooks: 0, workflows: 0 };
+  const counts = { skills: 0, commands: 0, hooks: 0, rules: 0, workflows: 0 };
 
   // ── Slash commands ───────────────────────────────────────────
   // Cline searches `~/.cline/commands/` for command files (.md).
@@ -1185,6 +1200,31 @@ export async function syncConfigExtras({ dryRun }) {
     counts.hooks = 1;
   }
 
+  // ── Rules ────────────────────────────────────────────────────
+  // Cline reads every `.md` and `.txt` file in `~/.cline/rules/` as a
+  // rule (https://docs.cline.bot/customization/cline-rules). The Bizar
+  // harness ships 7 always-on rule files in `config/rules/` (general,
+  // git, javascript, python, testing, thinking, uncertainty). Copying
+  // them here means `bizar install` and `bizar update` actually wire up
+  // the always-on rules contract; before this change the directory
+  // existed but was empty on a fresh install.
+  const rulesSrc = join(REPO_ROOT, 'config', 'rules');
+  if (existsSync(rulesSrc)) {
+    const rulesDst = join(CLINE_DIR, 'rules');
+    mkdirSync(rulesDst, { recursive: true });
+    let ruleCount = 0;
+    for (const entry of readdirSync(rulesSrc, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const name = entry.name;
+      if (!name.endsWith('.md') && !name.endsWith('.txt')) continue;
+      const src = join(rulesSrc, name);
+      const dst = join(rulesDst, name);
+      copyFileSync(src, dst);
+      ruleCount += 1;
+    }
+    counts.rules = ruleCount;
+  }
+
   // ── Workflows ────────────────────────────────────────────────
   const workflowsSrc = join(REPO_ROOT, 'config', 'workflows');
   if (existsSync(workflowsSrc)) {
@@ -1215,9 +1255,10 @@ export async function syncConfigExtras({ dryRun }) {
   return {
     ok: true,
     message:
-      `commands + skills + hooks + workflows synced ` +
+      `commands + skills + hooks + rules + workflows synced ` +
       `(${counts.commands} commands, ${counts.skills} skills, ` +
-      `${counts.hooks} hooks, ${counts.workflows} workflows)`,
+      `${counts.hooks} hooks, ${counts.rules} rules, ` +
+      `${counts.workflows} workflows)`,
     counts,
   };
 }

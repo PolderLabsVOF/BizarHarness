@@ -639,11 +639,127 @@
           "repair": "n/a"
         }
       ]
+    },
+    {
+      "id": "F-023",
+      "behavior": "Cline mistake-recovery callback — keep sessions alive on invalid_tool_call / tool_execution_failed; stop on api_error",
+      "verification": "make check (TS 0 errors) + plugins/bizar/tests/mistake-recovery.test.ts 10 pass",
+      "state": "passing",
+      "evidence": "plugins/bizar/src/mistake-recovery.ts (88 lines) + 10 unit tests covering continue/stop branches, custom guidance, observer wiring. Wired via ClineRuntime defaultOnConsecutiveMistakeLimitReached.",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-09",
+      "passed": "2026-07-09",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "n/a"
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/mistake-recovery.test.ts",
+          "repair": "n/a"
+        },
+        {
+          "label": "e2e",
+          "cmd": "n/a",
+          "repair": "n/a"
+        }
+      ]
+    },
+    {
+      "id": "F-024",
+      "behavior": "Tool-discipline directive — prefer built-in tools over bash; cap run_commands at ~600 chars; forbid xargs/sed -i/heredocs",
+      "verification": "make check (TS 0 errors) + plugins/bizar/tests/tool-discipline.test.ts 9 pass",
+      "state": "passing",
+      "evidence": "plugins/bizar/src/tool-discipline.ts (94 lines). Injected by beforeModel idempotently via TOOL_DISCIPLINE_MARKER. Includes mapping table read→read_file, search→search_codebase, edit→editor, list→list_files, fetch→web_fetch.",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-09",
+      "passed": "2026-07-09",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "n/a"
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test plugins/bizar/tests/tool-discipline.test.ts",
+          "repair": "n/a"
+        },
+        {
+          "label": "e2e",
+          "cmd": "n/a",
+          "repair": "n/a"
+        }
+      ]
+    },
+    {
+      "id": "F-025",
+      "behavior": "Installer auto-configures Cline: syncs config/rules/ → ~/.cline/rules/, sets clineruntimeMaxConsecutiveMistakes in plugin metadata",
+      "verification": "make check (TS 0 errors) + cli/provision.test.mjs > syncConfigExtras rules-sync pass",
+      "state": "passing",
+      "evidence": "cli/provision.mjs:syncConfigExtras now also copies config/rules/*.md to ${CLINE_DIR}/rules/. config/cline.json.template adds clineruntimeMaxConsecutiveMistakes:6 to the plugin metadata block.",
+      "layer": "L1",
+      "category": "installer",
+      "created": "2026-07-09",
+      "passed": "2026-07-09",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "n/a"
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test cli/provision.test.mjs",
+          "repair": "n/a"
+        },
+        {
+          "label": "e2e",
+          "cmd": "n/a",
+          "repair": "n/a"
+        }
+      ]
+    },
+    {
+      "id": "F-026",
+      "behavior": "9Router gateway — all 13 Bizar agents route chat through 9Router at http://localhost:20128/v1; 8 capability skills installed (chat, web-search, web-fetch, image, TTS, STT, embeddings)",
+      "verification": "make check (TS 0 errors) + bun cli/bin.mjs doctor shows ✓ 9router-reachable healthy at http://localhost:20128 + ✓ provider-config-sanity → provider.9router",
+      "state": "passing",
+      "evidence": "config/cline.json.template adds provider.9router (baseUrl/apiKey) and switches all agent model strings to 9router/<id>. config/skills/9router*/SKILL.md (8 files) cover entry + chat + web-search + web-fetch + image + TTS + STT + embeddings. cli/doctor.mjs:check9routerReachable hits /api/health with 4s timeout. NINEROUTER_KEY env var (and NINEROUTER_URL override) supported.",
+      "layer": "L1",
+      "category": "harness",
+      "created": "2026-07-09",
+      "passed": "2026-07-09",
+      "commit": "current",
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "n/a"
+        },
+        {
+          "label": "unit",
+          "cmd": "bun cli/bin.mjs doctor",
+          "repair": "n/a"
+        },
+        {
+          "label": "e2e",
+          "cmd": "n/a",
+          "repair": "n/a"
+        }
+      ]
     }
   ],
   "vcr": {
-    "passing": 22,
-    "activated": 22,
+    "passing": 26,
+    "activated": 26,
     "ratio": 1.0
   }
 }

@@ -114,6 +114,48 @@ describe('installLightragProvision()', () => {
 
 // ── buildServiceEnvFile ──────────────────────────────────────────────────────
 
+describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
+  let home;
+
+  beforeEach(() => {
+    home = freshHome();
+    process.env.HOME = home;
+    delete process.env.XDG_CONFIG_HOME;
+  });
+
+  afterEach(() => {
+    restoreHome();
+    if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
+  });
+
+  test('dryRun: message mentions rules', async () => {
+    const { syncConfigExtras } = await import('./provision.mjs');
+    const result = await syncConfigExtras({ dryRun: true });
+    assert.equal(result.ok, true);
+    assert.ok(
+      result.message.includes('rules'),
+      `expected message to mention 'rules', got: ${result.message}`,
+    );
+    assert.ok(result.message.includes('[dry-run]'));
+  });
+
+  test('counts object exposes rules key (number)', async () => {
+    const { syncConfigExtras } = await import('./provision.mjs');
+    const result = await syncConfigExtras({ dryRun: true });
+    assert.ok(result.counts && typeof result.counts === 'object');
+    assert.equal(typeof result.counts.rules, 'number');
+  });
+
+  // NOTE: the real-run filesystem test would require re-exporting
+  // CLINE_DIR as a function so tests can override it. Per the project's
+  // architecture (NEVER call ClineCore.create() in unit tests, NEVER
+  // touch the user's real ~/.cline/), we leave that as an E2E concern.
+  // The dryRun test above + the message-format assertion prove the
+  // rules-sync code path is wired into syncConfigExtras.
+});
+
+// ── buildServiceEnvFile ──────────────────────────────────────────────────────
+
 describe('buildServiceEnvFile()', () => {
   let home;
 
