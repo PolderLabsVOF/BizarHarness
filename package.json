@@ -13,6 +13,7 @@
     "packages/sdk/",
     "config/",
     "templates/",
+    "scripts/",
     "install.sh",
     "cli/browser-harness-up.sh"
   ],
