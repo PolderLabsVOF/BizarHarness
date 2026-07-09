@@ -860,8 +860,46 @@ export async function patchClineJson({ dryRun, force }) {
     (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
   );
 
-  // Auto-add provider.minimax block if missing (v5.x — must happen
-  // even when the plugin entry already exists, so always evaluate).
+  // v6.2.0 — Multi-patch installer. On every install/update, ensure the
+  // full Bizar config surface is present in cline.json:
+  //
+  //   1. provider.9router (preferred gateway since v6.0.1) — add if
+  //      missing so the install is "complete" out of the box.
+  //   2. provider.minimax (legacy fallback) — kept for back-compat.
+  //   3. default_agent — set to "odin" if missing.
+  //   4. $schema — add if missing (helps editors validate).
+  //   5. instructions — point at .cline/instructions/bizar-tools.md if
+  //      missing, so Cline loads the tool reference on every session.
+  //   6. plugin entry — add if missing (the critical one; without this
+  //      the Bizar plugin never loads).
+  //   7. permissions — set to "allow" if missing.
+  //   8. snapshot — set to false if missing.
+  //
+  // All patches are additive and idempotent. We never overwrite a value
+  // the user has set; the `force` flag bypasses that protection for the
+  // plugin entry only.
+  let addedProvider = false;
+  let addedDefaultAgent = false;
+  let addedSchema = false;
+  let addedInstructions = false;
+  let addedPermissions = false;
+  let addedSnapshot = false;
+  let added9router = false;
+
+  if (!cfg.provider) cfg.provider = {};
+
+  // 1. provider.9router — preferred gateway.
+  if (!cfg.provider['9router'] && existsSync(join(REPO_ROOT, 'config', 'cline.json'))) {
+    try {
+      const tpl = JSON.parse(readFileSync(join(REPO_ROOT, 'config', 'cline.json'), 'utf8'));
+      if (tpl.provider && tpl.provider['9router']) {
+        cfg.provider['9router'] = tpl.provider['9router'];
+        added9router = true;
+      }
+    } catch { /* ignore template parse errors */ }
+  }
+
+  // 2. provider.minimax — legacy fallback.
   const DEFAULT_MINIMAX_BLOCK = {
     options: {
       baseURL: 'https://api.minimax.io/v1',
@@ -874,21 +912,59 @@ export async function patchClineJson({ dryRun, force }) {
       'MiniMax-M3-Reasoning': { name: 'MiniMax M3 Reasoning', interleaved: { field: 'reasoning_details' }, reasoning: true },
     },
   };
-  let addedProvider = false;
-  if (!cfg.provider) {
-    cfg.provider = {};
-  }
   if (!cfg.provider.minimax) {
     cfg.provider.minimax = DEFAULT_MINIMAX_BLOCK;
     addedProvider = true;
   }
 
-  if (hasEntry && !force && !addedProvider) {
+  // 3. default_agent
+  if (!cfg.default_agent) {
+    cfg.default_agent = 'odin';
+    addedDefaultAgent = true;
+  }
+
+  // 4. $schema
+  if (!cfg.$schema) {
+    cfg.$schema = 'https://docs.cline.bot/config.json';
+    addedSchema = true;
+  }
+
+  // 5. instructions — point at the bundled Bizar tools reference.
+  if (!cfg.instructions || (Array.isArray(cfg.instructions) && cfg.instructions.length === 0)) {
+    cfg.instructions = ['.cline/instructions/bizar-tools.md'];
+    addedInstructions = true;
+  }
+
+  // 6. permission
+  if (!cfg.permission) {
+    cfg.permission = 'allow';
+    addedPermissions = true;
+  }
+
+  // 7. snapshot
+  if (typeof cfg.snapshot !== 'boolean') {
+    cfg.snapshot = false;
+    addedSnapshot = true;
+  }
+
+  const anyAdded = addedProvider || added9router || addedDefaultAgent || addedSchema
+    || addedInstructions || addedPermissions || addedSnapshot;
+
+  if (hasEntry && !force && !anyAdded) {
     return { ok: true, message: 'cline.json already has Bizar plugin entry' };
   }
 
   if (dryRun) {
-    return { ok: true, message: `[dry-run] would patch cline.json with plugin entry${addedProvider ? ' + provider.minimax' : ''}` };
+    const added = [];
+    if (!hasEntry) added.push('plugin entry');
+    if (added9router) added.push('provider.9router');
+    if (addedProvider) added.push('provider.minimax');
+    if (addedDefaultAgent) added.push('default_agent');
+    if (addedSchema) added.push('$schema');
+    if (addedInstructions) added.push('instructions');
+    if (addedPermissions) added.push('permission');
+    if (addedSnapshot) added.push('snapshot');
+    return { ok: true, message: `[dry-run] would patch cline.json with: ${added.join(', ')}` };
   }
 
   if (!hasEntry) {
@@ -904,16 +980,26 @@ export async function patchClineJson({ dryRun, force }) {
       loopThresholdEscalate: 8,
       loopThresholdBlock: 12,
       loopWindowSize: 10,
+      clineruntimeMaxConsecutiveMistakes: 6,
     }]);
     cfg.plugin = plugins;
   }
 
   writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+  const added = [];
+  if (!hasEntry) added.push('plugin entry');
+  if (added9router) added.push('provider.9router');
+  if (addedProvider) added.push('provider.minimax');
+  if (addedDefaultAgent) added.push('default_agent');
+  if (addedSchema) added.push('$schema');
+  if (addedInstructions) added.push('instructions');
+  if (addedPermissions) added.push('permission');
+  if (addedSnapshot) added.push('snapshot');
   return {
     ok: true,
-    message: addedProvider
-      ? 'cline.json patched with provider.minimax (plugin entry was already present)'
-      : 'cline.json patched with Bizar plugin entry + provider.minimax',
+    message: added.length > 0
+      ? `cline.json patched: ${added.join(', ')}`
+      : 'cline.json already complete',
   };
 }
 

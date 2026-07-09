@@ -1,5 +1,43 @@
 # Changelog
 
+## v6.2.0 — Flawless Cline integration: /team + /test + /validate + e2e
+
+Minor bump. The Cline integration is now end-to-end flawless: every
+plugin artifact, slash command, agent file, skill, rule, hook, and
+provider config lands in the user's `~/.cline/` on every install.
+New `bizar validate` + `/validate` Cline command, plus `/team` and
+`/test` slash commands. The `make e2e` infrastructure is restored
+(was missing since v5.6.0).
+
+### Added
+
+- `cli/commands/validate.mjs` — new `bizar validate` subcommand. 21-point health check (cline CLI, cline.json, plugin path, runtime deps, agent files, slash commands, skills, rules, hooks, provider config, 9Router reachability). Flags: `--json`, `--strict`, `--only <name>`.
+- `config/commands/team.md` — `/team` slash command. Spawns a Cline agent team (Odin + Thor + Tyr + Mimir + Hermod + Forseti) for parallel multi-agent missions. Includes the default team composition, decomposition rules, and pre-dispatch checklist.
+- `config/commands/test.md` — `/test` slash command. Thin wrapper around `bizar test-gate` (auto-detects jest/vitest/bun/pytest/cargo/go).
+- `config/commands/validate.md` — `/validate` slash command. Runs the full `bizar validate` check battery.
+- `scripts/bh-full-e2e.mjs` — the 15-check end-to-end verifier. Was previously expected at `/tmp/bh-full-e2e.mjs` (a pre-existing infra gap that blocked `make e2e` and clean-check dimension #5 since v5.6.0). Now lives at `scripts/bh-full-e2e.mjs` and is run by both `make e2e` and the clean-check script.
+- `cli/commands/validate.test.mjs` — 15 unit tests for the new validator.
+
+### Fixed
+
+- `plugins/bizar/src/clineruntime.ts` — flipped `enableAgentTeams: false` → `true`. The `bizar_spawn_team` tool requires agent-teams to be enabled in ClineCore's session config. Without this, `/team` and the team coordinator were silently unavailable since v6.0.0.
+- `cli/provision.mjs:patchClineJson()` — refactored to be more robust. On every install/update, backfills the following on the user's cline.json (additive, idempotent): `provider.9router`, `provider.minimax`, `default_agent`, `$schema`, `instructions`, `permission`, `snapshot`. The previous version only added the plugin entry on first install; subsequent updates didn't fill in the other fields.
+- `.cline/instructions/bizar-tools.md` — removed lingering "opencode" references that survived the v6.1.0 Cline-only rewrite. Now correctly references `headroom wrap cline` and `~/.cline/skills/`.
+
+### Tests
+
+- 749 plugin/sdk tests pass (was 746).
+- 31 CLI tests pass (5 install + 11 provision + 15 validate).
+- 15 e2e checks pass (was N/A — the e2e script was missing).
+- `make clean-check` 5/5 pass (was 4/5).
+
+### Migration
+
+Operators on a v6.1.0 install should run `bizar update` to pull
+the new command files (team.md, test.md, validate.md) and the
+patched clineruntime.ts (enableAgentTeams: true). The update is
+backwards-compatible and idempotent.
+
 ## v6.1.0 — Cline-exclusive; OpenCode support removed
 
 Minor bump. Bizar is Cline-only as of this release; the pre-v5.6

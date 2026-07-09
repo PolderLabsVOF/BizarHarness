@@ -28,12 +28,13 @@ check:  ## Full verification pipeline (typecheck + tests)
 	@bun test plugins/bizar packages/sdk 2>&1 | tail -5
 	@echo "✓ make check passed"
 
-test:  ## Run all unit tests (plugin + sdk)
+test:  ## Run all unit tests (plugin + sdk + cli)
 	bun test plugins/bizar packages/sdk
+	@node --test cli/install.test.mjs cli/provision.test.mjs cli/commands/validate.test.mjs 2>&1 | tail -5
 
 e2e:  ## End-to-end tests (real plugin load + tool exercise)
 	@echo "▶ E2E: real plugin load + 22 tool/hook checks..."
-	@bun run /tmp/bh-full-e2e.mjs
+	@bun run scripts/bh-full-e2e.mjs
 
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json

@@ -128,6 +128,7 @@ function showHelp() {
     workspace              Manage workspaces (via the dashboard's HTTP API)
     eval                   Evaluate AI agent outputs against golden fixtures
     plan                   [v6.0.0+] Reserved for future plan management
+    validate               Validate the Bizar install (21 checks)
 
   Examples:
     bizar install
@@ -203,7 +204,7 @@ async function main() {
     const UTIL_COMMANDS = new Set([
       'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
       'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
-      'agent-browser', 'update', 'providers', 'plan',
+      'agent-browser', 'update', 'providers', 'plan', 'validate',
     ]);
     const UTIL_ALIASES = new Set(['dashboard', 'agent-browser-up']);
     let mod;
@@ -494,6 +495,23 @@ async function main() {
         return;
       }
       if (mod.run) await mod.run(cmd, cmdArgs, isHelpRequest);
+      break;
+    }
+
+    case 'validate': {
+      const mod = await importCommand('validate');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load validate command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'validate');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (!found) {
+        console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
+        showHelp();
+        process.exit(EXIT_ERROR);
+      }
       break;
     }
 

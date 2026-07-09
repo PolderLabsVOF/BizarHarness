@@ -317,6 +317,21 @@
       "description": "Bizar Plugin Menu.",
       "agent": "odin",
       "template": "commands-bizar/bizar.md\n\n$ARGUMENTS"
+    },
+    "team": {
+      "description": "Spawn a Cline agent team — coordinate Thor, Tyr, Mimir, Hermod, and Forseti to complete a complex mission end-to-end.",
+      "agent": "odin",
+      "template": "commands-bizar/team.md\n\n$ARGUMENTS"
+    },
+    "test": {
+      "description": "Run the project's test suite via the Bizar test gate (auto-detects jest/vitest/bun/pytest/cargo/go).",
+      "agent": "thor",
+      "template": "commands-bizar/test.md\n\n$ARGUMENTS"
+    },
+    "validate": {
+      "description": "Validate the Bizar install: cline.json, plugin entry, agents, skills, hooks, rules, commands, and provider config.",
+      "agent": "heimdall",
+      "template": "commands-bizar/validate.md\n\n$ARGUMENTS"
     }
   },
   "provider": {

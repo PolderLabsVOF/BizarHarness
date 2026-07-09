@@ -65,8 +65,8 @@ check "4. No debug artifacts" \
 
 # Check 5 — startup path (real plugin load)
 check "5. Startup path works" \
-  "test -f /tmp/bh-full-e2e.mjs && timeout 60 bun run /tmp/bh-full-e2e.mjs 2>&1 | tail -3" \
-  "Run 'make e2e' (writes /tmp/bh-full-e2e.mjs). Plugin must register 19 tools + 4 hooks."
+  "test -f scripts/bh-full-e2e.mjs && timeout 60 bun run scripts/bh-full-e2e.mjs 2>&1 | tail -3" \
+  "Run 'make e2e' (now lives at scripts/bh-full-e2e.mjs). Plugin must register 19 tools + 4 hooks."
 
 echo ""
 echo "═══════════════════════════════════════"

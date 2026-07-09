@@ -166,6 +166,50 @@ describe("ClineRuntime.startSession — execution plumbing", () => {
   });
 });
 
+describe("ClineRuntime.startSession — agent teams plumbing (v6.2.0)", () => {
+  test("enableAgentTeams is true on every session (team-spawn requires it)", async () => {
+    const runtime = new ClineRuntime({ logger: stubLogger() });
+    (runtime as unknown as { core: unknown }).core = makeFakeCore();
+    await runtime.startSession({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      workspaceRoot: "/tmp",
+      prompt: "go",
+    });
+    const cfg = capturedConfig[0]!.config;
+    expect(cfg.enableAgentTeams).toBe(true);
+  });
+
+  test("enableTools is true, enableSpawnAgent is false", async () => {
+    const runtime = new ClineRuntime({ logger: stubLogger() });
+    (runtime as unknown as { core: unknown }).core = makeFakeCore();
+    await runtime.startSession({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      workspaceRoot: "/tmp",
+      prompt: "go",
+    });
+    const cfg = capturedConfig[0]!.config;
+    expect(cfg.enableTools).toBe(true);
+    expect(cfg.enableSpawnAgent).toBe(false);
+  });
+
+  test("all three boolean flags survive even when caller passes no opts", async () => {
+    const runtime = new ClineRuntime({ logger: stubLogger() });
+    (runtime as unknown as { core: unknown }).core = makeFakeCore();
+    await runtime.startSession({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      workspaceRoot: "/tmp",
+      prompt: "go",
+    });
+    const cfg = capturedConfig[0]!.config;
+    expect(cfg.enableAgentTeams).toBe(true);
+    expect(cfg.enableTools).toBe(true);
+    expect(cfg.enableSpawnAgent).toBe(false);
+  });
+});
+
 function stubLogger(): { info: (m: string) => void; warn: (m: string) => void; error: (m: string) => void; debug: (m: string) => void; log: (o: { level: string; message: string }) => void } {
   return {
     info: () => {},
