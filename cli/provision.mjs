@@ -1330,6 +1330,31 @@ export async function syncConfigExtras({ dryRun }) {
     }
   }
 
+  // v6.2.5 - Mirror `config/agents/_shared/AGENT_BASELINE.md` to both
+  // `~/.cline/skills/agent-baseline/SKILL.md` and
+  // `~/.agents/skills/agent-baseline/SKILL.md`. The auto-loaded
+  // `config/agents/_shared/AGENT_BASELINE.md` references skills by
+  // `name: agent-baseline`, which the Cline skill loader resolves
+  // via `~/.cline/skills/agent-baseline/SKILL.md` (and the
+  // `npx skills` lookup uses `~/.agents/skills/...`). Without this
+  // mirror the agent-baseline SKILL.md never appears in the
+  // marketplace / loader, and the baseline fails to attach.
+  const sharedAgentsDir = join(REPO_ROOT, 'config', 'agents', '_shared');
+  if (existsSync(join(sharedAgentsDir, 'AGENT_BASELINE.md'))) {
+    const baselineSkillDir1 = join(CLINE_DIR, 'skills', 'agent-baseline');
+    const baselineSkillDir2 = join(HOME, '.agents', 'skills', 'agent-baseline');
+    mkdirSync(baselineSkillDir1, { recursive: true });
+    mkdirSync(baselineSkillDir2, { recursive: true });
+    copyFileSync(
+      join(sharedAgentsDir, 'AGENT_BASELINE.md'),
+      join(baselineSkillDir1, 'SKILL.md'),
+    );
+    copyFileSync(
+      join(sharedAgentsDir, 'AGENT_BASELINE.md'),
+      join(baselineSkillDir2, 'SKILL.md'),
+    );
+  }
+
   // ── Hooks ────────────────────────────────────────────────────
   // v6.2.1 — Cline hooks are real executable scripts (PreToolUse,
   // PostToolUse, TaskStart, TaskResume, UserPromptSubmit). They live in
