@@ -6,7 +6,7 @@
 > FILE DIRECTLY — edit `AGENTS.md` and run `make mirror-agents-md`.
 >
 > Source: `AGENTS.md` (canonical)
-> Mirrored: 2026-07-10T02:33:00+02:00 by `scripts/mirror-agents-md.sh`
+> Mirrored: 2026-07-10T02:39:08+02:00 by `scripts/mirror-agents-md.sh`
 
 ---
 
