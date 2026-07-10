@@ -88,6 +88,7 @@ ${RUNTIME} run "${COMMON_FLAGS[@]}" "$USE_IMAGE" sh -lc '
   echo "② install"
   bun install --no-save 2>&1 | tail -5 || echo "  bun install had warnings"
 
+  # ---- Stage ③ typecheck (L1 — Makefile) ----
   echo "③ typecheck"
   if ./node_modules/.bin/tsc --noEmit > /tmp/tsc.log 2>&1; then
     echo "  ✓ typecheck passed"
@@ -97,6 +98,7 @@ ${RUNTIME} run "${COMMON_FLAGS[@]}" "$USE_IMAGE" sh -lc '
     exit 1
   fi
 
+  # ---- Stage ④ plugin + sdk tests (L2 — bun) ----
   echo "④ plugin + sdk tests"
   if bun test plugins/bizar packages/sdk > /tmp/bun-test.log 2>&1; then
     tail -5 /tmp/bun-test.log
@@ -112,6 +114,7 @@ ${RUNTIME} run "${COMMON_FLAGS[@]}" "$USE_IMAGE" sh -lc '
     exit 1
   fi
 
+  # ---- Stage ⑤ CLI tests (L2 — node --test) ----
   echo "⑤ CLI tests"
   if command -v node >/dev/null 2>&1; then
     if node --test cli/install.test.mjs cli/provision.test.mjs cli/commands/validate.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs > /tmp/cli-test.log 2>&1; then
@@ -119,16 +122,26 @@ ${RUNTIME} run "${COMMON_FLAGS[@]}" "$USE_IMAGE" sh -lc '
       echo "  ✓ CLI tests passed"
     else
       tail -30 /tmp/cli-test.log
-      echo "  ⚠ CLI tests had failures"
+      echo "  ⚠ CLI tests had failures (continuing to next stage)"
     fi
   fi
 
+  # ---- Stage ⑥ cube-sandbox doctor smoke ----
+  # Does not require the CubeSandbox server; just verifies the SDK and
+  # CLI surface. Lenient exit (warn, not fail) if SDK or control node
+  # are missing — that is the expected state in a clean container.
   echo "⑥ sandbox smoke test"
   if command -v bun >/dev/null 2>&1; then
-    bun cli/bin.mjs sandbox doctor 2>&1 | tail -6 || echo "  ⚠ sandbox doctor failed (expected without CubeSandbox server)"
+    bun cli/bin.mjs sandbox doctor 2>&1 | tail -6 || echo "  ⚠ sandbox doctor returned non-zero (lenient)"
   fi
 
-  echo "⑦ done"
+  # ---- Stage ⑦ bizar validate end-to-end ----
+  echo "⑦ bizar validate"
+  if command -v bun >/dev/null 2>&1; then
+    bun cli/bin.mjs validate 2>&1 | tail -10 || echo "  ⚠ bizar validate returned non-zero (lenient)"
+  fi
+
+  echo "⑧ done"
 ' 2>&1 | tee "$LOG"
 
 echo
