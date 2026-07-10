@@ -501,6 +501,7 @@ const CHECK_ORDER = [
 ];
 
 const LENIENT_CHECKS = new Set([
+  'cline-cli-reachable', // v6.2.5 — lenified because the Cline CLI is normally in $PATH only on dev hosts; CI containers without it shouldn't fail validation
   '9router-reachable',
   'provider-config', // v6.2.2+ — installer no longer touches provider config; user must configure
   'cline-settings-provider', // v6.2.3 — warns about legacy/fake providerIds; non-blocking

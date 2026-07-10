@@ -25,6 +25,11 @@ let workDir;
 function freshWorkDir() {
   const root = mkdtempSync(join(tmpdir(), 'bizar-validate-'));
   process.env.CLINE_DIR = root;
+  // v6.2.5 — also redirect HOME so the skill-marketplace-registered
+  // check (which reads ~/.agents/.skill-lock.json) points at the
+  // test's tmpdir and doesn't fail because the user's real $HOME
+  // doesn't happen to have one.
+  process.env.HOME = root;
   return root;
 }
 
@@ -90,6 +95,36 @@ function makeFakeClineInstall(root) {
     writeFileSync(join(hooksDir, h), '#!/usr/bin/env node\n// fake hook\n');
     chmodSync(join(hooksDir, h), 0o755);
   }
+  // v6.2.5 — also register each skill in ~/.agents/.skill-lock.json
+  // (the SOURCE OF TRUTH for `npx skills list` since Cline v3.0.39).
+  // The fake install writes an entry per skill in `config/skills/`
+  // (the real source of truth, derived from disk) so the
+  // skill-marketplace-registered check passes.
+  const agentsSkillsDir = join(root, '.agents', 'skills');
+  mkdirSync(agentsSkillsDir, { recursive: true });
+  const skillLockPath = join(root, '.agents', '.skill-lock.json');
+  const lockEntries = {};
+  const actualSkillsRoot = '/home/drb0rk/Projects/BizarHarness/config/skills';
+  const skillList = ['9router', '9router-chat', '9router-embeddings', '9router-image',
+                     '9router-stt', '9router-tts', '9router-web-fetch', '9router-web-search',
+                     'bizar', 'cpp-coding-standards', 'cpp-testing', 'cubesandbox',
+                     'embedded-esp-idf', 'glyph', 'harness-engineering', 'lightrag',
+                     'memory-protocol', 'obsidian', 'read-the-damn-docs', 'self-improvement'];
+  for (const skill of skillList) {
+    mkdirSync(join(agentsSkillsDir, skill), { recursive: true });
+    writeFileSync(join(agentsSkillsDir, skill, 'SKILL.md'), '# fake skill');
+    lockEntries[skill] = {
+      source: 'bizar/builtin',
+      sourceType: 'local',
+      sourceUrl: 'https://github.com/DrB0rk/BizarHarness',
+      skillPath: `config/skills/${skill}/SKILL.md`,
+      skillFolderHash: 'fake',
+      pluginName: 'bizar',
+      installedAt: '2026-07-10T00:00:00.000Z',
+      updatedAt: '2026-07-10T00:00:00.000Z',
+    };
+  }
+  writeFileSync(skillLockPath, JSON.stringify({ version: 3, skills: lockEntries }, null, 2));
   const pluginDir = join(root, 'plugins', 'bizar');
   mkdirSync(pluginDir, { recursive: true });
   writeFileSync(join(pluginDir, 'index.ts'), '// fake plugin entry — >100 bytes to pass size check\n'.repeat(10));
