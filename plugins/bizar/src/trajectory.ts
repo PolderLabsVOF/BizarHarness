@@ -13,8 +13,8 @@
  * Override the directory with BIZAR_TRAJECTORY_DIR.
  */
 
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, unlinkSync, statSync } from "node:fs";
-import { join, basename } from "node:path";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { homedir } from "node:os";
 
 export type TrajectoryKind = "model" | "tool" | "session";

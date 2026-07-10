@@ -100,6 +100,10 @@ import {
   createBrowserCommandTool,
   type AgentBrowserDeps,
 } from "./src/tools/agent-browser.js";
+import {
+  createSandboxRunTool,
+  createSandboxExecTool,
+} from "./src/tools/sandbox.js";
 import { checkDangerous, getDangerousPatternStats, listDangerousPatterns } from "./src/dangerous-patterns.js";
 import { createSkillCurator } from "./src/hooks/skill-curator.js";
 import { createMemoryFlushOnCompact } from "./src/hooks/memory-flush-on-compact.js";
@@ -576,10 +580,28 @@ function buildTools(ctx: RuntimeContext, instanceManager: InstanceManager | null
     createBrowserScreenshotTool(browserDeps) as unknown as AgentTool,
     createBrowserCommandTool(browserDeps) as unknown as AgentTool,
   ];
+  // v6.3.0 — CubeSandbox (E2B-compatible KVM microVM) tools.
+  // Routes risky `bash`/`python`/`node` calls into a hardware-isolated
+  // sandbox. Each call boots <60ms / <5MB overhead via the Python SDK.
+  // See plugins/bizar/src/tools/sandbox.ts and
+  // config/skills/cubesandbox/SKILL.md.
+  const sandboxDeps = { logger: ctx.logger };
+  const sandboxTools: AgentTool[] = [
+    createSandboxRunTool(sandboxDeps) as unknown as AgentTool,
+    createSandboxExecTool(sandboxDeps) as unknown as AgentTool,
+  ];
   // v6.0.0 — Loop-engineering tools (ralph / repl / cron / plan-execute).
   // These work standalone (no clineRuntime needed) since state lives on disk.
   const loopTools: AgentTool[] = createLoopTools({ logger: ctx.logger }) as unknown as AgentTool[];
-  return [...basePlanTools, ...bgTools, ...teamTools, ...graphTools, ...browserTools, ...loopTools];
+  return [
+    ...basePlanTools,
+    ...bgTools,
+    ...teamTools,
+    ...graphTools,
+    ...browserTools,
+    ...sandboxTools,
+    ...loopTools,
+  ];
 }
 
 function bgDisabledTools(logger: Logger): AgentTool[] {
@@ -601,15 +623,46 @@ function buildHooksForCtx(ctx: RuntimeContext): AgentExtensionHooks {
       const args = toolCtx.input;
       // v6.0.0 — Dangerous-patterns approval gate (Hermes + OpenFang pattern).
       // Blocks rm -rf, sudo, prompt injection, SSRF, etc. See
-      // src/dangerous-patterns.ts for the full list. Tool calls with
-      // `decision: deny` are stopped before they reach the host.
+      // src/dangerous-patterns.ts for the full list.
+      //
+      // v6.2.4 — Three decisions handled:
+      //   - "deny"            → return { stop: true, reason } (the Cline
+      //                          AgentBeforeToolResult type uses `stop` and
+      //                          `reason` — NOT `cancel`/`context` which
+      //                          is the OLDER HookControl API). Cline halts
+      //                          the agent run when `stop: true` is set.
+      //   - "require-approval" → let the tool run, but queue a hint via
+      //                          ctx.pendingInjections so the agent sees the
+      //                          warning on the NEXT `beforeModel` call and
+      //                          can adjust course. There is no direct
+      //                          "ask the user for approval" field in the
+      //                          Cline beforeTool API; the host's approval
+      //                          gate (when set) handles user prompts
+      //                          separately via tool policies.
+      //   - "allow"           → fall through, let the tool run.
       try {
         const safety = checkDangerous(args as Record<string, unknown>);
         if (safety.decision === "deny") {
           ctx.logger.warn(
             `bizar: blocked tool '${tool}' — dangerous pattern '${safety.pattern}': ${safety.reason}`,
           );
-          return { stop: true, reason: `dangerous_pattern:${safety.pattern}:${safety.reason}` };
+          return {
+            stop: true,
+            reason: `dangerous_pattern:${safety.pattern}:${safety.reason}`,
+          };
+        }
+        if (safety.decision === "require-approval") {
+          // v6.2.4 — log + inject hint. The Cline host's tool-policy
+          // approval gate (when configured) handles the actual
+          // user-prompt flow. We just flag the pattern so the agent
+          // knows this command needs caution on its next turn.
+          ctx.logger.warn(
+            `bizar: requires-approval tool '${tool}' — dangerous pattern '${safety.pattern}': ${safety.reason}`,
+          );
+          ctx.pendingInjections.set(
+            sessionID,
+            `dangerous_pattern:${safety.pattern}:${safety.reason} — confirm with user before proceeding`,
+          );
         }
       } catch {
         // safety checks are best-effort; never fail the tool call here

@@ -229,6 +229,41 @@ const CHECKS = {
     return `${skills.length} skill(s) installed: ${skills.slice(0, 5).join(', ')}${skills.length > 5 ? '...' : ''}`;
   },
 
+  // v6.2.5 — verify each Bizar skill is registered in
+  // `~/.agents/.skill-lock.json` so Cline's marketplace UI counts it.
+  // Without registration, Cline shows "0 skills installed" even
+  // though the files are on disk (Cline reads the lock file, not the
+  // directory listing).
+  'skill-marketplace-registered': async () => {
+    const lockPath = join(process.env.HOME || process.env.USERPROFILE || '/root', '.agents', '.skill-lock.json');
+    if (!existsSync(lockPath)) {
+      throw new Error(`lock file missing: ${lockPath} — run \`bizar update\``);
+    }
+    let lock;
+    try {
+      lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+    } catch (err) {
+      throw new Error(`lock file corrupt: ${lockPath}: ${err.message}`);
+    }
+    const skillsRoot = join(REPO_ROOT, 'config', 'skills');
+    const expected = [];
+    if (existsSync(skillsRoot)) {
+      for (const entry of readdirSync(skillsRoot, { withFileTypes: true })) {
+        if (entry.isDirectory()) expected.push(entry.name);
+      }
+    }
+    const registered = Object.entries(lock.skills || {})
+      .filter(([, v]) => v && v.source === 'bizar/builtin')
+      .map(([k]) => k);
+    const missing = expected.filter((n) => !registered.includes(n));
+    if (missing.length > 0) {
+      throw new Error(
+        `${missing.length} Bizar skill(s) NOT registered in ${lockPath}: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '...' : ''} — run \`bizar update\``,
+      );
+    }
+    return `${registered.length} Bizar skill(s) registered in marketplace lock (of ${expected.length} expected)`;
+  },
+
   'rules-installed': async () => {
     const dir = join(clineDir(), 'rules');
     if (!existsSync(dir)) throw new Error(`rules dir missing: ${dir} — run \`bizar update\``);
@@ -453,6 +488,7 @@ const CHECK_ORDER = [
   'test-command-present',
   'validate-command-present',
   'skills-installed',
+  'skill-marketplace-registered',
   'rules-installed',
   'hooks-installed',
   'hooks-canonical-location',

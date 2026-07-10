@@ -246,8 +246,8 @@
         "websearch": "allow"
       }
     },
-    "browser-harness": {
-      "description": "browser-harness — Primary agent for browser-driven E2E verification. No-edit permissions. Drives Chrome via CDP for end-to-end testing of web apps.",
+    "agent-browser": {
+      "description": "agent-browser — Primary agent for browser-driven E2E verification. No-edit permissions. Drives Chrome for Testing via the agent-browser Rust CLI for end-to-end testing of web apps. Reads `_shared/CLINE_TOOLS.md` before any tool call.",
       "mode": "primary",
       "model": "minimaxcustom/MiniMax-M2.7",
       "color": "#84cc16",

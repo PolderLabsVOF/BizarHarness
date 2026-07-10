@@ -58,5 +58,14 @@ session-start:  ## Record session start to .harness/traces/sessions.jsonl
 session-end:  ## Record session end to .harness/traces/sessions.jsonl
 	@bash scripts/session-trace.sh end
 
+init:  ## v6.2.5 session initializer (L06 from walkinglabs); ./init.sh --fast
+	@./init.sh --fast
+
+mirror-agents-md:  ## v6.2.5 mirror AGENTS.md → CLAUDE.md (walkinglabs cross-tool)
+	@./scripts/mirror-agents-md.sh
+
+mirror-agents-md-check:  ## v6.2.5 CI check: CLAUDE.md is in sync with AGENTS.md
+	@./scripts/mirror-agents-md.sh --check
+
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check session-start session-end
+.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check session-start session-end init mirror-agents-md mirror-agents-md-check

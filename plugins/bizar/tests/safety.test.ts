@@ -86,6 +86,31 @@ describe("dangerous-patterns", () => {
     expect(names).toContain("sudo");
     expect(names).toContain("curl-metadata");
   });
+
+  it("v6.2.4 — 'deny' decision (e.g. rm -rf /) is correctly identified", () => {
+    // The hook itself uses `cancel: true` for deny (was `stop: true, reason`
+    // which Cline silently ignored). This test pins the checkDangerous
+    // contract that the hook relies on.
+    const r = checkDangerous({ command: "rm -rf /" });
+    expect(r.decision).toBe("deny");
+    expect(r.pattern).toBe("rm-rf-root");
+    expect(r.reason).toBeTruthy();
+  });
+
+  it("v6.2.4 — 'require-approval' decision (e.g. sudo) is correctly identified", () => {
+    // Previously the hook treated require-approval the same as allow,
+    // making the approval flow non-functional. Pin the contract.
+    const r = checkDangerous({ command: "sudo apt-get install foo" });
+    expect(r.decision).toBe("require-approval");
+    expect(r.pattern).toBe("sudo");
+  });
+
+  it("v6.2.4 — 'require-approval' covers chmod 777, chown root, git clean -fd", () => {
+    expect(checkDangerous({ command: "chmod 777 /tmp" }).decision).toBe("require-approval");
+    expect(checkDangerous({ command: "chown root /etc/hosts" }).decision).toBe("require-approval");
+    expect(checkDangerous({ command: "git clean -fd" }).decision).toBe("require-approval");
+    expect(checkDangerous({ command: "git reset --hard" }).decision).toBe("require-approval");
+  });
 });
 
 describe("skill-curator", () => {

@@ -219,4 +219,106 @@ describe('buildServiceEnvFile()', () => {
   });
 });
 
+// ── writeBizarSkillLock (v6.2.5) ──────────────────────────────────────────────
+//
+// Cline's marketplace UI reads `~/.agents/.skill-lock.json` to decide
+// whether a skill is installed. Without writing entries there, users
+// see "No skills installed" in Cline's Skills tab even though SKILL.md
+// files are correctly mirrored to `~/.cline/skills/` and
+// `~/.agents/skills/`. These tests pin the contract of the
+// `writeBizarSkillLock` helper that the installer uses.
+
+describe('writeBizarSkillLock() — Cline marketplace registration', () => {
+  let home, skillsSrc, agentsDir;
+
+  beforeEach(() => {
+    home = freshHome();
+    process.env.HOME = home;
+    delete process.env.XDG_CONFIG_HOME;
+    skillsSrc = join(home, 'config', 'skills');
+    agentsDir = join(home, '.agents');
+    mkdirSync(skillsSrc, { recursive: true });
+    mkdirSync(join(skillsSrc, 'bizar'), { recursive: true });
+    writeFileSync(join(skillsSrc, 'bizar', 'SKILL.md'), '# Bizar skill');
+    mkdirSync(join(skillsSrc, '9router'), { recursive: true });
+    writeFileSync(join(skillsSrc, '9router', 'SKILL.md'), '# 9router skill');
+    mkdirSync(agentsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    restoreHome();
+    if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
+  });
+
+  test('writes lock file with all skills as bizar/builtin', async () => {
+    const { writeBizarSkillLock } = await import('./provision.mjs');
+    const result = writeBizarSkillLock({ skillsSrc, agentsDir });
+    assert.equal(result.ok, true);
+    assert.equal(result.count, 2);
+
+    const lockPath = join(agentsDir, '.skill-lock.json');
+    assert.ok(existsSync(lockPath));
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+    assert.ok(lock.skills.bizar, 'bizar entry should exist');
+    assert.ok(lock.skills['9router'], '9router entry should exist');
+    assert.equal(lock.skills.bizar.source, 'bizar/builtin');
+    assert.equal(lock.skills['9router'].source, 'bizar/builtin');
+    assert.equal(lock.skills.bizar.pluginName, 'bizar');
+    assert.ok(lock.skills.bizar.installedAt);
+    assert.ok(lock.skills.bizar.updatedAt);
+  });
+
+  test('preserves user-installed skills (does not overwrite non-bizar source)', async () => {
+    const lockPath = join(agentsDir, '.skill-lock.json');
+    const preExisting = {
+      version: 3,
+      skills: {
+        'user-installed-skill': {
+          source: 'vercel-labs/agent-skills',
+          sourceType: 'github',
+          sourceUrl: 'https://github.com/vercel-labs/agent-skills.git',
+          skillPath: 'skills/foo/SKILL.md',
+          installedAt: '2026-06-13T10:03:13.744Z',
+          updatedAt: '2026-06-13T10:03:13.744Z',
+        },
+      },
+    };
+    writeFileSync(lockPath, JSON.stringify(preExisting));
+
+    const { writeBizarSkillLock } = await import('./provision.mjs');
+    writeBizarSkillLock({ skillsSrc, agentsDir });
+
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+    assert.ok(lock.skills['user-installed-skill'], 'user skill must remain');
+    assert.equal(
+      lock.skills['user-installed-skill'].source,
+      'vercel-labs/agent-skills',
+      'user skill source must NOT be overwritten',
+    );
+    assert.ok(lock.skills.bizar, 'bizar entry should be added');
+  });
+
+  test('is idempotent — re-running updates timestamps, does not duplicate', async () => {
+    const { writeBizarSkillLock } = await import('./provision.mjs');
+    writeBizarSkillLock({ skillsSrc, agentsDir });
+    const lock1 = JSON.parse(readFileSync(join(agentsDir, '.skill-lock.json'), 'utf8'));
+    const firstInstalledAt = lock1.skills.bizar.installedAt;
+
+    // tiny delay to make updatedAt observable
+    await new Promise((r) => setTimeout(r, 10));
+    writeBizarSkillLock({ skillsSrc, agentsDir });
+    const lock2 = JSON.parse(readFileSync(join(agentsDir, '.skill-lock.json'), 'utf8'));
+    assert.equal(lock2.skills.bizar.installedAt, firstInstalledAt);
+    assert.notEqual(lock2.skills.bizar.updatedAt, lock1.skills.bizar.updatedAt);
+  });
+
+  test('returns ok=true with count=0 if skillsSrc missing', async () => {
+    rmSync(skillsSrc, { recursive: true, force: true });
+    const { writeBizarSkillLock } = await import('./provision.mjs');
+    const result = writeBizarSkillLock({ skillsSrc, agentsDir });
+    assert.equal(result.ok, true);
+    assert.equal(result.count, 0);
+  });
+});
+
 console.log('  provision.mjs tests loaded — run with: node --test cli/provision.test.mjs');

@@ -125,6 +125,34 @@ describe("fingerprint — noise field stripping", () => {
     const b = fingerprint("read", { path: path.join(os.tmpdir(), "foo.ts"), cwd: "/completely/different" }, WORKTREE);
     expect(a).toBe(b);
   });
+
+  // v6.2.4 — noise fields at ANY depth must be stripped. Previously
+  // the `cwd` field was only stripped at the top level, so a nested
+  // `cwd` like `{ options: { cwd: "/x" } }` would still differentiate
+  // the fingerprint and trigger the loop-guard false-positives.
+  test("v6.2.4 — strips cwd at nested depth", () => {
+    const a = fingerprint("bash", {
+      command: "ls -la",
+      options: { cwd: "/home/user", env: { PATH: "/usr/bin" } },
+    }, WORKTREE);
+    const b = fingerprint("bash", {
+      command: "ls -la",
+      options: { cwd: "/completely/different", env: { PATH: "/usr/bin" } },
+    }, WORKTREE);
+    expect(a).toBe(b, "nested cwd must be stripped to keep the fingerprint stable");
+  });
+
+  test("v6.2.4 — strips id at nested depth", () => {
+    const a = fingerprint("edit", { meta: { id: "uuid-1", author: "alice" } }, WORKTREE);
+    const b = fingerprint("edit", { meta: { id: "uuid-2", author: "alice" } }, WORKTREE);
+    expect(a).toBe(b);
+  });
+
+  test("v6.2.4 — strips timestamp at nested depth", () => {
+    const a = fingerprint("edit", { config: { created_at: 1000, author: "alice" } }, WORKTREE);
+    const b = fingerprint("edit", { config: { created_at: 9999, author: "alice" } }, WORKTREE);
+    expect(a).toBe(b);
+  });
 });
 
 describe("fingerprint — nested objects", () => {

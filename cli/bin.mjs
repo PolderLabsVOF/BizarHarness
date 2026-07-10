@@ -584,6 +584,20 @@ async function main() {
       break;
     }
 
+    case 'sandbox': {
+      // v6.3.0 — CubeSandbox (E2B-compatible KVM microVM) wrapper.
+      // Subcommands: doctor | run | list | kill | install-template | config
+      const mod = await importCommand('sandbox');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load sandbox command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'sandbox');
+      await mod.runSandbox(cmdArgs);
+      break;
+    }
+
     default: {
       console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
       showHelp();

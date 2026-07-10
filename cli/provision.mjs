@@ -237,6 +237,73 @@ export function writeInstallMarker({ version, repoPath, serviceUnit }) {
   }
 }
 
+/**
+ * v6.2.5 - Register every `config/skills/<name>/SKILL.md` in
+ * `${agentsDir}/.skill-lock.json` so Cline's marketplace UI
+ * (`isMarketplaceSkillInstalled`) actually shows them as installed.
+ *
+ * Cline reads `~/.agents/.skill-lock.json` as its source of truth for
+ * skill installation state. The Bizar harness mirrors SKILL.md files
+ * to both `~/.cline/skills/` and `~/.agents/skills/`, but Cline still
+ * shows "No skills installed" in the Skills tab until each entry is
+ * registered here. Verified via `npx skills list -g` (writes the entry
+ * then the skill appears).
+ *
+ * Idempotent: entries already tagged `source: 'bizar/builtin'` only
+ * get their `updatedAt` refreshed; user-installed skills (any other
+ * source) are never touched.
+ *
+ * @param {object} opts
+ * @param {string} opts.skillsSrc   - directory containing config/skills/<name>
+ * @param {string} opts.agentsDir   - typically HOME/.agents
+ * @returns {{ok: boolean, count: number, path: string}}
+ */
+export function writeBizarSkillLock({ skillsSrc, agentsDir }) {
+  if (!existsSync(skillsSrc)) {
+    return { ok: true, count: 0, path: join(agentsDir, '.skill-lock.json') };
+  }
+  const lockPath = join(agentsDir, '.skill-lock.json');
+  let lock = { version: 3, skills: {} };
+  try {
+    const raw = readFileSync(lockPath, 'utf8');
+    lock = JSON.parse(raw);
+    if (!lock.skills || typeof lock.skills !== 'object') lock.skills = {};
+    if (typeof lock.version !== 'number') lock.version = 3;
+  } catch {
+    // first install - start fresh
+  }
+  const now = new Date().toISOString();
+  let count = 0;
+  for (const skillDir of readdirSync(skillsSrc, { withFileTypes: true })) {
+    if (!skillDir.isDirectory()) continue;
+    const name = skillDir.name;
+    const existing = lock.skills[name];
+    if (existing && existing.source === 'bizar/builtin') {
+      existing.updatedAt = now;
+      count += 1;
+      continue;
+    }
+    lock.skills[name] = {
+      source: 'bizar/builtin',
+      sourceType: 'local',
+      sourceUrl: 'https://github.com/DrB0rk/BizarHarness',
+      skillPath: 'config/skills/' + name + '/SKILL.md',
+      skillFolderHash: 'bizar-managed',
+      pluginName: 'bizar',
+      installedAt: existing && existing.installedAt ? existing.installedAt : now,
+      updatedAt: now,
+    };
+    count += 1;
+  }
+  try {
+    mkdirSync(agentsDir, { recursive: true });
+    writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+    return { ok: true, count, path: lockPath };
+  } catch (err) {
+    return { ok: false, count: 0, path: lockPath, error: err.message };
+  }
+}
+
 // ─── State detection ──────────────────────────────────────────────────────────
 
 /**
@@ -1245,6 +1312,21 @@ export async function syncConfigExtras({ dryRun }) {
       const src = join(skillsSrc, skillDir.name);
       const dst = join(agentsSkillsDst, skillDir.name);
       await copyDirIfExists(src, dst);
+    }
+  }
+
+  // v6.2.5 - Register every Bizar skill in `~/.agents/.skill-lock.json`
+  // so Cline's marketplace UI (`isMarketplaceSkillInstalled`) actually
+  // shows them. Without this, users see "0 skills" in the Skills tab
+  // even though the files are correctly mirrored. See the
+  // `writeBizarSkillLock` JSDoc for the full rationale.
+  if (existsSync(skillsSrc)) {
+    const skillLock = writeBizarSkillLock({
+      skillsSrc,
+      agentsDir: join(HOME, '.agents'),
+    });
+    if (!skillLock.ok && skillLock.error) {
+      console.warn(`bizar: skill lock write failed: ${skillLock.error}`);
     }
   }
 

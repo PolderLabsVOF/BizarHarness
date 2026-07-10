@@ -61,6 +61,13 @@ function normalizePath(v: string, worktree: string): string {
   return `path:${h.slice(0, 16)}`;
 }
 
+// Per §5.3: strip noise fields anywhere in the args tree, not just at
+// the top level. Cached at module load for hot-path perf.
+const SKIP_TIME_FIELDS =
+  /(^|_)time($|_)|stamp|created|updated|timestamp/i;
+const SKIP_FIELDS = /^(id|uuid|nonce|requestId|traceId)$/i;
+const SKIP_FIELD_NAMES = new Set(['cwd']); // v6.2.4 — was top-level only
+
 function normalize(value: unknown, worktree: string): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === "boolean") return value;
@@ -78,19 +85,12 @@ function normalize(value: unknown, worktree: string): unknown {
     const obj = value as Record<string, unknown>;
     const result: Record<string, unknown> = {};
 
-    // Per §5.3: strip fields whose name contains time/stamp/created/updated/timestamp
-    const SKIP_TIME_FIELDS =
-      /(^|_)time($|_)|stamp|created|updated|timestamp/i;
-
-    // Per §5.3: strip ID/nonce fields by exact name
-    const SKIP_FIELDS = /^(id|uuid|nonce|requestId|traceId)$/i;
-
     for (const [k, v] of Object.entries(obj)) {
-      // strip cwd field entirely per §5.3
-      if (k === "cwd") continue;
-      // strip ID/nonce fields per §5.3
+      // v6.2.4 — strip noise fields at ANY depth (was top-level only).
+      // Catches `{ config: { created_at: 12345 } }`, `{ cwd: '...' }` nested
+      // inside another object, etc.
+      if (SKIP_FIELD_NAMES.has(k)) continue;
       if (SKIP_FIELDS.test(k)) continue;
-      // strip timestamp fields per §5.3
       if (SKIP_TIME_FIELDS.test(k) && (typeof v === "number" || typeof v === "string")) continue;
 
       // normalize (includes path normalization for strings via normalizePath)
