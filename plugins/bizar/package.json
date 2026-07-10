@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-plugin",
-  "version": "6.2.4",
+  "version": "6.2.5",
   "description": "Bizar Norse-pantheon multi-agent plugin for Cline — 14 agents across 4 cost tiers with cost-aware routing and plans.",
   "type": "module",
   "main": "./index.ts",

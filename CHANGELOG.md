@@ -1,5 +1,115 @@
 # Changelog
 
+## v6.2.5 — CubeSandbox + harness-engineering + skill-lock fix + container tests
+
+Patch release bringing the deep-dive work to a close: critical
+skill-marketplace registration bug fixed (the "0 skills" issue in
+Cline), new CubeSandbox (E2B KVM microVM) integration, the
+walkinglabs/awesome-harness-engineering canon codified into a new
+skill + `init.sh` session initializer + `CLAUDE.md` mirror, and
+the entire test suite verified end-to-end inside an ephemeral
+Podman container.
+
+### Fixed (deep-dive series)
+
+- **`~/.agents/.skill-lock.json` registration** — the Bizar installer
+  mirrored SKILL.md files to `~/.cline/skills/` and `~/.agents/skills/`
+  but never wrote the corresponding `.skill-lock.json` entries. Cline's
+  marketplace UI (`isMarketplaceSkillInstalled`) reads the lock file,
+  not the directory listing, so users saw "0 skills" in the Skills
+  tab even with every file on disk. New exported helper
+  `writeBizarSkillLock()` in `cli/provision.mjs:261` writes entries
+  for all 18 Bizar skills as `source: 'bizar/builtin'`. Idempotent —
+  refreshes `updatedAt` on re-install and never touches entries owned
+  by other tools (e.g. `vercel-labs/agent-skills`).
+- **`fingerprint.ts` noise stripping** — recursive into nested objects.
+  Top-level stripping worked, but a fingerprint like
+  `{ cwd: '/tmp', meta: { cwd: '/tmp' } }` only stripped the top
+  cwd. Now both go away.
+- **`trajectory.ts`** — removed 5 dead imports (`existsSync`,
+  `readdirSync`, `unlinkSync`, `statSync`, `basename`) that hadn't
+  been used since the v6.0.0 rewrite.
+- **`clineruntime.ts` mistake-limit** — already a floor in v6.2.4
+  (Math.max), but this release also bumped default 6 → 10 for more
+  generous retry on tool-shape mismatches.
+- **`dangerous-patterns.ts`** hook — `"deny"` decision was using
+  Cline's `stop: true, reason` (the actual `AgentBeforeToolResult`
+  field shape from `@cline/shared/dist/agent.d.ts`). Earlier drafts
+  had used `cancel`/`context`/`review` which are the older
+  `HookControl` API and were silently ignored.
+- **`cli/commands/validate.mjs` `cline-cli-reachable`** — moved to
+  `LENIENT_CHECKS` so CI containers without `cline` on PATH don't
+  fail validation. CI containers are a legitimate Bizar runtime
+  (see the new `scripts/test-in-container.sh`); strict-flag still
+  promotes it to a hard fail.
+- **`cli/commands/validate.test.mjs`** — fake-install fixture was
+  broken since v6.2.0 (7 tests failing on master due to incomplete
+  fixture + the new skill-lock check). Fixed: mkdirSync for
+  `~/.agents/skills/<skill>/`, write the lock file with all 20 skill
+  entries, mirror HOME to CLINE_DIR. 18/18 passing.
+
+### Added
+
+- **CubeSandbox (TencentCloud)** — full integration for running
+  untrusted scripts in hardware-isolated KVM microVMs.
+  - `config/skills/cubesandbox/SKILL.md` — discovery, when to use,
+    E2B-SDK compatibility, security proxy / credential vault, benchmarks.
+  - `cli/commands/sandbox.mjs` — `bizar sandbox {doctor,run,list,kill,
+    install-template,config}` thin wrapper over the Python SDK.
+  - `plugins/bizar/src/tools/sandbox.ts` — `bizar_sandbox_run` and
+    `bizar_sandbox_exec` plugin tools (KVM-microVM path with <60ms
+    cold start / <5MB overhead). Both run the existing
+    `dangerous-patterns` gate on the script body.
+  - `plugins/bizar/tests/tools/sandbox.test.ts` — 7 unit tests pinning
+    the dangerous-patterns behavior, plugin registration, and
+    skill/CLI existence.
+- **harness-engineering skill** — `config/skills/harness-engineering/SKILL.md`
+  codifies the walkinglabs/awesome-harness-engineering 5-subsystem
+  model (Instructions / State / Verification / Scope / Session
+  Lifecycle) + L13 loop-engineering primitives (goal loop / timer
+  loop / maker-checker).
+- **`init.sh`** (root) — L06 session initializer. Verifies toolchain
+  + state files + WIP=1 + clean state, then exits 0 (or 1 with
+  `--strict`).
+- **`scripts/mirror-agents-md.sh`** + `make mirror-agents-md` target —
+  keeps `CLAUDE.md` (Claude-Code-compatible mirror) in sync with
+  the canonical `AGENTS.md`. Cross-tool compatibility for the
+  walkinglabs AGENTS.md convention.
+- **`scripts/test-in-container.sh`** — `make test-in-container`
+  equivalent that runs the entire validation pipeline (typecheck +
+  765 bun tests + 57 CLI tests + sandbox doctor smoke) inside an
+  ephemeral Podman container. Verified on
+  `docker.io/library/alpine:latest` with bun + nodejs installed
+  via apk + curl.
+- **`config/agents/_shared/AGENT_BASELINE.md`** — compacted from
+  735 → 155 lines. Verbose content (Identity / Tone / Refusal /
+  Copyright / Citations / Images / Memory Privacy) moved to
+  `config/skills/bizar/SKILL.md` for on-demand loading. Critical
+  rules stay auto-loaded.
+- **`cli/provision.mjs:syncConfigExtras`** — now also mirrors
+  `config/agents/_shared/AGENT_BASELINE.md` to
+  `~/.cline/skills/agent-baseline/SKILL.md` and
+  `~/.agents/skills/agent-baseline/SKILL.md` so the auto-load
+  discovery works (Cline's skill loader looks for `<name>/SKILL.md`
+  in those dirs; the source `config/agents/_shared/` path is not
+  discoverable).
+- **`cli/provision.mjs:writeBizarSkillLock`** — exported helper
+  with `cli/provision.test.mjs` test coverage (4 cases: writes
+  lock, preserves user-installed skills, idempotent, missing source
+  returns ok=true count=0).
+- **`cli/commands/validate.mjs`** — new `skill-marketplace-registered`
+  check (24th check). Pinned by `cli/provision.test.mjs`.
+
+### Changed
+
+- **`config/cline.json.template`** — `browser-harness` agent renamed
+  to `agent-browser`. The Python CDP `browser-harness` was retired
+  in v6.0.0; the rename finally closes the loop on the agent
+  registry side.
+- All 14 agent files now reference `agent-baseline` and
+  `CLINE_TOOLS.md` cleanly. The `bizar` skill (always loaded with
+  every agent) is now a self-contained reference doc.
+
 ## v6.2.4 — Mistake-limit floor + Cline tools primer
 
 Patch release. Fixes the silent v6.0.0 regression that aborted sessions

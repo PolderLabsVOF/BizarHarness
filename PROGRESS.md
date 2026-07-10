@@ -6,15 +6,21 @@
 
 ## Current State
 
-- **Last commit:** v6.2.4 — mistake-limit floor + Cline tools primer
-- **Released:** (unreleased; on master)
-- **`make check`:** 752/752 pass, 0 TS errors
-- **`make test`:** 814/814 pass (53 plugin/sdk files + 62 CLI tests)
+- **Last commit:** v6.2.5 — CubeSandbox + harness-engineering + skill-lock fix + container tests
+- **Released:** v6.2.5 — published to npm (3 packages)
+- **`make check`:** 765/765 pass, 0 TS errors
+- **`make test`:** 765 + 57 pass (54 plugin/sdk files + CLI tests)
 - **`make e2e`:** 20/20 pass
 - **`make clean-check`:** 5/5 dimensions pass
 - **`make vcr`:** 27/27 = 1.000
-- **Branch:** master
-- **Phase:** v6.2.4 — **Mistake-limit + tools primer**
+- **Container test (`scripts/test-in-container.sh`):** ✓ all 6 stages green
+- **Branch:** master (pushed)
+- **Phase:** v6.2.5 — **CubeSandbox + harness-engineering**
+
+## What landed in v6.2.5
+
+Deep-dive session: critical skill-lock bug, new CubeSandbox
+integration, walkinglabs principles applied, container-based testing.
 
 ## What landed in v6.2.4
 
