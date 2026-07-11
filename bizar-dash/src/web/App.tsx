@@ -764,10 +764,15 @@ function Shell() {
     }
   };
 
-  // v8.0 — Sidebar is the primary nav (topbar no longer hosts tabs), so
-  // the default layout must include it. Users can still pick "topnav" or
-  // "both" from Settings → Layout if they prefer.
-  const layout = settings?.ui?.layout || 'sidebar';
+  // v8.0 — Sidebar is the primary nav (topbar no longer hosts tabs).
+  // The persisted value 'topnav' is silently migrated to 'sidebar'
+  // because the topbar has nothing to act as nav in v8.0. Users with
+  // 'sidebar' or 'both' keep their choice.
+  const layout = (() => {
+    const v = settings?.ui?.layout;
+    if (!v || v === 'topnav') return 'sidebar';
+    return v;
+  })();
   const showHeader = settings?.ui?.showHeader !== false;
 
   return (
@@ -821,17 +826,15 @@ function Shell() {
         </div>
       )}
       <div className="layout-body">
-        {layout !== 'topnav' && (
-          <Sidebar
-            tabs={mergedTabs}
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            settingsMode={settingsMode}
-            settingsActiveSection={settingsActiveSection}
-            onSettingsSectionChange={setSettingsActiveSection}
-            onExitSettings={() => handleTabChange('overview')}
-          />
-        )}
+        <Sidebar
+          tabs={mergedTabs}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          settingsMode={settingsMode}
+          settingsActiveSection={settingsActiveSection}
+          onSettingsSectionChange={setSettingsActiveSection}
+          onExitSettings={() => handleTabChange('overview')}
+        />
         <main className="content" id="main-content" tabIndex={-1}>
           {bootError && (
             <div className="boot-error">
