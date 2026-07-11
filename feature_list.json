@@ -1052,11 +1052,68 @@
       "passed": "2026-07-11",
       "commit": "1a2ade2",
       "evidence": "make verify-feature F-036 — all layers green (2026-07-11)"
+    },
+    {
+      "id": "F-037",
+      "behavior": "v6.3.0 migration gap cleanup — remove dead Cline-era paths from clineruntime.ts, cline.json.template, cli/commands/validate.*, plugins/bizar/src/tools so make e2e no longer needs workarounds",
+      "verification": "make check (0 TS errors) + make test (all pass, no skip/xfail) + make e2e (13/13 green) + grep returns zero hits for 'cline' / '@cline/' in src/ excluding node_modules and migration changelog",
+      "state": "not_started",
+      "layer": "L1+L2+L3",
+      "category": "tech-debt",
+      "created": "2026-07-12",
+      "ruflo_source": null,
+      "files_touched": [
+        "packages/sdk/src/clineruntime.ts (delete or strip)",
+        ".claude/cline.json.template (delete)",
+        "cli/commands/validate.* (refactor — remove dead Cline check branches)",
+        "plugins/bizar/src/tools/* (delete dead tools or migrate to SDK)",
+        "docs/migration-guide.md (final migration status entry)"
+      ]
+    },
+    {
+      "id": "F-038",
+      "behavior": "Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline (soc2/gdpr/hipaa/permissive), TrustEvaluator, PolicyEngine, AuditService, FederationBudget tracker (per-call {maxTokens, maxUsd} + maxHops)",
+      "verification": "make check (0 TS errors) + a Node script that creates 2 Bizar instances with shared HMAC key, sends a federation-envelope from instance A to instance B, and verifies TrustEvaluator accepts and AuditService logs the call",
+      "state": "not_started",
+      "layer": "L1+L3",
+      "category": "ruflo-port",
+      "created": "2026-07-12",
+      "ruflo_source": "v3/@claude-flow/plugin-agent-federation/src/plugin.ts + plugin-agent-federation/src/domain/entities/federation-envelope.ts:1-20",
+      "files_touched": [
+        "packages/sdk/src/federation/envelope.ts (new)",
+        "packages/sdk/src/federation/hmac.ts (new)",
+        "packages/sdk/src/federation/pii.ts (new)",
+        "packages/sdk/src/federation/trust.ts (new)",
+        "packages/sdk/src/federation/policy.ts (new)",
+        "packages/sdk/src/federation/audit.ts (new)",
+        "packages/sdk/src/federation/budget.ts (new)",
+        "packages/sdk/src/federation/index.ts (new)",
+        "packages/sdk/src/mcp/server.ts (add federation_status MCP tool)"
+      ]
+    },
+    {
+      "id": "F-039",
+      "behavior": "Hive-mind Byzantine fault-tolerant consensus (thin port) — 3-of-5 majority for review/decision steps when multiple agents disagree; PBFT pre-prepare/prepare/commit/reply phases, view changes, fault detection",
+      "verification": "make check (0 TS errors) + a Node script that runs 5 mock agents through a 3-of-5 vote on a 3-step decision (pre-prepare → prepare → commit → reply) and verifies majority consensus + view-change on simulated faulty agent",
+      "state": "not_started",
+      "layer": "L1+L3",
+      "category": "ruflo-port",
+      "created": "2026-07-12",
+      "ruflo_source": "v3/@claude-flow/swarm/src/consensus/byzantine.ts + raft.ts + gossip.ts + crdt.ts + transport.ts",
+      "files_touched": [
+        "packages/sdk/src/consensus/byzantine.ts (new)",
+        "packages/sdk/src/consensus/types.ts (new)",
+        "packages/sdk/src/consensus/queen.ts (new)",
+        "packages/sdk/src/consensus/index.ts (new)",
+        "packages/sdk/src/mcp/server.ts (add consensus_propose MCP tool)"
+      ]
     }
   ],
   "vcr": {
     "passing": 36,
     "activated": 36,
-    "ratio": 1
+    "ratio": 1,
+    "in_flight": 0,
+    "not_started": 3
   }
 }

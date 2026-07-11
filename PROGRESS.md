@@ -18,23 +18,23 @@
 - **Branch:** master (unpushed)
 - **Phase:** v6.4.0 SHIPPED → next: v6.4.0 npm publish + v6.5.0 planning
 
-## In Progress — v6.5.0 (next)
+## In Progress — v6.5.0 Sprint
 
-Cleared v6.4.0 port cycle (all 5 features passing, VCR 1.000).
-Awaiting v6.4.0 npm publish + next-phase backlog. Candidates:
+Cleared v6.4.0 port cycle (5 features passing, VCR 36/36 = 1.000).
+v6.5.0 launched 2026-07-12 with 3 candidates dispatched in parallel
+per user direction (same model as v6.4.0 — WIP=1 honored within each
+agent's L09 verification chain, but the 3 features ship concurrently):
 
-- **npm publish v6.4.0** — bump `--tag latest`, verify publish
-  manifest after F-035's `cli/feature-list-bridge` lands new
-  claim fields (sanity check vs the publish manifest ADR)
-- **Cross-installation agent federation** (deferred from v6.4.0;
-  see ruflo `02-agent-system-map.md` §1 — port cost ~600 LOC
-  skeleton, full parity ~3,000)
-- **Hive-mind Byzantine consensus** (deferred; 3-of-5 majority
-  for review/decision steps is the realistic thin port)
-- **Pre-existing v6.3.0 migration gaps** — `clineruntime.ts`,
-  `cline.json.template`, `cli/commands/validate.*`, `plugins/bizar/src/tools`
-  still have dead Cline-era paths that `make e2e` worked around.
-  Worth a focused cleanup sprint.
+| F-id | Feature | Source | Port target |
+|---|---|---|---|
+| **F-037** (active) | v6.3.0 migration gap cleanup — remove dead Cline-era paths from `clineruntime.ts`, `cline.json.template`, `cli/commands/validate.*`, `plugins/bizar/src/tools` | in-repo tech debt (not ruflo) | deletions + grep verifications |
+| F-038 | Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline, TrustEvaluator, PolicyEngine, AuditService, FederationBudget | ruflo `v3/@claude-flow/plugin-agent-federation/src/plugin.ts` | `packages/sdk/src/federation/*.ts` (8 new files) |
+| F-039 | Hive-mind Byzantine consensus (thin port) — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply phases | ruflo `v3/@claude-flow/swarm/src/consensus/byzantine.ts` | `packages/sdk/src/consensus/*.ts` (5 new files) |
+
+**Sprint order:** F-038 + F-039 ship independently. F-037 unblocks
+all future SDK work (it removes the dead Cline paths that v6.4.0's
+release gate had to work around), so it should land first in the
+consolidation commit even though its agents run in parallel.
 
 ## What landed in v6.4.0 — Ruflo Port Cycle
 
