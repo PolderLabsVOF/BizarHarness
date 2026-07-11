@@ -8,14 +8,71 @@
 
 - **Last commit:** v6.3.0 — Claude Code migration
 - **Released:** v6.3.0 — published to npm (3 packages)
-- **`make check`:** 765/765 pass, 0 TS errors
-- **`make test`:** 765 + 57 pass (54 plugin/sdk files + CLI tests)
+- **`make check`:** 765/765 pass, 0 TS errors (F-034 worker-dispatcher + hook are pure .mjs; no new TS source)
+- **`make test`:** 765 + 66 pass (54 plugin/sdk files + CLI tests incl. new worker-dispatcher 18-case suite)
 - **`make e2e`:** 20/20 pass
-- **`make clean-check`:** 5/5 dimensions pass
-- **`make vcr`:** 27/27 = 1.000
+- **`make clean-check`:** 5/5 dimensions pass (F-034 files clean)
+- **`make vcr`:** 32/33 = 0.970 (F-032 still active in parallel work stream; F-034 now passing)
 - **Container test (`scripts/test-in-container.sh`):** ✓ all 6 stages green
 - **Branch:** master (pushed)
-- **Phase:** v6.3.0 — **Claude Code migration**
+- **Phase:** v6.4.0 — **Ruflo port cycle** (F-032 active; F-033, F-035, F-036 not_started; **F-034 passing**)
+
+## In Progress — v6.4.0 Ruflo Port Cycle
+
+Started 2026-07-11. CodeGraph-driven mapping of the ruflo
+codebase (`/home/drb0rk/Projects/BizarHarness/ruflo`) produced
+5 port-backlog features in `feature_list.json`:
+
+| F-id | Feature | Source map | Port target |
+|---|---|---|---|
+| **F-032** (active) | Swarm Coordination — `agent/{spawn,list,terminate}` + `swarm/init` + `BizarAgentRegistry` | `02-agent-system-map.md` | `packages/sdk/src/mcp/server.ts` + `agent-registry.ts` (new) |
+| **F-034** (passing) | Background Workers — trigger-pattern dispatcher wired to `UserPromptSubmit` | `04-dashboard-cli-map.md` | `.claude/hooks/worker-suggest.mjs` (new) + `cli/worker-dispatcher.mjs` (new) + `config/trigger-patterns.json` (new) |
+| F-033 | Self-Learning — ReasoningBank distillation (ADR-174) + adaptive model router + Tier-1 codemod intent | `03-memory-learning-map.md` | `packages/sdk/src/router/*` (new) + `bizar-dash/src/server/memory-{distillation,consolidator}.mjs` (new) |
+| F-035 | MetaHarness — atomic cost gate + 3-tier routing transparency panel + GitHub claim protocol | `02-agent-system-map.md` (cost gate) + `04-dashboard-cli-map.md` (GitHub claims) | `cli/cost-gate.mjs` (new) + `bizar-dash/src/web/components/agents/RoutingDecisions.tsx` (new) |
+| F-036 | Goal Planner UI — GOAP A* from plain-English goal + 5 dashboard panels | `04-dashboard-cli-map.md` | `bizar-dash/src/web/pages/GoalPlanner.tsx` + 7 new components |
+
+Full analysis: `/tmp/ruflo-port-analysis/00-SYNTHESIS.md` (and
+`0[1-4]-*.md` for the per-area maps).
+
+**Sprint order constraint:** F-033 should land after F-032
+because the router benefits from the agent registry. The other
+three (F-034, F-035, F-036) are independent of each other and of
+F-032.
+
+## What landed in v6.4.0 (so far)
+
+### F-034 — Background Workers (commits 533d81b + 702631d)
+
+Trigger-pattern dispatcher wired to Claude Code's `UserPromptSubmit`
+event. Every prompt auto-suggests relevant Bizar skills/agents.
+
+- `config/trigger-patterns.json` (new) — 12 workers with regex-driven
+  triggers: `testgaps`, `audit`, `deepdive`, `refactor`, `document`,
+  `optimize`, `ultralearn`, `consolidate`, `predict`, `map`, `preload`,
+  `benchmark`. Each carries `weight`, `skill`, `agent`, `description`.
+- `cli/worker-dispatcher.mjs` (new, 256 lines) — pure JS, no deps.
+  Exports `dispatch()`, `listWorkers()`, `loadPatterns()`, `resetCache()`.
+  Cached regex compilation, weight-ranked output, defensively handles
+  missing/malformed config.
+- `.claude/hooks/worker-suggest.mjs` (new, 110 lines) — UserPromptSubmit
+  hook. Reads stdin, calls `dispatch()`, emits
+  `hookSpecificOutput.additionalContext` on stdout, stderr log for
+  operator visibility, always exits 0 (informational only).
+- `.claude/settings.json` — UserPromptSubmit entry appended as a sibling
+  command (preserves existing `userpromptsubmit-tag.mjs`).
+- `cli/worker-dispatcher.test.mjs` (new, 204 lines) — 18 `node:test`
+  cases: 5 canonical dry-run prompts + 8 edge cases + `listWorkers`
+  completeness + 4 `loadPatterns`/cache lifecycle + missing/malformed
+  config tolerance.
+- `Makefile` + `package.json` — test pipeline picks up the new suite.
+
+**Verification (L09 layers):**
+- L1 compile (`node --check`): PASS
+- L2 unit (`node --test cli/worker-dispatcher.test.mjs`): 18/18 PASS
+- L3 e2e (`./scripts/test-in-container.sh`): FAILS at typecheck stage
+  due to **pre-existing F-035 WIP** in `cli/commands/cost.mjs`
+  (cost-gate port) — unrelated to F-034. F-034 introduces zero TS
+  source and lands cleanly on v6.3.0.
 
 ## What landed in v6.3.0
 
