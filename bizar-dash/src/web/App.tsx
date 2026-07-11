@@ -764,7 +764,10 @@ function Shell() {
     }
   };
 
-  const layout = settings?.ui?.layout || 'topnav';
+  // v8.0 — Sidebar is the primary nav (topbar no longer hosts tabs), so
+  // the default layout must include it. Users can still pick "topnav" or
+  // "both" from Settings → Layout if they prefer.
+  const layout = settings?.ui?.layout || 'sidebar';
   const showHeader = settings?.ui?.showHeader !== false;
 
   return (
