@@ -28,13 +28,40 @@ agent's L09 verification chain, but the 3 features ship concurrently):
 | F-id | Feature | Source | Port target |
 |---|---|---|---|
 | **F-037** (active) | v6.3.0 migration gap cleanup — remove dead Cline-era paths from `clineruntime.ts`, `cline.json.template`, `cli/commands/validate.*`, `plugins/bizar/src/tools` | in-repo tech debt (not ruflo) | deletions + grep verifications |
-| F-038 | Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline, TrustEvaluator, PolicyEngine, AuditService, FederationBudget | ruflo `v3/@claude-flow/plugin-agent-federation/src/plugin.ts` | `packages/sdk/src/federation/*.ts` (8 new files) |
+| **F-038** (passing, committed `8733d62`) | Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline, TrustEvaluator, PolicyEngine, AuditService, FederationBudget | ruflo `v3/@claude-flow/plugin-agent-federation/src/plugin.ts` | `packages/sdk/src/federation/*.ts` (8 new files) |
 | F-039 | Hive-mind Byzantine consensus (thin port) — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply phases | ruflo `v3/@claude-flow/swarm/src/consensus/byzantine.ts` | `packages/sdk/src/consensus/*.ts` (5 new files) |
 
 **Sprint order:** F-038 + F-039 ship independently. F-037 unblocks
 all future SDK work (it removes the dead Cline paths that v6.4.0's
 release gate had to work around), so it should land first in the
 consolidation commit even though its agents run in parallel.
+
+### F-038 — Federation Skeleton (commit `8733d62`)
+
+8 new federation modules under `packages/sdk/src/federation/`:
+`envelope.ts` (17-kind `FederationMessageType` + canonical signable
+payload), `hmac.ts` (HMAC-SHA-256 + `crypto.timingSafeEqual` + UUID
+nonces), `pii.ts` (4 compliance modes + 11 PII categories with
+two-phase collect-then-apply), `trust.ts` (per-peer scoring with
+sliding-window fail tracking), `policy.ts` (maxHops/action allowlist/
+peer blocklist), `audit.ts` (NDJSON to
+`.harness/federation-audit.log` with 10MB rotation), `budget.ts`
+(reserved→committed→released state machine with JSON persistence),
+and `index.ts` orchestrator (`createFederation()` with
+sign/receive/status). Plus `federation_status` MCP tool wired into
+`BIZAR_TOOLS` (lands when the F-039 commit picks up mcp/server.ts).
+
+- **Tests:** 101/101 vitest pass across 8 new test files (envelope
+  10 + hmac 22 + pii 12 + trust 9 + policy 11 + audit 10 + budget
+  16 + orchestrator 11). Full SDK suite 294/294.
+- **E2E:** `/tmp/f038-federation-roundtrip.mjs` — 34/34 PASS
+  (sign + PII redact + receive + tamper reject + nonce replay
+  reject + budget reserve/commit/release + audit log + status).
+- **Hard constraints:** `crypto.timingSafeEqual` for HMAC compare,
+  `crypto.randomUUID()` for 128-bit nonces, no new top-level npm
+  deps, backward-compatible with v6.4.0.
+- **`make check`:** 0 TS errors. **`make vcr`:** 37/38 = 0.974
+  (F-039 still in flight per parallel-sprint order).
 
 ## What landed in v6.4.0 — Ruflo Port Cycle
 

@@ -1080,7 +1080,7 @@
       "layer": "L1+L3",
       "category": "ruflo-port",
       "created": "2026-07-12",
-      "commit": "PENDING",
+      "commit": "8733d62",
       "ruflo_source": "v3/@claude-flow/plugin-agent-federation/src/plugin.ts + plugin-agent-federation/src/domain/entities/federation-envelope.ts:1-20",
       "files_touched": [
         "packages/sdk/src/federation/envelope.ts (new)",
