@@ -38,9 +38,9 @@
 ### 5. Startup path works
 
 - [ ] `make e2e` exits 0
-- [ ] Plugin loads in Cline host without errors
-- [ ] All 19 tools register
-- [ ] All 4 hooks wired
+- [ ] Bizar MCP server registers in Claude Code without errors
+- [ ] All SDK tools register (≥15 in `BIZAR_TOOLS`)
+- [ ] All Claude Code lifecycle hooks wired (SessionStart / PreToolUse / PostToolUse / UserPromptSubmit)
 - [ ] Memory tools round-trip (write → read → list → search)
 
 ## Dual-mode cleanup strategy

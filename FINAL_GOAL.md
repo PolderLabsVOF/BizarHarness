@@ -234,7 +234,7 @@ Concrete requirements for long-horizon support:
 | Requirement | Why it matters |
 |---|---|
 | **Checkpoint / resume** | A 4-hour task that crashes at 3h55m must not restart from zero. |
-| **Session persistence across restarts** | The dashboard, server, and cline can all be killed. Work must survive. |
+| **Session persistence across restarts** | The dashboard, server, and Claude Code runtime can all be killed. Work must survive. |
 | **Decoupled human availability** | The human can be offline for hours or days. The system cannot block. |
 | **Budget enforcement** | Long tasks can burn through money. A budget ceiling is mandatory. |
 | **Deadline management** | Some tasks have soft deadlines. The system needs to know which. |
@@ -277,15 +277,15 @@ This is a UX target, not a current state. The current plan-approval polling (2-s
 
 The journey from L2 to L5 is structured as three phases. The companion `ROADMAP.md` details the specific deliverables per tier; this section explains the arc.
 
-### Phase 1: Foundation (now → v5.x)
+### Phase 1: Foundation (now → v6.x; v6.3.0 Claude Code migration complete)
 
-**Status: shipped.** Bizar at v5.0.1 has a complete CLI, dashboard, plugin, memory service, 12 agent definitions, and 566 passing tests. The platform is usable for one-shot and short-horizon work. Long-horizon is the gap.
+**Status: shipped.** Bizar at v6.3.0 has a complete CLI, dashboard, Claude Code MCP server, memory service, 12 agent definitions, and 656+ plugin + 71+ SDK + 27+ E2E + 73/73 audit tests. The platform is usable for one-shot and short-horizon work. Long-horizon is the gap.
 
 What is in place:
 - CLI (15+ command modules, `install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate/...`)
 - Dashboard server (v1 on `:4097`, v2 on `:4098`, 18 memory endpoints, mods loader with security layer, task delegator, background agent retry loop, structured logging, Prometheus metrics)
 - Dashboard web (17 views, kanban tasks, plan canvas, settings with auto-save, memory tab with 5 panels, doctor page, 178 vitest tests)
-- Cline plugin (7 custom tools, background agent system with stall detection, loop guard, compaction gate at 50% context)
+- Claude Code MCP server (22 tools, background agent system with stall detection, loop guard, compaction gate at 50% context; plugin rewired from Cline `AgentExtension` to Claude Code `@anthropic-ai/claude-agent-sdk` MCP tool registration in v6.3.0)
 - Memory service (3 vault modes, 11 CLI subcommands, 18 REST endpoints, Obsidian-compatible Markdown, git-backed sync, secret scanning)
 - Self-improvement log (1,139 lines of lessons learned, read by agents at session start)
 
@@ -373,7 +373,7 @@ Bizar is a focused platform. The things we are **not** building:
 
 - **A RAG-only product.** Memory is a tool, not the product. We do not sell "vector search for your docs."
 - **An agent framework for end users.** Bizar is the platform we use to ship Bizar. We are not building a low-code agent builder for non-developers.
-- **A replacement for an IDE.** Bizar orchestrates work; humans still write code in their preferred editor. We integrate with cline; we do not replace it.
+- **A replacement for an IDE.** Bizar orchestrates work; humans still write code in their preferred editor. We integrate with Claude Code; we do not replace it.
 - **A general-purpose AI assistant.** Bizar is for engineering work. It is not a chatbot.
 - **A model provider.** We use existing models. We do not train or fine-tune our own (though the self-improvement loop may *suggest* fine-tuning data — a different thing).
 - **AGI.** We are not building a generally intelligent system. We are building a focused platform that does engineering work well, with human escalation when judgment is needed.

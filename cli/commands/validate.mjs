@@ -1,24 +1,30 @@
 /**
  * cli/commands/validate.mjs
  *
- * v6.2.0 — `bizar validate` subcommand.
+ * v6.3.0 — `bizar validate` subcommand (Claude Code-native).
  *
- * The Cline-aware health check. Extends `bizar doctor` with a longer
- * battery of checks specific to a "flawless Cline integration":
+ * The Claude Code-aware health check. Extends `bizar doctor` with a
+ * longer battery of checks specific to a "flawless Claude Code
+ * integration":
  *
- *   - cline.json schema + plugin path
- *   - 14 agent files in ~/.cline/agents/
- *   - 13 skills mirrored from config/skills/ → ~/.cline/skills/
- *   - 7 rules mirrored from config/rules/ → ~/.cline/rules/
- *   - 3 hooks in ~/.cline/hooks/ (pre/post-tool-use + README)
- *   - 13 slash commands in ~/.cline/commands/ (incl. /team /test /validate)
- *   - provider config sanity (9router preferred, minimax fallback)
- *   - 9router reachability
- *   - plugin runtime deps wired (zod, @cline/sdk, @cline/core)
- *   - enableAgentTeams plumbing (via the plugin index)
+ *   - `claude` CLI reachable + version
+ *   - `~/.claude/settings.json` exists + parses
+ *   - Bizar MCP server registered (mcpServers.bizar.*)
+ *   - Bizar plugin entry in MCP config
+ *   - 14 agent files in `~/.claude/agents/`
+ *   - 14 skills mirrored from `config/skills/` → `~/.claude/skills/`
+ *   - 7 rules mirrored from `config/rules/` → `~/.claude/rules/`
+ *   - 4-5 hook adapter scripts in `~/.claude/hooks/`
+ *     (PreToolUse / PostToolUse / SessionStart / UserPromptSubmit /
+ *     SessionEnd, all chmod +x)
+ *   - 14 slash commands in `~/.claude/commands/`
+ *     (incl. /team /test /validate)
+ *   - permissions.allow includes mcp__bizar__*
+ *   - permissions.deny covers dangerous patterns
+ *   - ~/.bizar_home/ exists (memory vault + loops dir)
  *
  * Exits non-zero if any check fails. Use `--json` for machine output.
- * Use `--strict` to also fail on lenient checks (9router unreachable).
+ * Use `--strict` to also fail on lenient checks.
  */
 import chalk from 'chalk';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -28,14 +34,28 @@ import { homedir } from 'node:os';
 
 const HOME = homedir();
 
-function clineDir() {
-  if (process.env.CLINE_DIR && process.env.CLINE_DIR.trim()) {
-    return process.env.CLINE_DIR.trim();
+/**
+ * Resolve the Claude Code global config directory.
+ * Mirrors `cli/utils.mjs:claudeConfigDir()` → `~/.claude/`.
+ */
+function claudeDir() {
+  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
+    return process.env.CLAUDE_CONFIG_DIR.trim();
   }
   if (process.platform === 'win32') {
-    return join(process.env.APPDATA || HOME, 'cline');
+    return process.env.APPDATA
+      ? join(process.env.APPDATA, 'Claude')
+      : join(HOME, '.claude');
   }
-  return join(HOME, '.cline');
+  return join(HOME, '.claude');
+}
+
+/**
+ * Resolve the Bizar HOME directory (memory vault + loops).
+ */
+function bizarHome() {
+  return process.env.BIZAR_HOME
+    || join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'bizar');
 }
 
 const REPO_ROOT = process.env.BIZAR_REPO_ROOT || process.cwd();
@@ -54,33 +74,18 @@ const REQUIRED_COMMANDS = [
   'team.md', 'test.md', 'validate.md', 'setup-provider.md',
 ];
 
-// v6.2.1 — Cline-native hook scripts (executable, shebang, no extension).
-// These are real Cline hooks (https://docs.cline.bot/customization/hooks).
-// The previous v6.x hook contract was markdown behavioral files, which
-// Cline silently ignored — leading to the "I see skills but no hooks"
-// user report.
+// v6.3.0 — Claude Code hook adapter scripts (executable, .mjs extension).
 const REQUIRED_HOOKS = [
-  'PreToolUse', 'PostToolUse', 'TaskStart', 'TaskResume', 'UserPromptSubmit',
+  'pretooluse-editwrite.mjs',
+  'posttooluse-editwrite.mjs',
+  'sessionstart-prime.mjs',
+  'userpromptsubmit-tag.mjs',
+  'sessionend-record.mjs',
 ];
 
-const REQUIRED_RUNTIME_DEPS = ['zod', '@cline/sdk', '@cline/core', '@cline/shared'];
-
-// v6.2.3 — Built-in Cline providerIds that are safe for any
-// "OpenAI-compatible endpoint" use case. The harness warns about
-// any providerId NOT in this set (since they fail in kanban mode).
-const OPENAI_COMPATIBLE_BUILTIN_IDS = new Set([
-  'litellm', 'cline', 'ollama', 'lmstudio', 'huggingface',
-  // Plus the first-class providers (also OpenAI-compatible):
-  'openrouter', 'deepseek', 'xai', 'together', 'fireworks',
-  'groq', 'cerebras', 'sambanova', 'nebius', 'baseten',
-  'requesty', 'vercel-ai-gateway', 'v0', 'aihubmix', 'hicap',
-  'nousResearch', 'huawei-cloud-maas', 'qwen', 'qwen-code',
-  'doubao', 'zai', 'zai-coding-plan', 'moonshot', 'wandb',
-  'xiaomi', 'kilo', 'oca', 'asksage', 'sapaicore',
-  // Non-OpenAI-compatible (kept so we don't false-positive):
-  'anthropic', 'google', 'bedrock', 'vertex', 'gemini',
-  'openai', 'openai-native', 'openai-codex',
-]);
+// v6.3.0 — Claude Code-aware runtime deps. The Bizar SDK + the Claude
+// Code agent SDK are the only required deps for the Bizar MCP server.
+const REQUIRED_RUNTIME_DEPS = ['zod', '@anthropic-ai/claude-agent-sdk'];
 
 function check(name, fn) {
   return Promise.resolve()
@@ -89,8 +94,8 @@ function check(name, fn) {
     .catch((err) => ({ name, ok: false, message: (err && err.message) ? err.message : String(err) }));
 }
 
-function clineJsonPath() {
-  return join(clineDir(), 'cline.json');
+function settingsJsonPath() {
+  return join(claudeDir(), 'settings.json');
 }
 
 function readJsonSafe(file) {
@@ -102,97 +107,157 @@ function readJsonSafe(file) {
   }
 }
 
-function pluginDepsDir() {
-  return join(clineDir(), 'plugins', 'bizar', 'node_modules');
-}
-
 const CHECKS = {
-  'cline-cli-reachable': async () => {
-    const r = spawnSync('cline', ['--version'], { encoding: 'utf8', timeout: 5000 });
-    if (r.status !== 0) throw new Error(`cline --version exited ${r.status}`);
-    return (r.stdout || r.stderr || '').trim().split('\n')[0] || 'cline available';
+  'claude-cli-reachable': async () => {
+    const r = spawnSync('claude', ['--version'], { encoding: 'utf8', timeout: 5000 });
+    if (r.status !== 0) throw new Error(`claude --version exited ${r.status}`);
+    return (r.stdout || r.stderr || '').trim().split('\n')[0] || 'claude available';
   },
 
-  'cline-json-exists': async () => {
-    const p = clineJsonPath();
+  'claude-settings-exists': async () => {
+    const p = settingsJsonPath();
     if (!existsSync(p)) throw new Error(`not found at ${p}`);
     return p;
   },
 
-  'cline-json-parses': async () => {
-    const cfg = readJsonSafe(clineJsonPath());
+  'claude-settings-parses': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
     if (!cfg) throw new Error('invalid JSON');
-    return 'cline.json parses';
+    return '~/.claude/settings.json parses';
   },
 
-  'plugin-entry-present': async () => {
-    const cfg = readJsonSafe(clineJsonPath());
-    const plugins = Array.isArray(cfg?.plugin) ? cfg.plugin : [];
-    const hasBizar = plugins.some((p) => {
-      if (Array.isArray(p) && typeof p[0] === 'string') return p[0].includes('plugins/bizar');
-      if (typeof p === 'string') return p.includes('plugins/bizar');
-      if (p && typeof p === 'object') {
-        return (p.path || '').includes('plugins/bizar');
-      }
-      return false;
-    });
-    if (!hasBizar) throw new Error('bizar plugin entry not in cline.json');
-    return 'bizar plugin registered';
-  },
-
-  'plugin-path-resolves': async () => {
-    const cfg = readJsonSafe(clineJsonPath());
-    const plugins = Array.isArray(cfg?.plugin) ? cfg.plugin : [];
-    let lastChecked = null;
-    for (const p of plugins) {
-      let entryPath = null;
-      if (Array.isArray(p) && typeof p[0] === 'string') entryPath = p[0];
-      else if (p && typeof p === 'object' && p.path) entryPath = p.path;
-      if (!entryPath) continue;
-      const isAbs = entryPath.startsWith('/') || /^[a-z]:[\\/]/i.test(entryPath);
-      const resolved = isAbs ? entryPath : join(clineDir(), entryPath);
-      lastChecked = resolved;
-      if (!existsSync(resolved)) {
-        throw new Error(`plugin path does not exist: ${resolved}`);
-      }
+  'claude-settings-schema': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    if (!cfg?.$schema) {
+      return 'no $schema declared (advisory only)';
     }
-    return lastChecked ? `plugin path resolves: ${lastChecked}` : 'no plugin path';
+    if (!cfg.$schema.includes('claude-code-settings')) {
+      throw new Error(`unexpected $schema: ${cfg.$schema}`);
+    }
+    return `$schema = ${cfg.$schema}`;
   },
 
-  'plugin-runtime-deps': async () => {
-    const nm = pluginDepsDir();
-    if (!existsSync(nm)) {
-      throw new Error(`${nm} missing — run \`bizar update\``);
+  'mcp-server-bizar-registered': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const servers = cfg?.mcpServers;
+    if (!servers || !servers.bizar) {
+      throw new Error(`mcpServers.bizar missing in ${settingsJsonPath()} — run \`bizar install\``);
     }
-    const missing = REQUIRED_RUNTIME_DEPS.filter((d) => !existsSync(join(nm, d)));
+    const s = servers.bizar;
+    return `bizar MCP server registered: command=${s.command || '(unset)'}, type=${s.type || 'stdio'}`;
+  },
+
+  'mcp-server-bizar-command': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const s = cfg?.mcpServers?.bizar;
+    if (!s) throw new Error('bizar MCP server not registered');
+    const args = Array.isArray(s.args) ? s.args.join(' ') : '';
+    const expected = 'npx -y @polderlabs/bizar-sdk mcp';
+    const actual = `${s.command || ''} ${args}`.trim();
+    if (!actual.includes('@polderlabs/bizar-sdk')) {
+      throw new Error(`MCP server command does not reference @polderlabs/bizar-sdk: ${actual}`);
+    }
+    return `MCP command OK: ${actual}`;
+  },
+
+  'permissions-allow-bizar': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const allow = cfg?.permissions?.allow || [];
+    const hasBizar = allow.some((p) => typeof p === 'string' && p.startsWith('mcp__bizar__'));
+    if (!hasBizar) {
+      throw new Error('permissions.allow does not include any mcp__bizar__* entries');
+    }
+    return `${allow.filter((p) => p.startsWith('mcp__bizar__')).length} mcp__bizar__* allowed`;
+  },
+
+  'permissions-deny-dangerous': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const deny = cfg?.permissions?.deny || [];
+    const required = [
+      'Read(./.env)',
+      'Bash(rm -rf /)',
+      'Bash(sudo *)',
+      'Write(./node_modules/**)',
+      'Write(./package-lock.json)',
+    ];
+    const missing = required.filter((r) => !deny.includes(r));
     if (missing.length > 0) {
-      throw new Error(`missing runtime deps: ${missing.join(', ')} — run \`bizar update\``);
+      return `missing ${missing.length} deny pattern(s) (advisory): ${missing.join(', ')}`;
     }
-    return `runtime deps present (${REQUIRED_RUNTIME_DEPS.join(', ')})`;
+    return `${deny.length} deny pattern(s) — all 5 required present`;
+  },
+
+  'hooks-pretooluse-wired': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const arr = cfg?.hooks?.PreToolUse;
+    if (!Array.isArray(arr) || arr.length === 0) {
+      throw new Error('no PreToolUse hooks wired in settings.json');
+    }
+    const m = arr.find((h) => h.matcher && h.matcher.includes('Write') && h.matcher.includes('Edit'));
+    if (!m) throw new Error('PreToolUse matcher missing Write|Edit pattern');
+    return `${arr.length} PreToolUse hook(s) wired (matcher: ${m.matcher})`;
+  },
+
+  'hooks-posttooluse-wired': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const arr = cfg?.hooks?.PostToolUse;
+    if (!Array.isArray(arr) || arr.length === 0) {
+      throw new Error('no PostToolUse hooks wired in settings.json');
+    }
+    return `${arr.length} PostToolUse hook(s) wired`;
+  },
+
+  'hooks-sessionstart-wired': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const arr = cfg?.hooks?.SessionStart;
+    if (!Array.isArray(arr) || arr.length === 0) {
+      throw new Error('no SessionStart hooks wired in settings.json');
+    }
+    return `${arr.length} SessionStart hook(s) wired`;
+  },
+
+  'hooks-userpromptsubmit-wired': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const arr = cfg?.hooks?.UserPromptSubmit;
+    if (!Array.isArray(arr) || arr.length === 0) {
+      throw new Error('no UserPromptSubmit hooks wired in settings.json');
+    }
+    return `${arr.length} UserPromptSubmit hook(s) wired`;
+  },
+
+  'hooks-sessionend-wired': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const arr = cfg?.hooks?.SessionEnd;
+    if (!Array.isArray(arr) || arr.length === 0) {
+      return 'no SessionEnd hook wired (advisory)';
+    }
+    return `${arr.length} SessionEnd hook(s) wired`;
   },
 
   'agent-files-installed': async () => {
-    const dir = join(clineDir(), 'agents');
+    const dir = join(claudeDir(), 'agents');
     if (!existsSync(dir)) throw new Error(`agents dir missing: ${dir}`);
     const missing = REQUIRED_AGENTS.filter((f) => !existsSync(join(dir, f)));
     if (missing.length > 0) throw new Error(`missing: ${missing.join(', ')}`);
-    return `all ${REQUIRED_AGENTS.length} agents present`;
+    return `all ${REQUIRED_AGENTS.length} agents present in ${dir}`;
   },
 
-  'agent-yaml-format': async () => {
-    // Cline loads agents via .yaml files generated from .md frontmatter.
-    // Verify at least one .yaml exists alongside its .md.
-    const dir = join(clineDir(), 'agents');
+  'agent-frontmatter-format': async () => {
+    // Claude Code reads agents via `.md` files with YAML frontmatter.
+    // Spot-check that at least the odin.md agent has frontmatter.
+    const dir = join(claudeDir(), 'agents');
     if (!existsSync(dir)) throw new Error('agents dir missing');
-    const yamls = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
-    if (yamls.length === 0) {
-      throw new Error('no .yaml agent files — Cline may not load them');
+    const odin = join(dir, 'odin.md');
+    if (!existsSync(odin)) throw new Error('odin.md missing');
+    const text = readFileSync(odin, 'utf8');
+    if (!text.startsWith('---')) {
+      throw new Error('odin.md has no YAML frontmatter — Claude Code may not load it');
     }
-    return `${yamls.length} Cline-loadable .yaml agent file(s)`;
+    return 'odin.md has YAML frontmatter';
   },
 
   'slash-commands-installed': async () => {
-    const dir = join(clineDir(), 'commands');
+    const dir = join(claudeDir(), 'commands');
     if (!existsSync(dir)) throw new Error(`commands dir missing: ${dir}`);
     const missing = REQUIRED_COMMANDS.filter((f) => !existsSync(join(dir, f)));
     if (missing.length > 0) {
@@ -202,26 +267,25 @@ const CHECKS = {
   },
 
   'team-command-present': async () => {
-    // /team is the new Cline command. Make sure it's installed.
-    const team = join(clineDir(), 'commands', 'team.md');
+    const team = join(claudeDir(), 'commands', 'team.md');
     if (!existsSync(team)) throw new Error(`${team} missing — run \`bizar update\``);
     return '/team command installed';
   },
 
   'test-command-present': async () => {
-    const testCmd = join(clineDir(), 'commands', 'test.md');
+    const testCmd = join(claudeDir(), 'commands', 'test.md');
     if (!existsSync(testCmd)) throw new Error(`${testCmd} missing — run \`bizar update\``);
     return '/test command installed';
   },
 
   'validate-command-present': async () => {
-    const v = join(clineDir(), 'commands', 'validate.md');
+    const v = join(claudeDir(), 'commands', 'validate.md');
     if (!existsSync(v)) throw new Error(`${v} missing — run \`bizar update\``);
     return '/validate command installed';
   },
 
   'skills-installed': async () => {
-    const dir = join(clineDir(), 'skills');
+    const dir = join(claudeDir(), 'skills');
     if (!existsSync(dir)) throw new Error(`skills dir missing: ${dir} — run \`bizar update\``);
     const entries = readdirSync(dir, { withFileTypes: true });
     const skills = entries.filter((e) => e.isDirectory()).map((e) => e.name);
@@ -229,43 +293,8 @@ const CHECKS = {
     return `${skills.length} skill(s) installed: ${skills.slice(0, 5).join(', ')}${skills.length > 5 ? '...' : ''}`;
   },
 
-  // v6.2.5 — verify each Bizar skill is registered in
-  // `~/.agents/.skill-lock.json` so Cline's marketplace UI counts it.
-  // Without registration, Cline shows "0 skills installed" even
-  // though the files are on disk (Cline reads the lock file, not the
-  // directory listing).
-  'skill-marketplace-registered': async () => {
-    const lockPath = join(process.env.HOME || process.env.USERPROFILE || '/root', '.agents', '.skill-lock.json');
-    if (!existsSync(lockPath)) {
-      throw new Error(`lock file missing: ${lockPath} — run \`bizar update\``);
-    }
-    let lock;
-    try {
-      lock = JSON.parse(readFileSync(lockPath, 'utf8'));
-    } catch (err) {
-      throw new Error(`lock file corrupt: ${lockPath}: ${err.message}`);
-    }
-    const skillsRoot = join(REPO_ROOT, 'config', 'skills');
-    const expected = [];
-    if (existsSync(skillsRoot)) {
-      for (const entry of readdirSync(skillsRoot, { withFileTypes: true })) {
-        if (entry.isDirectory()) expected.push(entry.name);
-      }
-    }
-    const registered = Object.entries(lock.skills || {})
-      .filter(([, v]) => v && v.source === 'bizar/builtin')
-      .map(([k]) => k);
-    const missing = expected.filter((n) => !registered.includes(n));
-    if (missing.length > 0) {
-      throw new Error(
-        `${missing.length} Bizar skill(s) NOT registered in ${lockPath}: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '...' : ''} — run \`bizar update\``,
-      );
-    }
-    return `${registered.length} Bizar skill(s) registered in marketplace lock (of ${expected.length} expected)`;
-  },
-
   'rules-installed': async () => {
-    const dir = join(clineDir(), 'rules');
+    const dir = join(claudeDir(), 'rules');
     if (!existsSync(dir)) throw new Error(`rules dir missing: ${dir} — run \`bizar update\``);
     const entries = readdirSync(dir).filter((f) => f.endsWith('.md') || f.endsWith('.txt'));
     if (entries.length === 0) throw new Error('no rules installed — run `bizar update`');
@@ -273,17 +302,15 @@ const CHECKS = {
   },
 
   'hooks-installed': async () => {
-    const dir = join(clineDir(), 'hooks');
+    const dir = join(claudeDir(), 'hooks');
     if (!existsSync(dir)) throw new Error(`hooks dir missing: ${dir} — run \`bizar update\``);
     const missing = REQUIRED_HOOKS.filter((f) => !existsSync(join(dir, f)));
     if (missing.length > 0) {
       throw new Error(`missing: ${missing.join(', ')} — run \`bizar update\``);
     }
-    // Verify hooks are executable (Cline silently skips non-executable
-    // hook files per the official contract). On Windows, chmod is a
-    // no-op so skip the check there.
+    // Verify hooks are executable. On Windows, chmod is a no-op so
+    // skip the check there.
     if (process.platform !== 'win32') {
-      const { statSync } = await import('node:fs');
       const nonExec = [];
       for (const f of REQUIRED_HOOKS) {
         try {
@@ -295,89 +322,49 @@ const CHECKS = {
         }
       }
       if (nonExec.length > 0) {
-        throw new Error(`hooks not executable: ${nonExec.join(', ')} — run \`chmod +x ~/.cline/hooks/*\``);
+        throw new Error(`hooks not executable: ${nonExec.join(', ')} — run \`chmod +x ~/.claude/hooks/*\``);
       }
     }
-    return `all ${REQUIRED_HOOKS.length} Cline-native hook file(s) executable in ${dir}`;
+    return `all ${REQUIRED_HOOKS.length} Claude Code hook file(s) executable in ${dir}`;
   },
 
-  'hooks-canonical-location': async () => {
-    // Cline's default global hooks location per the official docs:
-    // `~/Documents/Cline/Hooks/`. Verify our hooks are also there
-    // (Bizar install puts them in BOTH ~/.cline/hooks/ and
-    // ~/Documents/Cline/Hooks/ for max compatibility).
-    const canonical = join(homedir(), 'Documents', 'Cline', 'Hooks');
-    if (!existsSync(canonical)) {
-      return `optional: ${canonical} does not exist yet — \`bizar install\` creates it`;
+  'bizar-home-exists': async () => {
+    const h = bizarHome();
+    if (!existsSync(h)) {
+      throw new Error(`BIZAR_HOME missing at ${h} — run \`bizar install\``);
     }
-    const missing = REQUIRED_HOOKS.filter((f) => !existsSync(join(canonical, f)));
-    if (missing.length > 0) {
-      return `optional: ${missing.length} hook(s) missing in ${canonical} — re-run \`bizar install\``;
-    }
-    return `canonical hooks dir ${canonical} has all ${REQUIRED_HOOKS.length} hook(s)`;
+    return `BIZAR_HOME = ${h}`;
   },
 
-  'provider-config': async () => {
-    // v6.2.2 — The installer no longer adds a provider block. The user
-    // must configure their own provider. This check is therefore
-    // ALWAYS lenient (returns a hint, never fails). It just reports
-    // what's in cline.json so the user can see the current state.
-    const cfg = readJsonSafe(clineJsonPath());
-    if (!cfg?.provider || Object.keys(cfg.provider).length === 0) {
-      return 'no provider configured — user must add one. `bizar install` no longer touches provider config (v6.2.2+).';
+  'bizar-memory-vault-exists': async () => {
+    const vault = join(bizarHome(), 'memory-vault');
+    if (!existsSync(vault)) {
+      throw new Error(`memory vault missing at ${vault} — run \`bizar install\``);
     }
-    const names = Object.keys(cfg.provider);
-    const summary = names.map((n) => {
-      const p = cfg.provider[n];
-      const url = p?.baseUrl || p?.options?.baseURL || '(no baseUrl)';
-      const modelCount = Object.keys(p?.models || {}).length;
-      return `${n} (${modelCount} models, baseUrl=${url})`;
-    });
-    return `user-configured providers: ${summary.join('; ')}`;
+    return `memory vault = ${vault}`;
   },
 
-  'cline-settings-provider': async () => {
-    // v6.2.3 — The Cline CLI and kanban mode read from
-    // `~/.cline/data/settings/providers.json`. The harness config
-    // (`cline.json`) is a separate thing. This check inspects the
-    // actual settings file and:
-    //   1. Warns if the user has a legacy `openai-compatible` providerId
-    //      (from the v6.0.1 Cline auto-migration shim). Kanban mode
-    //      fails on this with "Unknown or disabled provider". Run
-    //      `bizar setup-provider` to auto-migrate.
-    //   2. Reports the active `lastUsedProvider` so the user can
-    //      see which provider Cline will actually use on the next
-    //      session.
-    const file = join(homedir(), '.cline', 'data', 'settings', 'providers.json');
-    if (!existsSync(file)) {
-      return 'no settings file at ~/.cline/data/settings/providers.json — run `bizar setup-provider` to add one';
-    }
-    const settings = readJsonSafe(file);
-    if (!settings || !settings.providers) {
-      return 'settings file is empty or invalid — run `bizar setup-provider`';
-    }
-    const names = Object.keys(settings.providers);
-    if (names.length === 0) {
-      throw new Error('no providers configured in Cline settings — run `bizar setup-provider`');
-    }
-    const issues = [];
-    if (names.includes('openai-compatible')) {
-      issues.push(`legacy 'openai-compatible' providerId present (broken in kanban mode) — run \`bizar setup-provider\` to auto-migrate to 'litellm'`);
-    }
-    // Check for any providerId that's not in Cline's built-in catalog.
-    for (const n of names) {
-      if (n === 'openai-compatible') continue; // handled above
-      if (!OPENAI_COMPATIBLE_BUILTIN_IDS.has(n)) {
-        issues.push(`'${n}' providerId is NOT in Cline's built-in catalog (likely broken in kanban mode)`);
+  'plugin-runtime-deps': async () => {
+    // v6.3.0 — for Claude Code, the runtime deps live in the
+    // Bizar SDK's node_modules, not in a `~/.claude/plugins/bizar/`
+    // dir. We probe the SDK install via npm root -g + the
+    // bizar-sdk entry. This is best-effort.
+    try {
+      const out = spawnSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 5000 }).stdout || '';
+      const root = out.trim();
+      if (!root) throw new Error('npm root -g returned empty');
+      const sdkPath = join(root, '@polderlabs', 'bizar-sdk');
+      if (!existsSync(sdkPath)) {
+        return `Bizar SDK not found at ${sdkPath} — install via npm install -g @polderlabs/bizar-sdk (advisory)`;
       }
+      const missing = REQUIRED_RUNTIME_DEPS.filter((d) => !existsSync(join(sdkPath, 'node_modules', d)));
+      if (missing.length > 0) {
+        return `missing runtime deps in SDK: ${missing.join(', ')} (advisory)`;
+      }
+      return `runtime deps present (${REQUIRED_RUNTIME_DEPS.join(', ')})`;
+    } catch (err) {
+      return `could not probe SDK install: ${err.message} (advisory)`;
     }
-    const lastUsed = settings.lastUsedProvider || '(none)';
-    if (issues.length > 0) {
-      // Throw so the ⚠ marker shows up; the check is in LENIENT_CHECKS
-      // so this won't cause `bizar validate` to exit non-zero.
-      throw new Error(`WARN: ${issues.join('; ')}. lastUsedProvider=${lastUsed} (${names.join(', ')})`);
-    }
-    return `lastUsedProvider=${lastUsed}; providers: ${names.join(', ')}`;
   },
 
   '9router-reachable': async () => {
@@ -397,115 +384,54 @@ const CHECKS = {
     }
   },
 
-  // v6.2.4 — Warn if the user's clineruntimeMaxConsecutiveMistakes is
-  // below the plugin's recommended minimum. Cline's CLI default is 3
-  // which aborts sessions on the 3rd tool mistake. The Bizar plugin
-  // recommends 10 (or `--retries N` with N ≥ 10).
-  'mistake-limit-floor': async () => {
-    const MIN = 10;
-    const cfg = readJsonSafe(clineJsonPath());
-    if (!cfg?.plugin || !Array.isArray(cfg.plugin)) {
-      return 'no plugin entries in cline.json — skip mistake-limit check';
+  'claude-md-mirrored': async () => {
+    const f = join(claudeDir(), 'CLAUDE.md');
+    if (!existsSync(f)) {
+      throw new Error(`${f} missing — run \`bizar install\` to mirror AGENTS.md`);
     }
-    const bizarEntry = cfg.plugin.find((p) => Array.isArray(p) && p[0] && p[0].includes('plugins/bizar'));
-    if (!bizarEntry) {
-      return 'Bizar plugin not registered — skip mistake-limit check';
-    }
-    const opts = (Array.isArray(bizarEntry) && bizarEntry[1]) || {};
-    const raw = opts.clineruntimeMaxConsecutiveMistakes;
-    if (typeof raw !== 'number' || raw >= MIN) {
-      return `clineruntimeMaxConsecutiveMistakes=${raw ?? 'default 10'} (≥ ${MIN}) — OK`;
-    }
-    throw new Error(
-      `clineruntimeMaxConsecutiveMistakes=${raw} is BELOW the recommended minimum (${MIN}). ` +
-      `Cline's default of 3 aborts the session on the 3rd tool mistake. ` +
-      `Edit ~/.cline/cline.json plugin[1].clineruntimeMaxConsecutiveMistakes to ${MIN}, or run ` +
-      `\`bizar install\` to reset to defaults. (See _shared/CLINE_TOOLS.md for the top-5 mistakes.)`,
-    );
-  },
-
-  'default-agent-set': async () => {
-    const cfg = readJsonSafe(clineJsonPath());
-    if (!cfg?.default_agent) {
-      throw new Error('no default_agent in cline.json — should be "odin"');
-    }
-    return `default_agent=${cfg.default_agent}`;
-  },
-
-  'instructions-loaded': async () => {
-    const cfg = readJsonSafe(clineJsonPath());
-    if (!cfg?.instructions || (Array.isArray(cfg.instructions) && cfg.instructions.length === 0)) {
-      throw new Error('no instructions[] in cline.json — Cline won\'t load the tools reference');
-    }
-    const ins = Array.isArray(cfg.instructions) ? cfg.instructions : [cfg.instructions];
-    return `${ins.length} instruction file(s) referenced`;
-  },
-
-  'plugin-index-loadable': async () => {
-    // Spot-check that the deployed plugin's index.ts is on disk and looks
-    // like a Cline plugin (has the `setup` function + registerTool pattern).
-    const idx = join(clineDir(), 'plugins', 'bizar', 'index.ts');
-    if (!existsSync(idx)) {
-      throw new Error(`${idx} missing — plugin not copied`);
-    }
-    const stat = statSync(idx);
-    if (stat.size < 100) {
-      throw new Error(`${idx} is suspiciously small (${stat.size} bytes)`);
-    }
-    return `plugin index.ts: ${stat.size} bytes`;
-  },
-
-  'enable-agent-teams': async () => {
-    // The /team command depends on `enableAgentTeams: true` in
-    // plugins/bizar/src/clineruntime.ts. Static check by reading the
-    // source file from the deployed plugin dir.
-    const rt = join(clineDir(), 'plugins', 'bizar', 'src', 'clineruntime.ts');
-    if (!existsSync(rt)) {
-      // Source-only install (npm bundled): can't check here, skip leniently.
-      return 'skipped (bundled install)';
-    }
-    const text = readFileSync(rt, 'utf8');
-    if (!/enableAgentTeams:\s*true/.test(text)) {
-      throw new Error('enableAgentTeams is not true in clineruntime.ts — /team will not work');
-    }
-    return 'enableAgentTeams: true in clineruntime.ts';
+    const stat = statSync(f);
+    if (stat.size < 200) throw new Error(`${f} is suspiciously small (${stat.size} bytes)`);
+    return `CLAUDE.md mirrored (${stat.size} bytes)`;
   },
 };
 
 const CHECK_ORDER = [
-  'cline-cli-reachable',
-  'cline-json-exists',
-  'cline-json-parses',
-  'plugin-entry-present',
-  'plugin-path-resolves',
-  'plugin-runtime-deps',
-  'plugin-index-loadable',
-  'enable-agent-teams',
+  'claude-cli-reachable',
+  'claude-settings-exists',
+  'claude-settings-parses',
+  'claude-settings-schema',
+  'mcp-server-bizar-registered',
+  'mcp-server-bizar-command',
+  'permissions-allow-bizar',
+  'permissions-deny-dangerous',
+  'hooks-pretooluse-wired',
+  'hooks-posttooluse-wired',
+  'hooks-sessionstart-wired',
+  'hooks-userpromptsubmit-wired',
+  'hooks-sessionend-wired',
   'agent-files-installed',
-  'agent-yaml-format',
+  'agent-frontmatter-format',
   'slash-commands-installed',
   'team-command-present',
   'test-command-present',
   'validate-command-present',
   'skills-installed',
-  'skill-marketplace-registered',
   'rules-installed',
   'hooks-installed',
-  'hooks-canonical-location',
-  'default-agent-set',
-  'instructions-loaded',
-  'provider-config',
-  'cline-settings-provider',
+  'bizar-home-exists',
+  'bizar-memory-vault-exists',
+  'claude-md-mirrored',
+  'plugin-runtime-deps',
   '9router-reachable',
-  'mistake-limit-floor',
 ];
 
 const LENIENT_CHECKS = new Set([
-  'cline-cli-reachable', // v6.2.5 — lenified because the Cline CLI is normally in $PATH only on dev hosts; CI containers without it shouldn't fail validation
+  'claude-cli-reachable', // Claude Code CLI is normally on $PATH only on dev hosts; CI containers without it shouldn't fail validation
   '9router-reachable',
-  'provider-config', // v6.2.2+ — installer no longer touches provider config; user must configure
-  'cline-settings-provider', // v6.2.3 — warns about legacy/fake providerIds; non-blocking
-  'mistake-limit-floor', // v6.2.4 — warns about low mistake limit; non-blocking
+  'plugin-runtime-deps', // best-effort probe via `npm root -g`
+  'permissions-deny-dangerous', // advisory — user may have intentionally customized
+  'hooks-sessionend-wired', // advisory — SessionEnd is optional
+  'claude-settings-schema', // advisory — schema field is documentation
 ]);
 
 export function showValidateHelp() {
@@ -521,19 +447,20 @@ export function showValidateHelp() {
 
   Description:
     A 21-point health check that confirms the Bizar install is fully
-    integrated with Cline:
-      • cline CLI reachable + version
-      • cline.json parses + plugin entry + path resolves
-      • plugin runtime deps (zod, @cline/sdk, @cline/core) wired
-      • plugin index.ts + enableAgentTeams plumbing
-      • all 14 agent files installed + Cline .yaml format
-      • all 13 slash commands (/audit, /bizar, /explain, /init, /learn,
+    integrated with Claude Code:
+      • claude CLI reachable + version
+      • ~/.claude/settings.json parses + Bizar MCP server registered
+      • permissions.allow includes mcp__bizar__*
+      • permissions.deny covers dangerous patterns
+      • hooks (PreToolUse / PostToolUse / SessionStart / UserPromptSubmit
+        / SessionEnd) wired in settings.json
+      • all 14 agent files installed with Claude Code frontmatter
+      • all 14 slash commands (/audit, /bizar, /explain, /init, /learn,
         /plan, /plow-through, /pr-review, /tailscale-serve,
         /visual-plan, /team, /test, /validate)
-      • all skills / rules / hooks mirrored to ~/.cline/
-      • provider.9router (preferred) or provider.minimax (legacy)
+      • all skills / rules / hooks mirrored to ~/.claude/
+      • ~/.bizar_home/ + memory vault ready
       • 9Router gateway reachable (lenient unless --strict)
-      • default_agent + instructions[] in cline.json
 
   Exit codes:
     0  All checks passed (or only lenient ones failed)
@@ -542,7 +469,7 @@ export function showValidateHelp() {
 
   Related:
     bizar doctor          Simpler 8-point check (legacy)
-    bizar update          Refresh the install (re-runs syncConfigExtras)
+    bizar update          Refresh the install (re-runs the provisioner)
     bizar repair          Fix common issues (stale symlinks, version drift)
   `);
 }
@@ -578,7 +505,7 @@ export async function runValidate(opts = {}) {
   for (const r of results) {
     const isLenient = LENIENT_CHECKS.has(r.name);
     const marker = r.ok ? chalk.green('✓') : (isLenient ? chalk.yellow('⚠') : chalk.red('✗'));
-    const label = r.name.padEnd(28);
+    const label = r.name.padEnd(32);
     const msg = r.ok ? chalk.dim(`  ${r.message}`) : (isLenient ? chalk.yellow(`  ${r.message}`) : chalk.red(`  ${r.message}`));
     console.log(`  ${marker} ${label}${msg}`);
   }

@@ -79,6 +79,8 @@ the relevant topic doc below.
 ### Safety (v6.0.0)
 
 - [docs/safety.md](safety.md) — DANGEROUS_PATTERNS reference
+  (Cline-era `{ stop: true, reason }` + Claude Code
+  `{ hookSpecificOutput: { permissionDecision: "deny" } }`)
 - [plugins/bizar/src/dangerous-patterns.ts](../plugins/bizar/src/dangerous-patterns.ts) —
   source code (36 patterns)
 - [docs/decisions/DEC-007-tool-approval-gate.md](decisions/DEC-007-tool-approval-gate.md) —
@@ -114,6 +116,8 @@ the relevant topic doc below.
 ### Agent teams
 
 - [docs/decisions/DEC-004-cline-agent-teams.md](decisions/DEC-004-cline-agent-teams.md)
+  — Claude Code agent teams (decision predates the
+  Cline → Claude Code migration; concept still applies)
 - [plugins/bizar/src/tools/team-spawn.ts](../plugins/bizar/src/tools/team-spawn.ts) —
   `bizar_spawn_team`
 - [plugins/bizar/src/tools/team-status.ts](../plugins/bizar/src/tools/team-status.ts) —
@@ -140,13 +144,20 @@ the relevant topic doc below.
 - [templates/clean-state-checklist.md](../templates/clean-state-checklist.md) —
   L12 Clean State
 
-### Cline migration
+### Claude Code migration (v6.3.0)
 
-- [docs/migration-guide.md](migration-guide.md) — OpenCode → Cline
-  upgrade guide
+- [docs/migration-guide.md](migration-guide.md) — Cline → Claude
+  Code upgrade guide (v6.2.x → v6.3.0)
 - [CHANGELOG.md](../CHANGELOG.md) — full release history
+- [docs/decisions/DEC-011-claude-code-migration.md](decisions/DEC-011-claude-code-migration.md) —
+  the v6.3.0 Claude Code migration decision
+
+### Cline rewrite (v6.0.0, historical)
+
+- [docs/migration-guide.md](migration-guide.md) — also covers the
+  v5.5.x → v6.0.0 OpenCode → Cline rewrite (archived section)
 - [docs/decisions/DEC-001-cline-rewrite.md](decisions/DEC-001-cline-rewrite.md) —
-  the rewrite decision
+  the OpenCode → Cline rewrite decision (historical)
 
 ### Release
 

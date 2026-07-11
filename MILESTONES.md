@@ -1,7 +1,7 @@
 # BizarHarness — Milestones
 
 > The strategic roadmap for **Bizar** as a **self-improving, autonomous,
-> long-horizon coding platform** built on Cline. Phased by capability, with
+> long-horizon coding platform** built on Claude Code. Phased by capability, with
 > hard success gates per phase. Updated at every phase end.
 
 ## Vision
@@ -37,7 +37,7 @@ Concretely, a goal looks like one of these:
 | **1. Autonomy** | Run unsupervised, survive failures, make progress without human input | v6.0.0 |
 | **2. Long-horizon** | Execute tasks that span hours, days, or weeks | v6.0.0 |
 | **3. Looping** | Three closed feedback loops that make Bizar self-improving | v6.0.0 |
-| **4. Cline integration** | First-class integration with Cline (subprocess → in-process) | v6.0.0 |
+| **4. Cline integration** | First-class integration with Claude Code (in-process; Agent SDK + MCP + skills + Agent dispatch) | v6.0.0 |
 | **5. Browser automation** | Self-healing CDP wrapper for browser-driven E2E verification | v6.0.0 (agent-browser) |
 | **6. Provider model** | Provider abstraction + automatic fallback chain | v5.7.0 |
 | **7. Knowledge graph** | Cross-agent knowledge graph | v6.0.0 |
@@ -112,7 +112,7 @@ closed learning loop.
 
 | Deliverable | Status |
 | --- | --- |
-| Cline rewrite (OpenCode → Cline) | ✅ shipped (v5.6.0-beta.1) |
+| Cline rewrite (OpenCode → Cline) | ✅ shipped (v5.6.0-beta.1) — historical, superseded by v6.3.0 Claude Code migration |
 | All 22 tools use `createTool` from `@cline/sdk` | ✅ shipped |
 | 4 + 2 safety hooks (beforeTool, afterTool, beforeModel, onEvent + curator + flush) | ✅ shipped |
 | In-process ClineCore (no subprocess) | ✅ shipped (DEC-002) |
@@ -124,12 +124,13 @@ closed learning loop.
 | Pre-compaction memory flush | ✅ shipped (DEC-009) |
 | Knowledge graph query tools (3 tools) | ✅ shipped (DEC-010) |
 | Harness engineering audit at 73/73 | ✅ shipped |
+| Claude Code migration (Cline → Claude Code) | ✅ shipped (v6.3.0) |
 
 **Test gate:** ✅ 656/658 plugin + 71/74 SDK + 27/27 E2E + 73/73 audit
 
 ### Phase 2 — Capability expansion (v5.7.0) — IN PROGRESS
 
-**Goal:** Bizar is competitive with Claude Code for long-horizon coding.
+**Goal:** Bizar is the Claude Code-native multi-agent coding harness for long-horizon coding.
 
 | Deliverable | Status |
 | --- | --- |
@@ -241,7 +242,7 @@ bash tools/audit-harness.sh .    # 73-component audit
 | [docs/safety.md](docs/safety.md) | DANGEROUS_PATTERNS reference |
 | [docs/curator.md](docs/curator.md) | Skill curator reference |
 | [docs/graph-tools.md](docs/graph-tools.md) | Knowledge graph tools |
-| [docs/migration-guide.md](docs/migration-guide.md) | OpenCode → Cline upgrade |
+| [docs/migration-guide.md](docs/migration-guide.md) | OpenCode → Cline upgrade (historical) |
 | [docs/code-review.md](docs/code-review.md) | Code review findings |
 | [docs/decisions/](docs/decisions/) | 10 ADRs |
 
@@ -253,4 +254,4 @@ bash tools/audit-harness.sh .    # 73-component audit
   curated list of 200+ agent-harness projects we cross-referenced
 - https://github.com/vercel-labs/agent-browser — the browser
   automation CLI for AI agents
-- https://docs.cline.bot — Cline documentation
+- https://docs.claude.com/claude-code — Claude Code documentation

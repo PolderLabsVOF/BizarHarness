@@ -15,30 +15,56 @@ export function repoPath(...parts) {
 }
 
 /**
- * Resolve the Cline global config directory.
-*
-  * Mirrors Cline's `resolveClineDir()` in `@cline/shared/storage`:
-  *   1. `process.env.CLINE_DIR` (explicit override)
-  *   2. `$HOME/.cline` (the Cline default since v3.0)
-  *
-  * v6.1.0 — Bizar is Cline-only. The pre-v5.6 `~/.config/cline/` path
-  * (the OpenCode-era layout) is no longer supported; the previous
-  * `legacyClineConfigDir()` helper has been removed.
-  */
-export function clineConfigDir() {
-  if (process.env.CLINE_DIR && process.env.CLINE_DIR.trim()) {
-    return process.env.CLINE_DIR.trim();
+ * Resolve the Claude Code global config directory.
+ *
+ * v6.3.0 — Bizar is Claude Code-native. The legacy `~/.cline/`
+ * path is kept as a back-compat alias via the wrappers below.
+ *
+ *   1. `process.env.CLAUDE_CONFIG_DIR` (explicit override)
+ *   2. `$HOME/.claude` (Claude Code default)
+ */
+export function claudeConfigDir() {
+  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
+    return process.env.CLAUDE_CONFIG_DIR.trim();
   }
   if (isWin) {
     return process.env.APPDATA
-      ? join(process.env.APPDATA, 'cline')
-      : join(homedir(), '.cline');
+      ? join(process.env.APPDATA, 'claude')
+      : join(homedir(), '.claude');
   }
-  return join(homedir(), '.cline');
+  return join(homedir(), '.claude');
 }
 
+export function claudeAgentsDir() {
+  return join(claudeConfigDir(), 'agents');
+}
+
+export function claudeSkillsDir() {
+  return join(claudeConfigDir(), 'skills');
+}
+
+export function claudeCommandsDir() {
+  return join(claudeConfigDir(), 'commands');
+}
+
+export function claudeHooksDir() {
+  return join(claudeConfigDir(), 'hooks');
+}
+
+/**
+ * @deprecated v6.3.0 — Claude Code migration. Use `claudeConfigDir()`.
+ * Thin wrapper so older scripts that haven't been migrated keep working.
+ */
+export function clineConfigDir() {
+  return claudeConfigDir();
+}
+
+/**
+ * @deprecated v6.3.0 — Claude Code migration. Use `claudeAgentsDir()`.
+ * Thin wrapper so older scripts that haven't been migrated keep working.
+ */
 export function clineAgentsDir() {
-  return join(clineConfigDir(), 'agents');
+  return claudeAgentsDir();
 }
 
 async function tryReadVersion(filePath) {
@@ -58,53 +84,41 @@ function commandExists(command) {
   return probe.status === 0;
 }
 
+/**
+ * @deprecated v6.3.0 — Claude Code migration. Use `detectClaude()`.
+ * Probe for the legacy Cline CLI to power compat reports.
+ */
 export async function detectCline() {
-  const configDir = clineConfigDir();
-  const agentsDir = clineAgentsDir();
-
+  const configDir = claudeConfigDir();
+  const agentsDir = claudeAgentsDir();
   let exists = false;
   let version = '';
-
   try {
     await access(configDir, constants.F_OK);
     exists = true;
+  } catch {
+    exists = false;
+  }
+  return { exists, version, configDir, agentsDir };
+}
 
-    if (isWin) {
-      const winPaths = [
-        join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'cline', 'package.json'),
-        join(process.env.APPDATA || homedir(), 'npm', 'node_modules', 'cline', 'package.json'),
-        join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'cline', 'package.json'),
-        join(process.env.APPDATA || homedir(), 'npm-global', 'node_modules', 'cline', 'package.json'),
-        join(homedir(), 'node_modules', 'cline', 'package.json'),
-        join(homedir(), 'node_modules', 'cline', 'package.json'),
-      ];
-      for (const p of winPaths) {
-        version = await tryReadVersion(p);
-        if (version) break;
-      }
-    } else {
-      const posixPaths = [
-        join(homedir(), '.local', 'share', 'cline', 'package.json'),
-        join(homedir(), '.local', 'share', 'cline', 'package.json'),
-        '/usr/local/lib/node_modules/cline/package.json',
-        '/usr/local/lib/node_modules/cline/package.json',
-        '/usr/lib/node_modules/cline/package.json',
-        '/usr/lib/node_modules/cline/package.json',
-        join(homedir(), '.npm-global', 'lib', 'node_modules', 'cline', 'package.json'),
-        join(homedir(), '.npm-global', 'lib', 'node_modules', 'cline', 'package.json'),
-        join(homedir(), 'node_modules', 'cline', 'package.json'),
-        join(homedir(), 'node_modules', 'cline', 'package.json'),
-      ];
-      for (const p of posixPaths) {
-        version = await tryReadVersion(p);
-        if (version) break;
-      }
+/**
+ * Probe for the Claude Code CLI on PATH.
+ * Returns `{ exists, version }`. v6.3.0+ replacement for `detectCline()`.
+ */
+export async function detectClaude() {
+  let exists = false;
+  let version = '';
+  try {
+    const probe = spawnSync('claude', ['--version'], { encoding: 'utf8', timeout: 5000 });
+    if (probe.status === 0) {
+      exists = true;
+      version = (probe.stdout || probe.stderr || '').trim().split('\n')[0];
     }
   } catch {
     exists = false;
   }
-
-  return { exists, version, configDir, agentsDir };
+  return { exists, version, configDir: claudeConfigDir(), agentsDir: claudeAgentsDir() };
 }
 
 export async function detectHeadroom() {
@@ -133,7 +147,7 @@ export async function detectSkillsCli() {
 }
 
 export async function detectInstalledAgents() {
-  const agentsDir = clineAgentsDir();
+  const agentsDir = claudeAgentsDir();
   try {
     await access(agentsDir, constants.F_OK);
     return agentsDir;
@@ -148,9 +162,9 @@ export function buildSummary(components, agents, target, skillPacks = []) {
   if (components.includes('agents-md')) parts.push('AGENTS.md');
   if (components.includes('skill-bizar')) parts.push('bizar skill');
   if (components.includes('skill-improve')) parts.push('self-improvement skill');
-  if (components.includes('cline-json')) parts.push('cline.json');
+  if (components.includes('settings-json')) parts.push('settings.json');
   if (components.includes('bizar')) parts.push('.bizar/ folder');
-  if (components.includes('plugin-bizar')) parts.push('Bizar plugin');
+  if (components.includes('mcp-bizar')) parts.push('Bizar MCP server');
   if (components.includes('rules')) parts.push('rules');
   if (components.includes('hooks')) parts.push('hooks');
   if (components.includes('commands')) parts.push('commands');
@@ -167,7 +181,7 @@ export function buildSummary(components, agents, target, skillPacks = []) {
   };
 }
 
-// ── Path helpers ─────────────────────────────────────────────────────────────────
+// Path helpers
 
 /**
  * Return the platform-specific Bizar config directory.

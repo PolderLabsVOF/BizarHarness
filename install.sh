@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
 #
-# install.sh — Cross-platform BizarHarness installer (v5.x — thin shell wrapper).
+# install.sh — Cross-platform BizarHarness installer (Claude Code).
 #
-# v5.x — Updated for issue #7. The install/update flow now:
-#   1. On first install: registers the system service that auto-starts
-#      the dashboard (`bizar service install`).
-#   2. On update: stops the running service before files are replaced
-#      (`bizar service stop` → npm upgrade → `bizar service restart`).
+# v6.3.0 — Migrated from Cline to Claude Code.
 #
-# Almost all logic still lives in `cli/provision.mjs:runProvision`, which
-# is shared between `bizar install` and `bizar update`. This bash script
-# exists only for the platform-specific steps that need sudo + a system
-# package manager:
+#   1. Detects platform (Linux/macOS/Windows)
+#   2. Installs Node.js 18+, jq, gh, uv, python3 (cross-platform)
+#   3. Installs Claude Code via npm:
+#        npm install -g @anthropic-ai/claude-agent-sdk
+#        npm install -g @anthropic-ai/claude-code
+#   4. Optionally installs agent-browser (Rust native CLI from vercel-labs)
+#   5. Shells out to `node cli/provision-claude.mjs`, which writes the
+#      `~/.claude/` config tree, registers the Bizar MCP server, and
+#      copies agent files / skills / commands / hooks / rules.
 #
-#   - Linux:  ensure node is installed (apt/dnf/pacman/zypper), install uv,
-#             python3.12, jq, gh, agent-browser (npm), Chrome for Testing.
-#   - macOS:  ensure homebrew is installed; everything else is via brew/npm.
-#   - Windows: a stub that prints "use install.ps1".
-#
-# Agent files / plugin copy / cline.json patching / service registration /
-# skills install / doctor check are ALL handled by the unified provisioner
-# after this script returns.
+# Almost all logic still lives in `cli/provision-claude.mjs:runProvision`,
+# which is shared between `bizar install` and `bizar update`. This bash
+# script exists only for the platform-specific steps that need sudo +
+# a system package manager.
 #
 # Flags:
 #   --non-interactive   skip prompts (CI safe)
@@ -72,7 +69,7 @@ MODE="install"
 
 show_usage() {
   cat <<'EOF'
-install.sh — BizarHarness cross-platform installer
+install.sh — BizarHarness cross-platform installer (Claude Code)
 
 Usage:
   ./install.sh                     Interactive install (Linux/macOS)
@@ -84,9 +81,10 @@ Usage:
   ./install.sh --mode=<mode>       install | update | install-only-system
 
 This script handles platform-specific system dependencies (apt/dnf/pacman/
-zypper on Linux, brew on macOS) and then shells to `node cli/provision.mjs`,
-which performs agent-file sync, plugin copy, cline.json patching,
-service registration, skills install, and the post-install doctor check.
+zypper on Linux, brew on macOS) and then shells to
+`node cli/provision-claude.mjs`, which writes ~/.claude/, registers the
+Bizar MCP server, copies agents / skills / commands / hooks / rules,
+and runs the post-install doctor check.
 EOF
 }
 
@@ -159,7 +157,7 @@ ensure_node() {
       action "Detected NixOS — Node.js must be installed via nix-shell"
       warn "Run the following, then re-run this installer:"
       warn "  nix-shell -p nodejs python3 jq gh git"
-      warn "  node cli/provision.mjs"
+      warn "  node cli/provision-claude.mjs"
       exit 0
       ;;
     void)
@@ -173,6 +171,29 @@ ensure_node() {
       ;;
   esac
   note "Node.js installed: $(node --version)"
+}
+
+# ── Claude Code install ────────────────────────────────────────────────────
+install_claude_code() {
+  if have_cmd claude; then
+    note "claude $(claude --version 2>/dev/null | head -1) present"
+  else
+    section "Installing Claude Code"
+    if ! have_cmd npm; then
+      err "npm not available — install Node.js 18+ first: https://nodejs.org/"
+      exit 1
+    fi
+    action "Installing @anthropic-ai/claude-agent-sdk..."
+    dry npm install -g @anthropic-ai/claude-agent-sdk 2>&1 || \
+      warn "claude-agent-sdk install failed — retry later: npm install -g @anthropic-ai/claude-agent-sdk"
+    action "Installing @anthropic-ai/claude-code..."
+    dry npm install -g @anthropic-ai/claude-code 2>&1
+    if have_cmd claude; then
+      note "claude $(claude --version 2>/dev/null | head -1) installed"
+    else
+      warn "claude CLI not found on PATH after install — check npm global bin dir"
+    fi
+  fi
 }
 
 # ── Dependency detection + install (cross-platform) ────────────────────────
@@ -194,7 +215,7 @@ install_agent_browser() {
   # the v5.x browser-harness (Python CDP wrapper). Installs via npm.
   #
   # If npm is not available, this is a soft-fail: agent-browser is
-  # optional, and `cli/provision.mjs:ensureAgentBrowser` will retry it
+  # optional, and `cli/provision-claude.mjs:ensureAgentBrowser` will retry it
   # once npm is available.
   if have_cmd agent-browser; then
     local ab_ver
@@ -305,7 +326,7 @@ install_missing_deps_linux() {
       warn "NixOS detected — LightRAG and other uv tools require manual setup"
       warn "  After nix-shell: nix-shell -p nodejs python3 jq gh git"
       warn "  Then run: uv tool install \"lightrag-hku[api]\""
-      warn "  And re-run this installer: node cli/provision.mjs"
+      warn "  And re-run this installer: node cli/provision-claude.mjs"
       return 0
       ;;
   esac
@@ -337,15 +358,13 @@ install_service() {
   # We still call it from here because the bash script may run standalone
   # (e.g. for first-boot provisioning before the npm package is set up).
   #
-  # v5.x — issue #7: On first install, register the service so the
-  # dashboard auto-starts at login. On update, the running service is
-  # stopped by the provisioner before files are replaced, then restarted
-  # by the provisioner after — see cli/provision.mjs. This function
-  # covers the FIRST install path only.
+  # v6.3.0 — Claude Code does NOT have an out-of-process "server" the way
+  # Cline did, so we skip `bizar service install` here. The dashboard
+  # (bizar-dash) is launched via `bizar dash start --bg` instead.
   local bin="$REPO_DIR/cli/bin.mjs"
   if [ ! -f "$bin" ]; then
     warn "cli/bin.mjs not found — service registration deferred"
-    warn "    (will complete when `bizar service install` is run later)"
+    warn "    (will complete when \`bizar service install\` is run later)"
     return 0
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -369,15 +388,15 @@ print_banner() {
   section "Install complete"
   echo ""
   echo -e "${BOLD}${CYAN}┌────────────────────────────────────────────────────────────┐${NC}"
-  echo -e "${BOLD}${CYAN}│${NC}  ${BOLD}BizarHarness ready.${NC}                                             │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${BOLD}BizarHarness ready (Claude Code).${NC}                          │"
   echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${GREEN}✓${NC} Cross-platform installer v4.4.7                             │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${GREEN}✓${NC} Cross-platform installer v6.3.0                             │"
   echo -e "${BOLD}${CYAN}│${NC}                                                          │"
   echo -e "${BOLD}${CYAN}│${NC}  Dashboard: ${CYAN}$dashboard_url${NC}                                    │"
   echo -e "${BOLD}${CYAN}│${NC}                                                          │"
   echo -e "${BOLD}${CYAN}│${NC}  ${DIM}Next:${NC}                                                            │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  1. Restart cline to pick up new config${NC}                     │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  2. Run /connect in cline to add API keys${NC}                   │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  1. Restart claude to pick up new config${NC}                   │"
+  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  2. Run \`claude auth login\` to add API keys${NC}                 │"
   echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  3. Run 'bizar dash start' to launch the dashboard${NC}             │"
   echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  4. Visit $dashboard_url in your browser${NC}                │"
   echo -e "${BOLD}${CYAN}└────────────────────────────────────────────────────────────┘${NC}"
@@ -393,6 +412,7 @@ install_linux() {
   note "Detected Linux ($(uname -m))"
   ensure_node
   check_deps
+  install_claude_code
   install_missing_deps_linux
   install_agent_browser
   install_service
@@ -402,6 +422,7 @@ install_macos() {
   note "Detected macOS ($(uname -m))"
   check_deps
   install_missing_deps_macos
+  install_claude_code
   install_agent_browser
   install_service
 }
@@ -417,7 +438,7 @@ main() {
   fi
 
   echo ""
-  echo -e "${BOLD}${CYAN}  ⚡ BizarHarness Installer v6.0.0${NC}"
+  echo -e "${BOLD}${CYAN}  ⚡ BizarHarness Installer v6.3.0 (Claude Code)${NC}"
   if [ "$UPDATE_MODE" -eq 1 ]; then
     echo -e "  ${DIM}Update mode${NC}"
   fi
@@ -441,16 +462,17 @@ main() {
   esac
 
   # ── Hand off to the unified provisioner (Node) ─────────────────────────
-  # All cross-OS work (agent files, plugin copy, cline.json patching,
-  # skills install, doctor check) lives in `cli/provision.mjs:runProvision`.
-  # It's idempotent — skipping it (e.g. via --install-only-system) is fine
-  # for first-boot scenarios where the npm package isn't yet set up.
+  # All cross-OS work (agent files, command copy, ~/.claude/ settings,
+  # MCP server registration, skills/rules/hooks mirror) lives in
+  # `cli/provision-claude.mjs:runProvision`. It's idempotent — skipping
+  # it (e.g. via --install-only-system) is fine for first-boot scenarios
+  # where the npm package isn't yet set up.
   if [ "$MODE" = "install-only-system" ]; then
     note "skipped node provisioner (--mode=install-only-system)"
     exit 0
   fi
 
-  if [ -f "$REPO_DIR/cli/provision.mjs" ]; then
+  if [ -f "$REPO_DIR/cli/provision-claude.mjs" ]; then
     echo ""
     section "Running unified provisioner"
     local args=(--mode "$MODE")
@@ -459,7 +481,7 @@ main() {
     [ "$NON_INTERACTIVE" -eq 1 ] && args+=(--yes)
     # `set +e` so we capture the provisioner's exit code and surface it.
     set +e
-    node "$REPO_DIR/cli/provision.mjs" "${args[@]}"
+    node "$REPO_DIR/cli/provision-claude.mjs" "${args[@]}"
     local rc=$?
     set -e
     if [ "$rc" -ne 0 ]; then
@@ -468,7 +490,7 @@ main() {
     fi
     print_banner
   else
-    warn "cli/provision.mjs not found — agent files / plugin / cline.json"
+    warn "cli/provision-claude.mjs not found — agent files / MCP / settings.json"
     warn "    were NOT synced. Run \`bizar install\` from a checkout to fix."
   fi
 }

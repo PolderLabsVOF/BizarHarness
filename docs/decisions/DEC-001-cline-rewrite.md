@@ -3,6 +3,14 @@
 > Cline-only and the OpenCode support surface has been removed. Kept for
 > historical reference only.
 
+> **SUPERSEDED — v6.3.0 (Claude Code migration).** This ADR records the
+> OpenCode → Cline migration that landed in v5.6.0 and was the active
+> runtime until v6.2.x. As of v6.3.0 (DEC-011), Bizar migrated from
+> Cline to Claude Code and the Cline support surface is no longer
+> active. The OpenCode → Cline rewrite decision stands (it got us to
+> an in-process, typed plugin runtime); what changed in v6.3.0 is the
+> host. Kept for historical reference only.
+
 # DEC-001 — Complete rewrite of the plugin framework (OpenCode → Cline)
 
 **Date:** 2026-07-07

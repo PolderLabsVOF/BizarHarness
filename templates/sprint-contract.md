@@ -37,9 +37,9 @@ The feature is `passing` only when ALL of:
 
 ## Architecture constraints
 
-- [ ] No `import` from `bizar-dash/` in `plugins/bizar/`
+- [ ] No `import` from `bizar-dash/` in `packages/sdk/`
 - [ ] No `fetch('http://127.0.0.1:...')` for memory operations
-- [ ] No `cline serve` subprocess spawn
+- [ ] No `claude` daemon subprocess spawn unless explicitly opted in via `claude --bg`
 - [ ] New architectural rule added to `.harness/arch-rules.json` (if applicable)
 
 ## Risk / unknowns

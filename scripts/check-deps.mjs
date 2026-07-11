@@ -2,14 +2,19 @@
 /**
  * scripts/check-deps.mjs
  *
- * v3.22.0 — Cross-platform dependency detector for BizarHarness.
+ * v6.3.0 — Cross-platform dependency detector for BizarHarness.
+ *
+ * Migrated to Claude Code: the previous Cline binary check has been
+ * replaced with a Claude Code CLI check (`claude` binary). All other
+ * tools (node, bun, tmux, git) are unchanged.
  *
  * Exports a single async function `checkDeps({ strict })` that probes the
- * environment for required tools (node, bun, cline, tmux, git) and returns
- * a structured JSON report.  Also runs as a CLI entry: `node check-deps.mjs`.
+ * environment for required tools (node, bun, claude, tmux, git) and
+ * returns a structured JSON report. Also runs as a CLI entry:
+ * `node check-deps.mjs`.
  *
  * Design:
- *   - No destructive shell-outs.  Only reads `--version` via execFileSync.
+ *   - No destructive shell-outs. Only reads `--version` via execFileSync.
  *   - Cross-platform `which(cmd)` helper respects PATHEXT on Windows.
  *   - Semver comparison using Node's built-in `node:semver` (available >= 20)
  *     with a tiny fallback for 18.x.
@@ -120,8 +125,8 @@ function readBunVersion() {
   return m ? m[1] : raw.split(' ')[0];
 }
 
-function readClineVersion() {
-  const raw = safeExec('cline');
+function readClaudeVersion() {
+  const raw = safeExec('claude');
   if (!raw) return null;
   const m = raw.match(/(\d+\.\d+\.\d+)/);
   return m ? m[1] : raw.split(' ')[0];
@@ -161,13 +166,6 @@ function readSembleVersion() {
   return m ? m[1] : raw.split(' ')[0];
 }
 
-function readSkillsVersion() {
-  const raw = safeExec('skills', ['--version']);
-  if (!raw) return null;
-  const m = raw.match(/(\d+\.\d+\.\d+)/);
-  return m ? m[1] : raw.split(' ')[0];
-}
-
 // ── Install command builders ───────────────────────────────────────────────────
 
 function installCmdFor(name) {
@@ -182,7 +180,7 @@ function windowsInstallCmd(name) {
   switch (name) {
     case 'node':   return 'winget install OpenJS.NodeJS.LTS 2>nul || choco install nodejs -y 2>nul || npm install -g n 2>nul';
     case 'bun':    return 'powershell -c "iwr bun.sh/install.ps1 -useb | iex"';
-    case 'cline': return 'winget install ClineAI.Cline 2>nul || npm install -g @cline/cli 2>nul';
+    case 'claude': return 'npm install -g @anthropic-ai/claude-code 2>nul';
     case 'tmux':   return 'winget install mintty.tmux 2>nul || choco install tmux -y 2>nul';
     case 'git':    return 'winget install Git.Git 2>nul || choco install git -y 2>nul';
     case 'python3': return 'winget install Python.Python.3.12 2>nul || choco install python -y 2>nul';
@@ -190,8 +188,7 @@ function windowsInstallCmd(name) {
     case 'jq':     return 'winget install jqlang.jq 2>nul || choco install jq -y 2>nul';
     case 'gh':     return 'winget install GitHub.cli 2>nul || choco install gh -y 2>nul';
     case 'headroom':
-    case 'semble':
-    case 'skills': return 'npm install -g ' + name + ' 2>nul';
+    case 'semble': return 'npm install -g ' + name + ' 2>nul';
     default:       return null;
   }
 }
@@ -200,7 +197,7 @@ function macInstallCmd(name) {
   switch (name) {
     case 'node':   return 'brew install node@18';
     case 'bun':    return 'brew install oven-sh/bun/bun';
-    case 'cline': return 'brew install clineai/tap/cline';
+    case 'claude': return 'npm install -g @anthropic-ai/claude-code';
     case 'tmux':   return 'brew install tmux';
     case 'git':    return null; // pre-installed on macOS
     case 'python3': return 'brew install python@3.12';
@@ -208,8 +205,7 @@ function macInstallCmd(name) {
     case 'jq':     return 'brew install jq';
     case 'gh':     return 'brew install gh';
     case 'headroom':
-    case 'semble':
-    case 'skills': return 'npm install -g ' + name;
+    case 'semble': return 'npm install -g ' + name;
     default:       return null;
   }
 }
@@ -224,8 +220,7 @@ function linuxInstallCmd(name) {
       case 'git':    return 'nix-shell -p git';
       case 'gh':     return 'nix-shell -p gh';
       case 'headroom':
-      case 'semble':
-      case 'skills': return `nix-env -iA nixpkgs.${name}`;
+      case 'semble': return `nix-env -iA nixpkgs.${name}`;
       default: return null;
     }
   }
@@ -246,8 +241,9 @@ function linuxInstallCmd(name) {
     }
     case 'bun':
       return 'curl -fsSL https://bun.sh/install | bash';
-    case 'cline':
-      return 'curl -fsSL https://docs.cline.bot/install | sh';
+    case 'claude':
+      // Claude Code CLI is npm-published; works on any distro with node + npm.
+      return `npm install -g @anthropic-ai/claude-code`;
     case 'tmux':
       return `${sudo}${pm} install -y tmux`;
     case 'git':
@@ -270,7 +266,6 @@ function linuxInstallCmd(name) {
       return `${sudo}${pm} install -y gh`;
     case 'headroom':
     case 'semble':
-    case 'skills':
       return `npm install -g ${name}`;
     default:
       return null;
@@ -281,8 +276,8 @@ function linuxInstallCmd(name) {
 
 const REQUIRED = {
   node:    { raw: '>=18',    min: '18.0.0' },
-  bun:     { raw: '>=1.0.0', min: '1.0.0' },
-  cline: { raw: '>=0.4.0', min: '0.4.0' },
+  bun:     { raw: '>=1.1.0', min: '1.1.0' },
+  claude:  { raw: '>=1.0.0', min: '1.0.0' },
 };
 
 // ── Main check ─────────────────────────────────────────────────────────────────
@@ -329,17 +324,17 @@ export async function checkDeps({ strict = false } = {}) {
     }
   }
 
-  // --- cline ---
+  // --- claude ---
   {
-    const current = readClineVersion();
-    const entry = { name: 'cline', status: 'missing', current, required: REQUIRED.cline.raw };
+    const current = readClaudeVersion();
+    const entry = { name: 'claude', status: 'missing', current, required: REQUIRED.claude.raw };
     if (!current) {
       entry.status = 'missing';
-      entry.installCmd = installCmdFor('cline');
+      entry.installCmd = installCmdFor('claude');
       missing.push(entry);
-    } else if (!satisfies(current, REQUIRED.cline.min)) {
+    } else if (!satisfies(current, REQUIRED.claude.min)) {
       entry.status = 'outdated';
-      entry.installCmd = installCmdFor('cline');
+      entry.installCmd = installCmdFor('claude');
       missing.push(entry);
     } else {
       entry.status = 'present';
@@ -452,19 +447,6 @@ export async function checkDeps({ strict = false } = {}) {
       present.push(entry);
     } else {
       entry.installCmd = installCmdFor('semble');
-      missing.push(entry);
-    }
-  }
-
-  // --- skills CLI ---
-  {
-    const current = readSkillsVersion();
-    const entry = { name: 'skills', status: 'missing', current, required: 'recommended' };
-    if (which('skills')) {
-      entry.status = 'present';
-      present.push(entry);
-    } else {
-      entry.installCmd = installCmdFor('skills');
       missing.push(entry);
     }
   }

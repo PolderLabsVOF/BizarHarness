@@ -4,12 +4,12 @@
  * Tests for the `bizar dev-link` / `bizar dev-unlink` subcommands.
  * Uses Node's built-in node:test (no external test framework).
  *
- * Strategy: mock HOME (and XDG_CONFIG_HOME) so clineConfigDir() in
+ * Strategy: mock HOME (and XDG_CONFIG_HOME) so claudeConfigDir() in
  * cli/utils.mjs returns a path inside a tmpdir, and exercise the
  * create/remove symlink behavior against a controlled filesystem.
  *
  * Note: We mock HOME *before* importing dev-link.mjs because the module
- * imports clineConfigDir transitively from utils.mjs. The path is
+ * imports claudeConfigDir transitively from utils.mjs. The path is
  * resolved at call time, though, so the mock just needs to be in place
  * when the functions run.
  */
@@ -40,28 +40,28 @@ const ORIG_HOME = process.env.HOME;
 const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
- * Point HOME at a fresh tmpdir so the module's clineConfigDir()
- * resolves inside it (via the fallback `<HOME>/.cline`).
+ * Point HOME at a fresh tmpdir so the module's claudeConfigDir()
+ * resolves inside it (via the fallback `<HOME>/.claude`).
  * Returns the tmpdir path.
  *
  * Note: we deliberately do NOT set XDG_CONFIG_HOME here. The
- * clineConfigDir() helper treats a set XDG_CONFIG_HOME as the
- * direct parent (so `XDG_CONFIG_HOME=~/.config` → `~/.cline`,
+ * claudeConfigDir() helper treats a set XDG_CONFIG_HOME as the
+ * direct parent (so `XDG_CONFIG_HOME=~/.config` → `~/.claude`,
  * matching the standard layout). Setting it to a raw tmpdir would
- * produce `<tmpdir>/cline` instead of the expected
- * `<tmpdir>/.cline` and break path alignment with the test.
+ * produce `<tmpdir>/claude` instead of the expected
+ * `<tmpdir>/.claude` and break path alignment with the test.
  */
 function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-devlink-'));
   process.env.HOME = home;
-  delete process.env.CLINE_DIR;
-    delete process.env.BIZAR_LEGACY_CLINE_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
+    delete process.env.BIZAR_LEGACY_CLAUDE_DIR;
   return home;
 }
 
 /** Path to the deployed plugin dir under the mocked HOME. */
 function pluginDest(home) {
-  return join(home, '.cline', 'plugins', 'bizar');
+  return join(home, '.claude', 'plugins', 'bizar');
 }
 
 after(() => {

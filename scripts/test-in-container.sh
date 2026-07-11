@@ -6,14 +6,16 @@
 #
 # v6.3.0 — synthesizes walkinglabs/awesome-harness-engineering L11
 # "observability belongs inside the harness" + the CubeSandbox deep
-# dive.
+# dive. Migrated to Claude Code: the container also installs the
+# `claude` CLI (npm) and verifies `claude --version` is reachable.
 #
 # What we run inside the container:
 #   - bun install (workspace bootstrap)
-#   - bunx tsc --noEmit (plugin + sdk)
-#   - bun test (plugin + sdk)
+#   - claude CLI install (npm install -g @anthropic-ai/claude-code)
+#   - bunx tsc --noEmit (sdk)
+#   - bun test (sdk)
 #   - node --test (CLI tests)
-#   - bizar validate (24 health checks)
+#   - bizar validate (health checks)
 #   - bizar sandbox doctor (CubeSandbox smoke test)
 #
 # Verifies Bizar builds and tests cleanly on a fresh, rootless podman.
@@ -88,6 +90,13 @@ ${RUNTIME} run "${COMMON_FLAGS[@]}" "$USE_IMAGE" sh -lc '
   echo "② install"
   bun install --no-save 2>&1 | tail -5 || echo "  bun install had warnings"
 
+  # ---- Stage ②.5 Claude Code CLI install (npm) ----
+  echo "②.5 claude CLI"
+  if ! command -v claude >/dev/null 2>&1; then
+    npm install -g @anthropic-ai/claude-code 2>&1 | tail -3 || echo "  ⚠ claude install failed (lenient)"
+  fi
+  echo "  claude: $(command -v claude >/dev/null 2>&1 && claude --version || echo missing)"
+
   # ---- Stage ③ typecheck (L1 — Makefile) ----
   echo "③ typecheck"
   if ./node_modules/.bin/tsc --noEmit > /tmp/tsc.log 2>&1; then
@@ -98,9 +107,9 @@ ${RUNTIME} run "${COMMON_FLAGS[@]}" "$USE_IMAGE" sh -lc '
     exit 1
   fi
 
-  # ---- Stage ④ plugin + sdk tests (L2 — bun) ----
-  echo "④ plugin + sdk tests"
-  if bun test plugins/bizar packages/sdk > /tmp/bun-test.log 2>&1; then
+  # ---- Stage ④ sdk tests (L2 — bun) ----
+  echo "④ sdk tests"
+  if bun test packages/sdk > /tmp/bun-test.log 2>&1; then
     tail -5 /tmp/bun-test.log
     if grep -q " 0 fail" /tmp/bun-test.log; then
       echo "  ✓ bun tests passed"

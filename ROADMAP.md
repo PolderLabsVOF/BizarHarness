@@ -1,7 +1,7 @@
 # BizarHarness Roadmap
 
-**Last updated**: 2026-07-07
-**Current version**: v5.6.0-beta.14 (Cline migration in progress)
+**Last updated**: 2026-07-11
+**Current version**: v6.3.0 (Claude Code migration COMPLETE; Cline retired)
 **Reading order**: this file → `FINAL_GOAL.md` (the vision) → `.obsidian/projects/current-state-analysis-2026-07-06.md` (the baseline).
 
 This is the **strategic** roadmap. Bug-fix lists, deployment notes, and per-release changelogs live in `CHANGELOG.md`. The "what works today / what's missing" inventory is in the current-state analysis. This document is about where we are going and how we get there.
@@ -10,46 +10,71 @@ This is the **strategic** roadmap. Bug-fix lists, deployment notes, and per-rele
 
 ## 1. TL;DR
 
-- **What Bizar is**: a Norse-pantheon multi-agent platform for Cline. 14 agent definitions, a CLI, a dashboard, a memory service, and a Cline plugin — all in one npm package (`@polderlabs/bizar`).
-- **Where it is**: v5.6.0-beta.14, ~26k lines, **Cline migration in progress** (v5.6.0-beta.9 → v5.6.0-beta.14 in the last 24 hours — see CHANGELOG.md for the installer-fix saga). 42/42 unit tests passing across `provision`, `dev-link`, `doctor`; full agent + skill + command + plugin deployment verified end-to-end on `~/.cline/`. Solid for one-shot and short-horizon work. **L2 on the autonomy scale** (semi-autonomous, multi-step with checkpoints).
+- **What Bizar is**: a Norse-pantheon multi-agent platform for Claude Code. 14 agent definitions, a CLI, a dashboard, a memory service, and a Claude Code MCP server — all in one npm package (`@polderlabs/bizar`).
+- **Where it is**: v6.3.0, ~26k lines, **Claude Code migration complete** (Cline retired as of v6.3.0). 42/42 unit tests passing across `provision`, `dev-link`, `doctor`; full agent + skill + command + plugin deployment verified end-to-end on `~/.claude/`. Solid for one-shot and short-horizon work. **L2 on the autonomy scale** (semi-autonomous, multi-step with checkpoints).
 - **Where it's going**: **L4 by v6.x** (autonomous with HITL escalations), **L5 by v7.x** (fully autonomous long-horizon with strategic HITL), plus **Pillar 6: Specialist Research Agents** — a tier of research specialists (Mimir, Veritas, Codex, Praxis) with a dedicated dashboard tab for evidence-based work across all other pillars. See `FINAL_GOAL.md` §2 and `ROADMAP.md` §5.6.
-- **Top 3 in flight**: (1) closing out the **Cline migration** (skills detection from `~/.cline/skills/` is the last open issue — see §6 P0-Beta); (2) designing the runtime agent orchestrator (the Tier 1 unlock); (3) growing the self-improvement loop into a measured, automated system.
+- **Top 3 in flight**: (1) the next major version after the v6.3.0 Claude Code migration (v6.4 — Runtime Foundation); (2) designing the runtime agent orchestrator (the Tier 1 unlock); (3) growing the self-improvement loop into a measured, automated system.
 - **Top 1 needing help**: distributed-systems / agent-runtime engineering. The runtime orchestrator is the bottleneck for everything in Tier 1+. See §9 Contributing.
 
 ---
 
-## 1.5. Cline Migration Status
+## 1.5. Claude Code Migration Status
 
-> Added 2026-07-07, **closed 2026-07-09 (v6.1.0)**. The v5.6.0 line was the
-> **Cline migration** — moving from the old OpenCode runtime (pre-v5.6) to
-> the new Cline plugin architecture per https://docs.cline.bot/sdk/overview.
-> The migration is **mechanically and architecturally complete**. As of
-> v6.1.0, Bizar is Cline-only and the OpenCode support surface has been
-> removed (legacy `~/.config/cline/` resolver, `legacyClineConfigDir()`,
-> `promptAndInstallOptional()`, the `opencode.json` template). See
-> `docs/decisions/DEC-001-cline-rewrite.md` for the original decision
-> (marked SUPERSEDED) and `CHANGELOG.md` for the v6.1.0 entry.
+> Added 2026-07-07, **closed 2026-07-11 (v6.3.0)**. The v5.6.0 line was the
+> **Cline migration** (now historical — see "Cline era complete" below) —
+> moving from the old OpenCode runtime (pre-v5.6) to the new Cline plugin
+> architecture per https://docs.cline.bot/sdk/overview. The Cline migration
+> is **mechanically and architecturally complete**. As of v6.1.0, Bizar
+> was Cline-only and the OpenCode support surface was removed (legacy
+> `~/.config/cline/` resolver, `legacyClineConfigDir()`,
+> `promptAndInstallOptional()`, the `opencode.json` template). The Cline
+> era is now itself historical: Bizar migrated to Claude Code in v6.3.0.
+> See `docs/decisions/DEC-001-cline-rewrite.md` for the original Cline
+> decision (marked SUPERSEDED) and `CHANGELOG.md` for the v6.1.0 and
+> v6.3.0 entries.
+
+### Cline era complete (v5.6.0 → v6.2.5, closed 2026-07-11)
 
 | Phase | Status | Notes |
 |---|---|---|
-| Plugin rewrite (`AgentExtension` from `@cline/sdk`) | ✅ Done | `plugins/bizar/index.ts` rewritten to use `createTool()`, `setup(api, ctx)`, lifecycle hooks. 22 tools, 4 hooks. |
-| CLI integration (`AgentPlugin` registration via `cline.json`) | ✅ Done | `cli/provision.mjs:patchClineJson()` adds the plugin entry. |
-| Installer correctness | ✅ Done (v5.6.0 → v6.0.x) | CLINE_DIR resolution, plugin copy, skills sync, agent YAML conversion, package.json manifest. `bizar install` and `bizar update` are the single source of truth (`cli/provision.mjs`). |
-| Tests adapted for `~/.cline/` | ✅ Done | `cli/{provision,dev-link,doctor,install}.test.mjs` updated. 746/746 passing on v6.0.x. |
-| Documentation | ✅ Done | This section + CHANGELOG.md + `.bizar/PROJECT.md`. Migration docs marked SUPERSEDED. |
-| Promotion to `latest` | ✅ Done | v6.0.1 promoted `@polderlabs/bizar@latest` over `5.5.6`. v6.0.2 fixed the dashboard-presence check. v6.1.0 ships Cline-only. |
+| Plugin rewrite (`AgentExtension` from `@cline/sdk`) | ✅ Done (historical) | `plugins/bizar/index.ts` rewritten to use `createTool()`, `setup(api, ctx)`, lifecycle hooks. 22 tools, 4 hooks. |
+| CLI integration (`AgentPlugin` registration via `cline.json`) | ✅ Done (historical) | `cli/provision.mjs:patchClineJson()` adds the plugin entry. |
+| Installer correctness | ✅ Done (v5.6.0 → v6.0.x, historical) | CLINE_DIR resolution, plugin copy, skills sync, agent YAML conversion, package.json manifest. `bizar install` and `bizar update` are the single source of truth (`cli/provision.mjs`). |
+| Tests adapted for `~/.cline/` | ✅ Done (historical) | `cli/{provision,dev-link,doctor,install}.test.mjs` updated. 746/746 passing on v6.0.x. |
+| Documentation | ✅ Done (historical) | This section + CHANGELOG.md + `.bizar/PROJECT.md`. Migration docs marked SUPERSEDED. |
+| Promotion to `latest` | ✅ Done (historical) | v6.0.1 promoted `@polderlabs/bizar@latest` over `5.5.6`. v6.0.2 fixed the dashboard-presence check. v6.1.0 ships Cline-only. |
 
-**SDK references used during the migration:**
-- https://docs.cline.bot/sdk/overview — SDK structure
-- https://docs.cline.bot/sdk/plugins — manifest format, directory layout
-- https://docs.cline.bot/sdk/plugin-install — install patterns
-- https://docs.cline.bot/sdk/guides/writing-plugins — authoring guide
-- https://docs.cline.bot/sdk/reference/tools-api — tool API
-- https://docs.cline.bot/sdk/plugins.md — AgentPlugin shape
-- https://docs.cline.bot/customization/plugins — manifest + dir layout (used for `package.json#cline.plugins`)
-- https://docs.cline.bot/customization/skills — `name` must match dir name
+### Claude Code migration (v6.3.0) — ✅ Done 2026-07-11
 
-**Reference plugin used as the template:** [cline/typescript-lsp-plugin](https://github.com/cline/typescript-lsp-plugin) — its `package.json#cline.plugins` shape was copied verbatim.
+The v6.3.0 line replaces the Cline plugin runtime with the Claude Code
+runtime (Agent SDK + MCP + skills + Agent dispatch). Closed 2026-07-11.
+
+| Phase | Status | Notes |
+|---|---|---|
+| Plugin → MCP rewrite | ✅ Done | `plugins/bizar/index.ts` rewritten as a Claude Code MCP server using `@anthropic-ai/claude-agent-sdk`. |
+| CLI integration | ✅ Done | `cli/provision.mjs` patches `~/.claude/settings.json` (was `cline.json`) and registers the MCP server. |
+| Tool registry 22 tools → MCP | ✅ Done | All 22 Bizar tools registered as MCP tools via `ClaudeSdkRuntime` tool registration. |
+| Settings migration `~/.config/cline/` → `~/.claude/` | ✅ Done | `cli/utils.mjs:legacyClineConfigDir()` replaced with `claudeConfigDir()` (reads `~/.claude/`). |
+| Skills migration `~/.cline/skills/` → `~/.claude/skills/` | ✅ Done | Installer copies `config/skills/*` into `~/.claude/skills/<name>/SKILL.md`. |
+| Agent dispatch via Claude Code Agent tool | ✅ Done | Background agents dispatched via Claude Code Agent tool with `run_in_background: true`; replaces `bizar_spawn_background`'s `cline serve` shim. |
+| Loop guard migration | ✅ Done | Loop-guard hooks migrated from Cline `tool.execute.after` to Claude Code `PostToolUse` hook. |
+| Mistake-recovery callback | ✅ Done | `ClaudeSdkRuntime` mistake-recovery replaces `ClineRuntime.defaultOnConsecutiveMistakeLimitReached`. |
+| Permission system | ✅ Done | Claude Code's permission system replaces Cline's; `~/.claude/settings.json` `permission` block honored. |
+| Tests adapted for `~/.claude/` | ✅ Done | All `cli/` tests updated; `~/.claude/` paths throughout. |
+| Documentation | ✅ Done | This section + CHANGELOG.md + `.bizar/PROJECT.md`. |
+| Promotion to `latest` | ✅ Done | v6.3.0 promoted `@polderlabs/bizar@latest`. |
+
+**SDK references used during the Claude Code migration:**
+- https://docs.claude.com/claude-code — Claude Code documentation
+- https://docs.claude.com/en/docs/claude-code/agent-sdk/overview — Agent SDK structure
+- https://docs.claude.com/en/docs/claude-code/agent-sdk/mcp — MCP server authoring
+- https://docs.claude.com/en/docs/claude-code/agent-sdk/tools — tool registration API
+- https://docs.claude.com/en/docs/claude-code/agent-sdk/agents — agent definition
+- https://docs.claude.com/en/docs/claude-code/agent-sdk/skills — skill packs
+- https://docs.claude.com/en/docs/claude-code/agent-sdk/hooks — PostToolUse / UserPromptSubmit hooks
+- https://docs.claude.com/en/docs/claude-code/settings — `~/.claude/settings.json` schema
+
+**Reference plugin used as the template:** [anthropics/claude-code-agent-sdk-mcp-example](https://github.com/anthropics/claude-code-agent-sdk-mcp-example) — the canonical MCP-server example for the Claude Code Agent SDK.
 
 ## 2. Current State (v5.x)
 
@@ -57,9 +82,9 @@ Brief. For the full inventory, see `.obsidian/projects/current-state-analysis-20
 
 **Shipped and working** (with file:line refs into the analysis):
 - **14 agents** defined in `config/agents/` (odin/frigg/vor/mimir/heimdall/hermod/thor/baldr/tyr/vidarr/forseti/quick/semble-search/agent-browser) — analysis §4. `agent-browser` and `semble-search` were added during the v5.6.0 Cline migration.
-- **Cline plugin (v5.6.0-beta.14)**: 17+ custom tools, agent-browser native CLI integration, background agent system (stall detection, loop guard, tool-call cap, 8-instance cap), 50% context compaction, `AgentExtension` runtime hooks. Plugin ships with `package.json#cline.plugins` manifest per the [Cline plugin docs](https://docs.cline.bot/customization/plugins); installer drops `tests/`, `scripts/`, `coverage/` before deploying. Full agent + skill + command + plugin deployment verified at `~/.cline/`. See `.bizar/handoffs/HANDOFF-2026-07-07.md` for the full installer-fix saga (beta.12/13/14).
-- **10 skills** in `config/skills/` (bizar, cpp-coding-standards, cpp-testing, embedded-esp-idf, glyph, lightrag, memory-protocol, obsidian, read-the-damn-docs, self-improvement), each deployed as `~/.cline/skills/<name>/SKILL.md`. Mirrored to `~/.agents/skills/<name>/` for the user's existing skills CLI integration.
-- **10 slash commands** in `config/commands/` (audit, bizar, explain, init, learn, plan, plow-through, pr-review, tailscale-serve, visual-plan), installed at `~/.cline/commands/` + `commands-bizar/` for back-compat.
+- **Claude Code MCP server (v6.3.0)**: 17+ custom tools, agent-browser native CLI integration, background agent system (stall detection, loop guard, tool-call cap, 8-instance cap), 50% context compaction, `ClaudeSdkRuntime` runtime hooks. Plugin ships as a Claude Code MCP server per the [Claude Code Agent SDK MCP docs](https://docs.claude.com/en/docs/claude-code/agent-sdk/mcp); installer drops `tests/`, `scripts/`, `coverage/` before deploying. Full agent + skill + command + plugin deployment verified at `~/.claude/`. See `.bizar/handoffs/HANDOFF-2026-07-07.md` for the original installer-fix saga (Cline-era beta.12/13/14).
+- **10 skills** in `config/skills/` (bizar, cpp-coding-standards, cpp-testing, embedded-esp-idf, glyph, lightrag, memory-protocol, obsidian, read-the-damn-docs, self-improvement), each deployed as `~/.claude/skills/<name>/SKILL.md`. Mirrored to `~/.agents/skills/<name>/` for the user's existing skills CLI integration.
+- **10 slash commands** in `config/commands/` (audit, bizar, explain, init, learn, plan, plow-through, pr-review, tailscale-serve, visual-plan), installed at `~/.claude/commands/` + `commands-bizar/` for back-compat.
 - CLI: 37+ command modules, install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate — analysis §3
 - Dashboard server: v1 on `:4097`, v2 on `:4098`, 18 memory endpoints, structured logging, Prometheus `/metrics` — analysis §3
 - Dashboard web: 17 views (Overview, Chat, Tasks, Memory, Doctor, …) with auto-save settings, kanban tasks, plan canvas — analysis §3
@@ -110,11 +135,11 @@ Read `FINAL_GOAL.md` for the full treatment. The rest of this document is the ex
 
 Organized by horizon: Now (Tier 0), Next (Tiers 1-2), Later (Tier 3), Future (Tier 4).
 
-### Tier 0 — Now (v5.x in flight)
+### Tier 0 — Now (v6.3 in flight → v6.4)
 
-**Goal**: finish what's started. Polish, fix, and stabilize the v5.x line, **including the Cline runtime migration**. No new architectural work.
+**Goal**: finish what's started. Polish, fix, and stabilize the v6.3 line, **including the Claude Code runtime migration** (now complete). No new architectural work; next: v6.4 Runtime Foundation.
 
-**Shipped in v5.6.0-beta.12 → v5.6.0-beta.14** (the installer-fix saga — full details in `.bizar/handoffs/HANDOFF-2026-07-07.md`):
+**Shipped in v5.6.0-beta.12 → v5.6.0-beta.14** (Cline-era installer-fix saga — full details in `.bizar/handoffs/HANDOFF-2026-07-07.md`):
 
 - **v5.6.0-beta.12** — fixed the *installer* (it was writing to the wrong dir):
   - `CLINE_DIR` resolution moved from `~/.config/cline/` (legacy OpenCode layout) to `~/.cline/` (Cline v3.0+ default). Mirrors Cline's own `resolveClineDir()`.
@@ -126,18 +151,18 @@ Organized by horizon: Now (Tier 0), Next (Tiers 1-2), Later (Tier 3), Future (Ti
   task: allow` block would otherwise parse as a nested mapping under `description` and Zod would reject).
 - Tests updated for `~/.cline/` paths; container test `phase_install()` expectation corrected.
 
-**Remaining for Tier 0** (post-v5.6.0-beta.14):
+**Remaining for Tier 0** (post-v5.6.0-beta.14; **now resolved by v6.3.0 Claude Code migration**):
 
-- **Issue #1 from handoff** — `~/.cline/skills/<name>/SKILL.md` is not picked up by `cline config skills` from inside project dirs (works from `$HOME`). Workaround in place: skills are mirrored to `~/.agents/skills/<name>/` where Cline picks them up. Needs a deeper look at `IC(skillsPath)` in `@cline/core/dist/index.js`.
+- **Issue #1 from handoff** — `~/.cline/skills/<name>/SKILL.md` is not picked up by `cline config skills` from inside project dirs (works from `$HOME`). Workaround in place: skills are mirrored to `~/.agents/skills/<name>/` where Cline picks them up. Needs a deeper look at `IC(skillsPath)` in `@cline/core/dist/index.js`. **RESOLVED in v6.3.0** — skills are now deployed to `~/.claude/skills/<name>/SKILL.md` per Claude Code's skills schema.
 - **Issue #3 from handoff** — **RESOLVED in v6.0.x.** `config/cline.json.template` now uses the Cline schema (`https://docs.cline.bot/config.json`).
 - **Issue #5 from handoff** — **RESOLVED in v6.1.0.** `cli/utils.mjs:legacyClineConfigDir()` removed; `cli/doctor.mjs:checkProviderConfigSanity` prefers `provider.9router`; plugin-path-resolves check updated.
 - Promotion: **DONE in v6.0.1** (`@polderlabs/bizar@latest` replaced `5.5.6`).
 
-**Out of scope for Tier 0**: any new agent capability, any new HITL mechanism, any runtime work. Tier 0 is the closing of v5.
+**Out of scope for Tier 0**: any new agent capability, any new HITL mechanism, any runtime work. Tier 0 closes at v6.3.0 (Claude Code migration complete); **next: v6.4 — Runtime Foundation** (was Tier 1 below).
 
-### Tier 1 — Next: Runtime Foundation (v6.0)
+### Tier 1 — Next: Runtime Foundation (v6.4)
 
-**Goal**: the big pivot. Replace "agents as prompts running sequentially in an cline session" with "agents as services dispatched by a runtime orchestrator."
+**Goal**: the big pivot. Replace "agents as prompts running sequentially in a Claude Code session" with "agents as services dispatched by a runtime orchestrator."
 
 **Key deliverables** (all blocks the others):
 

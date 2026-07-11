@@ -1,13 +1,16 @@
+> **Updated v6.3.0 (Claude Code migration).** Hook shape changed from Cline's `beforeTool` to Claude Code's `PreToolUse`. The decision vocabulary (`allow` / `require-approval` / `deny`) is preserved inside the harness and translated to Claude Code's `hookSpecificOutput.permissionDecision` (`allow` / `ask` / `deny`) at the hook boundary. The 36-pattern list is unchanged.
+
 # DEC-007 — Tool approval gate (DANGEROUS_PATTERNS)
 
 **Date:** 2026-07-07
 **Status:** Accepted
 **Deciders:** @tyr
-**Related:** DEC-001, DEC-008
+**Related:** DEC-001, DEC-008, DEC-011
 
 ## Context
 
-The plugin's `beforeTool` hook ran without any approval gate.
+The plugin's `PreToolUse` hook ran without any approval gate
+(Cline-era name: `beforeTool`; v6.3.0 rename below).
 Any tool call reached the host unchanged. A malicious or
 accidentally-misguided tool could `rm -rf /`, exfiltrate AWS
 credentials via the metadata IP, or inject prompt-injection
@@ -37,11 +40,11 @@ Implement a central `DANGEROUS_PATTERNS` list in
 - **11 require-approval** — sudo, chmod 777, chown root, git
   reset --hard, git clean -fd, path traversal, /etc/(shadow|passwd|sudoers), …
 
-Wire the gate into `beforeTool`:
+Wire the gate into `PreToolUse`:
 
 ```ts
-// plugins/bizar/index.ts
-beforeTool: async (toolCtx) => {
+// plugins/bizar/index.ts (v6.3.0)
+PreToolUse: async (toolCtx) => {
   // ... existing state-store + loop-guard logic ...
   try {
     const safety = checkDangerous(args as Record<string, unknown>);
@@ -49,7 +52,24 @@ beforeTool: async (toolCtx) => {
       ctx.logger.warn(
         `bizar: blocked tool '${tool}' — dangerous pattern '${safety.pattern}': ${safety.reason}`,
       );
-      return { stop: true, reason: `dangerous_pattern:${safety.pattern}:${safety.reason}` };
+      // Claude Code typed hook output: deny via hookSpecificOutput.
+      // Cline-era equivalent was { stop: true, reason }.
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: `dangerous_pattern:${safety.pattern}:${safety.reason}`,
+        },
+      };
+    }
+    if (safety.decision === "require-approval") {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "ask",
+          permissionDecisionReason: `require_approval:${safety.pattern}:${safety.reason}`,
+        },
+      };
     }
   } catch { /* safety checks are best-effort */ }
   // ... rest of the hook ...
@@ -117,9 +137,11 @@ const DANGEROUS_PATTERNS = [
 ## References
 
 - `plugins/bizar/src/dangerous-patterns.ts` (149 lines)
-- `plugins/bizar/index.ts` — `beforeTool` hook integration
+- `plugins/bizar/index.ts` — `PreToolUse` hook integration (v6.3.0;
+  was `beforeTool` under Cline)
 - `plugins/bizar/tests/safety.test.ts` — 11 unit tests
 - https://github.com/walkinglabs/awesome-harness-engineering —
   "Constraints, Guardrails & Safe Autonomy" section
 - https://www.anthropic.com/engineering/claude-code-sandboxing —
   Anthropic's sandboxing approach
+- DEC-011 — Claude Code migration (v6.3.0)

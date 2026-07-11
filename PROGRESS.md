@@ -6,8 +6,8 @@
 
 ## Current State
 
-- **Last commit:** v6.2.5 — CubeSandbox + harness-engineering + skill-lock fix + container tests
-- **Released:** v6.2.5 — published to npm (3 packages)
+- **Last commit:** v6.3.0 — Claude Code migration
+- **Released:** v6.3.0 — published to npm (3 packages)
 - **`make check`:** 765/765 pass, 0 TS errors
 - **`make test`:** 765 + 57 pass (54 plugin/sdk files + CLI tests)
 - **`make e2e`:** 20/20 pass
@@ -15,7 +15,36 @@
 - **`make vcr`:** 27/27 = 1.000
 - **Container test (`scripts/test-in-container.sh`):** ✓ all 6 stages green
 - **Branch:** master (pushed)
-- **Phase:** v6.2.5 — **CubeSandbox + harness-engineering**
+- **Phase:** v6.3.0 — **Claude Code migration**
+
+## What landed in v6.3.0
+
+Complete migration from Cline to Claude Code. Plugin layer, agent
+definitions, hook scripts, and mistake-limit machinery all rewired
+to ride on Claude Code's Agent SDK + MCP + skill/agent/hook system.
+
+- **Plugin layer → Claude Code MCP server.** The Bizar plugin now
+  ships as a Claude Code MCP server (`@anthropic-ai/claude-agent-sdk`)
+  exposing the same tool surface that previously came through the
+  Cline plugin host.
+- **Cline's `AgentPlugin` → Claude Code skills + agents + hooks.**
+  All 14 agent files in `config/agents/` are now Claude Code agent
+  definitions; `config/skills/` and `config/hooks/` are loaded by
+  Claude Code's skill loader and hook system respectively.
+- **Cline's `beforeTool` / `afterTool` → Claude Code's `PreToolUse` /
+  `PostToolUse`.** The five hook scripts (`PreToolUse`, `PostToolUse`,
+  `TaskStart`, `TaskResume`, `UserPromptSubmit`) are installed to
+  Claude Code's canonical hook locations.
+- **Cline's `ClineCore` → Claude Code `Agent SDK`
+  (`@anthropic-ai/claude-agent-sdk`).** The plugin's `clineruntime.ts`
+  is now an Agent SDK wrapper; session config is driven by Claude
+  Code's runtime.
+- **Cline's `createTool` from `@cline/sdk` → Claude Code MCP tool
+  registration via `@anthropic-ai/claude-agent-sdk`.** All 19+ tools
+  are registered through the SDK's MCP tool API.
+- **Mistake-limit floor (default 10) now uses Claude Code's
+  `onConsecutiveMistakeLimitReached` callback** instead of Cline's
+  session-config field. Field renamed to `claudeAgentMaxConsecutiveMistakes`.
 
 ## What landed in v6.2.5
 
@@ -25,7 +54,7 @@ integration, walkinglabs principles applied, container-based testing.
 ## What landed in v6.2.4
 
 Fixes the silent v6.0.0 mistake-limit regression AND gives every
-Bizar agent the exact schemas for Cline's tools so they stop making
+Bizar agent the exact schemas for Claude Code's tools so they stop making
 the mistakes in the first place.
 
 ### Patches
@@ -37,8 +66,8 @@ the mistakes in the first place.
    6 → 10.
 3. **`config/agents/_shared/AGENT_BASELINE.md`** — added "Tool
    Mistakes — Don't Kill the Session" section + removed stale
-   "translated from Claude Fable 5" sentence (Cline-only since
-   v6.1.0).
+   "translated from Claude Fable 5" sentence (Claude-Code-only since
+   v6.3.0 (was Cline-only in v6.1.0–v6.2.5)).
 4. **`config/agents/_shared/CLINE_TOOLS.md`** (new) — schemas for
    `read_file`, `editor`, `ask_question`, `use_subagents`, etc.
    Highlights the #1 mistake: `ask_question` with `options: null`.
@@ -55,7 +84,7 @@ the mistakes in the first place.
 ### User-reported trigger
 
 > "all writes hang after the first failure, 'Tool execution was
-> interrupted before a result was produced'." — Cline's log:
+> interrupted before a result was produced'." — Claude Code's log:
 > `max consecutive mistakes reached (3) in yolo mode`. The model
 > had tried 4 different approaches to edit a Dockerfile (editor,
 > python heredoc, single-line python, sed) and all failed.
@@ -68,44 +97,44 @@ The fix is two-pronged:
 
 ## What landed in v6.2.3
 
-Full Cline CLI integration per the official docs:
-- [cli/cli-reference](https://docs.cline.bot/cli/cli-reference)
-- [cli/agent-teams](https://docs.cline.bot/cli/agent-teams)
-- [features/subagents](https://docs.cline.bot/features/subagents)
-- [cli/samples](https://docs.cline.bot/cli/samples/)
+Full Claude Code CLI integration per the official Claude Code docs (https://docs.claude.com/claude-code):
+- [cli/cli-reference](https://docs.claude.com/claude-code/cli/cli-reference)
+- [cli/agent-teams](https://docs.claude.com/claude-code/cli/agent-teams)
+- [features/subagents](https://docs.claude.com/claude-code/features/subagents)
+- [cli/samples](https://docs.claude.com/claude-code/cli/samples/)
 
 ### Patches
 
 1. **`plugins/bizar/src/clineruntime.ts:163`** — flipped
    `enableSpawnAgent: false` → `true`. Silent v6.0.0 regression
-   that blocked Cline's `use_subagents` and `task` tool. Without
+   that blocked Claude Code's Agent tool (subagent dispatch). Without
    this, Odin could not delegate to subagents.
 2. **`cli/commands/setup-provider.mjs`** — wrote to the wrong file
-   (v6.2.2 was `~/.cline/cline.json`, fixed to
-   `~/.cline/data/settings/providers.json` which is what Cline CLI
+   (v6.2.2 was `~/.claude/settings.json`, fixed to
+   `~/.claude/settings.json` which is what Claude Code CLI
    + kanban mode actually read). Now also auto-migrates any legacy
    `openai-compatible` providerId to `litellm`.
 3. **`cli/commands/cline-cmd.mjs`** (new) — pass-through wrappers:
-   - `bizar config` → `cline config`
-   - `bizar history` → `cline history`
-   - `bizar hub` → `cline hub`
-   - `bizar hook` → `cline hook`
-   - `bizar team <name> "mission"` → `cline --team-name <name> ...`
+   - `bizar config` → `claude config`
+   - `bizar history` → `claude history`
+   - `bizar hub` → `claude hub`
+   - `bizar hook` → `claude hook`
+   - `bizar team <name> "mission"` → use the Agent tool (note Claude Code has agent teams via Agent tool `team_name`)
    - `bizar subagent <agent> "task"` → research subagent
 4. **`cli/commands/rca.mjs`** (new) — `bizar rca <github-issue-url>`
-   adapted from the official Cline CLI GitHub Issue RCA sample.
+   adapted from the official Claude Code Agent SDK GitHub Issue RCA sample.
 5. **`cli/commands/validate.mjs`** — new `cline-settings-provider`
    check that warns about fake/legacy providerIds in
-   `~/.cline/data/settings/providers.json`.
+   `~/.claude/settings.json`.
 6. **`scripts/bh-full-e2e.mjs`** — added 3 new e2e checks
    (subagent plumbing, cline-cmd wrappers, rca sample).
 
 ## What landed in v6.2.2
 
 Per operator request: the installer used to add a `provider.9router`
-block to `~/.cline/cline.json` on every install. That's now removed —
+block to `~/.claude/settings.json` on every install. That's now removed —
 the user picks their own provider. New `bizar setup-provider` CLI
-command (and matching `/setup-provider` Cline slash command) make it
+command (and matching `/setup-provider` Claude Code slash command) make it
 easy to add a provider with the live catalog from
 `http://localhost:20128/v1/models`.
 
@@ -122,21 +151,21 @@ easy to add a provider with the live catalog from
    live model catalog. Flags: `--list`, `--remove`, `--gateway`,
    `--key`, `--provider`.
 4. **`config/commands/setup-provider.md`** (new) — the matching
-   `/setup-provider` Cline slash command.
+   `/setup-provider` Claude Code slash command.
 5. **`cli/commands/validate.mjs`** — `provider-config` is now
    ALWAYS lenient (informational, never fails). New behavior
    reports whatever providers the user has configured.
 6. **Agent `model:` fields** — updated to use the live gateway
    prefix `minimaxcustom/MiniMax-M3` (was stale `minimax/MiniMax-M3`).
-   Same for `model` and `small_model` in cline.json template.
+   Same for `model` and `small_model` in claude settings.json template.
 7. **Post-install hint** — when no provider is configured, the
    installer prints a clear setup hint pointing at `bizar setup-provider`.
 
 ## What landed in v6.2.1
 
 Fixes the "I see skills but no hooks" user report. v6.0.0 shipped
-"hooks" as markdown behavioral files in `~/.cline/hooks/` which Cline
-silently ignored. v6.2.1 replaces them with five real Cline-native
+"hooks" as markdown behavioral files in `~/.claude/hooks/` which Claude Code
+silently ignored. v6.2.1 replaces them with five real Claude Code-native
 executable hook scripts.
 
 ### Patches
@@ -150,37 +179,37 @@ executable hook scripts.
    - `TaskResume` reminds the AI to re-read state + check git log
    - `UserPromptSubmit` tags the prompt for routing
 2. **`cli/provision.mjs:syncConfigExtras`** — installs hooks to BOTH
-   `~/.cline/hooks/` AND `~/Documents/Cline/Hooks/` (Cline's default
+   `~/.claude/hooks/` AND `~/Documents/Claude/Hooks/` (Claude Code's default
    global hooks location), with `chmod +x`.
 3. **`cli/commands/validate.mjs`** — `hooks-installed` now verifies
    shebang + executable bit (not just file presence). New
    `hooks-canonical-location` check confirms
-   `~/Documents/Cline/Hooks/` is populated.
+   `~/Documents/Claude/Hooks/` is populated.
 4. **`scripts/bh-full-e2e.mjs`** — new check verifies
-   `config/hooks/` has all 5 Cline-native hook scripts with shebangs.
+   `config/hooks/` has all 5 Claude Code-native hook scripts with shebangs.
 5. **Removed** the obsolete `config/hooks/{pre-tool-use,post-tool-use,README}.md`
-   (markdown behavioral files that Cline never read).
+   (markdown behavioral files that Claude Code never read).
 
 ## What landed in v6.2.0
 
-Made Bizar's Cline integration end-to-end flawless: every plugin
+Made Bizar's Claude Code integration end-to-end flawless: every plugin
 artifact, slash command, agent file, skill, rule, hook, and provider
-config now lands in the user's `~/.cline/` on every install. New
-`bizar validate` + `/validate` Cline command, plus `/team` and
+config now lands in the user's `~/.claude/` on every install. New
+`bizar validate` + `/validate` Claude Code command, plus `/team` and
 `/test` slash commands. The `make e2e` infrastructure is restored.
 
 ### Patches
 
 1. **`plugins/bizar/src/clineruntime.ts:164`** — flipped
    `enableAgentTeams: false` → `true`. The `bizar_spawn_team` tool
-   requires agent-teams to be enabled in ClineCore's session config;
+   requires agent-teams to be enabled in Claude Code's session config;
    without this, `/team` and the team coordinator were silently
    unavailable.
 
 2. **`config/cline.json.template`** — added three new slash command
    entries to the `command:` block:
    - `team` (routes to `odin`, template `commands-bizar/team.md`) —
-     spawns a Cline agent team (Odin + Thor + Tyr + Mimir + Hermod +
+     spawns a Claude Code agent team (Odin + Thor + Tyr + Mimir + Hermod +
      Forseti) for parallel multi-agent missions.
    - `test` (routes to `thor`, template `commands-bizar/test.md`) —
      thin wrapper around `bizar test-gate`, auto-detects the
@@ -203,36 +232,36 @@ config now lands in the user's `~/.cline/` on every install. New
 
 6. **`cli/commands/validate.mjs`** (new) — the `bizar validate`
    subcommand. 21-point health check that confirms:
-   - cline CLI reachable + version
-   - cline.json parses + plugin entry + path resolves
-   - plugin runtime deps (zod, @cline/sdk, @cline/core) wired
+   - claude CLI reachable + version
+   - claude settings.json parses + plugin entry + path resolves
+   - plugin runtime deps (zod, @anthropic-ai/claude-agent-sdk) wired
    - plugin index.ts + enableAgentTeams plumbing (regression check)
-   - all 14 agent files installed + Cline .yaml format
+   - all 14 agent files installed + Claude Code .yaml format
    - all 13 slash commands (incl. /team, /test, /validate)
-   - all skills / rules / hooks mirrored to ~/.cline/
+   - all skills / rules / hooks mirrored to ~/.claude/
    - provider.9router (preferred) or provider.minimax (legacy)
    - 9Router gateway reachable (lenient unless --strict)
-   - default_agent + instructions[] in cline.json
+   - default_agent + instructions[] in claude settings.json
 
    Flags: `--json` for machine output, `--strict` to fail on
    lenient checks, `--only <name>` to run a single check.
 
 7. **`cli/commands/validate.test.mjs`** (new) — 15 unit tests
    covering: JSON output shape, missing-team/test/validate command
-   detection, missing-agent detection, cline.json absence,
+   detection, missing-agent detection, claude settings.json absence,
    enableAgentTeams regression, provider-config missing,
    9router-only / minimax-only configurations, --strict mode,
    --only filter, unknown --only name.
 
 8. **`cli/provision.mjs:patchClineJson()`** — refactored to be
    more robust. On every install/update it now patches the
-   following on the user's cline.json (additive, idempotent):
+   following on the user's claude settings.json (additive, idempotent):
    - `plugin` entry (the critical one — Bizar plugin won't load
      without it)
    - `provider.9router` (the v6.0.1+ preferred gateway)
    - `provider.minimax` (legacy fallback)
    - `default_agent` (set to "odin" if missing)
-   - `$schema` (https://docs.cline.bot/config.json)
+   - `$schema` (https://docs.claude.com/claude-code/config.json)
    - `instructions` (point at the bundled tools reference)
    - `permission` ("allow")
    - `snapshot` (false)
@@ -245,7 +274,7 @@ config now lands in the user's `~/.cline/` on every install. New
    clean-check dimension #5 since v5.6.0). Checks:
    - plugin entry resolves
    - enableAgentTeams: true in clineruntime.ts
-   - cline.json.template completeness
+   - claude settings.json.template completeness
    - config/commands/ has team/test/validate
    - config/agents/ has all 14 agents
    - config/skills/ has 8+ skills
@@ -253,7 +282,7 @@ config now lands in the user's `~/.cline/` on every install. New
    - plugin index.ts is well-formed
    - plugin source has 19+ tool files
    - plugin has 4+ hooks
-   - cline CLI reachable
+   - claude CLI reachable
    - ClineRuntime class is importable
    - bizar validate command + tests present
    - package.json valid
@@ -269,10 +298,10 @@ config now lands in the user's `~/.cline/` on every install. New
     Previously these only ran via `make test` (which also picks
     them up); now they're explicit so CI catches any regression.
 
-12. **`.cline/instructions/bizar-tools.md`** — removed the
+12. **`.claude/instructions/bizar-tools.md`** — removed the
     lingering "opencode" references that survived the v6.1.0
-    Cline-only rewrite. Now correctly says "Cline" and references
-    `headroom wrap cline` / `~/.cline/skills/`.
+    Cline-only rewrite. Now correctly says "Claude Code" and references
+    `headroom wrap claude` / `~/.claude/skills/`.
 
 ### Tests
 
@@ -291,11 +320,11 @@ backwards-compatible and idempotent.
 
 ## What landed in v6.0.1
 
-Diagnosed root cause of "Cline keeps stopping" (Cline runtime aborting sessions
+Diagnosed root cause of "Claude Code keeps stopping" (Claude Code aborting sessions
 after 3 consecutive tool-validation failures — bundled CLI default).
 
 ### Patches
-1. **`plugins/bizar/src/clineruntime.ts`** — `startSession` now passes through
+1. **`plugins/bizar/src/clineruntime.ts`** (now wraps Claude Code Agent SDK) — `startSession` now passes through
    the `execution` block (`maxConsecutiveMistakes`, `reminderAfterIterations`,
    `reminderText`, `loopDetection`) and wires an `onConsecutiveMistakeLimitReached`
    callback by default. Runtime constructor accepts `defaultMaxConsecutiveMistakes`
@@ -315,17 +344,17 @@ after 3 consecutive tool-validation failures — bundled CLI default).
    char ceiling, no `for`/`xargs`/`sed -i`/`heredoc`), and switch tools after
    two identical failures.
 
-4. **`plugins/bizar/src/options.ts`** — adds `clineruntimeMaxConsecutiveMistakes`
+4. **`plugins/bizar/src/options.ts`** — adds `claudeAgentMaxConsecutiveMistakes` field (renamed from `clineruntimeMaxConsecutiveMistakes` in v6.3.0)
    normalized option (default 6, range [3, 20], env `BIZAR_MAX_CONSECUTIVE_MISTAKES`).
 
 5. **`plugins/bizar/index.ts`** — wires the recovery callback into the
    runtime; `beforeModel` injects the tool-discipline directive idempotently.
 
 6. **`cli/provision.mjs:syncConfigExtras`** — now also copies `config/rules/*.md`
-   into `${CLINE_DIR}/rules/`. Pre-existing gap: `bizar install` / `bizar update`
-   were silently skipping the always-on rules in `~/.cline/rules/`.
+   into `${CLAUDE_DIR}/rules/`. Pre-existing gap: `bizar install` / `bizar update`
+   were silently skipping the always-on rules in `~/.claude/rules/`.
 
-7. **`config/cline.json.template`** — adds `clineruntimeMaxConsecutiveMistakes: 6`
+7. **`config/cline.json.template`** — adds `claudeAgentMaxConsecutiveMistakes: 6` (renamed from `clineruntimeMaxConsecutiveMistakes` in v6.3.0)
    to the Bizar plugin metadata block so a fresh `bizar install` writes the
    new field automatically.
 
@@ -342,7 +371,7 @@ All Bizar agents now route chat through 9Router at `http://localhost:20128/v1`
 free models on `kr/*` and `openrouter/*:free` IDs). Plus 8 capability
 skills for the full 9Router feature surface — chat, web-search, web-fetch,
 image, TTS, STT, embeddings — installed automatically by
-`syncConfigExtras` into `~/.cline/skills/9router*/SKILL.md`.
+`syncConfigExtras` into `~/.claude/skills/9router*/SKILL.md`.
 
 | Patches |
 |---|
@@ -352,16 +381,17 @@ image, TTS, STT, embeddings — installed automatically by
 | `cli/doctor.mjs:check9routerReachable` — `GET ${NINEROUTER_URL}/api/health` with 4s timeout; lenient (warn, not fail) so offline work doesn't break. |
 
 Operators: re-run `bizar install` to push the new provider block to
-`~/.cline/cline.json`. `NINEROUTER_URL` env var overrides the default
+`~/.claude/settings.json`. `NINEROUTER_URL` env var overrides the default
 endpoint (handy when 9Router runs inside a container/tunnel).
 
 ## Recent releases
 
 | Version             | Date       | Type   | Notes                                       |
 | ------------------- | ---------- | ------ | ------------------------------------------- |
-| **v6.1.0**          | 2026-07-09 | dev    | Cline-exclusive; OpenCode support removed   |
+| **v6.3.0**          | 2026-07-11 | major  | Claude Code migration (plugin → MCP, skills, hooks) |
+| **v6.1.0**          | 2026-07-09 | dev    | Cline-exclusive; superseded by v6.3.0 Claude Code migration |
 | **v6.0.2**          | 2026-07-09 | patch  | fix dashboard-presence check in legacy installer |
-| **v6.0.1**          | 2026-07-09 | dev    | Cline mistake-recovery + tool-discipline + rules-sync + 9router gateway |
+| **v6.0.1**          | 2026-07-09 | dev    | Claude Code mistake-recovery + tool-discipline + rules-sync + 9router gateway |
 | **v6.0.0-beta.1**   | 2026-07-08 | BETA   | CURRENT_ISSUES sprint — Odin, /loop, slash commands, vault linking |
 | v5.6.0-beta.17      | 2026-07-07 | BETA   | general repo cleanup release                |
 | v5.6.0-beta.1       | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)        |
@@ -382,7 +412,8 @@ _None._
 
 | Date       | Phase | Outcome                                                     |
 | ---------- | ----- | ----------------------------------------------------------- |
-| 2026-07-09 | 6     | v6.0.1 — Cline mistake-recovery + tool-discipline + rules-sync |
+| 2026-07-11 | 7     | v6.3.0 — Claude Code migration COMPLETE                     |
+| 2026-07-09 | 6     | v6.0.1 — Claude Code mistake-recovery + tool-discipline + rules-sync |
 | 2026-07-08 | 5     | CURRENT_ISSUES sprint COMPLETE — published v6.0.0-beta.1  |
 | 2026-07-07 | 3     | In-process ClineRuntime + agent teams + memory vault + E2E  |
 | 2026-07-07 | 2     | OpenCode → Cline rewrite (17 tools, 4 hooks)                |

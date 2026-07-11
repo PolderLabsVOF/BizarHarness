@@ -16,7 +16,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartCline } from './prompts.mjs';
-import { detectCline, detectHeadroom, detectSemble, detectSkillsCli, detectUv, buildSummary, clineAgentsDir, clineConfigDir, repoPath } from './utils.mjs';
+import { detectClaude, detectHeadroom, detectSemble, detectSkillsCli, detectUv, buildSummary, claudeAgentsDir, claudeConfigDir, repoPath } from './utils.mjs';
 import { installAgents, installAgentsMd, installSkill, installClineJson, installBizarFolder, installPluginBizar, installHeadroom, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
 
 const AGENT_FILES = [
@@ -27,8 +27,12 @@ const AGENT_FILES = [
 ];
 
 /**
- * Install the Bizar cline plugin from this package's own
- * `plugins/bizar/` directory into `~/.config/cline/plugins/bizar/`.
+ * Install the Bizar MCP server from this package's own `plugins/bizar/`
+ * directory into `~/.claude/plugins/bizar/`.
+ *
+ * v6.3.0 — Bizar is Claude Code-native. The plugin entry-point still
+ * ships at `plugins/bizar/` as a back-compat shim that re-exports the
+ * SDK; the actual MCP server lives in `packages/sdk/src/mcp/bin.ts`.
  *
  * v4.0.0 consolidated everything into one npm package, so the plugin
  * source ships with `@polderlabs/bizar` itself — no separate
@@ -44,8 +48,8 @@ const AGENT_FILES = [
  * workspace-internal package not on the public registry. After copying
  * the plugin files, this function ALSO copies the source's `node_modules/`
  * to the deployed `node_modules/` so Bun can resolve the import when the
- * plugin is loaded from `~/.config/cline/plugins/bizar/`. Without
- * this, the plugin silently fails to load.
+ * plugin is loaded from `~/.claude/plugins/bizar/`. Without this, the
+ * plugin silently fails to load.
  *
  * Pass `{ silent: true }` to suppress the warning prints; the function
  * still returns `true` if the dest is already in the desired state.
@@ -65,7 +69,7 @@ export async function installPluginFromGlobal(opts = {}) {
   // A plain copy would dereference the symlink and silently break the
   // dev workflow. Print a hint unless silent, or honour an explicit
   // --force from the caller.
-  const destDir = join(clineConfigDir(), 'plugins', 'bizar');
+  const destDir = join(claudeConfigDir(), 'plugins', 'bizar');
   let destIsSymlink = false;
   try {
     destIsSymlink = lstatSync(destDir).isSymbolicLink();
@@ -81,7 +85,7 @@ export async function installPluginFromGlobal(opts = {}) {
     }
     console.log(
       chalk.yellow(
-        '  ⚠ ~/.config/cline/plugins/bizar is a dev symlink — skipping copy.',
+        '  ⚠ ~/.claude/plugins/bizar is a dev symlink — skipping copy.',
       ),
     );
     console.log(
@@ -197,11 +201,11 @@ export async function installPluginFromGlobal(opts = {}) {
       }
     }
 
-    // Wire runtime deps (`zod` plus `@cline/sdk`, `@cline/core`,
-    // `@cline/shared`) into the deployed plugin's `node_modules/`.
+    // Wire runtime deps (`zod` plus `@anthropic-ai/claude-agent-sdk`)
+    // into the deployed plugin's `node_modules/`.
     // Bun's module resolver walks up from the plugin entry point
     // looking for `node_modules/`, and without entries there the
-    // plugin throws `Cannot find module 'zod' (+2 more)` at startup.
+    // plugin throws `Cannot find module 'zod'` at startup.
     //
     // The resolution logic lives in `cli/plugin-runtime-deps.mjs` and
     // is shared with the modern provisioner (`cli/provision.mjs`). It
@@ -479,46 +483,38 @@ async function promptGraphifyInstall() {
 }
 
 export async function runPostInstall() {
-  // v6.1.0 — Bizar is Cline-only. The legacy opencode-era
-  // `promptAndInstallOptional()` (plugin/dashboard presence probes)
-  // has been removed; `cli/provision.mjs:runProvision` covers the same
-  // surface via `runProvision({ mode: 'install' })`, which is the path
+  // v6.3.0 — Bizar is Claude Code-native. `cli/provision-claude.mjs:runProvision`
+  // covers the install/update/validate surface and is the primary path
   // used by `bizar install` and `bizar update`. This `runPostInstall`
-  // is now a thin Cline-only bootstrap that:
-  //   - copies `config/cline.json` template on first install
-  //   - runs `installCommandsBizar()` for the legacy `commands-bizar/` dir
-  //   - installs agents into `~/.cline/agents/`
+  // is a thin Claude Code-native bootstrap that:
+  //   - copies `config/settings.json` template on first install
+  //   - installs agents into `~/.claude/agents/`
   //   - probes for headroom / semble / skills-cli
   //   - installs Headroom via pip or npm
-  // The old OpenCode-era probes (`Plugin source present`,
-  // `Dashboard source present`) moved to `cli/doctor.mjs` as live checks.
   const { mkdirSync, copyFileSync, existsSync } = await import('node:fs');
   const { execSync } = await import('node:child_process');
 
-  const dest = join(clineConfigDir(), 'cline.json');
-  const templateSrc = repoPath('config', 'cline.json');
+  const dest = join(claudeConfigDir(), 'settings.json');
+  const templateSrc = repoPath('config', 'settings.json');
   if (!existsSync(dest)) {
     if (existsSync(templateSrc)) {
-      mkdirSync(clineConfigDir(), { recursive: true });
+      mkdirSync(claudeConfigDir(), { recursive: true });
       copyFileSync(templateSrc, dest);
-      console.log('  ✓ cline.json bootstrapped from package template');
+      console.log('  ✓ settings.json bootstrapped from package template');
     }
   }
 
-  // Install Bizar commands to commands-bizar/ (separate from ECC's commands symlink)
-  await installCommandsBizar();
-
-  const env = await detectCline();
+  const env = await detectClaude();
   if (!env.exists) {
-    mkdirSync(clineConfigDir(), { recursive: true });
-    console.log(`BizarHarness: created ${clineConfigDir()}/`);
+    mkdirSync(claudeConfigDir(), { recursive: true });
+    console.log(`BizarHarness: created ${claudeConfigDir()}/`);
   }
 
-  mkdirSync(clineAgentsDir(), { recursive: true });
+  mkdirSync(claudeAgentsDir(), { recursive: true });
 
   for (const file of AGENT_FILES) {
     const src = repoPath('config', 'agents', file);
-    const dest = join(clineAgentsDir(), file);
+    const dest = join(claudeAgentsDir(), file);
     if (!existsSync(dest)) {
       copyFileSync(src, dest);
     }
@@ -537,14 +533,14 @@ export async function runPostInstall() {
           'pip install --user "headroom-ai[all]"',
           { stdio: 'pipe', timeout: 60000 },
         );
-        execSync('headroom wrap cline', { stdio: 'pipe' });
+        execSync('headroom wrap claude', { stdio: 'pipe' });
         console.log('BizarHarness: Headroom installed and configured.');
       }
     } catch {
       // Fall back to npm
       try {
         execSync('npm install -g headroom-ai', { stdio: 'pipe', timeout: 60000 });
-        execSync('headroom wrap cline', { stdio: 'pipe' });
+        execSync('headroom wrap claude', { stdio: 'pipe' });
         console.log('BizarHarness: Headroom installed (npm) and configured.');
       } catch {
         console.log('BizarHarness: Headroom install failed. Install manually: pip install "headroom-ai[all]" or npm install -g headroom-ai');
@@ -552,10 +548,10 @@ export async function runPostInstall() {
     }
   } else {
     try {
-      execSync('headroom wrap cline', { stdio: 'pipe' });
-      console.log('BizarHarness: Headroom configured for cline.');
+      execSync('headroom wrap claude', { stdio: 'pipe' });
+      console.log('BizarHarness: Headroom configured for claude.');
     } catch {
-      console.log('BizarHarness: could not configure Headroom. Run `headroom wrap cline` manually.');
+      console.log('BizarHarness: could not configure Headroom. Run `headroom wrap claude` manually.');
     }
   }
 

@@ -1,5 +1,141 @@
 # Changelog
 
+> **v6.3.0 is a major release.** Bizar Harness migrated from Cline to
+> Claude Code. The plugin framework that registered via Cline's
+> `AgentPlugin` API is now expressed as Claude Code skills (`SKILL.md`),
+> agents (`~/.claude/agents/*.md`), and an MCP server registered via
+> `.claude/mcp.json`. Hooks move from Cline's `beforeTool` / `afterTool`
+> to Claude Code's `PreToolUse` / `PostToolUse` (typed event payloads);
+> the runtime moves from `ClineRuntime` (wrapping `@cline/core`) to
+> `ClaudeSdkRuntime` (wrapping `@anthropic-ai/claude-agent-sdk`,
+> file kept as `plugins/bizar/src/clineruntime.ts` for plugin-manifest
+> back-compat). All v6.2.x entries below are historical and refer to the
+> Cline-era harness. See DEC-011, `docs/migration-guide.md`, and
+> `docs/decisions/DEC-011-claude-code-migration.md`.
+
+## v6.3.0 — Claude Code migration
+
+Major release. Migrates the entire harness surface from Cline to
+Claude Code. The plugin is now an MCP server; tools are registered via
+the Claude Code Agent SDK; hooks use Claude Code's typed event bag;
+subagent dispatch uses the Claude Code `Agent` tool natively; and the
+mistake-recovery semantics follow Claude Code's
+`onConsecutiveMistakeLimitReached` callback. See DEC-011.
+
+### Added
+
+- **DEC-011** — `docs/decisions/DEC-011-claude-code-migration.md`
+  records the decision. The v6.0.0–v6.2.x harness was preserved as
+  historical (DEC-001, DEC-002 are now marked historical; their
+  in-process decisions still stand but the runtime is now Claude Code).
+- **`@anthropic-ai/claude-agent-sdk` integration.** New
+  `plugins/bizar/src/clineruntime.ts` re-exports a `ClaudeSdkRuntime`
+  class that embeds the Agent SDK directly (no subprocess, no daemon).
+  The source filename is preserved for `package.json#claude.mcpServers`
+  manifest conventions.
+- **Claude-Code-native hooks** — `PreToolUse` (loop guard +
+  DANGEROUS_PATTERNS gate), `PostToolUse` (LogWriter), `UserPromptSubmit`
+  (pre-compaction memory flush), `SessionStart` / `SessionEnd`
+  (slash-command interception + memory write). Wired via
+  `.claude/hooks/` executable scripts; payloads are typed JSON in the
+  shape Claude Code expects.
+- **Claude Code skill surface.** All Bizar skills (18 in `feature_list.json`
+  today) are loaded from `.claude/skills/<name>/SKILL.md` (project) and
+  `~/.claude/skills/<name>/SKILL.md` (user). The dual Cline-era
+  `~/.cline/skills/` / `~/.agents/skills/` mirror is dropped.
+- **Claude Code agent surface.** `~/.claude/agents/*.md` is the single
+  canonical agent definition path. The Cline-era `~/.config/cline/agents/`
+  and Cline YAML conversion path (DEC-001 v6.0.0) are removed.
+- **Claude Code MCP server.** `plugins/bizar/` is registered via
+  `.claude/mcp.json` (was `package.json#cline.plugins`). 19 tools
+  registered as MCP tools via `@anthropic-ai/claude-agent-sdk`.
+- **`bizar validate` v6.3.0 column.** Adds checks for
+  `claude-agent-sdk-reachable`, `.claude/mcp.json-valid`,
+  `claude-settings-json-scoped`, `skill-lock-v2-format`,
+  `agent-teams-via-agent-tool`. Existing checks (skill-marketplace,
+  mistake-limit-floor, hooks-canonical-location) are adapted to the
+  Claude Code paths.
+
+### Changed
+
+- **Hook shape.** `beforeTool` (Cline discrete bag) →
+  `PreToolUse` (Claude Code typed payload returning
+  `{ hookSpecificOutput: { permissionDecision: "allow" | "deny" | "ask" } }`).
+  `afterTool` → `PostToolUse`. `beforeModel` → `UserPromptSubmit`. `onEvent`
+  → `SessionStart` / `SessionEnd` / `Stop`. The plugin's `checkDangerous()`
+  returns the harness-internal `ApprovalCheck` shape; the hook layer
+  translates to Claude Code's `permissionDecision` vocabulary.
+- **Tool name surface.** Cline's `cline.read_file`, `cline.editor`,
+  `cline.ask_question`, `cline.use_subagents` etc. are replaced by
+  Claude Code's native tools (`Read`, `Edit`, `Write`, `Bash`, `Grep`,
+  `Glob`, `WebFetch`, `WebSearch`, `Agent`, `Skill`, `AskUserQuestion`,
+  `SendMessage`, `NotebookEdit`). The harness's plugin-defined tools
+  (`bizar_*`) survive as MCP tools under the `mcp__bizar__` prefix.
+- **Subagent dispatch.** Cline's `use_subagents` /
+  `bizar_spawn_background` / `bizar_spawn_team` are replaced by the
+  Claude Code `Agent` tool with `subagent_type` and `run_in_background: true`.
+  `bizar_spawn_background` and `bizar_spawn_team` remain as MCP tools
+  that the plugin exposes; they are thin wrappers that emit an `Agent`
+  tool call to the host.
+- **Settings / permissions.** `~/.cline/cline.json` and
+  `~/.cline/data/settings/providers.json` → `~/.claude/settings.json`
+  (user) and `.claude/settings.json` (project). The Cline plugin entry
+  field shape (`plugin: ["./plugins/bizar/index.ts", { ... }]`) is gone;
+  the project now uses `.claude/mcp.json` + `settings.json`.
+- **Mistake-limit field.** `clineruntimeMaxConsecutiveMistakes`
+  (Cline session-config field) → `claudeAgentMaxConsecutiveMistakes`
+  (now consumed by `onConsecutiveMistakeLimitReached` callback default).
+  Default value stays at 10 (Math.max floor against Claude Code's
+  default of 6).
+- **Provider config.** The Cline-specific `provider.9router` /
+  `provider.minimax` blocks are replaced by Claude Code's
+  `providers.9router` / `providers.minimax` in `settings.json`. The
+  `9router-reachable` and `provider-config-sanity` checks adapt to the
+  Claude Code field names.
+- **`docs/migration-guide.md`** — full rewrite for the v6.2 → v6.3
+  Cline → Claude Code move. The old OpenCode → Cline content is moved
+  to a "Historical" section at the bottom.
+- **All four top-level docs (AGENTS.md, CLAUDE.md, README.md,
+  PROGRESS.md, ROADMAP.md, MILESTONES.md, FINAL_GOAL.md,
+  IMPLEMENTATION_PLAN.md)** — Cline/OpenCode mentions replaced by
+  Claude Code mentions; mapping tables added for hook and tool shape.
+
+### Removed
+
+- **Cline `AgentPlugin` API surface.** No more
+  `cli/provision.mjs:patchClineJson()` patching of
+  `cline.json#plugin[]`. The plugin manifest is now
+  `package.json#claude.mcpServers`.
+- **`legacyClineConfigDir()`** and **`promptAndInstallOptional()`** from
+  `cli/utils.mjs` and `cli/install.mjs` were already removed in v6.1.0;
+  re-verified absent in this release.
+- **Dual skill mirror.** Skills no longer mirror to
+  `~/.agents/skills/<name>/` (the Cline 3.0.39 fallback). Single
+  `.claude/skills/<name>/SKILL.md` source of truth.
+- **Bizar skill-lock `~/.agents/.skill-lock.json`** — replaced by
+  Claude Code's marketplace registry format
+  (`~/.claude/plugins/installed.json`).
+
+### Migration
+
+Existing v6.2.x users run `bizar update` to:
+
+1. Pull the new `package.json#claude.mcpServers` manifest.
+2. Mirror skills/agents/commands/hooks to `.claude/` instead of `~/.cline/`.
+3. Update `settings.json` permissions to the Claude Code `permission` table.
+4. Update any custom hooks that consumed the old `beforeTool` payload shape
+   to the new `PreToolUse` payload shape.
+
+The update is backwards-compatible: v6.2.x hooks and Cline skills keep
+working through the deprecation window if the user opts in; they are
+emitted to the console at install time.
+
+---
+
+> **Historical / Pre-Claude Code.** The entries below describe the
+> v5.5.x (OpenCode) and v6.0.0–v6.2.x (Cline) lines. They are kept for
+> archaeology only. v6.3.0 is the active release.
+
 ## v6.2.5 — CubeSandbox + harness-engineering + skill-lock fix + container tests
 
 Patch release bringing the deep-dive work to a close: critical

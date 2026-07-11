@@ -1,66 +1,70 @@
 # packages/sdk/ — Architecture
 
-> TypeScript SDK wrapper for the Bizar Harness. Provides typed
-> access to Cline events and HTTP responses. The plugin (Layer 0)
-> embeds ClineCore in-process and does NOT use this SDK; the
-> dashboard's HTTP client uses this SDK for legacy compat.
+> TypeScript SDK for the Bizar Harness. Provides the Claude Code MCP
+> server, memory vault, dangerous-pattern scanner, tool-call fingerprint,
+> and shared helpers consumed by both the dashboard and the runtime.
+> This is the only entry point into Bizar for Claude Code; the legacy
+> Cline plugin runtime has been removed (v6.3.0).
 
 ## Top-level layout
 
 ```
 packages/sdk/
 ├── src/
-│   ├── cline.ts                   # HTTP client (legacy compat)
-│   ├── cline-events.ts            # Event shape definitions
-│   ├── cline-types.ts             # Type definitions
-│   ├── client.ts                  # Higher-level client wrapper
-│   ├── errors.ts                  # Discriminated error model
-│   ├── events.ts                  # Event stream helpers
-│   ├── index.ts                   # Public API surface
-│   ├── types.ts                   # Shared types
-│   └── version.ts                 # SDK version constant
-├── tests/
-│   ├── client.test.ts             # vitest
-│   ├── errors.test.ts
-│   └── events.test.ts
+│   ├── index.ts                   # Public API surface (re-exports)
+│   ├── mcp/
+│   │   ├── server.ts              # createBizarMcpServer / BIZAR_TOOLS
+│   │   └── bin.ts                 # stdio MCP server entry (bizar-mcp)
+│   ├── memory/
+│   │   └── index.ts               # Obsidian-compatible vault helpers
+│   ├── dangerous-patterns.ts      # 36-pattern destructive-command scanner
+│   └── fingerprint.ts             # Tool-call fingerprint (SHA256)
 └── package.json
 ```
 
 ## Public contract
 
 ```ts
-import { ClineSdk, parseEvent, isBizarError } from "@polderlabs/bizar-sdk";
-
-const sdk = new ClineSdk({ baseUrl: "http://127.0.0.1:4321", password });
-const events = await sdk.events.subscribe({ sessionID });
-for await (const event of events) {
-  if (isBizarError(event)) console.error("error:", event);
-  else console.log("event:", parseEvent(event));
-}
+import {
+  // Memory vault (Obsidian-compatible markdown)
+  readNote, writeNote, listNotes, searchNotes,
+  // Dangerous-pattern scanner
+  checkDangerous, listDangerousPatterns,
+  // Tool-call fingerprint
+  fingerprint,
+  // MCP server (Claude Code's only path into the SDK)
+  createBizarMcpServer, BIZAR_TOOLS,
+} from "@polderlabs/bizar-sdk";
 ```
 
 ## Key invariants
 
-- SDK is HTTP-only (legacy compat). New code uses `@cline/core`
-  in-process for both plugin and dashboard.
-- Discriminated error model via `isBizarError(event)`.
-- Event shapes are versioned (current: `runtime.team.progress.v1`).
-- Tests use vitest (`bun test` doesn't pick them up — see
-  test files for vitest config).
+- This package is consumed **only** by the `bizar-mcp` stdio binary
+  (registered in `~/.claude/settings.json`) and by `plugins/bizar`
+  (back-compat shim that re-exports the SDK surface).
+- Claude Code has no in-process plugin API; MCP servers are the
+  sole integration path. Anything that previously required Cline's
+  `AgentPlugin` is now expressed as MCP tools or skills.
+- Memory vault is plain markdown with YAML frontmatter; the SDK
+  provides typed read/write/list/search so the dashboard, hooks,
+  and MCP tools all use the same backend.
+- Discriminated error model for memory + dangerous-pattern results
+  (`{ ok: true, data } | { ok: false, error }`).
 
 ## Versioning
 
 - `@polderlabs/bizar-sdk` follows semver.
-- Beta releases: `0.x.0-beta.N` (e.g. `0.2.0-beta.4`).
-- Stable releases: `0.x.0` once v0.2 stabilizes.
+- Current: `0.4.0` (Claude Code-native; MCP-first).
 
 ## Verification
 
-- `make check` — TS compile + tests (incl. vitest)
-- `make e2e` — SDK wrapper integration (plugin ↔ dashboard
-  roundtrip)
+- `make check` — TS compile + vitest
+- `make test` — vitest over the SDK
+- `bun run packages/sdk/src/mcp/bin.ts` — smoke test the MCP server
 
 ## See also
 
 - [docs/architecture.md](../../docs/architecture.md) — layer model
 - [@polderlabs/bizar-sdk on npm](https://www.npmjs.com/package/@polderlabs/bizar-sdk)
+- [docs/migration-guide.md](../../docs/migration-guide.md) — v6.3.0
+  Claude Code migration

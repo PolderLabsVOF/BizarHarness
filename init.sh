@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# init.sh — Bizar harness session initializer.
+# init.sh — Bizar harness session initializer (Claude Code).
 #
 # Synthesizes Lecture 06 of walkinglabs/learn-harness-engineering:
 #   "Why initialization needs its own phase".
@@ -35,7 +35,7 @@ done
 cd "$(dirname "$0")"
 
 # Header for the log
-echo "▶ init.sh — $(date -Iseconds) (Bizar harness initializer)"
+echo "▶ init.sh — $(date -Iseconds) (Bizar harness initializer, Claude Code)"
 
 ok()   { echo "  ✓ $1"; }
 warn() { echo "  ⚠ $1"; W=1; }
@@ -66,10 +66,10 @@ else
   err "git not on PATH"
 fi
 
-if command -v cline >/dev/null 2>&1; then
-  ok "cline $(cline --version 2>&1 | head -1)"
+if command -v claude >/dev/null 2>&1; then
+  ok "claude $(claude --version 2>&1 | head -1)"
 else
-  warn "cline not on PATH (optional for many agent tasks)"
+  warn "claude not on PATH (required for Claude Code sessions)"
 fi
 
 # ── 2. Bizar state ───────────────────────────────────────────────────────
@@ -134,13 +134,13 @@ echo
 echo "④ Clean state"
 
 if command -v rg >/dev/null 2>&1; then
-  if rg -q 'console\.log\(|console\.debug\(' --type ts --type tsx plugins/ 2>/dev/null; then
-    warn "console.log/debug found in plugins/ — clean before commit"
+  if rg -q 'console\.log\(|console\.debug\(' --type ts --type tsx packages/sdk/src 2>/dev/null; then
+    warn "console.log/debug found in packages/sdk/src — clean before commit"
   else
-    ok "no console.log/debug in plugins/"
+    ok "no console.log/debug in packages/sdk/src"
   fi
-  if rg -q 'debugger;|\.only\(' --type ts --type tsx plugins/ 2>/dev/null; then
-    err "debugger or .only() found in plugins/ — remove before commit"
+  if rg -q 'debugger;|\.only\(' --type ts --type tsx packages/sdk/src 2>/dev/null; then
+    err "debugger or .only() found in packages/sdk/src — remove before commit"
   fi
 fi
 
@@ -159,21 +159,42 @@ else
   fi
 fi
 
-# ── 6. Skill + agent mirrors (the 18 Bizar skills exist on disk) ─────────
+# ── 6. Claude Code install + skill/agent mirrors ────────────────────────
 echo
-echo "⑥ Skill + agent mirrors"
+echo "⑥ Claude Code install + skill/agent mirrors"
 
-if [[ -d ~/.agents/skills/bizar ]]; then
-  ok "~/.agents/skills/bizar present (and registered in .skill-lock.json)"
+# v6.3.0 — migrated from Cline to Claude Code. The "skill + agent"
+# mirrors now live under `~/.claude/` (NOT `~/.cline/` or
+# `~/.agents/skills/`). The canonical mirror path is `~/.claude/skills/`
+# — `npx skills add` no longer points there.
+if [[ -d ~/.claude/skills/bizar ]]; then
+  ok "~/.claude/skills/bizar present (mirrored from config/skills/)"
 else
-  warn "~/.agents/skills/bizar missing — run \`bizar update\` to materialize"
+  warn "~/.claude/skills/bizar missing — run \`bizar update\` to materialize"
 fi
 
-if [[ -d ~/.cline/agents ]]; then
-  COUNT=$(find ~/.cline/agents -name "*.md" -o -name "*.yaml" | wc -l)
-  ok "$COUNT agent file(s) in ~/.cline/agents"
+if [[ -d ~/.claude/agents ]]; then
+  COUNT=$(find ~/.claude/agents -maxdepth 1 -name "*.md" 2>/dev/null | wc -l)
+  ok "$COUNT agent file(s) in ~/.claude/agents"
 else
-  warn "~/.cline/agents missing"
+  warn "~/.claude/agents missing"
+fi
+
+if [[ -f ~/.claude/settings.json ]]; then
+  if node -e "JSON.parse(require('fs').readFileSync(process.env.HOME + '/.claude/settings.json','utf8'))" 2>/dev/null; then
+    ok "~/.claude/settings.json parses"
+  else
+    err "~/.claude/settings.json is corrupt — fix it before running"
+  fi
+else
+  warn "~/.claude/settings.json missing — run \`bizar install\`"
+fi
+
+if [[ -d ~/.claude/commands ]]; then
+  CMD_COUNT=$(find ~/.claude/commands -maxdepth 1 -name "*.md" 2>/dev/null | wc -l)
+  ok "$CMD_COUNT slash command(s) in ~/.claude/commands"
+else
+  warn "~/.claude/commands missing"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────

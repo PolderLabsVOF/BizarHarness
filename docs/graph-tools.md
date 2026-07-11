@@ -4,6 +4,11 @@
 > (`.bizar/graph/graph.json`, built by `graphify`) to agents.
 > Source: `plugins/bizar/src/tools/graph-query.ts`.
 
+> **v6.3.0 note:** These tools use the Claude Code MCP tool
+> registration shape via `@anthropic-ai/claude-agent-sdk`
+> (formerly `@cline/sdk` in v6.2.x). The tool input/output
+> contract is unchanged.
+
 ## TL;DR
 
 Three tools, all read-only, all backed by
@@ -108,7 +113,8 @@ E2E test in `/tmp/bh-full-e2e.mjs`.
 - **Cache the loaded graph.** v6.0.0 re-reads the JSON file on
   every tool call. With 100K+ nodes, this would be slow.
 - **Show team progress on the kanban.** Tasks.tsx consumes
-  `team_progress_projection` events to visualize team work
+  Claude Code agent team progress events (formerly
+  Cline's `team_progress_projection`) to visualize team work
   flowing across columns.
 - **Dashboard `Harness` view integration.** Surface
   graph-query results in the existing Harness dashboard.

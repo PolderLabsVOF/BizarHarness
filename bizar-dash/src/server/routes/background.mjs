@@ -14,10 +14,12 @@
  * /api/background/:id/retry (POST)         — manual unstick (v3.11.0)
  * /api/background/:id (DELETE)             — kill
  *
- * Backed by the cline-plugin's bg instance store. Imports the
- * store lazily so this module loads even when the plugin is offline.
+ * Backed by the bg instance store at `~/.cache/bizar/bg/<id>.json`.
+ * Imports the store lazily so this module loads even when the Claude
+ * Code CLI is offline.
  *
- * v5.5.1: the spawner is now SDK-based (see ../bg-spawner.mjs).
+ * v6.3.0: the spawner is now Claude-Code-based (see
+ * ../claude-bg-spawner.mjs).
  * `POST /api/background/:id/steer` performs a true mid-flight prompt
  * (no kill+respawn); the response shape stays backwards compatible with
  * the v5.5.0 contract except `newInstanceId` is `null` (same instance
@@ -34,9 +36,10 @@ import { wrap } from './_shared.mjs';
 export function createBackgroundRouter({ broadcast }) {
   const router = Router();
 
-  // Wire bg-spawner's broadcast so spawned agents broadcast on the
-  // existing WS bus (mirroring the way `bg-poller.mjs` does it).
-  import('../bg-spawner.mjs').then((m) => {
+  // Wire claude-bg-spawner's broadcast so spawned agents broadcast
+  // on the existing WS bus (mirroring the way `bg-poller.mjs` does
+  // it).
+  import('../claude-bg-spawner.mjs').then((m) => {
     if (m && typeof m.configureSpawner === 'function') {
       m.configureSpawner({ broadcast });
     }
@@ -71,7 +74,7 @@ export function createBackgroundRouter({ broadcast }) {
     const tags = Array.isArray(body.tags)
       ? body.tags.filter((t) => typeof t === 'string').slice(0, 10)
       : undefined;
-    const { spawnBgAgent } = await import('../bg-spawner.mjs');
+    const { spawnBgAgent } = await import('../claude-bg-spawner.mjs');
     const result = await spawnBgAgent({
       agent,
       prompt,
@@ -114,9 +117,9 @@ export function createBackgroundRouter({ broadcast }) {
   }));
 
   // v5.x — Tool-call history. The state file carries a `toolCalls`
-  // array populated by the plugin's InstanceManager as it observes
-  // cline events. This endpoint is read-only; the plugin owns the
-  // shape.
+  // array populated by claude-bg-spawner.mjs as it observes
+  // Claude Code events. This endpoint is read-only; the spawner
+  // owns the shape.
   router.get('/background/:id/tool-calls', wrap(async (req, res) => {
     const { backgroundStore } = await import('../background-store.mjs');
     const inst = backgroundStore.get(req.params.id);
@@ -130,7 +133,7 @@ export function createBackgroundRouter({ broadcast }) {
 
   // v5.x — Pause. SIGSTOP the subprocess.
   router.post('/background/:id/pause', wrap(async (req, res) => {
-    const { pauseBgAgent } = await import('../bg-spawner.mjs');
+    const { pauseBgAgent } = await import('../claude-bg-spawner.mjs');
     const result = pauseBgAgent(req.params.id);
     if (!result.ok) {
       res.status(result.error === 'unsupported_on_win32' ? 501 : 400).json({ ok: false, error: result.error });
@@ -142,7 +145,7 @@ export function createBackgroundRouter({ broadcast }) {
 
   // v5.x — Resume. SIGCONT the subprocess.
   router.post('/background/:id/resume', wrap(async (req, res) => {
-    const { resumeBgAgent } = await import('../bg-spawner.mjs');
+    const { resumeBgAgent } = await import('../claude-bg-spawner.mjs');
     const result = resumeBgAgent(req.params.id);
     if (!result.ok) {
       res.status(result.error === 'unsupported_on_win32' ? 501 : 400).json({ ok: false, error: result.error });
@@ -152,8 +155,9 @@ export function createBackgroundRouter({ broadcast }) {
     res.json({ ok: true, status: 'running' });
   }));
 
-  // v5.5.1 — Steer is now TRUE mid-flight: the dashboard calls
-  // sdk.sessions.prompt() on the live cline session. No kill+respawn.
+  // v6.3.0 — Steer is TRUE mid-flight: the dashboard calls
+  // claude-bg-spawner.mjs's `steerBgAgent()` on the live Claude Code
+  // session. No kill+respawn.
   // The response shape is the same `{ ok, newInstanceId?, processId? }` —
   // `newInstanceId` is omitted (the same instance is reused); the
   // `mode` field tells the dashboard this was a true mid-flight steer.
@@ -168,7 +172,7 @@ export function createBackgroundRouter({ broadcast }) {
       res.status(400).json({ ok: false, error: 'message_empty' });
       return;
     }
-    const { steerBgAgent } = await import('../bg-spawner.mjs');
+    const { steerBgAgent } = await import('../claude-bg-spawner.mjs');
     const result = await steerBgAgent(req.params.id, message);
     if (!result.ok) {
       res.status(400).json({ ok: false, error: result.error });
@@ -276,7 +280,7 @@ export function createBackgroundRouter({ broadcast }) {
     // that we own (spawned via POST /background). Falls back to the
     // plugin's tmux/abort path for instances spawned by the plugin.
     try {
-      const { isAlive: spawnerAlive, killBgAgent } = await import('../bg-spawner.mjs');
+      const { isAlive: spawnerAlive, killBgAgent } = await import('../claude-bg-spawner.mjs');
       if (spawnerAlive(req.params.id)) {
         const r = await killBgAgent(req.params.id, { signal: 'SIGTERM' });
         if (r.ok) {
@@ -288,10 +292,10 @@ export function createBackgroundRouter({ broadcast }) {
     } catch { /* ignore — fall through to legacy */ }
 
     const { backgroundStore } = await import('../background-store.mjs');
-    // v3.5.4 (bug #3) — `kill()` is now async (it awaits the abortSession
-    // HTTP call to cline serve, then deletes the state file, then
-    // best-effort tmux). The result includes a `steps[]` array so the UI
-    // can report exactly what happened.
+    // v6.3.0 — `kill()` is async (it awaits the kill on the
+    // claude-bg-spawner, then deletes the state file, then
+    // best-effort tmux). The result includes a `steps[]` array so
+    // the UI can report exactly what happened.
     //
     // We always return 200 — the result body's `ok` distinguishes
     // success from partial failure (e.g. abort succeeded but tmux kill

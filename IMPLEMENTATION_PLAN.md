@@ -5,6 +5,11 @@
 > a sequence of sprints with concrete deliverables, test gates, and
 > commit points. Updated whenever the next sprint changes.
 
+> **v6.3.0 migration COMPLETE** — Bizar is now Claude Code-native
+> (`@anthropic-ai/claude-agent-sdk`, MCP tool registration, in-process
+> `ClaudeSdkRuntime`); Cline support retired. This file now tracks work
+> under the Claude Code runtime.
+
 > **Currently active sprint:** **MS-2026-05 — Agent-Browser Integration
 > + Phase 2 Foundations**
 
@@ -14,7 +19,7 @@
 
 - v5.6.0-beta.1 through beta.6 published
 - 22 tools, 4 + 2 safety hooks, 73/73 audit
-- `ClineCore` in-process via `ClineRuntime`
+- Claude Code Agent SDK in-process via `ClaudeSdkRuntime` (was `ClineRuntime` pre-v6.3.0)
 - Closed learning loop primitives (curator + memory vault + snapshot flush)
 - 10 ADRs
 
@@ -26,7 +31,7 @@
 | Subagent RPC (DEC-006 P1) | Not started |
 | Trajectory capture + evaluation (DEC-007 P1) | Not started |
 | Self-healing browser automation (agent-browser) | **Not started — this sprint** |
-| Cline agent team progress on kanban | Not started |
+| Claude Code agent team progress on kanban | Not started |
 | Knowledge graph query surface | ✅ v6.0.0 (DEC-010) |
 | DANGEROUS_PATTERNS approval gate | ✅ v6.0.0 (DEC-007) |
 
@@ -67,9 +72,9 @@ Replace the `browser-harness` (Python CDP wrapper) with **agent-browser**
 1. ✅ MILESTONES.md + IMPLEMENTATION_PLAN.md (top-level)
 2. ⏳ **`cli/agent-browser-up.sh`** — Bash idempotent starter (background
    daemon via `setsid + nohup`, env overrides).
-3. ⏳ **`config/agents/agent-browser.md`** — Cline primary agent with
+3. ⏳ **`config/agents/agent-browser.md`** — Claude Code primary agent with
    no-edit permissions, drives agent-browser via Bash heredocs.
-4. ~~⏳ `config/opencode.json` + new cline.json~~ — **REMOVED in v6.1.0**. Bizar is Cline-only; the OpenCode agent-browser registration path has been dropped. agent-browser is now wired through the Cline `bizar_browser_*` tool family.
+4. ~~⏳ `config/opencode.json` + new cline.json~~ — **REMOVED in v6.1.0**. Bizar is Claude-Code-only as of v6.3.0 (was Cline-only v6.1.0–v6.2.5); the OpenCode and Cline agent-browser registration paths are both historical. agent-browser is now wired through the Claude Code MCP `bizar_browser_*` tool family.
 5. ⏳ **Reusable installer hooks in `install.sh`/`install.ps1`** — install
    agent-browser via npm (`npm install -g agent-browser`) + run
    `agent-browser install`.
@@ -83,10 +88,10 @@ Replace the `browser-harness` (Python CDP wrapper) with **agent-browser**
 10. ⏳ **`bizar-dash/src/server/browser.mjs`** stays (it's the OS
     "open URL in user browser" launcher — different concern).
 
-#### MS-2026-05-B — Cline MCP integration (next commit)
+#### MS-2026-05-B — Claude Code MCP integration (next commit)
 
-1. **Configure Cline to register `agent-browser mcp` as a tool server.**
-   Cline reads `.cline/mcp.json` (or the equivalent per-version) and
+1. **Configure Claude Code to register `agent-browser mcp` as a tool server.**
+   Claude Code reads `.claude/mcp.json` (or the equivalent per-version) and
    spawns MCP servers at session start. The config is a single JSON
    fragment:
    ```json
@@ -100,7 +105,7 @@ Replace the `browser-harness` (Python CDP wrapper) with **agent-browser**
      }
    }
    ```
-2. **Test the round trip in `e2e.mjs`** — spawn a Cline session, ask
+2. **Test the round trip in `e2e.mjs`** — spawn a Claude Code session, ask
    it to navigate to a URL via the MCP server, verify the response.
 3. **Document in `docs/mcp-integration.md`** — how to swap tool
    profiles (core, network, react, mobile), how to add plugins,
@@ -120,8 +125,8 @@ Replace the `browser-harness` (Python CDP wrapper) with **agent-browser**
 8. **`bizar_browser_chat`** — natural-language browser-driven
    tasks (requires `AI_GATEWAY_API_KEY`)
 
-These are thin wrappers around the agent-browser CLI. The plugin's
-Cline runtime invokes them via `execFile`.
+These are thin wrappers around the agent-browser CLI. The Bizar MCP server
+(via `ClaudeSdkRuntime`) invokes them via `execFile`.
 
 #### MS-2026-05-D — Kanban integration (followup)
 
@@ -162,7 +167,7 @@ bun run /tmp/bh-full-e2e.mjs
 MS-2026-05-A.1: docs + plans (this commit)
 MS-2026-05-A.2: install script + agent def + skill
 MS-2026-05-A.3: plugin tools (8 new tools)
-MS-2026-05-B.1: Cline MCP integration
+MS-2026-05-B.1: Claude Code MCP integration
 MS-2026-05-C.1: kanban + team integration
 ```
 
@@ -206,7 +211,7 @@ A feature is `passing` in `feature_list.json` only when ALL THREE LAYERS verify:
 - Env scrubbing before child process spawn
 - One-turn pipelined execution
 
-### MS-2026-09 — Cline agent team kanban visualization
+### MS-2026-09 — Claude Code agent team kanban visualization
 
 **Goal:** Teams work visible in real time on the kanban.
 

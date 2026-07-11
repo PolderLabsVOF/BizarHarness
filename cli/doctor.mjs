@@ -1,86 +1,53 @@
 /**
  * cli/doctor.mjs
  *
- * v3.12.2 — `bizar doctor` subcommand.
+ * v6.3.0 — `bizar doctor` subcommand (Claude Code-native).
  *
- * Runs a battery of health checks against the local Bizar / cline
+ * Runs a battery of health checks against the local Bizar / Claude Code
  * install and reports pass/fail for each. Returns a structured summary
  * suitable for callers (e.g. `bizar update`) that want to act on the
  * result without re-printing the per-check output.
  *
- * The checks are intentionally tolerant: missing optional tools
- * (headroom/semble/skills) don't fail the run, and the dashboard check
- * is skipped silently if no port file exists. The goal is "is your
- * install healthy?" not "is every conceivable thing present?".
+ * Checks (9 total):
+ *   claude-cli-reachable:    claude --version exits 0
+ *   settings-valid:          ~/.claude/settings.json parses
+ *   mcp-server-registered:   settings.json has mcpServers.bizar
+ *   hooks-wired:             settings.json has PreToolUse/PostToolUse/etc
+ *   agent-files-installed:   agent .md files deployed
+ *   skill-files-installed:   SKILL.md files deployed
+ *   tools-on-path:           at least one of headroom/semble/skills/claude
+ *   memory-vault:            BIZAR_HOME exists (memory subdir lazy)
+ *   9router-reachable:       provider gateway responds
  *
  * Usage:
- *   import { runDoctor } from './doctor.mjs';
- *   const r = await runDoctor();                    // prints everything
- *   const r = await runDoctor({ silent: true });    // returns summary only
+ *   import { runDoctor } from "./doctor.mjs";
+ *   const r = await runDoctor();
+ *   const r = await runDoctor({ silent: true });
  */
 import chalk from 'chalk';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { clineConfigDir, clineAgentsDir, which, bizarConfigDir } from './utils.mjs';
+import { homedir } from 'node:os';
 
-// v3.20.11: list every agent the install script is expected to deploy.
-// Adding a new agent to `config/agents/` without adding it here causes
-// doctor to silently under-count ("all 4 core agents present" when there
-// are actually 14). The list mirrors cli/install.mjs AGENT_FILES plus
-// `agent-browser.md` (added in v3.20.7) and `_shared/AGENT_BASELINE.md`
-// is intentionally excluded (it's a skill, not an agent).
-const REQUIRED_AGENTS = [
-  'odin.md',
-  'vor.md',
-  'frigg.md',
-  'quick.md',
-  'mimir.md',
-  'heimdall.md',
-  'hermod.md',
-  'thor.md',
-  'baldr.md',
-  'tyr.md',
-  'vidarr.md',
-  'forseti.md',
-  'semble-search.md',
-  'agent-browser.md',
-];
-
-// ── helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Run a check function and capture its result. The check either
- * returns a string message (pass) or throws an Error (fail).
- */
-async function runCheck(name, fn) {
-  try {
-    const message = await fn();
-    return { name, ok: true, message: message || 'ok' };
-  } catch (err) {
-    return {
-      name,
-      ok: false,
-      message: err && err.message ? err.message : String(err),
-    };
-  }
-}
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
+const BIZAR_HOME = process.env.BIZAR_HOME || join(homedir(), '.bizar_home');
 
 // ── individual checks ───────────────────────────────────────────────────────
 
-async function checkClineReachable() {
-  const r = spawnSync('cline', ['--version'], {
+async function checkClaudeReachable() {
+  const r = spawnSync('claude', ['--version'], {
     encoding: 'utf8',
     timeout: 5000,
   });
   if (r.status !== 0) {
-    throw new Error(`cline --version exited ${r.status}`);
+    throw new Error(`claude --version exited ${r.status}`);
   }
-  return (r.stdout || r.stderr || '').trim().split('\n')[0] || 'cline available';
+  return (r.stdout || r.stderr || '').trim().split('\n')[0] || 'claude available';
 }
 
-async function checkConfigValid() {
-  const cfgPath = join(clineConfigDir(), 'cline.json');
+async function checkSettingsValid() {
+  const cfgPath = join(CLAUDE_DIR, 'settings.json');
   if (!existsSync(cfgPath)) {
     throw new Error(`not found at ${cfgPath}`);
   }
@@ -89,73 +56,56 @@ async function checkConfigValid() {
   } catch (err) {
     throw new Error(`invalid JSON: ${err.message}`);
   }
-  return 'cline.json parses';
+  return 'settings.json parses';
 }
 
-async function checkPluginEntryPresent() {
-  const cfgPath = join(clineConfigDir(), 'cline.json');
+async function checkMcpServerRegistered() {
+  const cfgPath = join(CLAUDE_DIR, 'settings.json');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-  const plugins = Array.isArray(cfg.plugin) ? cfg.plugin : [];
-  if (plugins.length === 0) {
-    throw new Error('no plugin entries in cline.json');
+  const servers = cfg.mcpServers || {};
+  if (!servers.bizar) {
+    throw new Error('mcpServers.bizar missing from settings.json');
   }
-  const hasBizar = plugins.some((p) => {
-    if (typeof p === 'string') return p.includes('bizar');
-    if (Array.isArray(p)) {
-      const [path] = p;
-      return typeof path === 'string' && path.includes('bizar');
-    }
-    if (p && typeof p === 'object') {
-      return (
-        (p.name || '').includes('bizar') ||
-        (p.path || '').includes('bizar')
-      );
-    }
-    return false;
-  });
-  if (!hasBizar) {
-    throw new Error('bizar not found in plugin[]');
-  }
-  return 'bizar present in plugin[]';
+  return `bizar MCP server registered (${servers.bizar.command ?? '?'})`;
 }
 
-async function checkPluginPathResolves() {
-  const cfgPath = join(clineConfigDir(), 'cline.json');
+async function checkHooksWired() {
+  const cfgPath = join(CLAUDE_DIR, 'settings.json');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-  const plugins = Array.isArray(cfg.plugin) ? cfg.plugin : [];
-  let lastChecked = null;
-  for (const p of plugins) {
-    let entryPath = null;
-    if (Array.isArray(p)) {
-      const [path] = p;
-      if (typeof path === 'string') entryPath = path;
-    } else if (p && typeof p === 'object' && p.path) {
-      entryPath = p.path;
-    }
-    if (!entryPath) continue;
-    const isAbs = entryPath.startsWith('/') || /^[a-z]:[\\/]/i.test(entryPath);
-    const resolved = isAbs ? entryPath : join(clineConfigDir(), entryPath);
-    lastChecked = resolved;
-    if (!existsSync(resolved)) {
-      throw new Error(`plugin path does not exist: ${resolved}`);
-    }
+  const hooks = cfg.hooks || {};
+  const required = ['PreToolUse', 'PostToolUse', 'SessionStart', 'UserPromptSubmit'];
+  const missing = required.filter((e) => !Array.isArray(hooks[e]) || hooks[e].length === 0);
+  if (missing.length > 0) {
+    throw new Error(`missing hook events: ${missing.join(', ')}`);
   }
-  if (lastChecked === null) {
-    return 'no plugin path to check';
-  }
-  return `plugin path resolves: ${lastChecked}`;
+  return `hooks wired: ${required.join(', ')}`;
 }
 
 async function checkAgentFilesInstalled() {
-  const dir = clineAgentsDir();
+  const dir = join(CLAUDE_DIR, 'agents');
   if (!existsSync(dir)) {
     throw new Error(`agents dir missing: ${dir}`);
   }
-  const missing = REQUIRED_AGENTS.filter((f) => !existsSync(join(dir, f)));
-  if (missing.length > 0) {
-    throw new Error(`missing: ${missing.join(', ')}`);
+  const have = readdirSync(dir).filter((f) => f.endsWith('.md'));
+  if (have.length === 0) {
+    throw new Error('no agent .md files installed');
   }
-  return `all ${REQUIRED_AGENTS.length} core agents present`;
+  return `${have.length} agents installed: ${have.slice(0, 4).join(', ')}${have.length > 4 ? '…' : ''}`;
+}
+
+async function checkSkillFilesInstalled() {
+  const dir = join(CLAUDE_DIR, 'skills');
+  if (!existsSync(dir)) {
+    throw new Error(`skills dir missing: ${dir}`);
+  }
+  const skills = readdirSync(dir).filter((d) => {
+    const fp = join(dir, d, 'SKILL.md');
+    return existsSync(fp);
+  });
+  if (skills.length === 0) {
+    throw new Error('no SKILL.md files found');
+  }
+  return `${skills.length} skills installed`;
 }
 
 /**
@@ -165,7 +115,7 @@ async function checkAgentFilesInstalled() {
  * overall health report.
  */
 async function checkToolsAvailable() {
-  const tools = ['headroom', 'semble', 'skills'];
+  const tools = ['headroom', 'semble', 'skills', 'claude'];
   const found = tools.filter(which);
   if (found.length === 0) {
     throw new Error(`none of ${tools.join('/')} on PATH`);
@@ -173,127 +123,95 @@ async function checkToolsAvailable() {
   return `available: ${found.join(', ')}`;
 }
 
-async function checkProviderConfigSanity() {
-  const cfgPath = join(clineConfigDir(), 'cline.json');
-  if (!existsSync(cfgPath)) {
-    throw new Error('cline.json missing');
+async function checkMemoryVault() {
+  if (!existsSync(BIZAR_HOME)) {
+    throw new Error(`BIZAR_HOME missing: ${BIZAR_HOME}`);
   }
-  const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-
-  // v6.0.1 — 9router is the primary gateway. All Bizar agents
-  // route through it via `9router/<model>` prefixed model IDs.
-  const nine = cfg.provider && cfg.provider['9router'];
-  if (nine && nine.baseUrl) {
-    const models = nine.models || {};
-    const sane = Object.keys(models).filter((id) => typeof id === 'string' && id.length > 0);
-    if (sane.length === 0) {
-      throw new Error(
-        'provider.9router block has no models (run `bizar update` to re-sync)',
-      );
-    }
-    return `provider.9router baseUrl=${nine.baseUrl} sane (${sane.length} models)`;
+  const memDir = process.env.BIZAR_MEMORY_VAULT || join(BIZAR_HOME, 'memory');
+  if (!existsSync(memDir)) {
+    // Not fatal — the vault is created lazily on first write.
+    return `BIZAR_HOME present; memory vault will be created on demand`;
   }
-
-  // Fallback: legacy `minimax` provider only. Kept for back-compat with
-  // older pre-v6.0.1 cline.json installs.
-  const minimax = cfg.provider && cfg.provider.minimax;
-  if (!minimax) {
-    return 'warn: no provider.9router AND no provider.minimax — run `bizar update`';
-  }
-  const models = minimax.models || {};
-  const saneNames = Object.entries(models).filter(([, m]) => {
-    return (
-      m &&
-      typeof m === 'object' &&
-      'interleaved' in m &&
-      'reasoning' in m
-    );
-  });
-  if (saneNames.length === 0) {
-    throw new Error(
-      'no MiniMax-style model with interleaved + reasoning flags',
-    );
-  }
-  return `provider.minimax + ${saneNames.length} model(s) sane (legacy; consider migrating to provider.9router)`;
+  const st = statSync(memDir);
+  return `memory vault at ${memDir} (${st.isDirectory() ? 'dir' : '?'})`;
 }
 
-/**
- * v6.0.1 — Check 9Router reachability. 9Router is the Bizar gateway;
- * if it's down, agents can't reach any upstream. Lenient (warn) by
- * design — the user might be intentionally working offline — but a
- * loud warning keeps the issue from being silent.
- */
-async function check9routerReachable() {
-  const url = process.env.NINEROUTER_URL || 'http://localhost:20128';
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 4000);
+async function check9RouterReachable() {
+  const url = process.env.NINEROUTER_URL || 'http://127.0.0.1:8787';
+  let res;
   try {
-    const res = await fetch(`${url}/api/health`, { signal: ac.signal });
-    if (!res.ok) {
-      return `warn: 9router at ${url} returned HTTP ${res.status}`;
-    }
-    const body = await res.text().catch(() => '');
-    if (!body.includes('"ok":true')) {
-      return `warn: 9router at ${url} responded but body did not include ok:true (got: ${body.slice(0, 60)})`;
-    }
-    return `9router healthy at ${url}`;
+    res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
   } catch (err) {
-    const reason = err.name === 'AbortError' ? 'timeout after 4s' : (err.message || 'unreachable');
-    return `warn: 9router unreachable at ${url} — ${reason}`;
-  } finally {
-    clearTimeout(timer);
+    throw new Error(`9router at ${url} unreachable: ${err.message ?? err}`);
   }
+  if (!res.ok) {
+    throw new Error(`9router at ${url} responded HTTP ${res.status}`);
+  }
+  return `9router at ${url} ok`;
 }
+
+// ── runner ──────────────────────────────────────────────────────────────────
 
 const CHECKS = [
-  ['cline-reachable', checkClineReachable],
-  ['cline-config-valid', checkConfigValid],
-  ['plugin-entry-present', checkPluginEntryPresent],
-  ['plugin-path-resolves', checkPluginPathResolves],
-  ['agent-files-installed', checkAgentFilesInstalled],
-  ['tools-available', checkToolsAvailable],
-  ['provider-config-sanity', checkProviderConfigSanity],
-  ['9router-reachable', check9routerReachable],
+  { name: 'claude-cli-reachable',       run: checkClaudeReachable },
+  { name: 'settings-valid',            run: checkSettingsValid },
+  { name: 'mcp-server-registered',     run: checkMcpServerRegistered },
+  { name: 'hooks-wired',               run: checkHooksWired },
+  { name: 'agent-files-installed',     run: checkAgentFilesInstalled },
+  { name: 'skill-files-installed',     run: checkSkillFilesInstalled },
+  { name: 'tools-on-path',             run: checkToolsAvailable },
+  { name: 'memory-vault',              run: checkMemoryVault },
+  { name: '9router-reachable',         run: check9RouterReachable },
 ];
 
-// ── public API ──────────────────────────────────────────────────────────────
-
-/**
- * Run all health checks. Prints per-check output unless `opts.silent`.
- * Prints a final summary line unless `opts.json` is true.
- * Returns `{ passed, failed, results }`.
- */
 export async function runDoctor(opts = {}) {
   const silent = !!opts.silent;
-  const jsonMode = !!opts.json;
   const results = [];
-  for (const [name, fn] of CHECKS) {
-    const r = await runCheck(name, fn);
-    results.push(r);
+  let passed = 0;
+  let failed = 0;
+
+  for (const check of CHECKS) {
+    let result;
+    try {
+      const message = await check.run();
+      result = { name: check.name, ok: true, message: message ?? 'ok' };
+    } catch (err) {
+      result = { name: check.name, ok: false, message: err?.message ?? String(err) };
+    }
+    results.push(result);
+    if (result.ok) passed += 1;
+    else failed += 1;
+
     if (!silent) {
-      const marker = r.ok ? chalk.green('✓') : chalk.red('✗');
-      const label = name.padEnd(28);
-      const msg = r.ok ? chalk.dim(`  ${r.message}`) : chalk.red(`  ${r.message}`);
-      console.log(`  ${marker} ${label}${msg}`);
+      const tag = result.ok ? chalk.green('  ✔ ') : chalk.red('  ✖ ');
+      process.stdout.write(`${tag}${check.name}${result.ok ? '' : ` — ${result.message}`}\n`);
     }
   }
 
-  const passed = results.filter((r) => r.ok).length;
-  const failed = results.length - passed;
-
-  // Print summary line only when not in JSON mode
-  if (!jsonMode && (failed > 0 || !silent)) {
-    console.log('');
-    if (failed === 0) {
-      console.log(
-        chalk.green(`  ✓ ${passed} checks passed, ${failed} failed`),
-      );
-    } else {
-      console.log(
-        chalk.yellow(`  ⚠ ${passed} checks passed, ${failed} failed`),
-      );
-    }
+  if (!silent) {
+    const summary = chalk.bold(
+      failed > 0
+        ? chalk.red(`${failed} checks failed, ${passed} passed`)
+        : chalk.green(`${passed} checks passed`),
+    );
+    process.stdout.write(`\n${summary}\n`);
   }
 
   return { passed, failed, results };
+}
+
+// ── helper ──────────────────────────────────────────────────────────────────
+
+function which(cmd) {
+  const r = spawnSync('which', [cmd], { encoding: 'utf8' });
+  return r.status === 0 && !!r.stdout?.trim();
+}
+
+// Stand-alone CLI invocation (so `bizar doctor` still works when imported
+// without the bin dispatcher).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const silent = process.argv.includes('--silent');
+  runDoctor({ silent }).then(({ failed }) => {
+    process.exit(failed === 0 ? 0 : 1);
+  });
 }

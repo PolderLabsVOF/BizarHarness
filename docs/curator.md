@@ -4,6 +4,12 @@
 > 106 cataloged agent-harness projects, exactly one (Hermes
 > Agent) has this. Source: `plugins/bizar/src/hooks/skill-curator.ts`.
 
+> **v6.3.0 note:** The curator runs inside the Claude Code
+> skill/MCP setup callback. The skill-usage tracking path
+> remains `~/.bizar/skills/usage.jsonl` (Bizar path, unchanged
+> from the Cline era). Tool shape references in this doc use
+> the Claude Code MCP tool registration shape.
+
 ## TL;DR
 
 Tracks per-skill use/failure in `~/.bizar/skills/usage.jsonl`.

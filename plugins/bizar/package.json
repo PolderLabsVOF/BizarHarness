@@ -1,38 +1,17 @@
 {
   "name": "@polderlabs/bizar-plugin",
-  "version": "6.2.5",
-  "description": "Bizar Norse-pantheon multi-agent plugin for Cline — 14 agents across 4 cost tiers with cost-aware routing and plans.",
+  "version": "6.3.0",
+  "description": "Bizar Norse-pantheon multi-agent system — Claude Code-native plugin shim. Re-exports the SDK at packages/sdk so legacy `plugins/bizar/index.ts` consumers keep working while the actual logic lives in packages/sdk/.",
   "type": "module",
   "main": "./index.ts",
-  "cline": {
-    "plugins": [
-      {
-        "paths": [
-          "./index.ts"
-        ],
-        "capabilities": [
-          "tools",
-          "hooks"
-        ]
-      }
-    ]
-  },
   "dependencies": {
-    "zod": "^3.23.0"
+    "@polderlabs/bizar-sdk": "*"
   },
   "peerDependencies": {
-    "@cline/sdk": "*",
-    "@cline/core": "*",
-    "@cline/shared": "*"
+    "@anthropic-ai/claude-agent-sdk": "*"
   },
   "peerDependenciesMeta": {
-    "@cline/sdk": {
-      "optional": true
-    },
-    "@cline/core": {
-      "optional": true
-    },
-    "@cline/shared": {
+    "@anthropic-ai/claude-agent-sdk": {
       "optional": true
     }
   }

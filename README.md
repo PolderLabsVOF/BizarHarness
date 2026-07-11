@@ -2,14 +2,14 @@
 
 # BizarHarness ᛟ
 
-**Cline-based multi-agent coding harness with a closed learning loop.**
+**Claude Code-native multi-agent coding harness with a closed learning loop.**
 
-13 agents across 4 cost tiers. Odin routes, subagents execute, Forseti audits.
-ClineCore in-process — no subprocess, no port, no serve-info file.
+14 agents across 5 cost tiers. Odin routes, subagents execute, Forseti audits.
+Claude Code Agent SDK in-process — no subprocess, no port, no serve-info file.
 
 [![npm](https://img.shields.io/npm/v/@polderlabs/bizar?color=cb3837)](https://www.npmjs.com/package/@polderlabs/bizar)
-[![v6.0.0](https://img.shields.io/badge/v6.0.0-Cline-6366f1)](https://github.com/DrB0rk/BizarHarness)
-[![Cline](https://img.shields.io/badge/cline-%E2%9C%93-6366f1)](https://docs.cline.bot)
+[![v6.3.0](https://img.shields.io/badge/v6.3.0-Claude%20Code-6366f1)](https://github.com/DrB0rk/BizarHarness)
+[![Claude Code](https://img.shields.io/badge/claude--code-%E2%9C%93-6366f1)](https://docs.claude.com/claude-code)
 [![Audit 73/73](https://img.shields.io/badge/audit-73%2F73-10b981)](https://github.com/DrB0rk/BizarHarness)
 [![Harness](https://img.shields.io/badge/harness-L01--L12-8A2BE2)](docs/INDEX.md)
 [![Safety](https://img.shields.io/badge/safety-36%20patterns-ff6b6b)](docs/safety.md)
@@ -26,7 +26,7 @@ ClineCore in-process — no subprocess, no port, no serve-info file.
 
 ## Table of Contents
 
-- [What's new in v6.0.0](#-whats-new-in-v600)
+- [What's new in v6.3.0](#-whats-new-in-v630)
 - [Quick start](#-quick-start)
 - [The Pantheon](#-the-pantheon)
 - [Architecture](#-architecture)
@@ -37,43 +37,53 @@ ClineCore in-process — no subprocess, no port, no serve-info file.
 - [Knowledge Graph Tools](#-knowledge-graph-tools)
 - [Harness engineering audit (73/73)](#-harness-engineering-audit-7373)
 - [Documentation](#-documentation)
-- [Migration from v5.5.x](#-migration-from-v55x)
+- [Migration from v6.2.x (Cline era)](#-migration-from-v62x-cline-era)
+- [Historical: OpenCode → Cline (v5.6/v6.0)](#-historical-opencode--cline-v56v60)
 - [Contributing](#-contributing)
 - [License](#-license)
 
 ---
 
-## ✨ What's new in v6.0.0
+## ✨ What's new in v6.3.0
 
-v6.0.0 is a **complete rewrite** of the plugin framework from OpenCode
-to Cline. The plugin embeds ClineCore in-process — no subprocess spawn,
-no port, no password, no serve-info file. Plugin `setup()` returns in
-~3ms (was: 30s+ timeout).
+v6.3.0 is a **complete migration** from Cline to Claude Code. The plugin
+framework that previously lived as a Cline `AgentPlugin` is now expressed
+as Claude Code skills + MCP servers + `.claude/agents/` definitions.
+Claude Code's Agent SDK (`@anthropic-ai/claude-agent-sdk`) is embedded
+in-process — no subprocess spawn, no port, no password, no serve-info
+file. Hooks execute in Claude Code's event loop; mistake recovery uses
+the Agent SDK's `onConsecutiveMistakeLimitReached`; subagent dispatch
+uses the Claude Code `Agent` tool.
 
 | Feature | Description |
 | --- | --- |
-| **In-process ClineCore** | `ClineRuntime` wrapper replaces the subprocess. No port, no password. |
-| **22 tools, 4 hooks** | All use `createTool()` from `@cline/sdk`. 0 compat shims. |
-| **Cline agent teams** | New `bizar_spawn_team` + `bizar_team_status` tools. |
-| **Knowledge graph tools** | New `bizar_graph_query/path/explain` over `.bizar/graph/graph.json`. |
-| **DANGEROUS_PATTERNS gate** | 36 patterns (25 deny + 11 require-approval) checked in `beforeTool`. |
+| **Claude Code-native hooks** | `PreToolUse` / `PostToolUse` / `UserPromptSubmit` / `SessionStart` / `SessionEnd` — typed payloads, idiomatic Claude Code shape. |
+| **22 tools, 4 hooks** | All use Claude Code `MCP tool registration`. 0 compat shims. |
+| **Skills + MCP** | `.claude/skills/<name>/SKILL.md` (auto-loaded) + `.claude/mcp.json` (Semble, Bizar memory, CubeSandbox). Replaces the previous "plugin" surface. |
+| **Agent dispatch** | Subagents dispatched via the Claude Code `Agent` tool with `run_in_background: true`. The previous `bizar_spawn_team` tool is now `Agent` with `agent_team: "<name>"`. |
+| **Knowledge graph tools** | `bizar_graph_query/path/explain` over `.bizar/graph/graph.json` (still file-based; unchanged). |
+| **DANGEROUS_PATTERNS gate** | 36 patterns (25 deny + 11 require-approval) checked in `PreToolUse`. |
 | **Skill curator** | Per-skill use/failure tracking. The differentiator (1/106 projects). |
 | **Pre-compaction memory flush** | Durable snapshot before summarizer. Closes the durability gap. |
 | **In-process memory vault** | Tools read/write `~/.bizar_memory/` directly. No dashboard needed. |
 | **Harness audit 73/73** | Full L01–L12 compliance. `make check-arch` enforces 7 rules. |
-| **Removed: Plugins view** | Use **Mods** only. v5.6.0-beta.3. |
+| **Removed: plugin layer** | The `plugins/bizar/` plugin entry is now a Claude Code MCP server — skills do the rest. v6.0.0–v6.2.5. |
 
-See the full [CHANGELOG.md](CHANGELOG.md) for v5.6.0-beta.1 → beta.4.
+See the full [CHANGELOG.md](CHANGELOG.md) for v6.0.0 → v6.3.0 history.
 
 ---
 
 ## 🚀 Quick start
 
+Prerequisites: **Claude Code CLI** (`claude` on `PATH`; install via
+`npm install -g @anthropic-ai/claude-code` or follow
+[the Claude Code install docs](https://docs.claude.com/claude-code/getting-started)).
+
 ```bash
-# Install (stable v5.5.6)
+# Install (stable v6.3.0)
 npm install @polderlabs/bizar
 
-# Or try the v6.0.0 beta (Cline rewrite)
+# Or try the latest beta
 npm install @polderlabs/bizar@beta
 
 # Run
@@ -83,8 +93,9 @@ npx bizar
 The installer handles:
 
 - Cloning the dashboard repo
-- Configuring the Cline plugin
-- Setting up Semble (code search MCP) and Skills CLI
+- Installing Bizar skills + agents + commands to `.claude/`
+  (`skills/`, `agents/`, `commands/`, `hooks/`)
+- Configuring Semble (code search MCP) and Skills CLI
 - Headroom (token-saving proxy)
 
 If you'd rather install manually, see
@@ -113,8 +124,8 @@ If you'd rather install manually, see
 
 Odin is the only primary agent. Every request hits him first. He
 **never executes work** — he decomposes into parallel streams and
-dispatches to subagents. The Forseti gate audits all Tier 4/5 work
-(Tyr, Vidarr) before execution.
+dispatches to subagents via the Claude Code `Agent` tool. The Forseti
+gate audits all Tier 4/5 work (Tyr, Vidarr) before execution.
 
 See [plugins/bizar/ARCHITECTURE.md](plugins/bizar/ARCHITECTURE.md) for
 the full agent roster and routing rules.
@@ -128,27 +139,30 @@ the full agent roster and routing rules.
 │ Layer 1: UI (bizar-dash/)                                          │
 │   - React + TypeScript dashboard (17 tabs)                        │
 │   - Express server (HTTP + WS)                                     │
-│   - In-process ClineCore via @cline/sdk (replaces cline serve)    │
+│   - In-process Claude Code Agent SDK (no daemon / no subprocess)   │
 │   - Harness engineering dashboard view                             │
 │   - Kanban board (5 columns + backlog)                             │
 └────────────────────────────────────────────────────────────────────┘
                               ↕ HTTP REST + WebSocket
 ┌────────────────────────────────────────────────────────────────────┐
-│ Layer 0: Core (plugins/bizar/)                                     │
-│   - Cline plugin entry (AgentPlugin from @cline/sdk)              │
-│   - 22 tools + 4 hooks + 1 approval gate                          │
-│   - In-process ClineRuntime (wraps ClineCore.create())            │
-│   - In-process memory vault                                       │
-│   - DANGEROUS_PATTERNS approval gate                               │
-│   - Skill curator (closed learning loop)                           │
-│   - Pre-compaction memory flush                                   │
+│ Layer 0: Core (.claude/skills + .claude/agents + plugins/bizar/)   │
+│   - Skills (SKILL.md + bundled scripts)                             │
+│   - Agents (Odin, Frigg, Vör, Mimir, Heimdall, ...)                 │
+│   - Bizar MCP server (plugins/bizar/, 19 tools)                     │
+│   - 4 hooks (PreToolUse, PostToolUse, ...)                         │
+│   - In-process memory vault                                         │
+│   - DANGEROUS_PATTERNS approval gate                                │
+│   - Skill curator (closed learning loop)                            │
+│   - Pre-compaction memory flush                                     │
 └────────────────────────────────────────────────────────────────────┘
-                              ↕ Cline SDK
+                              ↕ Claude Code Agent SDK
 ┌────────────────────────────────────────────────────────────────────┐
-│ Substrate: ClineCore (@cline/core)                                 │
-│   - In-process runtime, no subprocess                              │
-│   - startSession / send / abort / subscribe                        │
-│   - Session storage, model dispatch, agent team tools              │
+│ Substrate: Claude Code (@anthropic-ai/claude-code + Agent SDK)     │
+│   - In-process runtime via Agent SDK, no subprocess                │
+│   - Skills auto-loaded from .claude/skills/                        │
+│   - MCP servers spawned from .claude/mcp.json                      │
+│   - Agent dispatch via Agent tool                                  │
+│   - Hooks executed in session event loop                           │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -159,25 +173,31 @@ model, module map, and inter-component contracts.
 
 ## 🛠 Tools (22 total)
 
+Bizar's 22 tools are exposed as a Claude Code MCP server (replacing
+Cline's `createTool` shape with the Claude Code MCP `tool`
+registration shape):
+
 | Category | Count | Tools |
 | --- | --- | --- |
 | **Background agents** | 9 | `bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`, `bizar_pause`, `bizar_resume`, `bizar_send_message`, `bizar_get_comments`, `bizar_report_progress` |
 | **Memory** | 4 | `bizar_memory_list`, `bizar_memory_read`, `bizar_memory_write`, `bizar_memory_search` |
 | **Plan / Glyphs** | 4 | `bizar_plan_action`, `bizar_open_kb`, `bizar_wait_for_feedback`, `bizar_read_glyph_feedback` |
-| **Cline agent teams** | 2 | `bizar_spawn_team`, `bizar_team_status` |
+| **Agent teams** | 2 | `bizar_spawn_team`, `bizar_team_status` |
 | **Knowledge graph** | 3 | `bizar_graph_query`, `bizar_graph_path`, `bizar_graph_explain` |
-| **Total** | **22** | All use `createTool` from `@cline/sdk` directly |
+| **Total** | **22** | All registered as MCP tools via the Claude Code MCP SDK |
 
 ---
 
 ## 🪝 Hooks (4 + 2 safety)
 
+Claude Code-native hooks (typed event payloads, idiomatic shape):
+
 | Hook | Purpose |
 | --- | --- |
-| `beforeTool` | Loop guard + **DANGEROUS_PATTERNS gate** |
-| `afterTool` | Per-tool-call log to `LogWriter` |
-| `beforeModel` | **Pre-compaction memory flush** (writes snapshot to vault) |
-| `onEvent` | `message-added` (slash commands) + `run-finished`/`run-failed` (memory write) |
+| `PreToolUse` | Loop guard + **DANGEROUS_PATTERNS gate** |
+| `PostToolUse` | Per-tool-call log to `LogWriter` |
+| `UserPromptSubmit` | **Pre-compaction memory flush** (writes snapshot to vault) |
+| `SessionStart` / `SessionEnd` | `message-added` (slash commands) + `run-finished`/`run-failed` (memory write) |
 
 | Safety component | Purpose |
 | --- | --- |
@@ -262,7 +282,7 @@ See [docs/graph-tools.md](docs/graph-tools.md) for the full reference.
 
 ## 🛡 Harness engineering audit (73/73)
 
-v6.0.0 passes the full L01–L12 audit at **73/73 = 100%**:
+v6.3.0 passes the full L01–L12 audit at **73/73 = 100%**:
 
 | Subsystem | Score |
 | --- | --- |
@@ -273,7 +293,7 @@ v6.0.0 passes the full L01–L12 audit at **73/73 = 100%**:
 | 5. Feedback | 7/7 (`make check/test/e2e/clean-check/arch/vcr/session-*`) |
 | 6. L05 Cross-session | 6/6 (Current State + clock-in/out + context anxiety) |
 | 7. L03 System of record | 4/4 (ACID: Durability, Consistency, Atomicity, Proximity) |
-| 8. L07 WIP=1 + VCR | 3/3 (WIP=1 + `make vcr` + VCR 20/20 = 1.0) |
+| 8. L07 WIP=1 + VCR | 3/3 (WIP=1 + `make vcr` + VCR 31/31 = 1.0) |
 | 9. L08 Feature list | 6/6 (evidence + verify-feature + granularity + state machine) |
 | 10. L09 DoD | 5/5 (3-layer verification + runtime signals + repair instructions) |
 | 11. L10 E2E + Arch | 8/8 (`make e2e` + `make check-arch` + 7 arch rules + E2E requirement) |
@@ -314,19 +334,27 @@ See [PROGRESS.md](PROGRESS.md) § Current State and the
 
 ---
 
-## 🔄 Migration from v5.5.x
+## 🔄 Migration from v6.2.x (Cline era)
 
-Upgrading from the OpenCode-based v5.5.x? See
+Upgrading from a Cline-era BizarHarness (v6.0.0 → v6.2.x)? See
 [docs/migration-guide.md](docs/migration-guide.md) for:
 
-- Breaking changes (tool shape, hook shape)
-- New tools (Cline agent teams, graph tools, curator)
-- Removed tools (Plugins → Mods)
+- Breaking changes (hook shape: `beforeTool` → `PreToolUse`)
+- New tools (Claude Code MCP server shape; Agent SDK dispatch)
+- Removed tools (the `bizar_spawn_background` tool family is now
+  Claude Code `run_in_background`)
 - Verification commands
 
-TL;DR: `npm install @polderlabs/bizar@beta` and update any custom
-slash commands that consumed the old `{ output: JSON.stringify(...) }`
-shape.
+TL;DR: `npm install @polderlabs/bizar@latest` and update any custom
+hooks that consumed the old `beforeTool` hook payload shape.
+
+## 📜 Historical: OpenCode → Cline (v5.6/v6.0)
+
+The OpenCode-era Bizar (≤ v5.5.x) was rebuilt on Cline across
+**v5.6.0-beta.x → v6.0.0** (the "Cline rewrite"). That migration is
+preserved as historical context only — see [docs/migration-guide.md](docs/migration-guide.md)
+§ Historical for the archived OpenCode → Cline guide. No current
+release of Bizar supports OpenCode.
 
 ---
 
@@ -349,8 +377,8 @@ The harness engineering protocol:
 Development of BizarHarness uses a separate sandbox repo for Docker/dev
 tooling. See [DrB0rk/BizarHarness-dev](https://github.com/DrB0rk/BizarHarness-dev)
 (private) for the local dev environment, including the Docker-based
-Cline sandbox used to test config and plugin changes without touching
-the system Cline install.
+Claude Code sandbox used to test config and plugin changes without
+touching the system Claude Code install.
 
 ---
 
@@ -364,8 +392,8 @@ MIT — see [LICENSE](LICENSE).
 
 Inspired by the [walkinglabs/learn-harness-engineering](https://github.com/walkinglabs/learn-harness-engineering)
 course and the [awesome-harness-engineering](https://github.com/walkinglabs/awesome-harness-engineering)
-curated list. Built on [Cline](https://docs.cline.bot) and
-[@cline/sdk](https://www.npmjs.com/package/@cline/sdk).
+curated list. Built on [Claude Code](https://docs.claude.com/claude-code)
+and [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk).
 
 ---
 

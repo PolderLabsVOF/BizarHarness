@@ -5,10 +5,11 @@
 
 # AGENTS.md — Bizar Harness
 
-> **Bizar Harness** is a Cline-based multi-agent coding harness for the Bizar project.
-> It embeds ClineCore in-process, exposes 22 agent tools (plan, memory, kanban,
-> background agents, Cline agent teams), and ships a TypeScript dashboard with a
-> kanban task board and live background-agent viewer.
+> **Bizar Harness** is a Claude Code-native multi-agent coding harness
+> for the Bizar project. It embeds the Claude Code Agent SDK
+> in-process, ships skills + MCP servers + slash commands under
+> `.claude/`, and ships a TypeScript dashboard with a kanban task
+> board and live agent viewer.
 
 If you are an agent: read this file, then `PROGRESS.md`, then run `make check`.
 
@@ -16,9 +17,9 @@ If you are an agent: read this file, then `PROGRESS.md`, then run `make check`.
 
 ```sh
 make setup       # Install dependencies (bun install)
-make dev         # Start dashboard + plugin in dev mode
+make dev         # Start dashboard in dev mode
 make check       # Full verification pipeline (typecheck + test)
-make test        # Run all tests (plugin + sdk + dashboard)
+make test        # Run all tests (skill + sdk + dashboard)
 make e2e         # End-to-end tests (real plugin load + tool exercise)
 make vcr         # Verify Code Reality check via feature_list.json
 make verify-feature ID=<n>  # Verify feature ID from feature_list.json
@@ -42,7 +43,9 @@ These rules are not optional. Violations break long sessions.
   # why: Stale docs are worse than no docs.
 - **MUST** follow the WIP=1 rule: only one feature active at a time.
   # why: Parallel WIP prevents VCR from reaching 1.0.
-- **MUST NOT** use `cline serve` as a subprocess — use ClineCore in-process.
+- **MUST NOT** use `claude daemon` or any persistent subprocess for the
+  runtime. Claude Code is in-process by default; if you need a long-running
+  background context, use `claude --bg` per the Claude Code CLI docs.
   # why: Subprocess hangs in headless test envs.
 - **MUST NOT** call dashboard HTTP from plugin for memory — use the in-process vault.
   # why: The plugin must work without a dashboard.
@@ -50,6 +53,40 @@ These rules are not optional. Violations break long sessions.
   # why: `make clean-check` fails on these.
 - **MUST NOT** skip E2E tests when changes cross component boundaries.
   # why: Unit tests pass on stubs; only E2E catches drift.
+- **MUST** configure tool access via `.claude/settings.json` (project) or
+  `~/.claude/settings.json` (user). Permission table is expressed as a
+  Claude Code allow/deny list scoped to the Claude Code tool surface:
+  Read, Edit, Write, Bash, Grep, Glob, WebFetch, WebSearch, NotebookEdit,
+  Agent (subagent dispatch with `run_in_background` / `isolation: "worktree"`),
+  Skill, AskUserQuestion, SendMessage.
+
+## Operating Manual (Claude Code-aware)
+
+This harness runs **inside Claude Code**. Its hooks execute in Claude Code's
+event loop (`PreToolUse`, `PostToolUse`, `UserPromptSubmit`,
+`SessionStart`, `SessionEnd`); its skills live under `.claude/skills/` and
+are loaded by name; its agents live under `.claude/agents/` and are
+dispatched via the `Agent` tool; its MCP servers live under
+`.claude/mcp.json` and are spawned at session start. Plugin / agent
+extension logic that previously needed Cline's `AgentPlugin` API is now
+expressed as a Claude Code skill (markdown + optional hooks script) plus,
+when state is needed across sessions, a Claude Code MCP server registered
+via the Agent SDK (`@anthropic-ai/claude-agent-sdk`).
+
+The mistake limit follows Claude Code's default of `6` consecutive
+tool-validation failures before a session is aborted; specific agents
+may override this in their `.claude/agents/<agent>.md` `permission`
+frontmatter (or via `isolation: { max_mistakes: 10 }` on the Agent
+tool call). The plugin's previous `clineruntimeMaxConsecutiveMistakes`
+field is renamed `claudeAgentMaxConsecutiveMistakes` in v6.3.0; the
+default is 10 (the floor is always Math.max'd against the runtime's
+default).
+
+The hook shape is the Claude Code event bag: each hook receives a
+typed payload and returns either `{ continue: true }` (pass through),
+`{ continue: false, stopReason: "..." }` (block), or, for `PreToolUse`
+hooks, `{ hookSpecificOutput: { permissionDecision: "allow" | "deny" | "ask", ...}}`
+(matches the previous `decision: allow|require-approval|deny` semantics).
 
 ## State files (where the system remembers things)
 
@@ -63,15 +100,22 @@ These rules are not optional. Violations break long sessions.
 - `templates/sprint-contract.md` — Pre-feature negotiation template
 - `templates/evaluator-rubric.md` — Sprint scoring rubric
 - `templates/clean-state-checklist.md` — 5-dimension exit checklist
+- `.claude/settings.json` — Project-scoped Claude Code tool permissions
+- `.claude/agents/*.md` — Bizar agent definitions (Odin, Frigg, ...)
+- `.claude/skills/*/SKILL.md` — Bizar skill packs (auto-loaded by name)
+- `.claude/commands/*.md` — User/project-level slash commands
+- `.claude/hooks/*` — Executable hook scripts (PreToolUse, PostToolUse, ...)
+- `.claude/mcp.json` — MCP server registrations (Semble, Bizar memory, ...)
 
 ## Clock-in (start of session)
 
 1. Read `PROGRESS.md` → confirm starting state + last commit.
-2. Run `make check` → confirm green baseline.
-3. Read `feature_list.json` → pick next `not_started` feature (WIP=1).
-4. If feature needs negotiation, fill `templates/sprint-contract.md`.
-5. Mark feature `active` in `feature_list.json`, commit.
-6. Run `make session-start`.
+2. Read `CLAUDE.md` (Claude Code reads this automatically).
+3. Run `make check` → confirm green baseline.
+4. Read `feature_list.json` → pick next `not_started` feature (WIP=1).
+5. If feature needs negotiation, fill `templates/sprint-contract.md`.
+6. Mark feature `active` in `feature_list.json`, commit.
+7. Run `make session-start`.
 
 ## Clock-out (end of session)
 
@@ -86,7 +130,8 @@ These rules are not optional. Violations break long sessions.
 
 > **Context anxiety warning:** If running low on context, do NOT rush
 > to finish. Stop, update `PROGRESS.md` Next Steps with concrete actions,
-> commit a clean checkpoint.
+> commit a clean checkpoint. Claude Code's `/compact` is the safety net;
+> reach for it before panic-editing.
 
 ## Definition of Done (L09)
 
@@ -104,7 +149,7 @@ Runtime signals include:
 - `bun run /tmp/bh-full-e2e.mjs` exits 0 (22/22 pass)
 - Plugin `setup()` returns in < 1s and registers 19 tools
 - Memory tools round-trip (write → read → list → search)
-- Cline agent teams tools registered
+- Claude Code agent dispatch wired (Odin → subagents via `Agent` tool)
 - Kanban board renders against `/api/tasks`
 
 ## Feature List Rules (L08)
@@ -117,14 +162,14 @@ State machine: `not_started` → `active` → `passing` (or back to `active` on 
 
 ## Architecture Boundaries (L10)
 
-- `plugins/bizar/` is **Layer 0** (Core).
-- `bizar-dash/` is **Layer 1** (UI).
-- They communicate via ClineCore SDK, never via raw HTTP/stdio for memory.
+- `.claude/skills/` + `.claude/mcp.json` + `.claude/agents/` — Layer 0 (Core). Skills and MCP servers replace the previous plugin layer.
+- `bizar-dash/` — Layer 1 (UI).
+- They communicate via the Claude Code Agent SDK, never via raw HTTP/stdio for memory.
 
 `make check-arch` enforces:
-- Plugin must not `import` from `bizar-dash/` (cross-layer).
-- Plugin must not call `fetch('http://127.0.0.1:...')` for memory.
-- Dashboard must not re-implement ClineCore features.
+- Skill must not import from `bizar-dash/` (cross-layer).
+- Skill must not call `fetch('http://127.0.0.1:...')` for memory.
+- Dashboard must not re-implement Claude Code Agent SDK features.
 
 Every code-review finding becomes a rule in `.harness/arch-rules.json`
 with `what` / `why` / `fix` fields.
@@ -166,7 +211,7 @@ A session is "clean" when ALL FIVE dimensions pass:
 - [docs/safety.md](docs/safety.md) — DANGEROUS_PATTERNS reference (v6.0.0)
 - [docs/curator.md](docs/curator.md) — Skill curator reference (v6.0.0)
 - [docs/graph-tools.md](docs/graph-tools.md) — Knowledge graph tools (v6.0.0)
-- [docs/migration-guide.md](docs/migration-guide.md) — OpenCode → Cline upgrade
+- [docs/migration-guide.md](docs/migration-guide.md) — Claude Code migration (v6.3.0)
 - [docs/decisions/](docs/decisions/) — individual ADRs (see DECISIONS.md)
 - [plugins/bizar/ARCHITECTURE.md](plugins/bizar/ARCHITECTURE.md) — plugin module
 - [plugins/bizar/CONSTRAINTS.md](plugins/bizar/CONSTRAINTS.md) — plugin hard rules
@@ -178,21 +223,28 @@ A session is "clean" when ALL FIVE dimensions pass:
 
 ```
 BizarHarness/
-├── AGENTS.md               # entry point
+├── AGENTS.md               # entry point (canonical)
+├── CLAUDE.md               # mirror of AGENTS.md for Claude Code
 ├── PROGRESS.md             # current state, in progress, next steps
 ├── DECISIONS.md            # architectural decisions
 ├── feature_list.json       # machine-readable features
 ├── Makefile                # setup / dev / check / test / e2e / ...
 ├── package.json            # bun workspace root
 ├── .nvmrc                  # pinned runtime version
-├── .claude/settings.json   # scoped tool access
+├── .claude/
+│   ├── settings.json       # scoped tool access
+│   ├── agents/             # Odin, Frigg, ... (one .md per agent)
+│   ├── skills/             # auto-loaded SKILL.md packs
+│   ├── commands/           # user-level slash commands
+│   ├── hooks/              # executable hook scripts
+│   └── mcp.json            # MCP server registrations
 ├── .harness/
 │   ├── arch-rules.json
 │   └── traces/             # gitignored
 ├── docs/                   # architecture, quality, decisions
 ├── templates/              # sprint contract, rubric, clean-state
 ├── scripts/                # verify-feature, check-arch, clean-state, session-trace
-├── plugins/bizar/          # Cline plugin + 19 tools
-├── packages/sdk/           # SDK wrapper
+├── plugins/bizar/          # Bizar MCP server + 19 tools
+├── packages/sdk/           # SDK wrapper around Claude Code Agent SDK
 └── bizar-dash/             # dashboard server + UI
 ```

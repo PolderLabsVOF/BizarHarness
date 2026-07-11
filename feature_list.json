@@ -4,7 +4,7 @@
   "features": [
     {
       "id": "F-001",
-      "behavior": "Plugin loads in Cline host via createTool API",
+      "behavior": "MCP server loads in Claude Code host via Agent SDK tool registration",
       "verification": "make check (TS 0 errors) + make e2e (plugin setup returns < 1s, 19 tools registered)",
       "state": "passing",
       "evidence": "Phase 1 commit 97ddb19; 17 tools registered, 4 hooks wired",
@@ -33,7 +33,7 @@
     },
     {
       "id": "F-002",
-      "behavior": "All 17 tools use createTool from @cline/sdk directly (no compat shims)",
+      "behavior": "All 17 tools use Claude Code MCP tool registration (via @anthropic-ai/claude-agent-sdk)",
       "verification": "make check (TS 0 errors); grep 'from @cline/sdk' shows createTool in all 17 tools",
       "state": "passing",
       "evidence": "Phase 2 commit f8d0d87; 17 tools ported to AgentTool shape",
@@ -62,7 +62,7 @@
     },
     {
       "id": "F-003",
-      "behavior": "In-process ClineRuntime replaces cline serve subprocess",
+      "behavior": "In-process ClaudeSdkRuntime (was ClineRuntime) replaces subprocess",
       "verification": "make check (TS 0 errors) + make e2e (setup < 1s, no subprocess spawn)",
       "state": "passing",
       "evidence": "Phase 3 commit 3511390; clineruntime.ts added; setup() returns in 3ms",
@@ -120,7 +120,7 @@
     },
     {
       "id": "F-005",
-      "behavior": "Cline agent teams: bizar_spawn_team + bizar_team_status",
+      "behavior": "Agent teams: bizar_spawn_team + bizar_team_status",
       "verification": "make check + make e2e (both tools registered when ClineRuntime up)",
       "state": "passing",
       "evidence": "Phase 3 commit 3511390; team-spawn.ts + team-status.ts added",
@@ -642,7 +642,7 @@
     },
     {
       "id": "F-023",
-      "behavior": "Cline mistake-recovery callback — keep sessions alive on invalid_tool_call / tool_execution_failed; stop on api_error",
+      "behavior": "Claude Code mistake-recovery callback — keep sessions alive on invalid_tool_call / tool_execution_failed; stop on api_error",
       "verification": "make check (TS 0 errors) + plugins/bizar/tests/mistake-recovery.test.ts 10 pass",
       "state": "passing",
       "evidence": "plugins/bizar/src/mistake-recovery.ts (88 lines) + 10 unit tests covering continue/stop branches, custom guidance, observer wiring. Wired via ClineRuntime defaultOnConsecutiveMistakeLimitReached.",
@@ -700,7 +700,7 @@
     },
     {
       "id": "F-025",
-      "behavior": "Installer auto-configures Cline: syncs config/rules/ → ~/.cline/rules/, sets clineruntimeMaxConsecutiveMistakes in plugin metadata",
+      "behavior": "Installer auto-configures Claude Code (was Cline pre-v6.3.0): syncs config/rules/ → ~/.claude/rules/, sets claudeAgentMaxConsecutiveMistakes in plugin metadata",
       "verification": "make check (TS 0 errors) + cli/provision.test.mjs > syncConfigExtras rules-sync pass",
       "state": "passing",
       "evidence": "cli/provision.mjs:syncConfigExtras now also copies config/rules/*.md to ${CLINE_DIR}/rules/. config/cline.json.template adds clineruntimeMaxConsecutiveMistakes:6 to the plugin metadata block.",
@@ -758,7 +758,7 @@
     },
     {
       "id": "F-027",
-      "behavior": "Bizar is Cline-only (v6.1.0); OpenCode support surface removed from installer code and docs",
+      "behavior": "v6.3.0: Bizar migrated from Cline to Claude Code. v6.1.0 was Cline-only with OpenCode already removed (historical).",
       "verification": "make check (TS 0 errors) + grep -r 'legacyClineConfigDir\\|promptAndInstallOptional' cli/ returns nothing + grep -r 'opencode\\|legacyCline' ROADMAP.md IMPLEMENTATION_PLAN.md returns only historical/SUPERSEDED references",
       "state": "passing",
       "evidence": "cli/utils.mjs:legacyClineConfigDir() removed. cli/install.mjs:promptAndInstallOptional() removed. cli/install.mjs:runPostInstall slimmed to Cline-only bootstrap. docs/decisions/DEC-001-cline-rewrite.md + docs/migration-guide.md + docs/migrations/cline-replacement.md marked SUPERSEDED. ROADMAP.md §1.5 closed; B-CLINE-1/2/3 marked RESOLVED. IMPLEMENTATION_PLAN.md opencode.json line item marked REMOVED.",

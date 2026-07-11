@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "mcpServers": {
+    "bizar": {
+      "command": "npx",
+      "args": ["-y", "@polderlabs/bizar-sdk", "mcp"],
+      "env": {
+        "BIZAR_HOME": "${HOME}/.bizar_home",
+        "BIZAR_MEMORY_VAULT": "${HOME}/.bizar_home/memory"
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "mcp__bizar__memory_read",
+      "mcp__bizar__memory_list",
+      "mcp__bizar__memory_search",
+      "mcp__bizar__memory_write",
+      "mcp__bizar__plan_action",
+      "mcp__bizar__open_kb",
+      "mcp__bizar__loop_list",
+      "mcp__bizar__loop_status",
+      "mcp__bizar__loop_start",
+      "mcp__bizar__loop_stop",
+      "mcp__bizar__graph_query",
+      "mcp__bizar__graph_path",
+      "mcp__bizar__danger_check",
+      "Read(~/.bizar_memory/**)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Write(./node_modules/**)",
+      "Write(./package-lock.json)",
+      "Write(./yarn.lock)",
+      "Write(./pnpm-lock.yaml)",
+      "Bash(rm -rf /)",
+      "Bash(sudo *)"
+    ]
+  },
+  "env": {
+    "BIZAR_HOME": "${HOME}/.bizar_home",
+    "BIZAR_MEMORY_VAULT": "${HOME}/.bizar_home/memory",
+    "BIZAR_LOOPS_DIR": "${HOME}/.bizar_loops"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/pretooluse-editwrite.mjs",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/pretooluse-bash.mjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/posttooluse-editwrite.mjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/userpromptsubmit-tag.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/sessionstart-prime.mjs",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/sessionend-recall.mjs",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

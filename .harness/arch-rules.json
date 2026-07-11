@@ -1,47 +1,47 @@
 {
   "$schema": "https://bizar.dev/schemas/arch-rules.v1.json",
-  "description": "Architectural rule registry for Bizar Harness. Each rule has what/why/fix fields. Rules are run by scripts/check-arch.sh.",
+  "description": "Architectural rule registry for Bizar Harness (v6.3.0, Claude Code-native). Each rule has what/why/fix fields. Rules are run by scripts/check-arch.sh.",
   "rules": [
     {
       "id": "ARCH-001",
-      "description": "Plugin must not import from dashboard (cross-layer violation)",
-      "check": "! grep -rEn 'from.*bizar-dash' plugins/bizar/src --include='*.ts' --include='*.tsx' --include='*.mjs' 2>/dev/null",
+      "description": "SDK must not import from dashboard (cross-layer violation)",
+      "check": "! grep -rEn 'from.*bizar-dash' packages/sdk/src --include='*.ts' --include='*.tsx' --include='*.mjs' 2>/dev/null",
       "expect": "pass",
-      "what": "A file in plugins/bizar/src/ imports from bizar-dash/.",
-      "why": "The plugin (Layer 0) and dashboard (Layer 1) communicate via the ClineCore SDK. A direct import couples the layers and breaks the plugin's portability (e.g. running inside Cline without the dashboard).",
-      "fix": "Move the shared code to packages/sdk/ and import from there. The plugin should only depend on @cline/sdk, @cline/core, and packages/sdk/."
+      "what": "A file in packages/sdk/src/ imports from bizar-dash/.",
+      "why": "The SDK (Layer 0) and dashboard (Layer 1) communicate via the Claude Code MCP transport. A direct import couples the layers and breaks the SDK's portability (e.g. running inside Claude Code without the dashboard).",
+      "fix": "Move the shared code to packages/sdk/ and import from there. The SDK should only depend on @anthropic-ai/claude-agent-sdk and other packages/sdk/ modules."
     },
     {
       "id": "ARCH-002",
-      "description": "Plugin must not call dashboard HTTP for memory operations",
-      "check": "! grep -rEn \"fetch\\('http://127\\\\.0\\\\.0\\\\.1.*api/memory\" plugins/bizar/src --include='*.ts' --include='*.tsx' 2>/dev/null",
+      "description": "SDK must not call dashboard HTTP for memory operations",
+      "check": "! grep -rEn \"fetch\\('http://127\\\\.0\\\\.0\\\\.1.*api/memory\" packages/sdk/src --include='*.ts' --include='*.tsx' 2>/dev/null",
       "expect": "pass",
-      "what": "A memory tool in the plugin calls the dashboard's /api/memory HTTP endpoint.",
-      "why": "The plugin must work without the dashboard running. Memory is on disk at ~/.bizar_memory/ \u2014 reading/writing directly avoids a network hop and a runtime dependency.",
-      "fix": "Use the in-process vault helpers from plugins/bizar/src/memory-vault.ts (readNote, writeNote, listNotes, searchNotes)."
+      "what": "A memory tool in the SDK calls the dashboard's /api/memory HTTP endpoint.",
+      "why": "The SDK must work without the dashboard running. Memory is on disk at ~/.bizar_memory/ — reading/writing directly avoids a network hop and a runtime dependency.",
+      "fix": "Use the in-process vault helpers from packages/sdk/src/memory/index.ts (readNote, writeNote, listNotes, searchNotes)."
     },
     {
       "id": "ARCH-003",
-      "description": "Plugin must not spawn cline serve subprocess",
-      "check": "! grep -rEn \"^[^/]*Bun\\.spawn\\(\\s*\\[\\s*\"cline\"\" plugins/bizar/src --include=\"*.ts\" --include=\"*.tsx\" 2>/dev/null",
+      "description": "Plugin must not spawn `claude daemon` subprocess (Claude Code is in-process by default; use `claude --bg` for background sessions per the Claude Code CLI docs)",
+      "check": "! grep -rEn \"Bun\\.spawn\\(\\s*\\[\\s*\\\"claude\\\"\\s*,\\s*\\\"daemon\\\"\" packages/sdk/src --include=\"*.ts\" --include=\"*.tsx\" 2>/dev/null",
       "expect": "pass",
-      "what": "Plugin code spawns the cline serve child subprocess.",
-      "why": "The subprocess hangs in headless test environments (no cline CLI, no creds). The plugin embeds ClineCore in-process via ClineRuntime instead.",
-      "fix": "Replace serve.ts with clineruntime.ts; remove the bun.spawn([\"cline\",\"serve\",...]) call. Use ClineRuntime.startSession / send / abort / subscribe instead."
+      "what": "Plugin or SDK code spawns the `claude daemon` subprocess unconditionally.",
+      "why": "Claude Code is in-process by default (no daemon). Spawning the daemon hangs in headless test environments (no claude CLI, no creds) and breaks the Agent SDK's in-process contract.",
+      "fix": "Embed `@anthropic-ai/claude-agent-sdk` directly. If you really need a long-running background Claude Code session, opt in via `claude --bg` and a `--bg` flag the user passes explicitly. Otherwise use the MCP stdio transport from @anthropic-ai/claude-agent-sdk."
     },
     {
       "id": "ARCH-004",
-      "description": "All tools must use createTool from @cline/sdk (no manual AgentTool shape)",
-      "check": "! grep -rEn 'name:.*inputSchema:.*execute:' plugins/bizar/src/tools --include='*.ts' 2>/dev/null | grep -v 'createTool\\|inputSchema:' | head -1; true",
+      "description": "All tools must use the Claude Code MCP tool registration shape via @anthropic-ai/claude-agent-sdk (no hand-rolled createTool wrappers from @cline/sdk)",
+      "check": "! grep -rEn 'name:.*inputSchema:.*execute:' packages/sdk/src/mcp --include='*.ts' 2>/dev/null | grep -v 'tool\\b\\|inputSchema:' | head -1; true",
       "expect": "pass",
-      "what": "A tool in plugins/bizar/src/tools/ is hand-rolled instead of using createTool().",
-      "why": "createTool() handles inputSchema validation, the AgentTool wrapper, and metadata. Hand-rolled tools drift from the Cline SDK contract over time.",
-      "fix": "Import createTool from @cline/sdk and call it with { name, description, inputSchema: z.object({...}).shape, execute }."
+      "what": "A tool in packages/sdk/src/mcp/ is hand-rolled instead of using the Claude Code MCP tool registration shape (was `createTool` from @cline/sdk under the Cline runtime).",
+      "why": "Claude Code's tool() handles inputSchema validation, the MCP tool wrapper, and metadata. Hand-rolled tools drift from the SDK contract over time and skip zod schema enforcement.",
+      "fix": "Import `tool` from @anthropic-ai/claude-agent-sdk and call it with { name, description, inputSchema: z.object({...}).shape, handler }. Do not import from @cline/sdk or @cline/core."
     },
     {
       "id": "ARCH-005",
       "description": "No debug artifacts in src/ (console.log / debugger / .only())",
-      "check": "! grep -rEn '(console\\\\.log|debugger|\\\\.only\\\\()' plugins/bizar/src packages/sdk/src bizar-dash/src --include='*.ts' --include='*.tsx' --include='*.mjs' 2>/dev/null | grep -v test | grep -v '\\\\.test\\\\.' | head -1; true",
+      "check": "! grep -rEn '(console\\\\.log|debugger|\\\\.only\\\\()' packages/sdk/src plugins/bizar/index.ts --include='*.ts' --include='*.tsx' --include='*.mjs' 2>/dev/null | grep -v test | grep -v '\\\\.test\\\\.' | head -1; true",
       "expect": "pass",
       "what": "Debug artifact found in src/ (console.log, debugger, or .only()).",
       "why": "Debug artifacts leak into production, slow down startup, and pollute logs. The clean-state check enforces their absence.",
@@ -50,20 +50,20 @@
     {
       "id": "ARCH-006",
       "description": "Memory vault location must be configurable via BIZAR_MEMORY_VAULT env var",
-      "check": "grep -q 'BIZAR_MEMORY_VAULT' plugins/bizar/src/memory-vault.ts",
+      "check": "grep -q 'BIZAR_MEMORY_VAULT' packages/sdk/src/memory/index.ts",
       "expect": "pass",
       "what": "Memory vault location is hardcoded; BIZAR_MEMORY_VAULT env var not honored.",
       "why": "Users may want a different vault location (e.g. project-local .obsidian/). The env var lets them override without code changes.",
-      "fix": "Use resolveVaultRoot() from plugins/bizar/src/memory-vault.ts \u2014 it checks process.env.BIZAR_MEMORY_VAULT first, then falls back to ~/.bizar_memory/."
+      "fix": "Use resolveVaultRoot() from packages/sdk/src/memory/index.ts — it checks process.env.BIZAR_MEMORY_VAULT first, then falls back to ~/.bizar_memory/."
     },
     {
       "id": "ARCH-007",
-      "description": "All 17 + 2 = 19 tools must be registered in the plugin entry",
-      "check": "test $(grep -c 'create.*Tool' plugins/bizar/index.ts | head -1) -ge 19",
+      "description": "SDK must define the BIZAR_TOOLS tool registry with the documented surface",
+      "check": "test $(grep -c 'name:' packages/sdk/src/mcp/server.ts | head -1) -ge 15",
       "expect": "pass",
-      "what": "Fewer than 19 tools registered in the plugin entry.",
-      "why": "The harness ships 17 core tools + 2 Cline agent team tools = 19. New tools must be added to the buildTools() function in plugins/bizar/index.ts.",
-      "fix": "Add the tool factory call in buildTools() and import it at the top of plugins/bizar/index.ts."
+      "what": "Fewer than the documented number of SDK tools registered.",
+      "why": "The SDK ships a curated tool surface (memory, plan, kb, graph, sandbox, loop). New tools must be added to the BIZAR_TOOLS array in packages/sdk/src/mcp/server.ts.",
+      "fix": "Add the tool factory call inside the BIZAR_TOOLS array and import it at the top of packages/sdk/src/mcp/server.ts."
     }
   ]
 }

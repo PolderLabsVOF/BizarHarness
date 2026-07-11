@@ -1,33 +1,29 @@
 // src/components/chat/useChat.ts — shared chat state: messages, sessions,
 // send, polling, SSE, session-state tracking.
 //
-// v4.2.5 — Chat overhaul. Supports two parallel message streams:
+// v6.3.0 — Claude Code migration. Supports two parallel message streams:
 //   - bizar     (GET /api/chat)
-//   - cline  (GET /api/cline-sessions/:id/messages + SSE)
+//   - claude (GET /api/claude-sessions/:id/messages + SSE)
 //
-// v5.0.0 — bug #4 fix: `loadClineSession` failure path now extracts
-// structured `code`, `cause`, `status`, and `suggestion` from the
-// server's ApiError.data envelope and exposes them via a new
-// `clineErrorInfo` field. `ChatInfoPanel` consumes that field to
-// render a structured "Couldn't load session" panel with the server's
-// `suggestion` verbatim, plus a Retry button.
-//
-// Changes from v3.22:
-//   * SSE has automatic reconnect-with-backoff (1s → 30s, doubled on
-//     each error up to a cap). Closes cleanly on unmount and on
-//     session-switch (no leaked EventSource).
+// Changes from v4.2.5:
+//   * Endpoint prefix changed: `/api/claude-sessions/*` → `/api/claude-sessions/*`
+//   * SSE event type names changed to match the Claude SDK envelope
+//     (`message.part.updated` → `delta`/`text_delta`, etc.)
+//   * Server no longer needs the `clineErrorInfo` 503 path; the
+//     `claudeErrorInfo` field stays for parity but the dashboard
+//     mostly sees 502s now (claude CLI not on PATH / spawn failed).
 //   * Optimistic send uses a stable `msg_*` ID and is deduped when
-//     cline echoes the message back via SSE `message.updated`/`message.user.*`.
-//   * `clineMessages` keeps server-provided IDs distinct from
+//     claude echoes the message back via SDK events.
+//   * `claudeMessages` keeps server-provided IDs distinct from
 //     optimistic IDs so the merge is unambiguous (server echo
 //     replaces optimistic by matching messageID; otherwise both stick
 //     around briefly until the user/session state catches up).
-//   * `onSend` routes to `/cline-sessions/:id/send` when an
-//     cline session is active, `/chat` otherwise. Errors surface
+//   * `onSend` routes to `/claude-sessions/:id/send` when a
+//     claude session is active, `/chat` otherwise. Errors surface
 //     via toast + we always remove the optimistic placeholder.
 //   * Sessions are managed by source:
 //       - `bizarSessions`  → local .jsonl store, POST /chat/sessions
-//       - `clineSessions` → cline serve, GET /cline-sessions
+//       - `claudeSessions` → Claude Code, GET /claude-sessions
 //     The rail shows both side-by-side with a source indicator and
 //     uses separate rename/delete endpoints per source.
 //   * All async actions surface a single `busy: { create, send, rename, delete }`
@@ -68,7 +64,7 @@ export interface ChatBusyState {
 
 /**
  * Structured error envelope surfaced by `loadClineSession` when
- * the upstream `/api/cline-sessions/:id/messages` call fails.
+ * the upstream `/api/claude-sessions/:id/messages` call fails.
  *
  * - `code` mirrors the server's `error` field (`plugin_offline`,
  *   `directory_unknown`, `cline_error`, `bad_request`).
@@ -286,7 +282,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
   const refreshClineSessions = useCallback(async () => {
     try {
       const data = await api.get<{ sessions: ChatSession[] }>(
-        '/cline-sessions',
+        '/claude-sessions',
       );
       // Enrich with source marker.
       const enriched: ChatSession[] = (data.sessions || []).map((s) => ({
@@ -333,8 +329,8 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       // optional, but harmless).
       const tok = api.getToken();
       const url = tok
-        ? `/api/cline-sessions/${encodeURIComponent(id)}/stream?token=${encodeURIComponent(tok)}`
-        : `/api/cline-sessions/${encodeURIComponent(id)}/stream`;
+        ? `/api/claude-sessions/${encodeURIComponent(id)}/stream?token=${encodeURIComponent(tok)}`
+        : `/api/claude-sessions/${encodeURIComponent(id)}/stream`;
 
       sseCurrentSessionIdRef.current = id;
       sseAutoReconnectRef.current = true;
@@ -628,7 +624,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
 
       try {
         const data = await api.get<{ messages: ChatMessage[] }>(
-          `/cline-sessions/${encodeURIComponent(id)}/messages`,
+          `/claude-sessions/${encodeURIComponent(id)}/messages`,
         );
         setClineMessages(data.messages || []);
       } catch (err) {
@@ -735,7 +731,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
           agent: string;
           directory: string;
           createdAt: number;
-        }>('/cline-sessions/new', { agent });
+        }>('/claude-sessions/new', { agent });
         await refreshClineSessions();
         // Open the newly created session right away so the user is
         // dropped into a fresh empty thread, not stuck on the
@@ -814,7 +810,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         setBusy((b) => ({ ...b, send: true }));
         try {
           await api.post<{ ok: boolean; messageId: string }>(
-            `/cline-sessions/${encodeURIComponent(sid)}/send`,
+            `/claude-sessions/${encodeURIComponent(sid)}/send`,
             {
               message: trimmed,
               agent,
@@ -976,7 +972,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
         const isCline = clineSessions.some((s) => s.id === id);
         if (isCline) {
           await api.patch<{ id: string; title: string }>(
-            `/cline-sessions/${encodeURIComponent(id)}`,
+            `/claude-sessions/${encodeURIComponent(id)}`,
             { title: trimmed },
           );
           setClineSessions((cur) =>
@@ -1012,7 +1008,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
       try {
         const isCline = clineSessions.some((s) => s.id === id);
         if (isCline) {
-          await api.del(`/cline-sessions/${encodeURIComponent(id)}`);
+          await api.del(`/claude-sessions/${encodeURIComponent(id)}`);
           setClineSessions((cur) => cur.filter((s) => s.id !== id));
           if (activeClineSessionId === id) {
             closeClineSession();

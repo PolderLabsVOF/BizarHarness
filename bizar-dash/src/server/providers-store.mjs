@@ -1074,58 +1074,31 @@ export const providersStore = {
       /* best-effort */
     }
 
-    // Source 3: cline serve HTTP API
+    // Source 3: claude CLI probe. v6.3.0 — Claude Code has no
+    // equivalent of the old cline serve HTTP API. Instead we
+    // ping `claude -v` to confirm the runtime is reachable and,
+    // if so, surface it as a "claude-cli" provider entry with the
+    // models Claude Code natively supports.
     try {
-      const { readServeInfo } = await import('./serve-info.mjs');
-      const info = readServeInfo();
-      if (info && info.baseUrl) {
-        const auth = 'Basic ' + Buffer.from(`cline:${info.password || ''}`).toString('base64');
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 1500);
-        try {
-          const resp = await fetch(`${info.baseUrl}/api/providers`, {
-            headers: { Authorization: auth },
-            signal: ctrl.signal,
-          });
-          if (resp.ok) {
-            const body = await resp.json().catch(() => null);
-            const list = Array.isArray(body?.providers)
-              ? body.providers
-              : Array.isArray(body?.data)
-              ? body.data
-              : Array.isArray(body)
-              ? body
-              : [];
-            for (const p of list) {
-              if (!p || typeof p !== 'object') continue;
-              const id = p.id || p.name;
-              if (!id) continue;
-              const models = (Array.isArray(p.models) ? p.models : []).map((m) => {
-                if (typeof m === 'string') return { id: m, name: m };
-                return {
-                  id: m.id || m.name || String(m),
-                  name: m.name || m.id || String(m),
-                };
-              });
-              upsert(
-                id,
-                {
-                  name: p.name || id,
-                  baseURL: p.baseURL || '',
-                  models,
-                },
-                'serve',
-              );
-            }
-          }
-        } catch {
-          /* serve unreachable — fall through */
-        } finally {
-          clearTimeout(timer);
-        }
+      const { spawnSync } = await import('node:child_process');
+      const probe = spawnSync('claude', ['-v'], { stdio: 'ignore', timeout: 1500 });
+      if (probe.status === 0) {
+        upsert(
+          'claude-cli',
+          {
+            name: 'Claude Code CLI',
+            baseURL: '',
+            models: [
+              { id: 'claude-opus-4', name: 'Claude Opus 4' },
+              { id: 'claude-sonnet-4', name: 'Claude Sonnet 4' },
+              { id: 'claude-haiku-4', name: 'Claude Haiku 4' },
+            ],
+          },
+          'cli',
+        );
       }
     } catch {
-      /* best-effort */
+      /* claude CLI unreachable — fall through */
     }
 
     return Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id));

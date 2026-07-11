@@ -176,9 +176,10 @@ export const backgroundStore = {
 
   /**
    * Best-effort: kill the tmux session for an instance.
-   * The plugin's session is HTTP-based, so this only stops the
-   * terminal attach; the underlying cline session continues
-   * unless the operator also aborts it.
+   * v6.3.0 — Claude Code sessions are spawned directly via the
+   * claude-bg-spawner; we also kill the Claude Code process
+   * tracked under `inst.sessionId` so the bg agent is fully
+   * terminated.
    */
   async kill(instanceId) {
     const steps = [];
@@ -192,26 +193,24 @@ export const backgroundStore = {
 
     if (inst.sessionId) {
       try {
-        const { readServeInfo, abortSession } = await import('./serve-info.mjs');
-        const serveInfo = readServeInfo();
-        if (!serveInfo) {
-          ok = false;
-          steps.push({ step: 'abort-session', ok: false, note: 'serve-info unavailable' });
+        // v6.3.0 — Claude Code has no equivalent of the Cline
+        // serve HTTP `/abort` endpoint. The bg-spawner tracks the
+        // Claude Code process for each instance id (which is the
+        // same value we already have) and exposes `killBgAgent()`.
+        const { isAlive, killBgAgent } = await import('./claude-bg-spawner.mjs').catch(() => ({}));
+        if (isAlive && isAlive(instanceId)) {
+          const killed = await killBgAgent(instanceId);
+          steps.push({ step: 'abort-session', ok: !!killed?.ok, ...(killed || {}) });
+          if (!killed?.ok) ok = false;
         } else {
-          const aborted = await abortSession(
-            serveInfo,
-            inst.sessionId,
-            inst.worktree || serveInfo.worktree,
-          );
-          steps.push({ step: 'abort-session', ...aborted });
-          if (!aborted.ok) ok = false;
+          steps.push({ step: 'abort-session', ok: true, note: 'no live claude process tracked' });
         }
       } catch (err) {
         ok = false;
         steps.push({ step: 'abort-session', ok: false, error: err instanceof Error ? err.message : String(err) });
       }
     } else {
-      steps.push({ step: 'abort-session', ok: true, note: 'no cline session id present' });
+      steps.push({ step: 'abort-session', ok: true, note: 'no claude session id present' });
     }
 
     if (inst._file && existsSync(inst._file)) {

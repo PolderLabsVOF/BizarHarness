@@ -10,7 +10,7 @@
  * /api/tasks/:id/start (POST)             — trigger dispatch of a queued task
  * /api/tasks/:id/status (PATCH)           — move status (queued|doing|done|blocked|archived)
  * /api/tasks/:id/comments (POST)          — append comment
- * /api/tasks/:id/chat (GET)               — cline messages for the task's bg instance
+ * /api/tasks/:id/chat (GET)               — claude messages for the task's bg instance
  * /api/tasks/:id/artifacts (GET)          — list artifacts for this task
  * /api/tasks/:id/artifacts (POST)         — attach artifact + link to task
  * /api/tasks/:id/timer (POST)             — toggle timer
@@ -34,10 +34,9 @@ import { notificationsStore } from '../notifications-store.mjs';
 import { projectsStore } from '../projects-store.mjs';
 import { artifactsStore } from '../artifacts-store.mjs';
 import {
-  readServeInfo,
-  listClineMessages,
-  normalizeClineMessage,
-} from '../serve-info.mjs';
+  listClaudeMessages,
+  normalizeClaudeMessage,
+} from '../claude-info.mjs';
 import { readActiveProjectId, wrap } from './_shared.mjs';
 import { ALLOWED_TASK_STATUSES } from '../tasks-store.mjs';
 
@@ -207,10 +206,15 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
   }));
 
   // v3.5.5 — Chat-task linkage. Given a task id, return the
-  // cline session's messages so the chat UI can open a thread
-  // for an in-progress or completed task. The task must have a
-  // `bgInstanceId` (or `sessionId`) in its metadata — the delegator
-  // writes that when the cline session is created.
+  // Claude Code session's messages so the chat UI can open a
+  // thread for an in-progress or completed task. The task must
+  // have a `bgInstanceId` (or `sessionId`) in its metadata — the
+  // delegator writes that when the Claude Code session is created.
+  //
+  // v6.3.0 — Reads from `~/.claude/sessions/<id>/messages.jsonl`
+  // via `claude-info.listClaudeMessages()` instead of the old
+  // cline serve HTTP endpoint. The 503 "plugin offline" path is
+  // gone — Claude Code is just a CLI on PATH.
   //
   // Response shape:
   //   { taskId, bgInstanceId, sessionId, agent, messages: [{id,role,content,ts}, ...] }
@@ -218,8 +222,7 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
   // Status codes:
   //   200 — messages returned (may be empty)
   //   404 — task not found, or no bg instance / session id
-  //   503 — plugin offline
-  //   502 — cline listMessages call failed
+  //   502 — claude listMessages call failed
   router.get('/tasks/:id/chat', wrap(async (req, res) => {
     const projectId = req.query.projectId || readActiveProjectId();
     const task = await tasksStore.getById(projectId, req.params.id);
@@ -246,41 +249,30 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
     if (!bgInstanceId && !sessionId) {
       return res.status(404).json({
         error: 'no_bg_instance',
-        message: 'task has no bg instance or cline session id',
-        taskId: task.id,
-      });
-    }
-
-    const serveInfo = readServeInfo();
-    if (!serveInfo) {
-      return res.status(503).json({
-        error: 'plugin_offline',
-        message: 'cline plugin is not running',
+        message: 'task has no bg instance or claude session id',
         taskId: task.id,
       });
     }
     if (!sessionId) {
       return res.status(404).json({
         error: 'no_session',
-        message: 'bg instance has no cline session id',
+        message: 'bg instance has no claude session id',
         taskId: task.id,
         bgInstanceId,
       });
     }
 
-    const active = projectsStore.active();
-    const directory = (active && active.path) || serveInfo.worktree || '';
-    const result = await listClineMessages(serveInfo, sessionId, directory);
+    const result = listClaudeMessages(sessionId);
     if (!result.ok) {
       return res.status(502).json({
-        error: 'cline_error',
-        message: result.error || 'listClineMessages failed',
+        error: 'claude_error',
+        message: result.error || 'listClaudeMessages failed',
         taskId: task.id,
         sessionId,
       });
     }
     const messages = Array.isArray(result.messages)
-      ? result.messages.map(normalizeClineMessage)
+      ? result.messages.map(normalizeClaudeMessage)
       : [];
     res.json({
       taskId: task.id,

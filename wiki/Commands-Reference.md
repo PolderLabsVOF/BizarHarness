@@ -1,12 +1,12 @@
 # Commands Reference
 
-BizarHarness exposes three layers of slash commands inside cline. They are all invoked by typing `/<name>` in the cline prompt.
+BizarHarness exposes three layers of slash commands inside Claude Code. They are all invoked by typing `/<name>` in the Claude Code prompt.
 
 | Layer | Lives in | Scope | How it's discovered |
 |---|---|---|---|
-| **Bizar plugin** | bundled with the Bizar plugin (`plugins/bizar/src/commands.ts`) | Per cline session — the plugin parses your message in its `chat.message` hook | Always available when the plugin is loaded |
-| **User-level** | `~/.config/cline/commands/*.md` | Every cline session, any project | Read at cline startup |
-| **Project-level** | `<project>/.cline/commands/*.md` | Only when cline runs in that project | Read at cline startup |
+| **Bizar plugin** | bundled with the Bizar MCP server (`plugins/bizar/src/commands.ts`) | Per Claude Code session — the plugin parses your message in Claude Code's `UserPromptSubmit` hook | Always available when the plugin is loaded |
+| **User-level** | `~/.claude/commands/*.md` | Every Claude Code session, any project | Read at Claude Code startup |
+| **Project-level** | `<project>/.claude/commands/*.md` | Only when Claude Code runs in that project | Read at Claude Code startup |
 
 This page documents all three. New commands ship as plain markdown files with optional frontmatter — see [Contributing](Contributing) for the format.
 
@@ -50,13 +50,13 @@ When **on**, the agent will create a plan and wait for feedback on complex tasks
 
 ### `/help` (alias: `/commands`)
 
-List all available slash commands. The plugin's `/help` returns its own command list; the cline-built-in `/help` returns the broader set including user-level and project-level commands.
+List all available slash commands. The plugin's `/help` returns its own command list; the Claude Code built-in `/help` returns the broader set including user-level and project-level commands.
 
 ---
 
 ## Loop guard thresholds
 
-The Bizar plugin's loop guard is what keeps subagents from calling the same tool 30 times in a row. It runs on every `tool.execute.after` hook and tracks the recent window of identical calls. The canonical threshold table:
+The Bizar plugin's loop guard is what keeps subagents from calling the same tool 30 times in a row. It runs on every `PostToolUse` hook and tracks the recent window of identical calls. The canonical threshold table:
 
 | Count of identical calls in window | Decision | Action |
 |---|---|---|
@@ -66,7 +66,7 @@ The Bizar plugin's loop guard is what keeps subagents from calling the same tool
 | 8..11 | `escalate` | inject an explicit handoff to Odin |
 | 12+ | `block` | **throw** — the agent must recover (e.g. switch tools) |
 
-The defaults are `warn=5, escalate=8, block=12` with `windowSize=10`. They are configurable per project via `cline.json`:
+The defaults are `warn=5, escalate=8, block=12` with `windowSize=10`. They are configurable per project via `~/.claude/settings.json`:
 
 ```json
 "plugin": [
@@ -85,7 +85,7 @@ If a 12-threshold block fires and the agent tries again, the plugin's `EventStre
 
 ## User-level commands (ship with BizarHarness)
 
-These are deployed by `install.sh` to `~/.config/cline/commands/`. All BizarHarness users get them.
+These are deployed by `install.sh` to `~/.claude/commands/`. All BizarHarness users get them.
 
 ### Project setup and inspection
 
@@ -171,7 +171,7 @@ These are deployed by `install.sh` to `~/.config/cline/commands/`. All BizarHarn
 
 ## Project-level commands (per-project)
 
-Project commands are scoped to a single repo. They are loaded from `<project>/.cline/commands/*.md` and only work when cline is started in that project.
+Project commands are scoped to a single repo. They are loaded from `<project>/.claude/commands/*.md` and only work when Claude Code is started in that project.
 
 ### `/tailscale-serve` — MagicDNS hosting
 
@@ -199,7 +199,7 @@ The HTTP fallback (binding to the Tailscale IP) lives in `scripts/host-magicdns.
 
 ### How to add a project command
 
-Drop a markdown file in `<project>/.cline/commands/<name>.md` with this frontmatter:
+Drop a markdown file in `<project>/.claude/commands/<name>.md` with this frontmatter:
 
 ```markdown
 ---
@@ -214,14 +214,14 @@ Body of the command — the prompt that the model sees when the user
 types `/<name>`.
 ```
 
-Restart cline to pick up new commands.
+Restart Claude Code to pick up new commands.
 
 ---
 
 ## Customizing the command set
 
 - **Disable a command**: rename the `.md` file with a leading dot (`.audit.md`) or move it out of the commands directory.
-- **Override a default**: drop a same-named file in `~/.config/cline/commands/` (user-level wins) or `<project>/.cline/commands/` (project-level wins).
+- **Override a default**: drop a same-named file in `~/.claude/commands/` (user-level wins) or `<project>/.claude/commands/` (project-level wins).
 - **Per-project skill scoping**: see [Self-Improvement](Self-Improvement) for how `.bizar/PROJECT.md` records which skills are available where.
 
 ---

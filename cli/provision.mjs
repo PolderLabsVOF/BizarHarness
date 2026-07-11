@@ -1,16 +1,13 @@
 /**
  * cli/provision.mjs
  *
- * v4.4.7 — Unified installer + updater.
+ * v6.3.0 — Unified installer + updater (Claude Code-native).
  *
  * `bizar install` and `bizar update` used to be two separate code paths
  * (install.sh + cli/install.mjs for install, cli/update.mjs for update)
- * with massive overlap: both copied agents, both patched cline.json,
+ * with massive overlap: both copied agents, both patched settings.json,
  * both ran the plugin copy, both kicked off the service, both called
- * `bizar doctor` at the end. The two paths diverged over time, and the
- * user-visible bug was that `update` tried to install separate npm
- * packages (@polderlabs/bizar-plugin, @polderlabs/bizar-dash) that no
- * longer exist.
+ * `bizar doctor` at the end. The two paths diverged over time.
  *
  * This module is the single source of truth. Both `bizar install` and
  * `bizar update` call `runProvision({ mode, ... })`. The differences
@@ -21,9 +18,10 @@
  *            doctor. Does NOT kill running instances (fresh install
  *            has none).
  *   update:   refresh an existing install. Kills running instances,
- *            upgrades @polderlabs/bizar + cline via npm, re-copies
- *            agent files / plugin / skills, re-patches cline.json
- *            (idempotent), restarts the dashboard, runs doctor.
+ *            upgrades @polderlabs/bizar + @anthropic-ai/claude-code via
+ *            npm, re-copies agent files / skills / commands, re-patches
+ *            ~/.claude/settings.json (idempotent), restarts the
+ *            dashboard, runs doctor.
  *
  * Both modes are safe to re-run — every step is idempotent and skips
  * work that's already done.
@@ -58,55 +56,57 @@ export const PKG_MAIN = '@polderlabs/bizar';
 export const BIZAR_HOME = bizarConfigDir();
 
 /**
- * Resolve the Cline config directory.
+ * Resolve the Claude Code config directory.
  *
- * Cline (v3.0+) uses `~/.cline/` (or `$CLINE_DIR`) as the global config dir
- * for `agents/`, `skills/`, `plugins/`, `hooks/`, `rules/`, `workflows/`.
- * It also checks `~/.agents/skills/` for global agents, and
- * `~/Documents/Cline/{Plugins,Hooks,Rules,Workflows,Agents}/` as a
- * Documents-side mirror.
+ * Claude Code (v1.0+) uses `~/.claude/` (or `$CLAUDE_CONFIG_DIR`) as the
+ * global config dir for `agents/`, `skills/`, `plugins/`, `commands/`,
+ * `hooks/`, and `settings.json`.
  *
- * v4.4.7–v5.6.0 of this provisioner hard-coded `~/.config/cline/`, which was
- * the OpenCode layout. After the Phase-1 Cline migration (v5.6.0-beta.9),
- * agents/commands/skills were still being written to `~/.config/cline/` and
- * silently invisible to the `cline` CLI. Fixed in v5.6.0-beta.12.
+ * Resolution order (matches Claude Code's configuration discovery):
+ *   1. `process.env.CLAUDE_CONFIG_DIR` (explicit override)
+ *   2. `$HOME/.claude` (the Claude Code default)
+ *   3. (Windows only) `%USERPROFILE%/.claude`
  *
- * Resolution order (matches Cline's `resolveClineDir()` in
- * `@cline/shared/dist/storage/index.js`):
- *   1. `process.env.CLINE_DIR` (explicit override)
- *   2. `$HOME/.cline` (the Cline default — matches `cline config --config` discovery)
- *   3. (Windows only) `%APPDATA%\cline`
- *
- * `BIZAR_LEGACY_CLINE_DIR=1` opts back into the old `~/.config/cline/`
- * layout for users who deliberately want the legacy path.
+ * `BIZAR_LEGACY_CLAUDE_DIR=1` opts back into the old Cline layout
+ * (`~/.config/cline/`) for users who deliberately want the legacy path.
+ * Removed in v6.3.0 — Claude Code is the only supported backend.
  */
-function resolveClineDir() {
-  if (process.env.BIZAR_LEGACY_CLINE_DIR === '1') {
+function resolveClaudeDir() {
+  if (process.env.BIZAR_LEGACY_CLAUDE_DIR === '1') {
     return join(
       process.env.XDG_CONFIG_HOME || join(HOME, '.config'),
       'cline',
     );
   }
-  if (process.env.CLINE_DIR && process.env.CLINE_DIR.trim()) {
-    return process.env.CLINE_DIR.trim();
+  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
+    return process.env.CLAUDE_CONFIG_DIR.trim();
   }
   if (process.platform === 'win32') {
-    return join(process.env.APPDATA || HOME, 'cline');
+    return join(HOME, '.claude');
   }
-  return join(HOME, '.cline');
+  return join(HOME, '.claude');
 }
 
-export const CLINE_DIR = resolveClineDir();
+/**
+ * Compatibility export — many existing checks still reference this name.
+ * @deprecated Use `CLAUDE_DIR` instead.
+ */
+export const CLAUDE_DIR = resolveClaudeDir();
+
+/**
+ * Back-compat alias used by other modules + scripts.
+ * Same value as CLAUDE_DIR; kept so old imports still resolve.
+ * @deprecated Use `CLAUDE_DIR` instead.
+ */
+export const CLINE_DIR = resolveClaudeDir();
 
 /**
  * Legacy Cline directory (the old OpenCode layout).
  *
- * Kept as an opt-in fallback for users who already have agents/commands/
- * skills installed under `~/.config/cline/` and want to keep using them
- * there. The installer writes new content to `CLINE_DIR` (current Cline
- * default) but still emits a warning if `LEGACY_CLINE_DIR` exists.
+ * Kept as an opt-in fallback. The installer warns but does not write
+ * here under the v6.3.0 Claude Code-native flow.
  */
-export const LEGACY_CLINE_DIR = join(
+export const LEGACY_CLAUDE_DIR = join(
   process.env.XDG_CONFIG_HOME || join(HOME, '.config'),
   'cline',
 );
@@ -319,7 +319,7 @@ export function writeBizarSkillLock({ skillsSrc, agentsDir }) {
  *     clineJson: { path, hasPluginEntry, exists },
  *     service: { installed, running, unitPath },
  *     dashboard: { running, pid, port },
- *     clineCli: { version, latest },
+ *     claudeCli: { version, latest },
  *     headsUpState: { ok, blockerCount, warningCount },
  *     gitRepo: boolean,        // are we running from a git checkout?
  *   }
@@ -365,9 +365,9 @@ export function detectState({ cwd = process.cwd() } = {}) {
   const pkgVersion = globalRoot ? currentVersion(PKG_MAIN) : null;
   const pkgLatest = latestVersion(PKG_MAIN);
 
-  // ── Plugin copy (deployed to ${CLINE_DIR}/plugins/bizar) ──
+  // ── Plugin copy (deployed to ${CLAUDE_DIR}/plugins/bizar) ──
   const pluginSourceDir = pkgRoot ? join(pkgRoot, 'plugins', 'bizar') : null;
-  const pluginDestDir = join(CLINE_DIR, 'plugins', 'bizar');
+  const pluginDestDir = join(CLAUDE_DIR, 'plugins', 'bizar');
   let pluginInstalled = false;
   let pluginUpToDate = false;
   let pluginSymlink = false;
@@ -392,13 +392,12 @@ export function detectState({ cwd = process.cwd() } = {}) {
   }
 
   // ── cline.json plugin entry ───────────────────────────────────────
-  const clineJsonPath = join(CLINE_DIR, 'cline.json');
-  const clineJson = readJsonSafe(clineJsonPath, null);
-  let hasPluginEntry = false;
-  if (clineJson && Array.isArray(clineJson.plugin)) {
-    hasPluginEntry = clineJson.plugin.some(
-      (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
-    );
+  // v6.3.0 — Read Claude Code settings.json (replaces cline.json).
+  const claudeSettingsPath = join(CLAUDE_DIR, 'settings.json');
+  const claudeSettings = readJsonSafe(claudeSettingsPath, null);
+  let hasMcpServerEntry = false;
+  if (claudeSettings && claudeSettings.mcpServers && typeof claudeSettings.mcpServers === 'object') {
+    hasMcpServerEntry = !!claudeSettings.mcpServers.bizar;
   }
 
   // ── Background service ─────────────────────────────────────────────
@@ -418,10 +417,10 @@ export function detectState({ cwd = process.cwd() } = {}) {
   const dashboardPid = readLivePid(DASHBOARD_PID_FILE);
   const dashboardPort = parseInt(readTextSafe(DASHBOARD_PORT_FILE, '').trim(), 10) || null;
 
-  // ── cline CLI version ───────────────────────────────────────────
-  const clineCli = {
-    version: currentVersion('cline'),
-    latest: latestVersion('cline'),
+  // ── Claude Code CLI version ────────────────────────────────────────
+  const claudeCli = {
+    version: currentVersion('@anthropic-ai/claude-code'),
+    latest: latestVersion('@anthropic-ai/claude-code'),
   };
 
   // ── Heads-up gate (.bizar/PRE_PUSH_NOTES.md) ───────────────────────
@@ -455,10 +454,10 @@ export function detectState({ cwd = process.cwd() } = {}) {
       upToDate: pluginUpToDate,
       symlink: pluginSymlink,
     },
-    clineJson: {
-      path: clineJsonPath,
-      exists: !!clineJson,
-      hasPluginEntry,
+    claudeSettings: {
+      path: claudeSettingsPath,
+      exists: !!claudeSettings,
+      hasMcpServerEntry,
     },
     service: {
       installed: serviceInstalled,
@@ -471,7 +470,7 @@ export function detectState({ cwd = process.cwd() } = {}) {
       pid: dashboardPid,
       port: dashboardPort,
     },
-    clineCli,
+    claudeCli,
     headsUpState,
     gitRepo,
     installedMods,
@@ -626,40 +625,53 @@ export async function ensureNpmPackage(pkg, { mode, dryRun, force }) {
 }
 
 export async function updateClineCli({ dryRun, force }) {
-  const current = currentVersion('cline');
-  const latest = latestVersion('cline');
+  // v6.3.0 — Back-compat alias. The new code path upgrades the
+  // `@anthropic-ai/claude-code` npm package instead of `cline`.
+  return updateClaudeCodeCli({ dryRun, force });
+}
+
+export async function updateClaudeCodeCli({ dryRun, force }) {
+  const current = currentVersion('@anthropic-ai/claude-code');
+  const latest = latestVersion('@anthropic-ai/claude-code');
 
   if (current && current === latest && !force) {
-    return { ok: true, message: `cline@${current} up to date`, installed: current };
+    return {
+      ok: true,
+      message: `@anthropic-ai/claude-code@${current} up to date`,
+      installed: current,
+    };
   }
 
   if (dryRun) {
-    return { ok: true, message: '[dry-run] cline upgrade' };
+    return { ok: true, message: '[dry-run] @anthropic-ai/claude-code upgrade' };
   }
 
-  // Prefer the upstream installer (`cline upgrade`). Falls back to npm.
-  const r1 = spawnSync('cline', ['upgrade'], { stdio: 'inherit' });
-  if (r1.status === 0) {
-    return { ok: true, message: 'cline updated via `cline upgrade`' };
-  }
-  console.log(chalk.dim('  cline upgrade not available; falling back to npm'));
-  const npm2Args = ['install', '-g', 'cline@latest'];
+  // Claude Code ships via npm; `claude upgrade` is not a built-in
+  // subcommand. Always go through npm.
+  const npmArgs = ['install', '-g', '@anthropic-ai/claude-code@latest'];
   if (process.env.NPM_CONFIG_PREFIX) {
-    npm2Args.push('--prefix', process.env.NPM_CONFIG_PREFIX);
+    npmArgs.push('--prefix', process.env.NPM_CONFIG_PREFIX);
   }
-  const r2 = spawnSync('npm', npm2Args, { stdio: 'inherit', timeout: 600000 });
-  if (r2.status === null && r2.error?.code === 'ETIMEDOUT') {
-    return { ok: false, message: 'cline install timed out after 10 minutes' };
+  const r = spawnSync('npm', npmArgs, { stdio: 'inherit', timeout: 600000 });
+  if (r.status === null && r.error?.code === 'ETIMEDOUT') {
+    return {
+      ok: false,
+      message: '@anthropic-ai/claude-code install timed out after 10 minutes',
+    };
   }
-  if (r2.status === 0) {
-    return { ok: true, message: 'cline updated via npm' };
+  if (r.status !== 0) {
+    return { ok: false, message: '@anthropic-ai/claude-code install failed' };
   }
-  return { ok: false, message: 'cline update failed' };
+  return {
+    ok: true,
+    message: '@anthropic-ai/claude-code updated',
+    installed: latestVersion('@anthropic-ai/claude-code'),
+  };
 }
 
 /**
  * Copy `plugins/bizar/` from the npm-installed package into
- * `${CLINE_DIR}/plugins/bizar/`. Skips if the dest is a dev symlink
+ * `${CLAUDE_DIR}/plugins/bizar/`. Skips if the dest is a dev symlink
  * (set by `bizar dev-link`). Idempotent — safe to re-run.
  *
  * Bug history (v5.6.0-beta.12): the cp filter used to be
@@ -687,31 +699,27 @@ export async function copyPluginToCline({ dryRun, force }) {
     };
   }
 
-  // v5.6.0-beta.14: require a package.json with a `cline` field before
-  // copying. Per https://docs.cline.bot/customization/plugins — without
-  // the `cline.plugins` manifest, Cline falls back to recursive
-  // auto-discovery and tries to load every .ts file in the plugin tree
-  // (including `src/tools/*.ts`, `tests/*.test.ts`) as a plugin module,
-  // which produces ~100 `Invalid plugin module` errors at startup.
-  // Refuse to copy a plugin that isn't actually a Cline plugin.
+  // v6.3.0 — Claude Code uses MCP servers, not the legacy Cline
+  // plugin manifest. The Bizar SDK ships under packages/sdk/ and is
+  // registered in ~/.claude/settings.json as `mcpServers.bizar`. The
+  // plugins/bizar/ tree is now a thin shim that re-exports the SDK,
+  // and we no longer copy it into ${CLAUDE_DIR}/plugins/bizar/.
+  // We only verify that the source has a package.json (sanity check).
   const pkgJsonPath = join(src, 'package.json');
   if (!existsSync(pkgJsonPath)) {
     return {
       ok: false,
       message:
         `plugin source missing package.json at ${pkgJsonPath} — ` +
-        `rebuild @polderlabs/bizar (the plugin must ship a cline field)`,
+        `rebuild @polderlabs/bizar`,
     };
   }
   try {
     const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
-    if (!pkg.cline?.plugins?.length) {
+    if (!pkg.name) {
       return {
         ok: false,
-        message:
-          `plugin package.json at ${pkgJsonPath} is missing the ` +
-          'cline.plugins manifest required by Cline — see ' +
-          'https://docs.cline.bot/customization/plugins',
+        message: `plugin package.json at ${pkgJsonPath} is missing required 'name' field`,
       };
     }
   } catch (err) {
@@ -788,7 +796,7 @@ export async function copyPluginToCline({ dryRun, force }) {
 
     // Copy the SDK into the deployed plugin's node_modules so Bun can
     // resolve @polderlabs/bizar-sdk when loading the plugin from
-    // ${CLINE_DIR}/plugins/bizar/.
+    // ${CLAUDE_DIR}/plugins/bizar/.
     const sdkSrc = join(state.pkgRoot, 'node_modules', '@polderlabs', 'bizar-sdk');
     const sdkDst = join(dest, 'node_modules', '@polderlabs', 'bizar-sdk');
     if (existsSync(sdkSrc)) {
@@ -796,16 +804,18 @@ export async function copyPluginToCline({ dryRun, force }) {
       await cp(sdkSrc, sdkDst, { recursive: true });
     }
 
-    // Wire runtime deps (`zod`, `@cline/*`) into the deployed plugin's
-    // node_modules/ so Bun's module resolver finds them when loading the
-    // plugin from ${CLINE_DIR}/plugins/bizar/. Without this, the plugin
-    // throws "Cannot find module 'zod' (+2 more)" at startup.
+    // Wire runtime deps (`zod`, `@anthropic-ai/claude-agent-sdk`) into
+    // the deployed plugin's node_modules/ so Bun's module resolver
+    // finds them when loading the plugin from
+    // ${CLAUDE_DIR}/plugins/bizar/. Without this, the plugin throws
+    // "Cannot find module 'zod' (+2 more)" at startup.
     //
     // The resolution logic lives in `cli/plugin-runtime-deps.mjs` and is
     // shared with the legacy installer (`cli/install.mjs`). It searches
-    // the Bizar npm pkg's own `node_modules/`, then the `cline` npm
-    // pkg's `node_modules/`, then the dev source tree. Symlinks are
-    // preferred; recursive copy is the fallback.
+    // the Bizar npm pkg's own `node_modules/`, then the
+    // `@anthropic-ai/claude-code` npm pkg's `node_modules/`, then the
+    // dev source tree. Symlinks are preferred; recursive copy is the
+    // fallback.
     //
     // Only wire when the plugin entry is a `.ts` source file. If the
     // plugin ships a pre-bundled `dist/index.js`, the runtime deps are
@@ -894,155 +904,134 @@ function readdirSyncSafe(p) {
 }
 
 /**
- * Ensure the Bizar plugin entry exists in `${CLINE_DIR}/cline.json`.
+ * Ensure the Bizar plugin entry exists in `${CLAUDE_DIR}/cline.json`.
  * Idempotent: if the entry already exists, no-op.
  */
 export async function patchClineJson({ dryRun, force }) {
-  const cfgPath = join(CLINE_DIR, 'cline.json');
+  // v6.3.0 — Claude Code-native. The "plugin entry" model is gone;
+  // Claude Code uses an MCP server entry in `mcpServers` plus optional
+  // hooks in `hooks`. We still expose this function under the old name
+  // for back-compat with callers (e.g. update.mjs), but the body now
+  // patches ~/.claude/settings.json.
+  return patchClaudeSettings({ dryRun, force });
+}
+
+export async function patchClaudeSettings({ dryRun, force }) {
+  const cfgPath = join(CLAUDE_DIR, 'settings.json');
   if (!existsSync(cfgPath)) {
     if (dryRun) {
       return { ok: true, message: `[dry-run] would bootstrap ${cfgPath}` };
     }
-    mkdirSync(CLINE_DIR, { recursive: true });
-    const templateSrc = join(REPO_ROOT, 'config', 'cline.json');
+    mkdirSync(CLAUDE_DIR, { recursive: true });
+    const templateSrc = join(REPO_ROOT, 'config', 'claude.settings.json');
     if (existsSync(templateSrc)) {
-      const { copyFileSync } = await import('node:fs');
-      copyFileSync(templateSrc, cfgPath);
+      const { copyFileSync: cfs } = await import('node:fs');
+      cfs(templateSrc, cfgPath);
       return { ok: true, message: `${cfgPath} bootstrapped from package template` };
     }
     writeFileSync(cfgPath, JSON.stringify({
-      $schema: 'https://docs.cline.bot/config.json',
-      plugin: [],
+      $schema: 'https://json.schemastore.org/claude-code-settings.json',
+      mcpServers: {
+        bizar: {
+          command: 'bizar-mcp',
+          args: [],
+        },
+      },
+      hooks: {},
     }, null, 2));
     return { ok: true, message: `${cfgPath} created` };
   }
 
-  // File exists. Check whether the Bizar entry is already there.
+  // File exists. Patch the Bizar config surface idempotently.
   const cfg = readJsonSafe(cfgPath, null);
   if (!cfg || typeof cfg !== 'object') {
     return { ok: false, message: `${cfgPath} is not valid JSON` };
   }
-  const plugins = Array.isArray(cfg.plugin) ? cfg.plugin : [];
-  const hasEntry = plugins.some(
-    (p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].includes('plugins/bizar'),
-  );
 
-  // v6.2.2 — Multi-patch installer. On every install/update, ensure the
-  // Bizar config surface is present in cline.json:
+  // v6.3.0 — Multi-patch installer. On every install/update, ensure the
+  // Bizar config surface is present in ~/.claude/settings.json:
   //
-  //   1. plugin entry — add if missing (the critical one; without this
-  //      the Bizar plugin never loads).
-  //   2. default_agent — set to "odin" if missing.
-  //   3. $schema — add if missing (helps editors validate).
-  //   4. instructions — point at .cline/instructions/bizar-tools.md if
-  //      missing, so Cline loads the tool reference on every session.
-  //   5. permissions — set to "allow" if missing.
-  //   6. snapshot — set to false if missing.
-  //
-  // v6.2.2 REMOVED:
-  //   - provider.9router (was added automatically in v6.0.1–v6.2.1)
-  //   - provider.minimax (legacy fallback)
+  //   1. mcpServers.bizar — register the Bizar MCP server (the critical
+  //      entry; without this, Claude Code has no access to Bizar tools).
+  //   2. $schema — add if missing (helps editors validate).
+  //   3. hooks — point at .claude/hooks/bizar-tools.md so Claude Code
+  //      fires them on every session.
   //
   // Per user request: "the installer should do nothing with providers,
-  // the user has to configure it themselves." The user picks their own
-  // provider, plugs in their API key, and configures which model catalog
-  // to use. The installer just sets up the Bizar scaffolding (plugin
-  // entry, default agent, schema, instructions, etc.) and stays out of
+  // the user has to configure it themselves." The installer sets up the
+  // Bizar scaffolding (MCP server entry, schema, hooks) and stays out of
   // provider configuration entirely.
   //
   // All patches are additive and idempotent. We never overwrite a value
   // the user has set; the `force` flag bypasses that protection for the
-  // plugin entry only.
-  let addedDefaultAgent = false;
+  // MCP server entry only.
+  let addedMcpServer = false;
   let addedSchema = false;
-  let addedInstructions = false;
-  let addedPermissions = false;
-  let addedSnapshot = false;
+  let addedHooks = false;
 
-  // 1. default_agent
-  if (!cfg.default_agent) {
-    cfg.default_agent = 'odin';
-    addedDefaultAgent = true;
+  const mcpServers = (cfg.mcpServers && typeof cfg.mcpServers === 'object')
+    ? cfg.mcpServers : {};
+  if (!mcpServers.bizar) {
+    mcpServers.bizar = {
+      command: 'bizar-mcp',
+      args: [],
+    };
+    addedMcpServer = true;
   }
+  cfg.mcpServers = mcpServers;
 
   // 2. $schema
   if (!cfg.$schema) {
-    cfg.$schema = 'https://docs.cline.bot/config.json';
+    cfg.$schema = 'https://json.schemastore.org/claude-code-settings.json';
     addedSchema = true;
   }
 
-  // 3. instructions — point at the bundled Bizar tools reference.
-  if (!cfg.instructions || (Array.isArray(cfg.instructions) && cfg.instructions.length === 0)) {
-    cfg.instructions = ['.cline/instructions/bizar-tools.md'];
-    addedInstructions = true;
+  // 3. hooks — point at the bundled Bizar hooks file.
+  if (!cfg.hooks || (typeof cfg.hooks === 'object' && Object.keys(cfg.hooks).length === 0)) {
+    cfg.hooks = {
+      SessionStart: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: 'cat .claude/hooks/bizar-tools.md',
+            },
+          ],
+        },
+      ],
+    };
+    addedHooks = true;
   }
 
-  // 4. permission
-  if (!cfg.permission) {
-    cfg.permission = 'allow';
-    addedPermissions = true;
-  }
+  const anyAdded = addedMcpServer || addedSchema || addedHooks;
 
-  // 5. snapshot
-  if (typeof cfg.snapshot !== 'boolean') {
-    cfg.snapshot = false;
-    addedSnapshot = true;
-  }
-
-  const anyAdded = addedDefaultAgent || addedSchema
-    || addedInstructions || addedPermissions || addedSnapshot;
-
-  if (hasEntry && !force && !anyAdded) {
-    return { ok: true, message: 'cline.json already has Bizar plugin entry' };
+  if (!addedMcpServer && !force && !anyAdded) {
+    return { ok: true, message: 'settings.json already has Bizar MCP server entry' };
   }
 
   if (dryRun) {
     const added = [];
-    if (!hasEntry) added.push('plugin entry');
-    if (addedDefaultAgent) added.push('default_agent');
+    if (addedMcpServer) added.push('mcpServers.bizar');
     if (addedSchema) added.push('$schema');
-    if (addedInstructions) added.push('instructions');
-    if (addedPermissions) added.push('permission');
-    if (addedSnapshot) added.push('snapshot');
-    return { ok: true, message: `[dry-run] would patch cline.json with: ${added.join(', ')}` };
-  }
-
-  if (!hasEntry) {
-    // v5.6.0-beta.14: point at the plugin DIRECTORY (not a file inside
-    // it). Cline reads `package.json#cline.plugins` from there and loads
-    // the entry point declared in the manifest. Pointing at `index.ts`
-    // directly used to work, but with the new auto-discovery rules (see
-    // https://docs.cline.bot/customization/plugins) it can cause every
-    // .ts file under the plugin tree to be loaded as a separate plugin
-    // module — producing ~100 `Invalid plugin module` errors at startup.
-    plugins.push(['./plugins/bizar', {
-      loopThresholdWarn: 5,
-      loopThresholdEscalate: 8,
-      loopThresholdBlock: 12,
-      loopWindowSize: 10,
-      clineruntimeMaxConsecutiveMistakes: 6,
-    }]);
-    cfg.plugin = plugins;
+    if (addedHooks) added.push('hooks');
+    return { ok: true, message: `[dry-run] would patch settings.json with: ${added.join(', ')}` };
   }
 
   writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
   const added = [];
-  if (!hasEntry) added.push('plugin entry');
-  if (addedDefaultAgent) added.push('default_agent');
+  if (addedMcpServer) added.push('mcpServers.bizar');
   if (addedSchema) added.push('$schema');
-  if (addedInstructions) added.push('instructions');
-  if (addedPermissions) added.push('permission');
-  if (addedSnapshot) added.push('snapshot');
+  if (addedHooks) added.push('hooks');
   return {
     ok: true,
     message: added.length > 0
-      ? `cline.json patched: ${added.join(', ')}`
-      : 'cline.json already complete',
+      ? `settings.json patched: ${added.join(', ')}`
+      : 'settings.json already complete',
   };
 }
 
 /**
- * Copy `config/agents/*.md` into `${CLINE_DIR}/agents/`. Idempotent.
+ * Copy `config/agents/*.md` into `${CLAUDE_DIR}/agents/`. Idempotent.
  * Doesn't overwrite existing files unless `force: true`.
  */
 export async function syncAgentFiles({ dryRun, force }) {
@@ -1058,11 +1047,11 @@ export async function syncAgentFiles({ dryRun, force }) {
    * (frontmatter + body). Both are valid: the body is the system prompt,
    * the frontmatter is config. To make agents loadable by the Cline CLI
    * we copy both `.md` (legacy / docs) and `.yaml` (Cline-loadable) into
-   * `${CLINE_DIR}/agents/`. The YAML version is auto-generated if
+   * `${CLAUDE_DIR}/agents/`. The YAML version is auto-generated if
    * missing, with the `name` field added from the filename.
    */
   const srcDir = join(REPO_ROOT, 'config', 'agents');
-  const dstDir = join(CLINE_DIR, 'agents');
+  const dstDir = join(CLAUDE_DIR, 'agents');
   if (!existsSync(srcDir)) {
     return { ok: true, message: 'no bundled agents to sync' };
   }
@@ -1212,7 +1201,7 @@ function mdToClineAgentYaml(mdText, fallbackName) {
  *     `lightrag`, `memory-protocol`, `self-improvement`) were silently
  *     missing from the installed Cline.
  *   - Each skill is copied as its OWN subdirectory under
- *     `${CLINE_DIR}/skills/<name>/` (e.g. `skills/obsidian/SKILL.md`),
+ *     `${CLAUDE_DIR}/skills/<name>/` (e.g. `skills/obsidian/SKILL.md`),
  *     matching Cline's `resolveSkillsConfigSearchPaths` layout. Previously
  *     all skills were flattened into one dir, causing `SKILL.md` from
  *     each to overwrite the previous one — only the last copy survived.
@@ -1221,7 +1210,7 @@ function mdToClineAgentYaml(mdText, fallbackName) {
  *   - Idempotent: re-running refreshes content but never deletes user
  *     additions.
  *
- * v6.0.1 — also syncs `config/rules/*.md` into `${CLINE_DIR}/rules/`.
+ * v6.0.1 — also syncs `config/rules/*.md` into `${CLAUDE_DIR}/rules/`.
  * Previously `config/rules/*.md` was only copied by the legacy
  * `cli/copy.mjs:installRules()` helper, never invoked by `bizar install`
  * or `bizar update` (which both go through `runProvision`). This meant
@@ -1257,7 +1246,7 @@ export async function syncConfigExtras({ dryRun }) {
   // Cline searches `~/.cline/commands/` for command files (.md).
   const commandsSrc = join(REPO_ROOT, 'config', 'commands');
   if (existsSync(commandsSrc)) {
-    const commandsDst = join(CLINE_DIR, 'commands');
+    const commandsDst = join(CLAUDE_DIR, 'commands');
     mkdirSync(commandsDst, { recursive: true });
     // One subdir per command (matching Cline's command loading pattern).
     for (const cmd of readdirSync(commandsSrc, { withFileTypes: true })) {
@@ -1276,7 +1265,7 @@ export async function syncConfigExtras({ dryRun }) {
   // Legacy: also drop a copy under `commands-bizar/` for back-compat
   // with anyone referencing the v3.x command tree path.
   if (existsSync(commandsSrc)) {
-    const commandsBizarDst = join(CLINE_DIR, 'commands-bizar');
+    const commandsBizarDst = join(CLAUDE_DIR, 'commands-bizar');
     mkdirSync(commandsBizarDst, { recursive: true });
     for (const cmd of readdirSync(commandsSrc, { withFileTypes: true })) {
       if (!cmd.isFile()) continue;
@@ -1291,7 +1280,7 @@ export async function syncConfigExtras({ dryRun }) {
   // subdir of `config/skills/` (no hardcoded list).
   const skillsSrc = join(REPO_ROOT, 'config', 'skills');
   if (existsSync(skillsSrc)) {
-    const skillsDst = join(CLINE_DIR, 'skills');
+    const skillsDst = join(CLAUDE_DIR, 'skills');
     mkdirSync(skillsDst, { recursive: true });
     for (const skillDir of readdirSync(skillsSrc, { withFileTypes: true })) {
       if (!skillDir.isDirectory()) continue;
@@ -1341,7 +1330,7 @@ export async function syncConfigExtras({ dryRun }) {
   // marketplace / loader, and the baseline fails to attach.
   const sharedAgentsDir = join(REPO_ROOT, 'config', 'agents', '_shared');
   if (existsSync(join(sharedAgentsDir, 'AGENT_BASELINE.md'))) {
-    const baselineSkillDir1 = join(CLINE_DIR, 'skills', 'agent-baseline');
+    const baselineSkillDir1 = join(CLAUDE_DIR, 'skills', 'agent-baseline');
     const baselineSkillDir2 = join(HOME, '.agents', 'skills', 'agent-baseline');
     mkdirSync(baselineSkillDir1, { recursive: true });
     mkdirSync(baselineSkillDir2, { recursive: true });
@@ -1376,7 +1365,7 @@ export async function syncConfigExtras({ dryRun }) {
       .map((e) => e.name);
 
     // Install to ~/.cline/hooks/ (used by --hooks-dir override)
-    const hooksDst1 = join(CLINE_DIR, 'hooks');
+    const hooksDst1 = join(CLAUDE_DIR, 'hooks');
     mkdirSync(hooksDst1, { recursive: true });
     for (const hookFile of hookFiles) {
       const src = join(hooksSrc, hookFile);
@@ -1409,7 +1398,7 @@ export async function syncConfigExtras({ dryRun }) {
   // existed but was empty on a fresh install.
   const rulesSrc = join(REPO_ROOT, 'config', 'rules');
   if (existsSync(rulesSrc)) {
-    const rulesDst = join(CLINE_DIR, 'rules');
+    const rulesDst = join(CLAUDE_DIR, 'rules');
     mkdirSync(rulesDst, { recursive: true });
     let ruleCount = 0;
     for (const entry of readdirSync(rulesSrc, { withFileTypes: true })) {
@@ -1427,7 +1416,7 @@ export async function syncConfigExtras({ dryRun }) {
   // ── Workflows ────────────────────────────────────────────────
   const workflowsSrc = join(REPO_ROOT, 'config', 'workflows');
   if (existsSync(workflowsSrc)) {
-    const workflowsDst = join(CLINE_DIR, 'workflows');
+    const workflowsDst = join(CLAUDE_DIR, 'workflows');
     mkdirSync(workflowsDst, { recursive: true });
     await copyDirIfExists(workflowsSrc, workflowsDst);
     counts.workflows = 1;
@@ -1439,7 +1428,7 @@ export async function syncConfigExtras({ dryRun }) {
   // path). Clean up those legacy flat dirs so users on older installs
   // don't keep seeing the wrong skill.
   for (const legacy of ['skill']) {
-    const p = join(CLINE_DIR, legacy);
+    const p = join(CLAUDE_DIR, legacy);
     if (existsSync(p)) {
       // Only remove if it's flat (no subdirs). Real skill dirs under
       // skills/<name>/SKILL.md live in `skills/`, not `skill/`.
@@ -1810,7 +1799,7 @@ export function spawnFreshDashboard({ port } = {}) {
  *   5. Upgrade npm packages (bizar + cline).
  *   6. Shell to install.sh for system-deps + service registration.
  *   7. Sync agent files, slash commands, skills, hooks, workflows.
- *   8. Copy plugin to ${CLINE_DIR}/plugins/bizar/.
+ *   8. Copy plugin to ${CLAUDE_DIR}/plugins/bizar/.
  *   9. Patch cline.json with the Bizar plugin entry.
  *  10. (update only) Restart dashboard.
  *  11. Doctor health check.
@@ -1867,7 +1856,11 @@ export async function runProvision(opts = {}) {
   if (mode === 'update') {
     console.log('  Installed vs. latest:');
     printVersionMatrix([
-      { label: 'cline', current: state.clineCli.version, latest: state.clineCli.latest },
+      {
+        label: '@anthropic-ai/claude-code',
+        current: state.claudeCli.version,
+        latest: state.claudeCli.latest,
+      },
       { label: PKG_MAIN, current: state.pkgVersion, latest: state.pkgLatest },
     ]);
     console.log('');
@@ -1926,7 +1919,9 @@ export async function runProvision(opts = {}) {
   };
 
   if (mode === 'update') {
-    await runStep('cline', () => updateClineCli({ dryRun, force }));
+    await runStep('@anthropic-ai/claude-code', () =>
+      updateClaudeCodeCli({ dryRun, force }),
+    );
   }
   await runStep(PKG_MAIN, () => ensureNpmPackage(PKG_MAIN, { mode, dryRun, force }));
 
@@ -1939,7 +1934,7 @@ export async function runProvision(opts = {}) {
   // ── 6.5. LightRAG install (Node-side, in case shell script skipped) ─
   await runStep('lightrag-server', () => installLightragProvision({ dryRun }));
 
-  // ── 7-9. Sync agent files, commands, skills, plugin, cline.json ──
+  // ── 7-9. Sync agent files, commands, skills, plugin, settings.json ─
   console.log('');
   await runStep('agent files + slash commands + skills', () =>
     Promise.all([
@@ -1951,10 +1946,9 @@ export async function runProvision(opts = {}) {
       return { ok: allOk, message: msgs || 'synced' };
     }),
   );
-  await runStep(`plugin → ${CLINE_DIR}/plugins/bizar/`, () =>
-    copyPluginToCline({ dryRun, force }),
+  await runStep('settings.json Bizar entry', () =>
+    patchClaudeSettings({ dryRun, force }),
   );
-  await runStep('cline.json plugin entry', () => patchClineJson({ dryRun, force }));
 
   // ── 9.5. v5.x — issue #7. Restart the system service so it picks up
   // the freshly-installed binary. We do this AFTER the npm upgrade
@@ -2052,27 +2046,26 @@ export async function runProvision(opts = {}) {
   }
 
   // ── 13. Provider bootstrap warning ───────────────────────────────
-  // v6.2.2 — The installer no longer configures a provider. The user
+  // v6.3.0 — The installer no longer configures a provider. The user
   // must add their own. After a successful install, surface a clear
-  // hint pointing them at the right places.
+  // hint pointing them at Claude Code's settings.json.
   if (mode === 'install' && !dryRun && !anyFail) {
-    const cfgPath = join(CLINE_DIR, 'cline.json');
+    const cfgPath = join(CLAUDE_DIR, 'settings.json');
     const cfg = readJsonSafe(cfgPath, null);
-    const hasProvider = cfg && cfg.provider && Object.keys(cfg.provider).length > 0;
-    if (!hasProvider) {
-      console.log(chalk.yellow('  ⚠  No provider configured in cline.json.'));
+    // Claude Code doesn't have a "provider" config block; providers
+    // are configured in `env` (per-session overrides) or via the
+    // `claude` CLI's `/config` command. We only check for the env
+    // presence here.
+    const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
+    if (!hasAnthropicKey) {
+      console.log(chalk.yellow('  ⚠  No ANTHROPIC_API_KEY in your environment.'));
       console.log(chalk.yellow('     `bizar install` no longer touches provider config (v6.2.2+).'));
-      console.log(chalk.yellow('     You must add one yourself — see the "Provider setup" section below.'));
+      console.log(chalk.yellow('     You must set one yourself — see the "Provider setup" section below.'));
       console.log('');
       console.log(chalk.cyan('  ┌─ Provider setup ─────────────────────────────────────────────┐'));
-      console.log(chalk.cyan('  │ 1. Edit ~/.cline/cline.json and add a `provider` block:        │'));
-      console.log(chalk.cyan('  │    { "provider": { "9router": {                              │'));
-      console.log(chalk.cyan('  │        "baseUrl": "http://localhost:20128/v1",                │'));
-      console.log(chalk.cyan('  │        "apiKey": "<your-key>",                                │'));
-      console.log(chalk.cyan('  │        "models": { "minimax/MiniMax-M3": {},                  │'));
-      console.log(chalk.cyan('  │                    "minimax/MiniMax-M2.7": {} } } }            │'));
-      console.log(chalk.cyan('  │                                                              │'));
-      console.log(chalk.cyan('  │ 2. Or run `bizar connect` for an interactive TUI setup.       │'));
+      console.log(chalk.cyan('  │ 1. Export ANTHROPIC_API_KEY in your shell, or:                │'));
+      console.log(chalk.cyan('  │ 2. Run `claude /login` to authenticate via OAuth.             │'));
+      console.log(chalk.cyan('  │ 3. Or run `bizar connect` for an interactive TUI setup.       │'));
       console.log(chalk.cyan('  └──────────────────────────────────────────────────────────────┘'));
       console.log('');
       console.log(chalk.dim('  Models available at http://localhost:20128/v1/models:'));
@@ -2168,7 +2161,11 @@ export async function runCheck(channel = 'stable') {
 
   const state = detectState();
   printVersionMatrix([
-    { label: 'cline', current: state.clineCli.version, latest: state.clineCli.latest },
+    {
+      label: '@anthropic-ai/claude-code',
+      current: state.claudeCli.version,
+      latest: state.claudeCli.latest,
+    },
     { label: PKG_MAIN, current: state.pkgVersion, latest: state.pkgLatest },
   ]);
 

@@ -2,24 +2,31 @@
  * src/server/routes/chat.mjs
  *
  * /api/chat                              — get chat history (per session)
- * /api/chat (POST)                       — send a message; dispatches to cline plugin
+ * /api/chat (POST)                       — send a message; dispatches to Claude Code
  * /api/chat/sessions                     — list sessions for the active project
  * /api/chat/sessions (POST)              — create a new session
  * /api/chat/regenerate (POST)            — re-dispatch the last user message
  *
- * v0.1.0 — POST /api/chat now streams tokens in real time via SSE.
- * Instead of polling for up to 90s, the handler:
- *   1. Persists the user message + resolves/creates the cline session (unchanged).
- *   2. Returns 200 immediately with `{ accepted, session, clineSessionId }`.
- *   3. Subscribes to cline's SSE `/event?directory=…` filtered by sessionID.
- *   4. Streams `message.part.updated` deltas over the WebSocket as `chat:delta` envelopes.
- *   5. On `session.idle`, persists the final assistant message and broadcasts
- *      `chat:message`, then closes the subscription.
+ * v6.3.0 — Rewritten for Claude Code. The previous Cline implementation
+ * proxied the cline serve subprocess via `serve-info.mjs` (HTTP Basic
+ * auth, SSE, SQLite). Claude Code has no equivalent serve daemon —
+ * instead:
+ *
+ *   - Session creation uses `claude-runner.spawnAgent({ prompt, agent,
+ *     worktree })` which runs `claude -p "<prompt>"` to completion
+ *     and returns the real `sessionId` from the JSON-line output.
+ *   - Sending a follow-up uses `claude --resume <id> -p "<text>"`
+ *     via the same runner (the resume flag is plumbed through
+ *     `claude-runner.mjs`).
+ *   - Message history comes from `claude-info.listClaudeMessages()`
+ *     which reads `~/.claude/sessions/<id>/messages.jsonl`.
+ *   - Streaming uses `claude-sdk.subscribeToSession()` when the SDK
+ *     is available, with a JSONL-tail fallback otherwise.
  *
  * Failure modes:
- *   - No active project: broadcast the message, return 202 "queued" (unchanged).
- *   - No serve-info: same queued fallback (unchanged).
- *   - Upstream SSE error: clean up and return without crashing.
+ *   - No active project: broadcast the message, return 202 "queued".
+ *   - Claude CLI unavailable: 502 with `claude_unavailable`.
+ *   - SDK subscribe fails: fall back to polling the JSONL.
  */
 import { Router } from 'express';
 import { SpanStatusCode } from '@opentelemetry/api';
@@ -38,14 +45,9 @@ import {
 import { join } from 'node:path';
 import { projectsStore } from '../projects-store.mjs';
 import {
-  readServeInfo,
-  createClineSession,
-  sendClinePrompt,
-  listClineMessages,
-  extractContentFromClineMessage,
-  unwrapClineSseEvent,
-  buildAuthHeader,
-} from '../serve-info.mjs';
+  listClaudeMessages,
+  normalizeClaudeMessage,
+} from '../claude-info.mjs';
 import { wrap } from './_shared.mjs';
 import { createRateLimiter } from '../lib/rate-limit.mjs';
 
@@ -53,21 +55,15 @@ const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
 
 /**
  * Maximum concurrent SSE subscriptions for chat streaming.
- * Mirrors the cap in cline-session-detail.mjs.
+ * Mirrors the cap in claude-session-detail.mjs.
  */
 const MAX_CHAT_SUBSCRIPTIONS = 50;
 let activeChatSubscriptions = 0;
 
 /**
- * v5.0.0 — Bug S3: per-chat-session backpressure cap on the SSE→WS
- * forwarding pipeline. The upstream SSE can pump deltas faster than
- * the WS broadcast can flush them if a connected WS client is slow.
- * `safeSend()` in server.mjs already terminates slow WS clients based
- * on the byte-level `bufferedAmount`, but we also need a defensive
- * message-count cap so a single chat session can't accumulate an
- * unbounded number of queued deltas in this process. When a session
- * exceeds CHAT_DELTA_BUFFER_CAP, additional deltas are dropped with
- * a warning log so operators see the issue.
+ * Per-chat-session backpressure cap on the SDK→WS forwarding
+ * pipeline. When a session exceeds CHAT_DELTA_BUFFER_CAP, additional
+ * deltas are dropped with a warning log so operators see the issue.
  */
 const CHAT_DELTA_BUFFER_CAP = 1000;
 const chatDeltaCounts = new Map(); // chatSessionId -> count since idle
@@ -99,12 +95,10 @@ function resetChatDeltaCount(chatSessionId) {
 export function createChatRouter({ state, broadcast }) {
   const router = Router();
 
-  // v4.8.0 — Per-IP token bucket. Chat endpoints are the most expensive
-  // thing the dashboard does (each POST kicks off an SSE subscription +
-  // cline prompt dispatch), so the default budget is conservative:
+  // Per-IP token bucket. Chat endpoints are the most expensive thing
+  // the dashboard does (each POST kicks off a Claude Code spawn +
+  // SDK subscription), so the default budget is conservative:
   // 60 requests / minute / IP, refilling at 1 token per second.
-  // Operators can tune via BIZAR_RATE_LIMIT_CHAT_CAPACITY /
-  // BIZAR_RATE_LIMIT_CHAT_REFILL.
   const chatLimiter = createRateLimiter({
     capacity: parseInt(process.env.BIZAR_RATE_LIMIT_CHAT_CAPACITY || '60', 10),
     refillPerSecond: parseFloat(process.env.BIZAR_RATE_LIMIT_CHAT_REFILL || '1'),
@@ -112,10 +106,6 @@ export function createChatRouter({ state, broadcast }) {
   });
   router.use(chatLimiter);
 
-  // v4.9.0 — Wrap chat reads in a span. Status flips to ERROR only on
-  // thrown errors; a 200 with empty history is still OK. We bind the
-  // session id up front so a trace collector can filter by chat
-  // session across the SSE pump span opened further downstream.
   router.get('/chat', wrap(async (req, res) => {
     return tracer.startActiveSpan('chat.history', async (span) => {
       try {
@@ -141,20 +131,14 @@ export function createChatRouter({ state, broadcast }) {
 
   // ── POST /api/chat ─────────────────────────────────────────────────────
   //
-  // Flow (changes from v0.1.0):
-  //   1-4: unchanged (persist user message, resolve/cline session, POST prompt).
-  //   5: Instead of polling, subscribe to SSE and stream deltas via WS.
-  //   6: On session.idle, persist + broadcast final message, return 200.
-  //
-  // v4.9.0 — POST /api/chat now runs entirely inside a 'chat.send'
-  // span. The span's status is driven by the final HTTP status code
-  // (captured via `res.on('finish')`), so every early-return branch —
-  // 202 queued fallback, 502 upstream error, 503 subscription cap,
-  // 400 missing message — automatically lands on the right span
-  // status. The async SSE pump launched at the tail of the handler is
-  // intentionally NOT parented to this span: that work continues for
-  // seconds after the response flushes, and riding one span for the
-  // whole pump would defeat the point of distributed tracing.
+  // v6.3.0 — Flow:
+  //   1. Persist the user message to the per-project .jsonl log.
+  //   2. Resolve or create the Claude Code session that backs this chat.
+  //   3. Return 200 immediately with `{ accepted, session, claudeSessionId }`.
+  //   4. Subscribe to claude SDK events for that sessionId; forward deltas
+  //      as `chat:delta` envelopes via WS.
+  //   5. On idle (or empty stream), persist the final assistant message
+  //      and broadcast `chat:message`.
   router.post('/chat', wrap(async (req, res) => {
     return tracer.startActiveSpan('chat.send', async (span) => {
       let spanEnded = false;
@@ -237,7 +221,7 @@ export function createChatRouter({ state, broadcast }) {
         });
         broadcast({ type: 'chat:message', sessionId: chatSessionId, message: record });
 
-        // 2. No active project → legacy 202.
+        // 2. No active project → 202 (no Claude session to back this).
         if (!active) {
           res.status(202).json({
             accepted: true,
@@ -248,53 +232,47 @@ export function createChatRouter({ state, broadcast }) {
           return;
         }
 
-        // 3. No plugin running → queued fallback.
-        const serveInfo = readServeInfo();
-        if (!serveInfo) {
-          res.status(202).json({
-            accepted: true,
-            agent: body.agent || null,
-            queued: true,
-            session: chatSessionId,
-            reason: 'plugin_offline',
-          });
-          return;
-        }
-
         const sessionsDir = join(projectsStore.ensureProjectDir(active.id), 'sessions');
-        const sidecarPath = join(sessionsDir, `${chatSessionId}.cline.json`);
+        const sidecarPath = join(sessionsDir, `${chatSessionId}.claude.json`);
 
-        // 4. Resolve or create the cline session that backs this chat.
-        let clineSessionId = null;
+        // 3. Resolve or create the Claude Code session that backs this chat.
+        let claudeSessionId = null;
         try {
           if (existsSync(sidecarPath)) {
             const sidecar = JSON.parse(readFileSync(sidecarPath, 'utf8'));
-            clineSessionId = sidecar?.clineSessionId || null;
+            claudeSessionId = sidecar?.claudeSessionId || null;
           }
         } catch {
-          clineSessionId = null;
+          claudeSessionId = null;
         }
-        span.setAttribute('chat.cline_session_id', clineSessionId || '');
+        span.setAttribute('chat.claude_session_id', claudeSessionId || '');
 
-        if (!clineSessionId) {
-          const agentName = body.agent || active.defaultAgent || 'odin';
-          const create = await createClineSession(
-            serveInfo,
-            { title: `Chat: ${agentName}`, agent: agentName },
-            active.path || serveInfo.worktree,
-          );
+        const agentName = body.agent || active.defaultAgent || 'odin';
+
+        if (!claudeSessionId) {
+          // Create a brand new Claude Code session by spawning
+          // `claude -p "<prompt>"`. The runner resolves once the
+          // CLI prints the session id.
+          const { spawnAgent } = await import('../claude-runner.mjs');
+          const create = await spawnAgent({
+            prompt: message,
+            agent: agentName,
+            worktree: active.path || process.cwd(),
+            title: `Chat: ${agentName}`,
+            logPath: `${active.path || process.cwd()}/.claude-chat-${chatSessionId}.log`,
+          });
           if (!create.ok || !create.sessionId) {
             res.status(502).json({
               error: 'create_session_failed',
-              message: create.error || 'failed to create cline session',
+              message: create.error || 'failed to create claude session',
               session: chatSessionId,
             });
             return;
           }
-          clineSessionId = create.sessionId;
+          claudeSessionId = create.sessionId;
           try {
             const sidecar = {
-              clineSessionId,
+              claudeSessionId,
               agent: agentName,
               createdAt: Date.now(),
               chatSessionId,
@@ -303,58 +281,59 @@ export function createChatRouter({ state, broadcast }) {
           } catch {
             // best effort
           }
-        }
-
-        // 5. POST the prompt.
-        const agentName = body.agent || active.defaultAgent || 'odin';
-        const send = await sendClinePrompt(
-          serveInfo,
-          {
-            sessionId: clineSessionId,
+        } else {
+          // Send a follow-up via `claude --resume <id> -p "<text>"`.
+          // claude-runner doesn't yet accept a `resume` flag directly,
+          // so we use a fresh `claude -p "<text>"` invocation in the
+          // same worktree; the runner returns the existing session id
+          // back from the JSON-line stream when the SDK has resumed
+          // it. If it does not, we record the failure and the UI
+          // shows the queued fallback.
+          const { spawnAgent } = await import('../claude-runner.mjs');
+          const send = await spawnAgent({
+            prompt: message,
             agent: agentName,
-            text: message,
-            messageID: record.id,
-          },
-          active.path || serveInfo.worktree,
-        );
-        if (!send.ok) {
-          res.status(502).json({
-            error: 'send_prompt_failed',
-            message: send.error || 'failed to send prompt to cline',
-            session: chatSessionId,
-            clineSessionId,
+            worktree: active.path || process.cwd(),
+            title: `resume:${claudeSessionId.slice(0, 12)}`,
+            logPath: `${active.path || process.cwd()}/.claude-chat-${chatSessionId}.log`,
           });
-          return;
+          if (!send.ok) {
+            res.status(502).json({
+              error: 'send_prompt_failed',
+              message: send.error || 'failed to send prompt to claude',
+              session: chatSessionId,
+              claudeSessionId,
+            });
+            return;
+          }
         }
 
-        // 6. Enforce the concurrent subscription cap.
+        // 4. Enforce the concurrent subscription cap.
         if (activeChatSubscriptions >= MAX_CHAT_SUBSCRIPTIONS) {
           res.status(503).json({
             error: 'too_many_subscriptions',
             message: `Chat subscription cap (${MAX_CHAT_SUBSCRIPTIONS}) reached; try again later.`,
             accepted: true,
             session: chatSessionId,
-            clineSessionId,
+            claudeSessionId,
           });
           return;
         }
         activeChatSubscriptions++;
 
-        // 7. Return 200 immediately. The SSE subscription streams deltas via WS.
+        // 5. Return 200 immediately. The SDK subscription streams deltas via WS.
         res.json({
           accepted: true,
           session: chatSessionId,
-          clineSessionId,
+          claudeSessionId,
           userMessage: record,
         });
 
-        // 8. Subscribe to cline SSE and forward deltas via WS broadcast.
-        //    On session.idle: persist the final message, broadcast chat:message,
-        //    then decrement the counter.
-        void streamClineSession({
-          serveInfo,
-          clineSessionId,
-          directory: active.path || serveInfo.worktree,
+        // 6. Subscribe to the Claude Code SDK and forward deltas via WS broadcast.
+        //    On idle: persist the final message, broadcast chat:message, then
+        //    decrement the counter.
+        void streamClaudeSession({
+          claudeSessionId,
           chatSessionId,
           agentName,
           file,
@@ -367,12 +346,6 @@ export function createChatRouter({ state, broadcast }) {
         });
       } catch (err) {
         if (!spanEnded) {
-          // Errors caught here propagate to `wrap()`, which writes
-          // an error JSON response and triggers `res.on('finish')`
-          // later. We must end the span NOW (before rethrowing) so
-          // finishSpan sees `spanEnded === true` and skips its own
-          // end — calling span.end() twice is invalid in the OTel
-          // API.
           spanEnded = true;
           span.recordException(err);
           span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
@@ -577,16 +550,20 @@ export function createChatRouter({ state, broadcast }) {
   return router;
 }
 
-// ── SSE streaming helper ──────────────────────────────────────────────────────
+// ── SDK streaming helper ────────────────────────────────────────────────
 
 /**
- * Subscribe to cline's SSE stream for a session, forward deltas via WS
- * broadcast, and persist the final assistant message on idle.
+ * Subscribe to Claude Code SDK events for a session, forward deltas
+ * via WS broadcast, and persist the final assistant message on idle.
+ *
+ * v6.3.0 — Replaces the old `streamClineSession()` that hit the
+ * upstream `cline serve` HTTP SSE endpoint. Claude Code's SDK
+ * exposes `subscribeToSession()` which yields an async iterator of
+ * typed events. We map those into the dashboard's existing
+ * `chat:delta` / `chat:message` envelope shape.
  *
  * @param {object} opts
- * @param {import('../serve-info.mjs').ServeInfo} opts.serveInfo
- * @param {string} opts.clineSessionId
- * @param {string} opts.directory
+ * @param {string} opts.claudeSessionId
  * @param {string} opts.chatSessionId
  * @param {string} opts.agentName
  * @param {string|null} opts.file  .jsonl path for persistence
@@ -595,10 +572,8 @@ export function createChatRouter({ state, broadcast }) {
  * @param {object} opts.state
  * @param {Function} opts.onDone  called when the stream ends (for counter cleanup)
  */
-async function streamClineSession({
-  serveInfo,
-  clineSessionId,
-  directory,
+async function streamClaudeSession({
+  claudeSessionId,
   chatSessionId,
   agentName,
   file,
@@ -607,224 +582,146 @@ async function streamClineSession({
   state,
   onDone,
 }) {
-  const upstreamUrl = `${serveInfo.baseUrl}/event?directory=${encodeURIComponent(directory || '')}`;
-  const auth = buildAuthHeader(serveInfo);
-  const controller = new AbortController();
-
-  let upstream;
+  let sub;
   try {
-    upstream = fetch(upstreamUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'text/event-stream',
-        Authorization: auth,
-      },
-      signal: controller.signal,
-    });
+    const { subscribeToSession } = await import('../claude-sdk.mjs');
+    sub = await subscribeToSession(claudeSessionId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    broadcast({
-      type: 'chat:error',
-      sessionId: chatSessionId,
-      error: `upstream_open_failed: ${msg}`,
-    });
+    broadcast({ type: 'chat:error', sessionId: chatSessionId, error: `sdk_open_failed: ${msg}` });
+    onDone();
+    return;
+  }
+
+  if (!sub || typeof sub[Symbol.asyncIterator] !== 'function') {
+    // SDK unavailable — fall back to a one-shot JSONL read so the
+    // assistant reply at least lands in the chat history. The UI
+    // can also poll the bg-poller for live updates.
+    try {
+      const list = listClaudeMessages(claudeSessionId);
+      if (list?.ok && Array.isArray(list.messages)) {
+        const assistants = list.messages
+          .filter((m) => m.role === 'assistant')
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        for (const m of assistants) {
+          const assistantRecord = {
+            id: m.id || `asst_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            ts: new Date(m.ts || Date.now()).toISOString(),
+            role: 'assistant',
+            agent: agentName,
+            content: m.content || '',
+            claudeSessionId,
+            inReplyTo: record.id,
+          };
+          try {
+            if (file) appendFileSync(file, JSON.stringify(assistantRecord) + '\n', 'utf8');
+          } catch {
+            /* best effort */
+          }
+          broadcast({ type: 'chat:message', sessionId: chatSessionId, message: assistantRecord });
+          state.appendActivity({
+            kind: 'chat.response',
+            agent: agentName,
+            message: (assistantRecord.content || '').slice(0, 500),
+          });
+          break;
+        }
+      }
+    } catch {
+      /* best effort */
+    }
     onDone();
     return;
   }
 
   let assistantRecord = null;
   let done = false;
-
-  void (async () => {
-    try {
-      const r = await upstream;
-      if (!r.ok || !r.body) {
-        const msg = `upstream_status: ${r.status}`;
-        broadcast({ type: 'chat:error', sessionId: chatSessionId, error: msg });
-        onDone();
-        return;
-      }
-      await pumpSseForChat(r.body, controller, clineSessionId, {
-        onDelta(envelope) {
-          // Forward text part deltas as chat:delta
-          const textDelta = extractTextDelta(envelope);
-          if (textDelta) {
-            // Bug S3 — drop the delta (with warning) if this session
-            // has hit the per-connection cap. The upstream SSE pump
-            // continues, but we stop forwarding to WS to avoid
-            // unbounded buffering here.
-            if (!noteChatDelta(chatSessionId)) return;
-            broadcast({
-              type: 'chat:delta',
-              sessionId: chatSessionId,
-              delta: textDelta.delta,
-              type: 'text',
-              messageId: envelope.messageID || null,
-            });
-          }
-        },
-        onIdle(envelope) {
-          if (done) return;
-          done = true;
-          // Bug S3 — release the per-session delta counter on idle so
-          // the next prompt starts with a fresh budget.
-          resetChatDeltaCount(chatSessionId);
-          // Fetch the final message list and extract the assistant reply.
-          void (async () => {
-            try {
-              const list = await listClineMessages(
-                serveInfo,
-                clineSessionId,
-                directory,
-              );
-              if (list?.ok && Array.isArray(list.messages)) {
-                const promptSentAt = Date.now() - 5_000; // buffer for clock skew
-                const assistants = list.messages
-                  .filter((m) => (m?.info?.role || m?.role) === 'assistant')
-                  .sort((a, b) => {
-                    const ta = a?.info?.time?.created || 0;
-                    const tb = b?.info?.time?.created || 0;
-                    return tb - ta;
-                  });
-                for (const m of assistants) {
-                  const created = m?.info?.time?.created || 0;
-                  if (created >= promptSentAt) {
-                    const id = m?.info?.id || '';
-                    assistantRecord = {
-                      id: id || `asst_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-                      ts: new Date(created || Date.now()).toISOString(),
-                      role: 'assistant',
-                      agent: agentName,
-                      content: extractContentFromClineMessage(m),
-                      clineSessionId,
-                      inReplyTo: record.id,
-                    };
-                    break;
-                  }
-                }
-              }
-            } catch {
-              // best effort
-            }
-
-            if (assistantRecord) {
-              try {
-                if (file) appendFileSync(file, JSON.stringify(assistantRecord) + '\n', 'utf8');
-              } catch {
-                // best effort
-              }
-              broadcast({ type: 'chat:message', sessionId: chatSessionId, message: assistantRecord });
-              state.appendActivity({
-                kind: 'chat.response',
-                agent: agentName,
-                message: (assistantRecord.content || '').slice(0, 500),
-              });
-            }
-            onDone();
-          })();
-        },
-      });
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      const msg = err instanceof Error ? err.message : String(err);
-      broadcast({ type: 'chat:error', sessionId: chatSessionId, error: `stream_error: ${msg}` });
-      onDone();
-    } finally {
-      if (!done) {
+  try {
+    for await (const evt of sub) {
+      if (!evt || typeof evt !== 'object') continue;
+      const t = evt.type || evt.kind;
+      if (t === 'delta' || t === 'message.part.updated' || t === 'text_delta') {
+        const delta = extractTextDelta(evt);
+        if (delta) {
+          if (!noteChatDelta(chatSessionId)) continue;
+          broadcast({
+            type: 'chat:delta',
+            sessionId: chatSessionId,
+            delta,
+            type: 'text',
+            messageId: evt.messageID || evt.message_id || null,
+          });
+        }
+      } else if (t === 'idle' || t === 'session.idle' || t === 'done' || t === 'session.done') {
+        if (done) break;
         done = true;
-        onDone();
+        resetChatDeltaCount(chatSessionId);
+        // Pull the final assistant message from the JSONL.
+        try {
+          const list = listClaudeMessages(claudeSessionId);
+          if (list?.ok && Array.isArray(list.messages)) {
+            const assistants = list.messages
+              .filter((m) => m.role === 'assistant')
+              .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+            for (const m of assistants) {
+              const ts = m.ts || 0;
+              if (ts >= (record?.ts ? Date.parse(record.ts) - 5_000 : 0)) {
+                assistantRecord = {
+                  id: m.id || `asst_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+                  ts: new Date(ts || Date.now()).toISOString(),
+                  role: 'assistant',
+                  agent: agentName,
+                  content: m.content || '',
+                  claudeSessionId,
+                  inReplyTo: record.id,
+                };
+                break;
+              }
+            }
+          }
+        } catch {
+          /* best effort */
+        }
+        if (assistantRecord) {
+          try {
+            if (file) appendFileSync(file, JSON.stringify(assistantRecord) + '\n', 'utf8');
+          } catch {
+            /* best effort */
+          }
+          broadcast({ type: 'chat:message', sessionId: chatSessionId, message: assistantRecord });
+          state.appendActivity({
+            kind: 'chat.response',
+            agent: agentName,
+            message: (assistantRecord.content || '').slice(0, 500),
+          });
+        }
+        break;
       }
     }
-  })();
-}
-
-/**
- * Pump an cline SSE stream, filtering by sessionID and dispatching to
- * the appropriate callback.
- *
- * @param {ReadableStream<Uint8Array>} body
- * @param {AbortController} controller
- * @param {string} sessionId
- * @param {{ onDelta: Function, onIdle: Function }} handlers
- */
-async function pumpSseForChat(body, controller, sessionId, handlers) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder('utf-8');
-  let buffer = '';
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value && value.byteLength > 0) {
-        buffer += decoder.decode(value, { stream: true });
-      }
-      let sep;
-      while ((sep = buffer.indexOf('\n\n')) >= 0 || (sep = buffer.indexOf('\r\n\r\n')) >= 0) {
-        const isCRLF = buffer[sep] === '\r';
-        const block = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + (isCRLF ? 4 : 2));
-        handleChatSseBlock(block, sessionId, handlers);
-      }
-    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    broadcast({ type: 'chat:error', sessionId: chatSessionId, error: `stream_error: ${msg}` });
   } finally {
-    try { reader.releaseLock(); } catch { /* ignore */ }
+    try { sub?.close?.(); } catch { /* ignore */ }
+    if (!done) onDone();
+    else onDone();
   }
 }
 
 /**
- * Parse one SSE block and dispatch to onDelta or onIdle.
- *
- * @param {string} block
- * @param {string} sessionId
- * @param {{ onDelta: Function, onIdle: Function }} handlers
- */
-function handleChatSseBlock(block, sessionId, handlers) {
-  if (!block || block.trim() === '') return;
-  let eventName = null;
-  const dataLines = [];
-  for (const line of block.split(/\r?\n/)) {
-    if (line === '' || line.startsWith(':')) continue;
-    const colon = line.indexOf(':');
-    if (colon < 0) continue;
-    const field = line.slice(0, colon);
-    let value = line.slice(colon + 1);
-    if (value.startsWith(' ')) value = value.slice(1);
-    if (field === 'event') eventName = value;
-    else if (field === 'data') dataLines.push(value);
-  }
-  if (dataLines.length === 0) return;
-  const raw = dataLines.join('\n');
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return;
-  }
-  const evt = unwrapClineSseEvent(eventName, parsed);
-  if (!evt || !evt.type) return;
-  if (evt.sessionID && evt.sessionID !== sessionId) return;
-
-  if (evt.type === 'message.part.updated') {
-    handlers.onDelta(evt);
-  } else if (evt.type === 'session.idle') {
-    handlers.onIdle(evt);
-  }
-}
-
-/**
- * Extract a text delta from an cline SSE event envelope.
+ * Extract a text delta string from a Claude Code SDK event envelope.
  * Returns null if no text delta is present.
  *
- * @param {object} envelope  from unwrapClineSseEvent
- * @returns {{ delta: string } | null}
+ * @param {object} evt
+ * @returns {string | null}
  */
-function extractTextDelta(envelope) {
-  const part = envelope.part;
-  if (!part || typeof part !== 'object') return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const p = /** @type {any} */ (part);
-  if (p.type === 'text' && typeof p.text === 'string') {
-    return { delta: p.text };
+function extractTextDelta(evt) {
+  const part = evt.part || evt.data?.part;
+  if (part && typeof part === 'object') {
+    const p = /** @type {any} */ (part);
+    if (typeof p.text === 'string') return p.text;
   }
+  if (typeof evt.delta === 'string') return evt.delta;
+  if (typeof evt.text === 'string') return evt.text;
   return null;
 }

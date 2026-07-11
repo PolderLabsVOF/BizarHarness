@@ -2,17 +2,17 @@
 
 Common issues you might hit when using BizarHarness, with concrete fixes.
 
-## "cline won't start" after install
+## "claude won't start" after install
 
-**Symptom:** `cline` exits immediately or hangs.
+**Symptom:** `claude` exits immediately or hangs.
 
-**Cause:** Most often a missing or invalid `auth.json` at `~/.local/share/cline/auth.json`.
+**Cause:** Most often a missing or invalid `auth.json` at `~/.local/share/claude-code/auth.json`.
 
 **Fix:**
 
-1. Run `cline` once to trigger the auth setup prompt.
-2. If the TUI doesn't open, run `cline /connect` to add an API key manually.
-3. Verify the file exists and is readable: `ls -la ~/.local/share/cline/auth.json`.
+1. Run `claude` once to trigger the auth setup prompt.
+2. If the TUI doesn't open, run `claude auth` to add an API key manually.
+3. Verify the file exists and is readable: `ls -la ~/.local/share/claude-code/auth.json`.
 
 For dev sandbox users: the same file is mounted read-only from your host into the container, so set it up on the host first.
 
@@ -24,34 +24,34 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 
 **Fix:**
 
-1. **Confirm the plugin is loaded.** In cline, run `/plugins` and check that `bizar` appears. If not, check `cline.json` for the `plugin` array and verify `./plugins/bizar/index.ts` is present.
+1. **Confirm the plugin is loaded.** In Claude Code, run `/plugins` and check that `bizar` appears. If not, check `~/.claude/settings.json` for the `plugin` array and verify `./plugins/bizar/index.ts` is present.
 2. **Check the plugin logs.** Look at `~/.cache/bizar/logs/<sessionId>.log`. You should see per-tool-call lines. If the file is empty, the plugin is not running.
-3. **Disable the plugin for one session** to recover: `BIZAR_DISABLE=1 cline`.
-4. **Disable only the loop guard** if status reporting is useful: `BIZAR_DISABLE_LOOP=1 cline`.
+3. **Disable the plugin for one session** to recover: `BIZAR_DISABLE=1 claude`.
+4. **Disable only the loop guard** if status reporting is useful: `BIZAR_DISABLE_LOOP=1 claude`.
 5. **If you added custom agents,** make sure they include the canonical `## Loop Guard Handling` section. Without it, the loop guard will throw at threshold 12 but the agent will keep retrying. See [Bizar Plugin](Bizar-Plugin) for the full limitations list.
 
 ## "Subagent not found" error
 
 **Symptom:** Odin reports it can't find a specific agent.
 
-**Cause:** The agent's `.md` file is missing from `~/.config/cline/agents/`.
+**Cause:** The agent's `.md` file is missing from `~/.claude/agents/`.
 
 **Fix:**
 
-1. List installed agents: `ls ~/.config/cline/agents/`. You should see `odin.md`, `frigg.md`, `vor.md`, `quick.md`, `mimir.md`, `heimdall.md`, `hermod.md`, `thor.md`, `baldr.md`, `tyr.md`, `vidarr.md`, `forseti.md`, and `semble-search.md`.
+1. List installed agents: `ls ~/.claude/agents/`. You should see `odin.md`, `frigg.md`, `vor.md`, `quick.md`, `mimir.md`, `heimdall.md`, `hermod.md`, `thor.md`, `baldr.md`, `tyr.md`, `vidarr.md`, `forseti.md`, and `semble-search.md`.
 2. If a file is missing, re-run the installer: `bizar`.
-3. For per-project installs, also check `<project>/.cline/agents/`.
-4. Restart cline after re-installing.
+3. For per-project installs, also check `<project>/.claude/agents/`.
+4. Restart Claude Code after re-installing.
 
 ## "Permission denied" running bash commands
 
 **Symptom:** Subagents (or Odin) get permission errors when running `bash`.
 
-**Cause:** cline's permission system is blocking the tool. BizarHarness doesn't grant permissions — it relies on the user's existing `cline.json` config.
+**Cause:** Claude Code's permission system is blocking the tool. BizarHarness doesn't grant permissions — it relies on the user's existing `~/.claude/settings.json` config.
 
 **Fix:**
 
-1. Check the `permission` section of `~/.config/cline/cline.json`.
+1. Check the `permission` section of `~/.claude/settings.json`.
 2. For unblocked tools, you can add entries like:
    ```jsonc
    "permission": {
@@ -59,7 +59,7 @@ For dev sandbox users: the same file is mounted read-only from your host into th
      "edit": "allow"
    }
    ```
-3. For per-tool rules, see the cline permission docs.
+3. For per-tool rules, see the Claude Code permission docs.
 4. **Don't enable `dangerously-skip-permissions` for production agents** — only for short-lived test sessions in a sandbox.
 
 ## "Rate limit" or cost runaway
@@ -70,11 +70,11 @@ For dev sandbox users: the same file is mounted read-only from your host into th
 
 **Fix:**
 
-1. **Reduce parallelism.** If Odin is firing 5+ parallel tasks, narrow the request. Cline is rate-limited per provider; 5 parallel M2.7 calls is fine, 5 parallel M3 calls can hit limits.
+1. **Reduce parallelism.** If Odin is firing 5+ parallel tasks, narrow the request. Claude Code is rate-limited per provider; 5 parallel M2.7 calls is fine, 5 parallel M3 calls can hit limits.
 2. **Use the background-agent tool-call cap.** Set `BIZAR_BACKGROUND_TOOL_CALL_CAP=200` to abort background instances that have run too long.
 3. **Use the test gate.** After implementation, run `bizar test-gate` instead of asking Odin to keep iterating.
 4. **Temporarily disable high-cost tiers.** Edit `config/agents/tyr.md` and change the model to `minimax/minimax-m2.7` (one tier down). Re-run the installer.
-5. **For emergency stop,** Ctrl-C the cline session. The Bizar plugin will mark all in-flight background instances as failed and abort the serve child.
+5. **For emergency stop,** Ctrl-C the Claude Code session. The Bizar MCP server will mark all in-flight background instances as failed and abort the serve child.
 
 ## "Memory Service" not working or memory errors
 
@@ -146,24 +146,24 @@ Patterns are defined in `bizar-dash/src/server/memory-secrets.mjs`. To temporari
 
 ## "Plugin not loading" (no Bizar in /plugins)
 
-**Symptom:** `/plugins` in cline doesn't show the Bizar plugin.
+**Symptom:** `/plugins` in Claude Code doesn't show the Bizar plugin.
 
-**Cause:** The plugin entry is missing from `cline.json`, or the `plugins/bizar/` directory is missing.
+**Cause:** The plugin entry is missing from `settings.json`, or the `plugins/bizar/` directory is missing.
 
 **Fix:**
 
-1. Check `~/.config/cline/cline.json` for a `plugin` array:
+1. Check `~/.claude/settings.json` for a `plugin` array:
    ```bash
-   jq '.plugin' ~/.config/cline/cline.json
+   jq '.plugin' ~/.claude/settings.json
    ```
    You should see an entry like `["./plugins/bizar/index.ts", { ... }]`.
 2. If the array is missing or empty, re-run `./install.sh` from the BizarHarness repo. The script idempotently adds the plugin entry.
 3. Check the plugin files are present:
    ```bash
-   ls ~/.config/cline/plugins/bizar/
+   ls ~/.claude/plugins/bizar/
    ```
    You should see `index.ts`, `src/`, `tests/`, `package.json`, etc.
-4. Restart cline.
+4. Restart Claude Code.
 
 ## "npm install" warnings about peer dependencies
 
@@ -188,20 +188,20 @@ Patterns are defined in `bizar-dash/src/server/memory-secrets.mjs`. To temporari
 2. **Verify the Memory Service vault exists** for the project. Vör checks the vault before asking. If the vault is missing, Vör will ask more than necessary — run `bizar memory init` and confirm `bizar memory status` reports a healthy vault.
 3. **If the Vör file is out of date,** re-run the installer. The current `vor.md` includes the research-first protocol.
 
-## "Install says 'cline not detected' but cline is installed"
+## "Install says 'claude not detected' but claude is installed"
 
-**Symptom:** The installer reports cline is missing.
+**Symptom:** The installer reports Claude Code is missing.
 
-**Cause:** `cline` is not on the installer's `$PATH` lookup.
+**Cause:** `claude` is not on the installer's `$PATH` lookup.
 
 **Fix:**
 
-1. Verify: `which cline`. If it returns nothing, the binary is not on `$PATH`.
-2. If cline is installed via npm, add the npm global bin to your shell rc:
+1. Verify: `which claude`. If it returns nothing, the binary is not on `$PATH`.
+2. If claude is installed via npm, add the npm global bin to your shell rc:
    ```bash
    export PATH="$(npm config get prefix)/bin:$PATH"
    ```
-3. If cline is installed via another method (curl, brew, source), make sure the install location is on `$PATH`.
+3. If claude is installed via another method (curl, brew, source), make sure the install location is on `$PATH`.
 4. Restart your shell.
 
 ## "Background agent never finishes"
@@ -231,39 +231,39 @@ EventStream.onSessionEvent: sessionId must be non-empty
 
 1. **Verify the installed version.** From the BizarHarness repo on the same machine:
    ```bash
-   grep version ~/.config/cline/plugins/bizar/package.json
+   grep version ~/.claude/plugins/bizar/package.json
    ```
    Should be `0.5.1` or later.
-2. **If older:** re-run `bash install.sh` from the BizarHarness repo. This copies the new source to `~/.config/cline/plugins/bizar/`.
-3. **If the version is correct but the error still appears:** the plugin was loaded by the *old* source at cline startup. **Restart cline** to load the new code. The plugin has no hot-reload.
+2. **If older:** re-run `bash install.sh` from the BizarHarness repo. This copies the new source to `~/.claude/plugins/bizar/`.
+3. **If the version is correct but the error still appears:** the plugin was loaded by the *old* source at Claude Code startup. **Restart Claude Code** to load the new code. The plugin has no hot-reload.
 4. **Run the regression test** to confirm the fix is in the source you deployed:
    ```bash
-   cd ~/.config/cline/plugins/bizar && export PATH="$HOME/.bun/bin:$PATH" && bun test tests/attach-handler-bug.test.ts
+   cd ~/.claude/plugins/bizar && export PATH="$HOME/.bun/bin:$PATH" && bun test tests/attach-handler-bug.test.ts
    ```
    All 3 tests should pass.
 
 ## Installed plugin source changes aren't taking effect
 
-**Symptom:** You edited a file in `plugins/bizar/src/` and re-ran `install.sh`, but cline is still using the old behavior. No error, just no change.
+**Symptom:** You edited a file in `plugins/bizar/src/` and re-ran `install.sh`, but Claude Code is still using the old behavior. No error, just no change.
 
-**Cause:** The Bizar plugin has **no hot-reload**. cline loads the plugin at process start and keeps it in memory for the session lifetime. `install.sh` only copies files to disk — it does not signal cline to reload.
+**Cause:** The Bizar MCP server has **no hot-reload**. Claude Code loads the plugin at process start and keeps it in memory for the session lifetime. `install.sh` only copies files to disk — it does not signal Claude Code to reload.
 
 **Fix:**
 
-1. **Restart cline.** This is the only reliable way. There's no in-process reload.
-2. If you're seeing this frequently during development, consider using the [Dev Sandbox](Dev-Sandbox) — the Docker-based sibling repo reloads the plugin on every cline restart in a fresh container, which is much faster than restarting your main cline.
+1. **Restart Claude Code.** This is the only reliable way. There's no in-process reload.
+2. If you're seeing this frequently during development, consider using the [Dev Sandbox](Dev-Sandbox) — the Docker-based sibling repo reloads the plugin on every Claude Code restart in a fresh container, which is much faster than restarting your main Claude Code.
 
 ## "install.sh" didn't deploy the latest commands
 
-**Symptom:** You `git pull`'d BizarHarness and see new commands in `config/commands/`, but `/help` in cline doesn't show them.
+**Symptom:** You `git pull`'d BizarHarness and see new commands in `config/commands/`, but `/help` in Claude Code doesn't show them.
 
-**Cause:** Pre-v0.5.1, `install.sh` only copied `agents/`, `skills/`, and the Bizar plugin. Slash commands and hooks were not deployed.
+**Cause:** Pre-v0.5.1, `install.sh` only copied `agents/`, `skills/`, and the Bizar MCP server. Slash commands and hooks were not deployed.
 
 **Fix:**
 
 1. Re-run `bash install.sh`. The v0.5.1 installer copies `config/commands/*.md` and `config/hooks/*` (recursive).
-2. Restart cline to pick up the new commands.
-3. Verify with `ls ~/.config/cline/commands/` — your new commands should appear.
+2. Restart Claude Code to pick up the new commands.
+3. Verify with `ls ~/.claude/commands/` — your new commands should appear.
 
 ## "tailscale serve" hangs forever
 
@@ -300,7 +300,7 @@ EventStream.onSessionEvent: sessionId must be non-empty
 - **GitHub Issues:** https://github.com/DrB0rk/BizarHarness/issues
 - **Discussions:** https://github.com/DrB0rk/BizarHarness/discussions
 - **Self-improvement log:** `.bizar/AGENTS_SELF_IMPROVEMENT.md` in your project may have a fix for an issue you're seeing.
-- **cline docs:** https://docs.cline.bot/docs
+- **Claude Code docs:** https://docs.claude.com/claude-code
 
 ## Next steps
 

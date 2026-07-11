@@ -7,9 +7,24 @@
 ## TL;DR
 
 Every tool call goes through `checkDangerous()` in the
-`beforeTool` hook. If the call's arguments match a deny
-pattern, the call is stopped with `{ stop: true, reason: '...' }`.
-The host never sees the dangerous call.
+`PreToolUse` hook (formerly the Cline-era `beforeTool` hook).
+If the call's arguments match a deny pattern, the hook
+returns the Claude Code shape:
+
+```ts
+{
+  hookSpecificOutput: {
+    permissionDecision: "deny",
+    permissionDecisionReason: "dangerous_pattern:<name>",
+  },
+}
+```
+
+The legacy Cline-era `{ stop: true, reason }` shape is
+translated into the Claude Code shape by the hook adapter;
+`checkDangerous()` itself returns the framework-neutral
+`ApprovalCheck` type (see the API section below). The host
+never sees the dangerous call.
 
 ## Pattern categories (36 total)
 
@@ -112,9 +127,21 @@ import { checkDangerous } from "./dangerous-patterns.js";
 
 const safety = checkDangerous(toolArgs);
 if (safety.decision === "deny") {
-  return { stop: true, reason: `dangerous_pattern:${safety.pattern}` };
+  return {
+    hookSpecificOutput: {
+      permissionDecision: "deny",
+      permissionDecisionReason: `dangerous_pattern:${safety.pattern}`,
+    },
+  };
 }
 ```
+
+The legacy Cline-era hook returned `{ stop: true, reason }`;
+the Claude Code hook returns
+`{ hookSpecificOutput: { permissionDecision: "deny",
+permissionDecisionReason } }`. Both shapes are
+semantically equivalent — the hook adapter translates one
+into the other.
 
 The `checkDangerous()` function:
 
@@ -176,9 +203,14 @@ export function getDangerousPatternStats(): {
 
 - [DEC-007](decisions/DEC-007-tool-approval-gate.md) — the
   decision that introduced the gate
-- [docs/architecture.md](architecture.md) — `beforeTool` integration
+- [docs/architecture.md](architecture.md) — `PreToolUse`
+  integration
 - Hermes Agent `tools/approval.py:546-770` — reference
 - OpenFang `crates/openfang-skills/src/verify.rs` — reference
 - OpenClaw `src/security/external-content.ts:28-43` — reference
+- https://docs.claude.com/claude-code — Claude Code hooks
+  (PreToolUse / PostToolUse event reference)
+- https://github.com/anthropics/claude-code — Claude Code
+  docs / examples
 - https://github.com/walkinglabs/awesome-harness-engineering —
   "Constraints, Guardrails & Safe Autonomy"

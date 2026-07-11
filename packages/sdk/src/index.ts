@@ -1,82 +1,47 @@
 /**
  * Public API for @polderlabs/bizar-sdk.
+ *
+ * v0.4.0 — Claude Code-native rewrite. The legacy Cline wrappers
+ * (`createClineSdk`, `subscribeClineEvents`, `Cline*` types) have been
+ * removed because Bizar no longer integrates with the Cline runtime.
+ * The Claude Code integration is via the MCP server exported from
+ * `./mcp/server.ts` (`createBizarMcpServer`) and the in-process memory
+ * vault exported from `./memory/index.ts`.
  */
 
-export { createBizarClient } from "./client.js";
-export type {
-  BizarClient,
-  BizarClientConfig,
-  SessionsResource,
-  ProjectsResource,
-  PlansResource,
-  EventsResource,
-  HealthResource,
-} from "./client.js";
-
-export type { EventSubscription, EventSubscriptionOptions } from "./events.js";
-
+// In-process memory vault (Obsidian-compatible markdown notes).
 export {
-  isBizarError,
-  connectionErrorFrom,
-  dashboardErrorFrom,
-  apiErrorFrom,
-} from "./errors.js";
-export type {
-  BizarError,
-  PluginError,
-  DashboardError,
-  ConnectionError,
-  APIError,
-  ClineConnectionError,
-} from "./errors.js";
+  readNote,
+  writeNote,
+  listNotes,
+  searchNotes,
+  parseFrontmatter,
+  serializeFrontmatter,
+  resolveVaultRoot,
+  DEFAULT_MEMORY_VAULT,
+  LEGACY_MEMORY_VAULT,
+} from "./memory/index.js";
+export type { MemoryNote } from "./memory/index.js";
 
-export type {
-  // Session
-  Session,
-  SessionStatus,
-  SessionCreate,
-  SessionListQuery,
-  // Project
-  Project,
-  // Plan
-  Plan,
-  PlanStatus,
-  // Part
-  Part,
-  TextPart,
-  ToolCallPart,
-  ToolResultPart,
-  ReasoningPart,
-  // Event
-  DashboardEvent,
-  DashboardConnectedEvent,
-  SessionCreatedEvent,
-  SessionUpdatedEvent,
-  SessionIdleEvent,
-  SessionErrorEvent,
-  MessagePartUpdatedEvent,
-  ToolExecutedEvent,
-  PlanUpdatedEvent,
-  // Health
-  Health,
-} from "./types.js";
+// Dangerous-pattern scanner.
+export {
+  checkDangerous,
+  listDangerousPatterns,
+  getDangerousPatternStats,
+} from "./dangerous-patterns.js";
+export type { ApprovalDecision, ApprovalCheck } from "./dangerous-patterns.js";
+
+// Tool-call fingerprint (stable hash for loop-guard).
+export { fingerprint } from "./fingerprint.js";
+
+// Claude Code MCP server.
+export {
+  createBizarMcpServer,
+  createBizarMcpServerConfig,
+  BIZAR_TOOLS,
+  getBizarMcpToolSummary,
+  defineTool,
+} from "./mcp/server.js";
+export type { SdkMcpToolDef, SdkMcpServerConfig } from "./mcp/server.js";
 
 export { SDK_VERSION } from "./version.js";
-
-// Cline SDK — wraps the cline serve child with a typed interface.
-// Tries `@cline/sdk` first; falls back to a thin fetch wrapper.
-export { createClineSdk } from "./cline.js";
-export type { ClineSdk, ClineSdkConfig } from "./cline.js";
-
-export { subscribeClineEvents } from "./cline-events.js";
-export type {
-  ClineEventEnvelope,
-  ClineEventSubscribeOptions,
-} from "./cline-events.js";
-
-export type {
-  ClineSession,
-  ClineMessage,
-  ClinePart,
-  ClineEvent,
-} from "./cline-types.js";

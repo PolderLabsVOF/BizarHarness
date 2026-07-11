@@ -1,20 +1,26 @@
 {
   "name": "@polderlabs/bizar-sdk",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./cline": "./dist/cline.js"
+    "./memory": "./dist/memory/index.js",
+    "./mcp": "./dist/mcp/server.js",
+    "./loop": "./dist/loop.js",
+    "./dangerous-patterns": "./dist/dangerous-patterns.js"
   },
   "files": ["dist"],
   "peerDependencies": {
-    "@cline/sdk": "*"
+    "@anthropic-ai/claude-agent-sdk": "*"
   },
   "peerDependenciesMeta": {
-    "@cline/sdk": {
+    "@anthropic-ai/claude-agent-sdk": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
   }
 }

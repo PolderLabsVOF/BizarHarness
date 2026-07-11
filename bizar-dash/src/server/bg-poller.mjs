@@ -1,18 +1,18 @@
 /**
  * src/server/bg-poller.mjs
  *
- * v3.5.5 — Task-completion polling bridge.
+ * v6.3.0 — Task-completion polling bridge for Claude Code.
  *
- * The plugin writes bg state files to `~/.cache/bizar/bg/<id>.json`
- * as each agent instance runs. When an instance reaches a terminal
- * state (`done` or `failed`), this poller:
+ * The bg state files live at `~/.cache/bizar/bg/<id>.json`. When an
+ * instance reaches a terminal state (`done` or `failed`), this
+ * poller:
  *
  *   1. Updates the linked task's `status` to `done` / `blocked`.
  *   2. Kills the tmux session (Task 3 integration) if one is alive.
  *   3. For `done` instances, scans the final assistant message from
- *      the cline session for an `html-artifact` fenced block and,
- *      when found, saves it via the artifacts store and links the
- *      artifact id onto the task's `metadata` (Task 5 + 6).
+ *      the Claude Code session for an `html-artifact` fenced block
+ *      and, when found, saves it via the artifacts store and links
+ *      the artifact id onto the task's `metadata`.
  *   4. Broadcasts a `tasks:change` event so the UI updates in real
  *      time without waiting for a full snapshot.
  *
@@ -23,14 +23,13 @@
  *
  * Idempotency: we remember the last status we've seen per instance
  * in a `Map` and only react to transitions, so a `done` instance that
- * reappears in the list (the plugin rewrites the file on every
- * progress event) won't trigger a duplicate task update.
+ * reappears in the list won't trigger a duplicate task update.
  */
 import { backgroundStore } from './background-store.mjs';
 import { tasksStore } from './tasks-store.mjs';
 import { projectsStore } from './projects-store.mjs';
 import { artifactsStore, extractArtifactFromMessage } from './artifacts-store.mjs';
-import { readServeInfo, listClineMessages, extractContentFromClineMessage, abortSession } from './serve-info.mjs';
+import { listClaudeMessages, readLastAssistantText } from './claude-info.mjs';
 import { execFileSync } from 'node:child_process';
 
 const POLL_INTERVAL_MS = 3_000;
@@ -79,37 +78,27 @@ function recordPollerFailure(scope, taskId, instanceId, err) {
 let _interval = null;
 
 /**
- * Read the artifact for a finished bg instance from the cline
+ * Read the artifact for a finished bg instance from the Claude Code
  * session. Returns the { html, name } pair or null when:
- *   - the plugin is offline
- *   - the cline session has no messages
+ *   - the session id is missing
+ *   - the session has no messages
  *   - the final assistant message has no html-artifact block
  *
  * @returns {Promise<{html:string,name:string|null}|null>}
  */
 async function scanForArtifact(bg) {
   if (!bg.sessionId) return null;
-  const serveInfo = readServeInfo();
-  if (!serveInfo) return null;
-  // v3.5.5 — `active.path` is the project root; that's the worktree
-  // the cline session was created in. Fall back to the plugin's
-  // recorded worktree when the active project has been removed.
-  const active = projectsStore.active();
-  const directory = bg.worktree || (active && active.path) || serveInfo.worktree || '';
-  const list = await listClineMessages(serveInfo, bg.sessionId, directory, ARTIFACT_SCAN_TIMEOUT_MS);
-  if (!list.ok || !Array.isArray(list.messages) || list.messages.length === 0) {
+  const result = listClaudeMessages(bg.sessionId);
+  if (!result.ok || !Array.isArray(result.messages) || result.messages.length === 0) {
     return null;
   }
   // Walk newest → oldest; pick the last assistant message.
-  const assistants = list.messages
-    .filter((m) => (m?.info?.role || m?.role) === 'assistant')
-    .sort((a, b) => {
-      const ta = a?.info?.time?.created || 0;
-      const tb = b?.info?.time?.created || 0;
-      return tb - ta;
-    });
+  const assistants = result.messages
+    .filter((m) => m.role === 'assistant')
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0));
   for (const m of assistants) {
-    const text = extractContentFromClineMessage(m);
+    const text = m.content || '';
+    if (!text) continue;
     const found = extractArtifactFromMessage(text);
     if (found) return found;
   }
@@ -191,13 +180,14 @@ async function tick() {
         recordPollerFailure('task-update', taskId, bg.instanceId, err);
       }
 
-      // Best-effort: abort the cline session. Idempotent — a
-      // already-finished session just returns 404 and we move on.
+      // Best-effort: kill the Claude Code session via the
+      // bg-spawner if it's still tracked. Idempotent — a
+      // already-finished session is a no-op.
       if (bg.sessionId) {
         try {
-          const serveInfo = readServeInfo();
-          if (serveInfo) {
-            await abortSession(serveInfo, bg.sessionId, bg.worktree || serveInfo.worktree);
+          const { isAlive, killBgAgent } = await import('./claude-bg-spawner.mjs').catch(() => ({}));
+          if (isAlive && isAlive(bg.sessionId)) {
+            await killBgAgent(bg.sessionId);
           }
         } catch { /* best effort */ }
 

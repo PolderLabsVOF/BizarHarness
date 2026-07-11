@@ -8,8 +8,9 @@
 
 | ID | Date | Status | Title | File |
 | --- | --- | --- | --- | --- |
-| DEC-001 | 2026-07-07 | Accepted | Complete rewrite (OpenCode → Cline) | [docs/decisions/DEC-001-cline-rewrite.md](docs/decisions/DEC-001-cline-rewrite.md) |
-| DEC-002 | 2026-07-07 | Accepted | In-process ClineCore (no `cline serve` subprocess) | [docs/decisions/DEC-002-in-process-clinecore.md](docs/decisions/DEC-002-in-process-clinecore.md) |
+| DEC-011 | 2026-07-11 | Accepted | Cline → Claude Code migration | [docs/decisions/DEC-011-claude-code-migration.md](docs/decisions/DEC-011-claude-code-migration.md) |
+| DEC-001 | 2026-07-07 | Accepted | OpenCode → Cline rewrite (superseded by DEC-011; the OpenCode→Cline migration was only temporary — Claude Code is the runtime as of v6.3.0) | [docs/decisions/DEC-001-cline-rewrite.md](docs/decisions/DEC-001-cline-rewrite.md) |
+| DEC-002 | 2026-07-07 | Accepted | In-process ClineCore (no `cline serve` subprocess — now no `claude daemon` subprocess; spirit preserved by DEC-011) | [docs/decisions/DEC-002-in-process-clinecore.md](docs/decisions/DEC-002-in-process-clinecore.md) |
 | DEC-003 | 2026-07-07 | Accepted | In-process memory vault (no dashboard HTTP) | [docs/decisions/DEC-003-in-process-memory-vault.md](docs/decisions/DEC-003-in-process-memory-vault.md) |
 | DEC-004 | 2026-07-07 | Accepted | Cline agent teams integration (`bizar_spawn_team`) | [docs/decisions/DEC-004-cline-agent-teams.md](docs/decisions/DEC-004-cline-agent-teams.md) |
 | DEC-005 | 2026-07-07 | Accepted | Background agents via dashboard HTTP + in-process Cline | [docs/decisions/DEC-005-bg-agents-via-dashboard.md](docs/decisions/DEC-005-bg-agents-via-dashboard.md) |
@@ -53,3 +54,13 @@ Each ADR is also referenced in:
 - `docs/architecture.md` — layer model and module map
 - `docs/quality-document.md` — per-module A/B/C/D scores
 - `feature_list.json` — features and their state
+
+## How decisions evolve
+
+ADRs are immutable once accepted; superseded decisions are marked
+with a banner and a "Superseded by DEC-NNN" cross-reference rather
+than rewritten in place. Historical DECs (001, 002) were partially
+superseded by DEC-011 (v6.3.0, Claude Code migration) — their
+underlying *spirit* still applies (in-process, single runtime per
+session, plugin-as-MCP-server) but the references to Cline-specific
+subprocesses and tool shapes are rewritten in v6.3.0.

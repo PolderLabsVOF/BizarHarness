@@ -78,7 +78,7 @@ if (
 // ── Banner ─────────────────────────────────────────────────────────────────────
 
 function showBanner() {
-  console.log(chalk.bold.cyan('  ᛭ Bizar — Norse Pantheon Agent System for cline'));
+  console.log(chalk.bold.cyan('  ᛭ Bizar — Norse Pantheon Agent System for Claude Code'));
   console.log();
 }
 
@@ -97,7 +97,7 @@ function showHelp() {
     export [target]     Export agents/rules to another harness
     artifact <subcommand>  Manage visual artifacts
     test-gate           Detect & run the project's test suite
-    update              Auto-update everything (cline + bizar + dash + plugin)
+    update              Auto-update everything (claude + bizar + dash + sdk)
     service             Manage the background service daemon
     dash <subcommand>   Manage the dashboard (start/stop/status/cleanup/tui)
     memory <subcommand> Manage project memory (Bizar Memory Service)
@@ -109,7 +109,7 @@ function showHelp() {
     usage                 Show compact usage analytics summary (24h rolling)
     doctor              Check the BizarHarness install for health issues
     repair              Fix common install issues
-    dev-link            Symlink local plugin source into cline's plugin dir
+    dev-link            Symlink local SDK source into Claude Code's plugin dir
     dev-unlink          Remove the dev symlink and restore the deployed copy
     heads-up <subcommand>  Manage pre-push / pre-release heads-ups
     bg <subcommand>     Manage background agents (list/view/kill/logs)
@@ -118,7 +118,7 @@ function showHelp() {
     marketplace <subcommand>  Browse and install plugins from the public marketplace
     agent-browser      Install / update / verify the agent-browser CLI
     agent-browser-up    Start Chromium for agent-browser (start/stop/status)
-    providers detect    Auto-detect provider API keys from env + cline.json
+    providers detect    Auto-detect provider API keys from env + ~/.claude/settings.json
     clip <subcommand>       Manage web clipper saved clips (list/delete/configure)
     ocr <subcommand>        OCR operations on images (list/process/configure)
     digest                 Manage weekly digests (list/view/generate)
@@ -129,14 +129,14 @@ function showHelp() {
     eval                   Evaluate AI agent outputs against golden fixtures
     plan                   [v6.0.0+] Reserved for future plan management
     validate               Validate the Bizar install (21 checks)
-    setup-provider         Configure a provider in cline.json (since v6.2.2 installer doesn't touch providers)
-    config                 Show current Cline configuration (pass-through to cline config)
-    history                List session history (pass-through to cline history)
-    hub                    Manage the local hub daemon (pass-through to cline hub)
-    hook                   Handle a hook payload from stdin (pass-through to cline hook)
-    team                   Spawn an agent team from CLI (wraps cline --team-name)
+    setup-provider         Configure a provider in ~/.claude/settings.json (since v6.2.2 installer doesn't touch providers)
+    config                 Show current Claude Code configuration (pass-through to claude config)
+    history                List session history (pass-through to claude history)
+    hub                    Manage the local hub daemon (pass-through to claude hub)
+    hook                   Handle a hook payload from stdin (pass-through to claude hook)
+    team                   Spawn an agent team from CLI (wraps claude --team-name)
     subagent               Spawn a read-only research subagent from CLI
-    rca                    Analyze a GitHub issue (Cline CLI sample)
+    rca                    Analyze a GitHub issue (Claude Code CLI sample)
 
   Examples:
     bizar install
@@ -151,8 +151,7 @@ function showHelp() {
 
   Install:
     npm install -g @polderlabs/bizar
-    npm install -g @polderlabs/bizar-dash
-    npm install -g @polderlabs/bizar-plugin
+    npm install -g @anthropic-ai/claude-code
   `);
 }
 
@@ -548,15 +547,15 @@ async function main() {
     case 'hook':
     case 'team':
     case 'subagent': {
-      // v6.2.3 — Pass-through wrappers for Cline CLI commands.
-      // These live in cli/commands/cline-cmd.mjs.
-      const mod = await importCommand('cline-cmd');
+      // v6.3.0 — Pass-through wrappers for Claude Code CLI commands.
+      // These live in cli/commands/claude-cmd.mjs.
+      const mod = await importCommand('claude-cmd');
       if (!mod) {
-        console.error(chalk.red(`  ✗ Could not load cline-cmd module`));
+        console.error(chalk.red(`  ✗ Could not load claude-cmd module`));
         process.exit(EXIT_ERROR);
         return;
       }
-      dbg('loaded command module:', 'cline-cmd');
+      dbg('loaded command module:', 'claude-cmd');
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (!found) {
         console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));

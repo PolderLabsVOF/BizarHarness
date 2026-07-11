@@ -5,7 +5,7 @@
  * the node_modules copy step added in the "make the plugin-install fix
  * durable" change.
  *
- * Strategy: mock HOME so clineConfigDir() resolves inside a tmpdir,
+ * Strategy: mock HOME so claudeConfigDir() resolves inside a tmpdir,
  * and pass `opts.sourceDir` to bypass the `npm root -g` lookup with a
  * caller-supplied fake plugin source.
  *
@@ -31,25 +31,25 @@ const ORIG_HOME = process.env.HOME;
 const ORIG_XDG = process.env.XDG_CONFIG_HOME;
 
 /**
- * Point HOME at a fresh tmpdir so the module's clineConfigDir()
- * resolves inside it. As of v5.6.0-beta.12, `clineConfigDir()` returns
- * `<HOME>/.cline/` (matching Cline's own `resolveClineDir` since v3.0).
+ * Point HOME at a fresh tmpdir so the module's claudeConfigDir()
+ * resolves inside it. As of v6.3.0, `claudeConfigDir()` returns
+ * `<HOME>/.claude/`.
  *
- * We also reset CLINE_DIR and BIZAR_LEGACY_CLINE_DIR so the test uses
- * the canonical path even if the developer's env is non-default.
+ * We also reset CLAUDE_CONFIG_DIR and BIZAR_LEGACY_CLAUDE_DIR so the
+ * test uses the canonical path even if the developer's env is non-default.
  */
 function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-install-'));
   process.env.HOME = home;
   delete process.env.XDG_CONFIG_HOME;
-  delete process.env.CLINE_DIR;
-  delete process.env.BIZAR_LEGACY_CLINE_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.BIZAR_LEGACY_CLAUDE_DIR;
   return home;
 }
 
 /** Path to the deployed plugin dir under the mocked HOME. */
 function pluginDest(home) {
-  return join(home, '.cline', 'plugins', 'bizar');
+  return join(home, '.claude', 'plugins', 'bizar');
 }
 
 /**

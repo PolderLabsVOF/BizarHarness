@@ -1,7 +1,7 @@
 /**
  * src/server/task-delegator.mjs
  *
- * v3.5.2 — Odin task delegation.
+ * v6.3.0 — Odin task delegation, REWRITTEN for Claude Code.
  *
  * Accepts a single "natural language" task from the user. Splits it into
  * 1-5 subtasks via heuristic rules (an LLM call would replace this in
@@ -18,23 +18,18 @@
  * Subtasks are always persisted to the regular tasks store first; the
  * background dispatch is best-effort.
  *
- * v3.5.4 (bug: dispatch stuck) — Dispatch path replaced. The previous
- * implementation shell-executed `node plugins/bizar/dist/cli.js bg enqueue`,
- * but the plugin is a Bun-native TS project with no compiled `dist/`,
- * so the exec always failed. The silent try/catch around execSync meant
- * the failure was invisible to both the user and the dashboard log.
+ * v6.3.0 — Dispatch path replaced. The previous Cline path shell-executed
+ * `node plugins/bizar/dist/cli.js bg enqueue`, then `cline run` via
+ * cline-runner.mjs. Claude Code has no equivalent `serve` child — the
+ * new path spawns `claude -p "<prompt>"` per subtask via
+ * `claude-runner.mjs` (in-process when the SDK is available,
+ * subprocess otherwise). The dispatch is gated on `pingClaudeSdk()`
+ * (in-process SDK reachable) OR the `claude` binary on PATH.
  *
- * New path:
- *   1. Read the plugin's serve-info file (port + password + worktree).
- *   2. POST /api/session on the plugin's cline serve child.
- *   3. POST /api/session/{id}/prompt to fire the task prompt.
- *   4. Write a state file under ~/.cache/bizar/bg/ so the dashboard's
- *      background-store can list and kill it.
- *
- * If serve-info is missing (plugin not running) we log a clear warning
- * at startup AND surface the dispatch failure in the `/submit` response,
- * so the user can re-dispatch manually with `/api/tasks/:id/start`
- * after the plugin is up.
+ * If neither is available we log a clear warning at startup AND
+ * surface the dispatch failure in the `/submit` response, so the
+ * user can re-dispatch manually with `/api/tasks/:id/start`
+ * once the runtime is up.
  */
 
 import { tasksStore, ALLOWED_TASK_STATUSES } from './tasks-store.mjs';
@@ -84,6 +79,7 @@ function buildPromptText(sub) {
   parts.push(`Subtask ID: ${sub.id}`);
   parts.push(`Assigned agent: ${sub.assignee || 'tyr'}`);
   parts.push(`Parent task ID: ${sub.parent || '(none)'}`);
+  parts.push(`Runtime: Claude Code (claude -p)`);
   return parts.join('\n');
 }
 
@@ -460,23 +456,25 @@ export const taskDelegator = {
   },
 
   /**
-   * v3.5.4 (bug: dispatch stuck) — Best-effort dispatch to the background
-   * agent infrastructure. Talks to the plugin's cline serve child via
-   * HTTP (createSession + sendPrompt) and writes a per-instance state
-   * file under BG_DIRS so the dashboard's `backgroundStore.list()` and
-   * `kill()` paths find the instance.
+   * v6.3.0 — Best-effort dispatch to the Claude Code runtime.
+   * Replaces the v3.5.4 Cline HTTP-serve path. Spawns one
+   * `claude -p "<prompt>"` subprocess per subtask via
+   * `claude-runner.mjs` (or, when the SDK is available,
+   * `claude-bg-spawner.mjs`'s SDK-backed path).
    *
-   * Replaces the previous `execSync('node plugins/bizar/dist/cli.js …')`
-   * path which silently failed because the plugin is a Bun-native TS
-   * project with no compiled `dist/`.
+   * The runner writes its output to the LogWriter's log file under
+   * `~/.cache/bizar/logs/<sessionId>.log`. The dashboard's
+   * `backgroundStore.list()` and `kill()` paths find the instance
+   * via the per-instance state file at
+   * `~/.cache/bizar/bg/<instanceId>.json`.
    *
    * Returns a structured `{ dispatched: string[], errors: Array<…>, warnings: Array<…> }`
-   * so the caller (and `/api/tasks/submit`) can surface failures to the
-   * user instead of swallowing them.
+   * so the caller (and `/api/tasks/submit`) can surface failures to
+   * the user instead of swallowing them.
    *
-   * v3.5.1 — Respects agents.maxParallel: caps concurrent dispatches to
-   * the configured limit; overflow subtasks are queued until a slot
-   * frees up.
+   * v3.5.1 — Respects agents.maxParallel: caps concurrent dispatches
+   * to the configured limit; overflow subtasks are queued until a
+   * slot frees up.
    *
    * @returns {Promise<{ dispatched: string[], errors: Array<{ subtaskId: string, kind: string, message: string }>, warnings: string[] }>}
    */
@@ -503,29 +501,32 @@ export const taskDelegator = {
     const runningCount = await runningBgCount();
     const slotsAvailable = Math.max(0, maxParallel - runningCount);
 
-    // v3.5.4 (bug: dispatch stuck) — Resolve the cline serve child
-    // the plugin owns. If the plugin is not running we record a warning
-    // and skip the actual spawn (subtasks still flip to `doing` so the
-    // user can see them, but `metadata.dispatchPending = true` tells
-    // them to retry via `/api/tasks/:id/start` once the plugin is up).
-    let serveInfo = null;
-    let serveReachable = false;
+    // v6.3.0 — Verify the Claude Code runtime is reachable. We
+    // accept either the in-process SDK or the `claude` binary on
+    // PATH. `pingClaudeSdk()` probes the SDK; `claude -v` on PATH
+    // is the subprocess fallback. When neither is available we
+    // mark subtasks as `dispatchPending: true` so the UI surfaces
+    // "Awaiting dispatch" and `/api/tasks/:id/start` can retry
+    // after the user installs Claude Code.
+    let claudeAvailable = false;
     try {
-      const { readServeInfo, pingClineServe } = await import('./serve-info.mjs');
-      serveInfo = readServeInfo();
-      if (!serveInfo) {
-        result.warnings.push('serve-info not found — the bizar plugin is not running. Tasks will be marked queued; retry via POST /api/tasks/:id/start once the plugin is up.');
-        console.warn('[task-delegator] serve-info missing — plugin may not be running. Dispatch will be deferred.');
-      } else {
-        serveReachable = await pingClineServe(serveInfo);
-        if (!serveReachable) {
-          result.warnings.push(`cline serve at ${serveInfo.baseUrl} is not reachable. Tasks will be marked queued; retry via POST /api/tasks/:id/start.`);
-          console.warn(`[task-delegator] cline serve not reachable at ${serveInfo.baseUrl}`);
-        }
+      const { pingClaudeSdk } = await import('./claude-sdk.mjs');
+      claudeAvailable = await pingClaudeSdk();
+    } catch {
+      claudeAvailable = false;
+    }
+    if (!claudeAvailable) {
+      try {
+        const { spawnSync } = await import('node:child_process');
+        const probe = spawnSync('claude', ['-v'], { stdio: 'ignore', timeout: 1500 });
+        claudeAvailable = probe.status === 0;
+      } catch {
+        claudeAvailable = false;
       }
-    } catch (err) {
-      result.warnings.push(`could not load serve-info helper: ${err.message}`);
-      console.warn('[task-delegator] serve-info helper failed:', err.message);
+    }
+    if (!claudeAvailable) {
+      result.warnings.push('claude runtime not reachable — neither the @anthropic-ai/claude-agent-sdk nor the `claude` binary on PATH. Tasks will be marked queued; retry via POST /api/tasks/:id/start once Claude Code is installed.');
+      console.warn('[task-delegator] claude runtime unreachable — dispatch will be deferred.');
     }
 
     // Split: first N get dispatched now, rest are queued.
@@ -549,13 +550,13 @@ export const taskDelegator = {
       });
     }
 
-    // v3.5.4 (bug: dispatch stuck) — Per-subtask dispatch path. We
-    // collect errors instead of swallowing them. Two failure modes:
-    //   - serveInfo/serveReachable missing: mark dispatchPending so
-    //     the UI shows "Awaiting dispatch" and `/api/tasks/:id/start`
-    //     can retry.
-    //   - HTTP error: record error message so the API response carries
-    //     it.
+    // v6.3.0 — Per-subtask dispatch path. We collect errors instead
+    // of swallowing them. Two failure modes:
+    //   - claudeAvailable=false: mark dispatchPending so the UI
+    //     shows "Awaiting dispatch" and `/api/tasks/:id/start` can
+    //     retry.
+    //   - spawn failure: record error message so the API response
+    //     carries it.
     for (const sub of toDispatch) {
       const startedAt = new Date().toISOString();
       let bgInstanceId = null;
@@ -563,21 +564,19 @@ export const taskDelegator = {
       let dispatchError = null;
       let dispatchPending = false;
 
-      // v3.11.1 — Active dispatch path. We no longer depend on the
-      // cline serve child's HTTP API to drive the agent loop
-      // (per the cline docs, that API is passive — it needs a
-      // TUI/web client connected to actually process prompts).
-      // Instead we spawn one `cline run` subprocess per subtask
-      // and capture its output to the LogWriter's log file. The
-      // plugin's cline-runner.ts and this dashboard's
-      // cline-runner.mjs share the same wire format.
-      if (serveInfo && serveReachable) {
+      // v6.3.0 — Active dispatch path. Spawn one `claude -p` (or
+      // `claude --bg` for long-running sessions) subprocess per
+      // subtask via claude-runner.mjs. Capture the sessionId from
+      // the runner's JSON-line stream.
+      if (claudeAvailable) {
         try {
-          const { spawnAgent } = await import('./cline-runner.mjs');
-          // v3.11.0 — Fall back to projectRoot when serve-info is
-          // missing `worktree` (older plugin builds only wrote
-          // `{password, pid, port}`).
-          const dispatchWorktree = serveInfo.worktree || projectRoot || '';
+          const { spawnAgent } = await import('./claude-runner.mjs');
+          // v6.3.0 — Prefer the bg-spawner's SDK-backed path when
+          // the SDK is reachable; fall back to the print-mode
+          // subprocess otherwise. We always pass `background: false`
+          // here so the runner returns a sessionId synchronously;
+          // the bg-spawner is used separately by the Active tab.
+          const dispatchWorktree = projectRoot || '';
           const promptText = buildPromptText(sub);
 
           // Predict the bg instance id (deterministic, derived from
@@ -597,14 +596,14 @@ export const taskDelegator = {
           });
 
           if (!spawnRes.ok || !spawnRes.sessionId) {
-            dispatchError = spawnRes.error || 'cline run failed before reporting session id';
+            dispatchError = spawnRes.error || 'claude -p failed before reporting session id';
           } else {
             sessionId = spawnRes.sessionId;
             bgInstanceId = predictedInstanceId;
 
             // v3.5.5 — Wrap the agent run in a tmux session so
             // operators can `tmux attach -t bizar-bg-<id>` and watch
-            // the cline process in real time.
+            // the claude process in real time.
             try {
               const tmuxRes = backgroundStore.spawnTmuxFor(
                 `bg_${sessionId.slice(0, 16)}`,
@@ -623,9 +622,9 @@ export const taskDelegator = {
           dispatchError = err instanceof Error ? err.message : String(err);
         }
       } else {
-        // Plugin not running — leave the subtask marked queued with a
-        // dispatchPending flag. The UI surfaces this and the user can
-        // retry via POST /api/tasks/:id/start.
+        // Claude Code not available — leave the subtask marked
+        // queued with a dispatchPending flag. The UI surfaces this
+        // and the user can retry via POST /api/tasks/:id/start.
         dispatchPending = true;
       }
 

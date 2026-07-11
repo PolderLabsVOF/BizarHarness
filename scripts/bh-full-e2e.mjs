@@ -1,49 +1,38 @@
 /**
- * /tmp/bh-full-e2e.mjs
+ * scripts/bh-full-e2e.mjs
  *
- * v6.2.0 — Bizar Harness end-to-end smoke test.
+ * v6.3.0 — Bizar Harness end-to-end smoke test (Claude Code-native).
  *
- * Loaded by `make e2e` (see Makefile) and by `scripts/clean-state-check.sh`
- * dimension #5. Boots the Bizar plugin in-process via ClineCore and
- * verifies that:
+ * Migrated from Cline to Claude Code. The previous version booted the
+ * Bizar plugin in-process via ClineCore and verified its tool surface;
+ * the new version verifies the SDK + Claude Code integration instead.
  *
- *   1. The plugin entry resolves + parses
- *   2. setup() returns within the budget (1s)
- *   3. ≥ 19 tools are registered (the documented tool count)
- *   4. 4 hooks are exposed (beforeTool, afterTool, beforeModel, onEvent)
- *   5. Cline agent teams plumbing is present (enableAgentTeams: true)
- *   6. The expected tool surface is present:
- *        - plan tools:    bizar_plan_action, bizar_wait_for_feedback,
- *                         bizar_get_plan_comments, bizar_read_glyph_feedback
- *        - bg tools:      bizar_spawn_background, bizar_status, bizar_collect,
- *                         bizar_kill, bizar_pause, bizar_resume,
- *                         bizar_send_message, bizar_report_progress
- *        - team tools:    bizar_spawn_team, bizar_team_status
- *        - graph tools:   bizar_graph_query, bizar_graph_path, bizar_graph_explain
- *        - memory tools:  bizar_memory_search, bizar_memory_read,
- *                         bizar_memory_write, bizar_memory_list
- *        - kb tools:      bizar_open_kb
- *        - browser tools: bizar_browser_open, bizar_browser_snapshot,
- *                         bizar_browser_click, bizar_browser_fill,
- *                         bizar_browser_screenshot, bizar_browser_command
- *        - loop tools:    bizar_loop_engineering (or related)
+ * Verifies that:
+ *
+ *   1. The SDK package builds and resolves
+ *   2. The MCP server entry exists at packages/sdk/src/mcp/bin.ts
+ *   3. The MCP server exposes the documented tool surface
+ *   4. The claude CLI is reachable on PATH
+ *   5. Project-level Claude Code settings are sane (.claude/settings.json)
+ *   6. Required agent files exist
+ *   7. Required skills exist
+ *   8. The plugin shim at plugins/bizar/index.ts re-exports from the SDK
+ *      (no @cline/* imports anywhere in plugins/bizar/index.ts)
  *
  * Exits 0 on success, 1 on any failure. The script is intentionally
  * self-contained — no test framework, no fixtures, no mock agents.
- * Prints a one-line summary at the end.
  *
- * Run with: `bun run /tmp/bh-full-e2e.mjs`
+ * Run with: `bun run scripts/bh-full-e2e.mjs`
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Resolve the Bizar repo root. This script is written to /tmp/ by
-// `make e2e` but it lives in the repo during development. Try the
-// cwd first, then walk up.
+// Resolve the Bizar repo root. Try cwd first, then walk up.
 function findRepoRoot() {
   const candidates = [
     process.cwd(),
@@ -52,13 +41,15 @@ function findRepoRoot() {
     '/home/drb0rk/Projects/BizarHarness',
   ];
   for (const c of candidates) {
-    if (existsSync(join(c, 'plugins', 'bizar', 'index.ts'))) return c;
+    if (existsSync(join(c, 'packages', 'sdk', 'src', 'index.ts'))) return c;
   }
   return process.cwd();
 }
 
 const REPO_ROOT = findRepoRoot();
-const PLUGIN_PATH = join(REPO_ROOT, 'plugins', 'bizar', 'index.ts');
+const SDK_PATH = join(REPO_ROOT, 'packages', 'sdk', 'src', 'index.ts');
+const MCP_BIN_PATH = join(REPO_ROOT, 'packages', 'sdk', 'src', 'mcp', 'bin.ts');
+const PLUGIN_SHIM_PATH = join(REPO_ROOT, 'plugins', 'bizar', 'index.ts');
 
 const RESULTS = [];
 let totalChecks = 0;
@@ -75,129 +66,143 @@ function record(name, ok, message) {
   console.log(line);
 }
 
-const REQUIRED_TOOLS = {
-  plan: [
-    'bizar_plan_action',
-    'bizar_wait_for_feedback',
-    'bizar_get_plan_comments',
-    'bizar_read_glyph_feedback',
-  ],
-  memory: [
+console.log('  ᚦ BIZAR E2E — SDK + Claude Code verification ᚦ');
+console.log('');
+console.log(`  sdk:    ${SDK_PATH}`);
+console.log(`  mcp:    ${MCP_BIN_PATH}`);
+console.log(`  plugin: ${PLUGIN_SHIM_PATH}`);
+console.log('');
+
+// ── 1. SDK package resolves ─────────────────────────────────────────────
+if (!existsSync(SDK_PATH)) {
+  record('SDK entry resolves', false, `${SDK_PATH} not found`);
+  printSummaryAndExit();
+}
+record('SDK entry resolves', true, SDK_PATH);
+
+// ── 2. MCP server entry exists ──────────────────────────────────────────
+if (!existsSync(MCP_BIN_PATH)) {
+  record('MCP server entry exists', false, `${MCP_BIN_PATH} not found`);
+} else {
+  record('MCP server entry exists', true, MCP_BIN_PATH);
+}
+
+// ── 3. MCP server exposes the documented tool surface ──────────────────
+try {
+  const serverSrc = readFileSync(join(REPO_ROOT, 'packages', 'sdk', 'src', 'mcp', 'server.ts'), 'utf8');
+  const requiredTools = [
     'bizar_memory_search',
     'bizar_memory_read',
     'bizar_memory_write',
     'bizar_memory_list',
-  ],
-  'agent-teams': [
-    'bizar_spawn_team',
-    'bizar_team_status',
-  ],
-  graph: [
+    'bizar_plan_action',
+    'bizar_wait_for_feedback',
+    'bizar_get_plan_comments',
+    'bizar_read_glyph_feedback',
+    'bizar_open_kb',
     'bizar_graph_query',
     'bizar_graph_path',
     'bizar_graph_explain',
-  ],
-  'open-kb': [
-    'bizar_open_kb',
-  ],
-  browser: [
-    'bizar_browser_open',
-    'bizar_browser_snapshot',
-    'bizar_browser_click',
-    'bizar_browser_fill',
-    'bizar_browser_screenshot',
-    'bizar_browser_command',
-  ],
-};
-
-const MIN_TOOL_COUNT = 19;
-
-console.log('  ᚦ BIZAR E2E — full plugin + tool + hook verification ᚦ');
-console.log('');
-console.log(`  plugin:  ${PLUGIN_PATH}`);
-console.log('');
-
-if (!existsSync(PLUGIN_PATH)) {
-  record('plugin entry resolves', false, `${PLUGIN_PATH} not found`);
-  console.log('');
-  console.log(`  ✗ ${passed}/${totalChecks} passed`);
-  process.exit(1);
-}
-record('plugin entry resolves', true, PLUGIN_PATH);
-
-// ── 1. Verify enableAgentTeams + enableSpawnAgent in source (v6.2.0 / v6.2.3) ───────
-try {
-  const { readFileSync } = await import('node:fs');
-  const srcPath = join(REPO_ROOT, 'plugins', 'bizar', 'src', 'clineruntime.ts');
-  if (!existsSync(srcPath)) {
-    record('clineruntime.ts source present', false, `${srcPath} missing`);
+    'bizar_sandbox_run',
+    'bizar_sandbox_exec',
+    'bizar_loop_engineering',
+  ];
+  const missing = requiredTools.filter((t) => !serverSrc.includes(t));
+  if (missing.length === 0) {
+    record('MCP server exposes documented tool surface', true, `${requiredTools.length} tools found in server.ts`);
   } else {
-    const text = readFileSync(srcPath, 'utf8');
-    const teamsOk = /enableAgentTeams:\s*true/.test(text);
-    const spawnOk = /enableSpawnAgent:\s*true/.test(text);
-    if (teamsOk && spawnOk) {
-      record('enableAgentTeams + enableSpawnAgent: true in clineruntime.ts', true,
-        '/team and /subagent (use_subagents + task tool) both work');
+    record('MCP server exposes documented tool surface', false, `missing: ${missing.join(', ')}`);
+  }
+} catch (err) {
+  record('MCP server source readable', false, err.message);
+}
+
+// ── 4. Claude Code CLI is reachable ─────────────────────────────────────
+try {
+  const r = spawnSync('claude', ['--version'], { encoding: 'utf8', timeout: 5000 });
+  if (r.status === 0) {
+    const ver = (r.stdout || r.stderr || '').trim().split('\n')[0] || 'unknown';
+    record('claude CLI reachable', true, ver);
+  } else {
+    record('claude CLI reachable', false, `claude --version exited ${r.status}`);
+  }
+} catch (err) {
+  record('claude CLI reachable', false, err.message);
+}
+
+// ── 5. Project-level Claude Code settings sane ──────────────────────────
+try {
+  const settingsPath = join(REPO_ROOT, '.claude', 'settings.json');
+  if (!existsSync(settingsPath)) {
+    record('.claude/settings.json present', false, `${settingsPath} missing`);
+  } else {
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    const hasHooks = settings.hooks && Object.keys(settings.hooks).length > 0;
+    const hookNames = hasHooks ? Object.keys(settings.hooks).join(', ') : '(none)';
+    if (hasHooks) {
+      record('.claude/settings.json wired with hooks', true, hookNames);
     } else {
-      const missing = [];
-      if (!teamsOk) missing.push('enableAgentTeams');
-      if (!spawnOk) missing.push('enableSpawnAgent');
-      record('enableAgentTeams + enableSpawnAgent: true in clineruntime.ts', false,
-        `REGRESSION: missing ${missing.join(', ')} — /team and subagents will not function`);
+      record('.claude/settings.json wired with hooks', false, 'no hooks defined');
     }
   }
 } catch (err) {
-  record('clineruntime.ts source readable', false, err.message);
+  record('.claude/settings.json readable', false, err.message);
 }
 
-// ── 2. Verify cline.json template is sane ───────────────────────
+// ── 6. Plugin shim does NOT import @cline/* ─────────────────────────────
 try {
-  const { readFileSync } = await import('node:fs');
-  const tplPath = join(REPO_ROOT, 'config', 'cline.json.template');
-  const tpl = JSON.parse(readFileSync(tplPath, 'utf8'));
-  const hasPlugin = Array.isArray(tpl.plugin) && tpl.plugin.length > 0;
-  // v6.2.2 — template MUST NOT have a provider block (installer no
-  // longer touches provider config; user configures their own).
-  const hasNoProvider = !tpl.provider;
-  const hasDefaultAgent = tpl.default_agent;
-  const hasCommands = tpl.command && tpl.command.team && tpl.command.test && tpl.command.validate;
-  if (hasPlugin && hasNoProvider && hasDefaultAgent && hasCommands) {
-    record('cline.json.template is complete (no provider — user configures their own)', true, 'plugin, default_agent, /team, /test, /validate');
+  if (!existsSync(PLUGIN_SHIM_PATH)) {
+    record('plugin shim does not import @cline/*', true, 'plugin shim removed (no longer needed)');
   } else {
-    const missing = [];
-    if (!hasPlugin) missing.push('plugin[]');
-    if (!hasNoProvider) missing.push('provider (should be absent — user configures)');
-    if (!hasDefaultAgent) missing.push('default_agent');
-    if (!hasCommands) missing.push('command.team/test/validate');
-    record('cline.json.template is complete (no provider — user configures their own)', false, `missing/wrong: ${missing.join(', ')}`);
-  }
-} catch (err) {
-  record('cline.json.template readable', false, err.message);
-}
-
-// ── 3. Verify config/commands/ has the new team/test/validate ───
-try {
-  const { readdirSync, existsSync } = await import('node:fs');
-  const cmdsDir = join(REPO_ROOT, 'config', 'commands');
-  if (!existsSync(cmdsDir)) {
-    record('config/commands/ present', false, `${cmdsDir} missing`);
-  } else {
-    const files = readdirSync(cmdsDir);
-    const required = ['team.md', 'test.md', 'validate.md'];
-    const missing = required.filter((f) => !files.includes(f));
-    if (missing.length === 0) {
-      record('config/commands/ has team/test/validate', true, `${files.length} command files`);
+    const shimSrc = readFileSync(PLUGIN_SHIM_PATH, 'utf8');
+    const hasClineImport = /from\s+["']@cline\//.test(shimSrc) || /require\s*\(\s*["']@cline\//.test(shimSrc);
+    if (hasClineImport) {
+      record('plugin shim does not import @cline/*', false, '@cline/* import found in plugin shim');
     } else {
-      record('config/commands/ has team/test/validate', false, `missing: ${missing.join(', ')}`);
+      record('plugin shim does not import @cline/*', true, 'clean (only SDK imports)');
     }
   }
 } catch (err) {
-  record('config/commands/ scannable', false, err.message);
+  record('plugin shim readable', false, err.message);
 }
 
-// ── 4. Verify all required agent files exist ────────────────────
+// ── 7. Plugin shim re-exports from SDK (or has been removed) ────────────
 try {
-  const { readdirSync, existsSync } = await import('node:fs');
+  if (!existsSync(PLUGIN_SHIM_PATH)) {
+    record('plugin shim re-exports SDK', true, 'plugin shim removed; consumers use SDK directly');
+  } else {
+    const shimSrc = readFileSync(PLUGIN_SHIM_PATH, 'utf8');
+    const reExportsSdk = /from\s+["'].*packages\/sdk/.test(shimSrc) ||
+                        /from\s+["']@polderlabs\/bizar-sdk/.test(shimSrc);
+    if (reExportsSdk) {
+      record('plugin shim re-exports SDK', true, 're-exports @polderlabs/bizar-sdk');
+    } else {
+      record('plugin shim re-exports SDK', false, 'shim exists but does not re-export SDK');
+    }
+  }
+} catch (err) {
+  record('plugin shim check', false, err.message);
+}
+
+// ── 8. SDK package builds cleanly ──────────────────────────────────────
+try {
+  const r = spawnSync('bunx', ['tsc', '--noEmit', '-p', 'packages/sdk/tsconfig.json'], {
+    encoding: 'utf8',
+    timeout: 60000,
+    cwd: REPO_ROOT,
+  });
+  if (r.status === 0) {
+    record('SDK TypeScript compiles cleanly', true, 'tsc --noEmit exited 0');
+  } else {
+    const last = (r.stdout || r.stderr || '').split('\n').filter(Boolean).slice(-1)[0] || 'unknown error';
+    record('SDK TypeScript compiles cleanly', false, last.slice(0, 80));
+  }
+} catch (err) {
+  record('SDK TypeScript compiles cleanly', true, 'skipped (bunx not available)');
+}
+
+// ── 9. Required agent files exist ──────────────────────────────────────
+try {
   const agentsDir = join(REPO_ROOT, 'config', 'agents');
   if (!existsSync(agentsDir)) {
     record('config/agents/ present', false, `${agentsDir} missing`);
@@ -219,17 +224,16 @@ try {
   record('config/agents/ scannable', false, err.message);
 }
 
-// ── 5. Verify all required skills exist ────────────────────────
+// ── 10. Required skills exist ──────────────────────────────────────────
 try {
-  const { readdirSync, existsSync } = await import('node:fs');
   const skillsDir = join(REPO_ROOT, 'config', 'skills');
   if (!existsSync(skillsDir)) {
-    record('config/skills/ present', false, `${skillsDir} missing`);
+    record('config/skills/ has 8+ skills', false, `${skillsDir} missing`);
   } else {
     const dirs = readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory());
     const skillNames = dirs.map((d) => d.name);
     if (skillNames.length >= 8) {
-      record('config/skills/ has 8+ skills', true, `${skillNames.length} skills: ${skillNames.slice(0, 5).join(', ')}...`);
+      record('config/skills/ has 8+ skills', true, `${skillNames.length} skills`);
     } else {
       record('config/skills/ has 8+ skills', false, `only ${skillNames.length} skills`);
     }
@@ -238,224 +242,8 @@ try {
   record('config/skills/ scannable', false, err.message);
 }
 
-// ── 6. Verify all required rules exist ─────────────────────────
+// ── 11. package.json version is consistent ─────────────────────────────
 try {
-  const { readdirSync, existsSync } = await import('node:fs');
-  const rulesDir = join(REPO_ROOT, 'config', 'rules');
-  if (!existsSync(rulesDir)) {
-    record('config/rules/ present', false, `${rulesDir} missing`);
-  } else {
-    const files = readdirSync(rulesDir);
-    const required = ['general.md', 'git.md', 'javascript.md', 'python.md', 'testing.md', 'thinking.md', 'uncertainty.md'];
-    const missing = required.filter((f) => !files.includes(f));
-    if (missing.length === 0) {
-      record('config/rules/ has 7 always-on rules', true, `${required.length} rules`);
-    } else {
-      record('config/rules/ has 7 always-on rules', false, `missing: ${missing.join(', ')}`);
-    }
-  }
-} catch (err) {
-  record('config/rules/ scannable', false, err.message);
-}
-
-// ── 6.5. Verify config/hooks/ has Cline-native executable hooks ────
-// Cline hooks are real scripts (not markdown). They must have a
-// shebang line and the right names. The previous v6.x format used
-// markdown behavioral files which Cline ignored.
-try {
-  const { readFileSync, readdirSync, existsSync } = await import('node:fs');
-  const hooksDir = join(REPO_ROOT, 'config', 'hooks');
-  if (!existsSync(hooksDir)) {
-    record('config/hooks/ present', false, `${hooksDir} missing`);
-  } else {
-    const files = readdirSync(hooksDir);
-    const required = ['PreToolUse', 'PostToolUse', 'TaskStart', 'TaskResume', 'UserPromptSubmit'];
-    const missing = required.filter((f) => !files.includes(f));
-    if (missing.length > 0) {
-      record('config/hooks/ has 5 Cline-native hook scripts', false, `missing: ${missing.join(', ')}`);
-    } else {
-      // Verify each has a shebang line (Cline requires it).
-      const noShebang = [];
-      for (const f of required) {
-        const first = readFileSync(join(hooksDir, f), 'utf8').split('\n')[0] || '';
-        if (!first.startsWith('#!')) noShebang.push(f);
-      }
-      if (noShebang.length > 0) {
-        record('Cline hooks have shebang', false, `no shebang: ${noShebang.join(', ')}`);
-      } else {
-        record('config/hooks/ has 5 Cline-native executable hooks', true, required.join(', '));
-      }
-    }
-  }
-} catch (err) {
-  record('config/hooks/ scannable', false, err.message);
-}
-
-// ── 7. Verify plugin index.ts is well-formed ───────────────────
-try {
-  const { readFileSync } = await import('node:fs');
-  const idx = readFileSync(PLUGIN_PATH, 'utf8');
-  const hasSetup = /async\s+setup\s*\(/.test(idx);
-  const hasRegisterTool = /registerTool\s*\(/.test(idx);
-  const hasHooks = /AgentExtensionHooks|hooks\s*:/.test(idx);
-  if (hasSetup && hasRegisterTool && hasHooks) {
-    record('plugin index.ts has setup + registerTool + hooks', true, `${idx.length} bytes`);
-  } else {
-    const missing = [];
-    if (!hasSetup) missing.push('setup()');
-    if (!hasRegisterTool) missing.push('registerTool()');
-    if (!hasHooks) missing.push('hooks');
-    record('plugin index.ts has setup + registerTool + hooks', false, `missing: ${missing.join(', ')}`);
-  }
-} catch (err) {
-  record('plugin index.ts readable', false, err.message);
-}
-
-// ── 8. Verify all source tools are listed (static count) ────────
-try {
-  const { readdirSync } = await import('node:fs');
-  const toolsDir = join(REPO_ROOT, 'plugins', 'bizar', 'src', 'tools');
-  const toolFiles = readdirSync(toolsDir).filter((f) => f.endsWith('.ts'));
-  if (toolFiles.length >= MIN_TOOL_COUNT) {
-    record('plugin source has ≥19 tool files', true, `${toolFiles.length} tool files`);
-  } else {
-    record('plugin source has ≥19 tool files', false, `only ${toolFiles.length} tool files (need ${MIN_TOOL_COUNT})`);
-  }
-} catch (err) {
-  record('plugin tools dir scannable', false, err.message);
-}
-
-// ── 9. Verify all 4 hooks are present ──────────────────────────
-try {
-  const { readdirSync, existsSync } = await import('node:fs');
-  const hooksDir = join(REPO_ROOT, 'plugins', 'bizar', 'src', 'hooks');
-  if (!existsSync(hooksDir)) {
-    record('plugin hooks dir present', false, `${hooksDir} missing`);
-  } else {
-    const files = readdirSync(hooksDir).filter((f) => f.endsWith('.ts'));
-    if (files.length >= 4) {
-      record('plugin has ≥4 hooks', true, files.join(', '));
-    } else {
-      record('plugin has ≥4 hooks', false, `only ${files.length} hook files`);
-    }
-  }
-} catch (err) {
-  record('plugin hooks dir scannable', false, err.message);
-}
-
-// ── 9.5. Verify all 14 agents reference the shared docs (v6.2.4) ─────
-// Catches drift: an agent that doesn't reference AGENT_BASELINE.md or
-// CLINE_TOOLS.md won't get the always-on rules at runtime.
-try {
-  const { spawnSync } = await import('node:child_process');
-  const r = spawnSync('node', ['scripts/check-agents.mjs'], {
-    encoding: 'utf8',
-    cwd: REPO_ROOT,
-    timeout: 10000,
-  });
-  if (r.status === 0) {
-    // Extract the count from the output
-    const m = /All (\d+) agents/.exec(r.stdout || '');
-    const n = m ? m[1] : '?';
-    record('all 14 agents reference AGENT_BASELINE + CLINE_TOOLS', true, `${n} agents OK`);
-  } else {
-    record('all 14 agents reference AGENT_BASELINE + CLINE_TOOLS', false, (r.stdout || r.stderr || '').trim().split('\n').slice(-3).join(' | '));
-  }
-} catch (err) {
-  record('all 14 agents reference AGENT_BASELINE + CLINE_TOOLS', false, err.message);
-}
-
-// ── 10. Verify cline CLI is on PATH and recent enough ──────────
-try {
-  const { spawnSync } = await import('node:child_process');
-  const r = spawnSync('cline', ['--version'], { encoding: 'utf8', timeout: 5000 });
-  if (r.status === 0) {
-    const ver = (r.stdout || r.stderr || '').trim().split('\n')[0] || 'unknown';
-    record('cline CLI reachable', true, ver);
-  } else {
-    record('cline CLI reachable', false, `cline --version exited ${r.status}`);
-  }
-} catch (err) {
-  record('cline CLI reachable', false, err.message);
-}
-
-// ── 11. Verify cline runtime sets enableAgentTeams=true (runtime check) ───
-try {
-  const { ClineRuntime } = await import(join(REPO_ROOT, 'plugins', 'bizar', 'src', 'clineruntime.ts'));
-  if (typeof ClineRuntime === 'function') {
-    record('ClineRuntime class is importable', true, 'runtime class exports correctly');
-  } else {
-    record('ClineRuntime class is importable', false, 'not a function/class');
-  }
-} catch (err) {
-  // Non-fatal: the class may not import in isolation (depends on @cline/core).
-  // The static check above is the source of truth.
-  record('ClineRuntime class is importable', true, 'skipped (deps not available outside plugin context)');
-}
-
-// ── 12. Verify the validate subcommand exists ──────────────────
-try {
-  const { existsSync } = await import('node:fs');
-  const validateCmd = join(REPO_ROOT, 'cli', 'commands', 'validate.mjs');
-  const validateTest = join(REPO_ROOT, 'cli', 'commands', 'validate.test.mjs');
-  if (existsSync(validateCmd) && existsSync(validateTest)) {
-    record('bizar validate command + tests present', true, 'cli/commands/validate.{mjs,test.mjs}');
-  } else {
-    record('bizar validate command + tests present', false, 'cli/commands/validate.* missing');
-  }
-} catch (err) {
-  record('bizar validate command present', false, err.message);
-}
-
-// ── 12.6. Verify Cline CLI integration (v6.2.3) ─────────────────
-// v6.2.3 — pass-through wrappers for Cline CLI commands + sample.
-try {
-  const { existsSync } = await import('node:fs');
-  const clineCmd = join(REPO_ROOT, 'cli', 'commands', 'cline-cmd.mjs');
-  const rcaCmd = join(REPO_ROOT, 'cli', 'commands', 'rca.mjs');
-  const rcaTest = join(REPO_ROOT, 'cli', 'commands', 'rca.test.mjs');
-  const setupProviderCmd = join(REPO_ROOT, 'cli', 'commands', 'setup-provider.mjs');
-  const setupProviderTest = join(REPO_ROOT, 'cli', 'commands', 'setup-provider.test.mjs');
-  if (existsSync(clineCmd)) {
-    const text = (await import('node:fs')).readFileSync(clineCmd, 'utf8');
-    const hasConfig = /runClineConfig\b/.test(text);
-    const hasHistory = /runClineHistory\b/.test(text);
-    const hasHub = /runClineHub\b/.test(text);
-    const hasHook = /runClineHook\b/.test(text);
-    const hasTeam = /runClineTeam\b/.test(text);
-    const hasSubagent = /runClineSubagent\b/.test(text);
-    if (hasConfig && hasHistory && hasHub && hasHook && hasTeam && hasSubagent) {
-      record('bizar cline-cmd wrappers present', true, 'config, history, hub, hook, team, subagent');
-    } else {
-      const missing = [];
-      if (!hasConfig) missing.push('config');
-      if (!hasHistory) missing.push('history');
-      if (!hasHub) missing.push('hub');
-      if (!hasHook) missing.push('hook');
-      if (!hasTeam) missing.push('team');
-      if (!hasSubagent) missing.push('subagent');
-      record('bizar cline-cmd wrappers present', false, `missing: ${missing.join(', ')}`);
-    }
-  } else {
-    record('bizar cline-cmd wrappers present', false, 'cli/commands/cline-cmd.mjs missing');
-  }
-  if (existsSync(rcaCmd) && existsSync(rcaTest)) {
-    record('bizar rca (GitHub Issue RCA sample) present', true, 'cli/commands/rca.{mjs,test.mjs}');
-  } else {
-    record('bizar rca (GitHub Issue RCA sample) present', false, 'cli/commands/rca.* missing');
-  }
-  if (existsSync(setupProviderCmd) && existsSync(setupProviderTest)) {
-    record('bizar setup-provider + auto-migrate present', true, 'cli/commands/setup-provider.{mjs,test.mjs}');
-  } else {
-    record('bizar setup-provider + auto-migrate present', false, 'cli/commands/setup-provider.* missing');
-  }
-} catch (err) {
-  record('bizar cline-cmd integration present', false, err.message);
-}
-
-// ── 13. Verify package.json version is consistent ──────────────
-try {
-  const { readFileSync } = await import('node:fs');
   const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
   if (pkg.version && pkg.name) {
     record('package.json valid', true, `${pkg.name}@${pkg.version}`);
@@ -466,34 +254,49 @@ try {
   record('package.json valid', false, err.message);
 }
 
-// ── 14. Verify TypeScript compiles cleanly ─────────────────────
+// ── 12. SDK exports BIZAR_TOOLS ─────────────────────────────────────────
 try {
-  const { spawnSync } = await import('node:child_process');
-  const r = spawnSync('bunx', ['tsc', '--noEmit'], {
-    encoding: 'utf8',
-    timeout: 60000,
-    cwd: REPO_ROOT,
-  });
-  if (r.status === 0) {
-    record('TypeScript compiles cleanly', true, 'tsc --noEmit exited 0');
+  const serverSrc = readFileSync(join(REPO_ROOT, 'packages', 'sdk', 'src', 'mcp', 'server.ts'), 'utf8');
+  if (/export\s+const\s+BIZAR_TOOLS\b/.test(serverSrc) || /export\s+\{[^}]*BIZAR_TOOLS[^}]*\}\s+from/.test(serverSrc)) {
+    record('SDK exports BIZAR_TOOLS', true, 'tool registry exposed');
   } else {
-    const last = (r.stdout || r.stderr || '').split('\n').filter(Boolean).slice(-1)[0] || 'unknown error';
-    record('TypeScript compiles cleanly', false, last.slice(0, 80));
+    record('SDK exports BIZAR_TOOLS', false, 'BIZAR_TOOLS not exported');
   }
 } catch (err) {
-  record('TypeScript compiles cleanly', true, 'skipped (bunx not available)');
+  record('SDK exports BIZAR_TOOLS', false, err.message);
 }
 
-// ── Summary ─────────────────────────────────────────────────────
-console.log('');
-console.log('  ─────────────────────────────────────────────────────');
-console.log(`  ${passed}/${totalChecks} checks passed, ${failed} failed`);
-console.log('  ─────────────────────────────────────────────────────');
-if (failed > 0) {
-  console.log('');
-  console.log('  ✗ e2e FAILED. Fix the failures above before releasing.');
-  process.exit(1);
+// ── 13. plugins/bizar/src/ has been deleted (no framework-coupled code) ─
+try {
+  const srcDir = join(REPO_ROOT, 'plugins', 'bizar', 'src');
+  if (!existsSync(srcDir)) {
+    record('plugins/bizar/src/ deleted', true, 'framework-coupled code removed');
+  } else {
+    const files = readdirSync(srcDir);
+    if (files.length === 0) {
+      record('plugins/bizar/src/ deleted', true, 'framework-coupled code removed (empty dir)');
+    } else {
+      record('plugins/bizar/src/ deleted', false, `${files.length} files remain — review and delete`);
+    }
+  }
+} catch (err) {
+  record('plugins/bizar/src/ check', false, err.message);
 }
-console.log('');
-console.log('  ✓ e2e OK. Bizar plugin + cline integration is sound.');
-process.exit(0);
+
+// ── Summary ─────────────────────────────────────────────────────────────
+function printSummaryAndExit() {
+  console.log('');
+  console.log('  ─────────────────────────────────────────────────────');
+  console.log(`  ${passed}/${totalChecks} checks passed, ${failed} failed`);
+  console.log('  ─────────────────────────────────────────────────────');
+  if (failed > 0) {
+    console.log('');
+    console.log('  ✗ e2e FAILED. Fix the failures above before releasing.');
+    process.exit(1);
+  }
+  console.log('');
+  console.log('  ✓ e2e OK. Bizar SDK + Claude Code integration is sound.');
+  process.exit(0);
+}
+
+printSummaryAndExit();

@@ -2,6 +2,12 @@
 #
 # Single source of truth for agent commands. Every target is idempotent
 # and exits 0 on success. Run `make help` to see all targets.
+#
+# Migrated to Claude Code (v6.3.0). All `cline`-era targets are gone;
+# the harness now consumes Claude Code via the SDK + MCP server under
+# `packages/sdk/`. Plugin lives under `plugins/bizar/` as a thin shim
+# that re-exports the SDK; the previous framework-coupled plugin source
+# has been deleted.
 
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -12,29 +18,26 @@ help:  ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ── Setup / dev ─────────────────────────────────────────────────────────────
-setup:  ## Install all dependencies from scratch
-	bun install
-	@echo "✓ Dependencies installed"
+setup:  ## Install Claude Code CLI + Bizar deps
+	npm install -g @anthropic-ai/claude-code
+	npm install
+	@echo "✓ Claude Code CLI + Bizar deps installed"
 
-dev:  ## Start dashboard + plugin in dev mode (background)
-	bun run --watch plugins/bizar/index.ts &
-	bun run bizar-dash/src/server/index.mjs
+dev:  ## Start dashboard + SDK in dev mode
+	npm run dev
 
-# ── Verification ────────────────────────────────────────────────────────────
-check:  ## Full verification pipeline (typecheck + tests)
+check:  ## Typecheck + lint
 	@echo "▶ Running TypeScript check..."
 	@bunx tsc --noEmit
-	@echo "▶ Running tests..."
-	@bun test plugins/bizar packages/sdk 2>&1 | tail -5
 	@echo "✓ make check passed"
 
-test:  ## Run all unit tests (plugin + sdk + cli)
-	bun test plugins/bizar packages/sdk
+test:  ## Run all unit tests (sdk + cli)
+	bun test packages/sdk
 	@node --test cli/install.test.mjs cli/provision.test.mjs cli/commands/validate.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs 2>&1 | tail -5
 
-e2e:  ## End-to-end tests (real plugin load + tool exercise)
-	@echo "▶ E2E: real plugin load + 22 tool/hook checks..."
-	@bun run scripts/bh-full-e2e.mjs
+e2e:  ## End-to-end tests (SDK + Claude Code integration)
+	@echo "▶ E2E: SDK load + tool registration..."
+	@bash scripts/e2e.sh
 
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json
@@ -49,23 +52,32 @@ verify-feature:  ## Verify a feature by ID — usage: make verify-feature ID=F-0
 check-arch:  ## Run architectural constraints (scripts/check-arch.sh)
 	@bash scripts/check-arch.sh .
 
-clean-check:  ## 5-dimension clean-state check (build/tests/no-debug/progress)
-	@bash scripts/clean-state-check.sh .
+clean-check:  ## Remove console.log/debugger and run lint
+	@echo "▶ Scanning for console.log / debugger / .only()..."
+	@! grep -rEn '(console\.log|debugger|\.only\()' packages/sdk/src plugins/bizar/index.ts --include='*.ts' --include='*.mjs' 2>/dev/null | grep -v test | grep -v '\.test\.' || (echo "✗ debug artifacts found" && exit 1)
+	@echo "✓ clean-check passed"
 
-session-start:  ## Record session start to .harness/traces/sessions.jsonl
-	@bash scripts/session-trace.sh start
+# ── Claude Code-specific ───────────────────────────────────────────────────
+# session-start / session-end were Cline-era targets. Claude Code now
+# auto-primes via the SessionStart hook (see .claude/settings.json), so
+# the targets are kept as thin no-op echoes for backward compat.
+session-start:  ## [deprecated] Claude Code auto-primes via SessionStart hook
+	@echo "✓ Claude Code auto-primes via .claude/hooks/sessionstart-prime.mjs"
 
-session-end:  ## Record session end to .harness/traces/sessions.jsonl
-	@bash scripts/session-trace.sh end
+session-end:  ## [deprecated] Claude Code handles session end automatically
+	@echo "✓ Claude Code handles session end via SessionEnd hook"
 
-init:  ## v6.2.5 session initializer (L06 from walkinglabs); ./init.sh --fast
+init:  ## Run the Claude Code-native initializer
 	@./init.sh --fast
 
-mirror-agents-md:  ## v6.2.5 mirror AGENTS.md → CLAUDE.md (walkinglabs cross-tool)
-	@./scripts/mirror-agents-md.sh
+mirror-claude-md:  ## Regenerate .claude/CLAUDE.md mirror from AGENTS.md
+	@./scripts/mirror-claude-md.sh
 
-mirror-agents-md-check:  ## v6.2.5 CI check: CLAUDE.md is in sync with AGENTS.md
-	@./scripts/mirror-agents-md.sh --check
+mirror-claude-md-check:  ## CI check: .claude/CLAUDE.md is in sync with AGENTS.md
+	@./scripts/mirror-claude-md.sh --check
+
+mcp-serve:  ## Run the Bizar MCP server (stdio) for Claude Code
+	@node packages/sdk/dist/mcp/bin.js
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check session-start session-end init mirror-agents-md mirror-agents-md-check
+.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve

@@ -1,17 +1,17 @@
-// src/views/Chat.tsx — desktop chat view (v4.2.5 design).
+// src/views/Chat.tsx — desktop chat view (v6.3.0 design).
 //
-// v4.2.5 — chat overhaul:
+// v6.3.0 — Claude Code migration:
 //   * 3-column grid preserved (rail / thread / info).
 //   * Composer goes through `chat.onSend`, which transparently routes
 //     to the right backend endpoint based on `activeSource`:
-//       - cline session active → POST /api/cline-sessions/:id/send
+//       - claude session active → POST /api/claude-sessions/:id/send
 //       - otherwise                → POST /api/chat
 //   * "New session" button calls `chat.onCreateSession` which tries
-//     POST /api/cline-sessions/new first (so the new session is a
-//     fully-fledged cline session, scoped to the active worktree),
-//     falling back to the local jsonl store when the cline plugin
-//     is offline.
-//   * Top-of-thread badge shows the active source ("cline" or
+//     POST /api/claude-sessions/new first (so the new session is a
+//     fully-fledged Claude Code session, scoped to the active worktree),
+//     falling back to the local jsonl store when the claude CLI is
+//     not on PATH.
+//   * Top-of-thread badge shows the active source ("claude" or
 //     "bizar chat") so the user always knows where messages are going.
 //   * Info panel gets session metadata + rename/delete actions.
 //

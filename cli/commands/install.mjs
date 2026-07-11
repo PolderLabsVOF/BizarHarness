@@ -32,11 +32,12 @@ export function showInstallHelp() {
        python3.12, jq, gh on Linux; brew on macOS) + service registration
        (systemd / launchd / Task Scheduler).
     3. Syncs agent files, slash commands, and bundled skills into
-       ~/.config/cline/.
-    4. Copies plugins/bizar/ from the npm install into
-       ~/.config/cline/plugins/bizar/ (preserves dev symlinks).
-    5. Patches ~/.config/cline/cline.json with the Bizar plugin
-       entry (skipped if already present).
+       ~/.claude/ (or $CLAUDE_CONFIG_DIR).
+    4. Registers the Bizar MCP server in ~/.claude/settings.json
+       (skipped if already present; the plugin shim is now an MCP
+       transport, not a Cline plugin).
+    5. Wires Claude Code lifecycle hooks (SessionStart / PreToolUse /
+       PostToolUse / UserPromptSubmit) under ~/.claude/hooks/.
     6. Runs 'bizar doctor' as a post-install health check.
 
     No API key collection, no interactive prompts.
@@ -45,9 +46,9 @@ export function showInstallHelp() {
 
 export function showUpdateHelp() {
   console.log(`
-  bizar update — Update cline + @polderlabs/bizar (which bundles the
-  plugin and dashboard). Detects what's installed and only touches what's
-  missing or out of date.
+  bizar update — Update @anthropic-ai/claude-code + @polderlabs/bizar
+  (which bundles the SDK, dashboard, and plugin shim). Detects what's
+  installed and only touches what's missing or out of date.
 
   Usage:
     bizar update                       Update EVERYTHING (default; auto-kills + restarts)
@@ -61,8 +62,8 @@ export function showUpdateHelp() {
     bizar update --help                Show this help
 
   Components updated:
-    cline   the cline CLI itself
-    @polderlabs/bizar    this CLI + dashboard + plugin (one package)
+    @anthropic-ai/claude-code   the Claude Code CLI itself
+    @polderlabs/bizar    this CLI + dashboard + SDK (one package)
 
   Behavior (v4.4.7+):
     • Single unified provisioner. 'bizar install' and 'bizar update' are
@@ -79,7 +80,7 @@ export function showUpdateHelp() {
       fresh detached dashboard process with the new code (skipped with
       --no-restart).
     • Runs 'bizar doctor' after a successful update to catch config
-      regressions before cline tries to start.
+      regressions before claude tries to start.
     • With --check: prints the version matrix and release-notes excerpt
       between current and latest, exits non-zero if an update is available.
 
