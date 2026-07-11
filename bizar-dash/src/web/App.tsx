@@ -42,6 +42,8 @@ import { Doctor } from './views/Doctor';
 import { Harness } from './views/Harness';
 import { Eval } from './views/Eval';
 import { EvalReport } from './views/EvalReport';
+// v6.4.0 — F-036 Goal Planner UI.
+import { GoalPlanner } from './views/GoalPlanner';
 import { SettingsNav } from './components/SettingsNav';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
@@ -108,6 +110,8 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   // Eval view's "Open Eval Report" button (full report + diff).
   eval: Eval,
   evalReport: EvalReport,
+  // v6.4.0 — F-036 Goal Planner UI. Plain-English goal → A* plan.
+  'goal-planner': GoalPlanner,
 };
 
 const VERSION = 'v6.0.0';

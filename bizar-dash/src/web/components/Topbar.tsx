@@ -26,6 +26,7 @@ import {
   Brain,
   Stethoscope,
   ClipboardCheck,
+  Target,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -66,6 +67,8 @@ export const TABS: TabDef[] = [
   { id: 'doctor', label: 'Doctor', icon: Stethoscope },
   // v6.0.0 — Harness engineering dashboard.
   { id: 'harness', label: 'Harness', icon: Shield },
+  // v6.4.0 — F-036 Goal Planner UI. Plain-English → A* plan.
+  { id: 'goal-planner', label: 'Goals', icon: Target },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 
