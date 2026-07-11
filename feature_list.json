@@ -1074,10 +1074,13 @@
       "id": "F-038",
       "behavior": "Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline (soc2/gdpr/hipaa/permissive), TrustEvaluator, PolicyEngine, AuditService, FederationBudget tracker (per-call {maxTokens, maxUsd} + maxHops)",
       "verification": "make check (0 TS errors) + a Node script that creates 2 Bizar instances with shared HMAC key, sends a federation-envelope from instance A to instance B, and verifies TrustEvaluator accepts and AuditService logs the call",
-      "state": "not_started",
+      "state": "passing",
+      "passed": "2026-07-12",
+      "evidence": "8 federation modules (envelope/hmac/pii/trust/policy/audit/budget/index) + federation_status MCP tool wired into BIZAR_TOOLS; 101/101 vitest pass (envelope 10 + hmac 22 + pii 12 + trust 9 + policy 11 + audit 10 + budget 16 + orchestrator 11); /tmp/f038-federation-roundtrip.mjs 34/34 PASS (sign + PII redact + receive + tamper reject + nonce replay reject + budget reserve/commit/release + audit log + status snapshot); tsc --noEmit exits 0",
       "layer": "L1+L3",
       "category": "ruflo-port",
       "created": "2026-07-12",
+      "commit": "PENDING",
       "ruflo_source": "v3/@claude-flow/plugin-agent-federation/src/plugin.ts + plugin-agent-federation/src/domain/entities/federation-envelope.ts:1-20",
       "files_touched": [
         "packages/sdk/src/federation/envelope.ts (new)",
@@ -1088,14 +1091,32 @@
         "packages/sdk/src/federation/audit.ts (new)",
         "packages/sdk/src/federation/budget.ts (new)",
         "packages/sdk/src/federation/index.ts (new)",
+        "packages/sdk/tests/federation/*.test.ts (new, 8 files)",
         "packages/sdk/src/mcp/server.ts (add federation_status MCP tool)"
+      ],
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run make check, fix TS errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test packages/sdk/tests/federation",
+          "repair": "Fix failures."
+        },
+        {
+          "label": "e2e",
+          "cmd": "node /tmp/f038-federation-roundtrip.mjs",
+          "repair": "Two-instance HMAC roundtrip + PII redaction + budget reserve/commit must work end-to-end."
+        }
       ]
     },
     {
       "id": "F-039",
       "behavior": "Hive-mind Byzantine fault-tolerant consensus (thin port) — 3-of-5 majority for review/decision steps when multiple agents disagree; PBFT pre-prepare/prepare/commit/reply phases, view changes, fault detection",
       "verification": "make check (0 TS errors) + a Node script that runs 5 mock agents through a 3-of-5 vote on a 3-step decision (pre-prepare → prepare → commit → reply) and verifies majority consensus + view-change on simulated faulty agent",
-      "state": "not_started",
+      "state": "active",
       "layer": "L1+L3",
       "category": "ruflo-port",
       "created": "2026-07-12",
@@ -1110,10 +1131,10 @@
     }
   ],
   "vcr": {
-    "passing": 36,
-    "activated": 36,
+    "passing": 37,
+    "activated": 37,
     "ratio": 1,
-    "in_flight": 0,
-    "not_started": 3
+    "in_flight": 1,
+    "not_started": 2
   }
 }
