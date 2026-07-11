@@ -86,7 +86,7 @@ export function VoiceRecorder({ vaultPath, onSaved }: VoiceRecorderProps) {
   return (
     <div className="voice-recorder">
       {!recording && !transcribing && (
-        <Button variant="accent" size="sm" onClick={startRecording} aria-label="Start recording">
+        <Button variant="primary" size="sm" onClick={startRecording} aria-label="Start recording">
           <Mic size={14} /> Record
         </Button>
       )}

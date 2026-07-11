@@ -264,7 +264,17 @@ function OverviewInner({
     <div className="view view-overview">
       {/* v3.4.0 — Hero takes the spotlight. No card wrapper. */}
       <div className="overview-hero-noframe">
-        <h1>What do you want to do?</h1>
+        <h1
+          style={{
+            color: 'var(--text-strong)',
+            fontWeight: 600,
+            background: 'none',
+            WebkitBackgroundClip: 'initial',
+            WebkitTextFillColor: 'initial',
+          }}
+        >
+          What do you want to do?
+        </h1>
         <p className="overview-hero-subtitle">
           Describe what you want — Odin will split it into tasks, create a plan,
           delegate to background agents, and track progress in real time.
@@ -296,6 +306,8 @@ function OverviewInner({
             placeholder="e.g. Implement user authentication with email + password, including registration, login, password reset, and integration tests. Use Bcrypt, JWT tokens, and the existing API style."
             disabled={submitting}
             aria-label="Describe what you want Odin to do"
+            style={{ boxShadow: 'var(--shadow-2)' }}
+            onFocus={(e) => { e.currentTarget.style.boxShadow = 'var(--shadow-2)'; }}
           />
           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
             <Button

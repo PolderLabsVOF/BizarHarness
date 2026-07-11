@@ -64,7 +64,7 @@ function categoryColor(cat: string | undefined): string {
 
 function StatusDot({ status, isStuck }: { status?: string; isStuck?: boolean }) {
   const color =
-    isStuck ? 'var(--error)'
+    isStuck ? 'var(--warning)'
     : status === 'working' ? 'var(--info)'
     : status === 'error' ? 'var(--error)'
     : 'var(--text-dim)';

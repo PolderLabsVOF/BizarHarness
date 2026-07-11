@@ -454,7 +454,8 @@
   border-left-color: var(--accent);
   border-left-width: 2px;
   padding-left: 14px;
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.04), transparent);
+  /* Removed linear-gradient — design system bans gradients; solid bg-elev-2 with left accent border */
+  background: var(--bg-elev-2);
 }
 
 .agent-node-chevron {
@@ -739,9 +740,8 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 180ms var(--motion-ease),
-              transform 180ms var(--motion-ease);
+  /* Removed transform: translateY(-2px) — design system bans hover movement; hover changes opacity only */
+  transition: opacity 180ms var(--motion-ease);
   pointer-events: none;
   z-index: 3;
 }
@@ -754,7 +754,6 @@
 .msg-actions:hover,
 .msg-actions:focus-within {
   opacity: 1;
-  transform: translateY(0);
   pointer-events: auto;
 }
 .msg-action-btn {
@@ -1365,7 +1364,7 @@
   cursor: pointer; text-align: left; font: inherit; color: var(--text);
   transition: all var(--motion-base) var(--motion-ease); min-height: 120px;
 }
-.chat-suggestion:hover { transform: translateY(-2px); border-color: var(--border-strong); background: var(--bg-2); }
+.chat-suggestion:hover { /* Removed transform: translateY(-2px) — design system bans hover movement */ border-color: var(--border-strong); background: var(--bg-2); }
 .chat-suggestion-title { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; line-height: 1.3; }
 .chat-suggestion-title span { flex: 1; }
 .chat-suggestion-preview {
@@ -1436,7 +1435,8 @@
 .chat-composer-wrap.legacy {
   position: sticky; bottom: 0; left: 0; right: 0;
   padding: 0.5rem 1rem 1rem;
-  background: linear-gradient(to top, var(--bg) 0%, var(--bg) 50%, transparent 100%);
+  /* Removed linear-gradient fade — design system bans gradients; solid var(--bg) */
+  background: var(--bg);
   pointer-events: none; z-index: 10; max-width: 100%;
 }
 .chat-composer-wrap.legacy > * { pointer-events: auto; }
@@ -1713,14 +1713,8 @@
 .chat-composer-source-cline .chat-composer-pill:focus-within {
   border-color: var(--accent);
 }
-.chat-composer-source-cline::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  opacity: 0.6;
-}
+/* Removed .chat-composer-source-cline::before — design system bans decorative top stripes;
+   the cline source pill border-color already conveys the active source tint. */
 .chat-composer-wrap {
   position: relative;
 }

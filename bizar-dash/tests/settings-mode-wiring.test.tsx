@@ -1,75 +1,24 @@
 /**
  * tests/settings-mode-wiring.test.tsx
  *
- * v4.9.0 — Wiring tests for settings mode.
- * Verifies:
- * 1. Topbar Settings tab calls onTabChange('settings') when clicked
- * 2. Sidebar renders SettingsNav when settingsMode is true
- * 3. Sidebar renders normal tab rail when settingsMode is false
+ * v8.0 — Wiring tests for settings mode.
+ * The Topbar no longer hosts tabs (sidebar owns navigation), so
+ * only the Sidebar wiring is exercised here:
+ *   1. Sidebar renders SettingsNav when settingsMode is true
+ *   2. Sidebar renders normal tab rail when settingsMode is false
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { Sidebar } from '../src/web/components/Sidebar';
-import { Topbar, TABS } from '../src/web/components/Topbar';
+import { TABS } from '../src/web/components/Topbar';
 import type { TabDef } from '../src/web/components/Topbar';
 
 // Minimal tabs for testing (first 4 tabs from TABS)
 const TEST_TABS: TabDef[] = TABS.slice(0, 4);
 
 describe('Settings mode wiring', () => {
-  describe('Topbar', () => {
-    it('calls onTabChange with "settings" when the Settings tab is clicked', async () => {
-      const onTabChange = vi.fn();
-      const user = userEvent.setup();
-
-      render(
-        <Topbar
-          activeTab="overview"
-          onTabChange={onTabChange}
-          wsStatus="connected"
-          version="v4.9.0"
-          activeProject={null}
-          projects={[]}
-          onProjectChange={vi.fn()}
-          onProjectsRefresh={vi.fn()}
-          onOpenSearch={vi.fn()}
-        />,
-      );
-
-      // Find and click the Settings tab
-      const settingsTab = screen.getByRole('tab', { name: /settings/i });
-      await user.click(settingsTab);
-
-      expect(onTabChange).toHaveBeenCalledWith('settings');
-    });
-
-    it('calls onTabChange with "overview" when the Overview tab is clicked', async () => {
-      const onTabChange = vi.fn();
-      const user = userEvent.setup();
-
-      render(
-        <Topbar
-          activeTab="settings"
-          onTabChange={onTabChange}
-          wsStatus="connected"
-          version="v4.9.0"
-          activeProject={null}
-          projects={[]}
-          onProjectChange={vi.fn()}
-          onProjectsRefresh={vi.fn()}
-          onOpenSearch={vi.fn()}
-        />,
-      );
-
-      const overviewTab = screen.getByRole('tab', { name: /overview/i });
-      await user.click(overviewTab);
-
-      expect(onTabChange).toHaveBeenCalledWith('overview');
-    });
-  });
-
   describe('Sidebar', () => {
     const onTabChange = vi.fn();
     const onSettingsSectionChange = vi.fn();

@@ -778,10 +778,7 @@ function Shell() {
       </a>
       {showHeader && (
         <Topbar
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
           wsStatus={wsStatus}
-          version={VERSION}
           activeProject={snapshot?.activeProject || null}
           projects={snapshot?.projects || []}
           onProjectChange={onActivateProject}
@@ -789,9 +786,6 @@ function Shell() {
           onOpenSearch={() => setSearchOpen(true)}
           settings={settings}
           notificationsSlot={<Notifications wsSubscribe={subscribeToWs} />}
-          showTabs={layout === 'topnav'}
-          extraTabs={mergedTabs}
-          clineStatus={clineStatus}
         />
       )}
       {stuckAgents.length > 0 && !stuckBannerDismissed && (

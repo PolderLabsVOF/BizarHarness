@@ -1,87 +1,110 @@
 /**
  * tests/views/topbar.test.tsx
  *
- * v4.9.0 / v5.5.0 — Topbar tests. Verifies that:
- *   - The Settings tab appears as a single entry in the tab rail.
- *   - Clicking Settings invokes onTabChange with 'settings'.
- *   - The Settings tab shows the settings-mode-indicator when active.
- *   - All other tabs work normally.
+ * v8.0 — Topbar tests. The Topbar no longer carries navigation
+ * (sidebar owns tabs). The Topbar is now a single 48px row with:
+ *   - Brand (logo + title)
+ *   - Breadcrumb separator
+ *   - Project selector
+ *   - Search trigger (Cmd/Ctrl+K)
+ *   - WebSocket status indicator
+ *
+ * Tests verify these primitives render and behave correctly.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { Topbar, TABS } from '../../src/web/components/Topbar';
+import type { ProjectRecord } from '../../src/web/lib/types';
+
+const PROJECT: ProjectRecord = {
+  id: 'proj-1',
+  name: 'demo-app',
+  path: '/tmp/demo-app',
+  status: 'ready',
+  createdAt: 0,
+};
 
 describe('Topbar', () => {
-  const onTabChange = vi.fn();
+  const onProjectChange = vi.fn();
+  const onProjectsRefresh = vi.fn();
+  const onOpenSearch = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  const renderTopbar = (activeTab: string) =>
+  const renderTopbar = () =>
     render(
       <Topbar
-        activeTab={activeTab}
-        onTabChange={onTabChange}
         wsStatus="connected"
-        version="v4.9.0"
-        activeProject={null}
-        projects={[]}
-        onProjectChange={vi.fn()}
-        onProjectsRefresh={vi.fn()}
-        onOpenSearch={vi.fn()}
+        activeProject={PROJECT}
+        projects={[PROJECT]}
+        onProjectChange={onProjectChange}
+        onProjectsRefresh={onProjectsRefresh}
+        onOpenSearch={onOpenSearch}
       />,
     );
 
-  it('renders the Settings tab as a single entry', () => {
-    renderTopbar('overview');
-    expect(screen.getByRole('tab', { name: /settings/i })).toBeInTheDocument();
+  it('renders the brand title', () => {
+    renderTopbar();
+    expect(screen.getByText('Bizar')).toBeInTheDocument();
   });
 
-  it('renders all main tabs', () => {
-    renderTopbar('overview');
-    expect(screen.getByRole('tab', { name: /overview/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /chat/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /agents/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /memory/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /settings/i })).toBeInTheDocument();
+  it('renders the breadcrumb separator', () => {
+    renderTopbar();
+    expect(screen.getByText('/')).toBeInTheDocument();
   });
 
-  it('exposes the Settings tab id in TABS', () => {
+  it('renders the active project name', () => {
+    renderTopbar();
+    expect(screen.getByText('demo-app')).toBeInTheDocument();
+  });
+
+  it('renders "(no project)" when no active project is set', () => {
+    render(
+      <Topbar
+        wsStatus="connected"
+        activeProject={null}
+        projects={[]}
+        onProjectChange={onProjectChange}
+        onProjectsRefresh={onProjectsRefresh}
+        onOpenSearch={onOpenSearch}
+      />,
+    );
+    expect(screen.getByText('(no project)')).toBeInTheDocument();
+  });
+
+  it('renders a search trigger button', () => {
+    renderTopbar();
+    expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument();
+  });
+
+  it('calls onOpenSearch when the search trigger is clicked', async () => {
+    const user = userEvent.setup();
+    renderTopbar();
+    await user.click(screen.getByRole('button', { name: /search/i }));
+    expect(onOpenSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the WebSocket status indicator', () => {
+    renderTopbar();
+    expect(screen.getByText('connected')).toBeInTheDocument();
+  });
+
+  it('does not render any navigation tabs (sidebar owns those)', () => {
+    renderTopbar();
+    expect(screen.queryByRole('tab', { name: /overview/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /chat/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /settings/i })).not.toBeInTheDocument();
+  });
+
+  it('still exports TABS for the Sidebar to consume', () => {
+    expect(TABS).toBeInstanceOf(Array);
     const ids = TABS.map((t) => t.id);
+    expect(ids).toContain('overview');
+    expect(ids).toContain('chat');
     expect(ids).toContain('settings');
-    // Settings should NOT have a prefix (it's a single entry, not per-section)
-    expect(ids).not.toContain('settings-theme');
-    expect(ids).not.toContain('settings-general');
-  });
-
-  it('calls onTabChange with "settings" when the Settings tab is clicked', async () => {
-    const user = userEvent.setup();
-    renderTopbar('overview');
-    await user.click(screen.getByRole('tab', { name: /settings/i }));
-    expect(onTabChange).toHaveBeenCalledWith('settings');
-  });
-
-  it('calls onTabChange with "overview" when the Overview tab is clicked', async () => {
-    const user = userEvent.setup();
-    renderTopbar('settings');
-    await user.click(screen.getByRole('tab', { name: /overview/i }));
-    expect(onTabChange).toHaveBeenCalledWith('overview');
-  });
-
-  it('highlights the active tab with `tab-active`', () => {
-    renderTopbar('settings');
-    const settingsTab = screen.getByRole('tab', { name: /settings/i });
-    expect(settingsTab).toHaveClass('tab-active');
-  });
-
-  it('does not render settings section tabs (they are in the sidebar when in settings mode)', () => {
-    renderTopbar('overview');
-    // These section tabs should NOT exist in the topbar
-    expect(screen.queryByRole('tab', { name: /theme/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /general/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /layout/i })).not.toBeInTheDocument();
   });
 });

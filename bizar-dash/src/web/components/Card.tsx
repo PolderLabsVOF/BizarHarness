@@ -1,10 +1,18 @@
 // src/components/Card.tsx — wrapper card.
+//
+// v8.0 — Minimalist overhaul. Stripped decorative icon boxes and
+// `--accent-bg` fills. Variants are flat styling (background / radius /
+// border) — content is owned by `children` and, for the metric pattern,
+// by the dedicated `MetricCard` component which composes Card with
+// variant="metric".
 
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '../lib/utils';
 
+export type CardVariant = 'elevated' | 'outlined' | 'filled' | 'metric';
+
 export type CardProps = HTMLAttributes<HTMLDivElement> & {
-  variant?: 'elevated' | 'outlined' | 'filled';
+  variant?: CardVariant;
   interactive?: boolean;
   children?: ReactNode;
 };

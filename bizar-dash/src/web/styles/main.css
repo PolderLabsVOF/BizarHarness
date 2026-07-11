@@ -1,10 +1,8 @@
 /* ─────────────────────────────────────────────────────────────────────
-   Bizar Dashboard — React + TypeScript + Vite edition (v2.6.0)
-   Norse-pantheon inspired. Polished UI. Inter typography. WCAG AA.
+   Bizar Dashboard — React + TypeScript + Vite edition (v8.0)
+   Minimalist overhaul. Supabase/Grafana-inspired. Flat. No gradients.
    ───────────────────────────────────────────────────────────────────── */
 
-/* v3.21.x — Chat stylesheets must be imported BEFORE all other rules
-   (CSS @import ordering rule). Moved from line 262 in prior refactor. */
 @import './chat.css';
 @import './mobile-chat.css';
 
@@ -139,38 +137,48 @@ pre,
 /* ─── Theme tokens ─────────────────────────────────────────────────── */
 
 :root {
+  /* v8.0 — Minimalist flat palette. Supabase/Grafana-inspired. */
+
   /* Surfaces */
-  --bg: #0b0e14;
-  --bg-elev: #12161f;
-  --bg-elev-2: #1a1f2b;
-  --bg-elev-3: #232a39;
+  --bg: #0e1014;
+  --bg-elev: #15171c;
+  --bg-elev-2: #1c1f25;
+  --bg-elev-3: #24272f;
 
   /* Borders */
-  --border: #232a39;
-  --border-strong: #2d3648;
+  --border: #24272f;
+  --border-strong: #2f333d;
 
   /* Text */
-  --text: #c9d1d9;
-  --text-dim: #b4bcd0;
+  --text: #a1a1aa;
+  --text-dim: #71717a;
   --text-muted: var(--text-dim);
-  --text-strong: #f0f6fc;
+  --text-strong: #fafafa;
 
-  /* Brand & status */
-  --accent: #8b5cf6;
-  --accent-2: #a78bfa;
-  --accent-3: #c4b5fd;
-  --accent-bg: rgba(139, 92, 246, 0.12);
-  --accent-border: rgba(139, 92, 246, 0.4);
-  --accent-glow: rgba(139, 92, 246, 0.18);
-  --accent-soft: rgba(139, 92, 246, 0.08);
+  /* Brand accent (teal-green, Supabase-aligned) */
+  --accent: #10b981;
+  --accent-2: #34d399;
+  --accent-3: #6ee7b7;
+  --accent-bg: rgba(16, 185, 129, 0.10);
+  --accent-border: rgba(16, 185, 129, 0.35);
 
-  --success: oklch(0.72 0.16 145);
-  --warning: oklch(0.78 0.14 70);
-  --error: oklch(0.66 0.20 25);
-  --info: oklch(0.72 0.13 235);
-  --success-soft: rgba(52, 211, 153, 0.15);
-  --error-soft: rgba(248, 113, 113, 0.12);
-  --warning-soft: rgba(251, 191, 36, 0.15);
+  /* Status */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+  --success-soft: rgba(16, 185, 129, 0.12);
+  --warning-soft: rgba(245, 158, 11, 0.12);
+  --error-soft: rgba(239, 68, 68, 0.12);
+  --info-soft: rgba(59, 130, 246, 0.12);
+
+  /* Chart palette — discrete, solid fills only */
+  --chart-1: #10b981;
+  --chart-2: #f59e0b;
+  --chart-3: #ef4444;
+  --chart-4: #3b82f6;
+  --chart-5: #8b5cf6;
+  --chart-grid: #24272f;
 
   /* Syntax highlight (json tree) */
   --syntax-key: #79c0ff;
@@ -180,9 +188,10 @@ pre,
   --syntax-null: #ff7b72;
 
   /* Misc surfaces */
-  --overlay-bg: rgba(0, 0, 0, 0.6);
+  --overlay-bg: rgba(0, 0, 0, 0.60);
+  --text-on-accent: #ffffff;
 
-  /* Type scale */
+  /* Type */
   --font-mono:
     'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas,
     monospace;
@@ -190,7 +199,7 @@ pre,
     'Inter var', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto,
     sans-serif;
 
-  /* Spacing scale (8pt + extra for spacious layouts) */
+  /* Spacing scale (8pt) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -204,32 +213,27 @@ pre,
   --space-20: 80px;
   --space-24: 96px;
 
-  /* v4.6.0 — Semantic spacing aliases. These mirror the existing
-     --space-* numeric scale so existing rules stay untouched, and
-     new code can pick the alias that fits the intent. Use whichever
-     reads clearer at the call site; they resolve to the same pixel
-     values. Goal: kill the "is this 12 or 16?" guessing in
-     view-level padding. */
-  --spacing-xs: var(--space-1);  /* 4px  — micro gap, icon-to-text */
-  --spacing-sm: var(--space-2);  /* 8px  — tight stack, between rows */
-  --spacing-md: var(--space-3);  /* 12px — default card padding */
-  --spacing-lg: var(--space-4);  /* 16px — section padding */
-  --spacing-xl: var(--space-6);  /* 24px — page-level padding */
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-3);
+  --spacing-lg: var(--space-4);
+  --spacing-xl: var(--space-6);
 
   /* Radius */
   --radius-sm: 6px;
   --radius: 8px;
   --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-lg: 12px;
   --radius-xl: 16px;
+  --radius-pill: 999px;
 
-  /* Shadows */
-  --shadow-color: rgba(0, 0, 0, 0.45);
-  --shadow-color-strong: rgba(0, 0, 0, 0.6);
-  --shadow-1: 0 1px 2px var(--shadow-color);
-  --shadow-2: 0 4px 12px var(--shadow-color);
-  --shadow-3: 0 12px 32px var(--shadow-color);
-  --shadow-glow: 0 0 0 1px var(--accent-border), 0 8px 32px var(--accent-glow);
+  /* Shadows — flat, no glow */
+  --shadow-color: rgba(0, 0, 0, 0.40);
+  --shadow-color-strong: rgba(0, 0, 0, 0.55);
+  --shadow-1: 0 1px 0 0 var(--border);
+  --shadow-2: 0 1px 3px 0 var(--shadow-color);
+  --shadow-3: 0 8px 24px 0 var(--shadow-color-strong);
+
   --bg-elevated: var(--bg-elev);
   --surface-2: var(--bg-elev-2);
 
@@ -240,66 +244,51 @@ pre,
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
 
-  /* v3.21.x — Semantic and surface tokens for chat UI overhaul */
+  /* Back-compat aliases (kept for old selectors) */
+  --bg-1: var(--bg-elev-2);
+  --bg-2: var(--bg-elev-3);
   --surface-0: var(--bg);
-  --surface-1: color-mix(in oklab, var(--bg) 92%, var(--text) 8%);
-  --surface-2: color-mix(in oklab, var(--bg) 84%, var(--text) 16%);
-
-  /* v3.21.x — Gemini-inspired surface tokens for chat UI overhaul.
-     --bg-1, --bg-2 are NEW names that don't conflict with --bg / --bg-elev. */
-  --bg-1: #18181b;
-  --bg-2: #27272a;
-  --radius-pill: 999px;
-
-  /* v3.21.x — Theme-aware greeting gradients (derive from --accent).
-     Old hardcoded tokens (preserved for reference):
-       --gradient-hello: linear-gradient(90deg, #4285f4 0%, #8b5cf6 100%);
-       --gradient-name:  linear-gradient(90deg, #c084fc 0%, #ec4899 50%, #ef4444 100%);
-     Replaced with color-mix versions so the greeting automatically follows
-     whatever --accent the user picks. */
-  --gradient-hello: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--accent), white 25%) 0%,
-    var(--accent) 100%
-  );
-  --gradient-name: linear-gradient(
-    90deg,
-    var(--accent) 0%,
-    color-mix(in oklab, var(--accent), oklch(0.55 0.22 25) 35%) 60%,
-    color-mix(in oklab, var(--accent), oklch(0.55 0.22 25) 65%) 100%
-  );
+  --surface-1: var(--bg-elev);
+  --accent-glow: transparent;
+  --accent-soft: var(--accent-bg);
+  --shadow-glow: 0 0 0 1px var(--accent-border);
 
   color-scheme: dark;
 }
 
 [data-theme='light'] {
-  --bg: #f7f8fa;
+  --bg: #fafafa;
   --bg-elev: #ffffff;
-  --bg-elev-2: #f0f3f8;
-  --bg-elev-3: #e6ebf2;
+  --bg-elev-2: #f4f4f5;
+  --bg-elev-3: #e4e4e7;
 
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
 
-  --text: #1f2937;
-  --text-dim: #475569;
-  --text-strong: #0f172a;
+  --text: #27272a;
+  --text-dim: #52525b;
+  --text-strong: #0a0a0a;
 
-  --accent: #7c3aed;
-  --accent-2: #6d28d9;
-  --accent-3: #5b21b6;
-  --accent-bg: rgba(124, 58, 237, 0.08);
-  --accent-border: rgba(124, 58, 237, 0.3);
-  --accent-glow: rgba(124, 58, 237, 0.18);
-  --accent-soft: rgba(124, 58, 237, 0.06);
+  --accent: #059669;
+  --accent-2: #047857;
+  --accent-3: #065f46;
+  --accent-bg: rgba(5, 150, 105, 0.08);
+  --accent-border: rgba(5, 150, 105, 0.30);
 
-  --success: #047857;
-  --warning: #b45309;
-  --error: #b91c1c;
-  --info: #1d4ed8;
-  --success-soft: rgba(5, 150, 105, 0.12);
+  --success: #059669;
+  --warning: #d97706;
+  --error: #dc2626;
+  --info: #2563eb;
+  --success-soft: rgba(5, 150, 105, 0.10);
+  --warning-soft: rgba(217, 119, 6, 0.10);
   --error-soft: rgba(220, 38, 38, 0.08);
-  --warning-soft: rgba(217, 119, 6, 0.12);
+  --info-soft: rgba(37, 99, 235, 0.10);
+
+  --chart-1: #059669;
+  --chart-2: #d97706;
+  --chart-3: #dc2626;
+  --chart-4: #2563eb;
+  --chart-grid: #e4e4e7;
 
   --syntax-key: #0969da;
   --syntax-string: #0a3069;
@@ -307,23 +296,19 @@ pre,
   --syntax-boolean: #cf222e;
   --syntax-null: #cf222e;
 
-  --shadow-color: rgba(15, 23, 42, 0.08);
-  --shadow-color-strong: rgba(15, 23, 42, 0.16);
-  --shadow-1: 0 1px 2px var(--shadow-color);
-  --shadow-2: 0 4px 12px var(--shadow-color);
-  --shadow-3: 0 12px 32px var(--shadow-color);
+  --shadow-color: rgba(15, 23, 42, 0.06);
+  --shadow-color-strong: rgba(15, 23, 42, 0.12);
+  --shadow-1: 0 1px 0 0 var(--border);
+  --shadow-2: 0 1px 3px 0 var(--shadow-color);
+  --shadow-3: 0 8px 24px 0 var(--shadow-color-strong);
 
-  /* v3.21.x — Surface and semantic tokens (light theme overrides). */
-  --surface-1: color-mix(in oklab, var(--bg) 92%, var(--text) 8%);
-  --surface-2: color-mix(in oklab, var(--bg) 84%, var(--text) 16%);
-  /* v4.8.0 — Darken light-theme status colors so they pass WCAG AA (4.5:1)
-     against the light surface (#f7f8fa). */
-  --success: oklch(0.48 0.14 145);
-  --warning: oklch(0.55 0.15 70);
-  --error: oklch(0.48 0.20 25);
-  --info: oklch(0.48 0.16 235);
   --bg-1: #f4f4f5;
   --bg-2: #e4e4e7;
+  --surface-1: var(--bg-elev);
+  --surface-2: var(--bg-elev-2);
+  --accent-glow: transparent;
+  --accent-soft: var(--accent-bg);
+  --shadow-glow: 0 0 0 1px var(--accent-border);
 
   color-scheme: light;
 }
@@ -334,10 +319,7 @@ pre,
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background:
-    radial-gradient(circle at 0% 0%, var(--accent-bg), transparent 50%),
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
 }
 
 /* `.content` styling moved to `.app > .layout-body > .content` in Layout variants below.
@@ -540,8 +522,8 @@ pre,
   flex-direction: column;
   flex-shrink: 0;
   min-height: 56px;
-  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
-  backdrop-filter: blur(10px);
+  /* Removed backdrop-filter: blur(10px); — design system bans blur on every surface except .modal-backdrop */
+  background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -588,7 +570,10 @@ pre,
 .brand-logo {
   font-size: 22px;
   line-height: 1;
-  filter: drop-shadow(0 0 12px var(--accent-border));
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .brand-title {
@@ -848,8 +833,7 @@ pre,
 
 .card-interactive:hover {
   border-color: var(--border-strong);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-2);
+  /* Removed transform: translateY(-1px) and box-shadow — design system bans hover movement/shadows; hover changes color only */
 }
 
 .card-title {
@@ -1426,11 +1410,8 @@ pre,
   line-height: 1.1;
   margin: 0 0 12px;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--text-strong) 0%, var(--accent) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: var(--text-strong); /* fallback */
+  /* Removed linear-gradient text fill — design system bans gradients on text/brand glyphs */
+  color: var(--text-strong);
 }
 
 .overview-hero-noframe .overview-hero-subtitle {
@@ -1649,27 +1630,16 @@ pre,
   border-radius: var(--radius);
   cursor: pointer;
   transition:
-    box-shadow var(--motion-fast) var(--ease),
-    transform var(--motion-fast) var(--ease),
     background var(--motion-base) var(--ease);
   position: relative;
   overflow: hidden;
 }
-.activity-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 14px;
-  right: 14px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--accent-rule);
-  pointer-events: none;
-}
+/* Removed .activity-card::before — design system bans decorative top stripes on cards.
+   Status is conveyed by border-left (replaced below) and the existing icon tint. */
 .activity-card:hover {
-  box-shadow: var(--shadow-2);
-  transform: translateY(-1px);
+  /* Removed box-shadow and transform: translateY(-1px) — design system bans hover movement/shadows */
   background: var(--bg-elev-3);
+  border-color: var(--border-strong);
 }
 .activity-card-info { --accent-rule: var(--accent); }
 .activity-card-success { --accent-rule: var(--success); }
@@ -1747,7 +1717,8 @@ pre,
   right: 0;
   bottom: 0;
   height: 8rem;
-  background: linear-gradient(to bottom, rgba(8, 11, 18, 0), var(--bg));
+  /* Removed linear-gradient fade — design system bans gradients; solid var(--bg) provides the same visual cutoff */
+  background: var(--bg);
   pointer-events: none;
 }
 
@@ -2253,14 +2224,9 @@ pre,
 .canvas-grid-bg {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(
-    circle,
-    var(--border) 1px,
-    transparent 1px
-  );
-  background-size: 24px 24px;
-  background-position: 0 0;
-  opacity: 0.5;
+  /* Removed radial-gradient dot pattern — design system bans gradients; solid bg keeps the canvas subtle */
+  background: var(--bg);
+  opacity: 1;
   pointer-events: none;
 }
 
@@ -2279,16 +2245,13 @@ pre,
   padding: var(--space-3);
   cursor: pointer;
   transition:
-    border-color var(--motion-base) var(--ease),
-    box-shadow var(--motion-base) var(--ease),
-    transform var(--motion-fast) var(--ease);
+    border-color var(--motion-base) var(--ease);
   min-width: 140px;
 }
 
 .canvas-element:hover {
   border-color: var(--accent-border);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-2);
+  /* Removed transform: translateY(-1px) and box-shadow — design system bans hover movement/shadows */
 }
 
 .canvas-element-selected {
@@ -2573,17 +2536,8 @@ pre,
   position: relative;
   overflow: hidden;
 }
-.provider-active-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 18px;
-  right: 18px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--accent);
-  pointer-events: none;
-}
+/* Removed .provider-active-card::before — design system bans decorative top stripes on cards.
+   Active state is conveyed by --border-strong + --accent-border on the card itself. */
 .provider-active-body {
   display: flex;
   flex-direction: column;
@@ -2921,15 +2875,8 @@ pre,
   animation: pulse-soft 1.6s var(--ease) infinite;
   position: relative;
 }
-.is-working::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  border: 1px solid var(--info);
-  pointer-events: none;
-  animation: pulse-soft 1.6s var(--ease) infinite;
-}
+/* Removed .is-working::after pulsing glow ring — design system bans pulsing glow rings.
+   The opacity pulse on the element itself communicates the working state. */
 .is-stuck {
   position: relative;
 }
@@ -2955,8 +2902,8 @@ pre,
   gap: var(--space-3);
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
-  backdrop-filter: blur(10px);
+  /* Removed backdrop-filter: blur(10px); — design system bans blur on every surface except .modal-backdrop */
+  background: var(--bg-elev);
   flex-shrink: 0;
   min-width: 0;
 }
@@ -3375,28 +3322,16 @@ pre,
   overflow: hidden;
   transition:
     border-color var(--motion-base) var(--ease),
-    box-shadow var(--motion-base) var(--ease),
-    transform var(--motion-fast) var(--ease),
     background var(--motion-base) var(--ease);
   content-visibility: auto;
   contain-intrinsic-size: 0 80px;
 }
-.task-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 12px;
-  right: 12px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--accent-rule);
-  pointer-events: none;
-}
+/* Removed .task-card::before — design system bans decorative top stripes on cards.
+   Status is conveyed via border-left on priority variants in tasks.css. */
 
 .task-card:hover {
   border-color: var(--border-strong);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-2);
+  /* Removed transform: translateY(-1px) and box-shadow — design system bans hover movement/shadows */
 }
 
 .task-card-focused {
@@ -3609,13 +3544,13 @@ pre,
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--bg-elev-2) 70%, transparent);
+  /* Removed backdrop-filter: blur(8px); — design system bans blur on every surface except .modal-backdrop */
+  background: var(--bg-elev-2);
   overflow-x: auto;
   scrollbar-width: thin;
   position: sticky;
   top: 56px;
   z-index: 5;
-  backdrop-filter: blur(8px);
 }
 
 .settings-subnav-button {
@@ -3965,7 +3900,7 @@ details[open] .skills-category-summary::before {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 14px;
-  box-shadow: var(--shadow-3);
+  /* Removed box-shadow: var(--shadow-3); — design system bans drop-shadows; border alone separates the toast */
   font-size: 13px;
   pointer-events: auto;
   animation: toast-in var(--motion-slow) var(--ease);
@@ -3974,17 +3909,8 @@ details[open] .skills-category-summary::before {
   position: relative;
   overflow: hidden;
 }
-.toast::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 12px;
-  right: 12px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--accent-rule);
-  pointer-events: none;
-}
+/* Removed .toast::before — design system bans decorative top stripes on cards.
+   Status is conveyed by border-color on the toast variant classes. */
 
 .toast-icon {
   flex-shrink: 0;
@@ -4721,7 +4647,7 @@ kbd {
   white-space: nowrap;
 }
 
-/* v3.3.2 — Logo runic B */
+/* v3.3.2 — Logo runic B (no drop-shadow per v8 minimalism) */
 .brand-logo {
   color: var(--accent);
   font-size: 22px;
@@ -4729,8 +4655,6 @@ kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 0 12px var(--accent-border));
-  transition: filter var(--motion-base) var(--ease);
 }
 
 /* ─── v3.0.0 additions ─────────────────────────────────────────────── */
@@ -7241,7 +7165,7 @@ select:focus-visible,
 }
 
 .tl-task-bar-selected rect {
-  filter: drop-shadow(0 0 6px var(--accent-glow));
+  /* Removed filter: drop-shadow(0 0 6px var(--accent-glow)); — design system bans drop-shadows */
 }
 
 .tl-event-marker-group {
@@ -7259,7 +7183,7 @@ select:focus-visible,
 .tl-now-line {
   /* SVG line — stroke set inline for clarity */
   pointer-events: none;
-  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.45));
+  /* Removed filter: drop-shadow(...); — design system bans drop-shadows */
 }
 
 .tl-now-marker {
@@ -7651,7 +7575,8 @@ select:focus-visible,
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2, var(--accent)) 100%);
+  /* Removed linear-gradient fill — design system bans gradients; solid accent color */
+  background: var(--accent);
   transition: width var(--motion-base, 200ms) var(--ease, ease-out);
 }
 
@@ -7659,11 +7584,11 @@ select:focus-visible,
   position: absolute;
   top: 50%;
   right: var(--space-2);
-  transform: translateY(-50%);
+  transform: translateY(-50%); /* vertical-centering positioning transform, not a hover effect */
   font-size: 10px;
   color: var(--text);
   font-weight: 600;
-  text-shadow: 0 0 4px var(--bg-elev);
+  /* Removed text-shadow: 0 0 4px var(--bg-elev); — design system bans text-shadow */
 }
 
 /* ─── Output modal (live capture) ───────────────────────────────────────── */
@@ -8059,15 +7984,8 @@ select:focus-visible,
   position: relative;
   min-height: 100vh;
   padding: 5.5rem 1.5rem 4rem;
-  /* Dotted "Figma canvas" background — subtle against dark bg */
+  /* Removed radial-gradient dot pattern — design system bans gradients; solid bg keeps the canvas subtle */
   background-color: var(--bg);
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    rgba(255, 255, 255, 0.06) 1px,
-    transparent 0
-  );
-  background-size: 24px 24px;
-  background-attachment: local;
   overflow: visible;
 }
 
@@ -8130,9 +8048,7 @@ select:focus-visible,
   background: var(--bg-elev-3);
   border: 1px solid var(--border-strong);
   border-radius: 999px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  /* Removed box-shadow + backdrop-filter: blur(10px); — design system bans shadows and blur on every surface except .modal-backdrop */
 }
 
 .glyph-toolbar-divider {
@@ -8197,14 +8113,13 @@ select:focus-visible,
   background: var(--accent);
   border-color: var(--accent);
   color: white;
-  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.35);
+  /* Removed box-shadow — design system bans drop-shadows */
 }
 
 .glyph-btn--send:hover:not(:disabled) {
   background: var(--accent-2);
   border-color: var(--accent-2);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.5);
+  /* Removed transform: translateY(-1px) and box-shadow — design system bans hover movement/shadows */
 }
 
 .glyph-btn-badge {
@@ -9091,8 +9006,9 @@ select:focus-visible,
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  background: linear-gradient(to right, rgba(139, 92, 246, 0.1), transparent);
-  border-bottom: 1px solid var(--border);
+  /* Removed linear-gradient — design system bans gradients; solid bg-elev-2 with accent border separates the banner */
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--accent-border, var(--border));
   font-size: 13px;
   color: var(--text-dim);
 }
@@ -9544,8 +9460,9 @@ select:focus-visible,
 }
 
 .eval-summary-cta {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.04));
-  border-color: rgba(139, 92, 246, 0.25);
+  /* Removed linear-gradient — design system bans gradients; solid bg-elev with accent-tinted border */
+  background: var(--bg-elev);
+  border-color: var(--accent-border, rgba(139, 92, 246, 0.25));
   justify-content: space-between;
 }
 
@@ -9865,8 +9782,9 @@ select:focus-visible,
   transition: background 200ms ease, box-shadow 200ms ease;
 }
 .cline-status.cline-active {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.18), rgba(99, 102, 241, 0.18));
-  border-color: rgba(139, 92, 246, 0.45);
+  /* Removed linear-gradient — design system bans gradients; solid accent-bg with accent border */
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
   color: var(--text-strong);
 }
 .cline-status.cline-active .cline-dot {
@@ -9900,8 +9818,9 @@ select:focus-visible,
 
 /* v6.0.0 — VERSION banner polish. */
 .brand-version {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.18), rgba(236, 72, 153, 0.18));
-  border: 1px solid rgba(139, 92, 246, 0.4);
+  /* Removed linear-gradient — design system bans gradients; solid accent-bg with accent border */
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
   color: var(--text-strong);
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -9974,8 +9893,9 @@ select:focus-visible,
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(99, 102, 241, 0.25));
-  border: 1px solid rgba(139, 92, 246, 0.45);
+  /* Removed linear-gradient — design system bans gradients; solid accent-bg with accent border */
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
   color: var(--text-strong);
   flex-shrink: 0;
 }

@@ -185,7 +185,7 @@ export function Providers({ snapshot, settings, refreshSnapshot }: Props) {
           <Button variant="ghost" size="sm" onClick={reload} title="Refresh" aria-label="Refresh providers">
             <RefreshCw size={14} className={loading ? 'spin' : ''} />
           </Button>
-          <Button variant="accent" size="sm" onClick={openAddModal}>
+          <Button variant="primary" size="sm" onClick={openAddModal}>
             <Plus size={14} /> Add Provider
           </Button>
         </div>
@@ -228,7 +228,7 @@ export function Providers({ snapshot, settings, refreshSnapshot }: Props) {
           message="Add a provider to get started. Providers define the base URL and API key for accessing models."
           action={
             <div className="empty-state-actions">
-              <Button variant="accent" onClick={openAddModal}>
+              <Button variant="primary" onClick={openAddModal}>
                 <Plus size={14} /> Add Provider
               </Button>
             </div>

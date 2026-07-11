@@ -288,7 +288,7 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
           </Button>
           {backlogCount > 0 && (
             <Button
-              variant={showBacklog ? 'accent' : 'ghost'}
+              variant={showBacklog ? 'primary' : 'ghost'}
               size="sm"
               onClick={() => setShowBacklog((v) => !v)}
               title={showBacklog ? 'Hide backlog' : 'Show backlog'}
@@ -440,7 +440,12 @@ function TaskCard({
       <div className="task-card-head">
         <span
           className="priority-dot"
-          style={{ background: priorityColors[task.priority] || 'var(--info)' }}
+          style={{
+            background: priorityColors[task.priority] || 'var(--info)',
+            width: 6,
+            height: 6,
+            marginTop: 7,
+          }}
         />
         <div className="task-card-title">{task.title}</div>
       </div>

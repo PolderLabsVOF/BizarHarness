@@ -595,8 +595,9 @@
 }
 /* v6.0.0 — Cline agent team badge on tasks */
 .task-card-badge.team {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.18), rgba(236, 72, 153, 0.18));
-  border: 1px solid rgba(139, 92, 246, 0.4);
+  /* Removed linear-gradient — design system bans gradients; solid accent-bg with accent border */
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
   color: var(--text-strong);
   font-weight: 600;
   display: inline-flex;

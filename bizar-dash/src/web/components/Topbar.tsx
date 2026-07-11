@@ -1,35 +1,24 @@
-// src/components/Topbar.tsx — header with brand, project selector, search, tabs, ws status.
+// src/components/Topbar.tsx — header with brand, breadcrumb, search,
+// notifications slot, WS status.
+//
+// v8.0 — Minimalist overhaul. Flattened to a single 48px row. The
+// tabs row is gone (sidebar carries navigation in sidebar/both
+// layouts), the version pill is gone (no glow, no rounded badge),
+// and the `showTabs` / `extraTabs` props are removed. The
+// ProjectSelector stays but its styling is flattened to a
+// breadcrumb-style chip.
+
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  LayoutDashboard,
-  MessageSquare,
-  Bot,
-  Map,
   Folder,
-  CheckSquare,
-  Settings2,
-  Sliders,
-  Puzzle,
-  Clock,
-  History as HistoryIcon,
-  Search as SearchIcon,
-  ChevronDown,
+  ChevronRight,
   Plus,
   RefreshCw,
-  Power,
-  Sparkles,
-  Shield,
-  Activity,
-  Radio,
-  Coins,
-  Brain,
-  Stethoscope,
-  ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { ProjectRecord, WsStatus, WsMessage, Settings, DirectoryListing } from '../lib/types';
+import type { ProjectRecord, WsStatus, Settings, DirectoryListing } from '../lib/types';
 import { api } from '../lib/api';
 import { useModal } from './Modal';
 import { FileBrowser } from './FileBrowser';
@@ -39,41 +28,32 @@ export type TabDef = {
   id: string;
   label: string;
   icon: LucideIcon;
+  isMod?: boolean;
+  modId?: string;
 };
 
 export const TABS: TabDef[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'agents', label: 'Agents', icon: Bot },
-  { id: 'artifacts', label: 'Glyphs', icon: Map },
-  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-  { id: 'activity', label: 'Activity', icon: Activity },
-  { id: 'background', label: 'Active', icon: Radio },
-  { id: 'skills', label: 'Skills', icon: Sparkles },
-  { id: 'memory', label: 'Memory', icon: Brain },
-  { id: 'mods', label: 'Mods', icon: Puzzle },
-  { id: 'schedules', label: 'Schedules', icon: Clock },
-  { id: 'history', label: 'History', icon: HistoryIcon },
-  { id: 'minimax', label: 'Usage', icon: Coins },
-  // v5.2.0 — Eval framework UI. Lives next to Doctor (both are
-  // operator-quality surfaces) so the "did the last eval pass?"
-  // question is one click from the home screen.
-  { id: 'eval', label: 'Eval', icon: ClipboardCheck },
-  // v6.0.0 — Doctor page. Lives between Overview and Settings so the
-  // "is everything healthy?" question is always one click from the
-  // home screen and from the settings surface (where an operator
-  // typically arrives after something looks off).
-  { id: 'doctor', label: 'Doctor', icon: Stethoscope },
-  // v6.0.0 — Harness engineering dashboard.
-  { id: 'harness', label: 'Harness', icon: Shield },
-  { id: 'settings', label: 'Settings', icon: Sliders },
+  { id: 'overview', label: 'Overview', icon: ChevronRight },
+  { id: 'chat', label: 'Chat', icon: ChevronRight },
+  { id: 'agents', label: 'Agents', icon: ChevronRight },
+  { id: 'artifacts', label: 'Glyphs', icon: ChevronRight },
+  { id: 'tasks', label: 'Tasks', icon: ChevronRight },
+  { id: 'activity', label: 'Activity', icon: ChevronRight },
+  { id: 'background', label: 'Active', icon: ChevronRight },
+  { id: 'skills', label: 'Skills', icon: ChevronRight },
+  { id: 'memory', label: 'Memory', icon: ChevronRight },
+  { id: 'mods', label: 'Mods', icon: ChevronRight },
+  { id: 'schedules', label: 'Schedules', icon: ChevronRight },
+  { id: 'history', label: 'History', icon: ChevronRight },
+  { id: 'minimax', label: 'Usage', icon: ChevronRight },
+  { id: 'eval', label: 'Eval', icon: ChevronRight },
+  { id: 'doctor', label: 'Doctor', icon: ChevronRight },
+  { id: 'harness', label: 'Harness', icon: ChevronRight },
+  { id: 'settings', label: 'Settings', icon: ChevronRight },
 ];
 
 export type TopbarProps = {
-  activeTab: string;
-  onTabChange: (id: string) => void;
   wsStatus: WsStatus;
-  version: string;
   activeProject: ProjectRecord | null;
   projects: ProjectRecord[];
   onProjectChange: (id: string) => void;
@@ -87,30 +67,10 @@ export type TopbarProps = {
    * subscribe to the same WebSocket the rest of the app uses.
    */
   notificationsSlot?: ReactNode;
-  /**
-   * Whether to render the tabs row. In sidebar/both layouts the sidebar
-   * carries navigation, so we hide this row to keep the topbar slim.
-   */
-  showTabs?: boolean;
-  /**
-   * v3.20.3 — Optional extra tabs (mod views) appended after the built-in
-   * tabs. Each entry is the same shape as TabDef with an `id` matching
-   * the mod view id (e.g. 'graphify:web').
-   */
-  extraTabs?: TabDef[];
-  /** v6.0.0 — Cline runtime status (in-process core status). */
-  clineStatus?: {
-    state: 'active' | 'idle' | 'unavailable' | 'unknown';
-    label: string;
-    detail?: string;
-  } | null;
 };
 
 export function Topbar({
-  activeTab,
-  onTabChange,
   wsStatus,
-  version,
   activeProject,
   projects,
   onProjectChange,
@@ -119,9 +79,6 @@ export function Topbar({
   settings,
   rightSlot,
   notificationsSlot,
-  showTabs = true,
-  extraTabs,
-  clineStatus = null,
 }: TopbarProps) {
   return (
     <header className="topbar">
@@ -129,8 +86,8 @@ export function Topbar({
         <div className="brand">
           <span className="brand-logo" aria-hidden="true">ᛒ</span>
           <span className="brand-title">Bizar</span>
-          <span className="brand-version">{version}</span>
         </div>
+        <span className="topbar-breadcrumb-sep" aria-hidden="true">/</span>
         <ProjectSelector
           activeProject={activeProject}
           projects={projects}
@@ -145,7 +102,6 @@ export function Topbar({
           title="Search (Ctrl/Cmd+K)"
           aria-label="Open search"
         >
-          <SearchIcon size={14} />
           <span className="muted">Search…</span>
           <kbd>⌘K</kbd>
         </button>
@@ -153,73 +109,12 @@ export function Topbar({
         <div className="topbar-right">
           {notificationsSlot}
           {rightSlot}
-          {clineStatus && (
-            <div
-              className={cn('cline-status', `cline-${clineStatus.state}`)}
-              title={clineStatus.detail || `Cline ${clineStatus.label}`}
-              aria-label={`Cline runtime: ${clineStatus.label}`}
-            >
-              <span className="cline-dot" />
-              <span className="cline-label">Cline · {clineStatus.label}</span>
-            </div>
-          )}
           <div className={cn('ws-status', `ws-${wsStatus}`)} title={`WebSocket: ${wsStatus}`}>
             <span className="ws-dot" />
             <span className="ws-label">{wsStatus}</span>
           </div>
         </div>
       </div>
-      {showTabs && (
-        <nav className="tabs-row" role="tablist" aria-label="Primary tabs">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const active = tab.id === activeTab;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={cn('tab', active && 'tab-active')}
-                onClick={() => onTabChange(tab.id)}
-                title={tab.label}
-              >
-                <Icon size={14} className="tab-icon" />
-                <span className="tab-label">{tab.label}</span>
-                {tab.id === 'settings' && active && (
-                  <span className="settings-mode-indicator" title="Settings mode active">
-                    <Settings2 size={12} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          {extraTabs && extraTabs.length > 0 && (
-            <>
-              <span className="tab-separator" aria-hidden="true" />
-              {extraTabs.map((tab) => {
-                const Icon = tab.icon;
-                const active = tab.id === activeTab;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={cn('tab', 'tab-mod', active && 'tab-active')}
-                    onClick={() => onTabChange(tab.id)}
-                    title={`${tab.label} (mod)`}
-                  >
-                    <Icon size={14} className="tab-icon" />
-                    <span className="tab-label">{tab.label}</span>
-                    <span className="tab-badge">mod</span>
-                  </button>
-                );
-              })}
-            </>
-          )}
-        </nav>
-      )}
     </header>
   );
 }
@@ -287,7 +182,7 @@ function ProjectSelector({
         <span className="project-selector-name">
           {activeProject?.name || '(no project)'}
         </span>
-        <ChevronDown size={12} />
+        <ChevronRight size={12} />
       </button>
       {open && (
         <div className="project-selector-menu">
