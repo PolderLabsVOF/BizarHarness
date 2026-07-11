@@ -934,7 +934,7 @@
       "category": "ruflo-port",
       "created": "2026-07-11",
       "passed": "2026-07-11",
-      "commit": "current",
+      "commit": "533d81b",
       "ruflo_source": "v3/@claude-flow/swarm/src/workers/worker-dispatch.ts:147-240 + hooks/src/workers/index.ts",
       "files_touched": [
         "config/trigger-patterns.json (new)",
@@ -999,8 +999,8 @@
   ],
   "vcr": {
     "passing": 32,
-    "activated": 32,
-    "ratio": 1,
+    "activated": 33,
+    "ratio": 0.970,
     "in_flight": 1,
     "not_started": 3
   }
