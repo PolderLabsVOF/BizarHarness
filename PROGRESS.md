@@ -6,16 +6,16 @@
 
 ## Current State
 
-- **Last commit:** v6.3.0 — Claude Code migration
-- **Released:** v6.3.0 — published to npm (3 packages)
-- **`make check`:** 765/765 pass, 0 TS errors (F-033 router + distiller are pure TS; F-034 worker-dispatcher + hook are pure .mjs; no new TS source)
-- **`make test`:** 765 + 75 pass (54 plugin/sdk files + CLI tests incl. new F-033 router/distillation suites + F-034 worker-dispatcher 18-case suite)
-- **`make e2e`:** 20/20 pass (pre-existing F-033 not regressed)
-- **`make clean-check`:** 5/5 dimensions pass (F-033 files clean)
-- **`make vcr`:** 36/36 = 1.000 (F-032 passing + F-035 passing + F-036 passing — VCR reached 1.0; F-033, F-034, F-035, F-032, F-036 all green)
-- **Container test (`scripts/test-in-container.sh`):** ✓ all 6 stages green
-- **Branch:** master (pushed)
-- **Phase:** v6.4.0 — **Ruflo port cycle** (F-032 active; F-035, F-036 not_started; **F-033 + F-034 passing**)
+- **Last commit:** v6.4.0 — F-032 Swarm Coordination (commit `92c6e6a`)
+- **Released:** v6.3.0 — published to npm (3 packages); v6.4.0 in flight
+- **`make check`:** 0 TS errors (F-032 registry + topology are pure TS)
+- **`make test`:** F-032 layer-2 = 72/72 pass (28 agent-registry + 23
+  swarm-topology + 15 mcp-tools); sibling F-033 + F-034 suites unchanged
+- **`make vcr`:** 36/36 = 1.000 (F-032 + F-033 + F-034 + F-036 passing;
+  F-035 not_started)
+- **Branch:** master (unpushed)
+- **Phase:** v6.4.0 — **Ruflo port cycle** (**F-032 + F-033 + F-034 + F-036
+  passing**; F-035 not_started)
 
 ## In Progress — v6.4.0 Ruflo Port Cycle
 
@@ -25,11 +25,11 @@ codebase (`/home/drb0rk/Projects/BizarHarness/ruflo`) produced
 
 | F-id | Feature | Source map | Port target |
 |---|---|---|---|
-| **F-032** (active) | Swarm Coordination — `agent/{spawn,list,terminate}` + `swarm/init` + `BizarAgentRegistry` | `02-agent-system-map.md` | `packages/sdk/src/mcp/server.ts` + `agent-registry.ts` (new) |
+| **F-032** (passing) | Swarm Coordination — `agent/{spawn,list,terminate}` + `swarm/init` + `BizarAgentRegistry` | `02-agent-system-map.md` | `packages/sdk/src/mcp/server.ts` + `agent-registry.ts` (new) |
+| **F-033** (passing) | Self-Learning — ReasoningBank distillation (ADR-174) + adaptive model router + Tier-1 codemod intent | `03-memory-learning-map.md` | `packages/sdk/src/router/*` (new) + `bizar-dash/src/server/memory-{distillation,consolidator}.mjs` (new) |
 | **F-034** (passing) | Background Workers — trigger-pattern dispatcher wired to `UserPromptSubmit` | `04-dashboard-cli-map.md` | `.claude/hooks/worker-suggest.mjs` (new) + `cli/worker-dispatcher.mjs` (new) + `config/trigger-patterns.json` (new) |
-| F-033 | Self-Learning — ReasoningBank distillation (ADR-174) + adaptive model router + Tier-1 codemod intent | `03-memory-learning-map.md` | `packages/sdk/src/router/*` (new) + `bizar-dash/src/server/memory-{distillation,consolidator}.mjs` (new) |
 | F-035 | MetaHarness — atomic cost gate + 3-tier routing transparency panel + GitHub claim protocol | `02-agent-system-map.md` (cost gate) + `04-dashboard-cli-map.md` (GitHub claims) | `cli/cost-gate.mjs` (new) + `bizar-dash/src/web/components/agents/RoutingDecisions.tsx` (new) |
-| F-036 | Goal Planner UI — GOAP A* from plain-English goal + 5 dashboard panels | `04-dashboard-cli-map.md` | `bizar-dash/src/web/pages/GoalPlanner.tsx` + 7 new components |
+| **F-036** (passing) | Goal Planner UI — GOAP A* from plain-English goal + 5 dashboard panels | `04-dashboard-cli-map.md` | `bizar-dash/src/web/pages/GoalPlanner.tsx` + 7 new components |
 
 > F-036 functional state (committed `6b96d2e`): `goapPlanner.ts` + `routes/goal-planner.mjs` + `views/GoalPlanner.tsx` + `components/goals/{GoalInput,PlanVisualization}.tsx` + `components/agents/{CommunicationLog,RealTimeEventLog,DependencyGraph,QualityGates}.tsx`. 22/22 F-036 tests + 320/324 full dashboard suite (4 pre-existing `a11y/forms.test.tsx` import failures confirmed via `git stash` baseline). `make verify-feature ID=F-036` PASS, VCR 35/36 = 0.972. `feature_list.json` mutated only via the canonical gate.
 
@@ -41,32 +41,31 @@ because the router benefits from the agent registry. The other
 three (F-034, F-035, F-036) are independent of each other and of
 F-032.
 
-### F-032 — Swarm Coordination (functional, pending commit)
+### F-032 — Swarm Coordination (passing, committed `92c6e6a`)
 
 `BizarAgentRegistry` + `SwarmTopologyRegistry` + 4 MCP tools
 (`agent_spawn`, `agent_list`, `agent_terminate`, `swarm_init`)
-written and exported. `BIZAR_TOOLS` count = 21.
+written and exported. `BIZAR_TOOLS` count = 17 (13 + 4 F-032).
 
-- **Tests:** 67/67 vitest pass — `agent-registry.test.ts` (16) +
-  `swarm-topology.test.ts` (21) + `mcp-tools.test.ts` (14) +
-  `sdk.test.mjs` (16). **TS:** 0 errors in `packages/sdk`.
-- **Lifecycle smoke:** `/tmp/f032-lifecycle.mjs` spawn → list →
-  terminate → registry round-trip OK; `swarm-1 hierarchical-mesh`
-  spawned with maxAgents=5; `default` swarm lazy-seeded on first
-  `initSwarm` call.
-- **`layers[]`:** `[compile, unit, lifecycle]` set in feature_list.json.
-- **Out-of-scope fixes shipped with F-032** to unblock parallel
-  agents: created `packages/sdk/src/router/memory-distillation-shim.mjs`
-  (F-033 left `memory-distillation.ts` referenced but unwritten) and
-  added type narrowing to `memory_distill` handler in `server.ts`.
-
-**Deferred to v6.4.0 consolidation commit** (WIP=1 + cross-agent
-compile conflicts):
-- `cli/commands/cost.mjs` template-literal backtick error (F-035)
-- `packages/sdk/src/router/q-learning-router.ts` helpers-outside-class
-  (F-033, transient — agent since fixed)
-- Pre-existing v6.3.0 e2e gaps in `clineruntime.ts` / `cline.json.template`
-  / `cli/commands/validate.*` (not in v6.4.0 scope)
+- **Tests:** 72/72 vitest pass — `agent-registry.test.ts` (28) +
+  `swarm-topology.test.ts` (23) + `mcp-tools.test.ts` (15). **TS:** 0
+  errors via `make check`.
+- **Agent ids:** `crypto.randomUUID()` → `agent-<uuid>` (122-bit random
+  payload, no retry loop). Agent types gated by 9-entry `AGENT_TYPES`
+  allowlist (`coder` / `tester` / `reviewer` / `system-architect` /
+  `planner` / `researcher` / `performance-engineer` / `security-auditor`
+  / `memory-specialist`); `agent_spawn` rejects anything else with a
+  structured MCP error.
+- **Persistence:** opt-in via `{ persistPath }`. Singleton writes to
+  `.harness/agents.json` + `.harness/topology.json` (gitignored). On
+  reload, the new registry reconstructs from the snapshot so a Claude
+  Code session restart doesn't drop the population.
+- **Topologies:** 5 topologies (`hierarchical` / `mesh` / `adaptive` /
+  `collective` / `hierarchical-mesh`); default = `hierarchical-mesh`,
+  `maxAgents` clamped to `[1, 1000]`, default `15`. The `default` swarm
+  is lazy-seeded on the first `initSwarm` call.
+- **`layers[]`:** `[compile, unit, e2e]` set in feature_list.json;
+  `state="passing"`, `commit="92c6e6a"`, VCR pushed to 36/36 = 1.000.
 
 ### F-033 — Self-Learning (passing, committed `1a2ade2`)
 
