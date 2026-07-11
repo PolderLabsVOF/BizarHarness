@@ -17,7 +17,7 @@
   was cleanup not new tools; `plugin shim does not import @cline/*`
   confirms the SDK has zero Cline coupling)
 - **`make clean-check`:** 5/5 dimensions green
-- **`make vcr`:** 38/38 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039)
+- **`make vcr`:** 39/39 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039)
 - **Branch:** master (unpushed)
 - **Phase:** v6.5.0 — all 3 candidates shipped
 

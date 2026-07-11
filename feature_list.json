@@ -1059,7 +1059,7 @@
       "verification": "make check (0 TS errors) + make test (all pass, no skip/xfail) + make e2e (13/13 green) + narrow grep over the 4 target paths returns 0 hits for cline / @cline / clineruntime (broader cli/ has ~234 hits but all are documented intentional back-compat / migration helpers — not framework-coupled source)",
       "state": "passing",
       "passed": "2026-07-12",
-      "commit": "f037-migration-cleanup",
+      "commit": "4e7bb83648dd6634ad3036a81379421d51e1646e",
       "evidence": "make check exit 0 + 294/294 unit tests pass + make e2e 13/13 green + clean-check 5/5 + plugins/bizar/{ARCHITECTURE,CONSTRAINTS,README}.md rewritten for the post-rewrite shim state (no longer describe deleted files) + scripts/check-forbidden-imports.sh removed (src/ empty) + plugins/bizar/tsconfig.json slimmed (no src/**/*.ts or tests/**/*.ts globs) + docs/migration-guide.md final-status entry added (records what was removed + categorizes the residual cli/ hits as intentional migration tooling) + 2 pre-existing F-038 TS errors fixed in passing (trust.ts unused _now prefix, federation/index.ts redundant imports)",
       "layer": "L1+L2+L3",
       "category": "tech-debt",
@@ -1186,8 +1186,8 @@
     }
   ],
   "vcr": {
-    "passing": 38,
-    "activated": 38,
+    "passing": 39,
+    "activated": 39,
     "ratio": 1
   }
 }
