@@ -80,4 +80,35 @@ export type {
   InitSwarmResult,
 } from "./swarm-topology.js";
 
+// F-039 — Byzantine fault-tolerant consensus (thin PBFT port).
+export {
+  ByzantineConsensus,
+  type ByzantineConsensusOpts,
+  QueenCoordinator,
+  type QueenCoordinatorOpts,
+  createConsensus,
+  getSharedConsensus,
+  resetSharedConsensus,
+  type ConsensusHandle,
+  type CreateConsensusOpts,
+  PHASE_ORDER,
+  DEFAULT_QUORUM,
+  DEFAULT_PEER_COUNT,
+  DEFAULT_MAX_FAULTS,
+} from "./consensus/index.js";
+export type {
+  CommitResult,
+  ConsensusOpts,
+  ConsensusStatus,
+  Decision,
+  Phase,
+  ProposeResult,
+  Proposal,
+  ProposalSnapshot,
+  ProposalStatus,
+  Vote,
+  VoteResult,
+  ViewChangeResult,
+} from "./consensus/types.js";
+
 export { SDK_VERSION } from "./version.js";

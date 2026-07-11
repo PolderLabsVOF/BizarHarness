@@ -6,17 +6,17 @@
 
 ## Current State
 
-- **Last commit:** v6.4.0 — release consolidation (Makefile + e2e + JSDoc)
+- **Last commit:** v6.5.0 — F-039 hive-mind Byzantine consensus landed
 - **Released:** **v6.4.0 — Ruflo port cycle shipped** (5/5 features
   passing, VCR 36/36 = 1.000, `make check` + `make test` + `make e2e`
   + `make clean-check` all green; npm publish pending)
 - **`make check`:** 0 TS errors
-- **`make test`:** 269/269 pass (160 SDK bun + 109 CLI node:test)
-- **`make e2e`:** 13/13 pass (21 tools verified against current SDK surface)
+- **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test)
+- **`make e2e`:** 13/13 pass (22 tools verified — +1 `consensus_propose`)
 - **`make clean-check`:** 5/5 dimensions green
-- **`make vcr`:** 36/36 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036)
+- **`make vcr`:** 38/38 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-038 + F-039)
 - **Branch:** master (unpushed)
-- **Phase:** v6.4.0 SHIPPED → next: v6.4.0 npm publish + v6.5.0 planning
+- **Phase:** v6.5.0 — F-038 + F-039 landed; F-037 still WIP
 
 ## In Progress — v6.5.0 Sprint
 
@@ -29,7 +29,7 @@ agent's L09 verification chain, but the 3 features ship concurrently):
 |---|---|---|---|
 | **F-037** (active) | v6.3.0 migration gap cleanup — remove dead Cline-era paths from `clineruntime.ts`, `cline.json.template`, `cli/commands/validate.*`, `plugins/bizar/src/tools` | in-repo tech debt (not ruflo) | deletions + grep verifications |
 | **F-038** (passing, committed `8733d62`) | Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline, TrustEvaluator, PolicyEngine, AuditService, FederationBudget | ruflo `v3/@claude-flow/plugin-agent-federation/src/plugin.ts` | `packages/sdk/src/federation/*.ts` (8 new files) |
-| F-039 | Hive-mind Byzantine consensus (thin port) — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply phases | ruflo `v3/@claude-flow/swarm/src/consensus/byzantine.ts` | `packages/sdk/src/consensus/*.ts` (5 new files) |
+| F-039 (passing) | Hive-mind Byzantine consensus (thin port) — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply phases | ruflo `v3/@claude-flow/swarm/src/consensus/byzantine.ts` | `packages/sdk/src/consensus/*.ts` (4 new files) + `consensus_propose` MCP tool |
 
 **Sprint order:** F-038 + F-039 ship independently. F-037 unblocks
 all future SDK work (it removes the dead Cline paths that v6.4.0's
@@ -50,6 +50,67 @@ peer blocklist), `audit.ts` (NDJSON to
 and `index.ts` orchestrator (`createFederation()` with
 sign/receive/status). Plus `federation_status` MCP tool wired into
 `BIZAR_TOOLS` (lands when the F-039 commit picks up mcp/server.ts).
+
+### F-039 — Hive-mind Byzantine Consensus (passing)
+
+In-memory PBFT-style 3-of-5 majority for Bizar review/decision steps,
+thin-ported from ruflo's
+`v3/@claude-flow/swarm/src/consensus/byzantine.ts` + the
+`QueenCoordinator` proposer-election pattern. No transport — peers
+are passed in the constructor; the orchestrator drives `onPrepare` /
+`castVote` to tally votes. Replay protection keys on payload digest
+(view-scoped, so view-changes can re-propose the same payload).
+
+- `packages/sdk/src/consensus/types.ts` — `Phase = 'pre-prepare' |
+  'prepare' | 'commit' | 'reply'`, `Vote`, `Proposal`,
+  `ProposalSnapshot`, `ConsensusStatus`, and result shapes.
+- `packages/sdk/src/consensus/byzantine.ts` — `ByzantineConsensus`
+  class. `propose()` (replay-protected), `castVote()` (idempotent,
+  quorum auto-commit, proposer self-fault detection),
+  `onPrepare(proposalId, vote)` (transport-friendly entry point),
+  `commit()` (force-commit admin override), `viewChange()` (rotates
+  proposer via `QueenCoordinator.advance()` + increments
+  `viewNumber`).
+- `packages/sdk/src/consensus/queen.ts` — `QueenCoordinator` with
+  round-robin weighted by per-peer skip count. `recordFault(peer)`
+  adds `maxFaults` skip-tokens; `advance()` walks one step at a
+  time, decrementing any peer's skip counter it lands on.
+  Deterministic via optional `proposerSeed`.
+- `packages/sdk/src/consensus/index.ts` — `createConsensus(opts)`
+  facade returning a `ConsensusHandle`, plus `getSharedConsensus()`
+  singleton (defaults to the 5-agent Norse roster
+  `odin / frigg / vor / mimir / heimdall` with `bizar-f039-default`
+  seed).
+- `packages/sdk/src/mcp/server.ts` — `consensus_propose` MCP tool
+  (22nd in `BIZAR_TOOLS`); takes `payload: string` (JSON-encoded),
+  optional `vote` / `agentId` / `quorum` overrides, returns
+  `{ proposalId, status, phase, approvals, rejections, ... }`.
+- `packages/sdk/tests/consensus.test.ts` — **33 vitest cases**
+  covering: 5-agent 3-of-5 commit, exact-3 + abstain commit,
+  2-yes-3-no rejection, late-vote no-op, proposer self-fault +
+  view-change, explicit view-change + re-propose, 2-2-1 tie,
+  replay protection, payload-digest view-scoped expiry, view-count
+  semantics, validation throws, QueenCoordinator round-robin +
+  fault-skip semantics, deterministic seed, singleton lifecycle,
+  `PHASE_ORDER` + `DEFAULT_*` constants.
+- `/tmp/f039-consensus-roundtrip.mjs` — L3 e2e (plain `node`,
+  imports built `dist/`). 4 scenarios, **29 assertions**:
+  happy-path 3-of-5 commit, 2-2-1 split + view-change + re-propose,
+  replay protection, proposer self-fault.
+
+**Verification (L09 layers):**
+- L1 compile (`bunx tsc --noEmit`): 0 TS errors (used `noUnusedLocals`
+  + `noUnusedParameters` discipline; new getters
+  `getLocalAgentId` / `getMaxFaults` / `getHistoryLimit` keep
+  `strict` happy).
+- L2 unit (`vitest run tests/consensus.test.ts`): 33/33 PASS.
+- L3 e2e (`node /tmp/f039-consensus-roundtrip.mjs`): 29/29 PASS.
+
+**Constraints honoured:** 0 new npm deps (only `node:crypto` +
+`Map` + `Set`); backward-compatible — adds 1 new MCP tool without
+breaking the existing 21; deterministic quorum math (no randomness
+in vote tally); proposer election takes an optional seed for test
+pinned-heads. VCR pushed to **38/38 = 1.000** after F-039 + F-038.
 
 - **Tests:** 101/101 vitest pass across 8 new test files (envelope
   10 + hmac 22 + pii 12 + trust 9 + policy 11 + audit 10 + budget

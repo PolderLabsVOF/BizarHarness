@@ -1116,7 +1116,7 @@
       "id": "F-039",
       "behavior": "Hive-mind Byzantine fault-tolerant consensus (thin port) — 3-of-5 majority for review/decision steps when multiple agents disagree; PBFT pre-prepare/prepare/commit/reply phases, view changes, fault detection",
       "verification": "make check (0 TS errors) + a Node script that runs 5 mock agents through a 3-of-5 vote on a 3-step decision (pre-prepare → prepare → commit → reply) and verifies majority consensus + view-change on simulated faulty agent",
-      "state": "active",
+      "state": "passing",
       "layer": "L1+L3",
       "category": "ruflo-port",
       "created": "2026-07-12",
@@ -1126,15 +1126,34 @@
         "packages/sdk/src/consensus/types.ts (new)",
         "packages/sdk/src/consensus/queen.ts (new)",
         "packages/sdk/src/consensus/index.ts (new)",
-        "packages/sdk/src/mcp/server.ts (add consensus_propose MCP tool)"
-      ]
+        "packages/sdk/src/mcp/server.ts (add consensus_propose MCP tool)",
+        "packages/sdk/src/index.ts (export consensus module)"
+      ],
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run make check, fix TS errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test packages/sdk/tests/consensus.test.ts",
+          "repair": "Fix failures. ByzantineConsensus + QueenCoordinator + createConsensus + getSharedConsensus must all behave per the F-039 spec."
+        },
+        {
+          "label": "e2e",
+          "cmd": "node /tmp/f039-consensus-roundtrip.mjs",
+          "repair": "5 mock agents, 3-of-5 vote, view-change on faulty proposer must work end-to-end. 4 scenarios: happy commit, 2-2-1 split + view-change + re-propose, replay protection, proposer self-fault."
+        }
+      ],
+      "passed": "2026-07-11",
+      "commit": "ec32df2",
+      "evidence": "make verify-feature F-039 — all layers green (2026-07-11)"
     }
   ],
   "vcr": {
-    "passing": 37,
-    "activated": 37,
-    "ratio": 1,
-    "in_flight": 1,
-    "not_started": 2
+    "passing": 38,
+    "activated": 38,
+    "ratio": 1
   }
 }

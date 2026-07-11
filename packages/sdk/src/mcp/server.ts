@@ -58,6 +58,11 @@ import {
   DEFAULT_MAX_AGENTS,
   type SwarmTopology,
 } from "../swarm-topology.js";
+import { getSharedConsensus } from "../consensus/index.js";
+import {
+  createFederation,
+  type FederationHandle,
+} from "../federation/index.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
 // the package is optional. Callers pass the result of `tool()` and
@@ -622,6 +627,110 @@ const hooksRouteTool = defineTool<{ task: string; explicitAgent?: string }>(
 );
 
 // ---------------------------------------------------------------------------
+// Consensus tool (F-039) — thin PBFT-style 3-of-5 majority for
+// review/decision steps. Wraps the shared `getSharedConsensus()`
+// orchestrator; the MCP surface is intentionally minimal (one tool)
+// because the consensus layer is a coordination primitive — model
+// callers propose payloads, the cluster of 5 agents (odin / frigg /
+// vor / mimir / heimdall) reaches quorum, and the tool returns the
+// proposalId + status. Vote tally and view-change are internal — the
+// MCP caller drives the lifecycle through the orchestrator's
+// `castVote` / `viewChange` if it wants finer control.
+//
+// The payload is a JSON string so callers don't need a zod schema for
+// every consensus call; the orchestrator's replay-protection hash
+// keys on the canonicalized JSON anyway, so semantically equivalent
+// payloads collapse to the same proposalId.
+// ---------------------------------------------------------------------------
+
+const consensusProposeTool = defineTool<{
+  payload: string;
+  quorum?: number;
+  vote?: string;
+  agentId?: string;
+}>(
+  "consensus_propose",
+  "PBFT-style 3-of-5 majority consensus for Bizar review/decision steps. payload is a JSON-encoded string (canonicalized via JSON.stringify). vote ∈ yes|no|abstain (defaults to 'yes' from the local agent). agentId is the peer whose vote this call represents (defaults to the local agent = 'odin'). Returns { proposalId, status, phase, approvals, rejections }. Re-submitting the same payload in the same view returns the cached proposalId (replay protection).",
+  { payload: "string", quorum: "number", vote: "string", agentId: "string" },
+  async ({ payload, quorum, vote, agentId }) => {
+    try {
+      if (typeof payload !== "string" || payload.trim().length === 0) {
+        return err("consensus_propose: `payload` must be a non-empty JSON string");
+      }
+      let parsedPayload: unknown;
+      try {
+        parsedPayload = JSON.parse(payload);
+      } catch (e) {
+        return err(`consensus_propose: \`payload\` is not valid JSON: ${String(e)}`);
+      }
+      const consensus = getSharedConsensus();
+      const proposeResult = consensus.propose(parsedPayload);
+      const v: "yes" | "no" | "abstain" =
+        vote === "no" || vote === "abstain" ? vote : "yes";
+      const voter = agentId && agentId.trim().length > 0 ? agentId.trim() : consensus.localAgentId;
+      const voteResult = consensus.castVote(
+        proposeResult.proposalId,
+        voter,
+        v,
+      );
+      return ok(JSON.stringify({
+        proposalId: voteResult.proposalId,
+        status: voteResult.status,
+        phase: voteResult.phase,
+        approvals: voteResult.approvals,
+        rejections: voteResult.rejections,
+        abstentions: voteResult.abstentions,
+        committed: voteResult.committed,
+        quorum: quorum ?? consensus.getQuorum(),
+        currentProposer: consensus.getCurrentProposer(),
+        viewNumber: consensus.getViewNumber(),
+      }, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Federation tool (F-038) — Cross-installation agent federation
+// skeleton. Reads status from the shared `createFederation()` handle
+// (one per MCP server instance). The handle is configured against
+// `.harness/federation-audit.log` + `.harness/federation-budget.json`
+// under the project root. Per-call signing/receiving is not exposed
+// as a tool here — it's a library API used by the dashboard / future
+// transport layer; the MCP surface is intentionally a status probe
+// so callers can check peer trust + audit size + budget headroom
+// without needing to import the SDK.
+// ---------------------------------------------------------------------------
+
+function resolveFederationHandle(): FederationHandle {
+  const root = findRepoRoot();
+  const nodeId = `${root.replace(/[^a-zA-Z0-9_-]+/g, "_")}-mcp`;
+  // Shared secret per repo — the F-038 skeleton is in-process, so a
+  // hard-coded secret is fine for the status probe. Real deployments
+  // would source this from the env (BIZAR_FEDERATION_SECRET).
+  const secret = process.env.BIZAR_FEDERATION_SECRET ?? `bizar-federation-${root}`;
+  return createFederation({
+    nodeId,
+    secret,
+    auditPath: join(root, ".harness", "federation-audit.log"),
+    budgetPath: join(root, ".harness", "federation-budget.json"),
+  });
+}
+
+const federationStatusTool = defineTool<Record<string, never>>(
+  "federation_status",
+  "Federation skeleton status probe (F-038). Returns { nodeId, peers, nonceCacheSize, auditSizeBytes, auditPath, budget: { path, perPeer, outstandingReservations } }. Reads from the local createFederation() handle configured against .harness/federation-audit.log + .harness/federation-budget.json. Read-only.",
+  {},
+  async () => {
+    try {
+      const handle = resolveFederationHandle();
+      const snap = handle.status();
+      return ok(JSON.stringify(snap, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+// ---------------------------------------------------------------------------
 // Factory — wire all tools into an MCP server
 // ---------------------------------------------------------------------------
 
@@ -647,6 +756,8 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   agentRouteTool,
   memoryDistillTool,
   hooksRouteTool,
+  consensusProposeTool,
+  federationStatusTool,
 ];
 
 /**
