@@ -23,7 +23,7 @@
  *         allowedTools: ["mcp__bizar__*"],
  *       },
  *     })) {
- *       console.log(msg);
+ *       handleAgentMessage(msg);
  *     }
  *
  * The MCP server can also be registered in `~/.claude/settings.json`

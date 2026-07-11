@@ -90,22 +90,18 @@ if (!existsSync(MCP_BIN_PATH)) {
 // ── 3. MCP server exposes the documented tool surface ──────────────────
 try {
   const serverSrc = readFileSync(join(REPO_ROOT, 'packages', 'sdk', 'src', 'mcp', 'server.ts'), 'utf8');
+  // Tool surface updated for v6.4.0 (was: bizar_* prefix + sandbox/glyph/plan_comment tools
+  // that were removed in the v6.3.0 migration; F-032 + F-033 added agent/router tools).
   const requiredTools = [
-    'bizar_memory_search',
-    'bizar_memory_read',
-    'bizar_memory_write',
-    'bizar_memory_list',
-    'bizar_plan_action',
-    'bizar_wait_for_feedback',
-    'bizar_get_plan_comments',
-    'bizar_read_glyph_feedback',
-    'bizar_open_kb',
-    'bizar_graph_query',
-    'bizar_graph_path',
-    'bizar_graph_explain',
-    'bizar_sandbox_run',
-    'bizar_sandbox_exec',
-    'bizar_loop_engineering',
+    // v6.3.0 core
+    'memory_read', 'memory_write', 'memory_list', 'memory_search',
+    'plan_action', 'open_kb',
+    'loop_list', 'loop_status', 'loop_start', 'loop_stop',
+    'graph_query', 'graph_path', 'danger_check',
+    // F-032 Swarm Coordination
+    'agent_spawn', 'agent_list', 'agent_terminate', 'swarm_init',
+    // F-033 Self-Learning
+    'model_route', 'agent_route', 'memory_distill', 'hooks_route',
   ];
   const missing = requiredTools.filter((t) => !serverSrc.includes(t));
   if (missing.length === 0) {

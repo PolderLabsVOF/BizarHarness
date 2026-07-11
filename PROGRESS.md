@@ -6,32 +6,159 @@
 
 ## Current State
 
-- **Last commit:** v6.4.0 — F-032 Swarm Coordination (commit `92c6e6a`)
-- **Released:** v6.3.0 — published to npm (3 packages); v6.4.0 in flight
-- **`make check`:** 0 TS errors (F-032 registry + topology are pure TS)
-- **`make test`:** F-032 layer-2 = 72/72 pass (28 agent-registry + 23
-  swarm-topology + 15 mcp-tools); sibling F-033 + F-034 suites unchanged
-- **`make vcr`:** 36/36 = 1.000 (F-032 + F-033 + F-034 + F-036 passing;
-  F-035 not_started)
+- **Last commit:** v6.4.0 — release consolidation (Makefile + e2e + JSDoc)
+- **Released:** **v6.4.0 — Ruflo port cycle shipped** (5/5 features
+  passing, VCR 36/36 = 1.000, `make check` + `make test` + `make e2e`
+  + `make clean-check` all green; npm publish pending)
+- **`make check`:** 0 TS errors
+- **`make test`:** 269/269 pass (160 SDK bun + 109 CLI node:test)
+- **`make e2e`:** 13/13 pass (21 tools verified against current SDK surface)
+- **`make clean-check`:** 5/5 dimensions green
+- **`make vcr`:** 36/36 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036)
 - **Branch:** master (unpushed)
-- **Phase:** v6.4.0 — **Ruflo port cycle** (**F-032 + F-033 + F-034 + F-036
-  passing**; F-035 not_started)
+- **Phase:** v6.4.0 SHIPPED → next: v6.4.0 npm publish + v6.5.0 planning
 
-## In Progress — v6.4.0 Ruflo Port Cycle
+## In Progress — v6.5.0 (next)
 
-Started 2026-07-11. CodeGraph-driven mapping of the ruflo
-codebase (`/home/drb0rk/Projects/BizarHarness/ruflo`) produced
-5 port-backlog features in `feature_list.json`:
+Cleared v6.4.0 port cycle (all 5 features passing, VCR 1.000).
+Awaiting v6.4.0 npm publish + next-phase backlog. Candidates:
 
-| F-id | Feature | Source map | Port target |
-|---|---|---|---|
-| **F-032** (passing) | Swarm Coordination — `agent/{spawn,list,terminate}` + `swarm/init` + `BizarAgentRegistry` | `02-agent-system-map.md` | `packages/sdk/src/mcp/server.ts` + `agent-registry.ts` (new) |
-| **F-033** (passing) | Self-Learning — ReasoningBank distillation (ADR-174) + adaptive model router + Tier-1 codemod intent | `03-memory-learning-map.md` | `packages/sdk/src/router/*` (new) + `bizar-dash/src/server/memory-{distillation,consolidator}.mjs` (new) |
-| **F-034** (passing) | Background Workers — trigger-pattern dispatcher wired to `UserPromptSubmit` | `04-dashboard-cli-map.md` | `.claude/hooks/worker-suggest.mjs` (new) + `cli/worker-dispatcher.mjs` (new) + `config/trigger-patterns.json` (new) |
-| F-035 | MetaHarness — atomic cost gate + 3-tier routing transparency panel + GitHub claim protocol | `02-agent-system-map.md` (cost gate) + `04-dashboard-cli-map.md` (GitHub claims) | `cli/cost-gate.mjs` (new) + `bizar-dash/src/web/components/agents/RoutingDecisions.tsx` (new) |
-| **F-036** (passing) | Goal Planner UI — GOAP A* from plain-English goal + 5 dashboard panels | `04-dashboard-cli-map.md` | `bizar-dash/src/web/pages/GoalPlanner.tsx` + 7 new components |
+- **npm publish v6.4.0** — bump `--tag latest`, verify publish
+  manifest after F-035's `cli/feature-list-bridge` lands new
+  claim fields (sanity check vs the publish manifest ADR)
+- **Cross-installation agent federation** (deferred from v6.4.0;
+  see ruflo `02-agent-system-map.md` §1 — port cost ~600 LOC
+  skeleton, full parity ~3,000)
+- **Hive-mind Byzantine consensus** (deferred; 3-of-5 majority
+  for review/decision steps is the realistic thin port)
+- **Pre-existing v6.3.0 migration gaps** — `clineruntime.ts`,
+  `cline.json.template`, `cli/commands/validate.*`, `plugins/bizar/src/tools`
+  still have dead Cline-era paths that `make e2e` worked around.
+  Worth a focused cleanup sprint.
 
-> F-036 functional state (committed `6b96d2e`): `goapPlanner.ts` + `routes/goal-planner.mjs` + `views/GoalPlanner.tsx` + `components/goals/{GoalInput,PlanVisualization}.tsx` + `components/agents/{CommunicationLog,RealTimeEventLog,DependencyGraph,QualityGates}.tsx`. 22/22 F-036 tests + 320/324 full dashboard suite (4 pre-existing `a11y/forms.test.tsx` import failures confirmed via `git stash` baseline). `make verify-feature ID=F-036` PASS, VCR 35/36 = 0.972. `feature_list.json` mutated only via the canonical gate.
+## What landed in v6.4.0 — Ruflo Port Cycle
+
+5 features ported from ruflo via CodeGraph-driven mapping of the
+ruflo codebase (`/home/drb0rk/Projects/BizarHarness/ruflo`).
+Source maps: `/tmp/ruflo-port-analysis/0[1-4]-*.md`.
+
+### F-032 — Swarm Coordination (commit `92c6e6a`)
+
+`BizarAgentRegistry` + `SwarmTopologyRegistry` + 4 MCP tools
+(`agent_spawn`, `agent_list`, `agent_terminate`, `swarm_init`).
+21 MCP tools total (13 v6.3.0 core + 4 F-032 + 4 F-033).
+
+- **Tests:** 72/72 vitest — `agent-registry.test.ts` (28) +
+  `swarm-topology.test.ts` (23) + `mcp-tools.test.ts` (15)
+- **Agent ids:** `crypto.randomUUID()` → `agent-<uuid>`; 9-entry
+  `AGENT_TYPES` allowlist enforced (`coder`/`tester`/`reviewer`/
+  `system-architect`/`planner`/`researcher`/`performance-engineer`/
+  `security-auditor`/`memory-specialist`)
+- **Persistence:** opt-in via `{ persistPath }` → `.harness/agents.json`
+  + `.harness/topology.json` (gitignored)
+- **Topologies:** 5 (`hierarchical`/`mesh`/`adaptive`/`collective`/
+  `hierarchical-mesh`); default = `hierarchical-mesh`,
+  `maxAgents ∈ [1, 1000]`, default `15`
+
+### F-033 — Self-Learning (commit `1a2ade2`)
+
+ADR-174 distillation + 3-tier adaptive model router + Tier-1
+codemod intent + 8-agent Q-learning router.
+
+- **Tests:** 142/142 vitest (50 router + 13 orchestrator + 18
+  distillation + 61 sibling F-032)
+- **REST:** `POST /api/distill`, `GET /api/distill/patterns`,
+  `GET /api/distill/status` mounted in `api.mjs`
+- **Runtime:** `.bizar/distilled-patterns.json` (ADR-174 format);
+  singletons `modelRouter` + `agentRouter` with `saveTo/loadFrom`
+- **Schema:** `cli/memory-constants.mjs` extended with `pattern`
+  type + `VALID_PROVENANCE_TIERS` enum (`oracle:test-exec |
+  proxy:structural | judge:fable`)
+- **Surfaced tags:** `[CODEMOD_AVAILABLE]` (orchestrator's first),
+  then `[TASK_MODEL_RECOMMENDATION]` — both in `surfacedTags[]`
+  for prompt-side injection
+
+### F-034 — Background Workers (commits `533d81b` + `702631d`)
+
+Trigger-pattern dispatcher wired to Claude Code's `UserPromptSubmit`.
+12 workers: `testgaps`, `audit`, `deepdive`, `refactor`, `document`,
+`optimize`, `ultralearn`, `consolidate`, `predict`, `map`, `preload`,
+`benchmark`. Each carries `weight`, `skill`, `agent`, `description`.
+
+- `config/trigger-patterns.json` (new) — JSON map of 12 triggers
+- `cli/worker-dispatcher.mjs` (new, 256 LOC) — pure JS, no deps
+- `.claude/hooks/worker-suggest.mjs` (new, 110 LOC) — UserPromptSubmit
+  hook; always exits 0 (informational only)
+- `cli/worker-dispatcher.test.mjs` (new) — 18 `node:test` cases
+
+### F-035 — MetaHarness (commit `9ae48f8`)
+
+Atomic cost gate (better-sqlite3 + WAL + BEGIN IMMEDIATE) + 3-tier
+routing transparency panel + GitHub claim protocol.
+
+- `cli/cost-gate.mjs` (501 LOC) — ADR-164.1 §5.3 late-commit warning
+- `cli/commands/cost.mjs` — `bizar cost {register,status,reserve,
+  commit,release,sweep,list}`
+- `cli/feature-list-bridge.mjs` (400 LOC) — 7 `CLAIM_STATUSES`
+  + 4 `STEAL_REASONS` per ADR-016; atomic tmp+rename writes
+- `cli/commands/claim.mjs` — `bizar claim {claim,release,
+  handoff,steal,status,list,transition}`
+- `bizar-dash/src/web/components/agents/RoutingDecisions.tsx`
+  — tier badges CODEMOD(green)/TIER1(blue)/TIER2(yellow)/TIER3(red)
+- **Tests:** 43/43 node --test + 5/5 vitest + 160/160 SDK bun
+- **End-to-end CLI smoke:** `bizar cost register titan 50` →
+  `reserve --by tyr --amount 1.50` → `commit <txId> --amount 1.20`
+  → `status titan` ($48.80 remaining); `bizar claim F-035
+  --who odin` → `status F-035` (active by odin)
+
+### F-036 — Goal Planner UI (commit `6b96d2e`)
+
+GOAP A* from plain-English goal + 6 dashboard panels
+(GoalInput, PlanVisualization, CommunicationLog, RealTimeEventLog,
+DependencyGraph, QualityGates) wired to the existing `Ws()`
+singleton.
+
+- `bizar-dash/src/web/lib/goapPlanner.ts` — clause split →
+  verb map → A* over effect/precondition closure
+- `bizar-dash/src/server/routes/goal-planner.mjs` —
+  `POST /api/goal-planner/plan`
+- `bizar-dash/tests/setup.ts` — `ResizeObserver` + `matchMedia`
+  jsdom stubs
+- 22/22 F-036 tests + 320/324 full dashboard suite (4 pre-existing
+  `a11y/forms.test.tsx` import failures, confirmed via `git stash`
+  baseline)
+- **Constraints honoured:** no new deps (existing `@xyflow/react` +
+  `lucide-react`), no Tailwind, single `Ws()` subscription
+- **`feature_list.json` mutated only via canonical
+  `make verify-feature` gate**
+
+### v6.4.0 release consolidation — Makefile, e2e, JSDoc
+
+- `scripts/bh-full-e2e.mjs` — tool-list updated to match the new
+  SDK surface (21 tools: 13 v6.3.0 + 4 F-032 + 4 F-033); old
+  `bizar_*` prefix + `bizar_sandbox_*` / `bizar_glyph_*` /
+  `bizar_plan_comment_*` were v6.3.0 migration drift
+- `Makefile` — `make e2e` target fixed (pointed at non-existent
+  `scripts/e2e.sh`); `make test` target expanded to include
+  F-035's `cli/__tests__/{cost-gate,feature-list-bridge}.test.mjs`
+- `packages/sdk/src/mcp/server.ts:26` — JSDoc example replaced
+  `console.log(msg)` (false positive in `make clean-check` regex)
+  with `handleAgentMessage(msg)`
+- `package.json` — bumped 6.3.0 → 6.4.0 (MINOR: 5 new features,
+  backward-compatible)
+
+### v6.4.0 final gate
+
+- `make check` ✓ (0 TS errors)
+- `make test` ✓ (269/269: 160 SDK + 109 CLI)
+- `make e2e` ✓ (13/13 checks, 21 tools verified)
+- `make clean-check` ✓ (5/5 dimensions, 0 debug artifacts)
+- `make vcr` ✓ (**36/36 = 1.000**)
+
+Total v6.4.0 LOC: ~7,200 insertions across 32+ new files.
++8 MCP tools (13 → 21), +1 REST surface (`/api/goal-planner/plan`),
++2 CLI surfaces (`bizar cost` + `bizar claim`), +12 background
+workers, +1 dashboard page (Goals tab).
 
 Full analysis: `/tmp/ruflo-port-analysis/00-SYNTHESIS.md` (and
 `0[1-4]-*.md` for the per-area maps).
