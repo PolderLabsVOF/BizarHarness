@@ -84,15 +84,18 @@ npm install @polderlabs/bizar@6.3.0-beta.1
    | `beforeModel` | `UserPromptSubmit` |
    | `onEvent` | `SessionStart` / `SessionEnd` / `Stop` |
 
-4. **Update the runtime wrapper name (file kept for back-compat):**
+4. **Update the runtime wrapper import (file removed in v6.5.0 / F-037):**
    ```ts
    // Before (v6.2.x)
    import { ClineRuntime } from "./clineruntime.js";
 
    // After (v6.3.0)
-   import { AgentSdkRuntime } from "./clineruntime.js";
-   // file is still called clineruntime.ts for spec naming
+   import { createBizarMcpServer } from "@polderlabs/bizar-sdk/mcp";
+   // Claude Code invokes tools directly through MCP; no runtime wrapper needed.
    ```
+   > The `clineruntime.ts` file that shipped in v6.3.0 has been removed
+   > in v6.5.0 (F-037) once the migration was complete. Callers must
+   > import the MCP server factory directly from `@polderlabs/bizar-sdk`.
 5. **Settings:**
 
    | Cline setting (v6.2.x) | Claude Code default (v6.3.0) |
@@ -181,10 +184,80 @@ complexity without preserving meaningful functionality.
 - The plugin surface is now `.claude/skills/` +
   `.claude/mcp.json` + `.claude/agents/` (was
   `plugins/bizar/`).
-- The runtime wrapper file is still `clineruntime.ts` (for
-  the spec naming); the exported type is `AgentSdkRuntime`.
+- The `clineruntime.ts` file was deleted in v6.5.0 (F-037)
+  once the migration stabilized. Callers import
+  `createBizarMcpServer` from `@polderlabs/bizar-sdk` directly.
 - Tests run with `bun test` (unchanged).
 - The dashboard's bundle is unchanged.
+
+## F-037 / v6.5.0 — Cline-era paths removed
+
+The v6.3.0 rewrite landed all the Cline → Claude Code migration
+work in one cycle, but a handful of dead paths remained because
+they shipped alongside the rewrite:
+
+| Removed in F-037 | Replacement |
+| --- | --- |
+| `packages/sdk/src/clineruntime.ts` (Cline-era wrapper) | `packages/sdk/src/mcp/server.ts` (Claude Code MCP server) |
+| `.claude/cline.json.template` (Cline plugin config) | `.claude/settings.json` + `.claude/mcp.json` |
+| Dead Cline branches in `cli/commands/validate.mjs` | Now Claude-Code-native: checks `~/.claude/settings.json`, `~/.claude/agents/`, `~/.claude/skills/`, `~/.claude/hooks/`, `~/.claude/commands/` |
+| `plugins/bizar/src/tools/*` (22 Cline `createTool` files) | `BIZAR_TOOLS` array in `packages/sdk/src/mcp/server.ts` (23 MCP tools) |
+
+The `plugins/bizar/` directory is kept as a back-compat shim
+for `@polderlabs/bizar-plugin` consumers; its docs
+(ARCHITECTURE.md, CONSTRAINTS.md, README.md) were rewritten
+for the post-rewrite state so they no longer describe the
+deleted layout.
+
+Verification (per L09 3-layer DoD):
+
+```sh
+# Layer 1 — compile (TS 0 errors)
+make check                  # exit 0
+
+# Layer 2 — unit (all pass, no skip/xfail)
+make test                   # 294/294 pass (185 SDK bun + 109 CLI node:test)
+
+# Layer 3 — e2e (real plugin load + tools + hooks)
+make e2e                    # 13/13 green (incl. "plugin shim does not import @cline/*" + "SDK TypeScript compiles cleanly")
+```
+
+### What gets flagged by `grep -rEn 'cline|@cline' src/`
+
+The narrow in-scope check (the 4 target paths) returns **0 hits**:
+
+```sh
+grep -rEn 'cline|@cline' packages/sdk/src cli/commands/validate.mjs \
+  plugins/bizar/src .claude \
+  --include='*.ts' --include='*.mjs' --include='*.js' --include='*.json' \
+  --include='*.template' 2>/dev/null \
+  | grep -v 'docs/migration-guide.md' | grep -v 'CHANGELOG.md' \
+  | grep -v '\.claude/worktrees/'
+# → 0 hits ✓
+```
+
+A broader scan of the whole `cli/` tree (not in F-037 scope)
+returns ~234 hits. **All of them are intentional** back-compat
+or migration tooling — none are framework-coupled source code
+that the SDK or plugin builds against. Categorized:
+
+| Category | Files | Why kept |
+| --- | --- | --- |
+| **Cline-as-provider** ("cline/..." model IDs, `cline` Basic-auth user) | `commands/{minimax,clip,lightrag,headroom,ocr,usage,eval}.mjs`, `service-controller.mjs`, `providers-detect.mjs`, `audit.mjs`, `install.mjs`, `provision.mjs` | The string `"cline"` doubles as the canonical name of the Cline Zen provider (`cline/gpt-5-nano`, `cline/text-embedding-3-small`) which LightRAG / Headroom / MiniMax continue to use as the free-tier default. Changing the auth username would break compat with any installed Cline serve. |
+| **`~/.config/cline/` install paths** | `utils.mjs`, `copy.mjs`, `dev-link.mjs`, `bootstrap.mjs`, `provision.mjs`, `provision-claude.mjs`, `commands/setup-provider.mjs` + its test, `commands/mod.mjs`, `commands/util.mjs`, `plugin-runtime-deps.mjs` + its test, `export.mjs` | These are installer / migrator helpers used when a user on v6.2.x Cline upgrades to v6.3.0+ Claude Code. The CLI is the migration tool — it must understand the legacy layout. |
+| **Migration docstrings** | `commands/claude-cmd.mjs`, `commands/rca.mjs`, `commands/headroom.mjs`, `banner.mjs`, `bg.mjs`, `dev-link.mjs`, `update.mjs`, `prompts.mjs` | Pure comments / banner text explaining the v6.2.x → v6.3.0 upgrade path. The runtime code already routes to Claude Code — the strings remain so the CLI can still tell users about the legacy install when diagnosing. |
+
+These are not "dead code" — they're active migration helpers.
+A future F-task could rip them out once the install base has
+upgraded past v6.2.x, but that's outside the F-037 scope
+(which was the 5 specific files listed above).
+
+The untracked `.claude/worktrees/bizar-dash-redesign/`
+directory is a separate in-progress redesign branch (git
+worktree, not part of F-037). Its `clineruntime.ts`,
+`cline-runner.mjs`, `cline-sessions.mjs` etc. document the
+v6.2.x architecture it was forked from and are not built
+against by the current SDK.
 
 ## Verify your upgrade
 

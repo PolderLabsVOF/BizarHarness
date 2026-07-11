@@ -71,7 +71,7 @@ export class TrustEvaluator {
   }
 
   /** Snapshot the per-peer state seen by `evaluate()`. */
-  getPeerState(nodeId: string, now: number = Date.now()): PeerState {
+  getPeerState(nodeId: string, _now: number = Date.now()): PeerState {
     const rec = this.failHistory.get(nodeId);
     const total = rec?.failures.length ?? 0;
     const failures = rec?.failures.filter((b) => b).length ?? 0;

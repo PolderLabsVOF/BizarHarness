@@ -21,7 +21,6 @@ import { randomUUID } from "node:crypto";
 import {
   canonicalSignablePayload,
   emptyScanResult,
-  envelopeAgeMs,
   type EnvelopeBudget,
   type FederationEnvelope,
   type FederationMessageType,
@@ -30,7 +29,7 @@ import { freshNonce, NonceCache, signEnvelope, verifySignature } from "./hmac.js
 import { apply, isPiiMode, type PiiMode, type PiiResult } from "./pii.js";
 import { TrustEvaluator, type PeerState } from "./trust.js";
 import { PolicyEngine, type PolicyDecision } from "./policy.js";
-import { AuditService, type AuditDecision, type AuditEntry } from "./audit.js";
+import { AuditService } from "./audit.js";
 import { FederationBudget, validateBudgetInput, type PerPeerBudget } from "./budget.js";
 
 // ---------------------------------------------------------------------------

@@ -6,17 +6,20 @@
 
 ## Current State
 
-- **Last commit:** v6.5.0 — F-039 hive-mind Byzantine consensus landed
-- **Released:** **v6.4.0 — Ruflo port cycle shipped** (5/5 features
-  passing, VCR 36/36 = 1.000, `make check` + `make test` + `make e2e`
-  + `make clean-check` all green; npm publish pending)
-- **`make check`:** 0 TS errors
+- **Last commit:** v6.5.0 — F-037 migration gap cleanup landed
+- **Released:** **v6.5.0 — Tech-debt + federation + consensus
+  shipped** (3/3 features passing — F-037 + F-038 + F-039; VCR
+  38/38 = 1.000, `make check` + `make test` + `make e2e` +
+  `make clean-check` all green; npm publish pending)
+- **`make check`:** 0 TS errors (root + SDK tsconfig)
 - **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test)
-- **`make e2e`:** 13/13 pass (22 tools verified — +1 `consensus_propose`)
+- **`make e2e`:** 13/13 pass (23 tools verified — +0 net; F-037
+  was cleanup not new tools; `plugin shim does not import @cline/*`
+  confirms the SDK has zero Cline coupling)
 - **`make clean-check`:** 5/5 dimensions green
-- **`make vcr`:** 38/38 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-038 + F-039)
+- **`make vcr`:** 38/38 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039)
 - **Branch:** master (unpushed)
-- **Phase:** v6.5.0 — F-038 + F-039 landed; F-037 still WIP
+- **Phase:** v6.5.0 — all 3 candidates shipped
 
 ## In Progress — v6.5.0 Sprint
 
@@ -27,14 +30,40 @@ agent's L09 verification chain, but the 3 features ship concurrently):
 
 | F-id | Feature | Source | Port target |
 |---|---|---|---|
-| **F-037** (active) | v6.3.0 migration gap cleanup — remove dead Cline-era paths from `clineruntime.ts`, `cline.json.template`, `cli/commands/validate.*`, `plugins/bizar/src/tools` | in-repo tech debt (not ruflo) | deletions + grep verifications |
+| **F-037** (passing, this commit) | v6.3.0 migration gap cleanup — rewrite stale `plugins/bizar/` docs that describe the deleted Cline tree; record the final-status entry in `docs/migration-guide.md` | in-repo tech debt (not ruflo) | deletions + grep verifications + stale docs cleanup |
 | **F-038** (passing, committed `8733d62`) | Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline, TrustEvaluator, PolicyEngine, AuditService, FederationBudget | ruflo `v3/@claude-flow/plugin-agent-federation/src/plugin.ts` | `packages/sdk/src/federation/*.ts` (8 new files) |
-| F-039 (passing) | Hive-mind Byzantine consensus (thin port) — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply phases | ruflo `v3/@claude-flow/swarm/src/consensus/byzantine.ts` | `packages/sdk/src/consensus/*.ts` (4 new files) + `consensus_propose` MCP tool |
+| **F-039** (passing, committed `ae24842`) | Hive-mind Byzantine consensus (thin port) — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply phases | ruflo `v3/@claude-flow/swarm/src/consensus/byzantine.ts` | `packages/sdk/src/consensus/*.ts` (4 new files) + `consensus_propose` MCP tool |
 
-**Sprint order:** F-038 + F-039 ship independently. F-037 unblocks
-all future SDK work (it removes the dead Cline paths that v6.4.0's
-release gate had to work around), so it should land first in the
-consolidation commit even though its agents run in parallel.
+### What landed in v6.5.0
+
+- **F-037 — Migration gap cleanup.** All 5 F-037 target files were
+  already deleted/migrated by the v6.3.0 cycle (clineruntime.ts →
+  mcp/server.ts, cline.json.template → settings.json+mcp.json,
+  cli/commands/validate.mjs already Claude-Code-native, the 22
+  Cline `createTool` files were migrated into `BIZAR_TOOLS`).
+  F-037 cleaned up what remained: **rewrote** the stale
+  `plugins/bizar/{ARCHITECTURE,CONSTRAINTS,README}.md` so they
+  describe the post-migration shim state (the previous versions
+  still described the deleted Cline-era file tree and quoted
+  `createTool from @cline/sdk` mandates), **deleted**
+  `plugins/bizar/scripts/check-forbidden-imports.sh` (its src/
+  no longer exists), **slimmed** `plugins/bizar/tsconfig.json`
+  include globs (no more `src/**/*.ts` + `tests/**/*.ts`), and
+  **appended** the F-037 entry to `docs/migration-guide.md` with
+  both the L09 verification matrix and a categorized accounting of
+  the residual `cline` hits in `cli/` (all intentional back-compat
+  — Cline-as-provider model strings, the `~/.config/cline/`
+  install path helpers, and migration docstrings). Also fixed
+  two pre-existing F-038 TS errors the F-037 work surfaced via
+  the SDK tsconfig's stricter `noUnusedLocals`:
+  `federation/trust.ts` unused `now` parameter → `_now` prefix,
+  and `federation/index.ts` dropped 3 redundant re-imports
+  (`envelopeAgeMs`, `AuditDecision`, `AuditEntry`).
+
+  L09 verification: `make check` 0 errors • `make test` 294/294 •
+  `make e2e` 13/13 ("plugin shim does not import @cline/*" + "SDK
+  TypeScript compiles cleanly" both green) • `make clean-check`
+  5/5 • narrow gap-grep over the 4 target paths returns **0 hits**.
 
 ### F-038 — Federation Skeleton (commit `8733d62`)
 

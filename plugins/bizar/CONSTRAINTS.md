@@ -1,67 +1,62 @@
 # plugins/bizar/ — Hard Rules
 
-> Module-specific hard rules. These complement the root
-> [AGENTS.md](../../AGENTS.md) constraints. Violations break the
-> plugin's portability or safety guarantees.
+> Module-specific hard rules. Because this directory is a
+> back-compat shim (post-F-037), the constraints are minimal:
+> don't reintroduce Cline-era source files here. The active
+> rules live in
+> [`packages/sdk/`](../packages/sdk/) and the root
+> [AGENTS.md](../../AGENTS.md).
 
 ## Hard rules
 
-- **MUST** use `createTool` from `@cline/sdk` for every tool.
-  # why: Ensures the `AgentTool` shape is correct and the host can
-  # validate the inputSchema.
-- **MUST** use the in-process `ClineRuntime` (no `cline serve` subprocess).
-  # why: The subprocess hangs in headless test environments.
-- **MUST** use the in-process `memory-vault.ts` for memory operations.
-  # why: The plugin must work without the dashboard.
-- **MUST** run the `InstanceManager` in bg-only mode (http=null).
-  # why: No HTTP server means no background-agent controls via HTTP.
-  # The dashboard owns the actual Cline session lifecycle.
+- **MUST NOT** add Cline-era source files (no
+  `src/clineruntime.ts`, no `src/hooks/`, no
+  `src/tools/<name>.ts` using `@cline/sdk`).
+  # why: F-037 (v6.5.0) removed the Cline-era plugin surface.
+  # The Claude Code MCP server in `packages/sdk/src/mcp/`
+  # is the only tool registration surface now.
+- **MUST NOT** import from `@cline/sdk`, `@cline/core`, or
+  `@cline/shared`.
+  # why: Bizar is Claude Code-native (v6.3.0+). The Agent SDK
+  # dependency is `@anthropic-ai/claude-agent-sdk`.
+- **MUST NOT** spawn a `cline serve` subprocess.
+  # why: Claude Code runs in-process; any subprocess-based
+  # runtime breaks headless test environments.
 - **MUST NOT** import from `bizar-dash/`.
-  # why: Cross-layer violation. Use `@cline/sdk` or `packages/sdk/`.
-- **MUST NOT** use `fetch('http://127.0.0.1:...')` for memory.
-  # why: The plugin must work in-process without a dashboard.
-- **MUST NOT** return `{ output: JSON.stringify(...) }` from tool `execute()`.
-  # why: Use the structured `AgentToolResult` shape (`{ ok, ... }`).
-- **MUST NOT** hand-roll `AgentTool` shapes (use `createTool`).
-  # why: Hand-rolled tools drift from the Cline contract.
-- **MUST** pass every tool call through `checkDangerous()` in `beforeTool`.
-  # why: 36 dangerous patterns must be checked before the call
-  # reaches the host. Deny decisions stop the call.
-- **MUST** call `createMemoryFlushOnCompact().maybeFlush()` in
-  `beforeModel` when usage crosses the compaction threshold.
-  # why: Compaction drops context before persistence; the flush
-  # writes a durable snapshot first.
-- **MUST NOT** spawn subagents with `rm -rf`, `sudo`, SSRF, or
-  prompt-injection content. (Enforced by `checkDangerous()`.)
-  # why: Defense in depth — even legitimate agents sometimes
-  # generate bad tool calls.
+  # why: Cross-layer violation. This is a Layer 0 (Core) shim;
+  # the dashboard sits at Layer 1.
+- **MUST NOT** import from `node:dns`, `node:net`, `node:http`,
+  or `node:https` (network-bearing).
+  # why: The plugin must remain a pure shim with zero network
+  # calls. (The historical `scripts/check-forbidden-imports.sh`
+  # enforced this against `src/`; the directory is empty now, so
+  # the script was deleted.)
+- **MUST** keep `index.ts` a pure re-export of
+  `@polderlabs/bizar-sdk`.
+  # why: The shim's only job is to forward legacy consumers. No
+  # runtime logic should accumulate here.
 
 ## Soft rules
 
-- Prefer `bun:test` over `vitest` for new tests.
-- Prefer `Bun.file().text()` over `fs.readFileSync` for async reads.
-- Use `logger.debug()` not `console.debug()`.
-- Use `process.env.BIZAR_*` for environment-driven config.
-- The plugin's `setup()` should not block. Use `try/catch` for
-  ClineRuntime setup; fall back gracefully.
+- Prefer extending the SDK in `packages/sdk/src/mcp/server.ts`
+  over adding any code to this directory.
+- If a new npm dep is needed, declare it in `package.json` and
+  audit it against `docs/safety.md` patterns.
 
 ## Anti-patterns
 
-- ❌ Adding new tool types via the old OpenCode `tool()` factory
-  → Use `createTool()`.
-- ❌ Putting state in the plugin entry's module scope
-  → Use `ctx.stateStore` for per-session state.
-- ❌ Calling `process.exit()` from a hook
-  → Return `{ stop: true, reason: '...' }` to the host.
-- ❌ Spawning long-lived side effects in `beforeTool`
-  → Use the `afterTool` hook for post-call actions.
-- ❌ Skipping `checkDangerous()` for "trusted" tools
-  → All tool calls go through the gate, no exceptions.
+- ❌ Re-implementing tools here instead of in
+  `packages/sdk/src/mcp/server.ts`.
+  → Add to `BIZAR_TOOLS` and re-export from the SDK.
+- ❌ Adding `src/` or `tests/` subdirectories.
+  → If real source is needed, it belongs in `packages/sdk/`.
+- ❌ Pinning to `@cline/*` packages.
+  → Use `@anthropic-ai/claude-agent-sdk`.
 
 ## When in doubt
 
-1. Read [docs/architecture.md](../../docs/architecture.md) for the layer model.
-2. Check [.harness/arch-rules.json](../../.harness/arch-rules.json) for enforced rules.
-3. Run `make check-arch` before committing.
-4. Read [docs/decisions/DEC-007-tool-approval-gate.md](../../docs/decisions/DEC-007-tool-approval-gate.md)
-   for the safety gate.
+1. Read [docs/architecture.md](../../docs/architecture.md) for
+   the layer model.
+2. Read [docs/migration-guide.md](../../docs/migration-guide.md)
+   for the v6.3.0 → v6.5.0 migration history.
+3. Run `make check` and `make test` before committing.
