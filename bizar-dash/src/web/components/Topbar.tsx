@@ -15,6 +15,22 @@ import {
   ChevronRight,
   Plus,
   RefreshCw,
+  LayoutDashboard,
+  MessageSquare,
+  Bot,
+  Sparkles,
+  ListChecks,
+  Activity,
+  Zap,
+  Star,
+  Brain,
+  History,
+  Calendar,
+  BarChart3,
+  Stethoscope,
+  ShieldCheck,
+  Settings as SettingsIcon,
+  Target,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -24,32 +40,56 @@ import { useModal } from './Modal';
 import { FileBrowser } from './FileBrowser';
 import { Button } from './Button';
 
+export type SidebarSection = 'workspace' | 'agents' | 'knowledge' | 'system';
+
 export type TabDef = {
   id: string;
   label: string;
   icon: LucideIcon;
+  /** Which sidebar section this tab belongs to. Drives the rail grouping. */
+  section?: SidebarSection;
   isMod?: boolean;
   modId?: string;
 };
 
+/** v8.0 — Tab definitions grouped by sidebar section.
+ *
+ * Sections are rendered in order, top-to-bottom, with a small uppercase
+ * label between each group. The Settings tab lives in the 'system'
+ * section (no duplicate footer entry). Mod-added tabs render under a
+ * 'Mods' section beneath the built-in groups. */
 export const TABS: TabDef[] = [
-  { id: 'overview', label: 'Overview', icon: ChevronRight },
-  { id: 'chat', label: 'Chat', icon: ChevronRight },
-  { id: 'agents', label: 'Agents', icon: ChevronRight },
-  { id: 'artifacts', label: 'Glyphs', icon: ChevronRight },
-  { id: 'tasks', label: 'Tasks', icon: ChevronRight },
-  { id: 'activity', label: 'Activity', icon: ChevronRight },
-  { id: 'background', label: 'Active', icon: ChevronRight },
-  { id: 'skills', label: 'Skills', icon: ChevronRight },
-  { id: 'memory', label: 'Memory', icon: ChevronRight },
-  { id: 'mods', label: 'Mods', icon: ChevronRight },
-  { id: 'schedules', label: 'Schedules', icon: ChevronRight },
-  { id: 'history', label: 'History', icon: ChevronRight },
-  { id: 'minimax', label: 'Usage', icon: ChevronRight },
-  { id: 'eval', label: 'Eval', icon: ChevronRight },
-  { id: 'doctor', label: 'Doctor', icon: ChevronRight },
-  { id: 'harness', label: 'Harness', icon: ChevronRight },
-  { id: 'settings', label: 'Settings', icon: ChevronRight },
+  // Workspace — primary daily-driver surfaces
+  { id: 'overview',   label: 'Overview', icon: LayoutDashboard, section: 'workspace' },
+  { id: 'chat',       label: 'Chat',     icon: MessageSquare,   section: 'workspace' },
+  { id: 'goals',      label: 'Goals',    icon: Target,          section: 'workspace' },
+
+  // Agents & Work — anything that runs things or coordinates them
+  { id: 'agents',     label: 'Agents',   icon: Bot,             section: 'agents' },
+  { id: 'background', label: 'Active',   icon: Zap,             section: 'agents' },
+  { id: 'tasks',      label: 'Tasks',    icon: ListChecks,      section: 'agents' },
+  { id: 'artifacts',  label: 'Glyphs',   icon: Sparkles,        section: 'agents' },
+  { id: 'skills',     label: 'Skills',   icon: Star,            section: 'agents' },
+
+  // Knowledge & History — long-lived state and recall
+  { id: 'memory',     label: 'Memory',     icon: Brain,       section: 'knowledge' },
+  { id: 'schedules',  label: 'Schedules',  icon: Calendar,    section: 'knowledge' },
+  { id: 'history',    label: 'History',    icon: History,     section: 'knowledge' },
+
+  // System — settings, diagnostics, observability, governance
+  { id: 'minimax',    label: 'Usage',   icon: BarChart3,     section: 'system' },
+  { id: 'eval',       label: 'Eval',    icon: Activity,      section: 'system' },
+  { id: 'doctor',     label: 'Doctor',  icon: Stethoscope,   section: 'system' },
+  { id: 'harness',    label: 'Harness', icon: ShieldCheck,   section: 'system' },
+  { id: 'settings',   label: 'Settings', icon: SettingsIcon, section: 'system' },
+];
+
+/** v8.0 — Section ordering and labels for the sidebar rail. */
+export const SIDEBAR_SECTIONS: { id: SidebarSection; label: string }[] = [
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'agents',    label: 'Agents & Work' },
+  { id: 'knowledge', label: 'Knowledge' },
+  { id: 'system',    label: 'System' },
 ];
 
 export type TopbarProps = {

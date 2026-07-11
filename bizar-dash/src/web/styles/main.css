@@ -5427,6 +5427,21 @@ button.mod-instructions-head {
   margin-bottom: 2px;
   font-weight: 600;
 }
+/* v8.0 — A sidebar section wraps a label + its rows. Adds vertical
+   breathing room between sections and aligns rows flush under the
+   section title without affecting the .sidebar-tab itself. */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 0 4px;
+}
+.sidebar-section:first-child {
+  padding-top: 2px;
+}
+.sidebar-section:last-child {
+  padding-bottom: 8px;
+}
 .sidebar-tab-mod .sidebar-tab-label::after {
   content: '';
   display: inline-block;

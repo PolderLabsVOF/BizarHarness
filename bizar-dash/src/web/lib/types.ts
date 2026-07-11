@@ -836,11 +836,27 @@ export function applyTheme(themeName: ThemeName | ThemeSettings): 'dark' | 'ligh
   return resolved;
 }
 
-/** Apply the full theme object — sets CSS variables. */
+/** Apply the full theme object — sets CSS variables.
+ *
+ * v8.0 — All UI surfaces (buttons, charts, badges, sparklines, accent
+ * hovers, accent-tinted text) follow the configured theme accent. The
+ * status colors (success / warning / error / info) keep their semantic
+ * hues so red/green/yellow still mean red/green/yellow.
+ */
 export function applyThemeTokens(theme: ThemeSettings) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   root.style.setProperty('--accent', theme.accent);
+  // Derive accent hover / text variants from the configured accent so
+  // they don't get stuck on the default teal-green when the user picks
+  // a different accent (e.g. purple). Lighter than accent (accent-2) is
+  // used for hover fills; accent-3 is a desaturated text-on-accent tint.
+  root.style.setProperty('--accent-2', mixHex(theme.accent, '#ffffff', 0.18));
+  root.style.setProperty('--accent-3', mixHex(theme.accent, '#ffffff', 0.32));
+  // Primary chart series follows the theme accent.
+  root.style.setProperty('--chart-1', theme.accent);
+  // Status colors keep semantic meaning — they are intentionally NOT
+  // derived from the theme accent.
   root.style.setProperty('--success', theme.success);
   root.style.setProperty('--warning', theme.warning);
   root.style.setProperty('--error', theme.error);
@@ -848,6 +864,7 @@ export function applyThemeTokens(theme: ThemeSettings) {
   // Derive accent-bg/border lightly
   root.style.setProperty('--accent-bg', hexToRgba(theme.accent, 0.12));
   root.style.setProperty('--accent-border', hexToRgba(theme.accent, 0.4));
+  root.style.setProperty('--success-soft', hexToRgba(theme.success, 0.12));
   if (theme.fontFamily) {
     root.style.setProperty('--font-sans', `'${theme.fontFamily}', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`);
   }
@@ -866,4 +883,14 @@ function hexToRgba(hex: string, alpha: number) {
   const g = (n >> 8) & 255;
   const b = n & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Linear-blend two hex colors. `t` is the weight of `bHex` (0 = all aHex). */
+function mixHex(aHex: string, bHex: string, t: number) {
+  const a = hexToRgba(aHex, 1).match(/\d+/g)!.map(Number);
+  const b = hexToRgba(bHex, 1).match(/\d+/g)!.map(Number);
+  const r = Math.round(a[0] + (b[0] - a[0]) * t);
+  const g = Math.round(a[1] + (b[1] - a[1]) * t);
+  const bl = Math.round(a[2] + (b[2] - a[2]) * t);
+  return `#${[r, g, bl].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
