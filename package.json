@@ -4,8 +4,7 @@
   "description": "Norse-pantheon multi-agent system for Claude Code — 14 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness. Ships as a single npm package with the dashboard server, Claude Code MCP server, and typed SDK.",
   "type": "module",
   "bin": {
-    "bizar": "cli/bin.mjs",
-    "bizar-mcp": "packages/sdk/src/mcp/bin.ts"
+    "bizar": "cli/bin.mjs"
   },
   "files": [
     "cli/",
@@ -47,6 +46,7 @@
     "bun": ">=1.1.0"
   },
   "dependencies": {
+    "@polderlabs/bizar-sdk": "^0.4.0",
     "@mdx-js/mdx": "^3.1.1",
     "@mdx-js/react": "^3.1.1",
     "@opentelemetry/api": "^1.9.1",
