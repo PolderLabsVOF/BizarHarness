@@ -41,6 +41,8 @@ bizar-mods/
 .DS_Store
 Thumbs.dbbizar-dash/undefined/
 .harness/traces/
+.harness/agents.json
+.harness/topology.json
 
 # ── Auto-generated from .md by cli/provision.mjs:mdToClineAgentYaml() ───
 # Source of truth is the .md file. Delete the .yaml and re-run the

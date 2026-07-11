@@ -44,4 +44,40 @@ export {
 } from "./mcp/server.js";
 export type { SdkMcpToolDef, SdkMcpServerConfig } from "./mcp/server.js";
 
+// F-032 — Swarm coordination primitives.
+export {
+  BizarAgentRegistry,
+  bizarAgentRegistry,
+} from "./agent-registry.js";
+export type {
+  AgentRecord,
+  AgentStatus,
+  RegisterAgentInput,
+  RegisterAgentResult,
+  ListAgentsInput,
+  ListAgentsResult,
+  TerminateAgentInput,
+  TerminateAgentResult,
+} from "./agent-registry.js";
+
+export {
+  SwarmTopologyRegistry,
+  swarmTopologyRegistry,
+  initSwarm,
+  getSwarm,
+  listSwarms,
+  recordAgentInSwarm,
+  decommissionSwarm,
+  SWARM_TOPOLOGIES,
+  DEFAULT_TOPOLOGY,
+  DEFAULT_MAX_AGENTS,
+  DEFAULT_SWARM_ID,
+} from "./swarm-topology.js";
+export type {
+  SwarmRecord,
+  SwarmTopology,
+  InitSwarmInput,
+  InitSwarmResult,
+} from "./swarm-topology.js";
+
 export { SDK_VERSION } from "./version.js";
