@@ -19,6 +19,23 @@ export const VALID_TYPES = [
   'task_summary',
   'session_summary',
   'user_preference',
+  // v6.4.0 — F-033 ReasoningBank distillation pipeline (ADR-174).
+  // `pattern` is emitted by `bizar-dash/src/server/memory-consolidator.mjs`
+  // when a distillation run produces a promoted pattern (oracle:test-exec
+  // or judge:fable tier, ≥1 contributing entry). Patterns are searchable
+  // and re-feed into subsequent distillation runs as plain inputs.
+  'pattern',
+];
+
+export const VALID_PROVENANCE_TIERS = [
+  // Tier-1 (oracle) — observed via test execution. Eligible for promotion.
+  'oracle:test-exec',
+  // Tier-2 (proxy) — structural inference only. NOT eligible for
+  // promotion; written to the vault but `promoted: false`.
+  'proxy:structural',
+  // Tier-3 (judge:fable) — cost-bounded LLM-judge path; requires
+  // `BIZAR_DISTILL_BUDGET_USD > 0`. Out of scope in the $0 default.
+  'judge:fable',
 ];
 
 export const VALID_STATUSES = [

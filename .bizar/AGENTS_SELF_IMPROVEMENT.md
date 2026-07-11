@@ -17,7 +17,7 @@ Project-level agent learning. Entries are auto-appended by Odin at task completi
 11. **Schema tolerance for external state files** — files written by sibling processes MUST be parsed defensively. Use an additive schema: require only the fields you need.
 12. **Health probes must not depend on auth** — use TCP-connect (`net.createConnection`, 1.5s timeout), not HTTP.
 13. **Before declaring a subsystem "done," exercise a full write/read/search/delete round-trip.** Unit tests prove the parts work; round-trip proves the system works. Non-negotiable.
-14. **Always pass `--agent` explicitly when spawning sub-agents via `cline run`.** The `--title` is UI-only; `--agent` is the sole discriminator for model routing.
+14. **Always pass `--agent` explicitly when spawning sub-agents via `claude -p`.** The `--title` is UI-only; `--agent` is the sole discriminator for model routing.
 15. **The user's "it should just be X" usually means config drift** — sweep the whole codebase, not just one file, when model/provider complaints arise.
 16. **Background agents MUST stream live visibility (WS progress, tool call history, active session markers).** State files alone are insufficient — the operator cannot trust an invisible process. Every background agent dispatch must produce real-time status the dashboard can render.
 17. **Debug persistent "loading..." indicators—they are never OK.** If a loader shows forever, the underlying fetch or state init is broken. Add timeout fallbacks and error states; don't ship a spinner that can hang indefinitely.

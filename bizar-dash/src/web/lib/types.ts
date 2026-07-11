@@ -790,6 +790,30 @@ export type Snapshot = {
 
 export type WsStatus = 'connecting' | 'connected' | 'disconnected';
 
+/**
+ * F-035 (MetaHarness) — 3-tier model routing transparency.
+ * Emitted by the SDK when a request is dispatched to a model or
+ * short-circuited by a Tier-1 codemod intent (per ruflo's
+ * `[CODEMOD_AVAILABLE]` / `[TASK_MODEL_RECOMMENDATION]` convention).
+ */
+export type RoutingTier = 'CODEMOD' | 'TIER1' | 'TIER2' | 'TIER3';
+
+export type RoutingDecision = {
+  id: string;
+  ts: number;
+  tier: RoutingTier;
+  /** Model used when tier != CODEMOD. May be 'codemod:<intent>' otherwise. */
+  model: string;
+  /** Optional task or agent name for context. */
+  task?: string;
+  /** Optional cost estimate (USD) for non-codemod tiers. */
+  costUsd?: number;
+  /** Optional latency (ms) — populated post-call. */
+  latencyMs?: number;
+  /** Optional human-readable note (e.g. codemod intent description). */
+  note?: string;
+};
+
 export type WsMessage =
   | { type: 'snapshot'; ts: number; data: Snapshot }
   | { type: 'change'; event: string; path: string; ts: number }
@@ -810,6 +834,7 @@ export type WsMessage =
   | { type: 'notification:new'; notification: Notification }
   | { type: 'notifications:change' }
   | { type: 'dialog:show'; dialog: DialogDescriptor }
+  | { type: 'routing:decision'; decision: RoutingDecision }
   | { type: 'pong'; ts: number }
   | { type: 'ping' }
   | { type: 'refresh' };

@@ -885,7 +885,7 @@
       "category": "ruflo-port",
       "created": "2026-07-11",
       "passed": "2026-07-12",
-      "commit": "pending",
+      "commit": "92c6e6a",
       "ruflo_source": "v3/mcp/tools/agent-tools.ts:363/408/450 + swarm-tools.ts:389",
       "files_touched": [
         "packages/sdk/src/mcp/server.ts",

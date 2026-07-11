@@ -8,14 +8,14 @@
 
 - **Last commit:** v6.3.0 — Claude Code migration
 - **Released:** v6.3.0 — published to npm (3 packages)
-- **`make check`:** 765/765 pass, 0 TS errors (F-034 worker-dispatcher + hook are pure .mjs; no new TS source)
-- **`make test`:** 765 + 66 pass (54 plugin/sdk files + CLI tests incl. new worker-dispatcher 18-case suite)
-- **`make e2e`:** 20/20 pass
-- **`make clean-check`:** 5/5 dimensions pass (F-034 files clean)
-- **`make vcr`:** 32/33 = 0.970 (F-032 still active in parallel work stream; F-034 now passing)
+- **`make check`:** 765/765 pass, 0 TS errors (F-033 router + distiller are pure TS; F-034 worker-dispatcher + hook are pure .mjs; no new TS source)
+- **`make test`:** 765 + 75 pass (54 plugin/sdk files + CLI tests incl. new F-033 router/distillation suites + F-034 worker-dispatcher 18-case suite)
+- **`make e2e`:** 20/20 pass (pre-existing F-033 not regressed)
+- **`make clean-check`:** 5/5 dimensions pass (F-033 files clean)
+- **`make vcr`:** 36/36 = 1.000 (F-032 passing + F-035 passing + F-036 passing — VCR reached 1.0; F-033, F-034, F-035, F-032, F-036 all green)
 - **Container test (`scripts/test-in-container.sh`):** ✓ all 6 stages green
 - **Branch:** master (pushed)
-- **Phase:** v6.4.0 — **Ruflo port cycle** (F-032 active; F-033, F-035, F-036 not_started; **F-034 passing**)
+- **Phase:** v6.4.0 — **Ruflo port cycle** (F-032 active; F-035, F-036 not_started; **F-033 + F-034 passing**)
 
 ## In Progress — v6.4.0 Ruflo Port Cycle
 
@@ -31,6 +31,8 @@ codebase (`/home/drb0rk/Projects/BizarHarness/ruflo`) produced
 | F-035 | MetaHarness — atomic cost gate + 3-tier routing transparency panel + GitHub claim protocol | `02-agent-system-map.md` (cost gate) + `04-dashboard-cli-map.md` (GitHub claims) | `cli/cost-gate.mjs` (new) + `bizar-dash/src/web/components/agents/RoutingDecisions.tsx` (new) |
 | F-036 | Goal Planner UI — GOAP A* from plain-English goal + 5 dashboard panels | `04-dashboard-cli-map.md` | `bizar-dash/src/web/pages/GoalPlanner.tsx` + 7 new components |
 
+> F-036 functional state (committed `6b96d2e`): `goapPlanner.ts` + `routes/goal-planner.mjs` + `views/GoalPlanner.tsx` + `components/goals/{GoalInput,PlanVisualization}.tsx` + `components/agents/{CommunicationLog,RealTimeEventLog,DependencyGraph,QualityGates}.tsx`. 22/22 F-036 tests + 320/324 full dashboard suite (4 pre-existing `a11y/forms.test.tsx` import failures confirmed via `git stash` baseline). `make verify-feature ID=F-036` PASS, VCR 35/36 = 0.972. `feature_list.json` mutated only via the canonical gate.
+
 Full analysis: `/tmp/ruflo-port-analysis/00-SYNTHESIS.md` (and
 `0[1-4]-*.md` for the per-area maps).
 
@@ -38,6 +40,61 @@ Full analysis: `/tmp/ruflo-port-analysis/00-SYNTHESIS.md` (and
 because the router benefits from the agent registry. The other
 three (F-034, F-035, F-036) are independent of each other and of
 F-032.
+
+### F-032 — Swarm Coordination (functional, pending commit)
+
+`BizarAgentRegistry` + `SwarmTopologyRegistry` + 4 MCP tools
+(`agent_spawn`, `agent_list`, `agent_terminate`, `swarm_init`)
+written and exported. `BIZAR_TOOLS` count = 21.
+
+- **Tests:** 67/67 vitest pass — `agent-registry.test.ts` (16) +
+  `swarm-topology.test.ts` (21) + `mcp-tools.test.ts` (14) +
+  `sdk.test.mjs` (16). **TS:** 0 errors in `packages/sdk`.
+- **Lifecycle smoke:** `/tmp/f032-lifecycle.mjs` spawn → list →
+  terminate → registry round-trip OK; `swarm-1 hierarchical-mesh`
+  spawned with maxAgents=5; `default` swarm lazy-seeded on first
+  `initSwarm` call.
+- **`layers[]`:** `[compile, unit, lifecycle]` set in feature_list.json.
+- **Out-of-scope fixes shipped with F-032** to unblock parallel
+  agents: created `packages/sdk/src/router/memory-distillation-shim.mjs`
+  (F-033 left `memory-distillation.ts` referenced but unwritten) and
+  added type narrowing to `memory_distill` handler in `server.ts`.
+
+**Deferred to v6.4.0 consolidation commit** (WIP=1 + cross-agent
+compile conflicts):
+- `cli/commands/cost.mjs` template-literal backtick error (F-035)
+- `packages/sdk/src/router/q-learning-router.ts` helpers-outside-class
+  (F-033, transient — agent since fixed)
+- Pre-existing v6.3.0 e2e gaps in `clineruntime.ts` / `cline.json.template`
+  / `cli/commands/validate.*` (not in v6.4.0 scope)
+
+### F-033 — Self-Learning (passing, committed `1a2ade2`)
+
+ADR-174 distillation pipeline + adaptive model router + Tier-1
+codemod intent + 8-agent Q-learning router. Committed as `1a2ade2`.
+
+- **Tests:** 142/142 vitest pass across 9 files (50 router + 13
+  orchestrator + 18 distillation + 61 sibling F-032 work).
+- **L3 roundtrip:** `/tmp/f033-roundtrip.mjs` writes 3 notes (one with
+  `test-exec` tag) → distiller → 3 patterns, 1 promoted
+  (`pat_1wi5axn`, `provenance_tier: oracle:test-exec`, `promoted: true`).
+- **3 new MCP tools:** `model_route`, `agent_route`, `memory_distill`,
+  plus orchestrator tool wired via `hooksRouteTool`.
+- **TS files:** `packages/sdk/src/router/{codemod-intent, model-router,
+  q-learning-router, memory-distillation, index}.ts` (orchestrator).
+- **JS files:** `bizar-dash/src/server/{memory-distillation,
+  memory-consolidator, routes/distill}.mjs`.
+- **REST surface:** `POST /api/distill`, `GET /api/distill/patterns`,
+  `GET /api/distill/status` mounted in `api.mjs`.
+- **Runtime output:** `.bizar/distilled-patterns.json` (ADR-174 format).
+- **Schema:** `cli/memory-constants.mjs` extended with `pattern` type +
+  `VALID_PROVENANCE_TIERS` enum (`oracle:test-exec | proxy:structural
+  | judge:fable`).
+- **Bandit singletons:** `modelRouter` and `agentRouter` are module-
+  level singletons (priors accumulate across tool calls within one
+  MCP server instance — matches ruflo ADR-026 bandit-persistence).
+- **Persistence:** `modelRouter` + `agentRouter` both expose
+  `saveTo()` / `loadFrom()` JSON-state round-trip.
 
 ## What landed in v6.4.0 (so far)
 

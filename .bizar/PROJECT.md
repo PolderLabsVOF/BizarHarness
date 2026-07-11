@@ -1,6 +1,6 @@
 # BizarHarness
 
-Norse-pantheon multi-agent system for cline. 12 agents across 4 cost tiers with cost-aware routing.
+Norse-pantheon multi-agent system for Claude Code. 14 agents across 4 cost tiers with cost-aware routing.
 
 ## Final Goal
 
@@ -45,7 +45,7 @@ See [`../FINAL_GOAL.md`](../FINAL_GOAL.md) for the full vision document. The goa
 
 ## Entry Points
 - Install: `./install.sh`
-- Config: `~/.config/cline/`
+- Config: `~/.claude/` (Claude Code-native since v6.3.0)
 - Repo: `github.com/DrB0rk/BizarHarness`
 
 ## Current Version

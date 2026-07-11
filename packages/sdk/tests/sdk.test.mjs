@@ -31,6 +31,11 @@ describe("SDK build", () => {
       "memory/index.js", "memory/index.d.ts",
       "mcp/server.js", "mcp/server.d.ts",
       "mcp/bin.js", "mcp/bin.d.ts",
+      // v6.4.0 — F-033 Self-Learning (codemod + bandit + distillation).
+      "router/codemod-intent.js", "router/codemod-intent.d.ts",
+      "router/model-router.js", "router/model-router.d.ts",
+      "router/q-learning-router.js", "router/q-learning-router.d.ts",
+      "router/memory-distillation.js", "router/memory-distillation.d.ts",
     ]) {
       expect(existsSync(join(distDir, f))).toBe(true);
     }
@@ -71,10 +76,10 @@ describe("SDK module surface", () => {
     expect(typeof mod.DEFAULT_MEMORY_VAULT).toBe("string");
   });
 
-  test("MCP server module exposes ≥13 BIZAR_TOOLS", async () => {
+  test("MCP server module exposes ≥20 BIZAR_TOOLS (13 core + 4 swarm + 3 self-learning)", async () => {
     const mod = await import("../dist/mcp/server.js");
     expect(Array.isArray(mod.BIZAR_TOOLS)).toBe(true);
-    expect(mod.BIZAR_TOOLS.length).toBeGreaterThanOrEqual(13);
+    expect(mod.BIZAR_TOOLS.length).toBeGreaterThanOrEqual(20);
     expect(typeof mod.createBizarMcpServer).toBe("function");
     expect(typeof mod.createBizarMcpServerConfig).toBe("function");
     expect(typeof mod.defineTool).toBe("function");
@@ -85,11 +90,30 @@ describe("SDK module surface", () => {
       "plan_action", "open_kb",
       "loop_list", "loop_status", "loop_start", "loop_stop",
       "graph_query", "graph_path", "danger_check",
+      // F-032 — Swarm coordination.
+      "agent_spawn", "agent_list", "agent_terminate", "swarm_init",
+      // F-033 — Self-learning.
+      "model_route", "agent_route", "memory_distill",
     ]);
     const have = new Set(mod.BIZAR_TOOLS.map((t) => t.name));
     for (const n of expectedNames) {
       expect(have.has(n)).toBe(true);
     }
+  });
+
+  test("F-033 router modules export the expected API", async () => {
+    const cm = await import("../dist/router/codemod-intent.js");
+    expect(typeof cm.detectCodemodIntent).toBe("function");
+
+    const mr = await import("../dist/router/model-router.js");
+    expect(typeof mr.ModelRouter).toBe("function");
+
+    const ql = await import("../dist/router/q-learning-router.js");
+    expect(typeof ql.QLearningRouter).toBe("function");
+    expect(Array.isArray(ql.AGENT_ACTIONS)).toBe(true);
+
+    const ds = await import("../dist/router/memory-distillation.js");
+    expect(typeof ds.runDistillation).toBe("function");
   });
 });
 

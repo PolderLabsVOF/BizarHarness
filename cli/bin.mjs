@@ -137,6 +137,8 @@ function showHelp() {
     team                   Spawn an agent team from CLI (wraps claude --team-name)
     subagent               Spawn a read-only research subagent from CLI
     rca                    Analyze a GitHub issue (Claude Code CLI sample)
+    cost <subcommand>      Atomic cost gate (SQLite-backed room budget tracker)
+    claim <subcommand>     GitHub-style claim protocol over feature_list.json
 
   Examples:
     bizar install
@@ -594,6 +596,42 @@ async function main() {
       }
       dbg('loaded command module:', 'sandbox');
       await mod.runSandbox(cmdArgs);
+      break;
+    }
+
+    case 'cost': {
+      // F-035 MetaHarness — atomic SQLite-backed cost gate.
+      // Subcommands: register | status | reserve | commit | release | sweep | list
+      const mod = await importCommand('cost');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load cost command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'cost');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar cost <subcommand> — run 'bizar cost --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
+    case 'claim': {
+      // F-035 MetaHarness — GitHub-style claim protocol over feature_list.json.
+      // Subcommands: <featureId> | release | handoff | steal | status | list | transition
+      const mod = await importCommand('claim');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load claim command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'claim');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar claim <subcommand> — run 'bizar claim --help'`));
+        process.exit(EXIT_USAGE);
+      }
       break;
     }
 
