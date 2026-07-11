@@ -88,6 +88,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/worker-suggest.mjs",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [

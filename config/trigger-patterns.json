@@ -1,0 +1,186 @@
+{
+  "$schema": "./trigger-patterns.v1.schema.json",
+  "version": 1,
+  "description": "Trigger-pattern table for the Bizar Background Workers dispatcher. Each worker maps zero-or-more regex patterns to a Bizar skill and/or agent. The dispatcher in cli/worker-dispatcher.mjs reads this file, matches user prompts against the regex arrays (case-insensitive), and emits 0..N suggestions ranked by weight.",
+  "workers": [
+    {
+      "id": "testgaps",
+      "regex": [
+        "missing tests",
+        "low coverage",
+        "no tests for",
+        "tests? for .+ that",
+        "test gaps?",
+        "test coverage",
+        "coverage report",
+        "add tests"
+      ],
+      "weight": 0.8,
+      "skill": "harness-engineering",
+      "agent": "forseti",
+      "description": "Identify test coverage gaps and untested code paths."
+    },
+    {
+      "id": "audit",
+      "regex": [
+        "security scan",
+        "security audit",
+        "vulnerab",
+        "cve",
+        "owasp",
+        "pentest"
+      ],
+      "weight": 0.9,
+      "skill": "harness-engineering",
+      "agent": "forseti",
+      "description": "Security analysis and vulnerability scanning."
+    },
+    {
+      "id": "deepdive",
+      "regex": [
+        "deep dive into",
+        "deep dive",
+        "explain .{20,}",
+        "how does .+ work",
+        "walk me through",
+        "in-depth analysis",
+        "comprehensive review"
+      ],
+      "weight": 0.7,
+      "skill": null,
+      "agent": "mimir",
+      "description": "Deep code analysis and thorough explanation."
+    },
+    {
+      "id": "refactor",
+      "regex": [
+        "refactor",
+        "clean up .{1,30}",
+        "simplify",
+        "restructure",
+        "improve code quality",
+        "make .+ more readable"
+      ],
+      "weight": 0.7,
+      "skill": null,
+      "agent": "thor",
+      "description": "Code refactoring suggestions and structural cleanup."
+    },
+    {
+      "id": "document",
+      "regex": [
+        "write docs",
+        "write readme",
+        "add jsdoc",
+        "document .{1,40}",
+        "api docs",
+        "generate docs",
+        "add documentation"
+      ],
+      "weight": 0.6,
+      "skill": null,
+      "agent": "baldr",
+      "description": "Auto-documentation generation (README, JSDoc, API docs)."
+    },
+    {
+      "id": "optimize",
+      "regex": [
+        "optimize .{1,40} for",
+        "performance issue",
+        "make .+ faster",
+        "speed up",
+        "reduce .{1,20}(memory|time)",
+        "improve performance"
+      ],
+      "weight": 0.7,
+      "skill": null,
+      "agent": "thor",
+      "description": "Performance optimization and tuning."
+    },
+    {
+      "id": "ultralearn",
+      "regex": [
+        "learn about",
+        "understand how",
+        "understand what",
+        "understand why",
+        "comprehensive guide",
+        "master .+"
+      ],
+      "weight": 0.65,
+      "skill": "harness-engineering",
+      "agent": "mimir",
+      "description": "Deep knowledge acquisition and learning."
+    },
+    {
+      "id": "consolidate",
+      "regex": [
+        "consolidate",
+        "merge memories",
+        "clean up memory",
+        "deduplicate",
+        "memory maintenance"
+      ],
+      "weight": 0.5,
+      "skill": "harness-engineering",
+      "agent": null,
+      "description": "Memory consolidation and cleanup."
+    },
+    {
+      "id": "predict",
+      "regex": [
+        "what will happen",
+        "predict",
+        "forecast",
+        "anticipate",
+        "prepare for"
+      ],
+      "weight": 0.55,
+      "skill": null,
+      "agent": "mimir",
+      "description": "Predictive preloading and anticipation."
+    },
+    {
+      "id": "map",
+      "regex": [
+        "map .{0,5}codebase",
+        "architecture overview",
+        "project structure",
+        "dependency graph",
+        "code map",
+        "explore codebase"
+      ],
+      "weight": 0.6,
+      "skill": "harness-engineering",
+      "agent": "mimir",
+      "description": "Codebase mapping and architecture analysis."
+    },
+    {
+      "id": "preload",
+      "regex": [
+        "preload",
+        "cache ahead",
+        "prefetch",
+        "warm .+ cache"
+      ],
+      "weight": 0.4,
+      "skill": null,
+      "agent": null,
+      "description": "Resource preloading and cache warming."
+    },
+    {
+      "id": "benchmark",
+      "regex": [
+        "benchmark",
+        "performance test",
+        "measure speed",
+        "stress test",
+        "load test"
+      ],
+      "weight": 0.65,
+      "skill": null,
+      "agent": "thor",
+      "description": "Performance benchmarking."
+    }
+  ]
+}

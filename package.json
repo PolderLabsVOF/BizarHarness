@@ -23,7 +23,7 @@
     "test:sdk": "node_modules/.bin/vitest run --root packages/sdk",
     "test:web": "cd bizar-dash && npx vitest run",
     "test:sdk:watch": "node_modules/.bin/vitest --root packages/sdk",
-    "test": "npm run typecheck && npm run test:sdk && node --test cli/install.test.mjs cli/provision.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs && node --test bizar-dash/tests/path-safe.test.mjs",
+    "test": "npm run typecheck && npm run test:sdk && node --test cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs && node --test bizar-dash/tests/path-safe.test.mjs",
     "build": "npm run build:sdk && npm run build:dash",
     "prepublishOnly": "npm run build"
   },

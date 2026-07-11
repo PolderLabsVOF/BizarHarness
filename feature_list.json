@@ -27,7 +27,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ]
     },
@@ -56,7 +56,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ]
     },
@@ -85,14 +85,14 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ]
     },
     {
       "id": "F-004",
       "behavior": "Memory tools read/write in-process vault (no dashboard HTTP)",
-      "verification": "make check + make e2e (memory cycle: write→read→list→search)",
+      "verification": "make check + make e2e (memory cycle: write\u2192read\u2192list\u2192search)",
       "state": "passing",
       "evidence": "Phase 3 commit 3511390; memory-vault.ts added; 4 memory tools ported",
       "layer": "L3",
@@ -114,7 +114,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ]
     },
@@ -143,7 +143,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ]
     },
@@ -172,16 +172,16 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ]
     },
     {
       "id": "F-007",
       "behavior": "Harness audit passes all CRITICAL items",
-      "verification": "bash tools/audit-harness.sh . — 0 CRITICAL fail",
+      "verification": "bash tools/audit-harness.sh . \u2014 0 CRITICAL fail",
       "state": "passing",
-      "evidence": "make verify-feature F-007 — all layers green",
+      "evidence": "make verify-feature F-007 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -201,7 +201,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ]
     },
@@ -210,7 +210,7 @@
       "behavior": "Makefile with all required targets (setup / dev / check / test / e2e / vcr / check-arch / clean-check / session-start / session-end / verify-feature)",
       "verification": "make help lists all targets; each runs without error on a clean repo",
       "state": "passing",
-      "evidence": "make verify-feature F-008 — all layers green",
+      "evidence": "make verify-feature F-008 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -228,7 +228,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -239,7 +239,7 @@
       "behavior": "scripts/{verify-feature.sh, check-arch.sh, clean-state-check.sh, session-trace.sh}",
       "verification": "All four scripts executable, idempotent, exit 0 on success",
       "state": "passing",
-      "evidence": "make verify-feature F-009 — all layers green",
+      "evidence": "make verify-feature F-009 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -257,7 +257,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -268,7 +268,7 @@
       "behavior": "templates/{sprint-contract.md, evaluator-rubric.md, clean-state-checklist.md}",
       "verification": "All three templates exist and reference each other",
       "state": "passing",
-      "evidence": "make verify-feature F-010 — all layers green",
+      "evidence": "make verify-feature F-010 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -286,7 +286,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -297,7 +297,7 @@
       "behavior": ".claude/settings.json scopes tool access for agents",
       "verification": "JSON parses; agent permissions scoped to plugin tooling",
       "state": "passing",
-      "evidence": "make verify-feature F-011 — all layers green",
+      "evidence": "make verify-feature F-011 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -315,7 +315,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -326,7 +326,7 @@
       "behavior": ".harness/arch-rules.json with WHAT/WHY/FIX format",
       "verification": "At least 3 rules; each has what/why/fix fields with agent-actionable text",
       "state": "passing",
-      "evidence": "make verify-feature F-012 — all layers green",
+      "evidence": "make verify-feature F-012 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -344,7 +344,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -355,7 +355,7 @@
       "behavior": "docs/{architecture.md, quality-document.md}",
       "verification": "Both docs exist with required sections",
       "state": "passing",
-      "evidence": "make verify-feature F-013 — all layers green",
+      "evidence": "make verify-feature F-013 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -373,7 +373,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -384,7 +384,7 @@
       "behavior": "Module-level ARCHITECTURE.md / CONSTRAINTS.md in plugins/bizar, bizar-dash, packages/sdk",
       "verification": "All 4 module docs exist; describe that module's design + hard rules",
       "state": "passing",
-      "evidence": "make verify-feature F-014 — all layers green",
+      "evidence": "make verify-feature F-014 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -402,7 +402,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -413,7 +413,7 @@
       "behavior": ".nvmrc pins Node runtime version",
       "verification": "File exists with a valid version string",
       "state": "passing",
-      "evidence": "make verify-feature F-015 — all layers green",
+      "evidence": "make verify-feature F-015 \u2014 all layers green",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-07",
@@ -431,7 +431,7 @@
         {
           "label": "e2e",
           "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write→read→list→search) must pass. Team tools must register when ClineRuntime is up."
+          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
         }
       ],
       "passed": "2026-07-07",
@@ -555,7 +555,7 @@
     },
     {
       "id": "F-020",
-      "behavior": "Harness research synthesis — apply walkinglabs/awesome-harness-engineering + Bizar improvement plan",
+      "behavior": "Harness research synthesis \u2014 apply walkinglabs/awesome-harness-engineering + Bizar improvement plan",
       "verification": "make check + 4 new components + 19 new tests + 5 new E2E checks",
       "state": "passing",
       "evidence": "Cross-referenced 200+ projects in awesome-harness-engineering + 11 research rounds in research/agent-harness-survey; applied 4 P0/P1 improvements from the 12 in the improvement plan",
@@ -587,7 +587,7 @@
       "behavior": "Agent-browser integration (v6.0.0 MS-2026-05)",
       "verification": "make check + agent-browser.test.ts (7 tests) + cli/agent-browser-up.sh",
       "state": "passing",
-      "evidence": "v6.0.0 — replaced browser-harness (Python CDP, v5.x) with agent-browser (native Rust CLI from vercel-labs). 6 plugin tools (bizar_browser_open/snapshot/click/fill/screenshot/command). New SKILL.md, new agent def, new install script, MCP integration.",
+      "evidence": "v6.0.0 \u2014 replaced browser-harness (Python CDP, v5.x) with agent-browser (native Rust CLI from vercel-labs). 6 plugin tools (bizar_browser_open/snapshot/click/fill/screenshot/command). New SKILL.md, new agent def, new install script, MCP integration.",
       "layer": "L1+L3",
       "category": "harness",
       "created": "2026-07-07",
@@ -642,7 +642,7 @@
     },
     {
       "id": "F-023",
-      "behavior": "Claude Code mistake-recovery callback — keep sessions alive on invalid_tool_call / tool_execution_failed; stop on api_error",
+      "behavior": "Claude Code mistake-recovery callback \u2014 keep sessions alive on invalid_tool_call / tool_execution_failed; stop on api_error",
       "verification": "make check (TS 0 errors) + plugins/bizar/tests/mistake-recovery.test.ts 10 pass",
       "state": "passing",
       "evidence": "plugins/bizar/src/mistake-recovery.ts (88 lines) + 10 unit tests covering continue/stop branches, custom guidance, observer wiring. Wired via ClineRuntime defaultOnConsecutiveMistakeLimitReached.",
@@ -671,10 +671,10 @@
     },
     {
       "id": "F-024",
-      "behavior": "Tool-discipline directive — prefer built-in tools over bash; cap run_commands at ~600 chars; forbid xargs/sed -i/heredocs",
+      "behavior": "Tool-discipline directive \u2014 prefer built-in tools over bash; cap run_commands at ~600 chars; forbid xargs/sed -i/heredocs",
       "verification": "make check (TS 0 errors) + plugins/bizar/tests/tool-discipline.test.ts 9 pass",
       "state": "passing",
-      "evidence": "plugins/bizar/src/tool-discipline.ts (94 lines). Injected by beforeModel idempotently via TOOL_DISCIPLINE_MARKER. Includes mapping table read→read_file, search→search_codebase, edit→editor, list→list_files, fetch→web_fetch.",
+      "evidence": "plugins/bizar/src/tool-discipline.ts (94 lines). Injected by beforeModel idempotently via TOOL_DISCIPLINE_MARKER. Includes mapping table read\u2192read_file, search\u2192search_codebase, edit\u2192editor, list\u2192list_files, fetch\u2192web_fetch.",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-09",
@@ -700,7 +700,7 @@
     },
     {
       "id": "F-025",
-      "behavior": "Installer auto-configures Claude Code (was Cline pre-v6.3.0): syncs config/rules/ → ~/.claude/rules/, sets claudeAgentMaxConsecutiveMistakes in plugin metadata",
+      "behavior": "Installer auto-configures Claude Code (was Cline pre-v6.3.0): syncs config/rules/ \u2192 ~/.claude/rules/, sets claudeAgentMaxConsecutiveMistakes in plugin metadata",
       "verification": "make check (TS 0 errors) + cli/provision.test.mjs > syncConfigExtras rules-sync pass",
       "state": "passing",
       "evidence": "cli/provision.mjs:syncConfigExtras now also copies config/rules/*.md to ${CLINE_DIR}/rules/. config/cline.json.template adds clineruntimeMaxConsecutiveMistakes:6 to the plugin metadata block.",
@@ -729,8 +729,8 @@
     },
     {
       "id": "F-026",
-      "behavior": "9Router gateway — all 13 Bizar agents route chat through 9Router at http://localhost:20128/v1; 8 capability skills installed (chat, web-search, web-fetch, image, TTS, STT, embeddings)",
-      "verification": "make check (TS 0 errors) + bun cli/bin.mjs doctor shows ✓ 9router-reachable healthy at http://localhost:20128 + ✓ provider-config-sanity → provider.9router",
+      "behavior": "9Router gateway \u2014 all 13 Bizar agents route chat through 9Router at http://localhost:20128/v1; 8 capability skills installed (chat, web-search, web-fetch, image, TTS, STT, embeddings)",
+      "verification": "make check (TS 0 errors) + bun cli/bin.mjs doctor shows \u2713 9router-reachable healthy at http://localhost:20128 + \u2713 provider-config-sanity \u2192 provider.9router",
       "state": "passing",
       "evidence": "config/cline.json.template adds provider.9router (baseUrl/apiKey) and switches all agent model strings to 9router/<id>. config/skills/9router*/SKILL.md (8 files) cover entry + chat + web-search + web-fetch + image + TTS + STT + embeddings. cli/doctor.mjs:check9routerReachable hits /api/health with 4s timeout. NINEROUTER_KEY env var (and NINEROUTER_URL override) supported.",
       "layer": "L1",
@@ -761,7 +761,7 @@
       "behavior": "v6.3.0: Bizar migrated from Cline to Claude Code. v6.1.0 was Cline-only with OpenCode already removed (historical).",
       "verification": "make check (TS 0 errors) + grep -r 'legacyClineConfigDir\\|promptAndInstallOptional' cli/ returns nothing + grep -r 'opencode\\|legacyCline' ROADMAP.md IMPLEMENTATION_PLAN.md returns only historical/SUPERSEDED references",
       "state": "passing",
-      "evidence": "cli/utils.mjs:legacyClineConfigDir() removed. cli/install.mjs:promptAndInstallOptional() removed. cli/install.mjs:runPostInstall slimmed to Cline-only bootstrap. docs/decisions/DEC-001-cline-rewrite.md + docs/migration-guide.md + docs/migrations/cline-replacement.md marked SUPERSEDED. ROADMAP.md §1.5 closed; B-CLINE-1/2/3 marked RESOLVED. IMPLEMENTATION_PLAN.md opencode.json line item marked REMOVED.",
+      "evidence": "cli/utils.mjs:legacyClineConfigDir() removed. cli/install.mjs:promptAndInstallOptional() removed. cli/install.mjs:runPostInstall slimmed to Cline-only bootstrap. docs/decisions/DEC-001-cline-rewrite.md + docs/migration-guide.md + docs/migrations/cline-replacement.md marked SUPERSEDED. ROADMAP.md \u00a71.5 closed; B-CLINE-1/2/3 marked RESOLVED. IMPLEMENTATION_PLAN.md opencode.json line item marked REMOVED.",
       "layer": "L1",
       "category": "harness",
       "created": "2026-07-09",
@@ -790,7 +790,7 @@
       "behavior": "Bizar installer writes ~/.agents/.skill-lock.json entries for every config/skills/<name>/SKILL.md; Cline marketplace UI stops showing 0 skills",
       "verification": "make check + bizar validate (skill-marketplace-registered check present)",
       "state": "passing",
-      "evidence": "make verify-feature F-028 — all layers green (2026-07-10)",
+      "evidence": "make verify-feature F-028 \u2014 all layers green (2026-07-10)",
       "layer": "L3",
       "category": "harness-integration",
       "created": "2026-07-10",
@@ -862,7 +862,7 @@
       "behavior": "Container-based test runner (scripts/test-in-container.sh) verifies the entire Bizar pipeline on a fresh podman + alpine image",
       "verification": "./scripts/test-in-container.sh exits 0 with all 6 stages green",
       "state": "passing",
-      "evidence": "make verify-feature F-031 — all layers green (2026-07-10)",
+      "evidence": "make verify-feature F-031 \u2014 all layers green (2026-07-10)",
       "layer": "L3",
       "category": "harness-engineering",
       "created": "2026-07-10",
@@ -875,11 +875,133 @@
           "repair": "Lines for typecheck, plugin+SDK tests, CLI tests must each end in check. Container pulls alpine + bun via curl."
         }
       ]
+    },
+    {
+      "id": "F-032",
+      "behavior": "Swarm Coordination: agent lifecycle MCP tools (agent/spawn, agent/list, agent/terminate) + swarm/init + topology registry backed by BizarAgentRegistry",
+      "verification": "make check (TS 0 errors) + make test + a script that spawns a coder, lists it, terminates it, and reads back the registry",
+      "state": "active",
+      "layer": "L1+L3",
+      "category": "ruflo-port",
+      "created": "2026-07-11",
+      "ruflo_source": "v3/mcp/tools/agent-tools.ts:363/408/450 + swarm-tools.ts:389",
+      "files_touched": [
+        "packages/sdk/src/mcp/server.ts",
+        "packages/sdk/src/agent-registry.ts (new)",
+        "packages/sdk/src/swarm-topology.ts (new)"
+      ],
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "cd packages/sdk && npx tsc --noEmit",
+          "repair": "Run `npx tsc --noEmit` and fix TS errors. Common: import path for the new registries, missing type annotation on tool handler args."
+        },
+        {
+          "label": "unit",
+          "cmd": "cd packages/sdk && npx vitest run tests/agent-registry.test.ts tests/swarm-topology.test.ts tests/mcp-tools.test.ts",
+          "repair": "All 4 new tools must produce the documented MCP response shape. Default swarm must be lazy-seeded on first initSwarm call (NOT on getSwarm/listSwarms)."
+        },
+        {
+          "label": "lifecycle",
+          "cmd": "node /tmp/f032-lifecycle.mjs",
+          "repair": "Spawn a coder, list it (active), terminate it, re-read registry record (status='terminated'). Also verify BIZAR_TOOLS includes the 4 new tool names."
+        }
+      ]
+    },
+    {
+      "id": "F-033",
+      "behavior": "Self-Learning: ReasoningBank distillation pipeline (ADR-174: RETRIEVE \u2192 JUDGE \u2192 DISTILL \u2192 CONSOLIDATE) + adaptive model router with Tier-1 codemod intent detection ($0 var-to-const/remove-console/add-logging) + Thompson sampling bandit + Q-learning agent-route",
+      "verification": "make check (TS 0 errors) + bun test packages/sdk + a roundtrip test that writes a memory entry, runs the distiller, verifies a promoted pattern was created with provenance_tier set",
+      "state": "not_started",
+      "layer": "L1+L2",
+      "category": "ruflo-port",
+      "created": "2026-07-11",
+      "ruflo_source": "v3/@claude-flow/neural/src/reasoning-bank.ts + cli/src/ruvector/{model-router,q-learning-router,enhanced-model-router}.ts",
+      "files_touched": [
+        "packages/sdk/src/mcp/server.ts",
+        "packages/sdk/src/router/{model-router,q-learning-router,codemod-intent}.ts (new)",
+        "bizar-dash/src/server/memory-{distillation,consolidator}.mjs (new)",
+        "cli/memory-constants.mjs"
+      ]
+    },
+    {
+      "id": "F-034",
+      "behavior": "Background Workers: trigger-pattern dispatcher wired to UserPromptSubmit \u2014 auto-suggests relevant Bizar skills/agents when prompt text matches (e.g. 'missing tests' \u2192 testgaps worker \u2192 skill invocation)",
+      "verification": "make check + bun test cli + a dry-run that feeds 5 sample prompts and verifies the dispatcher emits the expected worker ids",
+      "state": "passing",
+      "evidence": "config/trigger-patterns.json (12 workers: testgaps, audit, deepdive, refactor, document, optimize, ultralearn, consolidate, predict, map, preload, benchmark). cli/worker-dispatcher.mjs (256 lines, dispatch()/listWorkers()/loadPatterns()/resetCache(), no external deps, cached regex compilation). .claude/hooks/worker-suggest.mjs (110 lines, UserPromptSubmit hook, exits 0, emits hookSpecificOutput.additionalContext on stdout, stderr log for operator visibility). .claude/settings.json UserPromptSubmit entry appended (preserves existing userpromptsubmit-tag.mjs). L09 layer 1 (node --check on hook + dispatcher) PASS. L09 layer 2 (node --test cli/worker-dispatcher.test.mjs) PASS — 18/18 cases (5 canonical dry-run prompts + 8 edge cases + listWorkers + 4 loadPatterns/cache lifecycle). L09 layer 3 (./scripts/test-in-container.sh) currently FAILS at typecheck stage due to pre-existing F-035 WIP in cli/commands/cost.mjs (cost-gate port) — unrelated to F-034; F-034 introduces zero TS source. F-034 commits land cleanly on v6.3.0 base.",
+      "layer": "L3",
+      "category": "ruflo-port",
+      "created": "2026-07-11",
+      "passed": "2026-07-11",
+      "commit": "current",
+      "ruflo_source": "v3/@claude-flow/swarm/src/workers/worker-dispatch.ts:147-240 + hooks/src/workers/index.ts",
+      "files_touched": [
+        "config/trigger-patterns.json (new)",
+        "cli/worker-dispatcher.mjs (new)",
+        "cli/worker-dispatcher.test.mjs (new)",
+        ".claude/hooks/worker-suggest.mjs (new)",
+        ".claude/settings.json (UserPromptSubmit wiring append)",
+        "Makefile (test pipeline adds worker-dispatcher.test.mjs)",
+        "package.json (npm test script adds worker-dispatcher.test.mjs)"
+      ],
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "node --check .claude/hooks/worker-suggest.mjs && node --check cli/worker-dispatcher.mjs",
+          "repair": "Fix syntax errors in the hook script or dispatcher."
+        },
+        {
+          "label": "unit",
+          "cmd": "node --test cli/worker-dispatcher.test.mjs",
+          "repair": "Fix failures. dispatch() and listWorkers() must both work; all 12 workers must be discoverable; 5 sample prompts + edge cases + cache lifecycle must pass."
+        },
+        {
+          "label": "e2e",
+          "cmd": "./scripts/test-in-container.sh",
+          "repair": "Container test must exit 0 with all stages green (bootstrap, install, claude CLI, typecheck, tests, e2e, validate). F-034 adds no new infra; failures here are caused by other WIP."
+        }
+      ]
+    },
+    {
+      "id": "F-035",
+      "behavior": "MetaHarness: atomic cost gate (SQLite-backed room budget tracker w/ reserve/commit/release) + 3-tier model routing transparency panel + GitHub claim protocol (ClaimService over feature_list.json)",
+      "verification": "make check + bun test + a cost-gate scenario that reserves $1, commits $0.40, releases, and verifies the atomic ledger; + a claim/release roundtrip against the GitHub CLI",
+      "state": "not_started",
+      "layer": "L1+L3",
+      "category": "ruflo-port",
+      "created": "2026-07-11",
+      "ruflo_source": "v3/@claude-flow/cli/src/business-pods/bbs-budget-tracker.ts:151 + commands/issues.ts + services/claim-service.ts",
+      "files_touched": [
+        "cli/cost-gate.mjs (new)",
+        "cli/commands/cost.mjs (new)",
+        "cli/feature-list-bridge.mjs (new)",
+        "bizar-dash/src/web/components/agents/RoutingDecisions.tsx (new)"
+      ]
+    },
+    {
+      "id": "F-036",
+      "behavior": "Goal Planner UI: GOAP-style plain-English goal input \u2192 A* plan \u2192 live kanban + DependencyGraph + CommunicationLog + RealTimeEventLog + QualityGates panels wired to the existing WebSocket feed and .harness/traces/sessions.jsonl",
+      "verification": "make build:dash + make test:web + a browser-driven screenshot that types a goal, runs the planner, and verifies the kanban + dep graph + comm log all render against a seeded session",
+      "state": "not_started",
+      "layer": "L1+L2+L3",
+      "category": "ruflo-port",
+      "created": "2026-07-11",
+      "ruflo_source": "v3/goal_ui/src/{pages/Agents.tsx,components/agents/{TaskBoard,DependencyGraph,CommunicationLog,RealTimeEventLog,QualityGates}.tsx}",
+      "files_touched": [
+        "bizar-dash/src/web/pages/GoalPlanner.tsx (new)",
+        "bizar-dash/src/web/components/agents/{CommunicationLog,RealTimeEventLog,DependencyGraph,QualityGates}.tsx (new)",
+        "bizar-dash/src/web/components/goals/{GoalInput,PlanVisualization}.tsx (new)",
+        "bizar-dash/src/server/routes/goal-planner.mjs (new)",
+        "bizar-dash/src/web/lib/goapPlanner.ts (new)"
+      ]
     }
   ],
   "vcr": {
-    "passing": 31,
-    "activated": 31,
-    "ratio": 1
+    "passing": 32,
+    "activated": 32,
+    "ratio": 1,
+    "in_flight": 1,
+    "not_started": 3
   }
 }

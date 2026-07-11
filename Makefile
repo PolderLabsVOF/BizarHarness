@@ -33,7 +33,7 @@ check:  ## Typecheck + lint
 
 test:  ## Run all unit tests (sdk + cli)
 	bun test packages/sdk
-	@node --test cli/install.test.mjs cli/provision.test.mjs cli/commands/validate.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs 2>&1 | tail -5
+	@node --test cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/commands/validate.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs 2>&1 | tail -5
 
 e2e:  ## End-to-end tests (SDK + Claude Code integration)
 	@echo "▶ E2E: SDK load + tool registration..."
