@@ -59,6 +59,9 @@ import { createEvalRouter } from './routes/eval.mjs';
 import { createWorkspacesRouter } from './routes/workspaces.mjs';
 import { createUsersRouter } from './routes/users.mjs';
 import { createVoiceRouter } from './routes/voice.mjs';
+// v6.4.0 — F-036 Goal Planner UI. POST /api/goal-planner/plan returns
+// a GOAP-style A* plan for a plain-English goal.
+import { createGoalPlannerRouter } from './routes/goal-planner.mjs';
 import { attachUserContext } from './auth.mjs';
 
 /**
@@ -140,6 +143,12 @@ export async function createApiRouter({
   // v5.0.0 — Voice notes (record, transcribe, list, delete, stream audio).
   router.use(createVoiceRouter({}));
   router.use(createDiagnosticsRouter());
+  // v6.4.0 — F-033 ReasoningBank distillation (ADR-174). Mounted
+  // here so the distillation log lives next to the rest of the
+  // self-learning surface. Lazy-imported for the same reason as
+  // memory.mjs above.
+  const { createDistillRouter } = await import('./routes/distill.mjs');
+  router.use(createDistillRouter({ projectRoot }));
   // v6.0.0 — Doctor page API. Mounted right after diagnostics so the
   // /doctor/* paths live next to the legacy /diagnostics/* surface
   // they conceptually extend. Each route inside is at its bare path
@@ -147,6 +156,8 @@ export async function createApiRouter({
   // level once /api is prepended by server.mjs.
   router.use('/doctor', createDoctorRouter());
   router.use(createPairRouter({ state, broadcast }));
+  // v6.4.0 — F-036 Goal Planner UI. Plain-English goal → A* plan.
+  router.use(createGoalPlannerRouter({ broadcast }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));

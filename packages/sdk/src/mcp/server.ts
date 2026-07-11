@@ -47,6 +47,17 @@ import {
   resolveVaultRoot,
 } from "../memory/index.js";
 import { checkDangerous } from "../dangerous-patterns.js";
+import { ModelRouter } from "../router/model-router.js";
+import { QLearningRouter } from "../router/q-learning-router.js";
+import { runDistillation } from "../router/memory-distillation.js";
+import { decideAgentWith } from "../router/index.js";
+import { bizarAgentRegistry } from "../agent-registry.js";
+import {
+  initSwarm as initSwarmOnRegistry,
+  DEFAULT_TOPOLOGY,
+  DEFAULT_MAX_AGENTS,
+  type SwarmTopology,
+} from "../swarm-topology.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
 // the package is optional. Callers pass the result of `tool()` and
@@ -373,6 +384,117 @@ const graphPathTool = defineTool<{ from: string; to: string }>(
 );
 
 // ---------------------------------------------------------------------------
+// Swarm / agent lifecycle tools (F-032)
+// ---------------------------------------------------------------------------
+
+const agentSpawnTool = defineTool<{
+  type: string;
+  name?: string;
+  priority?: "low" | "normal" | "high" | "critical";
+  metadata?: string;
+}>(
+  "agent_spawn",
+  "Spawn a new agent in the in-process BizarAgentRegistry. Returns the new agentId. Heartbeat is a stub — this registry is a coordination surface, not an agent runtime.",
+  { type: "string", name: "string", priority: "string", metadata: "string" },
+  async ({ type, name, priority, metadata }) => {
+    try {
+      let parsedMetadata: Record<string, unknown> | undefined;
+      if (metadata && typeof metadata === "string" && metadata.trim().length > 0) {
+        try { parsedMetadata = JSON.parse(metadata) as Record<string, unknown>; }
+        catch { return err("agent_spawn: `metadata` must be a JSON string"); }
+      }
+      const result = bizarAgentRegistry.registerAgent({
+        type,
+        name,
+        priority,
+        metadata: parsedMetadata,
+      });
+      return ok(JSON.stringify(result, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+const agentListTool = defineTool<{
+  status?: string;
+  type?: string;
+  limit?: number;
+  offset?: number;
+}>(
+  "agent_list",
+  "List agents tracked by the in-process BizarAgentRegistry. Filter by status (active|terminated|all) and/or type. Supports limit/offset pagination.",
+  { status: "string", type: "string", limit: "number", offset: "number" },
+  async ({ status, type, limit, offset }) => {
+    try {
+      const allowedStatuses = ["active", "terminated", "all"] as const;
+      type StatusFilter = typeof allowedStatuses[number];
+      const s: StatusFilter = (allowedStatuses as readonly string[]).includes(status ?? "")
+        ? (status as StatusFilter)
+        : "all";
+      const result = bizarAgentRegistry.listAgents({
+        status: s,
+        type,
+        limit: typeof limit === "number" ? limit : undefined,
+        offset: typeof offset === "number" ? offset : undefined,
+      });
+      return ok(JSON.stringify(result, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+const agentTerminateTool = defineTool<{
+  agentId: string;
+  graceful?: boolean;
+  reason?: string;
+}>(
+  "agent_terminate",
+  "Terminate a registered agent. Returns the agentId, status, and terminatedAt timestamp. No-op if the agent is already terminated.",
+  { agentId: "string", graceful: "boolean", reason: "string" },
+  async ({ agentId, graceful, reason }) => {
+    try {
+      const result = bizarAgentRegistry.terminateAgent({
+        agentId,
+        reason,
+        graceful: graceful ?? true,
+      });
+      return ok(JSON.stringify(result, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+const swarmInitTool = defineTool<{
+  topology?: string;
+  maxAgents?: number;
+  metadata?: string;
+}>(
+  "swarm_init",
+  "Initialize a new swarm in the SwarmTopologyRegistry. topology ∈ hierarchical|mesh|adaptive|collective|hierarchical-mesh (default 'hierarchical-mesh'); maxAgents clamped to [1,1000] (default 15). The 'default' swarm is created lazily on first call.",
+  { topology: "string", maxAgents: "number", metadata: "string" },
+  async ({ topology, maxAgents, metadata }) => {
+    try {
+      let parsedMetadata: Record<string, unknown> | undefined;
+      if (metadata && typeof metadata === "string" && metadata.trim().length > 0) {
+        try { parsedMetadata = JSON.parse(metadata) as Record<string, unknown>; }
+        catch { return err("swarm_init: `metadata` must be a JSON string"); }
+      }
+      const allowedTopologies: readonly SwarmTopology[] = [
+        "hierarchical", "mesh", "adaptive", "collective", "hierarchical-mesh",
+      ];
+      const topo: SwarmTopology = (allowedTopologies as readonly string[]).includes(topology ?? "")
+        ? (topology as SwarmTopology)
+        : DEFAULT_TOPOLOGY;
+      const max = typeof maxAgents === "number" ? maxAgents : DEFAULT_MAX_AGENTS;
+      const result = initSwarmOnRegistry({
+        topology: topo,
+        maxAgents: max,
+        metadata: parsedMetadata,
+      });
+      return ok(JSON.stringify(result, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Safety tool — exposed so any model can self-audit a Bash command
 // before running it.
 // ---------------------------------------------------------------------------
@@ -385,6 +507,115 @@ const dangerCheckTool = defineTool<{ command: string }>(
     try {
       const check = checkDangerous({ command });
       return ok(JSON.stringify(check, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+// ---------------------------------------------------------------------------
+// Self-learning tools (F-033 / ADR-174) — Thompson-sampling model
+// router + Q-learning agent router + memory distillation trigger.
+// ---------------------------------------------------------------------------
+
+/** Singleton model router — the priors accumulate across tool calls
+ *  within one MCP server instance, so the bandit can learn from
+ *  outcomes in real time. Tests construct their own router via the
+ *  exported `BIZAR_TOOLS` indirection. */
+const modelRouter = new ModelRouter();
+
+/** Singleton Q-learning router — same reasoning as above. */
+const agentRouter = new QLearningRouter();
+
+const modelRouteTool = defineTool<{ prompt: string }>(
+  "model_route",
+  "Adaptive model-tier routing. Returns the recommended tier ('flash'|'mid'|'expensive') for a prompt using a Thompson-sampling bandit over Beta(α,β) priors. Codemod-eligible prompts (var-to-const, remove-console, add-logging) short-circuit to 'flash' with codemodIntent set.",
+  { prompt: "string" },
+  async ({ prompt }) => {
+    try {
+      const decision = modelRouter.route(prompt);
+      return ok(JSON.stringify(decision, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+const agentRouteTool = defineTool<{ task: string }>(
+  "agent_route",
+  "Adaptive agent routing. Returns the recommended Bizar agent (odin|frigg|vor|mimir|heimdall|thor|tyr|forseti) for a task using Q-learning over a 64-dim bag-of-words feature hash. Codemod-eligible tasks route to heimdall (the routine-implementation agent).",
+  { task: "string" },
+  async ({ task }) => {
+    try {
+      const decision = agentRouter.selectAgent(task);
+      return ok(JSON.stringify(decision, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+const memoryDistillTool = defineTool<{ since?: string }>(
+  "memory_distill",
+  "Run the ReasoningBank distillation pipeline (ADR-174: RETRIEVE → JUDGE → DISTILL → CONSOLIDATE) over the in-process memory vault. Optionally filter entries by createdAt >= since. Returns {distilled, promoted, byTier} — promoted patterns are only emitted for oracle:test-exec or judge:fable tiers.",
+  { since: "string" },
+  async ({ since }) => {
+    try {
+      // The dashboard owns the consolidator module; the SDK tool
+      // shim reads directly from the vault and runs the same
+      // RETRIEVE → JUDGE → DISTILL → CONSOLIDATE pipeline inline,
+      // so the tool works without the dashboard process.
+      const root = resolveVaultRoot();
+      const all = listNotes(root, "", 10000);
+      const cutoff = since ? new Date(since) : null;
+      const entries = all
+        .filter((n) => !cutoff || !Number.isNaN(cutoff.getTime()) && new Date(
+          String(n.frontmatter?.createdAt ?? n.frontmatter?.created ?? 0),
+        ) >= cutoff)
+        .map((n) => ({
+          memory_id: n.relPath,
+          relPath: n.relPath,
+          frontmatter: n.frontmatter ?? {},
+          body: n.body ?? "",
+          kind: typeof (n.frontmatter?.kind ?? n.frontmatter?.type) === "string"
+            ? (n.frontmatter?.kind ?? n.frontmatter?.type) as string
+            : undefined,
+          created: typeof (n.frontmatter?.createdAt ?? n.frontmatter?.created) === "string"
+            ? (n.frontmatter?.createdAt ?? n.frontmatter?.created) as string
+            : undefined,
+        }));
+
+      // Static import — the SDK owns `memory-distillation.ts` so the
+      // tool can run the RETRIEVE → JUDGE → DISTILL → CONSOLIDATE
+      // pipeline without depending on the dashboard process.
+      const result = runDistillation(entries);
+      return ok(JSON.stringify({
+        distilled: result.patterns.length,
+        promoted: result.promoted.map((p: { id: string }) => p.id),
+        byTier: result.byTier,
+      }, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Self-learning orchestrator tool (F-033)
+//
+// Replaces the prompt-time heuristics in the Odin agent with a single
+// tool call. Combines the codemod tier-1 short-circuit, the
+// Q-learning agent pick, and the Thompson-bandit model-tier pick
+// behind one MCP `hooks_route` tool (matches ruflo
+// `v3/mcp/tools/hooks-tools.ts:1207`).
+// ---------------------------------------------------------------------------
+
+const hooksRouteTool = defineTool<{ task: string; explicitAgent?: string }>(
+  "hooks_route",
+  "Self-Learning router (F-033): decide which agent + model tier should handle a task. Returns {agent, modelTier, agentConfidence, modelConfidence, codemodIntent, surfacedTags}. surfacedTags contains the human-readable markers (e.g. [CODEMOD_AVAILABLE] / [TASK_MODEL_RECOMMENDATION]) that should be prepended to the prompt for downstream observability.",
+  { task: "string", explicitAgent: "string" },
+  async ({ task, explicitAgent }) => {
+    try {
+      const decision = decideAgentWith(modelRouter, agentRouter, {
+        task: String(task ?? ""),
+        explicitAgent: explicitAgent ? String(explicitAgent) : undefined,
+      });
+      return ok(JSON.stringify(decision, null, 2));
     } catch (e) { return err(String(e)); }
   },
   { readOnlyHint: true },
@@ -408,6 +639,14 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   graphQueryTool,
   graphPathTool,
   dangerCheckTool,
+  agentSpawnTool,
+  agentListTool,
+  agentTerminateTool,
+  swarmInitTool,
+  modelRouteTool,
+  agentRouteTool,
+  memoryDistillTool,
+  hooksRouteTool,
 ];
 
 /**
