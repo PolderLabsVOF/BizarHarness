@@ -116,6 +116,69 @@ function haveCmd(cmd) {
   }
 }
 
+/**
+ * Build the SDK workspace so its compiled JS output lives at
+ * `<pkg>/packages/sdk/dist/`. The dashboard imports the SDK memory
+ * module from `dist/memory/index.js`, not from `src/memory/index.js`,
+ * so without this build step the npm-installed package ships a TS
+ * source tree that the dashboard cannot run.
+ *
+ * v7.0.1 — `install.sh` + `bizar update` previously skipped this step
+ * entirely. Symptom: `bizar dash start` crashes with
+ * `Cannot find module .../packages/sdk/dist/memory/index.js`
+ * (or .../src/memory/index.js for older import paths). Root cause: the
+ * SDK's `packages.json` advertises `./dist/*` exports, but the SDK's
+ * `tsconfig.json` is never compiled by the installer.
+ *
+ * Idempotent: skips when `dist/memory/index.js` already exists.
+ * Non-fatal: returns `{ ok: false, message }` rather than throwing —
+ * the rest of the provision flow should still complete (some operators
+ * run a separate build pipeline, e.g. a CI step).
+ */
+export async function buildSdk({ dryRun = false } = {}) {
+  const sdkRoot = join(REPO_ROOT, 'packages', 'sdk');
+  const srcEntry = join(sdkRoot, 'src', 'memory', 'index.ts');
+  const distEntry = join(sdkRoot, 'dist', 'memory', 'index.js');
+
+  if (!existsSync(srcEntry)) {
+    // No SDK TS source — this is a stripped install or an unusual layout.
+    // Don't fail the whole provision over it; just report.
+    return { ok: true, skipped: true, message: `SDK src not found at ${srcEntry} — skipping build (likely a non-bundled install)` };
+  }
+
+  if (existsSync(distEntry)) {
+    return { ok: true, skipped: true, message: `SDK dist already present — skipping build (delete ${join(sdkRoot, 'dist')} to force)` };
+  }
+
+  if (dryRun) {
+    return { ok: true, skipped: false, message: `would build SDK at ${sdkRoot}` };
+  }
+
+  // Prefer `bun run build:sdk` (matches `package.json` `scripts.build:sdk`
+  // and the canonical dev flow), fall back to `npx tsc -p tsconfig.json`
+  // so the step works on systems without bun installed.
+  let cmd, args;
+  if (haveCmd('bun')) {
+    cmd = 'bun';
+    args = ['run', 'build:sdk'];
+  } else {
+    cmd = 'npx';
+    args = ['--yes', 'tsc', '-p', 'packages/sdk/tsconfig.json'];
+  }
+
+  try {
+    logInfo(`building SDK with \`${cmd} ${args.join(' ')}\` (REPO_ROOT=${REPO_ROOT})`);
+    execFileSync(cmd, args, { cwd: REPO_ROOT, stdio: 'pipe', timeout: 180_000 });
+    if (existsSync(distEntry)) {
+      return { ok: true, skipped: false, message: 'SDK built (dist/memory/index.js present)' };
+    }
+    return { ok: false, message: `build completed but ${distEntry} still missing — check tsconfig outDir` };
+  } catch (err) {
+    const stderr = err.stderr ? err.stderr.toString().split('\n').slice(0, 5).join(' | ') : '(no stderr)';
+    return { ok: false, message: `SDK build failed: ${stderr}` };
+  }
+}
+
 function readTextSafe(file, fallback = '') {
   try {
     if (!existsSync(file)) return fallback;
@@ -797,6 +860,13 @@ export async function runProvision(opts = {}) {
   await runStep('Syncing commands', () => syncCommandFiles({ dryRun, force }));
   await runStep('Syncing rules',    () => syncRulesFiles({ dryRun, force }));
   await runStep('Syncing hooks',    () => syncHookFiles({ dryRun, force }));
+
+  // ── 4b. Build the SDK workspace so dist/ exists. ────────────────────
+  // The dashboard imports from packages/sdk/dist/* at runtime; without
+  // this step v7.0.0+ npm installs crash on dashboard startup because
+  // the SDK ships as TS source only. See `buildSdk()` JSDoc for the
+  // full story.
+  await runStep('Building SDK',     () => buildSdk({ dryRun }));
 
   // ── 9. settings.json (MCP + hooks + permissions + env) ──────────────
   section('Writing settings.json');

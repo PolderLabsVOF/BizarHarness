@@ -22,7 +22,14 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { listNotes, writeNote } from "./memory-store.mjs";
-import { resolveVaultRoot } from "../../../packages/sdk/src/memory/index.js";
+// F-041 follow-up: import the BUILT SDK memory module from `dist/`,
+// not the TS source at `src/`. The src/ directory only ships the
+// .ts files; the dashboard runs against the compiled .js output in
+// dist/. v7.0.0 shipped with the src/ path, which makes the dashboard
+// crash with `Cannot find module .../src/memory/index.js` on startup.
+// Pointing at `dist/` matches what the SDK's package.json `exports`
+// map already advertises.
+import { resolveVaultRoot } from "../../../packages/sdk/dist/memory/index.js";
 import { runDistillation } from "./memory-distillation.mjs";
 
 /**
