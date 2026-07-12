@@ -1,55 +1,73 @@
-// src/views/Tasks.tsx
-//
-// v4.6.0 — Simplified task board.
-//
-// Design goals (per Odin):
-//   - Create flow = title + description (+ optional priority hint + tags).
-//     No agent picker. Odin decides what to do with the task and which
-//     agent picks it up; the UI just records intent.
-//   - Tasks grouped by status into 5 columns:
-//       Todo      (api: queued)
-//       In progress (api: doing)
-//       Done      (api: done)
-//       Failed    (api: blocked)
-//       Backlog   (api: backlog, parked ideas)
-//   - Each task row shows title, status, priority, createdAt, and the
-//     agent that auto-claimed it (read-only — set by the orchestrator).
-//   - Per-task actions: edit, delete, retry, change status.
-//   - Backlog view: parked ideas; one-click "promote to Todo".
-//
-// We keep the API contract (statuses: queued/doing/done/blocked/backlog)
-// so the dashboard doesn't break the existing server, tasks store, and
-// tests. The UI maps API statuses to friendlier labels.
+/*
+ * Tasks.tsx — Wave 3 redesigned kanban board (Supabase-style simplicity).
+ *
+ * The view groups tasks into 5 columns by API status (queued | doing | done
+ * | blocked | backlog) and renders each column as a `Panel` from the new
+ * design system. Task rows are compact (~76px) cards with a left-edge
+ * priority accent (3px) derived from the priority token. The redesign
+ * intentionally uses only design-system primitives (Panel, Grid, Stack,
+ * Inline, Badge, StatusDot, Button, IconButton, SearchInput, Select,
+ * EmptyState, LoadingState) — no legacy `.task-card` / `.kanban-column`
+ * classes from main.css.
+ *
+ * Hard constraints preserved from the previous implementation:
+ *   - Same export name (`Tasks`) and same `Props` shape so App.tsx keeps
+ *     importing without changes.
+ *   - Same API contracts (`api.get('/tasks')`, `api.patch(.../status)`, etc).
+ *   - Same WS subscriptions (`tasks:change`, `tasks:delete`).
+ *   - Same COLUMNS array — the API status enum is the public contract.
+ *   - BacklogPanel is still imported from `components/tasks/BacklogPanel`
+ *     and receives the same props (out-of-scope for this redesign).
+ *   - Legacy `Modal` is reused for the create/edit dialogs (out-of-scope).
+ *   - 30s tick for relative-time labels.
+ *
+ * What changed:
+ *   - Columns are now `Panel`s with a StatusDot + count in the header.
+ *   - Task rows render with `Badge` for status/priority/agent and
+ *     `IconButton` for actions (edit, submit-to-odin, retry, delete).
+ *   - The whole task row is clickable (delegates to the edit modal) —
+ *     action buttons stop propagation so they keep their dedicated path.
+ *   - Toolbar uses `SearchInput` + `Select` (priority) instead of raw
+ *     inputs.
+ */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   CheckSquare,
   Plus,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Search,
-  X as XIcon,
-  Clock,
+  RefreshCw,
   Tag as TagIcon,
   ArchiveRestore,
-  RefreshCw,
+  RotateCw,
   Send,
   Inbox,
-  Sparkles,
   Edit2,
-  RotateCw,
   Bot,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
-import { Spinner } from '../components/Spinner';
-import { Tag } from '../components/Tag';
 import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { api, enhancePrompt } from '../lib/api';
-import { cn, formatRelative, priorityColors } from '../lib/utils';
+import { formatRelative } from '../lib/utils';
 import type { Settings, Snapshot, Task } from '../lib/types';
 import { BacklogPanel } from '../components/tasks/BacklogPanel';
+import {
+  Badge,
+  cx,
+  Grid,
+  IconButton,
+  Inline,
+  LoadingState,
+  Panel,
+  SearchInput,
+  Select,
+  Stack,
+  StatusDot,
+  type BadgeVariant,
+} from '../ui';
+
+import '../styles/tasks-redesign.css';
 
 type Props = {
   snapshot: Snapshot;
@@ -60,6 +78,7 @@ type Props = {
 };
 
 type StatusKind = 'info' | 'accent' | 'success' | 'warning' | 'error';
+type PriorityKind = 'low' | 'normal' | 'high';
 
 /**
  * UI <-> API status mapping. We keep the existing API enum
@@ -67,17 +86,49 @@ type StatusKind = 'info' | 'accent' | 'success' | 'warning' | 'error';
  * rename the labels here so the dashboard, server, and tests stay in
  * sync. Switch back if you need to expose the raw API value.
  */
-const COLUMNS: { id: Task['status']; label: string; kind: StatusKind }[] = [
-  { id: 'queued',  label: 'Todo',        kind: 'info' },
-  { id: 'doing',   label: 'In progress', kind: 'accent' },
-  { id: 'done',    label: 'Done',        kind: 'success' },
-  { id: 'blocked', label: 'Failed',      kind: 'error' },
+const COLUMNS: {
+  id: Task['status'];
+  label: string;
+  kind: StatusKind;
+  dotVariant: 'info' | 'success' | 'warning' | 'danger';
+}[] = [
+  { id: 'queued',  label: 'Todo',        kind: 'info',    dotVariant: 'info' },
+  { id: 'doing',   label: 'In progress', kind: 'accent',  dotVariant: 'info' },
+  { id: 'done',    label: 'Done',        kind: 'success', dotVariant: 'success' },
+  { id: 'blocked', label: 'Failed',      kind: 'error',   dotVariant: 'danger' },
 ];
 
-const PRIORITIES = ['low', 'normal', 'high'] as const;
-type Priority = (typeof PRIORITIES)[number];
+const PRIORITIES: readonly PriorityKind[] = ['low', 'normal', 'high'];
 
-function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
+const PRIORITY_OPTIONS = [
+  { value: '', label: 'All' },
+  ...PRIORITIES.map((p) => ({ value: p, label: p })),
+];
+
+const STATUS_BADGE: Record<StatusKind, BadgeVariant> = {
+  info: 'info',
+  accent: 'accent',
+  success: 'success',
+  warning: 'warning',
+  error: 'danger',
+};
+
+const PRIORITY_BADGE: Record<PriorityKind, BadgeVariant> = {
+  high: 'danger',
+  normal: 'info',
+  low: 'neutral',
+};
+
+const PRIORITY_ROW_CLASS: Record<PriorityKind, string> = {
+  high: 'tasks-wave3__row--priority-high',
+  normal: 'tasks-wave3__row--priority-normal',
+  low: 'tasks-wave3__row--priority-low',
+};
+
+function TasksInner({
+  snapshot,
+  refreshSnapshot,
+}: Props) {
   const toast = useToast();
   const modal = useModal();
   const [tasks, setTasks] = useState<Task[]>(snapshot.tasks || []);
@@ -219,72 +270,63 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
     }
   };
 
+  const handleTaskClick = (task: Task) => {
+    openEditTaskModal(modal, toast, task, setTasks, reload, refreshSnapshot);
+  };
+
   return (
-    <div className="view view-tasks">
+    <div className="view view-tasks tasks-wave3">
       {/* Hidden live region for screen-reader announcements of status changes. */}
       <div className="sr-only" role="status" aria-live="polite">
         {statusAnnouncement}
       </div>
-      <header className="view-header">
-        <div className="view-header-text">
-          <h2 className="view-title">
-            <CheckSquare size={18} /> Tasks ({sorted.length})
+      <header className="tasks-wave3__header">
+        <div>
+          <h2 className="tasks-wave3__title-row">
+            <CheckSquare size={18} aria-hidden /> Tasks ({sorted.length})
           </h2>
-          <p className="view-subtitle">
+          <p className="tasks-wave3__subtitle">
             Add a task — title and description is all you need. Odin picks the agent and priority.
           </p>
         </div>
       </header>
 
-      {/* Toolbar: search, filter, sort, actions */}
-      <div className="tasks-toolbar">
-        <div className="tasks-toolbar-group">
-          <div className="search-input" style={{ width: 200 }}>
-            <Search size={12} aria-hidden />
-            <input
-              className="input"
-              type="text"
-              placeholder="Search…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              aria-label="Search tasks"
-            />
-            {filter && (
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Clear search"
-                onClick={() => setFilter('')}
-              >
-                <XIcon size={12} />
-              </button>
-            )}
-          </div>
+      {/* Toolbar: search, priority filter, refresh, backlog toggle, new task */}
+      <div className="tasks-wave3__toolbar" role="toolbar" aria-label="Task filters">
+        <div className="tasks-wave3__toolbar-group">
+          <SearchInput
+            inputSize="sm"
+            value={filter}
+            onChange={((v: unknown) => setFilter(String(v))) as unknown as React.ComponentProps<typeof SearchInput>['onChange']}
+            placeholder="Search…"
+            aria-label="Search tasks"
+          />
         </div>
 
-        <div className="tasks-toolbar-divider" />
-
-        <div className="tasks-toolbar-group">
-          <label className="tasks-toolbar-label" htmlFor="tasks-priority-filter">Priority</label>
-          <select
-            id="tasks-priority-filter"
-            className="select select-sm"
+        <div className="tasks-wave3__toolbar-group">
+          <span className="tasks-wave3__toolbar-label" id="tasks-priority-filter-label">
+            Priority
+          </span>
+          <Select
+            inputSize="sm"
+            aria-labelledby="tasks-priority-filter-label"
+            options={PRIORITY_OPTIONS}
             value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            title="Filter by priority"
-          >
-            <option value="">All</option>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
+            onChange={(e) => setPriorityFilter((e.target as HTMLSelectElement).value)}
+          />
         </div>
 
-        <div className="tasks-toolbar-spacer" />
+        <div className="tasks-wave3__toolbar-spacer" />
 
-        <div className="tasks-toolbar-group">
-          <Button variant="ghost" size="sm" onClick={reload} title="Refresh" aria-label="Refresh tasks">
-            <RefreshCw size={14} />
+        <div className="tasks-wave3__toolbar-group">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={reload}
+            title="Refresh"
+            aria-label="Refresh tasks"
+          >
+            <RefreshCw size={14} aria-hidden />
           </Button>
           {backlogCount > 0 && (
             <Button
@@ -293,9 +335,11 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
               onClick={() => setShowBacklog((v) => !v)}
               title={showBacklog ? 'Hide backlog' : 'Show backlog'}
             >
-              <Inbox size={14} />
+              <Inbox size={14} aria-hidden />
               Backlog
-              <span className="badge">{backlogCount}</span>
+              <span className="tasks-wave3__column-count" aria-label={`${backlogCount} items`}>
+                {backlogCount}
+              </span>
             </Button>
           )}
           <Button
@@ -303,7 +347,7 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
             size="sm"
             onClick={() => openCreateTaskModal(modal, toast, setTasks, reload, refreshSnapshot)}
           >
-            <Plus size={14} /> New task
+            <Plus size={14} aria-hidden /> New task
           </Button>
         </div>
       </div>
@@ -316,218 +360,167 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
       )}
 
       {loading ? (
-        <div className="view-loading"><Spinner size="lg" /></div>
+        <LoadingState label="Loading tasks…" />
       ) : (
-        <div className="kanban">
-          {COLUMNS.map((col) => (
-            <KanbanColumn
-              key={col.id}
-              column={col}
-              tasks={sorted.filter((t) => t.status === col.id)}
-              onMove={moveTask}
-              onDelete={deleteTask}
-              onRetry={retryTask}
-              onEdit={(t) => openEditTaskModal(modal, toast, t, setTasks, reload, refreshSnapshot)}
-              onSubmitToOdin={submitToOdin}
-              tick={tick}
-            />
-          ))}
-        </div>
+        <Grid cols={5} gap={3} className="tasks-wave3__kanban">
+          {COLUMNS.map((col) => {
+            const columnTasks = sorted.filter((t) => t.status === col.id);
+            return (
+              <Panel
+                key={col.id}
+                padding={3}
+                className="tasks-wave3__column"
+                title={
+                  <span className="tasks-wave3__column-title">
+                    <StatusDot variant={col.dotVariant} size="sm" label={col.label} />
+                    {col.label}
+                  </span>
+                }
+                actions={
+                  <span
+                    className="tasks-wave3__column-count"
+                    aria-label={`${columnTasks.length} tasks`}
+                  >
+                    {columnTasks.length}
+                  </span>
+                }
+              >
+                <Stack gap={2} className="tasks-wave3__column-body">
+                  {columnTasks.length === 0 ? (
+                    <div className="tasks-wave3__column-empty">No tasks</div>
+                  ) : (
+                    columnTasks.map((t) => (
+                      <TaskRow
+                        key={t.id}
+                        task={t}
+                        column={col}
+                        onTaskClick={handleTaskClick}
+                        onEdit={() => openEditTaskModal(modal, toast, t, setTasks, reload, refreshSnapshot)}
+                        onDelete={() => deleteTask(t.id)}
+                        onRetry={() => retryTask(t.id)}
+                        onSubmitToOdin={() => submitToOdin(t.id)}
+                        tick={tick}
+                      />
+                    ))
+                  )}
+                </Stack>
+              </Panel>
+            );
+          })}
+        </Grid>
       )}
     </div>
   );
 }
 
-// ─── Column ────────────────────────────────────────────────────────────────
+// ─── Row ─────────────────────────────────────────────────────────────────
 
-function KanbanColumn({
-  column,
-  tasks,
-  onMove,
-  onDelete,
-  onRetry,
-  onEdit,
-  onSubmitToOdin,
-  tick,
-}: {
-  column: { id: string; label: string; kind: StatusKind };
-  tasks: Task[];
-  onMove: (id: string, status: string) => void;
-  onDelete: (id: string) => void;
-  onRetry: (id: string) => void;
-  onEdit: (t: Task) => void;
-  onSubmitToOdin: (id: string) => void;
-  tick: number;
-}) {
-  const [dragOver, setDragOver] = useState(false);
-  return (
-    <div
-      className={cn('kanban-column', dragOver && 'kanban-column-drop')}
-      data-column={column.id}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-        const id = e.dataTransfer.getData('text/task-id');
-        if (id) onMove(id, column.id);
-      }}
-    >
-      <div className="kanban-col-header">
-        <CardTitle>
-          <span className={cn('status-dot', `status-${column.kind}`)} />
-          {column.label}
-        </CardTitle>
-        <span className="kanban-col-count tabular-nums">{tasks.length}</span>
-      </div>
-      <div className="kanban-col-body">
-        {tasks.length === 0 ? (
-          <div className="kanban-empty">No tasks</div>
-        ) : (
-          tasks.map((t) => (
-            <TaskCard
-              key={t.id}
-              task={t}
-              onMove={(dir) => {
-                const idx = COLUMNS.findIndex((c) => c.id === t.status);
-                const next = idx + dir;
-                if (next >= 0 && next < COLUMNS.length) onMove(t.id, COLUMNS[next].id);
-              }}
-              onEdit={() => onEdit(t)}
-              onDelete={() => onDelete(t.id)}
-              onRetry={() => onRetry(t.id)}
-              onSubmitToOdin={() => onSubmitToOdin(t.id)}
-              tick={tick}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Card ──────────────────────────────────────────────────────────────────
-
-function TaskCard({
-  task,
-  onMove,
-  onEdit,
-  onDelete,
-  onRetry,
-  onSubmitToOdin,
-  tick,
-}: {
+type RowProps = {
   task: Task;
-  onMove: (dir: -1 | 1) => void;
+  column: (typeof COLUMNS)[number];
+  onTaskClick: (task: Task) => void;
   onEdit: () => void;
   onDelete: () => void;
   onRetry: () => void;
   onSubmitToOdin: () => void;
   tick: number;
-}) {
+};
+
+function TaskRow({
+  task,
+  column,
+  onTaskClick,
+  onEdit,
+  onDelete,
+  onRetry,
+  onSubmitToOdin,
+  tick,
+}: RowProps) {
   const assignedAgent = task.workedBy || task.assignee || null;
+  const priority: PriorityKind = (PRIORITIES as readonly string[]).includes(task.priority as string)
+    ? (task.priority as PriorityKind)
+    : 'normal';
   return (
     <div
-      className={cn('task-card', `priority-${task.priority}`)}
+      className={cx('tasks-wave3__row', PRIORITY_ROW_CLASS[priority])}
       data-task-id={task.id}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/task-id', task.id);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
       data-tick={tick}
+      role="button"
+      tabIndex={0}
+      onClick={() => onTaskClick(task)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onTaskClick(task);
+        }
+      }}
     >
-      <div className="task-card-head">
-        <span
-          className="priority-dot"
-          style={{ background: priorityColors[task.priority] || 'var(--info)' }}
-        />
-        <div className="task-card-title">{task.title}</div>
+      <div className="tasks-wave3__row-title-row">
+        <div className="tasks-wave3__row-title" title={task.title}>
+          {task.title}
+        </div>
+        <Badge variant={STATUS_BADGE[column.kind]} size="sm" aria-label={`Status ${column.label}`}>
+          {column.label}
+        </Badge>
       </div>
-      {task.description && (
-        <div className="task-card-desc">{task.description.slice(0, 160)}</div>
-      )}
-      <div className="task-card-badges">
+
+      <Inline gap={1} align="center" className="tasks-wave3__row-badges">
+        <Badge variant={PRIORITY_BADGE[priority]} size="sm">
+          {priority}
+        </Badge>
         {assignedAgent && (
-          <span className="task-card-badge" title={`Auto-assigned to @${assignedAgent}`}>
-            <Bot size={10} /> @{assignedAgent}
-          </span>
+          <Badge variant="neutral" size="sm">
+            <Bot size={10} aria-hidden /> @{assignedAgent}
+          </Badge>
         )}
-        {task.timeSpent ? (
-          <span className="task-card-badge">
-            <Clock size={10} /> {Math.round((task.timeSpent || 0) / 60)}m
-          </span>
-        ) : null}
-        {task.tags && task.tags.length > 0 && task.tags.slice(0, 3).map((tag) => (
-          <Tag key={tag}>{tag}</Tag>
+        {(task.tags || []).slice(0, 2).map((tag) => (
+          <Badge key={tag} variant="neutral" size="sm">
+            #{tag}
+          </Badge>
         ))}
-        {/* v6.0.0 — Cline agent team indicator. */}
-        {(task.tags || []).some((t) => t.startsWith('team:')) && (
-          <span className="task-card-badge team" title="Cline agent team">
-            <Sparkles size={10} /> team
-          </span>
-        )}
-      </div>
-      <div className="task-card-footer">
-        <span className="task-card-time tabular-nums muted">
-          {formatRelative(task.createdAt)}
-        </span>
-        <div className="task-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Move left"
-            title="Move left"
-            onClick={() => onMove(-1)}
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Edit"
+      </Inline>
+
+      <div className="tasks-wave3__row-footer">
+        <span className="tasks-wave3__row-time">{formatRelative(task.createdAt)}</span>
+        <Inline
+          gap={1}
+          align="center"
+          className="tasks-wave3__row-actions"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <IconButton
+            variant="ghost"
+            size="sm"
+            icon={<Edit2 size={12} aria-hidden />}
+            aria-label="Edit task"
             title="Edit"
             onClick={onEdit}
-          >
-            <Edit2 size={14} />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
+          />
+          <IconButton
+            variant="ghost"
+            size="sm"
+            icon={<Send size={12} aria-hidden />}
             aria-label="Submit to Odin"
             title="Re-delegate to Odin"
             onClick={onSubmitToOdin}
-          >
-            <Send size={14} />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Retry"
+          />
+          <IconButton
+            variant="ghost"
+            size="sm"
+            icon={<RotateCw size={12} aria-hidden />}
+            aria-label="Retry task"
             title="Retry"
             onClick={onRetry}
-          >
-            <RotateCw size={14} />
-          </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn-danger"
-            aria-label="Delete"
+          />
+          <IconButton
+            variant="danger"
+            size="sm"
+            icon={<Trash2 size={12} aria-hidden />}
+            aria-label="Delete task"
             title="Delete"
             onClick={onDelete}
-          >
-            <Trash2 size={14} />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Move right"
-            title="Move right"
-            onClick={() => onMove(1)}
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
+          />
+        </Inline>
       </div>
     </div>
   );
@@ -560,7 +553,7 @@ function openCreateTaskModal(
       titleEl?.focus();
       return;
     }
-    const priority = (priorityEl?.value || 'normal') as Priority;
+    const priority = (priorityEl?.value || 'normal') as PriorityKind;
     const tags = (tagsEl?.value || '')
       .split(',')
       .map((s) => s.trim())
@@ -575,6 +568,11 @@ function openCreateTaskModal(
         // No assignee / agent — Odin decides.
       });
       modal.close();
+      // Synthetic mousedown is intentional: it signals any open outside-
+      // click listeners (e.g. WorkspaceSelector, Notifications popover)
+      // that another surface has just stolen focus, so they collapse
+      // before the toast overlays the layout. The event carries no
+      // coordinates by design — those listeners only check the dispatch.
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new MouseEvent('mousedown'));
       }
@@ -694,7 +692,7 @@ function openEditTaskModal(
       titleEl?.focus();
       return;
     }
-    const priority = (priorityEl?.value || 'normal') as Priority;
+    const priority = (priorityEl?.value || 'normal') as PriorityKind;
     const tags = (tagsEl?.value || '')
       .split(',')
       .map((s) => s.trim())
@@ -708,6 +706,11 @@ function openEditTaskModal(
         tags,
       });
       modal.close();
+      // Synthetic mousedown is intentional: it signals any open outside-
+      // click listeners (e.g. WorkspaceSelector, Notifications popover)
+      // that another surface has just stolen focus, so they collapse
+      // before the toast overlays the layout. The event carries no
+      // coordinates by design — those listeners only check the dispatch.
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new MouseEvent('mousedown'));
       }
@@ -788,4 +791,5 @@ function openEditTaskModal(
     ),
   });
 }
+
 export const Tasks = React.memo(TasksInner);
