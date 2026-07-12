@@ -174,3 +174,36 @@ export {
   DrawerTrigger,
   DrawerClose,
 } from './feedback/Drawer.js';
+
+// ── data (Sprint S3) ──────────────────────────────────────────────────────
+
+export { Card, CardHeader, CardBody, CardFooter, type CardProps, type CardHeaderProps, type CardVariant } from './data/Card.js';
+export { Badge, type BadgeProps, type BadgeTone, type BadgeSize } from './data/Badge.js';
+export { Chip, type ChipProps } from './data/Chip.js';
+export { Avatar, AvatarStack, type AvatarProps, type AvatarSize, type AvatarStackProps } from './data/Avatar.js';
+export { StatTile, StatGrid, type StatTileProps, type StatTrend, type StatGridProps } from './data/StatTile.js';
+export { Sparkline, type SparklineProps } from './data/Sparkline.js';
+export { BarList, type BarListProps, type BarListItem } from './data/BarList.js';
+export { Timeline, type TimelineProps, type TimelineItem } from './data/Timeline.js';
+export {
+  Accordion,
+  AccordionItem,
+  type AccordionProps,
+  type AccordionItemProps,
+} from './data/Accordion.js';
+export { ViewHeader, type ViewHeaderProps, type BreadcrumbItem } from './data/ViewHeader.js';
+export {
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+  type TableProps,
+  type TableHeadProps,
+  type TableBodyProps,
+  type TableRowProps,
+  type TableHeaderProps,
+  type TableCellProps,
+} from './data/Table.js';
+export { Kbd, type KbdProps } from './data/Kbd.js';

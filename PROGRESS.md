@@ -80,6 +80,34 @@ Shared:
 
 **Next sprint (S3 — Data display + Overview):** Card, StatTile, StatGrid, Badge, Chip, Avatar, AvatarStack, Table (TanStack), Sparkline, BarList, Timeline, Accordion, ViewHeader.
 
+**Sprint S3 (Data display + View primitives) shipped in this commit:**
+
+12 components in `bizar-dash/src/web/v8/ui/data/`:
+- `Card.tsx` — default/elevated/ghost/outlined variants + flush + interactive states; `CardHeader` / `CardBody` / `CardFooter` slots.
+- `Badge.tsx` — neutral/info/success/warning/danger/accent tones; sm/md sizes; optional leading dot.
+- `Chip.tsx` — filter pills with optional `selected` state and `onRemove` handler.
+- `Avatar.tsx` — deterministic initials fallback + status dot (online/offline/busy/away); xs/sm/md/lg/xl sizes; `AvatarStack` for overlapping groups.
+- `StatTile.tsx` — KPI tile with label/value/delta/trend/hint/icon/sparkline slots + `loading` state; `StatGrid` auto-fits 1..4 columns.
+- `Sparkline.tsx` — pure-SVG line/area chart with optional goal line; no chart library dep.
+- `BarList.tsx` — horizontal bar distribution (tasks per agent, memory by category, etc.).
+- `Timeline.tsx` — vertical event feed with tone-coloured dots + meta on the right.
+- `Accordion.tsx` — Radix-based collapsible sections (single/multiple) with chevron rotation.
+- `ViewHeader.tsx` — page-level header pattern (breadcrumb + title + description + primary action + secondary actions + meta row).
+- `Table.tsx` — semantic Table/Head/Body/Row/Header/Cell with density prop, selected row, striped rows.
+- `Kbd.tsx` — keyboard key chip for tooltips, shortcuts, settings.
+
+Dependencies added: `@radix-ui/react-accordion`.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 12 data components + types.
+- `bizar-dash/src/web/v8/__tests__/data.test.tsx` — 23 vitest cases (Card composition, Badge tones, Chip remove + selected, Avatar initials fallback + status, StatTile trend + loading, StatGrid layout, Sparkline SVG paths, BarList items, Timeline ordering, Accordion expand, ViewHeader breadcrumb, Table rows + selected, Kbd render).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 69/69 pass (5 test files: cx, theme, controls, feedback, data).
+
+**Next sprint (S4 — Navigation + Command Palette):** Tabs, Breadcrumb, NavLink, Pagination, CommandPalette (cmdk), NavMenu, Section.
+
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
 User-requested follow-up to F-040 (v7.0.0). Three problems:
