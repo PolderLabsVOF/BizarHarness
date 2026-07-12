@@ -232,3 +232,22 @@ export {
   type CommandPaletteGroupProps,
   type CommandPaletteItemProps,
 } from './navigation/CommandPalette.js';
+
+// ── kanban (Sprint S5 — centerpiece) ──────────────────────────────────────
+
+export {
+  KanbanCard,
+  useKanbanCardSortable,
+  type KanbanCardProps,
+  type KanbanCardData,
+  type KanbanCardVariant,
+  type KanbanPriority,
+} from './kanban/KanbanCard.js';
+export {
+  KanbanColumn,
+  type KanbanColumnProps,
+  type KanbanColumnData,
+} from './kanban/KanbanColumn.js';
+export { KanbanBoard, type KanbanBoardProps } from './kanban/KanbanBoard.js';
+export { KanbanQuickAdd, type KanbanQuickAddProps } from './kanban/KanbanQuickAdd.js';
+export { KanbanContextMenu, type KanbanContextMenuProps } from './kanban/KanbanContextMenu.js';

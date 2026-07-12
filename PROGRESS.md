@@ -128,6 +128,27 @@ Shared:
 
 **Next sprint (S5 — Kanban centerpiece):** KanbanBoard, KanbanColumn, KanbanCard, KanbanCardCompact, KanbanDetail, KanbanQuickAdd, KanbanContextMenu. Right-click every card (DESIGN.md Rule #1).
 
+**Sprint S5 (Kanban centerpiece) shipped in this commit:**
+
+5 components in `bizar-dash/src/web/v8/ui/kanban/` — the heart of the v8 dashboard:
+- `KanbanCard.tsx` — the primary surface. Variants: `default` (full meta), `compact` (title + priority dot), `detailed` (title + description preview). Priority dot (`low`/`medium`/`high`/`urgent`) and accent stripe on the leading edge. Meta row shows due date, comment count, attachment count, branch name. Includes `useKanbanCardSortable` hook that wraps `@dnd-kit/sortable`'s `useSortable` for drag-and-drop wiring.
+- `KanbanColumn.tsx` — vertical status column. Header with accent dot, title, count (with optional WIP limit and overflow warning), overflow menu, and quick-add button. Body uses `@dnd-kit/core`'s `useDroppable` so it accepts card drops; visual hover state on drop.
+- `KanbanBoard.tsx` — horizontal-scrolling board hosting the columns. Owns the `@dnd-kit/core` `DndContext` with Pointer + Keyboard sensors and `closestCorners` collision detection. Reports `onCardMove(cardId, fromColumnId, toColumnId)` on drop.
+- `KanbanQuickAdd.tsx` — inline card composer at column bottom. Idle → click → textarea; Enter submits, Escape cancels. Persists across multiple adds in one session.
+- `KanbanContextMenu.tsx` — the right-click menu every card gets (DESIGN.md Rule #1). Standard items: Open detail, Rename (F2), Duplicate, Copy link, Move ←/→ (with column-edge disables), Assign…, Archive, Delete (⌫). Built on the existing `ContextMenu` primitive.
+
+Dependencies added: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 5 kanban components + types.
+- `bizar-dash/src/web/v8/__tests__/kanban.test.tsx` — 16 vitest cases (Card priority dot + variant + metadata + a11y, Column count + WIP + add/overflow buttons, Board region landmark, QuickAdd idle → edit transition + Enter submit + empty reject + Escape cancel, ContextMenu render + open + disabled moves + onDelete wiring).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 94/94 pass (7 test files: cx, theme, controls, feedback, data, navigation, kanban).
+
+**Next sprint (S6 — Goals + Agents):** GoalCard, GoalProgress, GoalDetail, AgentCard, AgentRoster, AgentDetail, AgentActivity. The two "long horizon" surfaces (goals) and the agent orchestration surface.
+
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
 User-requested follow-up to F-040 (v7.0.0). Three problems:
