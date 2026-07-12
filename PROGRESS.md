@@ -4,6 +4,36 @@
 > right now. Updated at every clock-in AND clock-out. New sessions start
 > by reading this file before touching any code.
 
+## In Progress — F-043 v8 Dashboard Foundation (Sprint S1)
+
+User-requested full dashboard rewrite. v7 dashboard (`bizar-dash/src/web/{ui,views,components,hooks,locales,mobile,styles,App.tsx,main.tsx}`) is preserved untouched while the v8 tree builds in parallel at `bizar-dash/src/web/v8/`. The rewrite will replace v7 wholesale once Sprint S9 verification ships.
+
+**Design contracts** (committed in this branch, worktree-v8-dashboard-rewrite-plan):
+- `bizar-dash/DESIGN.md` — 14-section design system following Google's design.md standard (principles, tokens, typography, layout, components, interaction patterns, banned tropes).
+- `bizar-dash/PLAN.md` — 17-section implementation plan (17 ADRs, 10-sprint roadmap F-042..F-051, ~28 working days).
+- `bizar-dash/GLYPH.md` — ASCII visual rendering of the v8 design (B mark, shell layout, context menu, command palette, component tree, route tree, token system, sprint roadmap).
+
+**Sprint S1 (Foundation) shipped in this commit:**
+- `bizar-dash/src/web/v8/ui/styles/{tokens,reset,globals}.css` — full OKLch token system (light + dark + system) per DESIGN.md §3.
+- `bizar-dash/src/web/v8/ui/primitives/{Box,Stack,Inline,Cluster,Grid,Center,Separator,ScrollArea,Portal,VisuallyHidden}.tsx` — 10 layout & a11y primitives.
+- `bizar-dash/src/web/v8/ui/utils/cx.ts` — `clsx + tailwind-merge` wrapper.
+- `bizar-dash/src/web/v8/ui/theme/{ThemeProvider,DensityProvider,ThemeToggle,useTheme,useDensity}.{tsx,ts}` — light/dark/system theme + comfortable/compact density with localStorage persistence.
+- `bizar-dash/src/web/v8/shell/{AppShell,Topbar,Sidebar,StatusBar}.tsx` — the v8 layout skeleton (topbar 56px + collapsible 260px sidebar + main content area).
+- `bizar-dash/src/web/v8/{App,main}.tsx` — entry that wires ThemeProvider + DensityProvider + AppShell.
+- `bizar-dash/src/web/v8/views/Tasks/{TasksKanbanPlaceholder,CommandPalettePlaceholder}.tsx` — S1 stand-ins proving the shell renders.
+- `bizar-dash/src/web/v8/__tests__/{cx,theme.test.tsx}` — 14 vitest cases (cx semantics, ThemeProvider/DensityProvider cycles, localStorage persistence, data-attribute writes, hook-without-provider throws).
+
+**Branch:** `worktree-v8-dashboard-rewrite-plan` (worktree at `.claude/worktrees/v8-dashboard-rewrite-plan`).
+
+**Dependencies added** to `package.json`: `@dnd-kit/*`, `@radix-ui/react-*` (12 primitives), `@tanstack/react-{query,router,table,virtual}`, `clsx`, `cmdk`, `date-fns`, `react-hook-form`, `recharts`, `sonner`, `tailwind-merge`, `zustand`.
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npm test` → 412/412 pass (18 vitest files / 294 vitest cases + 118 node --test cases). The 4 v5.3.0-era `tests/a11y/forms.test.tsx` failures noted in v7.0.0 PROGRESS are still pre-existing on master.
+- `npx vite build` → clean (existing v7 main bundle unaffected; v8 entry is wired in Sprint S0).
+
+**Next sprint (S2 — Controls + Feedback):** Button + Input + Select + Modal + Toast + Tooltip. The 36 components in §8 of DESIGN.md.
+
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
 User-requested follow-up to F-040 (v7.0.0). Three problems:

@@ -1,0 +1,125 @@
+/* globals.css — typography, body baseline, density variants. v8.
+ * Source of truth: DESIGN.md §3 (tokens), §4 (typography).
+ * Variables come from tokens.css. No font-file imports — system stack only.
+ */
+
+@import url("./tokens.css");
+@import url("./reset.css");
+
+/* ── typography: system UI stack (no web-font dependency) ───────────── */
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-16: 1rem;
+  --fs-18: 1.125rem;
+  --fs-20: 1.25rem;
+  --fs-24: 1.5rem;
+  --fs-32: 2rem;
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.35;
+  --lh-base: 1.5;
+  --lh-relaxed: 1.65;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --tracking-tight: -0.01em;
+  --tracking-base: 0;
+  --tracking-wide: 0.04em;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  line-height: var(--lh-base);
+  color: var(--fg);
+  background: var(--bg);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  padding: 0 var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--fg-muted);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── density variants (DESIGN.md §3 token system) ───────────────────── */
+:root[data-density='comfortable'] {
+  --density-row-h: 36px;
+  --density-control-h: 36px;
+  --density-card-pad: var(--space-5);
+}
+
+:root[data-density='compact'] {
+  --density-row-h: 28px;
+  --density-control-h: 28px;
+  --density-card-pad: var(--space-3);
+}
+
+/* ── headings (used directly; most layout uses Stack+fs-* tokens) ──── */
+h1 {
+  font-size: var(--fs-24);
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+h2 {
+  font-size: var(--fs-20);
+  line-height: var(--lh-snug);
+  font-weight: var(--fw-semibold);
+}
+h3 {
+  font-size: var(--fs-18);
+  line-height: var(--lh-snug);
+  font-weight: var(--fw-medium);
+}
+h4 {
+  font-size: var(--fs-16);
+  line-height: var(--lh-base);
+  font-weight: var(--fw-medium);
+}
+
+/* ── a11y helpers (see VisuallyHidden primitive) ────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── global content layer (the v8 app lives inside #root) ───────────── */
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  isolation: isolate;
+}
