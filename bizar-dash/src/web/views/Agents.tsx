@@ -62,6 +62,14 @@ const MODELS = [
   'openrouter/minimax/minimax-m2.7',
 ];
 
+// Default agent swatch — the only place in the dashboard where a
+// literal hex appears. HTML <input type="color"> requires CSS Color
+// Module Level 3 hex format (no `oklch()`, no `var(--token)`). Keep
+// this in sync with --default-agent-swatch in ui/styles/tokens.css;
+// the token is what every CSS-side swatch reads, this is just the
+// native color-input seed value.
+const DEFAULT_AGENT_SWATCH_HEX = '#8b5cf6';
+
 const CATEGORIES = [
   { id: 'reasoning', label: 'Reasoning', variant: 'accent' as const },
   { id: 'code', label: 'Code', variant: 'info' as const },
@@ -229,7 +237,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
             </div>
             <div className="task-form-field" style={{ flex: '0 0 80px' }}>
               <label className="field-label" htmlFor="agent-new-color">Color</label>
-              <input id="agent-new-color" ref={(el) => (colorEl = el)} className="input" type="color" defaultValue="#8b5cf6" />
+              <input id="agent-new-color" ref={(el) => (colorEl = el)} className="input" type="color" defaultValue={DEFAULT_AGENT_SWATCH_HEX} />
             </div>
           </div>
           <div className="task-form-row">
@@ -362,7 +370,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
               </div>
               <div className="task-form-field" style={{ flex: '0 0 80px' }}>
                 <label className="field-label" htmlFor="agent-edit-color">Color</label>
-                <input id="agent-edit-color" ref={(el) => (colorEl = el)} className="input" type="color" defaultValue={full.color || '#8b5cf6'} />
+                <input id="agent-edit-color" ref={(el) => (colorEl = el)} className="input" type="color" defaultValue={full.color || DEFAULT_AGENT_SWATCH_HEX} />
               </div>
             </div>
             <div className="task-form-row">

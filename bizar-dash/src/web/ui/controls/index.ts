@@ -17,6 +17,8 @@ export { Toggle } from './Toggle';
 export type { ToggleProps, ToggleSize } from './Toggle';
 export { TextInput } from './TextInput';
 export type { TextInputProps, TextInputSize } from './TextInput';
+export { Textarea } from './Textarea';
+export type { TextareaProps, TextareaSize } from './Textarea';
 export { NumberInput } from './NumberInput';
 export type { NumberInputProps, NumberInputSize } from './NumberInput';
 export { Select } from './Select';

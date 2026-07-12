@@ -243,6 +243,17 @@ code,
   color: var(--accent);
 }
 
+/* Active-state pulse per DESIGN.md §9.1: a soft --accent-soft wash
+   behind the icon so the active tab reads at a glance without a heavy
+   fill. The pulse sits behind the icon, not the whole button, so the
+   tap target keeps its full nav-btn footprint for thumb reach. */
+.mobile-nav-btn-active > svg {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 4px;
+  box-sizing: content-box;
+}
+
 .mobile-nav-label {
   font-size: 10px;
   font-weight: 500;
@@ -2127,6 +2138,36 @@ code,
   font-weight: 500;
   text-align: left;
   cursor: pointer;
+}
+
+/* ─── View error boundary ───────────────────────────────────────────── */
+/* Shown when a child view throws during render (see MobileViewBoundary
+   in MobileApp.tsx). Keeps the chrome intact so the user can still tap
+   the back button or reload instead of staring at a blank white screen. */
+.mobile-view-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  min-height: 50vh;
+}
+
+.mobile-view-error h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.mobile-view-error p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 32ch;
+  word-break: break-word;
 }
 
 /* ─── Reduce motion ──────────────────────────────────────────────────── */

@@ -1,7 +1,7 @@
 // src/mobile/MobileTasks.tsx — filter-tab task list with search and FAB create sheet.
 import { useState } from 'react';
 import { Search, Plus } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cx } from '../ui/utils/cx';
 import { TaskCard } from '../components/TaskCard';
 import { TaskCreateSheet } from '../components/TaskCreateSheet';
 import type { Snapshot } from '../lib/types';
@@ -54,7 +54,7 @@ export function MobileTasks({ snapshot, refreshSnapshot, userId, workspaceId }: 
           <button
             key={f}
             type="button"
-            className={cn('mobile-tasks-tab', filter === f && 'is-active')}
+            className={cx('mobile-tasks-tab', filter === f && 'is-active')}
             onClick={() => setFilter(f)}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}

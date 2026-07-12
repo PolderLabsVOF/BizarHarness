@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   Settings2, Brain, KeyRound, Cpu, RefreshCw, Globe, Info, ChevronRight,
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cx } from '../ui/utils/cx';
 import type { Settings, Snapshot } from '../lib/types';
 
 // Sub-section components — each renders its section content inline.
@@ -206,7 +206,7 @@ export function MobileSettings({ settings, onSettingsChange, autoSave, snapshot 
           const Icon = s.icon;
           const isExpanded = expandedSection === s.id;
           return (
-            <div key={s.id} className={cn('mobile-settings-item', isExpanded && 'is-expanded')}>
+            <div key={s.id} className={cx('mobile-settings-item', isExpanded && 'is-expanded')}>
               <button
                 className="mobile-settings-item-head"
                 onClick={() => setExpandedSection(isExpanded ? null : s.id)}
@@ -222,7 +222,7 @@ export function MobileSettings({ settings, onSettingsChange, autoSave, snapshot 
                 </div>
                 <ChevronRight
                   size={16}
-                  className={cn('mobile-settings-item-chevron', isExpanded && 'is-rotated')}
+                  className={cx('mobile-settings-item-chevron', isExpanded && 'is-rotated')}
                 />
               </button>
               {isExpanded && (

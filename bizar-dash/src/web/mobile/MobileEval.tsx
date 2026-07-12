@@ -1,7 +1,7 @@
 // src/web/mobile/MobileEval.tsx — v5.4 mobile eval view with runs and schedules tabs.
 import { useEffect, useState } from 'react';
 import { ClipboardCheck, Clock } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cx } from '../ui/utils/cx';
 import { api } from '../lib/api';
 import type { EvalRunSummary } from '../components/EvalRunCard';
 
@@ -54,7 +54,7 @@ export function MobileEval() {
       <div className="mobile-eval-tabs">
         <button
           type="button"
-          className={cn('mobile-eval-tab', tab === 'runs' && 'is-active')}
+          className={cx('mobile-eval-tab', tab === 'runs' && 'is-active')}
           onClick={() => setTab('runs')}
         >
           <ClipboardCheck size={12} aria-hidden />
@@ -62,7 +62,7 @@ export function MobileEval() {
         </button>
         <button
           type="button"
-          className={cn('mobile-eval-tab', tab === 'schedules' && 'is-active')}
+          className={cx('mobile-eval-tab', tab === 'schedules' && 'is-active')}
           onClick={() => setTab('schedules')}
         >
           <Clock size={12} aria-hidden />
@@ -91,7 +91,7 @@ export function MobileEval() {
                   tabIndex={0}
                   onKeyDown={(e) => e.key === 'Enter' && setSelectedRun(r)}
                 >
-                  <div className={cn('mobile-eval-status', `is-${status}`)}>
+                  <div className={cx('mobile-eval-status', `is-${status}`)}>
                     {r.passed}/{r.total}
                   </div>
                   <div className="mobile-eval-run-info">

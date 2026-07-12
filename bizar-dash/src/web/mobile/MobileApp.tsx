@@ -1,5 +1,5 @@
 // src/mobile/MobileApp.tsx — mobile root with state-based routing + stack navigation.
-import { useCallback, useEffect, useState } from 'react';
+import { Component, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Activity, MessageSquare, CheckSquare, Settings, Grid } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Snapshot, Settings as SettingsType } from '../lib/types';
@@ -19,6 +19,37 @@ import { MobileMods } from './views/MobileMods';
 import { MobileSchedules } from './views/MobileSchedules';
 import { MobileHistory } from './views/MobileHistory';
 import { MobileConfig } from './views/MobileConfig';
+
+/** Tiny ErrorBoundary for mobile views — keeps a render error from
+ *  blanking the whole shell so the user sees a "Reload" prompt with
+ *  the chrome (topbar + back button) still intact. */
+class MobileViewBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  componentDidCatch(error: Error) {
+    this.setState({ error });
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="mobile-view-error">
+          <h2>Something went wrong</h2>
+          <p>{this.state.error.message}</p>
+          <button
+            type="button"
+            className="mobile-btn mobile-btn-secondary"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export type MobileView =
   | { id: 'activity' }
@@ -212,7 +243,7 @@ export function MobileApp() {
       />
 
       <main className="mobile-content">
-        {renderView()}
+        <MobileViewBoundary>{renderView()}</MobileViewBoundary>
       </main>
 
       {/* Bottom nav only on main tabs */}

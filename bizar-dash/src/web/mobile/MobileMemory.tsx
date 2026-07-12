@@ -13,7 +13,7 @@ import {
   Clipboard,
   Scan,
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cx } from '../ui/utils/cx';
 import { MemoryOverview } from '../views/memory/MemoryOverview';
 import { LightragPanel } from '../views/memory/LightragPanel';
 import { ObsidianPanel } from '../views/memory/ObsidianPanel';
@@ -89,7 +89,7 @@ export function MobileMemory({ vaultPath }: Props) {
             <button
               key={s.id}
               type="button"
-              className={cn('mobile-memory-tab', activeSource === s.id && 'is-active')}
+              className={cx('mobile-memory-tab', activeSource === s.id && 'is-active')}
               onClick={() => setActiveSource(s.id)}
               aria-pressed={activeSource === s.id}
             >

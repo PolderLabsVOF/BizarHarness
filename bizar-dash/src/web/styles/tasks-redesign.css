@@ -135,7 +135,6 @@
   padding: var(--space-3);
   background: var(--surface-0);
   border: 1px solid var(--border-subtle);
-  border-left-width: 3px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: border-color var(--duration-fast) var(--ease-out),
@@ -153,17 +152,11 @@
   outline-offset: 1px;
 }
 
-.tasks-wave3__row--priority-high {
-  border-left-color: var(--danger);
-}
-
-.tasks-wave3__row--priority-normal {
-  border-left-color: var(--info);
-}
-
-.tasks-wave3__row--priority-low {
-  border-left-color: var(--text-tertiary);
-}
+/* Priority hint inside the row is encoded by the <Badge> + <StatusDot>
+   rendered in JSX (see PRIORITY_BADGE in Tasks.tsx). We deliberately
+   drop the previous left-edge priority stripe — DESIGN.md §14 bans
+   vertical accent edges on containers; the badge + dot handle the
+   state encoding in one canonical place. */
 
 .tasks-wave3__row-title-row {
   display: flex;
@@ -229,3 +222,32 @@
 .tasks-wave3__dot--success { background: var(--success); }
 .tasks-wave3__dot--warning { background: var(--warning); }
 .tasks-wave3__dot--danger  { background: var(--danger); }
+
+/* ── Responsive (F-041) ─────────────────────────────────────────── */
+
+/* Below 1099px the 5-column kanban becomes a single vertical stack
+   with section dividers — DESIGN.md §13 lists 1099px as the "info
+   panel becomes sheet" breakpoint, so the kanban degrades the same
+   way. Each Panel becomes a section, not a column. */
+@media (max-width: 1099px) {
+  .tasks-wave3__kanban {
+    grid-template-columns: 1fr !important;
+    gap: var(--space-4) !important;
+  }
+  .tasks-wave3__column {
+    /* Drop the panel chrome on the collapsed view — section header
+       carries the title. */
+    border-color: transparent;
+    background: transparent;
+    padding: 0 !important;
+  }
+}
+
+/* On the mobile shell (< 768px) the mobile view takes over so we
+   just make sure no horizontal scroll leaks through if the desktop
+   view is briefly shown at that width. */
+@media (max-width: 767px) {
+  .tasks-wave3 {
+    overflow-x: hidden;
+  }
+}
