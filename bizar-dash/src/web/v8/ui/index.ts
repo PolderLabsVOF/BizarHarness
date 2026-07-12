@@ -304,3 +304,19 @@ export {
   type LibraryStatus,
 } from './libraries/LibraryItem.js';
 export { LibraryGrid, type LibraryGridProps } from './libraries/LibraryGrid.js';
+
+// ── settings (Sprint S8) ──────────────────────────────────────────────────
+
+export {
+  SettingsSection,
+  type SettingsSectionProps,
+} from './settings/SettingsSection.js';
+export {
+  SettingsRow,
+  type SettingsRowProps,
+} from './settings/SettingsRow.js';
+export {
+  SettingsNav,
+  type SettingsNavProps,
+  type SettingsNavItem,
+} from './settings/SettingsNav.js';

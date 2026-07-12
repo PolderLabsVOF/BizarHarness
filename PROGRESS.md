@@ -193,7 +193,24 @@ Shared:
 - `npm run typecheck` → 0 TS errors.
 - `cd bizar-dash && npx vitest run src/web/v8/__tests__/activity.test.tsx src/web/v8/__tests__/memory.test.tsx src/web/v8/__tests__/libraries.test.tsx` → 16/16 pass.
 
-**Next sprint (S8 — Settings):** 16 sections per PLAN.md §Settings: General, Theme, Density, Density-rules, Command Palette, Keyboard, Notifications, Storage, Plugins, MCP Servers, Skills, Hooks, Activity, Memory, Privacy, Advanced. A `SettingsSection` shell + per-section option rows.
+**Sprint S8 (Settings primitives) shipped in this commit:**
+
+3 primitives that compose the 16 Settings sections per PLAN.md §Settings.
+
+Settings (`bizar-dash/src/web/v8/ui/settings/`):
+- `SettingsSection.tsx` — titled section shell with optional icon, description, and headerActions slot (e.g. "Restore defaults" button). `aria-labelledby` wires the title for screen-reader navigation.
+- `SettingsRow.tsx` — labelled option row (label + description on left, control on right). `disabled` prop applies `aria-disabled` + `data-disabled` + 0.5 opacity. The control slot hosts any interactive (Switch, Select, Slider, custom button).
+- `SettingsNav.tsx` — left rail inside the Settings page. Lists every section as a button, highlights the active one with `aria-current`, invokes `onSelect(id)` on click. No router needed; caller wires the scroll target.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with the 3 primitives + types.
+- `bizar-dash/src/web/v8/__tests__/settings.test.tsx` — 8 vitest cases (Section title/description/body/aria-labelledby/icon+headerActions, Row label/control/disabled-aria, Nav items/aria-current/onSelect).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/settings.test.tsx` → 8/8 pass.
+
+**Next sprint (S9 — Polish + views wiring):** Compose the actual Settings, Goals, Agents, Memory, Skills, MCP, Hooks, and Activity views from the primitives above. Add the view router, the WebSocket layer for live agent/activity updates, and the app-level CommandPalette wiring. Final visual + a11y pass.
 
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
