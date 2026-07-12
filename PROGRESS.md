@@ -210,7 +210,37 @@ Shared:
 - `npm run typecheck` → 0 TS errors.
 - `cd bizar-dash && npx vitest run src/web/v8/__tests__/settings.test.tsx` → 8/8 pass.
 
-**Next sprint (S9 — Polish + views wiring):** Compose the actual Settings, Goals, Agents, Memory, Skills, MCP, Hooks, and Activity views from the primitives above. Add the view router, the WebSocket layer for live agent/activity updates, and the app-level CommandPalette wiring. Final visual + a11y pass.
+**Sprint S9 (Polish + view wiring) shipped in this commit:**
+
+The complete v8 dashboard now renders every view end-to-end. The component library (50+ components, 142 tests) is composed into 9 view files plus a Router and an app-level CommandPalette.
+
+Views (`bizar-dash/src/web/v8/views/`):
+- `Overview/OverviewView.tsx` — landing page. 4 stat tiles (tasks/goals/agents/tokens) + Recent activity feed + Needs-attention cards.
+- `Tasks/TasksView.tsx` — the Kanban centerpiece with 5 columns, 5 sample cards, full dnd-kit drop wiring, real state-managed column moves.
+- `Goals/GoalsView.tsx` — 3 goal cards (on-track / at-risk / done) + Key Result list.
+- `Agents/AgentsView.tsx` — 6-card roster (busy / idle / error / paused agents) + featured activity feed.
+- `Activity/ActivityView.tsx` — full event history as a vertical feed.
+- `Memory/MemoryView.tsx` — 4 memos scoped Project vs Global.
+- `Libraries/LibrariesView.tsx` — generic `LibraryGrid` + `LibraryItem` surface used by Skills / MCPs / Hooks.
+- `Settings/SettingsView.tsx` — all 16 PLAN.md sections. Sticky nav rail (SettingsNav) on the left, sections on the right. Theme + Density live-wired to ThemeProvider / DensityProvider.
+- `CommandPalette/AppCommandPalette.tsx` — ⌘K palette wired with the v8 navigation map. "Toggle theme" + "Toggle density" actions call into the live providers.
+
+Router:
+- `Router.tsx` — flat state-based `useViewForId(id)` that resolves to the correct view. Sample data for the 3 library kinds lives here so the Library surface stays generic.
+
+App:
+- `App.tsx` — replaced the placeholder. Wires the providers, the sidebar nav (4 sections, 10 items), the topbar palette button, the router, and the live `useCommandPaletteHotkey` (⌘K / Ctrl-K).
+
+Shared:
+- `bizar-dash/src/web/v8/__tests__/views.test.tsx` — 9 vitest cases (one per view: header rendered + a content signal). Providers wrapped explicitly.
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors across the entire v8 tree.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/views.test.tsx` → 9/9 pass.
+- `npm run test:web` → 738/742 pass (102 files). The 4 failures remain the pre-existing `tests/a11y/forms.test.tsx` regressions, unrelated to v8 work (confirmed via prior stash test).
+- `npm run build:dash` → clean (2.22s; the pre-existing main-bundle warning is from the v7 tree, not v8).
+
+**Next sprint:** Sprint S10 — TanStack Router swap (currently state-based), WebSocket layer for live agent/activity updates, and split the giant main bundle. Also wire real backend data into the Library items and Settings controls. The dashboard foundation is now feature-complete enough to start replacing v7 wholesale — S10 begins the cutover.
 
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 

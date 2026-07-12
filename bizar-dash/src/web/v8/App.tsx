@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { AppShell } from './shell/AppShell.js';
 import { Topbar } from './shell/Topbar.js';
 import { Sidebar, type SidebarSection } from './shell/Sidebar.js';
-import { Stack } from './ui/primitives/Stack.js';
-import { Inline } from './ui/primitives/Inline.js';
 import { Box } from './ui/primitives/Box.js';
-import { CommandPalettePlaceholder } from './views/Tasks/CommandPalettePlaceholder.js';
+import { Inline } from './ui/primitives/Inline.js';
+import { useViewForId } from './views/Router.js';
+import { AppCommandPalette } from './views/CommandPalette/AppCommandPalette.js';
+import { useCommandPaletteHotkey } from './ui/navigation/CommandPalette.js';
+import { useTheme } from './ui/theme/useTheme.js';
+import { useDensity } from './ui/theme/useDensity.js';
 import {
   Activity,
   Bot,
@@ -22,17 +25,50 @@ import {
 /**
  * v8 root App component.
  *
- * Responsibilities:
- *   1. Wire the providers (Theme + Density) at the top
- *   2. Render the shell (topbar + sidebar + content)
- *   3. Switch the visible view based on `activeSectionId`
- *
- * Routing is intentionally a flat `useState` for F-043. Sprint S4 swaps
- * this for TanStack Router.
+ * Wires the providers (Theme + Density), the shell (Topbar + Sidebar),
+ * the view router (state-based, see Router.tsx), and the app-level
+ * ⌘K command palette.
  */
+
+function iconFor(id: string): LucideIcon {
+  switch (id) {
+    case 'overview':
+      return Layers;
+    case 'tasks':
+      return CheckSquare;
+    case 'goals':
+      return Target;
+    case 'agents':
+      return Bot;
+    case 'activity':
+      return Activity;
+    case 'memory':
+      return Cpu;
+    case 'skills':
+      return Goal;
+    case 'mcps':
+      return Library;
+    case 'hooks':
+      return Layers;
+    case 'settings':
+      return Settings;
+    default:
+      return Layers;
+  }
+}
+
 export function App(): JSX.Element {
-  const [activeId, setActiveId] = useState<string>('tasks');
+  const [activeId, setActiveId] = useState<string>('overview');
   const [paletteOpen, setPaletteOpen] = useState<boolean>(false);
+  const theme = useTheme();
+  const density = useDensity();
+
+  const [hotkeyOpen, setHotkeyOpen] = useCommandPaletteHotkey();
+  const effectivePaletteOpen = paletteOpen || hotkeyOpen;
+  const setEffectivePaletteOpen = (v: boolean): void => {
+    setPaletteOpen(v);
+    setHotkeyOpen(v);
+  };
 
   const sections: SidebarSection[] = [
     {
@@ -69,13 +105,28 @@ export function App(): JSX.Element {
     },
   ];
 
-  // Mark the active item across all sections.
   for (const section of sections) {
     for (const item of section.items) {
       item.active = item.id === activeId;
       item.href = `#${item.id}`;
     }
   }
+
+  const handleNavigate = (id: string): void => {
+    if (id === '__theme') {
+      const next = theme.mode === 'dark' ? 'light' : 'dark';
+      theme.setMode(next);
+      return;
+    }
+    if (id === '__density') {
+      const next = density.density === 'comfortable' ? 'compact' : 'comfortable';
+      density.setDensity(next);
+      return;
+    }
+    setActiveId(id);
+  };
+
+  const view = useViewForId(activeId);
 
   return (
     <AppShell
@@ -118,73 +169,14 @@ export function App(): JSX.Element {
           }
         />
       }
-      sidebar={
-        <InteractiveSidebar sections={sections} onSelect={setActiveId} />
-      }
+      sidebar={<Sidebar sections={sections} defaultSections={false} />}
     >
-      <ActiveView id={activeId} />
-
-      {paletteOpen && <CommandPalettePlaceholder onClose={() => setPaletteOpen(false)} />}
+      {view}
+      <AppCommandPalette
+        open={effectivePaletteOpen}
+        onOpenChange={setEffectivePaletteOpen}
+        onNavigate={handleNavigate}
+      />
     </AppShell>
   );
-}
-
-function InteractiveSidebar({
-  sections,
-  onSelect,
-}: {
-  sections: SidebarSection[];
-  onSelect: (id: string) => void;
-}): JSX.Element {
-  return <Sidebar sections={sections} defaultSections={false} />;
-}
-
-function ActiveView({ id }: { id: string }): JSX.Element {
-  return (
-    <Stack gap={4}>
-      <Box>
-        <strong>Active section: </strong>
-        <code style={{ fontFamily: 'var(--font-mono)' }}>{id}</code>
-      </Box>
-      <Box
-        style={{
-          padding: 'var(--space-6)',
-          background: 'var(--surface-1)',
-          border: '1px dashed var(--border)',
-          borderRadius: 'var(--radius)',
-          color: 'var(--fg-muted)',
-          fontSize: 'var(--fs-13)',
-        }}
-      >
-        View surface for <code style={{ fontFamily: 'var(--font-mono)' }}>{id}</code> ships in a later sprint.
-      </Box>
-    </Stack>
-  );
-}
-
-function iconFor(id: string): LucideIcon {
-  switch (id) {
-    case 'overview':
-      return Layers;
-    case 'tasks':
-      return CheckSquare;
-    case 'goals':
-      return Target;
-    case 'agents':
-      return Bot;
-    case 'activity':
-      return Activity;
-    case 'memory':
-      return Cpu;
-    case 'skills':
-      return Goal;
-    case 'mcps':
-      return Library;
-    case 'hooks':
-      return Layers;
-    case 'settings':
-      return Settings;
-    default:
-      return Layers;
-  }
 }
