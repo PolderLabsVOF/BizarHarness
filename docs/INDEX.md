@@ -152,6 +152,35 @@ the relevant topic doc below.
 - [docs/decisions/DEC-011-claude-code-migration.md](decisions/DEC-011-claude-code-migration.md) —
   the v6.3.0 Claude Code migration decision
 
+### Dashboard design (v7.0.0)
+
+- [docs/releases/v7.0.0.md](releases/v7.0.0.md) — full v7.0.0
+  release notes (F-040 design system + v6.5.0 carryover)
+- [docs/dashboard-ui-migration.md](dashboard-ui-migration.md) —
+  F-040 design-system migration guide for mod authors
+- [bizar-dash/src/web/ui/](../bizar-dash/src/web/ui/) — 42
+  components across 7 categories (controls, data, feedback,
+  layout, navigation, primitives, theme + tokens)
+- [bizar-dash/src/web/views/Overview.tsx](../bizar-dash/src/web/views/Overview.tsx),
+  [Agents.tsx](../bizar-dash/src/web/views/Agents.tsx),
+  [Tasks.tsx](../bizar-dash/src/web/views/Tasks.tsx) — the three
+  views rewritten on the new design system
+
+### Agents + History dashboard (v7.0.0)
+
+- [bizar-dash/src/server/routes/agents.mjs](../bizar-dash/src/server/routes/agents.mjs) —
+  11 `/api/agents/*` endpoints (list, stuck, hierarchy, status,
+  heartbeat, invoke, restart, …)
+- [bizar-dash/src/server/agents-store.mjs](../bizar-dash/src/server/agents-store.mjs) —
+  on-disk status persistence (`~/.config/bizar/agent-status.json`)
+  + WebSocket broadcast
+- [bizar-dash/src/server/routes/history.mjs](../bizar-dash/src/server/routes/history.mjs) —
+  `/api/history` aggregator
+- **Honest scope:** live hook-driven auto-feed (the agent-tool-detect
+  and session-end-cleanup hooks from PR #2) is **deferred to v7.1**.
+  Today, agents show "idle" until manually updated via
+  `POST /api/agents/:name/status`.
+
 ### Cline rewrite (v6.0.0, historical)
 
 - [docs/migration-guide.md](migration-guide.md) — also covers the
@@ -162,6 +191,10 @@ the relevant topic doc below.
 ### Release
 
 - [CHANGELOG.md](../CHANGELOG.md) — chronological changelog
+- [docs/releases/v7.0.0.md](releases/v7.0.0.md) — F-040 redesign
+  + v6.5.0 carryover
+- [docs/releases/v4.0.0.md](releases/v4.0.0.md) — package
+  consolidation
 - [docs/RELEASING.md](RELEASING.md) — release process
 - [.harness/traces/](../.harness/traces/) — runtime session traces
 
@@ -178,7 +211,7 @@ the relevant topic doc below.
 | Make targets | [Makefile](../Makefile) |
 | Tests | `bun test plugins/bizar` |
 | E2E | `bun run /tmp/bh-full-e2e.mjs` |
-| Latest release | [CHANGELOG.md](../CHANGELOG.md) (top) |
+| Latest release | [docs/releases/v7.0.0.md](releases/v7.0.0.md) |
 
 ## Update policy
 
