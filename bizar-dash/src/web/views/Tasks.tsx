@@ -119,12 +119,6 @@ const PRIORITY_BADGE: Record<PriorityKind, BadgeVariant> = {
   low: 'neutral',
 };
 
-const PRIORITY_ROW_CLASS: Record<PriorityKind, string> = {
-  high: 'tasks-wave3__row--priority-high',
-  normal: 'tasks-wave3__row--priority-normal',
-  low: 'tasks-wave3__row--priority-low',
-};
-
 function TasksInner({
   snapshot,
   refreshSnapshot,
@@ -442,7 +436,7 @@ function TaskRow({
     : 'normal';
   return (
     <div
-      className={cx('tasks-wave3__row', PRIORITY_ROW_CLASS[priority])}
+      className={cx('tasks-wave3__row')}
       data-task-id={task.id}
       data-tick={tick}
       role="button"

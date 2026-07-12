@@ -243,6 +243,28 @@
 }
 .field-clear:hover { color: var(--text-primary); background-color: var(--surface-3); }
 
+/* ===== Textarea (F-041) ===== */
+.field-textarea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.field-input-textarea {
+  /* Resets the single-line .field-input height so the textarea can grow. */
+  height: auto;
+  min-height: 80px;
+  resize: vertical;
+  font-family: var(--font-sans);
+  line-height: var(--leading-normal);
+}
+.field-size-sm .field-input-textarea { font-size: var(--text-sm); min-height: 60px; }
+.field-size-md .field-input-textarea { font-size: var(--text-base); min-height: 80px; }
+.field-size-lg .field-input-textarea { font-size: var(--text-md); min-height: 120px; }
+.field-hint {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
 /* ===== Select ===== */
 .select {
   display: inline-block;

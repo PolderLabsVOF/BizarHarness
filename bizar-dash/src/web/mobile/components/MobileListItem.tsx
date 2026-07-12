@@ -1,6 +1,6 @@
 // src/mobile/components/MobileListItem.tsx — reusable list row for mobile.
 import { type ComponentType } from 'react';
-import { cn } from '../../lib/utils';
+import { cx } from '../../ui/utils/cx';
 
 type Props = {
   icon?: ComponentType<{ size?: number }>;
@@ -30,7 +30,7 @@ export function MobileListItem({
   return (
     <Tag
       {...(onClick ? { type: 'button' as const } : {})}
-      className={cn('mobile-list-item', onClick && 'mobile-list-item-interactive', className)}
+      className={cx('mobile-list-item', onClick && 'mobile-list-item-interactive', className)}
       onClick={onClick}
     >
       {Icon && (
@@ -46,7 +46,7 @@ export function MobileListItem({
         {meta && <span className="mobile-list-meta">{meta}</span>}
       </div>
       {badge && (
-        <span className={cn('mobile-list-badge', badgeVariant !== 'default' && `badge-${badgeVariant}`)}>
+        <span className={cx('mobile-list-badge', badgeVariant !== 'default' && `badge-${badgeVariant}`)}>
           {badge}
         </span>
       )}

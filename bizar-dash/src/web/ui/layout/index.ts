@@ -25,6 +25,7 @@ export {
   type PanelVariant,
 } from './Panel';
 export { PanelHeader, type PanelHeaderProps } from './PanelHeader';
+export { ViewHeader, type ViewHeaderProps } from './ViewHeader';
 export { Tabs, type TabsProps, type TabDef } from './Tabs';
 export {
   Breadcrumbs,

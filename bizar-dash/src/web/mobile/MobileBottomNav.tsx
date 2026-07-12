@@ -1,6 +1,6 @@
 // src/mobile/MobileBottomNav.tsx — bottom tab bar for mobile.
 import type { LucideIcon } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cx } from '../ui/utils/cx';
 
 export type MobileTab = {
   id: string;
@@ -23,7 +23,7 @@ export function MobileBottomNav({ tabs, activeTab, onChange }: Props) {
           <button
             key={t.id}
             type="button"
-            className={cn('mobile-nav-btn', activeTab === t.id && 'mobile-nav-btn-active')}
+            className={cx('mobile-nav-btn', { 'mobile-nav-btn-active': activeTab === t.id })}
             onClick={() => onChange(t.id)}
             aria-label={t.label}
             aria-current={activeTab === t.id ? 'page' : undefined}

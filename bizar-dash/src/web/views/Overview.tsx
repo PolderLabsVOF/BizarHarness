@@ -66,6 +66,7 @@ import {
   Sparkline,
   BarChart,
   KeyValueList,
+  Textarea,
   IconButton,
   Button as UiButton,
   Badge,
@@ -968,23 +969,11 @@ function OverviewInner({
             }}
           >
             <Stack gap={3}>
-              <textarea
+              <Textarea
                 ref={inputRef}
                 disabled={submitting}
                 aria-label="Describe what you want Odin to do"
                 rows={4}
-                style={{
-                  width: '100%',
-                  resize: 'vertical',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-base)',
-                  lineHeight: 'var(--leading-normal)',
-                  padding: 'var(--space-3) var(--space-4)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--surface-1)',
-                  color: 'var(--text-primary)',
-                }}
                 placeholder="e.g. Implement user authentication with email + password, including registration, login, password reset, and integration tests. Use Bcrypt, JWT tokens, and the existing API style."
                 data-testid="overview-prompt-input"
               />
