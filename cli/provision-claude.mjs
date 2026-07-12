@@ -167,17 +167,37 @@ export async function buildSdk({ dryRun = false } = {}) {
   // PATH — especially when invoked from a globally npm-installed package
   // whose lifecycle scripts run with a minimal env. Without the absolute
   // path, `bun run build:sdk` shells out to `tsc`, finds no shim on PATH,
-  // and fails with `tsc: command not found`. Prefer the absolute path so
-  // we don't depend on PATH inheritance.
+  // and fails with `tsc: command not found`.
+  //
+  // Bun's bin dir contains only `bun` and `bunx` — NOT `tsc`. So even
+  // when bun runs `build:sdk` (which executes the `tsc` line from
+  // package.json), the child shell still needs `tsc` on PATH. The npm
+  // global bin dir (where `npm install -g typescript` lands the shim) is
+  // the typical source — resolve it via `npm root -g`'s parent and
+  // prepend both bun's bin and the npm global bin to the child PATH.
   const bunFromHome = join(process.env.HOME || '', '.bun', 'bin', 'bun');
   let cmd, args, childEnv;
   if (existsSync(bunFromHome)) {
     cmd = bunFromHome;
     args = ['run', 'build:sdk'];
-    // Make bun's bin dir visible to the child so its tsc shim resolves.
-    const bunBin = dirname(bunFromHome);
     const pathDelim = process.platform === 'win32' ? ';' : ':';
-    childEnv = { ...process.env, PATH: `${bunBin}${pathDelim}${process.env.PATH || ''}` };
+    const bunBin = dirname(bunFromHome);
+    let npmGlobalBin = '';
+    try {
+      const npmRootG = execSync('npm root -g', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      // npm root -g returns .../lib/node_modules — parent is .../lib, and
+      // the bin dir lives at .../bin. So walk up one and over.
+      npmGlobalBin = join(dirname(npmRootG), '..', 'bin');
+    } catch {
+      // npm not on PATH — fall back to the standard location.
+      npmGlobalBin = process.platform === 'win32'
+        ? join(process.env.APPDATA || '', 'npm')
+        : join(process.env.HOME || '', '.local', 'bin');
+    }
+    const pathParts = [bunBin];
+    if (npmGlobalBin && existsSync(npmGlobalBin)) pathParts.push(npmGlobalBin);
+    pathParts.push(process.env.PATH || '');
+    childEnv = { ...process.env, PATH: pathParts.join(pathDelim) };
   } else if (haveCmd('bun')) {
     cmd = 'bun';
     args = ['run', 'build:sdk'];
@@ -200,6 +220,81 @@ export async function buildSdk({ dryRun = false } = {}) {
   } catch (err) {
     const stderr = err.stderr ? err.stderr.toString().split('\n').slice(0, 5).join(' | ') : '(no stderr)';
     return { ok: false, message: `SDK build failed: ${stderr}` };
+  }
+}
+
+/**
+ * Build the dashboard SPA (Vite production bundle) so the Node server
+ * in `bizar-dash/src/server/server.mjs` can serve the React UI from
+ * `bizar-dash/dist/index.html` + `dist/assets/*`. Without this step,
+ * npm installs that don't ship a pre-built `dist/` (the published
+ * tarball excludes it because it is `.gitignore`'d) leave the
+ * dashboard serving 404s for every asset, and the page renders blank
+ * with errors like `can't access property 'useState', et is undefined`.
+ *
+ * v7.0.3 — `install.sh` + `bizar update` previously skipped the
+ * dashboard build entirely. Symptom: a fresh `bizar install` /
+ * `bizar update` overwrote the package's pre-existing `dist/` (if
+ * any) and the dashboard's first request returned a 404 for the
+ * bundle, followed by the React error above in the browser console.
+ *
+ * Same bun / npx resolution strategy as `buildSdk()`. The vite config
+ * reads the same `tsconfig.json` for type info, but the heavy lifting
+ * is `vite build` itself which uses esbuild internally, so no tsc
+ * dependency here.
+ *
+ * Idempotent: skips when `bizar-dash/dist/index.html` already exists.
+ * Non-fatal: returns `{ ok: false, message }` rather than throwing —
+ * the rest of the provision flow should still complete.
+ */
+export async function buildDash({ dryRun = false } = {}) {
+  const dashDir = join(REPO_ROOT, 'bizar-dash');
+  const distIndex = join(dashDir, 'dist', 'index.html');
+
+  if (!existsSync(join(dashDir, 'src', 'web', 'index.html'))) {
+    return { ok: true, skipped: true, message: `Dashboard src not found at ${join(dashDir, 'src', 'web', 'index.html')} — skipping build` };
+  }
+
+  if (existsSync(distIndex)) {
+    return { ok: true, skipped: true, message: `Dashboard dist already present — skipping build (delete ${join(dashDir, 'dist')} to force)` };
+  }
+
+  if (dryRun) {
+    return { ok: true, skipped: false, message: `would build dashboard at ${dashDir}` };
+  }
+
+  const bunFromHome = join(process.env.HOME || '', '.bun', 'bin', 'bun');
+  let cmd, args, childEnv;
+  if (existsSync(bunFromHome)) {
+    cmd = bunFromHome;
+    args = ['run', 'build:dash'];
+    const pathDelim = process.platform === 'win32' ? ';' : ':';
+    const bunBin = dirname(bunFromHome);
+    const pathParts = [bunBin, process.env.PATH || ''];
+    childEnv = { ...process.env, PATH: pathParts.join(pathDelim) };
+  } else if (haveCmd('bun')) {
+    cmd = 'bun';
+    args = ['run', 'build:dash'];
+    childEnv = process.env;
+  } else {
+    cmd = 'npx';
+    args = ['--yes', 'vite', 'build'];
+    childEnv = process.env;
+  }
+
+  try {
+    logInfo(`building dashboard with \`${cmd} ${args.join(' ')}\` (REPO_ROOT=${REPO_ROOT})`);
+    // `vite build` writes to the configured outDir (../../dist from
+    // src/web/). On a non-bun shell the cwd must be REPO_ROOT because
+    // the configured `root` is relative. Bun handles this either way.
+    execFileSync(cmd, args, { cwd: REPO_ROOT, stdio: 'pipe', timeout: 240_000, env: childEnv });
+    if (existsSync(distIndex)) {
+      return { ok: true, skipped: false, message: 'Dashboard built (dist/index.html present)' };
+    }
+    return { ok: false, message: `build completed but ${distIndex} still missing — check vite.config.ts outDir` };
+  } catch (err) {
+    const stderr = err.stderr ? err.stderr.toString().split('\n').slice(0, 5).join(' | ') : '(no stderr)';
+    return { ok: false, message: `Dashboard build failed: ${stderr}` };
   }
 }
 
@@ -891,6 +986,14 @@ export async function runProvision(opts = {}) {
   // the SDK ships as TS source only. See `buildSdk()` JSDoc for the
   // full story.
   await runStep('Building SDK',     () => buildSdk({ dryRun }));
+
+  // ── 4c. Build the dashboard SPA so dist/index.html exists. ───────────
+  // The Node server in `bizar-dash/src/server/server.mjs` serves the
+  // React UI from `bizar-dash/dist/`. The published npm tarball excludes
+  // `dist/` because it is `.gitignore`'d, so a fresh install must
+  // rebuild it. Skips when already present (idempotent). See
+  // `buildDash()` JSDoc for the v7.0.3 reason this step exists.
+  await runStep('Building dashboard', () => buildDash({ dryRun }));
 
   // ── 9. settings.json (MCP + hooks + permissions + env) ──────────────
   section('Writing settings.json');
