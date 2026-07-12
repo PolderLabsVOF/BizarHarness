@@ -277,3 +277,30 @@ export {
   type AgentActivityProps,
   type AgentActivityItem,
 } from './agents/AgentActivity.js';
+
+// ── activity (Sprint S7) ──────────────────────────────────────────────────
+
+export {
+  ActivityFeed,
+  type ActivityFeedProps,
+  type ActivityItem,
+  type ActivityTone,
+} from './activity/ActivityFeed.js';
+
+// ── memory (Sprint S7) ────────────────────────────────────────────────────
+
+export {
+  MemoryVault,
+  type MemoryVaultProps,
+  type MemoryEntry,
+  type MemoryScope,
+} from './memory/MemoryVault.js';
+
+// ── libraries (Sprint S7) ─────────────────────────────────────────────────
+
+export {
+  LibraryItem,
+  type LibraryItemProps,
+  type LibraryStatus,
+} from './libraries/LibraryItem.js';
+export { LibraryGrid, type LibraryGridProps } from './libraries/LibraryGrid.js';

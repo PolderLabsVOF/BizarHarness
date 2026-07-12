@@ -171,7 +171,29 @@ Shared:
 - `cd bizar-dash && npx vitest run src/web/v8/__tests__/goals.test.tsx src/web/v8/__tests__/agents.test.tsx` → 16/16 pass.
 - Full dash test pass: `npm run test:web` → 97 files pass, 1 file pre-existing failure (`tests/a11y/forms.test.tsx`, 4 cases — predates v8 work, unrelated to this commit per stash check).
 
-**Next sprint (S7 — Activity + Memory + Libraries):** ActivityFeed, MemoryVault (project/global memos), SkillLibrary, McpLibrary, HookLibrary. The "knowledge surfaces" — what the harness has learned, what it's running, and how those move.
+**Sprint S7 (Activity + Memory + Libraries) shipped in this commit:**
+
+4 components across the "knowledge surfaces" — what the harness has learned, what it's running, and how those move.
+
+Activity (`bizar-dash/src/web/v8/ui/activity/`):
+- `ActivityFeed.tsx` — vertical feed (the home view). `<ol>` semantic ordering. Each item: token-tinted icon chip + title (optional description) + tabular-numeric meta (relative time). Renders empty node when items is empty.
+
+Memory (`bizar-dash/src/web/v8/ui/memory/`):
+- `MemoryVault.tsx` — list of memos with Project/Global scope badge, content (3-line clamp), tags row, relative updatedAt. Click handler opens the memo detail.
+
+Libraries (`bizar-dash/src/web/v8/ui/libraries/`):
+- `LibraryItem.tsx` — generic inventory card used by Skill / MCP / Hook libraries. Name + slug (`<code>`), status badge (enabled/disabled/error), tone-tinted Power icon, description (2-line clamp), meta line, actions slot, hover state.
+- `LibraryGrid.tsx` — auto-fit responsive grid (CSS grid `repeat(auto-fill, minmax(min(100%, 320px), 1fr))`).
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 4 new components + types.
+- `bizar-dash/src/web/v8/__tests__/{activity,memory,libraries}.test.tsx` — 16 vitest cases.
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/activity.test.tsx src/web/v8/__tests__/memory.test.tsx src/web/v8/__tests__/libraries.test.tsx` → 16/16 pass.
+
+**Next sprint (S8 — Settings):** 16 sections per PLAN.md §Settings: General, Theme, Density, Density-rules, Command Palette, Keyboard, Notifications, Storage, Plugins, MCP Servers, Skills, Hooks, Activity, Memory, Privacy, Advanced. A `SettingsSection` shell + per-section option rows.
 
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
