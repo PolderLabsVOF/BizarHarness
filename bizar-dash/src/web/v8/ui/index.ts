@@ -207,3 +207,28 @@ export {
   type TableCellProps,
 } from './data/Table.js';
 export { Kbd, type KbdProps } from './data/Kbd.js';
+
+// ── navigation (Sprint S4) ────────────────────────────────────────────────
+
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  type TabsProps,
+  type TabsListProps,
+  type TabsTriggerProps,
+  type TabsVariant,
+} from './navigation/Tabs.js';
+export { NavLink, type NavLinkProps } from './navigation/NavLink.js';
+export { Pagination, type PaginationProps } from './navigation/Pagination.js';
+export {
+  CommandPalette,
+  CommandPaletteGroup,
+  CommandPaletteItem,
+  CommandPaletteSeparator,
+  useCommandPaletteHotkey,
+  type CommandPaletteProps,
+  type CommandPaletteGroupProps,
+  type CommandPaletteItemProps,
+} from './navigation/CommandPalette.js';

@@ -108,6 +108,26 @@ Shared:
 
 **Next sprint (S4 — Navigation + Command Palette):** Tabs, Breadcrumb, NavLink, Pagination, CommandPalette (cmdk), NavMenu, Section.
 
+**Sprint S4 (Navigation + Command Palette) shipped in this commit:**
+
+4 components in `bizar-dash/src/web/v8/ui/navigation/`:
+- `Tabs.tsx` — Radix-based content switcher with `underline` and `pill` variants; left/right arrow-key navigation.
+- `NavLink.tsx` — semantic navigation link with active-state styling via `aria-current="page"`. Optional leading icon + active accent bar (sidebar pattern).
+- `Pagination.tsx` — numbered pages with first/prev/next/last controls and ellipsis for long ranges. Configurable sibling count.
+- `CommandPalette.tsx` — global ⌘K palette built on `cmdk`. Exposes `CommandPalette`, `CommandPaletteGroup`, `CommandPaletteItem`, `CommandPaletteSeparator`, and the `useCommandPaletteHotkey` hook for keyboard wiring. Designed to render inside a Dialog overlay.
+
+Dependencies added: `@radix-ui/react-tabs`.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 4 navigation components + types.
+- `bizar-dash/src/web/v8/__tests__/navigation.test.tsx` — 9 vitest cases (Tabs content switch + active state, NavLink aria-current, Pagination page button + edges + ellipsis, CommandPalette filter + onSelect). Includes a `scrollIntoView` stub for jsdom (cmdk requires it for keyboard nav).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 78/78 pass (6 test files: cx, theme, controls, feedback, data, navigation).
+
+**Next sprint (S5 — Kanban centerpiece):** KanbanBoard, KanbanColumn, KanbanCard, KanbanCardCompact, KanbanDetail, KanbanQuickAdd, KanbanContextMenu. Right-click every card (DESIGN.md Rule #1).
+
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
 User-requested follow-up to F-040 (v7.0.0). Three problems:
