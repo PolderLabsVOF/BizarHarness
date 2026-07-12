@@ -11,37 +11,15 @@
 /* ── View layout ──────────────────────────────────────────────────────────── */
 
 .view-memory {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4, 16px);
-  padding: 16px 20px 32px;
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
 }
 
-.memory-tab .view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-/* ── Body grid (rail + main) ─────────────────────────────────────────────── */
-
-.memory-tab-body {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: var(--space-4, 16px);
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .memory-tab-body {
-    grid-template-columns: 1fr;
-  }
-}
+/* v7.0.4 — removed .memory-tab .view-header + .memory-tab-body +
+   @media (max-width: 900px) collapse: Memory.tsx now renders a
+   ui/layout ViewHeader + ui/primitives Grid for the rail/main
+   split, so the legacy selectors are dead. */
 
 /* ── Source rail ─────────────────────────────────────────────────────────── */
 
@@ -57,31 +35,48 @@
   top: 16px;
 }
 
+/* v7.0.4 — Source rail buttons read identical to .sidebar-tab (which
+   the main nav rail uses). Same hover, same active tone. Aligns the
+   Memory rail visually with the rest of the dashboard chrome. */
+
 .memory-source-button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 6px);
-  color: var(--text-dim, #b4bcd0);
+  border-radius: var(--radius, 8px);
+  color: var(--text-dim);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   text-align: left;
-  transition: background var(--motion-fast, 120ms), color var(--motion-fast, 120ms), border-color var(--motion-fast, 120ms);
+  width: 100%;
+  font-family: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background var(--motion-base, 200ms) var(--ease),
+    color var(--motion-base, 200ms) var(--ease),
+    border-color var(--motion-base, 200ms) var(--ease);
 }
 
 .memory-source-button:hover {
-  background: var(--bg-elev-2, #1a1f2b);
-  color: var(--text, #c9d1d9);
+  background: var(--bg-elev-2);
+  color: var(--text);
 }
 
 .memory-source-button-active {
-  background: var(--accent-bg, rgba(139, 92, 246, 0.12));
-  border-color: var(--accent-border, rgba(139, 92, 246, 0.4));
-  color: var(--accent, #8b5cf6);
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.memory-source-button-active:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 /* ── Main panel column ──────────────────────────────────────────────────── */

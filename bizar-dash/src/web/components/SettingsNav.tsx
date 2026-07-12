@@ -68,7 +68,12 @@ export type SettingsNavProps = {
 
 export function SettingsNav({ activeSection, onSectionChange, onExitSettings }: SettingsNavProps) {
   return (
-    <div className="settings-nav-root" aria-label="Settings sections">
+    // v7.0.4 — reuse the .sidebar-* shell classes so the Settings rail
+    // is visually identical to the main nav rail. The legacy .settings-nav-*
+    // wrapper classes were a near-duplicate of .sidebar-nav + .sidebar-section-*
+    // and produced a subtly different bg tone. With the shared classes, both
+    // rails read as one component.
+    <nav className="sidebar-nav" aria-label="Settings sections">
       {/* Back button */}
       <button
         type="button"
@@ -80,12 +85,12 @@ export function SettingsNav({ activeSection, onSectionChange, onExitSettings }: 
         <span className="sidebar-tab-label">Back</span>
       </button>
 
-      <div className="settings-nav-divider" aria-hidden="true" />
+      <div className="sidebar-section-divider" aria-hidden="true" />
 
       {/* Section groups */}
       {SECTION_GROUPS.map((group) => (
         <div key={group.label} className="settings-nav-group">
-          <div className="settings-nav-group-label">{group.label}</div>
+          <div className="sidebar-section-label">{group.label}</div>
           {group.sections.map((s) => {
             const Icon = s.icon;
             const active = activeSection === s.id;
@@ -107,6 +112,6 @@ export function SettingsNav({ activeSection, onSectionChange, onExitSettings }: 
           })}
         </div>
       ))}
-    </div>
+    </nav>
   );
 }

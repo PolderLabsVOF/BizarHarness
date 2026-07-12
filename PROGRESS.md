@@ -85,6 +85,49 @@ F-041 was scoped to (a) clean up design-system drift in the 5 high-traffic
 desktop views, and (b) bring the mobile shell + 4 matching mobile views up
 to the same standard with proper mobile-native affordances.
 
+### F-043 outcome (v7.0.4 dashboard consistency)
+
+User screenshot showed four visible defects after v7.0.3 install fix:
+(1) theme drift between legacy chrome tokens (`--bg` / `--accent-3`) and
+design-system tokens (`--surface-*` / `--accent`); (2) sidebar section
+dividers invisible, group labels dim; (3) SettingsNav using a custom
+styling parallel to main sidebar; (4) Memory page on legacy `.view-*`
+shell with mismatched surface tone; (5) BarChart bars barely visible in
+dark mode.
+
+**Fix shipped (single source of truth = tokens.css):**
+- `bizar-dash/src/web/styles/main.css` — legacy tokens now alias to
+  design-system tokens (`--bg: var(--surface-0)`, `--bg-elev: var(--surface-1)`,
+  `--accent: #3ecf8e` (literal to avoid circular var() resolve), etc.).
+  `.app` background + `.sidebar` + `.sidebar-tab-active` +
+  `.sidebar-section-divider` / `.sidebar-section-label` rewritten to
+  consume surface tokens.
+- `bizar-dash/src/web/components/Topbar.tsx` — localStorage-backed theme
+  toggle hoisted from `Overview.tsx`. `data-theme` persists across reloads.
+- `bizar-dash/src/web/components/SettingsNav.tsx` —
+  `.settings-nav-root` / `.settings-nav-divider` / `.settings-nav-group-label`
+  removed in favour of `.sidebar-section-divider` + `.sidebar-section-label`.
+  One chrome, two consumers.
+- `bizar-dash/src/web/views/Memory.tsx` — migrated from legacy
+  `.view view-memory memory-tab` shell to `<Box>` + `<ViewHeader>` + `<Grid>`
+  + `<Stack>` ui/primitives. Sub-panels keep their own shell until a
+  follow-up sprint per-component migrates them.
+- `bizar-dash/src/web/styles/memory.css` — `.memory-source-button`
+  re-styled to mirror `.sidebar-tab` exactly (same padding, radius,
+  colours, transitions).
+- `bizar-dash/src/web/ui/data/data.css` — `.bd-bar-chart__track` height
+  8 → 10px + `border: 1px solid var(--border-subtle)` so empty rows are
+  visible. `.bd-bar-chart__bar` gains `box-shadow: inset 0 -1px 0
+  rgba(0,0,0,0.18)` for definition.
+
+**Test gate:** typecheck clean. cli 109/109, sdk 294/294, ui 595/599.
+The 4 a11y failures (`tests/a11y/forms.test.tsx`) are pre-existing on
+master — confirmed by `git diff master -- bizar-dash/tests/a11y/forms.test.tsx`
+returning empty.
+
+**Branch:** `fix/dashboard-theme-sidebar-memory` → PR → merge → npm
+publish v7.0.4.
+
 **Foundations added (Stage 1):**
 - `src/web/ui/controls/Textarea.tsx` — new primitive. Forwarded ref,
   `inputSize` variant, optional `error` + `hint`. Tokens-only styling.
@@ -899,6 +942,10 @@ endpoint (handy when 9Router runs inside a container/tunnel).
 
 | Version             | Date       | Type   | Notes                                       |
 | ------------------- | ---------- | ------ | ------------------------------------------- |
+| **v7.0.4**          | 2026-07-12 | patch  | dashboard consistency: theme unification, sidebar sections, settings-nav share chrome, Memory page on ui/primitives, BarChart dark-mode visibility |
+| **v7.0.3**          | 2026-07-12 | patch  | install flow: build SDK + dashboard dist on fresh installs (PATH-resolved tsc, buildDash() step) |
+| **v7.0.2**          | 2026-07-11 | patch  | vite chunk fix (drop brittle manualChunks to break circular import) |
+| **v7.0.0**          | 2026-07-11 | major  | F-041 desktop consistency + mobile UI pass |
 | **v6.3.0**          | 2026-07-11 | major  | Claude Code migration (plugin → MCP, skills, hooks) |
 | **v6.1.0**          | 2026-07-09 | dev    | Cline-exclusive; superseded by v6.3.0 Claude Code migration |
 | **v6.0.2**          | 2026-07-09 | patch  | fix dashboard-presence check in legacy installer |
