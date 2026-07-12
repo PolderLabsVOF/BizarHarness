@@ -9,9 +9,10 @@
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │ Layer 1: UI (bizar-dash/)                                          │
-│   - React + TypeScript dashboard (17 tabs)                        │
-│   - Express server (HTTP + WS)                                     │
+│   - React + TypeScript dashboard (18 tabs, F-040 redesign)        │
+│   - Express server (HTTP + WS), 46 route modules                   │
 │   - Claude Code Agent SDK integration (in-process)                │
+│   - Custom `ui/` design system (42 components, F-040)              │
 │   - Harness engineering dashboard view                             │
 │   - Kanban board (5 columns + backlog)                             │
 └────────────────────────────────────────────────────────────────────┘
@@ -21,7 +22,7 @@
 │           `.claude/agents/`)                                        │
 │   - Claude Code skill entries (previously plugins/bizar/)          │
 │   - MCP tool registration via @anthropic-ai/claude-agent-sdk      │
-│   - 19 tools + 4 hooks + 1 approval gate                          │
+│   - 23 tools + 7 hooks + 1 approval gate                          │
 │   - AgentSdkRuntime wrapper (file: clineruntime.ts, back-compat)  │
 │   - In-process memory vault                                       │
 │   - DANGEROUS_PATTERNS approval gate                               │
@@ -138,22 +139,29 @@
 - `src/server/memory-store.mjs` — full-featured memory service
   (LightRAG, git sync, secret scanning, schema validation).
 
-**Web (17 views)**
+**Web (18 tabs, F-040 design system)**
 
-`Overview`, `Chat`, `Agents`, `Artifacts` (glyphs), `Tasks`,
-`Activity`, `BackgroundAgents`, `Skills`, `Memory`, `Mods`,
-`Schedules`, `History`, `MiniMaxUsage`, `Eval`, `Doctor`,
-`Harness`, `Settings`.
+`Overview`, `Chat`, `Agents`, `Glyphs`, `Tasks`, `Activity`,
+`Active`, `Skills`, `Memory`, `Mods`, `Schedules`, `History`,
+`Usage`, `Eval`, `Doctor`, `Harness`, `Goals`, `Settings`.
 
 Key views:
 
 - `views/Harness.tsx` — 73/73 audit score, subsystem status, make
   targets, docs pointers. (v6.0.0)
-- `views/Tasks.tsx` — 5-column kanban + team badge.
+- `views/Tasks.tsx` — 5-column kanban + team badge (rewritten
+  on F-040 design system in v7.0.0).
+- `views/Agents.tsx` — agent roster, hierarchy, status, tags,
+  invoke/restart (rewritten on F-040 design system in v7.0.0;
+  live data feed deferred to v7.1).
 - `views/BackgroundAgents.tsx` — live BG agent viewer (5s poll
   + WebSocket events).
+- `views/GoalPlanner.tsx` — F-036 plain-English goals → A* plan
+  (v6.4.0).
 - `views/Chat.tsx` — 3-column chat (rail / thread / info).
 - `views/Memory.tsx` — memory subsystem (4 sources + config).
+- `bizar-dash/src/web/ui/` — F-040 design system (42 components,
+  tokens, theme provider; v7.0.0).
 
 ## Inter-component contracts
 

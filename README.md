@@ -8,7 +8,7 @@
 Claude Code Agent SDK in-process — no subprocess, no port, no serve-info file.
 
 [![npm](https://img.shields.io/npm/v/@polderlabs/bizar?color=cb3837)](https://www.npmjs.com/package/@polderlabs/bizar)
-[![v6.3.0](https://img.shields.io/badge/v6.3.0-Claude%20Code-6366f1)](https://github.com/DrB0rk/BizarHarness)
+[![v7.0.0](https://img.shields.io/badge/v7.0.0-F--040%20design-6366f1)](https://github.com/DrB0rk/BizarHarness)
 [![Claude Code](https://img.shields.io/badge/claude--code-%E2%9C%93-6366f1)](https://docs.claude.com/claude-code)
 [![Audit 73/73](https://img.shields.io/badge/audit-73%2F73-10b981)](https://github.com/DrB0rk/BizarHarness)
 [![Harness](https://img.shields.io/badge/harness-L01--L12-8A2BE2)](docs/INDEX.md)
@@ -26,50 +26,58 @@ Claude Code Agent SDK in-process — no subprocess, no port, no serve-info file.
 
 ## Table of Contents
 
-- [What's new in v6.3.0](#-whats-new-in-v630)
+- [What's new in v7.0.0](#-whats-new-in-v700)
 - [Quick start](#-quick-start)
 - [The Pantheon](#-the-pantheon)
 - [Architecture](#-architecture)
-- [Tools (22 total)](#-tools-22-total)
-- [Hooks (4 + 2 safety)](#-hooks-4--2-safety)
+- [Tools (23 total)](#-tools-23-total)
+- [Hooks (7 total)](#-hooks-7-total)
 - [Safety — DANGEROUS_PATTERNS](#-safety--dangerous-patterns)
 - [Skill Curator — closed learning loop](#-skill-curator--closed-learning-loop)
 - [Knowledge Graph Tools](#-knowledge-graph-tools)
+- [Agents and history dashboard](#-agents-and-history-dashboard)
 - [Harness engineering audit (73/73)](#-harness-engineering-audit-7373)
 - [Documentation](#-documentation)
-- [Migration from v6.2.x (Cline era)](#-migration-from-v62x-cline-era)
+- [Migration from v6.3.x](#-migration-from-v63x)
 - [Historical: OpenCode → Cline (v5.6/v6.0)](#-historical-opencode--cline-v56v60)
 - [Contributing](#-contributing)
 - [License](#-license)
 
 ---
 
-## ✨ What's new in v6.3.0
+## ✨ What's new in v7.0.0
 
-v6.3.0 is a **complete migration** from Cline to Claude Code. The plugin
-framework that previously lived as a Cline `AgentPlugin` is now expressed
-as Claude Code skills + MCP servers + `.claude/agents/` definitions.
-Claude Code's Agent SDK (`@anthropic-ai/claude-agent-sdk`) is embedded
-in-process — no subprocess spawn, no port, no password, no serve-info
-file. Hooks execute in Claude Code's event loop; mistake recovery uses
-the Agent SDK's `onConsecutiveMistakeLimitReached`; subagent dispatch
-uses the Claude Code `Agent` tool.
+v7.0.0 lands **F-040 — the dashboard redesign** — on top of the
+v6.3.0 Claude Code migration. The dashboard ships a custom `ui/`
+design system (42 components across controls, data, feedback,
+layout, navigation, primitives, theme + tokens) and rewrites
+the Overview, Agents, and Tasks views on top of it. v7.0.0 also
+carries the v6.5.0 work (F-037 migration cleanup, F-038
+federation skeleton, F-039 Byzantine consensus) that had been
+prepared but not published.
 
 | Feature | Description |
 | --- | --- |
-| **Claude Code-native hooks** | `PreToolUse` / `PostToolUse` / `UserPromptSubmit` / `SessionStart` / `SessionEnd` — typed payloads, idiomatic Claude Code shape. |
-| **22 tools, 4 hooks** | All use Claude Code `MCP tool registration`. 0 compat shims. |
-| **Skills + MCP** | `.claude/skills/<name>/SKILL.md` (auto-loaded) + `.claude/mcp.json` (Semble, Bizar memory, CubeSandbox). Replaces the previous "plugin" surface. |
-| **Agent dispatch** | Subagents dispatched via the Claude Code `Agent` tool with `run_in_background: true`. The previous `bizar_spawn_team` tool is now `Agent` with `agent_team: "<name>"`. |
-| **Knowledge graph tools** | `bizar_graph_query/path/explain` over `.bizar/graph/graph.json` (still file-based; unchanged). |
-| **DANGEROUS_PATTERNS gate** | 36 patterns (25 deny + 11 require-approval) checked in `PreToolUse`. |
-| **Skill curator** | Per-skill use/failure tracking. The differentiator (1/106 projects). |
-| **Pre-compaction memory flush** | Durable snapshot before summarizer. Closes the durability gap. |
-| **In-process memory vault** | Tools read/write `~/.bizar_memory/` directly. No dashboard needed. |
-| **Harness audit 73/73** | Full L01–L12 compliance. `make check-arch` enforces 7 rules. |
-| **Removed: plugin layer** | The `plugins/bizar/` plugin entry is now a Claude Code MCP server — skills do the rest. v6.0.0–v6.2.5. |
+| **`bizar-dash/src/web/ui/` design system** | 42 components (Button, Checkbox, Select, Slider, Toggle, DataTable, BarChart, Sparkline, StatTile, Tooltip, Toast, Dialog, AppShell, Sidebar, Topbar, CommandPalette, Box, Stack, Grid, + 23 more), tokenized via `ui/styles/tokens.css`, themeable via `ui/theme/ThemeProvider.tsx`. |
+| **Three view rewrites** | `Overview`, `Agents`, `Tasks` rebuilt on the design system. 123 dashboard test files (41 component tests + 82 view/integration tests). |
+| **18 dashboard tabs** | Overview, Chat, Agents, Glyphs, Tasks, Activity, Active, Skills, Memory, Mods, Schedules, History, Usage, Eval, Doctor, Harness, Goals, Settings. |
+| **Federation skeleton (F-038)** | 8 modules under `packages/sdk/src/federation/` — HMAC+nonce envelopes, PII pipeline, TrustEvaluator, PolicyEngine, AuditService, FederationBudget. Exposed as the `federation_status` MCP tool. |
+| **Byzantine consensus (F-039)** | 4 modules under `packages/sdk/src/consensus/` — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply. Exposed as the `consensus_propose` MCP tool. |
+| **23 MCP tools, 7 hooks** | All Claude Code `MCP tool registration`; hooks cover bash + edit/write pre+post, session lifecycle, prompt tagging, and worker suggestion. |
+| **Agents + History dashboard** | 11 `/api/agents/*` endpoints with on-disk status persistence; `/api/history` aggregator over activity log + tasks + plans + projects. See the [honest scope note](#-agents--history-dashboard) below. |
 
-See the full [CHANGELOG.md](CHANGELOG.md) for v6.0.0 → v6.3.0 history.
+> **Honest scope note.** The Agents and History *infrastructure*
+> is fully wired (REST, store, WebSocket broadcast, 11 endpoints).
+> The *hook-driven auto-feed* — hooks that POST to
+> `/api/agents/:name/status` as Claude Code tools fire — is **not**
+> wired in v7.0.0. That was in PR #2, deferred to a follow-up.
+> Today the Agents view surfaces data from manual `status` POSTs
+> and CLI operations; running-agent detection lights up once the
+> hook layer lands (target v7.1).
+
+See the full [CHANGELOG.md](CHANGELOG.md) and
+[docs/releases/v7.0.0.md](docs/releases/v7.0.0.md) for what
+landed, what's wired, and what's still to come.
 
 ---
 
@@ -80,7 +88,7 @@ Prerequisites: **Claude Code CLI** (`claude` on `PATH`; install via
 [the Claude Code install docs](https://docs.claude.com/claude-code/getting-started)).
 
 ```bash
-# Install (stable v6.3.0)
+# Install (stable v7.0.0)
 npm install @polderlabs/bizar
 
 # Or try the latest beta
@@ -137,19 +145,20 @@ the full agent roster and routing rules.
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │ Layer 1: UI (bizar-dash/)                                          │
-│   - React + TypeScript dashboard (17 tabs)                        │
+│   - React + TypeScript dashboard (18 tabs)                        │
 │   - Express server (HTTP + WS)                                     │
 │   - In-process Claude Code Agent SDK (no daemon / no subprocess)   │
 │   - Harness engineering dashboard view                             │
 │   - Kanban board (5 columns + backlog)                             │
+│   - Custom `ui/` design system (42 components, F-040)              │
 └────────────────────────────────────────────────────────────────────┘
                               ↕ HTTP REST + WebSocket
 ┌────────────────────────────────────────────────────────────────────┐
 │ Layer 0: Core (.claude/skills + .claude/agents + plugins/bizar/)   │
 │   - Skills (SKILL.md + bundled scripts)                             │
 │   - Agents (Odin, Frigg, Vör, Mimir, Heimdall, ...)                 │
-│   - Bizar MCP server (plugins/bizar/, 19 tools)                     │
-│   - 4 hooks (PreToolUse, PostToolUse, ...)                         │
+│   - Bizar MCP server (plugins/bizar/, 23 tools)                     │
+│   - 7 hooks (PreToolUse × 2, PostToolUse, SessionStart/End, ...)    │
 │   - In-process memory vault                                         │
 │   - DANGEROUS_PATTERNS approval gate                                │
 │   - Skill curator (closed learning loop)                            │
@@ -171,33 +180,39 @@ model, module map, and inter-component contracts.
 
 ---
 
-## 🛠 Tools (22 total)
+## 🛠 Tools (23 total)
 
-Bizar's 22 tools are exposed as a Claude Code MCP server (replacing
+Bizar's 23 tools are exposed as a Claude Code MCP server (replacing
 Cline's `createTool` shape with the Claude Code MCP `tool`
 registration shape):
 
 | Category | Count | Tools |
 | --- | --- | --- |
-| **Background agents** | 9 | `bizar_spawn_background`, `bizar_status`, `bizar_collect`, `bizar_kill`, `bizar_pause`, `bizar_resume`, `bizar_send_message`, `bizar_get_comments`, `bizar_report_progress` |
-| **Memory** | 4 | `bizar_memory_list`, `bizar_memory_read`, `bizar_memory_write`, `bizar_memory_search` |
-| **Plan / Glyphs** | 4 | `bizar_plan_action`, `bizar_open_kb`, `bizar_wait_for_feedback`, `bizar_read_glyph_feedback` |
-| **Agent teams** | 2 | `bizar_spawn_team`, `bizar_team_status` |
-| **Knowledge graph** | 3 | `bizar_graph_query`, `bizar_graph_path`, `bizar_graph_explain` |
-| **Total** | **22** | All registered as MCP tools via the Claude Code MCP SDK |
+| **Memory** | 4 | `memory_read`, `memory_write`, `memory_list`, `memory_search` |
+| **Plan / Glyphs** | 2 | `plan_action`, `open_kb` |
+| **Loop control** | 4 | `loop_list`, `loop_status`, `loop_start`, `loop_stop` |
+| **Graph / Knowledge** | 3 | `graph_query`, `graph_path`, `graph_explain` |
+| **Agents** | 3 | `agent_spawn`, `agent_list`, `agent_terminate` |
+| **Swarm + routing** | 3 | `swarm_init`, `model_route`, `agent_route` |
+| **Hooks + safety** | 2 | `hooks_route`, `danger_check` |
+| **Distill + consensus + federation** | 2 | `memory_distill`, `consensus_propose`, `federation_status` |
+| **Total** | **23** | All registered as MCP tools via the Claude Code MCP SDK |
 
 ---
 
-## 🪝 Hooks (4 + 2 safety)
+## 🪝 Hooks (7 total)
 
 Claude Code-native hooks (typed event payloads, idiomatic shape):
 
 | Hook | Purpose |
 | --- | --- |
-| `PreToolUse` | Loop guard + **DANGEROUS_PATTERNS gate** |
-| `PostToolUse` | Per-tool-call log to `LogWriter` |
-| `UserPromptSubmit` | **Pre-compaction memory flush** (writes snapshot to vault) |
-| `SessionStart` / `SessionEnd` | `message-added` (slash commands) + `run-finished`/`run-failed` (memory write) |
+| `pretooluse-bash` | Loop guard + **DANGEROUS_PATTERNS gate** (36 patterns) |
+| `pretooluse-editwrite` | Edit/write pre-flight checks (loop guard, paths) |
+| `posttooluse-editwrite` | Per-edit/write audit log entry |
+| `sessionstart-prime` | Slash command interception + memory prime |
+| `sessionend-recall` | Session-end memory write |
+| `userpromptsubmit-tag` | Prompt tagging + worker suggestion trigger |
+| `worker-suggest` (F-034) | Bizar background-worker dispatch based on prompt text |
 
 | Safety component | Purpose |
 | --- | --- |
@@ -280,9 +295,61 @@ See [docs/graph-tools.md](docs/graph-tools.md) for the full reference.
 
 ---
 
+## 🤖 Agents and history dashboard
+
+v7.0.0 ships the Agents and History surfaces on the new design
+system. The full data plane:
+
+**Server side (fully wired in v7.0.0):**
+
+- **11 `/api/agents/*` endpoints** under `bizar-dash/src/server/routes/agents.mjs` —
+  list, get, create, update, delete, plus `stuck`, `hierarchy`,
+  `invoke`, `status`, `heartbeat`, `restart`.
+- **On-disk status persistence** in `agents-store.mjs` —
+  `~/.config/bizar/agent-status.json` survives restarts.
+- **WebSocket broadcast** on every agent mutation
+  (`agents:change`).
+- **Stuck detection** + **13-agent hierarchy** (Odin →
+  Tyr/Thor/Hermod/Baldr/Mimir → Heimdall/Frigg/Vor; Forseti as
+  auditor peer; Vidarr fallback; Quick standalone).
+- **`/api/history`** aggregator — joins `activity-log` + tasks +
+  plans + projects with `?since=<iso>` filtering and a 2,000-event
+  cap.
+
+**UI side (fully wired in v7.0.0):**
+
+- **`Agents.tsx`** view (rewritten on F-040 design system) reads
+  from `/api/agents`, shows status, tags, category, hierarchy,
+  stuck indicators, modals for invoke/restart/delete.
+- **`History.tsx`** view reads `/api/history` with timeline
+  rendering.
+
+**Live data feed (deferred to v7.1 — was in PR #2):**
+
+- Hook-driven status updates as Claude Code tools fire — no hook
+  currently POSTs to `/api/agents/:name/status`. Agents show
+  "idle" until manually updated.
+- Session-end cleanup of stuck states — no hook flips
+  stuck→idle on session end.
+
+To push status updates from anywhere today (CLI, scripts, other
+hooks), POST to `/api/agents/:name/status`:
+
+```sh
+curl -X POST http://localhost:7842/api/agents/odin/status \
+  -H 'content-type: application/json' \
+  -d '{"status":"working","currentTaskId":"F-040"}'
+```
+
+See [docs/releases/v7.0.0.md](docs/releases/v7.0.0.md) for the
+release notes and [docs/dashboard-ui-migration.md](docs/dashboard-ui-migration.md)
+for the F-040 design-system migration guide.
+
+---
+
 ## 🛡 Harness engineering audit (73/73)
 
-v6.3.0 passes the full L01–L12 audit at **73/73 = 100%**:
+v7.0.0 passes the full L01–L12 audit at **73/73 = 100%**:
 
 | Subsystem | Score |
 | --- | --- |
@@ -293,7 +360,7 @@ v6.3.0 passes the full L01–L12 audit at **73/73 = 100%**:
 | 5. Feedback | 7/7 (`make check/test/e2e/clean-check/arch/vcr/session-*`) |
 | 6. L05 Cross-session | 6/6 (Current State + clock-in/out + context anxiety) |
 | 7. L03 System of record | 4/4 (ACID: Durability, Consistency, Atomicity, Proximity) |
-| 8. L07 WIP=1 + VCR | 3/3 (WIP=1 + `make vcr` + VCR 31/31 = 1.0) |
+| 8. L07 WIP=1 + VCR | 3/3 (WIP=1 + `make vcr` + VCR 39/39 = 1.0) |
 | 9. L08 Feature list | 6/6 (evidence + verify-feature + granularity + state machine) |
 | 10. L09 DoD | 5/5 (3-layer verification + runtime signals + repair instructions) |
 | 11. L10 E2E + Arch | 8/8 (`make e2e` + `make check-arch` + 7 arch rules + E2E requirement) |
@@ -334,7 +401,18 @@ See [PROGRESS.md](PROGRESS.md) § Current State and the
 
 ---
 
-## 🔄 Migration from v6.2.x (Cline era)
+## 🔄 Migration from v6.3.x
+
+Upgrading from v6.3.x? The Claude Code migration story is unchanged
+(in-process Agent SDK, MCP tool surface, hook event bag). v7.0.0
+adds the dashboard redesign without changing any plugin surface,
+so existing installations work — the installer just needs
+re-running to pick up the new dashboard assets:
+
+```sh
+npm install -g @polderlabs/bizar@latest
+./install.sh
+```
 
 Upgrading from a Cline-era BizarHarness (v6.0.0 → v6.2.x)? See
 [docs/migration-guide.md](docs/migration-guide.md) for:
