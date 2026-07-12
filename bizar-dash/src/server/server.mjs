@@ -79,7 +79,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // server.mjs lives at src/server/ — dist/ is at the package root
 const DIST_DIR = join(__dirname, '..', '..', 'dist');
 const WS_BACKPRESSURE_LIMIT_BYTES = 1024 * 1024;
-const MOBILE_UA_RE = /Android.+Mobile|iPhone|iPod|Windows Phone|webOS|BlackBerry|Opera Mini|IEMobile/i;
 
 let currentBroadcast = () => {};
 
@@ -111,30 +110,6 @@ export function getV2Auth() {
     password: v2Auth.password,
     file: v2Auth.file,
   };
-}
-
-function shouldRedirectToMobile(req) {
-  if (req.method !== 'GET') return false;
-  if (req.path !== '/') return false;
-  if (req.query?.desktop === '1') return false;
-  const accept = req.headers.accept || '';
-  if (typeof accept === 'string' && !accept.includes('text/html')) return false;
-  const ua = req.headers['user-agent'] || '';
-  return typeof ua === 'string' && MOBILE_UA_RE.test(ua);
-}
-
-function mobileRedirectTarget(req) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(req.query || {})) {
-    if (key === 'desktop') continue;
-    if (Array.isArray(value)) {
-      for (const item of value) params.append(key, String(item));
-    } else if (value != null) {
-      params.set(key, String(value));
-    }
-  }
-  const qs = params.toString();
-  return qs ? `/m?${qs}` : '/m';
 }
 
 /**
@@ -647,43 +622,12 @@ export async function createServer({
         '/assets',
         express.static(assetsDir, { maxAge: '1y', immutable: true, index: false }),
       );
-      // v3.23.0 — Serve the mobile CSS at a stable /mobile.css URL so the
-      // desktop index.html can link to it without needing to know the hash.
-      // MobileApp renders the mobile shell; without its CSS the user sees
-      // unformatted HTML. The actual file is named mobile-<hash>.css; we
-      // resolve it at startup so the URL is stable.
-      try {
-        const mobileCss = readdirSync(assetsDir).find((f) => /^mobile-.*\.css$/.test(f));
-        if (mobileCss) {
-          app.get('/mobile.css', (_req, res) => {
-            res.setHeader('Cache-Control', 'no-cache');
-            res.sendFile(join(assetsDir, mobileCss));
-          });
-        }
-      } catch { /* ignore — mobile.css won't be served, fine */ }
     }
-    app.get('/', (req, res, next) => {
-      if (!shouldRedirectToMobile(req)) {
-        next();
-        return;
-      }
-      res.redirect(302, mobileRedirectTarget(req));
-    });
-    // v3.5.0 — Mobile dashboard at /m
-    app.get('/m', (_req, res) => {
-      res.sendFile(join(DIST_DIR, 'mobile.html'));
-    });
-    // SPA fallback for /m/* — but ONLY for HTML navigation requests
-    // The negative lookahead (?!assets/) excludes asset paths so they fall
-    // through to the static /assets/* handler above
-    app.get(/^\/m\/(?!assets\/)/, (_req, res) => {
-      res.sendFile(join(DIST_DIR, 'mobile.html'));
-    });
     app.use(
       express.static(DIST_DIR, {
         extensions: ['html'],
         setHeaders: (res, filePath) => {
-          if (filePath.endsWith('index.html') || filePath.endsWith('mobile.html')) {
+          if (filePath.endsWith('index.html')) {
             res.setHeader('Cache-Control', 'no-cache');
           }
         },

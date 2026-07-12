@@ -4,6 +4,244 @@
 > right now. Updated at every clock-in AND clock-out. New sessions start
 > by reading this file before touching any code.
 
+## In Progress — F-043 v8 Dashboard Foundation (Sprint S1)
+
+User-requested full dashboard rewrite. v7 dashboard (`bizar-dash/src/web/{ui,views,components,hooks,locales,mobile,styles,App.tsx,main.tsx}`) is preserved untouched while the v8 tree builds in parallel at `bizar-dash/src/web/v8/`. The rewrite will replace v7 wholesale once Sprint S9 verification ships.
+
+**Design contracts** (committed in this branch, worktree-v8-dashboard-rewrite-plan):
+- `bizar-dash/DESIGN.md` — 14-section design system following Google's design.md standard (principles, tokens, typography, layout, components, interaction patterns, banned tropes).
+- `bizar-dash/PLAN.md` — 17-section implementation plan (17 ADRs, 10-sprint roadmap F-042..F-051, ~28 working days).
+- `bizar-dash/GLYPH.md` — ASCII visual rendering of the v8 design (B mark, shell layout, context menu, command palette, component tree, route tree, token system, sprint roadmap).
+
+**Sprint S1 (Foundation) shipped in this commit:**
+- `bizar-dash/src/web/v8/ui/styles/{tokens,reset,globals}.css` — full OKLch token system (light + dark + system) per DESIGN.md §3.
+- `bizar-dash/src/web/v8/ui/primitives/{Box,Stack,Inline,Cluster,Grid,Center,Separator,ScrollArea,Portal,VisuallyHidden}.tsx` — 10 layout & a11y primitives.
+- `bizar-dash/src/web/v8/ui/utils/cx.ts` — `clsx + tailwind-merge` wrapper.
+- `bizar-dash/src/web/v8/ui/theme/{ThemeProvider,DensityProvider,ThemeToggle,useTheme,useDensity}.{tsx,ts}` — light/dark/system theme + comfortable/compact density with localStorage persistence.
+- `bizar-dash/src/web/v8/shell/{AppShell,Topbar,Sidebar,StatusBar}.tsx` — the v8 layout skeleton (topbar 56px + collapsible 260px sidebar + main content area).
+- `bizar-dash/src/web/v8/{App,main}.tsx` — entry that wires ThemeProvider + DensityProvider + AppShell.
+- `bizar-dash/src/web/v8/views/Tasks/{TasksKanbanPlaceholder,CommandPalettePlaceholder}.tsx` — S1 stand-ins proving the shell renders.
+- `bizar-dash/src/web/v8/__tests__/{cx,theme.test.tsx}` — 14 vitest cases (cx semantics, ThemeProvider/DensityProvider cycles, localStorage persistence, data-attribute writes, hook-without-provider throws).
+
+**Branch:** `worktree-v8-dashboard-rewrite-plan` (worktree at `.claude/worktrees/v8-dashboard-rewrite-plan`).
+
+**Dependencies added** to `package.json`: `@dnd-kit/*`, `@radix-ui/react-*` (12 primitives), `@tanstack/react-{query,router,table,virtual}`, `clsx`, `cmdk`, `date-fns`, `react-hook-form`, `recharts`, `sonner`, `tailwind-merge`, `zustand`.
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npm test` → 412/412 pass (18 vitest files / 294 vitest cases + 118 node --test cases). The 4 v5.3.0-era `tests/a11y/forms.test.tsx` failures noted in v7.0.0 PROGRESS are still pre-existing on master.
+- `npx vite build` → clean (existing v7 main bundle unaffected; v8 entry is wired in Sprint S0).
+
+**Next sprint (S2 — Controls + Feedback):** Button + Input + Select + Modal + Toast + Tooltip. The 36 components in §8 of DESIGN.md.
+
+**Sprint S2 (Controls + Feedback) shipped in this commit:**
+
+22 components across the controls + feedback layers, all token-driven and built on Radix where a11y primitives matter.
+
+Controls (`bizar-dash/src/web/v8/ui/controls/`):
+- `Button.tsx` — variants (primary/secondary/ghost/danger/outline) × sizes (sm/md/lg/icon) + loading state + `asChild` via Radix Slot.
+- `IconButton.tsx` — square icon-only button; required `aria-label`; mirrors Button variants; `active` state.
+- `ButtonGroup.tsx` — attached segmented control (single bordered container).
+- `Input.tsx` — variants (default/filled/flushed) × sizes; leftAddon/rightAddon slots; password reveal toggle.
+- `Textarea.tsx` — autoResize option + min/max rows.
+- `Checkbox.tsx` — Radix-based with indeterminate state (Minus icon).
+- `Switch.tsx` — Radix-based, animated thumb.
+- `Toggle.tsx` + `ToggleGroup.tsx` — single + segmented group (`single` | `multiple`).
+- `RadioGroup.tsx` — Radix with optional label per item.
+- `Select.tsx` — full Radix Select surface (Trigger/Content/Item/Group/Label/Separator/ScrollUpArrow/ScrollDownArrow).
+- `Slider.tsx` — Radix single + range with track/range/thumb styling.
+- `Field.tsx` — id/label/hint/error wrapper with aria-describedby wiring.
+- `Form.tsx` — form wrapper with Submit helper.
+
+Feedback (`bizar-dash/src/web/v8/ui/feedback/`):
+- `Dialog.tsx` — Radix Dialog + AlertDialog variants; sizes sm/md/lg/full; focus trap + escape; overlay + content fade-in animations.
+- `Tooltip.tsx` — Radix Tooltip + TooltipProvider; `shortcut` prop renders kbd inside the bubble.
+- `Popover.tsx` — Radix Popover with Trigger/Content/Anchor/Close.
+- `Toast.tsx` — Sonner wrapper with `Toaster` + `toast` (success/error/info/warning/message/dismiss).
+- `Alert.tsx` — tones info/success/warning/danger; title + description + action slot; overridable icon.
+- `Banner.tsx` — top-of-page announcement with tone + action slot.
+- `Skeleton.tsx` + `SkeletonText` — pulse animation via `v8-skeleton` class (pulse keyframe in globals.css).
+- `Spinner.tsx` — discouraged per DESIGN.md §10; kept for non-skeleton contexts (command palette loading).
+- `EmptyState.tsx` — icon + title + description + action.
+- `DropdownMenu.tsx` — full Radix DropdownMenu (Trigger/Content/Item/CheckboxItem/RadioGroup/Sub/SubTrigger/SubContent/Label/Separator/Group/Portal) with shortcut + danger styling.
+- `ContextMenu.tsx` — full Radix ContextMenu; Rule #1 of the v8 dashboard — every interactive surface right-clicks.
+- `Sheet.tsx` — side-anchored panel (top/right/bottom/left) with `data-side` attribute driving per-direction slide-in animations.
+- `Drawer.tsx` — semantic alias for right-side Sheet (task/agent detail panels).
+
+Shared:
+- `bizar-dash/src/web/v8/ui/styles/globals.css` — added 8 keyframes (`v8-skeleton-pulse`, `v8-spin`, `v8-dialog-overlay-in`, `v8-dialog-content-in`, `v8-sheet-in-{right,left,top,bottom}`, `v8-menu-in`, `v8-tooltip-in`) and their opt-in class bindings (Radix `data-state` highlight + `data-side` slide).
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated to export all 22 components + their types.
+- `bizar-dash/src/web/v8/__tests__/controls.test.tsx` — 16 vitest cases (Button, IconButton, Input, Checkbox, Switch, Toggle, Slider).
+- `bizar-dash/src/web/v8/__tests__/feedback.test.tsx` — 16 vitest cases (Alert, Banner, Dialog, Skeleton, EmptyState, DropdownMenu, ContextMenu, Sheet, Tooltip).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 46/46 pass (4 test files: cx, theme, controls, feedback).
+
+**Next sprint (S3 — Data display + Overview):** Card, StatTile, StatGrid, Badge, Chip, Avatar, AvatarStack, Table (TanStack), Sparkline, BarList, Timeline, Accordion, ViewHeader.
+
+**Sprint S3 (Data display + View primitives) shipped in this commit:**
+
+12 components in `bizar-dash/src/web/v8/ui/data/`:
+- `Card.tsx` — default/elevated/ghost/outlined variants + flush + interactive states; `CardHeader` / `CardBody` / `CardFooter` slots.
+- `Badge.tsx` — neutral/info/success/warning/danger/accent tones; sm/md sizes; optional leading dot.
+- `Chip.tsx` — filter pills with optional `selected` state and `onRemove` handler.
+- `Avatar.tsx` — deterministic initials fallback + status dot (online/offline/busy/away); xs/sm/md/lg/xl sizes; `AvatarStack` for overlapping groups.
+- `StatTile.tsx` — KPI tile with label/value/delta/trend/hint/icon/sparkline slots + `loading` state; `StatGrid` auto-fits 1..4 columns.
+- `Sparkline.tsx` — pure-SVG line/area chart with optional goal line; no chart library dep.
+- `BarList.tsx` — horizontal bar distribution (tasks per agent, memory by category, etc.).
+- `Timeline.tsx` — vertical event feed with tone-coloured dots + meta on the right.
+- `Accordion.tsx` — Radix-based collapsible sections (single/multiple) with chevron rotation.
+- `ViewHeader.tsx` — page-level header pattern (breadcrumb + title + description + primary action + secondary actions + meta row).
+- `Table.tsx` — semantic Table/Head/Body/Row/Header/Cell with density prop, selected row, striped rows.
+- `Kbd.tsx` — keyboard key chip for tooltips, shortcuts, settings.
+
+Dependencies added: `@radix-ui/react-accordion`.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 12 data components + types.
+- `bizar-dash/src/web/v8/__tests__/data.test.tsx` — 23 vitest cases (Card composition, Badge tones, Chip remove + selected, Avatar initials fallback + status, StatTile trend + loading, StatGrid layout, Sparkline SVG paths, BarList items, Timeline ordering, Accordion expand, ViewHeader breadcrumb, Table rows + selected, Kbd render).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 69/69 pass (5 test files: cx, theme, controls, feedback, data).
+
+**Next sprint (S4 — Navigation + Command Palette):** Tabs, Breadcrumb, NavLink, Pagination, CommandPalette (cmdk), NavMenu, Section.
+
+**Sprint S4 (Navigation + Command Palette) shipped in this commit:**
+
+4 components in `bizar-dash/src/web/v8/ui/navigation/`:
+- `Tabs.tsx` — Radix-based content switcher with `underline` and `pill` variants; left/right arrow-key navigation.
+- `NavLink.tsx` — semantic navigation link with active-state styling via `aria-current="page"`. Optional leading icon + active accent bar (sidebar pattern).
+- `Pagination.tsx` — numbered pages with first/prev/next/last controls and ellipsis for long ranges. Configurable sibling count.
+- `CommandPalette.tsx` — global ⌘K palette built on `cmdk`. Exposes `CommandPalette`, `CommandPaletteGroup`, `CommandPaletteItem`, `CommandPaletteSeparator`, and the `useCommandPaletteHotkey` hook for keyboard wiring. Designed to render inside a Dialog overlay.
+
+Dependencies added: `@radix-ui/react-tabs`.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 4 navigation components + types.
+- `bizar-dash/src/web/v8/__tests__/navigation.test.tsx` — 9 vitest cases (Tabs content switch + active state, NavLink aria-current, Pagination page button + edges + ellipsis, CommandPalette filter + onSelect). Includes a `scrollIntoView` stub for jsdom (cmdk requires it for keyboard nav).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 78/78 pass (6 test files: cx, theme, controls, feedback, data, navigation).
+
+**Next sprint (S5 — Kanban centerpiece):** KanbanBoard, KanbanColumn, KanbanCard, KanbanCardCompact, KanbanDetail, KanbanQuickAdd, KanbanContextMenu. Right-click every card (DESIGN.md Rule #1).
+
+**Sprint S5 (Kanban centerpiece) shipped in this commit:**
+
+5 components in `bizar-dash/src/web/v8/ui/kanban/` — the heart of the v8 dashboard:
+- `KanbanCard.tsx` — the primary surface. Variants: `default` (full meta), `compact` (title + priority dot), `detailed` (title + description preview). Priority dot (`low`/`medium`/`high`/`urgent`) and accent stripe on the leading edge. Meta row shows due date, comment count, attachment count, branch name. Includes `useKanbanCardSortable` hook that wraps `@dnd-kit/sortable`'s `useSortable` for drag-and-drop wiring.
+- `KanbanColumn.tsx` — vertical status column. Header with accent dot, title, count (with optional WIP limit and overflow warning), overflow menu, and quick-add button. Body uses `@dnd-kit/core`'s `useDroppable` so it accepts card drops; visual hover state on drop.
+- `KanbanBoard.tsx` — horizontal-scrolling board hosting the columns. Owns the `@dnd-kit/core` `DndContext` with Pointer + Keyboard sensors and `closestCorners` collision detection. Reports `onCardMove(cardId, fromColumnId, toColumnId)` on drop.
+- `KanbanQuickAdd.tsx` — inline card composer at column bottom. Idle → click → textarea; Enter submits, Escape cancels. Persists across multiple adds in one session.
+- `KanbanContextMenu.tsx` — the right-click menu every card gets (DESIGN.md Rule #1). Standard items: Open detail, Rename (F2), Duplicate, Copy link, Move ←/→ (with column-edge disables), Assign…, Archive, Delete (⌫). Built on the existing `ContextMenu` primitive.
+
+Dependencies added: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 5 kanban components + types.
+- `bizar-dash/src/web/v8/__tests__/kanban.test.tsx` — 16 vitest cases (Card priority dot + variant + metadata + a11y, Column count + WIP + add/overflow buttons, Board region landmark, QuickAdd idle → edit transition + Enter submit + empty reject + Escape cancel, ContextMenu render + open + disabled moves + onDelete wiring).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 94/94 pass (7 test files: cx, theme, controls, feedback, data, navigation, kanban).
+
+**Next sprint (S6 — Goals + Agents):** GoalCard, GoalProgress, GoalDetail, AgentCard, AgentRoster, AgentDetail, AgentActivity. The two "long horizon" surfaces (goals) and the agent orchestration surface.
+
+**Sprint S6 (Goals + Agents) shipped in this commit:**
+
+4 components across the long-horizon-goals and agent-orchestration surfaces, all token-driven and built on the existing v8 primitives.
+
+Goals (`bizar-dash/src/web/v8/ui/goals/`):
+- `GoalCard.tsx` — long-horizon goal tile (the Goals page per PLAN.md). NOT a kanban card. Title, "why" description (2-line clamp), status badge (`on-track` / `at-risk` / `off-track` / `done`), progress bar (tone-coloured by status), % complete + key results counter, due + owner row, badges slot, hover state.
+- `KeyResult.tsx` — measurable sub-goal inside a Goal. Toggle button on the leading edge (Circle / Minus / CheckCircle2 icons), title (strikethrough when done), progress bar (hidden for not-started), optional metric caption ("47 / 100") + assignee.
+
+Agents (`bizar-dash/src/web/v8/ui/agents/`):
+- `AgentCard.tsx` — agent tile for the Agents roster. Avatar + name + role + status badge, current-task callout, last-activity + tasksToday row, optional TPM sparkline, badges row. Uses the existing `Sparkline` and `Avatar` data components.
+- `AgentActivity.tsx` — per-agent activity feed (run started, tool called, message received). Token-tinted icon chip, title, optional description + meta (timestamp). `<ol>` semantic ordering.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/data/ProgressBar.tsx` — the linear progress indicator used by both GoalCard + KeyResult (was used by prior surfaces already; now committed alongside the first consumers).
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 4 new components + types.
+- `bizar-dash/src/web/v8/__tests__/{goals,agents}.test.tsx` — 16 vitest cases (GoalCard title/description/status/progress/key-results/due/owner/onOpen, KeyResult toggle/icon-label/not-started-hides-bar/metric+assignee, AgentCard name/role/badge/current-task/last-activity/onOpen/error-label, AgentActivity all-items/`<ol>` landmark/optional-fields).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/goals.test.tsx src/web/v8/__tests__/agents.test.tsx` → 16/16 pass.
+- Full dash test pass: `npm run test:web` → 97 files pass, 1 file pre-existing failure (`tests/a11y/forms.test.tsx`, 4 cases — predates v8 work, unrelated to this commit per stash check).
+
+**Sprint S7 (Activity + Memory + Libraries) shipped in this commit:**
+
+4 components across the "knowledge surfaces" — what the harness has learned, what it's running, and how those move.
+
+Activity (`bizar-dash/src/web/v8/ui/activity/`):
+- `ActivityFeed.tsx` — vertical feed (the home view). `<ol>` semantic ordering. Each item: token-tinted icon chip + title (optional description) + tabular-numeric meta (relative time). Renders empty node when items is empty.
+
+Memory (`bizar-dash/src/web/v8/ui/memory/`):
+- `MemoryVault.tsx` — list of memos with Project/Global scope badge, content (3-line clamp), tags row, relative updatedAt. Click handler opens the memo detail.
+
+Libraries (`bizar-dash/src/web/v8/ui/libraries/`):
+- `LibraryItem.tsx` — generic inventory card used by Skill / MCP / Hook libraries. Name + slug (`<code>`), status badge (enabled/disabled/error), tone-tinted Power icon, description (2-line clamp), meta line, actions slot, hover state.
+- `LibraryGrid.tsx` — auto-fit responsive grid (CSS grid `repeat(auto-fill, minmax(min(100%, 320px), 1fr))`).
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 4 new components + types.
+- `bizar-dash/src/web/v8/__tests__/{activity,memory,libraries}.test.tsx` — 16 vitest cases.
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/activity.test.tsx src/web/v8/__tests__/memory.test.tsx src/web/v8/__tests__/libraries.test.tsx` → 16/16 pass.
+
+**Sprint S8 (Settings primitives) shipped in this commit:**
+
+3 primitives that compose the 16 Settings sections per PLAN.md §Settings.
+
+Settings (`bizar-dash/src/web/v8/ui/settings/`):
+- `SettingsSection.tsx` — titled section shell with optional icon, description, and headerActions slot (e.g. "Restore defaults" button). `aria-labelledby` wires the title for screen-reader navigation.
+- `SettingsRow.tsx` — labelled option row (label + description on left, control on right). `disabled` prop applies `aria-disabled` + `data-disabled` + 0.5 opacity. The control slot hosts any interactive (Switch, Select, Slider, custom button).
+- `SettingsNav.tsx` — left rail inside the Settings page. Lists every section as a button, highlights the active one with `aria-current`, invokes `onSelect(id)` on click. No router needed; caller wires the scroll target.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with the 3 primitives + types.
+- `bizar-dash/src/web/v8/__tests__/settings.test.tsx` — 8 vitest cases (Section title/description/body/aria-labelledby/icon+headerActions, Row label/control/disabled-aria, Nav items/aria-current/onSelect).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/settings.test.tsx` → 8/8 pass.
+
+**Sprint S9 (Polish + view wiring) shipped in this commit:**
+
+The complete v8 dashboard now renders every view end-to-end. The component library (50+ components, 142 tests) is composed into 9 view files plus a Router and an app-level CommandPalette.
+
+Views (`bizar-dash/src/web/v8/views/`):
+- `Overview/OverviewView.tsx` — landing page. 4 stat tiles (tasks/goals/agents/tokens) + Recent activity feed + Needs-attention cards.
+- `Tasks/TasksView.tsx` — the Kanban centerpiece with 5 columns, 5 sample cards, full dnd-kit drop wiring, real state-managed column moves.
+- `Goals/GoalsView.tsx` — 3 goal cards (on-track / at-risk / done) + Key Result list.
+- `Agents/AgentsView.tsx` — 6-card roster (busy / idle / error / paused agents) + featured activity feed.
+- `Activity/ActivityView.tsx` — full event history as a vertical feed.
+- `Memory/MemoryView.tsx` — 4 memos scoped Project vs Global.
+- `Libraries/LibrariesView.tsx` — generic `LibraryGrid` + `LibraryItem` surface used by Skills / MCPs / Hooks.
+- `Settings/SettingsView.tsx` — all 16 PLAN.md sections. Sticky nav rail (SettingsNav) on the left, sections on the right. Theme + Density live-wired to ThemeProvider / DensityProvider.
+- `CommandPalette/AppCommandPalette.tsx` — ⌘K palette wired with the v8 navigation map. "Toggle theme" + "Toggle density" actions call into the live providers.
+
+Router:
+- `Router.tsx` — flat state-based `useViewForId(id)` that resolves to the correct view. Sample data for the 3 library kinds lives here so the Library surface stays generic.
+
+App:
+- `App.tsx` — replaced the placeholder. Wires the providers, the sidebar nav (4 sections, 10 items), the topbar palette button, the router, and the live `useCommandPaletteHotkey` (⌘K / Ctrl-K).
+
+Shared:
+- `bizar-dash/src/web/v8/__tests__/views.test.tsx` — 9 vitest cases (one per view: header rendered + a content signal). Providers wrapped explicitly.
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors across the entire v8 tree.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/views.test.tsx` → 9/9 pass.
+- `npm run test:web` → 738/742 pass (102 files). The 4 failures remain the pre-existing `tests/a11y/forms.test.tsx` regressions, unrelated to v8 work (confirmed via prior stash test).
+- `npm run build:dash` → clean (2.22s; the pre-existing main-bundle warning is from the v7 tree, not v8).
+
+**Next sprint:** Sprint S10 — TanStack Router swap (currently state-based), WebSocket layer for live agent/activity updates, and split the giant main bundle. Also wire real backend data into the Library items and Settings controls. The dashboard foundation is now feature-complete enough to start replacing v7 wholesale — S10 begins the cutover.
+
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
 User-requested follow-up to F-040 (v7.0.0). Three problems:

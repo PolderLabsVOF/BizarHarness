@@ -1,62 +1,56 @@
-# DESIGN.md — Bizar Dashboard
+# DESIGN.md — Bizar Dashboard v8 (Dashboard Rewrite)
 
-> The BizarHarness dashboard. Norse-pantheon operator surface, dark-mode
-> first, dense by intent. **v7.0** — adds the comprehensive view index,
-> per-view data shapes, and the patterns needed for the eight secondary
-> tabs (Overview, Agents, Active, Skills, Memory, Mods, Schedules,
-> Settings) that v6 didn't fully document.
+> **Scope.** This document replaces the v7.0.0 design system (F-040)
+> and the in-progress mobile pass (F-041) in their entirety. The old
+> dashboard, its `src/web/ui/` primitives, its Norse-pantheon dark
+> aesthetic, its views, and its previous `DESIGN.md` are all **deleted**
+> under the rewrite. v8 ships a new file tree, a new component
+> library, a new theme, a new layout, and a new feature scope.
+>
+> **Read order.** If you only read three sections, read
+> [§1 Principles](#1--principles), [§3 Tokens](#3--design-tokens), and
+> [§7 Layout](#7--layout). Everything else is the supporting cast.
 
-## 0 · How to use this file
+---
 
-This document is the **single source of truth** for visual decisions in
-the dashboard. Every component, every color, every animation should be
-derivable from the tokens and rules below. If a future change isn't
-covered here, **add it to this file first**, then implement it.
+## Table of contents
 
-**Token binding.** Components consume CSS variables (`--bg`,
-`--text-strong`, `--accent`) defined in `:root` of `styles/main.css`.
-Do not hardcode hex outside `:root`. Derive tints with
-`color-mix(in oklch, var(--accent) 12%, transparent)` rather than
-inventing new tokens.
-
-**Themes.** The dashboard ships two themes — **dark** (default) and
-**light** (`[data-theme="light"]`). Both share the same token names;
-only the values change. Every component must read correctly in both
-themes without per-component overrides. Tokens are written in
-**OKLch** because the lightness/chroma/hue model flips cleanly across
-themes without the dark-mode channel separation that hex/rgb needs.
-
-**Visual contract for new screens.** A new view must:
-1. Sit on one of three layouts (topbar / sidebar / both).
-2. Use tokens from §3-§8 only.
-3. Document its data shape in §15.
-4. Have a P0 entry in the checklist (§14) and pass it.
+1. [Principles](#1--principles)
+2. [Brand & voice](#2--brand--voice)
+3. [Design tokens](#3--design-tokens)
+4. [Typography](#4--typography)
+5. [Spacing & layout](#5--spacing--layout)
+6. [Motion & elevation](#6--motion--elevation)
+7. [Layout](#7--layout)
+8. [Component library](#8--component-library)
+9. [Interaction patterns](#9--interaction-patterns)
+10. [Settings model](#10--settings-model)
+11. [Accessibility](#11--accessibility)
+12. [Banned tropes](#12--banned-tropes)
+13. [Visual contract for new screens](#13--visual-contract-for-new-screens)
+14. [Pre-merge checklist](#14--pre-merge-checklist)
 
 ---
 
 ## 1 · Principles
 
-These five rules govern every visual decision. When in doubt, follow
-them in order; if two conflict, the higher rule wins.
+Five rules govern every visual decision. When in doubt, follow them
+in order; if two conflict, the higher rule wins.
 
-1. **Operator-quality, not consumer-quality.** Surfaces are dense,
-   numeric, monospace-friendly. Information per square inch matters
-   more than breathing room. Whitespace is spent on legibility, not
-   decoration.
-2. **One accent, used with intent.** The accent earns its place by
-   signaling primary action, active state, or data emphasis. No AI
-   gradients. No purple washes behind text. No purple stripes on
-   container edges.
+1. **Data first, chrome last.** Every pixel earns its place by
+   carrying information. Whitespace is spent on legibility, not
+   decoration. Density targets a desktop operator running two
+   external monitors — never a marketing screenshot.
+2. **One accent, used with intent.** The accent is the green primary
+   token (`--accent`). It signals primary action, active state,
+   live data, and selection — nothing else. There is exactly one
+   accent across the entire product.
 3. **State is signal, not decoration.** Active, streaming, awaiting,
-   error, success — every state must be distinguishable at a glance
-   without reading copy. Use weight, glow, motion, and color — but
-   **never vertical accent edges on containers**.
-4. **Type does hierarchy.** `Inter` carries the body, `JetBrains Mono`
-   carries the metadata. Tabular numerics on every number. Display
-   sizes scale with container, not viewport. Long copy wraps pretty.
-5. **Layout over chrome.** The sidebar is rail-thin. The topbar is one
-   row. The chat thread is the product. Chrome that doesn't pay rent
-   gets removed.
+   error, success, offline — every state must be distinguishable at a glance without reading copy. Weight, fill, motion, and shape are the four channels. **Never gradients.** Never `border-left` accent stripes on containers.
+4. **Type does hierarchy.** A single sans family for UI, a single mono family for data. Size and weight carry the hierarchy; color is secondary. Tabular figures on every number.
+5. **Native over invented.** The browser already has menus, focus rings, scrollbars, and shortcuts. We add right-click context menus, command palettes, and keyboard shortcuts that wrap the platform — we never replace it.
+
+**Anti-target.** v7's Norse-pantheon, dark-by-default, accent-stripe look is rejected. v8 is light-by-default, dark-mode peer, single accent (green), gradient-free, dense by intent.
 
 ---
 
@@ -64,1089 +58,855 @@ them in order; if two conflict, the higher rule wins.
 
 | | |
 |--|--|
-| **Wordmark** | Bizar · runic `ᛒ` glyph in `var(--accent)` |
-| **Version pill** | mono text on a `var(--accent)` → `oklch(0.55 0.22 25)` gradient |
-| **Voice** | Direct, technical, never marketing. "404 not found" not "Oops! Something went wrong." Numbers with units. |
-| **Tab labels** | Single noun (`Chat`, `Agents`, `Tasks`). No icons-in-paragraphs. |
-| **Status copy** | "Streaming" not "Loading…". "Awaiting your reply" not "Ready". "13 of 47" not "Lots". |
-
-**Banned tropes** (audited before each PR):
-
-- Aggressive purple gradient backgrounds behind text or as page chrome.
-- Vertical accent stripes on containers (`box-shadow: inset 2px 0 0 …`,
-  `border-left: 3px solid …`). State-encoded or not. Active state uses
-  background, weight, glow, or motion — **never a left-edge bar**.
-- Generic emoji icons in feature lists (✨ 🚀 🎯 ❓). Use Lucide.
-- Inter as a display face for hero/section titles (Inter is body;
-  display uses larger sizes of the same family but tighter tracking).
-- Filler copy: "Feature One", "Lorem ipsum", invented metrics.
+| **Wordmark** | `Bizar` set in `Inter` SemiBold, 16px, `var(--fg)` |
+| **Product glyph** | A minimal `ᛒ` (runic Berkanan) in `var(--accent)` for logo and favicon |
+| **Voice** | Direct, technical, never marketing. Numbers with units. Inline code for IDs. |
+| **Tab labels** | Single noun (`Tasks`, `Goals`, `Agents`). No emoji decorations. |
+| **Status copy** | "Streaming" not "Loading…". "13 of 47" not "Lots". "Awaiting reply" not "Ready". |
+| **Errors** | One sentence: what happened + one action the user can take. No "Oops!". |
 
 ---
 
-## 3 · Color tokens
+## 3 · Design tokens
 
-All values written in OKLch where possible. Hex kept only for legacy
-or external-tool interop.
+All values live in `:root` (light) and `.dark` (dark) in `bizar-dash/src/web/ui/styles/tokens.css`. Components consume the CSS custom properties only — never raw color values. New tokens get added to this section **before** any component uses them.
 
-### 3.1 Surface scale (dark, default)
+The user-supplied shadcn preset theme is the source of truth for color tokens. Every other token (spacing, radius, motion, typography) is layered on top.
 
-```
---bg            oklch(15% 0.012 260)    #0b0e14  page canvas
---bg-elev       oklch(18% 0.012 260)    #12161f  cards, topbar, sidebars
---bg-elev-2     oklch(22% 0.014 260)    #1a1f2b  nested surfaces
---bg-elev-3     oklch(27% 0.016 260)    #232a39  hover / pressed surfaces
---border        oklch(27% 0.016 260)    #232a39  hairlines
---border-strong oklch(33% 0.018 260)    #2d3648  focus rings, dividers
-```
+### 3.1 Surface scale
 
-`--bg-1` and `--bg-2` from v6.x are deprecated; use `--bg-elev` and
-`--bg-elev-2` instead. (The chat composer backdrop uses
-`color-mix(in oklch, var(--bg-elev), black 12%)` for that nested feel.)
+| Token | Light (oklch) | Dark (oklch) | Use |
+|--|--|--|--|
+| `--bg` | `oklch(1 0 0)` | `oklch(0.141 0.005 285.823)` | Page canvas |
+| `--surface-1` | `oklch(1 0 0)` | `oklch(0.21 0.006 285.885)` | Cards, topbar, sidebar, dialogs |
+| `--surface-2` | `oklch(0.967 0.001 286.375)` | `oklch(0.274 0.006 286.033)` | Nested surfaces, table rows, hover bg |
+| `--surface-3` | `oklch(0.92 0.004 286.32)` | `oklch(0.37 0.013 285.805)` | Pressed, selected, drag-over |
+| `--surface-popover` | `oklch(1 0 0)` | `oklch(0.21 0.006 285.885)` | Popovers, context menus, command palette |
 
-### 3.2 Surface scale (light)
 
-```
---bg            oklch(98% 0.004 240)    #f7f8fa
---bg-elev       oklch(100% 0 0)        #ffffff
---bg-elev-2     oklch(96% 0.006 240)    #f0f3f8
---bg-elev-3     oklch(92% 0.008 240)    #e6ebf2
---border        oklch(90% 0.008 240)    #e2e8f0
---border-strong oklch(82% 0.012 240)    #cbd5e1
-```
+### 3.2 Foreground scale
 
-### 3.3 Text scale
+| Token | Light | Dark | Use |
+|--|--|--|--|
+| `--fg` | `oklch(0.141 0.005 285.823)` | `oklch(0.985 0 0)` | Primary text |
+| `--fg-muted` | `oklch(0.552 0.016 285.938)` | `oklch(0.705 0.015 286.067)` | Secondary text, captions, helper |
+| `--fg-subtle` | `oklch(0.705 0.015 286.067)` | `oklch(0.552 0.016 285.938)` | Tertiary, placeholder, disabled |
+| `--fg-on-accent` | `oklch(0.982 0.018 155.826)` | `oklch(0.982 0.018 155.826)` | Text on `--accent` backgrounds |
+| `--fg-link` | `var(--accent)` | `var(--accent)` | Inline links, breadcrumbs |
 
-| Token | Dark (OKLch) | Light (hex) | Use |
-|---|---|---|---|
-| `--text-strong` | `oklch(96% 0.005 240)` | `#0f172a` | Headings, primary content |
-| `--text` | `oklch(82% 0.010 245)` | `#1f2937` | Body |
-| `--text-dim` | `oklch(72% 0.012 245)` | `#475569` | Captions, metadata |
-| `--text-on-accent` | `oklch(100% 0 0)` | `#ffffff` | Text over accent fills |
+### 3.3 Accent (the only color that gets to be loud)
 
-### 3.4 Brand accent
+| Token | Light | Dark | Use |
+|--|--|--|--|
+| `--accent` | `oklch(0.527 0.154 150.069)` | `oklch(0.448 0.119 151.328)` | Primary buttons, active state, focus ring tint, live indicator |
+| `--accent-hover` | `oklch(0.477 0.154 150.069)` | `oklch(0.398 0.119 151.328)` | Hover on `--accent` |
+| `--accent-soft` | `color-mix(in oklch, var(--accent) 12%, transparent)` | same | Selected row tint, badge bg |
+| `--accent-ring` | `color-mix(in oklch, var(--accent) 35%, transparent)` | same | Focus ring |
 
-| Token | Dark | Light | Use |
-|---|---|---|---|
-| `--accent` | `oklch(0.62 0.18 273)` | `oklch(0.55 0.20 273)` | Primary action, active state, focus |
-| `--accent-2` | `oklch(0.72 0.16 273)` | `oklch(0.48 0.20 273)` | Hover state on accent |
-| `--accent-3` | `oklch(0.82 0.10 273)` | `oklch(0.40 0.18 273)` | Subdued accent text |
-| `--accent-bg` | `color-mix(in oklch, var(--accent) 12%, transparent)` | same, 8% | Tinted panel backgrounds |
-| `--accent-border` | `color-mix(in oklch, var(--accent) 40%, transparent)` | same, 30% | Tinted borders |
-| `--accent-glow` | `color-mix(in oklch, var(--accent) 18%, transparent)` | same | Focus glow shadow |
-| `--accent-soft` | `color-mix(in oklch, var(--accent) 8%, transparent)` | same, 6% | Hover wash on neutral surface |
+### 3.4 Semantic colors
 
-**Accent budget.** Two uses per region, max. Default allocation:
-1. Active nav item background OR primary CTA fill.
-2. Active state badge OR streaming pill.
+| Token | Light | Dark | Use |
+|--|--|--|--|
+| `--success` | `oklch(0.527 0.154 150.069)` | `oklch(0.723 0.219 149.579)` | Passed, succeeded, completed |
+| `--warning` | `oklch(0.7 0.15 75)` | `oklch(0.75 0.15 75)` | Awaiting, paused, queued |
+| `--danger` | `oklch(0.577 0.245 27.325)` | `oklch(0.704 0.191 22.216)` | Failed, error, destructive |
+| `--info` | `oklch(0.6 0.13 240)` | `oklch(0.7 0.13 240)` | Informational, neutral highlight |
 
-### 3.5 Status colors (OKLch in both themes)
+### 3.5 Borders & inputs
 
-| Token | Dark | Light | Use |
-|---|---|---|---|
-| `--success` | `oklch(0.72 0.16 145)` | `oklch(0.50 0.15 145)` | Streaming OK, task done, connected |
-| `--warning` | `oklch(0.78 0.14 70)` | `oklch(0.55 0.15 70)` | Stuck agent, retry, cost spike |
-| `--error` | `oklch(0.66 0.20 25)` | `oklch(0.52 0.20 25)` | Failed, deleted, auth error |
-| `--info` | `oklch(0.72 0.13 235)` | `oklch(0.50 0.15 235)` | Neutral informational |
-| `--success-soft` | `color-mix(in oklch, var(--success) 15%, transparent)` | same, 12% | Status pill bg |
-| `--error-soft` | `color-mix(in oklch, var(--error) 12%, transparent)` | same, 10% | Error region bg |
-| `--warning-soft` | `color-mix(in oklch, var(--warning) 15%, transparent)` | same, 10% | Warning region bg |
+| Token | Light | Dark | Use |
+|--|--|--|--|
+| `--border` | `oklch(0.92 0.004 286.32)` | `oklch(1 0 0 / 10%)` | Default 1px border |
+| `--border-strong` | `oklch(0.85 0.005 286)` | `oklch(1 0 0 / 18%)` | Hover, dividers |
+| `--input-bg` | `oklch(0.967 0.001 286.375)` | `oklch(0.274 0.006 286.033)` | Form control fill |
+| `--focus-ring` | `oklch(0.705 0.015 286.067)` | `oklch(0.552 0.016 285.938)` | Outer focus ring |
 
-### 3.6 Derived tokens (chat overhaul, v3.21 — preserved)
+### 3.6 Charts (categorical, sequential, status)
 
-```
---gradient-hello   linear 90deg, var(--accent-3) → var(--accent)
---gradient-name    linear 90deg, var(--accent) → oklch(0.55 0.22 25)
-```
+| Token | Value | Use |
+|--|--|--|
+| `--chart-1` | `oklch(0.871 0.006 286.286)` | First series, neutral |
+| `--chart-2` | `oklch(0.552 0.016 285.938)` | Second series |
+| `--chart-3` | `oklch(0.442 0.017 285.786)` | Third series |
+| `--chart-4` | `oklch(0.37 0.013 285.805)` | Fourth series |
+| `--chart-5` | `oklch(0.274 0.006 286.033)` | Fifth series |
+| `--chart-accent` | `var(--accent)` | Highlighted series |
 
-Both gradients are reserved for the **chat greeting** (`hello, name`)
-and **brand mark** (`ᛒ Bizar`) — never used elsewhere.
+Chart colors intentionally **do not match `--accent`** — they form a neutral grayscale ramp so that the green primary is reserved for interactive state. When a chart needs to highlight a single series (e.g. "errors over time"), it switches to `--danger` or `--success`, not `--accent`.
 
-### 3.7 Syntax highlight (json tree in JSON viewer)
+### 3.7 Sidebar
 
-```
---syntax-key      oklch(0.78 0.13 235)
---syntax-string   oklch(0.84 0.10 235)
---syntax-number   oklch(0.78 0.16 60)
---syntax-boolean  oklch(0.68 0.20 25)
---syntax-null     oklch(0.68 0.20 25)
-```
+| Token | Light | Dark | Use |
+|--|--|--|--|
+| `--sidebar-bg` | `oklch(0.985 0 0)` | `oklch(0.21 0.006 285.885)` | Sidebar canvas |
+| `--sidebar-fg` | `oklch(0.141 0.005 285.823)` | `oklch(0.985 0 0)` | Sidebar text |
+| `--sidebar-accent` | `oklch(0.627 0.194 149.214)` | `oklch(0.723 0.219 149.579)` | Active nav item, primary sidebar button |
+| `--sidebar-accent-fg` | `oklch(0.982 0.018 155.826)` | `oklch(0.982 0.018 155.826)` | Text on sidebar accent |
+| `--sidebar-hover` | `oklch(0.967 0.001 286.375)` | `oklch(0.274 0.006 286.033)` | Nav hover bg |
+| `--sidebar-border` | `oklch(0.92 0.004 286.32)` | `oklch(1 0 0 / 10%)` | Sidebar right border |
 
-### 3.8 Anti-pattern reference colors
+### 3.8 Geometry
 
-| Token | Value | When to use |
-|---|---|---|
-| ~~`--left-stripe`~~ | *banned* | Never. See §1.3. |
-| ~~purple page wash~~ | *banned* | Body backgrounds must be `--bg` or `--bg-elev`. |
-| ~~`#fff` raw~~ | `--text-strong` | Pure white is jarring on dark; use `--text-strong`. |
+| Token | Value | Use |
+|--|--|--|
+| `--radius` | `0.625rem` (10px) | Buttons, inputs, cards, popovers |
+| `--radius-sm` | `0.375rem` (6px) | Chips, badges, small buttons |
+| `--radius-lg` | `0.875rem` (14px) | Dialogs, sheets, large cards |
+| `--radius-pill` | `9999px` | Avatars, pills, toggle switches |
+
+### 3.9 Elevation
+
+| Token | Value | Use |
+|--|--|--|
+| `--shadow-1` | `0 1px 2px oklch(0 0 0 / 0.04)` | Resting cards |
+| `--shadow-2` | `0 4px 12px oklch(0 0 0 / 0.08)` | Hover cards, popovers |
+| `--shadow-3` | `0 12px 32px oklch(0 0 0 / 0.12)` | Drag overlay, dialogs |
+| `--shadow-4` | `0 24px 64px oklch(0 0 0 / 0.16)` | Sheets, command palette |
+
+Dark mode multiplies each shadow by `1.25` because shadows are weaker on dark surfaces.
+
+### 3.10 Motion
+
+| Token | Value | Use |
+|--|--|--|
+| `--motion-instant` | `50ms` | Hover color shift, focus ring |
+| `--motion-fast` | `120ms` | Small UI: button press, chip toggle |
+| `--motion-base` | `200ms` | Default: popovers, menus, sidebar collapse |
+| `--motion-slow` | `320ms` | Page transitions, drag overlays |
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | 90% of motion — feels like Linear |
+| `--ease-in-out` | `cubic-bezier(0.65, 0, 0.35, 1)` | Sidebar collapse, sheet slide |
+| `--ease-spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Success micro-bounces |
+
+`prefers-reduced-motion: reduce` zeroes every `--motion-*` token.
 
 ---
 
 ## 4 · Typography
 
-### 4.1 Font stacks
+Two families, six sizes, five weights. That is the whole type system.
 
-```
---font-sans:
-  'Inter var', 'Inter', system-ui, -apple-system, 'Segoe UI',
-  Roboto, 'Helvetica Neue', sans-serif
+### 4.1 Families
 
---font-mono:
-  'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code',
-  Consolas, monospace
-```
+| Token | Family | Use |
+|--|--|--|
+| `--font-sans` | `Inter Variable`, system-ui fallback | UI, body, headings |
+| `--font-mono` | `JetBrains Mono Variable`, `ui-monospace` fallback | IDs, paths, code, numerics |
+| `--font-display` | `Inter Variable` (tight tracking) | Hero text, empty states |
 
-Inter variable enables `cv02`, `cv03`, `cv04`, `cv11` stylistic sets
-for more legible numbers, parentheses, and `@` symbol.
+### 4.2 Sizes (modular scale 1.125)
 
-### 4.2 Scale
+| Token | Size / line-height | Use |
+|--|--|--|
+| `--text-xs` | `0.75rem / 1rem` (12/16) | Captions, helper, table footnotes |
+| `--text-sm` | `0.8125rem / 1.125rem` (13/18) | Default body, table cells |
+| `--text-base` | `0.875rem / 1.25rem` (14/20) | Default body on wide screens |
+| `--text-md` | `1rem / 1.5rem` (16/24) | Card titles, section headers |
+| `--text-lg` | `1.125rem / 1.625rem` (18/26) | Page titles |
+| `--text-xl` | `1.375rem / 1.75rem` (22/28) | Hero, empty-state title |
+
+### 4.3 Weights
+
+| Token | Value | Use |
+|--|--|--|
+| `--weight-regular` | `400` | Body |
+| `--weight-medium` | `500` | Nav labels, button text |
+| `--weight-semibold` | `600` | Card titles, table headers |
+| `--weight-bold` | `700` | Page titles only |
+
+### 4.4 Numerics
+
+All numeric cells use `font-variant-numeric: tabular-nums` so columns of figures align. The `mono` family is reserved for IDs, paths, and raw code; numerics stay in `sans` unless they are an ID.
+
+### 4.5 Long content
+
+Body copy uses `text-wrap: pretty`; headings use `text-wrap: balance`. Code blocks, table cells, and IDs use `text-wrap: nowrap` with `overflow: hidden; text-overflow: ellipsis` and a tooltip on hover.
+
+---
+
+## 5 · Spacing & layout
+
+### 5.1 Spacing scale (4px base)
 
 | Token | px | Use |
-|---|---|---|
-| `--fs-display` | 28 | Section title in chrome bars |
-| `--fs-h3` | 16 | Card title |
-| `--fs-body` | 14 | Default body (small for density) |
-| `--fs-meta` | 12 | Captions, timestamps |
-| `--fs-micro` | 11 | Numeric eyebrows, badges |
+|--|--|--|
+| `--space-0` | `0` | Reset |
+| `--space-1` | `4px` | Tight stack, chip padding-y |
+| `--space-2` | `8px` | Inline gap, button padding-y |
+| `--space-3` | `12px` | Default inline gap, control padding |
+| `--space-4` | `16px` | Card padding, stack gap, control padding-x |
+| `--space-5` | `20px` | Section padding |
+| `--space-6` | `24px` | Page section gap |
+| `--space-8` | `32px` | Page padding |
+| `--space-10` | `40px` | Hero vertical rhythm |
+| `--space-12` | `48px` | Page-level separators |
+| `--space-16` | `64px` | Empty-state padding |
 
-Tabular numerics (`font-variant-numeric: tabular-nums`) on every cell
-that contains numbers: token counters, costs, latencies, timestamps,
-session ids.
+### 5.2 Layout grid
 
-### 4.3 Weight scale
+- Desktop default: **12-column, 16px gutter, max 1440px content.**
+- Sidebar: **260px expanded, 60px collapsed**, `--motion-base` ease.
+- Topbar: **56px tall**, single row.
+- Right detail drawer: **360px** when open, slides over content on <1280px, pushes content on ≥1280px.
 
-| Weight | Use |
-|---|---|
-| 400 | Body, captions |
-| 500 | Tab labels, button text |
-| 600 | Card titles, section heads, active nav |
-| 700 | Reserved for hero metrics only |
+### 5.3 Density
 
-### 4.4 Heading rhythm
+Two density modes, user-toggleable per workspace:
 
-- h1: never used in dashboard chrome. Display goes to `--fs-display` with
-  letter-spacing `-0.02em`.
-- h2 / h3: card-level. `--fs-h3` (16px) weight 600.
-- Avoid long display copy inside cards; let the body carry meaning.
+| Mode | Row height | Padding-y | Use |
+|--|--|--|--|
+| **Compact** (default) | `32px` | `4px` | Power-user, screen-fillers |
+| **Comfortable** | `40px` | `8px` | Touch, lower-resolution |
 
----
+Density is a single CSS class on `<html>`: `data-density="compact"` or `"comfortable"`. Every list, table, and tree honors it. Card padding does not change with density.
 
-## 5 · Spacing
+### 5.4 Z-index scale
 
-8-point grid, with semantic aliases introduced in v4.6.0:
+| Layer | Value | Use |
+|--|--|--|
+| `--z-base` | `0` | Content |
+| `--z-sticky` | `10` | Table headers, sticky filters |
+| `--z-dropdown` | `1000` | Dropdowns, autocomplete |
+| `--z-sticky-nav` | `1100` | Topbar, sidebar |
+| `--z-overlay` | `1300` | Modal backdrop |
+| `--z-modal` | `1400` | Dialogs, sheets |
+| `--z-popover` | `1500` | Context menus, command palette |
+| `--z-toast` | `1600` | Toasts, notifications |
+| `--z-tooltip` | `1700` | Tooltips |
 
-```
---space-1  4px    --spacing-xs    icon-to-text, micro gap
---space-2  8px    --spacing-sm    between rows in a stack
---space-3  12px   --spacing-md    default card padding
---space-4  16px   --spacing-lg    section padding
---space-6  24px   --spacing-xl    page-level padding
---space-8  32px                    topbar vertical padding
---space-10 40px
---space-12 48px                    panel header padding
---space-16 64px                    rare, full-page sections
---space-20 80px
---space-24 96px                    hero only
-```
-
-**Card padding.** Default is `--space-3` (12px) — the dashboard is dense.
-Use `--space-4` (16px) only on kanban cards and chat info panels.
+No z-index above `1700`. If you need it, you have mis-designed.
 
 ---
 
-## 6 · Radius
+## 6 · Motion & elevation
 
-```
---radius-sm    6px    inputs, small buttons, badges
---radius       8px    buttons, tabs, default cards
---radius-md    10px    chat message bubbles
---radius-lg    14px    modals, kanban cards, topbar dropdowns
---radius-xl    16px    dialog, command palette
---radius-pill  999px   status pills, tag chips
-```
+### 6.1 Default transitions
 
----
+| Element | Property | Duration | Easing |
+|--|--|--|--|
+| Button bg | `background-color` | `--motion-instant` | `--ease-out` |
+| Button press | `transform` | `--motion-fast` | `--ease-out` |
+| Card hover | `box-shadow, transform` | `--motion-base` | `--ease-out` |
+| Popover open | `opacity, transform` | `--motion-base` | `--ease-out` |
+| Sidebar collapse | `width` | `--motion-base` | `--ease-in-out` |
+| Page transition | `opacity` | `--motion-slow` | `--ease-out` |
+| Drag overlay enter | `opacity, transform` | `--motion-fast` | `--ease-spring` |
+| Toast | `transform` | `--motion-base` | `--ease-spring` |
 
-## 7 · Elevation
+### 6.2 Micro-interactions
 
-```
---shadow-1   0 1px 2px rgba(0,0,0,0.45)              hairlines on cards
---shadow-2   0 4px 12px rgba(0,0,0,0.45)             dropdowns, popovers
---shadow-3   0 12px 32px rgba(0,0,0,0.45)            modals
---shadow-glow 0 0 0 1px accent-border + glow         focused/active surfaces
-```
+- **Live indicator:** green dot, 1.6s pulse animation (`opacity` 1→0.4→1, `--motion-slow`). Respects `prefers-reduced-motion`.
+- **Streaming text:** no special animation. Cursor blinks at end of last token, 1s cadence.
+- **Drag:** cursor changes to `grabbing` on `mousedown`. Drag overlay uses `--shadow-3` and `transform: rotate(1.5deg) scale(1.02)` for a "lifted" feel.
+- **Save:** inline checkmark flash, `--motion-fast`, `--ease-spring`. No modal.
+- **Error:** subtle 2px left border inside the input + focus ring tint `--danger`. No shake animation.
 
-Shadows are dark-tinted (not blurred gray) to read on the dark canvas.
-Avoid shadows on hairline borders; the border already separates.
+### 6.3 Reduced motion
 
----
-
-## 8 · Motion
-
-```
---motion-fast   120ms
---motion-base   200ms
---motion-slow   320ms
---ease          cubic-bezier(0.4, 0, 0.2, 1)
---motion-ease   cubic-bezier(0.2, 0, 0, 1)   sharp, intentional
-```
-
-**Streaming indicator.** Three dots in `--accent`, staggered opacity
-animation, `--motion-slow` per dot. Never use a spinner on a streaming
-chat — the user knows it's typing.
-
-**Pulsing badges** (Cline runtime, WebSocket connecting). Use `--ease`,
-`--motion-slow`, infinite, alternate. Never use on content inside the
-chat thread; only on system-state chrome.
-
-**No animations on data.** Token counts, cost numbers, task counts
-update in place. The number just changes — no flicker, no count-up.
+When `prefers-reduced-motion: reduce`:
+- All `--motion-*` tokens set to `0ms`.
+- Drag overlay: no rotation/scale, only opacity.
+- Page transitions: instant.
+- Live indicator: static dot, no pulse.
 
 ---
 
-## 9 · Components catalog
+## 7 · Layout
 
-The dashboard ships ~60 components. Every new component must slot into
-one of these categories.
+### 7.1 App shell
 
-### 9.1 Chrome
-
-#### Topbar
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  ᛒ Bizar v6.0.0 │ project ▾ │ ⌘K Search... │  • Cline·active • ws·live │  ← 1 row, ~52px tall
-│  [Overview][Chat][Agents][Glyphs][Tasks][Activity][Active][Skills]...   ← 2nd row, tabs (topbar layout only)
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-- Brand block: runic `ᛒ` (24px, `--accent`) + "Bizar" wordmark +
-  version pill. Pill uses `--gradient-name` and
-  `text-shadow: 0 1px 0 rgba(0,0,0,0.2)` so it reads on light too.
-- Project selector: pill button with `Folder` icon + project name +
-  chevron. Dropdown is `--bg-elev-2` with 8px radius, items 32px tall.
-- Search trigger: pill button with kbd hint `⌘K`, `--border` outline.
-- WebSocket status: dot (8px) + label. Dot color encodes state:
-  green=live, yellow=connecting, red=closed, gray=disabled.
-
-#### Sidebar (sidebar / both layout)
-```
-┌──────┐
-│  ⌂   │  ← icon-only buttons, 56px wide × 44px tall
-│  💬  │
-│  🤖  │
-│  ✦   │  ← ~17 tabs in scrollable column
-│  ... │
-│  ⚙   │  ← Settings pinned to bottom
-└──────┘
-```
-
-- Width: 56px collapsed.
-- Active state: `--accent-bg` background + `--accent` icon color +
-  bold weight on the (hidden) label. **No left edge stripe.**
-- Mod tabs (post v3.20.3) sit below a hairline divider labelled "Mods".
-- Settings mode (v4.9.0) replaces tab list with the full SettingsNav.
-
-### 9.2 Buttons
+The app shell is a fixed two-column layout: a sticky topbar on top, a sidebar on the left, and the main content area (SidebarInset) on the right. An optional status bar lives at the bottom on desktop and is hidden by default; it surfaces when there is an active alert.
 
 ```
-.btn-sm   24px tall, 8px 12px padding, 12px text
-.btn      32px tall, default, 13px text
-.btn-lg   40px tall, primary CTAs only
-
-Variants
-  .btn-primary       accent fill, white text, accent border
-  .btn-secondary     transparent, --border, --text
-  .btn-ghost         transparent, no border, hover → --fg
-  .btn-danger        transparent, --error text on hover
-  .btn-icon          square, icon-only, 32×32
+┌─────────────────────────────────────────────────────────────────────┐
+│  TOPBAR  56px   workspace · breadcrumb · status · search · user      │
+├──────────┬──────────────────────────────────────────────────────────┤
+│          │                                                          │
+│  SIDEBAR │              SIDEBAR INSET                               │
+│  260px   │              max 1440px, centered                        │
+│          │                                                          │
+│  nav     │              page content                                │
+│  groups  │                                                          │
+│          │                                                          │
+├──────────┴──────────────────────────────────────────────────────────┤
+│  STATUS BAR  28px  (optional)  online · tokens · latency · build   │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-Disabled = 50% opacity, `cursor: not-allowed`, no hover. **Never** show
-a disabled button with a spinner inside it — show the spinner *instead*
-of the button or use a loading state on the button itself.
+### 7.2 Topbar
 
-### 9.3 Inputs
+| Slot | Width | Contents |
+|--|--|--|
+| Left | 320px | Bizar logo · workspace switcher · project picker |
+| Center | flex | breadcrumb (route) + inline search (Cmd+K opens palette; inline search is for quick find) |
+| Right | auto | Status pills (agents online · tokens · queue) · notifications bell · theme toggle · user menu |
 
-```
-.input       32px tall, --bg-elev, --border, focus = --accent border + glow
-.textarea    auto, min 96px tall, resizes vertically
-.input-mono  same as .input, font-family: --font-mono  (used for hex/path fields)
-```
+The topbar is sticky (`--z-sticky-nav`). It is **not** a tab bar — tabs live inside views when needed.
 
-Search trigger in the topbar is a `.input` styled as a pill with a kbd
-hint inside it on the right.
+### 7.3 Sidebar
 
-### 9.4 Status pills & badges
+| Slot | Contents |
+|--|--|
+| Header | Workspace switcher (240px), collapse toggle (right edge) |
+| Section: **Workspace** | Overview, Tasks, Goals |
+| Section: **Operations** | Agents, Activity, Memory |
+| Section: **Libraries** | Skills, MCP servers, Hooks |
+| Section: **System** | Settings |
+| Footer | Status indicator (online/offline), build SHA, version |
 
-```
-.pill            999px radius, --accent-bg bg, --accent text, 11px mono uppercase
-.pill-success    --success-soft bg, --success text
-.pill-warning    --warning-soft bg, --warning text
-.pill-error      --error-soft bg, --error text
-.pill-info       --info bg (muted), --info text
+Each section has an 11px uppercase label in `--fg-subtle` with `letter-spacing: 0.04em`. Items are 32px tall, single line, with a 16x16 Lucide icon, label, and an optional count badge (right-aligned, `--fg-muted`). The active item uses `--sidebar-accent` background with `--sidebar-accent-fg` text and a 2px left-edge bar in `--sidebar-accent` (a single permitted use of an edge bar — it is the *only* navigation primitive allowed to use one).
 
-.badge           square corner, --bg-elev-2 bg, --text text, 11px mono, 14px square
-.dot             8px circle, color encodes state
-```
+### 7.4 Content area
 
-Pills = uppercased categorical labels (`STREAMING`, `MOD`, `BETA`).
-Badges = numeric counts (unread messages, queued tasks).
+The `SidebarInset` is a 1440px-max container with `--space-8` horizontal padding and `--space-6` top padding (topbar adds the rest). Pages render their own header (ViewHeader primitive — see §8.4) and then their content.
 
-### 9.5 Cards
+### 7.5 Optional right detail drawer
 
-```
-.card            --bg-elev, --border, --radius-lg (14px), --space-3 padding
-.card-elev-2     --bg-elev-2 (nested surfaces)
-.card-flat       no background, no border
-.card-rule       top border in --text-strong, used in log-style lists
-```
+The kanban and agents views can open a right-side **DetailDrawer** (360px). It slides in from the right with `--motion-base` and pushes content (≥1280px) or overlays it (<1280px). It contains:
+- Read view: title, metadata, body, activity, comments
+- Edit view: same + editable fields inline
 
-Kanban card: 16px padding, 14px radius, `box-shadow: --shadow-1` only
-on drag.
+### 7.6 Routes
 
-### 9.6 Modal & dialog
+| Path | Page | Default view |
+|--|--|--|
+| `/` | Overview | Dashboard summary |
+| `/tasks` | Tasks | Kanban (the main focus) |
+| `/tasks/list` | Tasks | List view |
+| `/tasks/calendar` | Tasks | Calendar view |
+| `/goals` | Goals | Active goals |
+| `/goals/:id` | Goal detail | Single goal |
+| `/agents` | Agents | Roster |
+| `/agents/:id` | Agent detail | Single agent |
+| `/activity` | Activity | Event log |
+| `/memory` | Memory | Vault browser |
+| `/libraries/skills` | Skills | Library |
+| `/libraries/mcps` | MCP servers | Library |
+| `/libraries/hooks` | Hooks | Library |
+| `/settings/*` | Settings | Hierarchical |
 
-- Backdrop: `--overlay-bg` (60% black).
-- Surface: `--bg-elev-2`, `--radius-xl`, `--shadow-3`.
-- Title: `--fs-h3` weight 600, `--space-3` from top.
-- Footer: `--border` top hairline, right-aligned actions.
+The nav stays at **6 top-level items** (Workspace, Operations, Libraries, System — the rest are sub-routes of the existing items). The user explicitly said "I do not want too many tabs", so we surface items as nav groups with secondary tabs inside the page.
 
-Command palette (v3.1.0+): 520px wide, centered, 16px padding, kbd row
-in footer showing shortcuts.
+### 7.7 Empty states
 
-### 9.7 Toast
+Every collection view has an `EmptyState` (see §8.5) with:
+- A 24px Lucide icon in `--fg-subtle`
+- A one-line title in `--text-md` `--weight-medium`
+- A one-sentence body in `--fg-muted`
+- One primary CTA button (`--accent`)
+- Optional secondary text link
 
-- Bottom-right, stacks upward, 4 visible max.
-- Width 360px, `--bg-elev-2`, `--radius-md`, `--shadow-2`.
-- Color-coded left edge of *icon*, not the toast background.
-- Lifetimes: `info` 2.5s, `success` 3s, `warning` 5s, `error` 8s.
-
-### 9.8 Tabs (topbar variant)
-
-- 36px tall, `--fs-meta` text, `--font-mono`.
-- Active: `--text-strong` + 2px `--accent` underline (positioned at
-  bottom of the tab, full-width).
-- Hover: `--text-strong` (no underline).
-- Settings tab: shows a small `Settings2` icon next to its label when
-  settings mode is active.
-
-### 9.9 Sidebar tabs (sidebar / both layout)
-
-- 56px wide column, 44px tall.
-- Icon 18px, label hidden (tooltip via `title`).
-- Active: `--accent-bg` background, `--accent` icon, 600 weight label.
-- Inactive: `--text-dim` icon.
-
-### 9.10 Chat
-
-#### Rail (`<aside class="chat-rail">`)
-- Width 280px. Sections grouped by recency: Today, Yesterday, This
-  week, Earlier.
-- Each row: state indicator (8px dot, color per state) + title + time
-  + unread badge + 3-dot menu.
-- Active session background: `--accent-bg` with no left stripe.
-- Sub-agent tree: collapsible, indented 12px, smaller text, hairline
-  connector.
-
-#### Thread (`<section class="chat-thread-section">`)
-- Center column, fills remaining width.
-- Thread head: title + source badge (`cline` / `bizar chat`) + subtitle
-  with state (idle / Replying / Your turn).
-- Messages: alternating bubbles. User right-aligned, `--bg-elev-2`
-  bubble. Assistant left-aligned, no bubble (transparent).
-- Streaming indicator: three pulsing dots in `--accent`, animated.
-- Jump-to-latest pill (when scrolled up): floating, bottom-right of
-  thread, `--bg-elev-2` + `--shadow-2`.
-
-#### Composer
-- Pill-shaped input, `--bg-elev` outer, `--bg-elev-2` inner field.
-- Attachments: chip row above input.
-- Slash command suggestions: popover above, mono, `--font-mono`.
-- Agent + model selectors: pill chips on left, opens dropdown on
-  click.
-
-#### Info panel (`<aside class="chat-info">`)
-- Width 320px, sections (Session, Agent, Model, Tokens, Cost,
-  Attached agents, MCPs, Slash commands, Actions).
-- Token usage: numeric + horizontal progress bar (`--bg-elev-2` track,
-  `--accent` fill, 4px tall).
-- Cost: numeric + "approx · live from MiniMax" caption when not
-  measured.
-
-### 9.11 Tables
-
-- Hairline borders (`--border`), no row striping.
-- Header row: `--text-dim`, `--font-mono`, 12px, uppercase, 0.04em
-  letter-spacing.
-- Body row: 14px, `--text`, 12px 14px padding.
-- Numerics: `--font-mono`, `tabular-nums`, right-aligned.
-- Hover: `--bg-elev-2` wash — not a colored row.
-
-### 9.12 Kanban (Tasks)
-
-5-column board: Backlog → Todo → In progress → Review → Done.
-
-- Column header: 12px mono uppercase, count badge, scrollable column
-  body.
-- Card: 14px radius, 16px padding, kanban-card-shadow only on drag.
-- Team badge (v6.0.0): pill with sparkle icon, attached to cards
-  tagged `team:*`.
-- Drag: 1px `--accent-border` outline, `--shadow-3`.
-
-### 9.13 Status indicators (session, agent, runtime)
-
-| State | Dot | Background | Animation |
-|---|---|---|---|
-| idle | `--text-dim` | none | none |
-| streaming | `--success` | `--success-soft` 4px wash on icon | pulsing glow |
-| awaiting | `--warning` | none | none |
-| error | `--error` | `--error-soft` ring | shake once on entry |
-| connecting | `--text-dim` | none | opacity 0.4↔1, slow |
-
-### 9.14 Glyph artifact cards
-
-- Square 1:1, `--bg-elev`, 1px `--accent-border` on hover.
-- Title in `--fs-h3`, 11px mono caption.
-- Send / Copy / Edit icon row in footer.
-
-### 9.15 Notifications bell
-
-- 16px bell icon, dot for unread count.
-- Panel: 360px wide, scrolls, items 64px tall, hairline separators.
-
-### 9.16 Search modal
-
-- 600px wide, 80vh max height.
-- Input at top (large), results list below.
-- Each result: icon + title + path (mono, dim) + kbd hint.
-- Arrow keys to navigate, Enter to open.
-
-### 9.17 Sparkline & metric charts
-
-- Inline SVG, 32px tall, `--accent` stroke 1.5px, gradient fill (8% → 0%).
-- Right-aligned delta: `--success` for "up is good", `--error` for "up is bad".
-- Numeric body always tabular-nums.
-
-### 9.18 Workflow DAG visualizer (v6.0.0)
-
-Used in Tasks card detail and Eval reports.
-- Nodes: rounded rectangles (8px radius), `--bg-elev-2` background, hairline border.
-- Node states: idle / running / done / failed / skipped — colored border + center dot.
-- Edges: 1.5px lines in `--text-dim`, animated dashed line on the "currently running" edge.
-- Vertical timeline: time on the left axis in mono.
-
-### 9.19 Approval queue (v6.0.0)
-
-Used in Plans & Memory tabs.
-- Each row: 56px tall, agent avatar + plan title + target file (mono) + Approve / Steer / Reject buttons.
-- Hairline separators; rejected plans get a thin `--error-soft` wash on hover-to-undo.
-- Bulk action toolbar floats above the queue when ≥1 selected.
-
-### 9.20 Cost / token chart card (v6.0.0)
-
-Used in Usage (MiniMax) and Overview.
-- Card: title + period selector (24h / 7d / 30d) + big numeric + sparkline + breakdown bars.
-- Breakdown bars: horizontal stacked bar by model, `--accent` for primary, `--text-dim` for others.
-- Always tabular-nums. Always right-aligned.
-
-### 9.21 BG agent live panel (v6.0.0)
-
-Used in Active tab.
-- Row: 56px tall, agent avatar + name + status pill + elapsed (mono, 1s tick) + action buttons (pause / steer / stop).
-- Status pill variants: `running` (success pulse) / `paused` (warning) / `stuck` (warning static + Retry) / `done` (text-dim).
-- Collapsed by default, expands to show streaming output and tool calls.
+No illustrations, no emoji, no "celebrate your first task" copy.
 
 ---
 
-## 10 · Patterns
+## 8 · Component library
 
-### 10.1 Layout shells
+The library lives at `bizar-dash/src/web/ui/`. Every component is named with PascalCase, lives in its own file, exports a named function, and has a colocated `.test.tsx` file. No default exports.
 
-Three layouts selectable in Settings → UI → Layout:
+### 8.1 `ui/primitives/` — no business logic
 
-| Layout | Topbar tabs | Sidebar nav | Main grid |
-|---|---|---|---|
-| `topbar` | visible | hidden | topbar + view |
-| `sidebar` | collapsed (no tabs row) | visible | sidebar + view |
-| `both` | collapsed | visible | sidebar + view + small topbar |
+- **Box** — `div` with tokens (bg, fg, padding, radius)
+- **Stack** — vertical flex with `--space-N` gap
+- **Inline** — horizontal flex with `--space-N` gap
+- **Cluster** — wraps inline elements that pack
+- **Grid** — CSS grid wrapper with col/row gap
+- **Center** — centers content (empty states)
+- **Separator** — 1px horizontal/vertical rule
+- **ScrollArea** — themed scroll wrapper, hides scrollbars unless scrolling
+- **Resizable** — wraps `react-resizable-panels`
+- **VisuallyHidden** — `sr-only` helper
+- **Portal** — Radix Portal wrapper
 
-Default is `sidebar` (v6.0.0). Switching layouts preserves the active
-tab.
+### 8.2 `ui/controls/` — form & input
 
-### 10.2 3-column chat
+- **Button** (variants: `primary | secondary | ghost | outline | danger | link`, sizes: `xs | sm | md | lg | icon`)
+- **ButtonGroup** — stacked buttons with shared borders
+- **IconButton** — square, icon-only, requires `aria-label`
+- **Input** — single-line text, optional left/right slots
+- **Textarea** — multi-line, autoresize
+- **InputOTP** — segmented code input
+- **Select** — Radix Select wrapper (single)
+- **MultiSelect** — Radix Popover + command list (multi)
+- **Combobox** — Radix Popover + list + input (async-capable)
+- **Checkbox** — Radix Checkbox
+- **RadioGroup** — Radix RadioGroup
+- **Switch** — Radix Switch
+- **Toggle** — single toggle button
+- **ToggleGroup** — Radix ToggleGroup
+- **Slider** — Radix Slider
+- **DatePicker** — single date
+- **DateRangePicker** — two dates
+- **TimePicker** — single time
+- **ColorPicker** — popover with swatches + input
+- **Field** — label + control + error + helper wrapper
+- **Form** — React Hook Form + Zod integration
+
+### 8.3 `ui/feedback/` — feedback & status
+
+- **Alert** — inline banner, variants `info | success | warning | danger`
+- **Toast** — Sonner wrapper, top-right, auto-dismiss 5s
+- **Dialog** — Radix Dialog (modal)
+- **AlertDialog** — destructive confirm
+- **Sheet** — Radix Dialog with side prop (right/left/top/bottom)
+- **Drawer** — bottom-sheet variant for mobile
+- **Popover** — Radix Popover
+- **HoverCard** — Radix HoverCard (preview on hover)
+- **Tooltip** — Radix Tooltip, 4-side aware
+- **Progress** — linear bar
+- **ProgressCircle** — circular determinate/indeterminate
+- **Spinner** — single-element rotating arc
+- **Skeleton** — shimmering placeholder
+- **EmptyState** — see §7.7
+- **ErrorBoundary** — React error boundary
+- **Banner** — full-width inline banner
+
+### 8.4 `ui/data/` — data display
+
+- **Card** — generic container with optional header/footer slots
+- **StatTile** — single metric, optional delta indicator
+- **StatGrid** — N-up grid of StatTiles
+- **Table** — semantic `<table>` (low-level)
+- **DataTable** — TanStack Table wrapper (sort, filter, paginate, select, resize, virtualize)
+- **Badge** — small label, variants `default | accent | success | warning | danger | neutral`
+- **Chip** — removable tag with avatar/icon
+- **Avatar** — image or initials, with optional status dot
+- **AvatarStack** — overlapping avatars
+- **Timeline** — vertical event list with timestamps
+- **Accordion** — Radix Accordion
+- **Collapsible** — single show/hide
+- **Chart** — Recharts wrapper (LineChart, BarChart, AreaChart, PieChart) bound to chart tokens
+- **Sparkline** — inline mini-chart
+- **MetricRing** — circular progress with label
+- **BarList** — horizontal ranked list (used in activity feeds)
+- **TreeView** — Radix Accordion-based tree
+- **VirtualList** — TanStack Virtual wrapper
+- **Kbd** — keyboard key cap
+- **CountBadge** — numeric pill, optional max cap (e.g. "99+")
+- **ViewHeader** — page title + description + actions slot (used at top of every page)
+
+### 8.5 `ui/navigation/` — navigation
+
+- **Sidebar** (root + provider) — wraps `nav`, handles collapse
+- **SidebarProvider** — context, persisted collapsed state
+- **SidebarInset** — content slot inside SidebarProvider
+- **SidebarSection** — labeled section
+- **SidebarItem** — single nav row
+- **SidebarGroup** — collapsible group
+- **Topbar** — top bar slot composition
+- **Breadcrumb** — list of links
+- **NavLink** — Radix-styled anchor with active state
+- **Tabs** — Radix Tabs wrapper
+- **TabBar** — styled tab strip
+- **TabPanel** — content slot
+- **Menu** — Radix DropdownMenu with shortcut display
+- **ContextMenu** — Radix ContextMenu (right-click trigger)
+- **DropdownMenu** — Radix DropdownMenu
+- **Menubar** — Radix Menubar
+- **Pagination** — page + per-page controls
+- **Stepper** — multi-step progress
+- **CommandPalette** — Cmd+K overlay (see §9.4)
+- **CommandBar** — inline command (Ctrl+K for filter focus)
+- **NavSection** — labeled section for sidebar
+- **NavItem** — sidebar row primitive
+- **NavGroup** — collapsible section in sidebar
+- **ViewTabs** — tab strip below ViewHeader
+
+### 8.6 `ui/kanban/` — the main feature
+
+This directory is the largest and most important. The kanban is the centerpiece of the dashboard.
+
+- **KanbanBoard** — root container, owns DnD context
+- **KanbanColumn** — column with header (title, count, actions), droppable body, add-task footer
+- **KanbanCard** — task card, draggable, with all metadata visible
+- **KanbanCardCompact** — minimal card for high-density mode
+- **KanbanCardExpanded** — preview-on-hover or detail-drawer card
+- **KanbanDetail** — right-side drawer content
+- **KanbanFilters** — filter bar (assignee, label, priority, due, search)
+- **KanbanGroupBy** — group-by selector (status / assignee / label / priority / due / project)
+- **KanbanSort** — sort selector
+- **KanbanDensity** — compact/comfortable toggle
+- **KanbanEmptyState** — column empty state
+- **KanbanKeyboardShortcuts** — helper component showing available shortcuts
+- **KanbanQuickAdd** — inline add input at top of each column
+- **KanbanContextMenu** — right-click menu (see §9.2)
+- **KanbanDragOverlay** — drag preview
+
+### 8.7 `ui/popups/` — right-click & custom popups
+
+All popups are Radix-based or custom portals. **Browser default context menus are suppressed on all interactive surfaces** (`oncontextmenu` returns `false`); right-click opens our `ContextMenu`.
+
+- **ContextMenu** — Radix ContextMenu (right-click + Shift+F10)
+- **ActionMenu** — vertical list of actions with icons + shortcuts
+- **SubActionMenu** — nested action menu (Radix Sub)
+- **QuickAction** — single-action right-click shortcut
+- **CommandBar** — Cmd+K overlay
+- **DetailDrawer** — right-side drawer with read/edit toggle
+- **ConfirmDialog** — destructive confirmation
+- **InfoPopover** — hover/click popover with rich content
+
+### 8.8 `ui/theme/` — theming
+
+- **ThemeProvider** — light/dark/system, persists to `localStorage`
+- **useTheme** — hook returning `{ theme, setTheme, resolvedTheme }`
+- **ThemeToggle** — dropdown trigger
+- **DensityProvider** — compact/comfortable
+- **useDensity** — hook
+
+### 8.9 `ui/utils/`
+
+- **cx** — `clsx` + `tailwind-merge` wrapper
+- **formatNumber**, **formatPercent**, **formatBytes**, **formatDuration**, **formatRelativeTime** — display formatters
+- **useHotkeys** — global hotkey registry (see §9.3)
+- **useFocusTrap** — focus trap for popovers
+- **useMediaQuery** — responsive hook
+- **useReducedMotion** — accessibility hook
+- **useDebouncedValue** — search input debounce
+- **useLocalStorage** — typed localStorage hook
+
+### 8.10 `ui/hooks/` — cross-cutting hooks
+
+- **useWebSocket** — typed WS subscriber
+- **useAgents** — agent roster query
+- **useTasks** — task query/mutation
+- **useGoals** — goal query/mutation
+- **useShortcuts** — keyboard shortcut dispatcher
+- **useContextMenu** — opens Radix ContextMenu at cursor
+- **useDragAndDrop** — dnd-kit wrapper
+
+---
+
+## 9 · Interaction patterns
+
+### 9.1 The five inviolable rules
+
+1. **Right-click is sacred.** Every interactive surface has a `ContextMenu`. No element falls back to the browser default.
+2. **Keyboard parity.** Every action has a shortcut. Every menu item shows the shortcut right-aligned in `Kbd` style.
+3. **Cmd+K is everything.** Cmd+K opens the command palette, which contains every page, every action, every setting, every shortcut reference.
+4. **Optimistic by default.** Mutations apply instantly; rollback on error with a toast. No spinners on the user's own actions.
+5. **Real-time by default.** Live data refreshes via WS without user action; the green pulse indicator shows the connection is live.
+
+### 9.2 Right-click context menus
+
+Right-click menus replace browser defaults everywhere except in `<input>`, `<textarea>`, and `[contenteditable]`. The trigger is `onContextMenu` on the element, opening a Radix `ContextMenu`.
+
+```tsx
+<KanbanCard onContextMenu={(e) => {
+  e.preventDefault();
+  openContextMenu(task.id, e);
+}}>
+  ...
+</KanbanCard>
+```
+
+Every context menu follows this structure:
 
 ```
-┌────────┬──────────────────────────────┬─────────┐
-│  Rail  │  Thread                      │  Info   │
-│ 280px  │  flex                        │  320px  │
-│        │                              │         │
-│        │  [composer always at bottom] │         │
-└────────┴──────────────────────────────┴─────────┘
+┌─────────────────────────────────────┐
+│  Open in drawer           ⌘↵        │
+│  Edit                   E          │
+│  Duplicate              ⇧D         │
+│  Copy link              ⌥L         │
+│  ────────────────────────────────  │
+│  Assign to agent           ▸       │
+│  Move to column           ▸       │
+│  Set priority             ▸       │
+│  ────────────────────────────────  │
+│  Archive                ⌘⇧A         │
+│  Delete (danger)        ⌫          │
+└─────────────────────────────────────┘
 ```
 
-- All three columns scroll independently.
-- Composer sticks to bottom of thread column (`position: sticky`,
-  `bottom: 0`, `--bg-elev` backdrop).
-- Info panel collapses below 1100px (becomes a sheet above 768px).
+The keyboard equivalent is **Shift+F10** when the element has focus. We render the same menu for both triggers.
 
-### 10.3 Streaming thread
+### 9.3 Keyboard shortcuts
 
-When a session is in `streaming` state:
+Every shortcut is registered in `ui/utils/shortcuts.ts` and bound through `useHotkeys`. Shortcuts are scoped:
 
-- Source badge in thread head pulses `--success` glow.
-- Subtitle reads "Replying · odin · open-design".
-- Footer of thread shows three pulsing dots in `--accent`.
-- Composer is disabled (`pointer-events: none` on the textarea, send
-  button replaced with a small stop icon).
+| Scope | Modifiers | Examples |
+|--|--|--|
+| **Global** | `Cmd`/`Ctrl` | `Cmd+K` palette, `Cmd+B` sidebar, `Cmd+/` shortcuts |
+| **Tasks view** | none (when focused) | `C` new, `E` edit, `/` search, `1-9` jump column |
+| **Anywhere** | `Cmd` | `Cmd+S` save (if open editor), `Cmd+,` settings |
 
-### 10.4 Active tab navigation
+Shortcuts ignore typing when an `<input>` or `<textarea>` has focus unless the modifier is `Cmd`/`Ctrl`. The Command Palette shows all available shortcuts and is searchable.
 
-- Active tab has accent underline (topbar) or accent background
-  (sidebar).
-- Keyboard: `1`–`9` for first 9 tabs, `0` for Overview (v3.2.0).
-- Browser back/forward navigates tab history.
+### 9.4 Command Palette (Cmd+K)
 
-### 10.5 Status of background agents
+Built on `cmdk` (the same library Linear uses). Triggers:
 
-`Active` tab shows live background agents. Each row:
+| Command | Description |
+|--|--|
+| `Cmd+K` (Mac) / `Ctrl+K` (Win/Linux) | Open |
+| `Esc` | Close |
+| `↑↓` | Navigate |
+| `↵` | Execute |
+| `Tab` | Switch scope (Actions / Pages / Settings) |
 
-```
-[●] odin       odin@open-design  · streaming   4m12s   [pause][steer][stop]
-```
+Three scopes (tabs):
+1. **Actions** — quick mutations on the current selection. If nothing is selected, falls back to general actions.
+2. **Navigate** — every page, with breadcrumbs.
+3. **Settings** — every settings key, jump to its setting page.
 
-- Dot color = agent state.
-- Time elapsed updates every second (`--motion-fast`).
-- Action buttons are `.btn-sm .btn-ghost`.
-- Stuck agents (>5 min no progress) get a yellow dot + a `Retry`
-  button.
+The palette has a fuzzy-search input at the top, a list of matches, and a footer showing the current scope + scope-switch hint.
 
-### 10.6 Memory sources
+### 9.5 Optimistic mutations
 
-4 sources, each with its own glyph + accent-tinted background:
+Every mutation goes through `useMutation` from TanStack Query:
 
-| Source | Glyph | Accent |
-|---|---|---|
-| project notes | `Brain` | `--accent` |
-| skills | `Sparkles` | `--accent-2` |
-| tasks | `CheckSquare` | `--success` |
-| activity log | `Activity` | `--info` |
-
-A unified search bar queries all 4 in parallel; results are grouped by
-source with the matching glyph on the left of each row.
-
-### 10.7 Cline runtime badge (v6.0.0)
-
-```
-┌──────────────────────────┐
-│  ● Cline · active        │   ← pulse when state=active
-└──────────────────────────┘
+```ts
+const updateTask = useMutation({
+  mutationFn: api.tasks.update,
+  onMutate: (newTask) => {
+    queryClient.setQueryData(['tasks'], applyUpdate(old, newTask));
+    return { previous: old };
+  },
+  onError: (_err, _vars, ctx) => {
+    queryClient.setQueryData(['tasks'], ctx?.previous);
+    toast.error('Could not save — reverted');
+  },
+  onSettled: () => queryClient.invalidateQueries(['tasks']),
+});
 ```
 
-8px dot, label in mono. Lives in topbar-right. `active` = pulsing
-green. `idle` = static dim. `unavailable` = static red. `unknown` =
-static gray.
+The UI updates instantly; the toast confirms or reverts. No spinners on user-initiated mutations.
 
-### 10.8 Doctor / Harness status pills
+### 9.6 Real-time updates
 
-Subsystem status: 4 pill states, 5-dim progress bars.
+The dashboard maintains a single WebSocket connection (`/ws/dashboard`) that streams:
+
+- `tasks:change` — task created/updated/deleted
+- `agents:change` — agent registered/deregistered
+- `goals:change` — goal progress tick
+- `activity:event` — new event in activity log
+- `routing:decision` — new routing decision
+- `cost:tick` — cost reservation update
+- `system:status` — health, version, build
+
+All hooks consume these via `useWebSocket` + React Query cache invalidation. The connection state shows in the topbar's status pill (green pulse = connected, amber = reconnecting, red = offline).
+
+### 9.7 Hover & focus
+
+- Hover previews use `HoverCard` with a 400ms delay, 200ms close.
+- Focus rings: `--focus-ring` 2px outline + 2px offset, always visible on keyboard focus, never on mouse click.
+- Tooltip: 4-side aware, 200ms delay, `--motion-base` ease.
+
+### 9.8 Empty states
+
+(See §7.7.) Every collection has a deliberate empty state with one CTA. We never say "Nothing to see here." We always say what to do next.
+
+---
+
+## 10 · Settings model
+
+Settings is hierarchical, scoped, and always findable. The full settings surface lives at `/settings/*` with a sidebar in the page itself (not the global sidebar).
+
+### 10.1 Section structure
 
 ```
-[●] Cline runtime          active     ▰▰▰▰▰▱▱▱▱  5/8
-[●] Task scheduler         active     ▰▰▰▰▰▰▱▱▱  6/8
-[●] Memory store           degraded   ▰▰▰▱▱▱▱▱▱  3/8
-[●] WebSocket              active     ▰▰▰▰▰▰▰▰▱  7/8
+/settings
+├── /general          Workspace name, logo, default project
+├── /appearance       Theme, density, accent color (future)
+├── /agents           Default agent roster, max concurrency
+├── /goals            Goal cadence, review interval
+├── /tasks            Default workflow, custom statuses, kanban config
+├── /skills           Skill library, default skill, auto-suggest
+├── /mcps             MCP servers, auth, per-tool permissions
+├── /hooks            Hook config (Pre/Post/UserPrompt)
+├── /routing          Model tiers, cost ceiling, fallback
+├── /memory           Vault location, retention, distillation
+├── /notifications    Per-event toggles, channels
+├── /security         Webhook secrets, HMAC keys, PII mode
+├── /integrations     GitHub, Slack, webhooks
+├── /billing          Cost gate, room budget, alerts
+├── /team             Members, roles (future)
+└── /advanced         Debug, traces, export/import, reset
 ```
 
-Pills are pill-success / pill-warning / pill-error as appropriate.
-Progress bars: `--bg-elev-2` track, `--accent` fill. **No colored
-track backgrounds** — color stays on the fill, not on the rail.
+### 10.2 Settings page pattern
 
-### 10.9 Overview dashboard layout (v6.0.0)
+Every settings page follows the same skeleton:
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  HEADER:  ⌂ Bizar   project▾   ⌘K Search  • ws·live  • cline   │
+┌─ ViewHeader ────────────────────────────────────────────────────┐
+│  Settings · Agents                          [ Save changes ]   │
+│  Default roster and concurrency for new sessions.               │
 ├────────────────────────────────────────────────────────────────┤
-│  HERO ROW (4 cards):                                           │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ │
-│  │ tokens/hr  │ │ latency    │ │ error rate │ │ cost/hr    │ │
-│  │ 1.42M      │ │ 842ms      │ │ 0.21%      │ │ $1.84      │ │
-│  │ +12% ▲     │ │ −18ms ▼    │ │ +0.04 ▲    │ │ −8% ▼      │ │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────┘ │
-├────────────────────────────────────────────────────────────────┤
-│  TWO-COL:                                                      │
-│  ┌──────────────────────┐ ┌──────────────────────────────┐    │
-│  │ Live activity feed   │ │ Active agents (3 running)    │    │
-│  │ (timestamped rows)   │ │ (status rows w/ pause)       │    │
-│  │                      │ │                              │    │
-│  │                      │ │ Memory health                │    │
-│  │                      │ │ (4 sources at a glance)      │    │
-│  └──────────────────────┘ └──────────────────────────────┘    │
-├────────────────────────────────────────────────────────────────┤
-│  GRAPH ROW:                                                    │
-│  ┌──────────────────────────────────────────────────────────┐ │
-│  │ Token spend · last 24h  (large sparkline + breakdown)   │ │
+│  ┌─ FieldGroup ──────────────────────────────────────────────┐ │
+│  │  Default roster size       [ 8 ]            — help text  │ │
+│  │  Max concurrent agents     [ 16 ]           — help text  │ │
+│  │  Agent types               [ multi-select ] — help text  │ │
+│  │  Auto-spawn on session     [ toggle ON ]    — help text  │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│  ┌─ FieldGroup ──────────────────────────────────────────────┐ │
+│  │  Restart agents on config change  [ toggle OFF ]          │ │
 │  └──────────────────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 10.10 Cost dashboard layout (Usage tab)
+A field group is a `Card` containing one or more `Field` rows. Each field has a label, control, and helper text (one short sentence). Fields auto-save on blur with an inline checkmark; an explicit "Save changes" button is reserved for grouped forms.
+
+### 10.3 Settings discovery
+
+- Every setting is reachable via Cmd+K (palette).
+- Every setting is reachable via `/settings` breadcrumb.
+- The settings sidebar is **the only** place that lives in the page (not the global sidebar) so it has room to breathe.
+
+---
+
+## 11 · Accessibility
+
+WCAG 2.2 AA is the floor. We aim higher where it does not cost.
+
+### 11.1 Color & contrast
+
+- All text/background pairs meet **AA 4.5:1** (body) and **AA 3:1** (large text, icons).
+- Charts use shape + color (never color alone).
+- Status indicators always have a shape or label in addition to color (green dot + "live"; red dot + "errored").
+
+### 11.2 Keyboard
+
+- Every interactive element is reachable via Tab.
+- Focus order is visual order.
+- Focus ring is always visible on keyboard focus.
+- Modals trap focus; popovers return focus on close.
+- Drag-and-drop has a keyboard alternative (`Space` to pick up, arrows to move, `Enter` to drop, `Esc` to cancel).
+
+### 11.3 Screen readers
+
+- Every icon-only button has `aria-label`.
+- Every form control has a `<label>` (visible or sr-only).
+- Live regions (`aria-live="polite"`) for activity updates and toasts.
+- Tables use `<th scope="col">`; data tables announce sort state.
+
+### 11.4 Motion
+
+- `prefers-reduced-motion` zeroes motion tokens (§6.3).
+- Auto-playing animations have a pause control.
+- Drag/drop has a non-motion alternative.
+
+### 11.5 Touch & pointer
+
+- Minimum target size: **44x44px** for touch (mobile/tablet), **24x24px** for desktop.
+- Right-click has a long-press alternative on touch (650ms hold).
+- Hover-only patterns have a focus equivalent.
+
+---
+
+## 12 · Banned tropes
+
+Audited before every PR via `scripts/check-design-tropes.sh`.
+
+- **No gradients.** Anywhere. As backgrounds, as fills, as borders, as button hovers. The accent color is solid. Charts use solid fills. Period.
+- **No vertical accent stripes on containers.** Active state uses background tint + weight + motion. The single permitted edge bar is the 2px active-item bar inside `SidebarItem` (§7.3).
+- **No purple, blue, or rainbow washes.** The accent is green. Charts are grayscale. Status colors are semantic.
+- **No emoji in UI copy.** Use Lucide icons.
+- **No "Lorem ipsum".** Every placeholder is realistic.
+- **No "Feature One / Feature Two".** Labels are real.
+- **No "Loading…" spinners as primary state.** Use skeleton or streaming copy ("Fetching agents…").
+- **No default browser context menus** on any interactive surface.
+- **No modal-on-modal stacking.** A modal cannot open another modal without an explicit close.
+- **No tooltips on disabled buttons.** Tooltip on hover only when the action is enabled; if disabled, helper text appears inline.
+- **No invented metrics.** Real numbers or "—" placeholder.
+- **No glass / blur / noise effects.** Surfaces are solid fills.
+- **No animated icons** except the live indicator pulse.
+
+---
+
+## 13 · Visual contract for new screens
+
+A new screen must:
+
+1. Pick one of the seven layouts from §7 (default: topbar + sidebar).
+2. Use tokens from §3 only — never raw colors.
+3. Use type from §4 only — never custom families.
+4. Use motion from §6 only — never bespoke easings.
+5. Use icons from `lucide-react` — never emoji or custom SVGs (unless domain-specific, in which case it goes in `ui/icons/`).
+6. Use components from `ui/` only — never rebuild primitives.
+7. Honor density mode (§5.3).
+8. Honor `prefers-reduced-motion`.
+9. Honor `prefers-color-scheme` via the theme system.
+10. Have right-click context menus on every interactive element.
+11. Have keyboard shortcuts for every action.
+12. Have an empty state, a loading state, and an error state.
+13. Have at least one place where the green accent earns its keep.
+14. Document its data shape in `bizar-dash/src/web/views/<name>/README.md`.
+15. Have a colocated `.test.tsx` file with the AAA pattern.
+
+---
+
+## 14 · Pre-merge checklist
+
+Run before opening a PR that touches UI:
+
+```sh
+pnpm check:design-tropes   # grep for banned patterns (§12)
+pnpm check:a11y            # axe-core on every new page
+pnpm check:visual          # screenshot diff at 1440/1100/768/390
+pnpm test -- ui            # component tests
+pnpm e2e                   # full app boots, no console errors
+pnpm check:keyboard        # manual keyboard-only walkthrough (CI recorded)
+```
+
+All five must pass. The visual diff must not regress at any of the four widths. The keyboard walkthrough must reach every interactive element via Tab only.
+
+---
+
+## Appendix A · shadcn preset `b7kBsBkh7b`
+
+The dashboard is initialized with:
+
+```sh
+pnpm dlx shadcn@latest init --preset b7kBsBkh7b
+```
+
+Per the [shadcn CLI v4 changelog](https://ui.shadcn.com/docs/changelog/2026-03-cli-v4), presets are opaque codes resolved by the CLI. The `b7kBsBkh7b` preset ships:
+
+- Pre-configured `components.json` (style: `new-york`, base color: `neutral`, CSS variables: `yes`, icon library: `lucide`).
+- Pre-tuned `tailwind.config.ts` with the OKLch color ramp.
+- Pre-installed primitives matching the foundation in §3.
+
+If the preset resolves to a different package set than expected, the plan still holds: §3 is the contract, the preset is the bootstrap. Any preset mismatch is resolved by overriding `components.json` and running `pnpm dlx shadcn@latest add <component>` for each missing primitive in §8.
+
+The provided OKLch theme in the user's brief maps directly to §3 — every token in `:root` (light) and `.dark` is taken verbatim from the brief, then extended with the geometry, motion, and z-index tokens that the preset does not cover.
+
+---
+
+## Appendix B · File map
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  HEADER  Usage  · 24h ▾    $1.84/hr  −8% ▲                    │
-├────────────────────────────────────────────────────────────────┤
-│  STAT CARDS (4):                                               │
-│  [spent 24h] [cost/hr] [tokens/hr] [alerts]                   │
-├──────────────────────────────┬─────────────────────────────────┤
-│  TOKEN SPEND CHART           │  MODEL BREAKDOWN               │
-│  (stacked area, last 24h)    │  (horizontal bars per model)   │
-│                              │                                 │
-├──────────────────────────────┼─────────────────────────────────┤
-│  RECENT ALARMS               │  BUDGET STATUS                 │
-│  (timeline of cost spikes)   │  (4 budgets, percent gauges)   │
-└──────────────────────────────┴─────────────────────────────────┘
-```
-
-### 10.11 Active BG agents layout
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│  HEADER  Active · 3 running 1 paused 1 stuck                   │
-├────────────────────────────────────────────────────────────────┤
-│  ROW (collapsible, default collapsed):                         │
-│  ● odin       streaming  4m12s   [pause][steer][stop][expand]  │
-│   ─ expanded: streaming output + tool call list ─              │
-│                                                                │
-│  ● thor       paused     8m03s   [resume][steer][stop]         │
-│  ● mimir      stuck      5m21s   [retry][steer][stop]          │
-│  ● tyr        done       2m41s   [restart][remove]             │
-└────────────────────────────────────────────────────────────────┘
-```
-
-### 10.12 Settings mode (v4.9.0)
-
-When the user enters the Settings tab, the sidebar replaces its
-tab list with the full SettingsNav (16 sections). The active section
-lights up in the sidebar and the main panel scrolls to it.
-
-```
-┌──────┬───────────────────────────────────────────────┐
-│ ⌂    │  Theme                                          │
-│ 💬   │  ──────                                         │
-│ 🤖   │  Accent color        [color picker]             │
-│ ... │  Font family         [Inter ▾]                  │
-│ ⚙ → │  Compact mode        [▢]                       │
-│      │                                                 │
-│ ▼    │  Layout                                         │
-│ Theme│  ──────                                         │
-│ Layo │  UI layout         (•) sidebar ( ) topnav ( ) both│
-│ Net  │  Show header        [✓]                       │
-│ Auth │                                                 │
-│ ...  │                                                 │
-└──────┴───────────────────────────────────────────────┘
+bizar-dash/src/web/
+├── App.tsx
+├── main.tsx
+├── ui/
+│   ├── index.ts              # barrel export
+│   ├── primitives/
+│   ├── controls/
+│   ├── feedback/
+│   ├── data/
+│   ├── navigation/
+│   ├── kanban/
+│   ├── popups/
+│   ├── theme/
+│   ├── hooks/
+│   ├── utils/
+│   └── styles/
+│       ├── reset.css
+│       ├── tokens.css        # the entire §3, generated from JSON
+│       └── globals.css
+├── views/
+│   ├── Overview/
+│   ├── Tasks/
+│   ├── Goals/
+│   ├── Agents/
+│   ├── Activity/
+│   ├── Memory/
+│   ├── Libraries/
+│   └── Settings/
+├── icons/                    # domain-specific Lucide extensions
+├── routes.tsx                # TanStack Router route tree
+└── server/                   # existing REST API (unchanged)
 ```
 
 ---
 
-## 11 · Iconography
-
-Lucide React. 1.6 stroke width. Two sizes:
-
-| Size | Use |
-|---|---|
-| 11px | Inline-with-text icons (chat thread head, info panel headers) |
-| 12px | Button icons, badge icons |
-| 14px | Topbar & sidebar nav icons |
-| 16px | Card-level icons |
-| 18px | Sidebar collapsed icons (intentional bump for visibility) |
-| 20px | Hero / empty-state |
-
-The runic `ᛒ` (berkanan) is the brand glyph — not a Lucide icon. Always
-rendered in `var(--accent)` at 24px in the topbar brand block, 14px in
-the collapsed sidebar footer.
-
----
-
-## 12 · Accessibility
-
-- **WCAG 2.2 AA** contrast on all body text vs its surface.
-- `:focus-visible` ring: 2px `--accent` outline, 2px offset, 4px
-  radius.
-- Keyboard navigation: tab order follows visual order. Modals trap
-  focus. Esc closes. `Cmd/Ctrl+K` opens search.
-- Skip-to-main link (v4.8.0): visually hidden until focused, then pops
-  in at top-left.
-- `aria-current="true"` on active nav, active session.
-- `aria-live="polite"` on the chat log region.
-- `aria-selected` on tabs.
-- Color is never the sole signal — always pair with text or icon.
-
----
-
-## 13 · Responsive
-
-Three breakpoints (in addition to mobile which has a dedicated shell
-`MobileApp.tsx`):
-
-| Breakpoint | Behavior |
-|---|---|
-| ≥ 1440px | 3-column chat, sidebar + topbar visible |
-| 1100–1439 | 3-column chat, sidebar collapses to icons, info panel optional |
-| 768–1099 | Topbar-only layout, info panel becomes sheet |
-| < 768 | Mobile shell takes over (separate code path) |
-
-The desktop dashboard never tries to reflow to mobile — `MobileApp.tsx`
-is its own tree with its own components.
-
----
-
-## 14 · Anti-patterns (audited before each PR)
-
-These break the design system. Any of these in a PR gets a review
-blocker.
-
-- ❌ **Left color stripes on containers.** `box-shadow: inset 2px 0 0`,
-  `border-left: 3px solid`, or any vertical accent edge. Use background,
-  weight, glow, or motion instead.
-- ❌ **Purple gradient backgrounds behind text or as page chrome.**
-  Gradients are reserved for the greeting/brand mark only.
-- ❌ **Generic emoji as feature icons** in cards, lists, or empty
-  states. Use Lucide or `ᛒ`.
-- ❌ **Spinners on disabled buttons.** Use a button-loading state or
-  replace the button with the spinner.
-- ❌ **Inter as display face at >32px.** Inter is body. If you need a
-  display face, propose it in a PR and add the stack to `--font-display`.
-- ❌ **Filler copy**: "Feature One", "Lorem ipsum", invented metrics.
-- ❌ **Raw hex outside `:root`.** All colors must reference a token.
-- ❌ **Row striping in tables.** Use hover wash only.
-- ❌ **Shadowed hairlines.** Borders OR shadows, not both.
-- ❌ **Status conveyed by color alone.** Always pair with text/icon.
-- ❌ **Decimal alignment broken.** Numerics in tables must use
-  `tabular-nums` or be right-aligned.
-- ❌ **Horizontal scroll on viewport ≥ 1100px.** If your component
-  breaks the layout, fix the component.
-
----
-
-## 15 · View index & data shapes
-
-Every view declares the data it consumes. Mock data lives in
-`canvas.html` for visual development; the live API endpoint that
-backs each view is documented in `docs/api.md`.
-
-### 15.1 Overview
-
-**Layout:** §10.9. **Endpoint:** `GET /snapshot.overview`.
-
-```ts
-interface OverviewData {
-  // Live activity (last 50 items, newest first)
-  recentActivity: ActivityItem[];
-
-  // Hero metrics
-  metrics: {
-    tokensPerHour: number;
-    avgLatencyMs: number;
-    errorRate: number;        // 0..1
-    costPerHour: number;      // USD
-    activeBgAgents: number;
-    activeSessions: number;
-  };
-
-  // Active agents (subset of BackgroundAgents)
-  activeAgents: BgInstance[];
-
-  // Memory health (4 sources)
-  memoryHealth: {
-    source: 'lightrag' | 'obsidian' | 'gitsync' | 'semantic';
-    state: 'ok' | 'degraded' | 'down';
-    lastSync: string;
-  }[];
-
-  // Token spend chart (last 24h, hourly buckets)
-  tokenSpend: { hour: string; tokens: number; cost: number }[];
-}
-```
-
-### 15.2 Chat
-
-**Layout:** §10.2. **Endpoints:** `GET /snapshot.sessions` (list),
-`GET /api/cline-sessions` (cline), `POST /api/chat` (send),
-`WS /ws` (stream).
-
-```ts
-interface ChatSession {
-  id: string;
-  title: string;
-  mtime: number;
-  state: 'idle' | 'streaming' | 'awaiting';
-  source: 'bizar' | 'cline';
-  agent: string;
-  unread?: number;
-  pinned?: boolean;
-  tree?: { root: AgentTreeNode };  // orchestrator sub-agents
-}
-
-interface ChatMessage {
-  id: number;
-  role: 'user' | 'assistant' | 'tool';
-  author: string;
-  ts: string;       // HH:MM
-  text: ReactNode;
-  toolCalls?: ToolCall[];
-  pinned?: boolean;
-}
-```
-
-### 15.3 Agents
-
-**Layout:** Roster grid (3-col on ≥1440px, 2-col on ≥1024px, 1-col
-below). **Endpoint:** `GET /snapshot.agents`.
-
-```ts
-interface Agent {
-  name: string;          // 'odin', 'thor', 'mimir', ...
-  model: string;         // 'anthropic/claude-sonnet-4-6'
-  mode: string;          // 'plan-then-forseti'
-  status: 'idle' | 'busy' | 'stuck' | 'down';
-  lastSeen: number;
-  tasksCompleted: number;
-  avgLatencyMs: number;
-}
-```
-
-Each card: avatar (first 2 letters), name (mono), model (dim mono),
-status pill, last seen time, 3 mini stats.
-
-### 15.4 Glyphs (Artifacts)
-
-**Layout:** Masonry grid of square cards. **Endpoint:**
-`GET /snapshot.artifacts`.
-
-```ts
-interface Artifact {
-  id: string;
-  title: string;
-  kind: 'glyph' | 'note' | 'doc';
-  createdAt: number;
-  thumbnail?: string;   // data URL or absent
-  size: number;         // bytes
-}
-```
-
-### 15.5 Tasks
-
-**Layout:** 5-column kanban (§9.12). **Endpoint:** `GET /snapshot.tasks`.
-
-```ts
-interface Task {
-  id: string;            // 'T-120'
-  title: string;
-  col: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
-  priority: 'high' | 'mid' | 'low';
-  tags: string[];
-  team?: boolean;        // v6 team badge
-  by: string;            // agent name
-  when: string;          // 'now', '3h', '1d'
-}
-```
-
-### 15.6 Activity
-
-**Layout:** Timeline (§9.7). **Endpoint:** `WS /api/activity/stream`.
-
-```ts
-interface ActivityItem {
-  kind: 'agent' | 'task' | 'error' | 'info';
-  ts: string;            // HH:MM
-  text: ReactNode;       // allows inline mono spans
-  target?: string;       // optional file/task id
-}
-```
-
-### 15.7 Active (Background agents)
-
-**Layout:** §10.11. **Endpoints:** `GET /background`, `WS bg:*`.
-
-```ts
-interface BgInstance {
-  instanceId: string;
-  agent: string;
-  prompt: string;
-  status: 'pending' | 'running' | 'paused' | 'done' | 'failed';
-  startedAt: number;
-  elapsedMs: number;
-  toolCalls: BgToolCall[];
-  output: string;        // last 32k chars
-  stuck?: boolean;       // server-flagged
-}
-```
-
-### 15.8 Skills
-
-**Layout:** Card grid (3-col), each card collapsible. **Endpoint:**
-`GET /skills` (planned).
-
-```ts
-interface Skill {
-  id: string;            // 'design-taste-frontend'
-  name: string;
-  description: string;
-  enabled: boolean;
-  triggers: string[];
-  updatedAt: number;
-}
-```
-
-### 15.9 Memory
-
-**Layout:** 3-column (source rail · main panel · detail). **Endpoint:**
-`GET /memory/overview`, `GET /memory/{source}`, `POST /memory/search`.
-
-```ts
-interface MemoryOverview {
-  sources: {
-    id: 'lightrag' | 'obsidian' | 'gitsync' | 'semantic';
-    state: 'ok' | 'degraded' | 'down';
-    noteCount: number;
-    lastSync: number;
-  }[];
-  recent: MemoryNote[];
-}
-
-interface MemoryNote {
-  id: string;
-  source: MemoryOverview['sources'][number]['id'];
-  title: string;
-  preview: string;
-  tags: string[];
-  updatedAt: number;
-}
-```
-
-### 15.10 Mods
-
-**Layout:** List of installed mods with enable/disable, install new
-from URL. **Endpoint:** `GET /mods`, `POST /mods/install`.
-
-```ts
-interface Mod {
-  id: string;
-  name: string;
-  version: string;
-  enabled: boolean;
-  hasViews: boolean;
-  installPath: string;
-  updatedAt: number;
-}
-```
-
-### 15.11 Schedules
-
-**Layout:** Card list with cron expression, last run, next run,
-toggle. **Endpoint:** `GET /schedules`.
-
-```ts
-interface Schedule {
-  id: string;
-  name: string;
-  cron: string;          // '0 */6 * * *'
-  prompt: string;
-  agent: string;
-  enabled: boolean;
-  lastRun: number | null;
-  lastResult: 'ok' | 'fail' | null;
-  nextRun: number;
-}
-```
-
-### 15.12 Usage (MiniMax)
-
-**Layout:** §10.10. **Endpoint:** `GET /api/usage?range=24h|7d|30d`.
-
-```ts
-interface UsageData {
-  range: '24h' | '7d' | '30d';
-  totalCost: number;
-  totalTokens: number;
-  costPerHour: number;
-  byModel: { model: string; tokens: number; cost: number }[];
-  byHour: { hour: string; tokens: number; cost: number }[];
-  alerts: { ts: number; severity: 'warn' | 'error'; text: string }[];
-  budgets: { id: string; label: string; cap: number; spent: number }[];
-}
-```
-
-### 15.13 Eval
-
-**Layout:** Run list (top) + last run detail (bottom). **Endpoint:**
-`GET /eval/runs`, `GET /eval/runs/:id`.
-
-```ts
-interface EvalRun {
-  id: string;
-  startedAt: number;
-  finishedAt: number | null;
-  passed: number;
-  total: number;
-  cases: { name: string; pass: boolean; latencyMs: number }[];
-}
-```
-
-### 15.14 Doctor
-
-**Layout:** Hero score + 8 subsystem cards (§9.18). **Endpoint:**
-`GET /doctor`.
-
-```ts
-interface DoctorData {
-  checkedAt: number;
-  overall: number;        // 0..8
-  subsystems: {
-    name: string;
-    state: 'ok' | 'degraded' | 'warning' | 'error';
-    score: number;
-    total: number;
-    note: string;
-  }[];
-}
-```
-
-### 15.15 Harness
-
-**Layout:** Audit rules list + 6/6 pass badge. **Endpoint:**
-`GET /harness/audit`.
-
-```ts
-interface HarnessAudit {
-  version: string;
-  rules: { rule: string; pass: boolean; detail: string }[];
-}
-```
-
-### 15.16 Settings
-
-**Layout:** §10.12. **Endpoint:** `GET /settings`, `POST /settings`.
-
-16 sections: theme, updates, layout, general, env-vars, network,
-notifications, auth, agents, dashboard, background, system-llm,
-headroom, activity-log, workspaces, about. Each section is its own
-component in `src/web/views/settings/`.
-
----
-
-## 16 · Versioning
-
-- v7.0 — this document. Adds view index, data shapes, 5 new component
-  patterns (DAG, approvals, cost chart, BG panel, workflow). Token
-  system migrated to OKLch + color-mix.
-- v6.0.0 — Cline runtime badge, Harness tab, Tasks kanban team badge,
-  brand version pill, Mods-only navigation.
-- v5.x — Eval framework, Doctor page.
-- v4.x — Settings mode, char-counter, semi-collapsed topbar, slash
-  commands.
-- v3.x — Mods system, chat overhaul (3-column, rail, info panel),
-  semantic spacing aliases, command palette.
-- v2.x — Light theme, kanban board, hooks refactor.
-
-Future changes update this file first, then ship.
+**End of DESIGN.md — v8.0.0**

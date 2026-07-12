@@ -1,5 +1,0 @@
-/* mobile-chat.css — minimal mobile-specific overrides (most rules in chat.css @media) */
-@media (max-width: 480px) {
-  .chat-composer-wrap { padding: 0.375rem 0.375rem 0.5rem; }
-  .chat-welcome-h1 { font-size: 1.875rem; }
-}

@@ -7,9 +7,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
-    // tests/ is the canonical location; src/web/components/agents/ covers
-    // feature-scoped component tests (e.g. F-035 RoutingDecisions.test.tsx).
-    include: ['tests/**/*.test.{ts,tsx}', 'src/web/components/agents/**/*.test.{ts,tsx}'],
+    // The v8 dashboard is the only test surface that ships.
+    include: [
+      'tests/**/*.test.{ts,tsx}',
+      'src/web/v8/**/*.test.{ts,tsx}',
+    ],
     exclude: ['tests/**/*.test.mjs'],
   },
 });
