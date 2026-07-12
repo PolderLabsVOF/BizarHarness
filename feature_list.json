@@ -1183,11 +1183,50 @@
       "passed": "2026-07-11",
       "commit": "ec32df2",
       "evidence": "make verify-feature F-039 — all layers green (2026-07-11)"
+    },
+    {
+      "id": "F-040",
+      "behavior": "Live Agent Dashboard — dashboard's Agents view surfaces any Claude Code CLI session (claude / claude --bg / subagents via Agent tool) with status (idle/working/error/stuck), current task, last tool call, full history, approve/reject, steer, kill. Hooks into Claude Code JSONL via file watcher.",
+      "verification": "make check (TS 0 errors) + make test (≥12 new vitest cases for watcher + new endpoints) + /tmp/f040-agent-watch-roundtrip.mjs (spawn claude -p, assert watcher picks up Agent tool invocation, assert GET /api/agents/active returns correct state)",
+      "state": "active",
+      "layer": "L1+L2+L3",
+      "category": "dashboard-agents",
+      "created": "2026-07-12",
+      "files_touched": [
+        ".claude/hooks/agent-tool-detect.mjs (new — PreToolUse matcher=Agent)",
+        ".claude/hooks/session-end-cleanup.mjs (new — SessionEnd → mark idle)",
+        "bizar-dash/src/server/claude-session-watcher.mjs (new — JSONL tail → agents-store)",
+        "bizar-dash/src/server/routes/agents.mjs (add 5 endpoints)",
+        "bizar-dash/src/server/routes/claude-sessions.mjs (add POST .../kill)",
+        "bizar-dash/src/server/api.mjs (mount new endpoints)",
+        "bizar-dash/src/web/components/agents/LiveAgentsPanel.tsx (new)",
+        "bizar-dash/src/web/components/agents/AgentHistoryPanel.tsx (new)",
+        "bizar-dash/src/web/views/Agents.tsx (restructure with Live + History)",
+        "bizar-dash/src/web/lib/types.ts (4 new WS events)",
+        ".claude/settings.json (register hooks)"
+      ],
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "bunx tsc --noEmit",
+          "repair": "Run make check, fix TS errors."
+        },
+        {
+          "label": "unit",
+          "cmd": "bun test packages/sdk bizar-dash",
+          "repair": "Watcher tail-position tracking, agent-status mapping, REST endpoint coverage."
+        },
+        {
+          "label": "e2e",
+          "cmd": "node /tmp/f040-agent-watch-roundtrip.mjs",
+          "repair": "Spawn `claude -p \"Use Read on package.json\"`, wait for completion, assert agents-store saw the Agent tool invocation."
+        }
+      ]
     }
   ],
   "vcr": {
     "passing": 39,
-    "activated": 39,
-    "ratio": 1
+    "activated": 40,
+    "ratio": 0.975
   }
 }

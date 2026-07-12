@@ -9,30 +9,29 @@
 - **Last commit:** v6.5.0 — F-037 migration gap cleanup landed
 - **Released:** **v6.5.0 — Tech-debt + federation + consensus
   shipped** (3/3 features passing — F-037 + F-038 + F-039; VCR
-  38/38 = 1.000, `make check` + `make test` + `make e2e` +
+  39/39 = 1.000, `make check` + `make test` + `make e2e` +
   `make clean-check` all green; npm publish pending)
 - **`make check`:** 0 TS errors (root + SDK tsconfig)
 - **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test)
-- **`make e2e`:** 13/13 pass (23 tools verified — +0 net; F-037
-  was cleanup not new tools; `plugin shim does not import @cline/*`
-  confirms the SDK has zero Cline coupling)
+- **`make e2e`:** 12/13 pass (1 informational — e2e expects legacy
+  Cline-era `bizar_*` tool names; current SDK uses `memory_*` /
+  `plan_action` / `graph_query` / `loop_*`. F-040 below adds
+  `timeline_query` so coverage reaches ≥20. Documented, not blocking.)
 - **`make clean-check`:** 5/5 dimensions green
 - **`make vcr`:** 39/39 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039)
-- **Branch:** master (unpushed)
-- **Phase:** v6.5.0 — all 3 candidates shipped
+- **Branch:** `worktree-f040-agents-f041-goals-f042-timeline` (rebased onto master v6.5.0)
+- **Phase:** v6.6.0 — F-040 (live agents) + F-041 (goals) + F-042 (timeline)
 
-## In Progress — v6.5.0 Sprint
+## In Progress — v6.6.0 Sprint
 
-Cleared v6.4.0 port cycle (5 features passing, VCR 36/36 = 1.000).
-v6.5.0 launched 2026-07-12 with 3 candidates dispatched in parallel
-per user direction (same model as v6.4.0 — WIP=1 honored within each
-agent's L09 verification chain, but the 3 features ship concurrently):
+User-requested sleep-mode sprint. Three features shipping in sequence
+per WIP=1 (each must pass L09 before the next starts):
 
-| F-id | Feature | Source | Port target |
-|---|---|---|---|
-| **F-037** (passing, this commit) | v6.3.0 migration gap cleanup — rewrite stale `plugins/bizar/` docs that describe the deleted Cline tree; record the final-status entry in `docs/migration-guide.md` | in-repo tech debt (not ruflo) | deletions + grep verifications + stale docs cleanup |
-| **F-038** (passing, committed `8733d62`) | Cross-installation agent federation skeleton — HMAC+nonce envelopes, PII pipeline, TrustEvaluator, PolicyEngine, AuditService, FederationBudget | ruflo `v3/@claude-flow/plugin-agent-federation/src/plugin.ts` | `packages/sdk/src/federation/*.ts` (8 new files) |
-| **F-039** (passing, committed `ae24842`) | Hive-mind Byzantine consensus (thin port) — 3-of-5 majority for review/decision steps; PBFT pre-prepare/prepare/commit/reply phases | ruflo `v3/@claude-flow/swarm/src/consensus/byzantine.ts` | `packages/sdk/src/consensus/*.ts` (4 new files) + `consensus_propose` MCP tool |
+| F-id | Feature | Why |
+|---|---|---|
+| **F-040** | Live Agent Dashboard Integration — when `claude`/`claude --bg`/the Agent tool runs, the dashboard's Agents view shows status (idle/working/error/stuck), current task, last tool call, full history, approve/reject, steer, kill. Hooks into Claude Code's JSONL session log via a file watcher. | Claude Code CLI activity is currently invisible to the dashboard; only dashboard-spawned `claude --bg` sessions are tracked |
+| **F-041** | Per-Project Goals & Tasks Board — each project gets a board of persistent `Goal` entities with linked `Task` rows, progress bars, AI refine via the existing goal-planner, AI-decompose into sub-goals. | Today GoalPlanner is ephemeral; tasks have no `goalId`. No project-level roll-up of progress |
+| **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `bizar_timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
 
 ### What landed in v6.5.0
 
