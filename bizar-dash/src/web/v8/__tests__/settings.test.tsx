@@ -51,10 +51,16 @@ describe('SettingsRow', () => {
         id="theme-mode"
         label="Mode"
         description="Light or dark."
-        control={<select><option>Light</option></select>}
+        control={<select aria-label="Theme mode"><option>Light</option></select>}
       />,
     );
-    expect(container.querySelector('label[for="theme-mode"]')).not.toBeNull();
+    // Label is associated with the control group via aria-labelledby
+    // (WAI-ARIA pattern for generic controls without a native label).
+    const labelEl = container.querySelector('#theme-mode-label');
+    expect(labelEl).not.toBeNull();
+    expect(labelEl?.textContent).toContain('Mode');
+    const group = container.querySelector('[role="group"]');
+    expect(group?.getAttribute('aria-labelledby')).toBe('theme-mode-label');
     expect(container.textContent).toContain('Mode');
     expect(container.textContent).toContain('Light or dark.');
   });

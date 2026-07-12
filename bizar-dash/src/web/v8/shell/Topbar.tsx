@@ -79,7 +79,7 @@ function BrandPlaceholder(): JSX.Element {
         }}
         aria-hidden="true"
       >
-        B
+        ᛒ
       </Box>
       <Box style={{ fontWeight: 600, fontSize: 'var(--fs-14)' }}>Bizar</Box>
       <Separator orientation="vertical" style={{ height: 16 }} />

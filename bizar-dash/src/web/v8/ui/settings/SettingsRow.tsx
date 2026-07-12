@@ -27,6 +27,12 @@ export const SettingsRow = forwardRef<HTMLDivElement, SettingsRowProps>(function
   ref,
 ) {
   const { id, label, description, control, disabled = false, className, ...rest } = props;
+  // The label is announced via `aria-labelledby` rather than `<label
+  // htmlFor>` because the control is generic — its DOM id is set by the
+  // consumer (Switch, Select, custom input), and we'd otherwise need to
+  // thread it through the props chain. `aria-labelledby` is the WAI-ARIA
+  // sanctioned way to label a region without owning a native `<label>`.
+  const labelId = `${id}-label`;
   return (
     <div
       ref={ref}
@@ -44,9 +50,8 @@ export const SettingsRow = forwardRef<HTMLDivElement, SettingsRowProps>(function
       }}
       {...rest}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <label
-          htmlFor={id}
+      <div id={labelId} style={{ flex: 1, minWidth: 0 }}>
+        <span
           style={{
             display: 'block',
             fontSize: 'var(--fs-13)',
@@ -57,7 +62,7 @@ export const SettingsRow = forwardRef<HTMLDivElement, SettingsRowProps>(function
           }}
         >
           {label}
-        </label>
+        </span>
         {description !== undefined && (
           <p
             style={{
@@ -71,7 +76,13 @@ export const SettingsRow = forwardRef<HTMLDivElement, SettingsRowProps>(function
           </p>
         )}
       </div>
-      <div style={{ flexShrink: 0, alignSelf: 'center' }}>{control}</div>
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        style={{ flexShrink: 0, alignSelf: 'center' }}
+      >
+        {control}
+      </div>
     </div>
   );
 });

@@ -1,6 +1,8 @@
 import { Stack } from '../../ui/primitives/Stack.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { MemoryVault, type MemoryEntry } from '../../ui/memory/MemoryVault.js';
+import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { Brain } from 'lucide-react';
 
 /**
  * MemoryView — the durable cross-session memos the harness writes down.
@@ -44,7 +46,16 @@ export function MemoryView(): JSX.Element {
         title="Memory"
         description="Cross-session notes. Project memos live in the repo; global memos live on the user."
       />
-      <MemoryVault entries={ENTRIES} empty={<div>No memos yet.</div>} />
+      <MemoryVault
+        entries={ENTRIES}
+        empty={
+          <EmptyState
+            icon={<Brain size={24} aria-hidden="true" />}
+            title="No memos yet"
+            description="Memos appear here as you and the harness accumulate them."
+          />
+        }
+      />
     </Stack>
   );
 }

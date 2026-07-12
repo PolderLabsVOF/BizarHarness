@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Palette,
   Keyboard,
@@ -74,10 +74,64 @@ export function SettingsView(): JSX.Element {
 
   const navItems: SettingsNavItem[] = SECTIONS.map((s) => ({ id: s.id, title: s.title, icon: <s.icon size={14} aria-hidden="true" /> }));
 
+  // Click on a left-rail nav entry → set active + scroll the section into view.
+  const handleSelect = (id: string): void => {
+    setActiveId(id);
+    // Use a rAF so the active highlight paints before the scroll begins —
+    // some browsers queue both as separate compositor passes otherwise.
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  // Sync active section with what's actually on screen as the user scrolls.
+  // Without this, the rail highlight lags behind the scroll position.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const root = rootRef.current;
+    if (!root) return;
+    const targets = SECTIONS
+      .map((s) => document.getElementById(s.id))
+      .filter((el): el is HTMLElement => el !== null);
+    if (targets.length === 0) return;
+
+    const visible = new Map<string, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = entry.target.id;
+          if (entry.isIntersecting) {
+            visible.set(id, entry.intersectionRatio);
+          } else {
+            visible.delete(id);
+          }
+        }
+        if (visible.size === 0) return;
+        // Pick the section with the highest visible ratio.
+        let bestId: string | undefined;
+        let bestRatio = -1;
+        for (const [id, ratio] of visible) {
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            bestId = id;
+          }
+        }
+        if (bestId) setActiveId(bestId);
+      },
+      { rootMargin: '-30% 0px -50% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+    for (const t of targets) observer.observe(t);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   return (
+    <div ref={rootRef}>
     <Grid cols={3} gap={5}>
       <aside style={{ position: 'sticky', top: 0, alignSelf: 'start' }}>
-        <SettingsNav items={navItems} activeId={activeId} onSelect={setActiveId} />
+        <SettingsNav items={navItems} activeId={activeId} onSelect={handleSelect} />
       </aside>
       <Stack gap={5} style={{ gridColumn: 'span 2' }}>
         <SettingsSection
@@ -246,5 +300,6 @@ export function SettingsView(): JSX.Element {
         </SettingsSection>
       </Stack>
     </Grid>
+    </div>
   );
 }

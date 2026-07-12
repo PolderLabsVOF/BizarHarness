@@ -197,7 +197,7 @@ h4 {
 .v8-context-menu,
 .v8-popover {
   animation: v8-menu-in 140ms var(--easing-standard, cubic-bezier(0.4, 0, 0.2, 1));
-  transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-context-menu-content-transform-origin, var(--radix-popover-content-transform-origin, top));
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-context-menu-content-transform-origin, var(--radix-popover-content-transform-origin, top)));
 }
 
 .v8-tooltip {

@@ -71,6 +71,18 @@ export interface SidebarProps {
   footer?: ReactNode;
   /** Default collapsed state. Persisted to localStorage. */
   defaultCollapsed?: boolean;
+  /**
+   * Fires when the user activates a sidebar item (click, Enter, Space).
+   * The Sidebar takes no opinion on what `id` does — `App.tsx` wires it
+   * to `setActiveId`. `href` is not navigated (we preventDefault); use
+   * a real `<a>` only if you want browser navigation.
+   */
+  onItemSelect?: (id: string) => void;
+  /**
+   * Override which item is currently active. If omitted, each item's
+   * `active` flag is used as-is (set externally by the consumer).
+   */
+  activeId?: string;
   className?: string;
 }
 
@@ -116,6 +128,8 @@ export function Sidebar({
   defaultSections = true,
   footer,
   defaultCollapsed,
+  onItemSelect,
+  activeId,
   className,
 }: SidebarProps): JSX.Element {
   const initial =
@@ -125,6 +139,11 @@ export function Sidebar({
 
   const data = sections ?? (defaultSections ? DEFAULT_SECTIONS : []);
   const width = collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)';
+
+  // Resolve active state: prefer the consumer-supplied `activeId` (state
+  // driven); fall back to each item's `active` flag (default sections).
+  const isActive = (id: string): boolean =>
+    activeId !== undefined ? id === activeId : false;
 
   return (
     <Box
@@ -147,7 +166,13 @@ export function Sidebar({
       <ScrollArea style={{ flex: 1, padding: 'var(--space-3) var(--space-2)' }}>
         <Stack gap={4}>
           {data.map((section) => (
-            <SidebarSectionView key={section.id} section={section} collapsed={collapsed} />
+            <SidebarSectionView
+              key={section.id}
+              section={section}
+              collapsed={collapsed}
+              onItemSelect={onItemSelect}
+              isItemActive={isActive}
+            />
           ))}
         </Stack>
       </ScrollArea>
@@ -177,7 +202,12 @@ export function Sidebar({
           <>
             <Box style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
               <div>◉ online · v8.0.0</div>
-              <div style={{ fontFamily: 'var(--font-mono)' }}>build placeholder</div>
+              <div
+                style={{ fontFamily: 'var(--font-mono)' }}
+                title={`build ${import.meta.env.VITE_BUILD_SHA}`}
+              >
+                build {import.meta.env.VITE_BUILD_SHA}
+              </div>
             </Box>
             <button
               type="button"
@@ -218,9 +248,13 @@ export function Sidebar({
 function SidebarSectionView({
   section,
   collapsed,
+  onItemSelect,
+  isItemActive,
 }: {
   section: SidebarSection;
   collapsed: boolean;
+  onItemSelect?: (id: string) => void;
+  isItemActive: (id: string) => boolean;
 }): JSX.Element {
   return (
     <Stack gap={1}>
@@ -239,20 +273,39 @@ function SidebarSectionView({
         </Box>
       )}
       {section.items.map((item) => (
-        <SidebarItemView key={item.id} item={item} collapsed={collapsed} />
+        <SidebarItemView
+          key={item.id}
+          item={item}
+          collapsed={collapsed}
+          active={isItemActive(item.id)}
+          onSelect={onItemSelect}
+        />
       ))}
     </Stack>
   );
 }
 
-function SidebarItemView({ item, collapsed }: { item: SidebarItem; collapsed: boolean }): JSX.Element {
+function SidebarItemView({
+  item,
+  collapsed,
+  active,
+  onSelect,
+}: {
+  item: SidebarItem;
+  collapsed: boolean;
+  active: boolean;
+  onSelect?: (id: string) => void;
+}): JSX.Element {
   const Icon = item.icon;
   return (
-    <a
-      href={item.href ?? '#'}
-      aria-current={item.active ? 'page' : undefined}
+    <button
+      type="button"
+      onClick={() => onSelect?.(item.id)}
+      aria-current={active ? 'page' : undefined}
+      aria-label={item.label}
       title={collapsed ? item.label : undefined}
-      className={cx('v8-sidebar-item', item.active && 'is-active')}
+      data-sidebar-item={item.id}
+      className={cx('v8-sidebar-item', active && 'is-active')}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -260,11 +313,16 @@ function SidebarItemView({ item, collapsed }: { item: SidebarItem; collapsed: bo
         padding: collapsed ? 'var(--space-2)' : 'var(--space-2) var(--space-3)',
         borderRadius: 'var(--radius-sm)',
         fontSize: 'var(--fs-13)',
-        color: item.active ? 'var(--fg)' : 'var(--fg-muted)',
-        background: item.active ? 'var(--sidebar-hover)' : 'transparent',
-        fontWeight: item.active ? 500 : 400,
+        color: active ? 'var(--fg)' : 'var(--fg-muted)',
+        background: active ? 'var(--sidebar-hover)' : 'transparent',
+        fontWeight: active ? 500 : 400,
         justifyContent: collapsed ? 'center' : 'flex-start',
         minHeight: 32,
+        // DESIGN.md §7.3 — single permitted edge bar (active item only).
+        boxShadow: active ? 'inset 2px 0 0 0 var(--sidebar-accent)' : 'none',
+        border: 'none',
+        cursor: 'pointer',
+        textAlign: 'left',
         transition: 'background var(--motion-fast) var(--ease-out)',
       }}
     >
@@ -298,6 +356,6 @@ function SidebarItemView({ item, collapsed }: { item: SidebarItem; collapsed: bo
           )}
         </>
       )}
-    </a>
+    </button>
   );
 }

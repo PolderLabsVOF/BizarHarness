@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 import { Box } from '../ui/primitives/Box.js';
 import { Topbar } from './Topbar.js';
 import { Sidebar } from './Sidebar.js';
@@ -18,8 +18,10 @@ import { Sidebar } from './Sidebar.js';
  * The SidebarInset caps at max-width 1440px (DESIGN.md §7) and centers
  * itself, with 24px gutters on either side at >=1440px viewports.
  *
- * Children render inside SidebarInset. The shell does NOT own the route
- * tree — that's the job of `App.tsx` (which composes AppShell + RouterProvider).
+ * The ref forwarded from `App.tsx` lands on the `<main>` element so the
+ * caller can re-focus it when the route changes (and announce the new
+ * route to screen readers). `tabIndex={-1}` makes `<main>` focusable
+ * without putting it in the keyboard tab order.
  */
 
 export interface AppShellProps {
@@ -28,7 +30,10 @@ export interface AppShellProps {
   children?: ReactNode;
 }
 
-export function AppShell({ topbar, sidebar, children }: AppShellProps): JSX.Element {
+export const AppShell = forwardRef<HTMLElement, AppShellProps>(function AppShell(
+  { topbar, sidebar, children },
+  ref,
+) {
   return (
     <Box
       className="v8-app-shell"
@@ -54,7 +59,9 @@ export function AppShell({ topbar, sidebar, children }: AppShellProps): JSX.Elem
 
         <Box
           as="main"
+          ref={ref}
           id="main"
+          tabIndex={-1}
           className="v8-sidebar-inset"
           role="main"
           style={{
@@ -62,6 +69,7 @@ export function AppShell({ topbar, sidebar, children }: AppShellProps): JSX.Elem
             minWidth: 0,
             overflow: 'auto',
             background: 'var(--bg)',
+            outline: 'none', // visible focus ring handled by :focus-visible
           }}
         >
           <Box
@@ -79,4 +87,4 @@ export function AppShell({ topbar, sidebar, children }: AppShellProps): JSX.Elem
       </Box>
     </Box>
   );
-}
+});

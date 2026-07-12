@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { AppShell } from './shell/AppShell.js';
 import { Topbar } from './shell/Topbar.js';
 import { Sidebar, type SidebarSection } from './shell/Sidebar.js';
@@ -9,6 +9,7 @@ import { AppCommandPalette } from './views/CommandPalette/AppCommandPalette.js';
 import { useCommandPaletteHotkey } from './ui/navigation/CommandPalette.js';
 import { useTheme } from './ui/theme/useTheme.js';
 import { useDensity } from './ui/theme/useDensity.js';
+import { PageSkeleton } from './shell/PageSkeleton.js';
 import {
   Activity,
   Bot,
@@ -59,16 +60,20 @@ function iconFor(id: string): LucideIcon {
 
 export function App(): JSX.Element {
   const [activeId, setActiveId] = useState<string>('overview');
-  const [paletteOpen, setPaletteOpen] = useState<boolean>(false);
   const theme = useTheme();
   const density = useDensity();
 
-  const [hotkeyOpen, setHotkeyOpen] = useCommandPaletteHotkey();
-  const effectivePaletteOpen = paletteOpen || hotkeyOpen;
-  const setEffectivePaletteOpen = (v: boolean): void => {
-    setPaletteOpen(v);
-    setHotkeyOpen(v);
-  };
+  // Single source of truth for palette open/close. Both the hotkey hook
+  // and the topbar button drive the same setter — no race between them.
+  const [paletteOpen, setPaletteOpen] = useCommandPaletteHotkey();
+
+  // When the route changes, move focus to <main> so screen-reader users
+  // hear the new view announced and keyboard users land somewhere
+  // predictable (the new view header is now tabIndex=0 inside main).
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true });
+  }, [activeId]);
 
   const sections: SidebarSection[] = [
     {
@@ -105,13 +110,6 @@ export function App(): JSX.Element {
     },
   ];
 
-  for (const section of sections) {
-    for (const item of section.items) {
-      item.active = item.id === activeId;
-      item.href = `#${item.id}`;
-    }
-  }
-
   const handleNavigate = (id: string): void => {
     if (id === '__theme') {
       const next = theme.mode === 'dark' ? 'light' : 'dark';
@@ -130,6 +128,7 @@ export function App(): JSX.Element {
 
   return (
     <AppShell
+      ref={mainRef}
       topbar={
         <Topbar
           center={
@@ -169,12 +168,19 @@ export function App(): JSX.Element {
           }
         />
       }
-      sidebar={<Sidebar sections={sections} defaultSections={false} />}
+      sidebar={
+        <Sidebar
+          sections={sections}
+          defaultSections={false}
+          activeId={activeId}
+          onItemSelect={handleNavigate}
+        />
+      }
     >
-      {view}
+      <Suspense fallback={<PageSkeleton />}>{view}</Suspense>
       <AppCommandPalette
-        open={effectivePaletteOpen}
-        onOpenChange={setEffectivePaletteOpen}
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
         onNavigate={handleNavigate}
       />
     </AppShell>

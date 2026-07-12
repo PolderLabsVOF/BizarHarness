@@ -1,24 +1,15 @@
-import { useMemo } from 'react';
-import { OverviewView } from './Overview/OverviewView.js';
-import { TasksView } from './Tasks/TasksView.js';
-import { GoalsView } from './Goals/GoalsView.js';
-import { AgentsView } from './Agents/AgentsView.js';
-import { ActivityView } from './Activity/ActivityView.js';
-import { MemoryView } from './Memory/MemoryView.js';
-import { LibrariesView } from './Libraries/LibrariesView.js';
-import { SettingsView } from './Settings/SettingsView.js';
+import { lazy, useMemo } from 'react';
 import type { LibraryItemProps } from '../ui/libraries/LibraryItem.js';
 
 /**
  * Router — flat state-based view switcher.
  *
- * PLAN.md §S9 calls for TanStack Router; this is a stub for now — the
- * state lives in `App.tsx`. We expose `useRouter` only as a typed map
- * of `id → View`, plus a few helper hooks.
+ * State lives in `App.tsx`. Views are lazy-loaded via `React.lazy` so
+ * the initial bundle only ships the shell + providers + the active view
+ * on demand. Rollup emits each lazy view as its own chunk.
  *
- * Library views (skills/mcps/hooks) render the same surface with
- * different sample data; the data lives here so the Library surface
- * stays generic.
+ * Library views (skills/mcps/hooks) share the same surface; the data
+ * lives here so the Library component stays generic.
  */
 
 export interface RouteContext {
@@ -42,11 +33,38 @@ const MCPS: LibraryItemProps[] = [
 
 const HOOKS: LibraryItemProps[] = [
   { id: 'pretooluse-check-arch', name: 'PreToolUse:check-arch', slug: 'PreToolUse:check-arch', status: 'enabled', description: 'Refuses cross-layer imports.', meta: 'fires 312× today' },
-  { id: 'posttooluse-test', name: 'PostToolUse:test', slug: 'PostToolUse:test', status: 'enabled', description: 'Runs vitest on saved files.', meta: 'fires 88× today' },
-  { id: 'sessionstart-load-proj', name: 'SessionStart:load-project', slug: 'SessionStart:load-project', status: 'enabled', description: 'Reads `.bizar/PROJECT.md` + memory vault.', meta: 'fires on session start' },
-  { id: 'sessionend-trace', name: 'SessionEnd:trace', slug: 'SessionEnd:trace', status: 'enabled', description: 'Appends to `.harness/traces/sessions.jsonl`.', meta: 'fires on session end' },
-  { id: 'userpromptsubmit-mem', name: 'UserPromptSubmit:mem', slug: 'UserPromptSubmit:mem', status: 'error', description: 'Searches memory vault for prior context.', meta: 'exit 1 — needs token' },
+  { id: 'posttooluse-test', name: 'PostToolUse:test', slug: 'posttooluse-test', status: 'enabled', description: 'Runs vitest on saved files.', meta: 'fires 88× today' },
+  { id: 'sessionstart-load-proj', name: 'SessionStart:load-project', slug: 'sessionstart-load-proj', status: 'enabled', description: 'Reads `.bizar/PROJECT.md` + memory vault.', meta: 'fires on session start' },
+  { id: 'sessionend-trace', name: 'SessionEnd:trace', slug: 'sessionend-trace', status: 'enabled', description: 'Appends to `.harness/traces/sessions.jsonl`.', meta: 'fires on session end' },
+  { id: 'userpromptsubmit-mem', name: 'UserPromptSubmit:mem', slug: 'userpromptsubmit-mem', status: 'error', description: 'Searches memory vault for prior context.', meta: 'exit 1 — needs token' },
 ];
+
+// Each view is a separate Rollup entry once we hit production build.
+// The dev server serves them as-is via the lazy import.
+const OverviewView = lazy(() =>
+  import('./Overview/OverviewView.js').then((m) => ({ default: m.OverviewView })),
+);
+const TasksView = lazy(() =>
+  import('./Tasks/TasksView.js').then((m) => ({ default: m.TasksView })),
+);
+const GoalsView = lazy(() =>
+  import('./Goals/GoalsView.js').then((m) => ({ default: m.GoalsView })),
+);
+const AgentsView = lazy(() =>
+  import('./Agents/AgentsView.js').then((m) => ({ default: m.AgentsView })),
+);
+const ActivityView = lazy(() =>
+  import('./Activity/ActivityView.js').then((m) => ({ default: m.ActivityView })),
+);
+const MemoryView = lazy(() =>
+  import('./Memory/MemoryView.js').then((m) => ({ default: m.MemoryView })),
+);
+const LibrariesView = lazy(() =>
+  import('./Libraries/LibrariesView.js').then((m) => ({ default: m.LibrariesView })),
+);
+const SettingsView = lazy(() =>
+  import('./Settings/SettingsView.js').then((m) => ({ default: m.SettingsView })),
+);
 
 export function useViewForId(id: string): JSX.Element {
   return useMemo(() => {
