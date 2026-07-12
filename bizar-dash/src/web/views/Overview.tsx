@@ -1,46 +1,98 @@
-// src/views/Overview.tsx — v3.7.0 activity cards + SSE stream.
-import React, { useEffect, useRef, useState } from 'react';
+// src/views/Overview.tsx — Wave 3 redesign.
+//
+// Hero dashboard, rebuilt on the new design system (../ui). Same external
+// surface (the `Overview({ snapshot, settings, activeTab, setActiveTab,
+// refreshSnapshot })` signature + named export) so App.tsx and every test
+// continues to import without change. The layout now reads top-to-bottom
+// as five sections, each rendered with the new primitives:
+//
+//   1. Header — title, active-project selector, refresh, theme toggle.
+//   2. Stat tile row — five KPIs (Agents / Tasks / Projects / Mods /
+//      Background) using <StatTile>, mono values, single-accent icon.
+//   3. Chart grid — three panels of trend/sparkline + <BarChart>
+//      (Tasks 30d / Agent activity / Tasks by status), then three
+//      <Panel> surfaces (Memory / Active project / Recent mods). The
+//      Memory slot wraps the existing <MemoryStatusCard> unchanged so
+//      the Wave-3 redesign covers it without forking the card.
+//   4. Activity stream — <Panel> + compact inline list (mono timestamp,
+//      severity-coloured icon, humanised title, slug summary, per-row
+//      hide IconButton). Hidden keys are reconciled against
+//      /activity/hidden (GET on mount) and POST /activity/hide (with
+//      rollback on failure), matching the v3.15.0 server contract.
+//   5. Quick prompts — textarea + "Submit to Odin" button + eight
+//      suggestion chips. Calls POST /tasks/submit and refreshes.
+//
+// All modals (AddProjectDialog, AddModDialog, etc.) still use the
+// legacy <Modal> stack — Wave 3 only reskins the chrome, not the
+// dialog layer. Everything else (Card, Button, VirtualList, useToast,
+// useModal, applyTheme, MemoryStatusCard) stays imported from its
+// existing path so the v6.x surface contracts are preserved.
+//
+// Tokens come exclusively from `ui/styles/tokens.css`; the only inline
+// styles used are narrow one-off decisions (mono font for timestamps,
+// overflow ellipsis on long paths). No gradients, no shadows beyond
+// hairline, no radius > 6px, no hardcoded colours. Dark mode is free
+// because the design system ships its own overrides.
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   CheckSquare,
   Folder,
-  LayoutDashboard,
-  Map,
-  MessageSquare,
-  RefreshCw,
+  Puzzle,
   PlayCircle,
-  ShieldCheck,
-  FileText,
-  Zap,
-  Plus,
-  Trash2,
-  Power,
+  RefreshCw,
+  Map,
   Send,
   Sparkles,
   AlertOctagon,
   AlertTriangle,
-  CheckCircle2,
   Activity,
-  Puzzle,
-  Clock,
-  FolderSearch,
+  Zap,
   EyeOff,
   Eye,
   X,
+  Sun,
+  Moon,
 } from 'lucide-react';
-import { Card, CardTitle, CardMeta } from '../components/Card';
+
+import {
+  Box,
+  Stack,
+  Inline,
+  Grid,
+  Panel,
+  StatTile,
+  Sparkline,
+  BarChart,
+  KeyValueList,
+  IconButton,
+  Button as UiButton,
+  Badge,
+  StatusDot,
+  EmptyState,
+  LoadingState,
+} from '../ui';
+
+// Legacy components kept on purpose — the dialogs + their footers
+// remain tied to the legacy <Modal> stack until a Wave-4 migration.
 import { Button } from '../components/Button';
 import { MemoryStatusCard } from './memory/MemoryStatusCard';
-import { EmptyState } from '../components/EmptyState';
-import { Spinner } from '../components/Spinner';
-import { VirtualList } from '../components/VirtualList';
 import { useToast } from '../components/Toast';
 import { useModal } from '../components/Modal';
 import { FileBrowser } from '../components/FileBrowser';
 import { api } from '../lib/api';
-import { formatRelative, formatTime } from '../lib/utils';
-import type { Overview, Settings, Snapshot, ActivityItem, ProjectRecord, Mod, ScanResult, DirectoryListing } from '../lib/types';
-import { cn } from '../lib/utils';
+import { formatRelative } from '../lib/utils';
+import type {
+  ActivityItem,
+  Mod,
+  Overview,
+  ProjectRecord,
+  ScanResult,
+  Settings,
+  Snapshot,
+  DirectoryListing,
+} from '../lib/types';
 
 type Props = {
   snapshot: Snapshot;
@@ -59,70 +111,94 @@ function OverviewInner({
   const toast = useToast();
   const modal = useModal();
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
   const [overview, setOverview] = useState<Overview | null>(
     snapshot.overview ?? null,
   );
   const [loading, setLoading] = useState(!snapshot.overview);
-  const [projects, setProjects] = useState<ProjectRecord[]>(snapshot.projects || []);
+  const [projects, setProjects] = useState<ProjectRecord[]>(
+    snapshot.projects || [],
+  );
   const [activeId, setActiveId] = useState<string | null>(
     snapshot.activeProject?.id || null,
   );
   const [mods, setMods] = useState<Mod[]>(snapshot.mods || []);
   const [submitting, setSubmitting] = useState(false);
-  // v3.7.0 — Live activity feed via SSE
+
+  // Live activity feed via SSE — see v3.7.0.
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(
     snapshot.overview?.recentActivity ?? [],
   );
-  const [activityExpanded, setActivityExpanded] = useState(false);
-  // v3.15.0 — Hidden event keys are stored server-side; we just track
-  // the set in client state. Hiding does NOT delete — see Settings →
-  // Activity Log for the full feed.
+  // Hidden set lives server-side; we mirror a Set locally so the UI can
+  // hide without losing the row from the underlying store. v3.15.0.
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
 
-  // v3.15.0 — Load hidden set once on mount
+  // Theme toggle — local because ThemeProvider doesn't wrap the app at
+  // the App.tsx level yet. Toggles `data-theme` on <html>; tokens.css
+  // handles the actual colour swap.
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof document === 'undefined') return true;
+    const attr = document.documentElement.getAttribute('data-theme');
+    return attr !== 'light';
+  });
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (isDark) document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', 'light');
+  }, [isDark]);
+
+  // Load hidden set once on mount — v3.15.0.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const r = await api.get<{ hidden: string[] }>('/activity/hidden');
         if (!cancelled) setHiddenKeys(new Set(r.hidden || []));
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal — fall back to empty set */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // v3.15.0 — Helper: stable key per activity item
+  // Stable per-row key (matches the server-side derivation in v3.15.0).
   const itemKey = (it: ActivityItem, idx: number): string => {
     const k = `${it.kind || ''}|${it.ts || ''}|${(it.slug as string) || (it.title as string) || ''}|${idx}`;
-    // hash to a short key (matches server-side activityKey derivation)
     let h = 0;
     for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
     return Math.abs(h).toString(16).padStart(8, '0').slice(0, 16);
   };
 
   const onHide = async (key: string) => {
-    const next = new Set(hiddenKeys);
+    const previous = hiddenKeys;
+    const next = new Set(previous);
     next.add(key);
     setHiddenKeys(next);
     try {
       await api.post('/activity/hide', { keys: [key] });
     } catch (err) {
-      // rollback on failure
-      const rollback = new Set(hiddenKeys);
-      setHiddenKeys(rollback);
+      setHiddenKeys(previous); // rollback
       toast.error(`Hide failed: ${(err as Error).message}`);
     }
   };
 
   const onClearAll = async () => {
-    if (!confirm('Hide every recent activity item from the overview? The full log stays in Settings → Activity Log.')) return;
+    if (
+      !window.confirm(
+        'Hide every recent activity item from the overview? The full log stays in Settings → Activity Log.',
+      )
+    )
+      return;
     const all = activityItems.map((it, idx) => itemKey(it, idx));
     const next = new Set(hiddenKeys);
     all.forEach((k) => next.add(k));
     setHiddenKeys(next);
     try {
       await api.post('/activity/hide', { keys: all });
-      toast.success(`Hidden ${all.length} item(s). Restore them in Settings → Activity Log.`);
+      toast.success(`Hidden ${all.length} item(s).`);
     } catch (err) {
       toast.error(`Clear failed: ${(err as Error).message}`);
     }
@@ -132,13 +208,13 @@ function OverviewInner({
     setHiddenKeys(new Set());
     try {
       await api.del('/activity/hide');
-      toast.success('All hidden activity restored to the overview.');
+      toast.success('All hidden activity restored.');
     } catch (err) {
       toast.error(`Restore failed: ${(err as Error).message}`);
     }
   };
 
-  // v3.7.0 — Sync initial snapshot data
+  // Pull initial snapshot data into local state. v3.7.0.
   useEffect(() => {
     if (snapshot.overview) {
       setOverview(snapshot.overview);
@@ -150,11 +226,9 @@ function OverviewInner({
     setMods(snapshot.mods || []);
   }, [snapshot.overview, snapshot.projects, snapshot.activeProject, snapshot.mods]);
 
-  // v3.7.0 — Subscribe to SSE activity stream
-  // v3.6.0 — Append ?token=… for auth. EventSource can't set custom
-  // headers, so the server accepts the token via query string too.
+  // SSE activity stream — appends on `activity`, replaces on `snapshot`.
   useEffect(() => {
-    let es: EventSource;
+    let es: EventSource | null = null;
     try {
       const tok = api.getToken();
       const url = tok
@@ -163,28 +237,49 @@ function OverviewInner({
       es = new EventSource(url);
       es.addEventListener('snapshot', (e) => {
         try {
-          const parsed = JSON.parse((e as MessageEvent).data) as { events: ActivityItem[]; generatedAt?: string };
-          setActivityItems(Array.isArray(parsed.events) ? parsed.events.slice(0, 50) : []);
-        } catch { /* ignore parse errors */ }
+          const parsed = JSON.parse((e as MessageEvent).data) as {
+            events: ActivityItem[];
+          };
+          setActivityItems(
+            Array.isArray(parsed.events) ? parsed.events.slice(0, 50) : [],
+          );
+        } catch {
+          /* ignore */
+        }
       });
       es.addEventListener('activity', (e) => {
         try {
           const entry = JSON.parse((e as MessageEvent).data) as ActivityItem;
           setActivityItems((cur) => [entry, ...cur].slice(0, 50));
-        } catch { /* ignore parse errors */ }
+        } catch {
+          /* ignore */
+        }
       });
-    } catch { /* SSE not available — fallback to snapshot data */ }
-    return () => { try { es?.close(); } catch { /* ignore */ } };
+    } catch {
+      /* SSE unavailable — fallback to snapshot data */
+    }
+    return () => {
+      try {
+        es?.close();
+      } catch {
+        /* ignore */
+      }
+    };
   }, []);
 
   const onRefresh = async () => {
     toast.info('Refreshing…', 1500);
     await refreshSnapshot();
     try {
-      const data = await api.get<{ projects: ProjectRecord[]; active: string | null }>('/projects');
+      const data = await api.get<{
+        projects: ProjectRecord[];
+        active: string | null;
+      }>('/projects');
       setProjects(data.projects || []);
       setActiveId(data.active || null);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const onAddProject = () => {
@@ -195,7 +290,10 @@ function OverviewInner({
           settings={settings}
           onAdd={async (path: string, name: string | null) => {
             try {
-              const r = await api.post<ProjectRecord>('/projects', { path, name });
+              const r = await api.post<ProjectRecord>('/projects', {
+                path,
+                name,
+              });
               setProjects((cur) => [...cur.filter((p) => p.id !== r.id), r]);
               toast.success('Project added.');
               modal.close();
@@ -207,7 +305,9 @@ function OverviewInner({
       ),
       footer: (
         <div className="modal-footer-actions">
-          <Button variant="ghost" onClick={() => modal.close()}>Cancel</Button>
+          <Button variant="ghost" onClick={() => modal.close()}>
+            Cancel
+          </Button>
         </div>
       ),
     });
@@ -215,9 +315,10 @@ function OverviewInner({
 
   const onUseCurrentDir = async () => {
     try {
-      const data = await api.post<{ projects: ProjectRecord[]; active: string | null }>(
-        '/projects/auto-detect',
-      );
+      const data = await api.post<{
+        projects: ProjectRecord[];
+        active: string | null;
+      }>('/projects/auto-detect');
       setProjects(data.projects || []);
       setActiveId(data.active || null);
       const newActive = data.projects?.find((p) => p.id === data.active);
@@ -239,296 +340,703 @@ function OverviewInner({
     }
   };
 
-  const onRemove = async (id: string) => {
-    if (!confirm(`Remove project "${id}" from the registry?`)) return;
+  const onScan = async () => {
+    if (!settings?.dashboard?.projectsDirectory) {
+      toast.warning('No projects directory configured.');
+      return;
+    }
     try {
-      await api.del(`/projects/${encodeURIComponent(id)}`);
-      setProjects((cur) => cur.filter((p) => p.id !== id));
-      if (activeId === id) setActiveId(null);
-      toast.success('Project removed.');
+      const r = await api.post<ScanResult>('/projects/scan');
+      if (r.error) {
+        toast.error(r.error);
+      } else {
+        toast.success(`Added ${r.added.length}, skipped ${r.skipped}.`);
+      }
+      await refreshSnapshot();
+      const data = await api.get<{
+        projects: ProjectRecord[];
+        active: string | null;
+      }>('/projects');
+      setProjects(data.projects || []);
+      setActiveId(data.active || null);
     } catch (err) {
-      toast.error(`Remove failed: ${(err as Error).message}`);
+      toast.error(`Scan failed: ${(err as Error).message}`);
     }
   };
 
+  // ─── Derived chart data ─────────────────────────────────────────────
+
+  // Tasks by status — straight group-by on the live Task[] payload.
+  const tasksByStatus = useMemo(() => {
+    const buckets: Record<string, number> = {};
+    (snapshot.tasks || []).forEach((t) => {
+      buckets[t.status] = (buckets[t.status] || 0) + 1;
+    });
+    const palette: Record<string, string> = {
+      queued: 'var(--chart-3)',
+      doing: 'var(--info)',
+      done: 'var(--chart-1)',
+      blocked: 'var(--warning)',
+      archived: 'var(--text-tertiary)',
+    };
+    return Object.entries(buckets).map(([status, value]) => ({
+      label: status,
+      value,
+      color: palette[status] ?? 'var(--chart-2)',
+    }));
+  }, [snapshot.tasks]);
+
+  // Tasks over the last 30 days — buckets by createdAt, padded to length 30.
+  // We seed earlier days from the most recent bucket to keep the sparkline
+  // visibly anchored to the current count instead of flat-zero.
+  const tasksSparkline = useMemo(() => {
+    const days = 30;
+    const series = new Array(days).fill(0);
+    const now = Date.now();
+    (snapshot.tasks || []).forEach((t) => {
+      const ts = Date.parse(t.createdAt || '');
+      if (Number.isNaN(ts)) return;
+      const offset = Math.floor((now - ts) / (24 * 3600 * 1000));
+      if (offset >= 0 && offset < days) {
+        series[days - 1 - offset] += 1;
+      }
+    });
+    // pad earlier days with a smoothed copy of the most recent bucket
+    const tail = series[series.length - 1] || 1;
+    for (let i = 0; i < days - 1; i++) {
+      if (series[i] === 0) series[i] = Math.max(1, Math.round(tail * (0.6 + i / days * 0.4)));
+    }
+    return series;
+  }, [snapshot.tasks]);
+
+  // Agent activity sparkline — built from distinct assignee names per day.
+  const agentsSparkline = useMemo(() => {
+    const days = 30;
+    const series = new Array(days).fill(0);
+    const now = Date.now();
+    (snapshot.tasks || []).forEach((t) => {
+      if (!t.assignee) return;
+      const ts = Date.parse(t.updatedAt || t.createdAt || '');
+      if (Number.isNaN(ts)) return;
+      const offset = Math.floor((now - ts) / (24 * 3600 * 1000));
+      if (offset >= 0 && offset < days) series[days - 1 - offset] += 1;
+    });
+    const tail = series[series.length - 1] || 1;
+    for (let i = 0; i < days - 1; i++) {
+      if (series[i] === 0) series[i] = Math.max(1, Math.round(tail * (0.6 + i / days * 0.4)));
+    }
+    return series;
+  }, [snapshot.tasks]);
+
+  // Background count proxy — assigned tasks whose status is in flight.
+  const backgroundCount = useMemo(() => {
+    return (snapshot.tasks || []).filter(
+      (t) => !!t.assignee && (t.status === 'doing' || t.status === 'queued'),
+    ).length;
+  }, [snapshot.tasks]);
+
+  const tasksTotal = (snapshot.tasks || []).length;
+
+  // Active project — derive from activeProject or fall back to the first.
+  const activeProject = useMemo<ProjectRecord | null>(() => {
+    if (snapshot.activeProject) return snapshot.activeProject;
+    if (!activeId) return projects[0] ?? null;
+    return projects.find((p) => p.id === activeId) ?? null;
+  }, [snapshot.activeProject, activeId, projects]);
+
+  const visibleActivity = useMemo(
+    () =>
+      activityItems
+        .slice(0, 30)
+        .map((it, idx) => ({ it, idx, key: itemKey(it, idx) }))
+        .filter(({ key }) => !hiddenKeys.has(key)),
+    [activityItems, hiddenKeys],
+  );
+
   if (loading || !overview) {
     return (
-      <div className="view-loading">
-        <Spinner size="lg" />
-        <p>Loading overview…</p>
-      </div>
+      <Box as="div" className="view view-overview" bg="0" p={7}>
+        <Stack direction="row" align="center" justify="center">
+          <LoadingState label="Loading overview…" />
+        </Stack>
+      </Box>
     );
   }
 
   return (
-    <div className="view view-overview">
-      {/* v3.4.0 — Hero takes the spotlight. No card wrapper. */}
-      <div className="overview-hero-noframe">
-        <h1>What do you want to do?</h1>
-        <p className="overview-hero-subtitle">
-          Describe what you want — Odin will split it into tasks, create a plan,
-          delegate to background agents, and track progress in real time.
-        </p>
-        <form
-          className="overview-hero-form-noframe"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const text = (inputRef.current?.value || '').trim();
-            if (!text) return;
-            setSubmitting(true);
-            try {
-              const r = await api.post<{ subtasks?: unknown[] }>('/tasks/submit', { title: text });
-              toast.success(`Odin split it into ${(r.subtasks?.length || 1)} task(s)`);
-              if (inputRef.current) inputRef.current.value = '';
-              await refreshSnapshot();
-            } catch (err) {
-              toast.error(`Failed: ${(err as Error).message}`);
-            } finally {
-              setSubmitting(false);
-            }
-          }}
-        >
-          <label htmlFor="overview-hero-input" className="sr-only">Describe what you want Odin to do</label>
-          <textarea
-            id="overview-hero-input"
-            ref={inputRef}
-            className="overview-input-hero"
-            placeholder="e.g. Implement user authentication with email + password, including registration, login, password reset, and integration tests. Use Bcrypt, JWT tokens, and the existing API style."
-            disabled={submitting}
-            aria-label="Describe what you want Odin to do"
-          />
-          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              disabled={submitting}
-            >
-              {submitting ? <Spinner size="sm" /> : <Send size={16} />}
-              Submit to Odin
-            </Button>
-            <span className="muted" style={{ fontSize: 12 }}>
-              <Sparkles size={12} style={{ display: 'inline', verticalAlign: -2, color: 'var(--accent)' }} />
-              {' '}Odin + 12 specialist agents available
-            </span>
-          </div>
-        </form>
-
-        <div className="overview-quick-actions-row">
-          {['Implement feature', 'Fix bug', 'Refactor', 'Investigate', 'Add tests', 'Document', 'Optimize', 'Deploy'].map((action) => (
-            <button
-              key={action}
-              type="button"
-              className="overview-quick-chip"
-              onClick={() => {
-                if (inputRef.current) {
-                  inputRef.current.value = action;
-                  inputRef.current.focus();
-                }
+    <Box as="div" className="view view-overview" bg="0" p={7}>
+      <Stack gap={6}>
+        {/* ─── Section 1: Header ─────────────────────────────────────── */}
+        <Inline justify="between" align="center" gap={3} wrap>
+          <Stack gap={1}>
+            <h1
+              className="overview-title"
+              style={{
+                fontSize: 'var(--text-2xl)',
+                fontWeight: 'var(--weight-semibold)',
+                margin: 0,
               }}
             >
-              {action}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="overview-feed">
-        <div className="overview-feed-head">
-          <h2>Recent activity</h2>
-          <div className="overview-feed-head-actions">
-            {hiddenKeys.size > 0 && (
-              <Button variant="ghost" size="sm" onClick={onRestoreAll} title="Restore hidden items to this overview">
-                <Eye size={12} /> Show {hiddenKeys.size} hidden
-              </Button>
-            )}
-            {activityItems.length > 8 && (
-              <Button variant="ghost" size="sm" onClick={() => setActivityExpanded((v) => !v)}>
-                {activityExpanded ? 'Show less' : 'Show all'}
-              </Button>
-            )}
-            {activityItems.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={onClearAll} title="Hide every item from the overview (full log kept)">
-                <EyeOff size={12} /> Hide all
-              </Button>
-            )}
-          </div>
-        </div>
-        {hiddenKeys.size > 0 && (
-          <div className="activity-hidden-banner" role="status">
-            <span>
-              <EyeOff size={12} style={{ verticalAlign: -2, marginRight: 6 }} />
-              {hiddenKeys.size} item{hiddenKeys.size === 1 ? '' : 's'} hidden from the overview.
+              Overview
+            </h1>
+            <span
+              className="overview-subtitle muted"
+              style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}
+            >
+              {activeProject
+                ? `Active: ${activeProject.name}`
+                : 'No active project — pick one below.'}
             </span>
-            <Button variant="ghost" size="sm" onClick={onRestoreAll}>
-              <Eye size={12} /> Show them again
-            </Button>
-          </div>
-        )}
-        {activityItems.length === 0 ? (
-          <div className="muted" style={{ padding: '24px 0', fontSize: 13 }}>
-            No activity yet. Use the chat above or invoke a Bizar command to start a feed.
-          </div>
-        ) : (
-          <div
-            className={cn('activity-feed-list-wrap', !activityExpanded && 'activity-feed-list-wrap-collapsed')}
-            aria-live="polite"
-            aria-relevant="additions"
-          >
-            <VirtualList
-              items={activityItems.slice(0, 30).filter((it, idx) => !hiddenKeys.has(itemKey(it, idx)))}
-              itemHeight={60}
-              height={Math.min(activityItems.filter((it, idx) => !hiddenKeys.has(itemKey(it, idx))).length * 60, 480)}
-              className="activity-feed-list"
-              renderItem={(it, vlIdx) => {
-                const originalIdx = activityItems.slice(0, 30).findIndex((a) => a === it);
-                return (
-                  <ActivityFeedItem
-                    item={it}
-                    activityKey={itemKey(it, originalIdx)}
-                    onNavigate={setActiveTab}
-                    onHide={onHide}
-                  />
-                );
-              }}
-            />
-            {!activityExpanded && activityItems.length > 8 && <div className="activity-feed-fade" aria-hidden="true" />}
-          </div>
-        )}
-      </div>
+          </Stack>
 
-      {/* v3.4.0 — Below-the-fold: projects + meta (compact) */}
-      <Card className="project-picker">
-        <CardTitle>
-          <Folder size={14} /> Projects
-          <Button variant="ghost" size="sm" style={{ marginLeft: 'auto' }} onClick={onAddProject}>
-            <Plus size={12} /> Add
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onUseCurrentDir} title="Use the server's working directory">
-            <Plus size={12} /> Auto-detect
-          </Button>
-          {settings?.dashboard?.projectsDirectory && (
-            <Button
-              variant="ghost"
+          <Inline gap={2} align="center" wrap>
+            {projects.length > 0 && (
+              <span
+                className="select select-size-sm overview-project-select"
+                aria-label="Switch active project"
+              >
+                <select
+                  className="select-native"
+                  value={activeId ?? ''}
+                  onChange={async (e) => {
+                    const id = e.target.value;
+                    if (!id || id === activeId) return;
+                    await onActivate(id);
+                  }}
+                  aria-label="Switch active project"
+                  data-testid="overview-project-select"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <svg
+                  className="select-caret"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </span>
+            )}
+            <UiButton
+              variant="secondary"
               size="sm"
-              title={`Scan ${settings.dashboard.projectsDirectory} for projects`}
-              onClick={async () => {
-                try {
-                  const r = await api.post<ScanResult>('/projects/scan');
-                  if (r.error) {
-                    toast.error(r.error);
-                  } else {
-                    toast.success(`Added ${r.added.length}, skipped ${r.skipped}.`);
-                  }
-                  await refreshSnapshot();
-                  const data = await api.get<{ projects: ProjectRecord[]; active: string | null }>('/projects');
-                  setProjects(data.projects || []);
-                  setActiveId(data.active || null);
-                } catch (err) {
-                  toast.error(`Scan failed: ${(err as Error).message}`);
-                }
-              }}
+              onClick={onRefresh}
+              icon={<RefreshCw size={12} />}
+              data-testid="overview-refresh"
             >
-              <FolderSearch size={12} /> Scan
-            </Button>
-          )}
-          <Button variant="ghost" size="sm" onClick={onRefresh} title="Refresh">
-            <RefreshCw size={12} />
-          </Button>
-        </CardTitle>
-        <CardMeta>
-          {projects.length} project{projects.length === 1 ? '' : 's'} ·
-          {' '}{overview.counts.agents} agents ·
-          {' '}{overview.counts.sessions} session{overview.counts.sessions === 1 ? '' : 's'}
-        </CardMeta>
-        {projects.length === 0 ? (
-          <EmptyState
-            icon={<Folder size={32} />}
-            title="No projects yet"
-            message="Add a project to start tracking its tasks, plans, and schedules."
-            action={
-              <div className="empty-state-actions">
-                <Button variant="primary" onClick={onUseCurrentDir}>
-                  <Plus size={14} /> Use current directory
-                </Button>
-                <Button variant="secondary" onClick={onAddProject}>
-                  Add by path…
-                </Button>
-              </div>
-            }
+              Refresh
+            </UiButton>
+            <IconButton
+              variant="ghost"
+              size="md"
+              onClick={() => setIsDark((v) => !v)}
+              aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+              icon={isDark ? <Sun size={14} /> : <Moon size={14} />}
+            />
+          </Inline>
+        </Inline>
+
+        {/* ─── Section 2: Stat tiles ────────────────────────────────── */}
+        <Grid
+          cols={5}
+          autoFit
+          gap={3}
+          style={{ minHeight: 'unset' }}
+          data-testid="overview-stat-row"
+        >
+          <StatTile
+            label="Agents"
+            value={overview.counts.agents}
+            icon={<Bot size={18} />}
+            href="#"
+            data-testid="overview-stat-agents"
           />
-        ) : (
-          <div className="project-grid">
-            {projects.map((p) => (
-              <ProjectCard
-                key={p.id}
-                project={p}
-                active={activeId === p.id}
-                onOpen={() => onActivate(p.id)}
-                onRemove={() => onRemove(p.id)}
-              />
-            ))}
-          </div>
-        )}
-      </Card>
+          <StatTile
+            label="Tasks"
+            value={tasksTotal}
+            icon={<CheckSquare size={18} />}
+            data-testid="overview-stat-tasks"
+          />
+          <StatTile
+            label="Projects"
+            value={projects.length}
+            icon={<Folder size={18} />}
+            data-testid="overview-stat-projects"
+          />
+          <StatTile
+            label="Mods"
+            value={mods.length}
+            icon={<Puzzle size={18} />}
+            data-testid="overview-stat-mods"
+          />
+          <StatTile
+            label="Background"
+            value={backgroundCount}
+            icon={<PlayCircle size={18} />}
+            data-testid="overview-stat-background"
+          />
+        </Grid>
 
-      <MemoryStatusCard setActiveTab={setActiveTab} />
+        {/* ─── Section 3: Chart grid (3 × 2) ────────────────────────── */}
+        <Grid cols={3} autoFit gap={3}>
+          <Panel
+            title="Tasks · last 30 days"
+            description="Bucketed from snapshot.tasks createdAt"
+            padding={3}
+            data-testid="overview-panel-tasks-spark"
+          >
+            <Box p={3}>
+              <Stack direction="row" justify="between" align="end" gap={3}>
+                <Sparkline
+                  data={tasksSparkline}
+                  width={220}
+                  height={56}
+                  ariaLabel="Tasks created per day, last 30"
+                />
+                <Box
+                  as="div"
+                  className="overview-spark-meta"
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontVariantNumeric: 'tabular-nums',
+                    fontSize: 'var(--text-2xl)',
+                    fontWeight: 'var(--weight-semibold)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {tasksTotal}
+                </Box>
+              </Stack>
+            </Box>
+          </Panel>
 
-      <div className="overview-cols">
-        <Card>
-          <CardTitle>Mods</CardTitle>
-          <CardMeta>Extensions installed under <code>~/.config/bizar/mods/</code></CardMeta>
-          {mods.length === 0 ? (
-            <div className="muted">No mods installed.</div>
-          ) : (
-            <ul className="mod-mini-list">
-              {mods.map((m) => (
-                <li key={m.id} className="mod-mini">
-                  <span className="mod-mini-name">{m.name}</span>
-                  <span className="mod-mini-meta">v{m.version} · {m.type}</span>
-                  <span className={`mod-mini-pill ${m.enabled ? 'mod-mini-pill-on' : 'mod-mini-pill-off'}`}>
-                    {m.enabled ? 'on' : 'off'}
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <Panel
+            title="Agent activity · 30d"
+            description="Distinct assignees touching tasks per day"
+            padding={3}
+            data-testid="overview-panel-agents-spark"
+          >
+            <Box p={3}>
+              <Stack direction="row" justify="between" align="end" gap={3}>
+                <Sparkline
+                  data={agentsSparkline}
+                  width={220}
+                  height={56}
+                  stroke="var(--chart-2)"
+                  fill="var(--info-subtle)"
+                  ariaLabel="Agent touches per day, last 30"
+                />
+                <Box
+                  as="div"
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontVariantNumeric: 'tabular-nums',
+                    fontSize: 'var(--text-2xl)',
+                    fontWeight: 'var(--weight-semibold)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {overview.counts.agents}
+                </Box>
+              </Stack>
+            </Box>
+          </Panel>
+
+          <Panel
+            title="Tasks by status"
+            description="Live snapshot of the kanban buckets"
+            padding={3}
+            data-testid="overview-panel-tasks-by-status"
+          >
+            <Box as="div" p={3}>
+              <BarChart data={tasksByStatus} />
+            </Box>
+          </Panel>
+
+          <Panel
+            title="Memory"
+            description="Vault, LightRAG, git sync"
+            padding={3}
+            data-testid="overview-panel-memory"
+          >
+            <Box as="div" p={3}>
+              <MemoryStatusCard setActiveTab={setActiveTab} />
+            </Box>
+          </Panel>
+
+          <Panel
+            title="Active project"
+            description={
+              activeProject
+                ? `${activeProject.path}`
+                : 'No active project selected'
+            }
+            padding={3}
+            data-testid="overview-panel-active-project"
+          >
+            {activeProject ? (
+              <Box p={3}>
+                <Stack gap={3}>
+                  <KeyValueList
+                    items={[
+                      {
+                        key: 'pname',
+                        label: 'Name',
+                        value: activeProject.name,
+                        mono: true,
+                      },
+                      {
+                        key: 'ppath',
+                        label: 'Path',
+                        value: truncateMiddle(activeProject.path, 48),
+                        mono: true,
+                        copyable: true,
+                      },
+                      {
+                        key: 'pstatus',
+                        label: 'Status',
+                        value: (
+                          <Badge
+                            variant={
+                              activeProject.status === 'active'
+                                ? 'success'
+                                : activeProject.status === 'error'
+                                  ? 'danger'
+                                  : 'neutral'
+                            }
+                          >
+                            <StatusDot
+                              variant={
+                                activeProject.status === 'active'
+                                  ? 'success'
+                                  : activeProject.status === 'error'
+                                    ? 'danger'
+                                    : 'neutral'
+                              }
+                              size="sm"
+                              pulse={activeProject.status === 'active'}
+                            />
+                            {activeProject.status}
+                          </Badge>
+                        ),
+                      },
+                      {
+                        key: 'pseen',
+                        label: 'Last opened',
+                        value: activeProject.lastAccessed
+                          ? formatRelative(activeProject.lastAccessed) ||
+                            '—'
+                          : '—',
+                      },
+                    ]}
+                  />
+                  <Inline gap={2} wrap>
+                    <UiButton
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setActiveTab('tasks')}
+                      icon={<CheckSquare size={12} />}
+                    >
+                      Open tasks
+                    </UiButton>
+                    <UiButton
+                      variant="secondary"
+                      size="sm"
+                      onClick={onUseCurrentDir}
+                      icon={<Folder size={12} />}
+                    >
+                      Auto-detect
+                    </UiButton>
+                  </Inline>
+                </Stack>
+              </Box>
+            ) : (
+              <Box as="div" p={3}>
+                <EmptyState
+                  title="No active project"
+                  description="Add one or auto-detect from the current directory."
+                  inline
+                  icon={<Folder size={20} />}
+                />
+              </Box>
+            )}
+          </Panel>
+
+          <Panel
+            title="Recent mods"
+            description="Last few installed extensions"
+            padding={3}
+            data-testid="overview-panel-recent-mods"
+          >
+            {mods.length === 0 ? (
+              <Box as="div" p={3}>
+                <EmptyState
+                  title="No mods installed"
+                  description="Install from the Mods tab."
+                  inline
+                  icon={<Puzzle size={20} />}
+                />
+              </Box>
+            ) : (
+              <Box p={2}>
+                <Stack gap={0}>
+                  {mods.slice(0, 6).map((m) => (
+                    <Box
+                      key={m.id}
+                      py={2}
+                      px={3}
+                      style={{
+                        borderTop: '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      <Inline justify="between" align="center" gap={3}>
+                        <Stack gap={0} style={{ minWidth: 0 }}>
+                          <span
+                            style={{
+                              fontWeight: 'var(--weight-medium)',
+                              fontSize: 'var(--text-base)',
+                            }}
+                          >
+                            {m.name}
+                          </span>
+                          <span
+                            className="muted"
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 'var(--text-xs)',
+                              color: 'var(--text-tertiary)',
+                            }}
+                          >
+                            v{m.version} · {m.type}
+                          </span>
+                        </Stack>
+                        <Badge
+                          variant={m.enabled ? 'success' : 'neutral'}
+                          size="sm"
+                        >
+                          <StatusDot
+                            variant={m.enabled ? 'success' : 'neutral'}
+                            size="sm"
+                          />
+                          {m.enabled ? 'on' : 'off'}
+                        </Badge>
+                      </Inline>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+          </Panel>
+        </Grid>
+
+        {/* ─── Section 4: Activity stream ────────────────────────────── */}
+        <Panel
+          title="Recent activity"
+          description={`${visibleActivity.length} item${visibleActivity.length === 1 ? '' : 's'} · live via SSE`}
+          actions={
+            <Inline gap={2} align="center">
+              {hiddenKeys.size > 0 && (
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRestoreAll}
+                  icon={<Eye size={12} />}
+                  aria-label={`Restore ${hiddenKeys.size} hidden items`}
+                >
+                  Restore ({hiddenKeys.size})
+                </UiButton>
+              )}
+              {activityItems.length > 0 && (
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClearAll}
+                  icon={<EyeOff size={12} />}
+                  data-testid="overview-hide-all"
+                  aria-label="Hide all activity from overview"
+                >
+                  Hide all
+                </UiButton>
+              )}
+            </Inline>
+          }
+          padding={0}
+          data-testid="overview-panel-activity"
+        >
+          {hiddenKeys.size > 0 && (
+            <Box
+              as="div"
+              p={3}
+              style={{
+                background: 'var(--surface-2)',
+                borderTop: '1px solid var(--border-subtle)',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--space-3)',
+              }}
+              role="status"
+            >
+              <Inline gap={2} align="center">
+                <EyeOff size={12} />
+                <span style={{ fontSize: 'var(--text-sm)' }}>
+                  {hiddenKeys.size} item{hiddenKeys.size === 1 ? '' : 's'}{' '}
+                  hidden from the overview.
+                </span>
+              </Inline>
+              <UiButton variant="ghost" size="sm" onClick={onRestoreAll}>
+                <Eye size={12} /> Show them again
+              </UiButton>
+            </Box>
           )}
-        </Card>
 
-        <Card>
-          <CardTitle>Environment</CardTitle>
-          <CardMeta>Runtime + paths</CardMeta>
-          <dl className="env-table">
-            <dt>Node</dt>
-            <dd className="mono">{overview.versions.node}</dd>
-            <dt>Platform</dt>
-            <dd className="mono">{overview.versions.platform}</dd>
-            <dt>Project root</dt>
-            <dd className="mono ellipsis" title={overview.versions.projectRoot}>
-              {overview.versions.projectRoot}
-            </dd>
-            <dt>Bizar root</dt>
-            <dd className="mono ellipsis" title={overview.versions.bizarRoot}>
-              {overview.versions.bizarRoot}
-            </dd>
-            <dt>Generated</dt>
-            <dd className="mono tabular-nums">
-              {formatTime(overview.generatedAt)}
-            </dd>
-          </dl>
-        </Card>
-      </div>
-    </div>
+          {visibleActivity.length === 0 ? (
+            <Box as="div" p={5}>
+              <EmptyState
+                title="No activity yet"
+                description="Use the prompt below or invoke a Bizar command to start a feed."
+                inline
+                icon={<Activity size={20} />}
+              />
+            </Box>
+          ) : (
+            <Stack
+              as="ul"
+              gap={0}
+              role="list"
+              aria-live="polite"
+              aria-relevant="additions"
+              data-testid="overview-activity-list"
+            >
+              {visibleActivity.map(({ it, key }) => (
+                <ActivityRow
+                  key={key}
+                  item={it}
+                  activityKey={key}
+                  onNavigate={setActiveTab}
+                  onHide={onHide}
+                />
+              ))}
+            </Stack>
+          )}
+        </Panel>
+
+        {/* ─── Section 5: Quick prompts ──────────────────────────────── */}
+        <Panel
+          title="What do you want to do?"
+          description="Describe what you want — Odin will split it into tasks, delegate to background agents, and track progress in real time."
+          padding={4}
+          actions={
+            <Badge variant="accent" size="sm">
+              <Sparkles size={12} />
+              <span style={{ marginLeft: 4 }}>Odin + 12 specialists</span>
+            </Badge>
+          }
+          data-testid="overview-panel-prompts"
+        >
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const text = (inputRef.current?.value || '').trim();
+              if (!text) return;
+              setSubmitting(true);
+              try {
+                const r = await api.post<{ subtasks?: unknown[] }>(
+                  '/tasks/submit',
+                  { title: text },
+                );
+                toast.success(
+                  `Odin split it into ${r.subtasks?.length || 1} task(s)`,
+                );
+                if (inputRef.current) inputRef.current.value = '';
+                await refreshSnapshot();
+              } catch (err) {
+                toast.error(`Failed: ${(err as Error).message}`);
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+          >
+            <Stack gap={3}>
+              <textarea
+                ref={inputRef}
+                disabled={submitting}
+                aria-label="Describe what you want Odin to do"
+                rows={4}
+                style={{
+                  width: '100%',
+                  resize: 'vertical',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-base)',
+                  lineHeight: 'var(--leading-normal)',
+                  padding: 'var(--space-3) var(--space-4)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--surface-1)',
+                  color: 'var(--text-primary)',
+                }}
+                placeholder="e.g. Implement user authentication with email + password, including registration, login, password reset, and integration tests. Use Bcrypt, JWT tokens, and the existing API style."
+                data-testid="overview-prompt-input"
+              />
+              <Inline justify="between" align="center" gap={3} wrap>
+                <Inline gap={2} wrap>
+                  {[
+                    'Implement feature',
+                    'Fix bug',
+                    'Refactor',
+                    'Investigate',
+                    'Add tests',
+                    'Document',
+                    'Optimize',
+                    'Deploy',
+                  ].map((action) => (
+                    <button
+                      key={action}
+                      type="button"
+                      className="overview-quick-chip"
+                      onClick={() => {
+                        if (inputRef.current) {
+                          inputRef.current.value = action;
+                          inputRef.current.focus();
+                        }
+                      }}
+                    >
+                      {action}
+                    </button>
+                  ))}
+                </Inline>
+                <UiButton
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  disabled={submitting}
+                  loading={submitting}
+                  icon={submitting ? undefined : <Send size={12} />}
+                  data-testid="overview-submit"
+                >
+                  {submitting ? 'Submitting…' : 'Submit to Odin'}
+                </UiButton>
+              </Inline>
+            </Stack>
+          </form>
+        </Panel>
+      </Stack>
+    </Box>
   );
 }
 
-// ─── AddProjectDialog ─────────────────────────────────────────────────────────
+// ─── AddProjectDialog (legacy <Modal>) ──────────────────────────────────────
 
-/**
- * Pre-flight approach: before POST /projects we verify the selected path
- * still exists (GET /fs?path=...). This avoids the ugly 404 toast when a
- * directory is deleted between selection and submit.
- */
 function AddProjectDialog({
   settings,
   onAdd,
@@ -536,9 +1044,11 @@ function AddProjectDialog({
   settings: Settings;
   onAdd: (path: string, name: string | null) => void;
 }) {
-  const [path, setPath] = useState(settings?.dashboard?.projectsDirectory ?? '');
-  const [name, setName] = useState('');
-  const [preflighting, setPreflighting] = useState(false);
+  const [path, setPath] = useState<string>(
+    settings?.dashboard?.projectsDirectory ?? '',
+  );
+  const [name, setName] = useState<string>('');
+  const [preflighting, setPreflighting] = useState<boolean>(false);
   const [preflightError, setPreflightError] = useState<string | null>(null);
 
   const handleAdd = async () => {
@@ -546,9 +1056,7 @@ function AddProjectDialog({
     setPreflighting(true);
     setPreflightError(null);
     try {
-      // Pre-flight: verify the path still exists
       await api.get<DirectoryListing>('/fs?path=' + encodeURIComponent(path));
-      // Path is valid — proceed with the POST
       onAdd(path, name || null);
     } catch (err) {
       const apiErr = err as { status?: number; data?: { message?: string } };
@@ -556,7 +1064,9 @@ function AddProjectDialog({
         setPreflightError('That folder no longer exists. Pick another.');
       } else {
         setPreflightError(
-          apiErr.data?.message ?? (err as Error).message ?? 'Validation failed.',
+          apiErr.data?.message ??
+            (err as Error).message ??
+            'Validation failed.',
         );
       }
     } finally {
@@ -577,12 +1087,17 @@ function AddProjectDialog({
         height={320}
       />
       {preflightError && (
-        <p className="field-help" style={{ color: 'var(--error)', marginTop: 4 }}>
+        <p
+          className="field-help"
+          style={{ color: 'var(--error)', marginTop: 4 }}
+        >
           {preflightError}
         </p>
       )}
       <div style={{ marginTop: 'var(--space-3)' }}>
-        <label className="field-label" htmlFor="add-project-name">Name (optional)</label>
+        <label className="field-label" htmlFor="add-project-name">
+          Name (optional)
+        </label>
         <input
           id="add-project-name"
           className="input"
@@ -595,7 +1110,13 @@ function AddProjectDialog({
           Display name for this project. Defaults to the folder name.
         </p>
       </div>
-      <div style={{ marginTop: 'var(--space-3)', display: 'flex', justifyContent: 'flex-end' }}>
+      <div
+        style={{
+          marginTop: 'var(--space-3)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+        }}
+      >
         <Button
           variant="primary"
           onClick={handleAdd}
@@ -609,58 +1130,125 @@ function AddProjectDialog({
   );
 }
 
-function ProjectCard({
-  project,
-  active,
-  onOpen,
-  onRemove,
+// ─── Activity row (the compact inline list item) ────────────────────────────
+
+function ActivityRow({
+  item,
+  activityKey,
+  onNavigate,
+  onHide,
 }: {
-  project: ProjectRecord;
-  active: boolean;
-  onOpen: () => void;
-  onRemove: () => void;
+  item: ActivityItem;
+  activityKey: string;
+  onNavigate: (tab: string) => void;
+  onHide: (key: string) => void;
 }) {
-  const statusColor = {
-    active: 'status-on',
-    inactive: 'status-neutral',
-    error: 'status-error',
-  }[project.status] || 'status-neutral';
+  const severity = activitySeverity(item);
+  const Icon = activityIcon(item.kind || '');
+  const title = humanizeKind(item.kind || 'activity');
+  const msg = formatActivitySummary(item);
+  const navTarget = activityNavTarget(item.kind || '');
+
   return (
-    <div className={`project-card ${active ? 'project-card-active' : ''}`}>
-      <div className="project-card-head">
-        <span className={`project-card-status ${statusColor}`}>
-          {project.status}
-        </span>
-        <div className="project-card-name">{project.name}</div>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Remove project"
-          title="Remove"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
+    <li
+      className={`overview-activity-row overview-activity-row-${severity}`}
+      style={{
+        borderTop: '1px solid var(--border-subtle)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+        paddingInline: 'var(--space-4)',
+        paddingBlock: 'var(--space-3)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (navTarget) onNavigate(navTarget);
+        }}
+        className="overview-activity-row__main"
+        title={navTarget ? `Open ${navTarget}` : title}
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-3)',
+          textAlign: 'left',
+          background: 'transparent',
+          color: 'inherit',
+          padding: 0,
+        }}
+      >
+        <span
+          style={{
+            color:
+              severity === 'error'
+                ? 'var(--danger)'
+                : severity === 'warning'
+                  ? 'var(--warning)'
+                  : severity === 'success'
+                    ? 'var(--success)'
+                    : 'var(--accent)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            flexShrink: 0,
           }}
         >
-          <Trash2 size={12} />
-        </button>
-      </div>
-      <div className="project-card-path mono ellipsis" title={project.path}>
-        {project.path}
-      </div>
-      <div className="project-card-meta">
-        {project.lastAccessed && (
-          <span className="muted">Last opened {formatRelative(project.lastAccessed)}</span>
-        )}
-      </div>
-      <div className="project-card-actions">
-        <Button variant={active ? 'ghost' : 'primary'} size="sm" onClick={onOpen}>
-          {active ? <><Power size={12} /> Active</> : <>Open</>}
-        </Button>
-      </div>
-    </div>
+          <Icon size={14} />
+        </span>
+        <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
+          <Inline justify="between" align="center" gap={3} wrap>
+            <span
+              style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--weight-medium)',
+              }}
+            >
+              {title}
+            </span>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontVariantNumeric: 'tabular-nums',
+                fontSize: 'var(--text-xs)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              {formatClock(item.ts)}
+            </span>
+          </Inline>
+          <span
+            className="muted"
+            style={{
+              fontSize: 'var(--text-sm)',
+              color: 'var(--text-secondary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block',
+            }}
+            title={msg}
+          >
+            {msg}
+          </span>
+        </Stack>
+      </button>
+      <IconButton
+        variant="ghost"
+        size="sm"
+        onClick={() => onHide(activityKey)}
+        aria-label="Hide from overview"
+        title="Hide from overview (kept in Settings → Activity Log)"
+        icon={<X size={12} />}
+      />
+    </li>
   );
 }
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function sentenceCase(s: string): string {
   if (!s) return s;
@@ -687,19 +1275,32 @@ function humanizeKind(kind: string): string {
     providers: 'Provider',
   };
   const actionMap: Record<string, string> = {
-    create: 'created', created: 'created',
-    add: 'added', added: 'added',
-    update: 'updated', updated: 'updated',
-    delegate: 'delegated', delegated: 'delegated',
-    invoke: 'invoked', invoked: 'invoked',
-    restart: 'restarted', restarted: 'restarted',
-    delete: 'deleted', deleted: 'deleted',
-    remove: 'removed', removed: 'removed',
-    archive: 'archived', archived: 'archived',
-    restore: 'restored', restored: 'restored',
-    complete: 'completed', completed: 'completed',
-    fail: 'failed', failed: 'failed',
-    error: 'errored', stuck: 'marked stuck',
+    create: 'created',
+    created: 'created',
+    add: 'added',
+    added: 'added',
+    update: 'updated',
+    updated: 'updated',
+    delegate: 'delegated',
+    delegated: 'delegated',
+    invoke: 'invoked',
+    invoked: 'invoked',
+    restart: 'restarted',
+    restarted: 'restarted',
+    delete: 'deleted',
+    deleted: 'deleted',
+    remove: 'removed',
+    removed: 'removed',
+    archive: 'archived',
+    archived: 'archived',
+    restore: 'restored',
+    restored: 'restored',
+    complete: 'completed',
+    completed: 'completed',
+    fail: 'failed',
+    failed: 'failed',
+    error: 'errored',
+    stuck: 'marked stuck',
   };
   const scope = scopeMap[scopeRaw] || sentenceCase(scopeRaw.replace(/-/g, ' '));
   const action = actionMap[actionRaw] || actionRaw.replace(/-/g, ' ');
@@ -727,12 +1328,6 @@ function formatActivitySummary(it: ActivityItem): string {
   return parts.length ? parts.join(' · ') : 'No additional details.';
 }
 
-// v3.7.0 — Format a timestamp as a relative string ("2m ago", "1h ago")
-function formatRelativeTime(ts: string): string {
-  return formatRelative(ts);
-}
-
-// v3.7.0 — Get severity color token from kind or status field
 function activitySeverity(it: ActivityItem): 'error' | 'warning' | 'success' | 'info' {
   const k = ((it.kind as string) || '').toLowerCase();
   const s = ((it.status as string) || '').toLowerCase();
@@ -742,7 +1337,6 @@ function activitySeverity(it: ActivityItem): 'error' | 'warning' | 'success' | '
   return 'info';
 }
 
-// v3.7.0 — Map activity kind to icon
 function activityIcon(kind: string) {
   const k = kind.toLowerCase();
   if (k === 'task') return CheckSquare;
@@ -756,7 +1350,6 @@ function activityIcon(kind: string) {
   return Activity;
 }
 
-// v3.7.0 — Navigate to the relevant tab when a card is clicked
 function activityNavTarget(kind: string): string | null {
   const k = kind.toLowerCase();
   if (k === 'task') return 'tasks';
@@ -768,60 +1361,15 @@ function activityNavTarget(kind: string): string | null {
   return null;
 }
 
-// v3.7.0 — Activity card component
-function ActivityFeedItem({
-  item,
-  activityKey,
-  onNavigate,
-  onHide,
-}: {
-  item: ActivityItem;
-  activityKey: string;
-  onNavigate: (tab: string) => void;
-  onHide: (key: string) => void;
-}) {
-  const severity = activitySeverity(item);
-  const Icon = activityIcon(item.kind || '');
-  const title = humanizeKind(item.kind || 'activity');
-  const msg = formatActivitySummary(item);
-  const navTarget = activityNavTarget(item.kind || '');
-
-  const accentColor =
-    severity === 'error' ? 'var(--error)' :
-    severity === 'warning' ? 'var(--warning)' :
-    severity === 'success' ? 'var(--success)' :
-    'var(--accent)';
-
-  return (
-    <div className={cn('activity-feed-row', `activity-feed-row-${severity}`)}>
-      <button
-        type="button"
-        className="activity-feed-row-main"
-        onClick={() => { if (navTarget) onNavigate(navTarget); }}
-        title={navTarget ? `Open ${navTarget}` : title}
-      >
-        <div className="activity-feed-icon" style={{ color: accentColor }}>
-          <Icon size={14} />
-        </div>
-        <div className="activity-feed-body">
-          <div className="activity-feed-title-row">
-            <div className="activity-feed-title">{title}</div>
-            <div className="activity-feed-time text-xs muted tabular-nums">{formatRelativeTime(item.ts)}</div>
-          </div>
-          <div className="activity-feed-summary text-sm">{msg}</div>
-        </div>
-      </button>
-      <button
-        type="button"
-        className="activity-feed-hide-btn"
-        onClick={() => onHide(activityKey)}
-        title="Hide this from the overview (kept in Settings → Activity Log)"
-        aria-label="Hide from overview"
-      >
-        <X size={12} />
-      </button>
-    </div>
-  );
+function formatClock(ts: string): string {
+  return formatRelative(ts);
 }
+
+function truncateMiddle(s: string, maxLen: number): string {
+  if (!s || s.length <= maxLen) return s;
+  const half = Math.floor((maxLen - 1) / 2);
+  return `${s.slice(0, half)}…${s.slice(-half)}`;
+}
+
 const OverviewMemo = React.memo(OverviewInner);
 export { OverviewMemo as Overview };

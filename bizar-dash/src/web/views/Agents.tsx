@@ -1,4 +1,13 @@
-// src/views/Agents.tsx — v3.1.0 agents with tags, categories, real-time status.
+// src/views/Agents.tsx — Agent roster view (Wave 3 redesign).
+//
+// Wave 3 migrates the legacy card-grid agent roster to the Bizar design
+// system: a split-pane layout with a sortable DataTable on the left and a
+// detail Panel on the right that surfaces the selected agent's metadata,
+// actions (Edit / Delete / Restart) and system prompt. Modals still use the
+// legacy Modal component (the design-system Dialog will land in a later
+// wave), and the public function signature, export name, API paths, and
+// WS event subscriptions remain unchanged so callers and the server are
+// not disturbed by this UI-only refactor.
 import { useEffect, useMemo, useState } from 'react';
 import {
   Bot,
@@ -8,28 +17,32 @@ import {
   Trash2,
   Play,
   Save,
-  X,
   RotateCw,
-  Activity,
-  Tag as TagIcon,
-  Folder,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  Circle,
-  ChevronDown,
-  ChevronRight,
+  CircleAlert,
 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Card, CardTitle } from '../components/Card';
-import { EmptyState } from '../components/EmptyState';
-import { Spinner } from '../components/Spinner';
-import { StatusBadge } from '../components/StatusBadge';
 import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
-import { cn, formatRelative, truncate } from '../lib/utils';
+import { formatRelative, truncate } from '../lib/utils';
 import type { Agent, Settings, Snapshot } from '../lib/types';
+
+// Design-system consumers — Wave 3 first real view to use them.
+import { Stack, Inline, Box } from '../ui/primitives';
+import {
+  DataTable,
+  KeyValueList,
+  EmptyState,
+  LoadingState,
+  type DataTableColumn,
+  type KeyValueItem,
+} from '../ui/data';
+import { Button as UIButton } from '../ui/controls';
+import { Badge, StatusDot } from '../ui/feedback';
+import { Panel } from '../ui/layout';
+import { cx } from '../ui/utils/cx';
+
+import '../styles/agents-redesign.css';
 
 type Props = {
   snapshot: Snapshot;
@@ -50,35 +63,54 @@ const MODELS = [
 ];
 
 const CATEGORIES = [
-  { id: 'reasoning', label: 'Reasoning', color: 'var(--accent)' },
-  { id: 'code', label: 'Code', color: 'var(--info)' },
-  { id: 'design', label: 'Design', color: 'var(--success)' },
-  { id: 'planning', label: 'Planning', color: 'var(--warning)' },
-  { id: 'gitops', label: 'GitOps', color: 'var(--error)' },
-  { id: 'analysis', label: 'Analysis', color: 'var(--text-dim)' },
+  { id: 'reasoning', label: 'Reasoning', variant: 'accent' as const },
+  { id: 'code', label: 'Code', variant: 'info' as const },
+  { id: 'design', label: 'Design', variant: 'success' as const },
+  { id: 'planning', label: 'Planning', variant: 'warning' as const },
+  { id: 'gitops', label: 'GitOps', variant: 'danger' as const },
+  { id: 'analysis', label: 'Analysis', variant: 'neutral' as const },
 ];
 
-function categoryColor(cat: string | undefined): string {
-  return CATEGORIES.find((c) => c.id === cat)?.color || 'var(--text-dim)';
+function categoryMeta(cat: string | undefined): { label: string; variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'accent' } {
+  if (!cat) return { label: '—', variant: 'neutral' };
+  const found = CATEGORIES.find((c) => c.id === cat);
+  return found
+    ? { label: found.label, variant: found.variant }
+    : { label: cat, variant: 'neutral' };
 }
 
-function StatusDot({ status, isStuck }: { status?: string; isStuck?: boolean }) {
-  const color =
-    isStuck ? 'var(--error)'
-    : status === 'working' ? 'var(--info)'
-    : status === 'error' ? 'var(--error)'
-    : 'var(--text-dim)';
-  return <span className="agent-status-dot" style={{ background: color }} />;
+type StatusKind = 'idle' | 'working' | 'error' | 'stuck';
+
+function statusKind(agent: Agent): StatusKind {
+  if (agent.isStuck) return 'stuck';
+  const s = (agent.status || 'idle') as string;
+  if (s === 'working') return 'working';
+  if (s === 'error') return 'error';
+  return 'idle';
 }
 
-function StatusPill({ agent }: { agent: Agent }) {
-  if (agent.isStuck) {
-    return <StatusBadge kind="error" dot>stuck</StatusBadge>;
-  }
-  const status = agent.status || 'idle';
-  if (status === 'working') return <StatusBadge kind="info" dot>working</StatusBadge>;
-  if (status === 'error') return <StatusBadge kind="error" dot>error</StatusBadge>;
-  return <StatusBadge kind="neutral" dot>idle</StatusBadge>;
+function statusLabel(kind: StatusKind): string {
+  if (kind === 'stuck') return 'stuck';
+  return kind;
+}
+
+function statusDotVariant(kind: StatusKind): 'neutral' | 'info' | 'danger' {
+  if (kind === 'working') return 'info';
+  if (kind === 'error' || kind === 'stuck') return 'danger';
+  return 'neutral';
+}
+
+function lastSeenTs(agent: Agent): number | undefined {
+  // The Agent type exposes `lastSeen` (legacy) and a future `lastSeenAt`.
+  // Either is acceptable; missing fields render as "—".
+  const a = agent as unknown as { lastSeenAt?: number };
+  return a.lastSeenAt ?? agent.lastSeen;
+}
+
+function tagsToString(tags: string[] | undefined, max = 4): string {
+  if (!tags || tags.length === 0) return '—';
+  const shown = tags.slice(0, max).join(', ');
+  return tags.length > max ? `${shown} +${tags.length - max}` : shown;
 }
 
 export function Agents({ snapshot, refreshSnapshot }: Props) {
@@ -88,13 +120,22 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
   const [loading, setLoading] = useState(!snapshot.agents);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [selectedName, setSelectedName] = useState<string | null>(null);
 
   useEffect(() => {
     setAgents(snapshot.agents || []);
     setLoading(!snapshot.agents);
   }, [snapshot.agents]);
 
-  const reload = async () => {
+  // If the selected agent disappears from the list (deleted elsewhere, WS
+  // swap), clear the selection so the detail panel reverts to the placeholder.
+  useEffect(() => {
+    if (selectedName && !agents.some((a) => a.name === selectedName)) {
+      setSelectedName(null);
+    }
+  }, [agents, selectedName]);
+
+  const reload = async (): Promise<void> => {
     try {
       const d = await api.get<{ agents: Agent[] }>('/agents');
       setAgents(d.agents || []);
@@ -108,7 +149,11 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
   const sorted = useMemo(() => {
     let out = [...agents];
     if (categoryFilter) {
-      out = out.filter((a) => categoryFilter === '__none__' ? !(a.category || '') : (a.category || '') === categoryFilter);
+      out = out.filter((a) =>
+        categoryFilter === '__none__'
+          ? !(a.category || '')
+          : (a.category || '') === categoryFilter,
+      );
     }
     if (search) {
       const q = search.toLowerCase();
@@ -122,13 +167,16 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }, [agents, categoryFilter, search]);
 
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    for (const a of agents) for (const t of a.tags || []) set.add(t);
-    return Array.from(set).sort();
-  }, [agents]);
+  const hasLastSeen = sorted.some((a) => typeof lastSeenTs(a) === 'number');
 
-  const onCreate = () => {
+  const selected = useMemo(
+    () => sorted.find((a) => a.name === selectedName) || null,
+    [sorted, selectedName],
+  );
+
+  // ─── Handlers (modal flows kept on the legacy Modal) ───────────────────
+
+  const onCreate = (): void => {
     let nameEl: HTMLInputElement | null = null;
     let descEl: HTMLInputElement | null = null;
     let modelEl: HTMLSelectElement | null = null;
@@ -251,6 +299,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                   prompt: promptEl?.value || '',
                 });
                 setAgents((cur) => [...cur, created]);
+                setSelectedName(created.name);
                 toast.success('Agent created.');
                 modal.close();
                 await refreshSnapshot();
@@ -266,7 +315,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     });
   };
 
-  const onEdit = async (a: Agent) => {
+  const onEdit = async (a: Agent): Promise<void> => {
     let descEl: HTMLInputElement | null = null;
     let modelEl: HTMLSelectElement | null = null;
     let modeEl: HTMLSelectElement | null = null;
@@ -345,7 +394,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
                     <input type="checkbox" value={t} aria-label={t} defaultChecked={full.tools?.includes(t)} />
                     <span>{t}</span>
                   </label>
-                ))}
+              ))}
               </div>
             </fieldset>
             <label className="field-label" htmlFor="agent-edit-prompt">System prompt</label>
@@ -404,7 +453,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  const onDelete = async (a: Agent) => {
+  const onDelete = async (a: Agent): Promise<void> => {
     if (!confirm(`Delete agent "${a.name}"? This removes ${a.path}.`)) return;
     try {
       await api.del(`/agents/${encodeURIComponent(a.name)}`);
@@ -415,7 +464,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  const onInvoke = async (a: Agent) => {
+  const onInvoke = (a: Agent): void => {
     let promptEl: HTMLTextAreaElement | null = null;
     modal.open({
       title: `Invoke ${a.name}`,
@@ -461,7 +510,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     });
   };
 
-  const onRestart = async (a: Agent) => {
+  const onRestart = async (a: Agent): Promise<void> => {
     try {
       const updated = await api.post<Agent>(`/agents/${encodeURIComponent(a.name)}/restart`);
       setAgents((cur) => cur.map((x) => (x.name === a.name ? updated : x)));
@@ -471,7 +520,7 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
-  const onSetStatus = async (a: Agent, status: 'idle' | 'working' | 'error') => {
+  const onSetStatus = async (a: Agent, status: 'idle' | 'working' | 'error'): Promise<void> => {
     try {
       const updated = await api.post<Agent>(`/agents/${encodeURIComponent(a.name)}/status`, { status });
       setAgents((cur) => cur.map((x) => (x.name === a.name ? updated : x)));
@@ -480,237 +529,428 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
     }
   };
 
+  // ─── Table column definitions ──────────────────────────────────────────
+
+  type Col = DataTableColumn<Agent>;
+
+  const columns: Col[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      sortable: true,
+      accessor: (a) => a.name,
+      render: (a) => (
+        <span className="agents-name-cell">
+          <span
+            className={cx(
+              'agents-name-cell__swatch',
+              !a.color && 'agents-name-cell__swatch--empty',
+            )}
+            style={a.color ? { background: a.color } : undefined}
+            aria-hidden="true"
+          />
+          {a.name}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      accessor: (a) => statusKind(a),
+      render: (a) => {
+        const kind = statusKind(a);
+        return (
+          <span className="agents-status-cell">
+            <StatusDot
+              variant={statusDotVariant(kind)}
+              size="sm"
+              pulse={kind === 'stuck'}
+              label={statusLabel(kind)}
+            />
+            <span
+              className={cx(
+                'agents-status-cell__label',
+                kind === 'stuck' && 'agents-status-cell__label--stuck',
+              )}
+            >
+              {statusLabel(kind)}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      accessor: (a) => a.category || '',
+      render: (a) => {
+        const meta = categoryMeta(a.category);
+        if (!a.category) return <span className="muted">—</span>;
+        return (
+          <span className="agents-category-cell">
+            <Badge variant={meta.variant} size="sm">{meta.label}</Badge>
+          </span>
+        );
+      },
+    },
+    {
+      key: 'tags',
+      header: 'Tags',
+      accessor: (a) => (a.tags || []).join(','),
+      render: (a) => (
+        <span className="agents-tags-cell" title={(a.tags || []).join(', ')}>
+          {tagsToString(a.tags)}
+        </span>
+      ),
+    },
+  ];
+
+  if (hasLastSeen) {
+    columns.push({
+      key: 'lastSeen',
+      header: 'Last seen',
+      sortable: true,
+      accessor: (a) => lastSeenTs(a) || 0,
+      render: (a) => {
+        const ts = lastSeenTs(a);
+        return <span className="muted tabular-nums">{ts ? formatRelative(ts) : '—'}</span>;
+      },
+    });
+  }
+
+  // ─── Detail panel ─────────────────────────────────────────────────────
+
+  function renderDetailBody(): React.JSX.Element {
+    if (!selected) {
+      return (
+        <div className="agents-detail__placeholder">
+          <span className="agents-detail__placeholder-icon" aria-hidden="true">
+            <Bot size={28} />
+          </span>
+          <span className="agents-detail__placeholder-title">No agent selected</span>
+          <span>Pick a row from the table to see its metadata, actions, and prompt.</span>
+        </div>
+      );
+    }
+
+    const a = selected;
+    const kind = statusKind(a);
+    const catMeta = categoryMeta(a.category);
+    const canRestart = a.isStuck || a.status === 'working' || a.status === 'error';
+
+    const metaItems: KeyValueItem[] = [
+      {
+        key: 'status',
+        label: 'Status',
+        value: (
+          <span className="agents-status-cell">
+            <StatusDot
+              variant={statusDotVariant(kind)}
+              size="sm"
+              pulse={kind === 'stuck'}
+              label={statusLabel(kind)}
+            />
+            <span className="agents-status-cell__label">{statusLabel(kind)}</span>
+          </span>
+        ),
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        value: a.category
+          ? <Badge variant={catMeta.variant} size="sm">{catMeta.label}</Badge>
+          : <span className="muted">—</span>,
+      },
+      {
+        key: 'tags',
+        label: 'Tags',
+        value: a.tags && a.tags.length > 0 ? (
+          <Inline gap={1} className="agents-detail__tags">
+            {a.tags.map((t) => (
+              <Badge key={t} variant="neutral" size="sm">{t}</Badge>
+            ))}
+          </Inline>
+        ) : <span className="muted">—</span>,
+      },
+      {
+        key: 'tools',
+        label: 'Tools',
+        value: a.tools && a.tools.length > 0 ? (
+          <Inline gap={1} className="agents-detail__tools">
+            {a.tools.map((t) => (
+              <Badge key={t} variant="info" size="sm">{t}</Badge>
+            ))}
+          </Inline>
+        ) : <span className="muted">—</span>,
+      },
+      {
+        key: 'model',
+        label: 'Model',
+        mono: true,
+        copyable: true,
+        value: a.model || '—',
+      },
+      {
+        key: 'mode',
+        label: 'Mode',
+        value: a.mode || 'subagent',
+      },
+      {
+        key: 'color',
+        label: 'Color',
+        value: a.color ? (
+          <Inline gap={2} align="center">
+            <span
+              className="agents-detail__name-swatch"
+              style={{ background: a.color }}
+              aria-hidden="true"
+            />
+            <code className="mono">{a.color}</code>
+          </Inline>
+        ) : <span className="muted">—</span>,
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        value: a.description
+          ? <div className="agents-detail__description">{truncate(a.description, 600)}</div>
+          : <span className="muted">—</span>,
+      },
+    ];
+
+    if (typeof lastSeenTs(a) === 'number') {
+      metaItems.push({
+        key: 'lastSeen',
+        label: 'Last seen',
+        mono: true,
+        value: formatRelative(lastSeenTs(a) as number),
+      });
+    }
+
+    if (a.lastError?.message) {
+      metaItems.push({
+        key: 'lastError',
+        label: 'Last error',
+        value: (
+          <div className="agents-detail__error">{a.lastError.message}</div>
+        ),
+      });
+    }
+
+    return (
+      <Stack gap={4} className="agents-detail__meta">
+        <KeyValueList items={metaItems} orientation="horizontal" />
+
+        <Box className="agents-detail__prompt">
+          <span className="agents-detail__prompt-label">System prompt</span>
+          {a.prompt ? (
+            <pre className="agents-detail__prompt-body">{a.prompt}</pre>
+          ) : (
+            <span className="agents-detail__prompt-empty">No prompt configured.</span>
+          )}
+        </Box>
+
+        <Inline gap={2} wrap className="agents-detail__actions">
+          <UIButton
+            variant="secondary"
+            size="sm"
+            icon={<Pencil size={12} />}
+            onClick={() => onEdit(a)}
+            aria-label={`Edit ${a.name}`}
+            data-testid={`agents-detail-edit-${a.name}`}
+          >
+            Edit
+          </UIButton>
+          <UIButton
+            variant="secondary"
+            size="sm"
+            icon={<Play size={12} />}
+            onClick={() => onInvoke(a)}
+            aria-label={`Invoke ${a.name}`}
+            data-testid={`agents-detail-invoke-${a.name}`}
+          >
+            Invoke
+          </UIButton>
+          {canRestart && (
+            <UIButton
+              variant="ghost"
+              size="sm"
+              icon={<RotateCw size={12} />}
+              onClick={() => onRestart(a)}
+              aria-label={`Restart ${a.name}`}
+              data-testid={`agents-detail-restart-${a.name}`}
+            >
+              Restart
+            </UIButton>
+          )}
+          <UIButton
+            variant="danger"
+            size="sm"
+            icon={<Trash2 size={12} />}
+            onClick={() => onDelete(a)}
+            aria-label={`Delete ${a.name}`}
+            data-testid={`agents-detail-delete-${a.name}`}
+          >
+            Delete
+          </UIButton>
+        </Inline>
+
+        {a.isStuck && (
+          <Inline gap={2} align="center" className="agents-detail__error">
+            <CircleAlert size={12} />
+            <span>
+              Agent is stuck — restart to reset state.
+            </span>
+          </Inline>
+        )}
+      </Stack>
+    );
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────
+
+  const categoryOptions = [
+    { value: '', label: 'All categories' },
+    ...CATEGORIES.map((c) => ({ value: c.id, label: c.label })),
+    { value: '__none__', label: '(no category)' },
+  ];
+
   return (
-    <div className="view view-agents">
-      <header className="view-header">
-        <div className="view-header-text">
-          <h2 className="view-title">
-            <Bot size={18} /> Agents ({sorted.length})
+    <div className="agents-redesign" data-testid="agents-view">
+      <header className="agents-redesign__header">
+        <div className="agents-redesign__header-text">
+          <h2 className="agents-redesign__title">
+            <Bot size={18} aria-hidden="true" />
+            <span>Agents</span>
+            <span className="agents-redesign__title-count" data-testid="agents-count">
+              ({sorted.length})
+            </span>
           </h2>
-          <p className="view-subtitle">
-            The Norse pantheon — click <kbd>Edit</kbd> to modify or <kbd>Invoke</kbd> to dispatch.
+          <p className="agents-redesign__subtitle">
+            The Norse pantheon — pick a row to inspect, <kbd>Edit</kbd> to modify, <kbd>Invoke</kbd> to dispatch.
           </p>
         </div>
-        <div className="view-actions">
-          <div className="search-input">
-            <label htmlFor="agents-search" className="sr-only">Search agents</label>
+        <div className="agents-redesign__controls">
+          <span className="agents-redesign__control" style={{ minWidth: 180 }}>
+            <label htmlFor="agents-search" className="vh">Search agents</label>
             <input
               id="agents-search"
               className="input"
-              type="text"
-              placeholder="Search…"
+              type="search"
+              placeholder="Search name, description, tag…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search agents"
+              data-testid="agents-search"
             />
-          </div>
-          <label htmlFor="agents-category-filter" className="sr-only">Filter by category</label>
-          <select
-            id="agents-category-filter"
-            className="select select-sm"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+          </span>
+          <span className="agents-redesign__control" style={{ minWidth: 180 }}>
+            <label htmlFor="agents-category-filter" className="vh">Filter by category</label>
+            <select
+              id="agents-category-filter"
+              className="select"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              data-testid="agents-category-filter"
+            >
+              {categoryOptions.map((opt) => (
+                <option key={opt.value || '__all__'} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </span>
+          <UIButton
+            variant="ghost"
+            size="sm"
+            icon={<RefreshCw size={12} />}
+            onClick={reload}
+            aria-label="Refresh"
+            data-testid="agents-refresh"
           >
-            <option value="">All categories</option>
-            {CATEGORIES.map((c) => (
-              <option key={c.id} value={c.id}>{c.label}</option>
-            ))}
-            <option value="__none__">(no category)</option>
-          </select>
-          <Button variant="secondary" size="sm" onClick={reload}>
-            <RefreshCw size={14} /> Refresh
-          </Button>
-          <Button variant="primary" size="sm" onClick={onCreate}>
-            <Plus size={14} /> New agent
-          </Button>
+            Refresh
+          </UIButton>
+          <UIButton
+            variant="primary"
+            size="sm"
+            icon={<Plus size={12} />}
+            onClick={onCreate}
+            aria-label="New agent"
+            data-testid="agents-new"
+          >
+            New agent
+          </UIButton>
         </div>
       </header>
 
-      {allTags.length > 0 && (
-        <div className="agent-tags-row">
-          <TagIcon size={12} />
-          {allTags.map((t) => (
-            <span key={t} className="tag">{t}</span>
-          ))}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="view-loading"><Spinner size="lg" /></div>
-      ) : sorted.length === 0 ? (
-        <EmptyState
-          icon={<Bot size={32} />}
-          title="No agents found"
-          message="Run bizar in the terminal to install Bizar."
-        />
-      ) : (
-        <div className="agent-grid">
-          {sorted.map((a) => (
-            <AgentCard
-              key={a.name}
-              agent={a}
-              onInvoke={() => onInvoke(a)}
-              onEdit={() => onEdit(a)}
-              onDelete={() => onDelete(a)}
-              onRestart={() => onRestart(a)}
-              onSetStatus={(s) => onSetStatus(a, s)}
+      <div className="agents-redesign__body">
+        <Box className="agents-roster">
+          {loading ? (
+            <LoadingState label="Loading agents…" rows={3} />
+          ) : sorted.length === 0 ? (
+            <EmptyState
+              icon={<Bot size={32} />}
+              title="No agents found"
+              description={
+                agents.length === 0
+                  ? 'Run bizar in the terminal to install Bizar.'
+                  : 'No agents match the current filters — try clearing the search or category.'
+              }
+              action={
+                agents.length === 0
+                  ? undefined
+                  : {
+                      label: 'Clear filters',
+                      onClick: () => {
+                        setSearch('');
+                        setCategoryFilter('');
+                      },
+                    }
+              }
             />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+          ) : (
+            <div className="agents-roster__table" data-testid="agents-table">
+              <DataTable<Agent>
+                columns={columns}
+                data={sorted}
+                rowKey={(a) => a.name}
+                compact
+                onRowClick={(a) => setSelectedName(a.name)}
+              />
+            </div>
+          )}
+        </Box>
 
-function AgentCard({
-  agent,
-  onInvoke,
-  onEdit,
-  onDelete,
-  onRestart,
-  onSetStatus,
-}: {
-  agent: Agent;
-  onInvoke: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onRestart: () => void;
-  onSetStatus: (s: 'idle' | 'working' | 'error') => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const catColor = categoryColor(agent.category);
-  const isWorking = (agent.status === 'working' || !!agent.currentTaskId) && !agent.isStuck;
-  return (
-    <Card
-      variant="elevated"
-      interactive
-      className={cn(
-        'agent-card',
-        isWorking && 'is-working',
-        agent.isStuck && 'is-stuck',
-      )}
-    >
-      <div className="agent-card-head">
-        <div className="agent-card-name">
-          <StatusDot status={agent.status} isStuck={agent.isStuck} />
-          {agent.name}
-        </div>
-        <div className="agent-card-badges">
-          {agent.category && (
-            <span
-              className="agent-card-category"
-              style={{ background: `color-mix(in srgb, ${catColor} 18%, transparent)`, color: catColor }}
-            >
-              {agent.category}
-            </span>
-          )}
-          <StatusPill agent={agent} />
-        </div>
-      </div>
-      <p className="agent-card-desc">{truncate(agent.description, 200)}</p>
-      <div className="agent-card-meta">
-        <span className="mono" title={agent.model || ''}>
-          {agent.model || '—'}
-        </span>
-        <span className="tabular-nums muted">{formatRelative(agent.mtime)}</span>
-      </div>
-      {agent.tags && agent.tags.length > 0 && (
-        <div className="agent-card-tags">
-          {agent.tags.map((t) => (
-            <span key={t} className="agent-card-tag">{t}</span>
-          ))}
-        </div>
-      )}
-      {(isWorking || agent.lastTask) && (
-        <div className="agent-card-activity">
-          {agent.currentTaskId && (
-            <div className="agent-card-row">
-              <Activity size={12} />
-              <span className="muted">Working on</span>
-              <code className="mono">{agent.currentTaskId}</code>
-            </div>
-          )}
-          {agent.lastTask && !agent.currentTaskId && (
-            <div className="agent-card-row">
-              <CheckCircle2 size={12} />
-              <span className="muted">Last</span>
-              <code className="mono">{agent.lastTask.id}</code>
-              <span className="muted tabular-nums">{formatRelative(agent.lastTask.finishedAt)}</span>
-            </div>
-          )}
-          {agent.tasksTotal != null && agent.tasksTotal > 0 && (
-            <div className="agent-card-row">
-              <Circle size={12} />
-              <span className="muted">Success rate</span>
-              <span className="tabular-nums">{Math.round((agent.successRate || 0) * 100)}%</span>
-              <span className="muted tabular-nums">({agent.tasksSucceeded}/{agent.tasksTotal})</span>
-            </div>
-          )}
-        </div>
-      )}
-      {agent.lastError && (
-        <div className="agent-card-error">
-          <AlertTriangle size={12} />
-          <span className="muted">Last error: {agent.lastError.message}</span>
-        </div>
-      )}
-      <div className="agent-card-actions">
-        <Button variant="primary" size="sm" onClick={onInvoke}>
-          <Play size={12} /> Invoke
-        </Button>
-        <Button variant="secondary" size="sm" onClick={onEdit}>
-          <Pencil size={12} /> Edit
-        </Button>
-        {(agent.isStuck || agent.status === 'working' || agent.status === 'error') && (
-          <Button variant="ghost" size="sm" onClick={onRestart} title="Reset agent status">
-            <RotateCw size={12} /> Restart
-          </Button>
-        )}
-        <Button variant="ghost" size="sm" onClick={onDelete}>
-          <Trash2 size={12} />
-        </Button>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
-          onClick={() => setExpanded((v) => !v)}
-          style={{ marginLeft: 'auto' }}
+        <Panel
+          title={
+            selected ? (
+              <span className="agents-detail__name">
+                <span
+                  className={cx(
+                    'agents-detail__name-swatch',
+                    !selected.color && 'agents-detail__name-swatch--empty',
+                  )}
+                  style={selected.color ? { background: selected.color } : undefined}
+                  aria-hidden="true"
+                />
+                <span>{selected.name}</span>
+              </span>
+            ) : (
+              'Agent detail'
+            )
+          }
+          description={
+            selected
+              ? selected.path
+              : 'Select an agent from the roster to see its metadata.'
+          }
+          padding={4}
+          variant="outlined"
+          className="agents-detail"
         >
-          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </button>
+          {renderDetailBody()}
+        </Panel>
       </div>
-      {expanded && (
-        <div className="agent-card-expanded">
-          <div className="agent-card-status-actions">
-            <span className="muted text-sm">Set status:</span>
-            <Button
-              variant={agent.status === 'idle' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => onSetStatus('idle')}
-            >
-              Idle
-            </Button>
-            <Button
-              variant={agent.status === 'working' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => onSetStatus('working')}
-            >
-              Working
-            </Button>
-            <Button
-              variant={agent.status === 'error' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => onSetStatus('error')}
-            >
-              Error
-            </Button>
-          </div>
-          <div className="agent-card-meta">
-            <Folder size={11} />
-            <code className="mono agent-card-path">{agent.path}</code>
-          </div>
-        </div>
-      )}
-    </Card>
+    </div>
   );
 }

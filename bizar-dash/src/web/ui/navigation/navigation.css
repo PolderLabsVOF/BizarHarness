@@ -1,0 +1,343 @@
+/*
+ * navigation.css — Styles for the Navigation component family (Wave 2B).
+ *
+ * One file for NavLink, NavGroup and CommandPalette. Tokens come from
+ * ui/styles/tokens.css — every colour, spacing, radius and shadow below is
+ * a `var(--...)` reference. Sidebar nav uses a subtle accent left-border to
+ * signal the active route (matches Supabase's nav visual language).
+ */
+
+/* ============ NavLink ============ */
+
+.bd-nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  text-decoration: none;
+  user-select: none;
+  width: 100%;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.bd-nav-link:hover:not(.bd-nav-link--disabled):not(.bd-nav-link--active) {
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.bd-nav-link:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.bd-nav-link--active {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+  border-left-color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+.bd-nav-link--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.bd-nav-link__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bd-nav-link__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bd-nav-link__badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-3);
+  color: var(--text-primary);
+  border-radius: var(--radius-full);
+}
+
+.bd-nav-link--active .bd-nav-link__badge {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* ============ NavGroup ============ */
+
+.bd-nav-group {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-3);
+}
+
+.bd-nav-group__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: transparent;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.bd-nav-group__header:hover {
+  color: var(--text-secondary);
+}
+
+.bd-nav-group__header:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.bd-nav-group--non-collapsible .bd-nav-group__header {
+  cursor: default;
+  pointer-events: none;
+}
+
+.bd-nav-group__header-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.bd-nav-group__label {
+  flex: 1;
+}
+
+.bd-nav-group__chevron {
+  flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.bd-nav-group--open .bd-nav-group__chevron {
+  transform: rotate(90deg);
+}
+
+.bd-nav-group__items {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height var(--duration-normal) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.bd-nav-group--open .bd-nav-group__items {
+  max-height: 1000px;
+  opacity: 1;
+}
+
+/* ============ CommandPalette ============ */
+
+.bd-cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  z-index: var(--z-modal);
+  animation: bd-cmdk-fade-in var(--duration-fast) var(--ease-out);
+}
+
+.bd-cmdk {
+  width: min(640px, calc(100vw - var(--space-7)));
+  max-height: 70vh;
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  overflow: hidden;
+  animation: bd-cmdk-slide-in var(--duration-normal) var(--ease-out);
+}
+
+.bd-cmdk__input-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+}
+
+.bd-cmdk__input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: var(--text-md);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.bd-cmdk__input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.bd-cmdk__kbd-hint {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.bd-cmdk__results {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+}
+
+.bd-cmdk__empty {
+  padding: var(--space-7);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.bd-cmdk__group {
+  padding: var(--space-2) 0;
+}
+
+.bd-cmdk__group-header {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+
+.bd-cmdk__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: var(--text-base);
+}
+
+.bd-cmdk__item:hover {
+  background: var(--surface-overlay);
+}
+
+.bd-cmdk__item--active {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+}
+
+.bd-cmdk__item-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.bd-cmdk__item--active .bd-cmdk__item-icon {
+  color: var(--accent);
+}
+
+.bd-cmdk__item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bd-cmdk__item-label {
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bd-cmdk__item-description {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bd-cmdk__item-shortcut {
+  flex-shrink: 0;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.bd-cmdk__item-shortcut kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.bd-cmdk__item--active .bd-cmdk__item-shortcut kbd {
+  background: var(--surface-0);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+@keyframes bd-cmdk-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bd-cmdk-slide-in {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
