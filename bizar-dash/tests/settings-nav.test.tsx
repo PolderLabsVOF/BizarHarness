@@ -41,7 +41,7 @@ describe('SettingsNav', () => {
     expect(onExitSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('renders section groups with group-label class', () => {
+  it('renders section groups with shared sidebar-section-label class', () => {
     render(
       <SettingsNav
         activeSection={null}
@@ -49,11 +49,11 @@ describe('SettingsNav', () => {
         onExitSettings={onExitSettings}
       />,
     );
-    expect(screen.getByText('General', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
-    expect(screen.getByText('Core', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
-    expect(screen.getByText('Agents', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
-    expect(screen.getByText('Experience', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
-    expect(screen.getByText('Data', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
+    expect(screen.getByText('General', { selector: '.sidebar-section-label' })).toBeInTheDocument();
+    expect(screen.getByText('Core', { selector: '.sidebar-section-label' })).toBeInTheDocument();
+    expect(screen.getByText('Agents', { selector: '.sidebar-section-label' })).toBeInTheDocument();
+    expect(screen.getByText('Experience', { selector: '.sidebar-section-label' })).toBeInTheDocument();
+    expect(screen.getByText('Data', { selector: '.sidebar-section-label' })).toBeInTheDocument();
   });
 
   it('renders section items within each group', () => {

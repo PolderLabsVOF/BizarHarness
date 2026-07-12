@@ -59,8 +59,8 @@ describe('Sidebar — settingsMode', () => {
     // Should show the back button
     expect(screen.getByRole('button', { name: /exit settings/i })).toBeInTheDocument();
     // Should show section groups (use selector to avoid duplicate text matches)
-    expect(screen.getByText('General', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
-    expect(screen.getByText('Core', { selector: '.settings-nav-group-label' })).toBeInTheDocument();
+    expect(screen.getByText('General', { selector: '.sidebar-section-label' })).toBeInTheDocument();
+    expect(screen.getByText('Core', { selector: '.sidebar-section-label' })).toBeInTheDocument();
   });
 
   it('shows Back button that calls onExitSettings', async () => {

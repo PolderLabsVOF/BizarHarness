@@ -609,32 +609,13 @@
   background: var(--bg);
 }
 
-/* Settings nav root */
-.settings-nav-root {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-3);
-  gap: 2px;
-}
-
-.settings-nav-divider {
-  height: 1px;
-  background: var(--border);
-  margin: var(--space-2) 0;
-}
-
-/* Section groups */
+/* v7.0.4 — SettingsNav reuses the .sidebar-nav + .sidebar-section-*
+   classes from main.css so the Settings rail is visually identical
+   to the main nav rail. Only the group spacing remains here so each
+   labelled section (General / Core / Agents / Experience / Data) gets
+   extra breathing room between its label and the next group. */
 .settings-nav-group {
   margin-bottom: var(--space-3);
-}
-
-.settings-nav-group-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  font-weight: 600;
-  padding: 4px 8px 6px;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -780,8 +761,7 @@
   }
 
   /* Hide sidebar nav on mobile */
-  .settings-sidebar,
-  .settings-nav-root {
+  .settings-sidebar {
     display: none;
   }
 

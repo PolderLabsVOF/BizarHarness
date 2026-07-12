@@ -48,6 +48,7 @@ export {
   Topbar, type TopbarProps,
   Panel, type PanelProps, type PanelPadding, type PanelVariant,
   PanelHeader, type PanelHeaderProps,
+  ViewHeader, type ViewHeaderProps,
   Tabs, type TabsProps, type TabDef,
   Breadcrumbs, type BreadcrumbsProps, type BreadcrumbItem,
 } from './layout';

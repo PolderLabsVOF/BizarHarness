@@ -52,8 +52,6 @@ import {
   EyeOff,
   Eye,
   X,
-  Sun,
-  Moon,
 } from 'lucide-react';
 
 import {
@@ -134,20 +132,8 @@ function OverviewInner({
   // hide without losing the row from the underlying store. v3.15.0.
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
 
-  // Theme toggle — local because ThemeProvider doesn't wrap the app at
-  // the App.tsx level yet. Toggles `data-theme` on <html>; tokens.css
-  // handles the actual colour swap.
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    if (typeof document === 'undefined') return true;
-    const attr = document.documentElement.getAttribute('data-theme');
-    return attr !== 'light';
-  });
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (isDark) document.documentElement.removeAttribute('data-theme');
-    else document.documentElement.setAttribute('data-theme', 'light');
-  }, [isDark]);
+  // v7.0.4 — theme toggle is now hoisted to Topbar (see
+  // components/Topbar.tsx); no per-view state needed here.
 
   // Load hidden set once on mount — v3.15.0.
   useEffect(() => {
@@ -536,13 +522,6 @@ function OverviewInner({
             >
               Refresh
             </UiButton>
-            <IconButton
-              variant="ghost"
-              size="md"
-              onClick={() => setIsDark((v) => !v)}
-              aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-              icon={isDark ? <Sun size={14} /> : <Moon size={14} />}
-            />
           </Inline>
         </Inline>
 

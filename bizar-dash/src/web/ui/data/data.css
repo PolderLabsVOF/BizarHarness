@@ -166,9 +166,10 @@
 }
 
 .bd-bar-chart__track {
-  height: 8px;
+  height: 10px;
   width: 100%;
   background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -177,6 +178,10 @@
   height: 100%;
   border-radius: var(--radius-full);
   transition: width var(--duration-normal) var(--ease-out);
+  /* v7.0.4 — bars read clearly in dark mode now that tokens.css drives
+     the surface tones. Inner track has a hairline border so empty
+     rows are still visible (no more "barely visible outline"). */
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
 }
 
 /* ============ DataTable ============ */

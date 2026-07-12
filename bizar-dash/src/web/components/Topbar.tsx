@@ -27,6 +27,8 @@ import {
   Stethoscope,
   ClipboardCheck,
   Target,
+  Sun,
+  Moon,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -126,6 +128,38 @@ export function Topbar({
   extraTabs,
   clineStatus = null,
 }: TopbarProps) {
+  // v7.0.4 — theme toggle hoisted from views/Overview.tsx so the
+  // user can swap light/dark from any view (not only Overview).
+  // Persisted to localStorage; falls back to system preference once
+  // on first paint, then user choice wins.
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof document === 'undefined') return true;
+    const stored = window.localStorage?.getItem('bizar.theme');
+    if (stored === 'light') return false;
+    if (stored === 'dark') return true;
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'light') return false;
+    if (attr === 'dark') return true;
+    return window.matchMedia?.('(prefers-color-scheme: light)').matches === false;
+  });
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (isDark) {
+      document.documentElement.removeAttribute('data-theme');
+      try {
+        window.localStorage?.setItem('bizar.theme', 'dark');
+      } catch {
+        /* private mode / quota — non-fatal */
+      }
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+      try {
+        window.localStorage?.setItem('bizar.theme', 'light');
+      } catch {
+        /* non-fatal */
+      }
+    }
+  }, [isDark]);
   return (
     <header className="topbar">
       <div className="topbar-row">
@@ -156,6 +190,17 @@ export function Topbar({
         <div className="topbar-right">
           {notificationsSlot}
           {rightSlot}
+          {/* v7.0.4 — theme toggle (hoisted from Overview so it's reachable from any view) */}
+          <button
+            type="button"
+            className="icon-btn topbar-theme-toggle"
+            onClick={() => setIsDark((v) => !v)}
+            aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+            data-testid="topbar-theme-toggle"
+          >
+            {isDark ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
           {clineStatus && (
             <div
               className={cn('cline-status', `cline-${clineStatus.state}`)}

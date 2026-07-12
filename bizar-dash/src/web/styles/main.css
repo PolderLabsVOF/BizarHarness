@@ -141,38 +141,46 @@ pre,
 /* ─── Theme tokens ─────────────────────────────────────────────────── */
 
 :root {
-  /* Surfaces */
-  --bg: #0b0e14;
-  --bg-elev: #12161f;
-  --bg-elev-2: #1a1f2b;
-  --bg-elev-3: #232a39;
+  /* v7.0.4 — legacy token aliases. The chrome (topbar / sidebar /
+     .app shell) reads --bg / --bg-elev / --text-dim / --accent-3 /
+     etc.; the new design-system primitives in `ui/styles/tokens.css`
+     define --surface-* / --text-* / --accent / --border-* as the
+     single source of truth. These aliases collapse the two systems
+     to one so the inner Overview panels and the outer app chrome
+     share the same surface tone — the user's v7.0.4 visual
+     request: "make the whole dashboard look like the inner part of
+     overview".
 
-  /* Borders */
-  --border: #232a39;
-  --border-strong: #2d3648;
+     The legacy variable NAMES are kept for backwards-compat with
+     the ~10k-line main.css body (every rule below references
+     these names); we just retarget the values to the design-system
+     tokens. */
+  --bg: var(--surface-0);
+  --bg-elev: var(--surface-1);
+  --bg-elev-2: var(--surface-2);
+  --bg-elev-3: var(--surface-3);
+  --bg-elevated: var(--bg-elev);
 
-  /* Text */
-  --text: #c9d1d9;
-  --text-dim: #b4bcd0;
-  --text-muted: var(--text-dim);
-  --text-strong: #f0f6fc;
+  --border: var(--border-default);
+  --border-strong: var(--border-strong);
 
-  /* Brand & status */
-  --accent: #8b5cf6;
-  --accent-2: #a78bfa;
-  --accent-3: #c4b5fd;
-  --accent-bg: rgba(139, 92, 246, 0.12);
-  --accent-border: rgba(139, 92, 246, 0.4);
-  --accent-glow: rgba(139, 92, 246, 0.18);
-  --accent-soft: rgba(139, 92, 246, 0.08);
+  --text: var(--text-primary);
+  --text-dim: var(--text-secondary);
+  --text-muted: var(--text-tertiary);
+  --text-strong: var(--text-primary);
 
-  --success: oklch(0.72 0.16 145);
-  --warning: oklch(0.78 0.14 70);
-  --error: oklch(0.66 0.20 25);
-  --info: oklch(0.72 0.13 235);
-  --success-soft: rgba(52, 211, 153, 0.15);
-  --error-soft: rgba(248, 113, 113, 0.12);
-  --warning-soft: rgba(251, 191, 36, 0.15);
+  --accent: #3ecf8e;
+  --accent-2: var(--accent);
+  --accent-3: var(--accent);
+  --accent-bg: var(--accent-subtle);
+  --accent-border: var(--accent);
+  --accent-glow: var(--accent-subtle);
+  --accent-soft: var(--accent-subtle);
+
+  --error: var(--danger);
+  --success-soft: var(--success-subtle);
+  --warning-soft: var(--warning-subtle);
+  --error-soft: var(--danger-subtle);
 
   /* Syntax highlight (json tree) */
   --syntax-key: #79c0ff;
@@ -232,8 +240,6 @@ pre,
   --shadow-2: 0 4px 12px var(--shadow-color);
   --shadow-3: 0 12px 32px var(--shadow-color);
   --shadow-glow: 0 0 0 1px var(--accent-border), 0 8px 32px var(--accent-glow);
-  --bg-elevated: var(--bg-elev);
-  --surface-2: var(--bg-elev-2);
 
   /* Motion */
   --motion-fast: 120ms;
@@ -241,11 +247,6 @@ pre,
   --motion-slow: 320ms;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
-
-  /* v3.21.x — Semantic and surface tokens for chat UI overhaul */
-  --surface-0: var(--bg);
-  --surface-1: color-mix(in oklab, var(--bg) 92%, var(--text) 8%);
-  --surface-2: color-mix(in oklab, var(--bg) 84%, var(--text) 16%);
 
   /* v3.21.x — Gemini-inspired surface tokens for chat UI overhaul.
      --bg-1, --bg-2 are NEW names that don't conflict with --bg / --bg-elev. */
@@ -275,33 +276,36 @@ pre,
 }
 
 [data-theme='light'] {
-  --bg: #f7f8fa;
-  --bg-elev: #ffffff;
-  --bg-elev-2: #f0f3f8;
-  --bg-elev-3: #e6ebf2;
+  /* v7.0.4 — see :root block above. Light theme aliases collapse to the
+     design-system tokens from `ui/styles/tokens.css` as well. */
+  --bg: var(--surface-0);
+  --bg-elev: var(--surface-1);
+  --bg-elev-2: var(--surface-2);
+  --bg-elev-3: var(--surface-3);
 
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border: var(--border-default);
+  --border-strong: var(--border-strong);
 
-  --text: #1f2937;
-  --text-dim: #475569;
-  --text-strong: #0f172a;
+  --text: var(--text-primary);
+  --text-dim: var(--text-secondary);
+  --text-muted: var(--text-tertiary);
+  --text-strong: var(--text-primary);
 
-  --accent: #7c3aed;
-  --accent-2: #6d28d9;
-  --accent-3: #5b21b6;
-  --accent-bg: rgba(124, 58, 237, 0.08);
-  --accent-border: rgba(124, 58, 237, 0.3);
-  --accent-glow: rgba(124, 58, 237, 0.18);
-  --accent-soft: rgba(124, 58, 237, 0.06);
+  --accent: #3ecf8e;
+  --accent-2: var(--accent);
+  --accent-3: var(--accent);
+  --accent-bg: var(--accent-subtle);
+  --accent-border: var(--accent);
+  --accent-glow: var(--accent-subtle);
+  --accent-soft: var(--accent-subtle);
 
-  --success: #047857;
-  --warning: #b45309;
-  --error: #b91c1c;
-  --info: #1d4ed8;
-  --success-soft: rgba(5, 150, 105, 0.12);
-  --error-soft: rgba(220, 38, 38, 0.08);
-  --warning-soft: rgba(217, 119, 6, 0.12);
+  --success: var(--success);
+  --warning: var(--warning);
+  --error: var(--danger);
+  --success-soft: var(--success-subtle);
+  --warning-soft: var(--warning-subtle);
+  --error-soft: var(--danger-subtle);
+  --info: var(--info);
 
   --syntax-key: #0969da;
   --syntax-string: #0a3069;
@@ -315,18 +319,6 @@ pre,
   --shadow-2: 0 4px 12px var(--shadow-color);
   --shadow-3: 0 12px 32px var(--shadow-color);
 
-  /* v3.21.x — Surface and semantic tokens (light theme overrides). */
-  --surface-1: color-mix(in oklab, var(--bg) 92%, var(--text) 8%);
-  --surface-2: color-mix(in oklab, var(--bg) 84%, var(--text) 16%);
-  /* v4.8.0 — Darken light-theme status colors so they pass WCAG AA (4.5:1)
-     against the light surface (#f7f8fa). */
-  --success: oklch(0.48 0.14 145);
-  --warning: oklch(0.55 0.15 70);
-  --error: oklch(0.48 0.20 25);
-  --info: oklch(0.48 0.16 235);
-  --bg-1: #f4f4f5;
-  --bg-2: #e4e4e7;
-
   color-scheme: light;
 }
 
@@ -336,10 +328,16 @@ pre,
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background:
-    radial-gradient(circle at 0% 0%, var(--accent-bg), transparent 50%),
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
+  position: relative;
+}
+.app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 0% 0%, var(--accent-bg), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* `.content` styling moved to `.app > .layout-body > .content` in Layout variants below.
@@ -5493,15 +5491,15 @@ button.mod-instructions-head {
 
 .sidebar-section-divider {
   height: 1px;
-  background: var(--border-soft, rgba(255,255,255,0.06));
-  margin: 12px 8px 4px;
+  background: var(--border);
+  margin: 12px 8px 6px;
 }
 .sidebar-section-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-dim, rgba(255,255,255,0.5));
-  padding: 4px 12px;
+  color: var(--text-tertiary);
+  padding: 6px 12px 2px;
   margin-bottom: 2px;
   font-weight: 600;
 }
@@ -5855,7 +5853,7 @@ html[data-animations="false"] * {
 .sidebar {
   width: 220px;
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  background: var(--bg-elev);
   border-right: 1px solid var(--border);
   padding: var(--space-3) var(--space-2);
   overflow-y: auto;
@@ -5906,13 +5904,13 @@ html[data-animations="false"] * {
 
 .sidebar-tab-active {
   background: var(--accent-bg);
-  color: var(--accent-3);
+  color: var(--accent);
   border-color: var(--accent-border);
 }
 
 .sidebar-tab-active:hover {
   background: var(--accent-bg);
-  color: var(--accent-3);
+  color: var(--accent);
 }
 
 .sidebar-tab-label {
