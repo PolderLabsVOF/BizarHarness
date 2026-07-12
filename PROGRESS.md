@@ -34,6 +34,52 @@ User-requested full dashboard rewrite. v7 dashboard (`bizar-dash/src/web/{ui,vie
 
 **Next sprint (S2 — Controls + Feedback):** Button + Input + Select + Modal + Toast + Tooltip. The 36 components in §8 of DESIGN.md.
 
+**Sprint S2 (Controls + Feedback) shipped in this commit:**
+
+22 components across the controls + feedback layers, all token-driven and built on Radix where a11y primitives matter.
+
+Controls (`bizar-dash/src/web/v8/ui/controls/`):
+- `Button.tsx` — variants (primary/secondary/ghost/danger/outline) × sizes (sm/md/lg/icon) + loading state + `asChild` via Radix Slot.
+- `IconButton.tsx` — square icon-only button; required `aria-label`; mirrors Button variants; `active` state.
+- `ButtonGroup.tsx` — attached segmented control (single bordered container).
+- `Input.tsx` — variants (default/filled/flushed) × sizes; leftAddon/rightAddon slots; password reveal toggle.
+- `Textarea.tsx` — autoResize option + min/max rows.
+- `Checkbox.tsx` — Radix-based with indeterminate state (Minus icon).
+- `Switch.tsx` — Radix-based, animated thumb.
+- `Toggle.tsx` + `ToggleGroup.tsx` — single + segmented group (`single` | `multiple`).
+- `RadioGroup.tsx` — Radix with optional label per item.
+- `Select.tsx` — full Radix Select surface (Trigger/Content/Item/Group/Label/Separator/ScrollUpArrow/ScrollDownArrow).
+- `Slider.tsx` — Radix single + range with track/range/thumb styling.
+- `Field.tsx` — id/label/hint/error wrapper with aria-describedby wiring.
+- `Form.tsx` — form wrapper with Submit helper.
+
+Feedback (`bizar-dash/src/web/v8/ui/feedback/`):
+- `Dialog.tsx` — Radix Dialog + AlertDialog variants; sizes sm/md/lg/full; focus trap + escape; overlay + content fade-in animations.
+- `Tooltip.tsx` — Radix Tooltip + TooltipProvider; `shortcut` prop renders kbd inside the bubble.
+- `Popover.tsx` — Radix Popover with Trigger/Content/Anchor/Close.
+- `Toast.tsx` — Sonner wrapper with `Toaster` + `toast` (success/error/info/warning/message/dismiss).
+- `Alert.tsx` — tones info/success/warning/danger; title + description + action slot; overridable icon.
+- `Banner.tsx` — top-of-page announcement with tone + action slot.
+- `Skeleton.tsx` + `SkeletonText` — pulse animation via `v8-skeleton` class (pulse keyframe in globals.css).
+- `Spinner.tsx` — discouraged per DESIGN.md §10; kept for non-skeleton contexts (command palette loading).
+- `EmptyState.tsx` — icon + title + description + action.
+- `DropdownMenu.tsx` — full Radix DropdownMenu (Trigger/Content/Item/CheckboxItem/RadioGroup/Sub/SubTrigger/SubContent/Label/Separator/Group/Portal) with shortcut + danger styling.
+- `ContextMenu.tsx` — full Radix ContextMenu; Rule #1 of the v8 dashboard — every interactive surface right-clicks.
+- `Sheet.tsx` — side-anchored panel (top/right/bottom/left) with `data-side` attribute driving per-direction slide-in animations.
+- `Drawer.tsx` — semantic alias for right-side Sheet (task/agent detail panels).
+
+Shared:
+- `bizar-dash/src/web/v8/ui/styles/globals.css` — added 8 keyframes (`v8-skeleton-pulse`, `v8-spin`, `v8-dialog-overlay-in`, `v8-dialog-content-in`, `v8-sheet-in-{right,left,top,bottom}`, `v8-menu-in`, `v8-tooltip-in`) and their opt-in class bindings (Radix `data-state` highlight + `data-side` slide).
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated to export all 22 components + their types.
+- `bizar-dash/src/web/v8/__tests__/controls.test.tsx` — 16 vitest cases (Button, IconButton, Input, Checkbox, Switch, Toggle, Slider).
+- `bizar-dash/src/web/v8/__tests__/feedback.test.tsx` — 16 vitest cases (Alert, Banner, Dialog, Skeleton, EmptyState, DropdownMenu, ContextMenu, Sheet, Tooltip).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `npx vitest run src/web/v8` → 46/46 pass (4 test files: cx, theme, controls, feedback).
+
+**Next sprint (S3 — Data display + Overview):** Card, StatTile, StatGrid, Badge, Chip, Avatar, AvatarStack, Table (TanStack), Sparkline, BarList, Timeline, Accordion, ViewHeader.
+
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
 User-requested follow-up to F-040 (v7.0.0). Three problems:

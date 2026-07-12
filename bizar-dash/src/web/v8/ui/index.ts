@@ -47,3 +47,130 @@ export {
 } from './theme/DensityProvider.js';
 export { useDensity } from './theme/useDensity.js';
 export { ThemeToggle, DensityToggle } from './theme/ThemeToggle.js';
+
+// ── controls (Sprint S2) ─────────────────────────────────────────────────
+
+export {
+  Button,
+  type ButtonProps,
+  type ButtonVariant,
+  type ButtonSize,
+} from './controls/Button.js';
+export {
+  IconButton,
+  type IconButtonProps,
+  type IconButtonVariant,
+  type IconButtonSize,
+} from './controls/IconButton.js';
+export { ButtonGroup, type ButtonGroupProps } from './controls/ButtonGroup.js';
+export { Input, type InputProps } from './controls/Input.js';
+export { Textarea, type TextareaProps } from './controls/Textarea.js';
+export { Checkbox, type CheckboxProps } from './controls/Checkbox.js';
+export { Switch, type SwitchProps } from './controls/Switch.js';
+export { Toggle, type ToggleProps } from './controls/Toggle.js';
+export {
+  ToggleGroup,
+  ToggleGroupItem,
+  type ToggleGroupProps,
+  type ToggleGroupItemProps,
+  type ToggleGroupType,
+} from './controls/ToggleGroup.js';
+export { RadioGroup, RadioGroupItem, type RadioGroupProps } from './controls/RadioGroup.js';
+export {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectGroup,
+  SelectLabel,
+  SelectSeparator,
+  type SelectProps,
+} from './controls/Select.js';
+export { Slider, type SliderProps } from './controls/Slider.js';
+export { Field, type FieldProps } from './controls/Field.js';
+export { Form, type FormProps } from './controls/Form.js';
+
+// ── feedback (Sprint S2) ─────────────────────────────────────────────────
+
+export {
+  Dialog,
+  DialogTrigger,
+  DialogClose,
+  DialogContent,
+  DialogPortal,
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  type DialogProps,
+  type DialogContentProps,
+  type DialogSize,
+} from './feedback/Dialog.js';
+export {
+  Tooltip,
+  TooltipProvider,
+  type TooltipProps,
+  type TooltipSide,
+  type TooltipAlign,
+} from './feedback/Tooltip.js';
+export {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverAnchor,
+  PopoverClose,
+  type PopoverProps,
+  type PopoverContentProps,
+} from './feedback/Popover.js';
+export { Toaster, toast, type ToasterProps } from './feedback/Toast.js';
+export { Alert, type AlertProps, type AlertTone } from './feedback/Alert.js';
+export { Banner, type BannerProps } from './feedback/Banner.js';
+export { Skeleton, SkeletonText, type SkeletonProps } from './feedback/Skeleton.js';
+export { Spinner, type SpinnerProps } from './feedback/Spinner.js';
+export { EmptyState, type EmptyStateProps } from './feedback/EmptyState.js';
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuGroup,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  type DropdownMenuProps,
+  type DropdownMenuContentProps,
+  type DropdownMenuItemProps,
+} from './feedback/DropdownMenu.js';
+export {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuLabel,
+  ContextMenuGroup,
+  type ContextMenuProps,
+  type ContextMenuContentProps,
+  type ContextMenuItemProps,
+} from './feedback/ContextMenu.js';
+export {
+  Sheet,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  type SheetProps,
+  type SheetContentProps,
+  type SheetSide,
+} from './feedback/Sheet.js';
+export {
+  Drawer,
+  DrawerContent,
+  DrawerTrigger,
+  DrawerClose,
+} from './feedback/Drawer.js';

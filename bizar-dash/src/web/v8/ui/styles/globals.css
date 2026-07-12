@@ -123,3 +123,98 @@ h4 {
   min-height: 100%;
   isolation: isolate;
 }
+
+/* ── keyframes (shared across feedback + data layers) ────────────────── */
+
+@keyframes v8-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@keyframes v8-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes v8-dialog-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes v8-dialog-content-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes v8-sheet-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes v8-sheet-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes v8-sheet-in-top {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes v8-sheet-in-bottom {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes v8-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes v8-tooltip-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── animation bindings (opt-in via class) ──────────────────────────── */
+
+.v8-skeleton {
+  animation: v8-skeleton-pulse 1.4s var(--easing-standard, cubic-bezier(0.4, 0, 0.2, 1)) infinite;
+}
+
+.v8-spinner {
+  animation: v8-spin 0.8s linear infinite;
+}
+
+.v8-dialog-overlay {
+  animation: v8-dialog-overlay-in 160ms var(--easing-standard, cubic-bezier(0.4, 0, 0.2, 1));
+}
+.v8-dialog-content {
+  animation: v8-dialog-content-in 200ms var(--easing-standard, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.v8-sheet[data-side='right'] { animation: v8-sheet-in-right 240ms cubic-bezier(0.32, 0.72, 0, 1); }
+.v8-sheet[data-side='left']  { animation: v8-sheet-in-left  240ms cubic-bezier(0.32, 0.72, 0, 1); }
+.v8-sheet[data-side='top']   { animation: v8-sheet-in-top   240ms cubic-bezier(0.32, 0.72, 0, 1); }
+.v8-sheet[data-side='bottom']{ animation: v8-sheet-in-bottom 240ms cubic-bezier(0.32, 0.72, 0, 1); }
+
+.v8-dropdown-menu,
+.v8-context-menu,
+.v8-popover {
+  animation: v8-menu-in 140ms var(--easing-standard, cubic-bezier(0.4, 0, 0.2, 1));
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-context-menu-content-transform-origin, var(--radix-popover-content-transform-origin, top));
+}
+
+.v8-tooltip {
+  animation: v8-tooltip-in 120ms var(--easing-standard, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* ── menu item focus state (Radix data-* attributes) ────────────────── */
+.v8-dropdown-menu__item[data-highlighted],
+.v8-context-menu__item[data-highlighted] {
+  background: var(--surface-2);
+}
+.v8-dropdown-menu__item.is-danger[data-highlighted],
+.v8-context-menu__item.is-danger[data-highlighted] {
+  background: color-mix(in oklch, var(--danger) 12%, transparent);
+}
+
+.v8-dropdown-menu__checkbox[data-state='checked'] .v8-dropdown-menu__checkbox-indicator,
+.v8-dropdown-menu__radio[data-state='checked'] .v8-dropdown-menu__radio-indicator {
+  display: inline-flex;
+}
