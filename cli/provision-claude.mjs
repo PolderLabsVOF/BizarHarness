@@ -127,8 +127,16 @@ function haveCmd(cmd) {
  * entirely. Symptom: `bizar dash start` crashes with
  * `Cannot find module .../packages/sdk/dist/memory/index.js`
  * (or .../src/memory/index.js for older import paths). Root cause: the
- * SDK's `packages.json` advertises `./dist/*` exports, but the SDK's
+ * SDK's `package.json` advertises `./dist/*` exports, but the SDK's
  * `tsconfig.json` is never compiled by the installer.
+ *
+ * Bun resolution: when bun is invoked from a globally npm-installed
+ * package, its lifecycle script runs with a minimal PATH that does
+ * NOT include `~/.bun/bin`. So `bun run build:sdk` (which shells out to
+ * `tsc` via bun's bin shim) fails with `tsc: command not found`. To
+ * dodge that, we resolve bun to its absolute path
+ * (`$HOME/.bun/bin/bun`) and prepend that dir to the child process
+ * PATH so bun's tsc shim is visible.
  *
  * Idempotent: skips when `dist/memory/index.js` already exists.
  * Non-fatal: returns `{ ok: false, message }` rather than throwing —
@@ -154,21 +162,37 @@ export async function buildSdk({ dryRun = false } = {}) {
     return { ok: true, skipped: false, message: `would build SDK at ${sdkRoot}` };
   }
 
-  // Prefer `bun run build:sdk` (matches `package.json` `scripts.build:sdk`
-  // and the canonical dev flow), fall back to `npx tsc -p tsconfig.json`
-  // so the step works on systems without bun installed.
-  let cmd, args;
-  if (haveCmd('bun')) {
+  // Resolve bun to an absolute path. `command -v bun` finds whatever is
+  // on PATH, but bun's bin dir (typically `~/.bun/bin`) is NOT always on
+  // PATH — especially when invoked from a globally npm-installed package
+  // whose lifecycle scripts run with a minimal env. Without the absolute
+  // path, `bun run build:sdk` shells out to `tsc`, finds no shim on PATH,
+  // and fails with `tsc: command not found`. Prefer the absolute path so
+  // we don't depend on PATH inheritance.
+  const bunFromHome = join(process.env.HOME || '', '.bun', 'bin', 'bun');
+  let cmd, args, childEnv;
+  if (existsSync(bunFromHome)) {
+    cmd = bunFromHome;
+    args = ['run', 'build:sdk'];
+    // Make bun's bin dir visible to the child so its tsc shim resolves.
+    const bunBin = dirname(bunFromHome);
+    const pathDelim = process.platform === 'win32' ? ';' : ':';
+    childEnv = { ...process.env, PATH: `${bunBin}${pathDelim}${process.env.PATH || ''}` };
+  } else if (haveCmd('bun')) {
     cmd = 'bun';
     args = ['run', 'build:sdk'];
+    childEnv = process.env;
   } else {
+    // Fallback: npx tsc. Requires a network round-trip on first use but
+    // works on systems without bun installed (CI, minimal containers).
     cmd = 'npx';
     args = ['--yes', 'tsc', '-p', 'packages/sdk/tsconfig.json'];
+    childEnv = process.env;
   }
 
   try {
     logInfo(`building SDK with \`${cmd} ${args.join(' ')}\` (REPO_ROOT=${REPO_ROOT})`);
-    execFileSync(cmd, args, { cwd: REPO_ROOT, stdio: 'pipe', timeout: 180_000 });
+    execFileSync(cmd, args, { cwd: REPO_ROOT, stdio: 'pipe', timeout: 180_000, env: childEnv });
     if (existsSync(distEntry)) {
       return { ok: true, skipped: false, message: 'SDK built (dist/memory/index.js present)' };
     }
