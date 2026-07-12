@@ -118,6 +118,45 @@ function notifyDashboard(agentName, sessionId) {
   }
 }
 
+/**
+ * v6.6.0 — F-042 timeline aggregator. Fire-and-forget POST to the
+ * dashboard's /api/timeline/append so the Agent-tool dispatch lands
+ * in the timeline ring. Never blocks the model — 1.5s timeout.
+ */
+function notifyTimeline(payload) {
+  const base = process.env.BIZAR_DASHBOARD_URL || 'http://127.0.0.1:4321';
+  let url;
+  try {
+    url = new URL('/api/timeline/append', base);
+  } catch {
+    return;
+  }
+  const body = JSON.stringify(payload);
+  const opts = {
+    method: 'POST',
+    hostname: url.hostname,
+    port: url.port || 80,
+    path: url.pathname,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+    timeout: HOOK_TIMEOUT_MS,
+  };
+  try {
+    const req = http.request(opts, (res) => {
+      res.on('data', () => {});
+      res.on('end', () => {});
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => { /* unreachable, refused, etc. — ignore */ });
+    req.write(body);
+    req.end();
+  } catch {
+    /* never throw out of the hook */
+  }
+}
+
 const guard = setTimeout(() => process.exit(0), TOTAL_GUARD_MS);
 guard.unref?.();
 
@@ -140,6 +179,18 @@ process.stdin.on('end', () => {
 
   logToFile(sessionId, agentName, promptPreview);
   notifyDashboard(agentName, sessionId);
+  notifyTimeline({
+    type: 'hook',
+    subType: 'agent-tool-detected',
+    ts: new Date().toISOString(),
+    actor: { kind: 'agent', name: agentName, sessionId },
+    summary: `Agent tool detected: ${agentName}`,
+    detail: promptPreview || null,
+    refs: { sessionId, agentName },
+    source: 'hook',
+    sourceId: `hook-agenttool:${sessionId || 'nosession'}:${Date.now()}:${agentName}`,
+    metadata: { promptPreview: promptPreview || null },
+  });
 
   // Always exit 0 — this hook is pure observability; the model must
   // never be blocked by it.

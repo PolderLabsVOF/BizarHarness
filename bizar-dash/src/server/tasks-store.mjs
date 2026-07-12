@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { projectsStore } from './projects-store.mjs';
+import { timelineStore } from './timeline-store.mjs';
 
 // v3.22 — Canonical status list. All status checks flow through this
 // constant so a new status needs a change in only this one place.
@@ -95,7 +96,7 @@ function saveStore(file, store) {
   atomicWriteJson(file, store);
 }
 
-function appendActivity(task, type, data) {
+function appendActivity(projectId, task, type, data) {
   task.activity = task.activity || [];
   task.activity.push({
     id: 'act_' + genShortId(),
@@ -104,6 +105,19 @@ function appendActivity(task, type, data) {
     data: data || null,
   });
   if (task.activity.length > 100) task.activity = task.activity.slice(-100);
+  // v6.6.0 — F-042 timeline aggregator. Fire-and-forget append into
+  // the timeline ring; timelineStore.appendEvent is swallow-safe so
+  // task mutations never crash on a timeline-store failure.
+  try {
+    const ev = timelineStore._testFromTaskActivity(
+      { ...task, projectId: projectId || null },
+      type,
+      data,
+    );
+    if (ev) timelineStore.appendEvent(ev);
+  } catch {
+    /* never throw out of task mutation paths */
+  }
 }
 
 export const tasksStore = {
@@ -182,7 +196,7 @@ export const tasksStore = {
         updatedAt: now,
         completedAt: null,
       };
-      appendActivity(task, 'created', { priority: task.priority });
+      appendActivity(projectId, task, 'created', { priority: task.priority });
       store.tasks.push(task);
       saveStore(file, store);
       return task;
@@ -205,7 +219,7 @@ export const tasksStore = {
       if (typeof patch.description === 'string') task.description = patch.description;
       if (ALLOWED_TASK_STATUSES.includes(patch.status)) {
         if (patch.status !== task.status) {
-          appendActivity(task, 'status', { from: task.status, to: patch.status });
+          appendActivity(projectId, task, 'status', { from: task.status, to: patch.status });
         }
         task.status = patch.status;
       }
@@ -242,7 +256,7 @@ export const tasksStore = {
       if (patch.goalId !== undefined) {
         const next = patch.goalId || null;
         if (next !== task.goalId) {
-          appendActivity(task, 'goal-link', { from: task.goalId, to: next });
+          appendActivity(projectId, task, 'goal-link', { from: task.goalId, to: next });
           task.goalId = next;
         }
       }
@@ -259,7 +273,7 @@ export const tasksStore = {
       task.updatedAt = new Date().toISOString();
       if (task.status === 'done' && !task.completedAt) {
         task.completedAt = task.updatedAt;
-        appendActivity(task, 'completed', null);
+        appendActivity(projectId, task, 'completed', null);
       } else if (task.status !== 'done') {
         task.completedAt = null;
       }
@@ -319,7 +333,7 @@ export const tasksStore = {
       meta.startedAt = meta.startedAt || new Date().toISOString();
       task.metadata = meta;
       task.updatedAt = new Date().toISOString();
-      appendActivity(task, 'progress', { progress: clamped, step: step || null, agent: agent || null });
+      appendActivity(projectId, task, 'progress', { progress: clamped, step: step || null, agent: agent || null });
       store.tasks[idx] = task;
       saveStore(file, store);
       return task;
@@ -344,7 +358,7 @@ export const tasksStore = {
         createdAt: new Date().toISOString(),
       };
       task.comments.push(comment);
-      appendActivity(task, 'comment', { commentId: comment.id });
+      appendActivity(projectId, task, 'comment', { commentId: comment.id });
       task.updatedAt = new Date().toISOString();
       saveStore(file, store);
       return task;
@@ -365,11 +379,11 @@ export const tasksStore = {
       if (task._timerStart) {
         const elapsed = Math.floor((now - task._timerStart) / 1000);
         task.timeSpent = (task.timeSpent || 0) + elapsed;
-        appendActivity(task, 'timer-stop', { elapsed });
+        appendActivity(projectId, task, 'timer-stop', { elapsed });
         delete task._timerStart;
       } else {
         task._timerStart = now;
-        appendActivity(task, 'timer-start', null);
+        appendActivity(projectId, task, 'timer-start', null);
       }
       task.updatedAt = new Date().toISOString();
       saveStore(file, store);
@@ -390,7 +404,7 @@ export const tasksStore = {
       if (!task) return null;
       if (!task._timerStart) {
         task._timerStart = Date.now();
-        appendActivity(task, 'timer-start', null);
+        appendActivity(projectId, task, 'timer-start', null);
         task.updatedAt = new Date().toISOString();
         saveStore(file, store);
       }
@@ -411,7 +425,7 @@ export const tasksStore = {
       if (task._timerStart) {
         const elapsed = Math.floor((Date.now() - task._timerStart) / 1000);
         task.timeSpent = (task.timeSpent || 0) + elapsed;
-        appendActivity(task, 'timer-stop', { elapsed });
+        appendActivity(projectId, task, 'timer-stop', { elapsed });
         delete task._timerStart;
         task.updatedAt = new Date().toISOString();
         saveStore(file, store);

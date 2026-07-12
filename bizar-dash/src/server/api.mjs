@@ -69,6 +69,11 @@ import { createGoalPlannerRouter } from './routes/goal-planner.mjs';
 // `goal-planner` endpoint stays mounted for any client that still
 // wants the raw planner without persistence.
 import { createGoalsRouter } from './routes/goals.mjs';
+// v6.6.0 — F-042 Visual Timeline + Agent Memory. Aggregates git
+// commits, hook logs, agent activity, task/goal changes, and file
+// events into a single timeline view. Mounted right after goals so
+// the cross-cutting history view is reachable from the goals tab.
+import { createTimelineRouter } from './routes/timeline.mjs';
 import { attachUserContext } from './auth.mjs';
 
 /**
@@ -177,6 +182,12 @@ export async function createApiRouter({
   // progress rollup + GOAP refine. Mounted right after the legacy
   // planner so the planner's POST /goal-planner/plan stays reachable.
   router.use(createGoalsRouter({ broadcast, projectRoot }));
+  // v6.6.0 — F-042 Visual Timeline + Agent Memory. Single source of
+  // truth for "what changed, where, when" — git commits, hook logs,
+  // agent activity, task / goal changes, file events. Mounted right
+  // after goals so a user who just looked at progress can jump to the
+  // history that produced it.
+  router.use(createTimelineRouter({ broadcast }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
@@ -251,10 +262,58 @@ async function ensureClaudeSessionWatcher({ broadcast }) {
   try {
     const { claudeSessionWatcher } = await import('./claude-session-watcher.mjs');
     const { agentsStore } = await import('./agents-store.mjs');
+    const { timelineStore } = await import('./timeline-store.mjs');
 
     claudeSessionWatcher.start({
       onEvent(evt) {
         try { broadcast(evt); } catch { /* ignore */ }
+        // v6.6.0 — F-042 timeline aggregator. Tool-use and
+        // session-ended events both get appended to the timeline ring
+        // so the dashboard's Timeline view + the agent_context MCP
+        // tool can ground decisions in what just happened.
+        try {
+          if (evt.type === 'claude:tool-use' && evt.agentName) {
+            const ev = timelineStore._testFromAgentStatus(
+              evt.agentName,
+              'working',
+              'claude-session-watcher',
+            );
+            if (ev) {
+              ev.subType = 'agent-tool-use';
+              ev.summary = `Agent ${evt.agentName} used tool ${evt.name}`;
+              ev.refs = { ...ev.refs, sessionId: evt.sessionId || null, toolUseId: evt.toolUseId || null };
+              ev.metadata = {
+                ...ev.metadata,
+                toolName: evt.name,
+                toolUseId: evt.toolUseId || null,
+                sessionId: evt.sessionId || null,
+              };
+              timelineStore.appendEvent(ev);
+            }
+          } else if (evt.type === 'claude:session-ended') {
+            const status = evt.reason === 'completed' ? 'idle' : 'error';
+            // Best-effort: pick the first agent with a current task
+            // matching this sessionId. If none, fall back to a
+            // session-level event with the sessionId as the actor.
+            const matched = agentsStore.list().find(
+              (a) => (a.currentTaskId || '').includes(evt.sessionId),
+            );
+            const ev = timelineStore._testFromAgentStatus(
+              matched ? matched.name : 'claude',
+              status,
+              'claude-session-watcher',
+            );
+            if (ev) {
+              ev.subType = 'agent-session-ended';
+              ev.summary = matched
+                ? `Agent ${matched.name} session ${evt.reason}`
+                : `Claude session ${evt.reason}`;
+              ev.refs = { ...ev.refs, sessionId: evt.sessionId || null };
+              ev.metadata = { ...ev.metadata, reason: evt.reason || null, sessionId: evt.sessionId || null };
+              timelineStore.appendEvent(ev);
+            }
+          }
+        } catch { /* timeline append is best-effort */ }
         // Side-effect: update agent-store on tool_use / session-end.
         if (evt.type === 'claude:tool-use' && evt.agentName) {
           try {

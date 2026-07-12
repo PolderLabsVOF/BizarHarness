@@ -46,6 +46,9 @@ import { EvalReport } from './views/EvalReport';
 // F-036 GoalPlanner with a durable Goals board (Goal entities +
 // live task rollups + AI Refine → Save as Goal).
 import { Goals } from './views/Goals';
+// v6.6.0 — F-042 Visual Timeline + Agent Memory. Aggregates every
+// "what changed, where, when" event into a single chronological view.
+import { Timeline } from './views/Timeline';
 import { SettingsNav } from './components/SettingsNav';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
@@ -116,6 +119,10 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   // (was 'goal-planner' in v6.4.0/F-036). Durable Goal entities with
   // linked tasks; AI Refine persists via POST /goals/from-plan.
   goals: Goals,
+  // v6.6.0 — F-042 Visual Timeline + Agent Memory. Cross-cutting
+  // history view aggregating git commits, hook logs, agent activity,
+  // task / goal changes, and file events.
+  timeline: Timeline,
 };
 
 const VERSION = 'v6.0.0';

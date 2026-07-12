@@ -408,6 +408,28 @@ export async function createServer({
         safeSend(client, JSON.stringify({ type: 'change', event, path: p, ts: Date.now() }));
       });
     },
+    // v6.6.0 — F-042 timeline aggregator. Every chokidar event is
+    // also fed into the timeline ring so the Timeline view surfaces
+    // file changes alongside commits, hook logs, and agent activity.
+    // Lazy-loaded because the timeline-store imports nothing that
+    // would itself depend on the watcher.
+    onTimelineEvent: async ({ event, path: filePath }) => {
+      try {
+        const { timelineStore } = await import('./timeline-store.mjs');
+        const subType = event === 'add' ? 'file-add'
+          : event === 'unlink' ? 'file-unlink'
+          : 'file-change';
+        const ev = timelineStore._testFromFileChange(filePath, projectRoot);
+        if (ev) {
+          ev.subType = subType;
+          ev.metadata = { ...(ev.metadata || {}), event };
+          ev.summary = `File ${event}: ${filePath}`;
+          timelineStore.appendEvent(ev);
+        }
+      } catch {
+        /* swallow — file timeline events are best-effort */
+      }
+    },
   });
 
   const server = createHttpServer(app);

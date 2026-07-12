@@ -15,6 +15,7 @@
 'use strict';
 
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -41,6 +42,47 @@ process.stdin.on('end', () => {
       cwd,
     }) + '\n');
   } catch { /* best-effort */ }
+
+  // v6.6.0 — F-042 timeline aggregator. Fire-and-forget POST to the
+  // dashboard's /api/timeline/append so the session-end event lands in
+  // the timeline ring. Never blocks the model — 1.5s timeout, 15s guard.
+  try {
+    const base = process.env.BIZAR_DASHBOARD_URL || 'http://127.0.0.1:4321';
+    const url = new URL('/api/timeline/append', base);
+    const body = JSON.stringify({
+      type: 'hook',
+      subType: 'session-end',
+      ts: new Date().toISOString(),
+      actor: { kind: 'user', sessionId },
+      summary: `Session ended (${reason})`,
+      detail: cwd,
+      refs: { sessionId },
+      source: 'hook',
+      sourceId: `hook-sessionend:${sessionId}:${Date.now()}`,
+      metadata: { reason, cwd },
+    });
+    const req = http.request(
+      {
+        method: 'POST',
+        hostname: url.hostname,
+        port: url.port || 80,
+        path: url.pathname,
+        timeout: 1500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        res.on('data', () => {});
+        res.on('end', () => {});
+      },
+    );
+    req.on('error', () => {});
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.write(body);
+    req.end();
+  } catch { /* swallow — never block the hook */ }
 
   // Write a session note to the memory vault.
   const vaultRoot = process.env.BIZAR_MEMORY_VAULT || path.join(os.homedir(), '.bizar_memory');

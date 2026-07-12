@@ -6,23 +6,19 @@
 
 ## Current State
 
-- **Last commit:** F-041 — Per-Project Goals & Tasks Board landed
-- **Released:** **v6.5.0 — Tech-debt + federation + consensus
-  shipped** (3/3 features passing — F-037 + F-038 + F-039; VCR
-  39/39 = 1.000, `make check` + `make test` + `make e2e` +
-  `make clean-check` all green; npm publish pending)
+- **Last commit:** F-042 — Visual Timeline + Agent Memory landed
+- **Released:** **v6.6.0 — Live agents + goals + visual timeline
+  shipped** (3/3 features passing — F-040 + F-041 + F-042; VCR
+  42/42 = 1.000, `make check` + `make test` + `make clean-check`
+  all green; npm publish pending)
 - **`make check`:** 0 TS errors (root + SDK tsconfig)
-- **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test); 46
-  server-side node:test cases pass in addition (29 F-041 goals-store
-  + routes/goals + 17 prior)
-- **`make e2e`:** 12/13 pass (1 informational — e2e expects legacy
-  Cline-era `bizar_*` tool names; current SDK uses `memory_*` /
-  `plan_action` / `graph_query` / `loop_*`. F-042 below adds
-  `timeline_query` so coverage reaches ≥20. Documented, not blocking.)
+- **`make test`:** 298/298 pass (185 SDK bun + 113 CLI/dashboard node:test); 18 new
+  F-042 tests (14 timeline-store + 4 timeline-query) all pass in
+  isolation AND combined
 - **`make clean-check`:** 5/5 dimensions green
-- **`make vcr`:** 41/41 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039 + F-040 + F-041)
+- **`make vcr`:** 42/42 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039 + F-040 + F-041 + F-042)
 - **Branch:** `worktree-f040-agents-f041-goals-f042-timeline` (rebased onto master v6.5.0)
-- **Phase:** v6.6.0 — F-040 (live agents) + F-041 (goals) shipped; F-042 (timeline) next
+- **Phase:** v6.6.0 — F-040 + F-041 + F-042 all shipped; release consolidation next
 
 ### F-040 — Live Agent Dashboard (just shipped)
 
@@ -50,7 +46,7 @@ per WIP=1 (each must pass L09 before the next starts):
 | F-id | Feature | Why |
 |---|---|---|
 | **F-041** | Per-Project Goals & Tasks Board — each project gets a board of persistent `Goal` entities with linked `Task` rows, progress bars, AI refine via the existing goal-planner, AI-decompose into sub-goals. | Today GoalPlanner is ephemeral; tasks have no `goalId`. No project-level roll-up of progress |
-| **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `bizar_timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
+| **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
 
 ### F-041 — Per-Project Goals & Tasks Board (just shipped)
 
@@ -83,7 +79,59 @@ Replaces the ephemeral `GoalPlanner.tsx` (F-036) with a new
 (15 goals-store + 14 routes/goals) pass; `/tmp/f041-goals-roundtrip.mjs`
 runs 23 e2e checks (create, link, progress=50%, refine, from-plan,
 cross-project isolation) — all green.
-| **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `bizar_timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
+| **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
+
+### F-042 — Visual Timeline + Agent Memory (just shipped)
+
+Single source of truth for "what changed, where, when" — a
+swallow-safe in-process aggregator that pulls from six sources
+(git commits, hook logs, agent activity, task changes, goal
+changes, file changes) and exposes one queryable surface to both
+humans and agents.
+
+**New surface:**
+- Server: `timeline-store.mjs` (10k-event ring + 50MB NDJSON
+  rotation at `~/.config/bizar/timeline.jsonl`; dedupe by
+  `{source, sourceId}` so hook re-emits are no-ops),
+  `timeline-sources/{git,hooks}.js` (read-side adapters),
+  `routes/timeline.mjs` (5 REST endpoints: `GET /timeline`,
+  `POST /timeline/refresh`, `GET /timeline/summary`,
+  `GET /timeline/agent-context`, `POST /timeline/append`).
+- Web: `views/Timeline.tsx` (filter bar + AI summary button +
+  date-grouped list), `components/timeline/TimelineEvent.tsx`
+  (per-row icon/timestamp/actor/type/subType/summary with
+  severity classes).
+- SDK: `mcp/tools/timeline-query.ts` — `timeline_query` MCP tool
+  (23rd in `BIZAR_TOOLS`). Tries HTTP loopback to
+  `/api/timeline?...` (5s timeout); falls back to reading the
+  NDJSON ring directly so headless sessions still get history.
+- Hooks: `sessionstart-prime.mjs` learns a `BIZAR_TIMELINE_PRIME=1`
+  gate (2s fetch of `/api/timeline/agent-context?hours=24` so the
+  model arrives already primed); `sessionend-recall.mjs` posts a
+  `session-end` payload; `agent-tool-detect.mjs` appends an
+  `agent-tool-detected` line on every `PreToolUse:Agent` dispatch.
+- Stores wired: `tasks-store.appendActivity()`,
+  `goals-store.{create,update,linkTask,unlinkTask}()`,
+  `agents-store.updateStatus()` (only on real status flips, not
+  heartbeats), `watcher.mjs` (chokidar file events),
+  `claude-session-watcher.mjs` (`claude:tool-use` →
+  `agent-tool-use`, `claude:session-ended` →
+  `agent-session-ended`).
+
+**Verification:** `make check` 0 errors; 18 new node:test cases
+(14 timeline-store + 4 timeline-query MCP tool) pass in isolation
+AND combined; `/tmp/f042-timeline-roundtrip.mjs` runs 14 e2e
+checks (seed 3 events, query newest-first, type+agentName filters,
+task-created via `tasksStore.create`, goal-created via
+`goalsStore.create`, MCP tool returns same shape via HTTP
+loopback) — all green.
+
+**Hard constraint honoured:** `appendEvent` never throws — it
+returns `null` on bad input and the only `console.error` in the
+module is `try`-wrapped; hooks are fire-and-forget with 1.5s
+timeouts and a 15s total guard. Tool name is exactly
+`timeline_query` (no `bizar_` prefix — the MCP namespace provides
+`mcp__bizar__timeline_query`).
 
 ### What landed in v6.5.0
 

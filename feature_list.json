@@ -1271,11 +1271,65 @@
           "repair": "Full /api/goals roundtrip: POST /goals, link tasks, mark one done, progress=50%, refine → from-plan → 2nd goal with 3 linked tasks, cross-project isolation."
         }
       ]
+    },
+    {
+      "id": "F-042",
+      "behavior": "Visual Timeline + Agent Memory — single source of truth for 'what changed, where, when'. Aggregates events from six sources (git commits, hook logs, agent activity, task changes, goal changes, file changes) into a 10k-event in-memory ring + 50MB NDJSON file at ~/.config/bizar/timeline.jsonl with rotation. Exposes a Timeline view in the dashboard (date-grouped list with filter bar + AI summary button) and a timeline_query MCP tool (mcp__bizar__timeline_query — name has no bizar_ prefix; MCP namespace provides it) for agents. SessionStart hook primes the model with recent activity via BIZAR_TIMELINE_PRIME=1. appendEvent MUST NEVER throw — returns null on bad input. Dedupe by {source, sourceId} so hook re-emits are no-ops.",
+      "verification": "make check (TS 0 errors) + node --test timeline-store.test.mjs timeline-query.test.mjs (≥18 cases: 14 timeline-store + 4 timeline-query) + node /tmp/f042-timeline-roundtrip.mjs (≥14 e2e checks: seed 3 events, query newest-first, type/agentName filters, task-created via tasksStore.create, goal-created via goalsStore.create, MCP tool returns same shape via HTTP loopback)",
+      "state": "passing",
+      "layer": "L1+L2+L3",
+      "category": "dashboard-timeline",
+      "created": "2026-07-12",
+      "committed": "2026-07-12",
+      "passed": "2026-07-12",
+      "files_touched": [
+        "bizar-dash/src/server/timeline-store.mjs (new — aggregator: 10k-event ring + 50MB NDJSON rotation; appendEvent NEVER throws; dedupe by {source, sourceId})",
+        "bizar-dash/src/server/timeline-sources/git.js (new — execFileSync git log adapter)",
+        "bizar-dash/src/server/timeline-sources/hooks.js (new — JSONL tail + normalize)",
+        "bizar-dash/src/server/routes/timeline.mjs (new — GET /timeline, POST /timeline/refresh, GET /timeline/summary, GET /timeline/agent-context, POST /timeline/append)",
+        "bizar-dash/src/server/timeline-store.test.mjs (new — 14 node:test cases including dedupe + ring cap + query filters + helpers)",
+        "bizar-dash/src/server/api.mjs (mount createTimelineRouter; extend ensureClaudeSessionWatcher onEvent to push agent-tool-use + agent-session-ended)",
+        "bizar-dash/src/server/tasks-store.mjs (appendActivity signature change → projectId first arg + timeline append at end)",
+        "bizar-dash/src/server/goals-store.mjs (pushGoalEvent helper + wire create/update/linkTask/unlinkTask)",
+        "bizar-dash/src/server/agents-store.mjs (updateStatus: only push timeline on real status flips, not heartbeats)",
+        "bizar-dash/src/server/watcher.mjs (onTimelineEvent optional callback parameter)",
+        "bizar-dash/src/server/server.mjs (wire onTimelineEvent with subType based on event)",
+        "bizar-dash/src/web/lib/types.ts (TimelineEvent type + WS message { type: 'timeline:event' })",
+        "bizar-dash/src/web/components/timeline/TimelineEvent.tsx (new — per-row icon/timestamp/actor/type/subType/summary)",
+        "bizar-dash/src/web/views/Timeline.tsx (new — filter bar + AI summary + date-grouped list)",
+        "bizar-dash/src/web/App.tsx (import Timeline; VIEW_MAP entry 'timeline': Timeline)",
+        "bizar-dash/src/web/components/Topbar.tsx (tab id 'timeline' in TABS)",
+        "packages/sdk/src/mcp/tools/timeline-query.ts (new — handleTimelineQuery: HTTP loopback + JSONL fallback + clampLimit 1..500 + buildSummary ≤200 words)",
+        "packages/sdk/src/mcp/server.ts (BIZAR_TOOLS entry: timeline_query — 23rd tool)",
+        "packages/sdk/tests/timeline-query.test.mjs (new — 4 node:test cases)",
+        ".claude/hooks/sessionstart-prime.mjs (BIZAR_TIMELINE_PRIME=1 gate + 2s fetch of /api/timeline/agent-context)",
+        ".claude/hooks/sessionend-recall.mjs (fire-and-forget POST to /api/timeline/append with session-end payload)",
+        ".claude/hooks/agent-tool-detect.mjs (notifyTimeline helper + agent-tool-detected payload)"
+      ],
+      "evidence": "make verify-feature F-042 — all layers green (2026-07-12)",
+      "passing_steps": [
+        {
+          "label": "typecheck",
+          "cmd": "cd bizar-dash && bunx tsc --noEmit",
+          "repair": "Type-only fixes: EmptyState uses `message` prop, not `description`."
+        },
+        {
+          "label": "unit",
+          "cmd": "node --test packages/sdk/tests/timeline-query.test.mjs bizar-dash/src/server/timeline-store.test.mjs",
+          "repair": "14 timeline-store cases (dedupe, ring cap, query filters, summary, agentContext, all helpers) + 4 timeline-query MCP tool cases (HTTP loopback, JSONL fallback, output shape, limit clamp)."
+        },
+        {
+          "label": "e2e",
+          "cmd": "node /tmp/f042-timeline-roundtrip.mjs",
+          "repair": "Roundtrip: seed 3 events via timelineStore.appendEvent → query newest-first → filter by type=agent → filter by agentName=coder → tasksStore.create emits task-created → goalsStore.create emits goal-created → MCP tool handleTimelineQuery returns { source: 'dashboard', events[], summary } shape via loopback."
+        }
+      ],
+      "commit": "2553460"
     }
   ],
   "vcr": {
-    "passing": 41,
-    "activated": 41,
-    "ratio": 1.0
+    "passing": 42,
+    "activated": 42,
+    "ratio": 1
   }
 }

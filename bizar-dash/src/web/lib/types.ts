@@ -432,6 +432,41 @@ export type GoalProgress = {
   percent: number;
 };
 
+/**
+ * v6.6.0 — F-042 TimelineEvent. Aggregated record of "what changed,
+ * where, when". Mirrors the shape produced by `timeline-store.mjs`.
+ *
+ * `type` is the source family; `subType` distinguishes events within
+ * a family (e.g. `task-created` vs `task-status`). `refs` carries the
+ * canonical identifiers so the UI can deep-link into the right view.
+ */
+export type TimelineEvent = {
+  id: string;
+  ts: string;
+  type: 'commit' | 'hook' | 'agent' | 'task' | 'goal' | 'file' | string;
+  subType: string;
+  projectId: string | null;
+  projectPath: string | null;
+  actor: {
+    kind: 'user' | 'agent' | 'system';
+    name?: string | null;
+    sessionId?: string | null;
+  };
+  summary: string;
+  detail: string | null;
+  refs: {
+    file?: string;
+    taskId?: string;
+    goalId?: string;
+    agentName?: string;
+    sessionId?: string;
+    commitSha?: string;
+  };
+  metadata: Record<string, unknown>;
+  source: string;
+  sourceId: string | null;
+};
+
 export type Notification = {
   id: string;
   ts: string;
@@ -899,6 +934,10 @@ export type WsMessage =
   | { type: 'goal:change'; goal: Goal }
   | { type: 'goal:tasks-linked'; goalId: string; taskIds: string[]; count: number }
   | { type: 'goal:progress'; goalId: string; progress: GoalProgress }
+  // F-042 — Timeline. Emitted by the timeline aggregator (routes/timeline.mjs
+  // → timelineStore.appendEvent → broadcast). One event per accepted
+  // timeline row; the UI appends to its local ring and re-renders.
+  | { type: 'timeline:event'; event: TimelineEvent }
   | { type: 'pong'; ts: number }
   | { type: 'ping' }
   | { type: 'refresh' };

@@ -33,6 +33,7 @@ import {
 } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
+import { timelineStore } from './timeline-store.mjs';
 
 const HOME = homedir();
 const AGENTS_DIR = join(HOME, '.config', 'cline', 'agents');
@@ -363,6 +364,17 @@ export const agentsStore = {
     }
     _status.set(name, next);
     saveStatus();
+    // v6.6.0 — F-042 timeline aggregator. Push a status event when
+    // the status actually changed (so a no-op heartbeat doesn't flood
+    // the timeline). Fire-and-forget — the timeline-store swallows.
+    try {
+      if (status && prev.status !== status) {
+        const ev = timelineStore._testFromAgentStatus(name, status, 'agents-store');
+        if (ev) timelineStore.appendEvent(ev);
+      }
+    } catch {
+      /* swallow */
+    }
     return readAgent(name);
   },
 

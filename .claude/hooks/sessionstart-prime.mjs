@@ -23,6 +23,7 @@
 'use strict';
 
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -70,6 +71,21 @@ process.stdin.on('end', () => {
         'Bizar SessionStart: Odin dispatches to subagents via `Agent` (sync) or via the `bizar-mcp` MCP server (async).',
       ];
 
+  // v6.6.0 — F-042 timeline prime. When BIZAR_TIMELINE_PRIME=1, ask
+  // the dashboard for a short prose summary of the last 24h of activity
+  // and inject it as a SessionStart note. Fire-and-forget: if the
+  // dashboard is unreachable we just skip the note. 2s timeout.
+  if (process.env.BIZAR_TIMELINE_PRIME === '1') {
+    try {
+      const base = process.env.BIZAR_DASHBOARD_URL || 'http://127.0.0.1:4321';
+      const url = new URL('/api/timeline/agent-context?hours=24', base);
+      const text = fetchAgentContext(url);
+      if (text) {
+        notes.push('Bizar SessionStart (timeline prime): recent activity — ' + text);
+      }
+    } catch { /* best-effort */ }
+  }
+
   const out = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
@@ -78,3 +94,32 @@ process.stdin.on('end', () => {
   };
   process.stdout.write(JSON.stringify(out) + '\n');
 });
+
+function fetchAgentContext(url) {
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        method: 'GET',
+        hostname: url.hostname,
+        port: url.port || 80,
+        path: url.pathname + url.search,
+        timeout: 2000,
+        headers: { Accept: 'application/json' },
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => { body += c; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            resolve(parsed && typeof parsed.text === 'string' ? parsed.text : null);
+          } catch { resolve(null); }
+        });
+      },
+    );
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(new Error('timeout')); resolve(null); });
+    req.end();
+  });
+}

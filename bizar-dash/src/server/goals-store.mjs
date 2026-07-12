@@ -30,6 +30,7 @@ import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { projectsStore } from './projects-store.mjs';
 import { tasksStore } from './tasks-store.mjs';
+import { timelineStore } from './timeline-store.mjs';
 
 // v6.6.0 — Canonical status / priority enums. Status mirrors the
 // task store's `status` shape (`archived` included so the soft-archive
@@ -136,6 +137,41 @@ function iso(d) {
   }
 }
 
+/**
+ * v6.6.0 — F-042 timeline aggregator. Best-effort append a goal
+ * change into the timeline ring. Swallow-safe; a timeline-store
+ * failure must never block a goal mutation.
+ */
+function pushGoalEvent(projectId, goal, action, extra) {
+  try {
+    const ev = timelineStore._testFromGoalChange(
+      { ...goal, projectId: projectId || null },
+      action,
+      extra || {},
+    );
+    if (ev) timelineStore.appendEvent(ev);
+  } catch {
+    /* swallow */
+  }
+}
+
+/**
+ * Lookup helper used by linkTask / unlinkTask to fetch the live goal
+ * (so the timeline event carries fresh metadata). Returns null when
+ * the goal is gone — callers should silently skip the timeline event
+ * in that case.
+ */
+function storeOrNull(projectId, goalId) {
+  try {
+    const file = resolveStorageFile(projectId);
+    const store = loadStore(file);
+    const g = (store.goals || []).find((x) => x && x.id === goalId);
+    return g ? { ...g } : null;
+  } catch {
+    return null;
+  }
+}
+
 export const goalsStore = {
   ALLOWED_STATUSES: ALLOWED_GOAL_STATUSES,
   ALLOWED_PRIORITIES: ALLOWED_GOAL_PRIORITIES,
@@ -225,6 +261,7 @@ export const goalsStore = {
       }
       store.goals.push(goal);
       saveStore(file, store);
+      pushGoalEvent(projectId, goal, 'create');
       return goal;
     } finally {
       release();
@@ -245,6 +282,7 @@ export const goalsStore = {
       const idx = store.goals.findIndex((g) => g.id === id);
       if (idx === -1) return null;
       const goal = { ...store.goals[idx] };
+      const prevStatus = goal.status;
 
       if (typeof patch.title === 'string') {
         const t = patch.title.trim();
@@ -290,6 +328,14 @@ export const goalsStore = {
       goal.updatedAt = new Date().toISOString();
       store.goals[idx] = goal;
       saveStore(file, store);
+      // Pick the most specific action for the timeline.
+      if (prevStatus !== 'archived' && goal.status === 'archived') {
+        pushGoalEvent(projectId, goal, 'archive');
+      } else if (prevStatus !== 'completed' && goal.status === 'completed') {
+        pushGoalEvent(projectId, goal, 'complete');
+      } else {
+        pushGoalEvent(projectId, goal, 'update');
+      }
       return goal;
     } finally {
       release();
@@ -307,7 +353,12 @@ export const goalsStore = {
    * row when the link actually changes.
    */
   async linkTask(projectId, goalId, taskId) {
-    return tasksStore.linkTaskToGoal(projectId, taskId, goalId);
+    const updated = await tasksStore.linkTaskToGoal(projectId, taskId, goalId);
+    if (updated) {
+      const goal = storeOrNull(projectId, goalId);
+      if (goal) pushGoalEvent(projectId, goal, 'link-task', { detail: `task=${taskId}` });
+    }
+    return updated;
   },
 
   /**
@@ -318,7 +369,12 @@ export const goalsStore = {
     // We don't require goalId equality here — the caller passes the
     // goal they intend to unlink from, but the task's own goalId is
     // the source of truth.
-    return tasksStore.unlinkTaskFromGoal(projectId, taskId);
+    const updated = await tasksStore.unlinkTaskFromGoal(projectId, taskId);
+    if (updated) {
+      const goal = storeOrNull(projectId, goalId);
+      if (goal) pushGoalEvent(projectId, goal, 'unlink-task', { detail: `task=${taskId}` });
+    }
+    return updated;
   },
 
   /**

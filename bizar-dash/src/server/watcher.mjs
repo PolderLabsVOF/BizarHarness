@@ -14,8 +14,13 @@ import chokidar from 'chokidar';
  * @param {string[]} opts.paths - files or directories to watch
  * @param {(event: 'add'|'change'|'unlink', path: string) => void} opts.onChange
  * @param {object} [opts.options] - extra chokidar options
+ * @param {(event: {event: string, path: string}) => void} [opts.onTimelineEvent]
+ *   v6.6.0 — F-042 hook. When supplied, every chokidar event also
+ *   forwards through this callback so the timeline aggregator can
+ *   record the change. Best-effort: a throw inside the callback
+ *   never crashes the watcher.
  */
-export function createWatcher({ paths, onChange, options = {} }) {
+export function createWatcher({ paths, onChange, options = {}, onTimelineEvent = null } = {}) {
   if (!Array.isArray(paths) || paths.length === 0) {
     throw new Error('createWatcher requires a non-empty paths array');
   }
@@ -51,6 +56,14 @@ export function createWatcher({ paths, onChange, options = {} }) {
     } catch (err) {
       // A faulty onChange must not crash the watcher
       console.error('[dashboard watcher] onChange error:', err);
+    }
+    if (typeof onTimelineEvent === 'function') {
+      try {
+        onTimelineEvent({ event, path: p });
+      } catch (err) {
+        try { console.error('[dashboard watcher] onTimelineEvent error:', err); }
+        catch { /* ignore */ }
+      }
     }
   };
 

@@ -71,6 +71,11 @@ export const TABS: TabDef[] = [
   // from 'goal-planner' (F-036) to 'goals' so the tab surfaces
   // durable Goal entities rather than the ephemeral A* planner.
   { id: 'goals', label: 'Goals', icon: Target },
+  // v6.6.0 — F-042 Visual Timeline + Agent Memory. Aggregates git
+  // commits, hook logs, agent activity, task/goal changes, and file
+  // events into a single chronological view. `History` is the
+  // per-session log; `Timeline` is the cross-cutting aggregator.
+  { id: 'timeline', label: 'Timeline', icon: HistoryIcon },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 

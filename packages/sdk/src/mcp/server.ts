@@ -63,6 +63,7 @@ import {
   createFederation,
   type FederationHandle,
 } from "../federation/index.js";
+import { handleTimelineQuery, type TimelineQueryArgs } from "./tools/timeline-query.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
 // the package is optional. Callers pass the result of `tool()` and
@@ -731,6 +732,41 @@ const federationStatusTool = defineTool<Record<string, never>>(
 );
 
 // ---------------------------------------------------------------------------
+// Timeline tool (F-042) — Visual Timeline + Agent Memory. Reads the
+// dashboard's /api/timeline endpoint (loopback) when reachable,
+// otherwise reads ~/.config/bizar/timeline.jsonl directly. Returns a
+// prose summary plus the JSON event dump so the model can either
+// quote the summary into context or pull specific events out.
+// ---------------------------------------------------------------------------
+
+const timelineQueryTool = defineTool<TimelineQueryArgs>(
+  "timeline_query",
+  "Query the Bizar timeline (F-042). Returns recent events for a project, file, agent, task, goal, or session. Use this to ground your decisions in what was already done. Filters: since (ISO timestamp; default = last 7 days), until, type (commit|hook|agent|task|goal|file|all), file, agentName, taskId, goalId, sessionId, commitSha, text (free-text search), limit (1..500; default 50). Looks up the dashboard at http://127.0.0.1:4321 by default (BIZAR_DASHBOARD_URL to override); falls back to ~/.config/bizar/timeline.jsonl when unreachable. Output: { source: 'dashboard'|'local', total, limit, since, events: TimelineEvent[], summary: string }.",
+  {
+    projectPath: "string",
+    since: "string",
+    until: "string",
+    type: "string",
+    file: "string",
+    agentName: "string",
+    taskId: "string",
+    goalId: "string",
+    sessionId: "string",
+    commitSha: "string",
+    text: "string",
+    limit: "number",
+  },
+  async (args) => {
+    try {
+      return await handleTimelineQuery(args);
+    } catch (e) {
+      return err(String(e));
+    }
+  },
+  { readOnlyHint: true },
+);
+
+// ---------------------------------------------------------------------------
 // Factory — wire all tools into an MCP server
 // ---------------------------------------------------------------------------
 
@@ -758,6 +794,7 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   hooksRouteTool,
   consensusProposeTool,
   federationStatusTool,
+  timelineQueryTool,
 ];
 
 /**
