@@ -50,22 +50,19 @@ unchanged — confirmed via `git log` as v5.3.0-era; not F-040).
 
 ## Current State
 
-- **Last commit:** v6.5.0 — F-037 migration gap cleanup landed
-- **Released:** **v6.5.0 — Tech-debt + federation + consensus
-  shipped** (3/3 features passing — F-037 + F-038 + F-039; VCR
-  38/38 = 1.000, `make check` + `make test` + `make e2e` +
-  `make clean-check` all green; npm publish pending)
-- **`make check`:** 0 TS errors (root + SDK tsconfig)
-- **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test)
-- **`make e2e`:** 13/13 pass (23 tools verified — +0 net; F-037
-  was cleanup not new tools; `plugin shim does not import @cline/*`
-  confirms the SDK has zero Cline coupling)
-- **`make clean-check`:** 5/5 dimensions green
-- **`make vcr`:** 39/39 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039)
-- **Branch:** master (pushed — 16 commits ahead of origin/master prior to PR #3 merge)
-- **Phase:** v6.5.0 → v7.0.0 in flight (F-040 dashboard redesign pending merge)
+- **Last commit:** v7.0.0 — F-040 dashboard redesign landed
+- **Released:** **v7.0.0 — F-040 dashboard redesign shipped**
+  (1/1 feature passing — F-040; VCR 39/39 = 1.000, typecheck 0
+  errors, SDK tests 294/294, web tests 582/586 [4 pre-existing
+  v5.3.0-era failures in `tests/a11y/forms.test.tsx`],
+  CLI tests 109/109, build clean)
+- **Branch:** master (v7.0.0 tagged and pushed, npm publish
+  pending)
+- **Phase:** v7.0.0 — F-040 dashboard redesign shipped; PR #2
+  (Live Agent Dashboard Integration) deferred to follow-up
+  release
 
-## In Progress — v6.5.0 Sprint
+## What landed in v7.0.0
 
 Cleared v6.4.0 port cycle (5 features passing, VCR 36/36 = 1.000).
 v6.5.0 launched 2026-07-12 with 3 candidates dispatched in parallel
