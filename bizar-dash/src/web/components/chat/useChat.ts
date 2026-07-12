@@ -38,6 +38,7 @@ import type {
   ChatSession,
   Settings,
   Snapshot,
+  WsMessage,
 } from '../../lib/types';
 import { api, ApiError } from '../../lib/api';
 import type { SessionState } from './ChatRail';
@@ -1105,7 +1106,7 @@ export function useChat(snapshot: Snapshot, settings: Settings, initialTaskId?: 
     import('../../lib/ws').then(({ Ws }) => {
       if (closed) return;
       const ws = new Ws();
-      ws.on((msg: { type: string; message?: ChatMessage }) => {
+      ws.on((msg: WsMessage) => {
         if (msg.type !== 'chat:message') return;
         const next = msg.message;
         if (!next) return;

@@ -835,6 +835,21 @@ export type WsMessage =
   | { type: 'notifications:change' }
   | { type: 'dialog:show'; dialog: DialogDescriptor }
   | { type: 'routing:decision'; decision: RoutingDecision }
+  // F-040 — Live Agent Dashboard. Emitted by the
+  // claude-session-watcher when a Claude Code session emits a
+  // tool_use block (`claude:tool-use`), heartbeat activity
+  // (`claude:session-activity`), or terminates (`claude:session-ended`).
+  // `claude:approval-needed` is broadcast when the watcher sees an
+  // Agent-tool dispatch — the dashboard surfaces an approve/reject UI.
+  | { type: 'claude:session-activity'; sessionId: string; agentName?: string; lastToolName?: string; lastTs: number }
+  | { type: 'claude:tool-use'; sessionId: string; toolUseId: string; name: string; args?: unknown; agentName?: string; ts: number }
+  | { type: 'claude:approval-needed'; sessionId: string; toolUseId: string; name: string; preview: string; ts: number }
+  | { type: 'claude:session-ended'; sessionId: string; reason: 'completed'|'failed'|'killed'; ts: number }
+  // F-040 — UI approval/steer/kill round-trip events.
+  | { type: 'agent:approval'; agent: string; approval: { toolUseId: string; approve: boolean; note: string; ts: number } }
+  | { type: 'agent:steered'; agent: string; sessionId?: string; message: string }
+  | { type: 'agent:steer-intent'; agent: string; message: string }
+  | { type: 'agent:killed'; agent: string; sessionId?: string }
   | { type: 'pong'; ts: number }
   | { type: 'ping' }
   | { type: 'refresh' };

@@ -27,6 +27,8 @@ import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { LiveAgentsPanel } from '../components/agents/LiveAgentsPanel';
+import { AgentHistoryPanel } from '../components/agents/AgentHistoryPanel';
 import { api } from '../lib/api';
 import { cn, formatRelative, truncate } from '../lib/utils';
 import type { Agent, Settings, Snapshot } from '../lib/types';
@@ -482,6 +484,10 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
 
   return (
     <div className="view view-agents">
+      {/* F-040 — Live Agents panel. Top-of-page surface that follows
+          Claude Code Agent-tool dispatches in real time. */}
+      <LiveAgentsPanel />
+      <hr className="view-divider" />
       <header className="view-header">
         <div className="view-header-text">
           <h2 className="view-title">
@@ -558,6 +564,11 @@ export function Agents({ snapshot, refreshSnapshot }: Props) {
           ))}
         </div>
       )}
+
+      {/* F-040 — Per-agent history. Collapsible at the bottom of the
+          Agents view. Lazy-loads when first expanded. */}
+      <hr className="view-divider" />
+      <AgentHistoryPanel agentNames={sorted.map((a) => a.name)} />
     </div>
   );
 }

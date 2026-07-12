@@ -6,21 +6,40 @@
 
 ## Current State
 
-- **Last commit:** v6.5.0 — F-037 migration gap cleanup landed
+- **Last commit:** F-040 — Live Agent Dashboard landed
 - **Released:** **v6.5.0 — Tech-debt + federation + consensus
   shipped** (3/3 features passing — F-037 + F-038 + F-039; VCR
   39/39 = 1.000, `make check` + `make test` + `make e2e` +
   `make clean-check` all green; npm publish pending)
 - **`make check`:** 0 TS errors (root + SDK tsconfig)
-- **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test)
+- **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test); 17
+  F-040 node:test cases pass in addition (12 watcher + 5 routes)
 - **`make e2e`:** 12/13 pass (1 informational — e2e expects legacy
   Cline-era `bizar_*` tool names; current SDK uses `memory_*` /
-  `plan_action` / `graph_query` / `loop_*`. F-040 below adds
+  `plan_action` / `graph_query` / `loop_*`. F-042 below adds
   `timeline_query` so coverage reaches ≥20. Documented, not blocking.)
 - **`make clean-check`:** 5/5 dimensions green
-- **`make vcr`:** 39/39 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039)
+- **`make vcr`:** 40/40 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039 + F-040)
 - **Branch:** `worktree-f040-agents-f041-goals-f042-timeline` (rebased onto master v6.5.0)
-- **Phase:** v6.6.0 — F-040 (live agents) + F-041 (goals) + F-042 (timeline)
+- **Phase:** v6.6.0 — F-040 (live agents) shipped; F-041 (goals) + F-042 (timeline) next
+
+### F-040 — Live Agent Dashboard (just shipped)
+
+Wired Claude Code's per-session `~/.claude/sessions/<id>/messages.jsonl`
+trail into the dashboard. Two new Claude Code hooks
+(`PreToolUse:Agent` + `SessionEnd`) feed a new
+`claude-session-watcher.mjs` module that tails each JSONL, extracts
+Agent-tool dispatches + result lines, and emits four new WS events:
+`claude:tool-use`, `claude:session-activity`, `claude:session-ended`,
+`claude:approval-needed`. A new `LiveAgentsPanel` + `AgentHistoryPanel`
+in the Agents view surface live cards (with Send follow-up / View
+transcript / Kill buttons) and a collapsible per-agent history.
+
+Six new REST endpoints — `GET /api/agents/active`,
+`GET /api/agents/:name/history`, `GET /api/agents/:name/sessions`,
+`POST /api/agents/:name/approve|steer|kill`,
+`POST /api/claude-sessions/:id/kill` — close the loop and forward
+into the bg-spawner registry when sessions are dashboard-spawned.
 
 ## In Progress — v6.6.0 Sprint
 
@@ -29,7 +48,6 @@ per WIP=1 (each must pass L09 before the next starts):
 
 | F-id | Feature | Why |
 |---|---|---|
-| **F-040** | Live Agent Dashboard Integration — when `claude`/`claude --bg`/the Agent tool runs, the dashboard's Agents view shows status (idle/working/error/stuck), current task, last tool call, full history, approve/reject, steer, kill. Hooks into Claude Code's JSONL session log via a file watcher. | Claude Code CLI activity is currently invisible to the dashboard; only dashboard-spawned `claude --bg` sessions are tracked |
 | **F-041** | Per-Project Goals & Tasks Board — each project gets a board of persistent `Goal` entities with linked `Task` rows, progress bars, AI refine via the existing goal-planner, AI-decompose into sub-goals. | Today GoalPlanner is ephemeral; tasks have no `goalId`. No project-level roll-up of progress |
 | **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `bizar_timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
 

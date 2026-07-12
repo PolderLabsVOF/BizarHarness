@@ -65,6 +65,16 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/agent-tool-detect.mjs",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [

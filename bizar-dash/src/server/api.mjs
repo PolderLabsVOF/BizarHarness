@@ -22,6 +22,7 @@
  */
 import express from 'express';
 import { pairStore } from './pair-store.mjs';
+import { warn as loggerWarn } from './logger.mjs';
 
 import { createAuthRouter } from './routes/auth.mjs';
 import { createOverviewRouter } from './routes/overview.mjs';
@@ -115,6 +116,14 @@ export async function createApiRouter({
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
   router.use(createSchedulesRouter({ broadcast }));
   router.use(createModsRouter());
+
+  // F-040 — Lazy-init the claude-session-watcher on the FIRST call to
+  // any /api/agents/* route. We can't start it at module load because
+  // api.mjs is composed before the WS broadcast is fully wired; the
+  // route middleware chain gets the live `broadcast` reference, so
+  // wiring the watcher here is the natural seam.
+  await ensureClaudeSessionWatcher({ broadcast });
+
   router.use(createAgentsRouter({ state, broadcast }));
   router.use(createBackgroundRouter({ broadcast }));
   router.use(createActivityRouter({ state }));
@@ -210,4 +219,74 @@ export async function createApiRouter({
   });
 
   return router;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// F-040 — Live Agent Dashboard integration.
+// ────────────────────────────────────────────────────────────────────────
+
+let _watcherBooted = false;
+
+/**
+ * Lazy-start the claude-session-watcher. Idempotent — calling it twice
+ * is a no-op. We forward watcher events through the supplied
+ * `broadcast` (so the WS bus picks them up) AND update the agent-store
+ * so the Agents view reflects live state without polling.
+ *
+ * @param {{ broadcast: (evt: object) => void }} deps
+ */
+async function ensureClaudeSessionWatcher({ broadcast }) {
+  if (_watcherBooted) return;
+  _watcherBooted = true;
+  try {
+    const { claudeSessionWatcher } = await import('./claude-session-watcher.mjs');
+    const { agentsStore } = await import('./agents-store.mjs');
+
+    claudeSessionWatcher.start({
+      onEvent(evt) {
+        try { broadcast(evt); } catch { /* ignore */ }
+        // Side-effect: update agent-store on tool_use / session-end.
+        if (evt.type === 'claude:tool-use' && evt.agentName) {
+          try {
+            agentsStore.updateStatus(
+              evt.agentName,
+              'working',
+              `agent:${evt.sessionId}:${evt.toolUseId}`,
+            );
+            // Pause approval-needs — broadcast a pending-approval event.
+            broadcast({
+              type: 'claude:approval-needed',
+              sessionId: evt.sessionId,
+              toolUseId: evt.toolUseId,
+              name: evt.name,
+              preview: typeof evt.args?.prompt === 'string'
+                ? evt.args.prompt.slice(0, 200)
+                : (typeof evt.args === 'string' ? evt.args.slice(0, 200) : ''),
+              ts: evt.ts || Date.now(),
+            });
+          } catch { /* best-effort */ }
+        } else if (evt.type === 'claude:session-ended') {
+          // Clear every agent last seen working in this session.
+          try {
+            for (const a of agentsStore.list()) {
+              const tid = a.currentTaskId || '';
+              if (tid.includes(evt.sessionId) || a.status === 'working') {
+                agentsStore.recordTaskResult(
+                  a.name,
+                  tid || `session:${evt.sessionId}`,
+                  evt.reason === 'completed',
+                );
+              }
+            }
+          } catch { /* best-effort */ }
+        }
+      },
+    });
+  } catch (err) {
+    // Don't crash boot if the watcher fails to start.
+    _watcherBooted = false;
+    try {
+      loggerWarn('[api] claude-session-watcher failed to start', { err: err?.message || String(err) });
+    } catch { /* ignore */ }
+  }
 }

@@ -255,5 +255,37 @@ export function createClaudeSessionsRouter() {
     res.json({ id: sessionId, deleted: true });
   }));
 
+  // F-040 — POST /api/claude-sessions/:id/kill: best-effort kill
+  // of the underlying `claude --bg` instance for a session id.
+  // Returns `{ ok: true, note: 'not_alive' | 'killed' }`. The
+  // on-disk JSONL is left untouched — the bg-spawner registry is
+  // the source of truth for "is this session alive".
+  router.post('/claude-sessions/:id/kill', wrap(async (req, res) => {
+    const sessionId = String(req.params?.id || '');
+    if (!SESSION_ID_RE.test(sessionId)) {
+      res.status(400).json({ error: 'bad_request', message: 'invalid session id' });
+      return;
+    }
+    try {
+      const bg = await import('../claude-bg-spawner.mjs');
+      const rec = bg.findBgBySessionId(sessionId);
+      if (!rec) {
+        res.json({ ok: true, sessionId, note: 'not_alive' });
+        return;
+      }
+      if (rec.endedAt) {
+        res.json({ ok: true, sessionId, note: 'not_alive' });
+        return;
+      }
+      const result = await bg.killBgAgent(rec.instanceId, {});
+      res.json({ ok: !!result?.ok, sessionId, ...(result || {}) });
+    } catch (err) {
+      res.status(500).json({
+        error: 'kill_failed',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }));
+
   return router;
 }

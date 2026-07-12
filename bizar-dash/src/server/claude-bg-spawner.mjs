@@ -388,3 +388,53 @@ export function status() {
     bySessionCount: bySessionId.size,
   };
 }
+
+/**
+ * F-040 — Snapshot the live bg-spawner registries. Returns a
+ * read-only view of `byInstanceId` + `bySessionId` so the agents
+ * router can correlate hook-detected Agent dispatches with running
+ * `claude --bg` sessions for steer / kill.
+ *
+ * @returns {{ instances: Array<{ instanceId: string, sessionId: string, agent: string|null, state: string, endedAt: number|null }>, bySessionId: Record<string, string> }}
+ */
+export function listBgInstances() {
+  const instances = [];
+  for (const [instanceId, rec] of byInstanceId.entries()) {
+    instances.push({
+      instanceId,
+      sessionId: rec.sessionId || "",
+      agent: rec.state && rec.state !== "starting" ? (rec.sessionId ? (rec.state) : null) : null,
+      state: rec.state || "starting",
+      endedAt: rec.endedAt || null,
+      finalStatus: rec.finalStatus || null,
+      worktree: rec.worktree || null,
+    });
+  }
+  const bySession = {};
+  for (const [sessionId, rec] of bySessionId.entries()) {
+    bySession[sessionId] = rec.instanceId;
+  }
+  return { instances, bySessionId: bySession };
+}
+
+/**
+ * F-040 — Resolve the live bg-spawner instance for a session id, if any.
+ *
+ * @param {string} sessionId
+ * @returns {SpawnerRecord | null}
+ */
+export function findBgBySessionId(sessionId) {
+  if (!sessionId) return null;
+  return bySessionId.get(sessionId) || null;
+}
+
+/**
+ * F-040 — Resolve the live bg-spawner instance for an instance id, if any.
+ *
+ * @param {string} instanceId
+ * @returns {SpawnerRecord | null}
+ */
+export function findBgByInstanceId(instanceId) {
+  if (!instanceId) return null;
+  return byInstanceId.get(instanceId) || null;
+}

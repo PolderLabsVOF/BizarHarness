@@ -1188,23 +1188,28 @@
       "id": "F-040",
       "behavior": "Live Agent Dashboard — dashboard's Agents view surfaces any Claude Code CLI session (claude / claude --bg / subagents via Agent tool) with status (idle/working/error/stuck), current task, last tool call, full history, approve/reject, steer, kill. Hooks into Claude Code JSONL via file watcher.",
       "verification": "make check (TS 0 errors) + make test (≥12 new vitest cases for watcher + new endpoints) + /tmp/f040-agent-watch-roundtrip.mjs (spawn claude -p, assert watcher picks up Agent tool invocation, assert GET /api/agents/active returns correct state)",
-      "state": "active",
+      "state": "passing",
       "layer": "L1+L2+L3",
       "category": "dashboard-agents",
       "created": "2026-07-12",
+      "committed": "2026-07-12",
       "files_touched": [
         ".claude/hooks/agent-tool-detect.mjs (new — PreToolUse matcher=Agent)",
         ".claude/hooks/session-end-cleanup.mjs (new — SessionEnd → mark idle)",
         "bizar-dash/src/server/claude-session-watcher.mjs (new — JSONL tail → agents-store)",
-        "bizar-dash/src/server/routes/agents.mjs (add 5 endpoints)",
+        "bizar-dash/src/server/claude-bg-spawner.mjs (add listBgInstances / findBgBySessionId helpers)",
+        "bizar-dash/src/server/routes/agents.mjs (add /active, /:name/history, /:name/sessions, /:name/approve, /:name/steer, /:name/kill)",
         "bizar-dash/src/server/routes/claude-sessions.mjs (add POST .../kill)",
-        "bizar-dash/src/server/api.mjs (mount new endpoints)",
+        "bizar-dash/src/server/api.mjs (lazy-init watcher + onEvent side-effects)",
+        "bizar-dash/src/server/claude-session-watcher.test.mjs (new — 12 node:test cases)",
+        "bizar-dash/src/server/routes/agents.test.mjs (new — 5 node:test cases)",
         "bizar-dash/src/web/components/agents/LiveAgentsPanel.tsx (new)",
         "bizar-dash/src/web/components/agents/AgentHistoryPanel.tsx (new)",
-        "bizar-dash/src/web/views/Agents.tsx (restructure with Live + History)",
-        "bizar-dash/src/web/lib/types.ts (4 new WS events)",
-        ".claude/settings.json (register hooks)"
+        "bizar-dash/src/web/views/Agents.tsx (insert Live + History panels)",
+        "bizar-dash/src/web/lib/types.ts (4 new WS events + agent:approval/steered/killed)",
+        ".claude/settings.json (register Agent PreToolUse matcher)"
       ],
+      "evidence": "bunx tsc --noEmit → 0 errors; node --test claude-session-watcher.test.mjs routes/agents.test.mjs → 17/17 pass; node /tmp/f040-agent-watch-roundtrip.mjs → PASS; make test → 294/294 pass (no regressions); make clean-check → 5/5 dimensions green",
       "layers": [
         {
           "label": "compile",
@@ -1213,7 +1218,7 @@
         },
         {
           "label": "unit",
-          "cmd": "bun test packages/sdk bizar-dash",
+          "cmd": "node --test bizar-dash/src/server/claude-session-watcher.test.mjs bizar-dash/src/server/routes/agents.test.mjs",
           "repair": "Watcher tail-position tracking, agent-status mapping, REST endpoint coverage."
         },
         {
@@ -1225,8 +1230,8 @@
     }
   ],
   "vcr": {
-    "passing": 39,
+    "passing": 40,
     "activated": 40,
-    "ratio": 0.975
+    "ratio": 1.0
   }
 }
