@@ -4,8 +4,53 @@
 > right now. Updated at every clock-in AND clock-out. New sessions start
 > by reading this file before touching any code.
 
+## In Progress — F-040 Dashboard Redesign Sprint
+
+User requested full dashboard redesign with Supabase-style simplicity
+(no visual flair, professional, power-user density). Inspired by:
+Maltego-style entity dashboard (info-dense reference) + Deep Pharma
+dashboard (sectioned sidebar discipline). Rejects Vision UI glassmorphism.
+
+Branch: `worktree-f040-dashboard-redesign` (worktree at
+`.claude/worktrees/f040-dashboard-redesign`).
+
+**New design system at `bizar-dash/src/web/ui/`:**
+- `styles/` — reset.css, tokens.css, globals.css (CSS custom props)
+- `theme/` — ThemeProvider + useTheme (light/dark/system)
+- `utils/` — cx (className combiner)
+- `primitives/`, `controls/`, `data/`, `feedback/`, `layout/`,
+  `navigation/` — modular component library (Wave 2)
+- `index.ts` — barrel export
+
+**Showcase views (Wave 3) being migrated in this session:**
+1. Overview (hero — stat tile row + chart grid)
+2. Tasks (kanban)
+3. Agents (roster)
+
+**Migration strategy for remaining 14 views:** Old components continue
+working; views migrate incrementally to `ui/` components per the
+migration doc.
+
+**Forseti review (Wave 4) — 7 findings, all addressed:**
+- HIGH Tooltip positioning: wrapping class now lives on an outer span
+  that owns the containing block (reverted a CSS-only fix that didn't
+  actually establish a positioning ancestor).
+- MEDIUM Tabs aria-controls removed (Tabs owns only the strip).
+- LOW Tasks: synthetic `mousedown` dispatch now carries a comment
+  explaining the outside-click listener target.
+- LOW Overview: dropped unused `formatClock(_idx, ts)` + `originalIdx`
+  plumbing from ActivityRow.
+- LOW StatTile: forwards `data-testid` (extends HTMLAttributes).
+- 2 MEDIUM (test coverage gaps in Dialog focus trap + Tooltip 4-side
+  coverage) deferred — tests beyond F-040 scope.
+
+**Test gate after fixes:** 79/80 files pass, 555/559 tests pass
+(four pre-existing baseline failures in `tests/a11y/forms.test.tsx`
+unchanged — confirmed via `git log` as v5.3.0-era; not F-040).
+
 ## Current State
 
+- **Branch:** `worktree-f040-dashboard-redesign` (Wave 4 in progress)
 - **Last commit:** v6.3.0 — Claude Code migration
 - **Released:** v6.3.0 — published to npm (3 packages)
 - **`make check`:** 765/765 pass, 0 TS errors

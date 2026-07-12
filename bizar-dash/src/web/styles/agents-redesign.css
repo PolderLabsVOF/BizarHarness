@@ -1,0 +1,311 @@
+/*
+ * agents-redesign.css — Layout for the redesigned Agents view (Wave 3).
+ *
+ * Replaces the legacy `.view-agents / .agent-card / .agent-grid` rules that
+ * lived in main.css. Follows the same design constraints as the ui/ library:
+ * tokens only, hairline borders, no shadows beyond `--shadow-hairline`, and
+ * radii capped at `--radius-md`. The split-pane layout uses a CSS grid that
+ * collapses to a single column below 1024px so the detail panel can be
+ * dismissed on narrow screens without losing the list.
+ */
+
+.agents-redesign {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: 0;
+}
+
+.agents-redesign__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.agents-redesign__header-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.agents-redesign__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.agents-redesign__title-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-md);
+}
+
+.agents-redesign__subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 640px;
+}
+
+.agents-redesign__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.agents-redesign__control {
+  min-width: 160px;
+}
+
+.agents-redesign__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1023px) {
+  .agents-redesign__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ─── Roster table wrapper ─── */
+
+.agents-roster {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.agents-roster__table {
+  flex: 1;
+  min-height: 0;
+}
+
+.agents-roster__table .bd-data-table {
+  height: 100%;
+}
+
+.agents-roster__row-selected td {
+  background: var(--accent-subtle);
+}
+
+.agents-roster__row-selected:hover td {
+  background: var(--accent-subtle);
+}
+
+/* ─── Status cell ─── */
+
+.agents-status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.agents-status-cell__label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
+}
+
+.agents-status-cell__label--stuck {
+  color: var(--danger);
+  font-weight: var(--weight-medium);
+}
+
+/* ─── Name cell ─── */
+
+.agents-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+.agents-name-cell__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.agents-name-cell__swatch--empty {
+  background: transparent;
+}
+
+/* ─── Tags cell ─── */
+
+.agents-tags-cell {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  display: inline-block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* ─── Category cell — colour swatch on Badge ─── */
+
+.agents-category-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.agents-category-cell__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* ─── Detail panel ─── */
+
+.agents-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.agents-detail__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-8);
+  gap: var(--space-3);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  min-height: 240px;
+}
+
+.agents-detail__placeholder-icon {
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
+.agents-detail__placeholder-title {
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+
+.agents-detail__meta {
+  padding-top: var(--space-2);
+}
+
+.agents-detail__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.agents-detail__name-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.agents-detail__name-swatch--empty {
+  background: transparent;
+}
+
+.agents-detail__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.agents-detail__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.agents-detail__description {
+  white-space: pre-wrap;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: var(--leading-snug);
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.agents-detail__error {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--danger);
+  background: var(--danger-subtle);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  word-break: break-word;
+}
+
+.agents-detail__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.agents-detail__prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.agents-detail__prompt-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agents-detail__prompt-body {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: var(--leading-snug);
+}
+
+.agents-detail__prompt-empty {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
