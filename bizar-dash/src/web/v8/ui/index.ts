@@ -251,3 +251,29 @@ export {
 export { KanbanBoard, type KanbanBoardProps } from './kanban/KanbanBoard.js';
 export { KanbanQuickAdd, type KanbanQuickAddProps } from './kanban/KanbanQuickAdd.js';
 export { KanbanContextMenu, type KanbanContextMenuProps } from './kanban/KanbanContextMenu.js';
+
+// ── goals (Sprint S6) ─────────────────────────────────────────────────────
+
+export {
+  GoalCard,
+  type GoalCardProps,
+  type GoalStatus,
+} from './goals/GoalCard.js';
+export {
+  KeyResult,
+  type KeyResultProps,
+  type KeyResultStatus,
+} from './goals/KeyResult.js';
+
+// ── agents (Sprint S6) ────────────────────────────────────────────────────
+
+export {
+  AgentCard,
+  type AgentCardProps,
+  type AgentStatus,
+} from './agents/AgentCard.js';
+export {
+  AgentActivity,
+  type AgentActivityProps,
+  type AgentActivityItem,
+} from './agents/AgentActivity.js';

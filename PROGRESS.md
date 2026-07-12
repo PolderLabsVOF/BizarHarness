@@ -149,6 +149,30 @@ Shared:
 
 **Next sprint (S6 — Goals + Agents):** GoalCard, GoalProgress, GoalDetail, AgentCard, AgentRoster, AgentDetail, AgentActivity. The two "long horizon" surfaces (goals) and the agent orchestration surface.
 
+**Sprint S6 (Goals + Agents) shipped in this commit:**
+
+4 components across the long-horizon-goals and agent-orchestration surfaces, all token-driven and built on the existing v8 primitives.
+
+Goals (`bizar-dash/src/web/v8/ui/goals/`):
+- `GoalCard.tsx` — long-horizon goal tile (the Goals page per PLAN.md). NOT a kanban card. Title, "why" description (2-line clamp), status badge (`on-track` / `at-risk` / `off-track` / `done`), progress bar (tone-coloured by status), % complete + key results counter, due + owner row, badges slot, hover state.
+- `KeyResult.tsx` — measurable sub-goal inside a Goal. Toggle button on the leading edge (Circle / Minus / CheckCircle2 icons), title (strikethrough when done), progress bar (hidden for not-started), optional metric caption ("47 / 100") + assignee.
+
+Agents (`bizar-dash/src/web/v8/ui/agents/`):
+- `AgentCard.tsx` — agent tile for the Agents roster. Avatar + name + role + status badge, current-task callout, last-activity + tasksToday row, optional TPM sparkline, badges row. Uses the existing `Sparkline` and `Avatar` data components.
+- `AgentActivity.tsx` — per-agent activity feed (run started, tool called, message received). Token-tinted icon chip, title, optional description + meta (timestamp). `<ol>` semantic ordering.
+
+Shared:
+- `bizar-dash/src/web/v8/ui/data/ProgressBar.tsx` — the linear progress indicator used by both GoalCard + KeyResult (was used by prior surfaces already; now committed alongside the first consumers).
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel updated with all 4 new components + types.
+- `bizar-dash/src/web/v8/__tests__/{goals,agents}.test.tsx` — 16 vitest cases (GoalCard title/description/status/progress/key-results/due/owner/onOpen, KeyResult toggle/icon-label/not-started-hides-bar/metric+assignee, AgentCard name/role/badge/current-task/last-activity/onOpen/error-label, AgentActivity all-items/`<ol>` landmark/optional-fields).
+
+**Verification:**
+- `npm run typecheck` → 0 TS errors.
+- `cd bizar-dash && npx vitest run src/web/v8/__tests__/goals.test.tsx src/web/v8/__tests__/agents.test.tsx` → 16/16 pass.
+- Full dash test pass: `npm run test:web` → 97 files pass, 1 file pre-existing failure (`tests/a11y/forms.test.tsx`, 4 cases — predates v8 work, unrelated to this commit per stash check).
+
+**Next sprint (S7 — Activity + Memory + Libraries):** ActivityFeed, MemoryVault (project/global memos), SkillLibrary, McpLibrary, HookLibrary. The "knowledge surfaces" — what the harness has learned, what it's running, and how those move.
+
 ## In Progress — F-041 Dashboard Consistency + Mobile UI Pass
 
 User-requested follow-up to F-040 (v7.0.0). Three problems:
