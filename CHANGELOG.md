@@ -1,17 +1,39 @@
 # Changelog
 
-> **v6.3.0 is a major release.** Bizar Harness migrated from Cline to
-> Claude Code. The plugin framework that registered via Cline's
-> `AgentPlugin` API is now expressed as Claude Code skills (`SKILL.md`),
-> agents (`~/.claude/agents/*.md`), and an MCP server registered via
-> `.claude/mcp.json`. Hooks move from Cline's `beforeTool` / `afterTool`
-> to Claude Code's `PreToolUse` / `PostToolUse` (typed event payloads);
-> the runtime moves from `ClineRuntime` (wrapping `@cline/core`) to
-> `ClaudeSdkRuntime` (wrapping `@anthropic-ai/claude-agent-sdk`,
-> file kept as `plugins/bizar/src/clineruntime.ts` for plugin-manifest
-> back-compat). All v6.2.x entries below are historical and refer to the
-> Cline-era harness. See DEC-011, `docs/migration-guide.md`, and
-> `docs/decisions/DEC-011-claude-code-migration.md`.
+## v7.0.0 — F-040 dashboard redesign
+
+Major release. Adds the new `bizar-dash/src/web/ui/` design system
+(controls, data, feedback, layout, navigation, primitives, theme,
+tokens) and rewrites three views (Overview, Agents, Tasks) on top of
+it. The dashboard ships as a single React app with a tokenized
+theme, a tested component library (Button, Checkbox, IconButton,
+Kbd, NumberInput, RadioGroup, SearchInput, Select, Slider,
+TextInput, Toggle, BarChart, DataTable, EmptyState, ErrorState,
+KeyValueList, LoadingState, Sparkline, StatTile, Badge, Dialog,
+ProgressBar, StatusDot, Toast, Tooltip, AppShell, Breadcrumbs,
+Panel, PanelHeader, Sidebar, Tabs, Topbar, CommandPalette,
+NavGroup, NavLink, Box, Grid, Inline, Separator, Stack,
+VisuallyHidden), and 36 unit-test files alongside the three
+view tests.
+
+- F-040 — Dashboard redesign: 113 files changed, +13,358 / −987.
+- F-037/038/039 (carried over from v6.5.0): migration gap cleanup,
+  federation skeleton (HMAC+nonce envelopes, PII pipeline,
+  TrustEvaluator, PolicyEngine, AuditService, FederationBudget),
+  hive-mind Byzantine consensus (3-of-5 majority).
+
+Supersedes:
+- v8.0 minimalist dashboard redesign (PR #1) — closed.
+- F-040 Live Agent Dashboard Integration (PR #2, 24k+ lines, 131
+  files) — deferred to a follow-up release.
+
+> **v7.0.0 is a major release.** Adds the `bizar-dash/src/web/ui/`
+> design system (controls, data, feedback, layout, navigation,
+> primitives, theme, tokens) and rewrites the Overview, Agents,
+> and Tasks views on top of it. All v6.3.x and earlier entries are
+> historical; the active runtime is Claude Code via MCP + the
+> Agent SDK. See `docs/dashboard-ui-migration.md` and the entries
+> for F-037/038/039 (carried over from v6.5.0).
 
 ## v6.3.0 — Claude Code migration
 
