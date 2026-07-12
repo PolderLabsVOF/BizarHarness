@@ -1,5 +1,78 @@
 # Changelog
 
+## v8.0.0 — v8 dashboard production cutover
+
+Major release. The dashboard ships as a single v8 entry built on a
+tokenized OKLch design system. The v7 surface — including the entire
+mobile dashboard — is deleted. `bizar-dash/src/web/` now contains only
+`v8/`, `v8.html`, and the v8 entry.
+
+### Dashboard
+
+- **Single v8 entry.** `vite.config.ts` (root + biz-dash) emits a
+  single `index.html` from `v8.html`. `rollupOptions.input.mobile` and
+  the v7 entry are gone.
+- **Code-split per view.** All 8 views (Overview, Tasks, Goals,
+  Agents, Activity, Memory, Libraries, Settings) are `React.lazy`
+  chunks behind a `<Suspense fallback={<PageSkeleton/>}>`. Per-view
+  chunks 2–14 kB; initial bundle 58.93 kB (gzip 18.28 kB).
+- **Sidebar nav wired.** Sidebar items are `<button>`s with
+  `onClick → setActiveId`. Active item carries `aria-current="page"`
+  and the 2 px `--sidebar-accent` edge bar per DESIGN.md §7.3.
+- **Settings scroll-spy.** Settings nav clicks scroll the section
+  into view; an `IntersectionObserver` keeps the active highlight in
+  sync as the user scrolls.
+- **Command palette — 3 scopes.** Navigation, Actions, Settings (16
+  sections, navigates to `settings#{id}` via `requestAnimationFrame`).
+- **A11y.** `AppShell` uses `forwardRef` so `App.tsx` can focus `<main>`
+  on view change. `SettingsRow` uses `aria-labelledby` for generic
+  controls. Collapsed sidebar items carry `aria-label`.
+- **Theme + density.** `ThemeProvider` (light / dark / system) and
+  `DensityProvider` (comfortable / compact) persist to localStorage
+  and stamp `data-theme` / `data-density` on `<html>`.
+- **Build hash in sidebar footer.** `import.meta.env.VITE_BUILD_SHA`,
+  injected via vite `define` (falls back to `'dev'` in dev mode).
+
+### Server
+
+- **Mobile deleted.** `bizar-dash/src/server/server.mjs` stripped of
+  `MOBILE_UA_RE`, `shouldRedirectToMobile`, `/mobile.css`, `/m`, and
+  `/m/*` routes. The dashboard server is desktop-only.
+
+### Tests
+
+- 294 vitest cases passing across 18 files (up from 164 cases / 12
+  files in v7.0.4).
+- New suites: `App`, `AppShell`, `Sidebar`, `SettingsView`,
+  `PageSkeleton`, `AppCommandPalette`, `useCommandPaletteHotkey`,
+  `ThemeProvider`, `DensityProvider`.
+
+### Removed (breaking)
+
+- `bizar-dash/src/web/components/` — v7 raw React components.
+- `bizar-dash/src/web/hooks/` — v7 hooks (replaced by v8's).
+- `bizar-dash/src/web/lib/` — v7 utilities.
+- `bizar-dash/src/web/locales/` — v7 i18n (v8 is en-only for now).
+- `bizar-dash/src/web/mobile/` — entire mobile surface.
+- `bizar-dash/src/web/styles/` — v7 CSS.
+- `bizar-dash/src/web/ui/` — v7 UI primitives.
+- `bizar-dash/src/web/views/` — v7 views.
+- `bizar-dash/src/web/App.tsx`, `main.tsx`, `MobileApp.tsx`,
+  `mobile.html`, `mobile.tsx`, `index.html` — v7 entries.
+
+### Migration notes
+
+- The dashboard is desktop-only. Mobile clients should run the
+  v7.x line until a responsive web UI is shipped.
+- `vitest.config.ts` dropped the `components/agents/` glob; only
+  `tests/**/*.test.{ts,tsx}` and `src/web/v8/**/*.test.{ts,tsx}`
+  remain.
+- `vite.config.ts` no longer accepts a `mobile` build input. The
+  published package ships exactly one HTML entry.
+
+Supersedes:
+- v7.0.0 / v7.0.4 (F-040 dashboard redesign).
+
 ## v7.0.0 — F-040 dashboard redesign
 
 Major release. Adds the new `bizar-dash/src/web/ui/` design system
