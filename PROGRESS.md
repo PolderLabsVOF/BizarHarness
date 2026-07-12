@@ -6,22 +6,23 @@
 
 ## Current State
 
-- **Last commit:** F-040 — Live Agent Dashboard landed
+- **Last commit:** F-041 — Per-Project Goals & Tasks Board landed
 - **Released:** **v6.5.0 — Tech-debt + federation + consensus
   shipped** (3/3 features passing — F-037 + F-038 + F-039; VCR
   39/39 = 1.000, `make check` + `make test` + `make e2e` +
   `make clean-check` all green; npm publish pending)
 - **`make check`:** 0 TS errors (root + SDK tsconfig)
-- **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test); 17
-  F-040 node:test cases pass in addition (12 watcher + 5 routes)
+- **`make test`:** 294/294 pass (185 SDK bun + 109 CLI node:test); 46
+  server-side node:test cases pass in addition (29 F-041 goals-store
+  + routes/goals + 17 prior)
 - **`make e2e`:** 12/13 pass (1 informational — e2e expects legacy
   Cline-era `bizar_*` tool names; current SDK uses `memory_*` /
   `plan_action` / `graph_query` / `loop_*`. F-042 below adds
   `timeline_query` so coverage reaches ≥20. Documented, not blocking.)
 - **`make clean-check`:** 5/5 dimensions green
-- **`make vcr`:** 40/40 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039 + F-040)
+- **`make vcr`:** 41/41 = **1.000** (F-032 + F-033 + F-034 + F-035 + F-036 + F-037 + F-038 + F-039 + F-040 + F-041)
 - **Branch:** `worktree-f040-agents-f041-goals-f042-timeline` (rebased onto master v6.5.0)
-- **Phase:** v6.6.0 — F-040 (live agents) shipped; F-041 (goals) + F-042 (timeline) next
+- **Phase:** v6.6.0 — F-040 (live agents) + F-041 (goals) shipped; F-042 (timeline) next
 
 ### F-040 — Live Agent Dashboard (just shipped)
 
@@ -49,6 +50,39 @@ per WIP=1 (each must pass L09 before the next starts):
 | F-id | Feature | Why |
 |---|---|---|
 | **F-041** | Per-Project Goals & Tasks Board — each project gets a board of persistent `Goal` entities with linked `Task` rows, progress bars, AI refine via the existing goal-planner, AI-decompose into sub-goals. | Today GoalPlanner is ephemeral; tasks have no `goalId`. No project-level roll-up of progress |
+| **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `bizar_timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
+
+### F-041 — Per-Project Goals & Tasks Board (just shipped)
+
+Adds a durable `Goal` entity to the dashboard. Each project gets a
+board of `Goal` rows (title, description, status, priority, owner,
+targetDate, parent/child sub-goals, tags) with linked `Task` rows via
+`task.goalId`. Live progress bars roll tasks up to goals (computed
+on every WS event, not stored). AI Refine converts plain-English
+goal text into a GOAP Plan via `/api/goals/:id/refine`; "Save as
+Goal" persists the resulting plan as a `Goal` + linked `Tasks` via
+`/api/goals/from-plan`. Per-project isolation at
+`~/.config/cline/projects/<id>/goals.json`.
+
+Replaces the ephemeral `GoalPlanner.tsx` (F-036) with a new
+`Goals.tsx` view (tab id `goals` replaces `goal-planner` everywhere).
+
+**New surface:**
+- Server: `goals-store.mjs` (atomic per-project Goal store with
+  cycle detection), `routes/goals.mjs` (REST: GET/POST /goals,
+  PATCH/DELETE /:id, /tasks, /progress, /refine, /from-plan).
+  `tasks-store.mjs` learned `goalId` plus three helpers
+  (`linkTaskToGoal`, `unlinkTaskFromGoal`, `getByGoalId`).
+- Web: `components/goals/GoalCard.tsx` (reusable card),
+  `views/Goals.tsx` (header + grid + create/refine/edit/archive
+  modals + inline task panel), `views/Tasks.tsx` gained a Goal
+  badge on each task card.
+- WS events: `goal:change`, `goal:tasks-linked`, `goal:progress`.
+
+**Verification:** `make check` 0 errors; 29 node:test cases
+(15 goals-store + 14 routes/goals) pass; `/tmp/f041-goals-roundtrip.mjs`
+runs 23 e2e checks (create, link, progress=50%, refine, from-plan,
+cross-project isolation) — all green.
 | **F-042** | Visual Timeline + Agent Memory — single source of truth for "what changed, where, when" (git commits, hook logs, agent activity, task changes, goal changes, file changes). New `bizar_timeline_query` MCP tool for agents + Timeline view for humans + SessionStart hook primes the model with recent activity. | Agents repeat work because they don't see what was done before. No cross-cutting history view |
 
 ### What landed in v6.5.0

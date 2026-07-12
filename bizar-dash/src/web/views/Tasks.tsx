@@ -39,6 +39,7 @@ import {
   Edit2,
   RotateCw,
   Bot,
+  Target,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Card, CardTitle, CardMeta } from '../components/Card';
@@ -48,7 +49,7 @@ import { useModal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { api, enhancePrompt } from '../lib/api';
 import { cn, formatRelative, priorityColors } from '../lib/utils';
-import type { Settings, Snapshot, Task } from '../lib/types';
+import type { Goal, Settings, Snapshot, Task } from '../lib/types';
 import { BacklogPanel } from '../components/tasks/BacklogPanel';
 
 type Props = {
@@ -87,6 +88,12 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
   const [showBacklog, setShowBacklog] = useState(false);
   const [tick, setTick] = useState(0); // for live timer re-render
   const [statusAnnouncement, setStatusAnnouncement] = useState('');
+  // v6.6.0 — F-041. Load the project's goals so each task card can
+  // surface a clickable "Goal: <title>" badge that jumps to the
+  // Goals view. Recomputes when the project switches or the snapshot
+  // updates.
+  const activeProjectId = snapshot.activeProject?.id || '';
+  const [goalsById, setGoalsById] = useState<Record<string, Goal>>({});
 
   const reload = async () => {
     try {
@@ -105,6 +112,32 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
       setLoading(false);
     }
   }, [snapshot.tasks]);
+
+  // v6.6.0 — F-041. Fetch goals for the active project so task cards
+  // can show a "Goal" badge. Re-runs whenever the active project
+  // changes. Empty / no-project just clears the map; the badge won't
+  // render in those cases anyway because no task will have a goalId.
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeProjectId) {
+      setGoalsById({});
+      return;
+    }
+    api
+      .get<{ goals: Goal[] }>(`/goals?projectId=${encodeURIComponent(activeProjectId)}`)
+      .then((r) => {
+        if (cancelled) return;
+        const m: Record<string, Goal> = {};
+        for (const g of r.goals || []) m[g.id] = g;
+        setGoalsById(m);
+      })
+      .catch(() => {
+        if (!cancelled) setGoalsById({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId]);
 
   // Periodic tick keeps relative-time labels fresh without a full reload.
   useEffect(() => {
@@ -330,6 +363,8 @@ function TasksInner({ snapshot, refreshSnapshot, setActiveTab }: Props) {
               onEdit={(t) => openEditTaskModal(modal, toast, t, setTasks, reload, refreshSnapshot)}
               onSubmitToOdin={submitToOdin}
               tick={tick}
+              goalsById={goalsById}
+              onOpenGoal={() => setActiveTab('goals')}
             />
           ))}
         </div>
@@ -349,6 +384,8 @@ function KanbanColumn({
   onEdit,
   onSubmitToOdin,
   tick,
+  goalsById,
+  onOpenGoal,
 }: {
   column: { id: string; label: string; kind: StatusKind };
   tasks: Task[];
@@ -358,6 +395,8 @@ function KanbanColumn({
   onEdit: (t: Task) => void;
   onSubmitToOdin: (id: string) => void;
   tick: number;
+  goalsById: Record<string, Goal>;
+  onOpenGoal: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   return (
@@ -398,6 +437,8 @@ function KanbanColumn({
               onRetry={() => onRetry(t.id)}
               onSubmitToOdin={() => onSubmitToOdin(t.id)}
               tick={tick}
+              goal={t.goalId ? goalsById[t.goalId] || null : null}
+              onOpenGoal={onOpenGoal}
             />
           ))
         )}
@@ -416,6 +457,8 @@ function TaskCard({
   onRetry,
   onSubmitToOdin,
   tick,
+  goal,
+  onOpenGoal,
 }: {
   task: Task;
   onMove: (dir: -1 | 1) => void;
@@ -424,6 +467,8 @@ function TaskCard({
   onRetry: () => void;
   onSubmitToOdin: () => void;
   tick: number;
+  goal: Goal | null;
+  onOpenGoal: () => void;
 }) {
   const assignedAgent = task.workedBy || task.assignee || null;
   return (
@@ -466,6 +511,25 @@ function TaskCard({
           <span className="task-card-badge team" title="Cline agent team">
             <Sparkles size={10} /> team
           </span>
+        )}
+        {/* v6.6.0 — F-041 Goal badge. Renders when this task is
+            linked to a Goal; click jumps to the Goals view so the
+            user can see the rollup. Hidden when the linked goal
+            isn't in our lookup map (stale link, deleted goal). */}
+        {goal && (
+          <button
+            type="button"
+            className="task-card-badge task-card-goal-badge"
+            data-testid="task-goal-badge"
+            data-goal-id={goal.id}
+            title={`Linked to goal: ${goal.title} — click to open`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenGoal();
+            }}
+          >
+            <Target size={10} /> {goal.title}
+          </button>
         )}
       </div>
       <div className="task-card-footer">

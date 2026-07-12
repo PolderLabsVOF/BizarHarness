@@ -127,7 +127,11 @@ function aStar(actions, goals) {
   return best.path;
 }
 
-function inlinePlan(goalText) {
+// v6.6.0 — F-041 re-exports the planner so /api/goals/from-plan and
+// /api/goals/:id/refine can persist a plan without duplicating the
+// action-template table. The shape is identical to the TS
+// `planGoal()` in web/lib/goapPlanner.ts (kept in sync manually).
+export function inlinePlan(goalText) {
   const id = `plan_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const clauses = splitClauses(goalText);
   const effective = clauses.length > 0 ? clauses : [(goalText || 'Investigate the goal').trim()];

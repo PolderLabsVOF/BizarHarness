@@ -1227,11 +1227,55 @@
           "repair": "Spawn `claude -p \"Use Read on package.json\"`, wait for completion, assert agents-store saw the Agent tool invocation."
         }
       ]
+    },
+    {
+      "id": "F-041",
+      "behavior": "Per-Project Goals & Tasks Board — each project gets a durable board of Goal entities (title, description, status, priority, owner, targetDate, parent/child sub-goals, tags) with linked Task rows via task.goalId; live progress bars roll tasks up to goals; AI Refine converts plain-English goal text into a GOAP Plan and persists it as Goal + Tasks; per-project isolation at ~/.config/cline/projects/<id>/goals.json; replaces ephemeral GoalPlanner (F-036) with a tab labeled 'Goals'.",
+      "verification": "make check (TS 0 errors) + node --test goals-store.test.mjs + node --test routes/goals.test.mjs (≥29 cases) + node /tmp/f041-goals-roundtrip.mjs (≥20 e2e checks: create, link, progress, refine, from-plan, cross-project isolation)",
+      "state": "passing",
+      "layer": "L1+L2+L3",
+      "category": "dashboard-goals",
+      "created": "2026-07-12",
+      "committed": "2026-07-12",
+      "files_touched": [
+        "bizar-dash/src/server/tasks-store.mjs (goalId field + linkTaskToGoal / unlinkTaskFromGoal / getByGoalId helpers)",
+        "bizar-dash/src/server/goals-store.mjs (new — atomic per-project Goal store with cycle detection)",
+        "bizar-dash/src/server/routes/goal-planner.mjs (re-export inlinePlan for /goals/:id/refine reuse)",
+        "bizar-dash/src/server/routes/goals.mjs (new — REST surface: GET/POST /goals, PATCH/DELETE /:id, /tasks, /progress, /refine, /from-plan)",
+        "bizar-dash/src/server/api.mjs (mount createGoalsRouter)",
+        "bizar-dash/src/server/goals-store.test.mjs (new — 15 node:test cases)",
+        "bizar-dash/src/server/routes/goals.test.mjs (new — 14 node:test cases)",
+        "bizar-dash/src/web/lib/types.ts (Goal, GoalProgress types + 3 WS events)",
+        "bizar-dash/src/web/components/goals/GoalCard.tsx (new — reusable card with progress bar)",
+        "bizar-dash/src/web/views/Goals.tsx (new — main Goals view with create / refine / save-as-goal)",
+        "bizar-dash/src/web/views/Tasks.tsx (Goal badge on each task card; click jumps to Goals tab)",
+        "bizar-dash/src/web/views/GoalPlanner.tsx (removed — superseded by Goals)",
+        "bizar-dash/src/web/App.tsx (tab id 'goals' replaces 'goal-planner')",
+        "bizar-dash/src/web/components/Topbar.tsx (tab id 'goals' in TABS array)"
+      ],
+      "evidence": "make check: TS 0 errors; node --test goals-store.test.mjs routes/goals.test.mjs: 29/29 pass; node /tmp/f041-goals-roundtrip.mjs: 23/23 pass (2026-07-12)",
+      "passing_steps": [
+        {
+          "label": "typecheck",
+          "cmd": "cd bizar-dash && bunx tsc --noEmit",
+          "repair": "Type-only fixes (Plan imported from lib/goapPlanner; Settings retained in Props type)."
+        },
+        {
+          "label": "unit",
+          "cmd": "node --test bizar-dash/src/server/goals-store.test.mjs bizar-dash/src/server/routes/goals.test.mjs",
+          "repair": "Goal CRUD, per-project isolation, cycle detection, plan persistence, taskIds validation."
+        },
+        {
+          "label": "e2e",
+          "cmd": "node /tmp/f041-goals-roundtrip.mjs",
+          "repair": "Full /api/goals roundtrip: POST /goals, link tasks, mark one done, progress=50%, refine → from-plan → 2nd goal with 3 linked tasks, cross-project isolation."
+        }
+      ]
     }
   ],
   "vcr": {
-    "passing": 40,
-    "activated": 40,
+    "passing": 41,
+    "activated": 41,
     "ratio": 1.0
   }
 }

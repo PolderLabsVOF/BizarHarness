@@ -67,8 +67,10 @@ export const TABS: TabDef[] = [
   { id: 'doctor', label: 'Doctor', icon: Stethoscope },
   // v6.0.0 — Harness engineering dashboard.
   { id: 'harness', label: 'Harness', icon: Shield },
-  // v6.4.0 — F-036 Goal Planner UI. Plain-English → A* plan.
-  { id: 'goal-planner', label: 'Goals', icon: Target },
+  // v6.6.0 — F-041 Per-Project Goals & Tasks Board. Tab id renamed
+  // from 'goal-planner' (F-036) to 'goals' so the tab surfaces
+  // durable Goal entities rather than the ephemeral A* planner.
+  { id: 'goals', label: 'Goals', icon: Target },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 

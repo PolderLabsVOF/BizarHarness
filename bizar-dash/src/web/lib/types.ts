@@ -383,10 +383,53 @@ export type Task = {
   currentStep?: string | null;
   progressAgent?: string | null;
   progressHistory?: { ts: string; progress: number; step: string | null; agent?: string | null }[];
+  // v6.6.0 — F-041 Goal linkage. A task belongs to at most one
+  // Goal; null = unlinked. Mutated by goals-store.linkTask/unlinkTask
+  // (which call tasksStore.update with a goalId patch).
+  goalId?: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;
   _timerStart?: number;
+};
+
+/**
+ * v6.6.0 — F-041 Goal entity. Stored at
+ * `~/.config/cline/projects/<id>/goals.json` and rendered on the
+ * Goals tab. Each goal may have a `parentGoalId` (sub-goals) and
+ * an arbitrary set of linked Tasks (looked up via `task.goalId`).
+ */
+export type Goal = {
+  id: string;
+  title: string;
+  description: string;
+  status: 'active' | 'completed' | 'archived' | string;
+  priority: 'low' | 'normal' | 'high' | string;
+  owner: string | null;
+  targetDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  parentGoalId: string | null;
+  tags: string[];
+  /** Captured when AI Refine runs; carries the GOAP Plan. */
+  metadata?: { aiSuggestions?: unknown } | null;
+  /** Resolved by the server at the response boundary. */
+  projectId: string;
+};
+
+/**
+ * v6.6.0 — F-041 live roll-up of a goal's linked tasks. `total`
+ * excludes archived tasks so archiving the last "done" task doesn't
+ * drop a goal from 100% to 0%.
+ */
+export type GoalProgress = {
+  total: number;
+  done: number;
+  blocked: number;
+  inProgress: number;
+  archived: number;
+  percent: number;
 };
 
 export type Notification = {
@@ -850,6 +893,12 @@ export type WsMessage =
   | { type: 'agent:steered'; agent: string; sessionId?: string; message: string }
   | { type: 'agent:steer-intent'; agent: string; message: string }
   | { type: 'agent:killed'; agent: string; sessionId?: string }
+  // F-041 — Goals & Tasks Board. Emitted by routes/goals.mjs so the
+  // dashboard updates without polling. Each mutation broadcasts one
+  // or more of these so per-card progress bars / lists refresh.
+  | { type: 'goal:change'; goal: Goal }
+  | { type: 'goal:tasks-linked'; goalId: string; taskIds: string[]; count: number }
+  | { type: 'goal:progress'; goalId: string; progress: GoalProgress }
   | { type: 'pong'; ts: number }
   | { type: 'ping' }
   | { type: 'refresh' };

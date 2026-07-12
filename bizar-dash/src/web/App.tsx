@@ -42,8 +42,10 @@ import { Doctor } from './views/Doctor';
 import { Harness } from './views/Harness';
 import { Eval } from './views/Eval';
 import { EvalReport } from './views/EvalReport';
-// v6.4.0 — F-036 Goal Planner UI.
-import { GoalPlanner } from './views/GoalPlanner';
+// v6.6.0 — F-041 Per-Project Goals & Tasks Board. Replaces the
+// F-036 GoalPlanner with a durable Goals board (Goal entities +
+// live task rollups + AI Refine → Save as Goal).
+import { Goals } from './views/Goals';
 import { SettingsNav } from './components/SettingsNav';
 import { Spinner } from './components/Spinner';
 import { Button } from './components/Button';
@@ -110,8 +112,10 @@ const VIEW_MAP: Record<string, (p: ViewProps) => React.ReactNode> = {
   // Eval view's "Open Eval Report" button (full report + diff).
   eval: Eval,
   evalReport: EvalReport,
-  // v6.4.0 — F-036 Goal Planner UI. Plain-English goal → A* plan.
-  'goal-planner': GoalPlanner,
+  // v6.6.0 — F-041 Per-Project Goals & Tasks Board. Tab id 'goals'
+  // (was 'goal-planner' in v6.4.0/F-036). Durable Goal entities with
+  // linked tasks; AI Refine persists via POST /goals/from-plan.
+  goals: Goals,
 };
 
 const VERSION = 'v6.0.0';

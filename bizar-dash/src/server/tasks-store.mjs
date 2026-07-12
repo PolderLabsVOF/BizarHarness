@@ -172,6 +172,9 @@ export const tasksStore = {
         archived: false,
         workedBy: null,
         dueDate: typeof input.dueDate === 'string' ? input.dueDate : null,
+        // v6.6.0 — F-041 goal linkage. A task belongs to at most one
+        // Goal; goals-store mutates this via update() / linkTaskToGoal().
+        goalId: input.goalId || null,
         // v3.2.0 — fields for the task delegator.
         subtasks: Array.isArray(input.subtasks) ? input.subtasks : undefined,
         metadata: input.metadata && typeof input.metadata === 'object' ? input.metadata : undefined,
@@ -231,6 +234,17 @@ export const tasksStore = {
       }
       if (typeof patch.dueDate === 'string' || patch.dueDate === null) {
         task.dueDate = patch.dueDate || null;
+      }
+      // v6.6.0 — F-041 goal linkage. Set/clear via PATCH /tasks/:id.
+      // `null` clears (unlink); `undefined` is a no-op so callers can
+      // safely send partial patches. When the value changes we append
+      // a `goal-link` activity row so the UI can show the diff.
+      if (patch.goalId !== undefined) {
+        const next = patch.goalId || null;
+        if (next !== task.goalId) {
+          appendActivity(task, 'goal-link', { from: task.goalId, to: next });
+          task.goalId = next;
+        }
       }
       // v3.2.0 — generic metadata bag (used by task-delegator to
       // record bg instance IDs, dispatch timestamps, etc.).
@@ -552,5 +566,43 @@ export const tasksStore = {
       }
     }
     return { affected };
+  },
+
+  // v6.6.0 — F-041 Goal linkage helpers. The Goal board lives in
+  // goals-store.mjs but the relationship itself is stored on the task
+  // (`task.goalId`). These helpers keep the linkage symmetric: the
+  // goals-store calls into here to set/clear the field, and agents
+  // can read `getByGoalId()` to render the goal-scoped task list
+  // without scanning every task on every render.
+
+  /**
+   * Link a task to a Goal. Returns the updated task, or null when
+   * the task id does not exist. A no-op when the task is already
+   * linked to this goal (returns the task unchanged, no activity row).
+   * @param {string} projectId
+   * @param {string} taskId
+   * @param {string|null} goalId  — null clears the link.
+   */
+  async linkTaskToGoal(projectId, taskId, goalId) {
+    return this.update(projectId, taskId, { goalId: goalId || null });
+  },
+
+  /**
+   * Clear the goal link on a task. Convenience wrapper that callers
+   * use when they only have the taskId (e.g. bulk unlink paths).
+   */
+  async unlinkTaskFromGoal(projectId, taskId) {
+    return this.update(projectId, taskId, { goalId: null });
+  },
+
+  /**
+   * Return every task whose `goalId` matches the given goal id.
+   * Includes archived tasks so the goals-store can compute archived
+   * counts in its `progress()` roll-up.
+   */
+  getByGoalId(projectId, goalId) {
+    if (!goalId) return [];
+    const all = this.loadTasks(projectId, { includeArchived: true });
+    return all.filter((t) => t && t.goalId === goalId);
   },
 };

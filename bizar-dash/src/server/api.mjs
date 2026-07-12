@@ -63,6 +63,12 @@ import { createVoiceRouter } from './routes/voice.mjs';
 // v6.4.0 — F-036 Goal Planner UI. POST /api/goal-planner/plan returns
 // a GOAP-style A* plan for a plain-English goal.
 import { createGoalPlannerRouter } from './routes/goal-planner.mjs';
+// v6.6.0 — F-041 Goals & Tasks Board. Replaces the ephemeral
+// planner with a persistent Goal store + REST surface (mounted at
+// the same /api/goals path so legacy clients don't break). The
+// `goal-planner` endpoint stays mounted for any client that still
+// wants the raw planner without persistence.
+import { createGoalsRouter } from './routes/goals.mjs';
 import { attachUserContext } from './auth.mjs';
 
 /**
@@ -167,6 +173,10 @@ export async function createApiRouter({
   router.use(createPairRouter({ state, broadcast }));
   // v6.4.0 — F-036 Goal Planner UI. Plain-English goal → A* plan.
   router.use(createGoalPlannerRouter({ broadcast }));
+  // v6.6.0 — F-041 Goals & Tasks Board. Persistent Goal store +
+  // progress rollup + GOAP refine. Mounted right after the legacy
+  // planner so the planner's POST /goal-planner/plan stays reachable.
+  router.use(createGoalsRouter({ broadcast, projectRoot }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
