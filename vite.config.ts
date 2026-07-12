@@ -19,23 +19,14 @@ export default defineConfig({
         mobile: resolve(__dirname, 'bizar-dash/src/web/mobile.html'),
       },
       output: {
-        // Function-form manualChunks: group modules by path patterns rather than
-        // requiring them to be entry-level imports (array form fails when a module
-        // isn't directly reachable from the entry chunk root).
-        manualChunks: (id) => {
-          if (!id) return;
-          if (id.includes('node_modules')) {
-            if (id.includes('lucide-react')) return 'icons';
-            if (id.includes('react-markdown') || id.includes('remark')) return 'markdown';
-            if (id.includes('react-router')) return 'router';
-            if (id.includes('react') || id.includes('scheduler')) return 'react-vendor';
-            if (id.includes('fuse.js')) return 'fuzzy';
-            if (id.includes('recharts')) return 'charts';
-            if (id.includes('@xyflow')) return 'flow';
-            if (id.includes('@mdx-js')) return 'editor';
-            return 'vendor';
-          }
-        },
+        // No manualChunks: any function-form split here is brittle
+        // because rollup's chunk graph tracks shared dependencies and
+        // can route modules that import each other into separate
+        // chunks, producing circular imports
+        // (vendor → react-vendor → flow → vendor) that surface as
+        // "can't access property 'useState', et is undefined" at boot.
+        // Rollup's default heuristic + the per-entry chunks (`main`,
+        // `mobile`) produce a working build without that footgun.
       },
     },
   },
