@@ -45,10 +45,10 @@ describe('AgentDetail (S11 control plane)', () => {
     fireEvent.change(ta, { target: { value: 'continue from S10' } });
     fireEvent.click(screen.getByRole('button', { name: /Send/i }));
     await waitFor(() => {
-      expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBeGreaterThan(0);
+      const calls = (fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      const hasSend = calls.some((c) => String(c[0] ?? '').includes('/api/cc-agents/sess-abc-123/send'));
+      expect(hasSend).toBe(true);
     });
-    const call = (fetchMock as unknown as { mock: { calls: { toString: () => string }[] } }).mock.calls[0].toString();
-    expect(call).toContain('/api/cc-agents/sess-abc-123/send');
   });
 
   it('renders Copy id + Restart buttons alongside Send', () => {

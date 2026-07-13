@@ -135,6 +135,11 @@ h4 {
   to { transform: rotate(360deg); }
 }
 
+@keyframes v8-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, currentColor 60%, transparent); }
+  100% { box-shadow: 0 0 0 8px color-mix(in oklch, currentColor 0%, transparent); }
+}
+
 @keyframes v8-dialog-overlay-in {
   from { opacity: 0; }
   to   { opacity: 1; }

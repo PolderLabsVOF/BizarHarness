@@ -24,6 +24,7 @@ import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { wrap } from './_shared.mjs';
 import { projectsStore } from '../projects-store.mjs';
+import { tasksStore } from '../tasks-store.mjs';
 import { parseProgress, serializeProgress } from '../progress-parser.mjs';
 
 const VALID_STATUSES = new Set(['on-track', 'at-risk', 'off-track', 'done', 'blocked', 'active']);
@@ -206,7 +207,101 @@ export function createGoalsRouter({ broadcast } = {}) {
     res.status(204).end();
   }));
 
+  // S18 — decompose a goal into tasks (one per key-result).
+  // Each task carries metadata.goalId / metadata.krId so progress can
+  // flow back the other way (task done -> KR done -> goal progress%).
+  router.post('/goals/:id/decompose', wrap(async (req, res) => {
+    const parsed = parseProgress(readRaw());
+    const goal = parsed.goals.find((g) => g.id === req.params.id);
+    if (!goal) { res.status(404).json({ error: 'not_found' }); return; }
+    if (!Array.isArray(goal.keyResults) || goal.keyResults.length === 0) {
+      res.status(400).json({ error: 'bad_request', message: 'goal has no key results to decompose' });
+      return;
+    }
+    const active = projectsStore.active();
+    const projectId = active?.id || 'default';
+    const created = [];
+    for (const kr of goal.keyResults) {
+      if (kr.taskId) continue; // already decomposed
+      const task = await tasksStore.create(projectId, {
+        title: kr.title,
+        description: `Auto-created from goal "${goal.title}"`,
+        priority: 'normal',
+        assignee: kr.assignee || null,
+        dueDate: goal.due || null,
+        metadata: { goalId: goal.id, goalTitle: goal.title, krId: kr.id, krTitle: kr.title },
+      });
+      kr.taskId = task.id;
+      created.push({ kr: kr.id, task: task.id });
+    }
+    writeRaw(serializeProgress(parsed));
+    broadcast(broadcast, goal);
+    res.status(201).json({ goalId: goal.id, created });
+  }));
+
+  // S18 — reverse-sync: task status changes propagate to the linked KR
+  // and recompute the goal's progress%. Called by the tasks router when
+  // a task with metadata.goalId moves to 'done'.
+  router.post('/goals/:id/sync-from-tasks', wrap(async (req, res) => {
+    const parsed = parseProgress(readRaw());
+    const goal = parsed.goals.find((g) => g.id === req.params.id);
+    if (!goal) { res.status(404).json({ error: 'not_found' }); return; }
+    const active = projectsStore.active();
+    const projectId = active?.id || 'default';
+    let changed = false;
+    for (const kr of goal.keyResults) {
+      if (!kr.taskId) continue;
+      const task = await tasksStore.getById(projectId, kr.taskId);
+      if (!task) continue;
+      const isDone = task.status === 'done';
+      if (Boolean(kr.done) !== isDone) {
+        kr.done = isDone;
+        changed = true;
+      }
+    }
+    const done = goal.keyResults.filter((k) => k.done).length;
+    const newProgress = goal.keyResults.length > 0 ? done / goal.keyResults.length : 0;
+    if (newProgress !== goal.progress) {
+      goal.progress = newProgress;
+      changed = true;
+    }
+    if (changed) {
+      writeRaw(serializeProgress(parsed));
+      broadcast(broadcast, goal);
+    }
+    res.json({ goal, changed });
+  }));
+
   return router;
 }
 
-export const _internals = { progressPath, readRaw, writeRaw, VALID_STATUSES };
+/**
+ * S18 — recompute KR done flags + goal progress% from a task status
+ * change. Called by the tasks router when a goal-linked task moves.
+ * Returns true if anything was persisted, false if no change.
+ */
+export function syncGoalFromTask(
+  goalId, krId, taskDone, broadcast
+) {
+  const parsed = parseProgress(readRaw());
+  const goal = parsed.goals.find((g) => g.id === goalId);
+  if (!goal) return false;
+  const kr = Array.isArray(goal.keyResults)
+    ? goal.keyResults.find((k) => k.id === krId)
+    : null;
+  if (kr && Boolean(kr.done) !== taskDone) kr.done = taskDone;
+  const doneCount = goal.keyResults.filter((k) => k.done).length;
+  const newProgress = goal.keyResults.length > 0 ? doneCount / goal.keyResults.length : 0;
+  if (
+    newProgress !== goal.progress ||
+    (kr && kr.done !== taskDone)
+  ) {
+    goal.progress = newProgress;
+    writeRaw(serializeProgress(parsed));
+    broadcast(broadcast, goal);
+    return true;
+  }
+  return false;
+}
+
+export const _internals = { progressPath, readRaw, writeRaw, VALID_STATUSES, syncGoalFromTask };

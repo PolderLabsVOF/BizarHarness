@@ -8,6 +8,7 @@ import { Stack } from '../primitives/Stack.js';
 import { Inline } from '../primitives/Inline.js';
 import { Textarea } from '../controls/Textarea.js';
 import { Skeleton } from '../feedback/Skeleton.js';
+import { AgentStreamPanel } from './AgentStreamPanel.js';
 import { fetchJson } from '../../data/fetcher.js';
 
 /**
@@ -45,9 +46,10 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastProcessId, setLastProcessId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) { setPrompt(''); setMessage(null); setError(null); }
+    if (open) { setPrompt(''); setMessage(null); setError(null); setLastProcessId(null); }
   }, [open, agentId]);
 
   const runAction = async (
@@ -65,8 +67,9 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
         { method, body },
       );
       if (res.ok) {
-        const extra = res.sessionId ? ` (session ${res.sessionId.slice(0, 8)})` : '';
-        setMessage(`${label} succeeded${extra}`);
+        const sessionExtra = res.sessionId ? ` (session ${res.sessionId.slice(0, 8)})` : '';
+        if (res.processId) setLastProcessId(res.processId);
+        setMessage(`${label} succeeded${sessionExtra}`);
       } else {
         setError(res.error || `${label} failed`);
       }
@@ -210,6 +213,35 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
             {message}
           </div>
         )}
+        {lastProcessId !== null && (
+          <div
+            style={{
+              padding: 'var(--space-2) var(--space-3)',
+              background: 'var(--surface-0)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 'var(--fs-12)',
+              color: 'var(--fg-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+            }}
+          >
+            <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>PID</span>
+            <code
+              data-testid="agent-process-id"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--fg)',
+                background: 'var(--surface-1)',
+                padding: '2px 6px',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              {lastProcessId}
+            </code>
+          </div>
+        )}
         {error !== null && (
           <div
             role="alert"
@@ -224,6 +256,25 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
           >
             {error}
           </div>
+        )}
+
+        {/* Live stream — only meaningful for Claude Code sessions (they have
+            a backing JSONL log). Bizar agents have no equivalent surface. */}
+        {source === 'claude-code' && (
+          <Stack gap={2}>
+            <div
+              style={{
+                fontSize: 'var(--fs-12)',
+                color: 'var(--fg-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
+              <ActivityIcon size={12} aria-hidden style={{ verticalAlign: 'middle', marginRight: 4 }} />
+              Live stream
+            </div>
+            <AgentStreamPanel sessionId={key} />
+          </Stack>
         )}
       </Stack>
     </SheetContent>

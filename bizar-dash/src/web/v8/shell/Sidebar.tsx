@@ -189,15 +189,47 @@ export function Sidebar({
         }}
       >
         {collapsed ? (
-          <Box
-            aria-hidden="true"
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 'var(--radius-pill)',
-              background: 'var(--success)',
-            }}
-          />
+          <Stack align="center" gap={2}>
+            <Box
+              aria-hidden="true"
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 'var(--radius-pill)',
+                background: 'var(--success)',
+                boxShadow: '0 0 0 4px color-mix(in oklch, var(--success) 24%, transparent)',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setCollapsed((c) => {
+                  const next = !c;
+                  if (typeof window !== 'undefined') {
+                    window.localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
+                  }
+                  return next;
+                });
+              }}
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+              data-testid="sidebar-expand"
+              style={{
+                width: 24,
+                height: 24,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--fg-muted)',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              <ChevronsRight size={14} />
+            </button>
+          </Stack>
         ) : (
           <>
             <Box style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
@@ -220,8 +252,9 @@ export function Sidebar({
                   return next;
                 });
               }}
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="v8-sidebar-collapse"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+              data-testid="sidebar-collapse"
               style={{
                 width: 24,
                 height: 24,
@@ -232,9 +265,10 @@ export function Sidebar({
                 color: 'var(--fg-muted)',
                 background: 'transparent',
                 border: '1px solid var(--border)',
+                cursor: 'pointer',
               }}
             >
-              {collapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
+              <ChevronsLeft size={14} />
             </button>
           </>
         )}

@@ -15,7 +15,7 @@
 
 import { Router } from 'express';
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, watch } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { wrap } from './_shared.mjs';
@@ -187,6 +187,193 @@ export function createCCAgentsRouter({ broadcast = () => {} } = {}) {
     broadcast({ type: 'agents:change' });
     res.json({ ok: true, sessionId: result.sessionId, processId: result.processId });
   }));
+
+  return router;
+}
+
+/**
+ * resolveSessionLog — locate the JSONL file backing a Claude Code session.
+ *
+ * Claude Code writes per-session logs to:
+ *   ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl
+ *
+ * The agent roster (from `claude agents --json`) gives us the session id
+ * and the working directory; we encode the cwd the same way Claude Code
+ * does (`-` prefix + every `/` replaced with `-`) and probe the path.
+ */
+export function resolveSessionLog(sessionId, cwd) {
+  if (!sessionId) return null;
+  const enc = String(cwd || '').replace(/[/]/g, '-').replace(/^-/, '-');
+  const candidate = join(HOME, '.claude', 'projects', enc, `${sessionId}.jsonl`);
+  return existsSync(candidate) ? candidate : null;
+}
+
+/**
+ * parseJsonlTail — read the last N lines of a session JSONL and shape each
+ * line into the dashboard's agent-stream event:
+ *
+ *   { ts, kind, content, role?, toolName?, toolInput? }
+ *
+ * Recognised line types: assistant message, user message, tool_use,
+ * tool_result, system.
+ */
+export function parseJsonlTail(text, limit = 100) {
+  const lines = text.split('\n').filter((l) => l.trim().length > 0);
+  const slice = lines.slice(-limit);
+  const out = [];
+  for (const line of slice) {
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    const ts = typeof rec.ts === 'string'
+      ? Date.parse(rec.ts)
+      : (typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : Date.now());
+    const msg = rec.message || rec;
+    const role = msg.role || rec.role || (rec.type === 'user' ? 'user' : rec.type === 'assistant' ? 'assistant' : 'system');
+    if (msg.content && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block.type === 'text') {
+          out.push({ ts, kind: 'text', role, content: String(block.text || '').slice(0, 4000) });
+        } else if (block.type === 'tool_use') {
+          out.push({
+            ts,
+            kind: 'tool',
+            role,
+            toolName: String(block.name || 'tool'),
+            toolInput: typeof block.input === 'string' ? block.input : JSON.stringify(block.input || {}).slice(0, 4000),
+          });
+        } else if (block.type === 'tool_result') {
+          out.push({
+            ts,
+            kind: 'tool-result',
+            role,
+            content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content || '').slice(0, 4000),
+            isError: block.is_error === true,
+          });
+        }
+      }
+    } else if (typeof msg.content === 'string') {
+      out.push({ ts, kind: 'text', role, content: msg.content.slice(0, 4000) });
+    } else if (rec.type === 'system' || rec.type === 'summary') {
+      out.push({ ts, kind: 'system', role: 'system', content: typeof rec.summary === 'string' ? rec.summary : JSON.stringify(rec).slice(0, 2000) });
+    }
+  }
+  return out;
+}
+
+/**
+ * createAgentStreamRouter — separate Router mounted at `/api/agent-stream`.
+ * Exposes:
+ *   GET /api/agent-stream/recent?sessionId=<id>&limit=<n>
+ *     Buffered last-N events for a session (cheap, no file watch).
+ *   GET /api/agent-stream/live?sessionId=<id>
+ *     Server-Sent Events stream. Sends the buffer first, then tails the
+ *     JSONL via fs.watch and pushes new lines as `event: append` frames.
+ *     25s heartbeat keeps proxies from idling out the connection.
+ */
+export function createAgentStreamRouter() {
+  const router = Router();
+
+  router.get('/agent-stream/recent', wrap(async (req, res) => {
+    const sessionId = String(req.query?.sessionId || '');
+    const limit = Math.min(Math.max(parseInt(String(req.query?.limit || '50'), 10) || 50, 1), 500);
+    const r = await listAgents();
+    const agent = r.agents.find((a) => a.sessionId === sessionId || a.id === sessionId);
+    if (!agent) { res.status(404).json({ error: 'not_found' }); return; }
+    const logPath = resolveSessionLog(agent.sessionId, agent.cwd);
+    if (!logPath) { res.json({ events: [], agent, logPath: null }); return; }
+    const stat = statSync(logPath);
+    if (!stat.isFile()) { res.json({ events: [], agent }); return; }
+    const start = Math.max(0, stat.size - 256 * 1024); // last 256KB keeps it cheap
+    const fd = await import('node:fs').then((m) => m.openSync(logPath, 'r'));
+    const buf = Buffer.alloc(stat.size - start);
+    try {
+      readFileSync(fd, buf, 0, buf.length, start);
+    } finally {
+      (await import('node:fs')).closeSync(fd);
+    }
+    res.json({
+      agent,
+      logPath,
+      events: parseJsonlTail(buf.toString('utf8'), limit),
+    });
+  }));
+
+  router.get('/agent-stream/live', (req, res) => {
+    const sessionId = String(req.query?.sessionId || '');
+    if (!/^[A-Za-z0-9_-]{4,64}$/.test(sessionId)) {
+      res.status(400).json({ error: 'bad_request', message: 'sessionId required' });
+      return;
+    }
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    let closed = false;
+    const send = (event, data) => {
+      if (closed) return;
+      try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { closed = true; }
+    };
+
+    // Initial snapshot — last 50 events so the UI renders immediately.
+    (async () => {
+      const r = await listAgents();
+      const agent = r.agents.find((a) => a.sessionId === sessionId || a.id === sessionId);
+      if (!agent) { send('error', { error: 'not_found' }); res.end(); return; }
+      const logPath = resolveSessionLog(agent.sessionId, agent.cwd);
+      send('agent', agent);
+      if (!logPath) { send('end', { reason: 'no_log' }); return; }
+      const stat = statSync(logPath);
+      let offset = stat.size;
+      // Seed with the last 50 events so the user sees context.
+      const start = Math.max(0, stat.size - 128 * 1024);
+      const buf = Buffer.alloc(stat.size - start);
+      const fd = await import('node:fs').then((m) => m.openSync(logPath, 'r'));
+      try { readFileSync(fd, buf, 0, buf.length, start); } finally { (await import('node:fs')).closeSync(fd); }
+      send('snapshot', { events: parseJsonlTail(buf.toString('utf8'), 50) });
+
+      // Tail the file via fs.watch + interval poll (fs.watch is flaky on Linux
+      // for files appended to by other processes; poll every 750ms as a safety net).
+      const interval = setInterval(async () => {
+        if (closed) return;
+        try {
+          const s = statSync(logPath);
+          if (s.size > offset) {
+            const fd2 = await import('node:fs').then((m) => m.openSync(logPath, 'r'));
+            const buf2 = Buffer.alloc(s.size - offset);
+            try { readFileSync(fd2, buf2, 0, buf2.length, offset); } finally { (await import('node:fs')).closeSync(fd2); }
+            offset = s.size;
+            send('append', { events: parseJsonlTail(buf2.toString('utf8'), 200) });
+          }
+        } catch {
+          // file may have been rotated — close gracefully.
+          send('end', { reason: 'file_gone' });
+          closed = true;
+          res.end();
+        }
+      }, 750);
+
+      // Heartbeat keeps the connection alive through corporate proxies.
+      const hb = setInterval(() => {
+        if (closed) return;
+        try { res.write(': ping\n\n'); } catch { closed = true; }
+      }, 25_000);
+
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(interval);
+        clearInterval(hb);
+        try { res.end(); } catch { /* */ }
+      };
+      req.on('close', cleanup);
+      req.on('aborted', cleanup);
+    })().catch((err) => {
+      send('error', { error: err?.message || String(err) });
+      try { res.end(); } catch { /* */ }
+    });
+  });
 
   return router;
 }

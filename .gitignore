@@ -33,6 +33,10 @@ bizar-mods/
 # screenshots, plan outputs, scripts. Per-machine, never pushed.
 .bizar/
 
+# ── Broken literal ${HOME} folder (unexpanded shell var that leaked into
+# the working tree at some point; git treats it as a literal directory name)
+${HOME}/
+
 # ── Test fixtures and scratch ──────────────────────────────────────────────
 *.log
 *.tgz

@@ -110,14 +110,27 @@ interface Project {
   cwd?: string;
 }
 
-async function spawnAgent(kind: string, onToast?: AppCommandPaletteProps['onToast']): Promise<void> {
+async function spawnAgent(
+  kind: string,
+  onToast?: AppCommandPaletteProps['onToast'],
+  cwd?: string,
+): Promise<void> {
   try {
-    const res = await fetchJson<{ agent?: BizarAgent; ok?: boolean; error?: string }>(`/api/agents`, {
+    // /api/spawn/agent spawns a Claude Code background agent via
+    // claude-runner.mjs. Falls back to /api/agents for legacy kinds.
+    const isCC = ['coder', 'researcher', 'planner', 'reviewer'].includes(kind);
+    const url = isCC ? '/api/spawn/agent' : '/api/agents';
+    const ccBody = { agent: kind, prompt: 'Spawned via command palette', worktree: cwd };
+    const legacyBody = { kind, prompt: 'Spawned via command palette' };
+    const res = await fetchJson<{ ok?: boolean; processId?: string; error?: string; message?: string }>(url, {
       method: 'POST',
-      body: { kind, prompt: 'Spawned via command palette' },
+      body: isCC ? ccBody : legacyBody,
     });
-    if (res.error) onToast?.({ kind: 'error', text: res.error });
-    else onToast?.({ kind: 'success', text: `Spawned ${kind} agent` });
+    if (res.error || (res.message && !res.ok)) {
+      onToast?.({ kind: 'error', text: res.error || res.message || 'spawn failed' });
+    } else {
+      onToast?.({ kind: 'success', text: `Spawned ${kind} agent` });
+    }
   } catch (err) {
     onToast?.({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
   }
@@ -148,14 +161,16 @@ export function AppCommandPalette(props: AppCommandPaletteProps): JSX.Element {
   const { open, onOpenChange, onNavigate, onToast } = props;
   const handleSelect = useSettingsNavigation(onNavigate, onOpenChange);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectCwd, setActiveProjectCwd] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetchJson<{ projects?: Project[] }>(`/api/projects`);
+        const res = await fetchJson<{ projects?: Project[]; active?: { id: string; cwd?: string } }>(`/api/projects`);
         if (!cancel && res.projects) setProjects(res.projects);
+        if (!cancel && res.active?.cwd) setActiveProjectCwd(res.active.cwd);
       } catch {
         // ignore — group just won't appear.
       }
@@ -166,7 +181,7 @@ export function AppCommandPalette(props: AppCommandPaletteProps): JSX.Element {
   const onSpawn = (id: string): void => {
     const kind = id.slice('spawn:'.length);
     onOpenChange(false);
-    void spawnAgent(kind, onToast);
+    void spawnAgent(kind, onToast, activeProjectCwd);
   };
 
   const onSwitchProject = (id: string): void => {

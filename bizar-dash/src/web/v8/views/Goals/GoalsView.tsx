@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Grid } from '../../ui/primitives/Grid.js';
+import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { GoalCard, type GoalCardProps, type GoalStatus } from '../../ui/goals/GoalCard.js';
 import { GoalDetail } from '../../ui/goals/GoalDetail.js';
@@ -40,6 +41,8 @@ export function GoalsView(): JSX.Element {
   const [initialized, setInitialized] = useState(false);
   const [openGoalId, setOpenGoalId] = useState<string | null>(null);
   const [creating, setCreating] = useState<boolean>(false);
+  const [decomposing, setDecomposing] = useState<string | null>(null);
+  const [decomposeError, setDecomposeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (goals.data?.goals && !initialized) {
@@ -80,6 +83,33 @@ export function GoalsView(): JSX.Element {
 
   const openGoal = openGoalId ? local.find((g) => g.id === openGoalId) ?? null : null;
 
+  const decompose = useCallback(async (goalId: string) => {
+    setDecomposing(goalId);
+    setDecomposeError(null);
+    try {
+      const res = await fetchJson<{ goalId: string; created: { kr: string; task: string }[] }>(
+        `/api/goals/${encodeURIComponent(goalId)}/decompose`,
+        { method: 'POST' },
+      );
+      // Patch local state with the new taskIds so the button reflects
+      // "Decomposed" without waiting for the WS roundtrip.
+      if (Array.isArray(res.created) && res.created.length > 0) {
+        setLocal((prev) => prev.map((g) => {
+          if (g.id !== goalId) return g;
+          const krs = (g.keyResults ?? []).map((kr) => {
+            const link = res.created.find((c) => c.kr === kr.id);
+            return link ? { ...kr, taskId: link.task } : kr;
+          });
+          return { ...g, keyResults: krs };
+        }));
+      }
+    } catch (err) {
+      setDecomposeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDecomposing(null);
+    }
+  }, []);
+
   return (
     <Stack gap={5}>
       <ViewHeader
@@ -91,6 +121,11 @@ export function GoalsView(): JSX.Element {
           </Button>
         }
       />
+      {decomposeError !== null && (
+        <div role="alert" style={{ padding: 'var(--space-3)', background: 'color-mix(in oklch, var(--danger) 12%, var(--surface-0))', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-12)' }}>
+          Decompose failed: {decomposeError}
+        </div>
+      )}
       {goals.loading && local.length === 0 ? (
         <Stack gap={3}>
           <Skeleton style={{ height: 160 }} />
@@ -109,19 +144,40 @@ export function GoalsView(): JSX.Element {
         </Card>
       ) : (
         <Grid cols={2}>
-          {local.map((g) => (
-            <div
-              key={g.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setOpenGoalId(g.id)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenGoalId(g.id); } }}
-              style={{ cursor: 'pointer', outline: 'none' }}
-              data-testid={`goal-card-${g.id}`}
-            >
-              <GoalCard {...goalToCard(g)} />
-            </div>
-          ))}
+          {local.map((g) => {
+            const krCount = g.keyResults?.length ?? 0;
+            const decomposed = (g.keyResults ?? []).every((kr) => Boolean(kr.taskId));
+            return (
+              <div
+                key={g.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpenGoalId(g.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenGoalId(g.id); } }}
+                style={{ cursor: 'pointer', outline: 'none' }}
+                data-testid={`goal-card-${g.id}`}
+              >
+                <Stack gap={2}>
+                  <GoalCard {...goalToCard(g)} />
+                  {krCount > 0 && (
+                    <Inline align="center" justify="end" gap={2}>
+                      <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+                        {decomposed ? 'Decomposed' : `${krCount} key result${krCount === 1 ? '' : 's'} · not yet linked`}
+                      </span>
+                      <Button
+                        variant="secondary"
+                        onClick={(e) => { e.stopPropagation(); void decompose(g.id); }}
+                        disabled={decomposing === g.id}
+                        title={decomposed ? 'Re-create missing task links' : 'Create one task per key result'}
+                      >
+                        <Plus size={12} aria-hidden /> {decomposed ? 'Re-link tasks' : 'Decompose → Tasks'}
+                      </Button>
+                    </Inline>
+                  )}
+                </Stack>
+              </div>
+            );
+          })}
         </Grid>
       )}
 

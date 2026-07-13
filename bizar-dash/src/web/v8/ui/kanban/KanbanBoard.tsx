@@ -62,12 +62,15 @@ export function KanbanBoard({ columns, onCardMove, children, className }: Kanban
       <div
         className={cx('v8-kanban-board', className)}
         style={{
-          display: 'flex',
-          gap: 'var(--space-3)',
-          padding: 'var(--space-3)',
+          display: 'grid',
+          gridAutoFlow: 'column',
+          gridAutoColumns: 'minmax(320px, 1fr)',
+          gap: 'var(--space-4)',
+          padding: 'var(--space-4) var(--space-5)',
           overflowX: 'auto',
           overflowY: 'hidden',
           height: '100%',
+          width: '100%',
           alignItems: 'stretch',
         }}
         role="region"

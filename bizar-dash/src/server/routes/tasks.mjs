@@ -33,6 +33,9 @@ import { agentsStore } from '../agents-store.mjs';
 import { notificationsStore } from '../notifications-store.mjs';
 import { projectsStore } from '../projects-store.mjs';
 import { artifactsStore } from '../artifacts-store.mjs';
+// S18 — reverse-sync from the goals router (recompute KR done
+// + goal progress from a task status change and persist to PROGRESS.md).
+import { syncGoalFromTask } from './goals.mjs';
 import {
   listClaudeMessages,
   normalizeClaudeMessage,
@@ -189,6 +192,14 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
           message: task.title || task.id,
           meta: { taskId: task.id },
         }, { broadcast });
+      } catch { /* best-effort */ }
+    }
+    // S18 — reverse-sync linked goal KR. If the task came from a goal
+    // decompose (metadata.goalId), update the goal's PROGRESS.md and
+    // broadcast the change. Best-effort: ignore failures.
+    if (task?.metadata?.goalId && task.metadata.krId) {
+      try {
+        syncGoalFromTask(task.metadata.goalId, task.metadata.krId, status === 'done', broadcast);
       } catch { /* best-effort */ }
     }
     res.json(task);

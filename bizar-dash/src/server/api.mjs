@@ -53,6 +53,7 @@ import { createMinimaxRouter } from './routes/minimax.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
 import { createEnvVarsRouter } from './routes/env-vars.mjs';
 import { createUpdateRouter } from './routes/update.mjs';
+import { createSpawnRouter } from './routes/spawn.mjs';
 import { createUsageRouter } from './routes/usage.mjs';
 import { createHeadroomRouter } from './routes/headroom.mjs';
 import { createEvalRouter } from './routes/eval.mjs';
@@ -133,6 +134,10 @@ export async function createApiRouter({
   // v4.6.0 — Update endpoints (status / check / apply). Wired with the
   // shared broadcast so apply can stream progress via WS.
   router.use(createUpdateRouter({ broadcast }));
+  // Sprint S13 — ⌘K palette spawn-agent endpoint. Lazy-imported so the
+  // hatch (claude binary) isn't pulled in during tests.
+  const { createSpawnRouter: spawnRouter } = await import('./routes/spawn.mjs');
+  router.use(spawnRouter({ broadcast }));
   router.use(createSettingsRouter({ state, broadcast }));
   router.use(createChatRouter({ state, broadcast }));
   router.use(createClaudeSessionsRouter());

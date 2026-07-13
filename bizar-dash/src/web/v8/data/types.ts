@@ -78,6 +78,7 @@ export interface Goal {
     title: string;
     done: boolean;
     assignee?: string;
+    taskId?: string;
   }>;
   owner?: string;
   due?: string;
@@ -137,6 +138,7 @@ export interface ActivityEvent {
   ts?: number;
   tone?: 'info' | 'success' | 'warning' | 'danger';
   agent?: string;
+  actor?: string;
   iconKey?: string;
   slug?: string;
 }

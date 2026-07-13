@@ -58,6 +58,27 @@ if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   };
 }
 
+// jsdom doesn't ship EventSource. AgentStreamPanel (Sprint S11) opens
+// an SSE connection on mount, so we stub a no-op stand-in that lets the
+// component subscribe without throwing. Tests that exercise the stream
+// replace globalThis.EventSource with a mock before render.
+if (typeof globalThis.EventSource === 'undefined') {
+  class StubEventSource {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSED = 2;
+    readyState = 0;
+    onopen: ((this: EventSource, ev: Event) => unknown) | null = null;
+    onerror: ((this: EventSource, ev: Event) => unknown) | null = null;
+    onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null;
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    close(): void { this.readyState = 2; }
+    dispatchEvent(): boolean { return true; }
+  }
+  globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+}
+
 afterEach(() => {
   cleanup();
 });

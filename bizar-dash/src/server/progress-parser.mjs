@@ -102,9 +102,15 @@ export function parseProgress(text) {
       continue;
     }
     // Body lines under the current goal.
-    const kr = parseKeyResultLine(line);
+    const kr = parseKeyResultLine(line, i);
     if (kr) {
-      current.keyResults.push({ id: `kr-${current.id}-${current.keyResults.length + 1}`, ...kr });
+      current.keyResults.push({
+        id: kr.krId || `kr-${current.id}-${current.keyResults.length + 1}`,
+        title: kr.title,
+        done: kr.done,
+        assignee: kr.assignee,
+        taskId: kr.taskId,
+      });
       i += 1;
       continue;
     }
@@ -166,16 +172,25 @@ function inferSection(fullText, headerIndex, headerText) {
   return 'unknown';
 }
 
-function parseKeyResultLine(line) {
+function parseKeyResultLine(line, index) {
   const m = /^\s*-\s+\[(x|X| )\]\s+(.+)$/.exec(line);
   if (!m) return null;
   const done = m[1].toLowerCase() === 'x';
   const rest = m[2].trim();
   const assignee = /\(@([a-z0-9_-]+)\)\s*$/.exec(rest);
+  // Optional trailing HTML comment holds KR id + linked task id so
+  // roundtrips through serialize/parse preserve both. See S18.
+  let krId;
+  let taskId;
+  const meta = /<!--\s*([a-z0-9_-]+)(?:\s+taskId:\s*([A-Za-z0-9_-]+))?\s*-->/i.exec(rest);
+  if (meta) krId = meta[1];
+  if (meta && meta[2]) taskId = meta[2];
   return {
     title: assignee ? rest.slice(0, assignee.index).trim() : rest,
     done,
     assignee: assignee ? assignee[1] : undefined,
+    krId,
+    taskId,
   };
 }
 
@@ -209,7 +224,8 @@ export function serializeProgress(parsed) {
       out.push('Key results:');
       for (const kr of goal.keyResults) {
         const assignee = kr.assignee ? ` (@${kr.assignee})` : '';
-        out.push(`- [${kr.done ? 'x' : ' '}] ${kr.title}${assignee}`);
+        const meta = kr.taskId ? ` <!-- ${kr.id} taskId: ${kr.taskId} -->` : (kr.id ? ` <!-- ${kr.id} -->` : '');
+        out.push(`- [${kr.done ? 'x' : ' '}] ${kr.title}${assignee}${meta}`);
       }
     }
     out.push('');

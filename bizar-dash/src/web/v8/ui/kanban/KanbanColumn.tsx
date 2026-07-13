@@ -57,12 +57,12 @@ export const KanbanColumn = forwardRef<HTMLElement, KanbanColumnProps>(function 
       style={{
         display: 'flex',
         flexDirection: 'column',
-        width: 280,
-        flexShrink: 0,
+        minWidth: 320,
         background: 'var(--surface-0)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
         height: '100%',
+        boxShadow: 'var(--shadow-1)',
         ...style,
       }}
       aria-label={typeof column.title === 'string' ? column.title : undefined}
@@ -70,11 +70,16 @@ export const KanbanColumn = forwardRef<HTMLElement, KanbanColumnProps>(function 
     >
       <header
         style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--space-2)',
-          padding: 'var(--space-3) var(--space-3)',
+          padding: 'var(--space-3) var(--space-4)',
           borderBottom: '1px solid var(--border)',
+          background: 'color-mix(in oklch, var(--surface-0) 92%, transparent)',
+          backdropFilter: 'blur(8px)',
         }}
       >
         <span
@@ -165,10 +170,10 @@ export const KanbanColumn = forwardRef<HTMLElement, KanbanColumnProps>(function 
         style={{
           flex: 1,
           minHeight: 0,
-          padding: 'var(--space-2)',
+          padding: 'var(--space-3) var(--space-3) var(--space-4)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 'var(--space-2)',
+          gap: 'var(--space-3)',
           overflowY: 'auto',
           background: isOver ? 'color-mix(in oklch, var(--accent) 6%, transparent)' : 'transparent',
           transition: 'background var(--motion-fast) var(--ease-out)',

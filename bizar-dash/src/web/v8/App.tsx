@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from './shell/AppShell.js';
 import { Topbar } from './shell/Topbar.js';
 import { Sidebar, type SidebarSection } from './shell/Sidebar.js';
@@ -10,6 +10,8 @@ import { useCommandPaletteHotkey } from './ui/navigation/CommandPalette.js';
 import { useTheme } from './ui/theme/useTheme.js';
 import { useDensity } from './ui/theme/useDensity.js';
 import { PageSkeleton } from './shell/PageSkeleton.js';
+import { useFetch } from './data/useFetch.js';
+import { useWsMessage } from './data/useWebSocket.js';
 import {
   Activity,
   Bot,
@@ -75,21 +77,60 @@ export function App(): JSX.Element {
     mainRef.current?.focus({ preventScroll: true });
   }, [activeId]);
 
+  // Live counts for the sidebar. Polled on mount + WS refresh.
+  const tasksRes = useFetch<{ tasks?: { id: string; status: string }[]; count?: number }>('/api/tasks');
+  const goalsRes = useFetch<{ goals?: { id: string }[]; count?: number }>('/api/goals');
+  const bizarAgentsRes = useFetch<{ agents?: { id: string; status: string }[] }>('/api/agents');
+  const ccAgentsRes = useFetch<{ agents?: { id: string; status: string }[] }>('/api/cc-agents');
+  const skillsRes = useFetch<{ skills?: { name: string }[]; count?: number }>('/api/skills?kind=skills');
+  const mcpsRes = useFetch<{ skills?: { name: string }[]; count?: number }>('/api/skills?kind=mcps');
+  const hooksRes = useFetch<{ skills?: { name: string }[]; count?: number }>('/api/skills?kind=hooks');
+
+  // Bump on any relevant WS event so counts refresh.
+  const [bump, setBump] = useState(0);
+  useEffect(() => {
+    const inc = (): void => setBump((n) => n + 1);
+    window.addEventListener('focus', inc);
+    return () => { window.removeEventListener('focus', inc); };
+  }, []);
+  useWsMessage('tasks:change', () => setBump((n) => n + 1));
+  useWsMessage('goals:change', () => setBump((n) => n + 1));
+  useWsMessage('agents:change', () => setBump((n) => n + 1));
+
+  const counts = useMemo(() => {
+    const tasks = tasksRes.data?.tasks || [];
+    const tasksTotal = tasks.length || tasksRes.data?.count || 0;
+    const goals = (goalsRes.data?.goals || []).length || goalsRes.data?.count || 0;
+    const bAgents = bizarAgentsRes.data?.agents || [];
+    const cAgents = ccAgentsRes.data?.agents || [];
+    const runningBizar = bAgents.filter((a) => a.status === 'busy' || a.status === 'working').length;
+    const totalAgents = bAgents.length + cAgents.length;
+    return {
+      tasksTotal,
+      goals,
+      agentsRunning: `${runningBizar + cAgents.length}/${totalAgents || 0}`,
+      skills: skillsRes.data?.count ?? skillsRes.data?.skills?.length,
+      mcps: mcpsRes.data?.count ?? mcpsRes.data?.skills?.length,
+      hooks: hooksRes.data?.count ?? hooksRes.data?.skills?.length,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksRes.data, goalsRes.data, bizarAgentsRes.data, ccAgentsRes.data, skillsRes.data, mcpsRes.data, hooksRes.data, bump]);
+
   const sections: SidebarSection[] = [
     {
       id: 'workspace',
       label: 'Workspace',
       items: [
         { id: 'overview', label: 'Overview', icon: iconFor('overview') },
-        { id: 'tasks', label: 'Tasks', icon: iconFor('tasks'), count: 47 },
-        { id: 'goals', label: 'Goals', icon: iconFor('goals'), count: 3 },
+        { id: 'tasks', label: 'Tasks', icon: iconFor('tasks'), count: counts.tasksTotal },
+        { id: 'goals', label: 'Goals', icon: iconFor('goals'), count: counts.goals },
       ],
     },
     {
       id: 'operations',
       label: 'Operations',
       items: [
-        { id: 'agents', label: 'Agents', icon: iconFor('agents'), count: '8/16' },
+        { id: 'agents', label: 'Agents', icon: iconFor('agents'), count: counts.agentsRunning },
         { id: 'activity', label: 'Activity', icon: iconFor('activity'), live: true },
         { id: 'memory', label: 'Memory', icon: iconFor('memory') },
       ],
@@ -98,9 +139,9 @@ export function App(): JSX.Element {
       id: 'libraries',
       label: 'Libraries',
       items: [
-        { id: 'skills', label: 'Skills', icon: iconFor('skills'), count: 18 },
-        { id: 'mcps', label: 'MCPs', icon: iconFor('mcps'), count: 3 },
-        { id: 'hooks', label: 'Hooks', icon: iconFor('hooks'), count: 5 },
+        { id: 'skills', label: 'Skills', icon: iconFor('skills'), count: counts.skills ?? 0 },
+        { id: 'mcps', label: 'MCPs', icon: iconFor('mcps'), count: counts.mcps ?? 0 },
+        { id: 'hooks', label: 'Hooks', icon: iconFor('hooks'), count: counts.hooks ?? 0 },
       ],
     },
     {

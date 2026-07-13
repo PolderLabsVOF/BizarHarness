@@ -444,17 +444,64 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit:** F-041 dashboard consistency + mobile UI pass
-  (worktree branch `worktree-consistency-mobile-ui-pass`, ready for
-  review as a draft PR)
-- **Released:** v7.0.0 — F-040 dashboard redesign shipped
-  (39/39 VCR = 1.000, typecheck 0 errors, SDK tests 294/294, web
-  tests 582/586 [4 pre-existing v5.3.0-era failures in
-  `tests/a11y/forms.test.tsx`], CLI tests 109/109, build clean)
-- **Branch:** master (v7.0.0 tagged); F-041 lands via draft PR
-- **Phase:** F-041 ready to ship — desktop + mobile consistency
-  polish on top of v7.0.0; Chat.tsx and Settings long-tail deferred
-  per original plan
+- **Last commit:** pending — Sprint S10–S15 v8 dashboard live-data + control plane
+- **Released:** v8.0.0 dashboard production cutover (master tagged).
+  v8 now reads from real backend: `/api/tasks`, `/api/goals`, `/api/agents`,
+  `/api/cc-agents`, `/api/activity`, `/api/skills`, `/api/settings`,
+  `/api/projects`, plus the new `/api/spawn/agent` (Bizar is a harness for
+  Claude Code — all Bizar agents spawn CC under the hood).
+- **Branch:** master; v8.0.0 ships, v7 + mobile deleted per release plan.
+- **Phase:** S10–S15 verification — all live, all typecheck green, all tests green.
+  v8 dashboard is a real orchestration center.
+
+### v8 dashboard orchestration summary
+
+- **S10 (live data):** every view reads from the backend. No seeded
+  sample data anywhere. Sidebar live counts driven by useFetch +
+  WS (`tasks:change` / `goals:change` / `agents:change`).
+- **S11 (agent detail):** `AgentDetail` drawer (right) with live
+  status, prompt input, restart, kill, copy-id, live SSE stream
+  (`/api/agent-stream/live`).
+- **S12 (goals control):** editable goals, KR management, status
+  selects, all mirrored to `PROGRESS.md` (CC `/goal` single source
+  of truth). Progress parser round-trips KR ids via `<!-- kr-id
+  taskId: X -->` HTML-comment markers.
+- **S13 (palette + topbar):** ⌘K with Spawn / Tasks / Projects /
+  Settings groups. New `POST /api/spawn/agent` route wraps
+  `claude-runner.spawnAgent`. Spawns inherit the active project's
+  cwd.
+- **S14 (kanban):** visual overhaul — CSS grid with
+  `gridAutoFlow: 'column'`, full-width columns, no wasted gutters.
+- **S15 (changelog):** activity view rewritten as a day-grouped
+  visual changelog with diffs, source filter chips, NDJSON export,
+  lookback slider.
+- **S15b (settings):** 18 sections (added Task defaults + Agent
+  defaults), all PATCHed to `/api/settings` with per-row
+  persistence, IntersectionObserver-tracked sticky nav.
+
+### Cross-cutting wiring
+
+- **Goals ↔ Tasks decompose:** `POST /api/goals/:id/decompose`
+  creates one task per KR with `metadata.goalId/krId`. `PATCH
+  /api/tasks/:id/status` reverse-syncs via `syncGoalFromTask`
+  exported from `goals.mjs` and imported into `tasks.mjs`. KR ids
+  round-trip across PROGRESS.md via HTML-comment metadata.
+- **Spawn route:** `POST /api/spawn/agent` accepts `{ agent, prompt,
+  worktree?, model? }`, defaults `worktree` to active project cwd
+  (from `/api/projects`), logs to `~/.bizar/logs/spawn-<ts>.log`,
+  broadcasts `agents:change` over WS.
+- **CC `/goal` mirror:** `.claude/commands/goal.md` writes via
+  `/api/goals` → same PROGRESS.md file the dashboard reads/writes.
+  Single source of truth.
+
+### Verification
+
+- `make check` — 0 errors.
+- Dashboard vitest: **244/244** pass (33 files, +37 vs S9 baseline).
+- SDK vitest: **294/294** pass.
+- Backend `tests/goals-decompose.test.mjs`: **4/4** pass.
+- Plugin pre-existing failures (190/207) are out-of-scope v5.3.0
+  era and unchanged.
 
 ## What landed in v7.0.0
 
