@@ -4,6 +4,8 @@ import { Inline } from '../ui/primitives/Inline.js';
 import { Cluster } from '../ui/primitives/Cluster.js';
 import { Separator } from '../ui/primitives/Separator.js';
 import { ThemeToggle, DensityToggle } from '../ui/theme/ThemeToggle.js';
+import { useFetch } from '../data/useFetch.js';
+import { useConnectionState } from '../data/useWebSocket.js';
 
 /**
  * Topbar — the 56px horizontal bar at the top of the v8 shell.
@@ -63,6 +65,11 @@ export function Topbar({ brand, center, actions, status }: TopbarProps): JSX.Ele
 }
 
 function BrandPlaceholder(): JSX.Element {
+  const projects = useFetch<{ projects?: Array<{ id: string; name?: string }>; active?: string | { id: string } }>('/api/projects');
+  const list = projects.data?.projects ?? [];
+  const activeId = typeof projects.data?.active === 'string' ? projects.data.active : projects.data?.active?.id;
+  const active = list.find((p) => p.id === activeId);
+  const label = active?.name || activeId || 'workspace';
   return (
     <Inline align="center" gap={2}>
       <Box
@@ -83,26 +90,42 @@ function BrandPlaceholder(): JSX.Element {
       </Box>
       <Box style={{ fontWeight: 600, fontSize: 'var(--fs-14)' }}>Bizar</Box>
       <Separator orientation="vertical" style={{ height: 16 }} />
-      <Box style={{ fontSize: 'var(--fs-13)', color: 'var(--fg-muted)' }}>workspace ▾</Box>
+      <Box
+        title={activeId ?? undefined}
+        data-testid="topbar-active-project"
+        style={{ fontSize: 'var(--fs-13)', color: 'var(--fg-muted)' }}
+      >
+        {label} ▾
+      </Box>
     </Inline>
   );
 }
 
 function DefaultActions({ status }: { status?: ReactNode }): JSX.Element {
+  const connected = useConnectionState();
   return (
     <>
       {status ?? (
-        <Inline align="center" gap={1} style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+        <Inline
+          align="center"
+          gap={1}
+          aria-live="polite"
+          data-testid="topbar-connection-state"
+          style={{
+            fontSize: 'var(--fs-12)',
+            color: connected ? 'var(--success)' : 'var(--warning)',
+          }}
+        >
           <Box
             aria-hidden="true"
             style={{
               width: 8,
               height: 8,
               borderRadius: 'var(--radius-pill)',
-              background: 'var(--success)',
+              background: connected ? 'var(--success)' : 'var(--warning)',
             }}
           />
-          <span>live</span>
+          <span>{connected ? 'live' : 'offline'}</span>
         </Inline>
       )}
       <Separator orientation="vertical" style={{ height: 16 }} />

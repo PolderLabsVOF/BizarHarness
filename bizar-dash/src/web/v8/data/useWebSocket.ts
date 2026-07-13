@@ -10,7 +10,7 @@
  * one socket per view would multiply the server's fan-out cost.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { WsMessage } from './types.js';
 
 type Listener = (msg: WsMessage) => void;
@@ -135,6 +135,14 @@ export function useWsConnected(cb: (connected: boolean) => void): void {
       state.connectedListeners.delete(cb);
     };
   }, [cb]);
+}
+
+/** Subscribe-friendly hook that returns the current connection state.
+ *  Re-renders on connect/disconnect. */
+export function useConnectionState(): boolean {
+  const [connected, setConnected] = useState<boolean>(state.socket?.readyState === WebSocket.OPEN);
+  useWsConnected(setConnected);
+  return connected;
 }
 
 /** Test seam — reset module state. Not exported from the barrel. */
