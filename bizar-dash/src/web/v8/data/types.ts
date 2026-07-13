@@ -88,7 +88,7 @@ export interface Goal {
 export interface Task {
   id: string;
   title: string;
-  status?: 'queued' | 'doing' | 'done' | 'blocked' | 'archived';
+  status?: 'backlog' | 'queued' | 'doing' | 'done' | 'blocked' | 'archived';
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   description?: string;
   branch?: string;
@@ -96,7 +96,21 @@ export interface Task {
   comments?: number;
   attachments?: number;
   assignee?: string;
+  /** Free-form tags the server accepts (string array). */
+  tags?: string[];
+  /** Ids of subtasks owned by this task. */
+  subtasks?: string[];
+  /** Ids of tasks that must finish before this one. */
+  dependencies?: string[];
+  /** Recurring rule (server-typed, varies). */
+  recurring?: unknown;
+  /** Server-tracked metadata bag (progress lives here). */
   metadata?: Record<string, unknown>;
+  /** Activity log (server-typed). */
+  activity?: Array<{ id?: string; type?: string; ts?: string; data?: unknown }>;
+  /** Internal server timer (used by `POST /api/tasks/:id/timer`). */
+  _timerStart?: number;
+  /** Comments count (server convenience field). */
   createdAt?: number;
   updatedAt?: number;
 }
