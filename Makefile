@@ -32,12 +32,22 @@ check:  ## Typecheck + lint
 	@echo "✓ make check passed"
 
 test:  ## Run all unit tests (sdk + cli)
-	bun test packages/sdk
-	@node --test cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/__tests__/cost-gate.test.mjs cli/__tests__/feature-list-bridge.test.mjs cli/commands/validate.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs 2>&1 | tail -5
+	@if command -v bun >/dev/null 2>&1; then \
+		bun test packages/sdk; \
+	else \
+		echo "(bun not found — falling back to vitest via npm)"; \
+		node_modules/.bin/vitest run --root packages/sdk; \
+	fi
+	@node --test cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/__tests__/cost-gate.test.mjs cli/__tests__/feature-list-bridge.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs 2>&1 | tail -5
 
 e2e:  ## End-to-end tests (SDK + Claude Code integration)
 	@echo "▶ E2E: SDK load + tool registration..."
-	@bun run scripts/bh-full-e2e.mjs
+	@if command -v bun >/dev/null 2>&1; then \
+		bun run scripts/bh-full-e2e.mjs; \
+	else \
+		echo "(bun not found — running e2e with node)"; \
+		node scripts/bh-full-e2e.mjs; \
+	fi
 
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json

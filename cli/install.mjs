@@ -1,5 +1,4 @@
 import chalk from 'chalk';
-import boxen from 'boxen';
 import { existsSync, lstatSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
