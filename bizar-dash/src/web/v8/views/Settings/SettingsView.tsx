@@ -71,6 +71,30 @@ import { fetchJson, FetchError } from '../../data/fetcher.js';
 
 type Section = { id: string; title: string; icon: LucideIcon };
 
+const COMMON_TIMEZONES: readonly string[] = [
+  'UTC',
+  'America/Los_Angeles',
+  'America/Denver',
+  'America/Chicago',
+  'America/New_York',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Amsterdam',
+  'Europe/Paris',
+  'Europe/Madrid',
+  'Europe/Stockholm',
+  'Europe/Istanbul',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Asia/Shanghai',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+];
+
 const SECTIONS: Section[] = [
   { id: 'general', title: 'General', icon: SettingsIcon },
   { id: 'theme', title: 'Theme', icon: Palette },
@@ -94,17 +118,29 @@ const SECTIONS: Section[] = [
 
 interface SettingsState {
   workspaceName: string;
+  workspaceTimezone: string;
   defaultView: 'overview' | 'tasks' | 'goals' | 'agents' | 'activity' | 'settings';
   themeAccent: string;
   densityBaseFont: number;
   tasksCompact: boolean;
   memoryCompact: boolean;
+  activityCompact: boolean;
   paletteHistory: boolean;
   paletteFuzzy: boolean;
   notifyAgentFinished: boolean;
   notifyCiFailed: boolean;
   notifyTokenBudget: boolean;
   notifyDailyDigest: boolean;
+  notifyChannel: 'toast' | 'system' | 'both' | 'silent';
+  storagePath: string;
+  cachePath: string;
+  sessionsPath: string;
+  cacheSizeMb: number;
+  hookPreToolUse: boolean;
+  hookPostToolUse: boolean;
+  hookTaskStart: boolean;
+  hookTaskResume: boolean;
+  hookUserPromptSubmit: boolean;
   activityRetentionDays: number;
   memoryAutoCommit: boolean;
   memoryScopeDefault: 'project' | 'global' | 'all';
@@ -121,17 +157,29 @@ interface SettingsState {
 
 const DEFAULTS: SettingsState = {
   workspaceName: 'Bizar Harness',
+  workspaceTimezone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC',
   defaultView: 'overview',
   themeAccent: '#5b8def',
   densityBaseFont: 13,
   tasksCompact: false,
   memoryCompact: true,
+  activityCompact: false,
   paletteHistory: true,
   paletteFuzzy: true,
   notifyAgentFinished: true,
   notifyCiFailed: true,
   notifyTokenBudget: true,
   notifyDailyDigest: false,
+  notifyChannel: 'toast',
+  storagePath: '~/.bizar/store.db',
+  cachePath: '~/.cache/bizar',
+  sessionsPath: '~/.claude/sessions',
+  cacheSizeMb: 256,
+  hookPreToolUse: true,
+  hookPostToolUse: true,
+  hookTaskStart: true,
+  hookTaskResume: true,
+  hookUserPromptSubmit: true,
   activityRetentionDays: 30,
   memoryAutoCommit: true,
   memoryScopeDefault: 'all',
@@ -164,14 +212,17 @@ function NativeSelect({
   defaultValue,
   onChange,
   children,
+  id_attr,
 }: {
   value?: string;
   defaultValue?: string;
   onChange?: (v: string) => void;
   children: ReactNode;
+  id_attr?: string;
 }): JSX.Element {
   return (
     <select
+      id={id_attr}
       value={value}
       defaultValue={defaultValue}
       onChange={(e) => onChange?.(e.target.value)}
@@ -343,6 +394,18 @@ export function SettingsView(): JSX.Element {
               }
             />
             <SettingsRow
+              id="workspace-timezone"
+              label="Timezone"
+              description="Used for activity timestamps + digests."
+              control={
+                <NativeSelect value={settings.workspaceTimezone} onChange={(v) => update('workspaceTimezone', v)} id_attr="workspace-timezone-select">
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </NativeSelect>
+              }
+            />
+            <SettingsRow
               id="default-view"
               label="Default view on launch"
               control={
@@ -451,7 +514,7 @@ export function SettingsView(): JSX.Element {
           <SettingsSection id="density-rules" title="Density rules" description="Override density per surface." icon={<Sparkles size={14} aria-hidden />}>
             <SettingsRow id="tasks-compact" label="Tasks page — compact by default" control={<Switch checked={settings.tasksCompact} onCheckedChange={(v) => update('tasksCompact', v)} />} />
             <SettingsRow id="memory-compact" label="Memory page — compact by default" control={<Switch checked={settings.memoryCompact} onCheckedChange={(v) => update('memoryCompact', v)} />} />
-            <SettingsRow id="activity-compact" label="Activity page — compact by default" control={<Switch defaultChecked={Boolean((settings as unknown as Record<string, unknown>).activityCompact)} onCheckedChange={(v) => void patch('activityCompact', v)} />} />
+            <SettingsRow id="activity-compact" label="Activity page — compact by default" control={<Switch checked={settings.activityCompact} onCheckedChange={(v) => update('activityCompact', v)} />} />
           </SettingsSection>
 
           {/* 5. Command palette */}
@@ -495,7 +558,7 @@ export function SettingsView(): JSX.Element {
               label="Channel"
               description="Where notifications render."
               control={
-                <NativeSelect defaultValue="toast">
+                <NativeSelect value={settings.notifyChannel} onChange={(v) => update('notifyChannel', v as SettingsState['notifyChannel'])}>
                   <option value="toast">In-app toast</option>
                   <option value="system">OS notification</option>
                   <option value="both">Both</option>
@@ -507,10 +570,56 @@ export function SettingsView(): JSX.Element {
 
           {/* 8. Storage */}
           <SettingsSection id="storage" title="Storage" description="Where local data lives." icon={<Database size={14} aria-hidden />}>
-            <SettingsRow id="store-path" label="Local store path" control={<code style={{ fontFamily: 'var(--font-mono)' }}>~/.bizar/store.db</code>} />
-            <SettingsRow id="cache-path" label="Cache directory" control={<code style={{ fontFamily: 'var(--font-mono)' }}>~/.cache/bizar</code>} />
-            <SettingsRow id="sessions-path" label="Claude Code sessions" control={<code style={{ fontFamily: 'var(--font-mono)' }}>~/.claude/sessions</code>} />
-            <SettingsRow id="cache-size" label="Cache size" control={<Count loading={false} value={42} />} />
+            <SettingsRow
+              id="store-path"
+              label="Local store path"
+              control={
+                <Input
+                  value={settings.storagePath}
+                  onChange={(e) => update('storagePath', e.target.value)}
+                  style={{ width: 280, fontFamily: 'var(--font-mono)' }}
+                />
+              }
+            />
+            <SettingsRow
+              id="cache-path"
+              label="Cache directory"
+              control={
+                <Input
+                  value={settings.cachePath}
+                  onChange={(e) => update('cachePath', e.target.value)}
+                  style={{ width: 280, fontFamily: 'var(--font-mono)' }}
+                />
+              }
+            />
+            <SettingsRow
+              id="sessions-path"
+              label="Claude Code sessions"
+              control={
+                <Input
+                  value={settings.sessionsPath}
+                  onChange={(e) => update('sessionsPath', e.target.value)}
+                  style={{ width: 280, fontFamily: 'var(--font-mono)' }}
+                />
+              }
+            />
+            <SettingsRow
+              id="cache-size"
+              label="Cache budget"
+              description="Soft cap (MB) before LRU eviction."
+              control={
+                <Inline align="center" gap={2}>
+                  <Slider
+                    value={[settings.cacheSizeMb]}
+                    onValueChange={(v) => update('cacheSizeMb', v[0] ?? 256)}
+                    min={64}
+                    max={4096}
+                    step={32}
+                  />
+                  <code style={{ fontFamily: 'var(--font-mono)' }}>{settings.cacheSizeMb} MB</code>
+                </Inline>
+              }
+            />
             <SettingsRow
               id="store-gc"
               label="Garbage collect"
@@ -604,11 +713,11 @@ export function SettingsView(): JSX.Element {
           {/* 12. Hooks */}
           <SettingsSection id="hooks" title="Hooks" description="Executable hook scripts." icon={<Wrench size={14} aria-hidden />}>
             <SettingsRow id="hooks-count" label="Registered hooks" control={<Count loading={hooksRes.loading} value={hooksRes.data?.skills?.length ?? 0} />} />
-            <SettingsRow id="hooks-pretool" label="PreToolUse" description="Block writes to .env / secrets / node_modules." control={<Switch defaultChecked />} />
-            <SettingsRow id="hooks-posttool" label="PostToolUse" description="Log tool latency to ~/.config/bizar/hook-logs/." control={<Switch defaultChecked />} />
-            <SettingsRow id="hooks-taskstart" label="TaskStart" description="Prime AI with project context." control={<Switch defaultChecked />} />
-            <SettingsRow id="hooks-taskresume" label="TaskResume" description="Re-read state + check git log." control={<Switch defaultChecked />} />
-            <SettingsRow id="hooks-prompt" label="UserPromptSubmit" description="Tag prompts for routing." control={<Switch defaultChecked />} />
+            <SettingsRow id="hooks-pretool" label="PreToolUse" description="Block writes to .env / secrets / node_modules." control={<Switch checked={settings.hookPreToolUse} onCheckedChange={(v) => update('hookPreToolUse', v)} />} />
+            <SettingsRow id="hooks-posttool" label="PostToolUse" description="Log tool latency to ~/.config/bizar/hook-logs/." control={<Switch checked={settings.hookPostToolUse} onCheckedChange={(v) => update('hookPostToolUse', v)} />} />
+            <SettingsRow id="hooks-taskstart" label="TaskStart" description="Prime AI with project context." control={<Switch checked={settings.hookTaskStart} onCheckedChange={(v) => update('hookTaskStart', v)} />} />
+            <SettingsRow id="hooks-taskresume" label="TaskResume" description="Re-read state + check git log." control={<Switch checked={settings.hookTaskResume} onCheckedChange={(v) => update('hookTaskResume', v)} />} />
+            <SettingsRow id="hooks-prompt" label="UserPromptSubmit" description="Tag prompts for routing." control={<Switch checked={settings.hookUserPromptSubmit} onCheckedChange={(v) => update('hookUserPromptSubmit', v)} />} />
           </SettingsSection>
 
           {/* 13. Activity */}

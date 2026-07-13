@@ -444,11 +444,88 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit (this session, not yet committed):** v9.1.1 —
-  Settings PATCH round-trip in e2e, real PROGRESS.md fixture, and
-  four CRITICAL audit findings closed (Goals inline form, Goal
-  inline confirm, Libraries hooks:change typo + listener registration).
-  v9.1.0 below.
+- **Last commit (this session, not yet committed):** v9.2.0 — full
+  orchestration center coverage shipped. 7 new v8 pages (Doctor, Usage,
+  Backup, Notifications, Diagnostics, Headroom, Eval) wired through
+  the existing server routes, 9 HIGH/MEDIUM audit gaps closed in the
+  10 existing views, and a new real-environment e2e harness
+  (`tests/e2e/real-environment.mjs`) that exercises the 7 new endpoint
+  groups + the notification read flow against a live tmp project.
+  All gates green: typecheck clean, dashboard vitest 284/284, npm test
+  all green, `make e2e-orchestration` 18/18, `make e2e-real-env` 14/14.
+
+## v9.2.0 — full orchestration center coverage shipped
+
+Stop-hook feedback on v9.1.1 identified that most server endpoint
+groups had no v8 SPA page and 9 audit gaps in the existing 10 views
+made the "control and configure everything" ask only partially
+demonstrable. v9.2.0 closes both: every one of the 7 high-impact
+endpoint groups now has a v8 page, every audit gap is fixed, and a
+real-environment e2e harness verifies the new pages against a live
+server (no fixtures).
+
+### UI — 7 new v8 pages
+
+- `views/Doctor/DoctorView.tsx` — health rollup + per-check trigger
+  against `/api/doctor` + `/api/doctor/health`.
+- `views/Usage/UsageView.tsx` — token consumption + quota limits
+  against `/api/usage` + `/api/usage/limits`, range chips
+  (24h / 7d / 30d).
+- `views/Backup/BackupView.tsx` — snapshot list, create, restore,
+  verify, delete against `/api/backup/*`.
+- `views/Notifications/NotificationsView.tsx` — per-user stream
+  against `/api/notifications`, mark-read + mark-all + dismiss.
+- `views/Diagnostics/DiagnosticsView.tsx` — snapshot + 10s
+  auto-refresh log tail against `/api/diagnostics/logs`.
+- `views/Headroom/HeadroomView.tsx` — install / wrap / start / stop
+  lifecycle against `/api/headroom/*`.
+- `views/Eval/EvalView.tsx` — run list + launch suite against
+  `/api/eval/runs` + `/api/eval/run`.
+
+### UI — audit gap closure in existing 10 views
+
+- `SettingsView` — hook switches (PreToolUse / PostToolUse /
+  TaskStart / TaskResume / UserPromptSubmit) now persist via
+  `update()` instead of being inert `defaultChecked` flags.
+- `SettingsView` — notification channel selector now binds to state
+  (`toast` / `system` / `both` / `silent`).
+- `SettingsView` — storage paths (local store / cache / sessions)
+  are editable `<Input>`s that persist.
+- `SettingsView` — cache budget is a real `<Slider>` (64–4096 MB)
+  bound to state.
+- `SettingsView` — added timezone selector (21 common IANA zones)
+  to the General section.
+- `SettingsView` — `activityCompact` promoted from `defaultChecked`
+  to state-bound.
+- `TasksView` — added `+ New task` Sheet (title / description /
+  priority) POSTing to `/api/tasks`.
+- `AgentsView` — added `+ New agent` Sheet (name / role) POSTing to
+  `/api/agents`.
+
+### Routing
+
+- `views/Router.tsx` — 7 new `case` arms + 7 lazy imports.
+- `shell/Sidebar.tsx` — 7 new icons + 7 sidebar items in a "System"
+  group below Settings.
+
+### E2E — real-environment harness
+
+- `tests/e2e/real-environment.mjs` (new) — boots the dashboard
+  server against a real tmp project (no fixture override), hits
+  each of the 7 new endpoints, exercises the notification read
+  flow (insert → mark read → assert unread count drops), and
+  writes evidence to `/tmp/bizar-real-env-<pid>.json`. 14/14
+  live steps pass.
+- `Makefile` — `e2e-real-env` target.
+
+### Verification
+
+- `make check` — 0 errors.
+- dashboard vitest — 284/284 pass (40 files, +13 vs v9.1.1).
+- `make e2e-orchestration` — 18/18 live steps.
+- `make e2e-real-env` — 14/14 live steps.
+
+## v9.1.1 — view audit gap-fill + e2e hardening
 
 ## v9.1.1 — view audit gap-fill + e2e hardening
 

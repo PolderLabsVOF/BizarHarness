@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
+import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { KanbanBoard } from '../../ui/kanban/KanbanBoard.js';
 import { KanbanColumn, type KanbanColumnData } from '../../ui/kanban/KanbanColumn.js';
 import { KanbanCard, useKanbanCardSortable, type KanbanCardData } from '../../ui/kanban/KanbanCard.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { TaskDetail } from '../../ui/tasks/TaskDetail.js';
+import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
+import { Input } from '../../ui/controls/Input.js';
+import { Textarea } from '../../ui/controls/Textarea.js';
+import { Button } from '../../ui/controls/Button.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
-import { fetchJson } from '../../data/fetcher.js';
+import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { Task, WsMessage } from '../../data/types.js';
 
 type TaskStatus = 'queued' | 'doing' | 'blocked' | 'done' | 'archived';
@@ -87,6 +93,22 @@ export function TasksView(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [createDraft, setCreateDraft] = useState<{ title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' } | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const saveCreate = async (): Promise<void> => {
+    if (createDraft === null || !createDraft.title.trim()) return;
+    setCreating(true);
+    try {
+      await fetchJson('/api/tasks', { method: 'POST', body: { title: createDraft.title.trim(), description: createDraft.description, priority: createDraft.priority, status: 'queued' } });
+      setCreateDraft(null);
+      tasks.refetch();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const onWsRemove = useCallback((msg: WsMessage) => {
     const m = msg as { type?: string; id?: string };
@@ -183,7 +205,14 @@ export function TasksView(): JSX.Element {
       <ViewHeader
         title="Tasks"
         description="Drag cards across columns. Click a card to edit. Use the checkbox to select multiple."
-        actions={error ? <span style={{ color: 'var(--danger)' }}>{error}</span> : null}
+        actions={
+          <Inline gap={2} align="center">
+            {error !== null && <span role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--fs-12)' }}>{error}</span>}
+            <Button variant="primary" onClick={() => setCreateDraft({ title: '', description: '', priority: 'medium' })} data-testid="task-create-open">
+              <Plus size={14} aria-hidden /> New task
+            </Button>
+          </Inline>
+        }
       />
       {selectedCount > 0 && (
         <div role="region" aria-label="Bulk actions" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', background: 'color-mix(in oklch, var(--accent) 8%, var(--surface-0))' }}>
@@ -239,6 +268,63 @@ export function TasksView(): JSX.Element {
           }}
         />
       )}
+
+      {/* v9.2.0 — create-task Sheet. Replaces the missing "new task"
+          action that the audit flagged as a HIGH gap. */}
+      <Sheet open={createDraft !== null} onOpenChange={(o) => { if (!o) setCreateDraft(null); }}>
+        <SheetContent side="right" title="New task">
+          {createDraft !== null && (
+            <Stack gap={4} style={{ padding: 'var(--space-4)' }}>
+              <Stack gap={2}>
+                <label htmlFor="task-create-title" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Title</label>
+                <Input
+                  id="task-create-title"
+                  value={createDraft.title}
+                  onChange={(e) => setCreateDraft({ ...createDraft, title: e.target.value })}
+                  placeholder="What needs doing?"
+                  disabled={creating}
+                  data-testid="task-create-title"
+                />
+              </Stack>
+              <Stack gap={2}>
+                <label htmlFor="task-create-desc" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Description (optional)</label>
+                <Textarea
+                  id="task-create-desc"
+                  value={createDraft.description}
+                  onChange={(e) => setCreateDraft({ ...createDraft, description: e.target.value })}
+                  rows={4}
+                  disabled={creating}
+                  data-testid="task-create-desc"
+                />
+              </Stack>
+              <Stack gap={2}>
+                <label htmlFor="task-create-priority" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Priority</label>
+                <select
+                  id="task-create-priority"
+                  value={createDraft.priority}
+                  onChange={(e) => setCreateDraft({ ...createDraft, priority: e.target.value as typeof createDraft.priority })}
+                  disabled={creating}
+                  data-testid="task-create-priority"
+                  style={{ height: 32, padding: '0 var(--space-2)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--surface-0)', color: 'var(--fg)', fontSize: 'var(--fs-13)' }}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </Stack>
+              <Inline gap={2}>
+                <Button variant="primary" onClick={() => { void saveCreate(); }} disabled={creating || !createDraft.title.trim()} data-testid="task-create-submit">
+                  Create task
+                </Button>
+                <Button variant="ghost" onClick={() => setCreateDraft(null)} disabled={creating}>
+                  Cancel
+                </Button>
+              </Inline>
+            </Stack>
+          )}
+        </SheetContent>
+      </Sheet>
     </Stack>
   );
 }

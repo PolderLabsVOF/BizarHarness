@@ -53,6 +53,10 @@ e2e-orchestration:  ## Sprint S25 — boot dashboard, hit merged endpoints, exer
 	@echo "▶ E2E orchestration: boot + snapshot + agents + goals + ws + admin..."
 	@BIZAR_E2E_SKIP_RESTART=$${BIZAR_E2E_SKIP_RESTART:-1} node tests/e2e/orchestration-center.mjs --port=$${BIZAR_E2E_PORT:-4173}
 
+e2e-real-env:  ## Sprint S36 — real-env harness: every new v9.2.0 page endpoint against live server
+	@echo "▶ E2E real-environment: 7 new pages, real server, no fixture..."
+	@node tests/e2e/real-environment.mjs --port=$${BIZAR_E2E_PORT:-4183}
+
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json
 	@echo "▶ Computing VCR ratio from feature_list.json..."
@@ -94,4 +98,4 @@ mcp-serve:  ## Run the Bizar MCP server (stdio) for Claude Code
 	@node packages/sdk/dist/mcp/bin.js
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve
+.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve

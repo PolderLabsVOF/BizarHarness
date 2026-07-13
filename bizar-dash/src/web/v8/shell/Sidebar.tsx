@@ -5,16 +5,23 @@ import { Separator } from '../ui/primitives/Separator.js';
 import { ScrollArea } from '../ui/primitives/ScrollArea.js';
 import {
   Activity,
+  Bell,
   Bot,
   CheckSquare,
   ChevronsLeft,
   ChevronsRight,
+  FlaskConical,
   Goal,
   Layers,
   Library,
+  Network,
   Settings as SettingsIcon,
+  Stethoscope,
   Target,
   Cpu,
+  Archive,
+  BarChart3,
+  Terminal,
   type LucideIcon,
 } from 'lucide-react';
 import { cx } from '../ui/utils/cx.js';
@@ -119,7 +126,16 @@ const DEFAULT_SECTIONS: SidebarSection[] = [
   {
     id: 'system',
     label: 'System',
-    items: [{ id: 'settings', label: 'Settings', icon: SettingsIcon }],
+    items: [
+      { id: 'doctor', label: 'Doctor', icon: Stethoscope },
+      { id: 'usage', label: 'Usage', icon: BarChart3 },
+      { id: 'backup', label: 'Backups', icon: Archive },
+      { id: 'notifications', label: 'Notifications', icon: Bell },
+      { id: 'diagnostics', label: 'Diagnostics', icon: Terminal },
+      { id: 'headroom', label: 'Headroom', icon: Network },
+      { id: 'eval', label: 'Eval', icon: FlaskConical },
+      { id: 'settings', label: 'Settings', icon: SettingsIcon },
+    ],
   },
 ];
 

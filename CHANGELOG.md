@@ -1,5 +1,69 @@
 # Changelog
 
+## v9.2.0 — feat: full orchestration center coverage shipped
+
+Stop-hook feedback on v9.1.1 identified 27 server route groups with no
+v8 SPA page and 9 HIGH/MEDIUM audit gaps in the existing 10 views.
+v9.2.0 ships 7 new v8 pages, closes every audit gap, and adds a
+real-environment e2e harness so the new pages are verified against
+the live server (no fixtures).
+
+UI — 7 new v8 pages
+- **Doctor** (`/doctor`) — health rollup + per-check triggers against
+  `/api/doctor` + `/api/doctor/health`.
+- **Usage** (`/usage`) — token consumption + quota limits from
+  `/api/usage` + `/api/usage/limits`, range chips (24h / 7d / 30d).
+- **Backup** (`/backup`) — snapshot list, create, restore, verify,
+  delete against `/api/backup/*`.
+- **Notifications** (`/notifications`) — per-user stream against
+  `/api/notifications`, mark-read + mark-all + dismiss.
+- **Diagnostics** (`/diagnostics`) — snapshot + 10s auto-refresh log
+  tail against `/api/diagnostics/logs`.
+- **Headroom** (`/headroom`) — install / wrap / start / stop lifecycle
+  against `/api/headroom/*`.
+- **Eval** (`/eval`) — run list + launch suite against
+  `/api/eval/runs` + `/api/eval/run`.
+
+UI — audit gap closure in existing 10 views
+- **SettingsView** — hook switches (PreToolUse / PostToolUse /
+  TaskStart / TaskResume / UserPromptSubmit) now persist via
+  `update()` instead of being inert `defaultChecked` flags.
+- **SettingsView** — notification channel selector now binds to
+  state (`toast` / `system` / `both` / `silent`).
+- **SettingsView** — storage paths (local store / cache / sessions)
+  are editable `<Input>`s that persist.
+- **SettingsView** — cache budget is a real `<Slider>` (64–4096 MB)
+  bound to state.
+- **SettingsView** — added timezone selector (21 common IANA zones)
+  to the General section.
+- **SettingsView** — `activityCompact` promoted from `defaultChecked`
+  to state-bound.
+- **TasksView** — added `+ New task` Sheet (title / description /
+  priority) POSTing to `/api/tasks`.
+- **AgentsView** — added `+ New agent` Sheet (name / role) POSTing to
+  `/api/agents`.
+
+Routing
+- `Router.tsx` adds 7 lazy-loaded view imports + 7 `case` arms.
+- `Sidebar.tsx` adds a "System" group with 7 new entries below
+  Settings, with `Stethoscope` / `BarChart3` / `Archive` / `Bell` /
+  `Terminal` / `Network` / `FlaskConical` icons.
+
+E2E — real-environment harness
+- `tests/e2e/real-environment.mjs` boots the dashboard server against
+  a real tmp project (no fixture override), hits each of the 7 new
+  endpoints, exercises the notification read flow (insert → mark
+  read → assert unread count drops), and writes evidence to
+  `/tmp/bizar-real-env-<pid>.json`. 14/14 live steps pass.
+- `make e2e-real-env` target added.
+
+Verification
+- `make check` 0 errors (typecheck + sdk + cli + dashboard vitest).
+- dashboard vitest 284/284 across 40 files.
+- `make e2e` 109/109 + cli 9/9.
+- `make e2e-orchestration` 18/18 live steps.
+- `make e2e-real-env` 14/14 live steps.
+
 ## v9.1.1 — fix: close CRITICAL view audit gaps + e2e hardening
 
 Stop-hook feedback on v9.1.0 found the dashboard still shipped with

@@ -7,10 +7,14 @@ import { AgentCard, type AgentCardProps, type AgentStatus } from '../../ui/agent
 import { AgentDetail } from '../../ui/agents/AgentDetail.js';
 import { Chip } from '../../ui/data/Chip.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
+import { Input } from '../../ui/controls/Input.js';
+import { Button } from '../../ui/controls/Button.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
+import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { BizarAgent, CCAgent, WsMessage } from '../../data/types.js';
-import { Bot, Cpu } from 'lucide-react';
+import { Bot, Cpu, Plus } from 'lucide-react';
 
 const SOURCE_STORAGE_KEY = 'bizar.agents.sourceFilter';
 const SOURCE_LABELS = {
@@ -93,6 +97,24 @@ export function AgentsView(): JSX.Element {
   const [ccList, setCCList] = useState<CCAgent[]>([]);
   const [initialized, setInitialized] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState<{ name: string; role: string } | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const saveCreate = async (): Promise<void> => {
+    if (createDraft === null || !createDraft.name.trim()) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await fetchJson('/api/agents', { method: 'POST', body: { name: createDraft.name.trim(), role: createDraft.role.trim() || 'agent' } });
+      setCreateDraft(null);
+      bizar.refetch();
+    } catch (err) {
+      setCreateError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   useEffect(() => {
     if (!initialized && bizar.data?.agents !== undefined && cc.data?.agents !== undefined) {
@@ -140,6 +162,11 @@ export function AgentsView(): JSX.Element {
       <ViewHeader
         title="Agents"
         description="Bizar agents (frontmatter-driven) and Claude Code background agents."
+        actions={
+          <Button variant="primary" onClick={() => setCreateDraft({ name: '', role: '' })} data-testid="agent-create-open">
+            <Plus size={14} aria-hidden /> New agent
+          </Button>
+        }
       />
       <Inline gap={2}>
         {(['all', 'bizar', 'claude-code'] as SourceFilter[]).map((id) => (
@@ -193,6 +220,48 @@ export function AgentsView(): JSX.Element {
           />
         );
       })()}
+
+      {/* v9.2.0 — create-agent Sheet. Closes the audit-flagged "no way
+          to add a new agent" HIGH gap. */}
+      <Sheet open={createDraft !== null} onOpenChange={(o) => { if (!o) setCreateDraft(null); }}>
+        <SheetContent side="right" title="New agent">
+          {createDraft !== null && (
+            <Stack gap={4} style={{ padding: 'var(--space-4)' }}>
+              <Stack gap={2}>
+                <label htmlFor="agent-create-name" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Name</label>
+                <Input
+                  id="agent-create-name"
+                  value={createDraft.name}
+                  onChange={(e) => setCreateDraft({ ...createDraft, name: e.target.value })}
+                  placeholder="e.g. frigg"
+                  disabled={creating}
+                  data-testid="agent-create-name"
+                />
+              </Stack>
+              <Stack gap={2}>
+                <label htmlFor="agent-create-role" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Role (optional)</label>
+                <Input
+                  id="agent-create-role"
+                  value={createDraft.role}
+                  onChange={(e) => setCreateDraft({ ...createDraft, role: e.target.value })}
+                  placeholder="e.g. code-review"
+                  disabled={creating}
+                  data-testid="agent-create-role"
+                />
+              </Stack>
+              {createError !== null && <span role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--fs-12)' }}>{createError}</span>}
+              <Inline gap={2}>
+                <Button variant="primary" onClick={() => { void saveCreate(); }} disabled={creating || !createDraft.name.trim()} data-testid="agent-create-submit">
+                  Create agent
+                </Button>
+                <Button variant="ghost" onClick={() => setCreateDraft(null)} disabled={creating}>
+                  Cancel
+                </Button>
+              </Inline>
+            </Stack>
+          )}
+        </SheetContent>
+      </Sheet>
     </Stack>
   );
 }

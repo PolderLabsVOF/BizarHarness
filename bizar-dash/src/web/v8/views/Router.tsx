@@ -42,6 +42,27 @@ const SchedulesView = lazy(() =>
 const BackgroundJobsView = lazy(() =>
   import('./BackgroundJobs/BackgroundJobsView.js').then((m) => ({ default: m.BackgroundJobsView })),
 );
+const DoctorView = lazy(() =>
+  import('./Doctor/DoctorView.js').then((m) => ({ default: m.DoctorView })),
+);
+const UsageView = lazy(() =>
+  import('./Usage/UsageView.js').then((m) => ({ default: m.UsageView })),
+);
+const BackupView = lazy(() =>
+  import('./Backup/BackupView.js').then((m) => ({ default: m.BackupView })),
+);
+const NotificationsView = lazy(() =>
+  import('./Notifications/NotificationsView.js').then((m) => ({ default: m.NotificationsView })),
+);
+const DiagnosticsView = lazy(() =>
+  import('./Diagnostics/DiagnosticsView.js').then((m) => ({ default: m.DiagnosticsView })),
+);
+const HeadroomView = lazy(() =>
+  import('./Headroom/HeadroomView.js').then((m) => ({ default: m.HeadroomView })),
+);
+const EvalView = lazy(() =>
+  import('./Eval/EvalView.js').then((m) => ({ default: m.EvalView })),
+);
 
 // Library surfaces now pull live data inside the view itself.
 // LibraryItemProps is imported so its type stays exported via this
@@ -75,6 +96,20 @@ export function useViewForId(id: string): JSX.Element {
         return <SchedulesView />;
       case 'background':
         return <BackgroundJobsView />;
+      case 'doctor':
+        return <DoctorView />;
+      case 'usage':
+        return <UsageView />;
+      case 'backup':
+        return <BackupView />;
+      case 'notifications':
+        return <NotificationsView />;
+      case 'diagnostics':
+        return <DiagnosticsView />;
+      case 'headroom':
+        return <HeadroomView />;
+      case 'eval':
+        return <EvalView />;
       default:
         return <OverviewView />;
     }

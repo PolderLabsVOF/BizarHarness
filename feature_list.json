@@ -1392,11 +1392,79 @@
       ],
       "passed": "2026-07-13",
       "commit": "pending"
+    },
+    {
+      "id": "F-064",
+      "behavior": "S33 — 7 new v8 pages (Doctor, Usage, Backup, Notifications, Diagnostics, Headroom, Eval) wired through existing server routes. Each page renders the standard pattern (ViewHeader + Skeleton + EmptyState + Card + fetchJson) and is reachable from the Sidebar's new System group. Router.tsx adds 7 lazy() imports + 7 case arms.",
+      "verification": "make check 0 errors. dashboard vitest passes 7 new view cases (one per new view) via installFetchMock URL-pattern matching. Sidebar counts all 7 new entries in the System group.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Doctor/DoctorView.tsx (new)",
+        "bizar-dash/src/web/v8/views/Usage/UsageView.tsx (new)",
+        "bizar-dash/src/web/v8/views/Backup/BackupView.tsx (new)",
+        "bizar-dash/src/web/v8/views/Notifications/NotificationsView.tsx (new)",
+        "bizar-dash/src/web/v8/views/Diagnostics/DiagnosticsView.tsx (new)",
+        "bizar-dash/src/web/v8/views/Headroom/HeadroomView.tsx (new)",
+        "bizar-dash/src/web/v8/views/Eval/EvalView.tsx (new)",
+        "bizar-dash/src/web/v8/views/Router.tsx (7 lazy imports + 7 case arms)",
+        "bizar-dash/src/web/v8/shell/Sidebar.tsx (7 new icons + 7 entries in System group)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
+    },
+    {
+      "id": "F-065",
+      "behavior": "S34 — SettingsView audit gap closure. 9 HIGH/MEDIUM findings closed: hook switches (PreToolUse/PostToolUse/TaskStart/TaskResume/UserPromptSubmit) now persist via update() instead of inert defaultChecked; notification channel select bound to state (toast/system/both/silent); storage paths (local store/cache/sessions) editable Inputs that persist; cache budget real Slider (64-4096 MB) bound to state; timezone selector (21 common IANA zones) added to General section; activityCompact promoted to state-bound. NativeSelect gains optional id_attr prop for test targeting of the timezone selector.",
+      "verification": "make check 0 errors. audit-fixes.test.tsx 6/6 cases (SettingsView timezone, TasksView create flow, AgentsView create flow) pass.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Settings/SettingsView.tsx (12 new state fields + 21-entry COMMON_TIMEZONES + wired controls)",
+        "bizar-dash/src/web/v8/ui/controls/Select.tsx (id_attr prop for test targeting)",
+        "bizar-dash/src/web/v8/__tests__/audit-fixes.test.tsx (new, 6 cases)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
+    },
+    {
+      "id": "F-066",
+      "behavior": "S35 — TasksView and AgentsView create forms via Sheet. TasksView gains a + New task button opening a Sheet with title/description/priority fields, POSTing to /api/tasks. AgentsView gains a + New agent button opening a Sheet with name/role fields, POSTing to /api/agents. Replaces the v9.0.5-era window.prompt/window.confirm blockers.",
+      "verification": "make check 0 errors. audit-fixes.test.tsx covers both create flows (Sheet opens, fields render, submit posts to correct endpoint).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Tasks/TasksView.tsx (+ New task Sheet + createDraft + saveCreate)",
+        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (+ New agent Sheet + createDraft + saveCreate)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
+    },
+    {
+      "id": "F-067",
+      "behavior": "S36 — Real-environment e2e harness. tests/e2e/real-environment.mjs boots the dashboard server against a real tmp project (no fixture override), hits each of the 7 new endpoint groups (Doctor, Usage, Backup, Notifications, Diagnostics, Headroom, Eval), exercises the notification read flow (insert → mark read → assert unread count drops), and writes evidence to /tmp/bizar-real-env-<pid>.json. Exits non-zero on any failure. Seeds ~/.config/bizar/notifications.jsonl with PID-keyed entry to test the read flow. Makefile e2e-real-env target added.",
+      "verification": "make e2e-real-env reports All 14 live steps passed. Evidence JSON contains 14 ok=true entries with detail strings naming each endpoint + the notification read flow assertions.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "test",
+      "created": "2026-07-13",
+      "files_touched": [
+        "tests/e2e/real-environment.mjs (new, 14 live steps)",
+        "Makefile (e2e-real-env target + .PHONY line update)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
     }
   ],
   "vcr": {
-    "passing": 45,
-    "activated": 45,
+    "passing": 49,
+    "activated": 49,
     "ratio": 1
   }
 }
