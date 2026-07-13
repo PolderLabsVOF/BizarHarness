@@ -114,6 +114,32 @@ export async function installPluginFromGlobal(opts = {}) {
     return false;
   }
 
+  // ── Auto-build: if src exists but dist/ does not, run the tsc build ──
+  // v8.0.2 — fresh npm installs ship only `plugins/bizar/index.ts` and no
+  // compiled entry. The plugin loader previously bailed here with the
+  // misleading "Plugin source not found" message even though the directory
+  // was present; the real blocker was the missing compiled output. Try to
+  // build once before giving up. Best-effort: build failures keep the old
+  // error path (still false return) so the user gets a clear next step.
+  const distEntry = join(pluginPath, 'dist', 'index.js');
+  if (!existsSync(distEntry)) {
+    try {
+      const { buildPlugin } = await import('./provision-claude.mjs');
+      const buildRes = await buildPlugin();
+      if (buildRes.ok && !buildRes.skipped) {
+        console.log(chalk.dim(`    auto-built plugin (${buildRes.message})`));
+      } else if (!buildRes.ok) {
+        console.log(chalk.yellow(`  ⚠ Plugin auto-build failed: ${buildRes.message}`));
+        console.log(chalk.dim('    Run `bizar install` from a checkout, or:'));
+        console.log(chalk.dim('      npx tsc -p plugins/bizar/tsconfig.json'));
+        return false;
+      }
+    } catch (err) {
+      console.log(chalk.yellow(`  ⚠ Plugin auto-build threw: ${err.message}`));
+      return false;
+    }
+  }
+
   await mkdir(destDir, { recursive: true });
 
   async function copyRecursive(srcDir, dstDir) {

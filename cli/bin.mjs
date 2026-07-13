@@ -75,6 +75,38 @@ if (
   await ensureSetup({ silent: true });
 }
 
+// ── Build guard (v8.0.2) ─────────────────────────────────────────────────────
+// The dashboard imports `packages/sdk/dist/memory/index.js` and the
+// plugin loader expects `plugins/bizar/dist/index.js`. On a fresh npm
+// install these directories are missing because the tarball ships only
+// TS source. Build them once on entry so `bizar dash start` (and any
+// other subcommand that touches the dashboard) never crashes with
+// `Cannot find module .../packages/sdk/dist/memory/index.js` or
+// `Plugin source not found at .../plugins/bizar`. Both builders are
+// idempotent and skip when dist/ already exists.
+if (
+  !isHelpRequest &&
+  !isVersionRequest &&
+  !process.env.BIZAR_SKIP_BUILD
+) {
+  try {
+    const { buildSdk, buildPlugin } = await import('./provision-claude.mjs');
+    const sdkRes = await buildSdk();
+    if (sdkRes.ok && !sdkRes.skipped) {
+      console.error(chalk.dim(`  → ${sdkRes.message}`));
+    }
+    const plugRes = await buildPlugin();
+    if (plugRes.ok && !plugRes.skipped) {
+      console.error(chalk.dim(`  → ${plugRes.message}`));
+    }
+  } catch (err) {
+    // Best-effort: never abort the user command on a build hiccup.
+    if (process.env.BIZAR_DEBUG) {
+      console.error(chalk.dim(`  [build-guard] ${err.message}`));
+    }
+  }
+}
+
 // ── Banner ─────────────────────────────────────────────────────────────────────
 
 function showBanner() {

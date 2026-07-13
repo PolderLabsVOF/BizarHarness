@@ -224,6 +224,84 @@ export async function buildSdk({ dryRun = false } = {}) {
 }
 
 /**
+ * Build the Bizar plugin shim (`plugins/bizar/`) so the loader can find
+ * `plugins/bizar/dist/index.js` at runtime. Same root cause as `buildSdk()`:
+ * the npm-installed package ships `plugins/bizar/index.ts` (TS source) but
+ * nothing at `dist/`. Without this build step, `bizar dash start` reports
+ * `Plugin source not found at .../plugins/bizar` from `cli/install.mjs:installPluginBizar`
+ * (which is misleading — the dir exists, just the compiled entry doesn't).
+ *
+ * v8.0.2 — same bun/npx/tsc strategy as `buildSdk()`. We compile the
+ * single TS entry `plugins/bizar/index.ts` to `plugins/bizar/dist/index.js`
+ * via the existing `plugins/bizar/tsconfig.json`.
+ *
+ * Idempotent: skips when `plugins/bizar/dist/index.js` already exists.
+ * Non-fatal: returns `{ ok: false, message }` rather than throwing.
+ */
+export async function buildPlugin({ dryRun = false } = {}) {
+  const pluginRoot = join(REPO_ROOT, 'plugins', 'bizar');
+  const srcEntry = join(pluginRoot, 'index.ts');
+  const distEntry = join(pluginRoot, 'dist', 'index.js');
+
+  if (!existsSync(srcEntry)) {
+    return { ok: true, skipped: true, message: `Plugin src not found at ${srcEntry} — skipping build` };
+  }
+
+  if (existsSync(distEntry)) {
+    return { ok: true, skipped: true, message: `Plugin dist already present — skipping build (delete ${join(pluginRoot, 'dist')} to force)` };
+  }
+
+  if (dryRun) {
+    return { ok: true, skipped: false, message: `would build plugin at ${pluginRoot}` };
+  }
+
+  // Same PATH-resolution dance as buildSdk(): npm-global scripts may have
+  // a stripped PATH that doesn't include ~/.bun/bin or the npm bin dir,
+  // so bun's tsc shim isn't visible to the child shell.
+  const bunFromHome = join(process.env.HOME || '', '.bun', 'bin', 'bun');
+  let cmd, args, childEnv;
+  if (existsSync(bunFromHome)) {
+    cmd = bunFromHome;
+    args = ['x', 'tsc', '-p', 'plugins/bizar/tsconfig.json'];
+    const pathDelim = process.platform === 'win32' ? ';' : ':';
+    const bunBin = dirname(bunFromHome);
+    let npmGlobalBin = '';
+    try {
+      const npmRootG = execSync('npm root -g', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      npmGlobalBin = join(dirname(npmRootG), '..', 'bin');
+    } catch {
+      npmGlobalBin = process.platform === 'win32'
+        ? join(process.env.APPDATA || '', 'npm')
+        : join(process.env.HOME || '', '.local', 'bin');
+    }
+    const pathParts = [bunBin];
+    if (npmGlobalBin && existsSync(npmGlobalBin)) pathParts.push(npmGlobalBin);
+    pathParts.push(process.env.PATH || '');
+    childEnv = { ...process.env, PATH: pathParts.join(pathDelim) };
+  } else if (haveCmd('bun')) {
+    cmd = 'bun';
+    args = ['x', 'tsc', '-p', 'plugins/bizar/tsconfig.json'];
+    childEnv = process.env;
+  } else {
+    cmd = 'npx';
+    args = ['--yes', 'tsc', '-p', 'plugins/bizar/tsconfig.json'];
+    childEnv = process.env;
+  }
+
+  try {
+    logInfo(`building plugin with \`${cmd} ${args.join(' ')}\` (REPO_ROOT=${REPO_ROOT})`);
+    execFileSync(cmd, args, { cwd: REPO_ROOT, stdio: 'pipe', timeout: 180_000, env: childEnv });
+    if (existsSync(distEntry)) {
+      return { ok: true, skipped: false, message: 'Plugin built (dist/index.js present)' };
+    }
+    return { ok: false, message: `build completed but ${distEntry} still missing — check tsconfig outDir` };
+  } catch (err) {
+    const stderr = err.stderr ? err.stderr.toString().split('\n').slice(0, 5).join(' | ') : '(no stderr)';
+    return { ok: false, message: `Plugin build failed: ${stderr}` };
+  }
+}
+
+/**
  * Build the dashboard SPA (Vite production bundle) so the Node server
  * in `bizar-dash/src/server/server.mjs` can serve the React UI from
  * `bizar-dash/dist/index.html` + `dist/assets/*`. Without this step,
@@ -986,6 +1064,14 @@ export async function runProvision(opts = {}) {
   // the SDK ships as TS source only. See `buildSdk()` JSDoc for the
   // full story.
   await runStep('Building SDK',     () => buildSdk({ dryRun }));
+
+  // ── 4b.2. Build the Bizar plugin shim so dist/index.js exists. ────
+  // The loader expects `plugins/bizar/dist/index.js`. Without this
+  // step v8.0.x npm installs crash on `bizar dash start` with
+  // `Plugin source not found at .../plugins/bizar` from
+  // `cli/install.mjs:installPluginBizar` (the dir exists, but the
+  // compiled entry does not). See `buildPlugin()` JSDoc.
+  await runStep('Building plugin',  () => buildPlugin({ dryRun }));
 
   // ── 4c. Build the dashboard SPA so dist/index.html exists. ───────────
   // The Node server in `bizar-dash/src/server/server.mjs` serves the
