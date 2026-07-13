@@ -22,6 +22,7 @@ import {
   Archive,
   BarChart3,
   Terminal,
+  MessageSquareText,
   type LucideIcon,
 } from 'lucide-react';
 import { cx } from '../ui/utils/cx.js';
@@ -103,6 +104,7 @@ const DEFAULT_SECTIONS: SidebarSection[] = [
       { id: 'overview', label: 'Overview', icon: Layers },
       { id: 'tasks', label: 'Tasks', icon: CheckSquare, count: 47, active: true },
       { id: 'goals', label: 'Goals', icon: Target, count: 3 },
+      { id: 'chat', label: 'Chat', icon: MessageSquareText, live: true },
     ],
   },
   {

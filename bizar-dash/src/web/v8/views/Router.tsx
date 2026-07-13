@@ -63,6 +63,9 @@ const HeadroomView = lazy(() =>
 const EvalView = lazy(() =>
   import('./Eval/EvalView.js').then((m) => ({ default: m.EvalView })),
 );
+const ChatView = lazy(() =>
+  import('./Chat/ChatView.js').then((m) => ({ default: m.ChatView })),
+);
 
 // Library surfaces now pull live data inside the view itself.
 // LibraryItemProps is imported so its type stays exported via this
@@ -110,6 +113,8 @@ export function useViewForId(id: string): JSX.Element {
         return <HeadroomView />;
       case 'eval':
         return <EvalView />;
+      case 'chat':
+        return <ChatView />;
       default:
         return <OverviewView />;
     }

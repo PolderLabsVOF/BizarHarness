@@ -1668,3 +1668,86 @@ User request: "control and configure everything in the dashboard".
 **Next sprint:** chat surface rewrite (deferred from earlier
 PLANs) + mobile dashboard v8 cutover (the user said "professional
 and data-driven"; chat is the last non-data surface).
+
+---
+
+## In Progress — v9.3.0 — Close chat surface + remaining endpoint groups
+
+User stop-hook feedback on v9.2.0: "the user's ask of a 'full
+control and orchestration center' is only partially satisfied —
+chat is the primary non-data surface and was deferred. Also no
+evidence of 'professional and data-driven' expansion across all 27
+server endpoint groups (only 7 high-impact groups added in this
+sprint; remaining groups not yet wired)."
+
+Scope answer: **Both — chat + remaining endpoints.** Triage
+produced 9 P0 routes + 11 P1 routes. P0/P1 ship in this v9.3.0
+release; P2/P3 (workspaces, digests, distill, ocr, users, pair,
+fs, themes, goal-planner, tailscale-alone, minimax) defer.
+
+### Sprint S37 — Foundations (shipped in commit `69aa434`)
+
+Goal: get the chat streaming protocol types + a reusable chat
+primitive layer in place so the S38+ sprints write views against
+stable contracts.
+
+- `bizar-dash/src/web/v8/data/types.ts` — added 7 new `WsMessage`
+  union members: `chat:delta`, `chat:message`, `chat:done`,
+  `chat:error`, `history:new`, `projects:change`,
+  `update:progress`. Plus `ChatMessage`, `ChatSession`,
+  `ClaudeSession`, `HistoryEvent` interfaces.
+- `bizar-dash/src/web/v8/ui/chat/EventStream.tsx` (new) — SSE
+  reader wrapper (`readEventStream(url, init, handlers)`) with
+  `AbortSignal` cancellation and `onChunk` / `onEvent` / `onDone`
+  / `onError` callbacks.
+- `bizar-dash/src/web/v8/ui/chat/MessageBubble.tsx` (new) —
+  memo'd user/assistant/system/tool bubble + `EmptyTranscript`
+  fallback. Uses existing `react-markdown` dep.
+- `bizar-dash/src/web/v8/ui/chat/ChatDrawer.tsx` (new) — right-
+  side Sheet wrapping transcript + composer with optimistic
+  append + streaming.
+- `bizar-dash/src/web/v8/ui/index.ts` — exports the 3 chat
+  primitives.
+- `bizar-dash/src/web/v8/__tests__/chat-types.test.ts` (new) —
+  4 vitest cases guard the new WS event type union.
+- `tests/e2e/ws-chat-roundtrip.mjs` (new) — boots server via
+  `createServer({port, projectRoot, clineConfigDir, bizarRoot})`,
+  opens `ws://.../ws`, broadcasts synthetic envelopes via
+  `broadcast()` from `server.mjs`. Asserts handshake +
+  `chat:delta` / `chat:message` / `chat:done` / `chat:error` /
+  `projects:change` / `history:new` arrive. **6/6 pass.**
+
+### Sprint S38 — Chat view (shipped in this commit, F-068)
+
+Goal: full chat UI from a v8 page.
+
+- `bizar-dash/src/web/v8/views/Chat/ChatView.tsx` (new, ~355
+  LOC) — three-pane layout: session list (left, 260px),
+  transcript (center, `MessageBubble` per turn), composer
+  (bottom, `Textarea` + Send). Live updates via
+  `useFetch<ChatPayload>('/api/chat')` and
+  `useFetch<SessionsPayload>('/api/chat/sessions')`. New session
+  POSTs to `/api/chat/sessions`, regenerate POSTs to
+  `/api/chat/regenerate`, audit POSTs to `/api/chat/audit`.
+  Streaming send posts to `/api/chat` via `readEventStream`.
+  Delete uses inline confirm row (no `window.confirm`). Refresh
+  on `chat:message` WS event.
+- `bizar-dash/src/web/v8/views/Router.tsx` — `case 'chat'` arm
+  + lazy `ChatView` import.
+- `bizar-dash/src/web/v8/shell/Sidebar.tsx` — `Chat` entry under
+  Workspace (between Goals and Agents), `MessageSquareText`
+  icon, `live: true` indicator.
+- `bizar-dash/src/web/v8/__tests__/chat-view.test.tsx` (new,
+  ~141 LOC) — 6 vitest cases: mounts empty transcript, lists
+  sessions, renders existing bubbles, posts to
+  `/api/chat/sessions` on `+ New`, posts to
+  `/api/chat/regenerate` on regen click, posts to
+  `/api/chat/audit` on Audit button. **6/6 pass.**
+
+**Verification:**
+- `make check` → 0 errors.
+- `npm run typecheck` → 0 errors.
+- `npx vitest run` (web) → **42 test files / 294 tests pass.**
+
+**Next sprint:** S39 — Projects + Claude sessions + Claude
+session detail (P0).
