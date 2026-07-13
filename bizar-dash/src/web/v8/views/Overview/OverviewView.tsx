@@ -15,6 +15,7 @@ import { Card, CardBody, CardHeader } from '../../ui/data/Card.js';
 import { Badge } from '../../ui/data/Badge.js';
 import { ActivityFeed, type ActivityItem } from '../../ui/activity/ActivityFeed.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
+import { Sparkline } from '../../ui/data/Sparkline.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import type { ActivityEvent, Snapshot } from '../../data/types.js';
@@ -59,6 +60,20 @@ function eventToItem(e: ActivityEvent, idx: number): ActivityItem {
 export function OverviewView(): JSX.Element {
   const snapshot = useFetch<Snapshot>('/api/snapshot');
   const activity = useFetch<{ events?: ActivityEvent[] }>('/api/activity?limit=10');
+
+  // v10-S2 — real time-series trends. `/api/usage?range=24h` returns a
+  // `daily` array (one bucket per day). We thread the token counts into
+  // a Sparkline slot on the Tokens StatTile so the KPI isn't point-in-
+  // time any more. Snapshot / activity / usage are independent requests
+  // — if usage 500s the tile still renders.
+  interface UsageDay { date?: string; tokens?: number }
+  interface UsageResponse { daily?: UsageDay[]; totals?: { tokens?: number } }
+  const usage = useFetch<UsageResponse>('/api/usage?range=24h');
+  const tokenSeries = useMemo<readonly number[]>(() => {
+    const days = usage.data?.daily ?? [];
+    if (days.length < 2) return [];
+    return days.map((d) => (typeof d.tokens === 'number' ? d.tokens : 0));
+  }, [usage.data]);
 
   // Live-tail new events. Keep them in a small in-memory ring buffer.
   const [liveEvents, setLiveEvents] = useState<ActivityEvent[]>([]);
@@ -119,6 +134,13 @@ export function OverviewView(): JSX.Element {
           value={tokens.last24h ? `${(tokens.last24h / 1_000_000).toFixed(1)}M` : '—'}
           trend={tokens.trend || 'flat'}
           delta="last 24h"
+          sparkline={
+            tokenSeries.length >= 2 ? (
+              <span data-testid="overview-tokens-sparkline">
+                <Sparkline data={tokenSeries} width={140} height={28} />
+              </span>
+            ) : undefined
+          }
         />
       </StatGrid>
 
