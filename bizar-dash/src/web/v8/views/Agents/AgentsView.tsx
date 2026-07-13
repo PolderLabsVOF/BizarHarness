@@ -11,11 +11,12 @@ import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
 import { Input } from '../../ui/controls/Input.js';
 import { Button } from '../../ui/controls/Button.js';
+import { Badge } from '../../ui/data/Badge.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { BizarAgent, CCAgent, WsMessage } from '../../data/types.js';
-import { AlertTriangle, Bot, Cpu, Plus } from 'lucide-react';
+import { AlertTriangle, Bot, Cpu, Plus, RotateCw } from 'lucide-react';
 import { AgentHierarchy } from './AgentHierarchy.js';
 
 const SOURCE_STORAGE_KEY = 'bizar.agents.sourceFilter';
@@ -31,6 +32,19 @@ function readPersistedSource(): SourceFilter {
   if (typeof localStorage === 'undefined') return 'all';
   const v = localStorage.getItem(SOURCE_STORAGE_KEY);
   return VALID_SOURCES.includes(v as SourceFilter) ? (v as SourceFilter) : 'all';
+}
+
+/** relativeTimeMs — "12s", "3m", "2h", "5d". Returns "—" for missing/future timestamps. */
+function relativeTimeMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const delta = Math.max(0, Date.now() - ms);
+  const sec = Math.floor(delta / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
 }
 
 /**
@@ -104,6 +118,7 @@ export function AgentsView(): JSX.Element {
   const [createDraft, setCreateDraft] = useState<{ name: string; role: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [restartingNames, setRestartingNames] = useState<Set<string>>(() => new Set());
 
   const saveCreate = async (): Promise<void> => {
     if (createDraft === null || !createDraft.name.trim()) return;
@@ -117,6 +132,26 @@ export function AgentsView(): JSX.Element {
       setCreateError(err instanceof FetchError ? err.message : (err as Error).message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  // v9.5.0 S48 — inline Restart from the stuck banner. One-click recovery
+  // without forcing the user to drill into the per-agent Sheet. The
+  // server broadcasts agents:change on success so the banner refreshes.
+  const restartStuck = async (name: string): Promise<void> => {
+    setRestartingNames((prev) => new Set(prev).add(name));
+    try {
+      await fetchJson(`/api/agents/${encodeURIComponent(name)}/restart`, { method: 'POST' });
+      stuck.refetch();
+      bizar.refetch();
+    } catch (err) {
+      setCreateError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setRestartingNames((prev) => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
     }
   };
 
@@ -182,12 +217,41 @@ export function AgentsView(): JSX.Element {
             </Button>
           }
         >
-          <Inline align="center" gap={2}>
-            <AlertTriangle size={14} aria-hidden style={{ color: 'var(--warning)' }} />
-            <span>
-              {(stuck.data?.stuck ?? []).length} agent{stuck.data && stuck.data.stuck && stuck.data.stuck.length === 1 ? '' : 's'} stuck (no heartbeat &gt;5m)
-            </span>
-          </Inline>
+          <Stack gap={2}>
+            <Inline align="center" gap={2}>
+              <AlertTriangle size={14} aria-hidden style={{ color: 'var(--warning)' }} />
+              <span>
+                {(stuck.data?.stuck ?? []).length} agent{stuck.data && stuck.data.stuck && stuck.data.stuck.length === 1 ? '' : 's'} stuck (no heartbeat &gt;5m)
+              </span>
+            </Inline>
+            <Stack gap={1}>
+              {(stuck.data?.stuck ?? []).map((s) => {
+                const restarting = restartingNames.has(s.name);
+                return (
+                  <Inline key={s.name} align="center" justify="between" gap={2} data-testid={`agents-stuck-row-${s.name}`}>
+                    <Inline gap={2} align="center">
+                      <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)' }}>{s.name}</code>
+                      <Badge tone="danger">{s.status || 'stuck'}</Badge>
+                      {typeof s.lastSeen === 'number' && s.lastSeen > 0 && (
+                        <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+                          last seen {relativeTimeMs(s.lastSeen)}
+                        </span>
+                      )}
+                    </Inline>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={restarting}
+                      onClick={() => { void restartStuck(s.name); }}
+                      data-testid={`agents-stuck-restart-${s.name}`}
+                    >
+                      <RotateCw size={12} aria-hidden /> {restarting ? 'Restarting…' : 'Restart'}
+                    </Button>
+                  </Inline>
+                );
+              })}
+            </Stack>
+          </Stack>
         </Banner>
       )}
       <Inline align="center" justify="between" wrap gap={2}>
