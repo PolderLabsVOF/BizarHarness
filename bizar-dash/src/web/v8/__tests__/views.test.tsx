@@ -78,16 +78,20 @@ describe('OverviewView', () => {
 describe('TasksView', () => {
   it('renders kanban column titles for a non-empty task list', async () => {
     mockFetch([
-      { url: '/api/tasks', body: { tasks: [{ id: 't1', title: 'Ship v8 dashboard', status: 'doing', priority: 'high' }] } },
+      // `/api/tasks` returns a bare array (matches routes/tasks.mjs:83).
+      { url: '/api/tasks', body: [{ id: 't1', title: 'Ship v8 dashboard', status: 'doing', priority: 'high' }] },
     ]);
     render(<Providers><TasksView /></Providers>);
     await waitFor(() => {
-      expect(screen.getByText(/Backlog/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Backlog/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/In progress/i)).toBeInTheDocument();
-    expect(screen.getByText(/In review/i)).toBeInTheDocument();
-    expect(screen.getByText(/Done/i)).toBeInTheDocument();
-    expect(screen.getByText(/Archived/i)).toBeInTheDocument();
+    // Column titles live in the column's header <div> (aria-label set to the
+    // column title); filter chips also use the same text — getByLabelText
+    // picks the column header specifically.
+    const columnTitles = [/Backlog/i, /Queued/i, /In progress/i, /In review/i, /Done/i, /Archived/i];
+    for (const title of columnTitles) {
+      expect(screen.getByLabelText(title)).toBeInTheDocument();
+    }
     expect(screen.getByText(/Ship v8 dashboard/i)).toBeInTheDocument();
   });
 });

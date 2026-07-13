@@ -4,6 +4,58 @@
 > right now. Updated at every clock-in AND clock-out. New sessions start
 > by reading this file before touching any code.
 
+## In Progress — Tasks Page → Cline-Style Kanban Overhaul
+
+User-requested Tasks page overhaul (F-0XX). The v8 kanban shipped in Sprint S5
+was a thin shim over `GET /api/tasks`. This overhaul brings it to parity with
+[Cline's local multi-agent kanban](https://github.com/cline/kanban) — per-card
+lifecycle, live status, multi-select, inline creation, full edit dialog — using
+only the project's custom-built components (no shadcn).
+
+**Branch:** `worktree-kanban-overhaul` (worktree at `.claude/worktrees/kanban-overhaul`).
+
+**New components shipped** (`bizar-dash/src/web/v8/ui/kanban/`):
+- `KanbanProgress.tsx` — compact progress bar (inline + block layouts) for cards and detail panels.
+- `KanbanCardBadges.tsx` — chip row for tags / assignee / recurring / subtask / dependency counts.
+- `KanbanToolbar.tsx` — top-of-board toolbar. Three modes: normal / selecting (bulk) / filtered. Swaps to bulk actions (move / archive / delete) when ≥1 card is selected.
+- `KanbanEmptyColumn.tsx` — dashed drop target shown when a column has 0 cards.
+- `KanbanDetailDialog.tsx` — full-edit modal (title, description, status, priority, assignee, branch, due date, tags, subtasks, dependencies, activity timeline). `PUT /api/tasks/:id` for save; `POST /api/tasks/:id/start` for queued tasks; `POST /api/tasks/:id/timer` for timer toggle; `POST /api/tasks/:id/archive`; `DELETE /api/tasks/:id`.
+- `useKanbanSelection.ts` — `Set<string>` of selected card ids with `toggle` / `add` / `remove` / `set` / `clear` helpers + Esc-to-clear keyboard shortcut (skips text inputs).
+
+**Extended components:**
+- `KanbanCard.tsx` — added selection checkbox, progress rendering, badge row, metadata (assignee, recurring, subtasks, deps, tags), onClick handler to open detail.
+- `KanbanBoard.tsx` — added `useKanbanBoard()` context for descendants to read selection state.
+- `KanbanContextMenu.tsx` — added `extraItems` prop for card-specific actions (e.g. "Start agent" on queued cards).
+
+**Rewritten:**
+- `TasksView.tsx` — full Cline-style surface: 6 columns (Backlog / Queued / In progress / In review / Done / Archived), WIP limit on In progress, search + priority filter chips, multi-select toolbar with bulk move / archive / delete via `POST /api/tasks/bulk`, full right-click context menu (open / duplicate / copy link / move left / move right / archive / delete / start agent for queued), keyboard shortcuts (`n` for new task, `Esc` to clear selection), live WS sync (`tasks:change` / `tasks:delete` / `task:progress`), new-task dialog.
+- `TasksKanbanPlaceholder.tsx` — DELETED (TasksView now does the real work).
+- `data/types.ts` — extended `Task` interface with `tags`, `subtasks`, `dependencies`, `recurring`, `activity`, `_timerStart`. Added `'backlog'` to status union.
+
+**Bug fixes baked into the rewrite:**
+1. `TasksView` was reading `tasks.data?.tasks` (wrapped shape) while `GET /api/tasks` returns a bare array (`routes/tasks.mjs:83`). Production cards never hydrated from the initial fetch — only WS events populated them. Now reads `Task[]` directly.
+2. `TasksView` had render-phase `setState` (line 91-93) triggering React warnings + undefined behavior on re-render. Moved data sync into `useEffect`.
+
+**Wired:**
+- `App.tsx` — replaced hardcoded sidebar tasks count (47) with live count from `/api/snapshot` (`active + queued + blocked + done`).
+
+**Tests:**
+- `__tests__/kanban.test.tsx` — extended with new components (Progress, CardBadges, Toolbar, EmptyColumn, useKanbanSelection, Card selection).
+- `__tests__/views.test.tsx` — fixed mock to return bare array (was wrapped). Updated column title lookups to use `getByLabelText` (the column header is aria-labeled, filter chips collide on text).
+- `__tests__/tasks-detail.test.tsx` — NEW. End-to-end coverage of the detail dialog flow (open, save via PUT, start agent).
+- `__tests__/tasks-bulk.test.tsx` — NEW. Selection toggle, bulk archive via POST /api/tasks/bulk, Esc clears selection.
+- `__tests__/App.test.tsx` — updated column title lookups for the same reason.
+
+**Verification:**
+- `make check` → 0 TS errors.
+- `npm run test:web` → 264/264 pass across 34 test files.
+- `make test` → 12 pre-existing SDK build-dist failures (unrelated; baseline on master).
+
+**Skipped:**
+- Card-linking / dependency arrows (Cline feature). Backend has the data, but rendering SVG arrows is a separate sprint. Surface the deps as chips in the detail dialog instead.
+- Per-card live agent terminal. Would require a new WS subscription per open dialog. Defer to a follow-up sprint.
+- Per-project task scoping in the UI. Backend supports `?projectId=`; we let the global active project handle it for now (matches the rest of the dashboard).
+
 ## In Progress — F-043 v8 Dashboard Foundation (Sprint S1)
 
 User-requested full dashboard rewrite. v7 dashboard (`bizar-dash/src/web/{ui,views,components,hooks,locales,mobile,styles,App.tsx,main.tsx}`) is preserved untouched while the v8 tree builds in parallel at `bizar-dash/src/web/v8/`. The rewrite will replace v7 wholesale once Sprint S9 verification ships.

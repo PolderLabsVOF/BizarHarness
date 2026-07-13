@@ -46,6 +46,8 @@ export interface KanbanContextMenuProps {
   canMoveLeft?: boolean;
   /** Whether "move right" is available (not the rightmost column). */
   canMoveRight?: boolean;
+  /** Optional card-specific items rendered between Move and Archive. */
+  extraItems?: ReactNode;
 }
 
 export function KanbanContextMenu(props: KanbanContextMenuProps) {
@@ -62,6 +64,7 @@ export function KanbanContextMenu(props: KanbanContextMenuProps) {
     onDelete,
     canMoveLeft = true,
     canMoveRight = true,
+    extraItems,
   } = props;
 
   return (
@@ -100,6 +103,7 @@ export function KanbanContextMenu(props: KanbanContextMenuProps) {
           Move to next column
           <kbd style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10 }}>→</kbd>
         </ContextMenuItem>
+        {extraItems}
         <ContextMenuSeparator />
         <ContextMenuItem leftIcon={<UserPlus size={14} aria-hidden="true" />} onSelect={onAssign}>
           Assign…

@@ -62,9 +62,12 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: /^Tasks$/i }));
 
     // TasksView renders the kanban column headers (no 'To do' anymore).
-    expect(await screen.findByText(/Backlog/i)).toBeInTheDocument();
-    expect(screen.getByText(/In progress/i)).toBeInTheDocument();
-    expect(screen.getByText(/Done/i)).toBeInTheDocument();
+    // Column titles live in the column's header <div>; filter chips also
+    // use the same text, so we wait for the column header specifically
+    // (aria-label is set to the column title).
+    expect(await screen.findByLabelText(/Backlog/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/In progress/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Done/i)).toBeInTheDocument();
   });
 
   it('marks the active sidebar item with aria-current="page"', async () => {
