@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from './shell/AppShell.js';
 import { Topbar } from './shell/Topbar.js';
 import { Sidebar, type SidebarSection } from './shell/Sidebar.js';
@@ -10,6 +10,7 @@ import { useCommandPaletteHotkey } from './ui/navigation/CommandPalette.js';
 import { useTheme } from './ui/theme/useTheme.js';
 import { useDensity } from './ui/theme/useDensity.js';
 import { PageSkeleton } from './shell/PageSkeleton.js';
+import { useFetch } from './data/useFetch.js';
 import {
   Activity,
   Bot,
@@ -63,6 +64,17 @@ export function App(): JSX.Element {
   const theme = useTheme();
   const density = useDensity();
 
+  // Live tasks count for the sidebar. Pulled from /api/snapshot so we
+  // don't double-fetch when the user lands on the Tasks view.
+  const snapshot = useFetch<{
+    overview?: { tasks?: { active?: number; queued?: number; done?: number; blocked?: number } };
+  }>('/api/snapshot');
+  const tasksCount = useMemo(() => {
+    const t = snapshot.data?.overview?.tasks;
+    if (!t) return undefined;
+    return (t.active ?? 0) + (t.queued ?? 0) + (t.blocked ?? 0) + (t.done ?? 0);
+  }, [snapshot.data]);
+
   // Single source of truth for palette open/close. Both the hotkey hook
   // and the topbar button drive the same setter — no race between them.
   const [paletteOpen, setPaletteOpen] = useCommandPaletteHotkey();
@@ -81,7 +93,7 @@ export function App(): JSX.Element {
       label: 'Workspace',
       items: [
         { id: 'overview', label: 'Overview', icon: iconFor('overview') },
-        { id: 'tasks', label: 'Tasks', icon: iconFor('tasks'), count: 47 },
+        { id: 'tasks', label: 'Tasks', icon: iconFor('tasks'), count: tasksCount },
         { id: 'goals', label: 'Goals', icon: iconFor('goals'), count: 3 },
       ],
     },
