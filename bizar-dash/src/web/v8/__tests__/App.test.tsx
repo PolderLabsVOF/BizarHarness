@@ -61,10 +61,10 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: /^Tasks$/i }));
 
-    // TasksView renders Backlog / To do / In progress column headers.
+    // TasksView renders the kanban column headers (no 'To do' anymore).
     expect(await screen.findByText(/Backlog/i)).toBeInTheDocument();
-    expect(screen.getByText(/To do/i)).toBeInTheDocument();
     expect(screen.getByText(/In progress/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done/i)).toBeInTheDocument();
   });
 
   it('marks the active sidebar item with aria-current="page"', async () => {

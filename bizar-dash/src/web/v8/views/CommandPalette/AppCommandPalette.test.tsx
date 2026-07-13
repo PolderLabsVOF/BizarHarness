@@ -62,7 +62,7 @@ describe('AppCommandPalette', () => {
     const headings = Array.from(dialog.querySelectorAll('[cmdk-group-heading]')).map(
       (node) => node.textContent,
     );
-    expect(headings).toEqual(['Navigation', 'Actions', 'Settings']);
+    expect(headings).toEqual(['Navigation', 'Actions', 'Agents', 'Tasks', 'Settings']);
   });
 
   it('typing Tasks narrows to the Tasks nav item and Enter calls onNavigate("tasks")', async () => {

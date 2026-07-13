@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { Sheet } from '../feedback/Sheet.js';
+import { Sheet, SheetContent } from '../feedback/Sheet.js';
 import { Stack } from '../primitives/Stack.js';
 import { Inline } from '../primitives/Inline.js';
 import { Button } from '../controls/Button.js';
 import { Input } from '../controls/Input.js';
-import { Select } from '../controls/Select.js';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../controls/Select.js';
 import { Skeleton } from '../feedback/Skeleton.js';
 import { Badge } from '../data/Badge.js';
 import { fetchJson } from '../../data/fetcher.js';
@@ -136,7 +136,8 @@ export function GoalDetail(props: GoalDetailProps): JSX.Element {
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} side="right" title="Edit goal">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" title="Edit goal">
       <Stack gap={4} style={{ padding: 'var(--space-4)' }}>
         <Stack gap={2}>
           <label htmlFor="goal-title" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
@@ -158,7 +159,16 @@ export function GoalDetail(props: GoalDetailProps): JSX.Element {
           <label htmlFor="goal-status" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
             Status
           </label>
-          <Select id="goal-status" value={status} onValueChange={saveStatus} options={STATUS_OPTIONS} />
+          <Select value={status} onValueChange={saveStatus}>
+            <SelectTrigger id="goal-status" size="sm" placeholder="Status" />
+            <SelectContent>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Stack>
 
         <Inline gap={2}>
@@ -229,6 +239,7 @@ export function GoalDetail(props: GoalDetailProps): JSX.Element {
         )}
         {busy !== null && <Skeleton style={{ height: 12 }} />}
       </Stack>
+    </SheetContent>
     </Sheet>
   );
 }

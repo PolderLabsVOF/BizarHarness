@@ -29,7 +29,11 @@ const SOURCE_LABELS = {
 type SourceFilter = keyof typeof SOURCE_LABELS;
 
 function mapBizar(a: BizarAgent): AgentCardProps {
-  const status = (a.status || 'idle') as AgentStatus;
+  const raw = (a.status || 'idle').toLowerCase();
+  const status: AgentStatus =
+    raw === 'busy' || raw === 'working' ? 'busy' :
+    raw === 'error' || raw === 'stuck' ? 'error' :
+    raw === 'paused' ? 'paused' : 'idle';
   return {
     id: `bizar:${a.name}`,
     name: a.name,

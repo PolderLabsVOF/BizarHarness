@@ -84,10 +84,10 @@ describe('TasksView', () => {
     await waitFor(() => {
       expect(screen.getByText(/Backlog/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/To do/i)).toBeInTheDocument();
     expect(screen.getByText(/In progress/i)).toBeInTheDocument();
     expect(screen.getByText(/In review/i)).toBeInTheDocument();
     expect(screen.getByText(/Done/i)).toBeInTheDocument();
+    expect(screen.getByText(/Archived/i)).toBeInTheDocument();
     expect(screen.getByText(/Ship v8 dashboard/i)).toBeInTheDocument();
   });
 });

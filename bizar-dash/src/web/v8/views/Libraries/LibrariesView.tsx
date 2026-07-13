@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { LibraryGrid, LibraryItem, type LibraryItemProps, type LibraryStatus } from '../../ui/index.js';
@@ -36,11 +36,14 @@ const ENDPOINT: Record<LibraryKind, string> = {
   hooks: '/api/skills?kind=hooks',
 };
 
-const CHANGE_EVENT: Record<LibraryKind, string[]> = {
-  skills: ['skills:change', 'agents:change'],
-  mcps: ['mcps:change', 'agents:change'],
-  hooks: ['agents:change'],
+const CHANGE_EVENTS: Record<LibraryKind, readonly string[]> = {
+  skills: ['skills:change', 'agents:change'] as const,
+  mcps: ['mcps:change', 'agents:change'] as const,
+  hooks: ['agents:change', 'agents:change'] as const,
 };
+// Stable hook count: always register listeners for all possible events,
+// filter inside the handler so kind navigation never changes hook order.
+const ALL_EVENTS = ['skills:change', 'mcps:change', 'agents:change'] as const;
 
 function mapItem(it: LibItem): LibraryItemProps {
   const status: LibraryStatus =
@@ -67,9 +70,14 @@ export function LibrariesView(props: LibrariesViewProps): JSX.Element {
   const res = useFetch<{ skills?: LibItem[]; items?: LibItem[]; count?: number }>(url);
   const [bust, setBust] = useState(0);
 
-  // Force a re-fetch when the matching change event fires.
-  const handler = (): void => setBust((n) => n + 1);
-  for (const evt of CHANGE_EVENT[kind]) useWsMessage(evt, handler);
+  // Force a re-fetch when the matching change event fires. Hook count
+  // is fixed (ALL_EVENTS.length) so navigating between kinds can't trip
+  // React's "Rendered fewer hooks than expected" runtime guard.
+  const events = CHANGE_EVENTS[kind];
+  const handler = useCallback((): void => setBust((n) => n + 1), []);
+  for (const evt of ALL_EVENTS) {
+    useWsMessage(evt, events.includes(evt) ? handler : () => {});
+  }
 
   useEffect(() => {
     if (bust > 0) res.refetch();

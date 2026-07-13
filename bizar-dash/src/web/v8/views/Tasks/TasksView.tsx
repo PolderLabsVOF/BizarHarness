@@ -3,12 +3,14 @@ import { Stack } from '../../ui/primitives/Stack.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { KanbanBoard } from '../../ui/kanban/KanbanBoard.js';
 import { KanbanColumn, type KanbanColumnData } from '../../ui/kanban/KanbanColumn.js';
-import { KanbanCard, type KanbanCardData } from '../../ui/kanban/KanbanCard.js';
+import { KanbanCard, useKanbanCardSortable, type KanbanCardData } from '../../ui/kanban/KanbanCard.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson } from '../../data/fetcher.js';
 import type { Task, WsMessage } from '../../data/types.js';
+
+type TaskStatus = 'queued' | 'doing' | 'blocked' | 'done' | 'archived';
 
 /**
  * TasksView — Sprint S10. Pulls `/api/tasks` and maps server statuses
@@ -18,10 +20,10 @@ import type { Task, WsMessage } from '../../data/types.js';
 
 const COLUMNS: KanbanColumnData[] = [
   { id: 'queued', title: 'Backlog', accentTone: 'neutral' },
-  { id: 'todo', title: 'To do', accentTone: 'info' },
   { id: 'doing', title: 'In progress', accentTone: 'accent', wipLimit: 5 },
   { id: 'blocked', title: 'In review', accentTone: 'warning' },
   { id: 'done', title: 'Done', accentTone: 'success' },
+  { id: 'archived', title: 'Archived', accentTone: 'neutral' },
 ];
 
 const PRIORITY_MAP: Record<string, KanbanCardData['priority']> = {
@@ -33,14 +35,14 @@ const PRIORITY_MAP: Record<string, KanbanCardData['priority']> = {
 
 interface Card extends KanbanCardData {
   taskId: string;
-  columnId: string;
+  columnId: TaskStatus;
 }
 
 function taskToCard(t: Task): Card {
   return {
     id: t.id,
     taskId: t.id,
-    columnId: t.status || 'queued',
+    columnId: statusToColumn(t.status),
     title: t.title,
     priority: PRIORITY_MAP[t.priority || 'medium'] || 'medium',
     branch: t.branch,
@@ -50,17 +52,32 @@ function taskToCard(t: Task): Card {
   };
 }
 
-type TaskColumnId = 'queued' | 'doing' | 'blocked' | 'done' | 'archived';
-
-function statusToColumn(status?: string): TaskColumnId {
+function statusToColumn(status?: TaskStatus): TaskStatus {
   switch (status) {
-    case 'queued': return 'queued';
-    case 'doing': return 'doing';
-    case 'blocked': return 'blocked';
-    case 'done': return 'done';
-    case 'archived': return 'archived';
-    default: return 'queued';
+    case 'queued':
+    case 'doing':
+    case 'blocked':
+    case 'done':
+    case 'archived':
+      return status;
+    default:
+      return 'queued';
   }
+}
+
+/**
+ * SortableCard — wraps a single KanbanCard with dnd-kit's useSortable
+ * so KanbanBoard.onDragEnd can fire.
+ */
+function SortableCard({ card }: { card: Card }): JSX.Element {
+  const sortable = useKanbanCardSortable(card.id);
+  return (
+    <KanbanCard
+      card={card}
+      isDragging={sortable.isDragging}
+      dragHandleProps={{ ...sortable.attributes, ...sortable.listeners, ref: sortable.setNodeRef, style: sortable.style }}
+    />
+  );
 }
 
 export function TasksView(): JSX.Element {
@@ -93,7 +110,7 @@ export function TasksView(): JSX.Element {
   const onCardMove = useCallback(async (cardId: string, _from: string, to: string) => {
     const card = cards.find((c) => c.taskId === cardId || c.id === cardId);
     if (!card) return;
-    const nextStatus = to;
+    const nextStatus = statusToColumn(to as TaskStatus);
     setCards((prev) =>
       prev.map((c) => (c.taskId === cardId ? { ...c, columnId: nextStatus } : c)),
     );
@@ -136,7 +153,7 @@ export function TasksView(): JSX.Element {
                 column={{ ...col, count: counts[col.id] || 0 }}
               >
                 {inColumn.map((card) => (
-                  <KanbanCard key={card.id} card={card} />
+                  <SortableCard key={card.id} card={card} />
                 ))}
               </KanbanColumn>
             );

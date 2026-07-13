@@ -3,7 +3,7 @@ import { Send, RotateCw, Octagon, ClipboardCopy, Activity as ActivityIcon } from
 import { Avatar } from '../data/Avatar.js';
 import { Badge } from '../data/Badge.js';
 import { Button } from '../controls/Button.js';
-import { Sheet } from '../feedback/Sheet.js';
+import { Sheet, SheetContent } from '../feedback/Sheet.js';
 import { Stack } from '../primitives/Stack.js';
 import { Inline } from '../primitives/Inline.js';
 import { Textarea } from '../controls/Textarea.js';
@@ -117,7 +117,8 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} side="right" title={name}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" title={name}>
       <Stack gap={4} style={{ padding: 'var(--space-4)' }}>
         <Inline gap={3} align="center">
           <Avatar name={name} status={status === 'busy' ? 'busy' : status === 'error' ? 'busy' : 'online'} />
@@ -225,6 +226,7 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
           </div>
         )}
       </Stack>
+    </SheetContent>
     </Sheet>
   );
 }
