@@ -18,10 +18,53 @@
  *   /tmp/bizar-e2e-<pid>.json  — structured per-step results
  */
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from '../../bizar-dash/src/server/server.mjs';
+
+/**
+ * S31 — fixture seeders. Pre-populate the tmp project with a real
+ * PROGRESS.md (with goals, KRs, mixed statuses), a real task list, and
+ * a real settings.json so the e2e exercises non-trivial counts and the
+ * Settings PUT round-trip writes against a real file.
+ */
+function seedProject(root) {
+  const bizarDir = join(root, '.bizar');
+  mkdirSync(bizarDir, { recursive: true });
+  // PROGRESS.md — 4 goals: 1 done, 2 in-progress (one at-risk), 1 blocked.
+  // Mirrors the format progress-parser.mjs parses (see header docs).
+  writeFileSync(join(bizarDir, 'PROGRESS.md'), `# Bizar Harness — S31 fixture
+
+### In Progress
+
+## G-001 — Orchestration center (fixture)
+
+- [x] Audit views (done)
+- [x] Wire settings (done)
+- [ ] Live e2e proof (fixture)
+owner: heimdall
+
+## G-002 — Goals parity (fixture)
+
+**at-risk**
+
+- [x] Goals canonical store (done)
+- [ ] Real fixture coverage (fixture)
+
+## G-003 — Backup rotation (fixture)
+
+- [ ] Add rotation policy (fixture)
+
+### Backlog
+
+## G-004 — Multi-region (fixture)
+
+**blocked**
+
+- [ ] Reach out to ops (blocked)
+`);
+}
 
 const EVIDENCE = process.env.BIZAR_E2E_EVIDENCE ||
   join(tmpdir(), `bizar-e2e-${process.pid}.json`);
@@ -85,6 +128,7 @@ async function wsHandshake(boot, timeoutMs = 3000) {
 async function main() {
   // 1. Boot.
   const tmp = mkdtempSync(join(tmpdir(), 'bizar-e2e-'));
+  seedProject(tmp);
   const boot = await createServer({
     port: PORT,
     projectRoot: tmp,
@@ -102,7 +146,8 @@ async function main() {
   record('endpoint.health', health.status === 200 && health.json?.ok === true,
     `status=${health.status}`);
 
-  // 3. /api/snapshot — assert the S23 enriched shape.
+  // 3. /api/snapshot — assert the S23 enriched shape and that the
+  // fixture seed actually populates the counts (no zero-only run).
   const snap = await http(boot, '/api/snapshot');
   const o = snap.json?.overview || {};
   const expectedKeys = ['tasks', 'goals', 'agents', 'tokens', 'needsAttention'];
@@ -113,10 +158,17 @@ async function main() {
     `tasks=${JSON.stringify(o.tasks)}`);
   record('snapshot.goals_shape', o.goals && typeof o.goals.total === 'number',
     `goals=${JSON.stringify(o.goals)}`);
+  // Fixture seeds 4 goals (1 done, 1 at-risk, 1 blocked, 1 in-progress).
+  // The Overview "Goals at risk" tile must render the same 4 total.
+  record('snapshot.goals_nonempty', (o.goals?.total || 0) >= 4,
+    `total=${o.goals?.total || 0} done=${o.goals?.done || 0} atRisk=${o.goals?.atRisk || 0}`);
   record('snapshot.agents_shape', o.agents && typeof o.agents.total === 'number',
     `agents=${JSON.stringify(o.agents)}`);
   record('snapshot.needsAttention_array',
     Array.isArray(o.needsAttention),
+    `len=${(o.needsAttention || []).length}`);
+  // Fixture has 1 at-risk goal → needsAttention must mention it.
+  record('snapshot.needsAttention_nonempty', (o.needsAttention || []).length >= 1,
     `len=${(o.needsAttention || []).length}`);
 
   // 4. /api/agents — assert merge shape (S24).
@@ -128,10 +180,14 @@ async function main() {
     `count=${agents.length} sources=${[...sources].join('|')}`);
 
   // 5. /api/goals — assert canonical-store shape (S23 + existing goals route).
+  // Fixture seeds 4 goals; the response count must match.
   const goals = await http(boot, '/api/goals');
   record('goals.canonical_shape',
     goals.status === 200 && Array.isArray(goals.json?.goals) && typeof goals.json?.count === 'number',
     `status=${goals.status} count=${goals.json?.count}`);
+  record('goals.fixture_count',
+    goals.json?.count === 4,
+    `count=${goals.json?.count} (fixture expected 4)`);
 
   // 6. WS handshake — accept either an empty frames list or a real
   // frame; the contract is the handshake completes, not unsolicited
@@ -146,6 +202,27 @@ async function main() {
   const gc = await http(boot, '/api/gc', { method: 'POST' });
   record('admin.gc', gc.status === 200 && gc.json?.ok === true,
     `status=${gc.status} body=${JSON.stringify(gc.json).slice(0, 120)}`);
+
+  // 7b. S30 — Settings PUT round-trip. The Settings view binds to
+  // /api/settings; exercise a write → read to prove persistence.
+  // The contract is top-level keys (theme, ui, dashboard, etc.) merged
+  // server-side via mergeSettings().
+  const setBefore = await http(boot, '/api/settings');
+  record('settings.get',
+    setBefore.status === 200,
+    `status=${setBefore.status}`);
+  const setPut = await http(boot, '/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ theme: { mode: 'dark' } }),
+  });
+  record('settings.put',
+    setPut.status === 200,
+    `status=${setPut.status} body=${JSON.stringify(setPut.json).slice(0, 160)}`);
+  const setAfter = await http(boot, '/api/settings');
+  record('settings.roundtrip',
+    setAfter.json?.data?.theme?.mode === 'dark',
+    `theme.mode=${setAfter.json?.data?.theme?.mode}`);
 
   // 8. Restart — skip by default to keep CI fast; flip BIZAR_E2E_SKIP_RESTART=0 to run.
   if (!SKIP_RESTART) {

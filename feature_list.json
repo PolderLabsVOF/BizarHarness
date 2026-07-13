@@ -1350,6 +1350,48 @@
       ],
       "passed": "2026-07-13",
       "commit": "pending"
+    },
+    {
+      "id": "F-061",
+      "behavior": "S32 — GoalsView inline create + delete (no window.prompt/window.confirm). Create opens a Sheet with title + description fields and validates non-empty title before POSTing /api/goals. Delete toggles an inline confirm row inside the card so the user can confirm without leaving the view.",
+      "verification": "make check 0 errors. dashboard vitest passes. make e2e-orchestration 18/18.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "ui",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Goals/GoalsView.tsx"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
+    },
+    {
+      "id": "F-062",
+      "behavior": "S32 — LibrariesView CHANGE_EVENTS.hooks typo fix. Was ['agents:change','agents:change'] (copy-paste); now ['hooks:change','agents:change']. Also adds hooks:change to ALL_EVENTS so the always-on WS listener is registered regardless of which tab the user is on.",
+      "verification": "make check 0 errors.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "ui",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Libraries/LibrariesView.tsx"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
+    },
+    {
+      "id": "F-063",
+      "behavior": "S30+S31 — E2E hardening. PUT /api/settings round-trip verified live (theme.mode persists). PROGRESS.md fixture pre-seeded with 4 goals so snapshot.goals.total=4 and needsAttention.length≥1 assertions are non-trivial.",
+      "verification": "make e2e-orchestration reports 18/18 live steps; settings.roundtrip asserts theme.mode=dark; goals.fixture_count asserts count=4.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "test",
+      "created": "2026-07-13",
+      "files_touched": [
+        "tests/e2e/orchestration-center.mjs"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
     }
   ],
   "vcr": {

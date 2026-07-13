@@ -1,5 +1,39 @@
 # Changelog
 
+## v9.1.1 — fix: close CRITICAL view audit gaps + e2e hardening
+
+Stop-hook feedback on v9.1.0 found the dashboard still shipped with
+non-trivial UI stubs (`window.prompt` for goal creation, a copy-paste
+typo in the WS event map). v9.1.1 closes four CRITICAL findings and
+hardens the live e2e with a Settings PUT round-trip and a real
+PROGRESS.md fixture.
+
+UI
+- GoalsView now ships an inline Sheet form for goal creation
+  (title + description fields, validation, no `window.prompt`).
+- GoalsView delete now uses an inline confirm row inside the card
+  (no `window.confirm`).
+- LibrariesView.CHANGE_EVENTS.hooks fixed from
+  `['agents:change', 'agents:change']` (typo) →
+  `['hooks:change', 'agents:change']`.
+- LibrariesView.ALL_EVENTS now includes `hooks:change` so the
+  always-on listener is correctly registered regardless of which
+  tab the user is on.
+
+E2E
+- `tests/e2e/orchestration-center.mjs` writes `PUT /api/settings` with
+  `{theme:{mode:'dark'}}` and reads back `data.theme.mode === 'dark'`
+  to prove persistence.
+- Fixture pre-seeds `.bizar/PROGRESS.md` with 4 goals (1 done,
+  1 at-risk, 1 blocked, 1 in-progress). The Overview "Goals at risk"
+  tile and needsAttention list now exercise non-trivial counts.
+
+Verification
+- `make check` 0 errors
+- `make test` 294/294 sdk
+- dashboard vitest 271/271
+- `make e2e-orchestration` 18/18 live steps
+
 ## v9.1.0 — feat: real integration gaps closed + live orchestration e2e
 
 The v9.0.x releases shipped dashboard UI polish (TaskDetail drawer,

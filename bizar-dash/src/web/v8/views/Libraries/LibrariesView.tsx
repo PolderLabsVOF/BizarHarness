@@ -39,11 +39,11 @@ const ENDPOINT: Record<LibraryKind, string> = {
 const CHANGE_EVENTS: Record<LibraryKind, readonly string[]> = {
   skills: ['skills:change', 'agents:change'] as const,
   mcps: ['mcps:change', 'agents:change'] as const,
-  hooks: ['agents:change', 'agents:change'] as const,
+  hooks: ['hooks:change', 'agents:change'] as const,
 };
 // Stable hook count: always register listeners for all possible events,
 // filter inside the handler so kind navigation never changes hook order.
-const ALL_EVENTS = ['skills:change', 'mcps:change', 'agents:change'] as const;
+const ALL_EVENTS = ['skills:change', 'mcps:change', 'hooks:change', 'agents:change'] as const;
 
 function mapItem(it: LibItem): LibraryItemProps {
   const status: LibraryStatus =

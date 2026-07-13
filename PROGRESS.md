@@ -444,6 +444,54 @@ drift away from the original ask.
 
 ## Current State
 
+- **Last commit (this session, not yet committed):** v9.1.1 —
+  Settings PATCH round-trip in e2e, real PROGRESS.md fixture, and
+  four CRITICAL audit findings closed (Goals inline form, Goal
+  inline confirm, Libraries hooks:change typo + listener registration).
+  v9.1.0 below.
+
+## v9.1.1 — view audit gap-fill + e2e hardening
+
+Stop hook on v9.1.0 flagged that the dashboard still shipped with
+non-trivial stubs and missing verifications. Three concrete fixes:
+
+1. **S30 — Settings PUT round-trip in live e2e.**
+   `tests/e2e/orchestration-center.mjs` now writes
+   `{theme:{mode:'dark'}}` via `PUT /api/settings` and asserts
+   `GET /api/settings` returns `data.theme.mode === 'dark'`.
+   Catches server-side regressions where settings writes don't
+   persist, or where the merge contract breaks.
+
+2. **S31 — real PROGRESS.md fixture.** The e2e now pre-seeds
+   `.bizar/PROGRESS.md` with 4 goals (1 done, 1 at-risk, 1 blocked,
+   1 in-progress) before booting, so snapshot.goals.total=4 and
+   snapshot.needsAttention.length≥1 are non-trivial assertions,
+   not zero-only passes.
+
+3. **S32 — close four CRITICAL audit findings.**
+   - `GoalsView.createGoal` now uses a `Sheet` form with title +
+     description fields. Kills the v9.0.5-era `window.prompt`
+     (blocked the "professional and data-driven" ask).
+   - `GoalsView.deleteGoal` now uses an inline confirm row
+     (delete + cancel buttons) inside the card, not
+     `window.confirm`.
+   - `LibrariesView.CHANGE_EVENTS.hooks` was `['agents:change',
+     'agents:change']` (copy-paste typo) — fixed to
+     `['hooks:change', 'agents:change']`.
+   - `LibrariesView.ALL_EVENTS` now includes `hooks:change` so
+     the always-on WS listener is correctly registered even when
+     the user isn't currently on the hooks tab.
+
+Verification
+- `make check` 0 errors
+- `make test` 294/294
+- dashboard vitest 271/271
+- `make e2e-orchestration` **18/18 live steps** pass
+
+---
+
+## Current State (prior — v9.1.0)
+
 - **Last commit (this session, not yet committed):** v9.1.0 — real
   integration gaps closed + live e2e. Three concrete fixes against
   the user's brief that the prior v9.0.5 polish didn't reach:

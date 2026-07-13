@@ -10,6 +10,9 @@ import { GoalDetail } from '../../ui/goals/GoalDetail.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { Button } from '../../ui/controls/Button.js';
+import { Input } from '../../ui/controls/Input.js';
+import { Textarea } from '../../ui/controls/Textarea.js';
+import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson } from '../../data/fetcher.js';
@@ -45,6 +48,11 @@ export function GoalsView(): JSX.Element {
   const [decomposing, setDecomposing] = useState<string | null>(null);
   const [decomposeError, setDecomposeError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  // v9.1.1 — replace window.prompt/window.confirm with an inline Sheet
+  // form for create + a per-card confirm row for delete. Same data
+  // contract; better UX, accessible, no popup blockers.
+  const [createDraft, setCreateDraft] = useState<{ title: string; description: string } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const filteredGoals = statusFilter === 'all' ? local : local.filter((g) => g.status === statusFilter);
 
@@ -83,31 +91,33 @@ export function GoalsView(): JSX.Element {
   });
 
   const createGoal = useCallback(async () => {
-    // Inline dialog flow: prompt for title + optional description before
-    // POSTing. Empty submission is rejected client-side.
-    const title = (typeof window !== 'undefined' && typeof window.prompt === 'function'
-      ? window.prompt('Goal title?')
-      : 'New goal');
-    if (title === null) return; // user cancelled
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    const description = typeof window !== 'undefined' && typeof window.prompt === 'function'
-      ? (window.prompt('Optional description?') ?? '')
-      : '';
+    // v9.1.1 — open the Sheet form. POST happens when the user clicks
+    // Create inside the Sheet (see saveCreate below).
+    setCreateDraft({ title: '', description: '' });
+  }, []);
+
+  const saveCreate = useCallback(async () => {
+    if (!createDraft || !createDraft.title.trim()) return;
     setCreating(true);
+    setDecomposeError(null);
     try {
       const res = await fetchJson<{ goal?: Goal; id?: string }>('/api/goals', {
         method: 'POST',
-        body: { title: trimmed, description: description.trim() || undefined, status: 'active' },
+        body: {
+          title: createDraft.title.trim(),
+          description: createDraft.description.trim() || undefined,
+          status: 'active',
+        },
       });
       if (res.goal) setLocal((prev) => [...prev, res.goal as Goal]);
       if (res.id) setOpenGoalId(res.id);
+      setCreateDraft(null);
     } catch (err) {
       setDecomposeError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreating(false);
     }
-  }, []);
+  }, [createDraft]);
 
   const openGoal = openGoalId ? local.find((g) => g.id === openGoalId) ?? null : null;
 
@@ -139,16 +149,13 @@ export function GoalsView(): JSX.Element {
   }, []);
 
   const deleteGoal = useCallback(async (goalId: string) => {
-    const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
-      ? window.confirm('Delete this goal? This removes it from PROGRESS.md.')
-      : true;
-    if (!ok) return;
     try {
       await fetchJson(`/api/goals/${encodeURIComponent(goalId)}`, { method: 'DELETE' });
       // Server broadcasts goals:removed + goals:change tombstone; the
       // WS handler drops the card. Close the drawer if it was open.
       setLocal((prev) => prev.filter((x) => x.id !== goalId));
       if (openGoalId === goalId) setOpenGoalId(null);
+      setConfirmDeleteId(null);
     } catch (err) {
       setDecomposeError(err instanceof Error ? err.message : String(err));
     }
@@ -211,16 +218,40 @@ export function GoalsView(): JSX.Element {
               >
                 <Stack gap={2}>
                   <GoalCard {...goalToCard(g)} />
-                  <Inline align="center" justify="end" gap={1}>
-                    <Button
-                      variant="ghost"
-                      onClick={(e) => { e.stopPropagation(); void deleteGoal(g.id); }}
-                      title="Delete goal"
-                      aria-label={`Delete goal ${g.title}`}
-                    >
-                      <Trash2 size={12} aria-hidden /> Delete
-                    </Button>
-                  </Inline>
+                  {confirmDeleteId === g.id ? (
+                    <Inline align="center" justify="end" gap={2}>
+                      <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+                        Delete this goal and remove it from PROGRESS.md?
+                      </span>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); void deleteGoal(g.id); }}
+                        data-testid={`goal-confirm-delete-${g.id}`}
+                      >
+                        Delete
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                      >
+                        Cancel
+                      </Button>
+                    </Inline>
+                  ) : (
+                    <Inline align="center" justify="end" gap={1}>
+                      <Button
+                        variant="ghost"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(g.id); }}
+                        title="Delete goal"
+                        aria-label={`Delete goal ${g.title}`}
+                        data-testid={`goal-delete-${g.id}`}
+                      >
+                        <Trash2 size={12} aria-hidden /> Delete
+                      </Button>
+                    </Inline>
+                  )}
                   {krCount > 0 && (
                     <Inline align="center" justify="end" gap={2}>
                       <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
@@ -250,6 +281,53 @@ export function GoalsView(): JSX.Element {
           onOpenChange={(o) => { if (!o) setOpenGoalId(null); }}
         />
       )}
+
+      {/* v9.1.1 — create-goal Sheet form. Replaces window.prompt which
+          blocked the user's "professional and data-driven" ask. */}
+      <Sheet open={createDraft !== null} onOpenChange={(o) => { if (!o) setCreateDraft(null); }}>
+        <SheetContent side="right" title="New goal">
+          {createDraft !== null && (
+            <Stack gap={4} style={{ padding: 'var(--space-4)' }}>
+              <Stack gap={2}>
+                <label htmlFor="goal-create-title" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Title</label>
+                <Input
+                  id="goal-create-title"
+                  value={createDraft.title}
+                  onChange={(e) => setCreateDraft({ ...createDraft, title: e.target.value })}
+                  placeholder="Ship the orchestration center"
+                  disabled={creating}
+                  data-testid="goal-create-title"
+                />
+              </Stack>
+              <Stack gap={2}>
+                <label htmlFor="goal-create-desc" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Description (optional)</label>
+                <Textarea
+                  id="goal-create-desc"
+                  value={createDraft.description}
+                  onChange={(e) => setCreateDraft({ ...createDraft, description: e.target.value })}
+                  rows={4}
+                  placeholder="Why this goal exists and what 'done' looks like."
+                  disabled={creating}
+                  data-testid="goal-create-desc"
+                />
+              </Stack>
+              <Inline gap={2}>
+                <Button
+                  variant="primary"
+                  onClick={() => { void saveCreate(); }}
+                  disabled={creating || !createDraft.title.trim()}
+                  data-testid="goal-create-submit"
+                >
+                  Create goal
+                </Button>
+                <Button variant="ghost" onClick={() => setCreateDraft(null)} disabled={creating}>
+                  Cancel
+                </Button>
+              </Inline>
+            </Stack>
+          )}
+        </SheetContent>
+      </Sheet>
     </Stack>
   );
 }
