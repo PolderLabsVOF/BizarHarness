@@ -23,6 +23,8 @@ import {
   Settings,
   Target,
   Goal,
+  CalendarClock,
+  Briefcase,
 } from 'lucide-react';
 
 /**
@@ -55,6 +57,10 @@ function iconFor(id: string): LucideIcon {
       return Layers;
     case 'settings':
       return Settings;
+    case 'schedules':
+      return CalendarClock;
+    case 'background':
+      return Briefcase;
     default:
       return Layers;
   }
@@ -133,6 +139,8 @@ export function App(): JSX.Element {
         { id: 'agents', label: 'Agents', icon: iconFor('agents'), count: counts.agentsRunning },
         { id: 'activity', label: 'Activity', icon: iconFor('activity'), live: true },
         { id: 'memory', label: 'Memory', icon: iconFor('memory') },
+        { id: 'schedules', label: 'Schedules', icon: iconFor('schedules') },
+        { id: 'background', label: 'Background', icon: iconFor('background') },
       ],
     },
     {

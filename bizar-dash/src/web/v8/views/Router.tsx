@@ -36,6 +36,12 @@ const LibrariesView = lazy(() =>
 const SettingsView = lazy(() =>
   import('./Settings/SettingsView.js').then((m) => ({ default: m.SettingsView })),
 );
+const SchedulesView = lazy(() =>
+  import('./Schedules/SchedulesView.js').then((m) => ({ default: m.SchedulesView })),
+);
+const BackgroundJobsView = lazy(() =>
+  import('./BackgroundJobs/BackgroundJobsView.js').then((m) => ({ default: m.BackgroundJobsView })),
+);
 
 // Library surfaces now pull live data inside the view itself.
 // LibraryItemProps is imported so its type stays exported via this
@@ -65,6 +71,10 @@ export function useViewForId(id: string): JSX.Element {
         return <LibrariesView kind="hooks" />;
       case 'settings':
         return <SettingsView />;
+      case 'schedules':
+        return <SchedulesView />;
+      case 'background':
+        return <BackgroundJobsView />;
       default:
         return <OverviewView />;
     }
