@@ -447,11 +447,11 @@ drift away from the original ask.
 - **Last commit (master):** v9.2.0 — full orchestration center coverage
   shipped (F-061..F-067).
 - **This session:** v9.3.0 in flight. **S37 + S38 + S39 + S40 + S41
-  shipped** (`69aa434`, `682d3cc`, `d26fd6f`, `13016df`, S41 pending
-  commit). S41 closes the "configure everything" P0 group (EnvVars +
-  Config). Next: S42 (Dialogs + Providers + Mods + Update, P1).
-- **Gate state (with S41 staged):** dashboard vitest 329/329 pass
-  across 157 files; 0 new typecheck errors from S41.
+  shipped** (`69aa434`, `682d3cc`, `d26fd6f`, `13016df`, `d952666`).
+  S41 closed the "configure everything" P0 group. S42 in flight:
+  Dialogs + Providers + Mods + Update (P1). Next: S43 long-tail.
+- **Gate state (with S42 staged):** dashboard vitest 344/344 pass
+  across 161 files; 0 new typecheck errors from S42.
 
 ## v9.2.0 — full orchestration center coverage shipped
 
@@ -1896,4 +1896,50 @@ providers + MCPs + system-LLM surfaces in one tabbed view.
 - 0 new typecheck errors from S41 (303 pre-existing test-file
   errors unchanged).
 
-**Next sprint:** S42 — Dialogs + Providers + Mods + Update (P1).
+### Sprint S42 — Dialogs + Providers + Mods + Update (shipped in this commit, F-077..F-080)
+
+Goal: power-user surfaces batched together. All four reuse the same
+Sheet/inline-confirm/WS pattern as S41.
+
+- `bizar-dash/src/web/v8/views/Dialogs/DialogsView.tsx` (new,
+  ~140 LOC) — list of active dialogs from `GET /api/dialogs`. Per-row
+  Dismiss button with inline confirm (`DELETE /api/dialogs/:id`).
+  Empty state + Refresh. Subscribes to `dialog:show` WS for live
+  updates (replaces earlier polling interval that leaked in jsdom).
+- `bizar-dash/src/web/v8/views/Providers/ProvidersView.tsx` (new,
+  ~220 LOC) — provider list from `GET /api/providers`, Active-default
+  card (`GET /api/providers/active`), per-provider active-key sub-card
+  with masked preview (`GET /api/providers/:id/active-key`), Rotate
+  with inline confirm (`POST /api/providers/:id/rotate`), Auto-detect
+  trigger (`GET /api/providers/auto-detect`).
+- `bizar-dash/src/web/v8/views/Mods/ModsView.tsx` (new, ~330 LOC) —
+  two-section card: Installed (`GET /api/mods`) with enable toggle
+  (`PUT /api/mods/:id {enabled}`), inline-confirm Uninstall
+  (`DELETE /api/mods/:id`), and Upgrade button (`POST /api/mods/:id/upgrade`)
+  when registry reports a newer version; Registry
+  (`GET /api/mods/registry`) with Install buttons; Install Sheet
+  accepts either registry id or local path.
+- `bizar-dash/src/web/v8/views/Update/UpdateView.tsx` (new,
+  ~280 LOC) — package update list (`GET /api/updates/status`),
+  Check (`GET /api/updates/check`), per-package Apply with inline
+  confirm (`POST /api/updates/apply {packages: [ids]}`), Apply all
+  card. Live progress log rendered from `update:progress`,
+  `update:log`, `update:complete` WS subscriptions.
+- `bizar-dash/src/web/v8/views/Router.tsx` — 4 new case arms + lazy
+  imports for `dialogs`, `providers`, `mods`, `update`.
+- `bizar-dash/src/web/v8/shell/Sidebar.tsx` — 4 new System entries:
+  Dialogs (`MessageSquare`), Providers (`Sparkles`), Mods (`Boxes`),
+  Update (`ArrowUpCircle`).
+- 4 new test files / 15 new vitest cases (dialogs: 3, providers: 4,
+  mods: 5, update: 3). All pass in isolation and in full suite.
+
+**Verification:**
+- `npx vitest run` → **161 files / 344 tests pass** (+16 new, was
+  157/329 before S42). 0 new typecheck errors from S42.
+- Bug found + fixed during S42: original `DialogsView` polled every
+  15s with `setInterval`; jsdom leaked the timer across test cleanup
+  and crashed workers with OOM. Replaced with WS subscription to
+  `dialog:show` (which the server already broadcasts on enqueue).
+
+**Next sprint:** S43 — long-tail P1 surfaces (Artifacts + LightRAG +
+Voice + Clipboard + Obsidian + Spawn + Misc).

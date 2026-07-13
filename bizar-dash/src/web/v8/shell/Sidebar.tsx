@@ -30,6 +30,10 @@ import {
   Terminal,
   MessageSquareText,
   MessageCircle,
+  MessageSquare,
+  Sparkles,
+  Boxes,
+  ArrowUpCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { cx } from '../ui/utils/cx.js';
@@ -143,6 +147,10 @@ const DEFAULT_SECTIONS: SidebarSection[] = [
       { id: 'auth', label: 'Auth', icon: ShieldCheck },
       { id: 'env-vars', label: 'Env vars', icon: Variable },
       { id: 'config', label: 'Config', icon: ServerCog },
+      { id: 'dialogs', label: 'Dialogs', icon: MessageSquare },
+      { id: 'providers', label: 'Providers', icon: Sparkles },
+      { id: 'mods', label: 'Mods', icon: Boxes },
+      { id: 'update', label: 'Update', icon: ArrowUpCircle },
       { id: 'doctor', label: 'Doctor', icon: Stethoscope },
       { id: 'usage', label: 'Usage', icon: BarChart3 },
       { id: 'backup', label: 'Backups', icon: Archive },

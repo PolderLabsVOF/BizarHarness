@@ -87,6 +87,18 @@ const EnvVarsView = lazy(() =>
 const ConfigView = lazy(() =>
   import('./Config/ConfigView.js').then((m) => ({ default: m.ConfigView })),
 );
+const DialogsView = lazy(() =>
+  import('./Dialogs/DialogsView.js').then((m) => ({ default: m.DialogsView })),
+);
+const ProvidersView = lazy(() =>
+  import('./Providers/ProvidersView.js').then((m) => ({ default: m.ProvidersView })),
+);
+const ModsView = lazy(() =>
+  import('./Mods/ModsView.js').then((m) => ({ default: m.ModsView })),
+);
+const UpdateView = lazy(() =>
+  import('./Update/UpdateView.js').then((m) => ({ default: m.UpdateView })),
+);
 
 // Library surfaces now pull live data inside the view itself.
 // LibraryItemProps is imported so its type stays exported via this
@@ -150,6 +162,14 @@ export function useViewForId(id: string): JSX.Element {
         return <EnvVarsView />;
       case 'config':
         return <ConfigView />;
+      case 'dialogs':
+        return <DialogsView />;
+      case 'providers':
+        return <ProvidersView />;
+      case 'mods':
+        return <ModsView />;
+      case 'update':
+        return <UpdateView />;
       default:
         return <OverviewView />;
     }
