@@ -49,6 +49,10 @@ e2e:  ## End-to-end tests (SDK + Claude Code integration)
 		node scripts/bh-full-e2e.mjs; \
 	fi
 
+e2e-orchestration:  ## Sprint S25 — boot dashboard, hit merged endpoints, exercise admin
+	@echo "▶ E2E orchestration: boot + snapshot + agents + goals + ws + admin..."
+	@BIZAR_E2E_SKIP_RESTART=$${BIZAR_E2E_SKIP_RESTART:-1} node tests/e2e/orchestration-center.mjs --port=$${BIZAR_E2E_PORT:-4173}
+
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json
 	@echo "▶ Computing VCR ratio from feature_list.json..."

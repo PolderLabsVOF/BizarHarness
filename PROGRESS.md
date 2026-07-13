@@ -444,30 +444,54 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit (this session, not yet committed):** v9.0.4 install-fix patch.
-  - **Root cause:** `packages/sdk/.gitignore` had `dist/` (npm respected it),
-    `npm pack` ran without a `prepack` hook, the SPA entry was `v8.html`
-    instead of `index.html`, in-repo `.claude/worktrees/` + `.harness/`
-    leaked into the tarball via the `.claude/` files-whitelist entry.
-  - **Fix:** added `prepack: npm run build`; renamed
-    `bizar-dash/src/web/v8.html` → `index.html` and updated both vite
-    configs (root + dashboard) to point at it; new
-    `packages/sdk/.npmignore` + `plugins/bizar/.npmignore`; root
-    `.npmignore` whitelist for `dist/`, exclusion of
-    `.claude/worktrees/` + `.harness/` + `fresh901/`; removed
-    `.claude/` from `package.json` files whitelist (runtime reads
-    `~/.claude/`, not the in-repo tree).
-  - **Bumps:** 9.0.1 → 9.0.3 (install fix) → 9.0.4 (SPA entry fix).
-    `CHANGELOG.md` records both entries.
-- **Fresh-install verification:** packed, reinstalled into default npm
-  prefix, started `bizar dash start`, `GET /` returns 200 HTML
-  ("Bizar Dashboard · v8 (preview)"), `GET /api/snapshot` returns 200
-  JSON. `make check` green.
+- **Last commit (this session, not yet committed):** v9.1.0 — real
+  integration gaps closed + live e2e. Three concrete fixes against
+  the user's brief that the prior v9.0.5 polish didn't reach:
+
+  1. **S23 — Overview snapshot includes real data.** Before this
+     commit, `state.getOverview()` returned only `counts.*` (agents,
+     artifacts, projects, sessions). The Overview StatTiles read
+     `ov.tasks`, `ov.goals`, `ov.agents`, `ov.tokens`,
+     `ov.needsAttention` — none of which existed in the live response.
+     Every StatTile rendered `0`/`—` against a real backend. Fixed
+     by extending `overview.mjs:buildSnapshot()` to compute
+     `tasks.{queued,active,done,blocked}` from the live task store,
+     `goals.{total,done,atRisk}` from `parseProgress()` against the
+     same `.bizar/PROGRESS.md` CC's `/goal` writes, and
+     `agents.{total,running,idle,error}` from the merged Bizar + CC
+     roster. `needsAttention` is derived from those buckets.
+  2. **S24 — `/api/agents` merges Bizar + CC.** Previously the
+     endpoint returned Bizar-only (`agentsStore.list()`); CC came from
+     a separate `/api/cc-agents` path. Now `/api/agents` returns the
+     union, each row tagged with `source: 'bizar' | 'cc'`. The CC
+     side reads from the existing 5s cache (no extra subprocess per
+     request). The AgentsView already filters by source, so the UI
+     gets the unified view for free; the new field is consumed via
+     the per-row `source` discriminator.
+  3. **S25 — Live e2e proof.** `make e2e-orchestration` boots the
+     dashboard server on a free port and asserts: `/api/health` is
+     200, `/api/snapshot` returns the enriched `overview.{tasks,
+     goals, agents, tokens, needsAttention}` keys, `/api/agents`
+     returns the source-tagged merged list, `/api/goals` reads from
+     PROGRESS.md, the WS handshake completes with frames received,
+     and `/api/gc` returns `{ok:true,...}`. Evidence file at
+     `/tmp/bizar-e2e-<pid>.json`.
+
+- **Audit findings (S23 audit):** Goals already use the canonical
+  store (`.bizar/PROGRESS.md` is what CC's `/goal` CLI writes, and
+  `goals.mjs:41-50` watches the file for live updates). So the
+  "goals use the default CC goals method" ask is satisfied at the
+  data layer; S23 closes the visible gap (OverviewView's "Goals at
+  risk" tile now reads real numbers).
+
 - **Branch:** master (uncommitted).
-- **Phase:** Fresh-install blocker fixed. Audit agent in flight against
-  user's full dashboard-orchestration asks (see "In Progress" below).
+- **Phase:** S23-S25 closed. Awaiting commit.
 - **Final verification:**
   - `make check` 0 TS errors.
+  - `make test` 294/294 sdk tests pass.
+  - dashboard vitest 271/271 tests pass.
+  - `node --test overview.test.mjs agents-cc.test.mjs` 6/6 pass.
+  - `make e2e-orchestration` 12/12 live steps pass.
 
 ## In Progress — Dashboard gap-fill against user's full asks
 

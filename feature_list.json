@@ -1304,6 +1304,52 @@
       ],
       "passed": "2026-07-13",
       "commit": "pending"
+    },
+    {
+      "id": "F-058",
+      "behavior": "S23 — Overview snapshot includes real tasks/goals/agents/tokens/needsAttention counts. Before this fix, state.getOverview() returned only counts.* so every Overview StatTile rendered 0/— on a live dashboard. New enrichOverview() in routes/overview.mjs aggregates task buckets from tasksStore, goal buckets from parseProgress() against .bizar/PROGRESS.md (CC's /goal canonical store), and agent buckets from the merged Bizar + CC roster.",
+      "verification": "make check 0 errors. node --test routes/overview.test.mjs passes. make e2e-orchestration reports snapshot.tasks_shape=queued,active,done,blocked and snapshot.goals_shape=total,done,atRisk with non-zero values when the active project has tasks and goals.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "server",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/server/routes/overview.mjs",
+        "bizar-dash/src/server/routes/agents-cc.mjs (peekCachedAgents export)",
+        "bizar-dash/src/server/routes/overview.test.mjs (new)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
+    },
+    {
+      "id": "F-059",
+      "behavior": "S24 — /api/agents merges Bizar + CC agents in a single response with source: 'bizar' | 'cc' discriminator. CC roster read via peekCachedAgents() (no extra subprocess per request). /api/agents now returns the union list so the dashboard shows both ecosystems side-by-side from one endpoint.",
+      "verification": "make check 0 errors. make e2e-orchestration reports agents.merged_shape pass; every agent row has source discriminator. UI: AgentsView source-chip filter renders both 'bizar' and 'cc' rows.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "server",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/server/routes/agents.mjs",
+        "bizar-dash/src/server/routes/agents-cc.mjs"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
+    },
+    {
+      "id": "F-060",
+      "behavior": "S25 — Live orchestration-center e2e. make e2e-orchestration boots the dashboard on a free port, hits /api/health, /api/snapshot, /api/agents, /api/goals, exercises /api/gc, completes a WS handshake, and writes evidence to /tmp/bizar-e2e-<pid>.json. Exits non-zero on any failure.",
+      "verification": "make e2e-orchestration reports All 12 steps passed; evidence JSON contains 12 ok=true entries with detail strings naming each endpoint and shape.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "test",
+      "created": "2026-07-13",
+      "files_touched": [
+        "tests/e2e/orchestration-center.mjs (new)",
+        "Makefile (e2e-orchestration target)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
     }
   ],
   "vcr": {

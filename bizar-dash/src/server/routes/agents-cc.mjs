@@ -113,6 +113,14 @@ async function listAgents({ force = false } = {}) {
   return _cache;
 }
 
+/** Read-only view of the last cached CC roster. Synchronous, returns
+ *  { agents, error, ts } or null when no fetch has happened yet.
+ *  Used by the overview snapshot to merge Bizar + CC without forking
+ *  a subprocess per request. */
+export function peekCachedAgents() {
+  return _cache ? { ..._cache, agents: _cache.agents.slice() } : null;
+}
+
 /**
  * @param {{ broadcast?: Function }} deps
  */
@@ -423,4 +431,4 @@ export function createAgentStreamRouter() {
   return router;
 }
 
-export const _internals = { listAgents, runClaudeAgents, enrichSession, CACHE_TTL_MS };
+export const _internals = { listAgents, runClaudeAgents, enrichSession, peekCachedAgents, CACHE_TTL_MS };

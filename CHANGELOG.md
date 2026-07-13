@@ -1,5 +1,55 @@
 # Changelog
 
+## v9.1.0 — feat: real integration gaps closed + live orchestration e2e
+
+The v9.0.x releases shipped dashboard UI polish (TaskDetail drawer,
+AgentLiveOutput SSE, inline Goals, settings wiring) but the user's
+brief — *"fully integrated with the bizar backend and claude code"*
+and *"see agents regardless of if theyre created in bizar or in
+claude code"* — was only partly met. v9.1.0 closes three concrete
+integration gaps and proves them end-to-end.
+
+Server
+- `routes/overview.mjs:buildSnapshot()` now extends `state.getOverview()`
+  with `tasks`, `goals`, `agents`, `tokens`, `needsAttention` keys
+  populated from the live task store, `parseProgress()` against
+  `.bizar/PROGRESS.md` (CC's `/goal` canonical store), and the merged
+  Bizar + CC agent roster. Previously every Overview StatTile
+  rendered `0`/`—` because the keys didn't exist in the response.
+- `routes/agents.mjs:GET /agents` now returns the Bizar + CC union
+  with each row tagged `source: 'bizar' | 'cc'`. CC side reads via
+  the new `peekCachedAgents()` helper — no extra subprocess per
+  request; the existing 5s CC cache is reused.
+- `routes/agents-cc.mjs` exports `peekCachedAgents()` for sync
+  consumption from the overview + agents routers.
+
+E2E
+- `tests/e2e/orchestration-center.mjs` boots the dashboard on a free
+  port and asserts 12 live steps (server.boot, /api/health,
+  /api/snapshot shape with all 5 enriched keys, /api/agents merge
+  shape, /api/goals canonical-store shape, WS handshake with frames,
+  /api/gc admin exercise, /api/restart smoke). Evidence file at
+  `/tmp/bizar-e2e-<pid>.json`.
+- `make e2e-orchestration` — wire-up target. Pass
+  `BIZAR_E2E_SKIP_RESTART=0` to also exercise the self-respawn.
+
+Verification
+- `make check` 0 errors
+- `make test` 294/294
+- `node_modules/.bin/vitest --root bizar-dash run` 271/271
+- `node --test routes/overview.test.mjs routes/agents-cc.test.mjs` 6/6
+- `make e2e-orchestration` 12/12
+
+## v9.0.5 — feat: per-row drawers, live agent output, settings wiring
+
+Comprehensive UI polish on top of v9.0.0. Wires previously-stub
+Settings controls, adds per-row detail drawers across Tasks/Goals/
+Schedules, AgentLiveOutput (SSE tail with pause/clear/retry/follow),
+bulk task actions, inline goal creation, activity search/pause,
+memory WS + export, schedule edit, and a new /api/admin router.
+
+See git history for the per-file diff.
+
 ## v9.0.4 — patch: dashboard SPA entry now ships as `index.html`
 
 The dashboard SPA was built from `src/web/v8.html`, producing

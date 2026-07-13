@@ -20,6 +20,7 @@
  */
 import { Router } from 'express';
 import { agentsStore, buildHierarchyTree } from '../agents-store.mjs';
+import { peekCachedAgents } from './agents-cc.mjs';
 import { wrap } from './_shared.mjs';
 
 /**
@@ -31,8 +32,20 @@ import { wrap } from './_shared.mjs';
 export function createAgentsRouter({ state, broadcast }) {
   const router = Router();
 
+  // S24 — merge Bizar + CC agents in a single response. The `source`
+  // discriminator lets the UI render a per-row badge and route the
+  // right action handlers (CC agents use /api/cc-agents/:id/{kill,
+  // send, restart}; Bizar agents use /api/agents/:name/{restart, ...}).
   router.get('/agents', wrap(async (_req, res) => {
-    res.json({ agents: agentsStore.list() });
+    const bizarAgents = agentsStore.list().map((a) => ({ ...a, source: 'bizar' }));
+    let ccAgents = [];
+    try {
+      const cached = peekCachedAgents();
+      if (cached && Array.isArray(cached.agents)) {
+        ccAgents = cached.agents.map((a) => ({ ...a, source: 'cc' }));
+      }
+    } catch { /* best-effort */ }
+    res.json({ agents: [...bizarAgents, ...ccAgents] });
   }));
 
   // v3.1.0 — /api/agents/stuck must be defined BEFORE the /:name
