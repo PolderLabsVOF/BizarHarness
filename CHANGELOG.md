@@ -1,5 +1,18 @@
 # Changelog
 
+## v9.0.1 — patch: ship `plugins/` in the tarball
+
+`package.json` `files` whitelist omitted `plugins/bizar/`. Fresh
+installs failed at boot with:
+
+```
+Plugin source not found at .../node_modules/@polderlabs/bizar/plugins/bizar
+```
+
+Added `plugins/` to the `files` array so `npm install -g @polderlabs/bizar`
+places the Claude Code MCP plugin source where the dashboard's
+plugin-bootstrap step expects it.
+
 ## v9.0.0 — v8 orchestration center
 
 The dashboard is now a full control plane for both Bizar and

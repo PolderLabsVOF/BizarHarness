@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "9.0.0",
+  "version": "9.0.1",
   "description": "Norse-pantheon multi-agent system for Claude Code — 14 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness. Ships as a single npm package with the dashboard server, Claude Code MCP server, and typed SDK.",
   "type": "module",
   "bin": {
@@ -14,6 +14,7 @@
     "config/",
     "templates/",
     "scripts/",
+    "plugins/",
     "install.sh"
   ],
   "scripts": {
