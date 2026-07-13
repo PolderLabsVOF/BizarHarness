@@ -1751,3 +1751,53 @@ Goal: full chat UI from a v8 page.
 
 **Next sprint:** S39 — Projects + Claude sessions + Claude
 session detail (P0).
+
+### Sprint S39 — Projects + Claude sessions (shipped in this commit, F-069..F-071)
+
+Goal: the project's active-context picker + Claude Code session
+explorer + per-session detail pane.
+
+- `bizar-dash/src/web/v8/views/Projects/ProjectsView.tsx` (new,
+  ~225 LOC) — list of registered projects with active badge,
+  Activate button, Add (Sheet form for path + display name),
+  Remove (inline confirm row), Auto-detect cwd button, and Scan
+  configured projects directory. Live refresh on the
+  `project:change` WS event the server broadcasts.
+- `bizar-dash/src/web/v8/views/ClaudeSessions/ClaudeSessionsView.tsx`
+  (new, ~250 LOC) — list of Claude Code sessions, inline rename
+  (PATCH), inline-confirm delete (DELETE), and Open button that
+  surfaces the detail in a right Sheet. New session via Sheet
+  form posting to `/api/claude-sessions/new` (title, agent,
+  prompt, working directory).
+- `bizar-dash/src/web/v8/views/ClaudeSessions/ClaudeSessionDetail.tsx`
+  (new, ~140 LOC) — reads `/api/claude-sessions/:id/messages`,
+  renders bubbles via `MessageBubble`, sends follow-ups via
+  POST `/api/claude-sessions/:id/send`. Auto-refreshes 750ms
+  after send so the resumed turn appears.
+- `bizar-dash/src/web/v8/data/types.ts` — added `Project`
+  interface.
+- `bizar-dash/src/web/v8/views/Router.tsx` — added
+  `projects-list` and `claude-sessions` case arms + lazy
+  imports.
+- `bizar-dash/src/web/v8/shell/Sidebar.tsx` — added Projects
+  (`Folder` icon) + Claude sessions (`MessageCircle` icon) under
+  Workspace.
+- `bizar-dash/src/web/v8/__tests__/projects-view.test.tsx`
+  (new, 6 vitest cases): empty state, list with active badge,
+  opens Add Sheet, posts on submit, posts on activate, deletes
+  on confirm.
+- `bizar-dash/src/web/v8/__tests__/claude-sessions-view.test.tsx`
+  (new, 7 vitest cases): empty state, list with agent, opens
+  New Sheet, posts on create, PATCHes on rename, DELETEs on
+  confirm, opens detail Drawer.
+- `tests/e2e/real-environment.mjs` — added
+  `projects.list_shape` + `claude_sessions.list_shape` probes.
+
+**Verification:**
+- `make check` → 0 errors.
+- `npm run typecheck` → 0 errors.
+- `npx vitest run` → **44 test files / 307 tests pass**
+  (was 42 / 294 before S39; +13 new test cases).
+- `make e2e-real-env` → **16/16 steps pass** (was 14 / 14).
+
+**Next sprint:** S40 — History + Admin + Auth (P0).
