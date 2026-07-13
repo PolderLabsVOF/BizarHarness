@@ -86,13 +86,19 @@ describe('hook usage outside provider', () => {
   it('useTheme throws when used without a provider', () => {
     // suppress React's error boundary log
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => renderHook(() => useTheme())).toThrow(/ThemeProvider/);
-    spy.mockRestore();
+    try {
+      expect(() => renderHook(() => useTheme())).toThrow(/ThemeProvider/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('useDensity throws when used without a provider', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => renderHook(() => useDensity())).toThrow(/DensityProvider/);
-    spy.mockRestore();
+    try {
+      expect(() => renderHook(() => useDensity())).toThrow(/DensityProvider/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

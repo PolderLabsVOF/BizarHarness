@@ -31,7 +31,7 @@ interface RawMemoryEntry {
 }
 
 interface MemoryResponse {
-  entries?: RawMemoryEntry[];
+  notes?: RawMemoryEntry[];
   count?: number;
 }
 
@@ -55,14 +55,14 @@ interface NoteDraft {
 }
 
 export function MemoryView(): JSX.Element {
-  const mem = useFetch<MemoryResponse>('/api/memory');
+  const mem = useFetch<MemoryResponse>('/api/memory/notes');
   const [scope, setScope] = useState<MemoryScope | 'all'>('all');
   const [draft, setDraft] = useState<NoteDraft | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const entries = useMemo<MemoryEntry[]>(() => {
-    const list = (mem.data?.entries || []).map(toEntry);
+    const list = (mem.data?.notes || []).map(toEntry);
     if (scope === 'all') return list;
     return list.filter((e) => e.scope === scope);
   }, [mem.data, scope]);

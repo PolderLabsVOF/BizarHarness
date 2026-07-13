@@ -21,8 +21,8 @@ describe('MemoryView — control surface', () => {
     global.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
       const u = String(url);
       const method = init?.method ?? 'GET';
-      if (u.includes('/api/memory') && method === 'GET') {
-        return new Response(JSON.stringify({ entries: notes }), {
+      if (u.includes('/api/memory/notes') && method === 'GET') {
+        return new Response(JSON.stringify({ notes }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
