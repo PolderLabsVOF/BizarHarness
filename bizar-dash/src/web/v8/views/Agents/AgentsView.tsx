@@ -6,6 +6,7 @@ import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { AgentCard, type AgentCardProps, type AgentStatus } from '../../ui/agents/AgentCard.js';
 import { AgentDetail } from '../../ui/agents/AgentDetail.js';
 import { Chip } from '../../ui/data/Chip.js';
+import { Banner } from '../../ui/feedback/Banner.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
 import { Input } from '../../ui/controls/Input.js';
@@ -14,7 +15,8 @@ import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { BizarAgent, CCAgent, WsMessage } from '../../data/types.js';
-import { Bot, Cpu, Plus } from 'lucide-react';
+import { AlertTriangle, Bot, Cpu, Plus } from 'lucide-react';
+import { AgentHierarchy } from './AgentHierarchy.js';
 
 const SOURCE_STORAGE_KEY = 'bizar.agents.sourceFilter';
 const SOURCE_LABELS = {
@@ -54,9 +56,13 @@ function mapBizar(a: BizarAgent): AgentCardProps {
     currentTask: a.currentTaskId ? `Task ${a.currentTaskId}` : undefined,
     lastActivity: a.lastSeen ? new Date(a.lastSeen).toLocaleTimeString() : undefined,
     tasksToday: a.tasksTotal || 0,
-    // Bizar agents don't expose a message-count series. Use
-    // [tasksTotal] as a single-point sparkline so the chart isn't dead.
-    tpmHistory: typeof a.tasksTotal === 'number' ? [a.tasksTotal] : [],
+    // v9.4.0 — pass real metrics for the new AgentCard strip. The old
+    // `tpmHistory` field was dead because AgentCard only renders the
+    // sparkline when `length > 1` and we always passed a single point.
+    tasksSucceeded: typeof a.tasksSucceeded === 'number' ? a.tasksSucceeded : undefined,
+    tasksTotal: typeof a.tasksTotal === 'number' ? a.tasksTotal : undefined,
+    successRate: typeof a.successRate === 'number' ? a.successRate : undefined,
+    lastSeenMs: typeof a.lastSeen === 'number' && a.lastSeen > 0 ? a.lastSeen : undefined,
     badges: a.tags || [],
   };
 }
@@ -67,12 +73,6 @@ function mapCC(a: CCAgent): AgentCardProps {
     raw === 'busy' || raw === 'working' ? 'busy' :
     raw === 'error' ? 'error' :
     raw === 'paused' ? 'paused' : 'idle';
-  // Build a tiny sparkline series from messageCount. If we only have a
-  // scalar, we render a single-point chart; real time-series would
-  // require the backend to expose a history endpoint (deferred).
-  const series: number[] = typeof a.messageCount === 'number' && a.messageCount > 0
-    ? [a.messageCount]
-    : [];
   return {
     id: `cc:${a.sessionId || a.id}`,
     name: a.name || a.sessionId?.slice(0, 8) || 'unknown',
@@ -81,7 +81,9 @@ function mapCC(a: CCAgent): AgentCardProps {
     currentTask: a.lastMessageSnippet || undefined,
     lastActivity: a.lastMessageAt ? new Date(a.lastMessageAt).toLocaleTimeString() : (a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : undefined),
     tasksToday: a.messageCount || 0,
-    tpmHistory: series,
+    // CC agents don't expose successRate/tasksSucceeded — only messageCount.
+    // Skip the metric strip for them; the badge + lastActivity carry the
+    // signal.
     badges: [a.cwd?.split('/').slice(-2).join('/') || ''].filter(Boolean),
   };
 }
@@ -89,7 +91,9 @@ function mapCC(a: CCAgent): AgentCardProps {
 export function AgentsView(): JSX.Element {
   const bizar = useFetch<{ agents?: BizarAgent[] }>('/api/agents');
   const cc = useFetch<{ agents?: CCAgent[]; error?: string }>('/api/cc-agents');
+  const stuck = useFetch<{ stuck?: BizarAgent[] }>('/api/agents/stuck');
   const [source, setSource] = useState<SourceFilter>(readPersistedSource);
+  const [mode, setMode] = useState<'roster' | 'hierarchy'>('roster');
   useEffect(() => {
     if (typeof localStorage !== 'undefined') localStorage.setItem(SOURCE_STORAGE_KEY, source);
   }, [source]);
@@ -168,19 +172,57 @@ export function AgentsView(): JSX.Element {
           </Button>
         }
       />
-      <Inline gap={2}>
-        {(['all', 'bizar', 'claude-code'] as SourceFilter[]).map((id) => (
+      {(stuck.data?.stuck ?? []).length > 0 && (
+        <Banner
+          tone="warning"
+          data-testid="agents-stuck-banner"
+          action={
+            <Button variant="secondary" size="sm" onClick={() => setMode('hierarchy')}>
+              View details
+            </Button>
+          }
+        >
+          <Inline align="center" gap={2}>
+            <AlertTriangle size={14} aria-hidden style={{ color: 'var(--warning)' }} />
+            <span>
+              {(stuck.data?.stuck ?? []).length} agent{stuck.data && stuck.data.stuck && stuck.data.stuck.length === 1 ? '' : 's'} stuck (no heartbeat &gt;5m)
+            </span>
+          </Inline>
+        </Banner>
+      )}
+      <Inline align="center" justify="between" wrap gap={2}>
+        <Inline gap={2}>
+          {(['all', 'bizar', 'claude-code'] as SourceFilter[]).map((id) => (
+            <Chip
+              key={id}
+              selected={source === id}
+              onClick={() => setSource(id)}
+            >
+              {id === 'bizar' ? <Bot size={12} aria-hidden /> : id === 'claude-code' ? <Cpu size={12} aria-hidden /> : null}{' '}
+              {SOURCE_LABELS[id]}
+            </Chip>
+          ))}
+        </Inline>
+        <Inline gap={2}>
           <Chip
-            key={id}
-            selected={source === id}
-            onClick={() => setSource(id)}
+            data-testid="agents-mode-roster"
+            selected={mode === 'roster'}
+            onClick={() => setMode('roster')}
           >
-            {id === 'bizar' ? <Bot size={12} aria-hidden /> : id === 'claude-code' ? <Cpu size={12} aria-hidden /> : null}{' '}
-            {SOURCE_LABELS[id]}
+            Roster
           </Chip>
-        ))}
+          <Chip
+            data-testid="agents-mode-hierarchy"
+            selected={mode === 'hierarchy'}
+            onClick={() => setMode('hierarchy')}
+          >
+            Hierarchy
+          </Chip>
+        </Inline>
       </Inline>
-      {cards.length === 0 && (bizar.loading || cc.loading) ? (
+      {mode === 'hierarchy' ? (
+        <AgentHierarchy />
+      ) : cards.length === 0 && (bizar.loading || cc.loading) ? (
         <Grid cols={3}>
           <Skeleton style={{ height: 140 }} />
           <Skeleton style={{ height: 140 }} />
