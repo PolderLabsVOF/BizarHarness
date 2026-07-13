@@ -1225,13 +1225,73 @@
         }
       ],
       "passed": "2026-07-13",
-      "commit": "pending",
+      "commit": "4092295",
       "evidence": "npx vitest run src/web/v8 \u2014 25 files, 195/195 pass (2026-07-13). node --test 3 backend files \u2014 15/15 pass (2026-07-13)."
+    },
+    {
+      "id": "F-053",
+      "behavior": "v8 Agent detail Drawer + control plane (S11). Click any agent card \u2192 right-side Sheet with avatar/role/source badge/current task/prompt textarea + Send / Restart / Copy id buttons. Send routes to /api/cc-agents/:id/send for CC background agents and /api/agents/:name/invoke for Bizar agents. Backend routes/agents-cc.mjs adds kill + send endpoints.",
+      "verification": "tsc --noEmit 0 errors. control-plane.test.tsx 7/7 vitest cases (AgentDetail: name/badge/task callout/Send endpoint routing/button presence; GoalDetail: editable fields/KR list/PATCH on blur). Backend agents-cc 4/4 pass.",
+      "state": "passing",
+      "layer": "L1+L2",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/ui/agents/AgentDetail.tsx (new, Sheet + buttons + fetchJson routing)",
+        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (onOpen wiring + AgentDetail mount)",
+        "bizar-dash/src/server/routes/agents-cc.mjs (POST /cc-agents/:id/kill and /send)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7390713"
+    },
+    {
+      "id": "F-054",
+      "behavior": "v8 Goal editor Drawer + create flow (S12). Card click \u2192 editable Title / Status / Owner / Due + inline KR list (toggle done, add via Enter, remove). Each field PATCHes /api/goals/:id on blur; KR ops hit /key-results/:krId. '+ New goal' button POSTs /api/goals then opens the new goal for editing. Source-of-truth stays .bizar/PROGRESS.md.",
+      "verification": "tsc --noEmit 0 errors. control-plane.test.tsx 7/7 pass (GoalDetail sections). progress-parser 8/8 + round-trip pass.",
+      "state": "passing",
+      "layer": "L1+L2",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/ui/goals/GoalDetail.tsx (new, Sheet + editable fields + KR list)",
+        "bizar-dash/src/web/v8/views/Goals/GoalsView.tsx (+ New goal + Drawer mount)",
+        "bizar-dash/src/server/routes/goals.mjs (already shipped in S10; POST + PATCH + KR endpoints)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7390713"
+    },
+    {
+      "id": "F-055",
+      "behavior": "Command palette control surface (S13). \u2318K palette gains three groups: Agents (Spawn Coder/Researcher/Planner/Reviewer \u2192 POST /api/agents), Tasks (New task via window.prompt \u2192 POST /api/tasks/submit), Projects (dynamically loaded from /api/projects \u2192 POST /api/projects/:id/activate). Existing Navigation/Actions/Settings groups preserved.",
+      "verification": "tsc --noEmit 0 errors. The existing AppCommandPalette.test.tsx continues to pass (palette structure unchanged on the outside).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/CommandPalette/AppCommandPalette.tsx (3 new groups + spawnAgent + newTask + switchProject helpers)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7390713"
+    },
+    {
+      "id": "F-056",
+      "behavior": "Settings section wiring pass (S14). All 16 sections either render real controls (theme, density, density-rules, plugins/mcps/skills/hooks counts pulled live) or persist via PATCH /api/settings. control-plane.test.tsx regression suite pins the AgentDetail + GoalDetail wiring.",
+      "verification": "tsc --noEmit 0 errors. SettingsView smoke test (renders 16 sections, marks General as active) passes via views.test.tsx.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/__tests__/control-plane.test.tsx (new, 7 cases)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7390713"
     }
   ],
   "vcr": {
-    "passing": 40,
-    "activated": 40,
+    "passing": 44,
+    "activated": 44,
     "ratio": 1
   }
 }
