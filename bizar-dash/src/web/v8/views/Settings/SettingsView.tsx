@@ -200,6 +200,16 @@ export function SettingsView(): JSX.Element {
   const hooksRes = useFetch<{ skills?: { name: string }[] }>('/api/skills?kind=hooks');
   const agentsRes = useFetch<{ agents?: { name: string }[] }>('/api/agents');
 
+  // Hydrate from the server. The server returns the merged
+  // (defaults + persisted overrides) shape, so we can spread it
+  // directly over our DEFAULTS to pick up any keys we don't model.
+  const settingsRes = useFetch<Partial<SettingsState>>('/api/settings');
+  useEffect(() => {
+    if (settingsRes.data) {
+      setSettings((prev) => ({ ...prev, ...settingsRes.data }));
+    }
+  }, [settingsRes.data]);
+
   const update = <K extends keyof SettingsState>(key: K, value: SettingsState[K]): void => {
     setSettings((s) => ({ ...s, [key]: value }));
     void patch(key, value);
@@ -207,7 +217,13 @@ export function SettingsView(): JSX.Element {
 
   const patch = async (key: string, value: unknown): Promise<void> => {
     try {
-      await fetchJson('/api/settings', { method: 'PATCH', body: { [key]: value } });
+      // The settings endpoint accepts a partial body and merges with
+      // existing values on the server side — so PUT /api/settings
+      // with { [key]: value } is the canonical "update one row" path.
+      // We re-PUT the full merged shape so the server has the latest
+      // copy of every key we know about.
+      const merged = { ...settings, [key]: value };
+      await fetchJson('/api/settings', { method: 'PUT', body: merged });
       setSavedAt(Date.now());
       setError(null);
     } catch (err) {
