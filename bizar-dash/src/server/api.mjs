@@ -62,6 +62,11 @@ import { createVoiceRouter } from './routes/voice.mjs';
 // v6.4.0 — F-036 Goal Planner UI. POST /api/goal-planner/plan returns
 // a GOAP-style A* plan for a plain-English goal.
 import { createGoalPlannerRouter } from './routes/goal-planner.mjs';
+// Sprint S10 — v8 dashboard live data. /api/goals parses .bizar/PROGRESS.md;
+// /api/cc-agents exposes `claude agents --json` enriched with worktree + counts;
+// /api/agent-stream SSE tails the session JSONL for live agent output.
+import { createGoalsRouter } from './routes/goals.mjs';
+import { createCCAgentsRouter, createAgentStreamRouter } from './routes/agents-cc.mjs';
 import { attachUserContext } from './auth.mjs';
 
 /**
@@ -117,6 +122,9 @@ export async function createApiRouter({
   router.use(createModsRouter());
   router.use(createAgentsRouter({ state, broadcast }));
   router.use(createBackgroundRouter({ broadcast }));
+  // Sprint S10 — live CC agents + SSE stream for the dashboard output panel.
+  router.use(createCCAgentsRouter({ broadcast }));
+  router.use(createAgentStreamRouter());
   router.use(createActivityRouter({ state }));
   router.use(createHistoryRouter({ projectRoot }));
   router.use(createConfigRouter({ state, watcher }));
@@ -158,6 +166,8 @@ export async function createApiRouter({
   router.use(createPairRouter({ state, broadcast }));
   // v6.4.0 — F-036 Goal Planner UI. Plain-English goal → A* plan.
   router.use(createGoalPlannerRouter({ broadcast }));
+  // Sprint S10 — goals CRUD on .bizar/PROGRESS.md.
+  router.use(createGoalsRouter({ broadcast }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));

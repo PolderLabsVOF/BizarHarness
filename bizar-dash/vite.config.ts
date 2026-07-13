@@ -47,5 +47,20 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: false,
+    // v8 dashboard calls /api/* and /ws over the browser's same origin
+    // (port 5174). In dev we proxy those to the backend on PORT (4098
+    // by default) so the React app talks to the running server. In prod
+    // the backend serves /api/* itself.
+    proxy: {
+      '/api': {
+        target: process.env.VITE_BACKEND_URL || `http://127.0.0.1:${process.env.PORT || '4098'}`,
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: process.env.VITE_BACKEND_URL || `http://127.0.0.1:${process.env.PORT || '4098'}`,
+        ws: true,
+        changeOrigin: true,
+      },
+    },
   },
 });
