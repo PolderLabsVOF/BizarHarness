@@ -53,7 +53,7 @@ function writeRaw(text) {
   renameSync(tmp, p);
 }
 
-function broadcast(broadcast, goal) {
+function emit(broadcast, goal) {
   if (typeof broadcast === 'function') {
     broadcast({ type: 'goals:change', goal });
   }
@@ -94,7 +94,7 @@ export function createGoalsRouter({ broadcast } = {}) {
     if (!goal) { res.status(404).json({ error: 'not_found' }); return; }
     goal.status = status;
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     res.json(goal);
   }));
 
@@ -129,7 +129,7 @@ export function createGoalsRouter({ broadcast } = {}) {
     };
     parsed.goals.push(goal);
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     res.status(201).json(goal);
   }));
 
@@ -147,7 +147,7 @@ export function createGoalsRouter({ broadcast } = {}) {
       goal.status = body.status.toLowerCase();
     }
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     res.json(goal);
   }));
 
@@ -166,7 +166,7 @@ export function createGoalsRouter({ broadcast } = {}) {
     };
     goal.keyResults.push(kr);
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     res.status(201).json(kr);
   }));
 
@@ -185,7 +185,7 @@ export function createGoalsRouter({ broadcast } = {}) {
     const done = goal.keyResults.filter((k) => k.done).length;
     goal.progress = goal.keyResults.length > 0 ? done / goal.keyResults.length : 0;
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     res.json(kr);
   }));
 
@@ -203,7 +203,7 @@ export function createGoalsRouter({ broadcast } = {}) {
     const done = goal.keyResults.filter((k) => k.done).length;
     goal.progress = goal.keyResults.length > 0 ? done / goal.keyResults.length : 0;
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     res.status(204).end();
   }));
 
@@ -235,7 +235,7 @@ export function createGoalsRouter({ broadcast } = {}) {
       created.push({ kr: kr.id, task: task.id });
     }
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     res.status(201).json({ goalId: goal.id, created });
   }));
 
@@ -267,7 +267,7 @@ export function createGoalsRouter({ broadcast } = {}) {
     }
     if (changed) {
       writeRaw(serializeProgress(parsed));
-      broadcast(broadcast, goal);
+      emit(broadcast, goal);
     }
     res.json({ goal, changed });
   }));
@@ -298,7 +298,7 @@ export function syncGoalFromTask(
   ) {
     goal.progress = newProgress;
     writeRaw(serializeProgress(parsed));
-    broadcast(broadcast, goal);
+    emit(broadcast, goal);
     return true;
   }
   return false;

@@ -25,6 +25,7 @@ import { tasksStore } from './tasks-store.mjs';
 import { schedulesStore } from './schedules-store.mjs';
 import { providersStore, mcpsStore } from './providers-store.mjs';
 import { readClineJsonCached } from './providers-store.mjs';
+import { readSettings } from './routes/_shared.mjs';
 import { homedir } from 'node:os';
 import { startBgPoller, stopBgPoller } from './bg-poller.mjs';
 import { startBgRetryLoop, stopBgRetryLoop } from './bg-retry.mjs';
@@ -439,7 +440,6 @@ export async function createServer({
   // headroom routes are registered. Errors are caught and logged — startup
   // must not fail if Headroom has issues.
   const { headroomStartupHook } = await import('./headroom.mjs');
-  const { readSettings } = await import('./routes/_shared.mjs');
   try {
     const settings = readSettings();
     if (settings?.data?.headroom) {
