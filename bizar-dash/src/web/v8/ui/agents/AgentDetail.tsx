@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Send, RotateCw, Octagon, ClipboardCopy, Activity as ActivityIcon } from 'lucide-react';
 import { Avatar } from '../data/Avatar.js';
 import { Badge } from '../data/Badge.js';
@@ -8,9 +8,12 @@ import { Stack } from '../primitives/Stack.js';
 import { Inline } from '../primitives/Inline.js';
 import { Textarea } from '../controls/Textarea.js';
 import { Skeleton } from '../feedback/Skeleton.js';
+import { Card, CardBody } from '../data/Card.js';
 import { AgentStreamPanel } from './AgentStreamPanel.js';
 import { AgentLiveOutput } from './AgentLiveOutput.js';
 import { fetchJson } from '../../data/fetcher.js';
+import { useFetch } from '../../data/useFetch.js';
+import type { Task } from '../../data/types.js';
 
 /**
  * AgentDetail — Sprint S11. Right-side Drawer with live agent
@@ -56,6 +59,24 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastProcessId, setLastProcessId] = useState<string | null>(null);
+
+  // v9.5.0 S49 — agent↔task drilldown. `useFetch` is gated on `open` so
+  // we don't burn a request every time the Sheet is mounted-hidden. We
+  // client-filter for the current agent's name across both `workedBy`
+  // (Bizar task-store) and `metadata.agent` (task-store progress events).
+  const tasksQuery = useFetch<{ tasks?: Task[] }>(open ? '/api/tasks' : null);
+  const myTasks = useMemo<Task[]>(() => {
+    if (!open) return [];
+    const all = tasksQuery.data?.tasks ?? [];
+    return all.filter((t) => {
+      const md = (t.metadata ?? {}) as { agent?: unknown };
+      return (
+        (typeof (t as unknown as { workedBy?: unknown }).workedBy === 'string'
+          && (t as unknown as { workedBy: string }).workedBy === key)
+        || md.agent === key
+      );
+    });
+  }, [open, tasksQuery.data, key]);
 
   useEffect(() => {
     if (open) { setPrompt(''); setMessage(null); setError(null); setLastProcessId(null); }
@@ -328,6 +349,60 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
 
         {/* Live stream — only meaningful for Claude Code sessions (they have
             a backing JSONL log). Bizar agents have no equivalent surface. */}
+        {/* v9.5.0 S49 — agent↔task drilldown. Renders the tasks this agent
+            is currently working on (filtered by workedBy / metadata.agent),
+            so the user can see "what is my orchestrator doing right now"
+            without bouncing between this Sheet and the Tasks board. */}
+        <Stack gap={2}>
+          <div
+            style={{
+              fontSize: 'var(--fs-12)',
+              color: 'var(--fg-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}
+          >
+            Assigned tasks ({myTasks.length})
+          </div>
+          {tasksQuery.loading && myTasks.length === 0 ? (
+            <Skeleton style={{ height: 48 }} />
+          ) : myTasks.length === 0 ? (
+            <Card variant="outlined">
+              <CardBody>
+                <span data-testid="agent-tasks-empty" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+                  No tasks assigned to this agent.
+                </span>
+              </CardBody>
+            </Card>
+          ) : (
+            <Stack gap={1}>
+              {myTasks.map((t) => (
+                <div
+                  key={t.id}
+                  data-testid={`agent-tasks-${t.id}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: 'var(--space-2) var(--space-3)',
+                    background: 'var(--surface-0)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 'var(--fs-13)',
+                  }}
+                >
+                  <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>{t.id}</code>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {t.title}
+                  </span>
+                  <Badge tone={t.status === 'doing' ? 'info' : t.status === 'blocked' ? 'danger' : 'neutral'}>
+                    {t.status ?? 'queued'}
+                  </Badge>
+                </div>
+              ))}
+            </Stack>
+          )}
+        </Stack>
         {source === 'claude-code' && (
           <Stack gap={2}>
             <div
