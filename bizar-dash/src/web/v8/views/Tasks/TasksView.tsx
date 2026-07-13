@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { KanbanBoard } from '../../ui/kanban/KanbanBoard.js';
@@ -83,14 +83,16 @@ function SortableCard({ card }: { card: Card }): JSX.Element {
 export function TasksView(): JSX.Element {
   const tasks = useFetch<{ tasks?: Task[]; count?: number }>('/api/tasks');
   const [cards, setCards] = useState<Card[]>([]);
-  const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync fetched list → local state.
-  if (tasks.data?.tasks && !initialized) {
-    setInitialized(true);
-    setCards(tasks.data.tasks.map(taskToCard));
-  }
+  // Sync fetched list → local state. Effect-driven so we don't setState
+  // during render (which React warns about under StrictMode and which
+  // can double-render the cards).
+  useEffect(() => {
+    if (tasks.data?.tasks) {
+      setCards(tasks.data.tasks.map(taskToCard));
+    }
+  }, [tasks.data]);
 
   const onWsChange = useCallback((msg: WsMessage) => {
     if (msg.type !== 'tasks:change') return;
