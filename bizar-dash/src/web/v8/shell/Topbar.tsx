@@ -6,6 +6,7 @@ import { Separator } from '../ui/primitives/Separator.js';
 import { ThemeToggle, DensityToggle } from '../ui/theme/ThemeToggle.js';
 import { useFetch } from '../data/useFetch.js';
 import { useConnectionState } from '../data/useWebSocket.js';
+import { NotificationsPopover } from '../ui/feedback/NotificationsPopover.js';
 
 /**
  * Topbar — the 56px horizontal bar at the top of the v8 shell.
@@ -128,6 +129,8 @@ function DefaultActions({ status }: { status?: ReactNode }): JSX.Element {
           <span>{connected ? 'live' : 'offline'}</span>
         </Inline>
       )}
+      <Separator orientation="vertical" style={{ height: 16 }} />
+      <NotificationsPopover />
       <Separator orientation="vertical" style={{ height: 16 }} />
       <DensityToggle />
       <ThemeToggle />
