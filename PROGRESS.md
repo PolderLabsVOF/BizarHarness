@@ -1534,7 +1534,53 @@ endpoint (handy when 9Router runs inside a container/tunnel).
 | v5.6.0-beta.1       | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)        |
 | v5.5.6              | 2026-07-07 | stable | new `/plow-through` slash command          |
 
-## In Progress — v9.4.0 — Data-driven orchestration center polish
+## In Progress — v9.5.0 — Control + drilldown polish (agents roster)
+
+Stop-hook feedback noted that v9.4.0 only closed 3 audit gaps while
+narrowing scope from the wider 'fully plan out and implement
+everything / control and configure everything / professional and
+data-driven' ask. Audit surfaced 3 remaining concrete gaps:
+
+1. `make check` was broken on 3 TS2783 errors in UpdateView.tsx
+   (pre-existing since pre-v9.2.0; not surfaced by any prior sprint).
+2. The AgentsView stuck banner was read-only — 'View details' forced
+   the user to drill into each stuck agent's Sheet. For 3+ stuck
+   agents that's the literal 'control' gap.
+3. AgentDetail never showed the tasks that agent was working on,
+   so the 'progress' leg of 'see all agent statuses and progress' was
+   invisible for Bizar agents.
+
+### Sprint S47 — UpdateView typecheck fix (shipped in `1283b8b`, F-091)
+
+- `views/Update/UpdateView.tsx` lines 65-76 — the three
+  `useWsMessage` callbacks each built the log entry as
+  `{ type: 'update:progress', ...msg }`. Because `msg.type` already
+  carries the discriminator, the literal `type` key collided with
+  the spread and TS2783 fired (`'type' is specified more than once`).
+- Fixed by spreading `msg` first and narrowing via the cast:
+  `{ ...msg, type: 'update:progress' } as ProgressEvent`. Same fix
+  for `update:log` and `update:complete`.
+- **`make check` is GREEN for the first time since pre-v9.2.0.**
+
+### Sprint S48 — Inline Restart on stuck banner (shipped in `d1c9647`, F-092)
+
+- `views/Agents/AgentsView.tsx` — the stuck `Banner` now renders
+  one row per stuck agent (name + status Badge + last-seen + a
+  Restart `Button`). One click → `POST /api/agents/:name/restart` →
+  server broadcasts `agents:change` → banner refreshes.
+- `data-testid="agents-stuck-row-<name>"` and
+  `data-testid="agents-stuck-restart-<name>"` for test hooks.
+
+### Sprint S49 — AgentDetail agent↔task drilldown (shipped in `4fcf12e`, F-093)
+
+- `ui/agents/AgentDetail.tsx` — added an "Assigned tasks (N)"
+  section. `useFetch('/api/tasks')` is gated on `open`; the result
+  is client-filtered by `workedBy` (Bizar task-store) OR
+  `metadata.agent` (progress events). Each match renders as a Card
+  row with id (mono) + title + status Badge.
+- Empty-state Card when no tasks are assigned.
+
+**Test delta:** 370 → 376 (+6). **62 → 63 test files.**
 
 Stop-hook feedback on v9.3.0 ("insufficient evidence"): "see all
 agent statuses and progress and goals regardless of if they're

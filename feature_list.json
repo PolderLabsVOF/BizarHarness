@@ -1790,11 +1790,53 @@
       ],
       "passed": "2026-07-13",
       "commit": "1895a5f"
+    },
+    {
+      "id": "F-091",
+      "behavior": "S47 — make check green. Fix 3 TS2783 errors in views/Update/UpdateView.tsx:67,70,73 (useWsMessage callbacks spread msg AND set type literally, double-specifying the discriminator key).",
+      "verification": "bunx tsc --noEmit at root reports 0 errors. make check exits 0.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "fix",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Update/UpdateView.tsx (spread msg first, then narrow via cast)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "1283b8b"
+    },
+    {
+      "id": "F-092",
+      "behavior": "S48 — inline Restart per-stuck-agent on AgentsView banner. Each stuck agent renders as its own row with name, status badge, last-seen, and a Restart button (POST /api/agents/:name/restart). One-click recovery without drilling into AgentDetail.",
+      "verification": "bizar-dash/src/web/v8/__tests__/agents-stuck-banner.test.tsx passes (3 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (banner expanded into per-row Restart surface)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "d1c9647"
+    },
+    {
+      "id": "F-093",
+      "behavior": "S49 — AgentDetail agent↔task drilldown. Renders an 'Assigned tasks (N)' section sourced from GET /api/tasks, client-filtered by workedBy OR metadata.agent == agent name. Empty-state Card when none. useFetch is gated on `open` so closed Sheets don't request.",
+      "verification": "bizar-dash/src/web/v8/__tests__/agent-detail-tasks.test.tsx passes (3 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/ui/agents/AgentDetail.tsx (useFetch tasks + client filter + render block)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "4fcf12e"
     }
   ],
   "vcr": {
-    "passing": 52,
-    "activated": 52,
+    "passing": 55,
+    "activated": 55,
     "ratio": 1
   }
 }

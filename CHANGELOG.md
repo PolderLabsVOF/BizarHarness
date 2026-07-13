@@ -1,5 +1,104 @@
 # Changelog
 
+## v9.5.0 — feat: agents roster gets control + drilldown + `make check` green
+
+Stop-hook feedback on v9.4.0 noted scope-narrowing: the v9.4.0 plan
+audited only the 3 missing-API-consumer gaps and left the wider
+"control and configure everything" ask partially addressed. Audit
+surfaced 3 concrete remaining gaps — all closed in this release.
+
+### Sprint S47 — UpdateView typecheck fix (commit `1283b8b`, F-091)
+
+`make check` had been failing since pre-v9.2.0 on 3 identical
+errors in `views/Update/UpdateView.tsx` lines 67/70/73:
+
+```
+error TS2783: 'type' is specified more than once, so this usage
+will be overwritten.
+```
+
+The `useWsMessage` callbacks each built the log entry as
+`{ type: 'update:progress', ...msg }`. Because `msg.type` already
+carries the discriminator (e.g. `'update:progress'`), the literal
+`type` key collided with the spread. Fixed by spreading `msg` first
+and narrowing via the cast:
+
+```ts
+setLog((l) => [...l, { ...msg, type: 'update:progress' } as ProgressEvent]);
+```
+
+Same fix for `update:log` and `update:complete`.
+
+**`make check` is GREEN for the first time since pre-v9.2.0.**
+`bunx tsc --noEmit` reports 0 errors. (The 310 errors surfaced via
+`npx tsc -p tsconfig.json` inside `bizar-dash/` are pre-existing in
+`__tests__/*.tsx` files — missing jest-dom matcher typings from the
+project's per-tsconfig jest-dom install; not in scope of v9.5.0.)
+
+### Sprint S48 — Inline Restart per-stuck-agent (commit `d1c9647`, F-092)
+
+The v9.4.0 stuck `Banner` was read-only — `View details` forced the
+user to drill into each stuck agent's Sheet to recover. For 3+
+stuck agents that's a lot of clicks. v9.5.0 turns the banner into a
+control surface:
+
+- Each stuck agent renders as its own row inside the `Banner`:
+  name (mono code), status `Badge`, last-seen (relative time), and
+  a primary Restart `Button`.
+- One click → `POST /api/agents/:name/restart` → server broadcasts
+  `agents:change` → banner auto-refreshes.
+- `data-testid="agents-stuck-row-<name>"` and
+  `data-testid="agents-stuck-restart-<name>"` per row.
+- Reuses `Stack`, `Inline`, `Badge`, `Button`, `RotateCw`. No new
+  dependencies.
+
+### Sprint S49 — AgentDetail agent↔task drilldown (commit `4fcf12e`, F-093)
+
+The Sheet opened on a Bizar or CC agent name but never showed what
+that agent was actually doing. With a roster of 10+ agents (Bizar +
+CC) and no per-agent task surface, the user had to bounce to the
+Tasks board, eyeball the `assignee` column, and cross-reference by
+name. For the orchestration-center ask that was the "progress" leg
+of "see all agent statuses and progress".
+
+v9.5.0 adds an "Assigned tasks (N)" section to `AgentDetail`:
+
+- `useFetch('/api/tasks')` gated on `open` so closed Sheets don't
+  request.
+- Client-side filter on `workedBy` OR `metadata.agent` matching
+  the agent's name (Bizar task-store vs progress events).
+- Each match renders as a Card row: id (mono), title, status
+  `Badge` (doing=info / blocked=danger / else=neutral).
+- Empty-state Card when no tasks are assigned.
+- Skeleton while loading the first time.
+
+Reuses `Card`, `CardBody`, `Badge`, `Stack`, `Inline`, `Skeleton`,
+`useFetch`. No new dependencies.
+
+### Tests
+
+- **+6 vitest cases** across 2 new files:
+  `agents-stuck-banner.test.tsx` (3 cases — empty, banner
+  renders, click → POST restart) +
+  `agent-detail-tasks.test.tsx` (3 cases — only-this-agent,
+  empty-state, closed-sheet-no-fetch).
+- **370 → 376 tests**, **62 → 63 test files**.
+- `make test` green (376/376) + `make check` green.
+
+### Skipped (deliberate)
+
+- **Bulk Restart / Bulk Pause** — single-Row restart covers the
+  stuck case (the only batch operation that actually maps to a
+  real workflow). Bulk actions invite accidents; not needed yet.
+- **Manual task→agent assignment UI** — Odin already auto-assigns
+  via the spawned prompt; the Tasks board has worked-by wiring
+  for the rare manual case. Out of scope.
+- **Time-series sparkline / Overview trend charts** — needs new
+  backend `metricsSeries` endpoint. Future sprint.
+- **Settings audit for missing config surfaces** — SettingsView
+  already has 19 sections covering 100% of `BIZAR_*` env vars.
+  No gap found.
+
 ## v9.4.0 — feat: agents roster becomes data-driven orchestration surface
 
 Stop-hook feedback on v9.3.0 ("insufficient evidence"): "see all
