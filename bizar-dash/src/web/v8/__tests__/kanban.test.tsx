@@ -1,10 +1,12 @@
 /**
  * Kanban layer tests — KanbanCard, KanbanColumn, KanbanBoard, KanbanQuickAdd,
- * KanbanContextMenu. Covers rendering, priority/compact variants, quick-add
- * keyboard behavior, and the right-click menu.
+ * KanbanContextMenu, KanbanProgress, KanbanCardBadges, KanbanToolbar,
+ * KanbanEmptyColumn, useKanbanSelection. Covers rendering, priority/compact
+ * variants, quick-add keyboard behavior, the right-click menu, progress,
+ * badges, the toolbar's bulk-action swap, and selection bookkeeping.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   KanbanCard,
@@ -12,6 +14,11 @@ import {
   KanbanBoard,
   KanbanQuickAdd,
   KanbanContextMenu,
+  KanbanProgress,
+  KanbanCardBadges,
+  KanbanToolbar,
+  KanbanEmptyColumn,
+  useKanbanSelection,
 } from '../ui/index.js';
 
 describe('KanbanCard', () => {
@@ -172,5 +179,208 @@ describe('KanbanContextMenu', () => {
     fireEvent.contextMenu(screen.getByText('x'));
     await userEvent.click(await screen.findByText('Delete'));
     expect(onDelete).toHaveBeenCalled();
+  });
+});
+
+describe('KanbanProgress', () => {
+  it('renders nothing when value is 0 and no label/caption', () => {
+    const { container } = render(<KanbanProgress value={0} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders the inline bar with a label', () => {
+    render(<KanbanProgress value={42} label="42%" />);
+    expect(screen.getByText('42%')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
+  });
+
+  it('clamps values outside 0..100', () => {
+    render(<KanbanProgress value={150} label="100%" />);
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
+  });
+
+  it('renders block layout with caption + label', () => {
+    render(<KanbanProgress value={50} caption="Writing tests" label="50%" layout="block" />);
+    expect(screen.getByText('Writing tests')).toBeInTheDocument();
+    expect(screen.getByText('50%')).toBeInTheDocument();
+  });
+});
+
+describe('KanbanCardBadges', () => {
+  it('returns null when given no badges', () => {
+    const { container } = render(<KanbanCardBadges badges={[]} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders a label per badge', () => {
+    render(
+      <KanbanCardBadges
+        badges={[
+          { label: 'recurring', tone: 'info' },
+          { label: 'atlas', tone: 'accent' },
+        ]}
+      />,
+    );
+    expect(screen.getByText('recurring')).toBeInTheDocument();
+    expect(screen.getByText('atlas')).toBeInTheDocument();
+  });
+
+  it('collapses overflow into a +N chip', () => {
+    render(
+      <KanbanCardBadges
+        max={2}
+        badges={[
+          { label: 'one', tone: 'neutral' },
+          { label: 'two', tone: 'neutral' },
+          { label: 'three', tone: 'neutral' },
+          { label: 'four', tone: 'neutral' },
+        ]}
+      />,
+    );
+    expect(screen.getByText('one')).toBeInTheDocument();
+    expect(screen.getByText('two')).toBeInTheDocument();
+    expect(screen.queryByText('three')).not.toBeInTheDocument();
+    expect(screen.getByText('+2')).toBeInTheDocument();
+  });
+});
+
+describe('KanbanEmptyColumn', () => {
+  it('renders the default message', () => {
+    render(<KanbanEmptyColumn />);
+    expect(screen.getByText(/drop a task here/i)).toBeInTheDocument();
+  });
+
+  it('renders a custom message', () => {
+    render(<KanbanEmptyColumn message="Nothing in Done" />);
+    expect(screen.getByText(/nothing in done/i)).toBeInTheDocument();
+  });
+});
+
+describe('KanbanToolbar', () => {
+  it('shows the New task button when nothing is selected', async () => {
+    const onNewTask = vi.fn();
+    render(
+      <KanbanToolbar
+        totalCount={10}
+        visibleCount={10}
+        selectedCount={0}
+        query=""
+        onQueryChange={() => {}}
+        filters={[]}
+        onFilterToggle={() => {}}
+        onClearFilters={() => {}}
+        onNewTask={onNewTask}
+      />,
+    );
+    const btn = screen.getByRole('button', { name: /new task/i });
+    expect(btn).toBeInTheDocument();
+    await userEvent.click(btn);
+    expect(onNewTask).toHaveBeenCalled();
+  });
+
+  it('swaps to bulk mode when selectionCount > 0', () => {
+    render(
+      <KanbanToolbar
+        totalCount={10}
+        visibleCount={10}
+        selectedCount={3}
+        query=""
+        onQueryChange={() => {}}
+        filters={[]}
+        onFilterToggle={() => {}}
+        onClearFilters={() => {}}
+        onBulkArchive={() => {}}
+        onBulkDelete={() => {}}
+      />,
+    );
+    expect(screen.getByText('3 selected')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /archive/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /new task/i })).not.toBeInTheDocument();
+  });
+
+  it('filters input updates the query', async () => {
+    const onQueryChange = vi.fn();
+    render(
+      <KanbanToolbar
+        totalCount={10}
+        visibleCount={3}
+        selectedCount={0}
+        query="ab"
+        onQueryChange={onQueryChange}
+        filters={[]}
+        onFilterToggle={() => {}}
+        onClearFilters={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText(/filter tasks/i) as HTMLInputElement;
+    expect(input.value).toBe('ab');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'xy');
+    expect(onQueryChange).toHaveBeenCalled();
+  });
+});
+
+describe('useKanbanSelection', () => {
+  it('starts empty and toggles ids', () => {
+    const { result } = renderHook(() => useKanbanSelection());
+    expect(result.current.selected.size).toBe(0);
+    act(() => result.current.toggle('a'));
+    expect(result.current.has('a')).toBe(true);
+    act(() => result.current.toggle('a'));
+    expect(result.current.has('a')).toBe(false);
+  });
+
+  it('clear drops everything', () => {
+    const { result } = renderHook(() => useKanbanSelection());
+    act(() => {
+      result.current.add(['a', 'b', 'c']);
+    });
+    expect(result.current.selected.size).toBe(3);
+    act(() => result.current.clear());
+    expect(result.current.selected.size).toBe(0);
+  });
+
+  it('Esc clears selection', () => {
+    const { result } = renderHook(() => useKanbanSelection());
+    act(() => result.current.add(['a']));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(result.current.selected.size).toBe(0);
+  });
+
+  it('Esc is ignored when typing in an input', () => {
+    const { result } = renderHook(() => useKanbanSelection());
+    act(() => result.current.add(['a']));
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(result.current.selected.size).toBe(1);
+    document.body.removeChild(input);
+  });
+});
+
+describe('KanbanCard selection', () => {
+  it('renders a checkbox when onSelectionChange is provided', () => {
+    const onChange = vi.fn();
+    render(
+      <KanbanCard
+        card={{ id: 'c1', title: 'Pick me' }}
+        selected={false}
+        onSelectionChange={onChange}
+        showSelection
+      />,
+    );
+    const cb = screen.getByRole('checkbox');
+    expect(cb).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(cb);
+    expect(onChange).toHaveBeenCalledWith('c1', true);
+  });
+
+  it('marks the card as selected when prop is true', () => {
+    const { container } = render(
+      <KanbanCard card={{ id: 'c1', title: 'x' }} selected showSelection onSelectionChange={() => {}} />,
+    );
+    expect(container.querySelector('[data-selected="true"]')).not.toBeNull();
   });
 });
