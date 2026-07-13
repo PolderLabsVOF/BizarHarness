@@ -1534,9 +1534,52 @@ endpoint (handy when 9Router runs inside a container/tunnel).
 | v5.6.0-beta.1       | 2026-07-07 | BETA   | OpenCode → Cline rewrite (4 phases)        |
 | v5.5.6              | 2026-07-07 | stable | new `/plow-through` slash command          |
 
-## In Progress
+## In Progress — v9.4.0 — Data-driven orchestration center polish
 
-_None._
+Stop-hook feedback on v9.3.0 ("insufficient evidence"): "see all
+agent statuses and progress and goals regardless of if they're
+created in bizar or in cc; goals should use the default cc goals
+method; full control and orchestration center; professional and
+data-driven."
+
+Audit confirmed Bizar+CC unified agents and CC-canonical goals are
+already shipped (S24 `/api/agents` merge, GoalsView reads
+`.bizar/PROGRESS.md` which CC's `/goal` writes — same file). Three
+real gaps closed in this sprint:
+
+1. `/api/agents/hierarchy` had no view consumer → new
+   `views/Agents/AgentHierarchy.tsx`.
+2. `/api/agents/stuck` had no view consumer → warning `Banner`
+   surfacing stuck agents in AgentsView.
+3. `AgentCard.tpmHistory` was dead code (length>1 guard never
+   satisfied) → removed; replaced with a data-driven metric strip
+   (tasks, successRate, lastSeen) driven by real Bizar agent fields.
+
+### Sprint S45 — Hierarchy tree + stuck banner + dead-sparkline fix (shipped in `1895a5f`, F-088 / F-089 / F-090)
+
+- `bizar-dash/src/web/v8/views/Agents/AgentHierarchy.tsx` (new, ~213 LOC) —
+  collapsible parent/child tree sourced from `/api/agents/hierarchy`,
+  EmptyState when roots empty, WS `agents:change` refetch.
+- `bizar-dash/src/web/v8/views/Agents/AgentsView.tsx` —
+  added Roster/Hierarchy `Chip` toggle; added stuck `Banner`
+  with `View details` action; updated `mapBizar`/`mapCC` to
+  pass real metric props.
+- `bizar-dash/src/web/v8/ui/agents/AgentCard.tsx` — rewrote
+  with `tasksSucceeded` / `tasksTotal` / `successRate` /
+  `lastSeenMs` props and `data-testid="agent-card-tasks" /
+  -success / -lastseen` regions.
+- `bizar-dash/src/web/v8/__tests__/agent-hierarchy.test.tsx`
+  (new) — 4 vitest cases.
+- `bizar-dash/src/web/v8/__tests__/agent-card-metrics.test.tsx`
+  (new) — 3 vitest cases.
+
+**Test delta:** 363 → 370 (+7). **51 → 52 test files.**
+
+### Known pre-existing (not introduced by S45)
+
+- `Update/UpdateView.tsx:67,70,73` — `TS2783: 'type' is specified
+  more than once`. Verified on master `569d4af` via stash-compare;
+  predates v9.4.0. Tracked separately for a follow-up.
 
 ## Blockers
 

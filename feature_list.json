@@ -1747,11 +1747,54 @@
       ],
       "passed": "2026-07-13",
       "commit": "69aa434"
+    },
+    {
+      "id": "F-088",
+      "behavior": "S45 — AgentHierarchy view. Collapsible parent/child tree of Bizar agents (parent: links in agent frontmatter) sourced from GET /api/agents/hierarchy. EmptyState when roots is empty. Live refetch via agents:change WS.",
+      "verification": "bizar-dash/src/web/v8/__tests__/agent-hierarchy.test.tsx passes (4 cases: empty, one-root-two-children, click-collapse, click-expand).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Agents/AgentHierarchy.tsx (new, ~213 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "1895a5f"
+    },
+    {
+      "id": "F-089",
+      "behavior": "S45 — Agents stuck banner. Warning Banner at top of AgentsView when any agent has no heartbeat >5m (GET /api/agents/stuck). Inline 'View details' action flips mode to hierarchy.",
+      "verification": "Wired in AgentsView; data-testid=\"agents-stuck-banner\".",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (Banner + stuck fetch + mode toggle)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "1895a5f"
+    },
+    {
+      "id": "F-090",
+      "behavior": "S45 — AgentCard data-driven metric strip. Removed dead tpmHistory prop (length>1 guard was never satisfied). New optional props tasksSucceeded/tasksTotal (with ProgressBar), successRate (badged by threshold: <0.5 danger, >=0.5 warning, >=0.8 success), lastSeenMs (badged danger when >1d).",
+      "verification": "bizar-dash/src/web/v8/__tests__/agent-card-metrics.test.tsx passes (3 cases: all-rows, no-rows, badge-tone thresholds).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "ui",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/ui/agents/AgentCard.tsx (rewrite)",
+        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (mapBizar/mapCC updated)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "1895a5f"
     }
   ],
   "vcr": {
-    "passing": 49,
-    "activated": 49,
+    "passing": 52,
+    "activated": 52,
     "ratio": 1
   }
 }

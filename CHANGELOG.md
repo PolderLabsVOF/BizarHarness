@@ -1,5 +1,86 @@
 # Changelog
 
+## v9.4.0 — feat: agents roster becomes data-driven orchestration surface
+
+Stop-hook feedback on v9.3.0 ("insufficient evidence"): "see all
+agent statuses and progress and goals regardless of if they're
+created in bizar or in cc; full control and orchestration center;
+professional and data-driven." Audit confirmed the Bizar+CC unified
+agents surface (S24 `/api/agents` merge) and the CC-canonical goals
+surface (GoalsView reads `.bizar/PROGRESS.md` which CC's `/goal`
+writes) are already shipped. Three real gaps remained — all closed in
+this release.
+
+### Sprint S45 — Hierarchy tree + stuck banner + dead-sparkline fix (commit `1895a5f`, F-088 / F-089 / F-090)
+
+- **`AgentHierarchy` view** (`views/Agents/AgentHierarchy.tsx`,
+  new, ~213 LOC) — collapsible parent/child tree of Bizar agents
+  sourced from `GET /api/agents/hierarchy`. Each node renders
+  name, role, parent label (when non-root), live status badge,
+  and last-seen. Children render indented beneath their parent.
+  Click a chevron to expand/collapse. When `roots.length === 0` an
+  `EmptyState` is shown ("No hierarchy yet — agents have no parent
+  links in their frontmatter"). Live refetch via WS `agents:change`.
+  Reuses `Card`, `CardBody`, `Badge`, `Stack`, `Inline`,
+  `EmptyState`, `Skeleton`, `useFetch`, `useWsMessage`. No new
+  dependencies.
+- **Stuck `Banner`** in `AgentsView` — when
+  `GET /api/agents/stuck` returns any agent with no heartbeat
+  >5m, a single warning `Banner` reads "N agent(s) stuck (no
+  heartbeat >5m)" with a `View details` Button that flips the
+  mode to `hierarchy` and surfaces the offender's parent link.
+- **Roster/Hierarchy `Chip` toggle** in `AgentsView` — beneath the
+  source filter (`all | bizar | claude-code`), a second `Chip`
+  row toggles between the existing roster grid and the new
+  hierarchy tree.
+- **`AgentCard` rewritten** to be data-driven. The previous
+  `tpmHistory` prop was dead (it required `length > 1` to render
+  but `mapBizar` / `mapCC` always passed a single-element array).
+  Removed; replaced with four optional props:
+  - `tasksSucceeded` / `tasksTotal` — rendered as "127 / 142"
+    with a small `ProgressBar`.
+  - `successRate` — rendered as a `Badge` toned by threshold
+    (`<0.5` danger, `>=0.5` warning, `>=0.8` success).
+  - `lastSeenMs` — rendered as a `Badge` with relative time
+    ("12s ago", "3m ago", "2h ago", "5d ago"); danger tone if
+    `>1d`.
+  - `data-testid` regions: `agent-card-tasks`,
+    `agent-card-success` (+ `-badge`),
+    `agent-card-lastseen` (+ `-badge`).
+- **`mapBizar` / `mapCC` updated** in `AgentsView` to pass
+  the new metric props for Bizar agents; CC agents intentionally
+  pass none (CC doesn't expose successRate / tasksSucceeded — the
+  badge + lastActivity still carry the signal).
+
+### Tests
+
+- **+7 vitest cases** across 2 new files:
+  `agent-hierarchy.test.tsx` (4 cases — empty, one-root-two-
+  children, click-collapse, click-expand) +
+  `agent-card-metrics.test.tsx` (3 cases — all-rows, no-rows,
+  successRate badge-tone thresholds).
+- **63 → 70 test cases** delta; **51 → 52 test files**.
+- `make test` green (370/370).
+
+### Skipped (deliberate)
+
+- **Real sparkline series** — `/api/agents` doesn't expose a
+  time-series; minting one is out of scope. ponytail: re-add
+  `Sparkline` when backend exposes `metricsSeries`.
+- **Sidebar stuck-count badge** — Overview `Banner` (already
+  pulling `ov.needsAttention`) + AgentsView `Banner` already
+  surface it.
+- **CC agent tree** — `/api/agents/hierarchy` only covers Bizar
+  agents (`buildHierarchyTree` uses `agentsStore.list()`); CC
+  agents are flat. If users want a unified tree, future sprint.
+
+### Known pre-existing (out of scope for v9.4.0)
+
+- `views/Update/UpdateView.tsx` lines 67 / 70 / 73
+  (`TS2783: 'type' is specified more than once`) — verified on
+  `569d4af` via stash-compare; predates v9.4.0. Tracked for a
+  follow-up commit.
+
 ## v9.3.0 — feat: chat surface + remaining endpoint groups closed
 
 Stop-hook feedback on v9.2.0 identified that the user's ask of a
