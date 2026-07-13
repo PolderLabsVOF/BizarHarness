@@ -444,19 +444,12 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commits:** 11 atomic commits landing the full orchestration
-  center (live data → control plane → live topbar → notifications
-  bell → memory CRUD → settings hydration fix → goal task-link
-  badge → Tasks render-phase fix → Schedules + Background Jobs).
-- **Released:** v8.0.0 dashboard production cutover. v8 is the
-  user's full Claude Code orchestration center; Bizar is a harness
-  for Claude Code so all "Bizar agents" are CC-spawned via
-  `/api/spawn/agent`.
+- **Last commit:** `fix(cli): replace ESM require('node:fs') with top-level imports` — S15
+  of the CLI overhaul (F-057). 4 production sites fixed, static-analysis guard added.
 - **Branch:** master.
-- **Phase:** v8 dashboard shipped. All requested surfaces live,
-  hydrated, and routed. WIP=1 honored per-sprint (this commit
-  group covers multiple sprints as the user explicitly asked to
-  run multiple parallel subagents to completion).
+- **Phase:** Full Bizar CLI overhaul (S15–S22 per plan at
+  `.claude/plans/shimmying-moseying-wand.md`). S15 ships in this commit.
+  WIP=1 — one sprint at a time.
 - **Final verification:**
   - `make check` 0 TS errors.
   - Dashboard vitest: **271/271** pass (38 files).
@@ -464,6 +457,44 @@ drift away from the original ask.
   - Backend goals-decompose: **4/4** pass.
   - One pre-existing test (`views.test.tsx`) is flaky in parallel
     only — passes 9/9 when run alone.
+
+## In Progress — F-057 CLI overhaul (Sprint S15)
+
+User-requested full CLI overhaul: fix every issue, test every command,
+use TencentCloud/CubeSandbox for clean-environment e2e, robust to errors/exceptions.
+Multi-sprint plan (S15–S22) at `.claude/plans/shimmying-moseying-wand.md`.
+
+**S15 (this commit) ships:**
+- 4 ESM `require('node:fs')` call sites replaced with top-level imports:
+  `cli/commands/tailscale.mjs:21,132` (mkdirSync, unlinkSync),
+  `cli/commands/voice.mjs:106` (mkdirSync),
+  `cli/service-env.mjs:65-66` (readSync, closeSync, openSync).
+- `cli/__tests__/esm-no-require.test.mjs` (new, 2 cases) — static-analysis
+  guard that greps every production `.mjs` under `cli/` and asserts no
+  `require(` call exists outside comments and string literals. Fails
+  with a 4-line offender list on unfixed source; passes after the fix.
+  Defends against the bug regressing on Node 18/20 LTS where
+  `require` is undefined inside ESM modules (masked on Node 22+ by
+  the ESM `require` shim).
+
+**Bug class context:** the 4 call sites all worked locally because
+the dev box runs Node 24. On Node 18/20 LTS — the engines minimum
+in `package.json` — `require` is undefined in ESM and every call
+throws `ReferenceError`. The unfixed code path in tailscale.mjs
+returned `{ok: true}` (because the outer try/catch swallowed the
+ReferenceError) but never deleted `serve.json`, so users on LTS got
+a silently broken `unsetupTailscaleServe`. The static guard catches
+this class of bug regardless of Node version.
+
+**Verification (this commit):**
+- `npm run typecheck` — 0 errors.
+- `npm test` — 109/109 + 9/9 pass.
+- `node --test cli/__tests__/esm-no-require.test.mjs` — green.
+- New test runs before fix → 4-line offender list.
+- New test runs after fix → 2/2 pass.
+
+**Next:** S16 (friendly error formatter + global handlers + SIGINT on
+long-running tails).
 
 ### Views live now (12 top-level surfaces)
 

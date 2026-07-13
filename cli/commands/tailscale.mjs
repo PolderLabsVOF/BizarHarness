@@ -8,7 +8,7 @@
  * doesn't need to run `sudo tailscale serve ...` manually.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, writeFileSync, readFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import chalk from 'chalk';
@@ -18,7 +18,6 @@ const TS_STATE_DIR = process.env.TAILSCALE_STATE_DIR || join(homedir(), '.local'
 const TS_SERVE_CONFIG = join(TS_STATE_DIR, 'serve.json');
 
 function ensureStateDir() {
-  const { mkdirSync } = require('node:fs');
   try {
     mkdirSync(TS_STATE_DIR, { recursive: true });
   } catch { /* ignore */ }
@@ -129,7 +128,6 @@ export function unsetupTailscaleServe() {
     execFileSync('tailscale', ['serve', 'reset'], { encoding: 'utf8', timeout: 10000 });
     // Remove saved config
     if (existsSync(TS_SERVE_CONFIG)) {
-      const { unlinkSync } = require('node:fs');
       try { unlinkSync(TS_SERVE_CONFIG); } catch { /* ignore */ }
     }
     return { ok: true };

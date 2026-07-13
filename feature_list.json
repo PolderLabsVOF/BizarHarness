@@ -1287,11 +1287,28 @@
       ],
       "passed": "2026-07-13",
       "commit": "7390713"
+    },
+    {
+      "id": "F-057",
+      "behavior": "S15 — ESM `require('node:fs')` regression fix. Replaced all 4 production `require('node:fs')` call sites in cli/commands/tailscale.mjs, cli/commands/voice.mjs, and cli/service-env.mjs with top-level ESM imports. Added a static-analysis guard (cli/__tests__/esm-no-require.test.mjs) that greps every production .mjs file under cli/ and asserts no `require(` call exists outside comments and string literals. Guards against the bug returning on Node 18/20 LTS, where `require` is undefined inside ESM modules. The bug fires silently on Node 22+ thanks to the require shim, masking it on dev boxes.",
+      "verification": "npm run typecheck green (0 errors). npm test green (109/109 + 9/9). New cli/__tests__/esm-no-require.test.mjs passes after the fix; fails with a clear 4-line offender list on the unfixed source.",
+      "state": "passing",
+      "layer": "L0",
+      "category": "cli",
+      "created": "2026-07-13",
+      "files_touched": [
+        "cli/commands/tailscale.mjs",
+        "cli/commands/voice.mjs",
+        "cli/service-env.mjs",
+        "cli/__tests__/esm-no-require.test.mjs (new, 2 cases)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending"
     }
   ],
   "vcr": {
-    "passing": 44,
-    "activated": 44,
+    "passing": 45,
+    "activated": 45,
     "ratio": 1
   }
 }

@@ -4,7 +4,7 @@
  * v5.0.0 — Voice notes CLI — talks to the running dashboard's HTTP API.
  */
 import chalk from 'chalk';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -103,7 +103,7 @@ function loadConfig() {
 function saveConfig(cfg) {
   const dir = join(getBizarConfigDir());
   if (!existsSync(dir)) {
-    require('node:fs').mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true });
   }
   writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf8');
 }

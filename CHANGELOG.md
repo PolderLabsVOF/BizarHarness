@@ -1,5 +1,31 @@
 # Changelog
 
+## v9.0.2 — CLI overhaul S15: ESM `require()` regression
+
+Four production `.mjs` files used `require('node:fs')` (and
+`require?.('node:fs')` × 4) inside ESM modules. Works on Node 22+,
+throws `ReferenceError: require is not defined` on Node 18/20 LTS —
+the engines minimum in `package.json`.
+
+Fixed sites:
+
+- `cli/commands/tailscale.mjs:21,132` — `mkdirSync`, `unlinkSync`
+  replaced with top-level imports. The `unsetupTailscaleServe()`
+  path silently returned `{ok: true}` on LTS without deleting
+  `serve.json` (outer try/catch ate the ReferenceError).
+- `cli/commands/voice.mjs:106` — `mkdirSync` replaced with
+  top-level import. `saveConfig()`'s first-time-setup path crashed
+  on LTS, leaving voice settings unwritable.
+- `cli/service-env.mjs:65-66` — `readSync`, `closeSync` replaced
+  with top-level imports; `openSync` added. The /dev/urandom
+  password fallback crashed on LTS, leaving the service with
+  `CLINE_SERVER_PASSWORD=""`.
+
+New `cli/__tests__/esm-no-require.test.mjs` (2 cases) statically
+scans every production `.mjs` under `cli/` and asserts no
+`require(` call exists outside comments and string literals. Catches
+this class of bug regardless of Node version.
+
 ## v9.0.1 — patch: ship `plugins/` in the tarball
 
 `package.json` `files` whitelist omitted `plugins/bizar/`. Fresh

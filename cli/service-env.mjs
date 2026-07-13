@@ -18,7 +18,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readSync, closeSync, openSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -58,12 +58,11 @@ function generatePassword() {
   } catch {
     // Fallback: rough approximation using /dev/urandom
     try {
-      const { readFileSync } = require?.('node:fs') ?? (() => { throw new Error('no fs'); })();
-      const fd = require?.('node:fs')?.openSync?.('/dev/urandom', 'r');
+      const fd = openSync('/dev/urandom', 'r');
       if (fd !== undefined) {
         const buf = Buffer.alloc(32);
-        require('node:fs').readSync(fd, buf, 0, 32);
-        require('node:fs').closeSync?.(fd);
+        readSync(fd, buf, 0, 32);
+        closeSync(fd);
         return buf.toString('hex');
       }
     } catch { /* ignore */ }
