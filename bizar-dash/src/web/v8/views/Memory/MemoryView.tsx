@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useMemo, useState, useCallback } from 'react';
+import { Plus, Download } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
@@ -12,7 +12,9 @@ import { Button } from '../../ui/controls/Button.js';
 import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
 import { Textarea } from '../../ui/controls/Textarea.js';
 import { useFetch } from '../../data/useFetch.js';
+import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
+import type { WsMessage } from '../../data/types.js';
 
 /**
  * MemoryView — Sprint S10 + S15b. Pulls `/api/memory`, lets the user
@@ -69,6 +71,26 @@ export function MemoryView(): JSX.Element {
 
   const refresh = (): void => { void mem.refetch(); };
 
+  const onMemoryChange = useCallback((msg: WsMessage) => {
+    const m = msg as { type?: string };
+    if (m.type === 'memory:change' || m.type === 'memory:new' || m.type === 'memory:removed') {
+      refresh();
+    }
+  }, [mem]);
+  useWsMessage(['memory:change', 'memory:new', 'memory:removed'], onMemoryChange);
+
+  const exportNotes = (): void => {
+    const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bizar-memory-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const saveDraft = async (): Promise<void> => {
     if (!draft || !draft.content.trim()) return;
     setBusy(true);
@@ -114,6 +136,11 @@ export function MemoryView(): JSX.Element {
       <ViewHeader
         title="Memory"
         description="Cross-session notes. Project memos live in the repo; global memos live on the user."
+        actions={
+          <Button variant="secondary" onClick={exportNotes} disabled={entries.length === 0}>
+            <Download size={12} aria-hidden /> Export JSON
+          </Button>
+        }
       />
       <Inline align="center" justify="between" gap={2} wrap>
         <Inline gap={2}>

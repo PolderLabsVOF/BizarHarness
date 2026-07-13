@@ -12,6 +12,21 @@ import { useWsMessage } from '../../data/useWebSocket.js';
 import type { BizarAgent, CCAgent, WsMessage } from '../../data/types.js';
 import { Bot, Cpu } from 'lucide-react';
 
+const SOURCE_STORAGE_KEY = 'bizar.agents.sourceFilter';
+const SOURCE_LABELS = {
+  all: 'All',
+  bizar: 'Bizar',
+  'claude-code': 'Claude Code',
+} as const;
+type SourceFilter = keyof typeof SOURCE_LABELS;
+const VALID_SOURCES = Object.keys(SOURCE_LABELS) as SourceFilter[];
+
+function readPersistedSource(): SourceFilter {
+  if (typeof localStorage === 'undefined') return 'all';
+  const v = localStorage.getItem(SOURCE_STORAGE_KEY);
+  return VALID_SOURCES.includes(v as SourceFilter) ? (v as SourceFilter) : 'all';
+}
+
 /**
  * AgentsView — Sprint S10. Unified Bizar + Claude Code agents.
  *
@@ -20,13 +35,6 @@ import { Bot, Cpu } from 'lucide-react';
  * chip switches between `bizar | claude-code | all`. Live updates
  * via `agents:change` and `agent:status` WS events.
  */
-
-const SOURCE_LABELS = {
-  all: 'All',
-  bizar: 'Bizar',
-  'claude-code': 'Claude Code',
-} as const;
-type SourceFilter = keyof typeof SOURCE_LABELS;
 
 function mapBizar(a: BizarAgent): AgentCardProps {
   const raw = (a.status || 'idle').toLowerCase();
@@ -42,7 +50,9 @@ function mapBizar(a: BizarAgent): AgentCardProps {
     currentTask: a.currentTaskId ? `Task ${a.currentTaskId}` : undefined,
     lastActivity: a.lastSeen ? new Date(a.lastSeen).toLocaleTimeString() : undefined,
     tasksToday: a.tasksTotal || 0,
-    tpmHistory: [],
+    // Bizar agents don't expose a message-count series. Use
+    // [tasksTotal] as a single-point sparkline so the chart isn't dead.
+    tpmHistory: typeof a.tasksTotal === 'number' ? [a.tasksTotal] : [],
     badges: a.tags || [],
   };
 }
@@ -53,6 +63,12 @@ function mapCC(a: CCAgent): AgentCardProps {
     raw === 'busy' || raw === 'working' ? 'busy' :
     raw === 'error' ? 'error' :
     raw === 'paused' ? 'paused' : 'idle';
+  // Build a tiny sparkline series from messageCount. If we only have a
+  // scalar, we render a single-point chart; real time-series would
+  // require the backend to expose a history endpoint (deferred).
+  const series: number[] = typeof a.messageCount === 'number' && a.messageCount > 0
+    ? [a.messageCount]
+    : [];
   return {
     id: `cc:${a.sessionId || a.id}`,
     name: a.name || a.sessionId?.slice(0, 8) || 'unknown',
@@ -61,7 +77,7 @@ function mapCC(a: CCAgent): AgentCardProps {
     currentTask: a.lastMessageSnippet || undefined,
     lastActivity: a.lastMessageAt ? new Date(a.lastMessageAt).toLocaleTimeString() : (a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : undefined),
     tasksToday: a.messageCount || 0,
-    tpmHistory: [],
+    tpmHistory: series,
     badges: [a.cwd?.split('/').slice(-2).join('/') || ''].filter(Boolean),
   };
 }
@@ -69,7 +85,10 @@ function mapCC(a: CCAgent): AgentCardProps {
 export function AgentsView(): JSX.Element {
   const bizar = useFetch<{ agents?: BizarAgent[] }>('/api/agents');
   const cc = useFetch<{ agents?: CCAgent[]; error?: string }>('/api/cc-agents');
-  const [source, setSource] = useState<SourceFilter>('all');
+  const [source, setSource] = useState<SourceFilter>(readPersistedSource);
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(SOURCE_STORAGE_KEY, source);
+  }, [source]);
   const [bizarList, setBizarList] = useState<BizarAgent[]>([]);
   const [ccList, setCCList] = useState<CCAgent[]>([]);
   const [initialized, setInitialized] = useState(false);
@@ -155,6 +174,8 @@ export function AgentsView(): JSX.Element {
       {openId !== null && (() => {
         const sel = cards.find((c) => c.id === openId);
         if (!sel) return null;
+        const ccSource = sel.source === 'claude-code' ? ccList.find((a) => sel.id === `cc:${a.sessionId || a.id}`) : undefined;
+        const bzSource = sel.source === 'bizar' ? bizarList.find((a) => sel.id === `bizar:${a.name}`) : undefined;
         return (
           <AgentDetail
             agentId={sel.id}
@@ -162,6 +183,11 @@ export function AgentsView(): JSX.Element {
             role={sel.role}
             status={sel.status}
             currentTask={sel.currentTask}
+            startedAt={ccSource?.startedAt ?? bzSource?.lastSeen}
+            messageCount={ccSource?.messageCount}
+            lastMessageSnippet={ccSource?.lastMessageSnippet}
+            successRate={bzSource?.successRate}
+            tasksTotal={bzSource?.tasksTotal}
             open={openId !== null}
             onOpenChange={(o) => { if (!o) setOpenId(null); }}
           />

@@ -194,6 +194,35 @@ export function SettingsView(): JSX.Element {
   const [settings, setSettings] = useState<SettingsState>(DEFAULTS);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [lastAction, setLastAction] = useState<string | null>(null);
+
+  // Run an admin endpoint with confirm + busy state + error surface.
+  const runAdmin = async (label: string, method: 'POST' | 'DELETE', path: string, confirmMsg: string): Promise<void> => {
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function' && !window.confirm(confirmMsg)) return;
+    setBusy(label);
+    setError(null);
+    try {
+      await fetchJson(path, { method });
+      setLastAction(`${label} @ ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`);
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // GET that triggers a browser download (NDJSON for the activity log).
+  const downloadFile = (path: string, filename: string): void => {
+    if (typeof window === 'undefined') return;
+    const a = document.createElement('a');
+    a.href = path;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
 
   const skillsRes = useFetch<{ skills?: { name: string; source: string }[] }>('/api/skills?kind=skills');
   const mcpsRes = useFetch<{ skills?: { name: string }[] }>('/api/skills?kind=mcps');
@@ -293,6 +322,11 @@ export function SettingsView(): JSX.Element {
               </span>
             </Inline>
           )}
+          {lastAction !== null && (
+            <Inline align="center" justify="end" gap={2} style={{ fontSize: 'var(--fs-12)', color: 'var(--success)' }}>
+              <span>Last action:</span> <code style={{ fontFamily: 'var(--font-mono)' }}>{lastAction}</code>
+            </Inline>
+          )}
 
           {/* 1. General */}
           <SettingsSection id="general" title="General" description="Workspace identity + default landing page." icon={<SettingsIcon size={14} aria-hidden />}>
@@ -358,7 +392,7 @@ export function SettingsView(): JSX.Element {
               label="Font family"
               description="Body type. System fonts reduce render time."
               control={
-                <NativeSelect defaultValue="inter">
+                <NativeSelect defaultValue="inter" onChange={(v) => void patch('themeFont', v)}>
                   <option value="inter">Inter</option>
                   <option value="system">System UI</option>
                   <option value="jetbrains">JetBrains Mono</option>
@@ -369,7 +403,18 @@ export function SettingsView(): JSX.Element {
               id="theme-radius"
               label="Border radius"
               description="0 = sharp; 16 = rounded."
-              control={<Slider defaultValue={[8]} min={0} max={16} step={1} />}
+              control={
+                <Inline align="center" gap={2}>
+                  <Slider
+                    defaultValue={[8]}
+                    min={0}
+                    max={16}
+                    step={1}
+                    onValueChange={(v) => void patch('themeRadius', v[0] ?? 8)}
+                  />
+                  <code style={{ fontFamily: 'var(--font-mono)' }}>{(settings as unknown as Record<string, unknown>).themeRadius as number ?? 8}px</code>
+                </Inline>
+              }
             />
           </SettingsSection>
 
@@ -406,7 +451,7 @@ export function SettingsView(): JSX.Element {
           <SettingsSection id="density-rules" title="Density rules" description="Override density per surface." icon={<Sparkles size={14} aria-hidden />}>
             <SettingsRow id="tasks-compact" label="Tasks page — compact by default" control={<Switch checked={settings.tasksCompact} onCheckedChange={(v) => update('tasksCompact', v)} />} />
             <SettingsRow id="memory-compact" label="Memory page — compact by default" control={<Switch checked={settings.memoryCompact} onCheckedChange={(v) => update('memoryCompact', v)} />} />
-            <SettingsRow id="activity-compact" label="Activity page — compact by default" control={<Switch onCheckedChange={(v) => patch('activityCompact', v)} />} />
+            <SettingsRow id="activity-compact" label="Activity page — compact by default" control={<Switch defaultChecked={Boolean((settings as unknown as Record<string, unknown>).activityCompact)} onCheckedChange={(v) => void patch('activityCompact', v)} />} />
           </SettingsSection>
 
           {/* 5. Command palette */}
@@ -420,7 +465,7 @@ export function SettingsView(): JSX.Element {
               label="Default scope"
               description="Where palette actions apply when no context."
               control={
-                <NativeSelect defaultValue="project">
+                <NativeSelect defaultValue="project" onChange={(v) => void patch('paletteScope', v)}>
                   <option value="project">Active project</option>
                   <option value="global">Global</option>
                 </NativeSelect>
@@ -441,7 +486,7 @@ export function SettingsView(): JSX.Element {
           {/* 7. Notifications */}
           <SettingsSection id="notifications" title="Notifications" description="When the harness should ping you." icon={<Bell size={14} aria-hidden />}>
             <SettingsRow id="n-agent-finished" label="Agent run finished" control={<Switch checked={settings.notifyAgentFinished} onCheckedChange={(v) => update('notifyAgentFinished', v)} />} />
-            <SettingsRow id="n-task-moved" label="Task moved between columns" control={<Switch defaultChecked onCheckedChange={(v) => patch('notifyTaskMoved', v)} />} />
+            <SettingsRow id="n-task-moved" label="Task moved between columns" control={<Switch defaultChecked onCheckedChange={(v) => void patch('notifyTaskMoved', v)} />} />
             <SettingsRow id="n-ci-failed" label="CI failed" control={<Switch checked={settings.notifyCiFailed} onCheckedChange={(v) => update('notifyCiFailed', v)} />} />
             <SettingsRow id="n-token-budget" label="Token budget 80%" control={<Switch checked={settings.notifyTokenBudget} onCheckedChange={(v) => update('notifyTokenBudget', v)} />} />
             <SettingsRow id="n-daily-digest" label="Daily digest at 09:00" control={<Switch checked={settings.notifyDailyDigest} onCheckedChange={(v) => update('notifyDailyDigest', v)} />} />
@@ -470,13 +515,13 @@ export function SettingsView(): JSX.Element {
               id="store-gc"
               label="Garbage collect"
               description="Prune empty sessions and orphaned tasks."
-              control={<Button variant="secondary">Run GC</Button>}
+              control={<Button variant="secondary" disabled={busy === 'gc'} onClick={() => void runAdmin('gc', 'POST', '/api/admin/gc', 'Run garbage collect?')}>{busy === 'gc' ? 'Running…' : 'Run GC'}</Button>}
             />
             <SettingsRow
               id="store-clear"
               label="Clear local cache"
               description="Destructive. Wipes the activity log and snapshots."
-              control={<Button variant="danger">Clear…</Button>}
+              control={<Button variant="danger" disabled={busy === 'clear'} onClick={() => void runAdmin('cache/clear', 'POST', '/api/admin/cache/clear', 'Clear dashboard cache? This is reversible but will log you out briefly.')}>{busy === 'clear' ? 'Clearing…' : 'Clear…'}</Button>}
             />
           </SettingsSection>
 
@@ -582,13 +627,18 @@ export function SettingsView(): JSX.Element {
               id="activity-hide"
               label="Hide noisy event types"
               description="Comma-separated kinds. E.g. 'heartbeat,ping'."
-              control={<Input placeholder="heartbeat, ping, system" style={{ width: 280 }} />}
+              control={<Input
+                placeholder="heartbeat, ping, system"
+                defaultValue={String((settings as unknown as Record<string, unknown>).activityHide ?? '')}
+                onBlur={(e) => void patch('activityHide', e.target.value)}
+                style={{ width: 280 }}
+              />}
             />
             <SettingsRow
               id="activity-export"
               label="Export"
               description="Download the full activity log as NDJSON."
-              control={<Button variant="secondary">Export…</Button>}
+              control={<Button variant="secondary" onClick={() => downloadFile('/api/admin/activity/export', 'activity.ndjson')}>Export…</Button>}
             />
           </SettingsSection>
 
@@ -606,7 +656,7 @@ export function SettingsView(): JSX.Element {
                 </NativeSelect>
               }
             />
-            <SettingsRow id="memory-index" label="Re-index vault" description="Rebuild search index. May take a moment." control={<Button variant="secondary">Re-index</Button>} />
+            <SettingsRow id="memory-index" label="Re-index vault" description="Rebuild search index. May take a moment." control={<Button variant="secondary" disabled={busy === 'reindex'} onClick={() => void runAdmin('memory/reindex', 'POST', '/api/admin/memory/reindex', 'Rebuild the memory vault search index?')}>{busy === 'reindex' ? 'Re-indexing…' : 'Re-index'}</Button>} />
           </SettingsSection>
 
           {/* 15. Task defaults */}
@@ -639,7 +689,7 @@ export function SettingsView(): JSX.Element {
               id="task-assignee"
               label="Default assignee"
               description="Auto-assigns new tasks to this agent (empty = unassigned)."
-              control={<Input placeholder="odin" style={{ width: 240 }} />}
+              control={<Input placeholder="odin" defaultValue={String((settings as unknown as Record<string, unknown>).defaultTaskAssignee ?? '')} onBlur={(e) => void patch('defaultTaskAssignee', e.target.value)} style={{ width: 240 }} />}
             />
           </SettingsSection>
 
@@ -667,13 +717,18 @@ export function SettingsView(): JSX.Element {
                 </Inline>
               }
             />
-            <SettingsRow id="agent-bg" label="Spawn as background by default" control={<Switch onCheckedChange={(v) => patch('agentBackgroundDefault', v)} />} />
-            <SettingsRow id="agent-worktree" label="Always create a worktree" control={<Switch defaultChecked onCheckedChange={(v) => patch('agentWorktree', v)} />} />
+            <SettingsRow id="agent-bg" label="Spawn as background by default" control={<Switch defaultChecked={Boolean((settings as unknown as Record<string, unknown>).agentBackgroundDefault)} onCheckedChange={(v) => void patch('agentBackgroundDefault', v)} />} />
+            <SettingsRow id="agent-worktree" label="Always create a worktree" control={<Switch defaultChecked={Boolean((settings as unknown as Record<string, unknown>).agentWorktree ?? true)} onCheckedChange={(v) => void patch('agentWorktree', v)} />} />
             <SettingsRow
               id="agent-system-prompt"
               label="Extra system prompt"
               description="Appended to every agent's system prompt."
-              control={<Textarea rows={3} placeholder="You are a careful, methodical engineer…" />}
+              control={<Textarea
+                rows={3}
+                placeholder="You are a careful, methodical engineer…"
+                defaultValue={String((settings as unknown as Record<string, unknown>).agentSystemPrompt ?? '')}
+                onBlur={(e) => void patch('agentSystemPrompt', e.target.value)}
+              />}
             />
           </SettingsSection>
 
@@ -705,7 +760,7 @@ export function SettingsView(): JSX.Element {
             <SettingsRow
               id="privacy-telemetry"
               label="Send token usage telemetry"
-              control={<Switch onCheckedChange={(v) => patch('telemetryTokens', v)} />}
+              control={<Switch defaultChecked={Boolean((settings as unknown as Record<string, unknown>).telemetryTokens)} onCheckedChange={(v) => void patch('telemetryTokens', v)} />}
             />
           </SettingsSection>
 
@@ -728,15 +783,15 @@ export function SettingsView(): JSX.Element {
               description="Stop and relaunch the local server. Unsaved tasks are safe on disk."
               control={
                 <Inline align="center" gap={2}>
-                  <Button variant="danger"><RotateCw size={12} aria-hidden /> Restart…</Button>
-                  <Button variant="ghost"><Plus size={12} aria-hidden /> Rebuild</Button>
+                  <Button variant="danger" disabled={busy === 'restart'} onClick={() => void runAdmin('restart', 'POST', '/api/admin/restart', 'Restart the dashboard backend? You may need to relaunch the CLI if it does not come back.')}><RotateCw size={12} aria-hidden /> {busy === 'restart' ? 'Restarting…' : 'Restart…'}</Button>
+                  <Button variant="ghost" disabled={busy === 'rebuild'} onClick={() => void runAdmin('rebuild', 'POST', '/api/admin/rebuild', 'Rebuild the dashboard package? This runs `npm run build`.')}><Plus size={12} aria-hidden /> {busy === 'rebuild' ? 'Rebuilding…' : 'Rebuild'}</Button>
                 </Inline>
               }
             />
             <SettingsRow
               id="advanced-logs"
               label="Open logs folder"
-              control={<Button variant="secondary"><Trash2 size={12} aria-hidden /> Purge logs</Button>}
+              control={<Button variant="secondary" disabled={busy === 'purge-logs'} onClick={() => void runAdmin('logs/purge', 'POST', '/api/admin/logs/purge', 'Delete log files older than 14 days?') }><Trash2 size={12} aria-hidden /> {busy === 'purge-logs' ? 'Purging…' : 'Purge logs'}</Button>}
             />
           </SettingsSection>
         </Stack>

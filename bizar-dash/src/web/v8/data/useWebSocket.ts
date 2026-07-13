@@ -21,7 +21,16 @@ interface SocketState {
   retries: number;
   retryTimer: ReturnType<typeof setTimeout> | null;
   connectedListeners: Set<(connected: boolean) => void>;
+  /** Last time we received ANY message from the server. Used by the
+   *  client-side heartbeat to detect silently-dropped sockets where the
+   *  close event hasn't fired yet. */
+  lastMessageAt: number;
+  /** Wall-clock ping interval handle. */
+  heartbeatTimer: ReturnType<typeof setInterval> | null;
 }
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_TIMEOUT_MS = 60_000;
 
 const state: SocketState = {
   socket: null,
@@ -29,6 +38,8 @@ const state: SocketState = {
   retries: 0,
   retryTimer: null,
   connectedListeners: new Set(),
+  lastMessageAt: 0,
+  heartbeatTimer: null,
 };
 
 function url(): string {
@@ -40,6 +51,34 @@ function url(): string {
 function notifyConnected(connected: boolean): void {
   for (const fn of state.connectedListeners) {
     try { fn(connected); } catch { /* swallow */ }
+  }
+}
+
+function startHeartbeat(): void {
+  if (state.heartbeatTimer) return;
+  state.heartbeatTimer = setInterval(() => {
+    const sock = state.socket;
+    if (!sock) return;
+    // If the open socket hasn't seen any traffic in HEARTBEAT_TIMEOUT_MS,
+    // assume it's stuck (corporate proxy in the middle, server SIGSTOP,
+    // etc) and force a reconnect so the topbar indicator + listeners
+    // recover. The close event will not fire on a hung socket.
+    if (sock.readyState === WebSocket.OPEN) {
+      if (Date.now() - state.lastMessageAt > HEARTBEAT_TIMEOUT_MS) {
+        try { sock.close(); } catch { /* */ }
+        return;
+      }
+      // Lightweight app-level ping. The server doesn't have to answer;
+      // any incoming frame (including the WS pong) counts as liveness.
+      try { sock.send('ping'); } catch { /* */ }
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeat(): void {
+  if (state.heartbeatTimer) {
+    clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
   }
 }
 
@@ -56,9 +95,12 @@ function connect(): void {
   state.socket = sock;
   sock.addEventListener('open', () => {
     state.retries = 0;
+    state.lastMessageAt = Date.now();
     notifyConnected(true);
+    startHeartbeat();
   });
   sock.addEventListener('message', (ev) => {
+    state.lastMessageAt = Date.now();
     let msg: WsMessage;
     try { msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ''); }
     catch { return; }
@@ -69,6 +111,7 @@ function connect(): void {
   sock.addEventListener('close', () => {
     state.socket = null;
     notifyConnected(false);
+    stopHeartbeat();
     scheduleReconnect();
   });
   sock.addEventListener('error', () => {
@@ -157,5 +200,7 @@ export function _resetForTests(): void {
     clearTimeout(state.retryTimer);
     state.retryTimer = null;
   }
+  stopHeartbeat();
+  state.lastMessageAt = 0;
   state.retries = 0;
 }

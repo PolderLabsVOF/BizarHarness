@@ -51,6 +51,9 @@ import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
 import { createMinimaxRouter } from './routes/minimax.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
+// v9.0.5 — Admin endpoints (gc, cache clear, activity export, memory
+// reindex, restart, rebuild, logs purge) back the Settings page buttons.
+import { createAdminRouter } from './routes/admin.mjs';
 import { createEnvVarsRouter } from './routes/env-vars.mjs';
 import { createUpdateRouter } from './routes/update.mjs';
 import { createSpawnRouter } from './routes/spawn.mjs';
@@ -207,6 +210,8 @@ export async function createApiRouter({
   const { createTailscaleRouter } = await import('./routes/tailscale.mjs');
   router.use(createTailscaleRouter({}));
   router.use(createMiscRouter({ state, broadcast }));
+  // v9.0.5 — Settings page admin buttons live at /api/admin/*.
+  router.use(createAdminRouter({ broadcast }));
 
   // /api/auth/* must be reachable WITHOUT the bearer token so a fresh
   // client can probe whether auth is on. server.mjs adds requireAuth()

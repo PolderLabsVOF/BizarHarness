@@ -5,6 +5,7 @@ import { KanbanBoard } from '../../ui/kanban/KanbanBoard.js';
 import { KanbanColumn, type KanbanColumnData } from '../../ui/kanban/KanbanColumn.js';
 import { KanbanCard, useKanbanCardSortable, type KanbanCardData } from '../../ui/kanban/KanbanCard.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { TaskDetail } from '../../ui/tasks/TaskDetail.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson } from '../../data/fetcher.js';
@@ -84,6 +85,47 @@ export function TasksView(): JSX.Element {
   const tasks = useFetch<{ tasks?: Task[]; count?: number }>('/api/tasks');
   const [cards, setCards] = useState<Card[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const onWsRemove = useCallback((msg: WsMessage) => {
+    const m = msg as { type?: string; id?: string };
+    if (m.type !== 'tasks:removed' && m.type !== 'task:removed') return;
+    if (!m.id) return;
+    setCards((prev) => prev.filter((c) => c.taskId !== m.id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(m.id!);
+      return next;
+    });
+    if (openTaskId === m.id) setOpenTaskId(null);
+  }, [openTaskId]);
+  useWsMessage('tasks:removed', onWsRemove);
+  useWsMessage('task:removed', onWsRemove);
+
+  const toggleSelect = (taskId: string): void => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const bulkMove = async (toStatus: TaskStatus): Promise<void> => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setCards((prev) => prev.map((c) => (selectedIds.has(c.taskId) ? { ...c, columnId: toStatus } : c)));
+    try {
+      await fetchJson('/api/tasks/bulk-status', {
+        method: 'PATCH',
+        body: { ids, status: toStatus },
+      });
+      setSelectedIds(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   // Sync fetched list → local state. Effect-driven so we don't setState
   // during render (which React warns about under StrictMode and which
@@ -133,13 +175,25 @@ export function TasksView(): JSX.Element {
   const counts: Record<string, number> = {};
   for (const c of cards) counts[c.columnId] = (counts[c.columnId] || 0) + 1;
 
+  const openTask = openTaskId ? tasks.data?.tasks?.find((t) => t.id === openTaskId) ?? null : null;
+  const selectedCount = selectedIds.size;
+
   return (
     <Stack gap={4}>
       <ViewHeader
         title="Tasks"
-        description="Drag cards across columns. Right-click for actions."
+        description="Drag cards across columns. Click a card to edit. Use the checkbox to select multiple."
         actions={error ? <span style={{ color: 'var(--danger)' }}>{error}</span> : null}
       />
+      {selectedCount > 0 && (
+        <div role="region" aria-label="Bulk actions" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', background: 'color-mix(in oklch, var(--accent) 8%, var(--surface-0))' }}>
+          <strong style={{ fontSize: 'var(--fs-13)' }}>{selectedCount} selected</strong>
+          <button onClick={() => void bulkMove('doing')} style={{ padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)', cursor: 'pointer', fontSize: 'var(--fs-12)' }}>Move to In progress</button>
+          <button onClick={() => void bulkMove('done')} style={{ padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)', cursor: 'pointer', fontSize: 'var(--fs-12)' }}>Move to Done</button>
+          <button onClick={() => void bulkMove('archived')} style={{ padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)', cursor: 'pointer', fontSize: 'var(--fs-12)' }}>Archive</button>
+          <button onClick={() => setSelectedIds(new Set())} style={{ marginLeft: 'auto', padding: '4px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Clear</button>
+        </div>
+      )}
       {tasks.loading && cards.length === 0 ? (
         <Stack gap={3}>
           <Skeleton style={{ height: 120 }} />
@@ -155,12 +209,35 @@ export function TasksView(): JSX.Element {
                 column={{ ...col, count: counts[col.id] || 0 }}
               >
                 {inColumn.map((card) => (
-                  <SortableCard key={card.id} card={card} />
+                  <div key={card.id} style={{ position: 'relative' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(card.taskId)}
+                      onChange={() => toggleSelect(card.taskId)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Select ${card.title}`}
+                      style={{ position: 'absolute', top: 8, left: 8, zIndex: 2 }}
+                    />
+                    <div onClick={() => setOpenTaskId(card.taskId)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenTaskId(card.taskId); } }} style={{ cursor: 'pointer' }}>
+                      <SortableCard card={card} />
+                    </div>
+                  </div>
                 ))}
               </KanbanColumn>
             );
           })}
         </KanbanBoard>
+      )}
+      {openTask && (
+        <TaskDetail
+          task={openTask}
+          open={openTaskId !== null}
+          onOpenChange={(o) => { if (!o) setOpenTaskId(null); }}
+          onDeleted={() => {
+            setCards((prev) => prev.filter((c) => c.taskId !== openTask.id));
+            setOpenTaskId(null);
+          }}
+        />
       )}
     </Stack>
   );

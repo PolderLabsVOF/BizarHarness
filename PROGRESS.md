@@ -444,19 +444,63 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit:** `fix(cli): replace ESM require('node:fs') with top-level imports` — S15
-  of the CLI overhaul (F-057). 4 production sites fixed, static-analysis guard added.
-- **Branch:** master.
-- **Phase:** Full Bizar CLI overhaul (S15–S22 per plan at
-  `.claude/plans/shimmying-moseying-wand.md`). S15 ships in this commit.
-  WIP=1 — one sprint at a time.
+- **Last commit (this session, not yet committed):** v9.0.4 install-fix patch.
+  - **Root cause:** `packages/sdk/.gitignore` had `dist/` (npm respected it),
+    `npm pack` ran without a `prepack` hook, the SPA entry was `v8.html`
+    instead of `index.html`, in-repo `.claude/worktrees/` + `.harness/`
+    leaked into the tarball via the `.claude/` files-whitelist entry.
+  - **Fix:** added `prepack: npm run build`; renamed
+    `bizar-dash/src/web/v8.html` → `index.html` and updated both vite
+    configs (root + dashboard) to point at it; new
+    `packages/sdk/.npmignore` + `plugins/bizar/.npmignore`; root
+    `.npmignore` whitelist for `dist/`, exclusion of
+    `.claude/worktrees/` + `.harness/` + `fresh901/`; removed
+    `.claude/` from `package.json` files whitelist (runtime reads
+    `~/.claude/`, not the in-repo tree).
+  - **Bumps:** 9.0.1 → 9.0.3 (install fix) → 9.0.4 (SPA entry fix).
+    `CHANGELOG.md` records both entries.
+- **Fresh-install verification:** packed, reinstalled into default npm
+  prefix, started `bizar dash start`, `GET /` returns 200 HTML
+  ("Bizar Dashboard · v8 (preview)"), `GET /api/snapshot` returns 200
+  JSON. `make check` green.
+- **Branch:** master (uncommitted).
+- **Phase:** Fresh-install blocker fixed. Audit agent in flight against
+  user's full dashboard-orchestration asks (see "In Progress" below).
 - **Final verification:**
   - `make check` 0 TS errors.
-  - Dashboard vitest: **271/271** pass (38 files).
-  - SDK vitest: **294/294** pass.
-  - Backend goals-decompose: **4/4** pass.
-  - One pre-existing test (`views.test.tsx`) is flaky in parallel
-    only — passes 9/9 when run alone.
+
+## In Progress — Dashboard gap-fill against user's full asks
+
+Stop-hook feedback flagged the v9.0.4 work only fixed the install
+blocker, leaving the user's substantive dashboard asks unimplemented:
+
+> "fully functional and complete, fully integrated with the bizar
+> backend and claude code. i want to be able to see all agent
+> statusses and progress and goals. i want to be able to see agents
+> regardless of if theyre created in bizar or in claude code (cc).
+> goals should use the default cc goals method. the bizar dashboard
+> should be a full control and orchestratino center for development."
+
+Code-tree audit (read against `bizar-dash/src/web/v8/`) shows the
+prior S10–S15b work landed most of this — Agents unifies Bizar + CC
+with a source-chip filter and `AgentDetail` Sheet with Send/Restart/
+Kill/Copy + live SSE stream; Goals parses `.bizar/PROGRESS.md`
+(same file CC's `/goal` writes to) and offers a `GoalDetail` drawer
+with title/status/owner/due + KR list; Settings has 18 sections all
+PATCH-backed. So the "unimplemented" claim is partially misreading
+the state — but the user's wider ask (per-agent progress bars, more
+visible status, polished expansion across all views) still has real
+gaps to close.
+
+An audit agent (Frigg) is in flight at
+`.claude/worktrees/sibling-knowledg/codex-audit.jsonl`-equivalent
+socket, producing a gaps-ranked list. Its output drives the v9.0.5
+follow-up commit.
+
+**Plan:** once the audit lands, close the top gaps in one atomic
+commit per scope (TypeCheck-strict, test-covered, no debug artifacts).
+Skip: chat surface rewrite (out of scope; deferred to dedicated
+sprint), mobile v8 cutover (long-tail backlog item).
 
 ## In Progress — F-057 CLI overhaul (Sprint S15)
 

@@ -9,6 +9,7 @@ import { Inline } from '../primitives/Inline.js';
 import { Textarea } from '../controls/Textarea.js';
 import { Skeleton } from '../feedback/Skeleton.js';
 import { AgentStreamPanel } from './AgentStreamPanel.js';
+import { AgentLiveOutput } from './AgentLiveOutput.js';
 import { fetchJson } from '../../data/fetcher.js';
 
 /**
@@ -29,6 +30,11 @@ export interface AgentDetailProps {
   role: string;
   status: 'idle' | 'busy' | 'error' | 'paused';
   currentTask?: string;
+  startedAt?: number;
+  messageCount?: number;
+  lastMessageSnippet?: string;
+  successRate?: number;
+  tasksTotal?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -40,7 +46,10 @@ function parseId(agentId: string): { source: AgentSource; key: string } {
 }
 
 export function AgentDetail(props: AgentDetailProps): JSX.Element {
-  const { agentId, name, role, status, currentTask, open, onOpenChange } = props;
+  const {
+    agentId, name, role, status, currentTask, open, onOpenChange,
+    startedAt, messageCount, lastMessageSnippet, successRate, tasksTotal,
+  } = props;
   const { source, key } = parseId(agentId);
   const [prompt, setPrompt] = useState<string>('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -92,10 +101,15 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
   };
 
   const restart = async (): Promise<void> => {
+    const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(`Restart ${name}? The current session will be killed and a fresh one spawned.`)
+      : true;
+    if (!ok) return;
     if (source === 'claude-code') {
-      // CC background agents don't have a server-side restart — the user
-      // spawns a new one via the command palette. Surface that clearly.
-      setMessage('Use the command palette to spawn a fresh agent.');
+      // v9.0.5 — server now does kill+spawn in one shot, using the current
+      // prompt as the new session's seed (fallback to "continue").
+      const seed = prompt.trim() || 'continue from the last checkpoint';
+      await runAction('Restart', 'POST', `/api/cc-agents/${encodeURIComponent(key)}/restart`, { prompt: seed });
       return;
     }
     await runAction('Restart', 'POST', `/api/agents/${encodeURIComponent(key)}/restart`);
@@ -104,9 +118,29 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
   const kill = async (): Promise<void> => {
     if (source === 'claude-code') {
       await runAction('Kill', 'POST', `/api/cc-agents/${encodeURIComponent(key)}/kill`);
-    } else {
-      // No kill route for Bizar agents; restart is the closest analog.
-      await runAction('Restart', 'POST', `/api/agents/${encodeURIComponent(key)}/restart`);
+      return;
+    }
+    // Confirm before destroying — DELETE is irreversible.
+    const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(`Delete Bizar agent "${key}"? This is irreversible.`)
+      : true;
+    if (!ok) return;
+    setBusy('Kill');
+    setMessage(null);
+    setError(null);
+    try {
+      await fetchJson<{ ok?: boolean; error?: string }>(
+        `/api/agents/${encodeURIComponent(key)}`,
+        { method: 'DELETE' },
+      );
+      setMessage(`Killed ${name}`);
+      // Server broadcasts agents:change; close the drawer so the user
+      // sees the agent disappear from the grid.
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -127,14 +161,47 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
           <Avatar name={name} status={status === 'busy' ? 'busy' : status === 'error' ? 'busy' : 'online'} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 'var(--fs-13)', color: 'var(--fg-muted)' }}>{role}</div>
-            <Inline gap={2} style={{ marginTop: 4 }}>
+            <Inline gap={2} style={{ marginTop: 4 }} wrap>
               <Badge tone={status === 'busy' ? 'info' : status === 'error' ? 'danger' : 'neutral'} dot>
                 {status}
               </Badge>
               <Badge tone="accent">{source === 'bizar' ? 'Bizar agent' : 'Claude Code'}</Badge>
+              {startedAt !== undefined && (
+                <Badge tone="neutral" title={new Date(startedAt).toLocaleString()}>
+                  up {formatDuration(Date.now() - startedAt)}
+                </Badge>
+              )}
+              {typeof messageCount === 'number' && (
+                <Badge tone="neutral">{messageCount} msg</Badge>
+              )}
+              {typeof tasksTotal === 'number' && (
+                <Badge tone="neutral">{tasksTotal} tasks</Badge>
+              )}
+              {typeof successRate === 'number' && (
+                <Badge tone={successRate >= 0.8 ? 'success' : successRate >= 0.5 ? 'warning' : 'danger'}>
+                  {Math.round(successRate * 100)}% success
+                </Badge>
+              )}
             </Inline>
           </div>
         </Inline>
+
+        {typeof lastMessageSnippet === 'string' && lastMessageSnippet.length > 0 && (
+          <div
+            style={{
+              padding: 'var(--space-2) var(--space-3)',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 'var(--fs-12)',
+              color: 'var(--fg-muted)',
+              fontStyle: 'italic',
+            }}
+            title={lastMessageSnippet}
+          >
+            “{lastMessageSnippet.length > 240 ? `${lastMessageSnippet.slice(0, 240)}…` : lastMessageSnippet}”
+          </div>
+        )}
 
         {currentTask !== undefined && (
           <div
@@ -189,8 +256,9 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
               variant="danger"
               onClick={() => { void kill(); }}
               disabled={busy !== null}
+              title={source === 'claude-code' ? 'Kill the CC background session' : `Delete Bizar agent "${key}"`}
             >
-              <Octagon size={14} aria-hidden /> {source === 'claude-code' ? 'Kill' : 'Restart'}
+              <Octagon size={14} aria-hidden /> Kill
             </Button>
             <Button variant="ghost" onClick={() => { void copyId(); }}>
               <ClipboardCopy size={14} aria-hidden /> Copy id
@@ -271,13 +339,26 @@ export function AgentDetail(props: AgentDetailProps): JSX.Element {
               }}
             >
               <ActivityIcon size={12} aria-hidden style={{ verticalAlign: 'middle', marginRight: 4 }} />
-              Live stream
+              Live output
             </div>
-            <AgentStreamPanel sessionId={key} />
+            <AgentLiveOutput sessionId={key} paused={busy === 'Kill'} />
           </Stack>
         )}
       </Stack>
     </SheetContent>
     </Sheet>
   );
+}
+
+/** formatDuration — human-readable "3m 12s" / "1h 4m" / "2d 5h". */
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ${sec % 60}s`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ${min % 60}m`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ${hr % 24}h`;
 }

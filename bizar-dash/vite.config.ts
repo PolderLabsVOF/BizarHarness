@@ -14,10 +14,18 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
-      // Single dashboard entry — v8. The legacy v7 (index.html) and v7
-      // mobile (mobile.html) entries were removed in the v8 cutover.
+      // Single dashboard entry. The legacy v7 (index.html) and v7
+      // mobile (mobile.html) entries were removed in the v8 cutover;
+      // the SPA is now built as `index.html` so the server's
+      // dist/index.html fallback path resolves correctly.
+      //
+      // NOTE: this file is shadowed by the repo-root vite.config.ts when
+      // `npm run build:dash` is invoked from the repo root (vite walks
+      // up looking for a config and finds the root one first). The two
+      // files are kept in sync so the dash subdir can also be built in
+      // isolation.
       input: {
-        main: resolve(__dirname, 'src/web/v8.html'),
+        main: resolve(__dirname, 'src/web/index.html'),
       },
       // Code-split views so the initial bundle only ships what the
       // Overview needs. Manual chunks are safe in v8 (no shared

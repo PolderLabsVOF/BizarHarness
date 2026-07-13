@@ -149,6 +149,7 @@ export type WsMessage =
   | { type: 'agents:change'; source?: string; digest?: string }
   | { type: 'agent:status'; agent?: BizarAgent }
   | { type: 'goals:change'; goal?: Goal }
+  | { type: 'goals:removed'; id?: string }
   | { type: 'background:change'; id?: string; status?: string }
   | { type: 'background:syncError'; taskId?: string; instanceId?: string; fails?: number }
   | { type: 'artifact:new'; artifact?: { id?: string; title?: string } }

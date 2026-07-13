@@ -53,6 +53,7 @@ interface Schedule {
 interface SchedulesResponse extends Array<Schedule> {}
 
 interface CreateDraft {
+  id?: string;
   name: string;
   type: ScheduleType;
   schedule: string;
@@ -145,17 +146,31 @@ export function SchedulesView(): JSX.Element {
       const action: ScheduleAction = { type: draft.actionType };
       if (draft.actionType === 'agent') action.prompt = draft.prompt;
       if (draft.actionType === 'command') action.command = draft.prompt;
-      await fetchJson('/api/schedules', {
-        method: 'POST',
-        body: {
-          name: draft.name,
-          type: draft.type,
-          schedule: draft.schedule,
-          timezone: draft.timezone || 'UTC',
-          action,
-          enabled: true,
-        },
-      });
+      if (draft.id) {
+        // Edit path — PATCH the existing schedule.
+        await fetchJson(`/api/schedules/${encodeURIComponent(draft.id)}`, {
+          method: 'PATCH',
+          body: {
+            name: draft.name,
+            type: draft.type,
+            schedule: draft.schedule,
+            timezone: draft.timezone || 'UTC',
+            action,
+          },
+        });
+      } else {
+        await fetchJson('/api/schedules', {
+          method: 'POST',
+          body: {
+            name: draft.name,
+            type: draft.type,
+            schedule: draft.schedule,
+            timezone: draft.timezone || 'UTC',
+            action,
+            enabled: true,
+          },
+        });
+      }
       setDraft(null);
       refresh();
     } catch (err) {
@@ -245,6 +260,23 @@ export function SchedulesView(): JSX.Element {
 
                     <Inline align="center" gap={2} justify="end">
                       <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDraft({
+                          id: s.id,
+                          name: s.name,
+                          type: s.type,
+                          schedule: s.schedule,
+                          timezone: s.timezone || 'UTC',
+                          actionType: 'agent',
+                          prompt: (s.action && (s.action as { prompt?: string }).prompt) || '',
+                        })}
+                        data-testid={`schedule-edit-${s.id}`}
+                        title="Edit"
+                      >
+                        Edit
+                      </Button>
+                      <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => { void runNow(s); }}
@@ -279,7 +311,7 @@ export function SchedulesView(): JSX.Element {
       )}
 
       <Sheet open={draft !== null} onOpenChange={(o) => { if (!o) setDraft(null); }}>
-        <SheetContent side="right" title="New schedule">
+        <SheetContent side="right" title={draft?.id ? 'Edit schedule' : 'New schedule'}>
           {draft !== null && (
             <Stack gap={4} style={{ padding: 'var(--space-4)' }}>
               <Stack gap={2}>
@@ -380,7 +412,7 @@ export function SchedulesView(): JSX.Element {
                   onClick={() => { void createSchedule(); }}
                   disabled={busy || !draft.name.trim() || !draft.schedule.trim()}
                 >
-                  Create
+                  {draft?.id ? 'Save' : 'Create'}
                 </Button>
                 <Button variant="ghost" onClick={() => setDraft(null)} disabled={busy}>
                   Cancel

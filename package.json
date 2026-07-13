@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "9.0.1",
+  "version": "9.0.4",
   "description": "Norse-pantheon multi-agent system for Claude Code — 14 agents across 4 cost tiers with cost-aware routing, plans, and a configurable agent harness. Ships as a single npm package with the dashboard server, Claude Code MCP server, and typed SDK.",
   "type": "module",
   "bin": {
@@ -10,7 +10,6 @@
     "cli/",
     "bizar-dash/",
     "packages/sdk/",
-    ".claude/",
     "config/",
     "templates/",
     "scripts/",
@@ -26,6 +25,7 @@
     "test:sdk:watch": "node_modules/.bin/vitest --root packages/sdk",
     "test": "npm run typecheck && npm run test:sdk && node --test cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs cli/__tests__/cost-gate.test.mjs cli/__tests__/feature-list-bridge.test.mjs && node --test bizar-dash/tests/path-safe.test.mjs",
     "build": "npm run build:sdk && npm run build:dash",
+    "prepack": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

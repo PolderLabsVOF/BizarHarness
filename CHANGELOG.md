@@ -1,5 +1,52 @@
 # Changelog
 
+## v9.0.4 — patch: dashboard SPA entry now ships as `index.html`
+
+The dashboard SPA was built from `src/web/v8.html`, producing
+`dist/v8.html` in the published package. The server, however, looks
+for `dist/index.html` as the SPA fallback (the `app.get('*',
+sendFile(dist/index.html))` route in `server.mjs`). v9.0.0–v9.0.3
+booted the API but rendered a 503 page for the UI.
+
+Fix:
+
+- Rename `bizar-dash/src/web/v8.html` → `bizar-dash/src/web/index.html`.
+- Update root `vite.config.ts` entry path; keep
+  `bizar-dash/vite.config.ts` (shadowed when build runs from repo
+  root) in sync for isolation builds.
+
+The smoke check `curl /api/snapshot` and the dashboard SPA
+(`GET /` → `200` from `dist/index.html`) both pass on a fresh
+install.
+
+## v9.0.3 — patch: ship compiled `dist/` in the tarball
+
+Fresh installs of v9.0.0–v9.0.2 failed to start the dashboard:
+
+```
+Error: Cannot find module '.../node_modules/@polderlabs/bizar/packages/sdk/dist/memory/index.js'
+```
+
+Root cause: npm respects nested `.gitignore` files as default ignores.
+`packages/sdk/.gitignore` listed `dist/`, so `npm pack` shipped
+`src/` (TypeScript) but no `dist/` (JavaScript). Consumers had no
+`tsc` to compile it.
+
+Fix:
+
+- New `prepack` script in `package.json`: runs `npm run build` before
+  `npm pack` so `dist/` always exists at pack time.
+- New `packages/sdk/.npmignore` excludes `src/`, tests, tsconfig, arch
+  docs, sourcemaps; the root `.npmignore` whitelists `dist/` so the
+  compiled output overrides the per-package `.gitignore`.
+- New `plugins/bizar/.npmignore` excludes `index.ts`, `tsconfig.json`,
+  ARCHITECTURE.md, etc. — ships `dist/` only.
+- Root `.npmignore` drops `.claude/worktrees/` and `.harness/` from
+  the tarball (dev-only artifacts leaking through the prior
+  `files: [".claude/"]` whitelist). The `.claude/` entry is removed
+  from `package.json` `files` — runtime reads `~/.claude/`, not
+  in-repo `.claude/`.
+
 ## v9.0.2 — CLI overhaul S15: ESM `require()` regression
 
 Four production `.mjs` files used `require('node:fs')` (and

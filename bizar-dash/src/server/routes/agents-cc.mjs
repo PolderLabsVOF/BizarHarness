@@ -158,6 +158,51 @@ export function createCCAgentsRouter({ broadcast = () => {} } = {}) {
     }
   }));
 
+  // v9.0.5 — restart = kill + spawn a fresh session with the same prompt.
+  // The dashboard's Restart button calls this; the caller supplies the
+  // prompt so the new session picks up where the old one stopped.
+  router.post('/cc-agents/:id/restart', wrap(async (req, res) => {
+    const id = req.params.id;
+    const prompt = String((req.body && req.body.prompt) || '').trim();
+    if (!id || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'invalid id' });
+      return;
+    }
+    if (!prompt) {
+      res.status(400).json({ error: 'bad_request', message: 'prompt is required for restart' });
+      return;
+    }
+    try {
+      const proc = spawn('claude', ['agents', 'kill', id], {
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      await new Promise((resolve) => proc.on('exit', resolve));
+    } catch {
+      // best-effort kill; if it fails we still try to spawn a new one.
+    }
+    try {
+      const { spawnAgent } = await import('../claude-runner.mjs');
+      const result = await spawnAgent({
+        prompt,
+        agent: undefined,
+        worktree: HOME,
+        logPath: join(HOME, '.claude', 'sessions', '_restart', `${Date.now()}.log`),
+        background: true,
+        sessionIdTimeoutMs: 5_000,
+      });
+      _cache = null;
+      broadcast({ type: 'agents:change' });
+      if (!result.ok) {
+        res.status(502).json({ ok: false, error: result.error || 'spawn failed' });
+        return;
+      }
+      res.json({ ok: true, sessionId: result.sessionId, processId: result.processId });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  }));
+
   // S11 — send a follow-up prompt to a CC background agent.
   router.post('/cc-agents/:id/send', wrap(async (req, res) => {
     const id = req.params.id;

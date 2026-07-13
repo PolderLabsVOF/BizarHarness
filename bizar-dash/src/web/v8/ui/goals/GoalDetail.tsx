@@ -37,6 +37,23 @@ export interface GoalDetailProps {
 
 export function GoalDetail(props: GoalDetailProps): JSX.Element {
   const { goal, open, onOpenChange } = props;
+  const [deleting, setDeleting] = useState<boolean>(false);
+
+  const removeGoal = async (): Promise<void> => {
+    const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(`Delete goal "${goal.title}"? This removes it from PROGRESS.md.`)
+      : true;
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await fetchJson(`/api/goals/${encodeURIComponent(goal.id)}`, { method: 'DELETE' });
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
+  };
   const [title, setTitle] = useState<string>(goal.title);
   const [status, setStatus] = useState<string>(goal.status);
   const [owner, setOwner] = useState<string>(goal.owner || '');
@@ -236,6 +253,16 @@ export function GoalDetail(props: GoalDetailProps): JSX.Element {
             </Button>
           </Inline>
         </Stack>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-3)' }}>
+          <Button
+            variant="danger"
+            onClick={() => { void removeGoal(); }}
+            disabled={deleting || busy !== null}
+          >
+            <Trash2 size={14} aria-hidden /> {deleting ? 'Deleting…' : 'Delete goal'}
+          </Button>
+        </div>
 
         {message !== null && (
           <div role="status" style={{ fontSize: 'var(--fs-12)', color: 'var(--success)' }}>{message}</div>

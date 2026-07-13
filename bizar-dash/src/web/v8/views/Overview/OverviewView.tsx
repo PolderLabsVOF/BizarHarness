@@ -132,21 +132,99 @@ export function OverviewView(): JSX.Element {
         <Card>
           <CardHeader title="Needs attention" />
           <CardBody>
-            <Stack gap={3}>
-              {(ov.needsAttention || []).length === 0 && (
-                <StatTile
-                  label="All clear"
-                  value="Nothing needs attention"
-                  hint="The harness is running smoothly."
-                />
+            <Stack gap={2}>
+              {(ov.needsAttention || []).length === 0 ? (
+                <div
+                  role="status"
+                  style={{
+                    padding: 'var(--space-3)',
+                    border: '1px solid color-mix(in oklch, var(--success) 40%, var(--border))',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'color-mix(in oklch, var(--success) 8%, var(--surface-0))',
+                    color: 'var(--success)',
+                    fontSize: 'var(--fs-13)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                  }}
+                >
+                  <CheckCircle2 size={14} aria-hidden />
+                  All clear — nothing needs attention.
+                </div>
+              ) : (
+                (ov.needsAttention || []).map((n, i) => {
+                  const tone =
+                    String(n.label || '').toLowerCase().includes('fail') ? 'danger' :
+                    String(n.label || '').toLowerCase().includes('block') ? 'warning' :
+                    String(n.label || '').toLowerCase().includes('risk') ? 'warning' :
+                    'info';
+                  const Icon =
+                    tone === 'danger' ? AlertTriangle :
+                    tone === 'warning' ? AlertTriangle :
+                    ActivityIcon;
+                  return (
+                    <div
+                      key={i}
+                      role="alert"
+                      style={{
+                        padding: 'var(--space-3)',
+                        border: `1px solid color-mix(in oklch, var(--${tone}) 40%, var(--border))`,
+                        borderRadius: 'var(--radius-md)',
+                        background: `color-mix(in oklch, var(--${tone}) 8%, var(--surface-0))`,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 'var(--space-2)',
+                      }}
+                    >
+                      <Icon size={16} aria-hidden style={{ color: `var(--${tone})`, marginTop: 2, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 'var(--fs-13)', fontWeight: 600, color: 'var(--fg)' }}>{n.label}</div>
+                        <div style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)', marginTop: 2 }}>{n.value}</div>
+                        {typeof n.hint === 'string' && n.hint.length > 0 && (
+                          <div style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)', marginTop: 2 }}>{n.hint}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
               )}
-              {(ov.needsAttention || []).map((n, i) => (
-                <StatTile key={i} label={n.label} value={n.value} hint={n.hint} />
-              ))}
             </Stack>
           </CardBody>
         </Card>
       </div>
+
+      {Array.isArray(snapshot.data?.projects) && snapshot.data.projects.length > 0 && (
+        <Card>
+          <CardHeader title="Active projects" />
+          <CardBody>
+            <Stack gap={1}>
+              {snapshot.data.projects.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    padding: 'var(--space-2) var(--space-3)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--surface-0)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 'var(--space-2)',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 'var(--fs-13)', fontWeight: 600 }}>{p.name || p.id}</div>
+                    <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>{p.cwd}</code>
+                  </div>
+                  {snapshot.data?.activeProject?.id === p.id && (
+                    <Badge tone="success" dot>active</Badge>
+                  )}
+                </div>
+              ))}
+            </Stack>
+          </CardBody>
+        </Card>
+      )}
     </Stack>
   );
 }

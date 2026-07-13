@@ -163,6 +163,7 @@ export function ActivityView(): JSX.Element {
   const [compact, setCompact] = useState<boolean>(false);
   const [maxDays, setMaxDays] = useState<number>(14);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [search, setSearch] = useState<string>('');
 
   const onEvent = useCallback((msg: { event?: ActivityEvent } & Record<string, unknown>) => {
     if (!autoRefresh) return;
@@ -177,9 +178,22 @@ export function ActivityView(): JSX.Element {
   }, [live, events.data]);
 
   const filtered = useMemo<ExtendedEvent[]>(() => {
-    if (source === 'all') return merged;
-    return merged.filter((e) => inferSource(e) === source);
-  }, [merged, source]);
+    let list = source === 'all' ? merged : merged.filter((e) => inferSource(e) === source);
+    if (search.trim()) {
+      const needle = search.trim().toLowerCase();
+      list = list.filter((e) => {
+        const hay = [
+          e.title || '',
+          e.description || '',
+          e.kind || '',
+          e.agent || '',
+          e.actor || '',
+        ].join(' ').toLowerCase();
+        return hay.includes(needle);
+      });
+    }
+    return list;
+  }, [merged, source, search]);
 
   // Time-windowed set (older events clipped).
   const cutoff = Date.now() - maxDays * 86_400_000;
@@ -241,6 +255,39 @@ export function ActivityView(): JSX.Element {
         description="Day-grouped changelog across tasks, agents, goals, settings, and git."
         actions={
           <Inline align="center" gap={2}>
+            <input
+              type="search"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search activity"
+              style={{
+                height: 28,
+                padding: '0 var(--space-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--surface-0)',
+                color: 'var(--fg)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 'var(--fs-12)',
+                width: 200,
+                outline: 'none',
+              }}
+            />
+            <Inline align="center" gap={1}>
+              <Circle
+                size={8}
+                aria-hidden
+                style={{ color: autoRefresh ? 'var(--success)' : 'var(--fg-muted)' }}
+                fill="currentColor"
+              />
+              <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+                {autoRefresh ? 'Live' : 'Paused'}
+              </span>
+              <Button variant="ghost" onClick={() => setAutoRefresh((v) => !v)} aria-label={autoRefresh ? 'Pause stream' : 'Resume stream'}>
+                {autoRefresh ? 'Pause' : 'Resume'}
+              </Button>
+            </Inline>
             <Button variant="secondary" onClick={() => { void exportNdjson(); }}>
               <Filter size={12} aria-hidden /> Export NDJSON
             </Button>

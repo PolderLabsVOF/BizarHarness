@@ -19,7 +19,7 @@
  */
 
 import { Router } from 'express';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, watch } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { wrap } from './_shared.mjs';
@@ -29,6 +29,52 @@ import { parseProgress, serializeProgress } from '../progress-parser.mjs';
 
 const VALID_STATUSES = new Set(['on-track', 'at-risk', 'off-track', 'done', 'blocked', 'active']);
 const HOME = homedir();
+
+/** S17 — watch PROGRESS.md so edits from CC's `/goal` slash command
+ *  (which writes the file directly) push live updates to the
+ *  dashboard. Debounced because editors frequently emit 2+ events
+ *  for one logical write. */
+let watcher = null;
+let watcherDebounce = null;
+let watchedPath = null;
+
+function startProgressWatcher(broadcast) {
+  if (watcher || typeof broadcast !== 'function') return;
+  const target = progressPath();
+  if (!existsSync(target)) return;
+  watchedPath = target;
+  try {
+    watcher = watch(target, { persistent: false }, () => {
+      if (watcherDebounce) clearTimeout(watcherDebounce);
+      watcherDebounce = setTimeout(() => {
+        broadcast({ type: 'goals:file-changed', path: target });
+        // Also re-broadcast the full list so any view without a
+        // local merge path catches up. Cheap: parse is < 1ms.
+        try {
+          const parsed = parseProgress(readRaw());
+          for (const g of parsed.goals) {
+            broadcast({ type: 'goals:change', goal: g });
+          }
+        } catch { /* ignore parse errors */ }
+      }, 150);
+    });
+    watcher.on('error', () => { watcher = null; });
+  } catch { /* ENOENT on some editors — fall through */ }
+}
+
+function stopProgressWatcher() {
+  if (watcher) {
+    try { watcher.close(); } catch { /* */ }
+    watcher = null;
+  }
+  if (watcherDebounce) {
+    clearTimeout(watcherDebounce);
+    watcherDebounce = null;
+  }
+  watchedPath = null;
+}
+
+export { startProgressWatcher, stopProgressWatcher, progressPath, watchedPath };
 
 function progressPath() {
   // PROGRESS.md lives in the project root (v6 contract). Falls back
@@ -60,6 +106,37 @@ function emit(broadcast, goal) {
 }
 
 /**
+ * S17 — auto-derive "at-risk" status from KR progress + due-date
+ * proximity. Only escalates from "on-track" to "at-risk" — never
+ * downgrades user-set "off-track"/"blocked"/"done". If a due date is
+ * present and <14 days away, KRs less than 50% complete flip the
+ * goal to at-risk; past-due with KRs outstanding flips it to off-track.
+ * The derived status is *not* persisted — it's read-time only.
+ */
+function deriveRiskStatus(goal) {
+  const status = String(goal.status || '').toLowerCase();
+  if (status === 'done' || status === 'off-track' || status === 'blocked') return goal;
+  const krs = Array.isArray(goal.keyResults) ? goal.keyResults : [];
+  if (krs.length === 0) return goal;
+  const done = krs.filter((k) => k.done).length;
+  const progress = done / krs.length;
+  const due = goal.due ? Date.parse(goal.due) : NaN;
+  const now = Date.now();
+  const dayMs = 86_400_000;
+  if (!Number.isNaN(due)) {
+    const overdueDays = (now - due) / dayMs;
+    if (overdueDays > 0 && progress < 1) {
+      return { ...goal, status: 'off-track', derivedRisk: 'overdue-incomplete' };
+    }
+    const daysUntilDue = (due - now) / dayMs;
+    if (daysUntilDue <= 14 && progress < 0.5) {
+      return { ...goal, status: 'at-risk', derivedRisk: 'due-soon-low-progress' };
+    }
+  }
+  return goal;
+}
+
+/**
  * @param {{ broadcast?: Function }} deps
  */
 export function createGoalsRouter({ broadcast } = {}) {
@@ -67,7 +144,8 @@ export function createGoalsRouter({ broadcast } = {}) {
 
   router.get('/goals', wrap(async (_req, res) => {
     const parsed = parseProgress(readRaw());
-    res.json({ goals: parsed.goals, count: parsed.goals.length });
+    const enriched = parsed.goals.map(deriveRiskStatus);
+    res.json({ goals: enriched, count: enriched.length });
   }));
 
   router.get('/goals/:id', wrap(async (req, res) => {
@@ -271,6 +349,26 @@ export function createGoalsRouter({ broadcast } = {}) {
     }
     res.json({ goal, changed });
   }));
+  // PROGRESS.md, including its key-results. Returns 204.
+  router.delete('/goals/:id', wrap(async (req, res) => {
+    const parsed = parseProgress(readRaw());
+    const idx = parsed.goals.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) { res.status(404).json({ error: 'not_found' }); return; }
+    const [removed] = parsed.goals.splice(idx, 1);
+    writeRaw(serializeProgress(parsed));
+    if (typeof broadcast === 'function') {
+      broadcast({ type: 'goals:removed', id: removed.id });
+      // Also notify any listener that the goal list changed; the
+      // client removes the card locally + re-fetches on next mount.
+      broadcast({ type: 'goals:change', goal: { id: removed.id, removed: true } });
+    }
+    res.status(204).end();
+  }));
+
+  // Start the PROGRESS.md watcher so edits from CC's `/goal` slash
+  // command (which writes the file directly) push live updates. Cheap
+  // no-op when PROGRESS.md doesn't exist yet.
+  startProgressWatcher(broadcast);
 
   return router;
 }

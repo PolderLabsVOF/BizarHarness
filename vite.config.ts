@@ -14,10 +14,12 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: 'hidden',
     rollupOptions: {
-      // Single dashboard entry — v8. The legacy v7 (index.html) and v7
-      // mobile (mobile.html) entries were removed in the v8 cutover.
+      // Single dashboard entry. The legacy v7 (index.html) and v7
+      // mobile (mobile.html) entries were removed in the v8 cutover;
+      // the SPA is now built as `index.html` so the server's
+      // dist/index.html fallback path resolves correctly.
       input: {
-        main: resolve(__dirname, 'bizar-dash/src/web/v8.html'),
+        main: resolve(__dirname, 'bizar-dash/src/web/index.html'),
       },
       output: {
         // We DON'T manually group v8 views — each `React.lazy()` is
