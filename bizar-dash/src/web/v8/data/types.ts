@@ -154,4 +154,64 @@ export type WsMessage =
   | { type: 'background:syncError'; taskId?: string; instanceId?: string; fails?: number }
   | { type: 'artifact:new'; artifact?: { id?: string; title?: string } }
   | { type: 'activity:new'; event?: ActivityEvent }
+  // ── v9.3.0 chat streaming protocol ───────────────────────────────────
+  // `chat:delta` streams raw assistant text chunks mid-response.
+  // `chat:message` is the final persisted turn after the agent idles.
+  // `chat:done` always follows (or precedes) the final `chat:message`
+  // and signals the server is no longer streaming for this session.
+  // `chat:error` is a non-fatal error envelope (rate limit, claude
+  // unavailable, etc.); the session stays alive so the user can retry.
+  | { type: 'chat:delta'; session?: string; text?: string; ts?: number }
+  | { type: 'chat:message'; session?: string; message?: ChatMessage }
+  | { type: 'chat:done'; session?: string }
+  | { type: 'chat:error'; session?: string; error?: string; status?: number }
+  // ── v9.3.0 cross-project timeline ────────────────────────────────────
+  | { type: 'history:new'; event?: HistoryEvent }
+  // ── v9.3.0 projects context switch ───────────────────────────────────
+  | { type: 'projects:change'; active?: string | null }
+  // ── v9.3.0 self-update progress ──────────────────────────────────────
+  | { type: 'update:progress'; stage?: string; percent?: number; message?: string }
   | { type: string; [key: string]: unknown };
+
+/** `GET /api/chat/sessions` — chat sessions for the active project. */
+export interface ChatSession {
+  id: string;
+  title?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  messageCount?: number;
+  agent?: string | null;
+}
+
+/** `GET /api/chat?session=…` — single chat session message log. */
+export interface ChatMessage {
+  id: string;
+  ts: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string;
+  agent?: string | null;
+  model?: string | null;
+  attachments?: Array<{ kind?: string; name?: string; url?: string }>;
+}
+
+/** `GET /api/claude-sessions` — Claude Code session list. */
+export interface ClaudeSession {
+  id: string;
+  project?: string;
+  agent?: string;
+  title?: string;
+  startedAt?: number;
+  lastActivity?: number;
+  messageCount?: number;
+}
+
+/** `GET /api/history` — cross-project history event log. */
+export interface HistoryEvent {
+  id?: string;
+  project?: string;
+  agent?: string;
+  kind?: string;
+  title?: string;
+  description?: string;
+  ts?: number;
+}

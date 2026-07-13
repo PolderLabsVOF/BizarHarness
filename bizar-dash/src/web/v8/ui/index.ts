@@ -320,3 +320,9 @@ export {
   type SettingsNavProps,
   type SettingsNavItem,
 } from './settings/SettingsNav.js';
+
+// ── chat (Sprint S37, v9.3.0) ───────────────────────────────────────────
+
+export { readEventStream, type EventStreamHandlers, type EventStreamOptions } from './chat/EventStream.js';
+export { MessageBubble, EmptyTranscript, type MessageBubbleProps } from './chat/MessageBubble.js';
+export { ChatDrawer, type ChatDrawerProps } from './chat/ChatDrawer.js';
