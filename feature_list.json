@@ -1460,6 +1460,293 @@
       ],
       "passed": "2026-07-13",
       "commit": "pending"
+    },
+    {
+      "id": "F-068",
+      "behavior": "S38 — ChatView. Three-pane layout (session list, transcript, composer). Live deltas via WS chat:delta + chat:message. Regenerate per assistant message. Audit button. All actions use Sheet / inline confirm.",
+      "verification": "bizar-dash/src/web/v8/__tests__/chat-view.test.tsx passes (7 cases). End-to-end chat roundtrip asserted in tests/e2e/ws-chat-roundtrip.mjs (6/6).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Chat/ChatView.tsx (new, ~355 LOC)",
+        "bizar-dash/src/web/v8/views/Router.tsx (chat case arm)",
+        "bizar-dash/src/web/v8/shell/Sidebar.tsx (Chat entry)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "682d3cc"
+    },
+    {
+      "id": "F-069",
+      "behavior": "S39 — ProjectsView. List with active badge, Add Sheet, Activate, Remove (inline-confirm), Auto-detect, Scan. Backed by /api/projects.",
+      "verification": "bizar-dash/src/web/v8/__tests__/projects-view.test.tsx passes (6 cases). Full suite 307 tests after S39.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Projects/ProjectsView.tsx (new, 225 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "d26fd6f"
+    },
+    {
+      "id": "F-070",
+      "behavior": "S39 — ClaudeSessionsView + detail. List, rename (inline), delete (inline-confirm), Open-to-detail Sheet, New session Sheet. Detail sheet shows message timeline + follow-up send.",
+      "verification": "bizar-dash/src/web/v8/__tests__/claude-sessions-view.test.tsx passes (7 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/ClaudeSessions/ClaudeSessionsView.tsx (new, ~250 LOC)",
+        "bizar-dash/src/web/v8/views/ClaudeSessions/ClaudeSessionDetail.tsx (new, ~140 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "d26fd6f"
+    },
+    {
+      "id": "F-071",
+      "behavior": "S39 — Project interface added to data/types.ts.",
+      "verification": "Used by ProjectsView; Project interface present at data/types.ts.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "data",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/data/types.ts (Project interface)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "d952666"
+    },
+    {
+      "id": "F-072",
+      "behavior": "S40 — HistoryView. Timeline from /api/history with kind + project filter chips, refresh button, live updates on history:new WS.",
+      "verification": "bizar-dash/src/web/v8/__tests__/history-view.test.tsx passes (4 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/History/HistoryView.tsx (new, ~210 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "13016df"
+    },
+    {
+      "id": "F-073",
+      "behavior": "S40 — AdminView. Card grid with 7 tiles (gc, cache-clear, memory-reindex, logs-purge, restart, rebuild, export-activity). Destructive actions get inline confirm. Export opens in new tab.",
+      "verification": "bizar-dash/src/web/v8/__tests__/admin-view.test.tsx passes (6 cases). Real-env probe admin.gc_ok passes. Bug fixed: routes/admin.mjs paths corrected from /gc to /admin/gc (router.use() does not auto-prefix).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Admin/AdminView.tsx (new, ~200 LOC)",
+        "bizar-dash/src/server/routes/admin.mjs (path bug fix)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "13016df"
+    },
+    {
+      "id": "F-074",
+      "behavior": "S40 — AuthView. /api/auth/status, Reveal (bearer token), Rotate with inline confirm.",
+      "verification": "bizar-dash/src/web/v8/__tests__/auth-view.test.tsx passes (3 cases). Real-env probe auth.status_shape passes.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Auth/AuthView.tsx (new, ~165 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "13016df"
+    },
+    {
+      "id": "F-075",
+      "behavior": "S41 — EnvVarsView. List with masked values, Add/Edit/Bulk-Import Sheets, Export trigger, inline-confirm Delete. Client-side BIZAR_[A-Z0-9_]+ validation.",
+      "verification": "bizar-dash/src/web/v8/__tests__/env-vars-view.test.tsx passes (5 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/EnvVars/EnvVarsView.tsx (new, ~325 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "d952666"
+    },
+    {
+      "id": "F-076",
+      "behavior": "S41 — ConfigView. 4 tabs: Runtime config (raw JSON viewer + Reload/Save via /api/config), Providers (CRUD via /api/config/providers), MCPs (list via /api/config/mcps), System LLM (GET/PUT /api/llm/system-llm).",
+      "verification": "bizar-dash/src/web/v8/__tests__/config-view.test.tsx passes (4 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Config/ConfigView.tsx (new, ~340 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "d952666"
+    },
+    {
+      "id": "F-077",
+      "behavior": "S42 — DialogsView. Active queue (GET /api/dialogs). Per-row Dismiss with inline confirm (DELETE /api/dialogs/:id). Live via dialog:show WS.",
+      "verification": "bizar-dash/src/web/v8/__tests__/dialogs-view.test.tsx passes (3 cases). Bug fix: original polled every 15s with setInterval which leaked in jsdom and crashed workers with OOM; replaced with WS subscription.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Dialogs/DialogsView.tsx (new, ~140 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "218e46f"
+    },
+    {
+      "id": "F-078",
+      "behavior": "S42 — ProvidersView. List (GET /api/providers), active-default card (GET /api/providers/active), per-provider active-key masked sub-card (GET /api/providers/:id/active-key), inline-confirm Rotate (POST /api/providers/:id/rotate), Auto-detect trigger (GET /api/providers/auto-detect).",
+      "verification": "bizar-dash/src/web/v8/__tests__/providers-view.test.tsx passes (4 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Providers/ProvidersView.tsx (new, ~220 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "218e46f"
+    },
+    {
+      "id": "F-079",
+      "behavior": "S42 — ModsView. Installed + Registry sections. Enable toggle (PUT /api/mods/:id {enabled}), inline-confirm Uninstall (DELETE /api/mods/:id), Upgrade (POST /api/mods/:id/upgrade). Install Sheet accepts registry id or local path.",
+      "verification": "bizar-dash/src/web/v8/__tests__/mods-view.test.tsx passes (5 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Mods/ModsView.tsx (new, ~330 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "218e46f"
+    },
+    {
+      "id": "F-080",
+      "behavior": "S42 — UpdateView. Package list (GET /api/updates/status), Check (GET /api/updates/check), per-package Apply with inline confirm (POST /api/updates/apply {packages}), Apply all card. Live progress log from update:progress / update:log / update:complete WS.",
+      "verification": "bizar-dash/src/web/v8/__tests__/update-view.test.tsx passes (3 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Update/UpdateView.tsx (new, ~280 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "218e46f"
+    },
+    {
+      "id": "F-081",
+      "behavior": "S43 — ArtifactsView. List (GET /api/artifacts), Add Sheet (POST /api/artifacts {slug, ...}), Open-to-detail Sheet loading /api/artifacts/:slug + /render, inline-confirm Delete (DELETE /api/artifacts/:slug).",
+      "verification": "bizar-dash/src/web/v8/__tests__/artifacts-view.test.tsx passes (4 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Artifacts/ArtifactsView.tsx (new, ~250 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7e99103"
+    },
+    {
+      "id": "F-082",
+      "behavior": "S43 — LightRAGView. Defaults form (GET/PUT /api/lightrag/defaults), Status card with running + pid + host:port + log tail (GET /api/lightrag/status), Autostart trigger (POST /api/lightrag/autostart).",
+      "verification": "bizar-dash/src/web/v8/__tests__/lightrag-view.test.tsx passes (3 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/LightRAG/LightRAGView.tsx (new, ~210 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7e99103"
+    },
+    {
+      "id": "F-083",
+      "behavior": "S43 — VoiceView. List (GET /api/voice/list), inline audio player via /api/voice/:id/audio, Upload Sheet (FormData POST /api/voice/upload), inline-confirm Delete (DELETE /api/voice/:id).",
+      "verification": "bizar-dash/src/web/v8/__tests__/voice-view.test.tsx passes (3 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Voice/VoiceView.tsx (new, ~180 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7e99103"
+    },
+    {
+      "id": "F-084",
+      "behavior": "S43 — ClipboardView. Saved clip list (GET /api/clipboard/list), Save Sheet (POST /api/clipboard/save), inline-confirm Delete (DELETE /api/clipboard/:id).",
+      "verification": "bizar-dash/src/web/v8/__tests__/clipboard-view.test.tsx passes (3 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Clipboard/ClipboardView.tsx (new, ~190 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7e99103"
+    },
+    {
+      "id": "F-085",
+      "behavior": "S43 — ObsidianView. Vault stats (GET /api/obsidian), notes list (GET /api/obsidian/notes), per-note inline expand (GET /api/obsidian/notes/:path), inline-confirm Delete (DELETE /api/obsidian/notes/:path), Rebuild index (POST /api/obsidian/index).",
+      "verification": "bizar-dash/src/web/v8/__tests__/obsidian-view.test.tsx passes (3 cases).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Obsidian/ObsidianView.tsx (new, ~200 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7e99103"
+    },
+    {
+      "id": "F-086",
+      "behavior": "S43 — MiscView. Global fuzzy search panel (GET /api/search?q=) with kind icons, Tailscale card (GET /api/tailscale/status + Enable POST /api/tailscale/enable + Disable POST /api/tailscale/disable).",
+      "verification": "bizar-dash/src/web/v8/__tests__/misc-view.test.tsx passes (3 cases). Spawn palette actions were already wired in AppCommandPalette from earlier work.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Misc/MiscView.tsx (new, ~200 LOC)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "7e99103"
+    },
+    {
+      "id": "F-087",
+      "behavior": "S37 — Chat WS protocol foundations. WsMessage union gains chat:delta / chat:message / chat:done / chat:error / history:new / projects:change / update:progress. New ChatMessage / ChatSession / ClaudeSession / HistoryEvent interfaces.",
+      "verification": "bizar-dash/src/web/v8/__tests__/chat-types.test.ts passes (4 cases). tests/e2e/ws-chat-roundtrip.mjs passes 6/6.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "data",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/data/types.ts (WsMessage union + 4 interfaces)",
+        "bizar-dash/src/web/v8/ui/chat/EventStream.tsx (new)",
+        "bizar-dash/src/web/v8/ui/chat/MessageBubble.tsx (new)",
+        "bizar-dash/src/web/v8/ui/chat/ChatDrawer.tsx (new)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "69aa434"
     }
   ],
   "vcr": {

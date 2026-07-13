@@ -1,5 +1,111 @@
 # Changelog
 
+## v9.3.0 — feat: chat surface + remaining endpoint groups closed
+
+Stop-hook feedback on v9.2.0 identified that the user's ask of a
+"full control and orchestration center" was only partially satisfied
+— chat (the primary non-data surface) was deferred and only 7
+high-impact groups were added in v9.2.0. v9.3.0 closes the gap by
+shipping the chat surface and 19 additional endpoint-group pages
+across sprints S37-S43, plus the foundational chat primitives.
+
+### Chat surface (S37-S38)
+
+- **Chat WS protocol types** (`src/web/v8/data/types.ts`) —
+  `WsMessage` union gains `chat:delta`, `chat:message`,
+  `chat:done`, `chat:error`, `history:new`, `projects:change`,
+  `update:progress`. New `ChatMessage`, `ChatSession`, `ClaudeSession`,
+  `HistoryEvent`, `Project` interfaces.
+- **`EventStream.tsx`** — SSE reader wrapper (`text/event-stream`)
+  with `AbortSignal` cancellation and `onChunk` / `onEvent` /
+  `onDone` / `onError` callbacks.
+- **`MessageBubble.tsx`** — memo'd user/assistant/system/tool bubble
+  with `react-markdown` rendering.
+- **`ChatDrawer.tsx`** — right-side Sheet wrapping transcript +
+  composer with optimistic append + streaming. Will be reused by
+  AgentsView "Send prompt" and the standalone Chat view.
+- **ChatView** (`/chat`) — three-pane layout: session list
+  (`GET /api/chat/sessions`), transcript
+  (`GET /api/chat?session=…`), composer (POST `/api/chat`). Live
+  deltas via `chat:delta` / `chat:message` WS. Regenerate
+  (`POST /api/chat/regenerate`). Audit (`POST /api/chat/audit`).
+- **`tests/e2e/ws-chat-roundtrip.mjs`** — boots server, posts
+  `/api/chat`, asserts chat events arrive over WS within 5s.
+
+### Projects + Claude sessions (S39)
+
+- **ProjectsView** (`/projects-list`) — registered project registry,
+  Add Sheet, Activate, Remove (inline-confirm), Auto-detect, Scan.
+- **ClaudeSessionsView** (`/claude-sessions`) — list + rename +
+  inline-confirm delete + New Sheet.
+- **ClaudeSessionDetail** (drawer) — message timeline + follow-up
+  send via streaming endpoint.
+
+### History + Admin + Auth (S40)
+
+- **HistoryView** (`/history`) — cross-project timeline from
+  `/api/history` with kind + project filter chips, live
+  `history:new` WS.
+- **AdminView** (`/admin`) — card grid with 7 tiles (gc,
+  cache-clear, memory-reindex, logs-purge, restart, rebuild,
+  export-activity). Destructive actions get inline confirm.
+- **AuthView** (`/auth`) — `/api/auth/status`, Reveal button, Rotate
+  with inline confirm (`POST /api/auth/regenerate`).
+- **Bug fix:** `routes/admin.mjs` paths registered at `/gc` etc.
+  but router mounted via `router.use(createAdminRouter(...))` which
+  doesn't auto-prefix `/admin`. All 7 paths corrected to
+  `/admin/gc`, `/admin/cache/clear`, etc.
+
+### EnvVars + Config (S41)
+
+- **EnvVarsView** (`/env-vars`) — list with masked values, Add/
+  Edit/Bulk-Import Sheets, Export trigger, inline-confirm Delete.
+  Client-side `BIZAR_[A-Z0-9_]+` validation.
+- **ConfigView** (`/config`) — 4 tabs: Runtime config (raw JSON
+  viewer + Reload/Save), Providers (CRUD + inline-confirm Delete),
+  MCPs (list + Refresh), System LLM (enabled toggle + provider/
+  model inputs + Save).
+
+### Dialogs + Providers + Mods + Update (S42)
+
+- **DialogsView** (`/dialogs`) — active queue with inline-confirm
+  Dismiss; live via `dialog:show` WS.
+- **ProvidersView** (`/providers`) — list, active-default card,
+  per-provider active-key masked sub-card, Rotate with inline
+  confirm, Auto-detect trigger.
+- **ModsView** (`/mods`) — Installed + Registry sections; enable
+  toggle, inline-confirm Uninstall, Upgrade when registry reports
+  newer; Install Sheet accepts registry id or local path.
+- **UpdateView** (`/update`) — package list + Check + per-package
+  Apply + Apply all with inline confirm. Live progress log from
+  `update:progress` / `update:log` / `update:complete` WS.
+
+### Long-tail P1 surfaces (S43)
+
+- **ArtifactsView** (`/artifacts`) — list, Add Sheet, Open-to-detail
+  Sheet (loads `/render` for block count), inline-confirm Delete.
+- **LightRAGView** (`/lightrag`) — Defaults form, Status card with
+  log tail, Autostart trigger.
+- **VoiceView** (`/voice`) — list with inline audio player, Upload
+  Sheet (FormData), inline-confirm Delete.
+- **ClipboardView** (`/clipboard`) — saved clip list, Save Sheet,
+  inline-confirm Delete.
+- **ObsidianView** (`/obsidian`) — vault stats + notes list + per-
+  note inline expand + Rebuild index.
+- **MiscView** (`/misc`) — global fuzzy search + Tailscale card
+  with Enable / Disable.
+
+### Verification
+
+- 7 sprints (S37-S43) committed across 7 atomic commits.
+- Dashboard vitest 363/363 pass across 163 files (was 320/153 before
+  v9.3.0; +43 test files, +43 new tests from S37-S43).
+- 0 new typecheck errors introduced across the v9.3.0 sprints.
+- Sprint S42 found + fixed a jsdom OOM caused by `setInterval` leak
+  in DialogsView; replaced with WS subscription to `dialog:show`.
+- Sprint S43 found + fixed a duplicate `Layers` icon import in
+  Sidebar (caught by vite-react-babel PARSE_ERROR during transform).
+
 ## v9.2.0 — feat: full orchestration center coverage shipped
 
 Stop-hook feedback on v9.1.1 identified 27 server route groups with no

@@ -444,16 +444,40 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit (master):** v9.2.0 — full orchestration center coverage
-  shipped (F-061..F-067).
-- **This session:** v9.3.0 in flight. **S37 + S38 + S39 + S40 + S41 +
-  S42 + S43 shipped** (`69aa434`, `682d3cc`, `d26fd6f`, `13016df`,
-  `d952666`, `218e46f`, S43 pending commit). S43 closes the long-tail
-  P1 group (Artifacts, LightRAG, Voice, Clipboard, Obsidian, Misc;
-  Spawn already wired in CommandPalette from earlier work).
-  Next: S44 — release paperwork.
-- **Gate state (with S43 staged):** dashboard vitest 363/363 pass;
-  0 new typecheck errors from S43.
+- **Last commit (master):** v9.3.0 — chat surface + remaining
+  endpoint groups closed. 19 new v8 pages, 1 chat primitive layer,
+  1 auth bug fix, dashboard vitest 363/363 pass.
+- **This session:** v9.3.0 SHIPPED across 8 atomic commits (S37-S43
+  implementation + S44 paperwork). F-068..F-087 marked passing in
+  feature_list.json.
+- **v9.3.0 deliverables:** chat surface (S37-S38) + Projects + Claude
+  sessions (S39) + History + Admin + Auth (S40) + EnvVars + Config
+  (S41) + Dialogs + Providers + Mods + Update (S42) + Artifacts +
+  LightRAG + Voice + Clipboard + Obsidian + Misc (S43). The Spawn
+  palette actions were already wired in AppCommandPalette from
+  earlier work.
+- **Gate state:** dashboard vitest 363/363 pass across 163 files;
+  0 new typecheck errors from v9.3.0.
+- **Bug fixes landed in v9.3.0:** (1) `routes/admin.mjs` paths
+  corrected from `/gc` etc. to `/admin/gc` etc. (router.use() does
+  not auto-prefix); (2) DialogsView polling interval that leaked
+  in jsdom replaced with WS subscription to `dialog:show`;
+  (3) duplicate `Layers` icon import in Sidebar consolidated.
+
+## v9.3.0 — chat surface + remaining endpoint groups closed
+
+## v9.3.0 — chat surface + remaining endpoint groups closed
+
+Stop-hook feedback on v9.2.0:
+> "the user's ask of a 'full control and orchestration center' is
+> only partially satisfied — chat is the primary non-data surface
+> and was deferred ... only 7 high-impact groups added in this
+> sprint; remaining groups not yet wired."
+
+v9.3.0 closes both gaps across 7 implementation sprints (S37-S43)
+plus the S44 release paperwork.
+
+### Sprint S37 — Foundations (`69aa434`)
 
 ## v9.2.0 — full orchestration center coverage shipped
 
