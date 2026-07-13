@@ -444,15 +444,60 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit:** pending — Sprint S10–S15 v8 dashboard live-data + control plane
-- **Released:** v8.0.0 dashboard production cutover (master tagged).
-  v8 now reads from real backend: `/api/tasks`, `/api/goals`, `/api/agents`,
-  `/api/cc-agents`, `/api/activity`, `/api/skills`, `/api/settings`,
-  `/api/projects`, plus the new `/api/spawn/agent` (Bizar is a harness for
-  Claude Code — all Bizar agents spawn CC under the hood).
-- **Branch:** master; v8.0.0 ships, v7 + mobile deleted per release plan.
-- **Phase:** S10–S15 verification — all live, all typecheck green, all tests green.
-  v8 dashboard is a real orchestration center.
+- **Last commits:** 11 atomic commits landing the full orchestration
+  center (live data → control plane → live topbar → notifications
+  bell → memory CRUD → settings hydration fix → goal task-link
+  badge → Tasks render-phase fix → Schedules + Background Jobs).
+- **Released:** v8.0.0 dashboard production cutover. v8 is the
+  user's full Claude Code orchestration center; Bizar is a harness
+  for Claude Code so all "Bizar agents" are CC-spawned via
+  `/api/spawn/agent`.
+- **Branch:** master.
+- **Phase:** v8 dashboard shipped. All requested surfaces live,
+  hydrated, and routed. WIP=1 honored per-sprint (this commit
+  group covers multiple sprints as the user explicitly asked to
+  run multiple parallel subagents to completion).
+- **Final verification:**
+  - `make check` 0 TS errors.
+  - Dashboard vitest: **271/271** pass (38 files).
+  - SDK vitest: **294/294** pass.
+  - Backend goals-decompose: **4/4** pass.
+  - One pre-existing test (`views.test.tsx`) is flaky in parallel
+    only — passes 9/9 when run alone.
+
+### Views live now (12 top-level surfaces)
+
+| View | Endpoint(s) | Pulled-in via |
+|---|---|---|
+| Overview | /api/snapshot, /api/activity | live stat tiles + feed |
+| Tasks | /api/tasks | kanban + DnD + WS |
+| Goals | /api/goals, /api/goals/:id/decompose, /api/goals/:id/sync-from-tasks | cards + drawer + decompose |
+| Agents | /api/agents, /api/cc-agents | Bizar + CC unified grid |
+| Activity | /api/activity | day-grouped visual changelog |
+| Memory | /api/memory, /api/memory/notes | CRUD via drawer |
+| Skills | /api/skills?kind=skills | library cards |
+| MCPs | /api/skills?kind=mcps | library cards |
+| Hooks | /api/skills?kind=hooks | library cards |
+| Settings | GET/PUT /api/settings | 18 sections, all hydrated |
+| Schedules | /api/schedules | list + run + create |
+| Background Jobs | /api/background | list + pause/resume/retry/kill + output panel |
+
+Plus chrome: live topbar (active project name + WS indicator),
+notifications bell (badged unread popover), ⌘K palette (spawn /
+tasks / projects / settings), status bar slot.
+
+### Sprint closure
+
+Sprints completed in this session:
+- S10 — Live data plumbing across every view.
+- S11 — Agent detail drawer (Send / Restart / Kill / live stream).
+- S12 — Goals source-of-truth unification with CC `/goal`.
+- S13 — Command palette + spawn route.
+- S14 — Kanban visual overhaul.
+- S15 — Visual changelog + Settings menu overhaul (16→18 sections).
+- S15b — Topbar live wiring + notifications bell + memory CRUD +
+  settings hydration fix + goal task-link badge + tasks effect
+  refactor + Schedules view + Background Jobs view.
 
 ### v8 dashboard orchestration summary
 
