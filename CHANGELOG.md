@@ -1,5 +1,62 @@
 # Changelog
 
+## v9.0.0 — v8 orchestration center
+
+The dashboard is now a full control plane for both Bizar and
+Claude Code agents. Live, data-driven, and wired end-to-end.
+
+### Breaking vs v8.1.0
+- Live views now require a running dashboard server (`bizar start`).
+  Earlier seeded sample data is gone.
+
+### Dashboard
+- **Live data on every view.** Overview, Tasks, Goals, Agents,
+  Activity, Memory, Skills/MCPs/Hooks, Settings, Schedules, and
+  Background Jobs all hit the real `/api/*` endpoints. No sample data.
+- **CC + Bizar unified in Agents view.** Source filter chip
+  (`Bizar | Claude Code | All`) plus per-agent drawer with live
+  status pulse, last-10 actions timeline, and Restart / Send /
+  Kill / Open-session controls.
+- **Goals ↔ tasks loop.** KR toggle in `GoalDetail` decomposes a
+  key result into a tracked task via `POST /api/goals/:id/decompose`.
+  Task status flips reverse-sync through `metadata.goalId/krId`.
+  Source of truth: `.bizar/PROGRESS.md` — both the dashboard and
+  Claude Code's `/goal` slash command write through the same parser
+  + serializer.
+- **Command palette — 5 scopes.** Navigation, Actions, Projects,
+  Spawn (4 CC agents), Tasks (`New task…`, `Go to tasks`).
+  Settings sections are addressable too (`Settings · Memory` etc.)
+- **Topbar — live.** Active project name from `/api/projects`,
+  WS connection indicator (green pulse / amber reconnect / offline),
+  notifications bell with unread badge + popover, ⌘K hotkey
+  visible to new users.
+- **SettingsView hydrated.** Reads `GET /api/settings`, PUTs partial
+  updates (server merges). All 18 sections have wired controls.
+- **Schedules view.** List/toggle/run/create/delete via the
+  existing `/api/schedules` surface.
+- **Background Jobs view.** List/pause/resume/retry/kill CC
+  background instances; per-instance output panel via SSE.
+- **Memory CRUD.** Sheet-based create/edit/delete on
+  `/api/memory/notes`.
+
+### Server fixes (smoke-caught)
+- `goals:change` WS broadcast now carries the full goal payload
+  (was dropped because a local `function broadcast(broadcast, …)`
+  was shadowed by the route parameter — all 9 callsites).
+- Snapshot endpoint imports `readSettings` at module scope (was
+  dynamic-imported only inside `headroomStartupHook`, causing
+  `snapshot_failed: readSettings is not defined` on every WS
+  connect).
+- `MemoryView` now hits `/api/memory/notes` (plural) and reads
+  `.notes[]` (was `/api/memory` 404 + `.entries` undefined).
+
+### Test infra
+- 271 dashboard tests, all green; 10/10 stress runs stable.
+- `theme.test.tsx` "hook throws outside provider" tests now wrap
+  their expected throw in `try/finally` so the uncaught error
+  doesn't leak into later tests' render context (root cause of
+  the long-standing TasksView render flake).
+
 ## v8.0.0 — v8 dashboard production cutover
 
 Major release. The dashboard ships as a single v8 entry built on a
