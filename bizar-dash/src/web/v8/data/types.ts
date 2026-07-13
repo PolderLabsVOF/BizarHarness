@@ -205,6 +205,16 @@ export interface ClaudeSession {
   messageCount?: number;
 }
 
+/** `GET /api/projects` — registered project registry. */
+export interface Project {
+  id: string;
+  name?: string;
+  path: string;
+  active?: boolean;
+  addedAt?: number;
+  lastUsedAt?: number;
+}
+
 /** `GET /api/history` — cross-project history event log. */
 export interface HistoryEvent {
   id?: string;

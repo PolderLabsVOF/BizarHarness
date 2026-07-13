@@ -81,6 +81,12 @@ const AdminView = lazy(() =>
 const AuthView = lazy(() =>
   import('./Auth/AuthView.js').then((m) => ({ default: m.AuthView })),
 );
+const EnvVarsView = lazy(() =>
+  import('./EnvVars/EnvVarsView.js').then((m) => ({ default: m.EnvVarsView })),
+);
+const ConfigView = lazy(() =>
+  import('./Config/ConfigView.js').then((m) => ({ default: m.ConfigView })),
+);
 
 // Library surfaces now pull live data inside the view itself.
 // LibraryItemProps is imported so its type stays exported via this
@@ -140,6 +146,10 @@ export function useViewForId(id: string): JSX.Element {
         return <AdminView />;
       case 'auth':
         return <AuthView />;
+      case 'env-vars':
+        return <EnvVarsView />;
+      case 'config':
+        return <ConfigView />;
       default:
         return <OverviewView />;
     }

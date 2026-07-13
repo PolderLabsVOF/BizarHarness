@@ -444,15 +444,14 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit (this session, not yet committed):** v9.2.0 — full
-  orchestration center coverage shipped. 7 new v8 pages (Doctor, Usage,
-  Backup, Notifications, Diagnostics, Headroom, Eval) wired through
-  the existing server routes, 9 HIGH/MEDIUM audit gaps closed in the
-  10 existing views, and a new real-environment e2e harness
-  (`tests/e2e/real-environment.mjs`) that exercises the 7 new endpoint
-  groups + the notification read flow against a live tmp project.
-  All gates green: typecheck clean, dashboard vitest 284/284, npm test
-  all green, `make e2e-orchestration` 18/18, `make e2e-real-env` 14/14.
+- **Last commit (master):** v9.2.0 — full orchestration center coverage
+  shipped (F-061..F-067).
+- **This session:** v9.3.0 in flight. **S37 + S38 + S39 + S40 + S41
+  shipped** (`69aa434`, `682d3cc`, `d26fd6f`, `13016df`, S41 pending
+  commit). S41 closes the "configure everything" P0 group (EnvVars +
+  Config). Next: S42 (Dialogs + Providers + Mods + Update, P1).
+- **Gate state (with S41 staged):** dashboard vitest 329/329 pass
+  across 157 files; 0 new typecheck errors from S41.
 
 ## v9.2.0 — full orchestration center coverage shipped
 
@@ -1853,4 +1852,48 @@ auth status.
   44 / 307 before S40; +13 new test cases).
 - `make e2e-real-env` → **19/19 steps pass** (was 16 / 16).
 
-**Next sprint:** S41 — EnvVars + Config (P0).
+### Sprint S41 — EnvVars + Config (shipped in this commit, F-075..F-076)
+
+Goal: the "control and configure everything" P0 group. EnvVars was
+explicitly named by the user; Config closes the runtime config +
+providers + MCPs + system-LLM surfaces in one tabbed view.
+
+- `bizar-dash/src/web/v8/views/EnvVars/EnvVarsView.tsx` (new,
+  ~325 LOC) — list of env vars from `GET /api/env-vars` with masked
+  values + per-row Edit Sheet (`PUT /api/env-vars/:name`),
+  inline-confirm Delete (`DELETE /api/env-vars/:name`), Add Sheet
+  (`POST /api/env-vars` validates `BIZAR_[A-Z0-9_]+` client-side
+  before submit), Bulk-Import Sheet (`POST /api/env-vars/bulk-import`
+  parses `KEY=value` lines), Export trigger (`window.open` on
+  `/api/env-vars/export`), and a Refresh button. Error state surfaces
+  inline. Server emits `source` + `createdAt` per row when present.
+- `bizar-dash/src/web/v8/views/Config/ConfigView.tsx` (new,
+  ~340 LOC) — 4 tabs: Runtime config (`GET/PUT /api/config` raw JSON
+  viewer + Reload + Save), Providers (`GET /api/config/providers`
+  list + Add/Edit Sheets + inline-confirm Delete via
+  `DELETE /api/config/providers/:id`), MCPs
+  (`GET /api/config/mcps` list + Refresh), System LLM
+  (`GET/PUT /api/llm/system-llm` for the cline.json#systemLlm block —
+  enabled toggle, provider + model inputs, Save button). Tabs are
+  inline state — no router state, no Sheet, no extra dep.
+- `bizar-dash/src/web/v8/data/types.ts` — added the `Project`
+  interface that S39 referenced but missed at commit time.
+- `bizar-dash/src/web/v8/views/Router.tsx` — `env-vars` and `config`
+  case arms + lazy imports.
+- `bizar-dash/src/web/v8/shell/Sidebar.tsx` — two new System
+  entries: Env vars (`Variable`), Config (`ServerCog`).
+- `bizar-dash/src/web/v8/__tests__/env-vars-view.test.tsx` (new,
+  5 cases): renders list, empty state, Add posts + closes Sheet,
+  Bulk import posts, Delete confirms + fires DELETE.
+- `bizar-dash/src/web/v8/__tests__/config-view.test.tsx` (new,
+  4 cases): renders runtime tab by default, Save PUTs `/api/config`,
+  Delete confirms + fires DELETE on providers tab, System LLM tab
+  Save PUTs `/api/llm/system-llm`.
+
+**Verification:**
+- `npx vitest run` → **157 files / 329 tests pass** (+9 new, was
+  153/320 before S41). 3 consecutive runs stable.
+- 0 new typecheck errors from S41 (303 pre-existing test-file
+  errors unchanged).
+
+**Next sprint:** S42 — Dialogs + Providers + Mods + Update (P1).
