@@ -1,31 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Grid } from '../../ui/primitives/Grid.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { GoalCard, type GoalCardProps, type GoalStatus } from '../../ui/goals/GoalCard.js';
-import { KeyResult, type KeyResultProps, type KeyResultStatus } from '../../ui/goals/KeyResult.js';
-import { Card, CardBody, CardHeader } from '../../ui/data/Card.js';
+import { GoalDetail } from '../../ui/goals/GoalDetail.js';
+import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
-import { Select, SelectTrigger, SelectContent, SelectItem } from '../../ui/controls/Select.js';
+import { Button } from '../../ui/controls/Button.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson } from '../../data/fetcher.js';
 import type { Goal, WsMessage } from '../../data/types.js';
 
 /**
- * GoalsView — Sprint S10. Pulls `/api/goals` (parsed PROGRESS.md).
- * Status badge click → optimistic update + PATCH /api/goals/:id/status.
- * Key results are pulled from the goal's keyResults[] list.
+ * GoalsView — Sprint S10/S12. Pulls `/api/goals` (parsed PROGRESS.md).
+ * Card click → `GoalDetail` Drawer (editable title / status / due /
+ * owner / KR add/toggle/remove). "+ New goal" button creates a fresh
+ * goal via `POST /api/goals`. Live updates via `goals:change`.
  */
-
-const STATUS_OPTIONS = [
-  { value: 'on-track', label: 'On track' },
-  { value: 'at-risk', label: 'At risk' },
-  { value: 'off-track', label: 'Off track' },
-  { value: 'blocked', label: 'Blocked' },
-  { value: 'done', label: 'Done' },
-  { value: 'active', label: 'Active' },
-];
 
 function goalToCard(g: Goal): GoalCardProps {
   return {
@@ -41,25 +34,12 @@ function goalToCard(g: Goal): GoalCardProps {
   };
 }
 
-function krStatus(kr: { done: boolean }): KeyResultStatus {
-  return kr.done ? 'done' : 'in-progress';
-}
-
-function goalToKRs(g: Goal): KeyResultProps[] {
-  return g.keyResults.map((k) => ({
-    id: k.id,
-    title: k.title,
-    status: krStatus(k),
-    progress: k.done ? 1 : 0,
-    assignee: k.assignee,
-  }));
-}
-
 export function GoalsView(): JSX.Element {
   const goals = useFetch<{ goals?: Goal[]; count?: number }>('/api/goals');
   const [local, setLocal] = useState<Goal[]>([]);
   const [initialized, setInitialized] = useState(false);
-  const [focusedGoalId, setFocusedGoalId] = useState<string | null>(null);
+  const [openGoalId, setOpenGoalId] = useState<string | null>(null);
+  const [creating, setCreating] = useState<boolean>(false);
 
   useEffect(() => {
     if (goals.data?.goals && !initialized) {
@@ -82,27 +62,34 @@ export function GoalsView(): JSX.Element {
   }, []);
   useWsMessage('goals:change', onChange);
 
-  const setStatus = useCallback(async (id: string, status: string) => {
-    setLocal((prev) =>
-      prev.map((g) => (g.id === id ? { ...g, status: status as Goal['status'] } : g)),
-    );
+  const createGoal = useCallback(async () => {
+    setCreating(true);
     try {
-      await fetchJson(`/api/goals/${encodeURIComponent(id)}/status`, {
-        method: 'PATCH',
-        body: { status },
+      const res = await fetchJson<{ goal?: Goal; id?: string }>('/api/goals', {
+        method: 'POST',
+        body: { title: 'New goal' },
       });
+      if (res.goal) setLocal((prev) => [...prev, res.goal as Goal]);
+      if (res.id) setOpenGoalId(res.id);
     } catch {
-      // server will re-broadcast the canonical state via WS on the next reload
+      // server will broadcast the canonical state via WS on the next reload
+    } finally {
+      setCreating(false);
     }
   }, []);
 
-  const focused = focusedGoalId ? local.find((g) => g.id === focusedGoalId) : null;
+  const openGoal = openGoalId ? local.find((g) => g.id === openGoalId) ?? null : null;
 
   return (
     <Stack gap={5}>
       <ViewHeader
         title="Goals"
         description="Long-horizon commitments parsed from .bizar/PROGRESS.md."
+        actions={
+          <Button variant="primary" onClick={() => { void createGoal(); }} disabled={creating}>
+            <Plus size={14} aria-hidden /> New goal
+          </Button>
+        }
       />
       {goals.loading && local.length === 0 ? (
         <Stack gap={3}>
@@ -127,8 +114,8 @@ export function GoalsView(): JSX.Element {
               key={g.id}
               role="button"
               tabIndex={0}
-              onClick={() => setFocusedGoalId(g.id)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFocusedGoalId(g.id); } }}
+              onClick={() => setOpenGoalId(g.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenGoalId(g.id); } }}
               style={{ cursor: 'pointer', outline: 'none' }}
               data-testid={`goal-card-${g.id}`}
             >
@@ -138,37 +125,12 @@ export function GoalsView(): JSX.Element {
         </Grid>
       )}
 
-      {focused && (
-        <Card>
-          <CardHeader
-            title={`Goal · ${focused.title}`}
-            action={
-              <Select
-                value={focused.status}
-                onValueChange={(v) => setStatus(focused.id, v)}
-              >
-                <SelectTrigger size="sm" placeholder="Status" />
-                <SelectContent>
-                  {STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            }
-          />
-          <CardBody>
-            <Stack gap={2}>
-              {goalToKRs(focused).map((kr) => (
-                <KeyResult key={kr.id} {...kr} />
-              ))}
-              {focused.keyResults.length === 0 && (
-                <span style={{ color: 'var(--fg-muted)' }}>No key results yet.</span>
-              )}
-            </Stack>
-          </CardBody>
-        </Card>
+      {openGoal && (
+        <GoalDetail
+          goal={openGoal}
+          open={openGoalId !== null}
+          onOpenChange={(o) => { if (!o) setOpenGoalId(null); }}
+        />
       )}
     </Stack>
   );

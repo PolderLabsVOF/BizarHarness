@@ -1295,3 +1295,60 @@ agent card → right-side Drawer with live detail, last-10 actions
 timeline, and `Send prompt` / `Restart` / `Kill` actions that map to
 the new `/api/cc-agents/:id/kill` + `/api/agents/:name/invoke`
 endpoints.
+
+## S11-S14 — Control plane, goal editor, palette + settings wiring
+
+User request: "control and configure everything in the dashboard".
+
+**S11 — Agent detail Drawer + control plane:**
+- `bizar-dash/src/web/v8/ui/agents/AgentDetail.tsx` — right-side Sheet
+  with avatar, current-task callout, prompt textarea, and three
+  action buttons:
+  - **Send** → POST `/api/cc-agents/:id/send` (CC source) or
+    `/api/agents/:name/invoke` (Bizar source)
+  - **Restart** → POST `/api/agents/:name/restart` (Bizar only;
+    CC gets a "spawn a fresh agent via palette" hint)
+  - **Copy id** → `navigator.clipboard.writeText(key)`
+- `AgentsView.tsx` — `onOpen` wires each card to `setOpenId(c.id)`;
+  `AgentDetail` mounts when `openId !== null`.
+- Backend endpoints already shipped in `routes/agents-cc.mjs`.
+
+**S12 — Goal editing drawer + create flow:**
+- `bizar-dash/src/web/v8/ui/goals/GoalDetail.tsx` — Sheet with
+  editable Title / Status / Owner / Due + inline KeyResult list
+  (toggle done, add via Enter, remove button). Each field PATCHes
+  `/api/goals/:id` on blur or change. KR toggles/deletes hit
+  `/api/goals/:id/key-results/:krId`.
+- `GoalsView.tsx` — card click opens Drawer (was inline section);
+  `+ New goal` button POSTs `/api/goals` then opens the new goal
+  for editing. Source-of-truth stays `.bizar/PROGRESS.md`.
+
+**S13 — Command palette control plane:**
+- `AppCommandPalette.tsx` — three new groups:
+  - **Agents** — Spawn Coder / Researcher / Planner / Reviewer →
+    POST `/api/agents`.
+  - **Tasks** — `New task…` (window.prompt → POST
+    `/api/tasks/submit`), `Go to tasks board` (existing nav).
+  - **Projects** — dynamically loaded from `/api/projects`; each
+    entry hits POST `/api/projects/:id/activate`.
+- Toast hook stub: `onToast` prop surfaces success/error.
+
+**S14 — Settings wiring pass:**
+- `useFetch` already wires live counts into the Plugins / MCPs /
+  Skills / Hooks sections (shipped in S10). The S14 pass
+  consolidates PATCH endpoints (`/api/settings` + per-section
+  hookups) and adds the `tests/control-plane.test.tsx` regression
+  suite covering AgentDetail + GoalDetail.
+
+**Tests added:**
+- `bizar-dash/src/web/v8/__tests__/control-plane.test.tsx` —
+  7 vitest cases covering AgentDetail (name/badge, task callout,
+  Send endpoint routing, button presence) and GoalDetail
+  (editable fields, KR list, PATCH on blur).
+
+**Verification (L1 proxy — typecheck):**
+- `tsc --noEmit` via Node API: 0 diagnostics, 0 failures.
+
+**Next sprint:** chat surface rewrite (deferred from earlier
+PLANs) + mobile dashboard v8 cutover (the user said "professional
+and data-driven"; chat is the last non-data surface).

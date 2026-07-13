@@ -4,6 +4,7 @@ import { Inline } from '../../ui/primitives/Inline.js';
 import { Grid } from '../../ui/primitives/Grid.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { AgentCard, type AgentCardProps, type AgentStatus } from '../../ui/agents/AgentCard.js';
+import { AgentDetail } from '../../ui/agents/AgentDetail.js';
 import { Chip } from '../../ui/data/Chip.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { useFetch } from '../../data/useFetch.js';
@@ -68,6 +69,7 @@ export function AgentsView(): JSX.Element {
   const [bizarList, setBizarList] = useState<BizarAgent[]>([]);
   const [ccList, setCCList] = useState<CCAgent[]>([]);
   const [initialized, setInitialized] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!initialized && bizar.data?.agents !== undefined && cc.data?.agents !== undefined) {
@@ -141,10 +143,26 @@ export function AgentsView(): JSX.Element {
       ) : (
         <Grid cols={3}>
           {cards.map((c) => (
-            <AgentCard key={c.id} {...c} />
+            <AgentCard key={c.id} {...c} onOpen={() => setOpenId(c.id)} />
           ))}
         </Grid>
       )}
+
+      {openId !== null && (() => {
+        const sel = cards.find((c) => c.id === openId);
+        if (!sel) return null;
+        return (
+          <AgentDetail
+            agentId={sel.id}
+            name={sel.name}
+            role={sel.role}
+            status={sel.status}
+            currentTask={sel.currentTask}
+            open={openId !== null}
+            onOpenChange={(o) => { if (!o) setOpenId(null); }}
+          />
+        );
+      })()}
     </Stack>
   );
 }
