@@ -1801,3 +1801,56 @@ explorer + per-session detail pane.
 - `make e2e-real-env` → **16/16 steps pass** (was 14 / 14).
 
 **Next sprint:** S40 — History + Admin + Auth (P0).
+
+### Sprint S40 — History + Admin + Auth (shipped in this commit, F-072..F-074)
+
+Goal: the "what happened across projects" surface + admin controls +
+auth status.
+
+- `bizar-dash/src/web/v8/views/History/HistoryView.tsx` (new,
+  ~210 LOC) — timeline pulled from `/api/history`, kind + project
+  filter chips, refresh button, live updates on `history:new` WS.
+- `bizar-dash/src/web/v8/views/Admin/AdminView.tsx` (new,
+  ~200 LOC) — responsive card grid with one tile per admin
+  action: gc, cache-clear, memory-reindex, logs-purge, restart,
+  rebuild, export-activity. Destructive actions use the inline-
+  confirm row pattern. GET export tile opens the endpoint in a
+  new tab so the browser handles the Content-Disposition download.
+- `bizar-dash/src/web/v8/views/Auth/AuthView.tsx` (new,
+  ~165 LOC) — loads `/api/auth/status` on mount, Reveal button
+  fetches the bearer token, Rotate uses inline confirm before
+  POSTing to `/api/auth/regenerate`. Copy + show/hide buttons
+  on the token input.
+- `bizar-dash/src/web/v8/views/Router.tsx` — added `history`,
+  `admin`, `auth` case arms + lazy imports.
+- `bizar-dash/src/web/v8/shell/Sidebar.tsx` — three new System
+  entries at the top of the System section: History
+  (`History`), Admin (`Wrench`), Auth (`ShieldCheck`).
+- `bizar-dash/src/server/routes/admin.mjs` — **bug fix**: paths
+  were registered at `/gc`, `/cache/clear`, etc but the router is
+  mounted via `router.use(createAdminRouter(...))` which doesn't
+  auto-prefix `/admin`. Updated all 7 paths to `/admin/gc`,
+  `/admin/cache/clear`, `/admin/activity/export`, `/admin/memory/
+  reindex`, `/admin/restart`, `/admin/rebuild`, `/admin/logs/purge`.
+  This was a latent bug from v9.0.5 — the real-env probe caught it.
+- `bizar-dash/src/web/v8/__tests__/history-view.test.tsx` (new,
+  4 vitest cases): renders timeline, empty state, kind filter,
+  project filter.
+- `bizar-dash/src/web/v8/__tests__/admin-view.test.tsx` (new,
+  6 vitest cases): renders tile grid, runs non-destructive on
+  click, shows confirm row for destructive, confirms fires,
+  cancel doesn't, export opens in new tab.
+- `bizar-dash/src/web/v8/__tests__/auth-view.test.tsx` (new,
+  3 vitest cases): renders status, fetches reveal, regen
+  requires inline confirm.
+- `tests/e2e/real-environment.mjs` — added `history.shape`,
+  `admin.gc_ok`, `auth.status_shape` probes.
+
+**Verification:**
+- `make check` → 0 errors.
+- `npm run typecheck` → 0 errors.
+- `npx vitest run` → **153 test files / 320 tests pass** (was
+  44 / 307 before S40; +13 new test cases).
+- `make e2e-real-env` → **19/19 steps pass** (was 16 / 16).
+
+**Next sprint:** S41 — EnvVars + Config (P0).

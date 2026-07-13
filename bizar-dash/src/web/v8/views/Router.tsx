@@ -66,6 +66,21 @@ const EvalView = lazy(() =>
 const ChatView = lazy(() =>
   import('./Chat/ChatView.js').then((m) => ({ default: m.ChatView })),
 );
+const ProjectsView = lazy(() =>
+  import('./Projects/ProjectsView.js').then((m) => ({ default: m.ProjectsView })),
+);
+const ClaudeSessionsView = lazy(() =>
+  import('./ClaudeSessions/ClaudeSessionsView.js').then((m) => ({ default: m.ClaudeSessionsView })),
+);
+const HistoryView = lazy(() =>
+  import('./History/HistoryView.js').then((m) => ({ default: m.HistoryView })),
+);
+const AdminView = lazy(() =>
+  import('./Admin/AdminView.js').then((m) => ({ default: m.AdminView })),
+);
+const AuthView = lazy(() =>
+  import('./Auth/AuthView.js').then((m) => ({ default: m.AuthView })),
+);
 
 // Library surfaces now pull live data inside the view itself.
 // LibraryItemProps is imported so its type stays exported via this
@@ -115,6 +130,16 @@ export function useViewForId(id: string): JSX.Element {
         return <EvalView />;
       case 'chat':
         return <ChatView />;
+      case 'projects-list':
+        return <ProjectsView />;
+      case 'claude-sessions':
+        return <ClaudeSessionsView />;
+      case 'history':
+        return <HistoryView />;
+      case 'admin':
+        return <AdminView />;
+      case 'auth':
+        return <AuthView />;
       default:
         return <OverviewView />;
     }

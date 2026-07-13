@@ -147,6 +147,36 @@ async function main() {
     evalRuns.status === 200 && Array.isArray(evalRuns.json?.runs),
     `status=${evalRuns.status} runs=${evalRuns.json?.runs?.length}`);
 
+  // 11a. /api/projects — list shape (used by S39 ProjectsView).
+  const projects = await http(boot, '/api/projects');
+  record('projects.list_shape',
+    projects.status === 200 && Array.isArray(projects.json?.projects),
+    `status=${projects.status} count=${(projects.json?.projects || []).length}`);
+
+  // 11b. /api/claude-sessions — list shape (used by S39 ClaudeSessionsView).
+  const csess = await http(boot, '/api/claude-sessions');
+  record('claude_sessions.list_shape',
+    csess.status === 200 && (Array.isArray(csess.json?.sessions) || csess.json?.error !== undefined),
+    `status=${csess.status} count=${(csess.json?.sessions || []).length}`);
+
+  // 11c. /api/history — used by S40 HistoryView.
+  const hist = await http(boot, '/api/history');
+  record('history.shape',
+    hist.status === 200 && Array.isArray(hist.json?.events) && Array.isArray(hist.json?.projects),
+    `status=${hist.status} events=${(hist.json?.events || []).length} projects=${(hist.json?.projects || []).length}`);
+
+  // 11d. /api/admin/gc — used by S40 AdminView.
+  const gc = await http(boot, '/api/admin/gc', { method: 'POST' });
+  record('admin.gc_ok',
+    gc.status === 200 && gc.json?.ok === true,
+    `status=${gc.status} removed=${gc.json?.files ?? 0}`);
+
+  // 11e. /api/auth/status — used by S40 AuthView.
+  const auth = await http(boot, '/api/auth/status');
+  record('auth.status_shape',
+    auth.status === 200 && typeof auth.json?.required === 'boolean',
+    `status=${auth.status} required=${auth.json?.required} loopback=${auth.json?.loopback}`);
+
   // 12. Evidence dump.
   writeFileSync(EVIDENCE, JSON.stringify({
     ranAt: new Date().toISOString(),
