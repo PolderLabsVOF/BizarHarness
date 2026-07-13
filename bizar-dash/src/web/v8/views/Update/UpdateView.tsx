@@ -62,15 +62,18 @@ export function UpdateView(): JSX.Element {
   const installed = useMemo<UpdateEntry[]>(() => statusPayload.data?.packages ?? [], [statusPayload.data]);
   const refresh = useCallback(() => { void statusPayload.refetch(); }, [statusPayload]);
 
-  // Subscribe to live progress events.
+  // Subscribe to live progress events. `msg.type` is the discriminator
+  // (e.g. 'update:progress'); spreading first then narrowing via the
+  // cast avoids the TS2783 duplicate-key error we'd hit if we tried to
+  // also set `type: 'update:progress'` literally.
   useWsMessage('update:progress', (msg) => {
-    setLog((l) => [...l, { type: 'update:progress', ...msg } as ProgressEvent]);
+    setLog((l) => [...l, { ...msg, type: 'update:progress' } as ProgressEvent]);
   });
   useWsMessage('update:log', (msg) => {
-    setLog((l) => [...l, { type: 'update:log', ...msg } as ProgressEvent]);
+    setLog((l) => [...l, { ...msg, type: 'update:log' } as ProgressEvent]);
   });
   useWsMessage('update:complete', (msg) => {
-    setLog((l) => [...l, { type: 'update:complete', ...msg } as ProgressEvent]);
+    setLog((l) => [...l, { ...msg, type: 'update:complete' } as ProgressEvent]);
     setApplying(false);
     refresh();
   });
