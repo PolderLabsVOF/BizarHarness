@@ -80,8 +80,14 @@ function progressPath() {
   // PROGRESS.md lives in the project root (v6 contract). Falls back
   // to $HOME so a freshly-cloned dashboard with no active project
   // doesn't 500 — the response is just an empty goal list.
+  //
+  // v10-S3 — fix `active.cwd` → `active.path`. projectsStore stores
+  // the project root under the `path` key (see projects-store.mjs:168
+  // — `path: absPath`), so reading `.cwd` always returned undefined
+  // and the dashboard silently fell back to $HOME/.bizar/PROGRESS.md.
+  // That's the bug the v10-S3 cross-boundary E2E caught.
   const active = projectsStore.active();
-  const root = active?.cwd ? resolve(active.cwd) : HOME;
+  const root = active?.path ? resolve(active.path) : HOME;
   return join(root, '.bizar', 'PROGRESS.md');
 }
 

@@ -219,7 +219,19 @@ export function serializeProgress(parsed) {
       out.push(meta.join(' · '));
     }
     out.push(`Goal is **${goal.status}**.`);
-    if (goal.description) out.push(goal.description);
+    // v10-S3 — strip any `Goal is **status**` lines from the carried-
+    // over body before re-emitting, otherwise the original status line
+    // would sit right under the new one and the parser's "default
+    // 'on-track' → overwrite" guard would let the OLD status win on
+    // re-parse (the second matching line takes effect). Without this,
+    // mutating a goal's status via the dashboard would silently no-op
+    // on the next read.
+    const desc = (goal.description || '')
+      .split('\n')
+      .filter((line) => !/^\s*Goal is \*\*[a-z-]+\*\*\s*\.?\s*$/i.test(line))
+      .join('\n')
+      .trim();
+    if (desc) out.push(desc);
     if (goal.keyResults.length) {
       out.push('Key results:');
       for (const kr of goal.keyResults) {

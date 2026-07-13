@@ -103,3 +103,27 @@ test('serialise preserves preamble verbatim', () => {
   assert.ok(out.includes('Intro stays here.'));
   assert.ok(out.includes('## Footnotes'));
 });
+
+// v10-S3 — bug: parse → mutate status → serialise → re-parse must preserve
+// the new status. Previously, the original `Goal is **<old>**` line was
+// captured into goal.description during parse and serialised back
+// underneath the freshly-emitted status line, so the second match won on
+// re-parse and the status mutation silently no-op'd.
+test('v10-S3 — parse → mutate status → serialise → re-parse preserves new status', () => {
+  const text = `## G-003 — Write integration E2E (Sprint S3 Next Steps)
+
+Goal is **blocked**
+
+Final open: cross-boundary agent ↔ restart roundtrip.
+`;
+  const parsed = parseProgress(text);
+  assert.equal(parsed.goals[0].status, 'blocked');
+  parsed.goals[0].status = 'on-track';
+  const out = serializeProgress(parsed);
+  const reread = parseProgress(out);
+  assert.equal(reread.goals[0].status, 'on-track',
+    `expected on-track after round-trip, got ${reread.goals[0].status}; out was:\n${out}`);
+  // And the file must contain exactly one status line per goal.
+  const statusLines = out.split('\n').filter((l) => /Goal is \*\*[a-z-]+\*\*/i.test(l));
+  assert.equal(statusLines.length, 1, `expected 1 status line, got ${statusLines.length}`);
+});
