@@ -182,6 +182,7 @@ function serializeFrontmatter(fm) {
 }
 
 function readAgent(name) {
+  loadStatus(); // v10-S4 — fetch persisted runtime status before snapshotting, else a GET on a freshly-booted server always reports idle/default even when the agent is errored on disk.
   const file = join(AGENTS_DIR, `${name}.md`);
   if (!existsSync(file)) return null;
   const raw = safeReadText(file);
