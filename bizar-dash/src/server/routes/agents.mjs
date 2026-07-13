@@ -94,13 +94,15 @@ export function createAgentsRouter({ state, broadcast }) {
     res.status(202).json({ accepted: true, agent: name });
   }));
 
-  // v3.1.0 — Agent status (idle / working / error / stuck). The cline
-  // plugin pings this when it picks up or finishes a task; the dashboard
-  // also calls it on the lifecycle hooks below.
+  // v3.1.0 — Agent status (idle / working / error / stuck / paused). The
+  // cline plugin pings this when it picks up or finishes a task; the
+  // dashboard also calls it on the lifecycle hooks below. 'paused' was
+  // added in v10 so the stuck-banner Pause action can stop heartbeat
+  // drain without the agent disappearing from the roster.
   router.post('/agents/:name/status', wrap(async (req, res) => {
     const name = req.params.name;
     const { status, currentTaskId } = req.body || {};
-    const valid = ['idle', 'working', 'error', 'stuck'];
+    const valid = ['idle', 'working', 'error', 'stuck', 'paused'];
     if (status && !valid.includes(status)) {
       res.status(400).json({ error: 'bad_request', message: `invalid status (use: ${valid.join(', ')})` });
       return;

@@ -33,7 +33,7 @@ export interface BizarAgent {
   tools?: string[];
   tags?: string[];
   category?: string;
-  status?: 'idle' | 'working' | 'error' | 'stuck';
+  status?: 'idle' | 'working' | 'error' | 'stuck' | 'paused';
   currentTaskId?: string | null;
   currentTaskStartedAt?: number;
   lastSeen?: number;

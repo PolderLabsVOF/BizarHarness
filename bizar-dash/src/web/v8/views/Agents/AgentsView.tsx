@@ -16,7 +16,7 @@ import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { BizarAgent, CCAgent, WsMessage } from '../../data/types.js';
-import { AlertTriangle, Bot, Cpu, Plus, RotateCw } from 'lucide-react';
+import { AlertTriangle, Bot, Cpu, Pause, Play, Plus, RotateCw } from 'lucide-react';
 import { AgentHierarchy } from './AgentHierarchy.js';
 
 const SOURCE_STORAGE_KEY = 'bizar.agents.sourceFilter';
@@ -155,6 +155,58 @@ export function AgentsView(): JSX.Element {
     }
   };
 
+  // v10-S1 — inline Pause/Resume on the stuck banner. Pause stops
+  // heartbeat drain (status='paused'); Resume re-enables
+  // (status='idle' so Odin picks the agent up again on the next
+  // spawn). Uses the same in-flight Set pattern as restartStuck so
+  // all three actions disable each other per-row while pending.
+  const [busyStuckNames, setBusyStuckNames] = useState<Set<string>>(() => new Set());
+  const setStuckActionStatus = async (name: string, status: 'paused' | 'idle'): Promise<void> => {
+    setBusyStuckNames((prev) => new Set(prev).add(name));
+    try {
+      await fetchJson(`/api/agents/${encodeURIComponent(name)}/status`, {
+        method: 'POST',
+        body: { status },
+      });
+      stuck.refetch();
+      bizar.refetch();
+    } catch (err) {
+      setCreateError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setBusyStuckNames((prev) => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
+    }
+  };
+
+  // v10-S1 — bulk Pause-all-stuck. Fires status='paused' for every
+  // agent currently in /api/agents/stuck. Used when a wedged cluster
+  // needs to be drained before restart. Per-row actions are still
+  // available for selective triage.
+  const [bulkBusy, setBulkBusy] = useState<boolean>(false);
+  const bulkPauseStuck = async (): Promise<void> => {
+    const list = stuck.data?.stuck ?? [];
+    if (list.length === 0) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(list.map((a) =>
+        fetchJson(`/api/agents/${encodeURIComponent(a.name)}/status`, {
+          method: 'POST',
+          body: { status: 'paused' },
+        }).catch((err) => {
+          setCreateError(err instanceof FetchError ? err.message : (err as Error).message);
+          return null;
+        }),
+      ));
+      stuck.refetch();
+      bizar.refetch();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (!initialized && bizar.data?.agents !== undefined && cc.data?.agents !== undefined) {
       setInitialized(true);
@@ -212,9 +264,21 @@ export function AgentsView(): JSX.Element {
           tone="warning"
           data-testid="agents-stuck-banner"
           action={
-            <Button variant="secondary" size="sm" onClick={() => setMode('hierarchy')}>
-              View details
-            </Button>
+            <Inline gap={2}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => { void bulkPauseStuck(); }}
+                disabled={bulkBusy}
+                data-testid="agents-stuck-bulk-pause"
+                title="Pause every stuck agent at once"
+              >
+                <Pause size={12} aria-hidden /> {bulkBusy ? 'Pausing…' : 'Pause all'}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setMode('hierarchy')}>
+                View details
+              </Button>
+            </Inline>
           }
         >
           <Stack gap={2}>
@@ -227,26 +291,51 @@ export function AgentsView(): JSX.Element {
             <Stack gap={1}>
               {(stuck.data?.stuck ?? []).map((s) => {
                 const restarting = restartingNames.has(s.name);
+                const paused = s.status === 'paused';
+                const busy = restarting || busyStuckNames.has(s.name);
                 return (
                   <Inline key={s.name} align="center" justify="between" gap={2} data-testid={`agents-stuck-row-${s.name}`}>
                     <Inline gap={2} align="center">
                       <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)' }}>{s.name}</code>
-                      <Badge tone="danger">{s.status || 'stuck'}</Badge>
+                      <Badge tone={paused ? 'warning' : 'danger'}>{paused ? 'paused' : (s.status || 'stuck')}</Badge>
                       {typeof s.lastSeen === 'number' && s.lastSeen > 0 && (
                         <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
                           last seen {relativeTimeMs(s.lastSeen)}
                         </span>
                       )}
                     </Inline>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={restarting}
-                      onClick={() => { void restartStuck(s.name); }}
-                      data-testid={`agents-stuck-restart-${s.name}`}
-                    >
-                      <RotateCw size={12} aria-hidden /> {restarting ? 'Restarting…' : 'Restart'}
-                    </Button>
+                    <Inline gap={1}>
+                      {paused ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => { void setStuckActionStatus(s.name, 'idle'); }}
+                          data-testid={`agents-stuck-resume-${s.name}`}
+                        >
+                          <Play size={12} aria-hidden /> Resume
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => { void setStuckActionStatus(s.name, 'paused'); }}
+                          data-testid={`agents-stuck-pause-${s.name}`}
+                        >
+                          <Pause size={12} aria-hidden /> Pause
+                        </Button>
+                      )}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => { void restartStuck(s.name); }}
+                        data-testid={`agents-stuck-restart-${s.name}`}
+                      >
+                        <RotateCw size={12} aria-hidden /> {restarting ? 'Restarting…' : 'Restart'}
+                      </Button>
+                    </Inline>
                   </Inline>
                 );
               })}
