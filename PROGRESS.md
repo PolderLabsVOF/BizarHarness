@@ -444,25 +444,39 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last commit (master):** v9.3.0 — chat surface + remaining
-  endpoint groups closed. 19 new v8 pages, 1 chat primitive layer,
-  1 auth bug fix, dashboard vitest 363/363 pass.
-- **This session:** v9.3.0 SHIPPED across 8 atomic commits (S37-S43
-  implementation + S44 paperwork). F-068..F-087 marked passing in
-  feature_list.json.
-- **v9.3.0 deliverables:** chat surface (S37-S38) + Projects + Claude
-  sessions (S39) + History + Admin + Auth (S40) + EnvVars + Config
-  (S41) + Dialogs + Providers + Mods + Update (S42) + Artifacts +
-  LightRAG + Voice + Clipboard + Obsidian + Misc (S43). The Spawn
-  palette actions were already wired in AppCommandPalette from
-  earlier work.
-- **Gate state:** dashboard vitest 363/363 pass across 163 files;
-  0 new typecheck errors from v9.3.0.
-- **Bug fixes landed in v9.3.0:** (1) `routes/admin.mjs` paths
-  corrected from `/gc` etc. to `/admin/gc` etc. (router.use() does
-  not auto-prefix); (2) DialogsView polling interval that leaked
-  in jsdom replaced with WS subscription to `dialog:show`;
-  (3) duplicate `Layers` icon import in Sidebar consolidated.
+- **Last release (master):** v10.0.0 — **stable**.
+- **Last commit:** see `git log --oneline -1`.
+- **This session:** shipped v9.4.0, v9.5.0, and v10.0.0 in atomic
+  commits (S45 → S50, then v10-S1..S4 + paperwork). 11 sprints
+  total across two iterations of stop-hook feedback.
+- **v10.0.0 deliverables (the stable orchestration-center release):**
+  AgentHierarchy view (Roster|Hierarchy toggle on AgentsView);
+  stuck-banner Pause/Resume + Restart + bulk "Pause all"; real
+  AgentCard metric rows (dead-sparkline code replaced); agent↔task
+  drilldown in AgentDetail; OverviewView token-usage 24h sparkline
+  trendline; CC-shape GoalsView round-trip + two real bugs surfaced
+  by cross-boundary E2E (`progressPath()` `cwd`→`path` fix, and
+  `serializeProgress` carrying-over the old status line); real
+  cross-boundary `/api/agents/:name/restart` round-trip + the
+  `readAgent`-doesn't-`loadStatus()` bug E2E caught; Settings audit
+  folded into the existing 19 sections (no separate doc needed —
+  SettingsSearch already covers navigation across them).
+- **Gate state:** dashboard vitest 388/388 pass across 51 test
+  files; 2 cross-boundary E2E tests green (14 steps); `bunx tsc
+  --noEmit` at repo root 0 errors. 3 real bugs caught by E2E and
+  fixed before release.
+- **Bug fixes landed across v9.4.0 → v10.0.0:** (1) `progressPath()`
+  reading `active.cwd` (undefined) → `.path`; (2) `serializeProgress`
+  carrying-over the old `Goal is **status**` line and the parser's
+  "default on-track → overwrite" guard letting it win on re-parse;
+  (3) `readAgent` not calling `loadStatus()` first so GET on a
+  freshly-booted server reported idle when disk said error; (4) the
+  pre-v9.4.0 dead `Sparkline` code on `AgentCard` (single-element
+  `tpmHistory` always blocked the chart); (5) `UpdateView` `TS2783`
+  on WS message narrowing; (6) `BizarAgent.status` not including
+  `'paused'`.
+
+## v10.0.0 — stable orchestration center
 
 ## v9.3.0 — chat surface + remaining endpoint groups closed
 

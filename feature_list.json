@@ -1832,11 +1832,74 @@
       ],
       "passed": "2026-07-13",
       "commit": "4fcf12e"
+    },
+    {
+      "id": "F-094",
+      "behavior": "v10-S1 — Pause + Resume + bulk 'Pause all' on stuck banner. Banner renders Pause/Resume per row when status is not 'paused', and a single 'Pause all' button at the top that flips every stuck agent to 'paused' via concurrent POSTs. BizarAgent.status widens to include 'paused' so the comparison typechecks. Agents route valid status set widens to match.",
+      "verification": "bizar-dash/src/web/v8/__tests__/agents-stuck-banner.test.tsx passes 6 cases (3 old + 3 new: empty, per-row Pause POST, bulk Pause-all POST).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (per-row Pause/Resume + bulk Pause all)",
+        "bizar-dash/src/server/routes/agents.mjs (valid array includes 'paused')",
+        "bizar-dash/src/web/v8/data/types.ts (BizarAgent.status includes 'paused')"
+      ],
+      "passed": "2026-07-13",
+      "commit": "708138c"
+    },
+    {
+      "id": "F-095",
+      "behavior": "v10-S2 — OverviewView Tokens StatTile gains a hand-rolled SVG sparkline of the last 24h daily series from /api/usage?range=24h. Fits inside the existing sparkline slot on StatTile. Falls back gracefully (omits the sparkline block) when fewer than 2 daily points are available or on 500.",
+      "verification": "bizar-dash/src/web/v8/__tests__/overview-trends.test.tsx passes 3 cases (renders sparkline when >=2 points, omits when <2, still renders the tile on 500).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "view",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/web/v8/views/Overview/OverviewView.tsx (useFetch /api/usage + sparkline slot)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "dd0d59a"
+    },
+    {
+      "id": "F-096",
+      "behavior": "v10-S3 — CC-shape PROGRESS.md round-trip + 2-bug-fix. goals.mjs::progressPath() reads active.path instead of active.cwd (fixes silent $HOME fallback). progress-parser.mjs::serializeProgress strips carried-over 'Goal is **status**' lines from goal.description before re-emitting (fixes status-parse-second-match-wins on re-parse).",
+      "verification": "tests/e2e/goals-cc-roundtrip.mjs 8/8 PASS (register tmp project active, GET /api/goals, parse CC-shape fixture, PATCH status, re-read, assert file changed, assert watcher fired). component test goals-cc-roundtrip.test.tsx 2/2. unit test progress-parser.test.mjs 9/9 (includes new v10-S3 round-trip regression).",
+      "state": "passing",
+      "layer": "L3",
+      "category": "fix",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/server/routes/goals.mjs (active.path fix)",
+        "bizar-dash/src/server/progress-parser.mjs (serialize strips status lines)",
+        "bizar-dash/src/server/progress-parser.test.mjs (round-trip regression)",
+        "bizar-dash/src/web/v8/__tests__/goals-cc-roundtrip.test.tsx (NEW)",
+        "tests/e2e/goals-cc-roundtrip.mjs (NEW)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "09d859e"
+    },
+    {
+      "id": "F-097",
+      "behavior": "v10-S4 — cross-boundary /api/agents/:name/restart E2E + readAgent-bug fix. agents-store.mjs::readAgent now calls loadStatus() first so GET on a freshly-booted server reports the persisted runtime state, not the idle default. E2E fixture-writes $HOME/.config/bizar/agent-status.json as error, boots real server, asserts GET pre-state, POSTs /restart, asserts WS broadcast, asserts disk is now idle, GETs post-state, restores the user's real files in finally.",
+      "verification": "tests/e2e/agent-restart-roundtrip.mjs 6/6 PASS. stuck-banner vitest 6/6 still green (no regression).",
+      "state": "passing",
+      "layer": "L3",
+      "category": "fix",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/server/agents-store.mjs (readAgent loadStatus)",
+        "tests/e2e/agent-restart-roundtrip.mjs (NEW)"
+      ],
+      "passed": "2026-07-13",
+      "commit": "d71d958"
     }
   ],
   "vcr": {
-    "passing": 55,
-    "activated": 55,
+    "passing": 59,
+    "activated": 59,
     "ratio": 1
   }
 }

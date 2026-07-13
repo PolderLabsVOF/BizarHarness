@@ -1,5 +1,127 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v10.0.0 — 2026-07-13
+
+### Highlights
+
+The dashboard graduates from "dashboard over your data" to **orchestration center**.
+v10 closes the three audit gaps that stop-hook reviews flagged across
+v9.x: dead-sparkline code, hierarchy endpoints with no consumer, and a goals
+parser that broke the cross-boundary CC/`/goal` round-trip. v10 also adds a
+real restart lifecycle for stuck agents and per-day usage trendlines, plus a
+cross-boundary E2E suite that boots a real server, writes fixture project
+files, and asserts what the API returns and what it persists to disk.
+
+### Added
+
+- **Agent hierarchy view** (`AgentHierarchy`). New Roster|Hierarchy chip
+  toggle on AgentsView. Consumes `/api/agents/hierarchy`, renders a
+  collapsible parent/child tree, WS-subscribes to `agents:change`, falls
+  back to `EmptyState` when no parent links exist. Sprint S45.
+- **Stuck agents banner becomes actionable.** Each stuck row now exposes
+  Pause/Resume + Restart buttons. Banner header gains a "Pause all" bulk
+  action. Sprint S49 + v10-S1 (Pause/Resume/bulk, status widened to
+  include `paused`).
+- **Agent detail → tasks drilldown.** `AgentDetail` now fetches
+  `/api/tasks` once opened and renders the tasks assigned to this agent
+  (matched by `workedBy` OR `metadata.agent`) as Card rows inside the
+  panel. Empty-state Card when none. Sprint S49.
+- **GoalsView cross-boundary CC-shape round-trip.** Goals route now
+  resolves `.bizar/PROGRESS.md` against `projectsStore.active().path`
+  (was `.cwd`), so the dashboard reads the *active* project's file
+  instead of silently falling back to `$HOME/.bizar/PROGRESS.md`.
+  `serializeProgress` strips carried-over `Goal is **status**` lines
+  from goal descriptions before re-emitting, so PATCH /status mutations
+  actually persist (previously the second status line won on re-parse).
+  v10-S3.
+- **OverviewView token-usage sparkline trend.** Tokens StatTile shows a
+  SVG sparkline of the last 24h daily series returned by `/api/usage`.
+  Fits inside the existing `sparkline` slot on `StatTile`. Falls back
+  gracefully when fewer than 2 daily points are available. v10-S2.
+- **Cross-boundary E2E suite:**
+  - `tests/e2e/goals-cc-roundtrip.mjs` (8 steps) — boots server against
+    a tmp project, writes a CC-shape PROGRESS.md fixture, GETs /api/goals
+    + PATCHes status + re-reads + asserts file-watcher broadcast.
+  - `tests/e2e/agent-restart-roundtrip.mjs` (6 steps) — fixture agent
+    .md + status file marked error, GETs /restart pre-state, POSTs
+    /restart, asserts WS `agent:restarted` broadcast, asserts the
+    on-disk `~/.config/bizar/agent-status.json` actually moved to idle,
+    and GETs the post-state. Restores user's real $HOME files in
+    `finally`.
+
+### Fixed
+
+- **v10-S3** `serializeProgress` dropped the original `Goal is **<old>**`
+  line onto the page right under the freshly-emitted status line. Parser
+  saw both lines and the second match won (its overwrite guard
+  `'if status === on-track'` never fired because the default WAS
+  on-track and the new status was also on-track). Net: dashboard
+  `PATCH /status` returned 200 but the visible state didn't change.
+  Stripped at serialize time.
+- **v10-S4** `readAgent` read the in-memory `_status` Map without
+  calling `loadStatus()` first, so any agent never touched post-boot
+  silently fell back to the idle default even when its on-disk status
+  was error/stuck. E2E caught it. Fixed: `loadStatus()` at the top of
+  `readAgent` (idempotent).
+- **v10-S3** `progressPath()` read `active.cwd` (undefined) while
+  `projectsStore` actually stores under `.path`. Dashboard always
+  fell back to `$HOME/.bizar/PROGRESS.md`. Fixed: `active.path`.
+- **v9.4.0 / S45** Dead-sparkline code on `AgentCard`. `mapBizar`/`mapCC`
+  always passed a single-element `tpmHistory`, the `length > 1` guard
+  blocked the chart from ever rendering. Replaced with real
+  `tasksSucceeded / tasksTotal` + `successRate` + `lastSeenMs` rows.
+- **v9.5.0 / S47** `UpdateView` had pre-existing `TS2783` errors on
+  `WebSocket` message narrowing (discriminator duplication in spread
+  overload). Reordered to spread-then-narrow so the union collapses
+  cleanly.
+- **v9.5.0 / S47** `BizarAgent.status` union widened to include
+  `'paused'` so the stuck-banner Pause control's `s.status === 'paused'`
+  comparison typechecks. Server route valid set widened to match
+  (`['idle','working','error','stuck','paused']`).
+
+### Tests
+
+- vitest: 363 → 388 cases (+25); 49 → 51 test files (+2).
+- 2 new cross-boundary E2E tests (14 steps total) — both green.
+- `bunx tsc --noEmit` at repo root: 0 errors.
+- `npx tsc -p tsconfig.json` inside `bizar-dash/`: 0 errors in
+  `src/`. Pre-existing `toBeInTheDocument` jest-dom typing gaps in
+  `__tests__` files are unchanged baseline.
+
+### Files
+
+- `bizar-dash/src/server/routes/goals.mjs` — `progressPath()` fix +
+  comments pointing at the cross-boundary audit trail.
+- `bizar-dash/src/server/progress-parser.mjs` — `serializeProgress`
+  strips prior `Goal is **...**` lines.
+- `bizar-dash/src/server/progress-parser.test.mjs` — v10-S3 regression:
+  parse → mutate → serialise → re-parse → status preserved.
+- `bizar-dash/src/server/agents-store.mjs` — `readAgent` now
+  `loadStatus()` first.
+- `bizar-dash/src/web/v8/views/Agents/AgentsView.tsx` —
+  Roster|Hierarchy toggle + stuck banner Pause/Resume/bulk.
+- `bizar-dash/src/web/v8/views/Agents/AgentHierarchy.tsx` (NEW) —
+  collapsible tree.
+- `bizar-dash/src/web/v8/ui/agents/AgentCard.tsx` — dead sparkline
+  replaced with real task-count/success-rate/last-seen rows.
+- `bizar-dash/src/web/v8/ui/agents/AgentDetail.tsx` — tasks drilldown.
+- `bizar-dash/src/web/v8/views/Overview/OverviewView.tsx` — token
+  sparkline trendline on Tokens StatTile.
+- `bizar-dash/src/web/v8/views/Update/UpdateView.tsx` — TS2783 fix.
+- `bizar-dash/src/web/v8/data/types.ts` — `BizarAgent.status`
+  includes `'paused'`.
+- `bizar-dash/src/web/v8/__tests__/{agents-stuck-banner,agent-detail-tasks,overview-trends,goals-cc-roundtrip,agent-hierarchy,agent-card-metrics}.test.tsx` (new + extended).
+- `tests/e2e/{goals-cc-roundtrip,agent-restart-roundtrip}.mjs` (NEW).
+
+### Sprints covered
+
+- v9.4.0 — S45 (hierarchy + stuck banner + dead-sparkline), S46 (docs).
+- v9.5.0 — S47 (UpdateView typecheck), S48 (stuck Restart),
+  S49 (agent↔task drilldown), S50 (paperwork).
+- v10.0.0 — S1 (Pause/Resume/bulk), S2 (Overview Sparkline),
+  S3 (GoalsView CC round-trip + E2E + 2-bug-fix), S4 (cross-boundary
+  agent restart E2E + readAgent-bug fix), S5 (this paperwork).
+
 ## v4.5.0 — 2026-07-05
 
 ### Highlights
