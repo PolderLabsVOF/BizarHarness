@@ -99,6 +99,24 @@ const ModsView = lazy(() =>
 const UpdateView = lazy(() =>
   import('./Update/UpdateView.js').then((m) => ({ default: m.UpdateView })),
 );
+const ArtifactsView = lazy(() =>
+  import('./Artifacts/ArtifactsView.js').then((m) => ({ default: m.ArtifactsView })),
+);
+const LightRAGView = lazy(() =>
+  import('./LightRAG/LightRAGView.js').then((m) => ({ default: m.LightRAGView })),
+);
+const VoiceView = lazy(() =>
+  import('./Voice/VoiceView.js').then((m) => ({ default: m.VoiceView })),
+);
+const ClipboardView = lazy(() =>
+  import('./Clipboard/ClipboardView.js').then((m) => ({ default: m.ClipboardView })),
+);
+const ObsidianView = lazy(() =>
+  import('./Obsidian/ObsidianView.js').then((m) => ({ default: m.ObsidianView })),
+);
+const MiscView = lazy(() =>
+  import('./Misc/MiscView.js').then((m) => ({ default: m.MiscView })),
+);
 
 // Library surfaces now pull live data inside the view itself.
 // LibraryItemProps is imported so its type stays exported via this
@@ -170,6 +188,18 @@ export function useViewForId(id: string): JSX.Element {
         return <ModsView />;
       case 'update':
         return <UpdateView />;
+      case 'artifacts':
+        return <ArtifactsView />;
+      case 'lightrag':
+        return <LightRAGView />;
+      case 'voice':
+        return <VoiceView />;
+      case 'clipboard':
+        return <ClipboardView />;
+      case 'obsidian':
+        return <ObsidianView />;
+      case 'misc':
+        return <MiscView />;
       default:
         return <OverviewView />;
     }

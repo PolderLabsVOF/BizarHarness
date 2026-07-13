@@ -446,12 +446,14 @@ drift away from the original ask.
 
 - **Last commit (master):** v9.2.0 — full orchestration center coverage
   shipped (F-061..F-067).
-- **This session:** v9.3.0 in flight. **S37 + S38 + S39 + S40 + S41
-  shipped** (`69aa434`, `682d3cc`, `d26fd6f`, `13016df`, `d952666`).
-  S41 closed the "configure everything" P0 group. S42 in flight:
-  Dialogs + Providers + Mods + Update (P1). Next: S43 long-tail.
-- **Gate state (with S42 staged):** dashboard vitest 344/344 pass
-  across 161 files; 0 new typecheck errors from S42.
+- **This session:** v9.3.0 in flight. **S37 + S38 + S39 + S40 + S41 +
+  S42 + S43 shipped** (`69aa434`, `682d3cc`, `d26fd6f`, `13016df`,
+  `d952666`, `218e46f`, S43 pending commit). S43 closes the long-tail
+  P1 group (Artifacts, LightRAG, Voice, Clipboard, Obsidian, Misc;
+  Spawn already wired in CommandPalette from earlier work).
+  Next: S44 — release paperwork.
+- **Gate state (with S43 staged):** dashboard vitest 363/363 pass;
+  0 new typecheck errors from S43.
 
 ## v9.2.0 — full orchestration center coverage shipped
 
@@ -1941,5 +1943,58 @@ Sheet/inline-confirm/WS pattern as S41.
   and crashed workers with OOM. Replaced with WS subscription to
   `dialog:show` (which the server already broadcasts on enqueue).
 
-**Next sprint:** S43 — long-tail P1 surfaces (Artifacts + LightRAG +
-Voice + Clipboard + Obsidian + Spawn + Misc).
+### Sprint S43 — long-tail P1 surfaces (shipped in this commit, F-081..F-086)
+
+Goal: complete the v9.3.0 surface coverage. Six new v8 views + the
+already-wired Spawn palette actions from earlier work.
+
+- `bizar-dash/src/web/v8/views/Voice/VoiceView.tsx` (new, ~180 LOC) —
+  voice memos list (`GET /api/voice/list`), inline audio player
+  (`<audio src=/api/voice/:id/audio>`), inline-confirm Delete
+  (`DELETE /api/voice/:id`), Upload Sheet (FormData POST
+  `/api/voice/upload`).
+- `bizar-dash/src/web/v8/views/Clipboard/ClipboardView.tsx` (new,
+  ~190 LOC) — saved clip list (`GET /api/clipboard/list`), per-row
+  title + URL link + content preview, Save Sheet
+  (`POST /api/clipboard/save` with url/title/content/selection),
+  inline-confirm Delete (`DELETE /api/clipboard/:id`).
+- `bizar-dash/src/web/v8/views/LightRAG/LightRAGView.tsx` (new,
+  ~210 LOC) — Defaults form (`GET/PUT /api/lightrag/defaults` for
+  llm + embedding bindings), Status card
+  (`GET /api/lightrag/status`: running + pid + host:port + log tail),
+  Autostart trigger (`POST /api/lightrag/autostart`).
+- `bizar-dash/src/web/v8/views/Obsidian/ObsidianView.tsx` (new,
+  ~200 LOC) — vault stats card (`GET /api/obsidian`), notes list
+  (`GET /api/obsidian/notes`), per-note inline expand showing raw MDX
+  (`GET /api/obsidian/notes/:path`), inline-confirm Delete
+  (`DELETE /api/obsidian/notes/:path`), path-filter search, Rebuild
+  index (`POST /api/obsidian/index`).
+- `bizar-dash/src/web/v8/views/Artifacts/ArtifactsView.tsx` (new,
+  ~250 LOC) — artifacts list (`GET /api/artifacts`), Add Sheet
+  (`POST /api/artifacts` with slug/title/description/planMdx),
+  Open-to-detail right Sheet that loads both
+  `GET /api/artifacts/:slug` and `GET /api/artifacts/:slug/render`
+  (frontmatter + MDX + block count), inline-confirm Delete
+  (`DELETE /api/artifacts/:slug`).
+- `bizar-dash/src/web/v8/views/Misc/MiscView.tsx` (new, ~200 LOC) —
+  global fuzzy search panel (`GET /api/search?q=`) with kind icons
+  per result, Tailscale card (`GET /api/tailscale/status` + Enable
+  `POST /api/tailscale/enable` + Disable
+  `POST /api/tailscale/disable`).
+- `bizar-dash/src/web/v8/views/Router.tsx` — 6 new case arms + lazy
+  imports for `artifacts`, `lightrag`, `voice`, `clipboard`,
+  `obsidian`, `misc`.
+- `bizar-dash/src/web/v8/shell/Sidebar.tsx` — 6 new System entries.
+- 6 new test files / 19 new vitest cases (artifacts: 4, voice: 3,
+  clipboard: 3, lightrag: 3, obsidian: 3, misc: 3). All pass.
+- Bug found + fixed: Sidebar `Layers` icon was already imported
+  (Overview). Detected by `vite-react-babel` PARSE_ERROR during
+  test transform — 3 files (App, AppShell, Sidebar tests) failed
+  with the same root cause; consolidated to single import.
+
+**Verification:**
+- `npx vitest run` → **163 files / 363 tests pass** (+19 new, was
+  161/344 before S43). 0 new typecheck errors from S43.
+
+**Next sprint:** S44 — release paperwork for v9.3.0 (CHANGELOG,
+PROGRESS final state, feature_list F-068..F-086, README updates).
