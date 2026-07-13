@@ -32,6 +32,7 @@ interface MockRoute {
 }
 
 let routes: MockRoute[] = [];
+const originalFetch = globalThis.fetch;
 
 function mockFetch(routesIn: MockRoute[]): void {
   routes = routesIn;
@@ -55,6 +56,11 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Restore the real fetch (mockFetch overwrites globalThis.fetch and
+  // vi.restoreAllMocks doesn't undo that since it isn't a spy). Without
+  // this, a previous test's mock bleeds into the next one and triggers
+  // 404 responses for any endpoint not on its route table.
+  globalThis.fetch = originalFetch;
 });
 
 describe('OverviewView', () => {
