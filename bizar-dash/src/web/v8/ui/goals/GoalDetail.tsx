@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ExternalLink } from 'lucide-react';
 import { Sheet, SheetContent } from '../feedback/Sheet.js';
 import { Stack } from '../primitives/Stack.js';
 import { Inline } from '../primitives/Inline.js';
@@ -205,6 +205,12 @@ export function GoalDetail(props: GoalDetailProps): JSX.Element {
                   {kr.title}
                 </span>
                 {kr.assignee && <Badge tone="neutral">{kr.assignee}</Badge>}
+                {kr.taskId && (
+                  <Badge tone="info" title={`Decomposed task: ${kr.taskId}`}>
+                    <ExternalLink size={10} aria-hidden style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />
+                    task
+                  </Badge>
+                )}
                 <Button
                   variant="ghost"
                   onClick={() => { void removeKr(kr.id); }}
