@@ -1,108 +1,150 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack } from '../../ui/primitives/Stack.js';
+import { Inline } from '../../ui/primitives/Inline.js';
 import { Grid } from '../../ui/primitives/Grid.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
-import { AgentCard, type AgentCardProps } from '../../ui/agents/AgentCard.js';
-import { AgentActivity, type AgentActivityItem } from '../../ui/agents/AgentActivity.js';
-import { Card, CardBody, CardHeader } from '../../ui/data/Card.js';
-import { Wrench, Bot, GitMerge, MessageSquare } from 'lucide-react';
+import { AgentCard, type AgentCardProps, type AgentStatus } from '../../ui/agents/AgentCard.js';
+import { Chip } from '../../ui/data/Chip.js';
+import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { useFetch } from '../../data/useFetch.js';
+import { useWsMessage } from '../../data/useWebSocket.js';
+import type { BizarAgent, CCAgent, WsMessage } from '../../data/types.js';
+import { Bot, Cpu } from 'lucide-react';
 
 /**
- * AgentsView — orchestrator agents (PLAN.md "Agents page").
+ * AgentsView — Sprint S10. Unified Bizar + Claude Code agents.
  *
- * Each card shows status + current task + token sparkline. Click a card
- * to see per-agent activity (sample feed below).
+ * Two REST calls (Bizar agents from `/api/agents`, CC from
+ * `/api/cc-agents`) merged into a single grid. A `source` filter
+ * chip switches between `bizar | claude-code | all`. Live updates
+ * via `agents:change` and `agent:status` WS events.
  */
 
-const AGENTS: AgentCardProps[] = [
-  {
-    id: 'a1',
-    name: 'Atlas',
-    role: 'Lead researcher',
-    status: 'busy',
-    currentTask: 'Wire TanStack Router in v8 App',
-    lastActivity: '2m ago',
-    tasksToday: 7,
-    tpmHistory: [120, 200, 340, 280, 410, 480, 360, 290, 220, 180, 160, 140, 200, 260, 320, 380],
-  },
-  {
-    id: 'a2',
-    name: 'Borealis',
-    role: 'Frontend specialist',
-    status: 'busy',
-    currentTask: 'Polish Settings nav rail',
-    lastActivity: '8m ago',
-    tasksToday: 4,
-    tpmHistory: [60, 90, 120, 150, 180, 200, 220, 240, 260, 230, 210, 190, 170, 150],
-  },
-  {
-    id: 'a3',
-    name: 'Cassini',
-    role: 'QA + review',
-    status: 'idle',
-    currentTask: undefined,
-    lastActivity: '32m ago',
-    tasksToday: 12,
-    tpmHistory: [10, 5, 8, 0, 0, 0, 0, 0, 0, 0, 0],
-  },
-  {
-    id: 'a4',
-    name: 'Drift',
-    role: 'Migration sweeper',
-    status: 'error',
-    currentTask: 'Bulk-rename `var(--token)` to literals',
-    lastActivity: '1h ago',
-    tasksToday: 2,
-    tpmHistory: [200, 220, 240, 260, 0, 0, 0, 0],
-  },
-  {
-    id: 'a5',
-    name: 'Ember',
-    role: 'Memory curator',
-    status: 'paused',
-    lastActivity: '2h ago',
-    tasksToday: 1,
-    tpmHistory: [40, 60, 80, 100, 80, 60, 40, 20],
-  },
-  {
-    id: 'a6',
-    name: 'Ferro',
-    role: 'Build + test',
-    status: 'idle',
-    lastActivity: '15m ago',
-    tasksToday: 9,
-    tpmHistory: [30, 40, 50, 60, 50, 40, 30, 20, 10],
-  },
-];
+const SOURCE_LABELS = {
+  all: 'All',
+  bizar: 'Bizar',
+  'claude-code': 'Claude Code',
+} as const;
+type SourceFilter = keyof typeof SOURCE_LABELS;
 
-const FEATURED_AGENT_ID = 'a1';
+function mapBizar(a: BizarAgent): AgentCardProps {
+  const status = (a.status || 'idle') as AgentStatus;
+  return {
+    id: `bizar:${a.name}`,
+    name: a.name,
+    role: a.role || a.category || a.mode || 'agent',
+    status,
+    currentTask: a.currentTaskId ? `Task ${a.currentTaskId}` : undefined,
+    lastActivity: a.lastSeen ? new Date(a.lastSeen).toLocaleTimeString() : undefined,
+    tasksToday: a.tasksTotal || 0,
+    tpmHistory: [],
+    badges: a.tags || [],
+  };
+}
 
-const ACTIVITY: AgentActivityItem[] = [
-  { id: 'ev1', icon: <Bot size={14} aria-hidden="true" />, title: 'Run started', description: 'Picked up "Wire TanStack Router in v8 App"', meta: '12:04', tone: 'info' },
-  { id: 'ev2', icon: <Wrench size={14} aria-hidden="true" />, title: 'Tool call', description: 'Read src/web/v8/App.tsx', meta: '12:05' },
-  { id: 'ev3', icon: <MessageSquare size={14} aria-hidden="true" />, title: 'Message received', description: '"Use the state-based router"', meta: '12:06', tone: 'info' },
-  { id: 'ev4', icon: <GitMerge size={14} aria-hidden="true" />, title: 'Committed', description: 'feat(v8-dash): wire app-level router', meta: '12:08', tone: 'success' },
-];
+function mapCC(a: CCAgent): AgentCardProps {
+  const raw = (a.status || a.state || 'idle').toLowerCase();
+  const status: AgentStatus =
+    raw === 'busy' || raw === 'working' ? 'busy' :
+    raw === 'error' ? 'error' :
+    raw === 'paused' ? 'paused' : 'idle';
+  return {
+    id: `cc:${a.sessionId || a.id}`,
+    name: a.name || a.sessionId?.slice(0, 8) || 'unknown',
+    role: a.kind === 'background' ? 'CC background' : 'CC interactive',
+    status,
+    currentTask: a.lastMessageSnippet || undefined,
+    lastActivity: a.lastMessageAt ? new Date(a.lastMessageAt).toLocaleTimeString() : (a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : undefined),
+    tasksToday: a.messageCount || 0,
+    tpmHistory: [],
+    badges: [a.cwd?.split('/').slice(-2).join('/') || ''].filter(Boolean),
+  };
+}
 
 export function AgentsView(): JSX.Element {
+  const bizar = useFetch<{ agents?: BizarAgent[] }>('/api/agents');
+  const cc = useFetch<{ agents?: CCAgent[]; error?: string }>('/api/cc-agents');
+  const [source, setSource] = useState<SourceFilter>('all');
+  const [bizarList, setBizarList] = useState<BizarAgent[]>([]);
+  const [ccList, setCCList] = useState<CCAgent[]>([]);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!initialized && bizar.data?.agents !== undefined && cc.data?.agents !== undefined) {
+      setInitialized(true);
+      setBizarList(bizar.data.agents);
+      setCCList(cc.data.agents);
+    }
+  }, [bizar.data, cc.data, initialized]);
+
+  const onAgentsChange = useCallback(() => {
+    // Bust both caches; the next mount will re-fetch (cheap because
+    // the dashboard views are lazy-mounted).
+    bizar.refetch();
+    cc.refetch();
+  }, [bizar, cc]);
+  useWsMessage('agents:change', onAgentsChange);
+
+  const onAgentStatus = useCallback((msg: WsMessage) => {
+    if (msg.type !== 'agent:status') return;
+    const a = (msg as Extract<WsMessage, { type: 'agent:status' }>).agent;
+    if (!a || !a.name) return;
+    setBizarList((prev) => {
+      const idx = prev.findIndex((x) => x.name === a.name);
+      if (idx === -1) return [...prev, a];
+      const copy = prev.slice();
+      copy[idx] = { ...copy[idx], ...a };
+      return copy;
+    });
+  }, []);
+  useWsMessage('agent:status', onAgentStatus);
+
+  const cards = useMemo(() => {
+    const out: Array<AgentCardProps & { source: 'bizar' | 'claude-code' }> = [];
+    if (source !== 'claude-code') {
+      for (const a of bizarList) out.push({ ...mapBizar(a), source: 'bizar' });
+    }
+    if (source !== 'bizar') {
+      for (const a of ccList) out.push({ ...mapCC(a), source: 'claude-code' });
+    }
+    return out;
+  }, [bizarList, ccList, source]);
+
   return (
     <Stack gap={5}>
       <ViewHeader
         title="Agents"
-        description="The orchestrator's running entities. Click a card to drill into one."
+        description="Bizar agents (frontmatter-driven) and Claude Code background agents."
       />
-      <Grid cols={3}>
-        {AGENTS.map((agent) => (
-          <AgentCard key={agent.id} {...agent} />
+      <Inline gap={2}>
+        {(['all', 'bizar', 'claude-code'] as SourceFilter[]).map((id) => (
+          <Chip
+            key={id}
+            selected={source === id}
+            onClick={() => setSource(id)}
+          >
+            {id === 'bizar' ? <Bot size={12} aria-hidden /> : id === 'claude-code' ? <Cpu size={12} aria-hidden /> : null}{' '}
+            {SOURCE_LABELS[id]}
+          </Chip>
         ))}
-      </Grid>
-      <Card>
-        <CardHeader
-          title={`Activity — ${AGENTS.find((a) => a.id === FEATURED_AGENT_ID)?.name ?? ''}`}
-        />
-        <CardBody>
-          <AgentActivity items={ACTIVITY} />
-        </CardBody>
-      </Card>
+      </Inline>
+      {cards.length === 0 && (bizar.loading || cc.loading) ? (
+        <Grid cols={3}>
+          <Skeleton style={{ height: 140 }} />
+          <Skeleton style={{ height: 140 }} />
+          <Skeleton style={{ height: 140 }} />
+        </Grid>
+      ) : cards.length === 0 ? (
+        <span style={{ color: 'var(--fg-muted)' }}>
+          No agents yet. Run <code>/loop</code> or spawn one via the command palette.
+        </span>
+      ) : (
+        <Grid cols={3}>
+          {cards.map((c) => (
+            <AgentCard key={c.id} {...c} />
+          ))}
+        </Grid>
+      )}
     </Stack>
   );
 }

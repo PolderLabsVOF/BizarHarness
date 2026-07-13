@@ -1,108 +1,61 @@
-import { render, screen, act, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
-import { ToastContainer, ToastProvider, useToast } from '../../src/web/components/Toast';
+/**
+ * tests/components/Toast.test.tsx
+ *
+ * v8 migration — Toast test rewritten against the v8 Toaster / toast API.
+ *
+ * v7 used a `<ToastProvider>` context with imperative `toast()` calls.
+ * v8 uses Sonner directly: render `<Toaster />` once at the app root and
+ * call `toast.success(...)` / `toast.error(...)` from anywhere.
+ *
+ * Sonner renders toasts asynchronously into a portal — assertions use
+ * `findBy*` / `waitFor` rather than synchronous `getBy*`.
+ */
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { Toaster, toast } from '../../src/web/v8/ui/index.js';
 
-function ToastHarness() {
-  const toast = useToast();
-  return (
-    <div>
-      <button onClick={() => toast.show('Info message')}>Show Info</button>
-      <button onClick={() => toast.success('Success!')}>Show Success</button>
-      <button onClick={() => toast.error('Error!')}>Show Error</button>
-    </div>
-  );
-}
-
-describe('ToastContainer', () => {
-  it('renders toast with message', () => {
-    render(
-      <ToastContainer
-        toasts={[{ id: 1, kind: 'info', message: 'Test toast' }]}
-        onDismiss={() => {}}
-      />,
-    );
-    expect(screen.getByText('Test toast')).toBeInTheDocument();
-  });
-
-  it('has role="alert" and aria-live="assertive"', () => {
-    render(
-      <ToastContainer
-        toasts={[{ id: 1, kind: 'info', message: 'Accessible toast' }]}
-        onDismiss={() => {}}
-      />,
-    );
-    const toast = screen.getByRole('alert');
-    expect(toast).toBeInTheDocument();
-    expect(toast).toHaveAttribute('aria-live', 'assertive');
-  });
-});
-
-describe('ToastProvider + useToast', () => {
+describe('Toaster (v8)', () => {
   afterEach(() => {
-    vi.useRealTimers();
+    // Sonner keeps toasts in state across tests unless we explicitly dismiss.
+    toast.dismiss();
   });
 
-  it('displays a toast when show is called', async () => {
-    const user = userEvent.setup();
-    render(
-      <ToastProvider>
-        <ToastHarness />
-      </ToastProvider>,
-    );
-
-    await user.click(screen.getByText('Show Info'));
-    expect(screen.getByText('Info message')).toBeInTheDocument();
+  it('renders the Sonner Toaster container', () => {
+    render(<Toaster />);
+    // Sonner exposes an `aria-label="Notifications"` region for SR users.
+    const region = screen.getByLabelText(/notifications/i);
+    expect(region).toBeInTheDocument();
   });
 
-  it('displays multiple toasts stacked', async () => {
-    const user = userEvent.setup();
-    render(
-      <ToastProvider>
-        <ToastHarness />
-      </ToastProvider>,
-    );
-
-    await user.click(screen.getByText('Show Success'));
-    await user.click(screen.getByText('Show Error'));
-
-    expect(screen.getByText('Success!')).toBeInTheDocument();
-    expect(screen.getByText('Error!')).toBeInTheDocument();
+  it('exposes the imperative toast surface', () => {
+    expect(typeof toast.success).toBe('function');
+    expect(typeof toast.error).toBe('function');
+    expect(typeof toast.info).toBe('function');
+    expect(typeof toast.warning).toBe('function');
+    expect(typeof toast.message).toBe('function');
+    expect(typeof toast.dismiss).toBe('function');
   });
 
-  it('auto-dismisses after the default timeout', () => {
-    // Use fireEvent (synchronous) instead of userEvent to avoid
-    // timer conflicts with vi.useFakeTimers
-    vi.useFakeTimers();
+  it('toast.success emits a toast with the message text', async () => {
+    render(<Toaster />);
+    toast.success('Saved!');
+    expect(await screen.findByText('Saved!')).toBeInTheDocument();
+  });
 
-    render(
-      <ToastProvider>
-        <ToastHarness />
-      </ToastProvider>,
-    );
+  it('toast.error emits a toast with the error message text', async () => {
+    render(<Toaster />);
+    toast.error('Boom');
+    expect(await screen.findByText('Boom')).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByText('Show Info'));
-    expect(screen.getByText('Info message')).toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(4000);
+  it('toast.dismiss removes a previously shown toast', async () => {
+    render(<Toaster />);
+    toast.warning('Heads up');
+    const node = await screen.findByText('Heads up');
+    expect(node).toBeInTheDocument();
+    toast.dismiss();
+    await waitFor(() => {
+      expect(screen.queryByText('Heads up')).not.toBeInTheDocument();
     });
-
-    expect(screen.queryByText('Info message')).not.toBeInTheDocument();
-  });
-
-  it('dismisses a toast when dismiss button is clicked', async () => {
-    const user = userEvent.setup();
-    render(
-      <ToastProvider>
-        <ToastHarness />
-      </ToastProvider>,
-    );
-
-    await user.click(screen.getByText('Show Info'));
-    expect(screen.getByText('Info message')).toBeInTheDocument();
-
-    await user.click(screen.getByLabelText('Dismiss'));
-    expect(screen.queryByText('Info message')).not.toBeInTheDocument();
   });
 });

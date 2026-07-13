@@ -12,6 +12,9 @@ export default defineConfig({
       'tests/**/*.test.{ts,tsx}',
       'src/web/v8/**/*.test.{ts,tsx}',
     ],
-    exclude: ['tests/**/*.test.mjs'],
+    exclude: [
+      'tests/**/*.test.mjs',
+      'tests/v7-archive/**',
+    ],
   },
 });

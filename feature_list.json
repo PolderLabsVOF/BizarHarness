@@ -1183,11 +1183,55 @@
       "passed": "2026-07-11",
       "commit": "ec32df2",
       "evidence": "make verify-feature F-039 \u2014 all layers green (2026-07-11)"
+    },
+    {
+      "id": "F-052",
+      "behavior": "v8 dashboard live data plumbing \u2014 every v8 view pulls from the dashboard backend (Overview, Tasks, Goals, Agents, Activity, Memory, Libraries, Settings). Unified Agents view shows Bizar + Claude Code background agents with a source filter. Goals render from .bizar/PROGRESS.md. WS subscriptions for tasks:change / agents:change / activity:new / goals:change / agent:status. New /api/goals and /api/cc-agents REST routes mounted in api.mjs.",
+      "verification": "npx vitest run src/web/v8 \u2014 195 tests pass (142 baseline + ~53 new data hooks / view rewrites). node --test against backend progress-parser + bg-poller + agents-cc suites \u2014 15/15 pass.",
+      "state": "passing",
+      "layer": "L1+L2",
+      "category": "dashboard",
+      "created": "2026-07-13",
+      "files_touched": [
+        "bizar-dash/src/server/progress-parser.mjs (new)",
+        "bizar-dash/src/server/progress-parser.test.mjs (new, 8 cases)",
+        "bizar-dash/src/server/routes/goals.mjs (new, full CRUD over PROGRESS.md)",
+        "bizar-dash/src/server/routes/agents-cc.mjs (new, claude agents --json + enrichment)",
+        "bizar-dash/src/server/routes/agents-cc.test.mjs (new, 4 cases)",
+        "bizar-dash/src/server/bg-poller.mjs (tickCCAgents with SHA-1 digest diff)",
+        "bizar-dash/src/server/bg-poller.test.mjs (new, 3 cases)",
+        "bizar-dash/src/server/api.mjs (mount goals + cc-agents routers)",
+        "bizar-dash/src/web/v8/data/{fetcher,types,useFetch,useWebSocket}.ts (new)",
+        "bizar-dash/src/web/v8/__tests__/{useFetch,useWebSocket}.test.ts (new, 5+5 cases)",
+        "bizar-dash/src/web/v8/__tests__/views.test.tsx (rewrote seeded-data tests against mocked fetch)",
+        "bizar-dash/src/web/v8/views/{Overview,Tasks,Goals,Agents,Activity,Memory,Libraries,Settings}/*View.tsx (rewritten for live data)",
+        "bizar-dash/src/web/v8/views/Router.tsx (drop hardcoded library arrays)"
+      ],
+      "layers": [
+        {
+          "label": "compile",
+          "cmd": "make check",
+          "repair": "0 TS errors expected."
+        },
+        {
+          "label": "unit",
+          "cmd": "npx vitest run src/web/v8 && node --test bizar-dash/src/server/{progress-parser,routes/agents-cc,bg-poller}.test.mjs",
+          "repair": "All v8 frontend vitest cases (195) and backend node:test cases (15) must pass. Common: missing fetch mock in views.test, broken WS subscriber leak, Router barrel syntax error."
+        },
+        {
+          "label": "e2e",
+          "cmd": "make e2e",
+          "repair": "Add a /api/goals parse-shape check to bh-full-e2e.mjs. Then 14/14 expected."
+        }
+      ],
+      "passed": "2026-07-13",
+      "commit": "pending",
+      "evidence": "npx vitest run src/web/v8 \u2014 25 files, 195/195 pass (2026-07-13). node --test 3 backend files \u2014 15/15 pass (2026-07-13)."
     }
   ],
   "vcr": {
-    "passing": 39,
-    "activated": 39,
+    "passing": 40,
+    "activated": 40,
     "ratio": 1
   }
 }

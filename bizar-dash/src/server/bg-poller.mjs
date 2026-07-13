@@ -30,7 +30,8 @@ import { tasksStore } from './tasks-store.mjs';
 import { projectsStore } from './projects-store.mjs';
 import { artifactsStore, extractArtifactFromMessage } from './artifacts-store.mjs';
 import { listClaudeMessages, readLastAssistantText } from './claude-info.mjs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const POLL_INTERVAL_MS = 3_000;
 const ARTIFACT_SCAN_TIMEOUT_MS = 6_000;
@@ -267,8 +268,10 @@ export function startBgPoller() {
   // Tick once immediately so completions that happened while the
   // dashboard was down are reflected on the first WS snapshot.
   tick().catch((err) => console.error('[bg-poller] initial tick:', err.message));
+  tickCCAgents().catch(() => { /* best effort */ });
   _interval = setInterval(() => {
     tick().catch((err) => console.error('[bg-poller] tick:', err.message));
+    tickCCAgents().catch(() => { /* best effort */ });
   }, POLL_INTERVAL_MS);
   // Don't keep the event loop alive just for the poller — the http
   // server already does that. `unref()` is safe because we tear down
@@ -277,6 +280,81 @@ export function startBgPoller() {
     _interval.unref();
   }
   console.log(`[bg-poller] started (interval=${POLL_INTERVAL_MS}ms)`);
+}
+
+// ── Sprint S10 — CC background agent change detection ────────────────────
+// Polls `claude agents --json --all` on the same cadence and emits
+// `agents:change` when the digest changes (so the unified Agents
+// view updates without the browser polling).
+
+let _lastCCDigest = null;
+const CC_TIMEOUT_MS = 4_000;
+
+function runClaudeAgentsJson() {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let done = false;
+    let proc;
+    try {
+      proc = spawn('claude', ['agents', '--json', '--all'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (err) {
+      resolve({ ok: false, error: err.message });
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      try { proc.kill('SIGTERM'); } catch { /* */ }
+      resolve({ ok: false, error: 'timeout', stderr: stderr.slice(0, 200) });
+    }, CC_TIMEOUT_MS);
+    proc.stdout.on('data', (c) => { stdout += c.toString('utf8'); });
+    proc.stderr.on('data', (c) => { stderr += c.toString('utf8'); });
+    proc.on('error', (err) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve({ ok: false, error: err.message });
+    });
+    proc.on('exit', (code) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (code !== 0) {
+        resolve({ ok: false, error: `exit ${code}`, stderr: stderr.slice(0, 200) });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout || '[]');
+        resolve({ ok: true, agents: Array.isArray(parsed) ? parsed : [] });
+      } catch (err) {
+        resolve({ ok: false, error: `parse: ${err.message}` });
+      }
+    });
+  });
+}
+
+function digestAgents(agents) {
+  const h = createHash('sha1');
+  // Sort by id so the digest is order-independent — `claude agents --json`
+  // may return background agents in any order.
+  const sorted = [...agents].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  for (const a of sorted) {
+    h.update(`${a.id}|${a.status || ''}|${a.state || ''}|${a.cwd || ''}|${a.name || ''}\n`);
+  }
+  return h.digest('hex').slice(0, 16);
+}
+
+export async function tickCCAgents() {
+  const r = await runClaudeAgentsJson();
+  if (!r.ok) return; // CC not on PATH or timed out — leave the previous digest alone.
+  const d = digestAgents(r.agents);
+  if (d === _lastCCDigest) return;
+  _lastCCDigest = d;
+  try {
+    const { broadcast } = await import('./server.mjs');
+    broadcast({ type: 'agents:change', source: 'claude-code', digest: d });
+  } catch { /* server not ready yet — swallow */ }
 }
 
 export function stopBgPoller() {
@@ -291,5 +369,7 @@ export const _pollerInternals = {
   trackedStatuses,
   processedArtifacts,
   tick,
+  tickCCAgents,
   POLL_INTERVAL_MS,
+  digestAgents,
 };

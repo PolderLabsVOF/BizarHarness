@@ -1,61 +1,77 @@
+import { useMemo, useState } from 'react';
 import { Stack } from '../../ui/primitives/Stack.js';
+import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
-import { MemoryVault, type MemoryEntry } from '../../ui/memory/MemoryVault.js';
+import { MemoryVault, type MemoryEntry, type MemoryScope } from '../../ui/memory/MemoryVault.js';
 import { EmptyState } from '../../ui/feedback/EmptyState.js';
 import { Brain } from 'lucide-react';
+import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { Chip } from '../../ui/data/Chip.js';
+import { useFetch } from '../../data/useFetch.js';
 
 /**
- * MemoryView — the durable cross-session memos the harness writes down.
+ * MemoryView — Sprint S10. Pulls `/api/memory` (Bizar memory entries).
+ * Click a chip to scope the view (Project / Global / All).
  */
 
-const ENTRIES: MemoryEntry[] = [
-  {
-    id: 'm1',
-    content: 'The dashboard rewrite lives in v8 tree under `bizar-dash/src/web/v8/`. Sprint boundaries: S1..S9 (per PLAN.md).',
-    tags: ['dashboard', 'rewrite', 'sprint'],
-    scope: 'project',
-    updatedAt: 'Just now',
-  },
-  {
-    id: 'm2',
-    content: 'User prefers OKLch tokens, minimal visual flair, and token-driven styling only. No hardcoded hex anywhere in the v8 tree.',
-    tags: ['preferences', 'design'],
-    scope: 'global',
-    updatedAt: '3 days ago',
-  },
-  {
-    id: 'm3',
-    content: 'Pre-existing test failures in `tests/a11y/forms.test.tsx` predate v8 work — do not chase them in this branch.',
-    tags: ['tests', 'a11y'],
-    scope: 'project',
-    updatedAt: '1 week ago',
-  },
-  {
-    id: 'm4',
-    content: 'WIP=1 rule: only one feature active at a time per `feature_list.json`.',
-    tags: ['process'],
-    scope: 'project',
-    updatedAt: '2 weeks ago',
-  },
-];
+interface MemoryResponse {
+  entries?: Array<{
+    id?: string;
+    content?: string;
+    tags?: string[];
+    scope?: 'project' | 'global';
+    updatedAt?: string | number;
+  }>;
+  count?: number;
+}
+
+function toEntry(e: NonNullable<MemoryResponse['entries']>[number]): MemoryEntry {
+  return {
+    id: e.id || '',
+    content: e.content || '',
+    tags: e.tags || [],
+    scope: (e.scope || 'project') as MemoryScope,
+    updatedAt:
+      typeof e.updatedAt === 'number'
+        ? new Date(e.updatedAt).toLocaleString()
+        : e.updatedAt || '',
+  };
+}
 
 export function MemoryView(): JSX.Element {
+  const mem = useFetch<MemoryResponse>('/api/memory');
+  const [scope, setScope] = useState<MemoryScope | 'all'>('all');
+
+  const entries = useMemo<MemoryEntry[]>(() => {
+    const list = (mem.data?.entries || []).map(toEntry);
+    if (scope === 'all') return list;
+    return list.filter((e) => e.scope === scope);
+  }, [mem.data, scope]);
+
   return (
     <Stack gap={5}>
       <ViewHeader
         title="Memory"
         description="Cross-session notes. Project memos live in the repo; global memos live on the user."
       />
-      <MemoryVault
-        entries={ENTRIES}
-        empty={
-          <EmptyState
-            icon={<Brain size={24} aria-hidden="true" />}
-            title="No memos yet"
-            description="Memos appear here as you and the harness accumulate them."
-          />
-        }
-      />
+      <Inline gap={2}>
+        {(['all', 'project', 'global'] as const).map((s) => (
+          <Chip key={s} selected={scope === s} onClick={() => setScope(s)}>
+            {s === 'all' ? 'All' : s === 'project' ? 'Project' : 'Global'}
+          </Chip>
+        ))}
+      </Inline>
+      {mem.loading ? (
+        <Skeleton style={{ height: 240 }} />
+      ) : entries.length === 0 ? (
+        <EmptyState
+          icon={<Brain size={32} aria-hidden />}
+          title="No memory entries"
+          description="Memos land here once they are written via the memory tools."
+        />
+      ) : (
+        <MemoryVault entries={entries} />
+      )}
     </Stack>
   );
 }

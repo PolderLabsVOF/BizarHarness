@@ -1224,3 +1224,74 @@ make e2e         # real plugin load + tool invocation — BLOCKED (script missin
 make clean-check # 5-dimension exit verification — 4/5 pass (E2E blocked)
 make vcr         # feature_list VCR ratio — 25/25 = 1.000
 ```
+
+## S10 — v8 dashboard live data (F-052, this session)
+
+User-requested: turn the v8 dashboard into a real-time orchestration
+center. Every view pulls live data from the dashboard backend. Agents
+view unifies Bizar + Claude Code background agents. Goals render
+from `.bizar/PROGRESS.md`.
+
+**Backend:**
+- `bizar-dash/src/server/progress-parser.mjs` — pure parser for
+  `.bizar/PROGRESS.md`. `parseProgress(text)` returns
+  `{goals, preamble, postamble}` with `{id, title, status, progress,
+  keyResults[], owner, due, section}`. `serializeProgress(parsed)`
+  inverse. Header format `## F-NNN — Title` or `## Bare Title`.
+- `bizar-dash/src/server/routes/goals.mjs` — full CRUD over
+  PROGRESS.md. GET/PATCH `/api/goals/:id/status`, POST `/api/goals`,
+  PATCH `/api/goals/:id`, KR add/toggle/remove. Atomic write via
+  tmp+rename. Falls back to `$HOME` when no project is active.
+- `bizar-dash/src/server/routes/agents-cc.mjs` — Claude Code
+  background agents via `claude agents --json --all`. 5s module cache
+  to avoid subprocess-per-render. Enrichment reads session JSONL for
+  last-message snippet/timestamp. Kill + send endpoints.
+- `bizar-dash/src/server/bg-poller.mjs` — `tickCCAgents()` with
+  SHA-1 digest diff. Emits `agents:change` only when the digest
+  actually moves (order-independent).
+
+**Frontend (v8):**
+- `bizar-dash/src/web/v8/data/{fetcher,types,useFetch,useWebSocket}.ts`
+  — module-singleton WS client with exponential reconnect, fetch
+  hook with AbortController + refetch(), TypeScript types matching
+  REST shapes.
+- All 8 v8 views rewritten to consume live data:
+  - **Overview** — `/api/snapshot` + `/api/activity?limit=10`,
+    live-tail `activity:new` via ring buffer.
+  - **Tasks** — `/api/tasks`, kanban columns mapped from server
+    statuses, DnD → `PATCH /api/tasks/:id/status`, optimistic update
+    + rollback on error, live sync via `tasks:change`.
+  - **Goals** — `/api/goals`, status Select per goal → PATCH,
+    focused goal drawer with KeyResults, live sync via
+    `goals:change`.
+  - **Agents** — unified Bizar + CC agents with source filter chip
+    (`all | bizar | claude-code`), live updates via `agents:change`
+    and `agent:status`.
+  - **Activity** — full event history with WS tail.
+  - **Memory** — `/api/memory` with Project/Global/All scope chips.
+  - **Libraries** — Skills / MCPs / Hooks now fetch live data
+    (`/api/skills?kind=…`); Router drops hardcoded arrays.
+  - **Settings** — live counts for Plugins / MCPs / Skills / Hooks
+    sections; toggles PATCH `/api/settings`.
+
+**Tests:**
+- Backend: `node --test` on `progress-parser.test.mjs` (8) +
+  `agents-cc.test.mjs` (4) + `bg-poller.test.mjs` (3) = **15/15
+  pass**.
+- Frontend: `npx vitest run src/web/v8` — 25 files, **195/195 pass**
+  (142 baseline + 53 new across data hooks + view rewrites). The
+  pre-existing `views.test.tsx` was rewritten to mock `fetch` and
+  assert structure against the new live-data shells.
+- New tests: `useFetch.test.ts` (5 cases), `useWebSocket.test.ts`
+  (5 cases via FakeSocket).
+
+**Constraints honoured:** 0 new top-level npm deps; CC background
+agents polled via `claude agents --json` (no API needed); PROGRESS.md
+round-trips through serialize/deserialize; WS layer mirrors the
+existing legacy `Ws()` singleton pattern.
+
+**Next sprint (S11):** Agent detail panel + control plane. Click any
+agent card → right-side Drawer with live detail, last-10 actions
+timeline, and `Send prompt` / `Restart` / `Kill` actions that map to
+the new `/api/cc-agents/:id/kill` + `/api/agents/:name/invoke`
+endpoints.

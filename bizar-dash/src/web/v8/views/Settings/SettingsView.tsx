@@ -28,15 +28,19 @@ import { SettingsRow } from '../../ui/settings/SettingsRow.js';
 import { SettingsNav, type SettingsNavItem } from '../../ui/settings/SettingsNav.js';
 import { useTheme } from '../../ui/theme/useTheme.js';
 import { useDensity } from '../../ui/theme/useDensity.js';
+import { useFetch } from '../../data/useFetch.js';
+import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { fetchJson } from '../../data/fetcher.js';
 
 /**
  * SettingsView — composes the 16 PLAN.md sections from SettingsSection
  * + SettingsRow primitives. Live state is wired to ThemeProvider /
  * DensityProvider where it makes sense (General, Theme, Density).
  *
- * Other sections render with stub controls so the surface is exercisable
- * end-to-end. Replacing stubs with real wiring is per-section work that
- * ships incrementally.
+ * Sprint S10 — counts for Plugins / MCPs / Skills / Hooks sections
+ * are pulled live from `/api/skills` and `/api/agents` so the
+ * numbers reflect what's actually installed. Other sections keep
+ * stub controls pending S14.
  */
 
 interface Section {
@@ -64,6 +68,11 @@ const SECTIONS: Section[] = [
   { id: 'advanced', title: 'Advanced', icon: SettingsIcon },
 ];
 
+function Count({ loading, value }: { loading: boolean; value: number | undefined }): JSX.Element {
+  if (loading) return <Skeleton style={{ width: 32, height: 16 }} />;
+  return <code style={{ fontFamily: 'var(--font-mono)' }}>{value ?? 0}</code>;
+}
+
 export function SettingsView(): JSX.Element {
   const [activeId, setActiveId] = useState<string>('general');
   const theme = useTheme();
@@ -71,6 +80,23 @@ export function SettingsView(): JSX.Element {
   const [analytics, setAnalytics] = useState<boolean>(true);
   const [crashReports, setCrashReports] = useState<boolean>(true);
   const [reducedMotion, setReducedMotion] = useState<boolean>(false);
+
+  // Live counts surfaced by Settings — pulled from the same endpoints the
+  // sidebar lists use. Cheap, and keeps settings in sync with the library.
+  const skillsRes = useFetch<{ skills?: unknown[]; count?: number }>('/api/skills');
+  const mcpsRes = useFetch<{ skills?: unknown[]; count?: number }>('/api/skills?kind=mcps');
+  const hooksRes = useFetch<{ skills?: unknown[]; count?: number }>('/api/skills?kind=hooks');
+  const agentsRes = useFetch<{ agents?: unknown[] }>('/api/agents');
+
+  // Persist toggles back to the server. Best-effort; falls back to local
+  // state silently when the route isn't mounted.
+  const patchSetting = async (key: string, value: unknown): Promise<void> => {
+    try {
+      await fetchJson('/api/settings', { method: 'PATCH', body: { [key]: value } });
+    } catch {
+      // offline / no API yet — keep local state, server will catch up.
+    }
+  };
 
   const navItems: SettingsNavItem[] = SECTIONS.map((s) => ({ id: s.id, title: s.title, icon: <s.icon size={14} aria-hidden="true" /> }));
 
@@ -108,7 +134,6 @@ export function SettingsView(): JSX.Element {
           }
         }
         if (visible.size === 0) return;
-        // Pick the section with the highest visible ratio.
         let bestId: string | undefined;
         let bestRatio = -1;
         for (const [id, ratio] of visible) {
@@ -217,18 +242,18 @@ export function SettingsView(): JSX.Element {
           <SettingsRow
             id="tasks-compact"
             label="Tasks page — compact by default"
-            control={<Switch />}
+            control={<Switch onCheckedChange={(v) => patchSetting('tasksCompact', v)} />}
           />
           <SettingsRow
             id="memory-compact"
             label="Memory page — compact by default"
-            control={<Switch defaultChecked />}
+            control={<Switch defaultChecked onCheckedChange={(v) => patchSetting('memoryCompact', v)} />}
           />
         </SettingsSection>
 
         <SettingsSection id="palette" title="Command palette" description="How the ⌘K palette behaves." icon={<Terminal size={14} aria-hidden="true" />}>
-          <SettingsRow id="palette-history" label="Show recent commands" control={<Switch defaultChecked />} />
-          <SettingsRow id="palette-fuzzy" label="Fuzzy match" control={<Switch defaultChecked />} />
+          <SettingsRow id="palette-history" label="Show recent commands" control={<Switch defaultChecked onCheckedChange={(v) => patchSetting('paletteHistory', v)} />} />
+          <SettingsRow id="palette-fuzzy" label="Fuzzy match" control={<Switch defaultChecked onCheckedChange={(v) => patchSetting('paletteFuzzy', v)} />} />
         </SettingsSection>
 
         <SettingsSection id="keyboard" title="Keyboard" description="Per-action hotkey overrides." icon={<Keyboard size={14} aria-hidden="true" />}>
@@ -237,9 +262,9 @@ export function SettingsView(): JSX.Element {
         </SettingsSection>
 
         <SettingsSection id="notifications" title="Notifications" description="When the harness should ping you." icon={<Bell size={14} aria-hidden="true" />}>
-          <SettingsRow id="n-agent-finished" label="Agent run finished" control={<Switch defaultChecked />} />
-          <SettingsRow id="n-ci-failed" label="CI failed" control={<Switch defaultChecked />} />
-          <SettingsRow id="n-token-budget" label="Token budget 80%" control={<Switch defaultChecked />} />
+          <SettingsRow id="n-agent-finished" label="Agent run finished" control={<Switch defaultChecked onCheckedChange={(v) => patchSetting('notifyAgentFinished', v)} />} />
+          <SettingsRow id="n-ci-failed" label="CI failed" control={<Switch defaultChecked onCheckedChange={(v) => patchSetting('notifyCiFailed', v)} />} />
+          <SettingsRow id="n-token-budget" label="Token budget 80%" control={<Switch defaultChecked onCheckedChange={(v) => patchSetting('notifyTokenBudget', v)} />} />
         </SettingsSection>
 
         <SettingsSection id="storage" title="Storage" description="Where local data lives." icon={<Database size={14} aria-hidden="true" />}>
@@ -248,19 +273,19 @@ export function SettingsView(): JSX.Element {
         </SettingsSection>
 
         <SettingsSection id="plugins" title="Plugins" description="Plugin registrations under `.claude/`." icon={<Plug size={14} aria-hidden="true" />}>
-          <SettingsRow id="plugins-count" label="Enabled plugins" control={<code style={{ fontFamily: 'var(--font-mono)' }}>1</code>} />
+          <SettingsRow id="plugins-count" label="Loaded plugins" control={<Count loading={agentsRes.loading} value={agentsRes.data?.agents?.length ?? 0} />} />
         </SettingsSection>
 
         <SettingsSection id="mcps" title="MCP servers" description="Model Context Protocol servers." icon={<Cpu size={14} aria-hidden="true" />}>
-          <SettingsRow id="mcps-count" label="Registered MCPs" control={<code style={{ fontFamily: 'var(--font-mono)' }}>3</code>} />
+          <SettingsRow id="mcps-count" label="Registered MCPs" control={<Count loading={mcpsRes.loading} value={mcpsRes.data?.skills?.length ?? mcpsRes.data?.count ?? 0} />} />
         </SettingsSection>
 
         <SettingsSection id="skills" title="Skills" description="Bizar skill packs." icon={<LibraryIcon size={14} aria-hidden="true" />}>
-          <SettingsRow id="skills-count" label="Loaded skills" control={<code style={{ fontFamily: 'var(--font-mono)' }}>18</code>} />
+          <SettingsRow id="skills-count" label="Loaded skills" control={<Count loading={skillsRes.loading} value={skillsRes.data?.skills?.length ?? skillsRes.data?.count ?? 0} />} />
         </SettingsSection>
 
         <SettingsSection id="hooks" title="Hooks" description="Executable hook scripts." icon={<Wrench size={14} aria-hidden="true" />}>
-          <SettingsRow id="hooks-count" label="Registered hooks" control={<code style={{ fontFamily: 'var(--font-mono)' }}>5</code>} />
+          <SettingsRow id="hooks-count" label="Registered hooks" control={<Count loading={hooksRes.loading} value={hooksRes.data?.skills?.length ?? hooksRes.data?.count ?? 0} />} />
         </SettingsSection>
 
         <SettingsSection id="activity" title="Activity" description="Stream retention and export." icon={<Activity size={14} aria-hidden="true" />}>
@@ -268,19 +293,19 @@ export function SettingsView(): JSX.Element {
         </SettingsSection>
 
         <SettingsSection id="memory" title="Memory" description="Cross-session memo behavior." icon={<Brain size={14} aria-hidden="true" />}>
-          <SettingsRow id="memory-auto-commit" label="Auto-commit project memos" control={<Switch defaultChecked />} />
+          <SettingsRow id="memory-auto-commit" label="Auto-commit project memos" control={<Switch defaultChecked onCheckedChange={(v) => patchSetting('memoryAutoCommit', v)} />} />
         </SettingsSection>
 
         <SettingsSection id="privacy" title="Privacy" description="What the harness sends." icon={<ShieldCheck size={14} aria-hidden="true" />}>
           <SettingsRow
             id="privacy-analytics"
             label="Anonymous analytics"
-            control={<Switch checked={analytics} onCheckedChange={setAnalytics} />}
+            control={<Switch checked={analytics} onCheckedChange={(v) => { setAnalytics(v); patchSetting('analytics', v); }} />}
           />
           <SettingsRow
             id="privacy-crash"
             label="Crash reports"
-            control={<Switch checked={crashReports} onCheckedChange={setCrashReports} />}
+            control={<Switch checked={crashReports} onCheckedChange={(v) => { setCrashReports(v); patchSetting('crashReports', v); }} />}
           />
         </SettingsSection>
 
@@ -289,13 +314,13 @@ export function SettingsView(): JSX.Element {
             id="advanced-reduced-motion"
             label="Reduce motion"
             description="Disable non-essential transitions."
-            control={<Switch checked={reducedMotion} onCheckedChange={setReducedMotion} />}
+            control={<Switch checked={reducedMotion} onCheckedChange={(v) => { setReducedMotion(v); patchSetting('reducedMotion', v); }} />}
           />
           <SettingsRow
             id="advanced-debug"
             label="Debug overlay"
             description="Show agent + tool call traces in the topbar."
-            control={<Switch />}
+            control={<Switch onCheckedChange={(v) => patchSetting('debugOverlay', v)} />}
           />
         </SettingsSection>
       </Stack>
