@@ -122,6 +122,57 @@ files, and asserts what the API returns and what it persists to disk.
   S3 (GoalsView CC round-trip + E2E + 2-bug-fix), S4 (cross-boundary
   agent restart E2E + readAgent-bug fix), S5 (this paperwork).
 
+## v10.0.1 — 2026-07-14
+
+### Highlights
+
+Closes the three remaining v10.0.0 stop-hook gaps with real
+verifications, not paperwork. The cold-boot event-loop starvation
+that froze the dashboard for 3-5s is now fixed (async `execFile`
+in `memory-lightrag.mjs` + `BIZAR_HEADROOM_AUTOSTART=0` env gate in
+`server.mjs`), and the unauthenticated browser smoke is upgraded to
+an authenticated 8-view per-view walkthrough that proves
+AgentsView / GoalsView / TasksView / SettingsView / Memory /
+Activity render real data past the auth gate.
+
+### Fixed
+
+- **Cold-boot event-loop starvation** (`memory-lightrag.mjs:344`,
+  `server.mjs:439`). LightRAG's `findLightragBinary()` ran
+  `execFileSync('command', …)` synchronously with a 3s timeout on
+  every cold start. Converted to async `execFile` wrapped in a
+  Promise; the 3 call sites (`isInstalled`, two `startServer`
+  checks) now `await` it. The headroom startup hook (`npm install`
+  as a child process) is now opt-out via
+  `BIZAR_HEADROOM_AUTOSTART=0`, mirroring the existing lightrag
+  pattern. Default behaviour unchanged. Sprint S9.
+
+### Added
+
+- **`tests/e2e/cold-boot-perf.mjs`** — Regression test for the cold-
+  boot freeze. Boots `createServer()` with both opt-outs set,
+  asserts `listen → first-fetch < 2s`. Closes the v10-S7
+  "documented, not fixed" caveat. **2/2 PASS** (`bootMs=42,
+  firstFetchMs=21`).
+- **`tests/e2e/dashboard-auth-walkthrough.mjs`** — Authenticated
+  per-view walkthrough. Boots `createServer()` against a tmp
+  project, drives `agent-browser` through real sidebar clicks
+  (the v8 router is state-based, not hash-based), screenshots
+  each view, asserts the active sidebar item matches and the main
+  region renders view-specific content. **8/8 PASS** across
+  Overview (303 bytes), Agents (1000), Goals (805), Tasks (129),
+  Settings (6556), Memory (247), Activity (321) — all past the
+  auth gate. Closes the v10-S7 per-view-verification gap.
+
+### Changed
+
+- **`bizar-dash/BROWSER_VERIFICATION.md`** — Updated to v10.0.1.
+  Removed the "documented, not fixed" caveat for the cold-boot
+  freeze (it's now fixed). Added the cold-boot regression and
+  per-view walkthrough sections with PID + PASS count evidence.
+  Documented the loopback-auto-trust auth model that explains why
+  the browser walkthrough doesn't need to pass a bearer token.
+
 ## v4.5.0 — 2026-07-05
 
 ### Highlights

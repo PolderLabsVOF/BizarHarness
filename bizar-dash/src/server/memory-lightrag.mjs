@@ -30,7 +30,7 @@
 
 import {
   spawn,
-  execFileSync,
+  execFile,
 } from 'node:child_process';
 import {
   existsSync,
@@ -341,7 +341,7 @@ export function resolveLightRAGConfig(projectRoot) {
  * path or null. Uses `which`-style probing (POSIX `command -v`) and
  * common install dirs.
  */
-export function findLightragBinary() {
+export async function findLightragBinary() {
   const candidates = [
     `${homedir()}/.local/bin/lightrag-server`,
     `${homedir()}/.cargo/bin/lightrag-server`,
@@ -351,11 +351,16 @@ export function findLightragBinary() {
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
+  // v10-S9 — was sync execFileSync which froze the Node event loop for up
+  // to 3s during boot. Convert to async so the dashboard can keep
+  // serving requests while the `command -v` probe runs.
   try {
-    const path = execFileSync('command', ['-v', 'lightrag-server'], {
-      encoding: 'utf8',
-      timeout: 3000,
-    }).trim();
+    const path = (await new Promise((resolve, reject) => {
+      execFile('command', ['-v', 'lightrag-server'], { timeout: 3000 }, (err, stdout) => {
+        if (err) return reject(err);
+        resolve(String(stdout || '').trim());
+      });
+    }));
     if (path) return path;
   } catch (err) {
     // command returned non-zero — fall through
@@ -365,7 +370,7 @@ export function findLightragBinary() {
 }
 
 export async function isInstalled() {
-  const found = findLightragBinary() !== null;
+  const found = (await findLightragBinary()) !== null;
   if (found) _lightragNotInstalled = false;
   return found;
 }
@@ -504,7 +509,7 @@ export async function startServer(config, { logger } = {}) {
     }
   }
 
-  if (!findLightragBinary()) {
+  if (!(await findLightragBinary())) {
     _lightragNotInstalled = true;
     return {
       ok: false,
@@ -514,7 +519,7 @@ export async function startServer(config, { logger } = {}) {
   }
 
   // Spawn detached so the parent's lifetime doesn't drag the server down.
-  const bin = findLightragBinary();
+  const bin = await findLightragBinary();
   log(`starting ${bin} on http://${config.host}:${config.port} (working-dir ${config.workingDir})`);
 
   const child = spawn(
