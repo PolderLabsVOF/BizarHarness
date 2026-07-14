@@ -444,8 +444,8 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last release (master):** v10.0.0 — **stable**.
-- **Last commit:** see `git log --oneline -1`.
+- **Last release (master):** v10.0.1 — **stable**. Commits `74b48df`.
+- **Last commit:** `74b48df fix(v10): async LightRAG probe + headroom opt-out + per-view browser proof (v10.0.1)`
 - **This session:** shipped v9.4.0, v9.5.0, and v10.0.0 in atomic
   commits (S45 → S50, then v10-S1..S4 + paperwork). 11 sprints
   total across two iterations of stop-hook feedback.
@@ -475,6 +475,18 @@ drift away from the original ask.
   `tpmHistory` always blocked the chart); (5) `UpdateView` `TS2783`
   on WS message narrowing; (6) `BizarAgent.status` not including
   `'paused'`.
+
+- **v10.0.1 deliverables (closes 3 stop-hook gaps with real proof):**
+  (1) Cold-boot event-loop starvation FIXED —
+  `memory-lightrag.mjs:344` async `execFile` instead of sync
+  `execFileSync`, `server.mjs:439` `BIZAR_HEADROOM_AUTOSTART=0`
+  env gate; `cold-boot-perf.mjs` regression test 2/2 PASS
+  (`bootMs=42, firstFetchMs=21` was 3000+). (2) Per-view logged-in
+  browser proof — `dashboard-auth-walkthrough.mjs` drives
+  `agent-browser` through real sidebar clicks (state-based router,
+  not hash), 8/8 PASS across Overview/Agents/Goals/Tasks/Settings/
+  Memory/Activity. (3) `BROWSER_VERIFICATION.md` honest — removed
+  the "documented, not fixed" caveat.
 
 ## v10.0.0 — stable orchestration center
 
