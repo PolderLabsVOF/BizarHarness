@@ -83,7 +83,11 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
     const projectId = req.query.projectId || readActiveProjectId();
     const includeArchived = req.query.archived === 'true' || req.query.archived === '1';
     const onlyArchived = req.query.archived === 'only' || req.query.archived === 'archived';
-    res.json(tasksStore.loadTasks(projectId, { includeArchived, onlyArchived }));
+    // v10-S11 — return an envelope { tasks, count } so the UI's
+    // `body.tasks ?? []` pattern (App.tsx:87) lands correctly. The bare
+    // array shape predated the v8 UI and made TasksView render 0.
+    const tasks = tasksStore.loadTasks(projectId, { includeArchived, onlyArchived });
+    res.json({ tasks, count: tasks.length });
   }));
 
   router.post('/tasks', wrap(async (req, res) => {
