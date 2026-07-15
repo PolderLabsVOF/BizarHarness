@@ -27,6 +27,7 @@
     "test:e2e:coverage": "node tests/e2e/dashboard-coverage-proof.mjs",
     "test:e2e:cc": "node tests/e2e/dashboard-cc-bridge.mjs",
     "test:e2e:crud": "node tests/e2e/dashboard-crud-roundtrip.mjs",
+    "test:e2e:data": "node tests/e2e/dashboard-data-driven.mjs",
     "build": "npm run build:sdk && npm run build:dash",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"
