@@ -241,7 +241,12 @@ async function check(name, fn) {
 async function agentBrowserEval(expr) {
   const b64 = Buffer.from(expr, 'utf8').toString('base64');
   const { out } = await sh('agent-browser', ['eval', '-b', b64]);
-  return out.trim().replace(/^"|"$/g, '');
+  // agent-browser wraps the JS result in literal quotes. Unwrap twice:
+  // the outer `"` + escaped JSON + `"` then JSON.parse the payload.
+  let s = out.trim();
+  if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
+  s = s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  return s;
 }
 
 try {
