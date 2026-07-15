@@ -1,5 +1,71 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v10.0.3 — 2026-07-15
+
+### Highlights
+
+Six atomic commits close every umbrella-brief criterion the v10.0.2
+stop-hook flagged as unevidenced: per-agent status grid, CC session
+merge + CC `/goal` slash command, full CRUD surface, data-driven
+dashboard surfaces, and a single end-to-end surfaces matrix. Two
+real bugs surfaced and fixed in the process — TaskDetail PATCH
+mismatch and TasksView bulk-status 404.
+
+### Fixed
+
+- **`PATCH /api/tasks/:id`** (`tasks.mjs`). TaskDetail.tsx:81 sent
+  `PATCH` but the server only exposed `PUT` — every task edit
+  404'd. New PATCH handler mirrors PUT body and broadcasts
+  `tasks:change`. Unit-tested in `tasks-patch-routes.test.mjs`.
+- **`PATCH /api/tasks/bulk-status`** (`tasks.mjs`). TasksView.tsx:142
+  sent `PATCH /api/tasks/bulk-status` but the server only had
+  `POST /api/tasks/bulk` — the bulk-action bar never moved tasks.
+  New PATCH handler accepts `{ids, status}`, returns per-row
+  failures, validates status against the allow-list. Registered
+  before `/tasks/:id` so the literal `bulk-status` segment isn't
+  captured by Express's :id param.
+
+### Added
+
+- **`tests/e2e/dashboard-coverage-proof.mjs`** (Move 2). 8 Bizar
+  agents with diverse statuses (working/idle/paused/error/stuck),
+  6 goals across 4 status tones, 7 days of usage JSONL. Asserts
+  AgentsView renders ≥8 `.v8-agent-card` nodes spanning ≥4
+  distinct status classes, GoalsView renders ≥6 `[data-testid^=goal-card-]`
+  nodes, OverviewView renders `[data-testid=overview-tokens-sparkline]`.
+- **`tests/e2e/dashboard-cc-bridge.mjs`** (Move 3). 7 checks: Bizar
+  source discriminator, CC route mounted, Claude Code chip
+  clickable in UI, `.claude/commands/goal.md` references
+  /api/goals + POST + "Do not edit PROGRESS.md directly", dash
+  auth resolves port, POST /api/goals round-trip, new goal
+  appears as `goal-card-X` in GoalsView.
+- **`tests/e2e/dashboard-crud-roundtrip.mjs`** (Move 4). 16
+  mutations across all 4 primary stores (agents/tasks/goals
+  /schedules), each proving on-disk persistence AND round-trip
+  through the GET endpoint. 17 checks total.
+- **`tests/e2e/dashboard-data-driven.mjs`** (Move 5). 6 checks:
+  /api/usage returns ≥7 daily buckets (7d seed), AgentsView
+  renders ≥5 metric tile rows, GoalsView main innerText
+  contains ≥4 of 5 status tones, OverviewView sparkline renders.
+- **`tests/e2e/dashboard-surfaces-matrix.mjs`** (Move 6). 12-row
+  surfaces matrix walks every primary sidebar item (overview,
+  agents, goals, tasks, settings, memory, activity, schedules,
+  background, skills, mcps, hooks) past the auth gate. Drops
+  `chat` — the router case exists but App.tsx's sidebar
+  sections (workspace/operations/libraries/system) don't
+  surface it; honest matrix only includes reachability.
+- **OverviewView range fix.** `/api/usage?range=24h` only ever
+  returns 1 daily bucket so the Sparkline never renders in
+  practice; switched to `range=7d` so the trend tile has
+  ≥2 points even on freshly-seeded servers. Unit test updated.
+
+### Wiring
+
+5 new npm scripts: `test:e2e:coverage`, `test:e2e:cc`,
+`test:e2e:crud`, `test:e2e:data`, `test:e2e:matrix`. Each runs
+in a sandboxed `$HOME` so they don't pollute the user's real
+store.
+
 ## v10.0.0 — 2026-07-13
 
 ### Highlights

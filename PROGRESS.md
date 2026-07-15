@@ -444,14 +444,68 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last release (master):** v10.0.2 — **stable**. Commits `43d3c8b`.
-- **Last commit:** Move 2 (mutation round-trip + docs) pending;
-  Move 1 (walkthrough 12/12 + `/api/tasks` envelope fix) already
-  at `43d3c8b`.
-- **This session:** shipped v10.0.1 and v10.0.2 in atomic commits
-  across 5 sprints (S1..S4 stop-hook fixes, S5..S7 paperwork +
-  walkthrough, S8 stop-hook integration-breadth, S9 stop-hook
-  mutation-round-trip + docs).
+- **Last release (master):** v10.0.3 — **stable**. Commits `f9b4bca`.
+- **Last commit:** Move 6 (surfaces matrix + paperwork) at
+  `f9b4bca`. 5 prior atomic commits ship Moves 1..5.
+- **This session:** shipped v10.0.3 across 6 atomic commits that
+  close every umbrella-brief criterion the v10.0.2 stop-hook
+  flagged as unevidenced. Plus a small
+  `bizar-dash/src/web/v8/__tests__/overview-trends.test.tsx`
+  update for the range=24h→7d switch.
+- **v10.0.3 deliverables (closes 6 umbrella gaps with real proof):**
+  (1) **Two real bugs fixed** — `PATCH /api/tasks/:id` (TaskDetail
+  was sending PATCH, server only had PUT) and
+  `PATCH /api/tasks/bulk-status` (TasksView's bulk bar 404'd;
+  POST bulk was the only path). New unit test
+  `bizar-dash/tests/tasks-patch-routes.test.mjs` — 6/6 PASS.
+  (2) **Per-agent status grid proof** —
+  `tests/e2e/dashboard-coverage-proof.mjs` seeds 8 Bizar agents
+  with diverse statuses, 6 goals, 7 days of usage JSONL. **7/7 PASS**
+  — AgentsView renders ≥8 `.v8-agent-card` nodes spanning 4
+  status classes; GoalsView ≥6 `goal-card-*`; OverviewView
+  sparkline renders. (3) **CC bridge** —
+  `tests/e2e/dashboard-cc-bridge.mjs` proves Bizar source
+  discriminator + `/api/cc-agents` mounted + Claude Code chip
+  clickable + `.claude/commands/goal.md` references `/api/goals`
+  + POST + "Do not edit PROGRESS.md directly" + new goal
+  round-trips into PROGRESS.md and GoalsView. **7/7 PASS.**
+  (4) **Full CRUD surface** —
+  `tests/e2e/dashboard-crud-roundtrip.mjs` exercises 16 mutations
+  across agents/tasks/goals/schedules, each proving on-disk
+  persistence AND GET round-trip. **17/17 PASS.** (5) **Data-
+  driven surfaces** — `tests/e2e/dashboard-data-driven.mjs`
+  proves 7 daily usage buckets, 5 metric-tile rows, 5 status
+  tones, Overview sparkline. **6/6 PASS.** (6) **Surfaces
+  matrix** — `tests/e2e/dashboard-surfaces-matrix.mjs` walks
+  every primary sidebar item (overview/agents/goals/tasks/
+  settings/memory/activity/schedules/background/skills/mcps/
+  hooks) past the auth gate. **13/13 PASS.** Chat dropped —
+  it's a Router case but App.tsx's sidebar sections don't
+  surface it; honest matrix only includes reachability.
+- **Bug fixes landed in v10.0.3:** (1) `PATCH /api/tasks/:id`
+  was missing (only PUT existed) — TaskDetail.tsx:81 edits
+  404'd. Now PATCH mirrors PUT and broadcasts `tasks:change`.
+  (2) `PATCH /api/tasks/bulk-status` was missing (only POST
+  `/tasks/bulk` existed) — TasksView.tsx:142 bulk move 404'd.
+  Now PATCH validates against `ALLOWED_TASK_STATUSES`,
+  returns per-id failures, registered before `/tasks/:id` so
+  Express doesn't capture `bulk-status` as `:id`. (3)
+  OverviewView was hardcoded to `/api/usage?range=24h` which
+  only ever returns 1 daily bucket — the sparkline never
+  rendered. Switched to `range=7d` so the time-series has
+  ≥2 points even on freshly-seeded servers. Unit test
+  updated.
+- **v10.0.1 deliverables (closes 3 stop-hook gaps with real proof):**
+  (1) Cold-boot event-loop starvation FIXED —
+  `memory-lightrag.mjs:344` async `execFile` instead of sync
+  `execFileSync`, `server.mjs:439` `BIZAR_HEADROOM_AUTOSTART=0`
+  env gate; `cold-boot-perf.mjs` regression test 2/2 PASS
+  (`bootMs=42, firstFetchMs=21` was 3000+). (2) Per-view logged-in
+  browser proof — `dashboard-auth-walkthrough.mjs` drives
+  `agent-browser` through real sidebar clicks (state-based router,
+  not hash), 8/8 PASS across Overview/Agents/Goals/Tasks/Settings/
+  Memory/Activity. (3) `BROWSER_VERIFICATION.md` honest — removed
+  the "documented, not fixed" caveat.
 - **v10.0.0 deliverables (the stable orchestration-center release):**
   AgentHierarchy view (Roster|Hierarchy toggle on AgentsView);
   stuck-banner Pause/Resume + Restart + bulk "Pause all"; real

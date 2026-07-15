@@ -133,6 +133,17 @@ per-view-verification and "control and configure everything" gaps.
   `results.json` in `/tmp/bh-mut-1517935/`.
 - v10.0.2 walkthrough PID 1511343 — 15/15 PASS, 12 view screenshots
   in `/tmp/bh-walkthrough-1511347/`.
+- v10.0.3 surfaces matrix — 13/13 PASS, 12 screenshots +
+  `results.json` in `/tmp/bh-mat-<pid>/`.
+- v10.0.3 coverage proof — 7/7 PASS, 4 screenshots +
+  `results.json` in `/tmp/bh-cov-<pid>/`.
+- v10.0.3 CC bridge — 7/7 PASS, 4 screenshots +
+  `results.json` in `/tmp/bh-cc-<pid>/`.
+- v10.0.3 CRUD round-trip — 17/17 PASS, 16 mutations across
+  agents/tasks/goals/schedules, `results.json` in
+  `/tmp/bh-crud-<pid>/`.
+- v10.0.3 data-driven — 6/6 PASS, 3 screenshots +
+  `results.json` in `/tmp/bh-data-<pid>/`.
 - v10-S10 walkthrough PID 837829 — 8/8 PASS (legacy reference).
 - v10-S9 cold-boot PID 814729 — 2/2 PASS.
 - v10-S7 smoke PID 782897 — 9/9 PASS, 7 screenshots ~65KB.
@@ -142,6 +153,11 @@ per-view-verification and "control and configure everything" gaps.
 - `tests/e2e/dashboard-browser-smoke.mjs` — landing-page evidence
 - `tests/e2e/dashboard-auth-walkthrough.mjs` — per-view evidence
 - `tests/e2e/dashboard-mutation-roundtrip.mjs` — mutation round-trip
+- `tests/e2e/dashboard-coverage-proof.mjs` — per-agent status grid (v10.0.3-S2)
+- `tests/e2e/dashboard-cc-bridge.mjs` — CC merge + /goal slash (v10.0.3-S3)
+- `tests/e2e/dashboard-crud-roundtrip.mjs` — 16-mutation CRUD (v10.0.3-S4)
+- `tests/e2e/dashboard-data-driven.mjs` — metric tiles + status coverage (v10.0.3-S5)
+- `tests/e2e/dashboard-surfaces-matrix.mjs` — 12-route surfaces matrix (v10.0.3-S6)
 - `tests/e2e/cold-boot-perf.mjs` — cold-boot regression
 - `tests/e2e/goals-cc-roundtrip.mjs` — goals CC-shape round-trip
 - `tests/e2e/agent-restart-roundtrip.mjs` — agent restart round-trip
