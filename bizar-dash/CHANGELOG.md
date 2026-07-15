@@ -122,6 +122,72 @@ files, and asserts what the API returns and what it persists to disk.
   S3 (GoalsView CC round-trip + E2E + 2-bug-fix), S4 (cross-boundary
   agent restart E2E + readAgent-bug fix), S5 (this paperwork).
 
+## v10.0.2 — 2026-07-15
+
+### Highlights
+
+Closes the integration-breadth and "control and configure
+everything" gaps from the v10.0.1 stop-hook. The walkthrough now
+exercises **all 12 reachable sidebar views** with seeded Bizar
+agents, tasks across all 4 columns, a CC session stub for the
+Source-filter chip, and 3 PROGRESS.md goals spanning status tones
+(15/15 checks pass). A new mutation round-trip test proves the
+dashboard's 4 primary mutations (Settings PUT, Agent POST, Task
+POST, CC-style goal append) actually land on disk **and** round-trip
+back through the same API the views consume (4/4 checks pass).
+Also fixes a latent bug: `GET /api/tasks` returned a bare array
+while the v8 UI expected `{ tasks, count }` — TasksView rendered 0
+tasks even when `tasks.json` had data.
+
+### Fixed
+
+- **`GET /api/tasks` returned a bare array.** The v8 UI
+  (`App.tsx:87` and several views) consumes `{ tasks, count }`,
+  so the bare array shape made TasksView render 0 tasks even when
+  the underlying `tasks.json` had data. Now returns the envelope
+  shape, matching what the audit-fixes + views tests already
+  mocked. Sprint v10-S11.
+
+### Added
+
+- **`tests/e2e/dashboard-auth-walkthrough.mjs` (v2)** — Full-scope
+  sidebar walkthrough. Boots `createServer()` with
+  `HOME=/tmp/bh-walk-home-<pid>` so all backend stores redirect
+  to a tmp directory (no pollution of the user's real `$HOME`).
+  Seeds 3 Bizar agents (odin/thor/frigg), 4 tasks across the
+  queued/doing/done/blocked columns, a CC session stub at
+  `~/.config/bizar/agent-status.json`, and 3 goals
+  (G-001 on-track, G-002 at-risk, G-003 at-risk) in
+  `projectRoot/.bizar/PROGRESS.md`. Drives `agent-browser` through
+  the v8 sidebar (state-based router) and asserts each view's
+  main region renders view-specific content. **15/15 PASS** —
+  all 12 reachable sidebar views (overview/tasks/goals/agents/
+  activity/memory/schedules/background/skills/mcps/hooks/settings)
+  plus the 3 API-level seeds (agents, tasks, goals).
+- **`tests/e2e/dashboard-mutation-roundtrip.mjs`** — Mutation
+  round-trip test. Same boot pattern. Each of the 4 mutations
+  proves on-disk persistence **and** round-trips back through the
+  same API the view consumes:
+  - `PUT /api/settings` → `~/.config/bizar/settings.json`
+    (verified by reading the file + GET /api/settings envelope)
+  - `POST /api/agents` → `~/.config/cline/agents/<name>.md`
+    (verified by reading the file + GET /api/agents listing)
+  - `POST /api/tasks` → `~/.config/cline/projects/<id>/tasks.json`
+    (verified by reading the file + GET /api/tasks envelope)
+  - `POST /api/goals` → `projectRoot/.bizar/PROGRESS.md`
+    (verified by reading the file + GET /api/goals listing)
+  Each result row writes its on-disk evidence (path + last 280
+  bytes) to `results.json`. **4/4 PASS**.
+
+### Changed
+
+- **`bizar-dash/BROWSER_VERIFICATION.md`** — Updated to v10.0.2.
+  Added full-scope walkthrough section (15/15) + mutation
+  round-trip section (4/4). Recorded PIDs for the v10.0.2 runs.
+  Documented that the v8 sidebar has 12 reachable items (ChatView
+  exists but is excluded from the sidebar — only reachable via
+  command palette).
+
 ## v10.0.1 — 2026-07-14
 
 ### Highlights

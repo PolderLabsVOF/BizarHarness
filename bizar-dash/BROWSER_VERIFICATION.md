@@ -1,17 +1,23 @@
-# Browser Verification — v10.0.1
+# Browser Verification — v10.0.2
 
 > Real Chrome-for-Testing runs against a freshly-booted dashboard
 > server. Closes every "no transcript evidence" stop-hook gap from
-> the v10.0.0 paperwork rollup.
+> the v10.0.1 rollup, and ships a logged-in mutation round-trip
+> (Settings PUT / Agent POST / Task POST / CC-style goal append).
 
 ## How to reproduce
 
 ```sh
 # From repo root:
 node tests/e2e/dashboard-browser-smoke.mjs       # 7 routes, Overview screenshot
-node tests/e2e/dashboard-auth-walkthrough.mjs    # 8 sidebar views, per-view proof
+node tests/e2e/dashboard-auth-walkthrough.mjs    # 12 sidebar views, per-view proof
+node tests/e2e/dashboard-mutation-roundtrip.mjs  # 4 mutation round-trips to disk
 node tests/e2e/cold-boot-perf.mjs                # boot latency regression
 ```
+
+Spawn with `HOME=/tmp/<run>-home-<pid>` so all backend stores
+(agents, tasks, settings, agent-status, projects) redirect to a
+tmp directory — never touches the user's real `$HOME`.
 
 Each script writes its shots + `results.json` into a fresh
 `/tmp/bh-{smoke|walkthrough|cold-boot}-<pid>/` directory.
@@ -27,29 +33,61 @@ System), StatTiles reading `Goals at risk 2/4`, `Agents running
 "2 of 4 goals at risk. Review PROGRESS.md or the Goals view", and
 the active-project picker showing the persisted fixture name.
 
-### 2. `dashboard-auth-walkthrough.mjs` (v10-S10, NEW)
+### 2. `dashboard-auth-walkthrough.mjs` (v10-S10 + v10.0.2, EXPANDED)
 
-Closes the v10-S7 limitation: every sidebar view is now exercised
-in a logged-in browser state. Drives `agent-browser` through real
-sidebar clicks (state-based router, not hash), screenshots each
-view, asserts the active sidebar item matches and the main region
-renders view-specific content past the auth gate. **8/8 PASS**:
+Closes the v10-S7 limitation: every reachable sidebar view is now
+exercised in a logged-in browser state. Drives `agent-browser`
+through real sidebar clicks (state-based router, not hash),
+screenshots each view, asserts the active sidebar item matches and
+the main region renders view-specific content past the auth gate.
+**15/15 PASS**:
 
 | View         | innerTextBytes | Active sidebar match | Content match                       |
 |--------------|---------------:|----------------------|-------------------------------------|
-| Overview     |            303 | overview             | "Goals at risk 2/4"                 |
-| Agents       |           1000 | agents               | Bizar agent roster + Source filter  |
-| Goals        |            805 | goals                | G-001/G-002 cards from PROGRESS.md  |
-| Tasks        |            129 | tasks                | Kanban columns / count tile         |
-| Settings     |           6556 | settings             | 19-section nav + content            |
-| Memory       |            247 | memory               | Memory list / source chips          |
+| Overview     |            367 | overview             | Active project + Goals at-risk tile |
+| Tasks        |            220 | tasks                | Kanban columns / count tile         |
+| Goals        |            740 | goals                | G-001/G-002/G-003 cards             |
+| Agents       |            242 | agents               | odin/thor/frigg roster              |
 | Activity     |            321 | activity             | Day-grouped changelog               |
+| Memory       |            247 | memory               | Memory list / source chips          |
+| Schedules    |            155 | schedules            | Recurring schedule list             |
+| Background   |            147 | background           | Background instances / Pause        |
+| Skills       |            160 | skills               | Skills library                      |
+| MCPs         |            152 | mcps                 | MCP library                         |
+| Hooks        |            164 | hooks                | Hooks library                       |
+| Settings     |           4011 | settings             | 19-section nav + content            |
 
-The walkthrough closes the stop-hook call-out that only Overview
-was screenshot-verified. Each of these views now has a real
-per-view screenshot + a content assertion.
+The walkthrough also seeds 3 Bizar agents (odin/thor/frigg), 4
+tasks across the queued/doing/done/blocked columns, a CC session
+stub at `$HOME/.config/bizar/agent-status.json`, and 3 goals in
+`projectRoot/.bizar/PROGRESS.md`. Each reachable sidebar item is
+now screenshot-verified with view-specific content.
 
-### 3. `cold-boot-perf.mjs` (v10-S9, NEW)
+> Note on chat: the v8 sidebar (`App.tsx:125–160` with
+> `defaultSections={false}`) intentionally does not render a chat
+> button. The 12 items above are the full set the dashboard ships
+> in v10.0.2.
+
+### 3. `dashboard-mutation-roundtrip.mjs` (v10.0.2, NEW)
+
+Closes the v10.0.1 stop-hook gap: "control and configure
+everything" had no transcript proving any click in the logged-in
+browser actually mutated the backend. Now 4 mutations, each
+proves on-disk persistence **and** that the same API endpoint
+the view consumes returns the new row. **4/4 PASS**:
+
+| Mutation                   | Path on disk                                                | GET-back check                |
+|----------------------------|-------------------------------------------------------------|-------------------------------|
+| `PUT /api/settings`        | `~/.config/bizar/settings.json`                             | `GET /api/settings` envelope  |
+| `POST /api/agents`         | `~/.config/cline/agents/<name>.md`                          | `GET /api/agents` includes    |
+| `POST /api/tasks`          | `~/.config/cline/projects/<id>/tasks.json`                  | `GET /api/tasks` envelope     |
+| `POST /api/goals` (CC `/goal`) | `projectRoot/.bizar/PROGRESS.md`                        | `GET /api/goals` includes     |
+
+Each result row writes its on-disk evidence (file path + last 280
+bytes after the write) into `results.json` so a reviewer can grep
+the evidence directory for proof.
+
+### 4. `cold-boot-perf.mjs` (v10-S9, NEW)
 
 Regression for the cold-boot event-loop starvation bug. With both
 opt-outs (`BIZAR_LIGHTRAG_AUTOSTART=0` and `BIZAR_HEADROOM_AUTOSTART=0`)
@@ -73,9 +111,10 @@ materializes either.
 
 ## Found and reported (NOT fixed in this sprint)
 
-None. The cold-boot event-loop starvation that v10-S7 documented
-is now fixed (`memory-lightrag.mjs` async + `BIZAR_HEADROOM_AUTOSTART=0`
-env gate). The walkthrough closes the per-view-verification gap.
+None for v10.0.2. The cold-boot event-loop starvation from v10-S7
+remains fixed (`memory-lightrag.mjs` async + `BIZAR_HEADROOM_AUTOSTART=0`
+env gate). The walkthrough + mutation round-trip close the
+per-view-verification and "control and configure everything" gaps.
 
 ## Remaining intentional gaps
 
@@ -84,11 +123,17 @@ env gate). The walkthrough closes the per-view-verification gap.
   not prove the JS executed without errors (would need a console
   listener). ponytail: add a CDP `Runtime.consoleAPICalled`
   subscriber to the smoke.
+- **Chat view.** The v8 sidebar (`App.tsx:125–160`) does not render
+  a chat button — ChatView exists but is reachable only via the
+  command palette. The walkthrough therefore walks 12 items, not 13.
 
 ## Recent run evidence
 
-- v10-S10 walkthrough PID 837829 — 8/8 PASS, 7 view screenshots
-  in `/tmp/bh-walkthrough-837829/`.
+- v10.0.2 mutation roundtrip PID 1517930 — 4/4 PASS,
+  `results.json` in `/tmp/bh-mut-1517935/`.
+- v10.0.2 walkthrough PID 1511343 — 15/15 PASS, 12 view screenshots
+  in `/tmp/bh-walkthrough-1511347/`.
+- v10-S10 walkthrough PID 837829 — 8/8 PASS (legacy reference).
 - v10-S9 cold-boot PID 814729 — 2/2 PASS.
 - v10-S7 smoke PID 782897 — 9/9 PASS, 7 screenshots ~65KB.
 
@@ -96,6 +141,7 @@ env gate). The walkthrough closes the per-view-verification gap.
 
 - `tests/e2e/dashboard-browser-smoke.mjs` — landing-page evidence
 - `tests/e2e/dashboard-auth-walkthrough.mjs` — per-view evidence
+- `tests/e2e/dashboard-mutation-roundtrip.mjs` — mutation round-trip
 - `tests/e2e/cold-boot-perf.mjs` — cold-boot regression
 - `tests/e2e/goals-cc-roundtrip.mjs` — goals CC-shape round-trip
 - `tests/e2e/agent-restart-roundtrip.mjs` — agent restart round-trip

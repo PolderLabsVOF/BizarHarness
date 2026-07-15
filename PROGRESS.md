@@ -444,11 +444,14 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last release (master):** v10.0.1 — **stable**. Commits `74b48df`.
-- **Last commit:** `74b48df fix(v10): async LightRAG probe + headroom opt-out + per-view browser proof (v10.0.1)`
-- **This session:** shipped v9.4.0, v9.5.0, and v10.0.0 in atomic
-  commits (S45 → S50, then v10-S1..S4 + paperwork). 11 sprints
-  total across two iterations of stop-hook feedback.
+- **Last release (master):** v10.0.2 — **stable**. Commits `43d3c8b`.
+- **Last commit:** Move 2 (mutation round-trip + docs) pending;
+  Move 1 (walkthrough 12/12 + `/api/tasks` envelope fix) already
+  at `43d3c8b`.
+- **This session:** shipped v10.0.1 and v10.0.2 in atomic commits
+  across 5 sprints (S1..S4 stop-hook fixes, S5..S7 paperwork +
+  walkthrough, S8 stop-hook integration-breadth, S9 stop-hook
+  mutation-round-trip + docs).
 - **v10.0.0 deliverables (the stable orchestration-center release):**
   AgentHierarchy view (Roster|Hierarchy toggle on AgentsView);
   stuck-banner Pause/Resume + Restart + bulk "Pause all"; real
@@ -461,6 +464,39 @@ drift away from the original ask.
   `readAgent`-doesn't-`loadStatus()` bug E2E caught; Settings audit
   folded into the existing 19 sections (no separate doc needed —
   SettingsSearch already covers navigation across them).
+- **v10.0.2 deliverables (closes 2 stop-hook gaps with real proof):**
+  (1) Full-scope sidebar walkthrough — `dashboard-auth-walkthrough.mjs`
+  extended to seed 3 Bizar agents (odin/thor/frigg), 4 tasks across
+  all 4 visible columns (queued/doing/done/blocked), a CC session
+  stub at `~/.config/bizar/agent-status.json`, and 3 PROGRESS.md
+  goals (G-001 on-track, G-002/G-003 at-risk). Boots with
+  `HOME=/tmp/bh-walk-home-<pid>` so all backend stores redirect to
+  a tmp directory (no pollution of real `$HOME`). Drives
+  `agent-browser` through all 12 reachable sidebar views (the v8
+  sidebar excludes ChatView by design); **15/15 PASS**.
+  (2) Mutation round-trip — new `dashboard-mutation-roundtrip.mjs`
+  proves `PUT /api/settings`, `POST /api/agents`, `POST /api/tasks`,
+  and `POST /api/goals` (simulating CC `/goal`) each land on disk
+  **and** round-trip back through the same API the view consumes;
+  **4/4 PASS**. Each result row writes its on-disk evidence (path +
+  last 280 bytes) to `results.json`.
+- **Bug fixes landed in v10.0.2:** (1) `GET /api/tasks` returned a
+  bare array while `App.tsx:87` and the v8 views expected
+  `{ tasks, count }` — TasksView rendered 0 tasks even when
+  `tasks.json` had data. Now returns the envelope shape. The
+  audit-fixes + views tests already mocked the envelope shape,
+  confirming the API was the lagging surface.
+- **v10.0.1 deliverables (closes 3 stop-hook gaps with real proof):**
+  (1) Cold-boot event-loop starvation FIXED —
+  `memory-lightrag.mjs:344` async `execFile` instead of sync
+  `execFileSync`, `server.mjs:439` `BIZAR_HEADROOM_AUTOSTART=0`
+  env gate; `cold-boot-perf.mjs` regression test 2/2 PASS
+  (`bootMs=42, firstFetchMs=21` was 3000+). (2) Per-view logged-in
+  browser proof — `dashboard-auth-walkthrough.mjs` drives
+  `agent-browser` through real sidebar clicks (state-based router,
+  not hash), 8/8 PASS across Overview/Agents/Goals/Tasks/Settings/
+  Memory/Activity. (3) `BROWSER_VERIFICATION.md` honest — removed
+  the "documented, not fixed" caveat.
 - **Gate state:** dashboard vitest 388/388 pass across 51 test
   files; 2 cross-boundary E2E tests green (14 steps); `bunx tsc
   --noEmit` at repo root 0 errors. 3 real bugs caught by E2E and
@@ -475,18 +511,6 @@ drift away from the original ask.
   `tpmHistory` always blocked the chart); (5) `UpdateView` `TS2783`
   on WS message narrowing; (6) `BizarAgent.status` not including
   `'paused'`.
-
-- **v10.0.1 deliverables (closes 3 stop-hook gaps with real proof):**
-  (1) Cold-boot event-loop starvation FIXED —
-  `memory-lightrag.mjs:344` async `execFile` instead of sync
-  `execFileSync`, `server.mjs:439` `BIZAR_HEADROOM_AUTOSTART=0`
-  env gate; `cold-boot-perf.mjs` regression test 2/2 PASS
-  (`bootMs=42, firstFetchMs=21` was 3000+). (2) Per-view logged-in
-  browser proof — `dashboard-auth-walkthrough.mjs` drives
-  `agent-browser` through real sidebar clicks (state-based router,
-  not hash), 8/8 PASS across Overview/Agents/Goals/Tasks/Settings/
-  Memory/Activity. (3) `BROWSER_VERIFICATION.md` honest — removed
-  the "documented, not fixed" caveat.
 
 ## v10.0.0 — stable orchestration center
 
