@@ -157,6 +157,52 @@ export function createTasksRouter({ state, broadcast, projectRoot }) {
     });
   }));
 
+  // v10.0.3-S1 — TasksView.tsx:142 sends PATCH /api/tasks/bulk-status
+  // with `{ ids, status }` for the bulk action bar. The server only
+  // exposed POST /api/tasks/bulk, so the kanban multi-select returned
+  // 404. Implement the PATCH shape the UI already sends.
+  // MUST be registered before `/tasks/:id` so the literal "bulk-status"
+  // segment isn't captured by Express's :id param.
+  router.patch('/tasks/bulk-status', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || readActiveProjectId();
+    const { ids, status } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'bad_request', message: 'ids[] required' });
+      return;
+    }
+    if (!ALLOWED_TASK_STATUSES.includes(status)) {
+      res.status(400).json({ error: 'bad_request', message: 'invalid status' });
+      return;
+    }
+    const moved = [];
+    const failed = [];
+    for (const id of ids) {
+      const t = await tasksStore.move(projectId, id, status);
+      if (t) {
+        moved.push(t);
+        broadcast({ type: 'tasks:change', task: t });
+      } else {
+        failed.push({ id, reason: 'not_found' });
+      }
+    }
+    res.json({ moved, failed, count: moved.length });
+  }));
+
+  // v10.0.3-S1 — TaskDetail.tsx:81 sends PATCH /api/tasks/:id to
+  // edit title/description/priority/assignee/branch. The server only
+  // exposed PUT /tasks/:id, so every logged-in edit returned 404.
+  // Mirror the PUT body so PATCH is parity with PUT.
+  router.patch('/tasks/:id', wrap(async (req, res) => {
+    const projectId = req.body?.projectId || req.query?.projectId || readActiveProjectId();
+    const task = await tasksStore.update(projectId, req.params.id, req.body || {});
+    if (!task) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    broadcast({ type: 'tasks:change', task });
+    res.json(task);
+  }));
+
   router.patch('/tasks/:id/status', wrap(async (req, res) => {
     const projectId = req.body?.projectId || readActiveProjectId();
     const { status } = req.body || {};
