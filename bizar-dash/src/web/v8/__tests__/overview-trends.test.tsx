@@ -39,8 +39,9 @@ describe('OverviewView real-time trends (v10-S2)', () => {
       })],
     ]);
     render(<OverviewView />);
-    // Tokens StatTile gets a sparkline slot; data-testid the tile so the
-    // assertion stays decoupled from StatTile internals.
+    // v10.0.3-S2 — overview now asks /api/usage?range=7d so the daily
+    // time-series has ≥2 points; the testid still anchors to the same
+    // node regardless of the URL change.
     expect(await screen.findByTestId('overview-tokens-sparkline')).toBeTruthy();
   });
 

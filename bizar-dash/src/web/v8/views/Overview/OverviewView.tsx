@@ -68,7 +68,10 @@ export function OverviewView(): JSX.Element {
   // — if usage 500s the tile still renders.
   interface UsageDay { date?: string; tokens?: number }
   interface UsageResponse { daily?: UsageDay[]; totals?: { tokens?: number } }
-  const usage = useFetch<UsageResponse>('/api/usage?range=24h');
+  // v10.0.3-S2 — `range=24h` only ever returns 1 daily bucket so the
+  // sparkline never renders. Use 7d so the time-series trends have ≥2
+  // points even on freshly seeded servers (umbrella criterion #5).
+  const usage = useFetch<UsageResponse>('/api/usage?range=7d');
   const tokenSeries = useMemo<readonly number[]>(() => {
     const days = usage.data?.daily ?? [];
     if (days.length < 2) return [];
