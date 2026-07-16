@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import { Box } from '../ui/primitives/Box.js';
 import { Inline } from '../ui/primitives/Inline.js';
 import { Cluster } from '../ui/primitives/Cluster.js';
@@ -225,10 +225,66 @@ function DefaultActions({ status }: { status?: ReactNode }): JSX.Element {
         </Inline>
       )}
       <Separator orientation="vertical" style={{ height: 16 }} />
+      <CommandPaletteTrigger />
+      <Separator orientation="vertical" style={{ height: 16 }} />
       <NotificationsPopover />
       <Separator orientation="vertical" style={{ height: 16 }} />
       <DensityToggle />
       <ThemeToggle />
     </>
+  );
+}
+
+/**
+ * CommandPaletteTrigger — a single inline button that opens the command
+ * palette. Renders a kbd hint next to the magnifier icon so users discover
+ * the ⌘K shortcut. The full palette is wired through `useCommandPaletteHotkey`
+ * in App.tsx; this trigger just dispatches the same shortcut keydown.
+ */
+function CommandPaletteTrigger(): JSX.Element {
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const kbd = isMac ? '⌘K' : 'Ctrl K';
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // Dispatch the same key the global hotkey listens for so we don't
+        // duplicate the open/close logic.
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: isMac, ctrlKey: !isMac, bubbles: true }));
+      }}
+      aria-label="Open command palette"
+      title={`Open command palette (${kbd})`}
+      data-testid="topbar-palette-trigger"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 'var(--space-2)',
+        height: 28,
+        padding: '0 8px 0 6px',
+        borderRadius: 'var(--radius-sm)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface-1)',
+        color: 'var(--fg-muted)',
+        fontSize: 'var(--fs-12)',
+        cursor: 'pointer',
+      }}
+    >
+      <Search size={14} aria-hidden="true" />
+      <span>Search…</span>
+      <kbd
+        aria-hidden="true"
+        style={{
+          padding: '1px 4px',
+          borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--border)',
+          background: 'var(--surface-2)',
+          fontSize: 'var(--fs-11)',
+          fontFamily: 'var(--font-mono)',
+          color: 'var(--fg)',
+        }}
+      >
+        {kbd}
+      </kbd>
+    </button>
   );
 }
