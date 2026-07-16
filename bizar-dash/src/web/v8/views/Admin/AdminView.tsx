@@ -37,6 +37,7 @@ interface AdminAction {
   endpoint: string;
   method: 'POST' | 'GET';
   destructive: boolean;
+  group: 'data' | 'service' | 'logs';
 }
 
 const ACTIONS: AdminAction[] = [
@@ -48,6 +49,7 @@ const ACTIONS: AdminAction[] = [
     endpoint: '/api/admin/gc',
     method: 'POST',
     destructive: false,
+    group: 'data',
   },
   {
     id: 'cache-clear',
@@ -57,6 +59,7 @@ const ACTIONS: AdminAction[] = [
     endpoint: '/api/admin/cache/clear',
     method: 'POST',
     destructive: true,
+    group: 'data',
   },
   {
     id: 'memory-reindex',
@@ -66,6 +69,7 @@ const ACTIONS: AdminAction[] = [
     endpoint: '/api/admin/memory/reindex',
     method: 'POST',
     destructive: false,
+    group: 'data',
   },
   {
     id: 'logs-purge',
@@ -75,6 +79,7 @@ const ACTIONS: AdminAction[] = [
     endpoint: '/api/admin/logs/purge',
     method: 'POST',
     destructive: true,
+    group: 'logs',
   },
   {
     id: 'restart',
@@ -84,6 +89,7 @@ const ACTIONS: AdminAction[] = [
     endpoint: '/api/admin/restart',
     method: 'POST',
     destructive: true,
+    group: 'service',
   },
   {
     id: 'rebuild',
@@ -93,6 +99,7 @@ const ACTIONS: AdminAction[] = [
     endpoint: '/api/admin/rebuild',
     method: 'POST',
     destructive: true,
+    group: 'service',
   },
   {
     id: 'export-activity',
@@ -102,7 +109,14 @@ const ACTIONS: AdminAction[] = [
     endpoint: '/api/admin/activity/export',
     method: 'GET',
     destructive: false,
+    group: 'logs',
   },
+];
+
+const GROUPS: Array<{ id: 'data' | 'service' | 'logs'; title: string }> = [
+  { id: 'data', title: 'Data & cache' },
+  { id: 'service', title: 'Service' },
+  { id: 'logs', title: 'Logs' },
 ];
 
 export function AdminView(): JSX.Element {
@@ -112,11 +126,24 @@ export function AdminView(): JSX.Element {
         title="Admin"
         description="Maintenance actions. Destructive actions require an inline confirm."
       />
-      <Grid cols={{ base: 1, md: 2, lg: 3 }} gap={3}>
-        {ACTIONS.map((a) => (
-          <AdminTile key={a.id} action={a} />
-        ))}
-      </Grid>
+      <Stack gap={4} data-testid="admin-groups">
+        {GROUPS.map((group) => {
+          const items = ACTIONS.filter((a) => a.group === group.id);
+          if (items.length === 0) return null;
+          return (
+            <Stack key={group.id} gap={2} data-testid={`admin-group-${group.id}`}>
+              <h3 style={{ margin: 0, fontSize: 'var(--fs-12)', textTransform: 'uppercase', letterSpacing: 'var(--tracking-wide)', color: 'var(--fg-muted)' }}>
+                {group.title}
+              </h3>
+              <Grid cols={{ base: 1, md: 2, lg: 3 }} gap={3}>
+                {items.map((a) => (
+                  <AdminTile key={a.id} action={a} />
+                ))}
+              </Grid>
+            </Stack>
+          );
+        })}
+      </Stack>
     </Stack>
   );
 }
