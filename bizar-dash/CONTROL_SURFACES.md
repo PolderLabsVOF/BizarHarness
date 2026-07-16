@@ -1,4 +1,4 @@
-# Control Surfaces — v10.0.0
+# Control Surfaces — v10.0.5
 
 > Enumerates every v8 view and what mutations it can perform against
 > the dashboard server. Proves the "full control and orchestration
@@ -20,20 +20,20 @@
 
 ### 🟢 Tier 3 — full CRUD
 
-| View | Creates | Updates | Deletes | Other actions |
-|---|---|---|---|---|
-| **Agents** | `POST /api/agents` | `PUT /api/agents/:name`, `POST /api/agents/:name/status` | `DELETE /api/agents/:name` | `POST /api/agents/:name/{restart,heartbeat,invoke}` |
-| **Tasks** | `POST /api/tasks` | `PATCH /api/tasks/:id`, `PATCH /api/tasks/bulk-status` | `DELETE /api/tasks/:id` | move between kanban columns |
-| **Goals** | `POST /api/goals` | `PATCH /api/goals/:id`, `PATCH /api/goals/:id/status`, `POST /api/goals/:id/key-results` | `DELETE /api/goals/:id/key-results/:krId`, `DELETE /api/goals/:id` | `POST /api/goals/:id/decompose` (goal → tasks) |
-| **Providers** | `POST /api/providers` (via auto-add wizard) | `PUT /api/providers/:id`, `POST /api/providers/:id/{enable,disable,rotate}` | `DELETE /api/providers/:id` | `POST /api/providers/auto-detect` |
-| **Projects** | `POST /api/projects`, `POST /api/projects/auto-detect`, `POST /api/projects/scan` | `PATCH /api/projects/:id`, `POST /api/projects/:id/activate` | `DELETE /api/projects/:id` | — |
-| **ClaudeSessions** | `POST /api/claude-sessions/new` | `PATCH /api/claude-sessions/:id` (rename) | `DELETE /api/claude-sessions/:id` | `POST /api/claude-sessions/:id/resume` |
-| **Settings** | — | `PUT /api/settings`, `PUT /api/settings/plugin-options` | `POST /api/settings/reset` | `POST /api/admin/{gc,memory/reindex,cache/clear}` |
-| **EnvVars** | `POST /api/env-vars` | `PUT /api/env-vars/:key` | `DELETE /api/env-vars/:key` | rotate keys |
-| **Mods** | `POST /api/mods` (install) | `PATCH /api/mods/:id` (enable/disable) | `DELETE /api/mods/:id` (uninstall) | `POST /api/mods/:id/{enable,disable}` |
-| **Dialogs** | `POST /api/dialogs/:id/{approve,deny,skip}` (resolution) | `PATCH /api/dialogs/:id` | `DELETE /api/dialogs/:id` | approve / deny / skip |
-| **Backup** | `POST /api/backup/create` | — | — | `POST /api/backup/restore`, `POST /api/backup/verify` |
-| **Eval** | `POST /api/eval/run` | — | — | rerun eval suite |
+| View | Creates | Updates | Deletes | Other actions | E2E proof |
+|---|---|---|---|---|---|
+| **Agents** | `POST /api/agents` | `PUT /api/agents/:name`, `POST /api/agents/:name/status` | `DELETE /api/agents/:name` | `POST /api/agents/:name/{restart,heartbeat,invoke}` | crud-roundtrip |
+| **Tasks** | `POST /api/tasks` | `PATCH /api/tasks/:id`, `PATCH /api/tasks/bulk-status` | `DELETE /api/tasks/:id` | move between kanban columns | crud-roundtrip |
+| **Goals** | `POST /api/goals` | `PATCH /api/goals/:id`, `PATCH /api/goals/:id/status`, `POST /api/goals/:id/key-results` | `DELETE /api/goals/:id/key-results/:krId`, `DELETE /api/goals/:id` | `POST /api/goals/:id/decompose` (goal → tasks) | crud-roundtrip |
+| **Settings** | — | `PUT /api/settings`, `PUT /api/settings/plugin-options` | `POST /api/settings/reset` | `POST /api/admin/{gc,memory/reindex,cache/clear}` | config-coverage |
+| **Providers** | `POST /api/providers` (via auto-add wizard) | `PUT /api/providers/:id`, `POST /api/providers/:id/{enable,disable,rotate}` | `DELETE /api/providers/:id` | `POST /api/providers/auto-detect` | tier3-batch-a + tier3-batch-c |
+| **Projects** | `POST /api/projects`, `POST /api/projects/auto-detect`, `POST /api/projects/scan` | `PATCH /api/projects/:id`, `POST /api/projects/:id/activate` | `DELETE /api/projects/:id` | `POST /api/projects/refresh` | crud-roundtrip |
+| **ClaudeSessions** | `POST /api/claude-sessions/new` | `PATCH /api/claude-sessions/:id` (rename) | `DELETE /api/claude-sessions/:id` | `POST /api/claude-sessions/:id/resume` | tier3-batch-c (resume) |
+| **EnvVars** | `POST /api/env-vars` | `PUT /api/env-vars/:key` | `DELETE /api/env-vars/:key` | `POST /api/env-vars/:name/test` | tier3-batch-a |
+| **Mods** | `POST /api/mods` (install) | `PATCH /api/mods/:id` (enable/disable) | `DELETE /api/mods/:id` (uninstall) | `POST /api/mods/:id/{enable,disable}`, `POST /api/mods/:id/instructions/reinstall`, `PUT /api/mods/:id/mod-file/*` | tier3-batch-a |
+| **Dialogs** | `POST /api/dialogs/:id/{approve,deny,skip}` (resolution) | `PATCH /api/dialogs/:id` | `DELETE /api/dialogs/:id` | approve / deny / skip | tier3-batch-c |
+| **Backup** | `POST /api/backup/create` | — | — | `POST /api/backup/restore`, `POST /api/backup/verify` | — |
+| **Eval** | `POST /api/eval/run` | — | — | rerun eval suite | tier3-batch-a |
 
 ### 🟡 Tier 2 — partial mutations
 
@@ -99,6 +99,29 @@ that downstream mutations trigger over WS:
 - **Activity** → `activity:new` (SSE)
 - **Update** → `update:progress`, `update:log`, `update:complete`
 - **Settings** → `settings:change`, `settings:plugin-options:changed`
+
+## v10.0.5 audit deltas
+
+- **Tier 3 proof column added.** Every Tier 3 row now names the
+  E2E script that proves the round-trip (crud-roundtrip,
+  tier3-batch-a, tier3-batch-c, config-coverage, etc). The
+  full results live in `/tmp/{crud,tier3a,tier3c,cfg,full,mat}-<pid>/`.
+- **Dialogs promoted Tier 1 → Tier 3.** New approve/deny/skip
+  buttons wired to `POST /api/dialogs/:id/{approve,deny,skip}`
+  + PATCH for `data`-merge. See Move 2c.
+- **Providers expanded.** New POST (create), PUT (update),
+  DELETE, POST `/:id/enable|disable` endpoints + matching UI
+  buttons. See Moves 2b + 2c.
+- **ClaudeSessions expanded.** New `POST /:id/resume` route
+  + Resume button per row. See Moves 2b + 2c.
+- **EnvVars expanded.** New `POST /:name/test` route + Test
+  button per row. See Move 2a.
+- **Mods expanded.** New `POST /:id/instructions/reinstall` +
+  `PUT /:id/mod-file/*` + matching buttons. See Move 2a.
+- **Eval expanded.** Schedules CRUD (POST + DELETE) + Add/Delete
+  buttons. See Move 2a.
+- **Projects expanded.** New `POST /api/projects/refresh` +
+  button. See Move 2a.
 
 ## "Full control" verdict
 

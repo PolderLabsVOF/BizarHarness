@@ -1,4 +1,4 @@
-# Browser Verification — v10.0.2
+# Browser Verification — v10.0.5
 
 > Real Chrome-for-Testing runs against a freshly-booted dashboard
 > server. Closes every "no transcript evidence" stop-hook gap from
@@ -144,6 +144,25 @@ per-view-verification and "control and configure everything" gaps.
   `/tmp/bh-crud-<pid>/`.
 - v10.0.3 data-driven — 6/6 PASS, 3 screenshots +
   `results.json` in `/tmp/bh-data-<pid>/`.
+- v10.0.4 cc-disk fallback — 5/5 PASS, screenshots +
+  `results.json` in `/tmp/bh-cc-disk-<pid>/`.
+- v10.0.4 goal-slash — 6/6 PASS, screenshots +
+  `results.json` in `/tmp/bh-goal-slash-<pid>/`.
+- v10.0.4 config coverage — 7/7 PASS, screenshots +
+  `results.json` in `/tmp/bh-cfg-<pid>/`.
+- v10.0.5 full-surfaces PID 2523918 — **37/37 PASS**, walks
+  all Router cases, screenshots in `/tmp/bh-full-<pid>/`.
+- v10.0.5 tier3-batch-a — **7/7 PASS**, mutations across
+  env-vars.test, eval.schedules CRUD, mods.reinstall,
+  providers.add-key, `results.json` in `/tmp/tier3a-<pid>/`.
+- v10.0.5 tier3-batch-c — **14/14 PASS**, mutations across
+  dialogs.{approve,deny,skip,patch}, providers.{create,update,
+  delete,enable,disable}, claude-sessions.resume,
+  `results.json` in `/tmp/tier3c-<pid>/`.
+- v10.0.5 matrix PID 2527262 — **13/13 PASS**, regression
+  guard for v10.0.3 surfaces matrix.
+- v10.0.5 crud-roundtrip PID 2529494 — **17/17 PASS**,
+  regression guard for v10.0.3 CRUD round-trip.
 - v10-S10 walkthrough PID 837829 — 8/8 PASS (legacy reference).
 - v10-S9 cold-boot PID 814729 — 2/2 PASS.
 - v10-S7 smoke PID 782897 — 9/9 PASS, 7 screenshots ~65KB.
@@ -158,6 +177,12 @@ per-view-verification and "control and configure everything" gaps.
 - `tests/e2e/dashboard-crud-roundtrip.mjs` — 16-mutation CRUD (v10.0.3-S4)
 - `tests/e2e/dashboard-data-driven.mjs` — metric tiles + status coverage (v10.0.3-S5)
 - `tests/e2e/dashboard-surfaces-matrix.mjs` — 12-route surfaces matrix (v10.0.3-S6)
+- `tests/e2e/dashboard-cc-disk-fallback.mjs` — CC disk fallback + enrichSession fix (v10.0.4-S1)
+- `tests/e2e/dashboard-cc-goal-slash.mjs` — `/goal` slash command round-trip (v10.0.4-S2)
+- `tests/e2e/dashboard-config-coverage.mjs` — Settings reset + plugin-options + providers/projects/mods (v10.0.4-S3)
+- `tests/e2e/dashboard-full-surfaces.mjs` — 37-route reachability + view-root testids (v10.0.5-M1)
+- `tests/e2e/dashboard-tier3-batch-a.mjs` — 8 missing UI buttons against existing routes (v10.0.5-M2a)
+- `tests/e2e/dashboard-tier3-batch-c.mjs` — 8 new server endpoints + UI buttons (v10.0.5-M2b+M2c)
 - `tests/e2e/cold-boot-perf.mjs` — cold-boot regression
 - `tests/e2e/goals-cc-roundtrip.mjs` — goals CC-shape round-trip
 - `tests/e2e/agent-restart-roundtrip.mjs` — agent restart round-trip

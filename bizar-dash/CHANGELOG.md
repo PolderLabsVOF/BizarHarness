@@ -1,5 +1,152 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v10.0.5 — 2026-07-16
+
+### Highlights
+
+Four atomic moves close the umbrella brief end-to-end:
+**37/37 surfaces reachable**, **16 Tier-3 mutations proven
+with E2E**, **8 silent-failure views now surface a
+recoverable error**, and **9 views gained a data-driven
+list header** (count + sparkline + filter chips).
+
+### Move 1 — Sidebar reachability
+
+- `App.tsx` sections array grew from 12 hard-coded items to
+  24, wiring every section already declared in
+  `Sidebar.tsx:DEFAULT_SECTIONS`.
+- 17 view files got a `<view>-view` testid on their root
+  container.
+- `tests/e2e/dashboard-full-surfaces.mjs` walks all 37 Router
+  cases, clicks each sidebar item, and asserts the `<view>-view`
+  root testid appears. **37/37 PASS.**
+
+### Move 2 — Tier-3 mutation coverage
+
+16 atomic mutations across 8 endpoints, all proven with E2E.
+
+- **Move 2a — 8 missing UI buttons** wired against existing
+  server endpoints: Projects refresh, EnvVars test, Eval
+  schedule add/delete, Mods reinstall-instructions + edit,
+  Providers add-key, ClaudeSessions send.
+- **Move 2b — 8 new server endpoints**: `POST/PATCH/DELETE`
+  on dialogs (`/:id/approve|deny|skip` + `/:id`), providers
+  (`POST /`, `PUT /:id`, `DELETE /:id`,
+  `POST /:id/enable|disable`), claude-sessions
+  (`POST /:id/resume`). `dialog-store.mjs` grew `decide()`
+  (sidecar decision file + unlink queue) and `patch()`
+  (merge data).
+- **Move 2c — UI buttons for new routes**: DialogsView
+  (Approve/Skip/Deny/Dismiss), ProvidersView (New + per-row
+  Edit/Enable/Disable/Delete), ClaudeSessionsView (Resume).
+
+### Move 3 — ErrorState polish
+
+New shared `<ErrorState>` in
+`bizar-dash/src/web/v8/ui/feedback/ErrorState.tsx` with two
+modes — inline (Alert tone=danger banner with optional
+retry) and block (centered icon + title + message + retry,
+mirrors EmptyState).
+
+8 silent-failure views now surface a recoverable error
+before falling through to the empty state: History, Goals,
+Activity, Usage, Agents, Libraries (skill/mcp/hook),
+Doctor, Dialogs. Each wires `onRetry={() => fetch.refetch()}`
+so a 500 / network blip is one click away from recovery.
+
+### Move 4 — ListHeader polish
+
+New shared `<ListHeader>` in
+`bizar-dash/src/web/v8/ui/data/ListHeader.tsx` — title +
+count badge + optional Sparkline + optional filter chips +
+right-aligned actions. Wired into 9 views:
+
+- **High-traffic (sparkline):** Activity (per-day bucket
+  counts).
+- **High-traffic (count + chips):** Goals (status filter
+  chips migrated under ListHeader.filters).
+- **High-traffic (count only):** Agents.
+- **Count-only:** Projects, Providers, Mods, Dialogs,
+  EnvVars, Backup.
+
+Skipped: Tasks (Kanban already counts), History (custom
+FilterChip interleaves kinds + projects).
+
+### Bug fix landed in Move 1
+
+DoctorView.tsx called `checks.map` on `snap.data.checks`,
+but the server returns `checks` as
+`{ system, config, services }` (a grouped object), not an
+array. The view crashed on first render and unmounted the
+entire React tree (no ErrorBoundary). Flatten the groups
+into a typed `CheckResult[]` and filter to entries with
+valid name/status/message.
+
+### E2E proof
+
+- `dashboard-full-surfaces.mjs` — **37/37 PASS**
+- `dashboard-tier3-batch-a.mjs` — **7/7 PASS**
+- `dashboard-tier3-batch-c.mjs` — **14/14 PASS**
+- `dashboard-surfaces-matrix.mjs` — **13/13 PASS**
+- `dashboard-crud-roundtrip.mjs` — **17/17 PASS**
+
+## v10.0.4 — 2026-07-15
+
+### Highlights
+
+Three atomic commits close the three remaining umbrella-brief gaps
+the v10.0.3 stop-hook flagged: live CC roster from disk + correct
+enrichSession path, full `/goal` slash command E2E coverage, and
+full configuration coverage (Settings Reset + plugin-options UI,
+plus E2E proof for providers/projects/mods + the new testids).
+
+### Fixed
+
+- **`enrichSession` path** (`agents-cc.mjs:73`). The function read
+  `~/.claude/sessions/<sessionId>/messages.jsonl`, but real CC logs
+  live at `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`. The
+  path always 404'd, so `lastMessageAt`, `messageCount`, and
+  `lastMessageSnippet` never populated. v10.0.4 routes through the
+  existing `resolveSessionLog()` which already encodes `cwd`
+  correctly.
+- **BIZAR_CC_HOME redirect** (`agents-cc.mjs`). All CC session
+  paths now resolve via `ccHome()` which honours `BIZAR_CC_HOME` so
+  the test suite can sandbox `$HOME/.claude` into a tmp directory.
+
+### Added
+
+- **`listAgentsFromDisk()` fallback** (`agents-cc.mjs`). Enumerates
+  `$HOME/.claude/sessions/*.json` to mint a CC roster when the
+  `claude agents --json` CLI is absent (ENOENT, exit ≠ 0, or timeout).
+  When the CLI is present the two rosters are merged by sessionId
+  with disk-only fields (`lastMessageAt`/`messageCount`/`lastMessageSnippet`)
+  filling in any gaps the CLI left behind.
+- **`extractLastSnippet()` helper** (`agents-cc.mjs`). Pulled the
+  assistant-text-block extraction out of `enrichSession` so the live
+  CLI roster and the disk fallback share the exact same snippet
+  shape.
+- **SettingsView — Configuration section** (`SettingsView.tsx`).
+  Adds a "Reset to defaults" button (`POST /api/settings/reset`)
+  with confirm gate + busy state, and a "Plugin options" JSON
+  textarea editor that PUTs to `/api/settings/plugin-options`.
+  Both expose `data-testid` for E2E.
+- **`tests/e2e/dashboard-cc-disk-fallback.mjs`** (Move 1). 5 checks
+  proving the disk fallback path end-to-end against a tmp HOME.
+- **`tests/e2e/dashboard-cc-goal-slash.mjs`** (Move 2). 6 checks
+  proving the full `/goal` slash command path: port resolution from
+  `dash-auth.json`, POST/PATCH/KR cycle round-trip, UI render, and
+  the file-watcher fallback when CC writes PROGRESS.md directly.
+- **`tests/e2e/dashboard-config-coverage.mjs`** (Move 3). 7 checks
+  covering `POST /api/settings/reset`, `PUT /api/settings/plugin-options`,
+  `GET /api/providers/auto-detect`, `POST /api/projects/scan`,
+  `GET /api/mods`, and the two new SettingsView testids.
+
+### npm scripts
+
+- `test:e2e:cc-disk` — Move 1
+- `test:e2e:goal-slash` — Move 2
+- `test:e2e:cfg` — Move 3
+
 ## v10.0.3 — 2026-07-15
 
 ### Highlights
