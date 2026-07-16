@@ -16,7 +16,7 @@ import { resolve } from 'node:path';
 const REPO = resolve(import.meta.dirname, '..', '..');
 
 const { createUpdateRouter, resetUpdateCache } = await import(
-  `${REPO}/bizar-dash/src/server/routes/update.mjs`
+  './_update-test-helpers.mjs'
 );
 
 let app;

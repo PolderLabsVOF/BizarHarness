@@ -128,6 +128,14 @@ export function resetUpdateCache() {
 }
 
 /**
+ * Reset the concurrency guard — exposed for tests so each case
+ * starts with a clean _activeRun state.
+ */
+export function resetConcurrencyGuard() {
+  _activeRun = null;
+}
+
+/**
  * Compute the per-package installed map. For the dashboard package
  * itself we use INSTALLED_BIZAR_VERSION (the @polderlabs/bizar version
  * that bundles the dashboard). The other packages fall back to null
