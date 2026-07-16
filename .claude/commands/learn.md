@@ -1,44 +1,46 @@
 ---
-description: Extract patterns from the current Claude Code session and append to .bizar/AGENTS_SELF_IMPROVEMENT.md.
-allowed-tools: Read, Write, Bash, Grep
+description: Pillar D — review instincts and decisions from the self-learning log, ask user what to save/promote/drop.
+allowed-tools: AskUserQuestion, Read, Write, Bash
 ---
 
-# /learn — Extract Patterns from the Current Session
+# /learn — Self-Learning Review
 
-You are the `heimdall` (self-improvement) agent. Reflect on the
-current Claude Code session and extract reusable patterns, then
-append them to `.bizar/AGENTS_SELF_IMPROVEMENT.md`.
+You are the `heimdall` (self-improvement) agent. Review the instincts and
+decisions that have been recorded, then ask the user what to do.
 
-## What to Extract
+## Sources
 
-1. **Recurring workflows** — anything you (or the user) repeated
-   three or more times in this session
-2. **Project-specific conventions** — stack quirks, naming patterns,
-   file layout choices that future sessions should know
-3. **Gotchas** — bugs you hit, footguns you discovered, workarounds
-   that worked
-4. **Tooling tips** — non-obvious `bizar` subcommands, project-level
-   scripts, MCP server tricks
-5. **Cross-session conventions** — anything that would help the next
-   agent hit the ground running
+- Instinct log: `.bizar/learning/instincts.jsonl` (or via SDK: `listInstincts()`)
+- Decisions log: `.bizar/learning/decisions.jsonl` (or via SDK: `listDecisions()`)
+- Session traces: `.harness/traces/sessions.jsonl`
 
 ## Process
 
-1. Re-read the session transcript. Identify 3-7 distinct patterns.
-2. For each, write a short block:
-   - **Pattern**: one-line title
-   - **Context**: when this applies
-   - **Action**: the concrete recipe
-   - **Example**: file:line or command snippet
-3. Append (do NOT overwrite) the formatted blocks to
-   `.bizar/AGENTS_SELF_IMPROVEMENT.md`. Add a dated header.
-4. If the file doesn't exist yet, create it with the standard
-   header first.
-5. Confirm the append succeeded by tailing the file.
+1. Read recent instincts (`listInstincts()` or read the JSONL directly).
+2. Read recent decisions (`listDecisions()` or read the JSONL directly).
+3. Read `.harness/traces/sessions.jsonl` for recent session outcomes.
+4. Ask the user one question per category via `AskUserQuestion`:
+
+   a) **New instinct?** — "You ran `make check` N times. Save a low-confidence
+      instinct for it?" → if yes, call `recordInstinct({ trigger, action, confidence: 0.3, evidence: [...], scope: 'project' })`
+
+   b) **Promote existing?** — "An instinct for `npm install` has confidence 0.3.
+      Promote it to 0.6?" → if yes, call `promoteInstinct(id, 0.6)`
+
+   c) **Drop stale?** — "An instinct for `git push` (confidence 0.1) hasn't
+      fired in N sessions. Drop it?" → if yes, call `dropInstinct(id)`
+
+5. Summarise what was saved, promoted, or dropped.
+
+## SDK Functions
+
+```ts
+import { recordInstinct, listInstincts, promoteInstinct, dropInstinct } from '@polderlabs/bizar-sdk/learning';
+// or monorepo path: packages/sdk/dist/learning/instincts.js
+```
 
 ## Constraints
 
-- Don't duplicate content already in the file. Scan it first.
-- Don't extract one-off trivia. Patterns must be reusable.
-- Keep each block under ~10 lines. Long entries go in the per-agent
-  memory vault via `bizar memory add`.
+- Use `AskUserQuestion` (one per category, not one per item).
+- Do NOT use `console.log` — write to the instincts/decisions log only.
+- Confidence is 0–1. Auto-recorded instincts use 0.3 (low confidence, user-promotable).
