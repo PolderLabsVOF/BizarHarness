@@ -13,6 +13,8 @@ import { Stack } from '../../ui/primitives/Stack.js';
 import { StatTile, StatGrid } from '../../ui/data/StatTile.js';
 import { Card, CardBody, CardHeader } from '../../ui/data/Card.js';
 import { Badge } from '../../ui/data/Badge.js';
+import { Banner } from '../../ui/feedback/Banner.js';
+import { Button } from '../../ui/controls/Button.js';
 import { ActivityFeed, type ActivityItem } from '../../ui/activity/ActivityFeed.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { Sparkline } from '../../ui/data/Sparkline.js';
@@ -103,6 +105,19 @@ export function OverviewView(): JSX.Element {
 
   return (
     <Stack gap={5} data-testid="overview-view">
+      {snapshot.error && (
+        <Banner
+          tone="warning"
+          data-testid="overview-error-banner"
+          action={
+            <Button variant="ghost" size="sm" onClick={() => void snapshot.refetch()}>
+              Retry
+            </Button>
+          }
+        >
+          Snapshot unavailable: {snapshot.error.message || String(snapshot.error)}
+        </Banner>
+      )}
       <ViewHeader
         title="Overview"
         description="What's moving in the harness right now."
@@ -119,24 +134,28 @@ export function OverviewView(): JSX.Element {
           value={String((tasks.queued || 0) + (tasks.active || 0))}
           trend={(tasks.active || 0) > (tasks.queued || 0) ? 'up' : 'flat'}
           delta={`${tasks.done || 0} done · ${tasks.blocked || 0} blocked`}
+          loading={snapshot.loading}
         />
         <StatTile
           label="Goals at risk"
           value={`${goals.atRisk || 0} / ${goals.total || 0}`}
           trend={(goals.atRisk || 0) > 0 ? 'down' : 'flat'}
           delta={`${goals.done || 0} done`}
+          loading={snapshot.loading}
         />
         <StatTile
           label="Agents running"
           value={`${agents.running || 0} / ${agents.total || 0}`}
           trend={(agents.running || 0) > 0 ? 'up' : 'flat'}
           delta={`${agents.idle || 0} idle · ${agents.error || 0} error`}
+          loading={snapshot.loading}
         />
         <StatTile
           label="Tokens (24h)"
           value={tokens.last24h ? `${(tokens.last24h / 1_000_000).toFixed(1)}M` : '—'}
           trend={tokens.trend || 'flat'}
           delta="last 24h"
+          loading={snapshot.loading}
           sparkline={
             tokenSeries.length >= 2 ? (
               <span data-testid="overview-tokens-sparkline">
