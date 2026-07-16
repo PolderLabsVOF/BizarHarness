@@ -86,23 +86,46 @@ Prerequisites: **Claude Code CLI** (`claude` on `PATH`; install via
 `npm install -g @anthropic-ai/claude-code` or follow
 [the Claude Code install docs](https://docs.claude.com/claude-code/getting-started)).
 
+## Install
+
+Four install paths — pick whichever fits the platform.
+
+### 1. `git clone` (Linux, macOS, WSL)
+
 ```bash
-# Install (stable v7.0.0)
-npm install @polderlabs/bizar
-
-# Or try the latest beta
-npm install @polderlabs/bizar@beta
-
-# Run
-npx bizar
+git clone https://github.com/DrB0rk/BizarHarness.git
+cd BizarHarness
+chmod +x install.sh
+./install.sh
 ```
+
+### 2. curl-pipe one-liner (Linux, macOS, WSL)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DrB0rk/BizarHarness/main/install.sh | bash
+```
+
+### 3. Homebrew (macOS, Linux)
+
+```bash
+brew tap DrB0rk/bizar
+brew install bizar
+```
+
+### 4. Scoop (Windows PowerShell)
+
+```powershell
+scoop bucket add bizar https://github.com/DrB0rk/scoop-bizar
+scoop install bizar
+```
+
+After install: `bizar doctor` to verify, `bizar` to launch the dashboard.
 
 The installer handles:
 
-- Cloning the dashboard repo
 - Installing Bizar skills + agents + commands to `.claude/`
   (`skills/`, `agents/`, `commands/`, `hooks/`)
-- Configuring Semble (code search MCP) and Skills CLI
+- Configuring the in-process runtime (no separate MCP server needed in v10.x)
 
 If you'd rather install manually, see
 [docs/migration-guide.md](docs/migration-guide.md).

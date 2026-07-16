@@ -5,9 +5,13 @@ description: Use when working with, configuring, troubleshooting, or understandi
 
 # Bizar
 
-Norse-pantheon multi-agent system for Claude Code. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
+Norse-pantheon multi-agent system for Claude Code. 14 agents across 6 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
 
 ## Installation
+
+Four install paths — pick whichever fits the platform.
+
+### 1. `git clone` (Linux, macOS, WSL)
 
 ```bash
 git clone https://github.com/DrB0rk/BizarHarness.git
@@ -15,6 +19,28 @@ cd BizarHarness
 chmod +x install.sh
 ./install.sh
 ```
+
+### 2. curl-pipe one-liner (Linux, macOS, WSL)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DrB0rk/BizarHarness/main/install.sh | bash
+```
+
+### 3. Homebrew (macOS, Linux)
+
+```bash
+brew tap DrB0rk/bizar
+brew install bizar
+```
+
+### 4. Scoop (Windows PowerShell)
+
+```powershell
+scoop bucket add bizar https://github.com/DrB0rk/scoop-bizar
+scoop install bizar
+```
+
+After install: `bizar doctor` to verify, `bizar` to launch the dashboard.
 
 ## Architecture
 
@@ -24,17 +50,22 @@ All subagents use Obsidian vault memory with **per-project vaults**. Call `obsid
 
 ## Agent Reference
 
-| Agent | Model | Tier | Cost | When to Route |
-|---|---|---|---|---|
-| **Odin** ᛟ | MiniMax-M3 | Router | $0.30/M · $1.20/M out | Primary entry point. Decomposes and dispatches. |
-| **Mimir** ᛗ | DeepSeek V4 Flash | Free | **$0** | Deep codebase research, Semble-first exploration, docs analysis |
-| **Heimdall** ᚹ | DeepSeek V4 Flash | Free | **$0** | Simple edits, file ops, mechanical CRUD, quick answers |
-| **Hermod** ᚱ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI |
-| **Thor** ᚦ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Moderate implementation, tests, debugging, refactoring |
-| **Tyr** ᛏ | MiniMax-M3 | High | $0.30/M · $1.20/M out | Complex features, architecture, deep debugging, cross-cutting refactor |
-| **Vidarr** ᛉ | GPT-5.5 | Ultra | ChatGPT sub | Last resort when Tyr fails or debugging is stuck |
-| **Forseti** ᚨ | MiniMax-M3 | Gate | $0.30/M · $1.20/M out | Plan auditor — reviews Tyr/Vidarr plans before execution. edit: deny. |
-| **Semble** | — | — | **$0** | MCP search tool, not an agent. Semble-first code search. |
+| Agent | Model | Tier | When to Route |
+|---|---|---|---|
+| **Odin** ᛟ | gpt-5.6-terra | High | Primary entry point. Decomposes and dispatches. |
+| **Forseti** ᚨ | gpt-5.6-sol | Premium | Plan auditor — reviews Tyr/Vidarr plans before execution. edit: deny. |
+| **Frigg** ᚠ | MiniMax-M3 | Default | Read-only Q&A, memory recall, single-step lookups. |
+| **Heimdall** ᚹ | MiniMax-M3 | Default | Mechanical edits, file ops, .bizar/ maintenance. |
+| **Hermod** ᚱ | MiniMax-M3 | Default | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI. |
+| **Mimir** ᛗ | MiniMax-M3 | Default | Deep codebase research, Semble-first exploration, docs analysis. |
+| **Quick** ⚡ | deepseek-v4-flash-free | Budget | Single-shot tiny tasks. |
+| **Semble-Search** | MiniMax-M3 | Default | Semantic code search via Semble MCP. |
+| **Thor** ᚦ | MiniMax-M2.7 | Mid | Moderate implementation, tests, debugging, refactoring. |
+| **Tyr** ᛏ | gpt-5.6-terra | High | Top-tier implementation, architecture, complex debugging. |
+| **Vidarr** ᛉ | gpt-5.6-sol | Premium | Last resort when Tyr fails or debugging is stuck. |
+| **Vor** ᛗ | mimo-v2.5-free | Budget | Clarifying questions. |
+| **Baldr** ᛒ | gpt-5.6-sol | Premium | UI design language, visually-oriented critique. |
+| **agent-browser** | MiniMax-M3 | Default | Browser-driven E2E, Playwright-style flows. |
 
 ## Odin Routing Rules
 
@@ -50,22 +81,27 @@ All subagents use Obsidian vault memory with **per-project vaults**. Call `obsid
 ### Routing Cheat Sheet
 
 ```
-Research / Understanding     → @mimir  (free, Semble-first)
-Quick edit / File ops        → @heimdall  (free)
-Git / PR / Merge             → @hermod  (M2.7)
-Moderate implementation      → @thor  (M2.7)
-Complex implementation       → @tyr  (M3, after @forseti audit)
-Ultimate fallback           → @vidarr  (GPT-5.5, after @forseti audit)
-Plan review / Audit         → @forseti  (M3, review only)
+Research / Understanding     → @mimir  (default, Semble-first)
+Single-shot tiny task         → @quick  (budget)
+Clarifying question           → @vor  (budget)
+Read-only Q&A                 → @frigg  (default)
+Quick edit / File ops         → @heimdall  (default)
+Git / PR / Merge              → @hermod  (default)
+Browser-driven E2E            → @agent-browser  (default)
+Moderate implementation       → @thor  (mid)
+UI design language            → @baldr  (premium)
+Complex implementation        → @tyr  (high, after @forseti audit)
+Ultimate fallback             → @vidarr  (premium, after @forseti audit)
+Plan review / Audit           → @forseti  (premium, review only)
 ```
 
 ### Cost Escalation
 
 ```
-Free (Mimir, Heimdall) → $Mid (Thor, Hermod) → $$High (Tyr) → $$$Ultra (Vidarr)
+Budget (Quick, Vor) → Default (Heimdall, Hermod, Mimir, Frigg) → Mid (Thor) → High (Odin, Tyr) → Premium (Forseti, Vidarr, Baldr)
 ```
 
-Never use a paid agent for work a free agent can do. Never use Tyr for what Thor can handle.
+Never use a paid agent for work a budget or default agent can do. Never use Tyr for what Thor can handle.
 
 ## When to use Glyphs (visual plans)
 
