@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // PreToolUse — Bizar harness hook (Claude Code format).
 //
-// Runs BEFORE any tool call against `Write`, `Edit`, `MultiEdit`, or `Bash`.
+// Runs BEFORE any tool call against `Write`, `Edit`, or `MultiEdit`.
+// (Bash is handled by `pretooluse-bash.mjs`, registered separately.)
 //
 // Claude Code stdin shape:
 //   {
@@ -29,8 +30,7 @@
 //   1. Block writes to .env, .envrc, secrets/, credentials/,
 //      node_modules/, *.lock, *.lockb, package-lock.json, bun.lock*, yarn.lock.
 //   2. Warn (don't block) on console.log / debugger / .only() in src/.
-//   3. Scan `Bash` commands against the dangerous-patterns list.
-//   4. Always return a small context line for the next AI decision.
+//   3. Always return a small context line for the next AI decision.
 
 'use strict';
 
@@ -59,9 +59,6 @@ process.stdin.on('end', () => {
     filePath = String(toolInput.file_path || '');
     const edits = Array.isArray(toolInput.edits) ? toolInput.edits : [];
     content = edits.map((e) => String((e && e.new_string) || '')).join('\n');
-  } else if (toolName === 'Bash') {
-    // No "path" for Bash — use the command string as the inspect surface.
-    content = String(toolInput.command || '');
   } else {
     process.stdout.write('{}\n');
     return;
@@ -86,8 +83,6 @@ process.stdin.on('end', () => {
   let blockReason = '';
   if (filePath && blocked.some((re) => re.test(lowerPath))) {
     blockReason = filePath;
-  } else if (toolName === 'Bash' && blocked.some((re) => re.test(lowerContent))) {
-    blockReason = '(matched in Bash command)';
   }
 
   if (blockReason) {
@@ -105,8 +100,7 @@ process.stdin.on('end', () => {
 
   // 2. Warn — debug artifacts in src/ (only when a path-shaped target exists).
   const notes = [];
-  const target = filePath || content; // for Bash, content == command (rarely matches)
-  const lowerTarget = target.toLowerCase();
+  const lowerTarget = filePath.toLowerCase();
   if (
     filePath &&
     /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(lowerTarget) &&
