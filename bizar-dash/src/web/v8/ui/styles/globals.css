@@ -249,3 +249,17 @@ h4 {
 .v8-dropdown-menu__radio[data-state='checked'] .v8-dropdown-menu__radio-indicator {
   display: inline-flex;
 }
+
+/* Universal focus-visible ring for keyboard navigation across custom
+   buttons, sidebar items, and design-system Button variants. v10.4.3
+   L4 audit fix. */
+.v8-btn:focus-visible,
+.v8-button:focus-visible,
+button[data-section-toggle]:focus-visible,
+button[data-nav-item]:focus-visible,
+.v8-theme-toggle:focus-visible,
+.v8-density-toggle:focus-visible,
+.v8-icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
