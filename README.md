@@ -15,7 +15,6 @@ Claude Code Agent SDK in-process — no subprocess, no port, no serve-info file.
 [![Safety](https://img.shields.io/badge/safety-36%20patterns-ff6b6b)](docs/safety.md)
 [![Mimir](https://img.shields.io/badge/mimir-deep--research-0ea5e9)](plugins/bizar/skills)
 [![Skills](https://img.shields.io/badge/skills.sh-integrated-f59e0b)](https://www.skills.sh)
-[![Headroom](https://img.shields.io/badge/headroom-integrated-8A2BE2)](https://github.com/headroomlabs-ai/headroom)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 `npm install @polderlabs/bizar` · `npx bizar`
@@ -104,7 +103,6 @@ The installer handles:
 - Installing Bizar skills + agents + commands to `.claude/`
   (`skills/`, `agents/`, `commands/`, `hooks/`)
 - Configuring Semble (code search MCP) and Skills CLI
-- Headroom (token-saving proxy)
 
 If you'd rather install manually, see
 [docs/migration-guide.md](docs/migration-guide.md).

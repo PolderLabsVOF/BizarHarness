@@ -10,6 +10,3 @@
 
 ---
 
-<!-- headroom:rtk-instructions -->
-
-<!-- end headroom -->

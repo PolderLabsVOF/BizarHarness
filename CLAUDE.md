@@ -1,8 +1,3 @@
-<!-- headroom:rtk-instructions -->
-# RTK (Rust Token Killer) — token-optimized shell commands (always safe to prefix).
-
-<!-- end headroom -->
-
 # CLAUDE.md — Bizar Harness
 
 > **Canonical Claude Code entry point for Bizar Harness.**

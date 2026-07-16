@@ -94,8 +94,20 @@ mirror-claude-md:  ## Regenerate .claude/CLAUDE.md mirror from AGENTS.md
 mirror-claude-md-check:  ## CI check: .claude/CLAUDE.md is in sync with AGENTS.md
 	@./scripts/mirror-claude-md.sh --check
 
+cleanup:  ## Scan for stale rtk/headroom/ponytail references (exits 1 if any found)
+	@echo "▶ Scanning for rtk/headroom/ponytail references..."
+	@matches=$$(grep -rEn "rtk|headroom|ponytail|RTK|Headroom|Ponytail" \
+		--exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist \
+		--exclude-dir=.harness/traces --exclude-dir=research . 2>/dev/null \
+		| grep -v '^[^:]*:# ponytail:' || true); \
+	if [ -n "$$matches" ]; then \
+		echo "✗ Found stale references:"; echo "$$matches"; exit 1; \
+	else \
+		echo "✓ no stale rtk/headroom/ponytail references"; \
+	fi
+
 mcp-serve:  ## Run the Bizar MCP server (stdio) for Claude Code
 	@node packages/sdk/dist/mcp/bin.js
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve
+.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve cleanup

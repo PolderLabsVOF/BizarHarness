@@ -27,8 +27,6 @@ services:
       # Optional: OpenTelemetry export
       - BIZAR_OTEL=${BIZAR_OTEL:-0}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-      # Optional: Headroom context compression
-      - HEADROOM_ENABLED=${HEADROOM_ENABLED:-0}
       # Optional: Tailscale auth key (set for Funnel / Serve)
       - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
     healthcheck:

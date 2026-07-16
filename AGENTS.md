@@ -1,8 +1,3 @@
-<!-- headroom:rtk-instructions -->
-# RTK (Rust Token Killer) — token-optimized shell commands (always safe to prefix).
-
-<!-- end headroom -->
-
 # AGENTS.md — Bizar Harness
 
 > **Bizar Harness** is a Claude Code-native multi-agent coding harness

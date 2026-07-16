@@ -282,7 +282,7 @@ The journey from L2 to L5 is structured as three phases. The companion `ROADMAP.
 **Status: shipped.** Bizar at v6.3.0 has a complete CLI, dashboard, Claude Code MCP server, memory service, 12 agent definitions, and 656+ plugin + 71+ SDK + 27+ E2E + 73/73 audit tests. The platform is usable for one-shot and short-horizon work. Long-horizon is the gap.
 
 What is in place:
-- CLI (15+ command modules, `install/update/dash/service/bg/memory/plan/headroom/doctor/test-gate/...`)
+- CLI (15+ command modules, `install/update/dash/service/bg/memory/plan/doctor/test-gate/...`)
 - Dashboard server (v1 on `:4097`, v2 on `:4098`, 18 memory endpoints, mods loader with security layer, task delegator, background agent retry loop, structured logging, Prometheus metrics)
 - Dashboard web (17 views, kanban tasks, plan canvas, settings with auto-save, memory tab with 5 panels, doctor page, 178 vitest tests)
 - Claude Code MCP server (22 tools, background agent system with stall detection, loop guard, compaction gate at 50% context; plugin rewired from Cline `AgentExtension` to Claude Code `@anthropic-ai/claude-agent-sdk` MCP tool registration in v6.3.0)
