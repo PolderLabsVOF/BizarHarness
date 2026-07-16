@@ -9,6 +9,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import express from 'express';
 import { wrap } from './_shared.mjs';
 
 /**
@@ -17,7 +18,7 @@ import { wrap } from './_shared.mjs';
  * @returns {import('express').Router}
  */
 export function createAuditRouter({ projectRoot }) {
-  const router = require('express').Router();
+  const router = express.Router();
   const LATEST = join(projectRoot, '.harness', 'audit', 'latest.json');
 
   router.get('/audit', wrap(async (_req, res) => {
