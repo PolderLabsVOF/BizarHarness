@@ -21,6 +21,31 @@ import type { BizarAgent, CCAgent, WsMessage } from '../../data/types.js';
 import { AlertTriangle, Bot, Cpu, Pause, Play, Plus, RotateCw } from 'lucide-react';
 import { AgentHierarchy } from './AgentHierarchy.js';
 
+/**
+ * Strip leaked LLM interior monologue from agent card snippets.
+ * Clips to the first sentence, caps at 140 chars.
+ */
+export function sanitizeSummary(raw: string | undefined): string {
+  if (!raw) return '';
+  let s = raw.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  s = s.split('\n').filter((l) => !l.includes('```')).join('\n');
+  s = s.replace(/\bworktree:\s*/g, '');
+  s = s.replace(/\/tmp\//g, '');
+  s = s.replace(/\bReason:\s*/g, '');
+  s = s.replace(/^\s*→\s*/gm, '');
+  s = s.trim();
+  if (!s) return '';
+  // Strip leading bracketed prefix — [Premise — …] or [Analysis] etc.
+  s = s.replace(/^\[[\w\s]+[-—]\s*/, '');
+  s = s.replace(/^\[[\w\s]+\]\s*/gi, '');
+  s = s.trim();
+  if (!s) return '';
+  const m = s.match(/^[^.!?\n]+[.!?]/);
+  const first = m ? m[0] : s;
+  if (first.length <= 140) return first;
+  return first.slice(0, 137) + '…';
+}
+
 const SOURCE_STORAGE_KEY = 'bizar.agents.sourceFilter';
 const SOURCE_LABELS = {
   all: 'All',
@@ -94,7 +119,7 @@ function mapCC(a: CCAgent): AgentCardProps {
     name: a.name || a.sessionId?.slice(0, 8) || 'unknown',
     role: a.kind === 'background' ? 'CC background' : 'CC interactive',
     status,
-    currentTask: a.lastMessageSnippet || undefined,
+    currentTask: sanitizeSummary(a.lastMessageSnippet),
     lastActivity: a.lastMessageAt ? new Date(a.lastMessageAt).toLocaleTimeString() : (a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : undefined),
     tasksToday: a.messageCount || 0,
     // CC agents don't expose successRate/tasksSucceeded — only messageCount.
