@@ -92,17 +92,17 @@ describe('S38 ChatView', () => {
     expect(await screen.findByTestId('chat-bubble-assistant')).toBeTruthy();
   });
 
-  it('POSTs to /api/chat/sessions on `+ New session`', async () => {
-    const state = installFetchMock([
+  it('opens the New session modal on `+ New session` click', async () => {
+    installFetchMock([
       [/^\/api\/chat(\?|$)/, () => jsonResponse(200, { messages: [], sessions: [] })],
       [/^\/api\/chat\/sessions/, () => jsonResponse(200, { sessions: [] })],
     ]);
     render(<ChatView />);
     const create = await screen.findByTestId('chat-create-session');
     fireEvent.click(create);
+    // Modal should open with title "New Claude session"
     await waitFor(() => {
-      const hit = state.posts.find((p) => p.url.endsWith('/api/chat/sessions') && p.method === 'POST');
-      expect(hit).toBeTruthy();
+      expect(screen.getByText('New Claude session')).toBeTruthy();
     });
   });
 

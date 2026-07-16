@@ -26,6 +26,7 @@ import { fetchJson, FetchError } from '../../data/fetcher.js';
 import { MessageBubble, EmptyTranscript } from '../../ui/chat/MessageBubble.js';
 import { readEventStream } from '../../ui/chat/EventStream.js';
 import type { ChatMessage, ChatSession, WsMessage } from '../../data/types.js';
+import { NewSessionModal } from '../ClaudeSessions/NewSessionModal.js';
 
 interface ChatPayload {
   messages: ChatMessage[];
@@ -55,6 +56,7 @@ export function ChatView(): JSX.Element {
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [newSessionOpen, setNewSessionOpen] = useState<boolean>(false);
 
   // Seed active session from the first row in the response.
   useEffect(() => {
@@ -198,7 +200,7 @@ export function ChatView(): JSX.Element {
             <Button variant="ghost" onClick={() => void audit()} data-testid="chat-audit">
               <ShieldCheck size={14} aria-hidden /> Audit
             </Button>
-            <Button variant="primary" onClick={() => void createSession()} data-testid="chat-create-session">
+            <Button variant="primary" onClick={() => setNewSessionOpen(true)} data-testid="chat-create-session">
               <MessageSquarePlus size={14} aria-hidden /> New session
             </Button>
           </Inline>
@@ -351,6 +353,16 @@ export function ChatView(): JSX.Element {
           </CardBody>
         </Card>
       </Inline>
+
+      <NewSessionModal
+        open={newSessionOpen}
+        onOpenChange={setNewSessionOpen}
+        onCreated={(id) => {
+          setActiveId(id);
+          void payload.refetch();
+          void sessionsPayload.refetch();
+        }}
+      />
     </Stack>
   );
 }
