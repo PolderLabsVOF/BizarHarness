@@ -162,7 +162,7 @@ export function GoalsView(): JSX.Element {
   }, [openGoalId]);
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="goals-view">
       <ViewHeader
         title="Goals"
         description="Long-horizon commitments parsed from .bizar/PROGRESS.md."

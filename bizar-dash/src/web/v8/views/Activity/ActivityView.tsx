@@ -249,7 +249,7 @@ export function ActivityView(): JSX.Element {
   };
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="activity-view">
       <ViewHeader
         title="Activity"
         description="Day-grouped changelog across tasks, agents, goals, settings, and git."

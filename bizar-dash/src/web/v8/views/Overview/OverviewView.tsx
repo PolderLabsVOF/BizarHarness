@@ -102,7 +102,7 @@ export function OverviewView(): JSX.Element {
   const tokens = ov.tokens || {};
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="overview-view">
       <ViewHeader
         title="Overview"
         description="What's moving in the harness right now."

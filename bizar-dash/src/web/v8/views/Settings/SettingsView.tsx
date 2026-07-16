@@ -354,7 +354,7 @@ export function SettingsView(): JSX.Element {
   }, []);
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} data-testid="settings-view">
       <Grid cols={3} gap={5}>
         <aside style={{ position: 'sticky', top: 0, alignSelf: 'start' }}>
           <SettingsNav items={navItems} activeId={activeId} onSelect={handleSelect} />
@@ -903,8 +903,137 @@ export function SettingsView(): JSX.Element {
               control={<Button variant="secondary" disabled={busy === 'purge-logs'} onClick={() => void runAdmin('logs/purge', 'POST', '/api/admin/logs/purge', 'Delete log files older than 14 days?') }><Trash2 size={12} aria-hidden /> {busy === 'purge-logs' ? 'Purging…' : 'Purge logs'}</Button>}
             />
           </SettingsSection>
+
+          {/* 19. Configuration — Reset + Plugin options (v10.0.4) */}
+          <SettingsSection
+            id="configuration"
+            title="Configuration"
+            description="Reset to defaults, and edit the plugin-options sidecar."
+            icon={<SettingsIcon size={14} aria-hidden />}
+          >
+            <SettingsRow
+              id="config-reset"
+              label="Reset settings to defaults"
+              description="Calls POST /api/settings/reset. Restores every key to its DEFAULT_SETTINGS value."
+              control={
+                <Inline align="center" gap={2}>
+                  <Button
+                    variant="danger"
+                    disabled={busy === 'settings-reset'}
+                    data-testid="settings-reset"
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && typeof window.confirm === 'function'
+                          && !window.confirm('Reset every settings key to its default?')) return;
+                      setBusy('settings-reset');
+                      setError(null);
+                      (async () => {
+                        try {
+                          const next = await fetchJson<{ data?: Partial<SettingsState> }>('/api/settings/reset', { method: 'POST' });
+                          if (next?.data) setSettings({ ...DEFAULTS, ...next.data });
+                          setLastAction(`reset @ ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`);
+                        } catch (err) {
+                          setError(err instanceof FetchError ? err.message : (err as Error).message);
+                        } finally {
+                          setBusy(null);
+                        }
+                      })();
+                    }}
+                  >
+                    <RotateCw size={12} aria-hidden /> {busy === 'settings-reset' ? 'Resetting…' : 'Reset to defaults'}
+                  </Button>
+                </Inline>
+              }
+            />
+            <SettingsRow
+              id="config-plugin-options"
+              label="Plugin options"
+              description="JSON sidecar at ~/.config/bizar/plugin-options.json. Persisted via PUT /api/settings/plugin-options."
+              control={
+                <PluginOptionsEditor />
+              }
+            />
+          </SettingsSection>
         </Stack>
       </Grid>
     </div>
+  );
+}
+
+/**
+ * PluginOptionsEditor — small JSON textarea bound to the
+ * `~/.config/bizar/plugin-options.json` sidecar. Separate component
+ * because the rest of SettingsView is one-shot-on-mount and we want
+ * the editor to survive parent re-renders without clobbering the
+ * in-flight edit buffer. v10.0.4 — adds UI wiring for the previously
+ * unwired PUT /api/settings/plugin-options endpoint.
+ */
+function PluginOptionsEditor(): JSX.Element {
+  const [text, setText] = useState<string>('{}');
+  const [busy, setBusy] = useState<boolean>(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const opts = await fetchJson<Record<string, unknown>>('/api/settings/plugin-options');
+        if (!cancelled) setText(JSON.stringify(opts ?? {}, null, 2));
+      } catch (err) {
+        if (!cancelled) setError(err instanceof FetchError ? err.message : (err as Error).message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async (): Promise<void> => {
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); } catch (err) {
+      setError(`Invalid JSON: ${(err as Error).message}`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await fetchJson('/api/settings/plugin-options', { method: 'PUT', body: parsed as Record<string, unknown> });
+      setSavedAt(Date.now());
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack gap={2} style={{ width: '100%' }}>
+      <textarea
+        data-testid="plugin-options-form"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={6}
+        spellCheck={false}
+        style={{
+          width: '100%',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          padding: '8px',
+          background: 'var(--surface-1)',
+          color: 'var(--text-1)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-1)',
+        }}
+      />
+      <Inline align="center" gap={2}>
+        <Button variant="primary" disabled={busy} onClick={() => void save()}>
+          {busy ? 'Saving…' : 'Save plugin options'}
+        </Button>
+        {savedAt !== null && (
+          <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
+            saved {new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        )}
+        {error && <span style={{ fontSize: 11, color: 'var(--danger)' }}>{error}</span>}
+      </Inline>
+    </Stack>
   );
 }

@@ -86,7 +86,7 @@ export function LibrariesView(props: LibrariesViewProps): JSX.Element {
   const items: LibraryItemProps[] = (res.data?.skills || res.data?.items || []).map(mapItem);
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid={`${kind}-view`}>
       <ViewHeader title={KIND_LABEL[kind]} description={KIND_DESCRIPTION[kind]} />
       {res.loading ? (
         <Skeleton style={{ height: 240 }} />

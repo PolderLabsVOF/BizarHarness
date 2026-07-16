@@ -183,7 +183,7 @@ export function BackgroundJobsView(): JSX.Element {
   }, [instances]);
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="background-view">
       <ViewHeader
         title="Background Jobs"
         description="Live background agent sessions. Pause, resume, retry, or kill."

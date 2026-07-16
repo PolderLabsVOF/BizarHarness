@@ -249,7 +249,7 @@ export function AgentsView(): JSX.Element {
   }, [bizarList, ccList, source]);
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="agents-view">
       <ViewHeader
         title="Agents"
         description="Bizar agents (frontmatter-driven) and Claude Code background agents."

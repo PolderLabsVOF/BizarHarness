@@ -111,7 +111,7 @@ export function NotificationsView(): JSX.Element {
   const unread = items.filter((n) => !n.read).length;
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="notifications-view">
       <ViewHeader
         title="Notifications"
         description={`${unread} unread of ${items.length} total. Backed by ~/.config/bizar/notifications.jsonl.`}

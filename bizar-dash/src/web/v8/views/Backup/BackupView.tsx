@@ -109,7 +109,7 @@ export function BackupView(): JSX.Element {
   };
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="backup-view">
       <ViewHeader
         title="Backups"
         description={`${items.length} backup${items.length === 1 ? '' : 's'} in ~/.config/bizar/backups/. Create, restore, verify, or delete.`}

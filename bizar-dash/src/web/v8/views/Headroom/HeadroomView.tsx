@@ -113,7 +113,7 @@ export function HeadroomView(): JSX.Element {
   const isRunning = s?.status === 'running';
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="headroom-view">
       <ViewHeader
         title="Headroom"
         description="Local proxy that reduces token cost via caching + batching. Install, wrap Cline, start/stop."

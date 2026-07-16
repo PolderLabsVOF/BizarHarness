@@ -201,7 +201,7 @@ export function TasksView(): JSX.Element {
   const selectedCount = selectedIds.size;
 
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-testid="tasks-view">
       <ViewHeader
         title="Tasks"
         description="Drag cards across columns. Click a card to edit. Use the checkbox to select multiple."

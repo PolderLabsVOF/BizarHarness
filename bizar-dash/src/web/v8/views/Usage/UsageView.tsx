@@ -88,7 +88,7 @@ export function UsageView(): JSX.Element {
   const maxProvider = byProvider.reduce((m, p) => Math.max(m, p.tokens), 0);
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="usage-view">
       <ViewHeader
         title="Usage"
         description="Token consumption + quota limits from the rolling JSONL log."

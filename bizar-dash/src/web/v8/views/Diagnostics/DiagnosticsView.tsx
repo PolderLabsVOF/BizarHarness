@@ -60,7 +60,7 @@ export function DiagnosticsView(): JSX.Element {
   const logFile = logs.data?.file ?? null;
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="diagnostics-view">
       <ViewHeader
         title="Diagnostics"
         description="Live system snapshot + active log tail. Auto-refresh every 10s."

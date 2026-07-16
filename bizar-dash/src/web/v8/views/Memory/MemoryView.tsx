@@ -132,7 +132,7 @@ export function MemoryView(): JSX.Element {
   };
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="memory-view">
       <ViewHeader
         title="Memory"
         description="Cross-session notes. Project memos live in the repo; global memos live on the user."

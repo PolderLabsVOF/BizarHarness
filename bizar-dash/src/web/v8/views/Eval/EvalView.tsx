@@ -75,7 +75,7 @@ export function EvalView(): JSX.Element {
   const list = runs.data?.runs ?? [];
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="eval-view">
       <ViewHeader
         title="Eval framework"
         description="Run evaluation suites against the agent model. Suites live under fixtures/."

@@ -25,9 +25,22 @@ interface CheckResult {
   error?: string;
 }
 
+interface CheckGroup {
+  name?: string;
+  status?: Status;
+  message?: string;
+  error?: string;
+}
+
 interface HealthRollup {
   status: Status;
   issues: Array<{ name: string; status: Status; message: string }>;
+}
+
+interface DoctorSnapshot {
+  health: HealthRollup;
+  checks: { system?: CheckGroup[]; config?: CheckGroup[]; services?: CheckGroup[] };
+  recentErrors?: unknown[];
 }
 
 const STATUS_ICON: Record<Status, LucideIcon> = {
@@ -43,7 +56,7 @@ const STATUS_TONE = {
 } as const;
 
 export function DoctorView(): JSX.Element {
-  const snap = useFetch<{ health: HealthRollup; checks: CheckResult[]; recentErrors?: unknown[] }>('/api/doctor');
+  const snap = useFetch<DoctorSnapshot>('/api/doctor');
   const health = useFetch<HealthRollup>('/api/doctor/health');
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,10 +81,17 @@ export function DoctorView(): JSX.Element {
   };
 
   const rollup = health.data ?? snap.data?.health;
-  const checks = snap.data?.checks ?? [];
+  const checks: CheckResult[] = (() => {
+    const g = snap.data?.checks;
+    if (!g) return [];
+    return [...(g.system ?? []), ...(g.config ?? []), ...(g.services ?? [])]
+      .filter((c): c is CheckResult =>
+        typeof c.name === 'string' && typeof c.status === 'string' && typeof c.message === 'string'
+      );
+  })();
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="doctor-view">
       <ViewHeader
         title="Doctor"
         description="System diagnostics. Health poll every 30s; click any check to re-run."

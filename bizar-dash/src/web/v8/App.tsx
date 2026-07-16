@@ -25,6 +25,30 @@ import {
   Goal,
   CalendarClock,
   Briefcase,
+  MessageSquareText,
+  Folder,
+  MessageCircle,
+  History,
+  Wrench,
+  ShieldCheck,
+  Variable,
+  ServerCog,
+  MessageSquare,
+  Sparkles,
+  Boxes,
+  ArrowUpCircle,
+  Archive,
+  Database,
+  Mic,
+  ClipboardPaste,
+  BookOpen,
+  Search,
+  Stethoscope,
+  BarChart3,
+  Bell,
+  Terminal,
+  Network,
+  FlaskConical,
 } from 'lucide-react';
 
 /**
@@ -61,6 +85,56 @@ function iconFor(id: string): LucideIcon {
       return CalendarClock;
     case 'background':
       return Briefcase;
+    case 'chat':
+      return MessageSquareText;
+    case 'projects-list':
+      return Folder;
+    case 'claude-sessions':
+      return MessageCircle;
+    case 'history':
+      return History;
+    case 'admin':
+      return Wrench;
+    case 'auth':
+      return ShieldCheck;
+    case 'env-vars':
+      return Variable;
+    case 'config':
+      return ServerCog;
+    case 'dialogs':
+      return MessageSquare;
+    case 'providers':
+      return Sparkles;
+    case 'mods':
+      return Boxes;
+    case 'update':
+      return ArrowUpCircle;
+    case 'artifacts':
+      return Layers;
+    case 'lightrag':
+      return Database;
+    case 'voice':
+      return Mic;
+    case 'clipboard':
+      return ClipboardPaste;
+    case 'obsidian':
+      return BookOpen;
+    case 'misc':
+      return Search;
+    case 'doctor':
+      return Stethoscope;
+    case 'usage':
+      return BarChart3;
+    case 'backup':
+      return Archive;
+    case 'notifications':
+      return Bell;
+    case 'diagnostics':
+      return Terminal;
+    case 'headroom':
+      return Network;
+    case 'eval':
+      return FlaskConical;
     default:
       return Layers;
   }
@@ -130,6 +204,9 @@ export function App(): JSX.Element {
         { id: 'overview', label: 'Overview', icon: iconFor('overview') },
         { id: 'tasks', label: 'Tasks', icon: iconFor('tasks'), count: counts.tasksTotal },
         { id: 'goals', label: 'Goals', icon: iconFor('goals'), count: counts.goals },
+        { id: 'chat', label: 'Chat', icon: iconFor('chat'), live: true },
+        { id: 'projects-list', label: 'Projects', icon: iconFor('projects-list') },
+        { id: 'claude-sessions', label: 'Claude sessions', icon: iconFor('claude-sessions') },
       ],
     },
     {
@@ -155,7 +232,31 @@ export function App(): JSX.Element {
     {
       id: 'system',
       label: 'System',
-      items: [{ id: 'settings', label: 'Settings', icon: iconFor('settings') }],
+      items: [
+        { id: 'history', label: 'History', icon: iconFor('history') },
+        { id: 'admin', label: 'Admin', icon: iconFor('admin') },
+        { id: 'auth', label: 'Auth', icon: iconFor('auth') },
+        { id: 'env-vars', label: 'Env vars', icon: iconFor('env-vars') },
+        { id: 'config', label: 'Config', icon: iconFor('config') },
+        { id: 'dialogs', label: 'Dialogs', icon: iconFor('dialogs') },
+        { id: 'providers', label: 'Providers', icon: iconFor('providers') },
+        { id: 'mods', label: 'Mods', icon: iconFor('mods') },
+        { id: 'update', label: 'Update', icon: iconFor('update') },
+        { id: 'artifacts', label: 'Artifacts', icon: iconFor('artifacts') },
+        { id: 'lightrag', label: 'LightRAG', icon: iconFor('lightrag') },
+        { id: 'voice', label: 'Voice', icon: iconFor('voice') },
+        { id: 'clipboard', label: 'Clipboard', icon: iconFor('clipboard') },
+        { id: 'obsidian', label: 'Obsidian', icon: iconFor('obsidian') },
+        { id: 'misc', label: 'Misc', icon: iconFor('misc') },
+        { id: 'doctor', label: 'Doctor', icon: iconFor('doctor') },
+        { id: 'usage', label: 'Usage', icon: iconFor('usage') },
+        { id: 'backup', label: 'Backups', icon: iconFor('backup') },
+        { id: 'notifications', label: 'Notifications', icon: iconFor('notifications') },
+        { id: 'diagnostics', label: 'Diagnostics', icon: iconFor('diagnostics') },
+        { id: 'headroom', label: 'Headroom', icon: iconFor('headroom') },
+        { id: 'eval', label: 'Eval', icon: iconFor('eval') },
+        { id: 'settings', label: 'Settings', icon: iconFor('settings') },
+      ],
     },
   ];
 

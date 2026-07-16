@@ -181,7 +181,7 @@ export function SchedulesView(): JSX.Element {
   };
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} data-testid="schedules-view">
       <ViewHeader
         title="Schedules"
         description="Recurring and one-time jobs. Toggle enabled, run on demand, or create new."
