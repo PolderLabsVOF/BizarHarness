@@ -1,4 +1,4 @@
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { AlignJustify, Monitor, Moon, Rows3, Sun } from 'lucide-react';
 import { useTheme } from './useTheme.js';
 import { useDensity } from './useDensity.js';
 import { cx } from '../utils/cx.js';
@@ -36,7 +36,10 @@ export interface ThemeToggleProps {
 
 export function ThemeToggle({ className }: ThemeToggleProps): JSX.Element {
   const { mode, resolved, cycle } = useTheme();
-  const Icon = RESOLVED_ICON[mode];
+  // Show the icon for the *resolved* (actually applied) theme so the visual
+  // matches what the user is seeing — Sun when light is active, Moon when
+  // dark is active, Monitor when system is in effect.
+  const Icon = RESOLVED_ICON[resolved];
   return (
     <button
       type="button"
@@ -66,23 +69,25 @@ export interface DensityToggleProps {
 }
 export function DensityToggle({ className }: DensityToggleProps): JSX.Element {
   const { density, toggle } = useDensity();
+  const isCozy = density === 'comfortable';
+  const Icon = isCozy ? Rows3 : AlignJustify;
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={`Switch to ${density === 'comfortable' ? 'compact' : 'comfortable'} density`}
+      aria-label={`Switch to ${isCozy ? 'compact' : 'comfortable'} density`}
       title={`Density: ${density}`}
+      data-density={density}
       className={cx(
         'v8-density-toggle',
-        'inline-flex h-8 px-2 items-center justify-center',
+        'inline-flex h-8 w-8 items-center justify-center',
         'rounded-[var(--radius-sm)]',
-        'text-[var(--fs-12)] font-medium tracking-[var(--tracking-wide)] uppercase',
         'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-1)]',
         'transition-colors duration-[var(--motion-fast)]',
         className,
       )}
     >
-      {density === 'comfortable' ? 'Cozy' : 'Compact'}
+      <Icon size={16} aria-hidden="true" />
     </button>
   );
 }
