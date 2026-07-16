@@ -29,6 +29,9 @@
     "test:e2e:crud": "node tests/e2e/dashboard-crud-roundtrip.mjs",
     "test:e2e:data": "node tests/e2e/dashboard-data-driven.mjs",
     "test:e2e:matrix": "node tests/e2e/dashboard-surfaces-matrix.mjs",
+    "test:e2e:cc-disk": "node tests/e2e/dashboard-cc-disk-fallback.mjs",
+    "test:e2e:goal-slash": "node tests/e2e/dashboard-cc-goal-slash.mjs",
+    "test:e2e:cfg": "node tests/e2e/dashboard-config-coverage.mjs",
     "build": "npm run build:sdk && npm run build:dash",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"

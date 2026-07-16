@@ -15,7 +15,7 @@
 
 import { Router } from 'express';
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, statSync, watch } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, watch } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { wrap } from './_shared.mjs';
@@ -23,6 +23,13 @@ import { wrap } from './_shared.mjs';
 const HOME = homedir();
 const CACHE_TTL_MS = 5_000;
 let _cache = null; // { ts, agents, error }
+
+/** Resolve the CC home directory. Honours `BIZAR_CC_HOME` (used in
+ *  tests to redirect `$HOME/.claude` into a temp dir) before falling
+ *  back to `homedir()`. */
+function ccHome() {
+  return process.env.BIZAR_CC_HOME || HOME;
+}
 
 function runClaudeAgents() {
   return new Promise((resolve) => {
@@ -70,32 +77,94 @@ function runClaudeAgents() {
   });
 }
 
+/** Extract a snippet from the last assistant text block in a JSONL log.
+ *  Best-effort — returns undefined if no assistant message is found.
+ *  Reused by `enrichSession` (live roster) and `listAgentsFromDisk`
+ *  (disk fallback) so the shape stays identical. */
+function extractLastSnippet(text) {
+  const lines = text.split('\n').filter((l) => l.trim());
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    try {
+      const obj = JSON.parse(lines[i]);
+      if (obj?.type === 'assistant' && obj?.message?.content) {
+        const c = obj.message.content;
+        const txt = typeof c === 'string' ? c
+          : Array.isArray(c) ? c.filter((b) => b && (b.type === 'text' || typeof b.text === 'string')).map((b) => b.text || '').join('\n')
+          : '';
+        if (txt) return txt.replace(/\s+/g, ' ').trim().slice(0, 120);
+      }
+    } catch { /* skip */ }
+  }
+  return undefined;
+}
+
 function enrichSession(agent) {
   if (!agent || !agent.sessionId) return agent;
-  const file = join(HOME, '.claude', 'sessions', agent.sessionId, 'messages.jsonl');
-  if (!existsSync(file)) return agent;
+  // v10.0.4 — real CC session logs live at
+  //   ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl
+  // not at ~/.claude/sessions/<sid>/messages.jsonl (which never exists).
+  // `resolveSessionLog` already encodes the cwd correctly.
+  const logPath = resolveSessionLog(agent.sessionId, agent.cwd);
+  if (!logPath || !existsSync(logPath)) return agent;
   try {
-    const st = statSync(file);
+    const st = statSync(logPath);
+    const text = readFileSync(logPath, 'utf8');
     agent.lastMessageAt = st.mtimeMs;
-    const text = readFileSync(file, 'utf8');
     agent.messageCount = text.split('\n').filter((l) => l.trim()).length;
-    // Read last assistant text snippet (best-effort).
-    const lines = text.split('\n').filter((l) => l.trim());
-    for (let i = lines.length - 1; i >= 0; i -= 1) {
-      try {
-        const obj = JSON.parse(lines[i]);
-        if (obj?.type === 'assistant' && obj?.message?.content) {
-          const c = obj.message.content;
-          const txt = typeof c === 'string' ? c
-            : Array.isArray(c) ? c.filter((b) => b && (b.type === 'text' || typeof b.text === 'string')).map((b) => b.text || '').join('\n')
-            : '';
-          if (txt) { agent.lastMessageSnippet = txt.replace(/\s+/g, ' ').trim().slice(0, 120); }
-          break;
-        }
-      } catch { /* skip */ }
-    }
+    const snippet = extractLastSnippet(text);
+    if (snippet) agent.lastMessageSnippet = snippet;
+    agent.logPath = logPath;
   } catch { /* best effort */ }
   return agent;
+}
+
+/** v10.0.4 — enumerate `$HOME/.claude/sessions/*.json` to mint a CC
+ *  roster when the `claude agents --json` CLI is absent (or returns
+ *  ENOENT). Each session JSON envelope carries sessionId + cwd + name +
+ *  status; we also probe the JSONL log via `resolveSessionLog` so the
+ *  messageCount/lastMessageAt/lastMessageSnippet fields populate the
+ *  same way the live-roster path does. Best-effort: malformed JSON or
+ *  missing log files are skipped silently. */
+function listAgentsFromDisk() {
+  const sessionsDir = join(ccHome(), '.claude', 'sessions');
+  if (!existsSync(sessionsDir)) return [];
+  const out = [];
+  let entries;
+  try { entries = readdirSync(sessionsDir); } catch { return []; }
+  for (const entry of entries) {
+    if (!entry.endsWith('.json')) continue;
+    let env;
+    try {
+      env = JSON.parse(readFileSync(join(sessionsDir, entry), 'utf8'));
+    } catch { continue; }
+    const sid = String(env?.sessionId || entry.replace(/\.json$/, ''));
+    const cwd = String(env?.cwd || ccHome());
+    const a = {
+      id: sid,
+      sessionId: sid,
+      name: String(env?.name || sid),
+      cwd,
+      status: String(env?.status || 'unknown'),
+      startedAt: env?.startedAt ?? null,
+      updatedAt: env?.updatedAt ?? null,
+      kind: String(env?.kind || 'bg'),
+      source: 'disk',
+    };
+    const logPath = resolveSessionLog(sid, cwd);
+    if (logPath && existsSync(logPath)) {
+      try {
+        const st = statSync(logPath);
+        const text = readFileSync(logPath, 'utf8');
+        a.lastMessageAt = st.mtimeMs;
+        a.messageCount = text.split('\n').filter((l) => l.trim()).length;
+        const snippet = extractLastSnippet(text);
+        if (snippet) a.lastMessageSnippet = snippet;
+        a.logPath = logPath;
+      } catch { /* best effort */ }
+    }
+    out.push(a);
+  }
+  return out;
 }
 
 async function listAgents({ force = false } = {}) {
@@ -106,9 +175,34 @@ async function listAgents({ force = false } = {}) {
   const r = await runClaudeAgents();
   if (r.ok) {
     const agents = r.agents.map(enrichSession);
-    _cache = { ts: now, agents, error: null };
+    // v10.0.4 — always merge disk fallback on top. CLI roster is the
+    // authoritative source when present, but session JSON envelopes
+    // (the `claude agents --json` output does NOT include all on-disk
+    // sessions — e.g. finished/closed sessions persist on disk after
+    // the CLI stops tracking them). Merge by sessionId so duplicates
+    // collapse and disk-only fields (lastMessageAt/messageCount/
+    // lastMessageSnippet) win when the CLI didn't populate them.
+    const disk = listAgentsFromDisk();
+    const byId = new Map(agents.map((a) => [a.sessionId || a.id, a]));
+    for (const d of disk) {
+      const key = d.sessionId || d.id;
+      const existing = byId.get(key);
+      if (existing) {
+        if (!existing.lastMessageAt && d.lastMessageAt) existing.lastMessageAt = d.lastMessageAt;
+        if (!existing.messageCount && d.messageCount) existing.messageCount = d.messageCount;
+        if (!existing.lastMessageSnippet && d.lastMessageSnippet) existing.lastMessageSnippet = d.lastMessageSnippet;
+      } else {
+        byId.set(key, d);
+      }
+    }
+    _cache = { ts: now, agents: [...byId.values()], error: null };
   } else {
-    _cache = { ts: now, agents: [], error: r.error || 'unknown' };
+    // v10.0.4 — when the `claude` CLI is absent (ENOENT) or returns
+    // an error, fall back to enumerating `$HOME/.claude/sessions/*.json`
+    // so the dashboard still renders a roster. The `error` field is
+    // preserved so the UI can show a small "CLI unavailable" hint.
+    const disk = listAgentsFromDisk();
+    _cache = { ts: now, agents: disk, error: r.error || 'unknown' };
   }
   return _cache;
 }
@@ -257,7 +351,7 @@ export function createCCAgentsRouter({ broadcast = () => {} } = {}) {
 export function resolveSessionLog(sessionId, cwd) {
   if (!sessionId) return null;
   const enc = String(cwd || '').replace(/[/]/g, '-').replace(/^-/, '-');
-  const candidate = join(HOME, '.claude', 'projects', enc, `${sessionId}.jsonl`);
+  const candidate = join(ccHome(), '.claude', 'projects', enc, `${sessionId}.jsonl`);
   return existsSync(candidate) ? candidate : null;
 }
 
@@ -431,4 +525,4 @@ export function createAgentStreamRouter() {
   return router;
 }
 
-export const _internals = { listAgents, runClaudeAgents, enrichSession, peekCachedAgents, CACHE_TTL_MS };
+export const _internals = { listAgents, runClaudeAgents, enrichSession, listAgentsFromDisk, extractLastSnippet, resolveSessionLog, peekCachedAgents, CACHE_TTL_MS };
