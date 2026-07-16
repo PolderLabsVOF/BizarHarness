@@ -16,6 +16,7 @@ import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
@@ -87,6 +88,15 @@ export function DialogsView(): JSX.Element {
               <Skeleton style={{ height: 32 }} />
               <Skeleton style={{ height: 32 }} />
             </Stack>
+          ) : payload.error && dialogs.length === 0 ? (
+            <ErrorState
+              block
+              title="Couldn't load dialogs"
+              description="The dialog queue failed to fetch. Retry to refetch."
+              error={payload.error}
+              onRetry={refresh}
+              testid="dialogs-error-state"
+            />
           ) : dialogs.length === 0 ? (
             <EmptyState
               icon={<MessageSquare size={28} aria-hidden />}

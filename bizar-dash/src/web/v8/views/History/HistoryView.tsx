@@ -16,6 +16,7 @@ import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { Badge } from '../../ui/data/Badge.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
@@ -143,6 +144,15 @@ export function HistoryView(): JSX.Element {
               <Skeleton style={{ height: 36 }} />
               <Skeleton style={{ height: 36 }} />
             </Stack>
+          ) : payload.error && events.length === 0 ? (
+            <ErrorState
+              block
+              title="Couldn't load history"
+              description="The timeline endpoint failed. Retry to refetch."
+              error={payload.error}
+              onRetry={refresh}
+              testid="history-error"
+            />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={<History size={28} aria-hidden />}

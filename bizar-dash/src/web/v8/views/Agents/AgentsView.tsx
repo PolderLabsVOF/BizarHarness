@@ -8,6 +8,7 @@ import { AgentDetail } from '../../ui/agents/AgentDetail.js';
 import { Chip } from '../../ui/data/Chip.js';
 import { Banner } from '../../ui/feedback/Banner.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
 import { Input } from '../../ui/controls/Input.js';
 import { Button } from '../../ui/controls/Button.js';
@@ -381,6 +382,15 @@ export function AgentsView(): JSX.Element {
           <Skeleton style={{ height: 140 }} />
           <Skeleton style={{ height: 140 }} />
         </Grid>
+      ) : cards.length === 0 && (bizar.error || cc.error) ? (
+        <ErrorState
+          block
+          title="Couldn't load agents"
+          description="Both bizar and CC roster endpoints failed. Retry to refetch."
+          error={bizar.error ?? cc.error}
+          onRetry={() => { void bizar.refetch(); void cc.refetch(); }}
+          testid="agents-error"
+        />
       ) : cards.length === 0 ? (
         <span style={{ color: 'var(--fg-muted)' }}>
           No agents yet. Run <code>/loop</code> or spawn one via the command palette.

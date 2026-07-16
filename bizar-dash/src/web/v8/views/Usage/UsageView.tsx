@@ -6,6 +6,7 @@ import { Grid } from '../../ui/primitives/Grid.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { useFetch } from '../../data/useFetch.js';
 
 /**
@@ -140,6 +141,15 @@ export function UsageView(): JSX.Element {
 
       {res.loading ? (
         <Skeleton style={{ height: 200 }} />
+      ) : res.error && byProvider.length === 0 ? (
+        <ErrorState
+          block
+          title="Couldn't load usage"
+          description="Token analytics failed to fetch. Retry to refetch."
+          error={res.error}
+          onRetry={() => void res.refetch()}
+          testid="usage-error"
+        />
       ) : byProvider.length === 0 ? (
         <Card variant="default">
           <CardBody>

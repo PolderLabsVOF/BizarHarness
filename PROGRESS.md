@@ -444,9 +444,24 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last release (master):** v10.0.5-S2 (Moves 2a+2b+2c: Tier-3 mutation coverage).
+- **Last release (master):** v10.0.5-S3 (Moves 1+2+3: surface coverage, tier-3 mutations, error-state polish).
 - **This session:** shipping v10.0.5 across 4 moves to close the
-  umbrella brief — Moves 1+2 done, Move 3 in progress.
+  umbrella brief — Moves 1+2+3 done, Move 4 in progress.
+- **v10.0.5-Move 3 deliverables (ErrorState polish):**
+  New shared `<ErrorState>` in
+  `bizar-dash/src/web/v8/ui/feedback/ErrorState.tsx` with two
+  modes — inline (Alert tone=danger banner with optional
+  retry button) and block (centered icon + title + message +
+  retry, mirrors EmptyState). 8 silent-failure views now
+  surface a recoverable error before falling through to the
+  empty state: History, Goals, Activity, Usage, Agents,
+  Libraries (skill/mcp/hook), Doctor, Dialogs. Each wires
+  `onRetry={() => void fetch.refetch()}` so a 500 / network
+  blip is one click away from recovery. The remaining ~20
+  views with `role="alert"` have intentionally transient
+  inline mutation feedback (next to action buttons); those
+  weren't swapped because the inline alert is correct UX
+  for ephemeral per-action errors.
 - **v10.0.5-Move 2 deliverables (Tier-3 mutation coverage):**
   16 atomic mutations across 8 endpoints, all proven with E2E.
   - **Move 2a — 8 missing UI buttons** wired against existing

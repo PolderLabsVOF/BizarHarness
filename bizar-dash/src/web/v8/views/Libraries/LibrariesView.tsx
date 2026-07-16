@@ -4,6 +4,7 @@ import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { LibraryGrid, LibraryItem, type LibraryItemProps, type LibraryStatus } from '../../ui/index.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
 import type { LibraryItem as LibItem } from '../../data/types.js';
@@ -90,6 +91,15 @@ export function LibrariesView(props: LibrariesViewProps): JSX.Element {
       <ViewHeader title={KIND_LABEL[kind]} description={KIND_DESCRIPTION[kind]} />
       {res.loading ? (
         <Skeleton style={{ height: 240 }} />
+      ) : res.error && items.length === 0 ? (
+        <ErrorState
+          block
+          title={`Couldn't load ${KIND_LABEL[kind].toLowerCase()}`}
+          description="The library endpoint failed. Retry to refetch."
+          error={res.error}
+          onRetry={() => void res.refetch()}
+          testid={`libraries-${kind}-error`}
+        />
       ) : items.length === 0 ? (
         <EmptyState
           icon={<span>📚</span>}

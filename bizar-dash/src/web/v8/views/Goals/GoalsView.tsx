@@ -9,6 +9,7 @@ import { GoalCard, type GoalCardProps, type GoalStatus } from '../../ui/goals/Go
 import { GoalDetail } from '../../ui/goals/GoalDetail.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Input } from '../../ui/controls/Input.js';
 import { Textarea } from '../../ui/controls/Textarea.js';
@@ -190,6 +191,15 @@ export function GoalsView(): JSX.Element {
           <Skeleton style={{ height: 160 }} />
           <Skeleton style={{ height: 160 }} />
         </Stack>
+      ) : goals.error && local.length === 0 ? (
+        <ErrorState
+          block
+          title="Couldn't load goals"
+          description="The goals endpoint failed. Retry to refetch."
+          error={goals.error}
+          onRetry={() => void goals.refetch()}
+          testid="goals-error"
+        />
       ) : filteredGoals.length === 0 ? (
         <Card>
           <CardBody>

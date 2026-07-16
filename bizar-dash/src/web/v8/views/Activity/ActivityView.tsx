@@ -23,6 +23,7 @@ import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { Badge } from '../../ui/data/Badge.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Switch } from '../../ui/controls/Switch.js';
 import { Slider } from '../../ui/controls/Slider.js';
@@ -366,6 +367,15 @@ export function ActivityView(): JSX.Element {
 
       {events.loading && windowed.length === 0 ? (
         <Skeleton style={{ height: 320 }} />
+      ) : events.error && windowed.length === 0 ? (
+        <ErrorState
+          block
+          title="Couldn't load activity"
+          description="The activity feed failed to fetch. Retry to refetch."
+          error={events.error}
+          onRetry={() => void events.refetch()}
+          testid="activity-error"
+        />
       ) : (
         <Stack gap={5}>
           {grouped.map((group) => (

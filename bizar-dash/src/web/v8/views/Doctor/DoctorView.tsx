@@ -8,6 +8,7 @@ import { Badge } from '../../ui/data/Badge.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { useFetch } from '../../data/useFetch.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { LucideIcon } from 'lucide-react';
@@ -131,6 +132,15 @@ export function DoctorView(): JSX.Element {
           <Skeleton style={{ height: 64 }} />
           <Skeleton style={{ height: 64 }} />
         </Stack>
+      ) : snap.error && checks.length === 0 ? (
+        <ErrorState
+          block
+          title="Couldn't run doctor"
+          description="The diagnostic snapshot failed. Retry to refetch."
+          error={snap.error}
+          onRetry={() => void snap.refetch()}
+          testid="doctor-error"
+        />
       ) : checks.length === 0 ? (
         <EmptyState
           icon={<Stethoscope size={32} aria-hidden />}
