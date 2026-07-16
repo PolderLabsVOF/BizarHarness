@@ -5,6 +5,7 @@ import { Topbar } from './shell/Topbar.js';
 import { Sidebar, type SidebarSection } from './shell/Sidebar.js';
 import { Box } from './ui/primitives/Box.js';
 import { Inline } from './ui/primitives/Inline.js';
+import { Button } from './ui/controls/Button.js';
 import { useViewForId } from './views/Router.js';
 import { AppCommandPalette } from './views/CommandPalette/AppCommandPalette.js';
 import { useCommandPaletteHotkey } from './ui/navigation/CommandPalette.js';
@@ -345,9 +346,12 @@ export function App(): JSX.Element {
           }
           center={
             <Inline align="center" gap={2}>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setPaletteOpen(true)}
+                aria-label="Open command palette"
+                data-testid="palette-trigger"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -362,7 +366,6 @@ export function App(): JSX.Element {
                   maxWidth: '100%',
                   justifyContent: 'space-between',
                 }}
-                aria-label="Open command palette"
               >
                 <span>Type a command, page, or setting…</span>
                 <Box
@@ -375,7 +378,25 @@ export function App(): JSX.Element {
                 >
                   ⌘K
                 </Box>
-              </button>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Keyboard shortcuts"
+                data-testid="shortcuts-help"
+                title="Keyboard shortcuts"
+                onClick={() => {
+                  const shortcuts = [
+                    '⌘K — Command palette',
+                    '⌘/ — Toggle sidebar',
+                    '⌘, — Settings',
+                    '⌘. — Dismiss notification',
+                  ].join('\n');
+                  window.alert('Keyboard Shortcuts\n\n' + shortcuts);
+                }}
+              >
+                ?
+              </Button>
             </Inline>
           }
         />
