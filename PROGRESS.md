@@ -444,14 +444,71 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last release (master):** v10.0.3 — **stable**. Commits `f9b4bca`.
-- **Last commit:** Move 6 (surfaces matrix + paperwork) at
-  `f9b4bca`. 5 prior atomic commits ship Moves 1..5.
-- **This session:** shipped v10.0.3 across 6 atomic commits that
-  close every umbrella-brief criterion the v10.0.2 stop-hook
-  flagged as unevidenced. Plus a small
-  `bizar-dash/src/web/v8/__tests__/overview-trends.test.tsx`
-  update for the range=24h→7d switch.
+- **Last release (master):** v10.0.5-S1 (Move 1: sidebar reachability + view root testids).
+- **This session:** shipping v10.0.5 across 4 moves to close the
+  umbrella brief — Move 1 done, Move 2 in progress.
+- **v10.0.5-Move 1 deliverables (37/37 surfaces reachable):**
+  App.tsx sections array grew from 12 hard-coded items to 24,
+  wiring every section already declared in
+  `Sidebar.tsx:DEFAULT_SECTIONS`. 17 view files got a
+  `<view>-view` testid on their root container.
+  `tests/e2e/dashboard-full-surfaces.mjs` walks all 37 Router
+  cases, clicks each sidebar item, and asserts the `<view>-view`
+  root testid appears. **37/37 PASS.**
+- **Bug fix landed in Move 1:** DoctorView.tsx called
+  `checks.map` on `snap.data.checks`, but the server returns
+  `checks` as `{ system, config, services }` (a grouped object),
+  not an array. The view crashed on first render and unmounted
+  the entire React tree (no ErrorBoundary). Flatten the groups
+  into a typed `CheckResult[]` and filter to entries with
+  valid name/status/message.
+- **Last prior release:** v10.0.4 — stable.
+- **v10.0.4 shipped (3 atomic commits):** live CC roster from
+  disk (agents-cc.mjs:listAgentsFromDisk), full `/goal` slash
+  command E2E (dashboard-cc-goal-slash.mjs — 6/6 PASS), full
+  configuration coverage (dashboard-config-coverage.mjs — 7/7
+  PASS). Real `enrichSession` path bug FIXED — it was reading
+  the non-existent `~/.claude/sessions/<sid>/messages.jsonl`;
+  now uses `resolveSessionLog()` which points at
+  `~/.claude/projects/<enc>/<sid>.jsonl`.
+- **v10.0.4 deliverables (closes 3 umbrella gaps with real proof):**
+  (1) **Live CC roster from disk** —
+  `bizar-dash/src/server/routes/agents-cc.mjs` now merges a disk
+  fallback (`listAgentsFromDisk()` enumerating
+  `$HOME/.claude/sessions/*.json`) on top of the CLI roster, so the
+  dashboard always shows sessions even when `claude agents --json`
+  is absent or returns 0. New env var `BIZAR_CC_HOME` redirects the
+  CC home for tests. Real `enrichSession` path bug FIXED — it was
+  reading the non-existent `~/.claude/sessions/<sid>/messages.jsonl`;
+  now uses `resolveSessionLog()` which points at
+  `~/.claude/projects/<enc>/<sid>.jsonl`. New E2E
+  `tests/e2e/dashboard-cc-disk-fallback.mjs` — **5/5 PASS** proves
+  empty dir → 200 + agents=[] + error; seeded session → count=1
+  with name + sessionId + cwd + source=disk; seeded JSONL →
+  lastMessageAt + messageCount + lastMessageSnippet populated; UI
+  chip shows the new agent. (2) **Full `/goal` slash command E2E**
+  — `tests/e2e/dashboard-cc-goal-slash.mjs` exercises the exact
+  path the slash command runs: resolve port from
+  `~/.cache/bizarharness/dash-auth.json`, POST `/api/goals`, PATCH
+  status, POST/PATCH/DELETE key-results, render in GoalsView, then
+  append to `PROGRESS.md` directly to exercise the file-watcher
+  fallback. **6/6 PASS.** (3) **Full configuration coverage** —
+  `tests/e2e/dashboard-config-coverage.mjs` proves
+  `POST /api/settings/reset`, `PUT /api/settings/plugin-options`,
+  `GET /api/providers/auto-detect`, `POST /api/projects/scan`,
+  `GET /api/mods`, and renders the two new SettingsView testids.
+  **7/7 PASS.** New SettingsView "Configuration" section wires the
+  Reset button + plugin-options JSON editor that CONTROL_SURFACES.md
+  has claimed since v10.0.0 but the UI didn't render until now.
+- **Bug fixes landed in v10.0.4:** (1) `enrichSession` was reading
+  the wrong path (`~/.claude/sessions/<sid>/messages.jsonl` —
+  never exists), so `lastMessageAt`/`messageCount`/`lastMessageSnippet`
+  never populated on the live-roster path. Now goes through
+  `resolveSessionLog()` which points at
+  `~/.claude/projects/<encoded-cwd>/<sid>.jsonl`. The same helper
+  powers the new disk-fallback path so both share identical
+  enrichment semantics.
+- **v10.0.3 deliverables (closes 6 umbrella gaps with real proof):**
 - **v10.0.3 deliverables (closes 6 umbrella gaps with real proof):**
   (1) **Two real bugs fixed** — `PATCH /api/tasks/:id` (TaskDetail
   was sending PATCH, server only had PUT) and
