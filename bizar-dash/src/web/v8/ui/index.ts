@@ -318,6 +318,15 @@ export {
   type ActivityItem,
   type ActivityTone,
 } from './activity/ActivityFeed.js';
+export {
+  ActivityLane,
+  type ActivityLaneProps,
+  type ActivityLaneEvent,
+} from './activity/ActivityLane.js';
+export {
+  ActivityLanes,
+  type ActivityLanesProps,
+} from './activity/ActivityLanes.js';
 
 // ── memory (Sprint S7) ────────────────────────────────────────────────────
 

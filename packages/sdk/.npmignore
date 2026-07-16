@@ -1,0 +1,17 @@
+# .npmignore — overrides packages/sdk/.gitignore for npm pack.
+# Ship ONLY compiled dist/ so consumers don't need a TypeScript toolchain.
+# Exclude src/, tests/, tsconfig, .harness dev artifacts, sourcemaps.
+node_modules/
+src/
+tests/
+*.log
+.DS_Store
+.env
+.env.local
+coverage/
+*.tsbuildinfo
+tsconfig.json
+ARCHITECTURE.md
+README.md
+.harness/
+*.map

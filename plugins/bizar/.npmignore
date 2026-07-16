@@ -1,0 +1,17 @@
+# .npmignore — overrides plugins/bizar/.gitignore for npm pack.
+# Ship ONLY compiled dist/ + LICENSE + package.json. No TS sources,
+# no tsconfig, no arch docs. Consumers run from dist/.
+src/
+*.log
+.DS_Store
+.env
+.env.local
+coverage/
+*.tsbuildinfo
+tsconfig.json
+ARCHITECTURE.md
+CONSTRAINTS.md
+README.md
+index.ts
+.harness/
+*.map

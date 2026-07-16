@@ -60,7 +60,10 @@ export function createActivityRouter({ state } = {}) {
   const router = Router();
 
   // GET /activity — full log (newest first)
-  router.get('/activity', wrap(async (_req, res) => {
+  // Query params:
+  //   limit  — max items to return (default 200, hard cap 1000)
+  //   since  — ISO timestamp or numeric ms; only items with ts > since are returned
+  router.get('/activity', wrap(async (req, res) => {
     if (!state || typeof state.getOverview !== 'function') {
       res.status(503).json({ error: 'unavailable', message: 'state not ready' });
       return;
@@ -70,7 +73,24 @@ export function createActivityRouter({ state } = {}) {
       ? [...overview.recentActivity]
       : [];
     items.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
-    res.json({ items, total: items.length });
+
+    let filtered = items;
+    if (req.query && req.query.since !== undefined) {
+      const raw = String(req.query.since);
+      const sinceMs = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw);
+      if (Number.isFinite(sinceMs)) {
+        filtered = filtered.filter((e) => {
+          const t = typeof e.ts === 'number' ? e.ts : Date.parse(String(e.ts || ''));
+          return Number.isFinite(t) && t > sinceMs;
+        });
+      }
+    }
+
+    const requested = Number(req.query?.limit);
+    const limit = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 1000) : 200;
+    const trimmed = filtered.slice(0, limit);
+
+    res.json({ items: trimmed, total: filtered.length, limit, since: req.query?.since ?? null });
   }));
 
   // GET /activity/hidden — list of hidden event keys

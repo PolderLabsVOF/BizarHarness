@@ -177,6 +177,17 @@ export function App(): JSX.Element {
   useWsMessage('goals:change', () => setBump((n) => n + 1));
   useWsMessage('agents:change', () => setBump((n) => n + 1));
 
+  // Listen for cross-tree view navigation (e.g. ActivityLane row click).
+  useEffect(() => {
+    const onNav = (ev: Event): void => {
+      const detail = (ev as CustomEvent<{ id: string }>).detail;
+      if (!detail || typeof detail.id !== 'string') return;
+      setActiveId(detail.id);
+    };
+    window.addEventListener('bizar:navigate', onNav as EventListener);
+    return () => window.removeEventListener('bizar:navigate', onNav as EventListener);
+  }, []);
+
   const counts = useMemo(() => {
     const tasks = tasksRes.data?.tasks || [];
     const tasksTotal = tasks.length || tasksRes.data?.count || 0;

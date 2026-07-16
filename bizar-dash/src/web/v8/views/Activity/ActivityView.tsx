@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
-import { Grid } from '../../ui/primitives/Grid.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { ListHeader } from '../../ui/data/ListHeader.js';
 import { Sparkline } from '../../ui/data/Sparkline.js';
@@ -29,19 +28,25 @@ import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Switch } from '../../ui/controls/Switch.js';
 import { Slider } from '../../ui/controls/Slider.js';
-import { cx } from '../../ui/utils/cx.js';
+import { ActivityLane, type ActivityLaneEvent } from '../../ui/activity/ActivityLane.js';
+import { ActivityLanes } from '../../ui/activity/ActivityLanes.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import { useFetch } from '../../data/useFetch.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
+import { useViewNavigate, activityTarget } from '../../data/useViewNavigate.js';
 import type { ActivityEvent } from '../../data/types.js';
 
 /**
- * ActivityView — Sprint S15 visual changelog.
+ * ActivityView — Sprint S40 visual changelog.
  *
- * Renders an explicit day-grouped changelog ("Today", "Yesterday", "Mar 14")
- * with source badges and per-event highlights. Diff payloads (`meta.diff`)
- * render as expanded preview blocks. Filter chips narrow by source. The
- * topbar lives above the list so screen-magnifier users see context.
+ * Inspired by patoles/agent-flow: vertical swimlanes per actor
+ * (agent/system/user) with newest-first events, click-through to the
+ * source entity (task / goal / agent / artifact), and multi-select
+ * source filters.
+ *
+ * Layout: sticky header (search + live toggle + export) → counts row
+ * with per-source badges → preferences card (live / compact / look-back)
+ * → horizontal scroller of `ActivityLane`s.
  */
 
 type Source = 'task' | 'agent' | 'goal' | 'settings' | 'system' | 'git' | 'all';
@@ -55,7 +60,7 @@ const SOURCE_META: Record<Exclude<Source, 'all'>, { label: string; icon: LucideI
   git: { label: 'Git', icon: GitMerge, tone: 'neutral' },
 };
 
-const EVENT_TONE_MAP: Record<string, { icon: LucideIcon; tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger'; source: Source }> = {
+const EVENT_TONE_MAP: Record<string, { icon: LucideIcon; tone: ActivityLaneEvent['tone']; source: Source }> = {
   'git.merge': { icon: GitMerge, tone: 'success', source: 'git' },
   'git.pull-request': { icon: GitPullRequest, tone: 'info', source: 'git' },
   'task.completed': { icon: CheckCircle2, tone: 'success', source: 'task' },
@@ -65,13 +70,13 @@ const EVENT_TONE_MAP: Record<string, { icon: LucideIcon; tone: 'neutral' | 'info
   'agent.run': { icon: Bot, tone: 'info', source: 'agent' },
   'agent.tool': { icon: Wrench, tone: 'neutral', source: 'agent' },
   'agent.killed': { icon: AlertTriangle, tone: 'warning', source: 'agent' },
+  'agent.message': { icon: ActivityIcon, tone: 'info', source: 'agent' },
   'goal.created': { icon: Target, tone: 'info', source: 'goal' },
   'goal.status': { icon: Target, tone: 'info', source: 'goal' },
   'goal.decomposed': { icon: Target, tone: 'success', source: 'goal' },
   'settings.changed': { icon: SettingsIcon, tone: 'neutral', source: 'settings' },
   'system.error': { icon: AlertTriangle, tone: 'danger', source: 'system' },
   'system.note': { icon: ActivityIcon, tone: 'neutral', source: 'system' },
-  'agent.message': { icon: ActivityIcon, tone: 'info', source: 'agent' },
 };
 
 function inferSource(e: ActivityEvent): Source {
@@ -87,86 +92,37 @@ function inferSource(e: ActivityEvent): Source {
   return 'system';
 }
 
-function eventVisual(e: ActivityEvent): { icon: LucideIcon; tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger'; source: Source } {
+function eventVisual(e: ActivityEvent): { icon: LucideIcon; tone: ActivityLaneEvent['tone']; source: Source } {
   const m = EVENT_TONE_MAP[e.kind || e.iconKey || ''] || EVENT_TONE_MAP['system.note'];
   const inferred = inferSource(e);
   return { icon: m.icon, tone: m.tone, source: inferred };
 }
 
-function dayKey(ts: number): string {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function laneKey(e: ActivityEvent): string {
+  return e.agent || e.actor || e.slug || 'system';
 }
 
-function dayLabel(ts: number): string {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const d = new Date(ts);
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((today - start) / 86_400_000);
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+function laneLabel(key: string): string {
+  if (key === 'system') return 'System';
+  return key;
 }
 
-function timeShort(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+interface ExtendedEvent extends ActivityEvent {
+  __source?: Source;
+  __key?: string;
 }
-
-interface DiffPayload { before?: string; after?: string; lines?: { kind: '+' | '-' | ' '; text: string }[] }
-
-function renderDiff(meta: unknown): JSX.Element | null {
-  if (!meta || typeof meta !== 'object') return null;
-  const d = meta as DiffPayload;
-  if (Array.isArray(d.lines) && d.lines.length > 0) {
-    return (
-      <Box style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)', background: 'var(--surface-0)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
-        {d.lines.slice(0, 40).map((l, i) => (
-          <div key={i} style={{ color: l.kind === '+' ? 'var(--success)' : l.kind === '-' ? 'var(--danger)' : 'var(--fg-muted)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            <span style={{ display: 'inline-block', width: 12 }}>{l.kind === ' ' ? '' : l.kind}</span>
-            {l.text}
-          </div>
-        ))}
-      </Box>
-    );
-  }
-  if (d.before !== undefined || d.after !== undefined) {
-    return (
-      <Box style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {d.before !== undefined && (
-          <Box style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)', background: 'color-mix(in oklch, var(--danger) 12%, var(--surface-0))', border: '1px solid color-mix(in oklch, var(--danger) 30%, var(--border))', borderRadius: 'var(--radius-sm)', padding: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            <strong style={{ color: 'var(--danger)' }}>before</strong>
-            <div>{String(d.before)}</div>
-          </Box>
-        )}
-        {d.after !== undefined && (
-          <Box style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)', background: 'color-mix(in oklch, var(--success) 12%, var(--surface-0))', border: '1px solid color-mix(in oklch, var(--success) 30%, var(--border))', borderRadius: 'var(--radius-sm)', padding: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            <strong style={{ color: 'var(--success)' }}>after</strong>
-            <div>{String(d.after)}</div>
-          </Box>
-        )}
-      </Box>
-    );
-  }
-  return null;
-}
-
-function Box(props: { children?: React.ReactNode; style?: React.CSSProperties; className?: string }): JSX.Element {
-  return <div className={cx('v8-cl-box', props.className)} style={props.style}>{props.children}</div>;
-}
-
-interface ExtendedEvent extends ActivityEvent { __source?: Source }
 
 export function ActivityView(): JSX.Element {
-  const events = useFetch<{ events?: ActivityEvent[] }>('/api/activity?limit=200');
+  const events = useFetch<{ items?: ActivityEvent[]; total?: number; limit?: number; since?: string | null }>('/api/activity?limit=200');
   const [live, setLive] = useState<ActivityEvent[]>([]);
+  // Active source filter (single source — clicking a chip narrows to one).
   const [source, setSource] = useState<Source>('all');
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [compact, setCompact] = useState<boolean>(false);
   const [maxDays, setMaxDays] = useState<number>(14);
   const [exportError, setExportError] = useState<string | null>(null);
   const [search, setSearch] = useState<string>('');
+  const navigate = useViewNavigate();
 
   const onEvent = useCallback((msg: { event?: ActivityEvent } & Record<string, unknown>) => {
     if (!autoRefresh) return;
@@ -177,7 +133,7 @@ export function ActivityView(): JSX.Element {
   useWsMessage('activity:new', onEvent);
 
   const merged = useMemo<ExtendedEvent[]>(() => {
-    return [...live, ...(events.data?.events || [])];
+    return [...live, ...(events.data?.items || [])];
   }, [live, events.data]);
 
   const filtered = useMemo<ExtendedEvent[]>(() => {
@@ -205,23 +161,6 @@ export function ActivityView(): JSX.Element {
     [filtered, cutoff],
   );
 
-  const grouped = useMemo<{ key: string; label: string; events: ExtendedEvent[] }[]>(() => {
-    const map = new Map<string, ExtendedEvent[]>();
-    for (const e of windowed) {
-      const ts = e.ts || Date.now();
-      const k = dayKey(ts);
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(e);
-    }
-    const out: { key: string; label: string; events: ExtendedEvent[] }[] = [];
-    for (const [k, evs] of map) {
-      const first = evs.find((x) => x.ts);
-      const ts = first?.ts ?? Date.now();
-      out.push({ key: k, label: dayLabel(ts), events: evs });
-    }
-    return out.sort((a, b) => (a.key < b.key ? 1 : -1));
-  }, [windowed]);
-
   const counts = useMemo(() => {
     const acc: Record<Source, number> = { all: 0, task: 0, agent: 0, goal: 0, settings: 0, system: 0, git: 0 };
     for (const e of merged) {
@@ -233,15 +172,74 @@ export function ActivityView(): JSX.Element {
   }, [merged]);
 
   const sparklineData = useMemo<number[]>(() => {
-    // Chronological order (grouped is desc), so reverse to oldest-first.
-    return [...grouped].reverse().map((g) => g.events.length);
-  }, [grouped]);
+    // Group by hour bucket for sparkline.
+    const buckets = new Map<string, number>();
+    for (const e of windowed) {
+      if (!e.ts) continue;
+      const d = new Date(e.ts);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}`;
+      buckets.set(k, (buckets.get(k) ?? 0) + 1);
+    }
+    return [...buckets.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, v]) => v).slice(-24);
+  }, [windowed]);
+
+  // Group events into lanes (one per actor).
+  const lanes = useMemo<{ key: string; label: string; events: ActivityLaneEvent[]; icon: LucideIcon; tone: ActivityLaneEvent['tone'] }[]>(() => {
+    const map = new Map<string, ActivityLaneEvent[]>();
+    const order: string[] = [];
+    for (const e of windowed) {
+      const v = eventVisual(e);
+      const ts = e.ts || Date.now();
+      const k = laneKey(e);
+      const id = e.id || `${k}-${ts}-${Math.random().toString(36).slice(2, 6)}`;
+      if (!map.has(k)) { map.set(k, []); order.push(k); }
+      const target = activityTarget(e.kind, e.slug);
+      map.get(k)!.push({
+        id,
+        title: e.title || e.description || e.kind || 'event',
+        description: e.description && e.description !== e.title ? e.description : undefined,
+        ts,
+        tone: v.tone,
+        icon: v.icon,
+        href: target ? undefined : undefined,
+        kind: e.kind,
+        agent: e.agent,
+        actor: e.actor,
+        slug: e.slug,
+        raw: e,
+      });
+    }
+    // Sort each lane newest-first; ensure consistent order.
+    for (const arr of map.values()) arr.sort((a, b) => b.ts - a.ts);
+    return order.map((k) => {
+      const events = map.get(k)!;
+      // Lane icon picks the most recent event's icon (visual hint).
+      const Icon = (events[0]?.icon as LucideIcon) || Cpu;
+      // Lane tone picks the worst recent tone (danger > warning > success > info > neutral).
+      const severity: Record<NonNullable<ActivityLaneEvent['tone']>, number> = { danger: 4, warning: 3, success: 2, info: 1, neutral: 0 };
+      const worst = events.reduce<ActivityLaneEvent['tone']>((acc, e) => {
+        const cur = severity[e.tone ?? 'neutral'];
+        const best = severity[acc ?? 'neutral'];
+        return cur > best ? (e.tone ?? 'neutral') : acc;
+      }, 'neutral');
+      return { key: k, label: laneLabel(k), events, icon: Icon, tone: worst };
+    }).sort((a, b) => b.events.length - a.events.length);
+  }, [windowed]);
+
+  const onLaneClick = useCallback((ev: ActivityLaneEvent) => {
+    const target = activityTarget(ev.kind, ev.slug);
+    if (target) {
+      navigate(target);
+      return;
+    }
+    // Fallback: navigate to activity's own view (no-op) but focus the row.
+  }, [navigate]);
 
   const exportNdjson = async (): Promise<void> => {
     setExportError(null);
     try {
-      const res = await fetchJson<{ events?: ActivityEvent[] }>('/api/activity?limit=10000');
-      const text = (res.events || []).map((e) => JSON.stringify(e)).join('\n');
+      const res = await fetchJson<{ items?: ActivityEvent[] }>('/api/activity?limit=10000');
+      const text = (res.items || []).map((e) => JSON.stringify(e)).join('\n');
       const blob = new Blob([text], { type: 'application/x-ndjson' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -260,7 +258,7 @@ export function ActivityView(): JSX.Element {
     <Stack gap={5} data-testid="activity-view">
       <ViewHeader
         title="Activity"
-        description="Day-grouped changelog across tasks, agents, goals, settings, and git."
+        description="Live event lanes grouped by agent, system, and goal."
         actions={
           <Inline align="center" gap={2}>
             <input
@@ -303,10 +301,10 @@ export function ActivityView(): JSX.Element {
         }
       />
       <ListHeader
-        title="Feed"
+        title="Lanes"
         count={windowed.length}
         sparkline={sparklineData.length >= 2 ? <Sparkline data={sparklineData} width={120} height={28} /> : undefined}
-        description={`${counts.task} task · ${counts.agent} agent · ${counts.goal} goal`}
+        description={`${lanes.length} lane${lanes.length === 1 ? '' : 's'} · ${counts.task} task · ${counts.agent} agent · ${counts.goal} goal`}
         testid="activity-list-header"
       />
 
@@ -337,7 +335,7 @@ export function ActivityView(): JSX.Element {
       {/* Display prefs */}
       <Card>
         <CardBody>
-          <Grid cols={3} gap={4}>
+          <Inline align="center" gap={6} wrap>
             <Stack gap={1}>
               <label htmlFor="cl-auto" style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Live tail</label>
               <Inline align="center" gap={2}>
@@ -361,7 +359,13 @@ export function ActivityView(): JSX.Element {
                 <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)' }}>{maxDays}d</code>
               </Inline>
             </Stack>
-          </Grid>
+            <Inline align="center" gap={1}>
+              <Clock size={12} aria-hidden style={{ color: 'var(--fg-muted)' }} />
+              <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+                click any event row to jump to its source
+              </span>
+            </Inline>
+          </Inline>
         </CardBody>
       </Card>
 
@@ -380,7 +384,7 @@ export function ActivityView(): JSX.Element {
       )}
 
       {events.loading && windowed.length === 0 ? (
-        <Skeleton style={{ height: 320 }} />
+        <Skeleton style={{ height: 480 }} />
       ) : events.error && windowed.length === 0 ? (
         <ErrorState
           block
@@ -390,87 +394,37 @@ export function ActivityView(): JSX.Element {
           onRetry={() => void events.refetch()}
           testid="activity-error"
         />
+      ) : lanes.length === 0 ? (
+        <Card>
+          <CardBody>
+            <span style={{ color: 'var(--fg-muted)' }}>No lanes yet — events will appear here as agents run.</span>
+          </CardBody>
+        </Card>
       ) : (
-        <Stack gap={5}>
-          {grouped.map((group) => (
-            <Stack key={group.key} gap={3}>
-              <Inline
-                align="center"
-                gap={2}
-                style={{ position: 'sticky', top: 0, padding: 'var(--space-2) var(--space-3)', background: 'color-mix(in oklch, var(--surface-0) 88%, transparent)', backdropFilter: 'blur(8px)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', zIndex: 1 }}
-              >
-                <h2 style={{ margin: 0, fontSize: 'var(--fs-16)', fontWeight: 600 }}>{group.label}</h2>
-                <Badge tone="neutral">{group.events.length}</Badge>
-                <Clock size={12} aria-hidden style={{ color: 'var(--fg-muted)' }} />
-                <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
-                  {group.events.filter((e) => e.ts === undefined).length > 0
-                    ? 'live + historical'
-                    : 'historical only'}
-                </span>
-              </Inline>
-
-              <Stack gap={1}>
-                {group.events.map((e, i) => {
-                  const v = eventVisual(e);
-                  const SourceIcon = SOURCE_META[v.source as Exclude<Source, 'all'>]?.icon || Cpu;
-                  const ts = e.ts ?? Date.now();
-                  return (
-                    <Box
-                      key={`${e.id ?? `${ts}-${i}`}`}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'auto 1fr auto',
-                        gap: 12,
-                        padding: compact ? '6px 10px' : 'var(--space-3) var(--space-4)',
-                        background: 'var(--surface-1)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-md)',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {/* Icon column */}
-                      <Box
-                        style={{
-                          width: 32,
-                          height: 32,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 'var(--radius-pill)',
-                          background: `color-mix(in oklch, var(--${v.tone === 'neutral' ? 'fg-muted' : v.tone}) 18%, var(--surface-0))`,
-                          color: `var(--${v.tone === 'neutral' ? 'fg-muted' : v.tone})`,
-                        }}
-                      >
-                        <v.icon size={14} aria-hidden />
-                      </Box>
-                      {/* Body */}
-                      <Stack gap={1}>
-                        <Inline align="center" gap={2}>
-                          <strong style={{ fontSize: 'var(--fs-14)' }}>{e.title ?? e.description ?? e.kind ?? 'event'}</strong>
-                          <Badge tone={SOURCE_META[v.source as Exclude<Source, 'all'>]?.tone ?? 'neutral'}>
-                            <Inline align="center" gap={1}><SourceIcon size={10} aria-hidden /> {SOURCE_META[v.source as Exclude<Source, 'all'>]?.label ?? v.source}</Inline>
-                          </Badge>
-                          {e.kind && <Badge tone="neutral">{e.kind}</Badge>}
-                        </Inline>
-                        {e.description && e.description !== e.title && (
-                          <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-13)' }}>{e.description}</span>
-                        )}
-                        {renderDiff(e.meta)}
-                      </Stack>
-                      {/* Meta column */}
-                      <Stack align="end" gap={1}>
-                        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>{timeShort(ts)}</code>
-                        {typeof e.actor === 'string' && (
-                          <Inline align="center" gap={1}><Circle size={8} aria-hidden style={{ color: 'var(--accent)' }} /><span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>{e.actor}</span></Inline>
-                        )}
-                      </Stack>
-                    </Box>
-                  );
-                })}
-              </Stack>
-            </Stack>
+        <ActivityLanes minHeight={compact ? 320 : 480}>
+          {lanes.map((lane) => (
+            <ActivityLane
+              key={lane.key}
+              laneId={lane.key}
+              label={lane.label}
+              icon={lane.icon}
+              events={lane.events}
+              loading={events.loading && lane.events.length === 0}
+              onEventClick={onLaneClick}
+              trailing={
+                <Badge tone={
+                  lane.tone === 'danger' ? 'danger'
+                  : lane.tone === 'warning' ? 'warning'
+                  : lane.tone === 'success' ? 'success'
+                  : lane.tone === 'info' ? 'info'
+                  : 'neutral'
+                }>
+                  {lane.tone}
+                </Badge>
+              }
+            />
           ))}
-        </Stack>
+        </ActivityLanes>
       )}
     </Stack>
   );

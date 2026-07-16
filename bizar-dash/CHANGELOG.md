@@ -1,5 +1,52 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v10.0.7 — 2026-07-16
+
+### Highlights
+
+Activity page rebuilt as swimlanes (inspired by
+[patoles/agent-flow](https://github.com/patoles/agent-flow)) plus a
+route contract fix that was previously hiding every event.
+
+- **Activity lanes**: vertical swimlanes per agent/actor, newest-first,
+  320px columns with horizontal scroll, click-through on every event
+  row to the underlying entity (task / goal / agent / artifact) via a
+  new `useViewNavigate` hook.
+- **New primitives**: `ActivityLane` (one lane) + `ActivityLanes`
+  (horizontal scroller) — re-exported from `ui/index.ts`.
+- **Route contract**: `/api/activity` now returns `{ items, total,
+  limit, since }` (was leaking `events`); honors `?limit=N` (default
+  200, hard cap 1000) and accepts `?since=ISO` for windowed polling.
+- **Documentation**: per-actor lane behaviour, click-through targets,
+  and E2E script `tests/e2e/dashboard-activity-lanes.mjs` (6/6 PASS).
+
+### Files
+
+- `bizar-dash/src/server/routes/activity.mjs` — contract fix
+- `bizar-dash/src/web/v8/ui/activity/ActivityLane.tsx` — NEW primitive
+- `bizar-dash/src/web/v8/ui/activity/ActivityLanes.tsx` — NEW scroller
+- `bizar-dash/src/web/v8/ui/index.ts` — barrel re-exports
+- `bizar-dash/src/web/v8/data/useViewNavigate.ts` — NEW: cross-tree
+  `bizar:navigate` CustomEvent hook
+- `bizar-dash/src/web/v8/App.tsx` — listens for `bizar:navigate`
+- `bizar-dash/src/web/v8/views/Activity/ActivityView.tsx` — rewritten
+  as swimlanes
+- `tests/e2e/dashboard-activity-lanes.mjs` — NEW E2E (6 checks)
+- `package.json` — `test:e2e:activity-lanes` script
+
+### Skipped (deliberate)
+
+- **`?actor=` filter** on the route — currently the client groups by
+  whatever `state.recentActivity` already partitions. Ponytail: add
+  when the activity store grows large enough that the client grouping
+  becomes expensive.
+- **Lane drag-to-reorder** — lane order is currently count-desc, no
+  user override. ponytail: persist `localStorage['bizar:lane:order']`
+  when there's user demand.
+- **Horizontal time axis zoom** — patoles/agent-flow's timeline zoom
+  interaction, skipped because `ts` density is too spiky to make a
+  zoom useful without smoothing windows.
+
 ## v10.0.6 — 2026-07-16
 
 ### Highlights
