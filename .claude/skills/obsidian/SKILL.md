@@ -303,4 +303,4 @@ The vault directory is a Git repo. `bizar memory sync` does, in order:
 - `wiki/Architecture.md` — system-level architecture, including the Memory section.
 - `wiki/Self-Improvement.md` — self-improvement log conventions.
 - `config/skills/glyph/SKILL.md` — graphify knowledge graph (separate from the memory vault).
-- `config/skills/obsidian-skills/SKILL.md` — Obsidian Markdown / Bases / Canvas / CLI (auto-installed by `install.sh` via `skills add kepano/obsidian-skills`).
+- `config/skills/glyph/SKILL.md` — graphify knowledge graph (separate from the memory vault).

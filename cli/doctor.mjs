@@ -137,7 +137,7 @@ async function checkMemoryVault() {
 }
 
 async function check9RouterReachable() {
-  const url = process.env.NINEROUTER_URL || 'http://127.0.0.1:8787';
+  const url = process.env.NINEROUTER_URL || 'http://127.0.0.1:20128';
   let res;
   try {
     res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });

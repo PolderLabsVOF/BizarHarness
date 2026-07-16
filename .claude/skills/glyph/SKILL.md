@@ -158,6 +158,5 @@ Also check yourself: does it fit on one screen? Are there any 4-sentence RichTex
 
 ## See also
 
-- `bizar-dash/src/server/glyphs/mdx-compiler.mjs` — parser
-- `bizar-dash/src/web/views/glyphs/GlyphRenderer.tsx` — React renderer (has error banner)
-- `bizar-dash/src/web/views/glyphs/components.tsx` — block implementations
+- `bizar-dash/src/server/glyphs/mdx-compiler.mjs` — MDX compiler
+- `bizar-dash/src/server/artifacts.mjs` — artifact route (the legacy glyph React view was removed in v10 — artifacts is the current surface)
