@@ -34,6 +34,7 @@
  */
 import { Router } from 'express';
 import { dialogStore } from '../dialog-store.mjs';
+import { mintArtifact } from '../artifact-mint.mjs';
 import { wrap } from './_shared.mjs';
 
 /**
@@ -41,7 +42,7 @@ import { wrap } from './_shared.mjs';
  * @param {Function} deps.broadcast
  * @returns {import('express').Router}
  */
-export function createDialogsRouter({ broadcast }) {
+export function createDialogsRouter({ broadcast, projectRoot }) {
   const router = Router();
 
   // Debug / introspection — what dialogs are currently queued?
@@ -105,10 +106,26 @@ export function createDialogsRouter({ broadcast }) {
   router.patch('/dialogs/:id', wrap(async (req, res) => {
     const body = req.body || {};
     const dataPatch = body.data && typeof body.data === 'object' ? body.data : body;
+    const existing = dialogStore.get(req.params.id);
+    const wasNeedsInput = !!(existing && existing.needsUserInput === true);
     const updated = dialogStore.patch(req.params.id, dataPatch);
     if (!updated) {
       res.status(404).json({ error: 'not_found' });
       return;
+    }
+    // v10.0.6 — auto-mint a 'dialog-needs-input' artifact on the
+    // false→true transition (only when projectRoot is available).
+    const nowNeedsInput = updated.needsUserInput === true;
+    if (nowNeedsInput && !wasNeedsInput && projectRoot) {
+      mintArtifact({
+        kind: 'dialog-needs-input',
+        entityId: updated.id,
+        title: `Dialog needs input: ${updated.title || updated.id}`,
+        description: updated.prompt || updated.message || '',
+        frontmatter: { dialogId: updated.id, kind: updated.kind ?? null, command: updated.command ?? null },
+        projectRoot,
+        broadcast,
+      });
     }
     res.json({ ok: true, dialog: updated });
   }));

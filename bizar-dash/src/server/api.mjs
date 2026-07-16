@@ -145,7 +145,7 @@ export async function createApiRouter({
   router.use(createChatRouter({ state, broadcast }));
   router.use(createClaudeSessionsRouter());
   router.use(createClaudeSessionDetailRouter());
-  router.use(createDialogsRouter({ broadcast }));
+  router.use(createDialogsRouter({ broadcast, projectRoot }));
   router.use(createSkillsRouter({ broadcast }));
   router.use(await createObsidianRouter({ projectRoot }));
   // v3.24.0 — Bizar Memory Service (Phase 1). Lazy-imported so that if Thor's
@@ -175,7 +175,7 @@ export async function createApiRouter({
   // v6.4.0 — F-036 Goal Planner UI. Plain-English goal → A* plan.
   router.use(createGoalPlannerRouter({ broadcast }));
   // Sprint S10 — goals CRUD on .bizar/PROGRESS.md.
-  router.use(createGoalsRouter({ broadcast }));
+  router.use(createGoalsRouter({ broadcast, projectRoot }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));

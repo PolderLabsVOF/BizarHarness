@@ -26,6 +26,7 @@ import { wrap } from './_shared.mjs';
 import { projectsStore } from '../projects-store.mjs';
 import { tasksStore } from '../tasks-store.mjs';
 import { parseProgress, serializeProgress } from '../progress-parser.mjs';
+import { mintArtifact } from '../artifact-mint.mjs';
 
 const VALID_STATUSES = new Set(['on-track', 'at-risk', 'off-track', 'done', 'blocked', 'active']);
 const HOME = homedir();
@@ -145,7 +146,7 @@ function deriveRiskStatus(goal) {
 /**
  * @param {{ broadcast?: Function }} deps
  */
-export function createGoalsRouter({ broadcast } = {}) {
+export function createGoalsRouter({ broadcast, projectRoot } = {}) {
   const router = Router();
 
   router.get('/goals', wrap(async (_req, res) => {
@@ -176,9 +177,25 @@ export function createGoalsRouter({ broadcast } = {}) {
     const parsed = parseProgress(readRaw());
     const goal = parsed.goals.find((g) => g.id === req.params.id);
     if (!goal) { res.status(404).json({ error: 'not_found' }); return; }
+    const previousStatus = goal.status;
     goal.status = status;
     writeRaw(serializeProgress(parsed));
     emit(broadcast, goal);
+    // v10.0.6 — auto-mint a 'goal-finished' artifact on the done transition.
+    if (status === 'done' && previousStatus !== 'done' && projectRoot) {
+      const krSummary = (goal.keyResults || [])
+        .map((kr) => `- [${kr.done ? 'x' : ' '}] ${kr.title}`)
+        .join('\n');
+      mintArtifact({
+        kind: 'goal-finished',
+        entityId: goal.id,
+        title: `Goal finished: ${goal.title}`,
+        description: `Status moved from \`${previousStatus}\` to \`done\`.\n\n${krSummary}`,
+        frontmatter: { goalId: goal.id, previousStatus, owner: goal.owner ?? null },
+        projectRoot,
+        broadcast,
+      });
+    }
     res.json(goal);
   }));
 
