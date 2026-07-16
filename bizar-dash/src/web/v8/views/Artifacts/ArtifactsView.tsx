@@ -1,10 +1,19 @@
 /**
- * v8/views/Artifacts/ArtifactsView.tsx — Sprint S43, v9.3.0.
+ * v8/views/Artifacts/ArtifactsView.tsx — Sprint S43, v9.3.0 → v10.1.0
+ * (Claude Artifacts swap).
  *
  * Artifacts list (GET /api/artifacts) with per-row open-to-detail
  * (right-hand Sheet using GET /api/artifacts/:slug + /render) and
  * inline-confirm Delete (DELETE /api/artifacts/:slug). Add Sheet
- * posts a new artifact (POST /api/artifacts {slug, ...}).
+ * posts a new artifact (POST /api/artifacts {slug, kind, source, ...}).
+ *
+ * v10.1.0 — Detail panel dispatches by `kind`:
+ *   - claude-html / claude-svg / claude-react → sandboxed iframe
+ *     via <ClaudeArtifactView>
+ *   - mdx → legacy block-renderer fallback
+ *
+ * The AddForm gains a `kind` dropdown + a textarea bound to `source`;
+ * the textarea defaults to the kind-specific starting template.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,15 +30,17 @@ import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { EmptyState } from '../../ui/feedback/EmptyState.js';
 import { useFetch } from '../../data/useFetch.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
+import { ClaudeArtifactView, type ClaudeRenderPayload } from './ClaudeArtifactView.js';
 
 interface Artifact {
   slug: string;
   title?: string;
-  kind?: string;
+  kind?: 'mdx' | 'claude-html' | 'claude-svg' | 'claude-react';
   description?: string;
   createdAt?: string | number;
   updatedAt?: string | number;
   planMdx?: string;
+  source?: string;
   frontmatter?: Record<string, unknown>;
 }
 
@@ -130,7 +141,7 @@ export function ArtifactsView(): JSX.Element {
       </Card>
 
       <Sheet open={adding} onOpenChange={setAdding}>
-        <SheetContent side="right" title="Add artifact" description="Slug + title + initial MDX.">
+        <SheetContent side="right" title="Add artifact" description="Slug + kind + initial source.">
           <AddForm
             onSubmit={async (body) => {
               await fetchJson('/api/artifacts', { method: 'POST', body });
@@ -144,7 +155,7 @@ export function ArtifactsView(): JSX.Element {
 
       <Sheet open={activeSlug !== null} onOpenChange={(open) => { if (!open) setActiveSlug(null); }}>
         <SheetContent side="right" title={activeSlug ?? ''} description="Artifact detail">
-          {activeSlug !== null && <ArtifactDetail slug={activeSlug} />}
+          {activeSlug !== null && <ArtifactDetail slug={activeSlug} refresh={refresh} />}
         </SheetContent>
       </Sheet>
     </Stack>
@@ -155,15 +166,23 @@ function AddForm({
   onSubmit,
   onCancel,
 }: {
-  onSubmit: (body: { slug: string; title?: string; description?: string; planMdx?: string; frontmatter?: Record<string, unknown> }) => Promise<void>;
+  onSubmit: (body: { slug: string; title?: string; description?: string; kind?: string; source?: string; planMdx?: string }) => Promise<void>;
   onCancel: () => void;
 }): JSX.Element {
   const [slug, setSlug] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
-  const [planMdx, setPlanMdx] = useState<string>('');
+  const [kind, setKind] = useState<'mdx' | 'claude-html' | 'claude-svg' | 'claude-react'>('claude-html');
+  const [source, setSource] = useState<string>(KIND_TEMPLATES['claude-html']);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // When the user changes kind, swap the textarea content to a starter
+  // template for that kind. They can still edit further.
+  const onKindChange = (next: 'mdx' | 'claude-html' | 'claude-svg' | 'claude-react'): void => {
+    setKind(next);
+    setSource(KIND_TEMPLATES[next]);
+  };
 
   return (
     <Stack gap={3} style={{ padding: 'var(--space-4)' }}>
@@ -180,8 +199,37 @@ function AddForm({
         <Input value={description} onChange={(e) => setDescription((e.target as HTMLInputElement).value)} data-testid="artifact-form-description" />
       </label>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-        <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Plan MDX</span>
-        <Textarea value={planMdx} rows={6} onChange={(e) => setPlanMdx((e.target as HTMLTextAreaElement).value)} data-testid="artifact-form-mdx" />
+        <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Kind</span>
+        <select
+          value={kind}
+          onChange={(e) => onKindChange(e.target.value as typeof kind)}
+          data-testid="artifact-form-kind"
+          style={{
+            fontFamily: 'inherit',
+            fontSize: 'var(--fs-12)',
+            padding: 'var(--space-2)',
+            background: 'var(--surface-0)',
+            color: 'var(--fg)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          <option value="claude-html">Claude HTML</option>
+          <option value="claude-svg">Claude SVG</option>
+          <option value="claude-react">Claude React (JSX)</option>
+          <option value="mdx">Legacy MDX (glyphs)</option>
+        </select>
+      </label>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+        <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+          {kind === 'mdx' ? 'Plan MDX' : 'Source'}
+        </span>
+        <Textarea
+          value={source}
+          rows={kind === 'claude-react' ? 10 : 6}
+          onChange={(e) => setSource((e.target as HTMLTextAreaElement).value)}
+          data-testid={kind === 'mdx' ? 'artifact-form-mdx' : 'artifact-form-source'}
+        />
       </label>
       {error !== null && <span role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--fs-12)' }}>{error}</span>}
       <Inline justify="end" gap={2}>
@@ -194,7 +242,16 @@ function AddForm({
             setBusy(true);
             setError(null);
             try {
-              await onSubmit({ slug: slug.trim(), title: title.trim() || undefined, description: description.trim() || undefined, planMdx: planMdx || undefined });
+              const body: { slug: string; title?: string; description?: string; kind: typeof kind; source?: string; planMdx?: string } = {
+                slug: slug.trim(),
+                title: title.trim() || undefined,
+                description: description.trim() || undefined,
+                kind,
+              };
+              if (source) {
+                if (kind === 'mdx') body.planMdx = source; else body.source = source;
+              }
+              await onSubmit(body);
             } catch (err) {
               setError(err instanceof FetchError ? err.message : (err as Error).message);
               setBusy(false);
@@ -208,33 +265,187 @@ function AddForm({
   );
 }
 
-function ArtifactDetail({ slug }: { slug: string }): JSX.Element {
+const KIND_TEMPLATES: Record<'mdx' | 'claude-html' | 'claude-svg' | 'claude-react', string> = {
+  mdx: '# Hello\n\nAdd some MDX here.',
+  'claude-html': '<!doctype html>\n<h1 style="font-family:system-ui">Hello artifact</h1>\n<p>Edit me — click <em>Open</em> to preview.</p>',
+  'claude-svg': '<svg viewBox="0 0 100 100" width="200" height="200">\n  <circle cx="50" cy="50" r="40" fill="#0b66c3"/>\n  <text x="50" y="55" text-anchor="middle" fill="white" font-size="14">SVG</text>\n</svg>',
+  'claude-react': 'export default function App() {\n  const [n, setN] = React.useState(0);\n  return (\n    <div style={{ fontFamily: "system-ui", padding: 16 }}>\n      <h1>Hello</h1>\n      <button onClick={() => setN(n + 1)}>clicked {n}</button>\n    </div>\n  );\n}',
+};
+
+function ArtifactDetail({ slug, refresh }: { slug: string; refresh: () => void }): JSX.Element {
   const payload = useFetch<Artifact>(`/api/artifacts/${slug}`);
-  const renderPayload = useFetch<{ blocks?: unknown[]; frontmatter?: Record<string, unknown> }>(`/api/artifacts/${slug}/render`);
+  const renderPayload = useFetch<ClaudeRenderPayload>(`/api/artifacts/${slug}/render`);
+  const kind = payload.data?.kind || 'mdx';
+  const isClaude = kind === 'claude-html' || kind === 'claude-svg' || kind === 'claude-react';
+
   return (
     <Stack gap={2} style={{ padding: 'var(--space-4)' }}>
       {payload.loading && !payload.data ? (
         <Skeleton style={{ height: 80 }} />
       ) : payload.data ? (
         <Stack gap={2}>
-          <strong>{payload.data.title || payload.data.slug}</strong>
+          <Inline align="center" gap={2}>
+            <strong>{payload.data.title || payload.data.slug}</strong>
+            <code style={{ fontSize: 'var(--fs-11)', color: 'var(--fg-subtle)' }}>{payload.data.slug}</code>
+            <span style={{ fontSize: 'var(--fs-11)', color: 'var(--fg-muted)' }}>· {kind}</span>
+          </Inline>
           {payload.data.description && <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>{payload.data.description}</span>}
-          {payload.data.frontmatter && (
-            <div data-testid={`artifact-frontmatter-${slug}`} style={{ padding: 'var(--space-2)', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)' }}>
-              <pre style={{ margin: 0, fontSize: 'var(--fs-11)', fontFamily: 'var(--font-mono)' }}>{JSON.stringify(payload.data.frontmatter, null, 2)}</pre>
-            </div>
+
+          {/* Claude-* kinds render in a sandboxed iframe via the new
+              <ClaudeArtifactView>. The server compiles the source on
+              demand and returns iframe-ready HTML (srcdoc). */}
+          {isClaude && (
+            renderPayload.data ? (
+              <ClaudeArtifactView payload={renderPayload.data} slug={slug} />
+            ) : (
+              <Skeleton style={{ height: 200 }} />
+            )
           )}
-          {payload.data.planMdx && (
-            <pre data-testid={`artifact-mdx-${slug}`} style={{ padding: 'var(--space-2)', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--fs-11)', maxHeight: 240, overflow: 'auto', fontFamily: 'var(--font-mono)' }}>{payload.data.planMdx}</pre>
-          )}
-          {renderPayload.data && (
+
+          {/* Legacy MDX path keeps the original block-count summary. */}
+          {!isClaude && renderPayload.data && (
             <span data-testid={`artifact-render-${slug}`} style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
               Render: {Array.isArray(renderPayload.data.blocks) ? `${renderPayload.data.blocks.length} blocks` : 'no blocks'}
             </span>
           )}
+
+          {/* Inline editor — kind switch + textarea + save. */}
+          <Editor payload={payload.data} slug={slug} onSaved={() => { void payload.refetch(); void renderPayload.refetch(); refresh(); }} />
         </Stack>
       ) : (
         <span role="alert" style={{ color: 'var(--danger)' }}>Not found</span>
+      )}
+    </Stack>
+  );
+}
+
+/**
+ * Inline editor: lets the user change the kind, edit the body, and
+ * save via PUT /api/artifacts/:slug. After save we re-fetch both the
+ * artifact + the compiled render so the iframe updates with the new
+ * source on the next paint.
+ */
+function Editor({
+  payload,
+  slug,
+  onSaved,
+}: {
+  payload: Artifact;
+  slug: string;
+  onSaved: () => void;
+}): JSX.Element {
+  const initial = payload.source ?? payload.planMdx ?? '';
+  const [editKind, setEditKind] = useState<typeof payload.kind>(payload.kind || 'mdx');
+  const [editSource, setEditSource] = useState<string>(initial);
+  const [busy, setBusy] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<boolean>(false);
+
+  // Sync the textarea when the underlying artifact changes (e.g. when
+  // the user opens a different slug in the same Sheet).
+  useEffect(() => {
+    setEditKind(payload.kind || 'mdx');
+    setEditSource(payload.source ?? payload.planMdx ?? '');
+  }, [payload.slug, payload.source, payload.planMdx, payload.kind]);
+
+  const dirty =
+    editKind !== (payload.kind || 'mdx') || editSource !== (payload.source ?? payload.planMdx ?? '');
+
+  const save = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fetchJson(`/api/artifacts/${slug}`, {
+        method: 'PUT',
+        body: {
+          kind: editKind,
+          source: editKind === 'mdx' ? undefined : editSource,
+          planMdx: editKind === 'mdx' ? editSource : undefined,
+        },
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack gap={1} data-testid={`artifact-editor-${slug}`}>
+      <Inline align="center" justify="between" gap={2}>
+        <Button variant="ghost" onClick={() => setOpen((v) => !v)} data-testid={`artifact-edit-toggle-${slug}`}>
+          {open ? 'Close editor' : 'Edit'}
+        </Button>
+        {dirty && (
+          <span style={{ fontSize: 'var(--fs-11)', color: 'var(--callout-warning-fg, #b58900)' }}>
+            Unsaved changes
+          </span>
+        )}
+      </Inline>
+      {open && (
+        <Stack gap={2}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Kind</span>
+            <select
+              value={editKind}
+              onChange={(e) => setEditKind(e.target.value as typeof editKind)}
+              data-testid={`artifact-edit-kind-${slug}`}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 'var(--fs-12)',
+                padding: 'var(--space-2)',
+                background: 'var(--surface-0)',
+                color: 'var(--fg)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <option value="claude-html">Claude HTML</option>
+              <option value="claude-svg">Claude SVG</option>
+              <option value="claude-react">Claude React (JSX)</option>
+              <option value="mdx">Legacy MDX</option>
+            </select>
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+              {editKind === 'mdx' ? 'Plan MDX' : 'Source'}
+            </span>
+            <Textarea
+              value={editSource}
+              rows={editKind === 'claude-react' ? 12 : 8}
+              onChange={(e) => setEditSource((e.target as HTMLTextAreaElement).value)}
+              data-testid={`artifact-edit-source-${slug}`}
+            />
+          </label>
+          {error !== null && (
+            <span role="alert" data-testid={`artifact-edit-error-${slug}`} style={{ color: 'var(--danger)', fontSize: 'var(--fs-12)' }}>
+              {error}
+            </span>
+          )}
+          <Inline gap={1}>
+            <Button
+              variant="primary"
+              disabled={busy || !dirty}
+              onClick={() => void save()}
+              data-testid={`artifact-edit-save-${slug}`}
+            >
+              {busy ? 'Saving…' : 'Save'}
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy || !dirty}
+              onClick={() => {
+                setEditKind(payload.kind || 'mdx');
+                setEditSource(payload.source ?? payload.planMdx ?? '');
+                setError(null);
+              }}
+              data-testid={`artifact-edit-revert-${slug}`}
+            >
+              Revert
+            </Button>
+          </Inline>
+        </Stack>
       )}
     </Stack>
   );

@@ -51,18 +51,54 @@ export function createArtifactsRouter({ state, broadcast, projectRoot }) {
     res.json(artifact);
   }));
 
-  // v3.21.0 — Compile the artifact's MDX into a JSON-serializable
-  // glyph structure for the new Glyphs renderer. Returns frontmatter
-  // + a flat list of typed blocks, ready for the client-side block
-  // component map to render.
+  // v3.21.0 — Compile the artifact for the renderer. Dispatches by kind:
+  //   mdx           → JSON glyph blocks (legacy v3-v9 renderer)
+  //   claude-html   → iframe-ready HTML envelope
+  //   claude-svg    → iframe-ready HTML envelope (SVG body)
+  //   claude-react  → iframe-ready HTML envelope (Babel-standalone JSX)
+  // The Claude-* envelope is ready to drop into an iframe `srcdoc`; the
+  // client previewer component (`<ClaudeArtifactView>`) picks the
+  // correct renderer based on `kind` and `html`.
   router.get('/artifacts/:slug/render', wrap(async (req, res) => {
     const artifact = artifactsStore.get(req.params.slug, projectRoot);
     if (!artifact) {
       res.status(404).json({ error: 'not_found' });
       return;
     }
-    const compiled = await compileGlyphMdx(artifact.planMdx || '');
-    res.json({ slug: req.params.slug, ...compiled });
+    const kind = artifact.kind || 'mdx';
+    if (kind === 'mdx') {
+      const compiled = await compileGlyphMdx(artifact.planMdx || '');
+      res.json({ slug: req.params.slug, kind, ...compiled });
+      return;
+    }
+    const compiled = artifactsStore.compile(req.params.slug, projectRoot);
+    if (!compiled) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.json({
+      slug: req.params.slug,
+      kind: compiled.kind,
+      html: compiled.html,
+      warnings: compiled.warnings || [],
+      safeMode: !!compiled.safeMode,
+      compiledAt: compiled.compiledAt,
+    });
+  }));
+
+  // v10.1.0 — Full-screen viewer. Returns the compiled HTML envelope
+  // with `Content-Type: text/html` so a `<a target="_blank">` opens
+  // the artifact on its own page (no dashboard chrome). The iframe
+  // `sandbox` rules from the envelope apply — the page is just the
+  // envelope served as `text/html`.
+  router.get('/artifacts/:slug/view', wrap(async (req, res) => {
+    const compiled = artifactsStore.compile(req.params.slug, projectRoot);
+    if (!compiled) {
+      res.status(404).type('html').send('<h1>Not found</h1>');
+      return;
+    }
+    res.set('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src * data:;");
+    res.type('html').send(compiled.html);
   }));
 
   // v3.1.0 — Full artifact CRUD + canvas editing.

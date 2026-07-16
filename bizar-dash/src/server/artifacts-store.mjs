@@ -27,9 +27,21 @@ import {
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
+import {
+  compileClaudeArtifact,
+  detectKind as detectArtifactKind,
+} from './claude-artifacts.mjs';
 
 const HOME = homedir();
 const GLOBAL_PLANS_DIR = join(HOME, '.config', 'cline', 'artifacts');
+
+const VALID_KINDS = new Set(['mdx', 'claude-html', 'claude-svg', 'claude-react']);
+const ARTIFACT_FILE_BY_KIND = {
+  mdx: 'artifact.mdx',
+  'claude-html': 'artifact.html',
+  'claude-svg': 'artifact.svg',
+  'claude-react': 'artifact.jsx',
+};
 
 // Atomic JSON write: serialize to a sibling temp file, then rename into
 // place. `rename` is atomic on POSIX (same filesystem), so a crash
@@ -77,7 +89,7 @@ function emptyCanvas(title = 'Untitled plan') {
   };
 }
 
-function defaultMeta(slug, title) {
+function defaultMeta(slug, title, kind = 'mdx') {
   const now = new Date().toISOString();
   return {
     slug,
@@ -86,9 +98,29 @@ function defaultMeta(slug, title) {
     tags: [],
     description: '',
     author: process.env.USER || 'drb0rk',
+    kind: VALID_KINDS.has(kind) ? kind : 'mdx',
     created: now,
     lastEdited: now,
   };
+}
+
+function readArtifactBody(dir, kind) {
+  // The artifact body file depends on its kind. We always prefer the
+  // kind-specific file (artifact.html / artifact.svg / artifact.jsx / artifact.mdx)
+  // but accept legacy `plan.mdx` for the mdx case so old plans still load.
+  const primary = join(dir, ARTIFACT_FILE_BY_KIND[kind] || 'artifact.mdx');
+  if (existsSync(primary)) return { source: safeReadText(primary), file: primary };
+  if (kind === 'mdx') {
+    const legacy = join(dir, 'plan.mdx');
+    if (existsSync(legacy)) return { source: safeReadText(legacy), file: legacy };
+  }
+  return { source: '', file: primary };
+}
+
+function writeArtifactBody(dir, kind, source) {
+  const file = join(dir, ARTIFACT_FILE_BY_KIND[kind] || 'artifact.mdx');
+  writeFileSync(file, String(source || ''), 'utf8');
+  return file;
 }
 
 export const artifactsStore = {
@@ -151,6 +183,7 @@ export const artifactsStore = {
           tags: meta?.tags || [],
           description: meta?.description || '',
           author: meta?.author || null,
+          kind: meta?.kind || 'mdx',
           source: dir === GLOBAL_PLANS_DIR ? 'global' : 'worktree',
           elementCount,
           commentCount,
@@ -172,20 +205,57 @@ export const artifactsStore = {
     if (!dir) return null;
     const meta = safeReadJSON(join(dir, 'meta.json'), null);
     const canvas = safeReadJSON(join(dir, 'plan.json'), null);
-    // v3.20.15 — read `artifact.mdx` (the CLI's source-of-truth name from
-    // cli/artifact.mjs:writePlanFile), with `plan.mdx` as a fallback for
-    // legacy v0 plans that still exist on disk. Without this fallback,
-    // every artifact opened in the dashboard showed empty content even
-    // though `artifact.mdx` was present and correct.
-    const planMdx = safeReadText(join(dir, 'artifact.mdx'))
-      || safeReadText(join(dir, 'plan.mdx'));
+    const kind = meta?.kind || 'mdx';
+    // Read the body file for the resolved kind. For mdx we still honour
+    // the legacy `plan.mdx` fallback (v3.20.15 contract).
+    const { source, file } = readArtifactBody(dir, kind);
     return {
       slug,
       dir,
-      meta: meta || defaultMeta(slug, slug),
+      meta: meta || defaultMeta(slug, slug, kind),
       canvas: canvas || emptyCanvas(meta?.title || slug),
-      planMdx,
+      kind,
+      source,
+      bodyFile: file,
+      // `planMdx` retained for legacy callers; for non-mdx kinds it is the
+      // empty string so existing code paths degrade gracefully.
+      planMdx: kind === 'mdx' ? source : '',
     };
+  },
+
+  /**
+   * v10.1.0 — Compile a stored Claude-*-kind artifact into a render-ready
+   * HTML envelope. Returns `{ html, warnings, safeMode, kind, compiledAt }`
+   * suitable for an iframe `srcdoc`. Falls back to returning the raw
+   * `<pre>`-wrapped mdx body when the artifact is still `kind: 'mdx'`
+   * (legacy glyphs). Returns null if the slug does not exist.
+   */
+  compile(slug, projectRoot) {
+    const plan = this.get(slug, projectRoot);
+    if (!plan) return null;
+    const kind = plan.kind || 'mdx';
+    if (kind === 'mdx') {
+      // Legacy MDX glyphs: render as a `<pre>`-wrapped plain text panel so
+      // the dashboard's previewer can keep working without the old block
+      // pipeline.
+      const escaped = String(plan.source || plan.planMdx || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const html = [
+        '<!doctype html><html><body style="font-family:ui-monospace,monospace;padding:16px;background:#0b0e14;color:#dde2e8;white-space:pre-wrap;">',
+        escaped,
+        '</body></html>',
+      ].join('');
+      return {
+        kind: 'mdx',
+        html,
+        warnings: [],
+        safeMode: true,
+        compiledAt: new Date().toISOString(),
+      };
+    }
+    return compileClaudeArtifact(plan.source || '', { kind });
   },
 
   /** Create a new plan. Returns the full plan record. */
@@ -202,19 +272,35 @@ export const artifactsStore = {
       throw err;
     }
     const title = (body && body.title) || slug;
+    const kindRaw = (body && body.kind) || 'mdx';
+    const kind = VALID_KINDS.has(kindRaw) ? kindRaw : 'mdx';
+    const source = (body && typeof body.source === 'string') ? body.source
+      : (kind === 'mdx' && body && typeof body.planMdx === 'string' ? body.planMdx : '');
     const meta = {
-      ...defaultMeta(slug, title),
+      ...defaultMeta(slug, title, kind),
       ...(body || {}),
       slug,
+      kind,
       created: new Date().toISOString(),
       lastEdited: new Date().toISOString(),
     };
     const canvas = emptyCanvas(title);
     this._writePlan(dir, meta, canvas);
-    return { slug, dir, meta, canvas, planMdx: '' };
+    // Persist the artifact body in its kind-specific file so the next
+    // `get()` round-trips it without losing bytes.
+    if (source) writeArtifactBody(dir, kind, source);
+    return {
+      slug,
+      dir,
+      meta,
+      canvas,
+      kind,
+      source,
+      planMdx: kind === 'mdx' ? source : '',
+    };
   },
 
-  /** Update plan metadata (title, status, tags, description). */
+  /** Update plan metadata + (optionally) the artifact body. */
   updateMeta(slug, body, projectRoot) {
     if (!VALID_SLUG.test(slug || '')) return null;
     const dir = this.resolveDir(slug, projectRoot);
@@ -228,10 +314,30 @@ export const artifactsStore = {
       if (valid.includes(body.status)) meta.status = body.status;
     }
     if (typeof body?.author === 'string') meta.author = body.author;
+    if (typeof body?.kind === 'string' && VALID_KINDS.has(body.kind)) meta.kind = body.kind;
     meta.lastEdited = new Date().toISOString();
     const canvas = safeReadJSON(join(dir, 'plan.json'), emptyCanvas(meta.title));
     this._writePlan(dir, meta, canvas);
-    return { slug, dir, meta, canvas, planMdx: safeReadText(join(dir, 'plan.mdx')) };
+    // Source/body update is the central new contract for v10.1.0: the
+    // editor can PATCH the kind and the source in one call and we keep
+    // both in lock-step.
+    let source = '';
+    if (typeof body?.source === 'string') {
+      const next = meta.kind || 'mdx';
+      source = body.source;
+      writeArtifactBody(dir, next, source);
+    } else {
+      source = safeReadText(join(dir, ARTIFACT_FILE_BY_KIND[meta.kind || 'mdx'] || 'artifact.mdx'));
+    }
+    return {
+      slug,
+      dir,
+      meta,
+      canvas,
+      kind: meta.kind || 'mdx',
+      source,
+      planMdx: (meta.kind || 'mdx') === 'mdx' ? source : '',
+    };
   },
 
   /** Delete a plan directory. */
