@@ -307,6 +307,48 @@ nodes in the BizarHarness project) to agents:
 See [DEC-010](decisions/DEC-010-knowledge-graph-tools.md) and
 `plugins/bizar/src/tools/graph-query.ts`.
 
+## Feature state machine (Pillar C)
+
+Every feature in `feature_list.json` moves through a strict state machine:
+
+```
+not_started → active → passing
+                      ↑________|
+        (or back to active on failure)
+```
+
+A `passing` feature is only valid when all four artifacts are present:
+
+| Artifact | Tool | Failure mode |
+|---|---|---|
+| `evidence` field populated | feature state machine | empty string → block |
+| `commit` hash recorded | feature state machine | empty string → block |
+| `make audit` score >= 80 | feature state machine (calls audit script) | score < 80 → block |
+| Eval gate (>= 90% pass-rate) | `make eval-gate` / `scripts/eval-gate.mjs` | rate < 0.9 → block |
+
+The eval gate checks `.harness/evals/<id>.jsonl` for each `passing` feature.
+Each line must be a JSON object with `passed: true`, `pass: true`, or `status: "pass"`.
+Malformed lines are skipped (lenient). Features without an eval file are tolerated
+unless they are `passing` — then the gate fails.
+
+**Automation:**
+
+- `make check` runs `make eval-gate` as part of its pipeline
+- `make eval-gate` / `scripts/eval-gate.mjs` — standalone eval gate
+- `make feature-state-machine` / `scripts/feature-state-machine.mjs` — full state machine check
+- `.claude/hooks/post-merge-audit.sh` — post-merge hook that runs `make audit`
+  and appends the score to `PROGRESS.md` under `## Audit History`
+
+**Audit History table** in `PROGRESS.md`:
+
+```
+| Timestamp | Branch | Commit | Score | Trigger |
+|---|---|---|---|---|
+| 2026-07-16 10:00 | master | abc123f | 85 | post-merge-audit |
+```
+
+The hook is idempotent — running it twice for the same commit is a no-op.
+
 ## See also
 
 - [docs/decisions/](decisions/) — full ADR archive
