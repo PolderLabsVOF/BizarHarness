@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FlaskConical, Play, RefreshCw, Loader2 } from 'lucide-react';
+import { Calendar, FlaskConical, Play, Plus, RefreshCw, Trash2, Loader2 } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
@@ -28,6 +28,14 @@ interface EvalRun {
   durationMs?: number;
 }
 
+interface EvalSchedule {
+  id: string;
+  name: string;
+  cron: string;
+  suitePath?: string;
+  enabled?: boolean;
+}
+
 function statusTone(s: EvalRun['status'] | undefined): Tone {
   if (s === 'done') return 'success';
   if (s === 'failed') return 'danger';
@@ -45,9 +53,13 @@ function fmtDuration(ms: number | undefined): string {
 
 export function EvalView(): JSX.Element {
   const runs = useFetch<{ runs: EvalRun[] }>('/api/eval/runs?limit=20');
+  const schedules = useFetch<{ schedules: EvalSchedule[] }>('/api/eval/schedules');
   const [launching, setLaunching] = useState(false);
   const [suite, setSuite] = useState('default');
   const [error, setError] = useState<string | null>(null);
+  const [addingSchedule, setAddingSchedule] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({ name: '', cron: '', suitePath: 'default' });
+  const [busySchedule, setBusySchedule] = useState(false);
 
   useEffect(() => {
     if (runs.data?.runs) {
@@ -73,6 +85,34 @@ export function EvalView(): JSX.Element {
   };
 
   const list = runs.data?.runs ?? [];
+
+  const addSchedule = async (): Promise<void> => {
+    if (!scheduleForm.name.trim() || !scheduleForm.cron.trim()) return;
+    setBusySchedule(true);
+    setError(null);
+    try {
+      await fetchJson<{ ok?: boolean }>('/api/eval/schedules', { method: 'POST', body: scheduleForm });
+      setAddingSchedule(false);
+      setScheduleForm({ name: '', cron: '', suitePath: 'default' });
+      void schedules.refetch();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    } finally {
+      setBusySchedule(false);
+    }
+  };
+
+  const deleteSchedule = async (id: string): Promise<void> => {
+    setError(null);
+    try {
+      await fetchJson(`/api/eval/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      void schedules.refetch();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
+  const scheduleList = schedules.data?.schedules ?? [];
 
   return (
     <Stack gap={5} data-testid="eval-view">
@@ -151,6 +191,88 @@ export function EvalView(): JSX.Element {
           ))}
         </Stack>
       )}
+
+      <Card variant="elevated">
+        <CardBody>
+          <Inline align="center" justify="between" gap={2}>
+            <Inline align="center" gap={2}>
+              <Calendar size={16} aria-hidden />
+              <strong style={{ fontSize: 'var(--fs-14)' }}>Schedules</strong>
+              <Badge tone="neutral">{scheduleList.length}</Badge>
+            </Inline>
+            {!addingSchedule && (
+              <Button variant="primary" onClick={() => setAddingSchedule(true)} data-testid="eval-schedule-add">
+                <Plus size={14} aria-hidden /> Add schedule
+              </Button>
+            )}
+          </Inline>
+
+          {addingSchedule && (
+            <Stack gap={2} style={{ marginTop: 'var(--space-3)' }} data-testid="eval-schedule-form">
+              <Inline gap={2} align="center">
+                <input
+                  value={scheduleForm.name}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, name: e.target.value })}
+                  placeholder="name"
+                  data-testid="eval-schedule-form-name"
+                  style={inputStyle}
+                />
+                <input
+                  value={scheduleForm.cron}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, cron: e.target.value })}
+                  placeholder="cron (e.g. 0 9 * * *)"
+                  data-testid="eval-schedule-form-cron"
+                  style={inputStyle}
+                />
+                <input
+                  value={scheduleForm.suitePath}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, suitePath: e.target.value })}
+                  placeholder="suite path"
+                  data-testid="eval-schedule-form-suite"
+                  style={inputStyle}
+                />
+              </Inline>
+              <Inline gap={2}>
+                <Button variant="primary" onClick={() => void addSchedule()} disabled={busySchedule} data-testid="eval-schedule-form-submit">
+                  {busySchedule ? 'Saving…' : 'Save'}
+                </Button>
+                <Button variant="ghost" onClick={() => setAddingSchedule(false)} data-testid="eval-schedule-form-cancel">Cancel</Button>
+              </Inline>
+            </Stack>
+          )}
+
+          {scheduleList.length === 0 ? (
+            <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
+              No schedules yet. Add one to run suites on a cron.
+            </div>
+          ) : (
+            <Stack gap={2} style={{ marginTop: 'var(--space-3)' }}>
+              {scheduleList.map((s) => (
+                <Inline key={s.id} align="center" justify="between" gap={2} data-testid={`eval-schedule-row-${s.id}`}>
+                  <Inline align="center" gap={2}>
+                    <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-13)' }}>{s.name}</strong>
+                    <code style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>{s.cron}</code>
+                    {s.suitePath && <Badge tone="neutral">{s.suitePath}</Badge>}
+                  </Inline>
+                  <Button variant="ghost" onClick={() => void deleteSchedule(s.id)} data-testid={`eval-schedule-delete-${s.id}`} aria-label={`Delete schedule ${s.name}`}>
+                    <Trash2 size={14} aria-hidden />
+                  </Button>
+                </Inline>
+              ))}
+            </Stack>
+          )}
+        </CardBody>
+      </Card>
     </Stack>
   );
 }
+
+const inputStyle = {
+  padding: '6px 10px',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  background: 'var(--surface-0)',
+  color: 'var(--fg)',
+  fontSize: 'var(--fs-13)',
+  fontFamily: 'var(--font-mono)',
+} as const;

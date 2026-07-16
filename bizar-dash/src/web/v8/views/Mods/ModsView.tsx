@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Boxes, Download, Plus, Power, PowerOff, RefreshCcw, Trash2, Upload, ArrowUpCircle } from 'lucide-react';
+import { Boxes, Download, FileEdit, Plus, Power, PowerOff, RefreshCcw, RotateCcw, Trash2, Upload, ArrowUpCircle } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
@@ -79,6 +79,28 @@ export function ModsView(): JSX.Element {
     setError(null);
     try {
       await fetchJson(`/api/mods/${id}/upgrade`, { method: 'POST' });
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
+  const reinstallInstructions = async (id: string): Promise<void> => {
+    setError(null);
+    try {
+      await fetchJson(`/api/mods/${id}/instructions/reinstall`, { method: 'POST' });
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
+  const editModFile = async (id: string): Promise<void> => {
+    const content = window.prompt(`Edit mod file content for ${id} (JSON or YAML)`);
+    if (content === null) return;
+    setError(null);
+    try {
+      await fetchJson(`/api/mods/${id}/mod-file/content`, { method: 'PUT', body: { content } });
       refresh();
     } catch (err) {
       setError(err instanceof FetchError ? err.message : (err as Error).message);
@@ -160,6 +182,12 @@ export function ModsView(): JSX.Element {
                         )}
                         <Button variant="ghost" onClick={() => void toggle(m.id, !(m.enabled ?? true))} data-testid={`mod-toggle-${m.id}`} aria-label={m.enabled === false ? `Enable ${m.id}` : `Disable ${m.id}`}>
                           {m.enabled === false ? <Power size={14} aria-hidden /> : <PowerOff size={14} aria-hidden />}
+                        </Button>
+                        <Button variant="ghost" onClick={() => void reinstallInstructions(m.id)} data-testid={`mod-reinstall-instructions-${m.id}`} aria-label={`Reinstall instructions ${m.id}`}>
+                          <RotateCcw size={14} aria-hidden />
+                        </Button>
+                        <Button variant="ghost" onClick={() => void editModFile(m.id)} data-testid={`mod-edit-${m.id}`} aria-label={`Edit mod file ${m.id}`}>
+                          <FileEdit size={14} aria-hidden />
                         </Button>
                         <Button variant="ghost" onClick={() => setConfirmDelete((cur) => (cur === m.id ? null : m.id))} data-testid={`mod-uninstall-${m.id}`} aria-label={`Uninstall ${m.id}`}>
                           <Trash2 size={14} aria-hidden />

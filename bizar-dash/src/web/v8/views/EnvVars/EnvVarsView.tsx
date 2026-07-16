@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { Download, FileUp, Pencil, Plus, RefreshCcw, Trash2, Variable } from 'lucide-react';
+import { Download, FileUp, FlaskConical, Pencil, Plus, RefreshCcw, Trash2, Variable } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
@@ -35,10 +35,26 @@ export function EnvVarsView(): JSX.Element {
   const [bulkImporting, setBulkImporting] = useState<boolean>(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ name: string; ok: boolean; message: string } | null>(null);
 
   const rows = useMemo<EnvRow[]>(() => payload.data ?? [], [payload.data]);
 
   const refresh = useCallback(() => { void payload.refetch(); }, [payload]);
+
+  const runTest = async (name: string): Promise<void> => {
+    setTesting(name);
+    setError(null);
+    try {
+      const res = await fetchJson<{ ok?: boolean; status?: string; message?: string }>(`/api/env-vars/${encodeURIComponent(name)}/test`, { method: 'POST' });
+      setTestResult({ name, ok: res.ok !== false, message: res.message ?? (res.ok !== false ? 'OK' : 'Failed') });
+    } catch (err) {
+      const msg = err instanceof FetchError ? err.message : (err as Error).message;
+      setTestResult({ name, ok: false, message: msg });
+    } finally {
+      setTesting(null);
+    }
+  };
 
   const drop = async (name: string): Promise<void> => {
     setError(null);
@@ -118,6 +134,15 @@ export function EnvVarsView(): JSX.Element {
                         )}
                       </Stack>
                       <Inline gap={1}>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void runTest(r.name)}
+                          disabled={testing === r.name}
+                          data-testid={`env-var-test-${r.name}`}
+                          aria-label={`Test ${r.name}`}
+                        >
+                          <FlaskConical size={14} aria-hidden />
+                        </Button>
                         <Button variant="ghost" onClick={() => setEditing(r.name)} data-testid={`env-var-edit-${r.name}`} aria-label={`Edit ${r.name}`}>
                           <Pencil size={14} aria-hidden />
                         </Button>
@@ -140,6 +165,19 @@ export function EnvVarsView(): JSX.Element {
                           Cancel
                         </Button>
                       </Inline>
+                    )}
+                    {testResult !== null && testResult.name === r.name && (
+                      <div
+                        data-testid={`env-var-test-result-${r.name}`}
+                        style={{
+                          marginTop: 'var(--space-1)',
+                          fontSize: 'var(--fs-11)',
+                          color: testResult.ok ? 'var(--success)' : 'var(--danger)',
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        test: {testResult.message}
+                      </div>
                     )}
                   </div>
                 );

@@ -107,6 +107,19 @@ export function ProvidersView(): JSX.Element {
     }
   };
 
+  const addKey = async (id: string): Promise<void> => {
+    const envVar = window.prompt(`Env var name to add to ${id} (e.g. ${id.toUpperCase()}_KEY_2)`);
+    if (!envVar?.trim()) return;
+    const label = window.prompt('Label (optional)') || undefined;
+    setError(null);
+    try {
+      await fetchJson(`/api/providers/${id}/keys`, { method: 'POST', body: { envVar, label } });
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
   const runAutoDetect = async (): Promise<void> => {
     setProbing(true);
     setError(null);
@@ -221,6 +234,14 @@ export function ProvidersView(): JSX.Element {
                           title={!p.keys || p.keys.length < 2 ? 'Need ≥2 keys to rotate' : 'Rotate active key'}
                         >
                           <RotateCw size={14} aria-hidden /> Rotate
+                        </Button>
+                        <Button
+                          variant="primary"
+                          onClick={() => void addKey(p.id)}
+                          data-testid={`provider-add-key-${p.id}`}
+                          aria-label={`Add key to ${p.id}`}
+                        >
+                          <KeyRound size={14} aria-hidden /> Add key
                         </Button>
                       </Inline>
                     </Inline>
