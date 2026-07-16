@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/pretooluse-editwrite.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/pretooluse-editwrite.mjs",
             "timeout": 30
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/pretooluse-bash.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/pretooluse-bash.mjs",
             "timeout": 30
           }
         ]
@@ -75,8 +75,33 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/posttooluse-editwrite.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/posttooluse-editwrite.mjs",
             "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/drb0rk/projects/BizarHarness/.claude/hooks/auto-instinct.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bash /home/drb0rk/projects/BizarHarness/.claude/hooks/post-merge-audit.sh",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "EnterWorktree",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/drb0rk/projects/BizarHarness/scripts/worktree-setup.sh",
+            "timeout": 60
           }
         ]
       }
@@ -86,7 +111,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/userpromptsubmit-tag.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/userpromptsubmit-tag.mjs",
             "timeout": 10
           }
         ]
@@ -95,7 +120,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/worker-suggest.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/worker-suggest.mjs",
             "timeout": 10
           }
         ]
@@ -106,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/sessionstart-prime.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/sessionstart-prime.mjs",
             "timeout": 15
           }
         ]
@@ -117,12 +142,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/sessionend-recall.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/sessionend-recall.mjs",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/learning-extract.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/learning-extract.mjs",
             "timeout": 15
           }
         ]

@@ -26,10 +26,13 @@ setup:  ## Install Claude Code CLI + Bizar deps
 dev:  ## Start dashboard + SDK in dev mode
 	npm run dev
 
-check:  ## Typecheck + lint
+check:  ## Typecheck + lint + eval gate
 	@echo "▶ Running TypeScript check..."
-	@bunx tsc --noEmit
-	@echo "✓ make check passed"
+	@/home/drb0rk/.bun/bin/bunx tsc --noEmit
+	@echo "✓ TypeScript check passed"
+	@echo "▶ Running eval gate..."
+	@/home/drb0rk/.bun/bin/bun run scripts/eval-gate.mjs
+	@echo "✓ eval gate passed"
 
 test:  ## Run all unit tests (sdk + cli)
 	@if command -v bun >/dev/null 2>&1; then \
@@ -60,7 +63,7 @@ e2e-real-env:  ## Sprint S36 — real-env harness: every new v9.2.0 page endpoin
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json
 	@echo "▶ Computing VCR ratio from feature_list.json..."
-	@bun -e "const f = JSON.parse(await Bun.file('feature_list.json').text()); const total = f.features.filter(x => x.state !== 'not_started').length; const passing = f.features.filter(x => x.state === 'passing').length; const ratio = total === 0 ? 1.0 : passing / total; console.log('VCR:', passing + '/' + total, '=', ratio.toFixed(3)); if (ratio < 1.0 && total > 0) process.exit(1);"
+	@/home/drb0rk/.bun/bin/bun -e "const f = JSON.parse(await Bun.file('feature_list.json').text()); const total = f.features.filter(x => x.state !== 'not_started').length; const passing = f.features.filter(x => x.state === 'passing').length; const ratio = total === 0 ? 1.0 : passing / total; console.log('VCR:', passing + '/' + total, '=', ratio.toFixed(3)); if (ratio < 1.0 && total > 0) process.exit(1);"
 
 verify-feature:  ## Verify a feature by ID — usage: make verify-feature ID=F-001
 	@if [ -z "$(ID)" ]; then echo "Usage: make verify-feature ID=<feature-id>"; exit 1; fi
@@ -74,6 +77,21 @@ clean-check:  ## Remove console.log/debugger and run lint
 	@echo "▶ Scanning for console.log / debugger / .only()..."
 	@! grep -rEn '(console\.log|debugger|\.only\()' packages/sdk/src plugins/bizar/index.ts --include='*.ts' --include='*.mjs' 2>/dev/null | grep -v test | grep -v '\.test\.' || (echo "✗ debug artifacts found" && exit 1)
 	@echo "✓ clean-check passed"
+
+audit:  ## Run harness audit (12 categories, 0-100 score)
+	@echo "▶ Running harness audit..."
+	@node scripts/audit.mjs --write
+	@echo "✓ audit complete — output written to .harness/audit/latest.json"
+
+eval-gate:  ## Verify passing features have satisfying eval files (>= 0.9 pass-rate)
+	@echo "▶ Running eval gate..."
+	@/home/drb0rk/.bun/bin/bun run scripts/eval-gate.mjs
+	@echo "✓ eval gate passed"
+
+feature-state-machine:  ## Enforce plan→exec→verify→audit state machine per passing feature
+	@echo "▶ Running feature state machine..."
+	@/home/drb0rk/.bun/bin/bun run scripts/feature-state-machine.mjs
+	@echo "✓ feature state machine passed"
 
 # ── Claude Code-specific ───────────────────────────────────────────────────
 # session-start / session-end were Cline-era targets. Claude Code now
@@ -109,5 +127,8 @@ cleanup:  ## Scan for stale rtk/headroom/ponytail references (exits 1 if any fou
 mcp-serve:  ## Run the Bizar MCP server (stdio) for Claude Code
 	@node packages/sdk/dist/mcp/bin.js
 
+worktree-init:  ## Bootstrap a new worktree with shared node_modules / dist symlinks — usage: make worktree-init WORKTREE=/path/to/worktree
+	@./scripts/worktree-setup.sh "$(WORKTREE)"
+
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve cleanup
+.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup

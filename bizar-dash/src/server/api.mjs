@@ -52,6 +52,8 @@ import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
 import { createMinimaxRouter } from './routes/minimax.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
+// Pillar A — session heartbeat list + stop (reads .harness/traces/heartbeat.jsonl)
+import { createSessionsRouter } from './routes/sessions.mjs';
 // v9.0.5 — Admin endpoints (gc, cache clear, activity export, memory
 // reindex, restart, rebuild, logs purge) back the Settings page buttons.
 import { createAdminRouter } from './routes/admin.mjs';
@@ -71,6 +73,10 @@ import { createGoalPlannerRouter } from './routes/goal-planner.mjs';
 // /api/agent-stream SSE tails the session JSONL for live agent output.
 import { createGoalsRouter } from './routes/goals.mjs';
 import { createCCAgentsRouter, createAgentStreamRouter } from './routes/agents-cc.mjs';
+// Pillar B — Self-auditing: GET /api/audit returns harness score.
+import { createAuditRouter } from './routes/audit.mjs';
+// Pillar D — Self-learning: GET /api/decisions returns decisions log + tamper status.
+import { createDecisionsRouter } from './routes/decisions.mjs';
 import { attachUserContext } from './auth.mjs';
 
 /**
@@ -131,6 +137,7 @@ export async function createApiRouter({
   router.use(createCCAgentsRouter({ broadcast }));
   router.use(createAgentStreamRouter());
   router.use(createActivityRouter({ state }));
+  router.use(createDecisionsRouter({ projectRoot }));
   router.use(createHistoryRouter({ projectRoot }));
   router.use(createConfigRouter({ state, watcher }));
   router.use(createProvidersRouter());
@@ -177,6 +184,8 @@ export async function createApiRouter({
   router.use(createGoalPlannerRouter({ broadcast }));
   // Sprint S10 — goals CRUD on .bizar/PROGRESS.md.
   router.use(createGoalsRouter({ broadcast, projectRoot }));
+  // Pillar B — Self-auditing: harness score across 12 categories.
+  router.use(createAuditRouter({ projectRoot }));
   router.use(createThemesRouter({ state }));
   router.use(createNotificationsRouter({ broadcast }));
   router.use(createArtifactsRouter({ state, broadcast, projectRoot }));
@@ -206,6 +215,8 @@ export async function createApiRouter({
   const { createTailscaleRouter } = await import('./routes/tailscale.mjs');
   router.use(createTailscaleRouter({}));
   router.use(createMiscRouter({ state, broadcast }));
+  // Pillar A — session heartbeat list + stop
+  router.use(createSessionsRouter({ projectRoot }));
   // v9.0.5 — Settings page admin buttons live at /api/admin/*.
   router.use(createAdminRouter({ broadcast }));
 
