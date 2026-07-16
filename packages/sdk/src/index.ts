@@ -111,4 +111,32 @@ export type {
   ViewChangeResult,
 } from "./consensus/types.js";
 
+// F-034 — Self-learning (Pillar D): instincts + decisions logs.
+export {
+  recordInstinct,
+  listInstincts,
+  promoteInstinct,
+  dropInstinct,
+  recordDecision,
+  listDecisions,
+  verifyChain,
+  datamark,
+} from "./learning/index.js";
+
+// Pillar A — heartbeat + cron (autonomous long-running agents)
+export {
+  startHeartbeat,
+  stopHeartbeat,
+  failHeartbeat,
+  heartbeatPath,
+  type HeartbeatRecord,
+  type SessionStatus,
+} from "./agent/heartbeat.js";
+export {
+  addCronTask,
+  listCronTasks,
+  removeCronTask,
+  type CronTask,
+} from "./agent/cron.js";
+
 export { SDK_VERSION } from "./version.js";

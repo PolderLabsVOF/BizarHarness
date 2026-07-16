@@ -50,7 +50,12 @@ import { checkDangerous } from "../dangerous-patterns.js";
 import { ModelRouter } from "../router/model-router.js";
 import { QLearningRouter } from "../router/q-learning-router.js";
 import { runDistillation } from "../router/memory-distillation.js";
-import { decideAgentWith } from "../router/index.js";
+import {
+  decideAgentWith,
+  loadModelRegistry,
+  resolveAgentModel,
+  resolveTierModel,
+} from "../router/index.js";
 import { bizarAgentRegistry } from "../agent-registry.js";
 import {
   initSwarm as initSwarmOnRegistry,
@@ -63,6 +68,16 @@ import {
   createFederation,
   type FederationHandle,
 } from "../federation/index.js";
+import {
+  startHeartbeat,
+  stopHeartbeat,
+  failHeartbeat,
+} from "../agent/heartbeat.js";
+import {
+  addCronTask,
+  listCronTasks,
+  removeCronTask,
+} from "../agent/cron.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
 // the package is optional. Callers pass the result of `tool()` and
@@ -627,6 +642,52 @@ const hooksRouteTool = defineTool<{ task: string; explicitAgent?: string }>(
 );
 
 // ---------------------------------------------------------------------------
+// Agent → model resolution tool (v10.1.0)
+//
+// Reads `.claude/model-router.json` (the Bizar model registry) and
+// returns the concrete modelId + endpoint URL for an agent name. This
+// is the bridge between the orchestrator's tier decision and the
+// downstream HTTP call — the orchestrator says "flash / mid / expensive",
+// this tool says "use this specific model at this URL".
+//
+// Pair with `hooks_route`: pass `agent=...` and you get the resolved
+// model in one call. Use `list=true` to dump the entire registry for
+// the dashboard / debugging.
+// ---------------------------------------------------------------------------
+
+const routeAgentTool = defineTool<{ agent?: string; list?: boolean }>(
+  "route_agent",
+  "Resolve an agent name (e.g. 'odin', 'thor', 'tyr') to its concrete modelId + endpoint URL by reading .claude/model-router.json. Pass {list: true} to dump the full registry. Returns JSON: {agent, modelId, tier, endpoint, rationale, fallback?, allAgents?}.",
+  { agent: "string", list: "boolean" },
+  async ({ agent, list }) => {
+    try {
+      const reg = loadModelRegistry();
+      if (list === true) {
+        return ok(JSON.stringify({
+          endpoint: reg.endpoint,
+          agents: Array.from(reg.agents.values()),
+          tiers: Array.from(reg.tiers.values()),
+          fallbackChain: reg.fallbackChain,
+          gptOnlyFor: reg.gptOnlyFor,
+          gptNeverFor: reg.gptNeverFor,
+        }, null, 2));
+      }
+      const name = typeof agent === "string" && agent.trim().length > 0
+        ? agent.trim()
+        : "odin";
+      const resolved = resolveAgentModel(name, reg);
+      const tierResolved = resolveTierModel(resolved.tier, reg);
+      return ok(JSON.stringify({
+        ...resolved,
+        fallback: tierResolved.fallback,
+        allAgents: Array.from(reg.agents.keys()),
+      }, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+// ---------------------------------------------------------------------------
 // Consensus tool (F-039) — thin PBFT-style 3-of-5 majority for
 // review/decision steps. Wraps the shared `getSharedConsensus()`
 // orchestrator; the MCP surface is intentionally minimal (one tool)
@@ -731,6 +792,89 @@ const federationStatusTool = defineTool<Record<string, never>>(
 );
 
 // ---------------------------------------------------------------------------
+// Pillar A — session heartbeat + cron tools
+// ---------------------------------------------------------------------------
+
+/** In-memory store for active heartbeats started via the MCP tool.
+ *  Maps sessionId → stop fn. Only used by the MCP surface; the JSONL
+ *  file is the authoritative persistence. */
+const _activeHeartbeats = new Map<string, () => void>();
+
+const sessionHeartbeatTool = defineTool<{
+  action: "start" | "stop" | "fail";
+  sessionId?: string;
+  intervalMs?: number;
+}>(
+  "session_heartbeat",
+  "Start, stop, or fail a session heartbeat. start returns a sessionId. Stop/fail write a terminal record to .harness/traces/heartbeat.jsonl.",
+  { action: "string", sessionId: "string", intervalMs: "number" },
+  async ({ action, sessionId, intervalMs }) => {
+    try {
+      if (action === "start") {
+        const { sessionId: id, stop } = startHeartbeat(intervalMs ?? 30_000);
+        _activeHeartbeats.set(id, stop);
+        return ok(JSON.stringify({ sessionId: id }));
+      }
+      if (action === "stop") {
+        const id = sessionId ?? "";
+        const stop = _activeHeartbeats.get(id);
+        if (stop) { stop(); _activeHeartbeats.delete(id); }
+        else { stopHeartbeat(id); }
+        return ok(JSON.stringify({ sessionId: id ?? "", status: "done" }));
+      }
+      if (action === "fail") {
+        const id = sessionId ?? "";
+        const stop = _activeHeartbeats.get(id);
+        if (stop) { stop(); _activeHeartbeats.delete(id); }
+        else { failHeartbeat(id); }
+        return ok(JSON.stringify({ sessionId: id ?? "", status: "failed" }));
+      }
+      return err(`unknown_action: ${action}`);
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+const cronAddTool = defineTool<{
+  cron: string;
+  prompt: string;
+  recurring?: boolean;
+}>(
+  "cron_add",
+  "Add a cron task. Persists to .bizar/cron.json. recurring=false tasks fire once and are then removed.",
+  { cron: "string", prompt: "string", recurring: "boolean" },
+  async ({ cron, prompt, recurring }) => {
+    try {
+      const task = addCronTask({ cron, prompt, recurring: recurring ?? false });
+      return ok(JSON.stringify(task, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+const cronListTool = defineTool<Record<string, never>>(
+  "cron_list",
+  "List all cron tasks from .bizar/cron.json.",
+  {},
+  async () => {
+    try {
+      return ok(JSON.stringify(listCronTasks(), null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+const cronRemoveTool = defineTool<{ id: string }>(
+  "cron_remove",
+  "Remove a cron task by its id. Returns true if the task existed.",
+  { id: "string" },
+  async ({ id }) => {
+    try {
+      const removed = removeCronTask(id);
+      return ok(JSON.stringify({ id, removed }));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Factory — wire all tools into an MCP server
 // ---------------------------------------------------------------------------
 
@@ -756,8 +900,13 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   agentRouteTool,
   memoryDistillTool,
   hooksRouteTool,
+  routeAgentTool,
   consensusProposeTool,
   federationStatusTool,
+  sessionHeartbeatTool,
+  cronAddTool,
+  cronListTool,
+  cronRemoveTool,
 ];
 
 /**
