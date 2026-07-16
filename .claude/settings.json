@@ -87,7 +87,12 @@
             "type": "command",
             "command": "bash /home/drb0rk/projects/BizarHarness/.claude/hooks/auto-instinct.sh",
             "timeout": 15
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
           {
             "type": "command",
             "command": "bash /home/drb0rk/projects/BizarHarness/.claude/hooks/post-merge-audit.sh",
