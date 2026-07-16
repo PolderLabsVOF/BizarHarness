@@ -30,9 +30,20 @@ function runAudit() {
 function parseAuditOutput(stdout) {
   try {
     if (!stdout || typeof stdout !== 'string') return null;
-    const lines = stdout.trim().split('\n').filter(Boolean);
-    const last = lines[lines.length - 1];
-    return last ? JSON.parse(last) : null;
+    // Try last non-empty line first (handles single-line JSON)
+    const trimmed = stdout.trim();
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // Multi-line JSON: find the last line that starts a valid object/array
+      const lines = trimmed.split('\n');
+      // Find the first '{' or '[' and parse from there to end
+      const startIdx = lines.findIndex((l) => l.trim().startsWith('{') || l.trim().startsWith('['));
+      if (startIdx >= 0) {
+        return JSON.parse(lines.slice(startIdx).join('\n'));
+      }
+      return null;
+    }
   } catch {
     return null;
   }
