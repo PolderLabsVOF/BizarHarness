@@ -108,24 +108,31 @@ function mapBizar(a: BizarAgent): AgentCardProps {
   };
 }
 
+function truncatePreview(s: string, max = 80): string {
+  if (!s) return '';
+  return s.length <= max ? s : s.slice(0, max - 1) + '…';
+}
+
 function mapCC(a: CCAgent): AgentCardProps {
   const raw = (a.status || a.state || 'idle').toLowerCase();
   const status: AgentStatus =
     raw === 'busy' || raw === 'working' ? 'busy' :
     raw === 'error' ? 'error' :
     raw === 'paused' ? 'paused' : 'idle';
+  const kind = a.kind === 'background' ? 'background' : 'interactive';
   return {
     id: `cc:${a.sessionId || a.id}`,
     name: a.name || a.sessionId?.slice(0, 8) || 'unknown',
-    role: a.kind === 'background' ? 'CC background' : 'CC interactive',
+    role: kind === 'background' ? 'CC background' : 'CC interactive',
     status,
-    currentTask: sanitizeSummary(a.lastMessageSnippet),
+    currentTask: truncatePreview(sanitizeSummary(a.lastMessageSnippet)),
     lastActivity: a.lastMessageAt ? new Date(a.lastMessageAt).toLocaleTimeString() : (a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : undefined),
     tasksToday: a.messageCount || 0,
     // CC agents don't expose successRate/tasksSucceeded — only messageCount.
     // Skip the metric strip for them; the badge + lastActivity carry the
-    // signal.
-    badges: [a.cwd?.split('/').slice(-2).join('/') || ''].filter(Boolean),
+    // signal. Include a kind chip so users can distinguish CC background
+    // sessions from interactive ones.
+    badges: [kind, a.cwd?.split('/').slice(-2).join('/') || ''].filter(Boolean),
   };
 }
 
