@@ -1,4 +1,5 @@
 import { forwardRef, type ReactNode } from 'react';
+import * as RxDialog from '@radix-ui/react-dialog';
 import { Box } from '../ui/primitives/Box.js';
 import { Topbar } from './Topbar.js';
 import { Sidebar } from './Sidebar.js';
@@ -27,11 +28,14 @@ import { Sidebar } from './Sidebar.js';
 export interface AppShellProps {
   topbar?: ReactNode;
   sidebar?: ReactNode;
+  /** Controls the mobile sidebar drawer (open/close). */
+  mobileMenuOpen?: boolean;
+  onMobileMenuClose?: () => void;
   children?: ReactNode;
 }
 
 export const AppShell = forwardRef<HTMLElement, AppShellProps>(function AppShell(
-  { topbar, sidebar, children },
+  { topbar, sidebar, mobileMenuOpen, onMobileMenuClose, children },
   ref,
 ) {
   return (
@@ -55,7 +59,39 @@ export const AppShell = forwardRef<HTMLElement, AppShellProps>(function AppShell
           minHeight: 0, // critical: lets the body actually scroll instead of expanding
         }}
       >
-        {sidebar ?? <Sidebar />}
+        {/* Desktop sidebar — always present at >=768px */}
+        <Box className="v8-desktop-sidebar" style={{ flexShrink: 0 }}>
+          {sidebar ?? <Sidebar />}
+        </Box>
+
+        {/* Mobile sidebar drawer — shown via Dialog overlay on <768px */}
+        <RxDialog.Root open={mobileMenuOpen} onOpenChange={(open) => { if (!open) onMobileMenuClose?.(); }}>
+          <RxDialog.Portal>
+            <RxDialog.Overlay
+              className="v8-mobile-sidebar-overlay"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'oklch(0 0 0 / 0.4)',
+                zIndex: 'var(--z-modal)',
+              }}
+            />
+            <RxDialog.Content
+              className="v8-mobile-sidebar"
+              aria-label="Navigation"
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                bottom: 0,
+                width: 'var(--sidebar-w)',
+                zIndex: 'calc(var(--z-modal) + 1)',
+              }}
+            >
+              {sidebar ?? <Sidebar />}
+            </RxDialog.Content>
+          </RxDialog.Portal>
+        </RxDialog.Root>
 
         <Box
           as="main"

@@ -28,6 +28,8 @@ import { fetchJson, FetchError } from '../data/fetcher.js';
 
 export interface TopbarProps {
   brand?: ReactNode;
+  /** Leading slot — renders before brand (hamburger on mobile). */
+  leading?: ReactNode;
   center?: ReactNode;
   /** Right-aligned action cluster. */
   actions?: ReactNode;
@@ -35,7 +37,7 @@ export interface TopbarProps {
   status?: ReactNode;
 }
 
-export function Topbar({ brand, center, actions, status }: TopbarProps): JSX.Element {
+export function Topbar({ leading, brand, center, actions, status }: TopbarProps): JSX.Element {
   return (
     <Box
       as="header"
@@ -51,8 +53,9 @@ export function Topbar({ brand, center, actions, status }: TopbarProps): JSX.Ele
       }}
     >
       <Inline align="center" justify="between" gap={4} style={{ height: '100%' }}>
-        {/* left: brand */}
+        {/* left: leading (hamburger) + brand */}
         <Cluster align="center" gap={3}>
+          {leading}
           {brand ?? <BrandPlaceholder />}
         </Cluster>
 

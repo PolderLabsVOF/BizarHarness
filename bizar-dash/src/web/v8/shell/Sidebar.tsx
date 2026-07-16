@@ -359,44 +359,54 @@ function SidebarSectionView({
   return (
     <Stack gap={1} data-sidebar-section={section.id}>
       {!collapsed && (
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={sectionOpen}
-          aria-controls={`sidebar-section-${section.id}`}
-          data-testid={`sidebar-section-toggle-${section.id}`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 'var(--space-2)',
-            padding: 'var(--space-1) var(--space-3)',
-            background: 'transparent',
-            border: 0,
-            fontSize: 'var(--fs-12)',
-            fontWeight: 600,
-            color: 'var(--fg-subtle)',
-            letterSpacing: 'var(--tracking-wide)',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            width: '100%',
-            textAlign: 'left',
-          }}
-        >
-          <span>{section.label}</span>
+        <div role="presentation" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
           <span
-            aria-hidden="true"
-            data-testid={`sidebar-section-chevron-${section.id}`}
             style={{
-              display: 'inline-block',
-              transition: 'transform var(--motion-fast) var(--ease-out)',
-              transform: sectionOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-              fontSize: 10,
+              fontSize: 'var(--fs-12)',
+              fontWeight: 600,
+              color: 'var(--fg-subtle)',
+              letterSpacing: 'var(--tracking-wide)',
+              textTransform: 'uppercase',
+              flex: 1,
+              padding: 'var(--space-1) var(--space-3)',
             }}
           >
-            ▸
+            {section.label}
           </span>
-        </button>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={sectionOpen}
+            aria-controls={`sidebar-section-${section.id}`}
+            data-section-toggle={section.id}
+            data-testid={`sidebar-section-toggle-${section.id}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              background: 'transparent',
+              border: 0,
+              color: 'var(--fg-subtle)',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            <span
+              aria-hidden="true"
+              data-testid={`sidebar-section-chevron-${section.id}`}
+              style={{
+                display: 'inline-block',
+                transition: 'transform var(--motion-fast) var(--ease-out)',
+                transform: sectionOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                fontSize: 10,
+              }}
+            >
+              ▸
+            </span>
+          </button>
+        </div>
       )}
       {sectionOpen && (
         <div id={`sidebar-section-${section.id}`} role="group" aria-label={section.label}>
@@ -435,6 +445,7 @@ function SidebarItemView({
       aria-label={item.label}
       title={collapsed ? item.label : undefined}
       data-sidebar-item={item.id}
+      data-nav-item={item.id}
       className={cx('v8-sidebar-item', active && 'is-active')}
       style={{
         display: 'flex',

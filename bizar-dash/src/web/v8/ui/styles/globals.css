@@ -103,6 +103,32 @@ h4 {
   font-weight: var(--fw-medium);
 }
 
+/* ── mobile sidebar (C2 — < 768px) ─────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Desktop sidebar hidden on mobile */
+  .v8-desktop-sidebar {
+    display: none;
+  }
+
+  /* Show hamburger button on mobile */
+  .mobile-menu-toggle {
+    display: inline-flex !important;
+  }
+}
+
+@media (min-width: 768px) {
+  /* Mobile sidebar hidden on desktop */
+  .v8-mobile-sidebar,
+  .v8-mobile-sidebar-overlay {
+    display: none !important;
+  }
+
+  /* Hide hamburger on desktop */
+  .mobile-menu-toggle {
+    display: none !important;
+  }
+}
+
 /* ── a11y helpers (see VisuallyHidden primitive) ────────────────────── */
 .sr-only {
   position: absolute;

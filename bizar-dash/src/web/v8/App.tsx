@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Menu } from 'lucide-react';
 import { AppShell } from './shell/AppShell.js';
 import { Topbar } from './shell/Topbar.js';
 import { Sidebar, type SidebarSection } from './shell/Sidebar.js';
@@ -139,6 +140,7 @@ function iconFor(id: string): LucideIcon {
 
 export function App(): JSX.Element {
   const [activeId, setActiveId] = useState<string>('overview');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const theme = useTheme();
   const density = useDensity();
 
@@ -152,6 +154,36 @@ export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     mainRef.current?.focus({ preventScroll: true });
+  }, [activeId]);
+
+  // H6 — URL routing: sync activeId to/from window.location.hash.
+  // On mount, parse the hash (e.g. "#/tasks") and set activeId.
+  // On popstate (browser back/forward), re-parse and update.
+  // On every activeId change, push the new hash so deep links work.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#/')) {
+      const id = hash.slice(2);
+      if (id) setActiveId(id);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount-only
+
+  useEffect(() => {
+    const onPop = (): void => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#/')) {
+        const id = hash.slice(2);
+        if (id) setActiveId(id);
+      } else {
+        setActiveId('overview');
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    window.history.pushState(null, '', '#/' + activeId);
   }, [activeId]);
 
   // Live counts for the sidebar. Polled on mount + WS refresh.
@@ -288,6 +320,29 @@ export function App(): JSX.Element {
       ref={mainRef}
       topbar={
         <Topbar
+          leading={
+            <button
+              type="button"
+              aria-label="Open navigation menu"
+              data-testid="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(true)}
+              style={{
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--fg-muted)',
+                cursor: 'pointer',
+              }}
+              className="mobile-menu-toggle"
+            >
+              <Menu size={16} aria-hidden="true" />
+            </button>
+          }
           center={
             <Inline align="center" gap={2}>
               <button
@@ -330,9 +385,14 @@ export function App(): JSX.Element {
           sections={sections}
           defaultSections={false}
           activeId={activeId}
-          onItemSelect={handleNavigate}
+          onItemSelect={(id) => {
+            handleNavigate(id);
+            setMobileMenuOpen(false);
+          }}
         />
       }
+      mobileMenuOpen={mobileMenuOpen}
+      onMobileMenuClose={() => setMobileMenuOpen(false)}
     >
       <Suspense fallback={<PageSkeleton />}>{view}</Suspense>
       <AppCommandPalette
