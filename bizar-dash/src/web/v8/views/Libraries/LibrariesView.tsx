@@ -84,7 +84,12 @@ export function LibrariesView(props: LibrariesViewProps): JSX.Element {
     if (bust > 0) res.refetch();
   }, [bust, res]);
 
-  const items: LibraryItemProps[] = (res.data?.skills || res.data?.items || []).map(mapItem);
+  const items: LibraryItemProps[] = (res.data?.skills || res.data?.items || [])
+    .map(mapItem)
+    .reduce<LibraryItemProps[]>((acc, item) => {
+      if (!acc.some((existing) => existing.name === item.name)) acc.push(item);
+      return acc;
+    }, []);
 
   return (
     <Stack gap={5} data-testid={`${kind}-view`}>
