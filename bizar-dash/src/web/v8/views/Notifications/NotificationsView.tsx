@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, CheckCheck, Trash2, RefreshCw } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, RefreshCw, RotateCcw } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
@@ -16,7 +16,8 @@ import type { WsMessage } from '../../data/types.js';
 /**
  * NotificationsView — Sprint S35. Per-user notification stream backed
  * by `/api/notifications`. Pulls unread + read mixed, supports
- * mark-one-read, mark-all-read, and dismiss.
+ * mark-one-read, mark-all-read, dismiss with 5s undo, and
+ * "Show dismissed" with restore.
  */
 
 type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
@@ -34,6 +35,12 @@ interface NotificationItem {
 interface NotificationsResponse {
   notifications: NotificationItem[];
   stats?: { total: number; unread: number };
+}
+
+interface UndoToast {
+  id: string;
+  item: NotificationItem;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 function toneFor(item: NotificationItem): Tone {
@@ -57,6 +64,9 @@ function fmtRel(iso: string | undefined): string {
 export function NotificationsView(): JSX.Element {
   const res = useFetch<NotificationsResponse>('/api/notifications?limit=200');
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const [dismissed, setDismissed] = useState<NotificationItem[]>([]);
+  const [showDismissed, setShowDismissed] = useState(false);
+  const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,12 +105,29 @@ export function NotificationsView(): JSX.Element {
     }
   };
 
+  const restore = (item: NotificationItem): void => {
+    clearTimeout(undoToast?.timer);
+    setUndoToast(null);
+    setDismissed((prev) => prev.filter((n) => n.id !== item.id));
+    setItems((prev) => [item, ...prev]);
+  };
+
   const dismiss = async (id: string): Promise<void> => {
+    const item = items.find((n) => n.id === id);
+    if (!item) return;
     setBusy(id);
     setError(null);
     try {
       await fetchJson(`/api/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
       setItems((prev) => prev.filter((n) => n.id !== id));
+      setDismissed((prev) => [item, ...prev]);
+
+      // 5-second undo window
+      const timer = setTimeout(() => {
+        setDismissed((prev) => prev.filter((n) => n.id !== id));
+        setUndoToast((cur) => (cur?.id === id ? null : cur));
+      }, 5_000);
+      setUndoToast({ id, item, timer });
     } catch (err) {
       setError(err instanceof FetchError ? err.message : (err as Error).message);
     } finally {
@@ -109,12 +136,13 @@ export function NotificationsView(): JSX.Element {
   };
 
   const unread = items.filter((n) => !n.read).length;
+  const visibleItems = showDismissed ? [...items, ...dismissed] : items;
 
   return (
     <Stack gap={5} data-testid="notifications-view">
       <ViewHeader
         title="Notifications"
-        description={`${unread} unread of ${items.length} total. Backed by ~/.config/bizar/notifications.jsonl.`}
+        description={`${unread} unread of ${items.length} total${dismissed.length > 0 ? `, ${dismissed.length} dismissed` : ''}. Backed by ~/.config/bizar/notifications.jsonl.`}
         actions={
           <Inline gap={2} align="center">
             {error !== null && <span role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--fs-12)' }}>{error}</span>}
@@ -124,6 +152,11 @@ export function NotificationsView(): JSX.Element {
             <Button variant="secondary" onClick={() => void markAll()} disabled={busy === 'all' || unread === 0} data-testid="notifications-mark-all">
               <CheckCheck size={14} aria-hidden /> Mark all read
             </Button>
+            {dismissed.length > 0 && (
+              <Button variant="ghost" onClick={() => setShowDismissed((v) => !v)} data-testid="notifications-toggle-dismissed">
+                {showDismissed ? 'Hide dismissed' : `Show dismissed (${dismissed.length})`}
+              </Button>
+            )}
           </Inline>
         }
       />
@@ -133,7 +166,7 @@ export function NotificationsView(): JSX.Element {
           <Skeleton style={{ height: 64 }} />
           <Skeleton style={{ height: 64 }} />
         </Stack>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && dismissed.length === 0 ? (
         <EmptyState
           icon={<Bell size={32} aria-hidden />}
           title="No notifications"
@@ -141,15 +174,17 @@ export function NotificationsView(): JSX.Element {
         />
       ) : (
         <Stack gap={2}>
-          {items.map((n) => {
+          {visibleItems.map((n) => {
+            const isDismissed = dismissed.some((d) => d.id === n.id);
             const tone = toneFor(n);
             return (
-              <Card key={n.id} variant="default" style={{ opacity: n.read ? 0.7 : 1 }}>
+              <Card key={n.id} variant="default" style={{ opacity: isDismissed || n.read ? 0.7 : 1 }}>
                 <CardBody>
                   <Inline align="start" justify="between" gap={3}>
                     <Stack gap={1} style={{ flex: 1, minWidth: 0 }}>
                       <Inline align="center" gap={2}>
-                        {!n.read && <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 'var(--radius-pill)', background: 'var(--accent)' }} />}
+                        {isDismissed && <span data-testid={`notification-dismissed-badge-${n.id}`} style={{ fontSize: 'var(--fs-11)', color: 'var(--fg-subtle)' }}>dismissed</span>}
+                        {!n.read && !isDismissed && <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 'var(--radius-pill)', background: 'var(--accent)' }} />}
                         <strong style={{ fontSize: 'var(--fs-13)' }}>{n.title || n.source || n.id}</strong>
                         {n.source && <Badge tone={tone}>{n.source}</Badge>}
                         <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-12)' }}>{fmtRel(n.createdAt)}</span>
@@ -157,14 +192,22 @@ export function NotificationsView(): JSX.Element {
                       {n.body && <span style={{ fontSize: 'var(--fs-13)', color: 'var(--fg-muted)' }}>{n.body}</span>}
                     </Stack>
                     <Inline gap={1}>
-                      {!n.read && (
-                        <Button variant="ghost" onClick={() => void markRead(n.id)} disabled={busy === n.id} data-testid={`notification-read-${n.id}`}>
-                          Mark read
+                      {isDismissed ? (
+                        <Button variant="ghost" onClick={() => restore(n)} data-testid={`notification-restore-${n.id}`}>
+                          <RotateCcw size={12} aria-hidden /> Restore
                         </Button>
+                      ) : (
+                        <>
+                          {!n.read && (
+                            <Button variant="ghost" onClick={() => void markRead(n.id)} disabled={busy === n.id} data-testid={`notification-read-${n.id}`}>
+                              Mark read
+                            </Button>
+                          )}
+                          <Button variant="ghost" onClick={() => void dismiss(n.id)} disabled={busy === n.id} data-testid={`notification-dismiss-${n.id}`}>
+                            <Trash2 size={12} aria-hidden /> Dismiss
+                          </Button>
+                        </>
                       )}
-                      <Button variant="ghost" onClick={() => void dismiss(n.id)} disabled={busy === n.id} data-testid={`notification-dismiss-${n.id}`}>
-                        <Trash2 size={12} aria-hidden /> Dismiss
-                      </Button>
                     </Inline>
                   </Inline>
                 </CardBody>
@@ -172,6 +215,32 @@ export function NotificationsView(): JSX.Element {
             );
           })}
         </Stack>
+      )}
+      {undoToast !== null && (
+        <Card variant="default" data-testid="notifications-undo-toast" style={{ border: '1px solid var(--accent)', background: 'var(--surface-1)' }}>
+          <CardBody>
+            <Inline align="center" justify="between" gap={3}>
+              <span style={{ fontSize: 'var(--fs-13)' }}>
+                Notification dismissed.{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearTimeout(undoToast.timer);
+                    setUndoToast(null);
+                    restore(undoToast.item);
+                  }}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 'inherit', padding: 0, textDecoration: 'underline' }}
+                  data-testid="notifications-undo-btn"
+                >
+                  Undo
+                </button>
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => { clearTimeout(undoToast.timer); setUndoToast(null); }} data-testid="notifications-undo-close">
+                ✕
+              </Button>
+            </Inline>
+          </CardBody>
+        </Card>
       )}
     </Stack>
   );
