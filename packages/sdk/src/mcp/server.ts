@@ -46,6 +46,8 @@ import {
   writeNote,
   resolveVaultRoot,
 } from "../memory/index.js";
+import { listInstincts } from "../learning/instincts.js";
+import { listDecisions } from "../learning/decisions.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
 // the package is optional. Callers pass the result of `tool()` and
@@ -433,6 +435,8 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   loopStopTool,
   graphQueryTool,
   graphPathTool,
+  listInstinctsTool,
+  listDecisionsTool,
 ];
 
 /**
