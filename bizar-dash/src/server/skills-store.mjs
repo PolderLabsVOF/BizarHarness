@@ -112,6 +112,8 @@ function scanDir(dir, source) {
         source,
         path:        relPath,
         body,        // full body for detail view
+        kind:        'skills', // v10.0.6 — annotate for ?kind= filter
+        id:          entry.name, // stable id for selection state
       });
     }
   } catch {

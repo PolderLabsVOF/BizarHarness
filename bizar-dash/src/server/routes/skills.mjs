@@ -24,10 +24,15 @@ export function createSkillsRouter({ broadcast }) {
   // GET /skills
   router.get('/skills', wrap(async (req, res) => {
     const all = await skillsStore.list();
+    // v10.0.6 — honour ?kind= skills|mcps|hooks so the three library
+    // surfaces no longer show the same 49 items. Falls back to skills
+    // when the scanner hasn't annotated `kind` on an entry yet.
+    const kind = String(req.query?.kind || '').toLowerCase();
+    const filtered = kind ? all.filter((s) => String(s.kind || 'skills').toLowerCase() === kind) : all;
     // Group counts by source
     const counts = { shipped: 0, user: 0, project: 0 };
     for (const s of all) counts[s.source] = (counts[s.source] || 0) + 1;
-    res.json({ skills: all, count: all.length, counts });
+    res.json({ skills: filtered, count: filtered.length, counts, kind: kind || 'all' });
   }));
 
   // GET /skills/search?q=
