@@ -124,6 +124,7 @@ function showHelp() {
 
   Commands:
     install             Run the interactive installer
+    migrate             Migrate legacy ~/.config/cline/ or ~/.config/bizar/ to ~/.claude/
     audit               Run security audit on agent configuration
     init                Initialize .bizar/ in current project
     export [target]     Export agents/rules to another harness
@@ -290,6 +291,12 @@ async function main() {
       dbg('loaded command module:', 'install');
       await mod.run(cmd, cmdArgs, isHelpRequest);
       dbg('command returned:', cmd);
+      break;
+    }
+
+    case 'migrate': {
+      const { runMigrate } = await import('./migrate.mjs');
+      await runMigrate(cmdArgs);
       break;
     }
 
