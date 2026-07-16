@@ -110,6 +110,14 @@ interface Project {
   cwd?: string;
 }
 
+/** Mirror of ProjectsView.isTestProject — keeps test projects out of the palette. */
+function isTestProject(p: Project): boolean {
+  return (
+    /^(bizar-(e2e|real-env|admin)|bh-(cold-boot|walk-proj))/.test(p.id) ||
+    (p.name != null && p.name === p.id)
+  );
+}
+
 async function spawnAgent(
   kind: string,
   onToast?: AppCommandPaletteProps['onToast'],
@@ -197,10 +205,12 @@ export function AppCommandPalette(props: AppCommandPaletteProps): JSX.Element {
     void newTask(title, onToast);
   };
 
-  const projectItems: NavItem[] = projects.map((p) => ({
-    id: `project:${p.id}`,
-    label: `Switch to ${p.name || p.id}`,
-  }));
+  const projectItems: NavItem[] = projects
+    .filter((p) => !isTestProject(p))
+    .map((p) => ({
+      id: `project:${p.id}`,
+      label: `Switch to ${p.name || p.id}`,
+    }));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

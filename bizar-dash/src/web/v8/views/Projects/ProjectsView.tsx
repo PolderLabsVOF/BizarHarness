@@ -35,6 +35,14 @@ interface ProjectsPayload {
   projects: Project[];
 }
 
+/** Returns true for internal harness/CI test project IDs. */
+function isTestProject(p: Project): boolean {
+  return (
+    /^(bizar-(e2e|real-env|admin)|bh-(cold-boot|walk-proj))/.test(p.id) ||
+    (p.name != null && p.name === p.id)
+  );
+}
+
 export function ProjectsView(): JSX.Element {
   const payload = useFetch<ProjectsPayload>('/api/projects');
   const [adding, setAdding] = useState<boolean>(false);
@@ -43,8 +51,10 @@ export function ProjectsView(): JSX.Element {
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showTestProjects, setShowTestProjects] = useState<boolean>(false);
 
-  const projects = payload.data?.projects ?? [];
+  const allProjects = payload.data?.projects ?? [];
+  const projects = showTestProjects ? allProjects : allProjects.filter((p) => !isTestProject(p));
   const activeId = projects.find((p) => p.active)?.id ?? null;
 
   const refresh = useCallback(() => { void payload.refetch(); }, [payload]);
@@ -123,6 +133,16 @@ export function ProjectsView(): JSX.Element {
               <span role="alert" data-testid="projects-error" style={{ color: 'var(--danger)', fontSize: 'var(--fs-12)' }}>
                 {error}
               </span>
+            )}
+            {allProjects.some((p) => isTestProject(p)) && (
+              <Button
+                variant={showTestProjects ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setShowTestProjects((v) => !v)}
+                data-testid="projects-toggle-test"
+              >
+                {showTestProjects ? 'Hide test projects' : 'Show test projects'}
+              </Button>
             )}
             <Button variant="ghost" onClick={() => void scan()} data-testid="projects-scan">
               <ScanSearch size={14} aria-hidden /> Scan configured dir
