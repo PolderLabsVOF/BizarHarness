@@ -1,3 +1,8 @@
+---
+name: de-sloppify
+description: Detect AI-generated "slop" patterns in code diffs — overly verbose comments, redundant docstrings, hallucinated imports, dead helpers. Use proactively when reviewing recent edits.
+---
+
 # de-sloppify — Clean AI Slop from Code
 
 Detects and proposes fixes for common low-quality patterns introduced by LLMs:
