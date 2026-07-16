@@ -1,0 +1,80 @@
+/**
+ * cli/install/paths.mjs
+ *
+ * Single source of truth for all install paths. Replaces hard-coded
+ * path literals scattered throughout the install flow.
+ */
+
+import chalk from 'chalk';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+/** Resolve the Claude Code config directory.
+ *   1. `process.env.CLAUDE_CONFIG_DIR`
+ *   2. `$HOME/.claude`
+ */
+export function resolveClaudeDir() {
+  const HOME = homedir();
+  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
+    return process.env.CLAUDE_CONFIG_DIR.trim();
+  }
+  if (process.platform === 'win32') {
+    return process.env.APPDATA
+      ? join(process.env.APPDATA, 'Claude')
+      : join(HOME, '.claude');
+  }
+  return join(HOME, '.claude');
+}
+
+const HOME = homedir();
+const CLAUDE_DIR = resolveClaudeDir();
+const BIZAR_HOME = process.env.BIZAR_HOME
+  || join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'bizar');
+
+/** The Bizar runtime state directory (not under ~/.claude/). */
+export { BIZAR_HOME };
+
+/** Standard Claude Code subdirectories under CLAUDE_DIR. */
+export const PATHS = {
+  claudeDir:     CLAUDE_DIR,
+  agentsDir:     join(CLAUDE_DIR, 'agents'),
+  skillsDir:     join(CLAUDE_DIR, 'skills'),
+  commandsDir:   join(CLAUDE_DIR, 'commands'),
+  hooksDir:      join(CLAUDE_DIR, 'hooks'),
+  pluginsDir:    join(CLAUDE_DIR, 'plugins'),
+  settingsFile:  join(CLAUDE_DIR, 'settings.json'),
+  bizarHome:     BIZAR_HOME,
+  servicePid:    join(BIZAR_HOME, 'service.pid'),
+  dashboardPid:   join(BIZAR_HOME, 'dashboard.pid'),
+  dashboardPort: join(BIZAR_HOME, 'dashboard.port'),
+  installMarker: join(BIZAR_HOME, 'installed.json'),
+};
+
+/**
+ * Render the install-location card to the console.
+ * @param {{ dryRun?: boolean, force?: boolean }} [_opts]
+ */
+export function printInstallLocations(_opts = {}) {
+  const G = chalk.green;
+  const dim = chalk.dim;
+
+  console.log();
+  console.log(chalk.bold('┌─ BizarHarness will install to ─────────────────────────────────────┐'));
+  console.log(chalk.bold('│') + ' '.repeat(68) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `  Claude Code config     ${PATHS.claudeDir}`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ agents/          bundled agents`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ skills/          bundled skill packs`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ commands/        slash commands`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ hooks/           PreToolUse, PostToolUse, …`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ plugins/bizar/   the MCP server`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    └─ settings.json    scoped permissions + hooks`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + ' '.repeat(68) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `  Bizar runtime state   ${PATHS.bizarHome}`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ service.pid      background daemon PID`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ dashboard.pid    dashboard server PID`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    └─ installed.json   install manifest (version, hash)`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + ' '.repeat(68) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `  Override with: ${dim('CLAUDE_CONFIG_DIR=/path/to/dir')}`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('└──────────────────────────────────────────────────────────────────────┘'));
+  console.log();
+}
