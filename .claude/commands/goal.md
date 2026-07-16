@@ -6,7 +6,7 @@ description: Add or update a long-horizon goal in .bizar/PROGRESS.md — same so
 
 You are in `/goal` mode. The user has invoked this command to add or
 update a **goal** in `.bizar/PROGRESS.md`. This file is the single
-source of truth for goals — both the v8 dashboard's Goals view and
+source of truth for goals — both the dashboard's Goals view and
 Claude Code's `/goal` slash command read from and write to it.
 
 ## Contract
@@ -19,8 +19,9 @@ Claude Code's `/goal` slash command read from and write to it.
   `goals:change` WebSocket event so the dashboard updates live. **Do
   not edit PROGRESS.md directly** unless the dashboard is down.
 - **Use the dashboard's HTTP API by default.** Resolve the dashboard
-  port from `~/.cache/bizarharness/dash-auth.json` (`port` field), then
-  POST/PATCH. This keeps goals in lock-step with whatever the
+  port from `${BIZAR_HOME}/dashboard.port` (default
+  `~/.config/bizar/dashboard.port` per `cli/install/paths.mjs:49`),
+  then POST/PATCH. This keeps goals in lock-step with whatever the
   dashboard user is looking at.
 
 ## API surface (S10/S12)
@@ -44,7 +45,7 @@ DELETE /api/goals/:id/key-results/:krId         # remove KR
 PORT=$(jq -r .port ~/.cache/bizarharness/dash-auth.json)
 curl -s -X POST http://127.0.0.1:$PORT/api/goals \
   -H "Content-Type: application/json" \
-  -d '{"title":"Ship v8 dashboard","owner":"sam","due":"2026-09-30"}'
+  -d '{"title":"Ship current dashboard","owner":"sam","due":"2026-09-30"}'
 ```
 
 ### Change a goal's status to at-risk
@@ -90,7 +91,7 @@ file and broadcasts a `goals:change` event to refresh the UI.
 
 ## Background: why this exists
 
-`/goal` was added in S12 of the v8 dashboard rewrite. Before this,
+`/goal` was added in S12 of the dashboard rewrite. Before this,
 goals lived only in the user's head and `FINAL_GOAL.md` (which is the
 user's own planning doc, not the harness's tracker). This command
 makes goals a **first-class dashboard entity** — they appear in the
