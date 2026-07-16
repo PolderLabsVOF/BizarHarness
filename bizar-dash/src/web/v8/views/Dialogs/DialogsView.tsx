@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { MessageSquare, RefreshCcw, Trash2, X } from 'lucide-react';
+import { Check, MessageSquare, RefreshCcw, SkipForward, Trash2, X } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
@@ -44,6 +44,16 @@ export function DialogsView(): JSX.Element {
     try {
       await fetchJson(`/api/dialogs/${id}`, { method: 'DELETE' });
       setConfirmDelete(null);
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
+  const decide = async (id: string, verdict: 'approve' | 'deny' | 'skip'): Promise<void> => {
+    setError(null);
+    try {
+      await fetchJson(`/api/dialogs/${id}/${verdict}`, { method: 'POST', body: {} });
       refresh();
     } catch (err) {
       setError(err instanceof FetchError ? err.message : (err as Error).message);
@@ -119,14 +129,40 @@ export function DialogsView(): JSX.Element {
                           </span>
                         )}
                       </Stack>
-                      <Button
-                        variant="ghost"
-                        onClick={() => setConfirmDelete((cur) => (cur === d.id ? null : d.id))}
-                        data-testid={`dialog-dismiss-${d.id}`}
-                        aria-label={`Dismiss ${d.id}`}
-                      >
-                        <X size={14} aria-hidden /> Dismiss
-                      </Button>
+                      <Inline gap={1}>
+                        <Button
+                          variant="primary"
+                          onClick={() => void decide(d.id, 'approve')}
+                          data-testid={`dialog-approve-${d.id}`}
+                          aria-label={`Approve ${d.id}`}
+                        >
+                          <Check size={14} aria-hidden /> Approve
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void decide(d.id, 'skip')}
+                          data-testid={`dialog-skip-${d.id}`}
+                          aria-label={`Skip ${d.id}`}
+                        >
+                          <SkipForward size={14} aria-hidden /> Skip
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void decide(d.id, 'deny')}
+                          data-testid={`dialog-deny-${d.id}`}
+                          aria-label={`Deny ${d.id}`}
+                        >
+                          <X size={14} aria-hidden /> Deny
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => setConfirmDelete((cur) => (cur === d.id ? null : d.id))}
+                          data-testid={`dialog-dismiss-${d.id}`}
+                          aria-label={`Dismiss ${d.id}`}
+                        >
+                          <Trash2 size={14} aria-hidden />
+                        </Button>
+                      </Inline>
                     </Inline>
                     {isConfirming && (
                       <Inline gap={1} style={{ marginTop: 'var(--space-1)' }}>

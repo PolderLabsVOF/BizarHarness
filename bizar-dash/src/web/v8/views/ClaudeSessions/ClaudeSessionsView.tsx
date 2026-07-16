@@ -129,6 +129,15 @@ function SessionRow({
     }
   };
 
+  const resume = async (id: string): Promise<void> => {
+    setError(null);
+    try {
+      await fetchJson(`/api/claude-sessions/${id}/resume`, { method: 'POST', body: {} });
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
   const remove = async (): Promise<void> => {
     setError(null);
     try {
@@ -180,6 +189,9 @@ function SessionRow({
           )}
         </Stack>
         <Inline gap={1}>
+          <Button variant="primary" onClick={() => void resume(session.id)} data-testid={`claude-session-resume-${session.id}`} aria-label={`Resume ${session.id}`}>
+            Resume
+          </Button>
           <Button variant="ghost" onClick={() => onOpen(session.id)} data-testid={`claude-session-open-${session.id}`}>
             Open
           </Button>

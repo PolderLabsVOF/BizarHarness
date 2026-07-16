@@ -444,9 +444,28 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last release (master):** v10.0.5-S1 (Move 1: sidebar reachability + view root testids).
+- **Last release (master):** v10.0.5-S2 (Moves 2a+2b+2c: Tier-3 mutation coverage).
 - **This session:** shipping v10.0.5 across 4 moves to close the
-  umbrella brief — Move 1 done, Move 2 in progress.
+  umbrella brief — Moves 1+2 done, Move 3 in progress.
+- **v10.0.5-Move 2 deliverables (Tier-3 mutation coverage):**
+  16 atomic mutations across 8 endpoints, all proven with E2E.
+  - **Move 2a — 8 missing UI buttons** wired against existing
+    server endpoints (Projects refresh, EnvVars test, Eval
+    schedule add/delete, Mods reinstall-instructions + edit,
+    Providers add-key, ClaudeSessions send).
+  - **Move 2b — 8 new server endpoints**: `POST/PATCH/DELETE`
+    on dialogs (`/:id/approve|deny|skip` + `/:id`),
+    providers (`POST /`, `PUT /:id`, `DELETE /:id`,
+    `POST /:id/enable|disable`), claude-sessions (`POST
+    /:id/resume`). `dialog-store.mjs` grew `decide()` (sidecar
+    decision file + unlink queue) and `patch()` (merge data).
+  - **Move 2c — UI buttons for new routes** in DialogsView
+    (Approve/Skip/Deny/Dismiss), ProvidersView (New + per-row
+    Edit/Enable/Disable/Delete), ClaudeSessionsView (Resume).
+    Type grew `enabled?: boolean` on Provider.
+  - **E2E proof:** `dashboard-tier3-batch-a.mjs` 7/7 PASS,
+    `dashboard-tier3-batch-c.mjs` 14/14 PASS, full-surfaces
+    still 37/37, matrix still 13/13, crud still 17/17.
 - **v10.0.5-Move 1 deliverables (37/37 surfaces reachable):**
   App.tsx sections array grew from 12 hard-coded items to 24,
   wiring every section already declared in

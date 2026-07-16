@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { KeyRound, RotateCw, Sparkles, Star, RefreshCcw, Cpu } from 'lucide-react';
+import { KeyRound, Pencil, Plus, Power, PowerOff, RotateCw, Sparkles, Star, Trash2, RefreshCcw, Cpu } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
@@ -33,6 +33,7 @@ interface Provider {
   models?: string[];
   keys?: ProviderKey[];
   active?: boolean;
+  enabled?: boolean;
 }
 
 interface ProviderKey {
@@ -133,6 +134,57 @@ export function ProvidersView(): JSX.Element {
     }
   };
 
+  const createProvider = async (): Promise<void> => {
+    const id = window.prompt('Provider id (lowercase, e.g. openai)');
+    if (!id?.trim()) return;
+    const name = window.prompt('Display name') || id;
+    const baseURL = window.prompt('Base URL (optional)') || '';
+    const apiKey = window.prompt('API key or env:VAR marker') || '';
+    setError(null);
+    try {
+      await fetchJson('/api/providers', { method: 'POST', body: { id, name, baseURL, apiKey } });
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
+  const editProvider = async (p: Provider): Promise<void> => {
+    const name = window.prompt(`Rename ${p.id}`, p.name || p.id);
+    if (!name?.trim()) return;
+    const baseURL = window.prompt('Base URL', p.baseURL || '');
+    setError(null);
+    try {
+      await fetchJson(`/api/providers/${encodeURIComponent(p.id)}`, {
+        method: 'PUT',
+        body: { name, baseURL: baseURL ?? '' },
+      });
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
+  const deleteProvider = async (id: string): Promise<void> => {
+    setError(null);
+    try {
+      await fetchJson(`/api/providers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
+  const toggleEnabled = async (id: string, currentlyEnabled: boolean): Promise<void> => {
+    setError(null);
+    try {
+      await fetchJson(`/api/providers/${encodeURIComponent(id)}/${currentlyEnabled ? 'disable' : 'enable'}`, { method: 'POST' });
+      refresh();
+    } catch (err) {
+      setError(err instanceof FetchError ? err.message : (err as Error).message);
+    }
+  };
+
   return (
     <Stack gap={4} data-testid="providers-view">
       <ViewHeader
@@ -150,6 +202,9 @@ export function ProvidersView(): JSX.Element {
             </Button>
             <Button variant="primary" onClick={() => void runAutoDetect()} disabled={probing} data-testid="providers-auto-detect">
               <Sparkles size={14} aria-hidden /> {probing ? 'Probing…' : 'Auto-detect'}
+            </Button>
+            <Button variant="primary" onClick={() => void createProvider()} data-testid="providers-create">
+              <Plus size={14} aria-hidden /> New provider
             </Button>
           </Inline>
         }
@@ -242,6 +297,30 @@ export function ProvidersView(): JSX.Element {
                           aria-label={`Add key to ${p.id}`}
                         >
                           <KeyRound size={14} aria-hidden /> Add key
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void editProvider(p)}
+                          data-testid={`provider-edit-${p.id}`}
+                          aria-label={`Edit ${p.id}`}
+                        >
+                          <Pencil size={14} aria-hidden />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void toggleEnabled(p.id, p.enabled ?? true)}
+                          data-testid={`provider-toggle-${p.id}`}
+                          aria-label={(p.enabled ?? true) ? `Disable ${p.id}` : `Enable ${p.id}`}
+                        >
+                          {(p.enabled ?? true) ? <PowerOff size={14} aria-hidden /> : <Power size={14} aria-hidden />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void deleteProvider(p.id)}
+                          data-testid={`provider-delete-${p.id}`}
+                          aria-label={`Delete ${p.id}`}
+                        >
+                          <Trash2 size={14} aria-hidden />
                         </Button>
                       </Inline>
                     </Inline>
