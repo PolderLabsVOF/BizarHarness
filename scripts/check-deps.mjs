@@ -152,13 +152,6 @@ function readGhVersion() {
   return m ? m[1] : raw.split(' ')[0];
 }
 
-function readHeadroomVersion() {
-  const raw = safeExec('headroom', ['--version']);
-  if (!raw) return null;
-  const m = raw.match(/(\d+\.\d+\.\d+)/);
-  return m ? m[1] : raw.split(' ')[0];
-}
-
 function readSembleVersion() {
   const raw = safeExec('semble', ['--version']);
   if (!raw) return null;
@@ -187,7 +180,6 @@ function windowsInstallCmd(name) {
     case 'pip':    return 'python -m pip install --upgrade pip 2>nul || pip install --upgrade pip 2>nul';
     case 'jq':     return 'winget install jqlang.jq 2>nul || choco install jq -y 2>nul';
     case 'gh':     return 'winget install GitHub.cli 2>nul || choco install gh -y 2>nul';
-    case 'headroom':
     case 'semble': return 'npm install -g ' + name + ' 2>nul';
     default:       return null;
   }
@@ -204,7 +196,6 @@ function macInstallCmd(name) {
     case 'pip':    return 'python3 -m pip install --upgrade pip';
     case 'jq':     return 'brew install jq';
     case 'gh':     return 'brew install gh';
-    case 'headroom':
     case 'semble': return 'npm install -g ' + name;
     default:       return null;
   }
@@ -219,7 +210,6 @@ function linuxInstallCmd(name) {
       case 'jq':     return 'nix-shell -p jq';
       case 'git':    return 'nix-shell -p git';
       case 'gh':     return 'nix-shell -p gh';
-      case 'headroom':
       case 'semble': return `nix-env -iA nixpkgs.${name}`;
       default: return null;
     }
@@ -264,7 +254,6 @@ function linuxInstallCmd(name) {
       if (LINUX_DISTRO === 'alpine') return `${sudo}apk add --no-cache gh`;
       if (LINUX_DISTRO === 'void') return `${sudo}xbps-install -S gh`;
       return `${sudo}${pm} install -y gh`;
-    case 'headroom':
     case 'semble':
       return `npm install -g ${name}`;
     default:
@@ -421,19 +410,6 @@ export async function checkDeps({ strict = false } = {}) {
       present.push(entry);
     } else {
       entry.installCmd = installCmdFor('gh');
-      missing.push(entry);
-    }
-  }
-
-  // --- headroom ---
-  {
-    const current = readHeadroomVersion();
-    const entry = { name: 'headroom', status: 'missing', current, required: 'recommended' };
-    if (which('headroom')) {
-      entry.status = 'present';
-      present.push(entry);
-    } else {
-      entry.installCmd = installCmdFor('headroom');
       missing.push(entry);
     }
   }

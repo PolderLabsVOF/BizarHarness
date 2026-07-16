@@ -4,7 +4,7 @@
  * v5.x — Central env file builder for the Bizar service.
  *
  * Produces the content for `~/.config/bizar/service.env` (mode 0600),
- * which is sourced by the systemd/launchd service and the headroom companion.
+ * which is sourced by the systemd/launchd service.
  *
  * All BIZAR_* vars are written here so the service has a consistent view
  * of the environment. Values already present in `process.env` are honoured
@@ -31,7 +31,6 @@ export function defaultBizarEnv() {
     BIZAR_DASHBOARD_PORT: '4097',
     BIZAR_DASHBOARD_HOST: '127.0.0.1',
     BIZAR_LOG_LEVEL: 'info',
-    BIZAR_HEADROOM_AUTOSTART: '1',
     BIZAR_LIGHTRAG_AUTOSTART: '1',
     BIZAR_MEMORY_VAULT: join(home, '.bizar_memory'),
     CLINE_SERVER_PASSWORD: '',
@@ -77,11 +76,10 @@ function generatePassword() {
  * @param {object} opts
  * @param {string} [opts.bizarHome]   – default: ~/.config/bizar
  * @param {string} [opts.repoPath]    – absolute path to the repo root
- * @param {boolean} [opts.headroomAutoStart] – default: true
  * @param {boolean} [opts.lightragAutoStart] – default: true
  * @returns {string} env file content (does NOT write to disk)
  */
-export function buildServiceEnvFile({ bizarHome, repoPath, headroomAutoStart = true, lightragAutoStart = true } = {}) {
+export function buildServiceEnvFile({ bizarHome, repoPath, lightragAutoStart = true } = {}) {
   const home = homedir();
   const defaults = defaultBizarEnv();
 
@@ -91,11 +89,6 @@ export function buildServiceEnvFile({ bizarHome, repoPath, headroomAutoStart = t
     BIZAR_DASHBOARD_PORT:  process.env.BIZAR_DASHBOARD_PORT  || defaults.BIZAR_DASHBOARD_PORT,
     BIZAR_DASHBOARD_HOST:  process.env.BIZAR_DASHBOARD_HOST  || defaults.BIZAR_DASHBOARD_HOST,
     BIZAR_LOG_LEVEL:       process.env.BIZAR_LOG_LEVEL       || defaults.BIZAR_LOG_LEVEL,
-    BIZAR_HEADROOM_AUTOSTART: String(
-      process.env.BIZAR_HEADROOM_AUTOSTART !== undefined
-        ? (process.env.BIZAR_HEADROOM_AUTOSTART === '1' || process.env.BIZAR_HEADROOM_AUTOSTART === 'true' ? '1' : '0')
-        : (headroomAutoStart ? '1' : '0')
-    ),
     BIZAR_LIGHTRAG_AUTOSTART: String(
       process.env.BIZAR_LIGHTRAG_AUTOSTART !== undefined
         ? (process.env.BIZAR_LIGHTRAG_AUTOSTART === '1' || process.env.BIZAR_LIGHTRAG_AUTOSTART === 'true' ? '1' : '0')

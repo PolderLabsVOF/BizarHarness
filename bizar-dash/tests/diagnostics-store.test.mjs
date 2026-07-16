@@ -151,7 +151,6 @@ describe('collectDiagnostics', () => {
     assert.ok(snap.disk && typeof snap.disk.exists === 'boolean');
     assert.ok(snap.services);
     assert.ok(snap.services.dashboard);
-    assert.ok(snap.services.headroom);
     assert.ok(snap.services.lightrag);
     assert.ok(snap.services.cline);
     assert.ok(snap.counts);

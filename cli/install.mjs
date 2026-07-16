@@ -15,8 +15,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import { showBanner, showPantheon, sectionHeading } from './banner.mjs';
 import { promptComponents, promptInstallMode, promptAgents, promptSkillPacks, promptApiKeys, promptConfirmInstall, promptRestartCline } from './prompts.mjs';
-import { detectClaude, detectHeadroom, detectSemble, detectSkillsCli, detectUv, buildSummary, claudeAgentsDir, claudeConfigDir, repoPath } from './utils.mjs';
-import { installAgents, installAgentsMd, installSkill, installClineJson, installBizarFolder, installPluginBizar, installHeadroom, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
+import { detectClaude, detectSemble, detectSkillsCli, detectUv, buildSummary, claudeAgentsDir, claudeConfigDir, repoPath } from './utils.mjs';
+import { installAgents, installAgentsMd, installSkill, installClineJson, installBizarFolder, installPluginBizar, installSemble, installSkillsCli, installCuratedSkills, installRules, installHooks, installCommands, installCommandsBizar, mergeToolsIntoUserConfig } from './copy.mjs';
 
 const AGENT_FILES = [
   'odin.md', 'vor.md', 'frigg.md', 'quick.md',
@@ -514,7 +514,7 @@ export async function runPostInstall() {
   // is a thin Claude Code-native bootstrap that:
   //   - copies `config/settings.json` template on first install
   //   - installs agents into `~/.claude/agents/`
-  //   - probes for headroom / semble / skills-cli
+  //   - probes for semble / skills-cli
   //   - installs Headroom via pip or npm
   const { mkdirSync, copyFileSync, existsSync } = await import('node:fs');
   const { execSync } = await import('node:child_process');
@@ -545,40 +545,6 @@ export async function runPostInstall() {
     }
   }
   console.log('BizarHarness: agents installed.');
-
-  // Install Headroom
-  const headroomPresent = await detectHeadroom();
-  if (!headroomPresent) {
-    console.log('BizarHarness: installing Headroom (context compressor)...');
-    try {
-      if (process.platform === 'win32') {
-        console.log('BizarHarness: Automatic Headroom install not supported on Windows. Install manually: pip install "headroom-ai[all]"');
-      } else {
-        execSync(
-          'pip install --user "headroom-ai[all]"',
-          { stdio: 'pipe', timeout: 60000 },
-        );
-        execSync('headroom wrap claude', { stdio: 'pipe' });
-        console.log('BizarHarness: Headroom installed and configured.');
-      }
-    } catch {
-      // Fall back to npm
-      try {
-        execSync('npm install -g headroom-ai', { stdio: 'pipe', timeout: 60000 });
-        execSync('headroom wrap claude', { stdio: 'pipe' });
-        console.log('BizarHarness: Headroom installed (npm) and configured.');
-      } catch {
-        console.log('BizarHarness: Headroom install failed. Install manually: pip install "headroom-ai[all]" or npm install -g headroom-ai');
-      }
-    }
-  } else {
-    try {
-      execSync('headroom wrap claude', { stdio: 'pipe' });
-      console.log('BizarHarness: Headroom configured for claude.');
-    } catch {
-      console.log('BizarHarness: could not configure Headroom. Run `headroom wrap claude` manually.');
-    }
-  }
 
   // Install Semble
   const semblePresent = await detectSemble();

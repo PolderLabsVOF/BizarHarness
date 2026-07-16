@@ -73,7 +73,6 @@ const COMMAND_FILES = [
   'service',
   'dash',
   'minimax',
-  'headroom',
   'mod',
   'artifact',
   'memory',

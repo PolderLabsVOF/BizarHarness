@@ -119,10 +119,7 @@ export function getRecentErrors({ since = 0, limit = 200 } = {}) {
 }
 
 /**
- * v6.0.0 — Probe the local headroom proxy on `host:port`. Returns a
- * `{ running, port?, error? }` shape so the Doctor page can show a
- * "Headroom proxy on 8787 ✓" line without forcing the route to
- * swallow a 1.5s timeout on every poll.
+ * v6.0.0 — Generic TCP probe used by the Doctor page.
  *
  * @param {string} host
  * @param {number} port
@@ -182,23 +179,6 @@ async function probeLightRAG() {
   } catch (err) {
     return { running: false, error: err.message };
   }
-}
-
-async function probeHeadroom() {
-  // Headroom's default port — matches headroom.mjs's
-  // DEFAULT_HEADROOM_PORT. Settings override takes precedence.
-  let port = 8787;
-  let host = '127.0.0.1';
-  try {
-    const settingsPath = join(HOME, '.config', 'bizar', 'settings.json');
-    if (existsSync(settingsPath)) {
-      const parsed = JSON.parse(readFileSync(settingsPath, 'utf8'));
-      port = Number(parsed?.headroom?.port) || port;
-      host = String(parsed?.headroom?.host) || host;
-    }
-  } catch { /* ignore */ }
-  const result = await probeTcp(host, port, 800);
-  return { ...result, port, host };
 }
 
 /**
@@ -321,12 +301,11 @@ async function runConfigChecks() {
 }
 
 /**
- * v6.0.0 — Service health checks. TCP probes for headroom and
- * lightrag (both best-effort), cline plugin file probe, and the
- * dashboard itself (always `ok` — we're running because we got here).
+ * v6.0.0 — Service health checks. TCP probe for lightrag
+ * (best-effort), cline plugin file probe, and the dashboard itself
+ * (always `ok` — we're running because we got here).
  */
 async function runServiceChecks() {
-  const headroom = await probeHeadroom();
   const lightrag = await probeLightRAG();
   const serveInfo = clineServeInfo();
   const checks = [
@@ -334,13 +313,6 @@ async function runServiceChecks() {
       name: 'dashboard',
       status: 'ok',
       message: `running on pid ${process.pid}, up ${Math.floor(process.uptime())}s`,
-    },
-    {
-      name: 'headroom',
-      status: headroom.running ? 'ok' : 'warn',
-      message: headroom.running
-        ? `proxy on ${headroom.host}:${headroom.port}`
-        : `not running on ${headroom.host}:${headroom.port}${headroom.error ? ` (${headroom.error})` : ''}`,
     },
     {
       name: 'lightrag',
@@ -447,7 +419,7 @@ export async function health() {
  *   uptime: number,
  *   memory: NodeJS.MemoryUsage,
  *   disk: { exists: boolean, path: string, sizeBytes: number },
- *   services: { dashboard: object, headroom: object, lightrag: object, cline: object },
+ *   services: { dashboard: object, lightrag: object, cline: object },
  *   counts: ReturnType<typeof collectCounts>,
  *   recentErrors: ReturnType<typeof getRecentErrors>,
  *   configHealth: Array<{ name: string, status: string, message: string }>,
@@ -467,7 +439,6 @@ export async function collectDiagnostics() {
   let status = 'ok';
   if (issues.some((c) => c.status === 'fail')) status = 'fail';
   else if (issues.length > 0) status = 'warn';
-  const headroom = await probeHeadroom();
   const lightrag = await probeLightRAG();
   const serveInfo = clineServeInfo();
   const clineConfig = providersStore.CLINE_JSON;
@@ -505,7 +476,6 @@ export async function collectDiagnostics() {
         logPath: dashboardLogPath,
         logExists: dashboardLogExists,
       },
-      headroom,
       lightrag,
       cline: serveInfo,
     },

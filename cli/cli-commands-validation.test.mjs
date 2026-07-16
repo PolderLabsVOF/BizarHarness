@@ -25,7 +25,7 @@ const ALL_COMMANDS = [
   'install', 'update',
   'service',
   'dash', 'dashboard',
-  'minimax', 'tailscale', 'headroom', 'lightrag',
+  'minimax', 'tailscale', 'lightrag',
   'mod', 'usage',
   'deploy', 'plugin', 'marketplace',
   'artifact',

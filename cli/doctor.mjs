@@ -15,7 +15,7 @@
  *   hooks-wired:             settings.json has PreToolUse/PostToolUse/etc
  *   agent-files-installed:   agent .md files deployed
  *   skill-files-installed:   SKILL.md files deployed
- *   tools-on-path:           at least one of headroom/semble/skills/claude
+ *   tools-on-path:           at least one of semble/skills/claude
  *   memory-vault:            BIZAR_HOME exists (memory subdir lazy)
  *   9router-reachable:       provider gateway responds
  *
@@ -109,13 +109,13 @@ async function checkSkillFilesInstalled() {
 }
 
 /**
- * Lenient: passes if at least one of headroom/semble/skills is on PATH.
+ * Lenient: passes if at least one of semble/skills/claude is on PATH.
  * These are informational — none of them are strictly required for
  * `bizar doctor` to do its job, and missing them shouldn't fail the
  * overall health report.
  */
 async function checkToolsAvailable() {
-  const tools = ['headroom', 'semble', 'skills', 'claude'];
+  const tools = ['semble', 'skills', 'claude'];
   const found = tools.filter(which);
   if (found.length === 0) {
     throw new Error(`none of ${tools.join('/')} on PATH`);

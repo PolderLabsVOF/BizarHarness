@@ -436,32 +436,6 @@ export async function createServer({
     broadcast: localBroadcast,
   });
 
-  // v5.0.0 — Headroom startup hook. Runs after api.mjs is loaded so the
-  // headroom routes are registered. Errors are caught and logged — startup
-  // must not fail if Headroom has issues.
-  //
-  // v10-S9 — opt-out via BIZAR_HEADROOM_AUTOSTART=0. The hook runs
-  // `npm install` + a child process spawn which can take 2-5s on cold
-  // boot. Real users hit this on every dashboard launch; tests hit it
-  // too. Setting the env var skips the install + child-process spawn
-  // entirely. Default behaviour is unchanged (settings.json
-  // `headroom.enabled` still controls).
-  if (/^(0|false|no|off)$/i.test((process.env.BIZAR_HEADROOM_AUTOSTART || '').trim())) {
-    console.log('[bizar-dash] headroom startup skipped (BIZAR_HEADROOM_AUTOSTART=0)');
-  } else {
-    const { headroomStartupHook } = await import('./headroom.mjs');
-    try {
-      const settings = readSettings();
-      if (settings?.data?.headroom) {
-        headroomStartupHook(settings.data.headroom).catch((err) => {
-          console.warn('[bizar-dash] headroomStartupHook error:', err?.message || err);
-        });
-      }
-    } catch (err) {
-      console.warn('[bizar-dash] headroom startup hook skipped:', err?.message || err);
-    }
-  }
-
   // v5.5.2 — Auto-migrate legacy git.repoPath from the old vault location
   // to the new default. Runs before the lightrag hook so git-dependent
   // checks are already correct.
@@ -479,7 +453,7 @@ export async function createServer({
     console.warn('[bizar-dash] git.repoPath migration check failed:', err?.message || err);
   }
 
-  // v5.x — LightRAG startup hook (issue #6). Mirrors the headroom hook:
+  // v5.x — LightRAG startup hook (issue #6).
   // reads config from .bizar/memory.json + env vars, then calls
   // lightragStartupHook() which respects `lightrag.enabled` and the
   // BIZAR_LIGHTRAG_AUTOSTART env override. All errors are caught — the

@@ -148,22 +148,6 @@ export const DEFAULT_SETTINGS = {
     baseUrl: 'https://www.minimax.io',
     chatBaseUrl: 'https://api.minimax.io/v1',
   },
-  // v5.0.0 — Headroom context compression integration.
-  // Headroom sits between cline and LLM providers, compressing tool
-  // outputs, logs, RAG chunks, and conversation history by 60–95%.
-  headroom: {
-    enabled: true,
-    autoInstall: true,
-    port: 8787,
-    host: '127.0.0.1',
-    outputShaper: false,
-    telemetry: false,
-    budget: 0,
-    backend: 'anthropic',
-    autoStart: true,
-    autoWrap: true,
-    routeAllProviders: true,
-  },
 };
 
 /**
@@ -190,7 +174,6 @@ export function mergeSettings(existing) {
   merged.agents = { ...DEFAULT_SETTINGS.agents, ...(existing.agents || {}) };
   merged.systemLlm = { ...DEFAULT_SETTINGS.systemLlm, ...(existing.systemLlm || {}) };
   merged.minimax = { ...DEFAULT_SETTINGS.minimax, ...(existing.minimax || {}) };
-  merged.headroom = { ...DEFAULT_SETTINGS.headroom, ...(existing.headroom || {}) };
   // Always use the package version — never let user settings override it
   merged.about.version = DEFAULT_SETTINGS.about.version;
   return merged;

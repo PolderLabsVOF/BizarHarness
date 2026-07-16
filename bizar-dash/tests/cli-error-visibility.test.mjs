@@ -138,7 +138,7 @@ describe('command module null-check produces user-visible error', () => {
     // Count `if (!mod)` checks that follow `importCommand`
     const nullCheckCount = (binSrc.match(/if \(!mod\)/g) || []).length;
     // We have 9 case groups that call importCommand: install/update, service, dash,
-    // minimax, headroom, mod, artifact, memory, usage, and util (utility commands)
+    // minimax, mod, artifact, memory, usage, and util (utility commands)
     assert.ok(
       nullCheckCount >= 9,
       `Expected at least 9 null checks after importCommand, found ${nullCheckCount}`,

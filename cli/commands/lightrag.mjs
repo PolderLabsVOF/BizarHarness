@@ -8,7 +8,7 @@
  *                      the current working directory's project. Used by
  *                      `install.sh` and by operators who want to manually
  *                      start LightRAG without opening the dashboard.
- *   start              Alias for `autostart` (matches `headroom start`).
+ *   start              Alias for `autostart`.
  *   status             Print whether the LightRAG server is running.
  *
  * The dashboard server already auto-invokes `lightragStartupHook()` on

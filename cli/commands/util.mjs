@@ -120,7 +120,7 @@ export function showDoctorHelp() {
       • plugin path resolves
       • @polderlabs/bizar-plugin is installed globally
       • core agent files are installed (odin, quick, thor, tyr)
-      • headroom / semble / skills on PATH (lenient — at least one)
+      • semble / skills on PATH (lenient — at least one)
       • dashboard reachable (skipped if no port file)
       • provider.minimax block + MiniMax model flags are sane
 

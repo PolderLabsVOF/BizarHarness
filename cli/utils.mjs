@@ -121,13 +121,6 @@ export async function detectClaude() {
   return { exists, version, configDir: claudeConfigDir(), agentsDir: claudeAgentsDir() };
 }
 
-export async function detectHeadroom() {
-  return commandExists('headroom');
-}
-
-// Alias for backward-compat during migration
-export const detectRtk = detectHeadroom;
-
 export async function detectSemble() {
   if (commandExists('semble')) {
     return true;

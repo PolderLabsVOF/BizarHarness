@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import ora from 'ora';
 import chalk from 'chalk';
-import { repoPath, clineConfigDir, clineAgentsDir, detectRtk, detectSemble, detectUv, detectSkillsCli } from './utils.mjs';
+import { repoPath, clineConfigDir, clineAgentsDir, detectSemble, detectUv, detectSkillsCli } from './utils.mjs';
 
 async function fileExists(path) {
   try {
@@ -338,52 +338,6 @@ export async function installPluginBizar(projectRoot) {
   } catch (err) {
     spinner.fail(chalk.red(`Failed to install Bizar plugin: ${err.message}`));
     return { copied: 0, errors: [err.message] };
-  }
-}
-
-export async function installHeadroom() {
-  const { execSync } = await import('node:child_process');
-
-  const already = await detectRtk();
-  if (already) {
-    const spinner = ora({ text: 'Configuring Headroom for cline...', color: 'magenta' }).start();
-    try {
-      execSync('headroom wrap cline', { stdio: 'pipe' });
-      spinner.succeed(chalk.green('Headroom configured for cline'));
-    } catch {
-      spinner.warn(chalk.yellow('Could not auto-configure Headroom — run `headroom wrap cline` manually'));
-    }
-    return true;
-  }
-
-  const spinner = ora({ text: 'Installing Headroom (context compressor)...', color: 'magenta' }).start();
-
-  if (process.platform === 'win32') {
-    spinner.fail(chalk.red('Automatic Headroom install not supported on Windows. Install manually: pip install "headroom-ai[all]"'));
-    return false;
-  }
-
-  try {
-    execSync(
-      'pip install --user "headroom-ai[all]"',
-      { stdio: 'pipe', timeout: 60000 },
-    );
-    spinner.text = 'Configuring Headroom for cline...';
-    execSync('headroom wrap cline', { stdio: 'pipe' });
-    spinner.succeed(chalk.green('Headroom installed and configured for cline'));
-    return true;
-  } catch {
-    // Fall back to npm
-    try {
-      execSync('npm install -g headroom-ai', { stdio: 'pipe', timeout: 60000 });
-      spinner.text = 'Configuring Headroom for cline...';
-      execSync('headroom wrap cline', { stdio: 'pipe' });
-      spinner.succeed(chalk.green('Headroom installed (npm) and configured for cline'));
-      return true;
-    } catch {
-      spinner.fail(chalk.red('Headroom install failed. Install manually: pip install "headroom-ai[all]" or npm install -g headroom-ai'));
-      return false;
-    }
   }
 }
 

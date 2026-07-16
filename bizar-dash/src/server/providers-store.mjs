@@ -164,7 +164,7 @@ export { readClineJsonCached, invalidateClineJsonCache, CLINE_JSON_CACHE_TTL_MS 
 // MAX_ROTATION_ATTEMPTS: bound on the number of times `withKeyRotation`
 // will retry the user's fn with a different key before throwing. With
 // `cooldown` skipping, this matches the typical "1 primary + 1 backup"
-// deployment (2 attempts) with headroom for a 3rd emergency key.
+// deployment (2 attempts) with a 3rd emergency key.
 //
 // ROTATION_ERROR_PATTERNS: substring match against the lowercased error
 // message — used as a fallback when no structured `status` is present

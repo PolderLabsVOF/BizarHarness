@@ -42,7 +42,9 @@
   "env": {
     "BIZAR_HOME": "${HOME}/.bizar_home",
     "BIZAR_MEMORY_VAULT": "${HOME}/.bizar_home/memory",
-    "BIZAR_LOOPS_DIR": "${HOME}/.bizar_loops"
+    "BIZAR_LOOPS_DIR": "${HOME}/.bizar_loops",
+    "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
+    "BIZAR_MODEL_ROUTER_URL": "http://localhost:20128/v1"
   },
   "hooks": {
     "PreToolUse": [
@@ -116,6 +118,11 @@
           {
             "type": "command",
             "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/sessionend-recall.mjs",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node /home/drb0rk/Projects/BizarHarness/.claude/hooks/learning-extract.mjs",
             "timeout": 15
           }
         ]

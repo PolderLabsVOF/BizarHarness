@@ -102,9 +102,6 @@ function linuxUnitPath() {
 function linuxEnvPath() {
   return join(bizarConfigDir(), 'service.env');
 }
-function linuxHeadroomUnitPath() {
-  return join(userUnitDir(), 'bizar-headroom.service');
-}
 function darwinPlistPath() {
   return join(launchAgentsDir(), 'com.bizar.dashboard.plist');
 }
@@ -178,161 +175,6 @@ function linuxEnvFileContent({ projectRoot }) {
   return buildServiceEnvFile({ bizarHome: bizarConfigDir(), repoPath: projectRoot });
 }
 
-// ── Headroom companion service (Linux) ─────────────────────────────────────────
-
-function linuxHeadroomUnitContent() {
-  const envPath = join(bizarConfigDir(), 'service.env');
-  return [
-    '[Unit]',
-    'Description=Bizar Headroom context-compression proxy',
-    'After=bizar.service',
-    'Wants=bizar.service',
-    '',
-    '[Service]',
-    'Type=simple',
-    `EnvironmentFile=${envPath}`,
-    'ExecStart=/bin/sh -c "command -v headroom >/dev/null 2>&1 && headroom proxy cline || exit 0"',
-    'Restart=on-failure',
-    'RestartSec=10',
-    'TimeoutStopSec=15',
-    '',
-    '[Install]',
-    'WantedBy=default.target',
-    '',
-  ].join('\n');
-}
-
-function darwinHeadroomPlistPath() {
-  return join(launchAgentsDir(), 'com.bizar.headroom.plist');
-}
-
-function darwinHeadroomPlistContent({ nodePath, projectRoot }) {
-  const envContent = buildServiceEnvFile({ bizarHome: bizarConfigDir(), repoPath: projectRoot });
-  const envVars = parseEnvFile(envContent);
-  const envXml = envVars
-    .map(([k, v]) => `      <key>${xmlEscape(k)}</key>\n      <string>${xmlEscape(v)}</string>`)
-    .join('\n');
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
-    '<plist version="1.0">',
-    '<dict>',
-    '  <key>Label</key>',
-    '  <string>com.bizar.headroom</string>',
-    '  <key>ProgramArguments</key>',
-    '  <array>',
-    `    <string>${xmlEscape(nodePath)}</string>`,
-    '    <string>-c</string>',
-    '    <string>command -v headroom >/dev/null 2>&1 && headroom proxy cline || exit 0</string>',
-    '  </array>',
-    '  <key>EnvironmentVariables</key>',
-    '  <dict>',
-    envXml,
-    '  </dict>',
-    '  <key>KeepAlive</key>',
-    '  <true/>',
-    '  <key>RunAtLoad</key>',
-    '  <true/>',
-    '  <key>StandardOutPath</key>',
-    `  <string>${xmlEscape(join(bizarConfigDir(), 'headroom.log'))}</string>`,
-    '  <key>StandardErrorPath</key>',
-    `  <string>${xmlEscape(join(bizarConfigDir(), 'headroom.log'))}</string>`,
-    '  <key>WorkingDirectory</key>',
-    `  <string>${xmlEscape(projectRoot)}</string>`,
-    '</dict>',
-    '</plist>',
-    '',
-  ].join('\n');
-}
-
-function installHeadroomServiceLinux({ force = false }) {
-  // Honour BIZAR_HEADROOM_AUTOSTART from process.env (already merged by buildServiceEnvFile)
-  const headroomAutoStart = process.env.BIZAR_HEADROOM_AUTOSTART !== '0';
-  if (!headroomAutoStart) {
-    return ok({ note: 'headroom autostart disabled via BIZAR_HEADROOM_AUTOSTART=0' });
-  }
-  if (!existsSync(userUnitDir())) {
-    try { mkdirSync(userUnitDir(), { recursive: true }); } catch (err) {
-      return fail(`cannot create ${userUnitDir()}: ${err.message}`);
-    }
-  }
-  const unitPath = linuxHeadroomUnitPath();
-  const want = linuxHeadroomUnitContent();
-  if (!force && existsSync(unitPath)) {
-    const have = readFileSync(unitPath, 'utf8').trim() + '\n';
-    if (have === want.trim() + '\n') {
-      return ok({ alreadyInstalled: true, unitPath, note: 'headroom unit already matches' });
-    }
-  }
-  try {
-    writeFileSync(unitPath, want, { encoding: 'utf8', mode: 0o644 });
-  } catch (err) {
-    return fail(`write ${unitPath}: ${err.message}`);
-  }
-  runCmd('systemctl', ['--user', 'daemon-reload']);
-  const r = runCmd('systemctl', ['--user', 'enable', '--now', 'bizar-headroom.service']);
-  if (r.error || (r.status !== 0 && r.status !== null)) {
-    return fail(`headroom service enable failed: ${r.stderr || r.error?.message || `exit ${r.status}`}`, { unitPath });
-  }
-  return ok({ unitPath, note: 'headroom companion service installed and started' });
-}
-
-function uninstallHeadroomServiceLinux() {
-  const unitPath = linuxHeadroomUnitPath();
-  if (!existsSync(unitPath)) {
-    return ok({ unitPath: null, note: 'no headroom systemd unit installed' });
-  }
-  runCmd('systemctl', ['--user', 'disable', '--now', 'bizar-headroom.service']);
-  try { unlinkSync(unitPath); } catch { /* ignore */ }
-  runCmd('systemctl', ['--user', 'daemon-reload']);
-  return ok({ unitPath: null, note: 'headroom systemd unit removed' });
-}
-
-function installHeadroomServiceDarwin({ nodePath, projectRoot, force = false }) {
-  const headroomAutoStart = process.env.BIZAR_HEADROOM_AUTOSTART !== '0';
-  if (!headroomAutoStart) {
-    return ok({ note: 'headroom autostart disabled via BIZAR_HEADROOM_AUTOSTART=0' });
-  }
-  const dir = launchAgentsDir();
-  if (!existsSync(dir)) {
-    try { mkdirSync(dir, { recursive: true }); } catch (err) {
-      return fail(`cannot create ${dir}: ${err.message}`);
-    }
-  }
-  const plistPath = darwinHeadroomPlistPath();
-  const want = darwinHeadroomPlistContent({ nodePath, projectRoot });
-  if (!force && existsSync(plistPath)) {
-    const have = readFileSync(plistPath, 'utf8').trim() + '\n';
-    if (have === want.trim() + '\n') {
-      const lst = runCmd('launchctl', ['list']);
-      if (lst.status === 0 && /com\.bizar\.headroom/.test(lst.stdout)) {
-        return ok({ alreadyInstalled: true, unitPath: plistPath, note: 'headroom plist matches and is loaded' });
-      }
-    }
-  }
-  try {
-    writeFileSync(plistPath, want, { encoding: 'utf8', mode: 0o644 });
-    try { chmodSync(plistPath, 0o644); } catch { /* best-effort */ }
-  } catch (err) {
-    return fail(`write ${plistPath}: ${err.message}`);
-  }
-  runCmd('launchctl', ['unload', plistPath]);
-  const load = runCmd('launchctl', ['load', '-w', plistPath]);
-  if (load.error || (load.status !== 0 && load.status !== null)) {
-    return fail(`launchctl load failed for headroom: ${load.stderr || load.error?.message || `exit ${load.status}`}`, { unitPath: plistPath });
-  }
-  return ok({ unitPath: plistPath, note: 'headroom companion plist installed and loaded' });
-}
-
-function uninstallHeadroomServiceDarwin() {
-  const plistPath = darwinHeadroomPlistPath();
-  if (!existsSync(plistPath)) {
-    return ok({ unitPath: null, note: 'no headroom launchd plist installed' });
-  }
-  runCmd('launchctl', ['unload', plistPath]);
-  try { unlinkSync(plistPath); } catch { /* ignore */ }
-  return ok({ unitPath: null, note: 'headroom launchd plist removed' });
-}
 
 function installServiceLinux({ nodePath, projectRoot, force = false }) {
   if (!existsSync(userUnitDir())) {
@@ -391,13 +233,6 @@ function installServiceLinux({ nodePath, projectRoot, force = false }) {
   r = runCmd('systemctl', ['--user', 'enable', '--now', 'bizar.service']);
   if (r.error || (r.status !== 0 && r.status !== null)) {
     return fail(`systemctl --user enable --now failed: ${r.stderr || r.error?.message || `exit ${r.status}`}`, { unitPath });
-  }
-
-  // Also install headroom companion service (non-fatal if it fails)
-  const hr = installHeadroomServiceLinux({ force });
-  if (!hr.ok) {
-    // Non-fatal: headroom is optional
-    console.log(`  ${hr.error || 'headroom companion install failed'}`);
   }
 
   return ok({
@@ -560,12 +395,6 @@ function installServiceDarwin({ nodePath, projectRoot, force = false }) {
   const load = runCmd('launchctl', ['load', '-w', plistPath]);
   if (load.error || (load.status !== 0 && load.status !== null)) {
     return fail(`launchctl load failed: ${load.stderr || load.error?.message || `exit ${load.status}`}`, { unitPath: plistPath });
-  }
-
-  // Also install headroom companion service (non-fatal if it fails)
-  const hr = installHeadroomServiceDarwin({ nodePath, projectRoot, force });
-  if (!hr.ok) {
-    console.log(`  ${hr.error || 'headroom companion install failed'}`);
   }
 
   return ok({ unitPath: plistPath, note: 'plist installed and loaded' });
@@ -755,28 +584,7 @@ export function uninstallService() {
   else if (PLATFORM === 'darwin') result = uninstallServiceDarwin();
   else if (PLATFORM === 'win32') result = uninstallServiceWindows();
   else return fail(`unsupported platform: ${PLATFORM}`);
-  // Also uninstall headroom companion
-  if (PLATFORM === 'linux') uninstallHeadroomServiceLinux();
-  if (PLATFORM === 'darwin') uninstallHeadroomServiceDarwin();
   return result;
-}
-
-/**
- * Install the headroom companion service only (does NOT install the
- * main dashboard service). Idempotent. Safe to re-run.
- */
-export function installHeadroomService(opts = {}) {
-  const nodePath = resolveNodePath(opts.nodePath);
-  const projectRoot = resolveRepoRoot(opts.projectRoot);
-  if (PLATFORM === 'linux') return installHeadroomServiceLinux({ force: !!opts.force });
-  if (PLATFORM === 'darwin') return installHeadroomServiceDarwin({ nodePath, projectRoot, force: !!opts.force });
-  return ok({ note: `headroom companion not supported on ${PLATFORM}` });
-}
-
-export function uninstallHeadroomService() {
-  if (PLATFORM === 'linux') return uninstallHeadroomServiceLinux();
-  if (PLATFORM === 'darwin') return uninstallHeadroomServiceDarwin();
-  return ok({ note: `headroom companion not supported on ${PLATFORM}` });
 }
 
 /**

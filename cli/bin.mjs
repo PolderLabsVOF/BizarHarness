@@ -12,7 +12,7 @@
  *
  * Commands:
  *   install, audit, init, export, artifact, update, test-gate, service, dash,
- *   memory, headroom, minimax, usage, mod, doctor, repair, dev-link, dev-unlink,
+ *   memory, minimax, usage, mod, doctor, repair, dev-link, dev-unlink,
  *   heads-up, bg, agent-browser, agent-browser-up, providers, deploy, plugin,
  *   marketplace, plan, digest, backup, restore, clip, ocr, voice, workspace, eval
  */
@@ -133,7 +133,6 @@ function showHelp() {
     service             Manage the background service daemon
     dash <subcommand>   Manage the dashboard (start/stop/status/cleanup/tui)
     memory <subcommand> Manage project memory (Bizar Memory Service)
-    headroom <subcommand> Manage Headroom context compression
     lightrag <subcommand> Manage the LightRAG knowledge-graph server (status/start/autostart)
     minimax <subcommand>   Manage MiniMax Token Plan integration
     tailscale <subcommand> Manage Tailscale integration (auth, serve, status)
@@ -342,19 +341,6 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'tailscale');
-      await mod.run(cmd, cmdArgs, isHelpRequest);
-      dbg('command returned:', cmd);
-      break;
-    }
-
-    case 'headroom': {
-      const mod = await importCommand('headroom');
-      if (!mod) {
-        console.error(chalk.red(`  ✗ Could not load headroom command module`));
-        process.exit(EXIT_ERROR);
-        return;
-      }
-      dbg('loaded command module:', 'headroom');
       await mod.run(cmd, cmdArgs, isHelpRequest);
       dbg('command returned:', cmd);
       break;
