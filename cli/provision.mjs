@@ -928,3 +928,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 }
+
+// Back-compat alias — v10.0.0 historical API. 'bizar update' historically
+// called `runUpdate(args)`; we collapsed install + update onto
+// `runProvision({ mode: 'update', ... })`. Keep `runUpdate` importable so
+// `cli/commands/install.mjs` (which still uses the historical signature)
+// works without modification.
+export const runUpdate = (subargs, opts = {}) =>
+  runProvision({ ...opts, mode: 'update', subargs });
