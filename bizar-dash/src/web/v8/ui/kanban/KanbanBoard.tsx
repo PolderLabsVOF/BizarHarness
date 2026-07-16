@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import {
   DndContext,
   closestCorners,
@@ -16,7 +16,6 @@ import { cx } from '../utils/cx.js';
  *
  * The board owns drag state. It receives:
  *   - columns: definition + droppable ids
- *   - renderColumn: function that takes column data + isOver flag + children
  *   - onCardMove: invoked when a card moves between columns (or reorders within)
  *
  * For most cases, prefer using the higher-level `KanbanBoardSimple` wrapper
@@ -28,9 +27,36 @@ export interface KanbanBoardProps {
   onCardMove?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
   children: ReactNode;
   className?: string;
+  /** Set of selected card ids; passed down via context. */
+  selection?: ReadonlySet<string>;
+  /** Called when the user toggles the selection checkbox on a card. */
+  onSelectionChange?: (id: string, next: boolean) => void;
+  /** When true, all cards render their selection checkbox always-on. */
+  selectionMode?: boolean;
 }
 
-export function KanbanBoard({ columns, onCardMove, children, className }: KanbanBoardProps) {
+/**
+ * Context exposed to children of <KanbanBoard> so cards know about the
+ * selection state without prop-drilling through every column.
+ */
+export interface KanbanBoardContextValue {
+  selection: ReadonlySet<string>;
+  selectionMode: boolean;
+  onSelectionChange?: (id: string, next: boolean) => void;
+}
+
+export const KanbanBoardContext = createContext<KanbanBoardContextValue>({
+  selection: new Set(),
+  selectionMode: false,
+});
+
+/** Hook for descendants to read the board's selection state. */
+export function useKanbanBoard(): KanbanBoardContextValue {
+  return useContext(KanbanBoardContext);
+}
+
+export function KanbanBoard(props: KanbanBoardProps): JSX.Element {
+  const { columns, onCardMove, children, className, selection, onSelectionChange, selectionMode } = props;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -53,31 +79,39 @@ export function KanbanBoard({ columns, onCardMove, children, className }: Kanban
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={(e) => setActiveId(String(e.active.id))}
-      onDragEnd={handleDragEnd}
+    <KanbanBoardContext.Provider
+      value={{
+        selection: selection ?? new Set(),
+        selectionMode: selectionMode === true,
+        onSelectionChange,
+      }}
     >
-      <div
-        className={cx('v8-kanban-board', className)}
-        style={{
-          display: 'grid',
-          gridAutoFlow: 'column',
-          gridAutoColumns: 'minmax(320px, 1fr)',
-          gap: 'var(--space-4)',
-          padding: 'var(--space-4) var(--space-5)',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          height: '100%',
-          width: '100%',
-          alignItems: 'stretch',
-        }}
-        role="region"
-        aria-label="Kanban board"
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={(e) => setActiveId(String(e.active.id))}
+        onDragEnd={handleDragEnd}
       >
-        {children}
-      </div>
-    </DndContext>
+        <div
+          className={cx('v8-kanban-board', className)}
+          style={{
+            display: 'grid',
+            gridAutoFlow: 'column',
+            gridAutoColumns: 'minmax(320px, 1fr)',
+            gap: 'var(--space-4)',
+            padding: 'var(--space-4) var(--space-5)',
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            height: '100%',
+            width: '100%',
+            alignItems: 'stretch',
+          }}
+          role="region"
+          aria-label="Kanban board"
+        >
+          {children}
+        </div>
+      </DndContext>
+    </KanbanBoardContext.Provider>
   );
 }

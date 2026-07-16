@@ -248,9 +248,41 @@ export {
   type KanbanColumnProps,
   type KanbanColumnData,
 } from './kanban/KanbanColumn.js';
-export { KanbanBoard, type KanbanBoardProps } from './kanban/KanbanBoard.js';
+export {
+  KanbanBoard,
+  KanbanBoardContext,
+  useKanbanBoard,
+  type KanbanBoardProps,
+  type KanbanBoardContextValue,
+} from './kanban/KanbanBoard.js';
 export { KanbanQuickAdd, type KanbanQuickAddProps } from './kanban/KanbanQuickAdd.js';
 export { KanbanContextMenu, type KanbanContextMenuProps } from './kanban/KanbanContextMenu.js';
+export {
+  KanbanToolbar,
+  type KanbanToolbarProps,
+  type KanbanFilter,
+} from './kanban/KanbanToolbar.js';
+export {
+  KanbanDetailDialog,
+  type KanbanDetailDialogProps,
+} from './kanban/KanbanDetailDialog.js';
+export {
+  KanbanEmptyColumn,
+  type KanbanEmptyColumnProps,
+} from './kanban/KanbanEmptyColumn.js';
+export {
+  KanbanProgress,
+  type KanbanProgressProps,
+} from './kanban/KanbanProgress.js';
+export {
+  KanbanCardBadges,
+  type KanbanCardBadgesProps,
+  type KanbanCardBadge,
+} from './kanban/KanbanCardBadges.js';
+export {
+  useKanbanSelection,
+  type UseKanbanSelectionApi,
+} from './kanban/useKanbanSelection.js';
 
 // ── goals (Sprint S6) ─────────────────────────────────────────────────────
 

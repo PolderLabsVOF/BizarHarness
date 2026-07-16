@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
@@ -6,6 +6,7 @@ import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { KanbanBoard } from '../../ui/kanban/KanbanBoard.js';
 import { KanbanColumn, type KanbanColumnData } from '../../ui/kanban/KanbanColumn.js';
 import { KanbanCard, useKanbanCardSortable, type KanbanCardData } from '../../ui/kanban/KanbanCard.js';
+import { KanbanToolbar, useKanbanSelection, type KanbanFilter } from '../../ui/index.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { TaskDetail } from '../../ui/tasks/TaskDetail.js';
 import { Sheet, SheetContent } from '../../ui/feedback/Sheet.js';
@@ -17,16 +18,21 @@ import { useWsMessage } from '../../data/useWebSocket.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { Task, WsMessage } from '../../data/types.js';
 
-type TaskStatus = 'queued' | 'doing' | 'blocked' | 'done' | 'archived';
+type TaskStatus = NonNullable<Task['status']>;
 
 /**
  * TasksView — Sprint S10. Pulls `/api/tasks` and maps server statuses
  * to v8 kanban columns. Drag a card between columns → PATCH
  * /api/tasks/:id/status. Live updates via `tasks:change`.
+ *
+ * v10.0.6 — adds KanbanToolbar (search + priority filter chips +
+ * bulk-actions row), useKanbanSelection hook (Esc-to-clear), and a
+ * 6th "Backlog" column from PR #14.
  */
 
 const COLUMNS: KanbanColumnData[] = [
-  { id: 'queued', title: 'Backlog', accentTone: 'neutral' },
+  { id: 'backlog', title: 'Backlog', accentTone: 'neutral' },
+  { id: 'queued', title: 'Queued', accentTone: 'info' },
   { id: 'doing', title: 'In progress', accentTone: 'accent', wipLimit: 5 },
   { id: 'blocked', title: 'In review', accentTone: 'warning' },
   { id: 'done', title: 'Done', accentTone: 'success' },
@@ -61,6 +67,7 @@ function taskToCard(t: Task): Card {
 
 function statusToColumn(status?: TaskStatus): TaskStatus {
   switch (status) {
+    case 'backlog':
     case 'queued':
     case 'doing':
     case 'blocked':
@@ -68,7 +75,7 @@ function statusToColumn(status?: TaskStatus): TaskStatus {
     case 'archived':
       return status;
     default:
-      return 'queued';
+      return 'backlog';
   }
 }
 
@@ -92,7 +99,9 @@ export function TasksView(): JSX.Element {
   const [cards, setCards] = useState<Card[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selection = useKanbanSelection();
+  const [query, setQuery] = useState<string>('');
+  const [activeFilters, setActiveFilters] = useState<ReadonlySet<string>>(new Set());
   const [createDraft, setCreateDraft] = useState<{ title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' } | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -115,35 +124,26 @@ export function TasksView(): JSX.Element {
     if (m.type !== 'tasks:removed' && m.type !== 'task:removed') return;
     if (!m.id) return;
     setCards((prev) => prev.filter((c) => c.taskId !== m.id));
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(m.id!);
-      return next;
-    });
+    selection.remove([m.id]);
     if (openTaskId === m.id) setOpenTaskId(null);
-  }, [openTaskId]);
+  }, [openTaskId, selection]);
   useWsMessage('tasks:removed', onWsRemove);
   useWsMessage('task:removed', onWsRemove);
 
   const toggleSelect = (taskId: string): void => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
-      return next;
-    });
+    selection.toggle(taskId);
   };
 
   const bulkMove = async (toStatus: TaskStatus): Promise<void> => {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(selection.selected);
     if (ids.length === 0) return;
-    setCards((prev) => prev.map((c) => (selectedIds.has(c.taskId) ? { ...c, columnId: toStatus } : c)));
+    setCards((prev) => prev.map((c) => (selection.has(c.taskId) ? { ...c, columnId: toStatus } : c)));
     try {
       await fetchJson('/api/tasks/bulk-status', {
         method: 'PATCH',
         body: { ids, status: toStatus },
       });
-      setSelectedIds(new Set());
+      selection.clear();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -198,7 +198,45 @@ export function TasksView(): JSX.Element {
   for (const c of cards) counts[c.columnId] = (counts[c.columnId] || 0) + 1;
 
   const openTask = openTaskId ? tasks.data?.tasks?.find((t) => t.id === openTaskId) ?? null : null;
-  const selectedCount = selectedIds.size;
+  const selectedCount = selection.selected.size;
+
+  // ── v10.0.6 — search + filter chips (PR #14 toolbar wiring) ──
+  const filteredCards = useMemo<Card[]>(() => {
+    const q = query.trim().toLowerCase();
+    return cards.filter((c) => {
+      if (activeFilters.size > 0) {
+        if (activeFilters.has(`status:${c.columnId}`) === false) {
+          const hasPriority = c.priority !== undefined && activeFilters.has(`priority:${c.priority}`);
+          const hasStatus = activeFilters.has(`status:${c.columnId}`);
+          if (!hasPriority && !hasStatus) return false;
+        }
+      }
+      if (q !== '') {
+        const hay = `${c.title} ${c.description ?? ''}`.toLowerCase();
+        if (hay.includes(q) === false) return false;
+      }
+      return true;
+    });
+  }, [cards, query, activeFilters]);
+
+  const priorityFilters: KanbanFilter[] = [
+    { id: 'priority:low', label: 'Low', tone: 'neutral' },
+    { id: 'priority:medium', label: 'Medium', tone: 'info' },
+    { id: 'priority:high', label: 'High', tone: 'warning' },
+    { id: 'priority:urgent', label: 'Urgent', tone: 'danger' },
+  ];
+  const statusFilters: KanbanFilter[] = COLUMNS.map((c) => ({ id: `status:${c.id}`, label: c.title as string }));
+  const allFilters: KanbanFilter[] = [...priorityFilters, ...statusFilters];
+
+  const onFilterToggle = useCallback((id: string) => {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const onClearFilters = useCallback(() => setActiveFilters(new Set()), []);
 
   return (
     <Stack gap={4} data-testid="tasks-view">
@@ -215,13 +253,31 @@ export function TasksView(): JSX.Element {
         }
       />
       {selectedCount > 0 && (
-        <div role="region" aria-label="Bulk actions" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', background: 'color-mix(in oklch, var(--accent) 8%, var(--surface-0))' }}>
-          <strong style={{ fontSize: 'var(--fs-13)' }}>{selectedCount} selected</strong>
-          <button onClick={() => void bulkMove('doing')} style={{ padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)', cursor: 'pointer', fontSize: 'var(--fs-12)' }}>Move to In progress</button>
-          <button onClick={() => void bulkMove('done')} style={{ padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)', cursor: 'pointer', fontSize: 'var(--fs-12)' }}>Move to Done</button>
-          <button onClick={() => void bulkMove('archived')} style={{ padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)', cursor: 'pointer', fontSize: 'var(--fs-12)' }}>Archive</button>
-          <button onClick={() => setSelectedIds(new Set())} style={{ marginLeft: 'auto', padding: '4px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Clear</button>
-        </div>
+        <KanbanToolbar
+          totalCount={cards.length}
+          visibleCount={filteredCards.length}
+          selectedCount={selectedCount}
+          query={query}
+          onQueryChange={setQuery}
+          filters={allFilters}
+          onFilterToggle={onFilterToggle}
+          onClearFilters={onClearFilters}
+          onNewTask={() => setCreateDraft({ title: '', description: '', priority: 'medium' })}
+          onBulkMove={() => void bulkMove('doing')}
+          onBulkArchive={() => void bulkMove('archived')}
+          onBulkDelete={async () => {
+            const ids = Array.from(selection.selected);
+            if (ids.length === 0) return;
+            if (!window.confirm(`Delete ${ids.length} task${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+            try {
+              await fetchJson('/api/tasks/bulk-status', { method: 'PATCH', body: { ids, status: 'archived' } });
+              selection.clear();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+            }
+          }}
+          onClearSelection={() => selection.clear()}
+        />
       )}
       {tasks.loading && cards.length === 0 ? (
         <Stack gap={3}>
@@ -231,7 +287,7 @@ export function TasksView(): JSX.Element {
       ) : (
         <KanbanBoard columns={COLUMNS} onCardMove={onCardMove}>
           {COLUMNS.map((col) => {
-            const inColumn = cards.filter((c) => c.columnId === col.id);
+            const inColumn = filteredCards.filter((c) => c.columnId === col.id);
             return (
               <KanbanColumn
                 key={col.id}
@@ -241,7 +297,7 @@ export function TasksView(): JSX.Element {
                   <div key={card.id} style={{ position: 'relative' }}>
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(card.taskId)}
+                      checked={selection.has(card.taskId)}
                       onChange={() => toggleSelect(card.taskId)}
                       onClick={(e) => e.stopPropagation()}
                       aria-label={`Select ${card.title}`}

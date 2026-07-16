@@ -89,7 +89,7 @@ export interface Goal {
 export interface Task {
   id: string;
   title: string;
-  status?: 'queued' | 'doing' | 'done' | 'blocked' | 'archived';
+  status?: 'backlog' | 'queued' | 'doing' | 'done' | 'blocked' | 'archived';
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   description?: string;
   branch?: string;
@@ -100,6 +100,18 @@ export interface Task {
   metadata?: Record<string, unknown>;
   createdAt?: number;
   updatedAt?: number;
+  /** Optional tag list (Task tags are stored on the task itself in v10). */
+  tags?: string[];
+  /** Optional subtask list (freeform — accept string ids or {id, title, done}). */
+  subtasks?: Array<{ id?: string; title?: string; done?: boolean } | string>;
+  /** Optional dependencies (other task ids). */
+  dependencies?: string[];
+  /** Recurring task indicator. */
+  recurring?: boolean | string;
+  /** Activity log entries (for the detail dialog). */
+  activity?: Array<{ ts?: number; kind?: string; message?: string }>;
+  /** When the active timer started (for in-progress tracking). */
+  timerStart?: number;
 }
 
 /** `GET /api/memory` — memo entries. */
