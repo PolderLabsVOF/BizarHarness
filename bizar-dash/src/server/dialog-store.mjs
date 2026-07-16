@@ -41,6 +41,7 @@ import {
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
+import { warn as logWarn } from './logger.mjs';
 
 const HOME = homedir();
 const DIALOG_DIR = join(HOME, '.cache', 'bizar', 'dialogs');
@@ -125,7 +126,7 @@ export const dialogStore = {
     ensureDir();
     let files;
     try {
-      files = readdirSync(DIALOG_DIR).filter((f) => f.endsWith('.json'));
+      files = readdirSync(DIALOG_DIR).filter((f) => f.endsWith('.json') && !f.endsWith('.decision.json'));
     } catch {
       return [];
     }
@@ -154,7 +155,7 @@ export const dialogStore = {
     ensureDir();
     let files;
     try {
-      files = readdirSync(DIALOG_DIR).filter((f) => f.endsWith('.json'));
+      files = readdirSync(DIALOG_DIR).filter((f) => f.endsWith('.json') && !f.endsWith('.decision.json'));
     } catch {
       return false;
     }
@@ -173,5 +174,86 @@ export const dialogStore = {
       }
     }
     return removed;
+  },
+
+  /**
+   * Record a user decision (approve / deny / skip) for a queued
+   * dialog. Writes a sidecar `<file>.decision.json` so consumers can
+   * observe the verdict, then removes the queued dialog so the
+   * poller stops re-broadcasting it. Returns the recorded decision
+   * or null when the id wasn't queued.
+   *
+   * @param {string} id
+   * @param {'approve' | 'deny' | 'skip'} verdict
+   * @param {Record<string, unknown>} [extra]
+   */
+  decide(id, verdict, extra = {}) {
+    if (!id) return null;
+    if (!['approve', 'deny', 'skip'].includes(verdict)) {
+      throw new Error(`invalid verdict: ${verdict}`);
+    }
+    ensureDir();
+    let files;
+    try {
+      files = readdirSync(DIALOG_DIR).filter((f) => f.endsWith('.json') && !f.endsWith('.decision.json'));
+    } catch {
+      return null;
+    }
+    for (const f of files) {
+      const full = join(DIALOG_DIR, f);
+      const data = safeReadJSON(full);
+      if (data && data.id === id) {
+        const decision = {
+          id,
+          verdict,
+          ts: new Date().toISOString(),
+          dialogTitle: data.title,
+          dialogCommand: data.command,
+          extra: extra && typeof extra === 'object' ? extra : {},
+        };
+        const sidecar = `${full}.decision.json`;
+        try {
+          writeFileSync(sidecar, JSON.stringify(decision, null, 2) + '\n', 'utf8');
+        } catch (err) { logWarn('dialog-store.unlink_failed', { full, err: err.message }); }
+        try {
+          unlinkSync(full);
+        } catch (err) {
+          logger.warn('dialog-store', 'unlink failed', { full, err: err.message });
+          return null;
+        }
+        return decision;
+      }
+    }
+    return null;
+  },
+
+  /**
+   * Patch a queued dialog's `data` field in-place. Returns the
+   * updated dialog or null when the id wasn't queued.
+   *
+   * @param {string} id
+   * @param {Record<string, unknown>} patch
+   */
+  patch(id, patch) {
+    if (!id || !patch || typeof patch !== 'object') return null;
+    ensureDir();
+    let files;
+    try {
+      files = readdirSync(DIALOG_DIR).filter((f) => f.endsWith('.json') && !f.endsWith('.decision.json'));
+    } catch {
+      return null;
+    }
+    for (const f of files) {
+      const full = join(DIALOG_DIR, f);
+      const data = safeReadJSON(full);
+      if (data && data.id === id) {
+        const next = { ...data, data: { ...(data.data || {}), ...patch }, updatedAt: new Date().toISOString() };
+        const tmp = `${full}.tmp.${process.pid}`;
+        writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', 'utf8');
+        renameSync(tmp, full);
+        return next;
+      }
+    }
+    return null;
   },
 };

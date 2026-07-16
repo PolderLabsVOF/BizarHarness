@@ -197,6 +197,59 @@ export function createProvidersRouter() {
     });
   }));
 
+  // POST /providers — create a new provider. Delegates to
+  // providersStore.add which validates id, name, baseURL, apiKey,
+  // keys[] and persists the merged config.
+  router.post('/providers', wrap(async (req, res) => {
+    try {
+      const provider = providersStore.add(req.body || {});
+      res.status(201).json({ ok: true, provider });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: 'add_failed', message: err.message });
+    }
+  }));
+
+  // PUT /providers/:id — update an existing provider with a partial
+  // patch. Delegates to providersStore.update.
+  router.put('/providers/:id', wrap(async (req, res) => {
+    try {
+      const provider = providersStore.update(req.params.id, req.body || {});
+      res.json({ ok: true, provider });
+    } catch (err) {
+      const code = /not found/i.test(err.message) ? 404 : 400;
+      res.status(code).json({ ok: false, error: 'update_failed', message: err.message });
+    }
+  }));
+
+  // DELETE /providers/:id — remove a provider. Refuses to remove the
+  // provider currently set as the system LLM.
+  router.delete('/providers/:id', wrap(async (req, res) => {
+    try {
+      const removed = providersStore.remove(req.params.id);
+      if (!removed) {
+        res.status(404).json({ ok: false, error: 'not_found' });
+        return;
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: 'remove_failed', message: err.message });
+    }
+  }));
+
+  // POST /providers/:id/{enable,disable} — toggle the provider's
+  // `enabled` flag without touching any other field.
+  for (const verdict of ['enable', 'disable']) {
+    router.post(`/providers/:id/${verdict}`, wrap(async (req, res) => {
+      try {
+        const provider = providersStore.update(req.params.id, { enabled: verdict === 'enable' });
+        res.json({ ok: true, provider });
+      } catch (err) {
+        const code = /not found/i.test(err.message) ? 404 : 400;
+        res.status(code).json({ ok: false, error: `${verdict}_failed`, message: err.message });
+      }
+    }));
+  }
+
   // POST /providers/:id/keys — add a backup key to an existing provider.
   // Body: { envVar: string, label?: string }
   router.post('/providers/:id/keys', wrap(async (req, res) => {

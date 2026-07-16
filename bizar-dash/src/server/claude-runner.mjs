@@ -92,6 +92,11 @@ export function spawnAgent(opts) {
   if (opts.title) args.push('--session-title', opts.title);
   if (opts.agent) args.push('--agent', opts.agent);
   if (opts.model) args.push('--model', opts.model);
+  if (Array.isArray(opts.extraArgs) && opts.extraArgs.length > 0) {
+    for (const a of opts.extraArgs) {
+      if (typeof a === 'string' && a.length > 0) args.push(a);
+    }
+  }
 
   // 3. Spawn the process. Prefer the `claude` binary on PATH; fall
   //    back to `npx @anthropic-ai/claude-agent-sdk/cli` if not found.

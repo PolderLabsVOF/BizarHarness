@@ -185,6 +185,44 @@ export function createClaudeSessionDetailRouter() {
     })),
   );
 
+  // POST /api/claude-sessions/:id/resume — wake up an existing
+  // session by spawning `claude --resume <id>` against an empty
+  // prompt. Returns 202 when the resume command was dispatched;
+  // status of the resumed process is observable via the SSE
+  // endpoint. Body: { agent?: string }.
+  router.post('/claude-sessions/:id/resume', wrap(async (req, res) => {
+    const sessionId = String(req.params?.id || '').trim();
+    if (!sessionId) {
+      res.status(400).json({ ok: false, error: 'session_id_required' });
+      return;
+    }
+    const agent = typeof req.body?.agent === 'string' && req.body.agent.trim()
+      ? req.body.agent.trim()
+      : 'coder';
+    try {
+      const { spawnAgent } = await import('../claude-runner.mjs');
+      const result = await spawnAgent({
+        prompt: '',
+        agent,
+        worktree: process.cwd(),
+        title: `resume:${sessionId.slice(0, 12)}`,
+        logPath: `${process.cwd()}/.claude-resume-${sessionId.slice(0, 8)}.log`,
+        extraArgs: ['--resume', sessionId],
+      });
+      if (!result.ok) {
+        res.status(502).json({ ok: false, error: 'claude_error', message: result.error || 'failed to resume session' });
+        return;
+      }
+      res.status(202).json({ ok: true, sessionId, agent });
+    } catch (err) {
+      res.status(502).json({
+        ok: false,
+        error: 'claude_error',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }));
+
   // GET /api/claude-sessions/:id/stream (SSE)
   router.get('/claude-sessions/:id/stream', (req, res) => {
     const sessionId = String(req.params?.id || '');
