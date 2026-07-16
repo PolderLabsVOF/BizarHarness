@@ -52,20 +52,20 @@ All subagents use Obsidian vault memory with **per-project vaults**. Call `obsid
 
 | Agent | Model | Tier | When to Route |
 |---|---|---|---|
-| **Odin** ᛟ | gpt-5.6-terra | High | Primary entry point. Decomposes and dispatches. |
-| **Forseti** ᚨ | gpt-5.6-sol | Premium | Plan auditor — reviews Tyr/Vidarr plans before execution. edit: deny. |
-| **Frigg** ᚠ | MiniMax-M3 | Default | Read-only Q&A, memory recall, single-step lookups. |
-| **Heimdall** ᚹ | MiniMax-M3 | Default | Mechanical edits, file ops, .bizar/ maintenance. |
-| **Hermod** ᚱ | MiniMax-M3 | Default | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI. |
-| **Mimir** ᛗ | MiniMax-M3 | Default | Deep codebase research, Semble-first exploration, docs analysis. |
-| **Quick** ⚡ | deepseek-v4-flash-free | Budget | Single-shot tiny tasks. |
-| **Semble-Search** | MiniMax-M3 | Default | Semantic code search via Semble MCP. |
-| **Thor** ᚦ | MiniMax-M2.7 | Mid | Moderate implementation, tests, debugging, refactoring. |
-| **Tyr** ᛏ | gpt-5.6-terra | High | Top-tier implementation, architecture, complex debugging. |
-| **Vidarr** ᛉ | gpt-5.6-sol | Premium | Last resort when Tyr fails or debugging is stuck. |
-| **Vor** ᛗ | mimo-v2.5-free | Budget | Clarifying questions. |
-| **Baldr** ᛒ | gpt-5.6-sol | Premium | UI design language, visually-oriented critique. |
-| **agent-browser** | MiniMax-M3 | Default | Browser-driven E2E, Playwright-style flows. |
+| **Odin** ᛟ | cx/gpt-5.6-terra | High | Primary entry point. Decomposes and dispatches. |
+| **Forseti** ᚨ | cx/gpt-5.6-sol | Premium | Plan auditor — reviews Tyr/Vidarr plans before execution. edit: deny. |
+| **Frigg** ᚠ | bizar/MiniMax-M3 | Default | Read-only Q&A, memory recall, single-step lookups. |
+| **Heimdall** ᚹ | bizar/MiniMax-M3 | Default | Mechanical edits, file ops, .bizar/ maintenance. |
+| **Hermod** ᚱ | bizar/MiniMax-M3 | Default | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI. |
+| **Mimir** ᛗ | bizar/MiniMax-M3 | Default | Deep codebase research, Semble-first exploration, docs analysis. |
+| **Quick** ⚡ | oc/deepseek-v4-flash-free | Budget | Single-shot tiny tasks. |
+| **Semble-Search** | bizar/MiniMax-M3 | Default | Semantic code search via Semble MCP. |
+| **Thor** ᚦ | bizar/MiniMax-M2.7 | Mid | Moderate implementation, tests, debugging, refactoring. |
+| **Tyr** ᛏ | cx/gpt-5.6-terra | High | Top-tier implementation, architecture, complex debugging. |
+| **Vidarr** ᛉ | cx/gpt-5.6-sol | Premium | Last resort when Tyr fails or debugging is stuck. |
+| **Vor** ᛗ | oc/mimo-v2.5-free | Budget | Clarifying questions. |
+| **Baldr** ᛒ | cx/gpt-5.6-sol | Premium | UI design language, visually-oriented critique. |
+| **agent-browser** | bizar/MiniMax-M3 | Default | Browser-driven E2E, Playwright-style flows. |
 
 ## Odin Routing Rules
 
@@ -127,11 +127,10 @@ When the user says "show me a plan", "let's review the design", "I want to see t
 1. Write `artifacts/<slug>/artifact.mdx` with frontmatter (`title`, `status`, `kind: plan|recap`) and blocks
 2. Write `artifacts/<slug>/meta.json` with `{ title, slug, status, author, created, lastEdited }`
 3. Write `artifacts/<slug>/comments.json` as `[]` initially (comments added via the dashboard)
-4. Use the full block vocabulary — see `glyphs-research.md` in Obsidian or the dashboard's `/api/artifacts/<slug>/render` for the JSON shape
+4. Use the full block vocabulary — see `bizar-dash/src/server/glyphs/mdx-compiler.mjs` or the dashboard's `/api/artifacts/<slug>/render` for the JSON shape
 
 Templates available:
 - `templates/plan/plan.mdx.template` — forward planning (before code)
-- `templates/plan/plan.canvas.template` — legacy canvas (don't use; replaced by MDX)
 
 ## How to read glyph feedback
 
@@ -141,7 +140,7 @@ When the user clicks "Submit to agent" on a glyph in the dashboard, the dashboar
 - Answers to OpenQuestions (one `Q:` / `A:` block per question)
 - The original MDX source
 
-Read it with the `read_glyph_feedback` tool (preferred — returns parsed frontmatter + body + counts), or read the file directly with the `Read` tool.
+Read `artifacts/<slug>/feedback.md` directly with the `Read` tool.
 
 After reading the feedback, regenerate the glyph's `artifact.mdx` to address every comment and apply every answer. Then write the regenerated MDX back to `artifacts/<slug>/artifact.mdx` (and update `meta.json` if the title/summary changes).
 
@@ -250,7 +249,7 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
 
 ```
                  ┌──────────────────────┐
-                 │     Odin ᛟ (M3)      │
+                 │  Odin ᛟ (gpt-5.6-terra)│
                  │   Router / Decompose  │
                  └──────────┬───────────┘
                             │
@@ -259,7 +258,7 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
      ┌──────┴──────┐  ┌────┴────┐  ┌───────┴──────┐
      │ Research    │  │ Simple  │  │ Moderate     │
      │ Mimir ᛗ     │  │ Heimdall│  │ Thor ᚦ       │
-     │ (DeepSeek)  │  │ (DSeek) │  │ (M2.7)       │
+     │ (MiniMax-M3)│  │ (M3)    │  │ (M2.7)       │
      │ FREE        │  │ FREE    │  │ $            │
      └─────────────┘  └─────────┘  └───────┬───────┘
                                            │
@@ -267,14 +266,15 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
                     │                      │          │
              ┌──────┴──────┐       ┌───────┴──────┐   │
              │ Git         │       │ Complex      │   │
-             │ Hermod ᚱ    │       │ Tyr ᛏ (M3)   │   │
-             │ (M2.7) $    │       │ $$           │   │
+             │ Hermod ᚱ    │       │ Tyr ᛏ        │   │
+             │ (M3) FREE   │       │ (gpt-5.6-terra)│
+             │             │       │ $$           │   │
              └─────────────┘       └───────┬───────┘   │
                                            │           │
                                     ┌──────┴──────┐    │
                                     │ Last Resort │    │
                                     │ Vidarr ᛉ   │    │
-                                    │ (GPT-5.5)   │    │
+                                    │ (gpt-5.6-sol)│    │
                                     │ $$$$        │    │
                                     └─────────────┘    │
                                                        │
@@ -282,9 +282,10 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
                                    │
                             ┌──────┴──────┐
                             │ Forseti ᚨ   │
-                            │ Auditor (M3) │
+                            │ Auditor     │
+                            │ (gpt-5.6-sol)│
                             │ edit: deny   │
-                            │ $            │
+                            │ $$$$         │
                             └─────────────┘
 ```
 
@@ -400,7 +401,7 @@ Do not over-rely on memory; if uncertain, search.
 
 **Always-on MCP servers:**
 - `semble` — local codebase search
-- `bizar` — project memory, plan_action, open_kb, loop_start/stop/list/status, graph_query/path, danger_check (registered by `bizar install`)
+- `bizar` — memory (read/write/list/search), plan_action, loop_start/stop/list/status, graph_query/path, list_instincts, list_decisions (registered by `bizar install`)
 
 **Domain skills** — see Rule 4 above.
 
