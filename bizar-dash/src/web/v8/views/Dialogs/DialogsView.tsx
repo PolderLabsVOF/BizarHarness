@@ -103,7 +103,7 @@ export function DialogsView(): JSX.Element {
             <EmptyState
               icon={<MessageSquare size={28} aria-hidden />}
               title="No active dialogs"
-              description="Dialogs enqueued via the slash-command plugin will appear here."
+              description="Dialogs are confirmations and prompts the agent raises when it needs user input before proceeding. They appear here when the slash-command plugin queues one."
             />
           ) : (
             <Stack gap={1}>

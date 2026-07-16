@@ -81,7 +81,7 @@ export function ClipboardView(): JSX.Element {
               <Skeleton style={{ height: 60 }} />
             </Stack>
           ) : clips.length === 0 ? (
-            <EmptyState icon={<ClipboardPaste size={28} aria-hidden />} title="No saved clips" description="Save one with a URL + content." />
+            <EmptyState icon={<ClipboardPaste size={28} aria-hidden />} title="No saved clips" description="Clips are saved URL + text pairs captured from the clipboard during agent work. Each becomes a markdown note under clips/. Save one to get started." />
           ) : (
             <Stack gap={1}>
               {clips.map((c) => {

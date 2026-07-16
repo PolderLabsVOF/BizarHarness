@@ -94,7 +94,7 @@ export function ArtifactsView(): JSX.Element {
               <Skeleton style={{ height: 48 }} />
             </Stack>
           ) : artifacts.length === 0 ? (
-            <EmptyState icon={<Layers size={28} aria-hidden />} title="No artifacts" description="Create one to get started." />
+            <EmptyState icon={<Layers size={28} aria-hidden />} title="No artifacts" description="Artifacts are generated code — HTML canvases, SVG diagrams, and React components — created by the agent during task work. Add one to get started." />
           ) : (
             <Stack gap={1}>
               {artifacts.map((a) => {

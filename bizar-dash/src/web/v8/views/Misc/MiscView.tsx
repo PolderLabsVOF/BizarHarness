@@ -45,7 +45,7 @@ interface TailscaleStatus {
 export function MiscView(): JSX.Element {
   return (
     <Stack gap={4} data-testid="misc-view">
-      <ViewHeader title="Misc" description="Global search + Tailscale." />
+      <ViewHeader title="Misc" description="Global fuzzy search across projects, tasks, and agents — plus Tailscale VPN control." />
       <SearchPanel />
       <TailscalePanel />
     </Stack>

@@ -79,7 +79,7 @@ export function VoiceView(): JSX.Element {
               <Skeleton style={{ height: 48 }} />
             </Stack>
           ) : memos.length === 0 ? (
-            <EmptyState icon={<Mic size={28} aria-hidden />} title="No voice memos" description="Upload a recording to get started." />
+            <EmptyState icon={<Mic size={28} aria-hidden />} title="No voice memos" description="Voice memos are audio recordings captured during sessions — useful for verbal scratch notes and hands-free capture. Upload a .wav, .mp3, or .m4a file to get started." />
           ) : (
             <Stack gap={1}>
               {memos.map((m) => {
