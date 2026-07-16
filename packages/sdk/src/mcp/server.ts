@@ -46,38 +46,6 @@ import {
   writeNote,
   resolveVaultRoot,
 } from "../memory/index.js";
-import { checkDangerous } from "../dangerous-patterns.js";
-import { ModelRouter } from "../router/model-router.js";
-import { QLearningRouter } from "../router/q-learning-router.js";
-import { runDistillation } from "../router/memory-distillation.js";
-import {
-  decideAgentWith,
-  loadModelRegistry,
-  resolveAgentModel,
-  resolveTierModel,
-} from "../router/index.js";
-import { bizarAgentRegistry } from "../agent-registry.js";
-import {
-  initSwarm as initSwarmOnRegistry,
-  DEFAULT_TOPOLOGY,
-  DEFAULT_MAX_AGENTS,
-  type SwarmTopology,
-} from "../swarm-topology.js";
-import { getSharedConsensus } from "../consensus/index.js";
-import {
-  createFederation,
-  type FederationHandle,
-} from "../federation/index.js";
-import {
-  startHeartbeat,
-  stopHeartbeat,
-  failHeartbeat,
-} from "../agent/heartbeat.js";
-import {
-  addCronTask,
-  listCronTasks,
-  removeCronTask,
-} from "../agent/cron.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
 // the package is optional. Callers pass the result of `tool()` and
@@ -190,6 +158,51 @@ const memorySearchTool = defineTool<{ query: string; limit?: number }>(
       const notes = searchNotes(resolveVaultRoot(), q, n);
       if (notes.length === 0) return ok("no_matches");
       return ok(notes.map((m) => `${m.relPath}\n---\n${m.body.slice(0, 240)}…`).join("\n\n"));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+// ---------------------------------------------------------------------------
+// Pillar D — instinct + decision read-back (v10.3.0)
+// ---------------------------------------------------------------------------
+
+const listInstinctsTool = defineTool<{
+  scope?: "project" | "global";
+  project?: string;
+  limit?: number;
+}>(
+  "list_instincts",
+  "List recorded instincts (Pillar D auto-instinct + learning-extract). scope: project (default) or global. Returns up to `limit` entries (default 50) from `.bizar/learning/instincts.jsonl`.",
+  { scope: "string", project: "string", limit: "number" },
+  async ({ scope, project, limit }) => {
+    try {
+      const opts: { scope?: "project" | "global"; project?: string } = {};
+      if (scope === "project" || scope === "global") opts.scope = scope;
+      if (project) opts.project = project;
+      const entries = listInstincts(opts);
+      const n = typeof limit === "number" ? limit : 50;
+      const sliced = entries.slice(-n);
+      if (sliced.length === 0) return ok("no_instincts");
+      return ok(JSON.stringify(sliced, null, 2));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+const listDecisionsTool = defineTool<{ project?: string; limit?: number }>(
+  "list_decisions",
+  "List architectural / project decisions logged via Pillar D. Returns up to `limit` entries (default 50) from `.bizar/learning/decisions.jsonl`.",
+  { project: "string", limit: "number" },
+  async ({ project, limit }) => {
+    try {
+      const opts: { project?: string } = {};
+      if (project) opts.project = project;
+      const entries = listDecisions(opts);
+      const n = typeof limit === "number" ? limit : 50;
+      const sliced = entries.slice(-n);
+      if (sliced.length === 0) return ok("no_decisions");
+      return ok(JSON.stringify(sliced, null, 2));
     } catch (e) { return err(String(e)); }
   },
   { readOnlyHint: true },
@@ -404,477 +417,6 @@ const graphPathTool = defineTool<{ from: string; to: string }>(
 );
 
 // ---------------------------------------------------------------------------
-// Swarm / agent lifecycle tools (F-032)
-// ---------------------------------------------------------------------------
-
-const agentSpawnTool = defineTool<{
-  type: string;
-  name?: string;
-  priority?: "low" | "normal" | "high" | "critical";
-  metadata?: string;
-}>(
-  "agent_spawn",
-  "Spawn a new agent in the in-process BizarAgentRegistry. Returns the new agentId. Heartbeat is a stub — this registry is a coordination surface, not an agent runtime.",
-  { type: "string", name: "string", priority: "string", metadata: "string" },
-  async ({ type, name, priority, metadata }) => {
-    try {
-      let parsedMetadata: Record<string, unknown> | undefined;
-      if (metadata && typeof metadata === "string" && metadata.trim().length > 0) {
-        try { parsedMetadata = JSON.parse(metadata) as Record<string, unknown>; }
-        catch { return err("agent_spawn: `metadata` must be a JSON string"); }
-      }
-      const result = bizarAgentRegistry.registerAgent({
-        type,
-        name,
-        priority,
-        metadata: parsedMetadata,
-      });
-      return ok(JSON.stringify(result, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-const agentListTool = defineTool<{
-  status?: string;
-  type?: string;
-  limit?: number;
-  offset?: number;
-}>(
-  "agent_list",
-  "List agents tracked by the in-process BizarAgentRegistry. Filter by status (active|terminated|all) and/or type. Supports limit/offset pagination.",
-  { status: "string", type: "string", limit: "number", offset: "number" },
-  async ({ status, type, limit, offset }) => {
-    try {
-      const allowedStatuses = ["active", "terminated", "all"] as const;
-      type StatusFilter = typeof allowedStatuses[number];
-      const s: StatusFilter = (allowedStatuses as readonly string[]).includes(status ?? "")
-        ? (status as StatusFilter)
-        : "all";
-      const result = bizarAgentRegistry.listAgents({
-        status: s,
-        type,
-        limit: typeof limit === "number" ? limit : undefined,
-        offset: typeof offset === "number" ? offset : undefined,
-      });
-      return ok(JSON.stringify(result, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-const agentTerminateTool = defineTool<{
-  agentId: string;
-  graceful?: boolean;
-  reason?: string;
-}>(
-  "agent_terminate",
-  "Terminate a registered agent. Returns the agentId, status, and terminatedAt timestamp. No-op if the agent is already terminated.",
-  { agentId: "string", graceful: "boolean", reason: "string" },
-  async ({ agentId, graceful, reason }) => {
-    try {
-      const result = bizarAgentRegistry.terminateAgent({
-        agentId,
-        reason,
-        graceful: graceful ?? true,
-      });
-      return ok(JSON.stringify(result, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-const swarmInitTool = defineTool<{
-  topology?: string;
-  maxAgents?: number;
-  metadata?: string;
-}>(
-  "swarm_init",
-  "Initialize a new swarm in the SwarmTopologyRegistry. topology ∈ hierarchical|mesh|adaptive|collective|hierarchical-mesh (default 'hierarchical-mesh'); maxAgents clamped to [1,1000] (default 15). The 'default' swarm is created lazily on first call.",
-  { topology: "string", maxAgents: "number", metadata: "string" },
-  async ({ topology, maxAgents, metadata }) => {
-    try {
-      let parsedMetadata: Record<string, unknown> | undefined;
-      if (metadata && typeof metadata === "string" && metadata.trim().length > 0) {
-        try { parsedMetadata = JSON.parse(metadata) as Record<string, unknown>; }
-        catch { return err("swarm_init: `metadata` must be a JSON string"); }
-      }
-      const allowedTopologies: readonly SwarmTopology[] = [
-        "hierarchical", "mesh", "adaptive", "collective", "hierarchical-mesh",
-      ];
-      const topo: SwarmTopology = (allowedTopologies as readonly string[]).includes(topology ?? "")
-        ? (topology as SwarmTopology)
-        : DEFAULT_TOPOLOGY;
-      const max = typeof maxAgents === "number" ? maxAgents : DEFAULT_MAX_AGENTS;
-      const result = initSwarmOnRegistry({
-        topology: topo,
-        maxAgents: max,
-        metadata: parsedMetadata,
-      });
-      return ok(JSON.stringify(result, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-// ---------------------------------------------------------------------------
-// Safety tool — exposed so any model can self-audit a Bash command
-// before running it.
-// ---------------------------------------------------------------------------
-
-const dangerCheckTool = defineTool<{ command: string }>(
-  "danger_check",
-  "Audit a shell command for dangerous patterns (rm -rf, sudo, SSRF, etc.) and report the decision (allow/require-approval/deny).",
-  { command: "string" },
-  async ({ command }) => {
-    try {
-      const check = checkDangerous({ command });
-      return ok(JSON.stringify(check, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-// ---------------------------------------------------------------------------
-// Self-learning tools (F-033 / ADR-174) — Thompson-sampling model
-// router + Q-learning agent router + memory distillation trigger.
-// ---------------------------------------------------------------------------
-
-/** Singleton model router — the priors accumulate across tool calls
- *  within one MCP server instance, so the bandit can learn from
- *  outcomes in real time. Tests construct their own router via the
- *  exported `BIZAR_TOOLS` indirection. */
-const modelRouter = new ModelRouter();
-
-/** Singleton Q-learning router — same reasoning as above. */
-const agentRouter = new QLearningRouter();
-
-const modelRouteTool = defineTool<{ prompt: string }>(
-  "model_route",
-  "Adaptive model-tier routing. Returns the recommended tier ('flash'|'mid'|'expensive') for a prompt using a Thompson-sampling bandit over Beta(α,β) priors. Codemod-eligible prompts (var-to-const, remove-console, add-logging) short-circuit to 'flash' with codemodIntent set.",
-  { prompt: "string" },
-  async ({ prompt }) => {
-    try {
-      const decision = modelRouter.route(prompt);
-      return ok(JSON.stringify(decision, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-const agentRouteTool = defineTool<{ task: string }>(
-  "agent_route",
-  "Adaptive agent routing. Returns the recommended Bizar agent (odin|frigg|vor|mimir|heimdall|thor|tyr|forseti) for a task using Q-learning over a 64-dim bag-of-words feature hash. Codemod-eligible tasks route to heimdall (the routine-implementation agent).",
-  { task: "string" },
-  async ({ task }) => {
-    try {
-      const decision = agentRouter.selectAgent(task);
-      return ok(JSON.stringify(decision, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-const memoryDistillTool = defineTool<{ since?: string }>(
-  "memory_distill",
-  "Run the ReasoningBank distillation pipeline (ADR-174: RETRIEVE → JUDGE → DISTILL → CONSOLIDATE) over the in-process memory vault. Optionally filter entries by createdAt >= since. Returns {distilled, promoted, byTier} — promoted patterns are only emitted for oracle:test-exec or judge:fable tiers.",
-  { since: "string" },
-  async ({ since }) => {
-    try {
-      // The dashboard owns the consolidator module; the SDK tool
-      // shim reads directly from the vault and runs the same
-      // RETRIEVE → JUDGE → DISTILL → CONSOLIDATE pipeline inline,
-      // so the tool works without the dashboard process.
-      const root = resolveVaultRoot();
-      const all = listNotes(root, "", 10000);
-      const cutoff = since ? new Date(since) : null;
-      const entries = all
-        .filter((n) => !cutoff || !Number.isNaN(cutoff.getTime()) && new Date(
-          String(n.frontmatter?.createdAt ?? n.frontmatter?.created ?? 0),
-        ) >= cutoff)
-        .map((n) => ({
-          memory_id: n.relPath,
-          relPath: n.relPath,
-          frontmatter: n.frontmatter ?? {},
-          body: n.body ?? "",
-          kind: typeof (n.frontmatter?.kind ?? n.frontmatter?.type) === "string"
-            ? (n.frontmatter?.kind ?? n.frontmatter?.type) as string
-            : undefined,
-          created: typeof (n.frontmatter?.createdAt ?? n.frontmatter?.created) === "string"
-            ? (n.frontmatter?.createdAt ?? n.frontmatter?.created) as string
-            : undefined,
-        }));
-
-      // Static import — the SDK owns `memory-distillation.ts` so the
-      // tool can run the RETRIEVE → JUDGE → DISTILL → CONSOLIDATE
-      // pipeline without depending on the dashboard process.
-      const result = runDistillation(entries);
-      return ok(JSON.stringify({
-        distilled: result.patterns.length,
-        promoted: result.promoted.map((p: { id: string }) => p.id),
-        byTier: result.byTier,
-      }, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-// ---------------------------------------------------------------------------
-// Self-learning orchestrator tool (F-033)
-//
-// Replaces the prompt-time heuristics in the Odin agent with a single
-// tool call. Combines the codemod tier-1 short-circuit, the
-// Q-learning agent pick, and the Thompson-bandit model-tier pick
-// behind one MCP `hooks_route` tool (matches ruflo
-// `v3/mcp/tools/hooks-tools.ts:1207`).
-// ---------------------------------------------------------------------------
-
-const hooksRouteTool = defineTool<{ task: string; explicitAgent?: string }>(
-  "hooks_route",
-  "Self-Learning router (F-033): decide which agent + model tier should handle a task. Returns {agent, modelTier, agentConfidence, modelConfidence, codemodIntent, surfacedTags}. surfacedTags contains the human-readable markers (e.g. [CODEMOD_AVAILABLE] / [TASK_MODEL_RECOMMENDATION]) that should be prepended to the prompt for downstream observability.",
-  { task: "string", explicitAgent: "string" },
-  async ({ task, explicitAgent }) => {
-    try {
-      const decision = decideAgentWith(modelRouter, agentRouter, {
-        task: String(task ?? ""),
-        explicitAgent: explicitAgent ? String(explicitAgent) : undefined,
-      });
-      return ok(JSON.stringify(decision, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-// ---------------------------------------------------------------------------
-// Agent → model resolution tool (v10.1.0)
-//
-// Reads `.claude/model-router.json` (the Bizar model registry) and
-// returns the concrete modelId + endpoint URL for an agent name. This
-// is the bridge between the orchestrator's tier decision and the
-// downstream HTTP call — the orchestrator says "flash / mid / expensive",
-// this tool says "use this specific model at this URL".
-//
-// Pair with `hooks_route`: pass `agent=...` and you get the resolved
-// model in one call. Use `list=true` to dump the entire registry for
-// the dashboard / debugging.
-// ---------------------------------------------------------------------------
-
-const routeAgentTool = defineTool<{ agent?: string; list?: boolean }>(
-  "route_agent",
-  "Resolve an agent name (e.g. 'odin', 'thor', 'tyr') to its concrete modelId + endpoint URL by reading .claude/model-router.json. Pass {list: true} to dump the full registry. Returns JSON: {agent, modelId, tier, endpoint, rationale, fallback?, allAgents?}.",
-  { agent: "string", list: "boolean" },
-  async ({ agent, list }) => {
-    try {
-      const reg = loadModelRegistry();
-      if (list === true) {
-        return ok(JSON.stringify({
-          endpoint: reg.endpoint,
-          agents: Array.from(reg.agents.values()),
-          tiers: Array.from(reg.tiers.values()),
-          fallbackChain: reg.fallbackChain,
-          gptOnlyFor: reg.gptOnlyFor,
-          gptNeverFor: reg.gptNeverFor,
-        }, null, 2));
-      }
-      const name = typeof agent === "string" && agent.trim().length > 0
-        ? agent.trim()
-        : "odin";
-      const resolved = resolveAgentModel(name, reg);
-      const tierResolved = resolveTierModel(resolved.tier, reg);
-      return ok(JSON.stringify({
-        ...resolved,
-        fallback: tierResolved.fallback,
-        allAgents: Array.from(reg.agents.keys()),
-      }, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-// ---------------------------------------------------------------------------
-// Consensus tool (F-039) — thin PBFT-style 3-of-5 majority for
-// review/decision steps. Wraps the shared `getSharedConsensus()`
-// orchestrator; the MCP surface is intentionally minimal (one tool)
-// because the consensus layer is a coordination primitive — model
-// callers propose payloads, the cluster of 5 agents (odin / frigg /
-// vor / mimir / heimdall) reaches quorum, and the tool returns the
-// proposalId + status. Vote tally and view-change are internal — the
-// MCP caller drives the lifecycle through the orchestrator's
-// `castVote` / `viewChange` if it wants finer control.
-//
-// The payload is a JSON string so callers don't need a zod schema for
-// every consensus call; the orchestrator's replay-protection hash
-// keys on the canonicalized JSON anyway, so semantically equivalent
-// payloads collapse to the same proposalId.
-// ---------------------------------------------------------------------------
-
-const consensusProposeTool = defineTool<{
-  payload: string;
-  quorum?: number;
-  vote?: string;
-  agentId?: string;
-}>(
-  "consensus_propose",
-  "PBFT-style 3-of-5 majority consensus for Bizar review/decision steps. payload is a JSON-encoded string (canonicalized via JSON.stringify). vote ∈ yes|no|abstain (defaults to 'yes' from the local agent). agentId is the peer whose vote this call represents (defaults to the local agent = 'odin'). Returns { proposalId, status, phase, approvals, rejections }. Re-submitting the same payload in the same view returns the cached proposalId (replay protection).",
-  { payload: "string", quorum: "number", vote: "string", agentId: "string" },
-  async ({ payload, quorum, vote, agentId }) => {
-    try {
-      if (typeof payload !== "string" || payload.trim().length === 0) {
-        return err("consensus_propose: `payload` must be a non-empty JSON string");
-      }
-      let parsedPayload: unknown;
-      try {
-        parsedPayload = JSON.parse(payload);
-      } catch (e) {
-        return err(`consensus_propose: \`payload\` is not valid JSON: ${String(e)}`);
-      }
-      const consensus = getSharedConsensus();
-      const proposeResult = consensus.propose(parsedPayload);
-      const v: "yes" | "no" | "abstain" =
-        vote === "no" || vote === "abstain" ? vote : "yes";
-      const voter = agentId && agentId.trim().length > 0 ? agentId.trim() : consensus.localAgentId;
-      const voteResult = consensus.castVote(
-        proposeResult.proposalId,
-        voter,
-        v,
-      );
-      return ok(JSON.stringify({
-        proposalId: voteResult.proposalId,
-        status: voteResult.status,
-        phase: voteResult.phase,
-        approvals: voteResult.approvals,
-        rejections: voteResult.rejections,
-        abstentions: voteResult.abstentions,
-        committed: voteResult.committed,
-        quorum: quorum ?? consensus.getQuorum(),
-        currentProposer: consensus.getCurrentProposer(),
-        viewNumber: consensus.getViewNumber(),
-      }, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-// ---------------------------------------------------------------------------
-// Federation tool (F-038) — Cross-installation agent federation
-// skeleton. Reads status from the shared `createFederation()` handle
-// (one per MCP server instance). The handle is configured against
-// `.harness/federation-audit.log` + `.harness/federation-budget.json`
-// under the project root. Per-call signing/receiving is not exposed
-// as a tool here — it's a library API used by the dashboard / future
-// transport layer; the MCP surface is intentionally a status probe
-// so callers can check peer trust + audit size + budget headroom
-// without needing to import the SDK.
-// ---------------------------------------------------------------------------
-
-function resolveFederationHandle(): FederationHandle {
-  const root = findRepoRoot();
-  const nodeId = `${root.replace(/[^a-zA-Z0-9_-]+/g, "_")}-mcp`;
-  // Shared secret per repo — the F-038 skeleton is in-process, so a
-  // hard-coded secret is fine for the status probe. Real deployments
-  // would source this from the env (BIZAR_FEDERATION_SECRET).
-  const secret = process.env.BIZAR_FEDERATION_SECRET ?? `bizar-federation-${root}`;
-  return createFederation({
-    nodeId,
-    secret,
-    auditPath: join(root, ".harness", "federation-audit.log"),
-    budgetPath: join(root, ".harness", "federation-budget.json"),
-  });
-}
-
-const federationStatusTool = defineTool<Record<string, never>>(
-  "federation_status",
-  "Federation skeleton status probe (F-038). Returns { nodeId, peers, nonceCacheSize, auditSizeBytes, auditPath, budget: { path, perPeer, outstandingReservations } }. Reads from the local createFederation() handle configured against .harness/federation-audit.log + .harness/federation-budget.json. Read-only.",
-  {},
-  async () => {
-    try {
-      const handle = resolveFederationHandle();
-      const snap = handle.status();
-      return ok(JSON.stringify(snap, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-// ---------------------------------------------------------------------------
-// Pillar A — session heartbeat + cron tools
-// ---------------------------------------------------------------------------
-
-/** In-memory store for active heartbeats started via the MCP tool.
- *  Maps sessionId → stop fn. Only used by the MCP surface; the JSONL
- *  file is the authoritative persistence. */
-const _activeHeartbeats = new Map<string, () => void>();
-
-const sessionHeartbeatTool = defineTool<{
-  action: "start" | "stop" | "fail";
-  sessionId?: string;
-  intervalMs?: number;
-}>(
-  "session_heartbeat",
-  "Start, stop, or fail a session heartbeat. start returns a sessionId. Stop/fail write a terminal record to .harness/traces/heartbeat.jsonl.",
-  { action: "string", sessionId: "string", intervalMs: "number" },
-  async ({ action, sessionId, intervalMs }) => {
-    try {
-      if (action === "start") {
-        const { sessionId: id, stop } = startHeartbeat(intervalMs ?? 30_000);
-        _activeHeartbeats.set(id, stop);
-        return ok(JSON.stringify({ sessionId: id }));
-      }
-      if (action === "stop") {
-        const id = sessionId ?? "";
-        const stop = _activeHeartbeats.get(id);
-        if (stop) { stop(); _activeHeartbeats.delete(id); }
-        else { stopHeartbeat(id); }
-        return ok(JSON.stringify({ sessionId: id ?? "", status: "done" }));
-      }
-      if (action === "fail") {
-        const id = sessionId ?? "";
-        const stop = _activeHeartbeats.get(id);
-        if (stop) { stop(); _activeHeartbeats.delete(id); }
-        else { failHeartbeat(id); }
-        return ok(JSON.stringify({ sessionId: id ?? "", status: "failed" }));
-      }
-      return err(`unknown_action: ${action}`);
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-const cronAddTool = defineTool<{
-  cron: string;
-  prompt: string;
-  recurring?: boolean;
-}>(
-  "cron_add",
-  "Add a cron task. Persists to .bizar/cron.json. recurring=false tasks fire once and are then removed.",
-  { cron: "string", prompt: "string", recurring: "boolean" },
-  async ({ cron, prompt, recurring }) => {
-    try {
-      const task = addCronTask({ cron, prompt, recurring: recurring ?? false });
-      return ok(JSON.stringify(task, null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-const cronListTool = defineTool<Record<string, never>>(
-  "cron_list",
-  "List all cron tasks from .bizar/cron.json.",
-  {},
-  async () => {
-    try {
-      return ok(JSON.stringify(listCronTasks(), null, 2));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-const cronRemoveTool = defineTool<{ id: string }>(
-  "cron_remove",
-  "Remove a cron task by its id. Returns true if the task existed.",
-  { id: "string" },
-  async ({ id }) => {
-    try {
-      const removed = removeCronTask(id);
-      return ok(JSON.stringify({ id, removed }));
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-// ---------------------------------------------------------------------------
 // Factory — wire all tools into an MCP server
 // ---------------------------------------------------------------------------
 
@@ -891,22 +433,6 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   loopStopTool,
   graphQueryTool,
   graphPathTool,
-  dangerCheckTool,
-  agentSpawnTool,
-  agentListTool,
-  agentTerminateTool,
-  swarmInitTool,
-  modelRouteTool,
-  agentRouteTool,
-  memoryDistillTool,
-  hooksRouteTool,
-  routeAgentTool,
-  consensusProposeTool,
-  federationStatusTool,
-  sessionHeartbeatTool,
-  cronAddTool,
-  cronListTool,
-  cronRemoveTool,
 ];
 
 /**
