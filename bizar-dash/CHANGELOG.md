@@ -1,5 +1,78 @@
 # @polderlabs/bizar-dash — Changelog
 
+## v10.0.6 — 2026-07-16
+
+### Highlights
+
+Integrates the kanban overhaul (PR #14) plus five targeted UX bug
+fixes from the user-feedback round:
+
+- **Tasks board**: 6-column layout with Backlog, search + filter
+  chips, full multi-select toolbar (bulk move / archive / delete),
+  Esc-to-clear selection, dedicated detail dialog, per-card progress
+  bar + badges (recurring / subtasks / deps / tags / branch).
+- **Topbar project selector**: now a real button with a Radix Popover
+  listing every registered project — calls
+  `POST /api/projects/:id/activate` and refetches the active state.
+- **CC roster**: `/tmp` scratch sessions are filtered out of both the
+  live CLI roster and the disk fallback. Opt-out via
+  `BIZAR_CC_INCLUDE_TMP=1` for debug.
+- **Sidebar**: every section header is collapsible (click to toggle);
+  state persisted under `bizar:sidebar:section:collapsed:<id>` so the
+  23-item System section can fold away.
+- **Artifacts**: server-side auto-mint on `goal-finished` and
+  `dialog-needs-input` transitions. Sidebar already shows Artifacts;
+  it now actually populates without manual intervention.
+- **Libraries**: `/api/skills?kind=skills|mcps|hooks` is honoured,
+  the scanner stamps `kind` on every entry, and the three sidebar
+  counts diverge instead of all reading the same 49.
+
+### Per-move detail
+
+- **Move 1 (TasksView)**: replaced v10.0.5's flat 5-column board with
+  PR #14's 6-column layout, added 6 new primitives
+  (`KanbanToolbar`, `KanbanDetailDialog`, `KanbanCardBadges`,
+  `KanbanProgress`, `KanbanEmptyColumn`, `useKanbanSelection`).
+  Extended `Task` type with `tags / subtasks / dependencies /
+  recurring / activity / timerStart`. Wired toolbar + selection into
+  the existing `TaskDetail` Sheet so the create / edit flows are
+  unchanged. PR #14's bare-array `useFetch<Task[]>` was a regression
+  vs the v10.0.5 `{ tasks, count }` envelope — kept the wrapper shape.
+
+- **Move 2 (Topbar)**: replaced inert `<Box>{label} ▾</Box>` with a
+  Radix `Popover` anchored on a `<button>` trigger. Each menu item is
+  `<button role="menuitem">` (focus / arrow / Esc honoured natively),
+  shows a `●` indicator on the active project, and emits
+  `POST /api/projects/:id/activate` on click with per-item busy state.
+
+- **Move 3 (CC roster)**: introduced `shouldIncludeAgent()` in
+  `routes/agents-cc.mjs`, applied to the live CLI roster
+  (`r.agents.map(enrichSession)`) and the disk-fallback loop.
+  Skips agents whose `cwd` is `os.tmpdir()` or under it.
+
+- **Move 4 (Sidebar)**: per-section collapse + chevron + localStorage
+  persistence. New testids: `data-sidebar-section`, `sidebar-section-
+  toggle-<id>`, `sidebar-section-chevron-<id>` for E2E.
+
+- **Move 5 (Artifacts auto-mint)**: new `server/artifact-mint.mjs`
+  helper centralises slugification + idempotency (swallows 409 from
+  `artifactsStore.create`). Goals route mints on transition
+  `* → done`; dialogs route mints on `needsUserInput: false → true`.
+
+- **Move 6 (Libraries)**: skills route filters by `?kind=`; scanner
+  annotates `kind: 'skills'` + stable `id` per entry. Sidebar counts
+  surface distinct numbers (e.g. 18 / 0 / 0).
+
+### Skipped (deliberate)
+
+- MCP / hook file scanner: no scanner exists yet, so `?kind=mcps` and
+  `?kind=hooks` return empty lists. ponytail: ship a real MCP/hook
+  scanner when the surface is wired.
+- MDX body content for goal-finished artifacts: frontmatter + KR
+  checklist only; no rendered prose yet.
+- `theme.css` rebuild: visuals already match the PR's CSS, but a fresh
+  build:dash run isn't gated by the E2E.
+
 ## v10.0.5 — 2026-07-16
 
 ### Highlights

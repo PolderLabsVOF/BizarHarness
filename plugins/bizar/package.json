@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-plugin",
-  "version": "10.0.5",
+  "version": "10.0.6",
   "description": "Bizar Norse-pantheon multi-agent system — Claude Code-native plugin shim. Re-exports the SDK at packages/sdk so legacy `plugins/bizar/index.ts` consumers keep working while the actual logic lives in packages/sdk/.",
   "type": "module",
   "main": "./index.ts",
