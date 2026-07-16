@@ -46,13 +46,13 @@ fi
 # Use the SDK if available, otherwise use a raw node script.
 SDK_PATH="$(pwd)/node_modules/@polderlabs/bizar-sdk/learning"
 if [ -d "$SDK_PATH" ]; then
-  node -e "
-    const { recordInstinct } = require('$SDK_PATH/instincts.js');
+  CMD="$COMMAND" SDK_PATH="$SDK_PATH" node -e "
+    const { recordInstinct } = require(process.env.SDK_PATH);
     recordInstinct({
-      trigger: '$TRIGGER',
+      trigger: process.env.TRIGGER,
       action: 'auto_recorded',
       confidence: 0.3,
-      evidence: ['auto-instinct hook: $COMMAND'],
+      evidence: ['auto-instinct hook: ' + process.env.CMD],
       scope: 'global',
     });
     console.log('ok');
@@ -64,16 +64,16 @@ else
   INSTINCT_FILE="$LEARNING_DIR/instincts.jsonl"
   TS=$(date +%s%3N)
   ID=$(echo -n "${TS}::${TRIGGER}::auto_recorded" | sha256sum | cut -c1-16)
-  ENTRY=$(node -e "console.log(JSON.stringify({
-    id: '$ID',
-    trigger: '$TRIGGER',
+  ENTRY=$(CMD="$COMMAND" TRIGGER="$TRIGGER" ID="$ID" TS="$TS" node -e "console.log(JSON.stringify({
+    id: process.env.ID,
+    trigger: process.env.TRIGGER,
     action: 'auto_recorded',
     confidence: 0.3,
-    evidence: ['auto-instinct hook: $COMMAND'],
+    evidence: ['auto-instinct hook: ' + process.env.CMD],
     scope: 'global',
     project: '',
-    created_at: new Date($TS).toISOString(),
-    updated_at: new Date($TS).toISOString(),
+    created_at: new Date(Number(process.env.TS)).toISOString(),
+    updated_at: new Date(Number(process.env.TS)).toISOString(),
   }))")
   echo "$ENTRY" >> "$INSTINCT_FILE" 2>/dev/null || true
 fi
