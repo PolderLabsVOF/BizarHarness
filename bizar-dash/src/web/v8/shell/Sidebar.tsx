@@ -306,8 +306,9 @@ export function Sidebar({
               title="Collapse sidebar"
               data-testid="sidebar-collapse"
               style={{
-                width: 24,
-                height: 24,
+                width: 28,
+                height: 28,
+                cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',

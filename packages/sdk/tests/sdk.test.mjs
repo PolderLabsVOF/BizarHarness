@@ -80,10 +80,10 @@ describe("SDK module surface", () => {
     expect(typeof mod.DEFAULT_MEMORY_VAULT).toBe("string");
   });
 
-  test("MCP server module exposes ≥20 BIZAR_TOOLS (13 core + 4 swarm + 3 self-learning)", async () => {
+  test("MCP server module exposes the 14-tool surface (12 legacy v6 + 2 Pillar D)", async () => {
     const mod = await import("../dist/mcp/server.js");
     expect(Array.isArray(mod.BIZAR_TOOLS)).toBe(true);
-    expect(mod.BIZAR_TOOLS.length).toBeGreaterThanOrEqual(20);
+    expect(mod.BIZAR_TOOLS.length).toBeGreaterThanOrEqual(14);
     expect(typeof mod.createBizarMcpServer).toBe("function");
     expect(typeof mod.createBizarMcpServerConfig).toBe("function");
     expect(typeof mod.defineTool).toBe("function");
@@ -93,11 +93,9 @@ describe("SDK module surface", () => {
       "memory_read", "memory_write", "memory_list", "memory_search",
       "plan_action", "open_kb",
       "loop_list", "loop_status", "loop_start", "loop_stop",
-      "graph_query", "graph_path", "danger_check",
-      // F-032 — Swarm coordination.
-      "agent_spawn", "agent_list", "agent_terminate", "swarm_init",
-      // F-033 — Self-learning.
-      "model_route", "agent_route", "memory_distill",
+      "graph_query", "graph_path",
+      // Pillar D — read-back tools added in v10.3.0 audit cleanup.
+      "list_instincts", "list_decisions",
     ]);
     const have = new Set(mod.BIZAR_TOOLS.map((t) => t.name));
     for (const n of expectedNames) {

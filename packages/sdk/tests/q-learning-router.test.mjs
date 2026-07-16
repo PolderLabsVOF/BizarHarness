@@ -1,22 +1,29 @@
 /**
  * Tests for the Q-learning agent router (F-033).
  *
- * - selectAgent() returns one of the 8 hard-coded Bizar agent names.
+ * - selectAgent() returns one of the 14 hard-coded Bizar agent names.
  * - Codemod prompts route to heimdall (the routine-implementation agent).
  * - recordOutcome() updates the Q-table (snapshot mean shifts).
  * - LRU caching: repeated tasks return the same pick without burning
  *   exploration budget.
+ *
+ * v10.3.0 — Action set expanded from 8 to 14 to cover every dispatched
+ * agent (hermod, baldr, vidarr, quick, agent-browser, semble-search).
  */
 
 import { describe, test, expect } from "vitest";
 import { QLearningRouter, AGENT_ACTIONS } from "../src/router/q-learning-router.js";
 
 describe("QLearningRouter — action set", () => {
-  test("AGENT_ACTIONS lists 8 Bizar agents", () => {
-    expect(AGENT_ACTIONS.length).toBe(8);
+  test("AGENT_ACTIONS lists all 14 Bizar agents", () => {
+    expect(AGENT_ACTIONS.length).toBe(14);
     expect(AGENT_ACTIONS).toContain("odin");
     expect(AGENT_ACTIONS).toContain("heimdall");
     expect(AGENT_ACTIONS).toContain("forseti");
+    // v10.3.0 — long-tail agents now routable
+    for (const agent of ["hermod", "baldr", "vidarr", "quick", "agent-browser", "semble-search"]) {
+      expect(AGENT_ACTIONS, `missing long-tail agent: ${agent}`).toContain(agent);
+    }
   });
 });
 
