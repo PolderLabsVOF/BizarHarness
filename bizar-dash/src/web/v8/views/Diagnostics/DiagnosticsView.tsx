@@ -20,11 +20,13 @@ interface DiagnosticsHealth {
 }
 
 interface DiagnosticsSnapshot {
-  health?: DiagnosticsHealth;
-  uptime?: number;
   version?: string;
-  memory?: { used?: number; total?: number };
+  uptime?: number;
+  memory?: { rss?: number; heapUsed?: number; heapTotal?: number };
   checks?: Array<{ name: string; status: string; message?: string }>;
+  counts?: Record<string, number | string | null>;
+  errors?: Array<{ line: string; ts: string | null }>;
+  service?: { running?: boolean; pid?: number };
 }
 
 interface LogsResponse {
@@ -53,9 +55,9 @@ export function DiagnosticsView(): JSX.Element {
     return () => clearInterval(id);
   }, [logs]);
 
-  const health = snap.data?.health;
   const uptime = snap.data?.uptime;
   const checks = snap.data?.checks ?? [];
+  const counts = snap.data?.counts ?? {};
   const lines = logs.data?.lines ?? [];
   const logFile = logs.data?.file ?? null;
 
@@ -78,7 +80,13 @@ export function DiagnosticsView(): JSX.Element {
               <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Status</span>
               <Inline align="center" gap={2}>
                 <Activity size={14} aria-hidden />
-                <strong style={{ fontFamily: 'var(--font-mono)' }}>{snap.loading ? '…' : health?.status ?? 'unknown'}</strong>
+                <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                  {snap.loading ? '…' : (
+                    snap.error ? 'error' :
+                    !snap.data?.service?.running ? 'stopped' :
+                    (snap.data?.errors?.length ?? 0) > 0 ? 'warn' : 'ok'
+                  )}
+                </strong>
               </Inline>
             </Stack>
           </CardBody>
@@ -87,7 +95,7 @@ export function DiagnosticsView(): JSX.Element {
           <CardBody>
             <Stack gap={1}>
               <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Uptime</span>
-              <strong style={{ fontFamily: 'var(--font-mono)' }}>{fmtUptime(uptime)}</strong>
+              <strong style={{ fontFamily: 'var(--font-mono)' }}>{snap.loading ? '…' : fmtUptime(uptime)}</strong>
             </Stack>
           </CardBody>
         </Card>
@@ -95,11 +103,46 @@ export function DiagnosticsView(): JSX.Element {
           <CardBody>
             <Stack gap={1}>
               <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Version</span>
-              <strong style={{ fontFamily: 'var(--font-mono)' }}>{snap.data?.version ?? '—'}</strong>
+              <strong style={{ fontFamily: 'var(--font-mono)' }}>{snap.loading ? '…' : (snap.data?.version ?? '—')}</strong>
             </Stack>
           </CardBody>
         </Card>
       </Grid>
+
+      {snap.error && (
+        <Card variant="default" style={{ borderColor: 'var(--danger)' }}>
+          <CardBody>
+            <Stack gap={2}>
+              <Inline align="center" gap={2}>
+                <Activity size={14} aria-hidden style={{ color: 'var(--danger)' }} />
+                <strong style={{ color: 'var(--danger)' }}>Diagnostics fetch failed</strong>
+              </Inline>
+              <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>{snap.error.message ?? String(snap.error)}</span>
+              <Button variant="secondary" size="sm" onClick={() => { void snap.refetch(); }}>
+                <RefreshCw size={12} aria-hidden /> Retry
+              </Button>
+            </Stack>
+          </CardBody>
+        </Card>
+      )}
+
+      {Object.keys(counts).length > 0 && (
+        <Card variant="default">
+          <CardBody>
+            <Stack gap={2}>
+              <strong>Counts</strong>
+              <Grid cols={4}>
+                {Object.entries(counts).map(([k, v]) => (
+                  <Stack key={k} gap={0}>
+                    <span style={{ fontSize: 'var(--fs-11)', color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{k}</span>
+                    <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-13)' }}>{String(v ?? '—')}</strong>
+                  </Stack>
+                ))}
+              </Grid>
+            </Stack>
+          </CardBody>
+        </Card>
+      )}
 
       {checks.length > 0 && (
         <Card variant="default">
