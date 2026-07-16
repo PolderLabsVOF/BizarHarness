@@ -34,7 +34,7 @@ If the user does not specify a team composition, spawn this default:
 | Lead          | @odin   | minimax/MiniMax-M3   | Coordinate, synthesize, gate quality  |
 | Implementer 1 | @thor   | minimax/MiniMax-M2.7 | Moderate-complexity implementation   |
 | Implementer 2 | @tyr    | minimax/MiniMax-M3   | Complex / cross-cutting work         |
-| Researcher    | @mimir  | 9router/kr/auto  | Codebase research, pattern discovery  |
+| Researcher    | @mimir  | bizar/MiniMax-M3 | Codebase research, pattern discovery  |
 | Git ops       | @hermod | minimax/MiniMax-M2.7 | Branch, commit, push, PR             |
 | Reviewer      | @forseti| minimax/MiniMax-M3   | Audit plan + final output            |
 
@@ -76,8 +76,8 @@ implementer and a reviewer.
 - [ ] No subagent has both `bash: allow` AND a write-level git task
       in the same batch — Hermod is the only git writer
 - [ ] Each teammate's scope is named in plain English
-- [ ] You have prepended the **Sibling-Awareness Block** to every
-      prompt — see Odin baseline, "Parallel Dispatch Coordination"
+- [ ] You have prepended a one-paragraph sibling-awareness block to
+      every prompt (Odin baseline, "Parallel Dispatch Coordination")
 - [ ] You have called `bizar memory status` and confirmed the vault
       is reachable
 

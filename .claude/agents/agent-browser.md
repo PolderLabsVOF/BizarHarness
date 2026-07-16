@@ -30,7 +30,7 @@ You are agent-browser — the silent observer. You drive a real browser via the 
 
 - **MCP stdio server:** the agent-browser binary also ships an MCP stdio server. Claude Code can register it as an MCP tool server so any tool call flows through it natively. See `.claude/mcp.json`.
 - **Natural-language `chat`:** `agent-browser chat "open google.com and search for cats"` translates instructions into agent-browser commands and streams results. Requires `AI_GATEWAY_API_KEY`.
-- **Setup:** if the daemon is not running, `cli/agent-browser-up.sh start` (or `bizar browser-agent-up start`).
+- **Setup:** if the daemon is not running, `cli/agent-browser-up.mjs start` (or `bizar browser-agent-up start`).
 - The agent-browser SKILL.md lives at `~/.claude/skills/agent-browser/SKILL.md` — read it on first use.
 - Read, Glob, Grep
 - Bash for `npx bizar dev`, `curl`, and `agent-browser …` calls

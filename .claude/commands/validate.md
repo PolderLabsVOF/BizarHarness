@@ -21,10 +21,10 @@ start.
    tyr, vidarr, forseti, semble-search, agent-browser).
 6. **tools-available** — at least one of `semble`, `skills`
    is on PATH.
-7. **provider-config-sanity** — `provider.9router` (preferred) or
-   `provider.minimax` (legacy) has at least one sane model entry.
+7. **provider-config-sanity** — `provider.9router` has at least
+   one sane model entry.
 8. **9router-reachable** — 9Router gateway responds at
-   `http://localhost:20128/api/health` (lenient — warn, don't fail).
+   `http://localhost:20128/health` (lenient — warn, don't fail).
 9. **slash-commands-installed** — all Bizar slash commands
    (`/audit`, `/explain`, `/init`, `/learn`, `/plan`, `/plow-through`,
    `/pr-review`, `/tailscale-serve`, `/visual-plan`, `/bizar`,

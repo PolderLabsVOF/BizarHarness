@@ -54,8 +54,8 @@ The sections below are **Odin-specific**: how you route, how you parallelize, an
 
 For implementation work, you have two parallel implementation agents:
 
-- **@thor** (Sonnet) — moderate complexity, cheaper
-- **@tyr** (Opus) — complex work, more expensive
+- **@thor** (bizar/MiniMax-M2.7, mid tier) — moderate complexity, cheaper
+- **@tyr** (cx/gpt-5.6-terra, high tier) — complex work, more expensive
 
 **ALWAYS use both.** Split each implementation task across them. Examples:
 
