@@ -6,6 +6,8 @@ import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { Badge } from '../../ui/data/Badge.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Textarea } from '../../ui/controls/Textarea.js';
 import { useFetch } from '../../data/useFetch.js';
@@ -215,18 +217,20 @@ export function BackgroundJobsView(): JSX.Element {
 
       {res.loading && instances.length === 0 ? (
         <Skeleton style={{ height: 240 }} />
+      ) : res.error ? (
+        <ErrorState
+          block
+          title="Failed to load background jobs"
+          description="Could not reach the background jobs endpoint."
+          error={res.error}
+          onRetry={refresh}
+        />
       ) : instances.length === 0 ? (
-        <Card>
-          <CardBody>
-            <Stack gap={1} align="center">
-              <Cpu size={32} aria-hidden style={{ color: 'var(--fg-muted)' }} />
-              <strong>No background jobs</strong>
-              <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-13)' }}>
-                Background agents appear here when spawned.
-              </span>
-            </Stack>
-          </CardBody>
-        </Card>
+        <EmptyState
+          icon={<Cpu size={28} aria-hidden />}
+          title="No background jobs"
+          description="Background agents appear here when spawned."
+        />
       ) : (
         <Box style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 380px' : '1fr', gap: 'var(--space-4)' }}>
           {/* Instance list */}
