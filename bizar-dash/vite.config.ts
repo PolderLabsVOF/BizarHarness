@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string };
 
 export default defineConfig({
   plugins: [react()],
@@ -50,6 +52,12 @@ export default defineConfig({
     // footer can render the real git SHA instead of "build placeholder".
     'import.meta.env.VITE_BUILD_SHA': JSON.stringify(
       process.env['BIZAR_BUILD_SHA'] ?? 'dev',
+    ),
+    // Surfaced via `import.meta.env.VITE_APP_VERSION` so the sidebar
+    // footer renders the actual package version (kept in sync via the
+    // release pipeline).
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(
+      process.env['BIZAR_APP_VERSION'] ?? pkg.version,
     ),
   },
   server: {

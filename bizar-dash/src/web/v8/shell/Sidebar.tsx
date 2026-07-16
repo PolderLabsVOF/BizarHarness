@@ -14,9 +14,11 @@ import {
   Folder,
   Goal,
   History,
-  Layers,
+  LayoutDashboard,
   Library,
   Network,
+  Package,
+  Webhook,
   ServerCog,
   Settings as SettingsIcon,
   Stethoscope,
@@ -117,7 +119,7 @@ const DEFAULT_SECTIONS: SidebarSection[] = [
     id: 'workspace',
     label: 'Workspace',
     items: [
-      { id: 'overview', label: 'Overview', icon: Layers },
+      { id: 'overview', label: 'Overview', icon: LayoutDashboard },
       { id: 'tasks', label: 'Tasks', icon: CheckSquare, count: 47, active: true },
       { id: 'goals', label: 'Goals', icon: Target, count: 3 },
       { id: 'chat', label: 'Chat', icon: MessageSquareText, live: true },
@@ -140,7 +142,7 @@ const DEFAULT_SECTIONS: SidebarSection[] = [
     items: [
       { id: 'skills', label: 'Skills', icon: Goal, count: 18 },
       { id: 'mcps', label: 'MCPs', icon: Library, count: 3 },
-      { id: 'hooks', label: 'Hooks', icon: Layers, count: 5 },
+      { id: 'hooks', label: 'Hooks', icon: Webhook, count: 5 },
     ],
   },
   {
@@ -156,7 +158,7 @@ const DEFAULT_SECTIONS: SidebarSection[] = [
       { id: 'providers', label: 'Providers', icon: Sparkles },
       { id: 'mods', label: 'Mods', icon: Boxes },
       { id: 'update', label: 'Update', icon: ArrowUpCircle },
-      { id: 'artifacts', label: 'Artifacts', icon: Layers },
+      { id: 'artifacts', label: 'Artifacts', icon: Package },
       { id: 'lightrag', label: 'LightRAG', icon: Database },
       { id: 'voice', label: 'Voice', icon: Mic },
       { id: 'clipboard', label: 'Clipboard', icon: ClipboardPaste },
@@ -283,8 +285,9 @@ export function Sidebar({
         ) : (
           <>
             <Box style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>
-              <div>◉ online · v8.0.0</div>
+              <div data-testid="sidebar-version">◉ online · v{import.meta.env.VITE_APP_VERSION}</div>
               <div
+                data-testid="sidebar-build-sha"
                 style={{ fontFamily: 'var(--font-mono)' }}
                 title={`build ${import.meta.env.VITE_BUILD_SHA}`}
               >
