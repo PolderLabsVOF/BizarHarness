@@ -74,3 +74,31 @@ test('GET /api/model-router/models probe handles unreachable endpoint gracefully
     else process.env.BIZAR_MODEL_ROUTER_URL = prev;
   }
 });
+
+test('GET /api/model-router/resolve/:agent returns the concrete model + endpoint', async () => {
+  const app = buildApp();
+  const { status, body } = await getJson(app, '/api/model-router/resolve/tyr');
+  assert.equal(status, 200);
+  assert.equal(body.agent, 'tyr');
+  assert.match(body.modelId, /gpt-5\.6-terra/, 'tyr uses high-tier terra');
+  assert.match(body.endpoint, /^http/, 'endpoint is a URL');
+  assert.equal(typeof body.tier, 'string');
+});
+
+test('GET /api/model-router/resolve/:agent falls back for unknown agents', async () => {
+  const app = buildApp();
+  const { status, body } = await getJson(app, '/api/model-router/resolve/nonexistent-agent-xyz');
+  assert.equal(status, 200);
+  assert.equal(body.agent, 'nonexistent-agent-xyz');
+  assert.match(body.modelId, /[a-z0-9/_.-]+/, 'returns a model id');
+  assert.match(body.endpoint, /^http/, 'endpoint is a URL');
+});
+
+test('GET /api/model-router/resolve/:agent rejects bad slugs', async () => {
+  const app = buildApp();
+  // Express decodes percent-encoded path segments before the handler runs.
+  // Use a slug that's syntactically illegal per the route's regex.
+  const { status, body } = await getJson(app, '/api/model-router/resolve/has spaces');
+  assert.equal(status, 400);
+  assert.equal(body.error, 'bad_slug');
+});

@@ -36,6 +36,10 @@ describe("SDK build", () => {
       "router/model-router.js", "router/model-router.d.ts",
       "router/q-learning-router.js", "router/q-learning-router.d.ts",
       "router/memory-distillation.js", "router/memory-distillation.d.ts",
+      // v10.1.1 — F-034 Self-Learning (Pillar D): instincts + decisions.
+      "learning/index.js", "learning/index.d.ts",
+      "learning/instincts.js", "learning/instincts.d.ts",
+      "learning/decisions.js", "learning/decisions.d.ts",
     ]) {
       expect(existsSync(join(distDir, f))).toBe(true);
     }

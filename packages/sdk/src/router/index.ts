@@ -245,3 +245,17 @@ export {
   type AgentName,
   type AgentRouteDecision,
 } from "./q-learning-router.js";
+
+export {
+  loadModelRegistry,
+  resolveAgentModel,
+  resolveTierModel,
+  listAgentModels,
+  getEndpoint,
+  type ModelRegistry,
+  type ResolvedAgentModel,
+  type ResolvedTierModel,
+  type AgentModelEntry,
+  type TierModelEntry,
+  type BizarTier,
+} from "./agent-model-registry.js";
