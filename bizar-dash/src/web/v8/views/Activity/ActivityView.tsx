@@ -20,6 +20,8 @@ import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { Grid } from '../../ui/primitives/Grid.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
+import { ListHeader } from '../../ui/data/ListHeader.js';
+import { Sparkline } from '../../ui/data/Sparkline.js';
 import { Badge } from '../../ui/data/Badge.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
@@ -230,6 +232,11 @@ export function ActivityView(): JSX.Element {
     return acc;
   }, [merged]);
 
+  const sparklineData = useMemo<number[]>(() => {
+    // Chronological order (grouped is desc), so reverse to oldest-first.
+    return [...grouped].reverse().map((g) => g.events.length);
+  }, [grouped]);
+
   const exportNdjson = async (): Promise<void> => {
     setExportError(null);
     try {
@@ -294,6 +301,13 @@ export function ActivityView(): JSX.Element {
             </Button>
           </Inline>
         }
+      />
+      <ListHeader
+        title="Feed"
+        count={windowed.length}
+        sparkline={sparklineData.length >= 2 ? <Sparkline data={sparklineData} width={120} height={28} /> : undefined}
+        description={`${counts.task} task · ${counts.agent} agent · ${counts.goal} goal`}
+        testid="activity-list-header"
       />
 
       {exportError !== null && (

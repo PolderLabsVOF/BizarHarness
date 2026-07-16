@@ -17,6 +17,7 @@ import { Boxes, Download, FileEdit, Plus, Power, PowerOff, RefreshCcw, RotateCcw
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
+import { ListHeader } from '../../ui/data/ListHeader.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Input } from '../../ui/controls/Input.js';
@@ -128,6 +129,7 @@ export function ModsView(): JSX.Element {
           </Inline>
         }
       />
+      <ListHeader title="Installed" count={mods.length} testid="mods-list-header" />
 
       <Card variant="default">
         <CardBody>

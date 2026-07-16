@@ -3,6 +3,7 @@ import { Archive, Plus, Trash2, RotateCw, ShieldCheck, FileText } from 'lucide-r
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
+import { ListHeader } from '../../ui/data/ListHeader.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Badge } from '../../ui/data/Badge.js';
 import { Button } from '../../ui/controls/Button.js';
@@ -122,6 +123,7 @@ export function BackupView(): JSX.Element {
           </Inline>
         }
       />
+      <ListHeader title="Snapshots" count={items.length} testid="backup-list-header" />
       {list.loading && items.length === 0 ? (
         <Stack gap={2}>
           <Skeleton style={{ height: 80 }} />

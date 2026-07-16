@@ -10,6 +10,7 @@ import { GoalDetail } from '../../ui/goals/GoalDetail.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
 import { ErrorState } from '../../ui/feedback/ErrorState.js';
+import { ListHeader } from '../../ui/data/ListHeader.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Input } from '../../ui/controls/Input.js';
 import { Textarea } from '../../ui/controls/Textarea.js';
@@ -173,19 +174,26 @@ export function GoalsView(): JSX.Element {
           </Button>
         }
       />
+      <ListHeader
+        title="All goals"
+        count={local.length}
+        testid="goals-list-header"
+        filters={
+          <Inline gap={1} wrap>
+            {STATUS_FILTERS.map((s) => (
+              <Chip key={s} selected={statusFilter === s} onClick={() => setStatusFilter(s)}>
+                {s === 'all' ? 'All' : s.replace(/-/g, ' ')}
+                {s !== 'all' && ` · ${local.filter((g) => g.status === s).length}`}
+              </Chip>
+            ))}
+          </Inline>
+        }
+      />
       {decomposeError !== null && (
         <div role="alert" style={{ padding: 'var(--space-3)', background: 'color-mix(in oklch, var(--danger) 12%, var(--surface-0))', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-12)' }}>
           Decompose failed: {decomposeError}
         </div>
       )}
-      <Inline gap={1} wrap>
-        {STATUS_FILTERS.map((s) => (
-          <Chip key={s} selected={statusFilter === s} onClick={() => setStatusFilter(s)}>
-            {s === 'all' ? 'All' : s.replace(/-/g, ' ')}
-            {s !== 'all' && ` · ${local.filter((g) => g.status === s).length}`}
-          </Chip>
-        ))}
-      </Inline>
       {goals.loading && local.length === 0 ? (
         <Stack gap={3}>
           <Skeleton style={{ height: 160 }} />

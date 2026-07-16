@@ -3,6 +3,7 @@ import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { Grid } from '../../ui/primitives/Grid.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
+import { ListHeader } from '../../ui/data/ListHeader.js';
 import { AgentCard, type AgentCardProps, type AgentStatus } from '../../ui/agents/AgentCard.js';
 import { AgentDetail } from '../../ui/agents/AgentDetail.js';
 import { Chip } from '../../ui/data/Chip.js';
@@ -259,6 +260,12 @@ export function AgentsView(): JSX.Element {
             <Plus size={14} aria-hidden /> New agent
           </Button>
         }
+      />
+      <ListHeader
+        title="Roster"
+        count={cards.length}
+        description={stuck.data?.stuck && stuck.data.stuck.length > 0 ? `${stuck.data.stuck.length} stuck` : undefined}
+        testid="agents-list-header"
       />
       {(stuck.data?.stuck ?? []).length > 0 && (
         <Banner

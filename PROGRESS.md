@@ -444,9 +444,28 @@ drift away from the original ask.
 
 ## Current State
 
-- **Last release (master):** v10.0.5-S3 (Moves 1+2+3: surface coverage, tier-3 mutations, error-state polish).
+- **Last release (master):** v10.0.5-S4 (Moves 1+2+3+4: surfaces + tier-3 + errors + data-driven polish).
 - **This session:** shipping v10.0.5 across 4 moves to close the
-  umbrella brief — Moves 1+2+3 done, Move 4 in progress.
+  umbrella brief — Moves 1+2+3+4 done, paperwork in progress.
+- **v10.0.5-Move 4 deliverables (data-driven polish):**
+  New shared `<ListHeader>` in
+  `bizar-dash/src/web/v8/ui/data/ListHeader.tsx` — title +
+  count badge + optional sparkline + optional filter chips +
+  right-aligned actions. Wired into 9 views:
+  - **High-traffic (sparkline):** Activity (per-day bucket
+    counts, with task/agent/goal source breakdown).
+  - **High-traffic (count + chips):** Goals (status filter
+    chips migrated under ListHeader.filters).
+  - **High-traffic (count only):** Agents (count + stuck
+    hint).
+  - **Count + filter chips:** Projects, Providers, Mods,
+    Dialogs, EnvVars, Backup (each shows the live row count
+    of its primary list).
+  - **Skipped:** Tasks (Kanban layout — KanbanColumn already
+    shows per-status counts; ListHeader would duplicate).
+  - **Skipped:** History (already has a custom FilterChip row
+    that interleaves kinds + projects, switching it would
+    regress UX).
 - **v10.0.5-Move 3 deliverables (ErrorState polish):**
   New shared `<ErrorState>` in
   `bizar-dash/src/web/v8/ui/feedback/ErrorState.tsx` with two

@@ -12,6 +12,7 @@ import { Check, MessageSquare, RefreshCcw, SkipForward, Trash2, X } from 'lucide
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
+import { ListHeader } from '../../ui/data/ListHeader.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
@@ -81,6 +82,7 @@ export function DialogsView(): JSX.Element {
           </Inline>
         }
       />
+      <ListHeader title="Queue" count={dialogs.length} testid="dialogs-list-header" />
       <Card variant="default">
         <CardBody>
           {payload.loading && dialogs.length === 0 ? (

@@ -18,6 +18,7 @@ import { KeyRound, Pencil, Plus, Power, PowerOff, RotateCw, Sparkles, Star, Tras
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { ViewHeader } from '../../ui/data/ViewHeader.js';
+import { ListHeader } from '../../ui/data/ListHeader.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
@@ -208,6 +209,12 @@ export function ProvidersView(): JSX.Element {
             </Button>
           </Inline>
         }
+      />
+      <ListHeader
+        title="Configured"
+        count={providers.length}
+        description={activePayload.data?.providerId ? `active: ${activePayload.data.providerId}` : undefined}
+        testid="providers-list-header"
       />
 
       {activePayload.data && (activePayload.data.providerId !== null || activePayload.data.modelId !== null) && (
