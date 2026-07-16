@@ -316,7 +316,6 @@ export function Sidebar({
                 color: 'var(--fg-muted)',
                 background: 'transparent',
                 border: '1px solid var(--border)',
-                cursor: 'pointer',
               }}
             >
               <ChevronsLeft size={14} />
