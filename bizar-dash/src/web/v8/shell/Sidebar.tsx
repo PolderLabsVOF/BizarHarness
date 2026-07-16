@@ -341,31 +341,77 @@ function SidebarSectionView({
   onItemSelect?: (id: string) => void;
   isItemActive: (id: string) => boolean;
 }): JSX.Element {
+  // v10.0.6 — per-section collapse, persisted to localStorage. Lets the
+  // System section (23 items) fold away without disappearing entirely.
+  const storageKey = `bizar:sidebar:section:collapsed:${section.id}`;
+  const initial = typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === '1';
+  const [sectionOpen, setSectionOpen] = useState<boolean>(!initial);
+
+  const toggle = (): void => {
+    setSectionOpen((open) => {
+      const next = !open;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(storageKey, next ? '0' : '1');
+      }
+      return next;
+    });
+  };
+
   return (
-    <Stack gap={1}>
+    <Stack gap={1} data-sidebar-section={section.id}>
       {!collapsed && (
-        <Box
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={sectionOpen}
+          aria-controls={`sidebar-section-${section.id}`}
+          data-testid={`sidebar-section-toggle-${section.id}`}
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--space-2)',
             padding: 'var(--space-1) var(--space-3)',
+            background: 'transparent',
+            border: 0,
             fontSize: 'var(--fs-12)',
             fontWeight: 600,
             color: 'var(--fg-subtle)',
             letterSpacing: 'var(--tracking-wide)',
             textTransform: 'uppercase',
+            cursor: 'pointer',
+            width: '100%',
+            textAlign: 'left',
           }}
         >
-          {section.label}
-        </Box>
+          <span>{section.label}</span>
+          <span
+            aria-hidden="true"
+            data-testid={`sidebar-section-chevron-${section.id}`}
+            style={{
+              display: 'inline-block',
+              transition: 'transform var(--motion-fast) var(--ease-out)',
+              transform: sectionOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+              fontSize: 10,
+            }}
+          >
+            ▸
+          </span>
+        </button>
       )}
-      {section.items.map((item) => (
-        <SidebarItemView
-          key={item.id}
-          item={item}
-          collapsed={collapsed}
-          active={isItemActive(item.id)}
-          onSelect={onItemSelect}
-        />
-      ))}
+      {sectionOpen && (
+        <div id={`sidebar-section-${section.id}`} role="group" aria-label={section.label}>
+          {section.items.map((item) => (
+            <SidebarItemView
+              key={item.id}
+              item={item}
+              collapsed={collapsed}
+              active={isItemActive(item.id)}
+              onSelect={onItemSelect}
+            />
+          ))}
+        </div>
+      )}
     </Stack>
   );
 }
