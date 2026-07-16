@@ -4,11 +4,9 @@
  * v6.4.0 — ported from ruflo `q-learning-router.ts` (8-action softmax
  * agent-route over coder / tester / reviewer / …).
  *
- * Bizar has more than 8 named agents, so the action set is the 8 most
- * commonly delegated targets from `Agent` tool calls (matches
- * `.claude/agents/*.md` to first 8 names). Adding the full
- * 12-agent space could be done in a follow-up but each new agent
- * increases state-action coverage cost; 8 keeps the bandit honest.
+ * All 14 agents registered. The Q-learning policy converges faster on
+ * commonly-dispatched targets; long-tail agents are still routable but
+ * get the prior policy until sufficient feedback accumulates.
  *
  *   - State: a 64-dim bag-of-words hash of the task string (FNV-1a
  *     folded into 64 buckets). LRU-cached so repeated task patterns
@@ -39,6 +37,12 @@ export const AGENT_ACTIONS: readonly string[] = [
   "thor",
   "tyr",
   "forseti",
+  "hermod",
+  "baldr",
+  "vidarr",
+  "quick",
+  "agent-browser",
+  "semble-search",
 ] as const;
 
 export type AgentName = (typeof AGENT_ACTIONS)[number];
