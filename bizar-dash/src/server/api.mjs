@@ -78,10 +78,6 @@ import { createAuditRouter } from './routes/audit.mjs';
 // Pillar D — Self-learning: GET /api/decisions returns decisions log + tamper status.
 import { createDecisionsRouter } from './routes/decisions.mjs';
 import { attachUserContext } from './auth.mjs';
-// Sprint S10 — v8 dashboard live data. /api/goals parses .bizar/PROGRESS.md;
-// /api/cc-agents exposes `claude agents --json` enriched with worktree + counts.
-import { createGoalsRouter } from './routes/goals.mjs';
-import { createCCAgentsRouter } from './routes/agents-cc.mjs';
 
 /**
  * @param {object} deps
