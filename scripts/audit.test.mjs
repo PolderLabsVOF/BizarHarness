@@ -16,11 +16,15 @@ const AUDIT_SCRIPT = join(PROJECT_ROOT, 'scripts', 'audit.mjs');
 // Load the module as a script (audit.mjs writes to stdout, so we invoke it)
 // Always runs from PROJECT_ROOT so that ROOT resolution is correct.
 function runAudit() {
-  const { stdout, stderr, status } = execSync(
-    `node "${AUDIT_SCRIPT}" 2>&1`,
-    { cwd: PROJECT_ROOT, encoding: 'utf8' }
-  );
-  return { stdout, stderr, status };
+  try {
+    const stdout = execSync(`node "${AUDIT_SCRIPT}" 2>&1`, {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf8',
+    });
+    return { stdout, stderr: '', status: 0 };
+  } catch (err) {
+    return { stdout: err.stdout ?? '', stderr: err.stderr ?? '', status: err.status ?? 1 };
+  }
 }
 
 function parseAuditOutput(stdout) {
