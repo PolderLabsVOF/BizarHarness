@@ -1,498 +1,86 @@
 #!/usr/bin/env bash
-#
-# install.sh — Cross-platform BizarHarness installer (Claude Code).
-#
-# v6.3.0 — Migrated from Cline to Claude Code.
-#
-#   1. Detects platform (Linux/macOS/Windows)
-#   2. Installs Node.js 18+, jq, gh, uv, python3 (cross-platform)
-#   3. Installs Claude Code via npm:
-#        npm install -g @anthropic-ai/claude-agent-sdk
-#        npm install -g @anthropic-ai/claude-code
-#   4. Optionally installs agent-browser (Rust native CLI from vercel-labs)
-#   5. Shells out to `node cli/provision-claude.mjs`, which writes the
-#      `~/.claude/` config tree, registers the Bizar MCP server, and
-#      copies agent files / skills / commands / hooks / rules.
-#
-# Almost all logic still lives in `cli/provision-claude.mjs:runProvision`,
-# which is shared between `bizar install` and `bizar update`. This bash
-# script exists only for the platform-specific steps that need sudo +
-# a system package manager.
-#
-# Flags:
-#   --non-interactive   skip prompts (CI safe)
-#   --dry-run           print actions, make no changes
-#   --force             overwrite existing files
-#   --update            this is a re-install
-#   --mode=install|update|install-only-system
-#                       install = full flow (the default)
-#                       update  = alias for install (provisioner auto-detects)
-#                       install-only-system = only run this bash script, skip
-#                                              the Node provisioner (used for
-#                                              bootstrapping on a fresh box
-#                                              before the npm package is set up)
-#
-# The script exits with the provisioner's exit code.
-
+# install.sh — BizarHarness OS dependencies installer
+# Usage: ./install.sh [--non-interactive|--dry-run]
 set -euo pipefail
 
-# ── Color helpers ────────────────────────────────────────────────────────────
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-RED='\033[0;31m'
-DIM='\033[2m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-note()   { echo -e "  ${GREEN}✓${NC} $1"; }
-warn()   { echo -e "  ${YELLOW}⚠${NC} $1"; }
-err()    { echo -e "  ${RED}✗${NC} $1"; }
-action() { echo -e "  ${CYAN}→${NC} $1"; }
-dim()    { echo -e "  ${DIM}$1${NC}"; }
-section(){
-  echo ""
-  echo -e "${BOLD}${CYAN}── $1 ──${NC}"
-}
-
-have_cmd() { command -v "$1" >/dev/null 2>&1; }
-
-# ── Paths ───────────────────────────────────────────────────────────────────
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# ── Flags ────────────────────────────────────────────────────────────────────
-NON_INTERACTIVE=0
-DRY_RUN=0
-FORCE=0
-UPDATE_MODE=0
-MODE="install"
-
-show_usage() {
-  cat <<'EOF'
-install.sh — BizarHarness cross-platform installer (Claude Code)
-
-Usage:
-  ./install.sh                     Interactive install (Linux/macOS)
-  ./install.sh --help              Show this help
-  ./install.sh --dry-run           Dry run — print actions, no changes
-  ./install.sh --non-interactive   Non-interactive (CI safe)
-  ./install.sh --force             Overwrite existing files
-  ./install.sh --update            Alias for --mode=update
-  ./install.sh --mode=<mode>       install | update | install-only-system
-
-This script handles platform-specific system dependencies (apt/dnf/pacman/
-zypper on Linux, brew on macOS) and then shells to
-`node cli/provision-claude.mjs`, which writes ~/.claude/, registers the
-Bizar MCP server, copies agents / skills / commands / hooks / rules,
-and runs the post-install doctor check.
-EOF
-}
-
-parse_flags() {
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --help|-h) show_usage; exit 0;;
-      --non-interactive|-y) NON_INTERACTIVE=1;;
-      --dry-run) DRY_RUN=1;;
-      --force) FORCE=1;;
-      --update) UPDATE_MODE=1; MODE="update";;
-      --mode=*) MODE="${1#--mode=}";;
-      --mode) shift; MODE="${1:-install}";;
-      *) err "unknown flag: $1"; show_usage; exit 2;;
-    esac
-    shift
-  done
-}
-
-dry() {
-  if [ "$DRY_RUN" -eq 0 ]; then "$@"; fi
-}
-
-# ── sudo helper ─────────────────────────────────────────────────────────────
-SUDO=""
-sudo_if_needed() {
-  if [ "$(id -u)" -ne 0 ] && have_cmd sudo; then SUDO="sudo"; fi
-}
-
-# ── Node install (Linux) ────────────────────────────────────────────────────
-ensure_node() {
-  if have_cmd node; then
-    note "Node.js $(node --version) present"
-    return
-  fi
-  section "Installing Node.js"
-  if [ ! -f /etc/os-release ]; then
-    err "no /etc/os-release — cannot detect distro"
-    err "Install Node.js 18+ manually: https://nodejs.org/"
-    exit 1
-  fi
-  . /etc/os-release
-  sudo_if_needed
-  case "$ID" in
-    ubuntu|debian|pop|linuxmint|elementary)
-      action "Installing Node.js 20.x via NodeSource (apt)..."
-      dry $SUDO apt-get update
-      dry $SUDO apt-get install -y ca-certificates curl gnupg
-      dry curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash -
-      dry $SUDO apt-get install -y nodejs
-      ;;
-    fedora|rhel|rocky|almalinux|centos)
-      action "Installing Node.js 20.x via NodeSource (dnf)..."
-      dry $SUDO dnf install -y https://rpm.nodesource.com/pub_20.x/nodesource-release-nodesource-1.noarch.rpm
-      dry $SUDO dnf install -y nodejs
-      ;;
-    arch|manjaro|endeavouros)
-      action "Installing Node.js via pacman..."
-      dry $SUDO pacman -Sy --noconfirm nodejs npm
-      ;;
-    opensuse*|sles)
-      action "Installing Node.js via zypper..."
-      dry $SUDO zypper install -y nodejs20 npm20
-      ;;
-    alpine)
-      action "Installing Node.js via apk..."
-      dry $SUDO apk add --no-cache nodejs npm
-      ;;
-    nixos)
-      action "Detected NixOS — Node.js must be installed via nix-shell"
-      warn "Run the following, then re-run this installer:"
-      warn "  nix-shell -p nodejs python3 jq gh git"
-      warn "  node cli/provision-claude.mjs"
-      exit 0
-      ;;
-    void)
-      action "Installing Node.js via xbps..."
-      dry $SUDO xbps-install -S nodejs
-      ;;
-    *)
-      err "Unsupported distro: $ID"
-      err "Install Node.js 18+ manually: https://nodejs.org/"
-      exit 1
-      ;;
-  esac
-  note "Node.js installed: $(node --version)"
-}
-
-# ── Claude Code install ────────────────────────────────────────────────────
-install_claude_code() {
-  if have_cmd claude; then
-    note "claude $(claude --version 2>/dev/null | head -1) present"
-  else
-    section "Installing Claude Code"
-    if ! have_cmd npm; then
-      err "npm not available — install Node.js 18+ first: https://nodejs.org/"
-      exit 1
-    fi
-    action "Installing @anthropic-ai/claude-agent-sdk..."
-    dry npm install -g @anthropic-ai/claude-agent-sdk 2>&1 || \
-      warn "claude-agent-sdk install failed — retry later: npm install -g @anthropic-ai/claude-agent-sdk"
-    action "Installing @anthropic-ai/claude-code..."
-    dry npm install -g @anthropic-ai/claude-code 2>&1
-    if have_cmd claude; then
-      note "claude $(claude --version 2>/dev/null | head -1) installed"
-    else
-      warn "claude CLI not found on PATH after install — check npm global bin dir"
-    fi
-  fi
-}
-
-# ── Dependency detection + install (cross-platform) ────────────────────────
-check_deps() {
-  section "Checking dependencies"
-  if ! [ -f "$REPO_DIR/scripts/check-deps.mjs" ]; then
-    warn "scripts/check-deps.mjs not found — skipping detailed check"
-    return
-  fi
-  if ! node "$REPO_DIR/scripts/check-deps.mjs" --strict 2>/dev/null; then
-    warn "dependency detector reported missing deps — proceeding with best-effort checks"
-  else
-    note "all required dependencies satisfied"
-  fi
-}
-
-install_agent_browser() {
-  # v6.0.0 — agent-browser (native Rust CLI from vercel-labs). Replaces
-  # the v5.x browser-harness (Python CDP wrapper). Installs via npm.
-  #
-  # If npm is not available, this is a soft-fail: agent-browser is
-  # optional, and `cli/provision-claude.mjs:ensureAgentBrowser` will retry it
-  # once npm is available.
-  if have_cmd agent-browser; then
-    local ab_ver
-    ab_ver="$(agent-browser --version 2>/dev/null || echo 'unknown')"
-    note "agent-browser ${ab_ver} already installed"
-    return 0
-  fi
-  action "Installing agent-browser via npm..."
-  if ! have_cmd npm; then
-    warn "npm not available — skipping agent-browser install"
-    warn "    Install later: npm install -g agent-browser"
-    return 0
-  fi
-  if dry npm install -g agent-browser 2>&1; then
-    local ab_ver
-    ab_ver="$(agent-browser --version 2>/dev/null || echo 'unknown')"
-    note "agent-browser ${ab_ver} installed"
-    # Download Chrome for Testing
-    if dry agent-browser install 2>&1; then
-      note "Chrome for Testing downloaded"
-    else
-      warn "Chrome download failed — retry later: agent-browser install"
-    fi
-  else
-    warn "agent-browser install failed — the browser tools will not be available"
-    warn "    Install later: npm install -g agent-browser"
-  fi
-}
-
-install_lightrag() {
-  # LightRAG is optional but recommended. Install via uv tool.
-  # uv tools install to ~/.local/bin/ — ensure that's on PATH.
-  if [ -d "$HOME/.local/bin" ] && [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    export PATH="$HOME/.local/bin:$PATH"
-  fi
-  if have_cmd lightrag-server; then
-    note "LightRAG $(lightrag-server --version 2>/dev/null || echo 'server') present"
-    return 0
-  fi
-  action "Installing LightRAG via uv tool..."
-  if dry uv tool install "lightrag-hku[api]" 2>&1; then
-    note "LightRAG installed"
-    # Verify reachable
-    if [ -f "$HOME/.local/bin/lightrag-server" ]; then
-      note "LightRAG binary found at ~/.local/bin/"
-    fi
-  else
-    warn "LightRAG install failed — the memory graph will not be available"
-    warn "    Install later: uv tool install \"lightrag-hku[api]\""
-  fi
-}
-
-install_missing_deps_linux() {
-  . /etc/os-release 2>/dev/null || return 0
-  sudo_if_needed
-  case "$ID" in
-    ubuntu|debian|pop|linuxmint|elementary)
-      action "Installing uv, python3.12, jq, gh via apt..."
-      dry $SUDO apt-get update
-      dry $SUDO apt-get install -y --no-install-recommends python3 python3-pip jq git curl ca-certificates gnupg
-      # uv via official installer (no apt package)
-      if ! have_cmd uv; then
-        dry curl -LsSf https://astral.sh/uv/install.sh | sh
-        note "uv installed via astral.sh"
-      fi
-      ;;
-    fedora|rhel|rocky|almalinux|centos)
-      action "Installing uv, python3.12, jq, gh via dnf..."
-      dry $SUDO dnf install -y python3 python3-pip jq git curl gh
-      if ! have_cmd uv; then
-        dry curl -LsSf https://astral.sh/uv/install.sh | sh
-        note "uv installed via astral.sh"
-      fi
-      ;;
-    arch|manjaro|endeavouros)
-      action "Installing uv, python3.12, jq, gh via pacman..."
-      dry $SUDO pacman -Sy --noconfirm --needed python python-pip jq git curl github-cli
-      if ! have_cmd uv; then
-        dry curl -LsSf https://astral.sh/uv/install.sh | sh
-        note "uv installed via astral.sh"
-      fi
-      ;;
-    opensuse*|sles)
-      action "Installing uv, python3.12, jq, gh via zypper..."
-      dry $SUDO zypper install -y python3 python3-pip jq git curl gh
-      if ! have_cmd uv; then
-        dry curl -LsSf https://astral.sh/uv/install.sh | sh
-        note "uv installed via astral.sh"
-      fi
-      ;;
-    alpine)
-      action "Installing uv, python3, jq, gh via apk..."
-      dry $SUDO apk add --no-cache python3 py3-pip jq git curl
-      if ! have_cmd uv; then
-        dry curl -LsSf https://astral.sh/uv/install.sh | sh
-        note "uv installed via astral.sh"
-      fi
-      ;;
-    void)
-      action "Installing uv, python3, jq, gh via xbps..."
-      dry $SUDO xbps-install -S python3 python3-pip jq git curl
-      if ! have_cmd uv; then
-        dry curl -LsSf https://astral.sh/uv/install.sh | sh
-        note "uv installed via astral.sh"
-      fi
-      ;;
-    nixos)
-      warn "NixOS detected — LightRAG and other uv tools require manual setup"
-      warn "  After nix-shell: nix-shell -p nodejs python3 jq gh git"
-      warn "  Then run: uv tool install \"lightrag-hku[api]\""
-      warn "  And re-run this installer: node cli/provision-claude.mjs"
-      return 0
-      ;;
-  esac
-  # LightRAG via uv tool (requires uv to be on PATH)
-  install_lightrag
-}
-
-install_missing_deps_macos() {
-  if ! have_cmd brew; then
-    section "Homebrew"
-    action "Installing Homebrew..."
-    if [ "$DRY_RUN" -eq 0 ]; then
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-      note "Homebrew installed"
-    fi
-  else
-    note "Homebrew already installed"
-  fi
-  action "Installing uv, python3.12, jq, gh via brew..."
-  dry brew install uv jq gh 2>/dev/null || true
-  # LightRAG via uv tool (requires uv to be on PATH)
-  install_lightrag
-}
-
-# ── Service registration (delegated to Node) ────────────────────────────────
-install_service() {
-  section "Installing background service"
-  # The unified provisioner does this via `cli/service-controller.mjs`.
-  # We still call it from here because the bash script may run standalone
-  # (e.g. for first-boot provisioning before the npm package is set up).
-  #
-  # v6.3.0 — Claude Code does NOT have an out-of-process "server" the way
-  # Cline did, so we skip `bizar service install` here. The dashboard
-  # (bizar-dash) is launched via `bizar dash start --bg` instead.
-  local bin="$REPO_DIR/cli/bin.mjs"
-  if [ ! -f "$bin" ]; then
-    warn "cli/bin.mjs not found — service registration deferred"
-    warn "    (will complete when \`bizar service install\` is run later)"
-    return 0
-  fi
-  if [ "$DRY_RUN" -eq 1 ]; then
-    dim "  would run: node $bin service install"
-    return 0
-  fi
-  if [ "$UPDATE_MODE" -eq 1 ]; then
-    dim "  update mode: service restart is handled by the Node provisioner"
-    return 0
-  fi
-  if ! node "$bin" service install 2>&1; then
-    warn "service registration had issues — see output above"
-    dim "    manual command: node $bin service install"
-  fi
-}
-
-# ── Final success banner ───────────────────────────────────────────────────────
-
-print_banner() {
-  local dashboard_url="${BIZAR_DASHBOARD_URL:-http://localhost:4321}"
-  section "Install complete"
-  echo ""
-  echo -e "${BOLD}${CYAN}┌────────────────────────────────────────────────────────────┐${NC}"
-  echo -e "${BOLD}${CYAN}│${NC}  ${BOLD}BizarHarness ready (Claude Code).${NC}                          │"
-  echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${GREEN}✓${NC} Cross-platform installer v6.3.0                             │"
-  echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-  echo -e "${BOLD}${CYAN}│${NC}  Dashboard: ${CYAN}$dashboard_url${NC}                                    │"
-  echo -e "${BOLD}${CYAN}│${NC}                                                          │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}Next:${NC}                                                            │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  1. Restart claude to pick up new config${NC}                   │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  2. Run \`claude auth login\` to add API keys${NC}                 │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  3. Run 'bizar dash start' to launch the dashboard${NC}             │"
-  echo -e "${BOLD}${CYAN}│${NC}  ${DIM}  4. Visit $dashboard_url in your browser${NC}                │"
-  echo -e "${BOLD}${CYAN}└────────────────────────────────────────────────────────────┘${NC}"
-  echo ""
-  if [ "$DRY_RUN" -eq 1 ]; then
-    warn "DRY RUN — no changes were made"
-  fi
-}
-
-# ── OS dispatch ───────────────────────────────────────────────────────────────
-
-install_linux() {
-  note "Detected Linux ($(uname -m))"
-  ensure_node
-  check_deps
-  install_claude_code
-  install_missing_deps_linux
-  install_agent_browser
-  install_service
-}
-
-install_macos() {
-  note "Detected macOS ($(uname -m))"
-  check_deps
-  install_missing_deps_macos
-  install_claude_code
-  install_agent_browser
-  install_service
-}
-
-# ── Main ──────────────────────────────────────────────────────────────────────
+G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; N='\033[0m'
+note() { echo -e "  ${G}✓${N} $1"; }
+warn() { echo -e "  ${Y}⚠${N} $1"; }
+err()  { echo -e "  ${R}✗${N} $1"; }
+cmd()  { command -v "$1" >/dev/null 2>&1; }
+dry()  { [ "${DRY:-0}" -eq 0 ] && "$@" || echo "  would $*" >&2; }
+sudo_if_needed() { [ "$(id -u)" -ne 0 ] && cmd sudo && SUDO="sudo" || SUDO=""; }
 
 main() {
-  parse_flags "$@"
-
-  if [ "$DRY_RUN" -eq 1 ]; then
-    dim "DRY RUN MODE — no changes will be made"
-    echo ""
-  fi
-
-  echo ""
-  echo -e "${BOLD}${CYAN}  ⚡ BizarHarness Installer v6.3.0 (Claude Code)${NC}"
-  if [ "$UPDATE_MODE" -eq 1 ]; then
-    echo -e "  ${DIM}Update mode${NC}"
-  fi
-  echo ""
-
-  # OS detection
-  local os
-  os="$(uname -s)"
-  case "$os" in
-    Linux) install_linux ;;
-    Darwin) install_macos ;;
-    *)
-      err "Unsupported OS: $os"
-      echo ""
-      warn "On Windows, run install.ps1 instead."
-      warn "On other Unix systems, ensure Node.js 18+ is available and run:"
-      warn "  node scripts/check-deps.mjs"
-      echo ""
-      exit 1
-      ;;
+  local ni=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h) cat <<'EOF'
+install.sh — BizarHarness OS-dependencies installer
+  ./install.sh --non-interactive   CI safe
+  ./install.sh --dry-run           print actions, no changes
+EOF
+        exit 0;;
+      --dry-run) export DRY=1;;
+      --non-interactive|-y) ni=1;;
+      *) warn "ignoring: $1";;
+    esac; shift
+  done
+  echo "Installing OS dependencies..."
+  case "$(uname -s)" in
+    Linux)  linux;;
+    Darwin) macos;;
+    *) err "Unsupported OS — use install.ps1 on Windows"; exit 1;;
   esac
+  local a=(--mode=install)
+  [ "$ni" -eq 1 ] && a+=(--yes)
+  [ "${DRY:-0}" -eq 1 ] && a+=(--dry-run)
+  exec node "$(dirname "$0")/cli/provision.mjs" "${a[@]}"
+}
 
-  # ── Hand off to the unified provisioner (Node) ─────────────────────────
-  # All cross-OS work (agent files, command copy, ~/.claude/ settings,
-  # MCP server registration, skills/rules/hooks mirror) lives in
-  # `cli/provision-claude.mjs:runProvision`. It's idempotent — skipping
-  # it (e.g. via --install-only-system) is fine for first-boot scenarios
-  # where the npm package isn't yet set up.
-  if [ "$MODE" = "install-only-system" ]; then
-    note "skipped node provisioner (--mode=install-only-system)"
-    exit 0
-  fi
+linux() {
+  [ ! -f /etc/os-release ] && { err "no /etc/os-release"; exit 1; }
+  . /etc/os-release
+  note "Detected Linux ($ID)"
+  sudo_if_needed
+  case "$ID" in
+    ubuntu|debian|pop|linuxmint|elementary)
+      dry $SUDO apt-get update
+      dry $SUDO apt-get install -y ca-certificates curl gnupg
+      cmd node || dry curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash -
+      dry $SUDO apt-get install -y nodejs
+      dry $SUDO apt-get install -y --no-install-recommends python3 jq git curl
+      ;;
+    fedora|rhel|rocky|almalinux|centos)
+      cmd node || dry $SUDO dnf install -y https://rpm.nodesource.com/pub_20.x/nodesource-release-nodesource-1.noarch.rpm
+      cmd node || dry $SUDO dnf install -y nodejs
+      dry $SUDO dnf install -y python3 jq git curl gh
+      ;;
+    arch|manjaro|endeavouros)
+      dry $SUDO pacman -Sy --noconfirm --needed nodejs npm python jq git curl
+      ;;
+    opensuse*|sles)
+      dry $SUDO zypper install -y nodejs20 npm20 python3 jq git curl gh
+      ;;
+    alpine)  dry $SUDO apk add --no-cache nodejs npm python3 jq git curl ;;
+    void)    dry $SUDO xbps-install -S nodejs python3 jq git curl ;;
+    nixos)
+      note "NixOS — manual setup required"
+      warn "nix-shell -p nodejs python3 jq gh git"
+      warn "node cli/provision.mjs --mode=install"
+      exit 0
+      ;;
+    *) err "Unsupported distro: $ID"; exit 1;;
+  esac
+  cmd uv || { note "Installing uv..."; dry curl -LsSf https://astral.sh/uv/install.sh | sh; }
+  note "OS dependencies ready"
+}
 
-  if [ -f "$REPO_DIR/cli/provision-claude.mjs" ]; then
-    echo ""
-    section "Running unified provisioner"
-    local args=(--mode "$MODE")
-    [ "$DRY_RUN" -eq 1 ] && args+=(--dry-run)
-    [ "$FORCE" -eq 1 ] && args+=(--force)
-    [ "$NON_INTERACTIVE" -eq 1 ] && args+=(--yes)
-    # `set +e` so we capture the provisioner's exit code and surface it.
-    set +e
-    node "$REPO_DIR/cli/provision-claude.mjs" "${args[@]}"
-    local rc=$?
-    set -e
-    if [ "$rc" -ne 0 ]; then
-      warn "provisioner exited with code $rc"
-      exit "$rc"
-    fi
-    print_banner
-  else
-    warn "cli/provision-claude.mjs not found — agent files / MCP / settings.json"
-    warn "    were NOT synced. Run \`bizar install\` from a checkout to fix."
-  fi
+macos() {
+  note "Detected macOS"
+  cmd brew || { err "Homebrew not found — install from https://brew.sh"; exit 1; }
+  dry brew install uv jq gh
+  note "OS dependencies ready"
 }
 
 main "$@"
