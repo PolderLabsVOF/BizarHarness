@@ -40,7 +40,6 @@
 | View | Mutations |
 |---|---|
 | **Chat** | `POST /api/chat/{regenerate,audit}` — no conversation CRUD (uses Claude Code sessions) |
-| **Headroom** | `POST /api/headroom/{install,start,stop,wrap,unwrap}` — runtime toggle |
 | **LightRAG** | `POST /api/lightrag/{autostart,defaults}` — config + lifecycle |
 | **Misc** | `POST /api/tailscale/{enable,disable}` — Tailscale tunnel toggle |
 | **Notifications** | `POST /api/notifications/read-all` — bulk mark read |

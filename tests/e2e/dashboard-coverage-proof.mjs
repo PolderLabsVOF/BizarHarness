@@ -38,7 +38,6 @@ if (!process.env.HOME || !process.env.HOME.includes('bh-cov-home')) {
 }
 const HOME_OVERRIDE = process.env.HOME;
 process.env.BIZAR_LIGHTRAG_AUTOSTART = '0';
-process.env.BIZAR_HEADROOM_AUTOSTART = '0';
 // BIZAR_STORE_HOME must be set BEFORE the import at top of file (ESM
 // modules capture it at evaluation time). Pass via the shell wrapper.
 if (!process.env.BIZAR_STORE_HOME) {

@@ -1,7 +1,7 @@
 /**
  * src/server/routes/update.mjs
  *
- * v4.6.0 — Dashboard update endpoints.
+ * v10.3.0 — Dashboard update endpoints.
  *
  *   GET    /api/updates/status     — installed package versions only
  *   GET    /api/updates/check      — installed + latest + hasUpdates
@@ -42,14 +42,15 @@ import { wrap } from './_shared.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// v4.4.13 — packages the dashboard knows how to update. Aligned with
+// v10.3.0 — packages the dashboard knows how to update. Aligned with
 // the Settings UI's "Installed / Latest" panels and the CLI's update
-// flow. All three resolve on npmjs.org (bizar-dash and bizar-plugin are
-// deprecated but still resolvable).
+// flow. The @polderlabs/bizar package bundles CLI + dashboard + plugin
+// in one; the others are separate installable components.
 const KNOWN_PACKAGES = [
-  { id: 'bizar',         npmName: '@polderlabs/bizar',         label: 'Bizar CLI' },
-  { id: 'bizar-dash',    npmName: '@polderlabs/bizar-dash',    label: 'Dashboard' },
-  { id: 'bizar-plugin',  npmName: '@polderlabs/bizar-plugin',  label: 'Cline Plugin' },
+  { id: 'bizar',         npmName: '@polderlabs/bizar',              label: 'Bizar CLI + Dashboard + Plugin' },
+  { id: 'bizar-sdk',     npmName: '@polderlabs/bizar-sdk',          label: 'Bizar SDK (typed wrapper)' },
+  { id: 'claude-agent',  npmName: '@anthropic-ai/claude-agent-sdk', label: 'Claude Agent SDK (optional peer)' },
+  { id: 'claude-code',   npmName: '@anthropic-ai/claude-code',       label: 'Claude Code CLI' },
 ];
 
 const KNOWN_BY_ID = new Map(KNOWN_PACKAGES.map((p) => [p.id, p]));
@@ -135,13 +136,7 @@ export function resetUpdateCache() {
 function currentVersions() {
   const out = {};
   for (const p of KNOWN_PACKAGES) {
-    if (p.id === 'bizar') {
-      out[p.id] = INSTALLED_BIZAR_VERSION;
-    } else {
-      // Deprecated standalone packages — fall back to running dashboard
-      // version as a sane default so the row isn't permanently "—".
-      out[p.id] = INSTALLED_BIZAR_VERSION;
-    }
+    out[p.id] = INSTALLED_BIZAR_VERSION;
   }
   return out;
 }
@@ -150,9 +145,12 @@ function currentVersions() {
  * Compute latest map and hasUpdates flag. Iterates KNOWN_PACKAGES so
  * the UI gets a stable order and predictable keys even when one of the
  * `npm view` calls fails (those resolve to null).
+ * @param {Record<string, string|null>} current
+ * @returns {{ latest: Record<string,string|null>, hasUpdates: boolean, available: Record<string,string|null> }}
  */
 function latestVersionsAndFlag(current) {
   const latest = {};
+  const available = { stable: null, beta: null };
   let hasUpdates = false;
   for (const p of KNOWN_PACKAGES) {
     const lat = fetchLatestVersion(p.npmName);
@@ -160,7 +158,22 @@ function latestVersionsAndFlag(current) {
     const cur = current[p.id];
     if (cur && lat && cur !== lat) hasUpdates = true;
   }
-  return { latest, hasUpdates };
+  // For the primary bizar package, also fetch beta dist-tag
+  const bizarPkg = KNOWN_BY_ID.get('bizar');
+  if (bizarPkg) {
+    available.stable = fetchLatestVersion(bizarPkg.npmName);
+    try {
+      const betaVer = execFileSync(
+        'npm',
+        ['view', bizarPkg.npmName, 'dist-tags', 'beta'],
+        { stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 },
+      ).toString().trim();
+      available.beta = betaVer || null;
+    } catch {
+      available.beta = null;
+    }
+  }
+  return { latest, hasUpdates, available };
 }
 
 // ─── Apply concurrency guard ───────────────────────────────────────────────
@@ -298,17 +311,19 @@ export function createUpdateRouter({ broadcast = () => {} } = {}) {
    */
   router.get('/updates/status', wrap(async (_req, res) => {
     const current = currentVersions();
-    res.json({ current });
+    res.json({ installed: current });
   }));
 
   /**
    * GET /api/updates/check
-   * Installed + latest + hasUpdates. Calls `npm view` (cached).
+   * GET /api/updates/check?channel=stable|beta
+   * Installed + latest + hasUpdates + available per channel. Calls `npm view` (cached).
    */
-  router.get('/updates/check', wrap(async (_req, res) => {
+  router.get('/updates/check', wrap(async (req, res) => {
+    const channel = req.query.channel === 'beta' ? 'beta' : 'stable';
     const current = currentVersions();
-    const { latest, hasUpdates } = latestVersionsAndFlag(current);
-    res.json({ current, latest, hasUpdates });
+    const { latest, hasUpdates, available } = latestVersionsAndFlag(current);
+    res.json({ installed: current, available, hasUpdates, channel });
   }));
 
   /**
@@ -319,7 +334,11 @@ export function createUpdateRouter({ broadcast = () => {} } = {}) {
    */
   router.post('/updates/apply', wrap(async (req, res) => {
     if (isRunning()) {
-      res.status(409).json({ error: 'already_running', message: 'an update is already running' });
+      res.status(409).json({
+        error: 'already_running',
+        message: 'an update is already running',
+        runningSince: _activeRun ? new Date(_activeRun.startedAt).toISOString() : null,
+      });
       return;
     }
     const body = req.body || {};

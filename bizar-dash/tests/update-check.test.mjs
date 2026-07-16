@@ -64,34 +64,39 @@ describe('update.mjs — /api/updates/status', () => {
   it('returns the installed package map', async () => {
     const res = await request(app, 'GET', '/api/updates/status');
     assert.equal(res.status, 200);
-    assert.ok(res.body.current, 'response should have current field');
-    assert.equal(typeof res.body.current, 'object');
-    for (const id of ['bizar', 'bizar-dash', 'bizar-plugin']) {
-      assert.ok(id in res.body.current, `current.${id} should be a key`);
+    assert.ok(res.body.installed, 'response should have installed field');
+    assert.equal(typeof res.body.installed, 'object');
+    for (const id of ['bizar', 'bizar-sdk', 'claude-agent', 'claude-code']) {
+      assert.ok(id in res.body.installed, `installed.${id} should be a key`);
       assert.ok(
-        res.body.current[id] === null || typeof res.body.current[id] === 'string',
-        `current.${id} should be string or null`,
+        res.body.installed[id] === null || typeof res.body.installed[id] === 'string',
+        `installed.${id} should be string or null`,
       );
     }
   });
 
-  it('does not include latest/hasUpdates fields', async () => {
+  it('does not include latest/hasUpdates/available fields', async () => {
     const res = await request(app, 'GET', '/api/updates/status');
     assert.equal(res.status, 200);
     assert.equal(res.body.latest, undefined, 'status should not include latest');
     assert.equal(res.body.hasUpdates, undefined, 'status should not include hasUpdates');
+    assert.equal(res.body.available, undefined, 'status should not include available');
   });
 });
 
 describe('update.mjs — /api/updates/check', () => {
-  it('returns shape { current, latest, hasUpdates }', async () => {
+  it('returns shape { installed, available, hasUpdates, channel }', async () => {
     const res = await request(app, 'GET', '/api/updates/check');
     assert.equal(res.status, 200);
-    assert.ok(res.body.current, 'should have current');
-    assert.ok(res.body.latest, 'should have latest');
+    assert.ok(res.body.installed, 'should have installed');
+    assert.ok(res.body.available, 'should have available');
+    assert.equal(typeof res.body.available, 'object');
+    assert.ok('stable' in res.body.available, 'available should have stable key');
+    assert.ok('beta' in res.body.available, 'available should have beta key');
     assert.equal(typeof res.body.hasUpdates, 'boolean');
-    for (const id of ['bizar', 'bizar-dash', 'bizar-plugin']) {
-      assert.ok(id in res.body.latest, `latest.${id} should be a key`);
+    assert.equal(res.body.channel, 'stable');
+    for (const id of ['bizar', 'bizar-sdk', 'claude-agent', 'claude-code']) {
+      assert.ok(id in res.body.installed, `installed.${id} should be a key`);
     }
   });
 

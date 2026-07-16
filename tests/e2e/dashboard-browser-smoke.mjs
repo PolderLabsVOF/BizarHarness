@@ -36,11 +36,9 @@ mkdirSync(join(projectRoot, '.bizar'), { recursive: true });
 mkdirSync(join(projectRoot, '.config', 'cline'), { recursive: true });
 writeFileSync(join(projectRoot, '.bizar', 'PROGRESS.md'), '# browser-smoke fixture\n', 'utf8');
 // Pre-write settings.json with heavy startup hooks disabled so the
-// first fetch doesn't race an `npm install` (headroom) or a forked
-// `lightrag-server` process.
+// first fetch doesn't race a forked `lightrag-server` process.
 mkdirSync(join(projectRoot, '.config', 'bizar'), { recursive: true });
 writeFileSync(join(projectRoot, '.config', 'bizar', 'settings.json'), JSON.stringify({
-  headroom: { enabled: false, autoInstall: false, autoStart: false },
   lightrag: { enabled: false, autostart: false },
 }, null, 2), 'utf8');
 
@@ -57,7 +55,7 @@ await new Promise((resolve, reject) => {
   boot.server.once('listening', () => { boot.server.off('error', reject); console.log('server listening'); resolve(); });
   boot.server.listen(PORT, '127.0.0.1');
 });
-// Small grace period so startup hooks (LightRAG fork, headroom install, etc.)
+// Small grace period so startup hooks (LightRAG fork, etc.)
 // don't race our first fetch on cold boot.
 await new Promise((r) => setTimeout(r, 1500));
 
@@ -87,7 +85,7 @@ try {
   // Drive the browser — the dashboard SPA renders even without auth;
   // it shows the login gate inside the React tree. The Node-side
   // `fetch` smoke check was unreliable due to event-loop starvation
-  // by headroom's `npm install` at boot (separate bug; see notes in
+  // by startup hooks at boot (separate bug; see notes in
   // CONTROL_SURFACES.md follow-ups). The browser-side checks below
   // are the real evidence that the dashboard builds, mounts, and
   // responds to navigation across routes.

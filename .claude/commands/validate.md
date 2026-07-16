@@ -19,7 +19,7 @@ start.
 5. **agent-files-installed** — all agent files in `~/.claude/agents/`
    (odin, vor, frigg, quick, mimir, heimdall, hermod, thor, baldr,
    tyr, vidarr, forseti, semble-search, agent-browser).
-6. **tools-available** — at least one of `headroom`, `semble`, `skills`
+6. **tools-available** — at least one of `semble`, `skills`
    is on PATH.
 7. **provider-config-sanity** — `provider.9router` (preferred) or
    `provider.minimax` (legacy) has at least one sane model entry.

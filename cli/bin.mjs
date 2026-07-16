@@ -90,7 +90,7 @@ if (
   !process.env.BIZAR_SKIP_BUILD
 ) {
   try {
-    const { buildSdk, buildPlugin } = await import('./provision-claude.mjs');
+    const { buildSdk, buildPlugin } = await import('./provision.mjs');
     const sdkRes = await buildSdk();
     if (sdkRes.ok && !sdkRes.skipped) {
       console.error(chalk.dim(`  → ${sdkRes.message}`));

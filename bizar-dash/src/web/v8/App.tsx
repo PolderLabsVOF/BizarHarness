@@ -47,7 +47,6 @@ import {
   BarChart3,
   Bell,
   Terminal,
-  Network,
   FlaskConical,
 } from 'lucide-react';
 
@@ -131,8 +130,6 @@ function iconFor(id: string): LucideIcon {
       return Bell;
     case 'diagnostics':
       return Terminal;
-    case 'headroom':
-      return Network;
     case 'eval':
       return FlaskConical;
     default:
@@ -264,7 +261,6 @@ export function App(): JSX.Element {
         { id: 'backup', label: 'Backups', icon: iconFor('backup') },
         { id: 'notifications', label: 'Notifications', icon: iconFor('notifications') },
         { id: 'diagnostics', label: 'Diagnostics', icon: iconFor('diagnostics') },
-        { id: 'headroom', label: 'Headroom', icon: iconFor('headroom') },
         { id: 'eval', label: 'Eval', icon: iconFor('eval') },
         { id: 'settings', label: 'Settings', icon: iconFor('settings') },
       ],

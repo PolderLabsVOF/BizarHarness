@@ -47,7 +47,6 @@ if (!process.env.HOME || !process.env.HOME.includes('bh-walk-home')) {
 }
 const HOME_OVERRIDE = process.env.HOME;
 process.env.BIZAR_LIGHTRAG_AUTOSTART = '0';
-process.env.BIZAR_HEADROOM_AUTOSTART = '0';
 // agent-browser caches its chrome binary under ~/.cache; without this
 // override, it would look under the redirected HOME and fail to find chrome.
 process.env.AGENT_BROWSER_EXECUTABLE_PATH = process.env.AGENT_BROWSER_EXECUTABLE_PATH

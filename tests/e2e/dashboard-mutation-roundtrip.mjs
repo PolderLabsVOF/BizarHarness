@@ -50,7 +50,6 @@ if (!process.env.HOME || !process.env.HOME.includes('bh-mut-home')) {
 }
 const HOME_OVERRIDE = process.env.HOME;
 process.env.BIZAR_LIGHTRAG_AUTOSTART = '0';
-process.env.BIZAR_HEADROOM_AUTOSTART = '0';
 process.env.AGENT_BROWSER_EXECUTABLE_PATH = process.env.AGENT_BROWSER_EXECUTABLE_PATH
   || '/home/drb0rk/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
 

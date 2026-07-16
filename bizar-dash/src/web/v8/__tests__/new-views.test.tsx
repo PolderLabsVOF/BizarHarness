@@ -8,7 +8,6 @@ import { UsageView } from '../views/Usage/UsageView.js';
 import { BackupView } from '../views/Backup/BackupView.js';
 import { NotificationsView } from '../views/Notifications/NotificationsView.js';
 import { DiagnosticsView } from '../views/Diagnostics/DiagnosticsView.js';
-import { HeadroomView } from '../views/Headroom/HeadroomView.js';
 import { EvalView } from '../views/Eval/EvalView.js';
 
 /**
@@ -137,22 +136,6 @@ describe('DiagnosticsView (S35)', () => {
     expect(await screen.findByText('ok')).toBeTruthy();
     expect(screen.getByText('9.2.0')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-log-tail').textContent).toContain('line 1');
-  });
-});
-
-describe('HeadroomView (S35)', () => {
-  it('shows status + controls + stats', async () => {
-    installFetchMock([
-      { match: (u) => u.endsWith('/api/headroom/status'), run: () => ({ status: 'not-installed' }) },
-      { match: (u) => u.includes('/api/headroom/stats'), run: () => ({ hours: 24, requests: 142, tokensSaved: 1234, cacheHits: 12, cacheMisses: 4 }) },
-      { match: (u) => u.endsWith('/api/headroom/install'), run: () => ({ ok: true }) },
-      { match: () => true, run: () => ({}) },
-    ]);
-    render(<Providers><HeadroomView /></Providers>);
-    expect(await screen.findByText('not-installed')).toBeTruthy();
-    expect(screen.getByText('142')).toBeTruthy();
-    expect(screen.getByText('1234')).toBeTruthy();
-    expect(screen.getByTestId('headroom-install')).toBeTruthy();
   });
 });
 

@@ -28,7 +28,6 @@ if (!process.env.HOME || !process.env.HOME.includes('bh-mat-home')) {
 }
 const HOME_OVERRIDE = process.env.HOME;
 process.env.BIZAR_LIGHTRAG_AUTOSTART = '0';
-process.env.BIZAR_HEADROOM_AUTOSTART = '0';
 if (!process.env.BIZAR_STORE_HOME) {
   process.env.BIZAR_STORE_HOME = join(HOME_OVERRIDE, '.local', 'share', 'bizar');
 }

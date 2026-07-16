@@ -31,7 +31,6 @@ if (!process.env.HOME || !process.env.HOME.includes('bh-full-home')) {
 const HOME_OVERRIDE = process.env.HOME;
 const projectRoot = mkdtempSync(join(HOME_OVERRIDE, 'bh-full-proj-'));
 process.env.BIZAR_LIGHTRAG_AUTOSTART = '0';
-process.env.BIZAR_HEADROOM_AUTOSTART = '0';
 if (!process.env.BIZAR_STORE_HOME) {
   process.env.BIZAR_STORE_HOME = join(HOME_OVERRIDE, '.local', 'share', 'bizar');
 }
@@ -86,7 +85,7 @@ const VIEWS = [
   'skills', 'mcps', 'hooks',
   'settings', 'schedules', 'background',
   'doctor', 'usage', 'backup', 'notifications', 'diagnostics',
-  'headroom', 'eval', 'chat',
+  'eval', 'chat',
   'projects-list', 'claude-sessions',
   'history', 'admin', 'auth',
   'env-vars', 'config', 'dialogs', 'providers', 'mods',

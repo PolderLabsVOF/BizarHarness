@@ -33,7 +33,6 @@ const HOME_OVERRIDE = process.env.HOME;
 // rejects any dashboard.projectsDirectory that escapes `os.homedir()`.
 const projectRoot = mkdtempSync(join(HOME_OVERRIDE, 'bh-cfg-proj-'));
 process.env.BIZAR_LIGHTRAG_AUTOSTART = '0';
-process.env.BIZAR_HEADROOM_AUTOSTART = '0';
 if (!process.env.BIZAR_STORE_HOME) {
   process.env.BIZAR_STORE_HOME = join(HOME_OVERRIDE, '.local', 'share', 'bizar');
 }
@@ -154,7 +153,7 @@ await check('settings.reset_roundtrip', async () => {
 
 // ─── 2: plugin_options.put_roundtrip ─────────────────────────────
 await check('plugin_options.put_roundtrip', async () => {
-  const payload = { background: { autostart: false, ttlSeconds: 42 }, headroom: { enabled: true } };
+  const payload = { background: { autostart: false, ttlSeconds: 42 } };
   const put = await fetch(`http://127.0.0.1:${PORT}/api/settings/plugin-options`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

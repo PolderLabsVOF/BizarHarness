@@ -161,7 +161,6 @@ export function buildSummary(components, agents, target, skillPacks = []) {
   if (components.includes('rules')) parts.push('rules');
   if (components.includes('hooks')) parts.push('hooks');
   if (components.includes('commands')) parts.push('commands');
-  parts.push('Headroom');
   parts.push('Semble');
   parts.push('Skills CLI');
   if (skillPacks.length > 0) parts.push(`skills: ${skillPacks.join(', ')}`);

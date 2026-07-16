@@ -2,13 +2,12 @@
  * tests/e2e/cold-boot-perf.mjs — v10-S9.
  *
  * Regression for the cold-boot event-loop starvation bug. Booting
- * the dashboard with default settings takes ~3-5s because:
- *   - LightRAG hook ran `execFileSync('command', ...)` synchronously
- *   - Headroom hook runs `npm install` as a child process
+ * the dashboard with default settings takes ~3-5s because
+ * LightRAG hook ran `execFileSync('command', ...)` synchronously.
  *
- * This test boots the server with both opt-out env vars set and
+ * This test boots the server with the lightrag opt-out env var set and
  * asserts the first `/api/snapshot` response arrives within 2s of
- * the `listening` event. Also asserts that without the opt-outs,
+ * the `listening` event. Also asserts that without the opt-out,
  * the boot time stays bounded (proves the freeze is fixed, not just
  * bypassed).
  */
@@ -26,19 +25,15 @@ function record(name, ok, detail) {
   console.log(`${tag}  ${name}${detail ? `  -- ${detail}` : ''}`);
 }
 
-async function bootOnce({ lightragOff, headroomOff, label }) {
-  const proj = mkdtempSync(join(tmpdir(), 'bh-cold-boot-'));
+async function bootOnce({ lightragOff, label }) {
+  const proj = mkdtempSync(join(tmpdir(), 'bh-Cold-boot-'));
   mkdirSync(join(proj, '.bizar'), { recursive: true });
   mkdirSync(join(proj, '.config', 'cline'), { recursive: true });
   mkdirSync(join(proj, '.config', 'bizar'), { recursive: true });
   writeFileSync(join(proj, '.bizar', 'PROGRESS.md'), '# cold-boot perf\n', 'utf8');
   writeFileSync(join(proj, '.config', 'bizar', 'settings.json'), JSON.stringify({
-    headroom: { enabled: false, autoInstall: false, autoStart: false },
     lightrag: { enabled: lightragOff, autostart: lightragOff },
   }, null, 2), 'utf8');
-
-  if (headroomOff) process.env.BIZAR_HEADROOM_AUTOSTART = '0';
-  else delete process.env.BIZAR_HEADROOM_AUTOSTART;
 
   const PORT = 4200 + Math.floor(Math.random() * 100);
   const start = Date.now();
@@ -79,8 +74,8 @@ async function bootOnce({ lightragOff, headroomOff, label }) {
 }
 
 try {
-  // Path A: both opt-outs — fastest path. This is what tests + CI use.
-  await bootOnce({ lightragOff: true, headroomOff: true, label: 'optouts' });
+  // Path A: lightrag opt-out — fastest path. This is what tests + CI use.
+  await bootOnce({ lightragOff: true, label: 'optouts' });
 } catch (err) {
   record('cold_boot.error', false, `${err.message}\n${err.stack?.split('\n').slice(0, 6).join('\n')}`);
 }

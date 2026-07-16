@@ -151,7 +151,6 @@ test('buildServiceEnvFile returns string with all required vars', async () => {
   assert.ok(content.includes('BIZAR_DASHBOARD_PORT='), 'BIZAR_DASHBOARD_PORT present');
   assert.ok(content.includes('BIZAR_DASHBOARD_HOST='), 'BIZAR_DASHBOARD_HOST present');
   assert.ok(content.includes('BIZAR_LOG_LEVEL='), 'BIZAR_LOG_LEVEL present');
-  assert.ok(content.includes('BIZAR_HEADROOM_AUTOSTART='), 'BIZAR_HEADROOM_AUTOSTART present');
   assert.ok(content.includes('BIZAR_LIGHTRAG_AUTOSTART='), 'BIZAR_LIGHTRAG_AUTOSTART present');
   assert.ok(content.includes('BIZAR_MEMORY_VAULT='), 'BIZAR_MEMORY_VAULT present');
 });

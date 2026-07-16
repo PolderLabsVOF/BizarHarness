@@ -74,9 +74,6 @@ function generateComposeScaffold(outDir, opts) {
     '# Tailscale (optional)',
     '# TAILSCALE_AUTHKEY=tskey-auth-xxxxxxxxxxxxxxxxxxxx',
     '',
-    '# Headroom context compression (optional)',
-    '# HEADROOM_ENABLED=1',
-    '',
   ].join('\n');
   writeFileSync(join(scaffoldRoot, '.env.template'), envTemplate);
 

@@ -178,7 +178,7 @@ describe('buildServiceEnvFile()', () => {
       'BIZAR_HOME', 'BIZAR_REPO', 'PATH',
       'CLINE_SERVER_PASSWORD', 'BIZAR_DASHBOARD_PORT',
       'BIZAR_DASHBOARD_HOST', 'BIZAR_LOG_LEVEL',
-      'BIZAR_HEADROOM_AUTOSTART', 'BIZAR_LIGHTRAG_AUTOSTART',
+      'BIZAR_LIGHTRAG_AUTOSTART',
       'BIZAR_MEMORY_VAULT',
     ];
     for (const var_ of required) {

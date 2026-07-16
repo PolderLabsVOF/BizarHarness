@@ -57,9 +57,6 @@ const NotificationsView = lazy(() =>
 const DiagnosticsView = lazy(() =>
   import('./Diagnostics/DiagnosticsView.js').then((m) => ({ default: m.DiagnosticsView })),
 );
-const HeadroomView = lazy(() =>
-  import('./Headroom/HeadroomView.js').then((m) => ({ default: m.HeadroomView })),
-);
 const EvalView = lazy(() =>
   import('./Eval/EvalView.js').then((m) => ({ default: m.EvalView })),
 );
@@ -160,8 +157,6 @@ export function useViewForId(id: string): JSX.Element {
         return <NotificationsView />;
       case 'diagnostics':
         return <DiagnosticsView />;
-      case 'headroom':
-        return <HeadroomView />;
       case 'eval':
         return <EvalView />;
       case 'chat':

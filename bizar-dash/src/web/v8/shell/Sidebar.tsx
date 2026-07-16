@@ -167,7 +167,6 @@ const DEFAULT_SECTIONS: SidebarSection[] = [
       { id: 'backup', label: 'Backups', icon: Archive },
       { id: 'notifications', label: 'Notifications', icon: Bell },
       { id: 'diagnostics', label: 'Diagnostics', icon: Terminal },
-      { id: 'headroom', label: 'Headroom', icon: Network },
       { id: 'eval', label: 'Eval', icon: FlaskConical },
       { id: 'settings', label: 'Settings', icon: SettingsIcon },
     ],

@@ -49,7 +49,7 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
  *
  * Mirrors Claude Code's own resolver. Used so all subcommands
  * delegate to the same `~/.claude/` directory that the rest of the
- * Bizar harness writes to via `cli/provision-claude.mjs`.
+ * Bizar harness writes to via `cli/provision.mjs`.
  */
 export function resolveClaudeDir() {
   if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {

@@ -1,21 +1,20 @@
 /**
  * tests/e2e/real-environment.mjs
  *
- * Sprint S36 — Real-environment verification of the 7 v9.2.0 pages.
+ * Sprint S36 — Real-environment verification of the v9.2.0 pages.
  *
  * Unlike the fixture-driven orchestration-center.mjs, this harness
  * points the dashboard server at a real temp project dir (so JSONL
  * logs, settings.json, notifications.jsonl are all real files on
  * disk), but otherwise runs against the live server — no mocks.
  *
- * Verifies each of the 7 new endpoint groups:
+ * Verifies endpoint groups:
  *   1. /api/doctor/health
  *   2. /api/usage
  *   3. /api/backup/list
  *   4. /api/notifications
  *   5. /api/diagnostics
- *   6. /api/headroom/status
- *   7. /api/eval/runs
+ *   6. /api/eval/runs
  *
  * Exits non-zero on any failure. Evidence written to /tmp.
  */
@@ -135,43 +134,37 @@ async function main() {
     logs.status === 200 && Array.isArray(logs.json?.lines),
     `status=${logs.status} lines=${logs.json?.lines?.length}`);
 
-  // 10. /api/headroom/status — returns { installed, healthy, ... }.
-  const hr = await http(boot, '/api/headroom/status');
-  record('headroom.status',
-    hr.status === 200 && typeof hr.json?.healthy === 'string' && typeof hr.json?.installed === 'boolean',
-    `status=${hr.status} installed=${hr.json?.installed} healthy=${hr.json?.healthy}`);
-
-  // 11. /api/eval/runs — list shape.
+  // 10. /api/eval/runs — list shape.
   const evalRuns = await http(boot, '/api/eval/runs');
   record('eval.runs_shape',
     evalRuns.status === 200 && Array.isArray(evalRuns.json?.runs),
     `status=${evalRuns.status} runs=${evalRuns.json?.runs?.length}`);
 
-  // 11a. /api/projects — list shape (used by S39 ProjectsView).
+  // 10a. /api/projects — list shape (used by S39 ProjectsView).
   const projects = await http(boot, '/api/projects');
   record('projects.list_shape',
     projects.status === 200 && Array.isArray(projects.json?.projects),
     `status=${projects.status} count=${(projects.json?.projects || []).length}`);
 
-  // 11b. /api/claude-sessions — list shape (used by S39 ClaudeSessionsView).
+  // 10b. /api/claude-sessions — list shape (used by S39 ClaudeSessionsView).
   const csess = await http(boot, '/api/claude-sessions');
   record('claude_sessions.list_shape',
     csess.status === 200 && (Array.isArray(csess.json?.sessions) || csess.json?.error !== undefined),
     `status=${csess.status} count=${(csess.json?.sessions || []).length}`);
 
-  // 11c. /api/history — used by S40 HistoryView.
+  // 10c. /api/history — used by S40 HistoryView.
   const hist = await http(boot, '/api/history');
   record('history.shape',
     hist.status === 200 && Array.isArray(hist.json?.events) && Array.isArray(hist.json?.projects),
     `status=${hist.status} events=${(hist.json?.events || []).length} projects=${(hist.json?.projects || []).length}`);
 
-  // 11d. /api/admin/gc — used by S40 AdminView.
+  // 10d. /api/admin/gc — used by S40 AdminView.
   const gc = await http(boot, '/api/admin/gc', { method: 'POST' });
   record('admin.gc_ok',
     gc.status === 200 && gc.json?.ok === true,
     `status=${gc.status} removed=${gc.json?.files ?? 0}`);
 
-  // 11e. /api/auth/status — used by S40 AuthView.
+  // 10e. /api/auth/status — used by S40 AuthView.
   const auth = await http(boot, '/api/auth/status');
   record('auth.status_shape',
     auth.status === 200 && typeof auth.json?.required === 'boolean',
