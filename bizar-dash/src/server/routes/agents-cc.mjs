@@ -17,12 +17,33 @@ import { Router } from 'express';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync, watch } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { wrap } from './_shared.mjs';
 
 const HOME = homedir();
 const CACHE_TTL_MS = 5_000;
 let _cache = null; // { ts, agents, error }
+
+/**
+ * v10.0.6 — `shouldIncludeAgent` filters out CC sessions whose `cwd`
+ * lives under the OS temp directory. The disk fallback in
+ * `listAgentsFromDisk` used to surface whatever JSON envelope sat in
+ * `$HOME/.claude/sessions/`, which includes scratch /tmp sessions that
+ * aren't really live agent runs — they pollute the roster.
+ *
+ * Opt-out via `BIZAR_CC_INCLUDE_TMP=1` (used by tests + debug).
+ */
+function isTmpPath(p) {
+  if (!p) return false;
+  const s = String(p);
+  const tmp = tmpdir();
+  return s === tmp || s.startsWith(tmp + '/') || s === '/tmp' || s.startsWith('/tmp/');
+}
+function shouldIncludeAgent(agent) {
+  if (process.env.BIZAR_CC_INCLUDE_TMP === '1') return true;
+  const cwd = agent && agent.cwd;
+  return !isTmpPath(cwd);
+}
 
 /** Resolve the CC home directory. Honours `BIZAR_CC_HOME` (used in
  *  tests to redirect `$HOME/.claude` into a temp dir) before falling
@@ -150,6 +171,8 @@ function listAgentsFromDisk() {
       kind: String(env?.kind || 'bg'),
       source: 'disk',
     };
+    // v10.0.6 — drop /tmp scratch sessions from disk roster.
+    if (!shouldIncludeAgent(a)) continue;
     const logPath = resolveSessionLog(sid, cwd);
     if (logPath && existsSync(logPath)) {
       try {
@@ -174,7 +197,7 @@ async function listAgents({ force = false } = {}) {
   }
   const r = await runClaudeAgents();
   if (r.ok) {
-    const agents = r.agents.map(enrichSession);
+    const agents = r.agents.map(enrichSession).filter(shouldIncludeAgent);
     // v10.0.4 — always merge disk fallback on top. CLI roster is the
     // authoritative source when present, but session JSON envelopes
     // (the `claude agents --json` output does NOT include all on-disk
