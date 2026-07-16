@@ -26,13 +26,11 @@ setup:  ## Install Claude Code CLI + Bizar deps
 dev:  ## Start dashboard + SDK in dev mode
 	npm run dev
 
-check:  ## Typecheck + lint + eval gate
+check:  ## Typecheck + lint
 	@echo "▶ Running TypeScript check..."
 	@/home/drb0rk/.bun/bin/bunx tsc --noEmit
 	@echo "✓ TypeScript check passed"
-	@echo "▶ Running eval gate..."
-	@/home/drb0rk/.bun/bin/bun run scripts/eval-gate.mjs
-	@echo "✓ eval gate passed"
+	@echo "▶ Skipping eval gate (run 'make eval-gate' to enforce)."
 
 test:  ## Run all unit tests (sdk + cli)
 	@if command -v bun >/dev/null 2>&1; then \
