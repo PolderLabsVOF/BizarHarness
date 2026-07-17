@@ -49,6 +49,7 @@ export function CommandPalette(props: CommandPaletteProps) {
       className={cx('v8-command', className)}
       label="Command palette"
       shouldFilter
+      loop
     >
       <div
         style={{
