@@ -11,13 +11,15 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Send, RefreshCcw } from 'lucide-react';
+import { Send, RefreshCcw, MessageSquare } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Input } from '../../ui/controls/Input.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { useFetch } from '../../data/useFetch.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import type { ChatMessage } from '../../data/types.js';
@@ -69,12 +71,21 @@ export function ClaudeSessionDetail({ sessionId }: { sessionId: string }): JSX.E
 
       <Card variant="default">
         <CardBody>
-          {payload.loading && messages.length === 0 ? (
+          {payload.error != null ? (
+            <ErrorState
+              error={payload.error}
+              onRetry={refresh}
+              description="Failed to load session messages."
+            />
+          ) : payload.loading && messages.length === 0 ? (
             <Skeleton style={{ height: 120 }} />
           ) : messages.length === 0 ? (
-            <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-12)' }}>
-              No messages yet — start with a follow-up.
-            </span>
+            <EmptyState
+              icon={<MessageSquare size={28} aria-hidden />}
+              title="No messages yet"
+              description="Send a follow-up below to start the conversation."
+              data-testid={`claude-session-detail-empty-${sessionId}`}
+            />
           ) : (
             <Stack gap={1}>
               {messages.map((m) => (
