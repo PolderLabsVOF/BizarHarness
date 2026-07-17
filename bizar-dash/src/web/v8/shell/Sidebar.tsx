@@ -1,8 +1,44 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Box } from '../ui/primitives/Box.js';
 import { Stack } from '../ui/primitives/Stack.js';
 import { Separator } from '../ui/primitives/Separator.js';
 import { ScrollArea } from '../ui/primitives/ScrollArea.js';
+
+const sidebarSectionHeaderStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--space-2)',
+};
+
+const sidebarSectionLabelStyle: CSSProperties = {
+  fontSize: 'var(--fs-12)',
+  fontWeight: 600,
+  color: 'var(--fg-subtle)',
+  letterSpacing: 'var(--tracking-wide)',
+  textTransform: 'uppercase',
+  flex: 1,
+  padding: 'var(--space-1) var(--space-3)',
+};
+
+const sidebarSectionToggleStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 20,
+  height: 20,
+  background: 'transparent',
+  border: 0,
+  color: 'var(--fg-subtle)',
+  cursor: 'pointer',
+  padding: 0,
+};
+
+const sidebarSectionChevronStyle = (open: boolean): CSSProperties => ({
+  display: 'inline-block',
+  transition: 'transform var(--motion-fast) var(--ease-out)',
+  transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+  fontSize: 10,
+});
 import {
   Activity,
   Bell,
@@ -362,18 +398,8 @@ function SidebarSectionView({
   return (
     <Stack gap={1} data-sidebar-section={section.id}>
       {!collapsed && (
-        <div role="presentation" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-          <span
-            style={{
-              fontSize: 'var(--fs-12)',
-              fontWeight: 600,
-              color: 'var(--fg-subtle)',
-              letterSpacing: 'var(--tracking-wide)',
-              textTransform: 'uppercase',
-              flex: 1,
-              padding: 'var(--space-1) var(--space-3)',
-            }}
-          >
+        <div role="presentation" style={sidebarSectionHeaderStyle}>
+          <span style={sidebarSectionLabelStyle}>
             {section.label}
           </span>
           <button
@@ -383,28 +409,12 @@ function SidebarSectionView({
             aria-controls={`sidebar-section-${section.id}`}
             data-section-toggle={section.id}
             data-testid={`sidebar-section-toggle-${section.id}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 20,
-              height: 20,
-              background: 'transparent',
-              border: 0,
-              color: 'var(--fg-subtle)',
-              cursor: 'pointer',
-              padding: 0,
-            }}
+            style={sidebarSectionToggleStyle}
           >
             <span
               aria-hidden="true"
               data-testid={`sidebar-section-chevron-${section.id}`}
-              style={{
-                display: 'inline-block',
-                transition: 'transform var(--motion-fast) var(--ease-out)',
-                transform: sectionOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                fontSize: 10,
-              }}
+              style={sidebarSectionChevronStyle(sectionOpen)}
             >
               ▸
             </span>
