@@ -212,7 +212,40 @@ export function SchedulesView(): JSX.Element {
           description="Failed to load schedules."
         />
       ) : res.loading && schedules.length === 0 ? (
-        <Skeleton style={{ height: 240 }} />
+        <Stack gap={3} data-testid="schedules-skeleton">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Card key={i}>
+              <CardBody>
+                <Grid cols={4} gap={3} style={{ alignItems: 'center' }}>
+                  <Stack gap={1}>
+                    <Inline align="center" gap={2}>
+                      <Skeleton style={{ width: 80, height: 14 }} />
+                    </Inline>
+                    <Inline gap={2}>
+                      <Skeleton style={{ width: 56, height: 18 }} />
+                      <Skeleton style={{ width: 56, height: 18 }} />
+                    </Inline>
+                  </Stack>
+                  <Stack gap={1}>
+                    <Skeleton style={{ width: 60, height: 10 }} />
+                    <Skeleton style={{ width: 48, height: 12 }} />
+                    <Skeleton style={{ width: 40, height: 10 }} />
+                  </Stack>
+                  <Stack gap={1}>
+                    <Skeleton style={{ width: 100, height: 12 }} />
+                    <Skeleton style={{ width: 80, height: 10 }} />
+                  </Stack>
+                  <Inline align="center" gap={2} justify="end">
+                    <Skeleton style={{ width: 32, height: 24 }} />
+                    <Skeleton style={{ width: 24, height: 24 }} />
+                    <Skeleton style={{ width: 36, height: 24 }} />
+                    <Skeleton style={{ width: 24, height: 24 }} />
+                  </Inline>
+                </Grid>
+              </CardBody>
+            </Card>
+          ))}
+        </Stack>
       ) : schedules.length === 0 ? (
         <EmptyState
           icon={<Clock size={28} aria-hidden />}
