@@ -654,7 +654,7 @@ export function SettingsView(): JSX.Element {
                 control={
                   <Stack gap={1} style={{ maxHeight: 200, overflowY: 'auto', width: 360 }}>
                     {agentsRes.data.agents.map((a) => (
-                      <Inline key={a.name} align="center" justify="between" style={{ padding: '4px 8px', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)' }}>
+                      <Inline key={a.name} align="center" justify="between" style={{ padding: 'var(--space-1) var(--space-2)', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)' }}>
                         <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)' }}>{a.name}</code>
                         <Badge tone="success">active</Badge>
                       </Inline>
@@ -675,7 +675,7 @@ export function SettingsView(): JSX.Element {
                 control={
                   <Stack gap={1} style={{ maxHeight: 220, overflowY: 'auto', width: 360 }}>
                     {mcpsRes.data.skills.map((m) => (
-                      <Inline key={m.name} align="center" justify="between" style={{ padding: '4px 8px', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)' }}>
+                      <Inline key={m.name} align="center" justify="between" style={{ padding: 'var(--space-1) var(--space-2)', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)' }}>
                         <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)' }}>{m.name}</code>
                         <Switch defaultChecked onCheckedChange={(v) => void patch(`mcp:${m.name}`, v)} />
                       </Inline>
@@ -696,7 +696,7 @@ export function SettingsView(): JSX.Element {
                 control={
                   <Stack gap={1} style={{ maxHeight: 260, overflowY: 'auto', width: 360 }}>
                     {skillsRes.data.skills.map((s) => (
-                      <Inline key={s.name} align="center" justify="between" style={{ padding: '4px 8px', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)' }}>
+                      <Inline key={s.name} align="center" justify="between" style={{ padding: 'var(--space-1) var(--space-2)', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)' }}>
                         <Inline align="center" gap={2}>
                           <code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)' }}>{s.name}</code>
                           <Badge tone="neutral">{s.source}</Badge>
