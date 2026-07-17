@@ -7,6 +7,8 @@ import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { Badge } from '../../ui/data/Badge.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Switch } from '../../ui/controls/Switch.js';
 import { Textarea } from '../../ui/controls/Textarea.js';
@@ -203,20 +205,20 @@ export function SchedulesView(): JSX.Element {
         </div>
       )}
 
-      {res.loading && schedules.length === 0 ? (
+      {res.error != null ? (
+        <ErrorState
+          error={res.error}
+          onRetry={refresh}
+          description="Failed to load schedules."
+        />
+      ) : res.loading && schedules.length === 0 ? (
         <Skeleton style={{ height: 240 }} />
       ) : schedules.length === 0 ? (
-        <Card>
-          <CardBody>
-            <Stack gap={1} align="center">
-              <Clock size={32} aria-hidden style={{ color: 'var(--fg-muted)' }} />
-              <strong>No schedules yet</strong>
-              <span style={{ color: 'var(--fg-muted)', fontSize: 'var(--fs-13)' }}>
-                Create one with the button above.
-              </span>
-            </Stack>
-          </CardBody>
-        </Card>
+        <EmptyState
+          icon={<Clock size={28} aria-hidden />}
+          title="No schedules yet"
+          description="Create one with the button above."
+        />
       ) : (
         <Stack gap={3}>
           {schedules.map((s) => {
