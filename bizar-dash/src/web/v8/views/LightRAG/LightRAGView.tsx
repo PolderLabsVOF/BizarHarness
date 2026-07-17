@@ -14,7 +14,7 @@ import { ViewHeader } from '../../ui/data/ViewHeader.js';
 import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Input } from '../../ui/controls/Input.js';
-import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { Skeleton, SkeletonText } from '../../ui/feedback/Skeleton.js';
 import { EmptyState } from '../../ui/feedback/EmptyState.js';
 import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { useFetch } from '../../data/useFetch.js';
@@ -185,6 +185,8 @@ export function LightRAGView(): JSX.Element {
                 <div data-testid="lightrag-log" style={{ background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-2)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-11)', maxHeight: 160, overflow: 'auto' }}>
                   {status.logTail.filter(Boolean).slice(-10).map((l, i) => (<div key={i}>{l}</div>))}
                 </div>
+              ) : statusPayload.loading ? (
+                <SkeletonText lines={4} lastLineWidth="75%" />
               ) : (
                 <EmptyState
                   icon={<Database size={20} aria-hidden />}
