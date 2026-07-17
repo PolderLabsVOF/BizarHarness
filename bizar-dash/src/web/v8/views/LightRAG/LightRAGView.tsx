@@ -15,6 +15,8 @@ import { Card, CardBody } from '../../ui/data/Card.js';
 import { Button } from '../../ui/controls/Button.js';
 import { Input } from '../../ui/controls/Input.js';
 import { Skeleton } from '../../ui/feedback/Skeleton.js';
+import { EmptyState } from '../../ui/feedback/EmptyState.js';
+import { ErrorState } from '../../ui/feedback/ErrorState.js';
 import { useFetch } from '../../data/useFetch.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 
@@ -89,6 +91,7 @@ export function LightRAGView(): JSX.Element {
   };
 
   const status = statusPayload.data;
+  const fetchError = defaultsPayload.error ?? statusPayload.error;
 
   return (
     <Stack gap={4} data-testid="lightrag-view">
@@ -109,6 +112,15 @@ export function LightRAGView(): JSX.Element {
           </Inline>
         }
       />
+
+      {fetchError && (
+        <ErrorState
+          title="LightRAG unavailable"
+          description={fetchError.message || String(fetchError)}
+          onRetry={() => void refresh()}
+          data-testid="lightrag-fetch-error"
+        />
+      )}
 
       <Card variant="default">
         <CardBody>
@@ -169,10 +181,17 @@ export function LightRAGView(): JSX.Element {
                 {status.llmBinding && <span style={{ color: 'var(--fg-muted)' }}>· llm: <code>{status.llmBinding}</code></span>}
                 {status.embeddingBinding && <span style={{ color: 'var(--fg-muted)' }}>· embedding: <code>{status.embeddingBinding}</code></span>}
               </Inline>
-              {status.logTail && status.logTail.length > 0 && (
+              {status.logTail && status.logTail.length > 0 ? (
                 <div data-testid="lightrag-log" style={{ background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-2)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-11)', maxHeight: 160, overflow: 'auto' }}>
                   {status.logTail.filter(Boolean).slice(-10).map((l, i) => (<div key={i}>{l}</div>))}
                 </div>
+              ) : (
+                <EmptyState
+                  icon={<Database size={20} aria-hidden />}
+                  title="No log output yet"
+                  description="LightRAG has not emitted any log lines. Autostart a run to populate."
+                  data-testid="lightrag-log-empty"
+                />
               )}
             </Stack>
           )}
