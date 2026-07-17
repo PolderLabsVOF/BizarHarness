@@ -133,12 +133,16 @@ export function AuthView(): JSX.Element {
             ) : (
               <Stack gap={2}>
                 <Inline gap={2}>
-                  <Input
-                    readOnly
-                    value={showToken ? token : '••••••••••••••••••••••'}
-                    data-testid="auth-token-input"
-                    onFocus={(e) => (e.target as HTMLInputElement).select()}
-                  />
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', flex: 1 }}>
+                    <span style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>Bearer token</span>
+                    <Input
+                      readOnly
+                      value={showToken ? token : '••••••••••••••••••••••'}
+                      aria-label="Bearer token"
+                      data-testid="auth-token-input"
+                      onFocus={(e) => (e.target as HTMLInputElement).select()}
+                    />
+                  </label>
                   <Button variant="ghost" onClick={() => setShowToken((s) => !s)} data-testid="auth-toggle-visibility">
                     {showToken ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
                   </Button>
