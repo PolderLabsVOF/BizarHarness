@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { Box } from '../ui/primitives/Box.js';
 import { Inline } from '../ui/primitives/Inline.js';
@@ -10,6 +10,60 @@ import { useFetch } from '../data/useFetch.js';
 import { useConnectionState } from '../data/useWebSocket.js';
 import { NotificationsPopover } from '../ui/feedback/NotificationsPopover.js';
 import { fetchJson, FetchError } from '../data/fetcher.js';
+
+const popoverLabelStyle: CSSProperties = {
+  fontSize: 'var(--fs-12)',
+  color: 'var(--fg-muted)',
+  marginBottom: 8,
+};
+
+const popoverEmptyStyle: CSSProperties = {
+  fontSize: 'var(--fs-12)',
+  color: 'var(--fg-muted)',
+};
+
+const popoverListStyle: CSSProperties = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+};
+
+const popoverItemStyle = (isActive: boolean, busy: boolean): CSSProperties => ({
+  display: 'flex',
+  width: '100%',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  padding: '6px 8px',
+  background: isActive ? 'var(--surface-2)' : 'transparent',
+  border: 0,
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--fg)',
+  cursor: busy ? 'wait' : 'pointer',
+  fontSize: 'var(--fs-13)',
+  textAlign: 'left',
+});
+
+const popoverItemLabelStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
+const popoverItemMarkerStyle = (active: boolean): CSSProperties => ({
+  fontSize: 'var(--fs-11)',
+  color: active ? 'var(--accent)' : 'var(--fg-muted)',
+});
+
+const popoverErrorStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 'var(--fs-12)',
+  color: 'var(--danger)',
+};
 
 /**
  * Topbar — the 56px horizontal bar at the top of the v8 shell.
@@ -141,13 +195,13 @@ function BrandPlaceholder(): JSX.Element {
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" sideOffset={6}>
-          <Box style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)', marginBottom: 8 }}>
+          <Box style={popoverLabelStyle}>
             Switch project
           </Box>
           {list.length === 0 ? (
-            <Box style={{ fontSize: 'var(--fs-12)', color: 'var(--fg-muted)' }}>No projects registered</Box>
+            <Box style={popoverEmptyStyle}>No projects registered</Box>
           ) : (
-            <ul role="menu" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <ul role="menu" style={popoverListStyle}>
               {list.map((p) => {
                 const isActive = p.id === activeId;
                 return (
@@ -159,27 +213,13 @@ function BrandPlaceholder(): JSX.Element {
                       onClick={() => { void activate(p.id); }}
                       data-testid={`topbar-project-option-${p.id}`}
                       aria-current={isActive ? 'true' : undefined}
-                      style={{
-                        display: 'flex',
-                        width: '100%',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        padding: '6px 8px',
-                        background: isActive ? 'var(--surface-2)' : 'transparent',
-                        border: 0,
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--fg)',
-                        cursor: busy !== null ? 'wait' : 'pointer',
-                        fontSize: 'var(--fs-13)',
-                        textAlign: 'left',
-                      }}
+                      style={popoverItemStyle(isActive, busy !== null)}
                     >
-                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={popoverItemLabelStyle}>
                         {p.name || p.id}
                       </span>
-                      {isActive && <span style={{ fontSize: 'var(--fs-11)', color: 'var(--accent)' }}>●</span>}
-                      {!isActive && busy === p.id && <span style={{ fontSize: 'var(--fs-11)', color: 'var(--fg-muted)' }}>…</span>}
+                      {isActive && <span style={popoverItemMarkerStyle(true)}>●</span>}
+                      {!isActive && busy === p.id && <span style={popoverItemMarkerStyle(false)}>…</span>}
                     </button>
                   </li>
                 );
@@ -187,7 +227,7 @@ function BrandPlaceholder(): JSX.Element {
             </ul>
           )}
           {error !== null && (
-            <Box role="alert" data-testid="topbar-project-error" style={{ marginTop: 8, fontSize: 'var(--fs-12)', color: 'var(--danger)' }}>
+            <Box role="alert" data-testid="topbar-project-error" style={popoverErrorStyle}>
               {error}
             </Box>
           )}
