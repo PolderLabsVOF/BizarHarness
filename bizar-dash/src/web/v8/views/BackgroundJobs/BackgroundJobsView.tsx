@@ -216,7 +216,11 @@ export function BackgroundJobsView(): JSX.Element {
       )}
 
       {res.loading && instances.length === 0 ? (
-        <Skeleton style={{ height: 240 }} />
+        <Stack gap={2}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} style={{ height: 64, borderRadius: 'var(--radius-md)' }} />
+          ))}
+        </Stack>
       ) : res.error ? (
         <ErrorState
           block
@@ -295,6 +299,7 @@ export function BackgroundJobsView(): JSX.Element {
                             size="sm"
                             onClick={() => { void pauseInstance(inst.instanceId); }}
                             data-testid={`bg-pause-${inst.instanceId}`}
+                            aria-label={`Pause ${inst.agent ?? inst.instanceId}`}
                             title="Pause"
                           >
                             <Pause size={12} aria-hidden />
@@ -306,6 +311,7 @@ export function BackgroundJobsView(): JSX.Element {
                             size="sm"
                             onClick={() => { void resumeInstance(inst.instanceId); }}
                             data-testid={`bg-resume-${inst.instanceId}`}
+                            aria-label={`Resume ${inst.agent ?? inst.instanceId}`}
                             title="Resume"
                           >
                             <Play size={12} aria-hidden />
@@ -317,6 +323,7 @@ export function BackgroundJobsView(): JSX.Element {
                             size="sm"
                             onClick={() => { void retryInstance(inst.instanceId); }}
                             data-testid={`bg-retry-${inst.instanceId}`}
+                            aria-label={`Retry ${inst.agent ?? inst.instanceId}`}
                             title="Retry"
                           >
                             <RotateCw size={12} aria-hidden />
@@ -327,6 +334,7 @@ export function BackgroundJobsView(): JSX.Element {
                           size="sm"
                           onClick={() => setKillConfirm(inst.instanceId)}
                           data-testid={`bg-kill-${inst.instanceId}`}
+                          aria-label={`Kill ${inst.agent ?? inst.instanceId}`}
                           title="Kill"
                         >
                           <Trash2 size={12} aria-hidden />
@@ -353,6 +361,7 @@ export function BackgroundJobsView(): JSX.Element {
                       variant="ghost"
                       size="sm"
                       onClick={() => { if (selected) void loadOutput(selected.instanceId); }}
+                      aria-label="Refresh output"
                     >
                       <RotateCw size={12} aria-hidden />
                     </Button>
