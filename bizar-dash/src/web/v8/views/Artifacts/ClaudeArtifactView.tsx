@@ -84,7 +84,7 @@ export function ClaudeArtifactView({
           role="status"
           data-testid={`claude-safe-${slug}`}
         >
-          <AlertTriangle size={14} aria-hidden style={{ color: '#b58900' }} />
+          <AlertTriangle size={14} aria-hidden style={{ color: 'var(--callout-warning-fg)' }} />
           <span>
             Safe mode — the compiler stripped potentially dangerous
             patterns in this artifact.

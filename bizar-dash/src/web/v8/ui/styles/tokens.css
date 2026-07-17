@@ -29,6 +29,20 @@
   --danger:              oklch(0.55 0.20 25);
   --info:                oklch(0.55 0.13 240);
 
+  /* callouts (warning/danger/info inline banners) */
+  --callout-warning-bg:     #fdf6e3;
+  --callout-warning-border: #e0c97d;
+  --callout-warning-fg:     #b58900;
+  --callout-danger-bg:      oklch(0.55 0.20 25 / 0.08);
+  --callout-danger-border:  oklch(0.55 0.20 25);
+  --callout-danger-fg:      oklch(0.55 0.20 25);
+  --callout-info-bg:        oklch(0.55 0.13 240 / 0.08);
+  --callout-info-border:    oklch(0.55 0.13 240);
+  --callout-info-fg:        oklch(0.55 0.13 240);
+  --callout-success-bg:     oklch(0.55 0.13 150 / 0.08);
+  --callout-success-border: oklch(0.55 0.13 150);
+  --callout-success-fg:     oklch(0.55 0.13 150);
+
   --border:              oklch(0.90 0 0);
   --border-strong:       oklch(0.85 0 0);
   --input-bg:            oklch(0.99 0 0);
