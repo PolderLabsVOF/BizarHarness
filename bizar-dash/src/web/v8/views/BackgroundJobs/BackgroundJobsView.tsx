@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, RotateCw, Trash2, Terminal, Cpu, Bot, AlertTriangle, CheckCircle2, type LucideIcon } from 'lucide-react';
 import { Stack } from '../../ui/primitives/Stack.js';
 import { Inline } from '../../ui/primitives/Inline.js';
@@ -13,6 +13,7 @@ import { Textarea } from '../../ui/controls/Textarea.js';
 import { useFetch } from '../../data/useFetch.js';
 import { fetchJson, FetchError } from '../../data/fetcher.js';
 import { useWsMessage } from '../../data/useWebSocket.js';
+import { useFocusTrap } from '../../ui/feedback/useFocusTrap.js';
 import type { WsMessage } from '../../data/types.js';
 
 /**
@@ -97,6 +98,16 @@ export function BackgroundJobsView(): JSX.Element {
   const [busy, setBusy] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [killConfirm, setKillConfirm] = useState<string | null>(null);
+  const killConfirmRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(killConfirmRef, killConfirm !== null);
+
+  // Close kill confirm on Escape.
+  useEffect(() => {
+    if (!killConfirm) return;
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setKillConfirm(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [killConfirm]);
 
   useWsMessage('background:change', useCallback((msg: WsMessage) => {
     const m = msg as { id?: string; status?: string };
@@ -402,6 +413,7 @@ export function BackgroundJobsView(): JSX.Element {
       {/* Kill confirmation inline dialog */}
       {killConfirm && (
         <div
+          ref={killConfirmRef}
           role="dialog"
           aria-modal
           style={{

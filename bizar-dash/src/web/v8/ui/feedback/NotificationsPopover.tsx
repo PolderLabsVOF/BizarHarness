@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useFocusTrap } from './useFocusTrap.js';
 import { Bell, Check } from 'lucide-react';
 import { Box } from '../primitives/Box.js';
 import { Inline } from '../primitives/Inline.js';
@@ -109,6 +110,8 @@ export function NotificationsPopover(): JSX.Element {
   };
 
   const unread = items.length;
+
+  useFocusTrap(ref, open);
   return (
     <Box style={{ position: 'relative' }} ref={ref}>
       <button
