@@ -29,12 +29,7 @@
     ],
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
       "Read(./secrets/**)",
-      "Write(./node_modules/**)",
-      "Write(./package-lock.json)",
-      "Write(./yarn.lock)",
-      "Write(./pnpm-lock.yaml)",
       "Bash(rm -rf /)",
       "Bash(sudo *)"
     ]

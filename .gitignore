@@ -1,6 +1,9 @@
 # ── Node ────────────────────────────────────────────────────────────────────
 node_modules/
 package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lock
 
 # ── Per-user cline config (contains API tokens, do not commit) ──────────
 config/cline.json
@@ -62,3 +65,20 @@ bizar-dash/*.artifact.json
 # ── Personal notes (project-level scratch) ──────────────────────────────
 .clinerules
 .harness/evals/*.jsonl
+
+# ── Secrets (must never be committed; .env.example / .env.sample /
+#    .env.template stay tracked on purpose — they're docs) ─────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+.env.development
+**/secrets/
+**/credentials/
+*.pem
+*.key
+*.pfx
+*.p12
+service-account*.json
+gha-creds-*.json

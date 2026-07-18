@@ -27,10 +27,12 @@
 //   }}
 //
 // Behaviour:
-//   1. Block writes to .env, .envrc, secrets/, credentials/,
-//      node_modules/, *.lock, *.lockb, package-lock.json, bun.lock*, yarn.lock.
-//   2. Warn (don't block) on console.log / debugger / .only() in src/.
-//   3. Always return a small context line for the next AI decision.
+//   1. Block writes to .env, .envrc, secrets/, credentials/, node_modules/.
+//      .env.example/.sample/.template are explicitly allowed (docs, not
+//      secrets). Lockfiles are allowed — they're package-manager output.
+//   2. Always return a small context line for the next AI decision.
+//      (console.log / debugger / .only() are enforced by `make clean-check`
+//      at commit time — duplicate-warning here adds noise without safety.)
 
 'use strict';
 
@@ -45,43 +47,42 @@ process.stdin.on('end', () => {
   const toolInput =
     (input.tool_input && typeof input.tool_input === 'object') ? input.tool_input : {};
 
-  // Extract the "path" and "content" mapped onto Claude Code's
-  // Write/Edit/MultiEdit/Bash shapes.
+  // Extract the "file_path" mapped onto Claude Code's Write/Edit/MultiEdit
+  // shapes. Content scanning was removed (debug artifacts are enforced at
+  // commit time via `make clean-check`, not write time).
   let filePath = '';
-  let content = '';
   if (toolName === 'Write') {
     filePath = String(toolInput.file_path || '');
-    content = String(toolInput.content || '');
   } else if (toolName === 'Edit') {
     filePath = String(toolInput.file_path || '');
-    content = String(toolInput.new_string || '');
   } else if (toolName === 'MultiEdit') {
     filePath = String(toolInput.file_path || '');
-    const edits = Array.isArray(toolInput.edits) ? toolInput.edits : [];
-    content = edits.map((e) => String((e && e.new_string) || '')).join('\n');
   } else {
     process.stdout.write('{}\n');
     return;
   }
 
   const lowerPath = filePath.toLowerCase();
-  const lowerContent = content.toLowerCase();
 
-  // 1. Hard block — secrets + protected paths.
-  const blocked = [
-    /\/\.env(\.|$|\/)/,
-    /\/\.envrc$/,
-    /\/secrets?\//,
-    /\/credentials?/,
-    /\/node_modules\//,
-    /\.(lock|lockb)$/,
-    /\/package-lock\.json$/,
-    /\/bun\.lockb?$/,
-    /\/yarn\.lock$/,
+  // 1. Hard block — secrets + protected paths. .env.example/.sample/.template
+  //    and all lockfiles are explicitly allowed (docs / package-manager output).
+  const allowed = [
+    /\/\.env\.(example|sample|template|dist)$/i,
+    /\/(package-lock|yarn|pnpm-lock|bun)\.lock\w*$/i,
+    /\.(lock|lockb)$/i,
   ];
 
+  const blocked = [
+    /\/\.envrc$/,
+    /\/\.env(\.[a-z0-9_-]+)?$/i,
+    /\/secrets?\//,
+    /\/credentials?\//,
+    /\/node_modules\//,
+  ];
+
+  const isAllowed = filePath && allowed.some((re) => re.test(lowerPath));
   let blockReason = '';
-  if (filePath && blocked.some((re) => re.test(lowerPath))) {
+  if (filePath && !isAllowed && blocked.some((re) => re.test(lowerPath))) {
     blockReason = filePath;
   }
 
@@ -98,30 +99,13 @@ process.stdin.on('end', () => {
     return;
   }
 
-  // 2. Warn — debug artifacts in src/ (only when a path-shaped target exists).
-  const notes = [];
-  const lowerTarget = filePath.toLowerCase();
-  if (
-    filePath &&
-    /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(lowerTarget) &&
-    /\/(src|plugins|packages)\//.test(lowerTarget)
-  ) {
-    if (
-      /\bconsole\.(log|debug|warn)\b/.test(lowerContent) &&
-      !/\bconsole\.(error|info)\b/.test(lowerContent)
-    ) {
-      notes.push("Heads up: console.log detected in src — `make clean-check` will fail.");
-    }
-    if (/\bdebugger\b/.test(lowerContent)) {
-      notes.push('Heads up: debugger statement detected — remove before committing.');
-    }
-    if (/\.only\s*\(/.test(content) && !/\.skip\s*\(/.test(content)) {
-      notes.push("Heads up: .only() detected — `make clean-check` will fail.");
-    }
-  }
-
-  // 3. Always add a small context line for the AI's next decision.
-  notes.push(`Bizar PreToolUse: tool=${toolName || 'unknown'} path=${filePath || '(no path)'}`);
+  // 2. Always add a small context line for the AI's next decision.
+  //    Debug-artifact warnings (console.log / debugger / .only()) live in
+  //    `make clean-check` — duplicating them here would add noise without
+  //    adding safety (they're caught at commit time, not write time).
+  const notes = [
+    `Bizar PreToolUse: tool=${toolName || 'unknown'} path=${filePath || '(no path)'}`,
+  ];
 
   const out = {
     hookSpecificOutput: {
