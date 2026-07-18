@@ -7,6 +7,21 @@ description: Use when working with, configuring, troubleshooting, or understandi
 
 Norse-pantheon multi-agent system for Claude Code. 14 agents across 6 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
 
+> **Defaults — read first:**
+> - **Files are the source of truth.** The dashboard (`bizar-dash`)
+>   and any HTTP API it exposes are helpers and visualizers. They are
+>   **never required** for reading state, memory, goals, or tasks.
+>   If the dashboard is unreachable, slow, or absent, **do not block** —
+>   read the file directly with `Read` and continue. Never call
+>   `fetch('http://127.0.0.1:20128/...')` from an agent.
+> - **Non-trivial work** follows
+>   `research → plan → audit → impl → test (multiple rounds) → audit`.
+>   Trivial asks (rename, single-line fix, obvious single-file bug)
+>   skip the workflow and go straight to work.
+> - **Always WebSearch** for current library / API / external-service
+>   info, unless the answer is already in code or memory. WebSearch
+>   is cheap (1–3s); stale answers are not.
+
 ## Installation
 
 Four install paths — pick whichever fits the platform.

@@ -57,6 +57,7 @@ process.stdin.on('end', () => {
 
   const notes = isResume
     ? [
+        'Bizar SessionStart (resume): defaults still apply — files-first (dashboard is optional, never block on it), non-trivial work follows research → plan → audit → impl → test (multi-round) → audit, always WebSearch for current info.',
         'Bizar SessionStart (resume): re-read `.bizar/PROJECT.md` and `PROGRESS.md` before continuing.',
         'Bizar SessionStart (resume): check `git log --oneline -10` to see what changed since the last run.',
         // Claude Code compacts context automatically between resumes;
@@ -65,6 +66,7 @@ process.stdin.on('end', () => {
         'Bizar SessionStart (resume): WARNING — context may have been compacted since the last run; verify scope before continuing.',
       ]
     : [
+        'Bizar SessionStart: defaults — files are source of truth (dashboard is optional helper, never block on it); non-trivial work follows research → plan → audit → impl → test (multi-round) → audit; always WebSearch for current info unless the answer is in code/memory.',
         'Bizar SessionStart: read `.bizar/PROJECT.md` (if present) before any routing decision.',
         'Bizar SessionStart: if memory vault exists, run `bizar memory search "<topic>"` first.',
         'Bizar SessionStart: Odin dispatches to subagents via `Agent` (sync) or via the `bizar-mcp` MCP server (async).',

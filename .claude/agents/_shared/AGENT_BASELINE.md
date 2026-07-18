@@ -8,12 +8,90 @@ description: Always-on rules for every Bizar agent. Auto-loaded at session start
 Every Bizar agent follows these rules at all times. For deeper
 guidance, load `~/.claude/skills/bizar/SKILL.md` via the `Skill` tool.
 
-> **v6.2.4 — Read `_shared/CLAUDE_TOOLS.md` first.** Claude Code tools
+> **Read `_shared/CLAUDE_TOOLS.md` first.** Claude Code tools
 > (`Read`, `Edit`, `Bash`, `Glob`, `Grep`, `WebFetch`, `WebSearch`,
 > `AskUserQuestion`, `Skill`, `Agent`, …) have strict argument shapes.
 > Passing the wrong shape — e.g. `options: null` on `AskUserQuestion` —
 > silently fails and counts as a "mistake". Claude Code may abort the
 > session if the mistake limit is exceeded.
+
+## 0. Defaults — Files-First, Workflow, Always WebSearch
+
+Three directives apply to every task, every agent, every session.
+Read once at startup; they govern how you start, how you work, and
+where you look for information.
+
+### 0.1 Files are the source of truth — dashboard/API is optional
+
+- All state lives in files on disk: `PROGRESS.md`, `.bizar/`,
+  `artifacts/`, `.git/`, `.claude/`, `config/`, the source tree.
+- The dashboard (`bizar-dash`) and any HTTP API it exposes are
+  **helpers and visualizers only**. They are NEVER required for:
+  reading project state, reading or writing memory / goals /
+  tasks, routing decisions, or any tool the harness needs to
+  function.
+- If the dashboard is unreachable, slow, or absent: **do NOT
+  block**. Read the file directly with `Read` and continue.
+- Never call `fetch('http://127.0.0.1:20128/...')` (or any
+  dashboard URL) from an agent, hook, or skill. The plugin
+  layer in `packages/sdk/` already routes memory via in-process
+  calls — keep it that way.
+
+### 0.2 Default workflow — research → plan → audit → impl → test → audit
+
+For any non-trivial task (new feature, refactor, behaviour
+change, multi-file edit, design decision), follow this sequence.
+Do NOT skip steps to save time — the audit gates catch what the
+implementer missed.
+
+1. **Research.** WebSearch first (see 0.3), then `Read` the
+   relevant files, then `mcp__semble__search` for codebase
+   context. Delegate deep research to `@mimir` if scope is broad.
+2. **Plan.** Write a checklist of work items + files. For complex
+   work, draft the approach and send to `@forseti` for adversarial
+   review BEFORE implementation. Wait for `APPROVED`.
+3. **Audit / Verify (pre-impl).** Re-read the plan against the
+   codebase. Confirm file scopes are disjoint for parallel work.
+   Confirm the plan matches what the user actually asked.
+4. **Implementation.** Split across `@thor` + `@tyr` in parallel
+   when possible. One file scope per agent.
+5. **Testing (multiple rounds).** Run the project's test command.
+   Fix failures. Re-run. Repeat until the test gate is green AND
+   no new test cases surface regressions. Usually 2–4 rounds; do
+   not stop at the first green.
+6. **Audit / Verify (post-impl).** Send the diff (or change
+   summary + test output) to `@forseti` for a final review.
+   Surface anything skipped, edge cases the tests didn't catch,
+   documentation drift.
+
+**Trivial asks skip the workflow.** "Rename X to Y", "what does
+this function do", "fix the typo on line 42", single-file
+obvious-fix bugs — answer / fix directly. The workflow is for
+non-trivial work.
+
+**If the user says "just do it" / "plow through" / "ship it":**
+the workflow still applies; you just don't pause to ask
+permission at each step. Run research → plan → audit → impl →
+test → audit as one continuous stream.
+
+### 0.3 Always WebSearch (for current info)
+
+Default to `WebSearch` before answering questions about:
+- Library / framework docs (latest API, breaking changes, new
+  methods)
+- Current best practice for a stack
+- External services, APIs, products, versions
+- Anything that may have changed since the training cutoff
+
+Do NOT WebSearch when:
+- The answer is in the local code (`Read` / `Grep` /
+  `mcp__semble__search`)
+- The answer is in the memory vault (`bizar memory search`)
+- The question is about stable language semantics (e.g. "what
+  does `Array.map` do") — answer from knowledge
+
+WebSearch is cheap (1–3s); use it. The cost of answering with
+stale info is higher than the cost of the search.
 
 ## 1. Simplicity Rule
 
