@@ -52,6 +52,9 @@ import { createThemesRouter } from './routes/themes.mjs';
 import { createNotificationsRouter } from './routes/notifications.mjs';
 import { createMinimaxRouter } from './routes/minimax.mjs';
 import { createMiscRouter } from './routes/misc.mjs';
+// G-autoloop Phase 5 — loop runtime + agent-bus HTTP surface.
+import { createLoopsRouter } from './routes/loops.mjs';
+import { createAgentBusRouter } from './routes/agent-bus.mjs';
 // Pillar A — session heartbeat list + stop (reads .harness/traces/heartbeat.jsonl)
 import { createSessionsRouter } from './routes/sessions.mjs';
 // v9.0.5 — Admin endpoints (gc, cache clear, activity export, memory
@@ -215,6 +218,9 @@ export async function createApiRouter({
   const { createTailscaleRouter } = await import('./routes/tailscale.mjs');
   router.use(createTailscaleRouter({}));
   router.use(createMiscRouter({ state, broadcast }));
+  // G-autoloop Phase 5 — background loop runtime + inter-agent bus.
+  router.use(createLoopsRouter({ broadcast }));
+  router.use(createAgentBusRouter({ broadcast }));
   // Pillar A — session heartbeat list + stop
   router.use(createSessionsRouter({ projectRoot }));
   // v9.0.5 — Settings page admin buttons live at /api/admin/*.
