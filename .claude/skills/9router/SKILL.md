@@ -18,7 +18,7 @@ export NINEROUTER_KEY="sk-..."                      # from Dashboard → Keys (o
 
 All requests: `${NINEROUTER_URL}/v1/...` with header `Authorization: Bearer ${NINEROUTER_KEY}` (omit if auth disabled).
 
-Verify: `curl $NINEROUTER_URL/health` → `{"ok":true}`
+Verify: `curl $NINEROUTER_URL/api/health` → `{"ok":true}`
 
 ## Discover models
 
@@ -65,7 +65,7 @@ before starting a task.
 **Quick-check command** (run from anywhere in a Bizar session):
 
 ```bash
-curl -sS http://localhost:20128/health
+curl -sS http://localhost:20128/api/health
 ```
 
 If the response is not `{"ok":true}`, ask the user whether 9Router is running

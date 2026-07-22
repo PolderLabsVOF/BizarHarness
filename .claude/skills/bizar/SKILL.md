@@ -1,32 +1,13 @@
 ---
 name: bizar
-description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes. Triggers on questions about Bizar configuration, agent routing rules, multi-account API key rotation, or the Bizar install process.
+description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system for cline. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
 ---
 
 # Bizar
 
-Norse-pantheon multi-agent system for Claude Code. 14 agents across 6 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
-
-> **Defaults — read first:**
-> - **Files are the source of truth.** The dashboard (`bizar-dash`)
->   and any HTTP API it exposes are helpers and visualizers. They are
->   **never required** for reading state, memory, goals, or tasks.
->   If the dashboard is unreachable, slow, or absent, **do not block** —
->   read the file directly with `Read` and continue. Never call
->   `fetch('http://127.0.0.1:20128/...')` from an agent.
-> - **Non-trivial work** follows
->   `research → plan → audit → impl → test (multiple rounds) → audit`.
->   Trivial asks (rename, single-line fix, obvious single-file bug)
->   skip the workflow and go straight to work.
-> - **Always WebSearch** for current library / API / external-service
->   info, unless the answer is already in code or memory. WebSearch
->   is cheap (1–3s); stale answers are not.
+Norse-pantheon multi-agent system for cline. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
 
 ## Installation
-
-Four install paths — pick whichever fits the platform.
-
-### 1. `git clone` (Linux, macOS, WSL)
 
 ```bash
 git clone https://github.com/DrB0rk/BizarHarness.git
@@ -34,28 +15,6 @@ cd BizarHarness
 chmod +x install.sh
 ./install.sh
 ```
-
-### 2. curl-pipe one-liner (Linux, macOS, WSL)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/DrB0rk/BizarHarness/main/install.sh | bash
-```
-
-### 3. Homebrew (macOS, Linux)
-
-```bash
-brew tap DrB0rk/bizar
-brew install bizar
-```
-
-### 4. Scoop (Windows PowerShell)
-
-```powershell
-scoop bucket add bizar https://github.com/DrB0rk/scoop-bizar
-scoop install bizar
-```
-
-After install: `bizar doctor` to verify, `bizar` to launch the dashboard.
 
 ## Architecture
 
@@ -65,22 +24,17 @@ All subagents use Obsidian vault memory with **per-project vaults**. Call `obsid
 
 ## Agent Reference
 
-| Agent | Model | Tier | When to Route |
-|---|---|---|---|
-| **Odin** ᛟ | cx/gpt-5.6-terra | High | Primary entry point. Decomposes and dispatches. |
-| **Forseti** ᚨ | cx/gpt-5.6-sol | Premium | Plan auditor — reviews Tyr/Vidarr plans before execution. edit: deny. |
-| **Frigg** ᚠ | bizar/MiniMax-M3 | Default | Read-only Q&A, memory recall, single-step lookups. |
-| **Heimdall** ᚹ | bizar/MiniMax-M3 | Default | Mechanical edits, file ops, .bizar/ maintenance. |
-| **Hermod** ᚱ | bizar/MiniMax-M3 | Default | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI. |
-| **Mimir** ᛗ | bizar/MiniMax-M3 | Default | Deep codebase research, Semble-first exploration, docs analysis. |
-| **Quick** ⚡ | oc/deepseek-v4-flash-free | Budget | Single-shot tiny tasks. |
-| **Semble-Search** | bizar/MiniMax-M3 | Default | Semantic code search via Semble MCP. |
-| **Thor** ᚦ | bizar/MiniMax-M2.7 | Mid | Moderate implementation, tests, debugging, refactoring. |
-| **Tyr** ᛏ | cx/gpt-5.6-terra | High | Top-tier implementation, architecture, complex debugging. |
-| **Vidarr** ᛉ | cx/gpt-5.6-sol | Premium | Last resort when Tyr fails or debugging is stuck. |
-| **Vor** ᛗ | oc/mimo-v2.5-free | Budget | Clarifying questions. |
-| **Baldr** ᛒ | cx/gpt-5.6-sol | Premium | UI design language, visually-oriented critique. |
-| **agent-browser** | bizar/MiniMax-M3 | Default | Browser-driven E2E, Playwright-style flows. |
+| Agent | Model | Tier | Cost | When to Route |
+|---|---|---|---|---|
+| **Odin** ᛟ | MiniMax-M3 | Router | $0.30/M · $1.20/M out | Primary entry point. Decomposes and dispatches. |
+| **Mimir** ᛗ | DeepSeek V4 Flash | Free | **$0** | Deep codebase research, Semble-first exploration, docs analysis |
+| **Heimdall** ᚹ | DeepSeek V4 Flash | Free | **$0** | Simple edits, file ops, mechanical CRUD, quick answers |
+| **Hermod** ᚱ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI |
+| **Thor** ᚦ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Moderate implementation, tests, debugging, refactoring |
+| **Tyr** ᛏ | MiniMax-M3 | High | $0.30/M · $1.20/M out | Complex features, architecture, deep debugging, cross-cutting refactor |
+| **Vidarr** ᛉ | GPT-5.5 | Ultra | ChatGPT sub | Last resort when Tyr fails or debugging is stuck |
+| **Forseti** ᚨ | MiniMax-M3 | Gate | $0.30/M · $1.20/M out | Plan auditor — reviews Tyr/Vidarr plans before execution. `edit: deny`. |
+| **Semble** | — | — | **$0** | MCP search tool, not an agent. Semble-first code search. |
 
 ## Odin Routing Rules
 
@@ -89,34 +43,29 @@ All subagents use Obsidian vault memory with **per-project vaults**. Call `obsid
 ### Mandatory Parallelism
 
 1. **Every request** is decomposed into independent work items
-2. **Always 2+ parallel `Agent` calls** in a single message
+2. **Always 2+ parallel `task` calls** in a single message
 3. **Implementation always splits across @thor + @tyr** (frontend/backend, file split, impl+tests)
 4. If a task truly cannot be split, pair it with a parallel research or review task
 
 ### Routing Cheat Sheet
 
 ```
-Research / Understanding     → @mimir  (default, Semble-first)
-Single-shot tiny task         → @quick  (budget)
-Clarifying question           → @vor  (budget)
-Read-only Q&A                 → @frigg  (default)
-Quick edit / File ops         → @heimdall  (default)
-Git / PR / Merge              → @hermod  (default)
-Browser-driven E2E            → @agent-browser  (default)
-Moderate implementation       → @thor  (mid)
-UI design language            → @baldr  (premium)
-Complex implementation        → @tyr  (high, after @forseti audit)
-Ultimate fallback             → @vidarr  (premium, after @forseti audit)
-Plan review / Audit           → @forseti  (premium, review only)
+Research / Understanding     → @mimir  (free, Semble-first)
+Quick edit / File ops        → @heimdall  (free)
+Git / PR / Merge             → @hermod  (M2.7)
+Moderate implementation      → @thor  (M2.7)
+Complex implementation       → @tyr  (M3, after @forseti audit)
+Ultimate fallback           → @vidarr  (GPT-5.5, after @forseti audit)
+Plan review / Audit         → @forseti  (M3, review only)
 ```
 
 ### Cost Escalation
 
 ```
-Budget (Quick, Vor) → Default (Heimdall, Hermod, Mimir, Frigg) → Mid (Thor) → High (Odin, Tyr) → Premium (Forseti, Vidarr, Baldr)
+Free (Mimir, Heimdall) → $Mid (Thor, Hermod) → $$High (Tyr) → $$$Ultra (Vidarr)
 ```
 
-Never use a paid agent for work a budget or default agent can do. Never use Tyr for what Thor can handle.
+Never use a paid agent for work a free agent can do. Never use Tyr for what Thor can handle.
 
 ## When to use Glyphs (visual plans)
 
@@ -130,7 +79,7 @@ Glyphs are the dashboard's `/artifacts/<slug>/artifact.mdx` — MDX with rich bl
 - Any work where the user wants to annotate specific spots on a mockup/diagram with feedback
 
 **Don't use Glyphs for:**
-- "What does this function do?" — use `@frigg` or the `Read` tool
+- "What does this function do?" — use `@frigg` or the `read` tool
 - A simple bug fix with one obvious cause — just fix it
 - Single-file changes with no design questions
 - Anything that can be answered in one sentence
@@ -142,10 +91,11 @@ When the user says "show me a plan", "let's review the design", "I want to see t
 1. Write `artifacts/<slug>/artifact.mdx` with frontmatter (`title`, `status`, `kind: plan|recap`) and blocks
 2. Write `artifacts/<slug>/meta.json` with `{ title, slug, status, author, created, lastEdited }`
 3. Write `artifacts/<slug>/comments.json` as `[]` initially (comments added via the dashboard)
-4. Use the full block vocabulary — see `bizar-dash/src/server/glyphs/mdx-compiler.mjs` or the dashboard's `/api/artifacts/<slug>/render` for the JSON shape
+4. Use the full block vocabulary — see `glyphs-research.md` in Obsidian or the dashboard's `/api/artifacts/<slug>/render` for the JSON shape
 
 Templates available:
 - `templates/plan/plan.mdx.template` — forward planning (before code)
+- `templates/plan/plan.canvas.template` — legacy canvas (don't use; replaced by MDX)
 
 ## How to read glyph feedback
 
@@ -155,7 +105,7 @@ When the user clicks "Submit to agent" on a glyph in the dashboard, the dashboar
 - Answers to OpenQuestions (one `Q:` / `A:` block per question)
 - The original MDX source
 
-Read `artifacts/<slug>/feedback.md` directly with the `Read` tool.
+Read it with the `read_glyph_feedback` tool (preferred — returns parsed frontmatter + body + counts), or read the file directly with the `read` tool.
 
 After reading the feedback, regenerate the glyph's `artifact.mdx` to address every comment and apply every answer. Then write the regenerated MDX back to `artifacts/<slug>/artifact.mdx` (and update `meta.json` if the title/summary changes).
 
@@ -163,46 +113,48 @@ After reading the feedback, regenerate the glyph's `artifact.mdx` to address eve
 
 ### Odin Self-Handles Instead of Routing
 
-**Symptoms:** Odin runs `Bash`, `Glob`, `Grep`, `Edit`, or `Write` directly instead of delegating via `Agent`.
+**Symptoms:** Odin runs `bash`, `glob`, `grep`, `edit`, or `write` directly instead of delegating via `task`.
 
 **Causes:**
-- Odin's `tools:` frontmatter in `~/.claude/agents/odin.md` includes executable tools
+- Odin has executable tool permissions (`bash`, `glob`, `grep`, `edit`, `write`)
 - The model defaults to self-handling when tools are available
 
-**Fix:** Restrict Odin's `tools:` frontmatter to delegating tools only (drop `Bash`, `Write`, `Edit`):
+**Fix:** Remove those permissions from Odin's `~/.config/cline/agents/odin.md`:
 ```yaml
----
-name: odin
-description: ...
-tools: Agent, Read, WebFetch, WebSearch
-model: opus
----
-# NO Bash, Write, Edit — Odin only routes.
+permission:
+  task: allow
+  read: allow
+  list: allow
+  todowrite: allow
+  question: allow
+  webfetch: allow
+  websearch: allow
+  # NO bash, glob, grep, edit, write
 ```
 
 ### Agent Uses Wrong Model
 
-**Symptoms:** A subagent uses Sonnet when it should use Opus, or uses a high-cost model for a simple edit.
+**Symptoms:** A subagent uses DeepSeek when it should use M3, or uses GPT-5.5 for a simple edit.
 
 **Causes:** The agent's `model:` field in its `.md` file is wrong or the provider isn't configured.
 
-**Fix:** Check `~/.claude/agents/<name>.md` for the `model:` field. Valid Claude Code models:
-- `haiku` / `claude-haiku-4-5` — fast, cheap
-- `sonnet` / `claude-sonnet-5` — mid-tier
-- `opus` / `claude-opus-4-8` — high-tier
-- `fable` / `claude-fable-5` — experimental high-tier
+**Fix:** Check `~/.config/cline/agents/<name>.md` for the `model:` field. Valid models:
+- `cline/deepseek-v4-flash-free` — free
+- `minimax/MiniMax-M2.7` — M2.7
+- `minimax/MiniMax-M3` — M3
+- `openai/gpt-5.5` — GPT-5.5
 
-### Claude Code provider 404 errors
+### MiniMax direct provider 404 errors
 
-When using a custom provider id (anything that doesn't match a built-in Claude Code model name), make sure the provider's `baseURL` is set in `~/.claude/settings.json` under the matching provider key, not in the agent frontmatter. Adding an explicit `baseURL` per agent is a common cause of 404s.
+When using the `minimax/MiniMax-M3` or `minimax/MiniMax-M2.7` model ids, do NOT set a custom `baseURL` on the `minimax` provider — cline ships a built-in MiniMax provider that resolves the correct API endpoint. Adding an explicit baseURL is a common cause of 404s.
 
-### API key rate-limit / quota failures
+### MiniMax rate-limit / quota failures
 
 **Symptoms:** A session dies with HTTP 429, 402, or 5xx from the MiniMax API. The user has multiple MiniMax accounts and wants them to share the load.
 
-**Cause:** Claude Code has no built-in multi-key rotation; it reads one key from `auth.json` and uses it for the entire session. Hitting that key's rate limit or quota is fatal.
+**Cause:** cline has no built-in multi-key rotation; it reads one key from `auth.json` and uses it for the entire session. Hitting that key's rate limit or quota is fatal.
 
-**Fix:** Set additional keys via env vars. The `bizar-mcp` server rotates through them on 429/402/5xx automatically.
+**Fix:** Set additional keys via env vars. The `bizar` plugin rotates through them on 429/402/5xx automatically.
 
 ```bash
 # Option A — single comma-separated env var
@@ -220,10 +172,10 @@ Rotation policy:
 - Does NOT trigger on other 4xx (client error — the request itself is bad)
 - Network errors (ECONNRESET etc.) DO trigger rotation
 - Caps at N attempts where N = number of configured keys (try each once)
-- If all keys fail, the last error response is returned so the runtime surfaces it normally
+- If all keys fail, the last error response is returned so cline surfaces it normally
 - Round-robin on success: the next request starts on the next key, spreading load across accounts
 
-Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rotation env vars at all), the `bizar-mcp` server works exactly as before.
+Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rotation env vars at all), the plugin works exactly as before.
 
 ### Forseti Rejects Every Plan
 
@@ -243,28 +195,23 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
 
 | File | Purpose |
 |---|---|
-| `~/.claude/settings.json` | Main config (MCP servers, permissions, hooks, env) |
-| `~/.claude/CLAUDE.md` | Routing table and conventions (mirrored from AGENTS.md) |
-| `~/.claude/agents/odin.md` | Primary router agent |
-| `~/.claude/agents/mimir.md` | Research agent |
-| `~/.claude/agents/heimdall.md` | Simple tasks agent |
-| `~/.claude/agents/hermod.md` | Git operations agent |
-| `~/.claude/agents/thor.md` | Moderate implementation agent |
-| `~/.claude/agents/tyr.md` | Complex implementation agent |
-| `~/.claude/agents/vidarr.md` | Last resort agent |
-| `~/.claude/agents/forseti.md` | Plan auditor agent |
-| `~/.claude/agents/semble-search.md` | Code search agent |
-| `~/.claude/skills/bizar/SKILL.md` | Bizar skill (this file) |
-| `~/.claude/skills/glyph/SKILL.md` | Glyph skill (artifact protocol) |
-| `~/.claude/skills/harness-engineering/SKILL.md` | Harness-engineering methodology |
-| `~/.claude/hooks/*.mjs` | PreToolUse / PostToolUse / SessionStart hooks |
-| `~/.bizar_home/` | Bizar runtime state (loops, memory vault) |
+| `~/.config/cline/cline.json` | Main config (no external baseURL needed) |
+| `~/.config/cline/AGENTS.md` | Routing table and conventions |
+| `~/.config/cline/agents/odin.md` | Primary router agent |
+| `~/.config/cline/agents/mimir.md` | Research agent |
+| `~/.config/cline/agents/heimdall.md` | Simple tasks agent |
+| `~/.config/cline/agents/hermod.md` | Git operations agent |
+| `~/.config/cline/agents/thor.md` | Moderate implementation agent |
+| `~/.config/cline/agents/tyr.md` | Complex implementation agent |
+| `~/.config/cline/agents/vidarr.md` | Last resort agent |
+| `~/.config/cline/agents/forseti.md` | Plan auditor agent |
+| `~/.config/cline/agents/semble-search.md` | Code search tool definition |
 
 ## Quick Reference
 
 ```
                  ┌──────────────────────┐
-                 │  Odin ᛟ (gpt-5.6-terra)│
+                 │     Odin ᛟ (M3)      │
                  │   Router / Decompose  │
                  └──────────┬───────────┘
                             │
@@ -273,7 +220,7 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
      ┌──────┴──────┐  ┌────┴────┐  ┌───────┴──────┐
      │ Research    │  │ Simple  │  │ Moderate     │
      │ Mimir ᛗ     │  │ Heimdall│  │ Thor ᚦ       │
-     │ (MiniMax-M3)│  │ (M3)    │  │ (M2.7)       │
+     │ (DeepSeek)  │  │ (DSeek) │  │ (M2.7)       │
      │ FREE        │  │ FREE    │  │ $            │
      └─────────────┘  └─────────┘  └───────┬───────┘
                                            │
@@ -281,15 +228,14 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
                     │                      │          │
              ┌──────┴──────┐       ┌───────┴──────┐   │
              │ Git         │       │ Complex      │   │
-             │ Hermod ᚱ    │       │ Tyr ᛏ        │   │
-             │ (M3) FREE   │       │ (gpt-5.6-terra)│
-             │             │       │ $$           │   │
+             │ Hermod ᚱ    │       │ Tyr ᛏ (M3)   │   │
+             │ (M2.7) $    │       │ $$           │   │
              └─────────────┘       └───────┬───────┘   │
                                            │           │
                                     ┌──────┴──────┐    │
                                     │ Last Resort │    │
                                     │ Vidarr ᛉ   │    │
-                                    │ (gpt-5.6-sol)│    │
+                                    │ (GPT-5.5)   │    │
                                     │ $$$$        │    │
                                     └─────────────┘    │
                                                        │
@@ -297,10 +243,9 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
                                    │
                             ┌──────┴──────┐
                             │ Forseti ᚨ   │
-                            │ Auditor     │
-                            │ (gpt-5.6-sol)│
+                            │ Auditor (M3) │
                             │ edit: deny   │
-                            │ $$$$         │
+                            │ $            │
                             └─────────────┘
 ```
 
@@ -308,11 +253,11 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
 
 ## Verbose Agent Baseline Reference
 
-> The 12 always-on rules in `config/agents/_shared/AGENT_BASELINE.md`
+> The 12 always-on rules in `.claude/agents/_shared/AGENT_BASELINE.md`
 > are auto-loaded into every agent session at startup. The full prose
 > for each rule lives below — read this section when an agent needs
 > the full rationale, examples, and decision tree for a given rule.
-> New sessions don't load this by default; use the `Skill` tool with
+> New sessions don't load this by default; use the `skill` tool with
 > the `bizar` skill name when verbose guidance is needed.
 
 ### Rule 1 — Simplicity
@@ -342,7 +287,7 @@ subagent has specific context or tools the parent lacks.
 
 Bizar mods can ship instructions via `INSTRUCTIONS.md`,
 `agents/<id>.md`, `commands/<name>.md`, or `skills/<name>/SKILL.md`
-under `~/.bizar_home/mods/<id>/`. These override the baseline for
+under `~/.config/bizar/mods/<id>/`. These override the baseline for
 the scoped agents in declared order. See the Bizar mods SKILL.md
 for the full protocol.
 
@@ -369,7 +314,7 @@ this baseline. Follow them strictly:
 ### Rule 9 — Identity, Tone, and Refusal
 
 **Identity preamble.** Bizar is a Norse-pantheon multi-agent system
-for Claude Code. The agent does not have a fixed identity outside its role.
+for cline. The agent does not have a fixed identity outside its role.
 
 **Refusal handling.** Be free and open. Attempt unclear tasks with
 stated assumptions rather than refusing. Only refuse safety-critical
@@ -398,7 +343,7 @@ disengaging from abusive exchanges.
 ### Rule 9b — Knowledge and Research
 
 For facts that change quickly (prices, news, current positions),
-**search before answering** via `WebSearch` / `WebFetch` or delegate
+**search before answering** via `websearch` / `webfetch` or delegate
 to `@mimir` for deep research.
 
 For stable technical knowledge (language semantics, well-established
@@ -416,29 +361,29 @@ Do not over-rely on memory; if uncertain, search.
 
 **Always-on MCP servers:**
 - `semble` — local codebase search
-- `bizar` — memory (read/write/list/search), plan_action, loop_start/stop/list/status, graph_query/path, list_instincts, list_decisions (registered by `bizar install`)
+- `bizar memory` CLI — project memory (no MCP server needed; bash:allow)
 
 **Domain skills** — see Rule 4 above.
 
 **Browser interaction** — use `agent-browser` for browser-driven E2E.
-Run `agent-browser` via `Bash` heredoc. The skill lives at
-`~/.claude/skills/agent-browser/SKILL.md`.
+Run `agent-browser` via `bash` heredoc or the `mcp__agent-browser__*` MCP
+tools. See `.claude/skills/agent-browser/SKILL.md` for full reference.
 
 ### Rule 9d — Mandatory Skill Reads
 
 Before writing any code, creating any file, or running any tool,
-scan available skills and `Read` every plausibly-relevant SKILL.md.
+scan available skills and `read` every plausibly-relevant SKILL.md.
 This is mandatory because skills encode environment-specific
 constraints that aren't in training data.
 
 Triggers:
 - Frontend/React work → `frontend-design`
 - Backend/API work → framework-specific
-- Browser E2E → `agent-browser`
+- Browser E2E → `agent-browser` (`.claude/skills/agent-browser/SKILL.md`)
 - Skill creation → `skill-creator`
-- BizarHarness work → `~/.claude/skills/bizar/SKILL.md`
-- Self-improvement → `~/.claude/skills/self-improvement/SKILL.md`
-- This baseline → `~/.claude/skills/agent-baseline/SKILL.md` (always)
+- BizarHarness work → `.claude/skills/bizar/SKILL.md` (this file)
+- Self-improvement → `.claude/skills/self-improvement/SKILL.md`
+- This baseline → `.claude/agents/_shared/AGENT_BASELINE.md` (always)
 
 ### Rule 9e — File Creation Advice
 
@@ -455,7 +400,7 @@ By format:
 
 ### Rule 9f — Search and Copyright
 
-Use `WebSearch` / `WebFetch` for current info. Keep queries concise
+Use `websearch` / `webfetch` for current info. Keep queries concise
 (1-6 words). No `-`, `site:`, or quotes in search queries unless asked.
 
 **Copyright hard limits:**

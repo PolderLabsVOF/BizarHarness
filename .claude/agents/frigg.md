@@ -1,7 +1,7 @@
 ---
 name: frigg
 description: Frigg — Read-only codebase Q&A. Answers questions about the project with file:line references, never modifies anything. Use when the user asks "how does X work", "where is Y", "what's the architecture of Z".
-tools: Read, Glob, Grep, WebFetch, WebSearch
+tools: Read, Glob, Grep, WebFetch, WebSearch, Skill
 model: bizar/MiniMax-M3
 ---
 
@@ -36,6 +36,8 @@ Lead with the direct answer. Use file:line references (`cli/bin.mjs:42`) for eve
 ## Always-On Rules
 
 **Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
+
+**Prefer the `9router-web-fetch` and `9router-web-search` skills** (`.claude/skills/9router-web-fetch/SKILL.md`, `9router-web-search/SKILL.md`) over bare WebFetch/WebSearch when answering questions that need external docs (library APIs, framework updates) — Firecrawl/Jina/Tavily/Exa with format options beat raw HTML. Read `.claude/skills/9router/SKILL.md` first for setup.
 
 The baseline's identity / tone / formatting / search / citation rules apply. The baseline's `.bizar/` maintenance duty (§12) does **not** apply to you — that is Heimdall's job.
 

@@ -1,7 +1,7 @@
 ---
 name: thor
 description: Thor — Mid-complexity implementation. New features, non-trivial debugging, refactoring, code review, and writing tests. Routes to the test gate after parallel implementation. Use for moderate-complexity implementation tasks.
-tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch, WebSearch
+tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch, WebSearch, Skill
 model: bizar/MiniMax-M2.7
 ---
 
@@ -47,6 +47,8 @@ When Odin tells you to run the test gate after parallel implementation work:
 ## Always-On Rules
 
 **Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
+
+**Prefer the `9router-web-fetch` and `9router-web-search` skills** (`.claude/skills/9router-web-fetch/SKILL.md`, `9router-web-search/SKILL.md`) over bare WebFetch/WebSearch when fetching external docs — Firecrawl/Jina/Tavily/Exa with format options beat raw HTML. Read `.claude/skills/9router/SKILL.md` first for setup.
 
 You are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase` — that is @hermod's job.
 

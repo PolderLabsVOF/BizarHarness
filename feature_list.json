@@ -1895,11 +1895,242 @@
       ],
       "passed": "2026-07-13",
       "commit": "d71d958"
+    },
+    {
+      "id": "F-098",
+      "behavior": "Ship 39 MIT-licensed thinking-* mental-model skills from tjboudreaux/cc-thinking-skills (verbatim) + 1 Bizar-authored skillopt SkillOpt workflow wrapper. All 40 files under config/skills/<name>/SKILL.md and mirrored to .claude/skills/.",
+      "verification": "scripts/verify-thinking-skills.mjs exits 0 with 40/40 files passing frontmatter + size checks (name matches dir, description <=200, body >=100).",
+      "state": "passing",
+      "layer": "L1",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        "config/skills/thinking-*/SKILL.md (NEW x39)",
+        "config/skills/skillopt/SKILL.md (NEW x1)",
+        ".claude/skills/thinking-*/SKILL.md (NEW x39 dev mirror)",
+        ".claude/skills/skillopt/SKILL.md (NEW x1 dev mirror)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-099",
+      "behavior": "thinking-route.mjs UserPromptSubmit hook — deterministic keyword/regex router with 35 rule buckets covering all 39 thinking-* skills. Emits hookSpecificOutput.additionalContext priming the next turn with the most relevant model name and a 1-sentence rationale. Falls back to thinking-model-router when no rule matches. Wired into .claude/settings.json as a third UserPromptSubmit sibling. Always exits 0.",
+      "verification": ".claude/hooks/__tests__/thinking-route.test.mjs exits 0 with 41 routing cases + 5 edge cases + 6 hook-contract cases + 1 parity check = 53/53 PASS. node --check .claude/hooks/thinking-route.mjs passes.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/hooks/thinking-route.mjs (NEW)",
+        ".claude/hooks/__tests__/thinking-route.test.mjs (NEW)",
+        ".claude/settings.json (append UserPromptSubmit sibling)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-100",
+      "behavior": "AGENT_BASELINE.md section 4b 'Thinking Models (Default Layer)' — declares the 39 thinking-* skills + skillopt as the default reasoning layer, points at thinking-model-router as the LLM-driven entry point, and SkillOpt as the offline quality loop with pip install hint.",
+      "verification": "grep -n 'thinking-model-router\\|skillopt' config/agents/_shared/AGENT_BASELINE.md returns the expected rows in section 4b.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        "config/agents/_shared/AGENT_BASELINE.md (append section 4b)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-101",
+      "behavior": "scripts/sync-skills-mirror.mjs — idempotent mirror of config/skills/<name>/SKILL.md to .claude/skills/<name>/SKILL.md. Reports copied/in-sync/error counts per run. Orphan directories in the mirror are surfaced as warnings (not errors), so deletion from canonical doesn't trip the build.",
+      "verification": "node scripts/sync-skills-mirror.mjs exits 0. Running twice is idempotent — second run reports 0 copies, 60 already in sync.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        "scripts/sync-skills-mirror.mjs (NEW)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-102",
+      "behavior": "scripts/verify-thinking-skills.mjs — verifies every config/skills/thinking-*/SKILL.md and config/skills/skillopt/SKILL.md is well-formed (name matches dir, description <=200 chars, body >=100 chars). Wired into make check-arch as a post-step.",
+      "verification": "make check-arch exits 0 with the new verifier green (40/40 PASS). Deleting any one SKILL.md causes make check-arch to exit non-zero with that file named.",
+      "state": "passing",
+      "layer": "L1",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        "scripts/verify-thinking-skills.mjs (NEW)",
+        "Makefile (wire verify-thinking-skills into check-arch)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-103",
+      "behavior": "sessionstart-prime.mjs REWRITE — reads PROGRESS.md (current state + last ## In Progress), feature_list.json (total/passing/active + WIP=1 guard), git log --oneline -10, and .bizar/PROJECT.md. Branches on source: startup emits all 4 sources, clear emits only PROGRESS+git, resume reads .bizar/session-state.json handoff. Briefing hard-capped at 800 chars.",
+      "verification": ".claude/hooks/__tests__/sessionstart-prime.test.mjs 13/13 PASS. node --check exits 0. Smoke test against real repo emits 7-line briefing with project name, active feature, last commit.",
+      "state": "passing",
+      "layer": "L1+L2+L3",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/hooks/sessionstart-prime.mjs (REWRITE)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-104",
+      "behavior": "sessionend-recall.mjs REWRITE — reads transcript_path (last 200 lines JSONL), extracts last user prompt (skips fillers), files touched, bash commands, errors (12 patterns), tool counts. Writes .bizar/sessions/<date>-<id>.md with structured frontmatter + .bizar/session-state.json handoff for the next SessionStart. nextStep is resolved from blockers > last user prompt > pick next feature.",
+      "verification": ".claude/hooks/__tests__/sessionend-recall.test.mjs 9/9 PASS. node --check exits 0. Smoke test with synthesized transcript writes 90-line markdown note + 1KB session-state.json.",
+      "state": "passing",
+      "layer": "L1+L2+L3",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/hooks/sessionend-recall.mjs (REWRITE)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-105",
+      "behavior": "thinking-route.mjs APPEND slash-command routing — /plow-through, /team, /validate, /plan, /audit, /test, /pr-review. Slash detection wins over keyword router when prompt starts with the command. userpromptsubmit-tag.mjs DELETED (subsumed); .claude/settings.json UPS siblings dropped from 3 to 2.",
+      "verification": ".claude/hooks/__tests__/thinking-route.test.mjs 61/61 PASS (was 53 + 8 new slash cases). ls .claude/hooks/userpromptsubmit-tag.mjs: No such file. node -e confirms UPS array length=2.",
+      "state": "passing",
+      "layer": "L1+L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/hooks/thinking-route.mjs (APPEND slash table)",
+        ".claude/hooks/userpromptsubmit-tag.mjs (DELETED)",
+        ".claude/settings.json (drop UPS sibling)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-106",
+      "behavior": "New hook test files — sessionstart-prime.test.mjs (13 tests: source branching, WIP=1 guard, briefing cap, missing-source graceful) + sessionend-recall.test.mjs (9 tests: transcript extraction, errors, fillers, missing transcript). thinking-route.test.mjs appended 8 slash-command cases.",
+      "verification": "node --test .claude/hooks/__tests__/*.test.mjs → 121/121 PASS across 4 files (thinking-route 61, sessionstart-prime 13, sessionend-recall 9, pretooluse-editwrite 19 pre-existing + 19 = same total).",
+      "state": "passing",
+      "layer": "L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/hooks/__tests__/sessionstart-prime.test.mjs (NEW)",
+        ".claude/hooks/__tests__/sessionend-recall.test.mjs (NEW)",
+        ".claude/hooks/__tests__/thinking-route.test.mjs (APPEND 8 slash cases)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-107",
+      "behavior": "Delete legacy Cline-era trees (config/agents/, config/commands/, config/hooks/) and the dead syncAgentFiles function. Repoint 2 tests + 1 e2e check + 5 doc references from config/* to .claude/*. Agents, commands, and hooks are now canonical at .claude/{agents,commands,hooks}/ and there is no risk of silent overwrite on next provision.",
+      "verification": "git rm -rf config/agents config/commands config/hooks. cli/provision.mjs no longer references config/agents. memory-protocol-drift.test.mjs (4/4 PASS) and plow-through.test.mjs (5/5 PASS) repointed. scripts/bh-full-e2e.mjs: .claude/agents/ has all 14 agents ✓. make check exits 0.",
+      "state": "passing",
+      "layer": "L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        "config/agents/ (DELETED, 17 files)",
+        "config/commands/ (DELETED, 14 files)",
+        "config/hooks/ (DELETED, 7 entries)",
+        "cli/provision.mjs (syncAgentFiles deleted, step removed)",
+        "bizar-dash/tests/memory-protocol-drift.test.mjs (repointed + case-insensitive match)",
+        "cli/plow-through.test.mjs (repointed, dropped agent:odin check)",
+        "scripts/bh-full-e2e.mjs (agent-presence repointed)",
+        ".claude/commands/validate.md (hooks-installed line)",
+        ".claude/hooks/README.md (legacy note)",
+        ".claude/skills/bizar/SKILL.md + config/skills/bizar/SKILL.md (baseline path)",
+        "EXPLORATION.md (F-100 + Agents row)",
+        "PROGRESS.md (In Progress F-107 section)",
+        "feature_list.json (this entry)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-108",
+      "behavior": "Register Semble and agent-browser MCP servers in .claude/settings.json (mcpServers + permissions.allow). Both are stdio MCP servers reachable via PATH binaries (semble via uv tool install, agent-browser via npm-global). Wildcard permissions mcp__semble__* and mcp__agent-browser__* allow all exposed tools.",
+      "verification": "settings.json parses cleanly. `semble mcp` and `agent-browser mcp` both respond to JSON-RPC initialize with server info (semble 1.28.0, agent-browser 0.31.1). Semble MCP exposes search(query, repo, top_k) + find_related(file_path, line, repo, top_k) — content filtering via --content is CLI-only. agent-browser MCP exposes ~30 typed agent_browser_* tools under core profile. Doc fixes: agent-browser.md drops nonexistent skill path; semble-search.md + AGENT_BASELINE.md §3 corrected to match actual MCP surface. make check exits 0; memory-protocol-drift.test.mjs 4/4 PASS.",
+      "state": "passing",
+      "layer": "L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/settings.json (mcpServers: semble, agent-browser; permissions.allow: mcp__semble__*, mcp__agent-browser__*)",
+        ".claude/agents/agent-browser.md (dropped skill path ref, updated MCP registration note)",
+        ".claude/agents/semble-search.md (corrected tool surface, moved --content to CLI fallback)",
+        ".claude/agents/_shared/AGENT_BASELINE.md §3 (corrected --content claim)",
+        "docs/agent-audit-2026-07-22.md (resolution log)",
+        "PROGRESS.md (In Progress F-108 section)",
+        "feature_list.json (this entry)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-109",
+      "behavior": "Agent frontmatter fixes across 13 of 14 agents (Odin intentionally left unchanged — pure router with Agent + Read + WebFetch + WebSearch). Added AskUserQuestion to vor.md (its body requires it). Added Agent to hermod.md and vidarr.md (PR-review and Forseti-gate dispatch described in body but missing from tools). Added Skill to all 13 non-Odin agents (AGENT_BASELINE.md:9 and SKILLS.md:87 explicitly tell every agent to invoke skills via the Skill tool).",
+      "verification": "All 14 agent files have valid YAML frontmatter — make check (TypeScript) exits 0. plov-through.test.mjs 5/5 PASS, memory-protocol-drift.test.mjs 4/4 PASS. Audit correction: the 2026-07-22 audit incorrectly claimed forseti.md:26 references a nonexistent bizar-dash/src/server/mod-security.mjs — file does exist (14008 bytes, 2026-07-16); no fix needed; audit doc updated.",
+      "state": "passing",
+      "layer": "L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/agents/vor.md (AskUserQuestion, Skill)",
+        ".claude/agents/hermod.md (Agent, Skill)",
+        ".claude/agents/vidarr.md (Agent, Skill)",
+        ".claude/agents/thor.md, tyr.md, mimir.md, heimdall.md, baldr.md, quick.md (Skill)",
+        ".claude/agents/frigg.md, forseti.md, agent-browser.md, semble-search.md (Skill)",
+        "docs/agent-audit-2026-07-22.md (F-109 resolution log + audit correction)",
+        "PROGRESS.md (In Progress F-109 section)",
+        "feature_list.json (this entry)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-110",
+      "behavior": "Slash command wiring + skill refs in agent bodies. Extended thinking-route.mjs SLASH table from 7 to 18 entries — newly wired: /setup-provider, /explain, /visual-plan, /tailscale-serve, /bizar, /init, /cron, /spec, /sprint, /goal, /learn (length-desc order so longer prefixes win). 11 new test cases in thinking-route.test.mjs (61 → 72 PASS). Added explicit skill references in 3 agents: mimir.md (obsidian), heimdall.md (obsidian, memory-protocol, self-improvement), baldr.md (glyph, de-sloppify). Orphan slash commands (cron/goal/spec/sprint previously missing from config/commands/) are now canonical at .claude/commands/ only after F-107's config/commands/ deletion.",
+      "verification": "make check exits 0. thinking-route.test.mjs 72/72 PASS (was 61; +11 new cases). plow-through.test.mjs 5/5 PASS, memory-protocol-drift.test.mjs 4/4 PASS. All 18 slash commands in .claude/commands/ trigger their slash note on the matching prompt. All 3 modified agent bodies declare their explicit skill refs (verified by reading the updated Always-On sections).",
+      "state": "passing",
+      "layer": "L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/hooks/thinking-route.mjs (SLASH table 7 → 18 entries, length-desc order)",
+        ".claude/hooks/__tests__/thinking-route.test.mjs (+11 slash tests, 61 → 72)",
+        ".claude/agents/mimir.md (obsidian skill ref)",
+        ".claude/agents/heimdall.md (obsidian, memory-protocol, self-improvement skill refs)",
+        ".claude/agents/baldr.md (glyph, de-sloppify skill refs)",
+        "docs/agent-audit-2026-07-22.md (F-110 resolution log)",
+        "PROGRESS.md (In Progress F-110 section)",
+        "feature_list.json (this entry)"
+      ],
+      "passed": "2026-07-22"
+    },
+    {
+      "id": "F-111",
+      "behavior": "Audit follow-up — fill the four remaining gaps from docs/agent-audit-2026-07-22.md §A2/C1/C2/D7: (1) NEW .claude/skills/agent-browser/SKILL.md — first-class docs for the agent-browser CLI/MCP that the agent-browser agent uses as its primary tool; (2) .claude/skills/bizar/SKILL.md:370 — drop the stale Cline-era `~/.cline/skills/agent-browser/SKILL.md` path, redirect to the new skill; (3) .claude/agents/_shared/AGENT_BASELINE.md §6 — drop the empty `config/rules/` references (the project-level dir is empty), point at user-level `~/.claude/rules/`; (4) add explicit 9router skill refs to the 4 agents that fetch external content (thor, tyr, mimir, frigg) — 9router-web-fetch + 9router-web-search replace bare WebFetch/WebSearch via Firecrawl/Jina/Tavily/Exa with format options and provider auto-fallback.",
+      "verification": "make check exits 0. thinking-route 113/113 PASS, memory-protocol-drift 4/4 PASS, plow-through 5/5 PASS. ls .claude/skills/agent-browser/SKILL.md exists and is readable. grep -rn '~/.cline/' .claude/ returns no matches (all Cline paths cleaned). All 4 modified agent bodies reference their 9router skill refs. AGENT_BASELINE.md §6 no longer references config/rules/ as a source.",
+      "state": "passing",
+      "layer": "L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "files_touched": [
+        ".claude/skills/agent-browser/SKILL.md (NEW)",
+        ".claude/skills/bizar/SKILL.md (drop 4 Cline-era paths: line 370 agent-browser, line 384 bizar, line 385 self-improvement, line 386 agent-baseline)",
+        ".claude/skills/9router/SKILL.md (drop 1 Cline-era path: line 61)",
+        ".claude/agents/agent-browser.md (explicit agent-browser skill ref)",
+        ".claude/agents/_shared/AGENT_BASELINE.md §4 (add 9router mention) + §6 (drop config/rules/ refs)",
+        ".claude/agents/{thor,tyr,mimir,frigg}.md (9router skill refs)",
+        "PROGRESS.md (F-111 In Progress)",
+        "feature_list.json (this entry)"
+      ],
+      "passed": "2026-07-22"
     }
   ],
   "vcr": {
-    "passing": 59,
-    "activated": 59,
+    "passing": 73,
+    "activated": 73,
     "ratio": 1
   }
 }

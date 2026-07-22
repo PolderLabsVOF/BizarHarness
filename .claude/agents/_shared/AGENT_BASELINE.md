@@ -118,12 +118,17 @@ If you hit the limit: stop retrying, read `CLAUDE_TOOLS.md`, or open a fresh ses
 
 ## 3. Codebase Search — Semble First
 
-Use `mcp__semble__search "<query>"` first. Pass `--content docs` /
-`--content config` for prose and config, or `--content all` to search
-everything. Semble is faster and lighter than `Grep` + `Read`.
-Read whole files only when the chunk returned is insufficient.
+Use `mcp__semble__search "<query>"` first. Semble is faster and lighter
+than `Grep` + `Read`. Read whole files only when the chunk returned is
+insufficient.
 
-For CLI fallback or sub-agents without MCP access, use:
+The MCP tool exposes `query`, `repo` (optional — path or git URL;
+defaults to CWD), and `top_k` (default 5). It does **not** accept
+`--content` — for content-type filtering (`docs` / `config` / `all`)
+use the CLI:
+
+For CLI fallback, sub-agents without MCP access, or content-type
+filtering:
 
 ```bash
 semble search "authentication flow" ./my-project
@@ -136,7 +141,8 @@ The index is built on first run and cached automatically. If `semble` is not on 
 
 ## 4. Skill Discovery
 
-Claude Code auto-loads skills from `~/.claude/skills/<name>/SKILL.md`.
+Claude Code auto-loads skills from `~/.claude/skills/<name>/SKILL.md`
+and project-local `.claude/skills/<name>/SKILL.md`.
 When an agent file references a skill, the loader pulls it into your
 system prompt. You always see skill content — you must follow it.
 
@@ -147,6 +153,13 @@ Domain skill repos:
 - Testing: `mattpocock/skills`, `microsoft/playwright-cli`
 - Design: `anthropics/skills`, `leonxlnx/taste-skill`
 
+For external web calls (WebFetch / WebSearch), prefer the **9router**
+skills when `$NINEROUTER_URL` is reachable — they expose Firecrawl /
+Jina Reader / Tavily / Exa with format options and provider auto-fallback
+that bare WebFetch / WebSearch don't. See
+`.claude/skills/9router/SKILL.md` (umbrella) and the leaf skills
+`9router-web-fetch`, `9router-web-search`.
+
 ## 5. Project Memory Vault
 
 **Mandatory at session start.** Run `bizar memory status` to resolve
@@ -156,14 +169,21 @@ with `bizar memory write <relpath> --type <type> --body "..."`.
 
 ## 6. Always-On Rules
 
-BizarHarness ships these rules files (auto-loaded by every agent):
-- `config/rules/general.md` — secrets, logging, code quality
-- `config/rules/javascript.md` — JS/TS conventions
-- `config/rules/python.md` — Python conventions
-- `config/rules/git.md` — git and commit conventions
-- `config/rules/testing.md` — test methodology
-- `config/rules/thinking.md` — concise reasoning
-- `config/rules/uncertainty.md` — research before retry
+BizarHarness applies user-level rules from `~/.claude/rules/` to every
+session (auto-loaded by Claude Code at session start):
+
+- `general.md` — secrets, logging, code quality
+- `javascript.md` — JS/TS conventions
+- `python.md` — Python conventions
+- `git.md` — git and commit conventions
+- `testing.md` — test methodology
+- `thinking.md` — concise reasoning
+- `uncertainty.md` — research before retry
+
+The project-level `config/rules/` tree is empty (legacy Cline-era
+location; removed in F-107). Do not write project rules there — they
+will not be loaded. User-level rules at `~/.claude/rules/` apply
+globally.
 
 ## 7. Loop Guard Handling
 
