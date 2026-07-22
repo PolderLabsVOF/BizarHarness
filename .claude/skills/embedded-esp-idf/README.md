@@ -4,7 +4,7 @@ ESP-IDF v5.x C++ firmware patterns for Claude Code. Covers the `idf.py` workflow
 
 ## What it provides
 
-- **SKILL.md** — quick start + 7 deep-dive references + 2 helper scripts
+- **SKILL.md** — pam start + 7 deep-dive references + 2 helper scripts
 - **references/idf-py-commands.md** — every `idf.py` subcommand + exit codes
 - **references/freertos-patterns.md** — task lifecycle, ISR-to-task handoff, ringbuffer streams
 - **references/memory-and-iram.md** — IRAM/DRAM/PSRAM model, `IRAM_ATTR`, `MALLOC_CAP_*`

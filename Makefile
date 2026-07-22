@@ -70,6 +70,14 @@ verify-feature:  ## Verify a feature by ID — usage: make verify-feature ID=F-0
 
 check-arch:  ## Run architectural constraints (scripts/check-arch.sh)
 	@bash scripts/check-arch.sh .
+	@echo "▶ Verifying thinking-* skill files..."
+	@node scripts/verify-thinking-skills.mjs
+
+sync-skills-mirror:  ## Mirror config/skills/ -> .claude/skills/ (idempotent)
+	@node scripts/sync-skills-mirror.mjs
+
+verify-thinking-skills:  ## Verify every thinking-*/skillopt SKILL.md is well-formed
+	@node scripts/verify-thinking-skills.mjs
 
 clean-check:  ## Remove console.log/debugger and run lint
 	@echo "▶ Scanning for console.log / debugger / .only()..."
@@ -129,4 +137,4 @@ worktree-init:  ## Bootstrap a new worktree with shared node_modules / dist syml
 	@./scripts/worktree-setup.sh "$(WORKTREE)"
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup
+.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills

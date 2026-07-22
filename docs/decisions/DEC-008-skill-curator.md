@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-07
 **Status:** Accepted
-**Deciders:** @tyr
+**Deciders:** @karen
 
 ## Context
 

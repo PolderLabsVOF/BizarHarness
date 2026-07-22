@@ -60,14 +60,14 @@ writeFileSync(
 
 // Seed one Bizar agent + one task + one goal as precondition.
 writeFileSync(
-  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'odin.md'),
+  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'mike.md'),
   '---\ndescription: Router\nmode: router\ntags: [orchestration]\ncategory: reasoning\n---\nRoute.\n',
   'utf8',
 );
 writeFileSync(
   join(HOME_OVERRIDE, '.config', 'bizar', 'agent-status.json'),
   JSON.stringify({
-    odin: { status: 'idle', currentTaskId: null, lastSeen: Date.now(), heartbeat: Date.now(), currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 0, tasksSucceeded: 0, tasksFailed: 0, successRate: 1 },
+    mike: { status: 'idle', currentTaskId: null, lastSeen: Date.now(), heartbeat: Date.now(), currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 0, tasksSucceeded: 0, tasksFailed: 0, successRate: 1 },
   }, null, 2),
   'utf8',
 );

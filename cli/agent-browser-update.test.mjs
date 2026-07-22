@@ -1,7 +1,7 @@
 /**
- * cli/agent-browser-update.test.mjs
+ * cli/kevin-update.test.mjs
  *
- * Unit tests for the v6.0.0 agent-browser install/update module.
+ * Unit tests for the v6.0.0 kevin install/update module.
  * Uses node:test (no `expect` — uses `assert` instead).
  */
 
@@ -14,9 +14,9 @@ const {
   install,
   update,
   ensureRunning,
-} = await import("./agent-browser-update.mjs");
+} = await import("./kevin-update.mjs");
 
-describe("agent-browser-update", () => {
+describe("kevin-update", () => {
   it("exports the public API", () => {
     assert.equal(typeof detectState, "function");
     assert.equal(typeof printStatus, "function");
@@ -42,9 +42,9 @@ describe("agent-browser-update", () => {
     }
   });
 
-  it("detectState profileDir points to ~/.agent-browser/profile by default", () => {
+  it("detectState profileDir points to ~/.kevin/profile by default", () => {
     const s = detectState();
-    assert.match(s.profileDir, /\.agent-browser\/profile$/);
+    assert.match(s.profileDir, /\.kevin\/profile$/);
   });
 
   it("detectState default daemon port is 9223", () => {
@@ -63,7 +63,7 @@ describe("agent-browser-update", () => {
       console.log = origLog;
     }
     assert.ok(captured.length > 0);
-    assert.match(captured[0], /agent-browser/);
+    assert.match(captured[0], /kevin/);
   });
 
   it("install with dryRun=true returns a state object", () => {

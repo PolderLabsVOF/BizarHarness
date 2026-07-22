@@ -34,9 +34,9 @@ describe("decideAgentWith — precedence chain", () => {
     const qr = new QLearningRouter({ seed: 42 });
     const d = decideAgentWith(mr, qr, {
       task: "convert var to const",
-      explicitAgent: "odin",
+      explicitAgent: "mike",
     });
-    expect(d.agent).toBe("odin");
+    expect(d.agent).toBe("mike");
     expect(d.agentConfidence).toBe(1.0);
     expect(d.codemodIntent).toBeNull();
     // Explicit path still emits a [TASK_MODEL_RECOMMENDATION] tag.
@@ -48,7 +48,7 @@ describe("decideAgentWith — precedence chain", () => {
     const mr = new ModelRouter({ seed: 42 });
     const qr = new QLearningRouter({ seed: 42 });
     const d = decideAgentWith(mr, qr, { task: "convert var to const" });
-    expect(d.agent).toBe("heimdall");
+    expect(d.agent).toBe("brenda");
     expect(d.agentConfidence).toBe(1.0);
     expect(d.codemodIntent).toBe("var-to-const");
     expect(d.modelTier).toBe("flash");
@@ -61,7 +61,7 @@ describe("decideAgentWith — precedence chain", () => {
     const mr = new ModelRouter({ seed: 42 });
     const qr = new QLearningRouter({ seed: 42 });
     const d = decideAgentWith(mr, qr, { task: "design a database schema" });
-    expect(["odin", "frigg", "vor", "mimir", "heimdall", "thor", "tyr", "forseti"])
+    expect(["mike", "susan", "janet", "greg", "brenda", "todd", "karen", "linda"])
       .toContain(d.agent);
     expect(d.codemodIntent).toBeNull();
     expect(["flash", "mid", "expensive"]).toContain(d.modelTier);
@@ -78,7 +78,7 @@ describe("decideAgentWith — precedence chain", () => {
   });
 });
 
-const AGENT_SET = new Set(["odin", "frigg", "vor", "mimir", "heimdall", "thor", "tyr", "forseti"]);
+const AGENT_SET = new Set(["mike", "susan", "janet", "greg", "brenda", "todd", "karen", "linda"]);
 
 describe("tag formatters", () => {
   test("codemodTag includes intent and confidence", () => {
@@ -167,6 +167,6 @@ describe("decideAgent — codemod short-circuit covers all three intents", () =>
     const qr = new QLearningRouter({ seed: 42 });
     const d = decideAgentWith(mr, qr, { task: prompt });
     expect(d.codemodIntent).toBe(expected);
-    expect(d.agent).toBe("heimdall");
+    expect(d.agent).toBe("brenda");
   });
 });

@@ -1,7 +1,7 @@
 /**
  * tests/e2e/dashboard-browser-smoke.mjs — v10-S7.
  *
- * Boots the real dashboard server + drives agent-browser through the
+ * Boots the real dashboard server + drives kevin through the
  * Overview, Agents, Goals, Tasks, and Settings views. Writes
  * screenshots to /tmp/bh-browser-smoke/*.png and asserts the page
  * title, the sidebar nav, and a key data-testid render on each view.
@@ -89,34 +89,34 @@ try {
   // CONTROL_SURFACES.md follow-ups). The browser-side checks below
   // are the real evidence that the dashboard builds, mounts, and
   // responds to navigation across routes.
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `${baseUrl}/`]);
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `${baseUrl}/`]);
   await new Promise((r) => setTimeout(r, 1500));
 
-  // Drive agent-browser through the views.
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `${baseUrl}/`]);
+  // Drive kevin through the views.
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `${baseUrl}/`]);
   // Wait for React to hydrate (Vite-built bundle, network round-trip).
   await new Promise((r) => setTimeout(r, 1500));
 
   await check('browser.title', async () => {
-    const { out } = await sh('agent-browser', ['get', 'title']);
+    const { out } = await sh('kevin', ['get', 'title']);
     return `title="${out.trim()}"`;
   });
 
   await check('browser.console_errors', async () => {
-    // Use eval to read window-side errors. agent-browser doesn't expose
+    // Use eval to read window-side errors. kevin doesn't expose
     // console.history directly; we poll a known DOM landmark instead.
-    const { out } = await sh('agent-browser', ['eval', 'document.body.children.length']);
+    const { out } = await sh('kevin', ['eval', 'document.body.children.length']);
     if (Number(out) === 0) throw new Error('empty body');
     return `bodyChildren=${out.trim()}`;
   });
 
   // Screenshot the landing page (Overview if router works, Login otherwise).
-  await sh('agent-browser', ['screenshot', join(SHOT_DIR, '01-landing.png')]);
+  await sh('kevin', ['screenshot', join(SHOT_DIR, '01-landing.png')]);
 
   // Snapshot the accessibility tree so we can see what's actually rendered.
-  const { out: snapRaw } = await sh('agent-browser', ['snapshot']);
+  const { out: snapRaw } = await sh('kevin', ['snapshot']);
   await check('browser.snapshot_nonempty', async () => {
     if (!snapRaw || snapRaw.length < 100) throw new Error('snapshot empty');
     return `bytes=${snapRaw.length}`;
@@ -129,11 +129,11 @@ try {
   const routes = ['#/agents', '#/goals', '#/tasks', '#/settings', '#/projects'];
   for (let i = 0; i < routes.length; i++) {
     const r = routes[i];
-    await sh('agent-browser', ['open', `${baseUrl}/${r}`]);
+    await sh('kevin', ['open', `${baseUrl}/${r}`]);
     await new Promise((res) => setTimeout(res, 800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, `${String(i + 2).padStart(2, '0')}-${r.slice(2)}.png`)]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, `${String(i + 2).padStart(2, '0')}-${r.slice(2)}.png`)]);
     await check(`browser.${r.slice(2)}.snapshot`, async () => {
-      const { out } = await sh('agent-browser', ['eval', 'document.body.innerText.length']);
+      const { out } = await sh('kevin', ['eval', 'document.body.innerText.length']);
       if (Number(out) < 50) throw new Error(`innerText too short (${out})`);
       return `innerTextBytes=${out.trim()}`;
     });
@@ -143,20 +143,20 @@ try {
   // the bundled module's global side-effect. The dist index.html
   // references /assets/main-*.js — confirm asset is reachable.
   await check('dashboard.main_bundle', async () => {
-    const { out } = await sh('agent-browser', ['eval', 'Array.from(document.scripts).map(s => s.src).join(",")']);
+    const { out } = await sh('kevin', ['eval', 'Array.from(document.scripts).map(s => s.src).join(",")']);
     if (!out.includes('main-')) throw new Error('no main bundle script tag');
     return `scripts=${out.split(',').length}`;
   });
 
   // Final screenshot of Settings specifically — the most configuration-heavy page.
-  await sh('agent-browser', ['open', `${baseUrl}/#/settings`]);
+  await sh('kevin', ['open', `${baseUrl}/#/settings`]);
   await new Promise((r) => setTimeout(r, 1000));
-  await sh('agent-browser', ['screenshot', join(SHOT_DIR, '07-settings-final.png')]);
+  await sh('kevin', ['screenshot', join(SHOT_DIR, '07-settings-final.png')]);
 } catch (err) {
   results.push({ name: 'e2e.error', ok: false, detail: err.message });
   console.error('smoke error:', err.message);
 } finally {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
   await boot.close?.();
   // Evidence file.
   const evidence = join(SHOT_DIR, 'results.json');

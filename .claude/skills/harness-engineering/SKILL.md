@@ -1,6 +1,6 @@
 ---
 name: harness-engineering
-description: Use when designing or evaluating the environment around an AI coding agent — instructions, state, verification, scope, and lifecycle. Triggers on questions about agent harness design, session lifecycle, definition of done, scope discipline, state persistence, loop engineering, context engineering, or observability. Synthesizes the walkinglabs/awesome-harness-engineering canon with Bizar's Norse-pantheon architecture so every agent session starts from a strong baseline.
+description: Use when designing or evaluating the environment around an AI coding agent — instructions, state, verification, scope, and lifecycle. Synthesizes the walkinglabs/awesome-harness-engineering canon with Bizar's Norse-pantheon architecture so every agent session starts from a strong baseline.
 ---
 
 # Harness Engineering for Bizar agents
@@ -27,10 +27,10 @@ References:
    -----------       -----            ------------
    AGENTS.md         PROGRESS.md      make check
    CLAUDE.md         feature_list.json make test
-   .claude/          .harness/traces/ make e2e
-     agents/         DECISIONS.md     make clean-check
-     skills/         init.sh output
-     hooks/
+   _shared/          .harness/traces/ make e2e
+     AGENT_BASELINE  DECISIONS.md     make clean-check
+   _shared/          init.sh output
+     CLINE_TOOLS
 
    Scope              Session Lifecycle
    -----              ------------------
@@ -47,8 +47,8 @@ Bizar ships all five. This skill is your reminder to use them.
 Every agent session MUST follow this lifecycle:
 
 1. **Read AGENTS.md** — your operating manual.
-2. **Read CLAUDE.md** — Claude Code mirror of AGENTS.md (auto-loaded).
-3. **Read .claude/agents/_shared/AGENT_BASELINE.md** — baseline behavior rules.
+2. **Read _shared/AGENT_BASELINE.md** — baseline behavior rules.
+3. **Read _shared/CLINE_TOOLS.md** — exact tool schemas.
 4. **Run `make session-start`** — record session ID.
 5. **Read PROGRESS.md** — state from the last session.
 6. **Read feature_list.json** — pick the next `not_started` feature.
@@ -111,9 +111,8 @@ Treat the context window as a working memory budget, not a dump site:
 ## Observability (L11, OTel)
 
 If you can't see what the agent did, you can't fix what it broke. Bizar
-records every session to `.harness/traces/sessions.jsonl` (gitignored)
-and via the SessionEnd hook to `~/.bizar_home/memory/projects/<name>/sessions/`.
-For OpenTelemetry-compatible exporters, see `packages/sdk/src/observability.ts`.
+records every session to `.harness/traces/sessions.jsonl` (gitignored).
+For OpenTelemetry-compatible exporters, see `plugins/bizar/src/observability.ts`.
 
 ## Sandbox (CubeSandbox — v6.3.0)
 

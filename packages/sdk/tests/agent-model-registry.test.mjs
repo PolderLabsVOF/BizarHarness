@@ -30,10 +30,10 @@ const SAMPLE = {
     budget: { models: ['oc/deepseek-v4-flash-free', 'oc/mimo-v2.5-free'], purpose: 'Cheap.' },
   },
   agents: {
-    odin: { model: 'cx/gpt-5.6-terra', tier: 'high', rationale: 'routing' },
-    thor: { model: 'bizar/MiniMax-M2.7', tier: 'mid', rationale: 'mid-impl' },
-    quick: { model: 'oc/deepseek-v4-flash-free', tier: 'budget', rationale: 'tiny' },
-    heimdall: { model: 'bizar/MiniMax-M3', tier: 'default', rationale: 'mech' },
+    mike: { model: 'cx/gpt-5.6-terra', tier: 'high', rationale: 'routing' },
+    todd: { model: 'bizar/MiniMax-M2.7', tier: 'mid', rationale: 'mid-impl' },
+    pam: { model: 'oc/deepseek-v4-flash-free', tier: 'budget', rationale: 'tiny' },
+    brenda: { model: 'bizar/MiniMax-M3', tier: 'default', rationale: 'mech' },
   },
   policies: {
     fallback_chain: ['cx/gpt-5.6-sol', 'bizar/MiniMax-M3', 'oc/mimo-v2.5-free'],
@@ -64,8 +64,8 @@ describe('agent-model-registry', () => {
 
   it('resolves a known agent to its model + endpoint', () => {
     const reg = loadModelRegistry({ configPath: cfgPath });
-    const r = resolveAgentModel('odin', reg);
-    assert.equal(r.agent, 'odin');
+    const r = resolveAgentModel('mike', reg);
+    assert.equal(r.agent, 'mike');
     assert.equal(r.modelId, 'cx/gpt-5.6-terra');
     assert.equal(r.tier, 'high');
     assert.equal(r.endpoint, 'http://localhost:20128/v1');
@@ -75,7 +75,7 @@ describe('agent-model-registry', () => {
   it('falls back to the default agent on an unknown agent', () => {
     const reg = loadModelRegistry({ configPath: cfgPath });
     const r = resolveAgentModel('nonexistent', reg);
-    // Falls back to "odin" if it exists, else "default" agent entry.
+    // Falls back to "mike" if it exists, else "default" agent entry.
     assert.ok(r.modelId.length > 0);
     assert.ok(r.endpoint.startsWith('http'));
   });
@@ -93,8 +93,8 @@ describe('agent-model-registry', () => {
     const list = listAgentModels(reg);
     assert.equal(list.length, 4);
     const names = list.map((a) => a.agent);
-    assert.ok(names.includes('odin'));
-    assert.ok(names.includes('quick'));
+    assert.ok(names.includes('mike'));
+    assert.ok(names.includes('pam'));
   });
 
   it('env override on endpoint wins over the JSON', () => {
@@ -102,7 +102,7 @@ describe('agent-model-registry', () => {
     try {
       const reg = loadModelRegistry({ configPath: cfgPath });
       assert.equal(reg.endpoint, 'http://custom:9000/v1');
-      const r = resolveAgentModel('quick', reg);
+      const r = resolveAgentModel('pam', reg);
       assert.equal(r.endpoint, 'http://custom:9000/v1');
     } finally {
       delete process.env.BIZAR_MODEL_ROUTER_URL;

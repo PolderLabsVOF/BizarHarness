@@ -42,13 +42,13 @@ are available as `$ARGUMENTS` (or `$1`, `$2`, ...):
 ## When to Use
 
 - After any non-trivial code change
-- Before committing (`@hermod` should always run `/test` first)
+- Before committing (`@steve` should always run `/test` first)
 - As the final step of a `/team` mission — gate quality with tests
 
 ## Common Patterns
 
 - **Post-implementation gate** — after Thor and Tyr finish their
-  parallel work, dispatch `thor` to run `/test`. If failures, fix
+  parallel work, dispatch `todd` to run `/test`. If failures, fix
   and re-run.
 - **PR check** — run `/test` in CI before merging.
 - **Debug a flaky test** — run `/test` twice; if the second run

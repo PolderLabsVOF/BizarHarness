@@ -61,10 +61,10 @@ function bizarHome() {
 const REPO_ROOT = process.env.BIZAR_REPO_ROOT || process.cwd();
 
 const REQUIRED_AGENTS = [
-  'odin.md', 'vor.md', 'frigg.md', 'quick.md',
-  'mimir.md', 'heimdall.md', 'hermod.md', 'thor.md', 'baldr.md',
-  'tyr.md', 'vidarr.md', 'forseti.md',
-  'semble-search.md', 'agent-browser.md',
+  'mike.md', 'janet.md', 'susan.md', 'pam.md',
+  'greg.md', 'brenda.md', 'steve.md', 'todd.md', 'brad.md',
+  'karen.md', 'carl.md', 'linda.md',
+  'oscar.md', 'kevin.md',
 ];
 
 const REQUIRED_COMMANDS = [
@@ -244,16 +244,16 @@ const CHECKS = {
 
   'agent-frontmatter-format': async () => {
     // Claude Code reads agents via `.md` files with YAML frontmatter.
-    // Spot-check that at least the odin.md agent has frontmatter.
+    // Spot-check that at least the mike.md agent has frontmatter.
     const dir = join(claudeDir(), 'agents');
     if (!existsSync(dir)) throw new Error('agents dir missing');
-    const odin = join(dir, 'odin.md');
-    if (!existsSync(odin)) throw new Error('odin.md missing');
-    const text = readFileSync(odin, 'utf8');
+    const mike = join(dir, 'mike.md');
+    if (!existsSync(mike)) throw new Error('mike.md missing');
+    const text = readFileSync(mike, 'utf8');
     if (!text.startsWith('---')) {
-      throw new Error('odin.md has no YAML frontmatter — Claude Code may not load it');
+      throw new Error('mike.md has no YAML frontmatter — Claude Code may not load it');
     }
-    return 'odin.md has YAML frontmatter';
+    return 'mike.md has YAML frontmatter';
   },
 
   'slash-commands-installed': async () => {

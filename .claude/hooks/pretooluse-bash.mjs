@@ -28,11 +28,17 @@ process.stdin.on('end', () => {
   // Inline dangerous-pattern scanner. Mirrors
   // `packages/sdk/src/dangerous-patterns.ts` — kept inline so this hook
   // works without importing the SDK at runtime.
+  // For the `rm` family, the path argument must be EXACTLY the dangerous
+  // root — not a prefix of a deeper path. `/home/drb0rk/projects/foo.mjs`
+  // is a legitimate delete, not "wipe home directory". The old patterns
+  // matched any path STARTING with `/home` and so blocked every file
+  // delete under the project root (false positive).
   const DANGEROUS = [
-    { name: 'rm-rf-root', pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/\s*$/i, decision: 'deny', reason: 'Recursive delete of root filesystem' },
-    { name: 'rm-rf-etc', pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/(etc|var|usr|boot|home)\b/i, decision: 'deny', reason: 'Recursive delete of system directory' },
-    { name: 'rm-rf-wildcard', pattern: /\brm\s+-\w*r\w*f\w*\s+\*/i, decision: 'ask', reason: 'Recursive delete with wildcard' },
-    { name: 'rm-rf-home', pattern: /\brm\s+(-\w*r\w*f\w*\s+)*~?\//i, decision: 'ask', reason: 'Recursive delete of home directory' },
+    { name: 'rm-rf-root',       pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/(?:\s|$|;|\|)/i, decision: 'deny', reason: 'Recursive delete of root filesystem' },
+    { name: 'rm-rf-system',      pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/(?:etc|var|usr|boot)\b(?:\s|$|;|\|)/i, decision: 'deny', reason: 'Recursive delete of system directory' },
+    { name: 'rm-rf-wildcard',    pattern: /\brm\s+-\w*r\w*f\w*\s+\*/i, decision: 'ask', reason: 'Recursive delete with wildcard' },
+    { name: 'rm-rf-home',        pattern: /\brm\s+(-\w*r\w*f\w*\s+)*~?\/(?:\s|$|;|\|)/i, decision: 'ask', reason: 'Recursive delete of home directory' },
+    { name: 'rm-rf-home-exact',  pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/home(?:\s|$|;|\|)/i, decision: 'ask', reason: 'Recursive delete of /home (the directory, not a sub-path)' },
     { name: 'mkfs', pattern: /\bmkfs(\.\w+)?\s+\/dev\//i, decision: 'deny', reason: 'Format filesystem' },
     { name: 'dd-of-dev', pattern: /\bdd\s+.*of=\/dev\//i, decision: 'deny', reason: 'dd to raw device' },
     { name: 'sudo', pattern: /(^|\s|;|&&|\|\|)sudo\b/i, decision: 'ask', reason: 'Sudo escalation' },

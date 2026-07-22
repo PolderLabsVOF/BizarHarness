@@ -20,7 +20,7 @@ const ALL_COMMANDS = [
   // Util-based (live in cli/commands/util.mjs)
   'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
   'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
-  'agent-browser', 'agent-browser-up', 'providers',
+  'kevin', 'kevin-up', 'providers',
   // Own module
   'install', 'update',
   'service',
@@ -38,7 +38,7 @@ const ALL_COMMANDS = [
 const NON_OWN_MODULE = new Set([
   'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
   'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
-  'agent-browser', 'agent-browser-up', 'providers', 'install', 'update',
+  'kevin', 'kevin-up', 'providers', 'install', 'update',
 ]);
 
 const seen = new Set();

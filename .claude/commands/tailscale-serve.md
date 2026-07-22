@@ -31,7 +31,7 @@ Parse them and route to the matching step below.
    ```
    If the port is not open, tell the user clearly which command starts the
    service (e.g. `npm run host:start` for the BizarHarness demo, or
-   `python3 -m http.server 8765` for a quick static server). Do not proceed
+   `python3 -m http.server 8765` for a pam static server). Do not proceed
    without an upstream.
 
 3. **Check current Tailscale Serve status**:

@@ -1,11 +1,11 @@
 ---
-description: PR review mode. Launch @mimir (research) and @forseti (audit) in parallel, then post the combined review as a PR comment.
+description: PR review mode. Launch @greg (research) and @linda (audit) in parallel, then post the combined review as a PR comment.
 allowed-tools: Read, Grep, Glob, Bash, WebFetch
 ---
 
 # /pr-review — PR Review
 
-You are the `hermod` agent running PR review mode. The full
+You are the `steve` agent running PR review mode. The full
 arguments are available as `$ARGUMENTS` — expect a PR number, URL,
 or branch name.
 
@@ -15,12 +15,12 @@ or branch name.
    number. Use `gh pr view <ref>` to fetch the metadata.
 
 2. Dispatch two **parallel** subagents via the **Agent tool**:
-   - **`mimir` (research)** — trace the diff's blast radius:
+   - **`greg` (research)** — trace the diff's blast radius:
      - Files changed and their blast radius
      - Related call sites / consumers that might break
      - Historical context (search `bizar memory search "<feature>"`)
      - Tests that should have run
-   - **`forseti` (audit)** — security and correctness review:
+   - **`linda` (audit)** — security and correctness review:
      - Permission grants added or expanded
      - Hardcoded secrets or PII
      - Race conditions, TOCTOU, unbounded loops

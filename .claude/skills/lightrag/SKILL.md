@@ -1,6 +1,6 @@
 ---
 name: lightrag-instructions
-description: Always-on rules for the LightRAG mod. When the LightRAG server is running, prefer the knowledge graph for cross-document questions before re-reading source files. Triggers on questions where LightRAG should be queried (cross-document semantic questions, entity/relationship lookups) instead of grep-style searches.
+description: Always-on rules installed by the LightRAG mod. When the LightRAG server is running, prefer the knowledge graph for cross-document questions before re-reading source files.
 ---
 
 # LightRAG — Installed Instructions
@@ -42,19 +42,19 @@ LightRAG is for **natural-language questions about content**, not code structure
 
 ## Rules by Agent
 
-### @mimir (research)
+### @greg (research)
 - Before deep-diving into a research question with 20+ tool calls, query the LightRAG knowledge graph first: `POST /query` with the question text. The graph often points you at the right document in 1-2 calls.
 - If LightRAG returns no results, fall back to Semble and grep. Don't force-fit results.
 - After running any new document through LightRAG, the graph updates — query again to see the new context.
 
-### @frigg (Q&A)
+### @susan (Q&A)
 - When the user asks a project-specific question that grep can't answer (e.g. "what did we decide about X?"), check LightRAG first via `POST /query` with the question as the query text.
 - LightRAG returns retrieved context with the answer. Use that as the basis for the response.
 
-### @odin (router)
+### @mike (router)
 - After completing a piece of work that produced documentation (decisions, postmortems, ADRs), consider whether the content should be ingested into LightRAG. If yes, call the dashboard's `/api/mods/lightrag/insert` with the file path.
 
-## API quick reference
+## API pam reference
 
 ```
 POST /query              — body: { query: string, mode: "mix" | "local" | "global" | "hybrid" | "naive" }

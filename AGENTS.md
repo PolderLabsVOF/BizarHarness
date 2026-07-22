@@ -96,7 +96,7 @@ hooks, `{ hookSpecificOutput: { permissionDecision: "allow" | "deny" | "ask", ..
 - `templates/evaluator-rubric.md` — Sprint scoring rubric
 - `templates/clean-state-checklist.md` — 5-dimension exit checklist
 - `.claude/settings.json` — Project-scoped Claude Code tool permissions
-- `.claude/agents/*.md` — Bizar agent definitions (Odin, Frigg, ...)
+- `.claude/agents/*.md` — Bizar agent definitions (Mike, Susan, ...)
 - `.claude/skills/*/SKILL.md` — Bizar skill packs (auto-loaded by name)
 - `.claude/commands/*.md` — User/project-level slash commands
 - `.claude/hooks/*` — Executable hook scripts (PreToolUse, PostToolUse, ...)
@@ -144,7 +144,7 @@ Runtime signals include:
 - `bun run /tmp/bh-full-e2e.mjs` exits 0 (22/22 pass)
 - Plugin `setup()` returns in < 1s and registers 19 tools
 - Memory tools round-trip (write → read → list → search)
-- Claude Code agent dispatch wired (Odin → subagents via `Agent` tool)
+- Claude Code agent dispatch wired (Mike → subagents via `Agent` tool)
 - Kanban board renders against `/api/tasks`
 
 ## Feature List Rules (L08)
@@ -228,7 +228,7 @@ BizarHarness/
 ├── .nvmrc                  # pinned runtime version
 ├── .claude/
 │   ├── settings.json       # scoped tool access
-│   ├── agents/             # Odin, Frigg, ... (one .md per agent)
+│   ├── agents/             # Mike, Susan, ... (one .md per agent)
 │   ├── skills/             # auto-loaded SKILL.md packs
 │   ├── commands/           # user-level slash commands
 │   ├── hooks/              # executable hook scripts

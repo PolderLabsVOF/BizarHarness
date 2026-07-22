@@ -1,11 +1,11 @@
 ---
 name: bizar
-description: Use when working with, configuring, troubleshooting, or understanding the Bizar Norse-pantheon multi-agent system for cline. Covers Odin routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
+description: Use when working with, configuring, troubleshooting, or understanding the Bizar 90s office multi-agent system for cline. Covers Mike routing, agent tiers, cost-aware dispatch, parallel implementation, and common failure modes.
 ---
 
 # Bizar
 
-Norse-pantheon multi-agent system for cline. 13 agents across 4 cost tiers, with Odin as a pure router that always splits implementation across parallel subagents.
+90s office multi-agent system for cline. 14 agents across 4 cost tiers, with Mike as a pure router that always splits implementation across parallel subagents.
 
 ## Installation
 
@@ -18,7 +18,7 @@ chmod +x install.sh
 
 ## Architecture
 
-Odin is the only primary agent. Every request hits him first. He NEVER does work — he decomposes into parallel streams and dispatches to subagents.
+Mike is the only primary agent. Every request hits him first. He NEVER does work — he decomposes into parallel streams and dispatches to subagents.
 
 All subagents use Obsidian vault memory with **per-project vaults**. Call `obsidian_list_vaults` at session start to discover available vaults, determine the project name, and use the matching `<project-name>` vault. The default vault is for general/cross-project knowledge only.
 
@@ -26,46 +26,46 @@ All subagents use Obsidian vault memory with **per-project vaults**. Call `obsid
 
 | Agent | Model | Tier | Cost | When to Route |
 |---|---|---|---|---|
-| **Odin** ᛟ | MiniMax-M3 | Router | $0.30/M · $1.20/M out | Primary entry point. Decomposes and dispatches. |
-| **Mimir** ᛗ | DeepSeek V4 Flash | Free | **$0** | Deep codebase research, Semble-first exploration, docs analysis |
-| **Heimdall** ᚹ | DeepSeek V4 Flash | Free | **$0** | Simple edits, file ops, mechanical CRUD, quick answers |
-| **Hermod** ᚱ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI |
-| **Thor** ᚦ | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Moderate implementation, tests, debugging, refactoring |
-| **Tyr** ᛏ | MiniMax-M3 | High | $0.30/M · $1.20/M out | Complex features, architecture, deep debugging, cross-cutting refactor |
-| **Vidarr** ᛉ | GPT-5.5 | Ultra | ChatGPT sub | Last resort when Tyr fails or debugging is stuck |
-| **Forseti** ᚨ | MiniMax-M3 | Gate | $0.30/M · $1.20/M out | Plan auditor — reviews Tyr/Vidarr plans before execution. `edit: deny`. |
-| **Semble** | — | — | **$0** | MCP search tool, not an agent. Semble-first code search. |
+| **Mike** | MiniMax-M3 | Router | $0.30/M · $1.20/M out | Primary entry point. Decomposes and dispatches. |
+| **Greg** | DeepSeek V4 Flash | Free | **$0** | Deep codebase research, Semble-first exploration, docs analysis |
+| **Brenda** | DeepSeek V4 Flash | Free | **$0** | Simple edits, file ops, mechanical CRUD, pam answers |
+| **Steve** | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Git ops: commit, push, PR, merge, rebase, branches, `gh` CLI |
+| **Todd** | MiniMax-M2.7 | Mid | $0.30/M · $1.20/M out | Moderate implementation, tests, debugging, refactoring |
+| **Karen** | MiniMax-M3 | High | $0.30/M · $1.20/M out | Complex features, architecture, deep debugging, cross-cutting refactor |
+| **Carl** | GPT-5.5 | Ultra | ChatGPT sub | Last resort when Karen fails or debugging is stuck |
+| **Linda** | MiniMax-M3 | Gate | $0.30/M · $1.20/M out | Plan auditor — reviews Karen/Carl plans before execution. `edit: deny`. |
+| **Oscar** | — | — | **$0** | MCP search tool, not an agent. Semble-first code search. |
 
-## Odin Routing Rules
+## Mike Routing Rules
 
-**Odin has `edit: deny`, `bash: deny`, `glob: deny`, `grep: deny`.** He literally cannot self-handle.
+**Mike has `edit: deny`, `bash: deny`, `glob: deny`, `grep: deny`.** He literally cannot self-handle.
 
 ### Mandatory Parallelism
 
 1. **Every request** is decomposed into independent work items
 2. **Always 2+ parallel `task` calls** in a single message
-3. **Implementation always splits across @thor + @tyr** (frontend/backend, file split, impl+tests)
+3. **Implementation always splits across @todd + @karen** (frontend/backend, file split, impl+tests)
 4. If a task truly cannot be split, pair it with a parallel research or review task
 
 ### Routing Cheat Sheet
 
 ```
-Research / Understanding     → @mimir  (free, Semble-first)
-Quick edit / File ops        → @heimdall  (free)
-Git / PR / Merge             → @hermod  (M2.7)
-Moderate implementation      → @thor  (M2.7)
-Complex implementation       → @tyr  (M3, after @forseti audit)
-Ultimate fallback           → @vidarr  (GPT-5.5, after @forseti audit)
-Plan review / Audit         → @forseti  (M3, review only)
+Research / Understanding     → @greg  (free, Semble-first)
+Quick edit / File ops        → @brenda  (free)
+Git / PR / Merge             → @steve  (M2.7)
+Moderate implementation      → @todd  (M2.7)
+Complex implementation       → @karen  (M3, after @linda audit)
+Ultimate fallback           → @carl  (GPT-5.5, after @linda audit)
+Plan review / Audit         → @linda  (M3, review only)
 ```
 
 ### Cost Escalation
 
 ```
-Free (Mimir, Heimdall) → $Mid (Thor, Hermod) → $$High (Tyr) → $$$Ultra (Vidarr)
+Free (Greg, Brenda) → $Mid (Todd, Steve) → $$High (Karen) → $$$Ultra (Carl)
 ```
 
-Never use a paid agent for work a free agent can do. Never use Tyr for what Thor can handle.
+Never use a paid agent for work a free agent can do. Never use Karen for what Todd can handle.
 
 ## When to use Glyphs (visual plans)
 
@@ -79,7 +79,7 @@ Glyphs are the dashboard's `/artifacts/<slug>/artifact.mdx` — MDX with rich bl
 - Any work where the user wants to annotate specific spots on a mockup/diagram with feedback
 
 **Don't use Glyphs for:**
-- "What does this function do?" — use `@frigg` or the `read` tool
+- "What does this function do?" — use `@susan` or the `read` tool
 - A simple bug fix with one obvious cause — just fix it
 - Single-file changes with no design questions
 - Anything that can be answered in one sentence
@@ -111,15 +111,15 @@ After reading the feedback, regenerate the glyph's `artifact.mdx` to address eve
 
 ## Troubleshooting
 
-### Odin Self-Handles Instead of Routing
+### Mike Self-Handles Instead of Routing
 
-**Symptoms:** Odin runs `bash`, `glob`, `grep`, `edit`, or `write` directly instead of delegating via `task`.
+**Symptoms:** Mike runs `bash`, `glob`, `grep`, `edit`, or `write` directly instead of delegating via `task`.
 
 **Causes:**
-- Odin has executable tool permissions (`bash`, `glob`, `grep`, `edit`, `write`)
+- Mike has executable tool permissions (`bash`, `glob`, `grep`, `edit`, `write`)
 - The model defaults to self-handling when tools are available
 
-**Fix:** Remove those permissions from Odin's `~/.config/cline/agents/odin.md`:
+**Fix:** Remove those permissions from Mike's `.claude/agents/office-manager.md`:
 ```yaml
 permission:
   task: allow
@@ -177,49 +177,49 @@ Rotation policy:
 
 Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rotation env vars at all), the plugin works exactly as before.
 
-### Forseti Rejects Every Plan
+### Linda Rejects Every Plan
 
-**Symptoms:** Forseti always returns "CHANGES REQUIRED" or "REJECTED".
+**Symptoms:** Linda always returns "CHANGES REQUIRED" or "REJECTED".
 
 **Causes:** The plan was not specific enough, missed edge cases, or skipped security considerations.
 
-**Fix:** Provide more detail in the plan sent to Forseti: include specific file paths, data flow, error handling, and security implications.
+**Fix:** Provide more detail in the plan sent to Linda: include specific file paths, data flow, error handling, and security implications.
 
 ### Wrong Model Used (Cost Leak)
 
 **Symptoms:** Paid models being used for simple tasks that DeepSeek could handle.
 
-**Fix:** Check routing in `odin.md` — ensure simple/mechanical work always routes to @heimdall first. If @thor or @tyr gets the task, update Odin's routing instructions.
+**Fix:** Check routing in `office-manager.md` — ensure simple/mechanical work always routes to @brenda first. If @todd or @karen gets the task, update Mike's routing instructions.
 
 ## Config File Locations
 
 | File | Purpose |
 |---|---|
-| `~/.config/cline/cline.json` | Main config (no external baseURL needed) |
-| `~/.config/cline/AGENTS.md` | Routing table and conventions |
-| `~/.config/cline/agents/odin.md` | Primary router agent |
-| `~/.config/cline/agents/mimir.md` | Research agent |
-| `~/.config/cline/agents/heimdall.md` | Simple tasks agent |
-| `~/.config/cline/agents/hermod.md` | Git operations agent |
-| `~/.config/cline/agents/thor.md` | Moderate implementation agent |
-| `~/.config/cline/agents/tyr.md` | Complex implementation agent |
-| `~/.config/cline/agents/vidarr.md` | Last resort agent |
-| `~/.config/cline/agents/forseti.md` | Plan auditor agent |
-| `~/.config/cline/agents/semble-search.md` | Code search tool definition |
+| `.claude/settings.json` | Project-scoped Claude Code tool permissions |
+| `.claude/agents/office-manager.md` | Primary router agent |
+| `.claude/agents/research-analyst.md` | Research agent |
+| `.claude/agents/office-coordinator.md` | Simple tasks agent |
+| `.claude/agents/it-lead.md` | Git operations agent |
+| `.claude/agents/senior-engineer.md` | Moderate implementation agent |
+| `.claude/agents/principal-engineer.md` | Complex implementation agent |
+| `.claude/agents/vp-engineering.md` | Last resort agent |
+| `.claude/agents/qa-reviewer.md` | Plan auditor agent |
+| `.claude/agents/knowledge-manager.md` | Code search tool definition |
 
 ## Quick Reference
 
 ```
                  ┌──────────────────────┐
-                 │     Odin ᛟ (M3)      │
-                 │   Router / Decompose  │
+                 │    Mike (M3)          │
+                 │  Office Manager /    │
+                 │  Router / Decompose  │
                  └──────────┬───────────┘
                             │
             ┌───────────────┼───────────────┐
             │               │               │
      ┌──────┴──────┐  ┌────┴────┐  ┌───────┴──────┐
      │ Research    │  │ Simple  │  │ Moderate     │
-     │ Mimir ᛗ     │  │ Heimdall│  │ Thor ᚦ       │
+     │ Greg        │  │ Brenda  │  │ Todd         │
      │ (DeepSeek)  │  │ (DSeek) │  │ (M2.7)       │
      │ FREE        │  │ FREE    │  │ $            │
      └─────────────┘  └─────────┘  └───────┬───────┘
@@ -228,13 +228,13 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
                     │                      │          │
              ┌──────┴──────┐       ┌───────┴──────┐   │
              │ Git         │       │ Complex      │   │
-             │ Hermod ᚱ    │       │ Tyr ᛏ (M3)   │   │
+             │ Steve       │       │ Karen (M3)   │   │
              │ (M2.7) $    │       │ $$           │   │
              └─────────────┘       └───────┬───────┘   │
                                            │           │
                                     ┌──────┴──────┐    │
                                     │ Last Resort │    │
-                                    │ Vidarr ᛉ   │    │
+                                    │ Carl        │    │
                                     │ (GPT-5.5)   │    │
                                     │ $$$$        │    │
                                     └─────────────┘    │
@@ -242,7 +242,7 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
                                    ┌───────────────────┘
                                    │
                             ┌──────┴──────┐
-                            │ Forseti ᚨ   │
+                            │ Linda       │
                             │ Auditor (M3) │
                             │ edit: deny   │
                             │ $            │
@@ -313,7 +313,7 @@ this baseline. Follow them strictly:
 
 ### Rule 9 — Identity, Tone, and Refusal
 
-**Identity preamble.** Bizar is a Norse-pantheon multi-agent system
+**Identity preamble.** Bizar is a 90s office multi-agent system
 for cline. The agent does not have a fixed identity outside its role.
 
 **Refusal handling.** Be free and open. Attempt unclear tasks with
@@ -344,7 +344,7 @@ disengaging from abusive exchanges.
 
 For facts that change quickly (prices, news, current positions),
 **search before answering** via `websearch` / `webfetch` or delegate
-to `@mimir` for deep research.
+to `@greg` for deep research.
 
 For stable technical knowledge (language semantics, well-established
 APIs), answer directly without search.
@@ -365,9 +365,9 @@ Do not over-rely on memory; if uncertain, search.
 
 **Domain skills** — see Rule 4 above.
 
-**Browser interaction** — use `agent-browser` for browser-driven E2E.
-Run `agent-browser` via `bash` heredoc or the `mcp__agent-browser__*` MCP
-tools. See `.claude/skills/agent-browser/SKILL.md` for full reference.
+**Browser interaction** — use `kevin` for browser-driven E2E.
+Run `kevin` via `bash` heredoc or the `mcp__agent-browser__*` MCP
+tools. See `.claude/skills/kevin/SKILL.md` for full reference.
 
 ### Rule 9d — Mandatory Skill Reads
 
@@ -379,7 +379,7 @@ constraints that aren't in training data.
 Triggers:
 - Frontend/React work → `frontend-design`
 - Backend/API work → framework-specific
-- Browser E2E → `agent-browser` (`.claude/skills/agent-browser/SKILL.md`)
+- Browser E2E → `kevin` (`.claude/skills/kevin/SKILL.md`)
 - Skill creation → `skill-creator`
 - BizarHarness work → `.claude/skills/bizar/SKILL.md` (this file)
 - Self-improvement → `.claude/skills/self-improvement/SKILL.md`
@@ -431,7 +431,7 @@ decisions, when pivoting subsystems.
 
 ### Rule 12 — Self-Improvement
 
-Heimdall-only. After every implementation agent finishes, append a
+Brenda-only. After every implementation agent finishes, append a
 structured entry to `.bizar/AGENTS_SELF_IMPROVEMENT.md`:
 
 ```markdown
@@ -440,7 +440,7 @@ structured entry to `.bizar/AGENTS_SELF_IMPROVEMENT.md`:
 - Lesson: what we learned
 - Pattern: what to do next time
 - Files: src/foo.ts, src/bar.ts
-- Agent: thor
+- Agent: todd
 ```
 
 Deduplicate — update existing entries instead of repeating. Keep the

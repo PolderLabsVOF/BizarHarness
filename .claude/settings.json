@@ -8,6 +8,14 @@
         "BIZAR_HOME": "${HOME}/.bizar_home",
         "BIZAR_MEMORY_VAULT": "${HOME}/.bizar_home/memory"
       }
+    },
+    "semble": {
+      "command": "semble",
+      "args": ["mcp"]
+    },
+    "kevin": {
+      "command": "kevin",
+      "args": ["mcp"]
     }
   },
   "permissions": {
@@ -25,7 +33,9 @@
       "mcp__bizar__graph_query",
       "mcp__bizar__graph_path",
       "mcp__bizar__danger_check",
-      "Read(~/.bizar_memory/**)"
+      "Read(~/.bizar_memory/**)",
+      "mcp__semble__*",
+      "mcp__agent-browser__*"
     ],
     "deny": [
       "Read(./.env)",
@@ -111,7 +121,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/userpromptsubmit-tag.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/worker-suggest.mjs",
             "timeout": 10
           }
         ]
@@ -120,7 +130,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/worker-suggest.mjs",
+            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/thinking-route.mjs",
             "timeout": 10
           }
         ]

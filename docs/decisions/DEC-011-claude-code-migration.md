@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-11
 **Status:** Accepted
-**Deciders:** @odin, @tyr
+**Deciders:** @mike, @karen
 **Supersedes:** none
 **Related:** DEC-001 (OpenCode → Cline, now historical), DEC-002, DEC-004, DEC-007
 

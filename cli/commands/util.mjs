@@ -3,7 +3,7 @@
  *
  * Miscellaneous utility commands:
  *   audit, init, export, test-gate, dev-link, dev-unlink,
- *   doctor, repair, heads-up, bg, agent-browser, agent-browser-up, providers detect,
+ *   doctor, repair, heads-up, bg, kevin, kevin-up, providers detect,
  *   backup, restore
  */
 import chalk from 'chalk';
@@ -119,7 +119,7 @@ export function showDoctorHelp() {
       • the Bizar plugin is registered
       • plugin path resolves
       • @polderlabs/bizar-plugin is installed globally
-      • core agent files are installed (odin, quick, thor, tyr)
+      • core agent files are installed (mike, pam, todd, karen)
       • semble / skills on PATH (lenient — at least one)
       • dashboard reachable (skipped if no port file)
       • provider.minimax block + MiniMax model flags are sane
@@ -466,11 +466,11 @@ export async function run(name, args, isHelpRequest) {
       }
       break;
 
-    case 'agent-browser-up': {
+    case 'kevin-up': {
       const { execFileSync } = await import('node:child_process');
       const sub = args[0] || 'start';
       const __dirname = fileURLToPath(new URL('.', import.meta.url));
-      const scriptPath = join(__dirname, '..', 'agent-browser-up.sh');
+      const scriptPath = join(__dirname, '..', 'kevin-up.sh');
       try {
         const out = execFileSync('bash', [scriptPath, sub], {
           encoding: 'utf8',
@@ -478,18 +478,18 @@ export async function run(name, args, isHelpRequest) {
         });
         if (out) process.stdout.write(out);
       } catch (err) {
-        console.error(chalk.red(`  ✗ agent-browser-up ${sub} failed (exit ${err.status ?? 1})`));
+        console.error(chalk.red(`  ✗ kevin-up ${sub} failed (exit ${err.status ?? 1})`));
         process.exit(err.status || 1);
       }
       break;
     }
 
-    case 'agent-browser': {
-      // v6.0.0 — install / update / verify the agent-browser CLI.
-      // (The 'agent-browser-up' sibling is the bash wrapper that just
+    case 'kevin': {
+      // v6.0.0 — install / update / verify the kevin CLI.
+      // (The 'kevin-up' sibling is the bash wrapper that just
       // manages the daemon process; this is the rich installer + updater.)
       const { install, update, detectState, ensureRunning, printStatus } =
-        await import('../agent-browser-update.mjs');
+        await import('../kevin-update.mjs');
       const sub = args[0] || 'status';
       switch (sub) {
         case 'status':
@@ -497,7 +497,7 @@ export async function run(name, args, isHelpRequest) {
           break;
         case 'install': {
           const s = install({ silent: false });
-          console.log(chalk.green('\n  agent-browser ready.'));
+          console.log(chalk.green('\n  kevin ready.'));
           console.log(`    version:    ${s.version}`);
           console.log(`    daemon:     ${s.daemonRunning ? 'running' : 'stopped'}`);
           console.log(`    profile:    ${s.profileDir}`);
@@ -505,7 +505,7 @@ export async function run(name, args, isHelpRequest) {
         }
         case 'update': {
           const s = update({ silent: false });
-          console.log(chalk.green('\n  agent-browser up-to-date.'));
+          console.log(chalk.green('\n  kevin up-to-date.'));
           console.log(`    version:    ${s.version}`);
           console.log(`    daemon:     ${s.daemonRunning ? 'running' : 'stopped'}`);
           break;
@@ -520,7 +520,7 @@ export async function run(name, args, isHelpRequest) {
           break;
         case 'stop': {
           const { spawnSync } = await import('node:child_process');
-          const killed = spawnSync('pkill', ['-f', 'agent-browser serve'], { stdio: 'ignore' });
+          const killed = spawnSync('pkill', ['-f', 'kevin serve'], { stdio: 'ignore' });
           if (killed.status === 0) {
             console.log(chalk.green('  ✓ daemon stopped'));
           } else {
@@ -529,21 +529,21 @@ export async function run(name, args, isHelpRequest) {
           break;
         }
         default:
-          console.log(`bizar agent-browser <sub>
+          console.log(`bizar kevin <sub>
 
   Subcommands:
     status   one-line status (default)
-    install  install agent-browser + download Chrome
+    install  install kevin + download Chrome
     update   upgrade to the latest version
     detect   JSON state (for scripts)
     start    start the daemon
     stop     stop the daemon
 
   Examples:
-    bizar agent-browser status
-    bizar agent-browser install
-    bizar agent-browser update
-    bizar agent-browser start`);
+    bizar kevin status
+    bizar kevin install
+    bizar kevin update
+    bizar kevin start`);
       }
       break;
     }

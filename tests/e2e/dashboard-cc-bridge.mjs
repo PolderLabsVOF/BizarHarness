@@ -57,9 +57,9 @@ mkdirSync(join(projectRoot, '.bizar'), { recursive: true });
 
 // 3 Bizar agents so AgentsView has a populated grid.
 for (const a of [
-  { name: 'odin',  description: 'Router', mode: 'router',   tags: ['orchestration'], category: 'reasoning', prompt: 'Route.' },
-  { name: 'thor',  description: 'Coder',  mode: 'subagent', tags: ['code'],           category: 'code',      prompt: 'Implement.' },
-  { name: 'frigg', description: 'Reader', mode: 'subagent', tags: ['research'],       category: 'research',  prompt: 'Answer.' },
+  { name: 'mike',  description: 'Router', mode: 'router',   tags: ['orchestration'], category: 'reasoning', prompt: 'Route.' },
+  { name: 'todd',  description: 'Coder',  mode: 'subagent', tags: ['code'],           category: 'code',      prompt: 'Implement.' },
+  { name: 'susan', description: 'Reader', mode: 'subagent', tags: ['research'],       category: 'research',  prompt: 'Answer.' },
 ]) {
   writeFileSync(
     join(HOME_OVERRIDE, '.config', 'cline', 'agents', `${a.name}.md`),
@@ -74,9 +74,9 @@ for (const a of [
 // the live CC CLI is available.
 const now = Date.now();
 const bizarStatuses = {
-  odin:  { status: 'idle',    currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 0, tasksSucceeded: 0, tasksFailed: 0, successRate: 1 },
-  thor:  { status: 'working', currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: now,  lastError: null, lastTask: null, tasksTotal: 5, tasksSucceeded: 5, tasksFailed: 0, successRate: 1 },
-  frigg: { status: 'idle',    currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 0, tasksSucceeded: 0, tasksFailed: 0, successRate: 1 },
+  mike:  { status: 'idle',    currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 0, tasksSucceeded: 0, tasksFailed: 0, successRate: 1 },
+  todd:  { status: 'working', currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: now,  lastError: null, lastTask: null, tasksTotal: 5, tasksSucceeded: 5, tasksFailed: 0, successRate: 1 },
+  susan: { status: 'idle',    currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 0, tasksSucceeded: 0, tasksFailed: 0, successRate: 1 },
   'cc:walk-1': { status: 'working', currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: now, lastError: null, lastTask: null, tasksTotal: 7, tasksSucceeded: 7, tasksFailed: 0, successRate: 1 },
   'cc:walk-2': { status: 'idle',    currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 0, tasksSucceeded: 0, tasksFailed: 0, successRate: 1 },
   'cc:walk-3': { status: 'paused',  currentTaskId: null, lastSeen: now, heartbeat: now, currentTaskStartedAt: null, lastError: null, lastTask: null, tasksTotal: 2, tasksSucceeded: 2, tasksFailed: 0, successRate: 1 },
@@ -158,8 +158,8 @@ async function check(name, fn) {
 
 async function agentBrowserEval(expr) {
   const b64 = Buffer.from(expr, 'utf8').toString('base64');
-  const { out } = await sh('agent-browser', ['eval', '-b', b64]);
-  // agent-browser wraps the JS result in literal quotes. Unwrap twice:
+  const { out } = await sh('kevin', ['eval', '-b', b64]);
+  // kevin wraps the JS result in literal quotes. Unwrap twice:
   // the outer `\`"` + escaped JSON + `\`"` then JSON.parse the payload.
   let s = out.trim();
   // Strip surrounding "..." if present.
@@ -202,14 +202,14 @@ try {
 
   // Open browser, click Agents nav, click Claude Code chip, capture
   // post-click state. The chip exists in the UI even when empty.
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
   await new Promise((r) => setTimeout(r, 2000));
 
   await check('cc.merge.chip_clickable_in_ui', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="agents"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="agents"]']);
     await new Promise((r) => setTimeout(r, 1800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'agents-with-chips.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'agents-with-chips.png')]);
 
     const clickJs = `(()=>{
       const chips=[...document.querySelectorAll('button, [role=button], .v8-chip, [data-testid^=agents-source]')]
@@ -232,7 +232,7 @@ try {
       throw new Error(`chip JSON parse failed: ${err.message} raw=${JSON.stringify(evalOut).slice(0, 200)}`);
     }
     await new Promise((r) => setTimeout(r, 800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'agents-after-cc-click.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'agents-after-cc-click.png')]);
     if (!parsed.clicked) throw new Error(`no Claude Code chip found in AgentsView`);
     return `chips=${parsed.chipCount} beforeCount=${parsed.beforeCount} clicked=${parsed.clicked}`;
   });
@@ -306,9 +306,9 @@ try {
 
   // 4. Live UI proof: navigate to Goals, confirm new goal renders.
   await check('cc.goal.ui_round_trip', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="goals"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="goals"]']);
     await new Promise((r) => setTimeout(r, 1800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'goals-after-cc-post.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'goals-after-cc-post.png')]);
 
     // Find goal-card-* for new id.
     const cardOk = await agentBrowserEval(
@@ -330,7 +330,7 @@ try {
   results.push({ name: 'cc.error', ok: false, detail: err.message });
   console.error('cc error:', err.message);
 } finally {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
   await boot.close?.();
   writeFileSync(join(SHOT_DIR, 'results.json'),
     JSON.stringify({ results, shots: SHOT_DIR, projectRoot, homeOverride: HOME_OVERRIDE }, null, 2));

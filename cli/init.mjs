@@ -363,6 +363,6 @@ ${stack.runner ? `- Dev: \`${stack.runner}\`` : ''}
     }
   }
 
-  console.log(chalk.dim('\n  Project initialized. Run `@frigg` to ask questions about the codebase.\n'));
+  console.log(chalk.dim('\n  Project initialized. Run `@susan` to ask questions about the codebase.\n'));
   return true;
 }

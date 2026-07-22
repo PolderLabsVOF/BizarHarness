@@ -26,7 +26,7 @@ import { runPostInstall } from './install.mjs';
  * If ANY are missing → setup is needed.
  */
 const SETUP_MARKERS = [
-  join(clineAgentsDir(), 'odin.md'),           // core agent installed
+  join(clineAgentsDir(), 'mike.md'),           // core agent installed
   join(clineConfigDir(), 'plugins', 'bizar'),   // plugin installed
 ];
 

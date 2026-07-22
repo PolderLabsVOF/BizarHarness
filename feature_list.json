@@ -2126,11 +2126,38 @@
         "feature_list.json (this entry)"
       ],
       "passed": "2026-07-22"
+    },
+    {
+      "id": "F-112",
+      "behavior": "Theme pivot — full rename Norse → 90s corporate office. 14 agents renamed on disk: file paths (frigg.md → help-desk.md, thor.md → senior-engineer.md, etc.) AND name: frontmatter (mike/todd/karen/brenda/greg/susan/steve/brad/janet/carl/linda/pam/kevin/oscar). Body first-sentence rewrites from 'You are Frigg — the all-seeing one' → 'You are Susan, the front-desk Help Desk.' same role, new costume. AGENT_BASELINE.md §12 'Heimdall's Self-Improvement Duty' → 'Brenda's Records Duty'. bizar/SKILL.md identity preamble (3 'Norse-pantheon' lines + 20+ routing-table cells) rewritten. AGENTS.md cosmetic Norse lines updated. CLAUDE.md mirror refreshed via make mirror-claude-md. scripts/check-agents.mjs rewired to .claude/agents/ with new filenames (broken since F-107).",
+      "verification": "make check exits 0. thinking-route 113/113 PASS, memory-protocol-drift 4/4 PASS, plow-through 5/5 PASS. grep -rE '\\\\b(odin|thor|tyr|heimdall|mimir|frigg|hermod|baldr|vor|vidarr|forseti)\\\\b' --include='*.md' --include='*.mjs' .claude/ scripts/ tests/ AGENTS.md CLAUDE.md returns zero (PROGRESS.md + audit doc exempt). grep -i 'norse|pantheon|asgard|mythology|valhalla' .claude/ AGENTS.md CLAUDE.md returns zero. cat .claude/agents/help-desk.md | head -5 shows 'name: susan'. Routing tables reference @susan, @todd, @kevin etc.",
+      "state": "passing",
+      "evidence": "2026-07-22 — 14/14 agents renamed (git mv), AGENT_BASELINE §8 §12 rewritten, bizar/SKILL.md full routing-table + diagram + troubleshooting rewrite, AGENTS.md/CLAUDE.md cosmetic lines, check-agents.mjs rewired to .claude/agents/, tests 122/122 PASS.",
+      "layer": "L2",
+      "category": "core",
+      "created": "2026-07-22",
+      "passed": "2026-07-22",
+      "files_touched": [
+        ".claude/agents/*.md (14 git mv + first-sentence rewrites)",
+        ".claude/agents/_shared/AGENT_BASELINE.md (§6 §8 §12 Brenda/Mike rewrites)",
+        ".claude/agents/_shared/CLAUDE_TOOLS.md (roster line 357)",
+        ".claude/skills/bizar/SKILL.md (Norse-pantheon lines + 20 routing-table cells + ASCII diagram + troubleshooting subsections)",
+        ".claude/skills/agent-browser/SKILL.md (Kevin reference)",
+        ".claude/hooks/thinking-route.mjs (agent-name keywords)",
+        ".claude/hooks/__tests__/*.test.mjs (test assertions)",
+        ".claude/commands/{plow-through,pr-review,explain,validate,team,test,tailscale-serve,learn}.md",
+        "scripts/bh-full-e2e.mjs (agent presence check)",
+        "scripts/check-agents.mjs (rewired to .claude/agents/ with new names)",
+        "AGENTS.md (cosmetic Norse lines)",
+        "CLAUDE.md (mirror refresh)",
+        "PROGRESS.md (F-112 In Progress)",
+        "feature_list.json (this entry)"
+      ]
     }
   ],
   "vcr": {
-    "passing": 73,
-    "activated": 73,
+    "passing": 74,
+    "activated": 74,
     "ratio": 1
   }
 }

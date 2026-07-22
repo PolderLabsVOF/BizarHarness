@@ -10,7 +10,7 @@
 
 **Date:** 2026-07-07
 **Status:** Superseded (by DEC-011)
-**Deciders:** @tyr
+**Deciders:** @karen
 **Related:** DEC-001, DEC-005, DEC-011
 
 ## Context

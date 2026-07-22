@@ -9,7 +9,7 @@
  *   - clicking that button navigates the SPA to the route
  *   - the corresponding [data-view-<id>] root testid is in the DOM
  *
- * State-based router (no hash). agent-browser `click` does auto-scroll
+ * State-based router (no hash). kevin `click` does auto-scroll
  * but is flaky for off-canvas items; we use an eval-driven click path
  * so the test is timing-independent.
  *
@@ -93,9 +93,9 @@ const VIEWS = [
   'voice', 'clipboard', 'obsidian', 'misc',
 ];
 
-await sh('agent-browser', ['close', '--all']).catch(() => {});
-await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+await sh('kevin', ['close', '--all']).catch(() => {});
+await sh('kevin', ['set', 'viewport', '1440', '900']);
+await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
 await new Promise((r) => setTimeout(r, 2500));
 
 // First: enumerate sidebar items via eval (one shot, prove all 37 exist).
@@ -106,7 +106,7 @@ const enumB64 = Buffer.from(
   })()`,
   'utf8',
 ).toString('base64');
-const enumOut = (await sh('agent-browser', ['eval', '-b', enumB64])).out;
+const enumOut = (await sh('kevin', ['eval', '-b', enumB64])).out;
 let enumStr = enumOut.trim();
 if (enumStr.startsWith('"') && enumStr.endsWith('"')) enumStr = enumStr.slice(1, -1);
 enumStr = enumStr.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -130,7 +130,7 @@ async function checkView(viewId) {
     })()`,
     'utf8',
   ).toString('base64');
-  const clickOut = (await sh('agent-browser', ['eval', '-b', clickB64])).out;
+  const clickOut = (await sh('kevin', ['eval', '-b', clickB64])).out;
   let s = clickOut.trim();
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
   s = s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -152,13 +152,13 @@ async function checkView(viewId) {
     })()`,
     'utf8',
   ).toString('base64');
-  const rootOut = (await sh('agent-browser', ['eval', '-b', rootB64])).out;
+  const rootOut = (await sh('kevin', ['eval', '-b', rootB64])).out;
   let r2 = rootOut.trim();
   if (r2.startsWith('"') && r2.endsWith('"')) r2 = r2.slice(1, -1);
   r2 = r2.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
   const parsed = JSON.parse(r2);
   if (parsed.found) {
-    try { await sh('agent-browser', ['screenshot', join(SHOT_DIR, `${viewId}.png`)]); } catch { /* ignore */ }
+    try { await sh('kevin', ['screenshot', join(SHOT_DIR, `${viewId}.png`)]); } catch { /* ignore */ }
     return { sidebarItem: true, viewRoot: true, detail: `testid=${rootTestid}` };
   }
   return { sidebarItem: true, viewRoot: false, detail: `missing ${rootTestid}; dom has ${JSON.stringify(parsed.all)}` };
@@ -180,7 +180,7 @@ for (const v of VIEWS) {
   }
 }
 
-try { await sh('agent-browser', ['close', '--all']); } catch { /* ignore */ }
+try { await sh('kevin', ['close', '--all']); } catch { /* ignore */ }
 await boot.close?.();
 
 writeFileSync(join(SHOT_DIR, 'results.json'), JSON.stringify({

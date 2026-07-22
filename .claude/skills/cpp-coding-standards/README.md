@@ -4,7 +4,7 @@ Modern C++17/20 standards skill for Claude Code. Loads when an agent is writing,
 
 ## What it provides
 
-- **SKILL.md** — quick-start checklist + 5 deep-dive references
+- **SKILL.md** — pam-start checklist + 5 deep-dive references
 - **references/memory-safety.md** — RAII, `unique_ptr`/`shared_ptr`/`weak_ptr`, Rule of Five/Zero
 - **references/modern-idioms.md** — C++17/20 features with examples
 - **references/error-handling.md** — exceptions vs `std::error_code` vs `std::expected`

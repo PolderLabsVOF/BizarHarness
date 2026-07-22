@@ -13,7 +13,7 @@
  * Commands:
  *   install, audit, init, export, artifact, update, test-gate, service, dash,
  *   memory, minimax, usage, mod, doctor, repair, dev-link, dev-unlink,
- *   heads-up, bg, agent-browser, agent-browser-up, providers, deploy, plugin,
+ *   heads-up, bg, kevin, kevin-up, providers, deploy, plugin,
  *   marketplace, plan, digest, backup, restore, clip, ocr, voice, workspace, eval
  */
 import chalk from 'chalk';
@@ -148,8 +148,8 @@ function showHelp() {
     deploy              One-click deploy to Vercel, Cloudflare, Fly.io, or Docker
     plugin <subcommand> Manage marketplace plugins (search/install/config/invoke)
     marketplace <subcommand>  Browse and install plugins from the public marketplace
-    agent-browser      Install / update / verify the agent-browser CLI
-    agent-browser-up    Start Chromium for agent-browser (start/stop/status)
+    kevin      Install / update / verify the kevin CLI
+    kevin-up    Start Chromium for kevin (start/stop/status)
     providers detect    Auto-detect provider API keys from env + ~/.claude/settings.json
     clip <subcommand>       Manage web clipper saved clips (list/delete/configure)
     ocr <subcommand>        OCR operations on images (list/process/configure)
@@ -245,21 +245,21 @@ async function main() {
     const UTIL_COMMANDS = new Set([
       'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
       'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
-      'agent-browser', 'update', 'providers', 'plan', 'validate',
+      'kevin', 'update', 'providers', 'plan', 'validate',
       'setup-provider', 'config', 'history', 'hub', 'hook',
       'team', 'subagent', 'rca',
     ]);
-    const UTIL_ALIASES = new Set(['dashboard', 'agent-browser-up']);
+    const UTIL_ALIASES = new Set(['dashboard', 'kevin-up']);
     let mod;
     if (UTIL_COMMANDS.has(cmd)) {
       // util-based commands: audit, init, etc.
       mod = await importCommand('util');
     } else if (UTIL_ALIASES.has(cmd)) {
-      // util aliases: dashboard → dash, agent-browser-up → bash script
+      // util aliases: dashboard → dash, kevin-up → bash script
       if (cmd === 'dashboard') {
         mod = await importCommand('dash');
-      } else if (cmd === 'agent-browser-up') {
-        // Run via util.mjs's `agent-browser-up` case
+      } else if (cmd === 'kevin-up') {
+        // Run via util.mjs's `kevin-up` case
         mod = await importCommand('util');
       }
     } else {
@@ -499,8 +499,8 @@ async function main() {
     case 'digest':
     case 'backup':
     case 'restore':
-    case 'agent-browser':
-    case 'agent-browser-up':
+    case 'kevin':
+    case 'kevin-up':
     case 'providers':
     case 'plan': {
       const mod = await importCommand('util');

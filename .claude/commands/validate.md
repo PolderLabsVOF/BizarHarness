@@ -17,8 +17,8 @@ start.
 3. **plugin-entry-present** — `settings.json` has a Bizar plugin entry.
 4. **plugin-path-resolves** — the plugin path on disk actually exists.
 5. **agent-files-installed** — all agent files in `~/.claude/agents/`
-   (odin, vor, frigg, quick, mimir, heimdall, hermod, thor, baldr,
-   tyr, vidarr, forseti, semble-search, agent-browser).
+   (mike, janet, susan, pam, greg, brenda, steve, todd, brad,
+   karen, carl, linda, oscar, kevin).
 6. **tools-available** — at least one of `semble`, `skills`
    is on PATH.
 7. **provider-config-sanity** — `provider.9router` has at least
@@ -33,8 +33,8 @@ start.
     mirrored to `~/.claude/skills/`.
 11. **rules-installed** — every `.md` in `config/rules/` is mirrored
     to `~/.claude/rules/`.
-12. **hooks-installed** — `config/hooks/` is mirrored to
-    `~/.claude/hooks/`.
+12. **hooks-installed** — `.claude/hooks/` scripts are installed
+    with executable permissions.
 
 ## How to Use
 

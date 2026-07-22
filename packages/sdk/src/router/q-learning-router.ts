@@ -11,7 +11,7 @@
  *   - State: a 64-dim bag-of-words hash of the task string (FNV-1a
  *     folded into 64 buckets). LRU-cached so repeated task patterns
  *     are O(1).
- *   - Action: one of `odin|frigg|vor|mimir|heimdall|thor|tyr|forseti`.
+ *   - Action: one of `mike|susan|janet|greg|brenda|todd|karen|linda`.
  *   - Reward: `+1` on `recordOutcome(agent, true)`, `0` on false.
  *   - Exploration: ε-greedy with ε = 0.1 (configurable).
  *
@@ -29,20 +29,20 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { detectCodemodIntent } from "./codemod-intent.js";
 
 export const AGENT_ACTIONS: readonly string[] = [
-  "odin",
-  "frigg",
-  "vor",
-  "mimir",
-  "heimdall",
-  "thor",
-  "tyr",
-  "forseti",
-  "hermod",
-  "baldr",
-  "vidarr",
-  "quick",
-  "agent-browser",
-  "semble-search",
+  "mike",
+  "susan",
+  "janet",
+  "greg",
+  "brenda",
+  "todd",
+  "karen",
+  "linda",
+  "steve",
+  "brad",
+  "carl",
+  "pam",
+  "kevin",
+  "oscar",
 ] as const;
 
 export type AgentName = (typeof AGENT_ACTIONS)[number];
@@ -94,19 +94,19 @@ export class QLearningRouter {
   /**
    * Greedy ε-soft policy. Returns a cached decision when the same
    * (task) hash has been seen recently (LRU bounded by `lruSize`).
-   * Codemod-eligible prompts short-circuit to `heimdall` (the
+   * Codemod-eligible prompts short-circuit to `brenda` (the
    * routine-implementation agent) so they still get a "best" agent
    * without paying the bandit lookup cost twice.
    */
   selectAgent(task: string): AgentRouteDecision {
     if (!task || typeof task !== "string") {
-      return { agent: "odin", confidence: 0.5 };
+      return { agent: "mike", confidence: 0.5 };
     }
 
     // Tier-1 codemod-eligible prompt → deterministic safe pick.
     const cm = detectCodemodIntent(task);
     if (cm !== null) {
-      return { agent: "heimdall", confidence: 1.0 };
+      return { agent: "brenda", confidence: 1.0 };
     }
 
     const bucket = this.bucketize(task);

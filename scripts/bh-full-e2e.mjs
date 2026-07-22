@@ -198,26 +198,28 @@ try {
 }
 
 // ── 9. Required agent files exist ──────────────────────────────────────
+// F-107: agents are canonical at .claude/agents/ (Claude Code-loadable).
+// The legacy config/agents/ tree was removed.
 try {
-  const agentsDir = join(REPO_ROOT, 'config', 'agents');
+  const agentsDir = join(REPO_ROOT, '.claude', 'agents');
   if (!existsSync(agentsDir)) {
-    record('config/agents/ present', false, `${agentsDir} missing`);
+    record('.claude/agents/ present', false, `${agentsDir} missing`);
   } else {
     const files = readdirSync(agentsDir);
     const required = [
-      'odin.md', 'vor.md', 'frigg.md', 'quick.md',
-      'mimir.md', 'heimdall.md', 'hermod.md', 'thor.md', 'baldr.md',
-      'tyr.md', 'vidarr.md', 'forseti.md', 'semble-search.md', 'agent-browser.md',
+      'mike.md', 'janet.md', 'susan.md', 'pam.md',
+      'greg.md', 'brenda.md', 'steve.md', 'todd.md', 'brad.md',
+      'karen.md', 'carl.md', 'linda.md', 'oscar.md', 'kevin.md',
     ];
     const missing = required.filter((f) => !files.includes(f));
     if (missing.length === 0) {
-      record('config/agents/ has all 14 agents', true, `${required.length} agents`);
+      record('.claude/agents/ has all 14 agents', true, `${required.length} agents`);
     } else {
-      record('config/agents/ has all 14 agents', false, `missing: ${missing.join(', ')}`);
+      record('.claude/agents/ has all 14 agents', false, `missing: ${missing.join(', ')}`);
     }
   }
 } catch (err) {
-  record('config/agents/ scannable', false, err.message);
+  record('.claude/agents/ scannable', false, err.message);
 }
 
 // ── 10. Required skills exist ──────────────────────────────────────────

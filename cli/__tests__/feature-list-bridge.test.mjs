@@ -82,10 +82,10 @@ describe('claim()', () => {
   afterEach(() => { /* tmp cleaned in after() */ });
 
   test('first claim succeeds', () => {
-    const result = br.claim('F-A', { type: 'human', id: 'odin', name: 'Odin' }, 'first-run');
+    const result = br.claim('F-A', { type: 'human', id: 'mike', name: 'Odin' }, 'first-run');
     assert.equal(result.ok, true);
     const f = result.feature;
-    assert.equal(f.claimant.id, 'odin');
+    assert.equal(f.claimant.id, 'mike');
     assert.equal(f.claimStatus, 'claimed');
     assert.ok(f.claimedAt);
     assert.equal(f.claimReason, 'first-run');
@@ -94,9 +94,9 @@ describe('claim()', () => {
   });
 
   test('second claim rejected with ALREADY_CLAIMED', () => {
-    br.claim('F-A', { type: 'human', id: 'odin', name: 'Odin' }, 'first-run');
+    br.claim('F-A', { type: 'human', id: 'mike', name: 'Odin' }, 'first-run');
     assert.throws(
-      () => br.claim('F-A', { type: 'agent', id: 'tyr' }, 'second-run'),
+      () => br.claim('F-A', { type: 'agent', id: 'karen' }, 'second-run'),
       (err) => err instanceof ClaimError && err.code === 'ALREADY_CLAIMED',
     );
   });
@@ -116,10 +116,10 @@ describe('claim()', () => {
   });
 
   test('can re-claim a completed feature', () => {
-    br.claim('F-A', { type: 'human', id: 'odin' }, '');
-    br.transition('F-A', 'completed', { id: 'odin' }, '');
+    br.claim('F-A', { type: 'human', id: 'mike' }, '');
+    br.transition('F-A', 'completed', { id: 'mike' }, '');
     // released -> re-claimable
-    const r2 = br.claim('F-A', { type: 'agent', id: 'tyr' }, 'second life');
+    const r2 = br.claim('F-A', { type: 'agent', id: 'karen' }, 'second life');
     assert.equal(r2.ok, true);
   });
 });
@@ -135,8 +135,8 @@ describe('release()', () => {
   });
 
   test('release after claim sets status to unclaimed', () => {
-    br.claim('F-X', { type: 'human', id: 'odin' }, '');
-    const result = br.release('F-X', { id: 'odin' }, 'done');
+    br.claim('F-X', { type: 'human', id: 'mike' }, '');
+    const result = br.release('F-X', { id: 'mike' }, 'done');
     assert.equal(result.ok, true);
     assert.equal(result.feature.claimStatus, 'unclaimed');
     assert.equal(result.feature.claimant, null);
@@ -145,15 +145,15 @@ describe('release()', () => {
 
   test('release without claim errors with NOT_CLAIMED', () => {
     assert.throws(
-      () => br.release('F-X', { id: 'odin' }, ''),
+      () => br.release('F-X', { id: 'mike' }, ''),
       (err) => err instanceof ClaimError && err.code === 'NOT_CLAIMED',
     );
   });
 
   test('release with wrong claimant errors with WRONG_CLAIMANT', () => {
-    br.claim('F-X', { type: 'human', id: 'odin' }, '');
+    br.claim('F-X', { type: 'human', id: 'mike' }, '');
     assert.throws(
-      () => br.release('F-X', { id: 'tyr' }, ''),
+      () => br.release('F-X', { id: 'karen' }, ''),
       (err) => err instanceof ClaimError && err.code === 'WRONG_CLAIMANT',
     );
   });
@@ -170,15 +170,15 @@ describe('handoff()', () => {
   });
 
   test('handoff moves claimant', () => {
-    br.claim('F-H', { type: 'human', id: 'odin' }, '');
+    br.claim('F-H', { type: 'human', id: 'mike' }, '');
     const result = br.handoff(
       'F-H',
-      { type: 'human', id: 'odin' },
-      { type: 'agent', id: 'tyr', name: 'Tyr' },
+      { type: 'human', id: 'mike' },
+      { type: 'agent', id: 'karen', name: 'Tyr' },
       'context finished',
     );
     assert.equal(result.ok, true);
-    assert.equal(result.feature.claimant.id, 'tyr');
+    assert.equal(result.feature.claimant.id, 'karen');
     assert.equal(result.feature.claimStatus, 'claimed');
     // history: claim + handoff-initiated + handoff-accepted
     const events = result.feature.claimHistory.map((e) => e.event);
@@ -189,8 +189,8 @@ describe('handoff()', () => {
     assert.throws(
       () => br.handoff(
         'F-H',
-        { type: 'human', id: 'odin' },
-        { type: 'agent', id: 'tyr' },
+        { type: 'human', id: 'mike' },
+        { type: 'agent', id: 'karen' },
         '',
       ),
       (err) => err instanceof ClaimError && err.code === 'NOT_CLAIMED',
@@ -209,17 +209,17 @@ describe('steal()', () => {
   });
 
   test('steal moves the claim', () => {
-    br.claim('F-S', { type: 'human', id: 'odin' }, '');
+    br.claim('F-S', { type: 'human', id: 'mike' }, '');
     for (const reason of STEAL_REASONS) {
       // Steal a fresh feature for each reason to avoid ALREADY_CLAIMED.
       const f = minimalFeature(`F-S-${reason}`);
       const fFile = writeFixture(tmp, `s-${reason}.json`, [f]);
       const subBridge = bridgeFactory(fFile);
       subBridge.claim(`F-S-${reason}`, { type: 'agent', id: 'previous' }, '');
-      const result = subBridge.steal(`F-S-${reason}`, { type: 'agent', id: 'tyr' }, reason);
+      const result = subBridge.steal(`F-S-${reason}`, { type: 'agent', id: 'karen' }, reason);
       assert.equal(result.ok, true);
       assert.equal(result.previousClaimant.id, 'previous');
-      assert.equal(result.feature.claimant.id, 'tyr');
+      assert.equal(result.feature.claimant.id, 'karen');
       assert.equal(result.stealReason, reason);
       assert.ok(
         result.feature.claimHistory.some((e) => e.event === 'steal' && e.reason === reason),
@@ -228,9 +228,9 @@ describe('steal()', () => {
   });
 
   test('steal rejects unknown reason', () => {
-    br.claim('F-S', { type: 'human', id: 'odin' }, '');
+    br.claim('F-S', { type: 'human', id: 'mike' }, '');
     assert.throws(
-      () => br.steal('F-S', { type: 'agent', id: 'tyr' }, 'bogus-reason'),
+      () => br.steal('F-S', { type: 'agent', id: 'karen' }, 'bogus-reason'),
       (err) => err instanceof ClaimError && err.code === 'UNKNOWN_STEAL_REASON',
     );
   });
@@ -247,30 +247,30 @@ describe('transition()', () => {
   });
 
   test('claim → active → paused → active → completed', () => {
-    br.claim('F-T', { type: 'human', id: 'odin' }, '');
-    br.transition('F-T', 'active', { id: 'odin' }, '');
+    br.claim('F-T', { type: 'human', id: 'mike' }, '');
+    br.transition('F-T', 'active', { id: 'mike' }, '');
     assert.equal(br.get('F-T').claimStatus, 'active');
-    br.transition('F-T', 'paused', { id: 'odin' }, 'lunch');
+    br.transition('F-T', 'paused', { id: 'mike' }, 'lunch');
     assert.equal(br.get('F-T').claimStatus, 'paused');
-    br.transition('F-T', 'active', { id: 'odin' }, '');
+    br.transition('F-T', 'active', { id: 'mike' }, '');
     assert.equal(br.get('F-T').claimStatus, 'active');
-    br.transition('F-T', 'completed', { id: 'odin' }, '');
+    br.transition('F-T', 'completed', { id: 'mike' }, '');
     assert.equal(br.get('F-T').claimStatus, 'completed');
   });
 
   test('illegal transition rejected', () => {
-    br.claim('F-T', { type: 'human', id: 'odin' }, '');
+    br.claim('F-T', { type: 'human', id: 'mike' }, '');
     // claimed → blocked is NOT in ALLOWED_TRANSITIONS['claimed']
     assert.throws(
-      () => br.transition('F-T', 'blocked', { id: 'odin' }, ''),
+      () => br.transition('F-T', 'blocked', { id: 'mike' }, ''),
       (err) => err instanceof ClaimError && err.code === 'BAD_TRANSITION',
     );
   });
 
   test('unknown status rejected', () => {
-    br.claim('F-T', { type: 'human', id: 'odin' }, '');
+    br.claim('F-T', { type: 'human', id: 'mike' }, '');
     assert.throws(
-      () => br.transition('F-T', 'bogus', { id: 'odin' }, ''),
+      () => br.transition('F-T', 'bogus', { id: 'mike' }, ''),
       (err) => err instanceof ClaimError && err.code === 'UNKNOWN_STATUS',
     );
   });
@@ -292,12 +292,12 @@ describe('list()', () => {
   });
 
   test('claims 2, handoffs 1, steals 1 — list filters', () => {
-    br.claim('F-1', { type: 'human', id: 'odin' }, '');
-    br.claim('F-2', { type: 'agent', id: 'tyr' }, '');
-    br.claim('F-3', { type: 'human', id: 'odin' }, '');
-    br.handoff('F-3', { type: 'human', id: 'odin' }, { type: 'agent', id: 'tyr' }, '');
-    br.claim('F-4', { type: 'human', id: 'mimir' }, '');
-    br.steal('F-4', { type: 'agent', id: 'tyr' }, 'voluntary');
+    br.claim('F-1', { type: 'human', id: 'mike' }, '');
+    br.claim('F-2', { type: 'agent', id: 'karen' }, '');
+    br.claim('F-3', { type: 'human', id: 'mike' }, '');
+    br.handoff('F-3', { type: 'human', id: 'mike' }, { type: 'agent', id: 'karen' }, '');
+    br.claim('F-4', { type: 'human', id: 'greg' }, '');
+    br.steal('F-4', { type: 'agent', id: 'karen' }, 'voluntary');
 
     const all = br.list();
     assert.equal(all.length, 4);
@@ -310,8 +310,8 @@ describe('list()', () => {
     assert.ok(humanIds.includes('F-1'), 'F-1 stayed human');
     assert.ok(!humanIds.includes('F-4'), 'F-4 is now an agent claim');
 
-    const byOdin = br.list({ claimantId: 'odin' });
-    assert.equal(byOdin.length, 1, 'only F-1 still belongs to odin');
+    const byOdin = br.list({ claimantId: 'mike' });
+    assert.equal(byOdin.length, 1, 'only F-1 still belongs to mike');
     assert.equal(byOdin[0].id, 'F-1');
   });
 
@@ -327,9 +327,9 @@ describe('persistence', () => {
   test('bridges are independent — each gets its own file', () => {
     const file = writeFixture(tmp, `p-${Math.random().toString(36).slice(2, 6)}.json`, [minimalFeature('F-P')]);
     const a = bridgeFactory(file);
-    a.claim('F-P', { type: 'human', id: 'odin' }, '');
+    a.claim('F-P', { type: 'human', id: 'mike' }, '');
     const b = bridgeFactory(file);
-    assert.equal(b.get('F-P').claimant.id, 'odin');
+    assert.equal(b.get('F-P').claimant.id, 'mike');
     assert.equal(b.get('F-P').claimStatus, 'claimed');
   });
 

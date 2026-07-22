@@ -1,14 +1,17 @@
 /**
  * scripts/check-agents.mjs
  *
- * v6.2.4 — Verifies every agent file references the right shared docs.
+ * v10.7.0 — Verifies every agent file references the right shared docs.
  *
  * Fails (exit 1) if any of the 14 Bizar agents is missing the
- * AGENT_BASELINE or CLINE_TOOLS reference. This catches drift early —
+ * AGENT_BASELINE or CLAUDE_TOOLS reference. This catches drift early —
  * an agent that doesn't reference the baseline doesn't get the
  * always-on rules at runtime.
+ *
+ * Reads from `.claude/agents/` (canonical Claude Code location).
+ * The legacy `config/agents/` tree was removed in F-107.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,27 +19,27 @@ const __filename = fileURLToPath(import.meta.url);
 const ROOT = join(__filename, '..', '..');
 
 const AGENT_FILES = [
-  'agent-browser.md',
-  'baldr.md',
-  'forseti.md',
-  'frigg.md',
-  'heimdall.md',
-  'hermod.md',
-  'mimir.md',
-  'odin.md',
-  'quick.md',
-  'semble-search.md',
-  'thor.md',
-  'tyr.md',
-  'vidarr.md',
-  'vor.md',
+  'support-tech.md',
+  'brand-designer.md',
+  'qa-reviewer.md',
+  'help-desk.md',
+  'office-coordinator.md',
+  'it-lead.md',
+  'research-analyst.md',
+  'office-manager.md',
+  'exec-assistant.md',
+  'knowledge-manager.md',
+  'senior-engineer.md',
+  'principal-engineer.md',
+  'vp-engineering.md',
+  'office-greeter.md',
 ];
 
 let failed = 0;
 const rows = [];
 
 for (const file of AGENT_FILES) {
-  const path = join(ROOT, 'config', 'agents', file);
+  const path = join(ROOT, '.claude', 'agents', file);
   let text = '';
   try {
     text = readFileSync(path, 'utf8');
@@ -46,20 +49,20 @@ for (const file of AGENT_FILES) {
     continue;
   }
   const hasBaseline = /AGENT_BASELINE|agent-baseline/i.test(text);
-  const hasClineTools = /CLINE_TOOLS/i.test(text);
-  if (!hasBaseline && !hasClineTools) {
-    rows.push([file, 'NO REFERENCE', 'needs AGENT_BASELINE or CLINE_TOOLS in description']);
+  const hasClaudeTools = /CLAUDE_TOOLS/i.test(text);
+  if (!hasBaseline && !hasClaudeTools) {
+    rows.push([file, 'NO REFERENCE', 'needs AGENT_BASELINE or CLAUDE_TOOLS in body']);
     failed++;
   } else {
     const refs = [
       hasBaseline ? 'AGENT_BASELINE' : null,
-      hasClineTools ? 'CLINE_TOOLS' : null,
+      hasClaudeTools ? 'CLAUDE_TOOLS' : null,
     ].filter(Boolean).join('+');
     rows.push([file, 'OK', refs]);
   }
 }
 
-console.log('\n  Agent → Shared-Docs reference check (v6.2.4)\n');
+console.log('\n  Agent → Shared-Docs reference check (v10.7.0)\n');
 console.log('  ' + 'agent'.padEnd(24) + 'status'.padEnd(14) + 'references');
 console.log('  ' + '-'.repeat(60));
 for (const [file, status, refs] of rows) {
@@ -67,7 +70,7 @@ for (const [file, status, refs] of rows) {
 }
 console.log('');
 if (failed > 0) {
-  console.log(`  ✗ ${failed} agent(s) missing the AGENT_BASELINE/CLINE_TOOLS reference.\n`);
+  console.log(`  ✗ ${failed} agent(s) missing the AGENT_BASELINE/CLAUDE_TOOLS reference.\n`);
   process.exit(1);
 }
 console.log(`  ✓ All ${AGENT_FILES.length} agents reference the shared docs.\n`);

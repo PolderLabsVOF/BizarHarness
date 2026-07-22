@@ -5,7 +5,7 @@
  *
  * Subcommands:
  *   bizar eval list [--limit N]              List recent runs
- *   bizar eval run <suite-path> [--concurrency N] [--agent thor]  Run a suite
+ *   bizar eval run <suite-path> [--concurrency N] [--agent todd]  Run a suite
  *   bizar eval show <run-id>                Show run details
  *   bizar eval diff <run-id-1> <run-id-2>  Compare two runs
  *   bizar eval init <path>                  Scaffold a new fixture template
@@ -76,7 +76,7 @@ export function showEvalHelp() {
 
   Usage:
     bizar eval list [--limit N]                   List recent runs (default limit 20)
-    bizar eval run <suite-path> [--concurrency N] [--agent thor]
+    bizar eval run <suite-path> [--concurrency N] [--agent todd]
                                                     Run a fixture suite
     bizar eval show <run-id>                     Show run details + results
     bizar eval diff <run-id-1> <run-id-2>        Diff two runs
@@ -118,12 +118,12 @@ async function runSuite(args) {
   const suitePath = positional[0];
   if (!suitePath) {
     console.error(chalk.red('  Error: suite-path is required'));
-    console.error('  Usage: bizar eval run <suite-path> [--concurrency N] [--agent thor]');
+    console.error('  Usage: bizar eval run <suite-path> [--concurrency N] [--agent todd]');
     process.exit(1);
   }
 
   const concurrency = parseInt(args.find((a) => a.startsWith('--concurrency='))?.split('=')[1] || '5', 10);
-  const agent = args.find((a) => a.startsWith('--agent='))?.split('=')[1] || 'thor';
+  const agent = args.find((a) => a.startsWith('--agent='))?.split('=')[1] || 'todd';
 
   console.log(chalk.bold(`  Running eval suite: ${suitePath}`));
   console.log(`  Concurrency: ${concurrency}  Agent: ${agent}`);
@@ -260,7 +260,7 @@ function initFixture(path) {
     id: 'my-fixture-id',
     name: 'My Fixture',
     description: 'Describe what this fixture verifies',
-    agent: 'thor',
+    agent: 'todd',
     prompt: 'What should the agent do?',
     expected: {
       contains: ['expected output fragment'],
@@ -286,7 +286,7 @@ function initFixture(path) {
   - \`id\` — unique identifier
   - \`name\` — human-readable name
   - \`description\` — what the fixture verifies
-  - \`agent\` — agent to use (thor, tyr, etc.)
+  - \`agent\` — agent to use (todd, karen, etc.)
   - \`prompt\` — the prompt to send
   - \`expected\` — validation rules (contains, notContains, regex, jsonSchema, maxTokens, maxLatencyMs)
   - \`tags\` — optional tags for filtering

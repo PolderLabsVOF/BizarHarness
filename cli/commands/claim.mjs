@@ -111,9 +111,9 @@ function showHelp() {
     --help, -h                   Show this help
 
   Examples:
-    bizar claim F-035 --who odin --reason "porting MetaHarness from ruflo"
-    bizar claim steal F-014 --by hermod --reason stale
-    bizar claim handoff F-035 --to tyr --from odin
+    bizar claim F-035 --who mike --reason "porting MetaHarness from ruflo"
+    bizar claim steal F-014 --by steve --reason stale
+    bizar claim handoff F-035 --to karen --from mike
     bizar claim list --status claimed --agent-only
 `);
 }

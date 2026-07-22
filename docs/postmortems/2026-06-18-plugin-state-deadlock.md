@@ -27,10 +27,10 @@ Cline failed to render on startup, then became unable to commit any user message
 | Time | Event |
 |------|-------|
 | Day N | `~/.config/cline/plugins/bizar/index.ts` added `client.session.list()` during stale-session cleanup — no timeout wrapper. |
-| Day N | `~/.config/cline/cline.json` and `~/.cline/cline.json` updated to model `minimax/MiniMax-M3`, small_model `minimax/MiniMax-M2.7`, default_agent `quick`, with `supabase.enabled = false`, `hindsight.enabled = false`, MCP permissions switched from `ask` to `deny`. |
+| Day N | `~/.config/cline/cline.json` and `~/.cline/cline.json` updated to model `minimax/MiniMax-M3`, small_model `minimax/MiniMax-M2.7`, default_agent `pam`, with `supabase.enabled = false`, `hindsight.enabled = false`, MCP permissions switched from `ask` to `deny`. |
 | Day N | `~/.config/environment.d/90-hindsight.conf` created for environment-variable persistence. Loaders added to `~/.bashrc`, `~/.profile`, and `~/.config/fish/conf.d/90-hindsight.fish`. `cline.json` updated with a direct bearer token fallback. |
-| Day N | `~/Projects/BizarHarness/config/cline.json` (project-local override) was still forcing `default_agent: odin`, `model: cline/deepseek-v4-flash-free`, and re-enabling the broken MCPs. |
-| Day N | Agent definition files for `quick`, `frigg`, `vor`, `mimir`, `heimdall` still had `model: cline/deepseek-v4-flash-free` pinned inside each YAML frontmatter. |
+| Day N | `~/Projects/BizarHarness/config/cline.json` (project-local override) was still forcing `default_agent: mike`, `model: cline/deepseek-v4-flash-free`, and re-enabling the broken MCPs. |
+| Day N | Agent definition files for `pam`, `susan`, `janet`, `greg`, `brenda` still had `model: cline/deepseek-v4-flash-free` pinned inside each YAML frontmatter. |
 | Day N | `plugins/bizar/src/state.ts` introduced a re-entrant per-session mutex. `chat.message` hook calls `stateStore.withLock(sessionID, ...)` → inside that closure, `load()` and `save()` each independently call `withLock(sessionID, ...)` again → **self-deadlock on first message submit**. |
 | 2026-06-18 | User observes blank screen on Cline launch. |
 | 2026-06-18 | User bypasses startup block manually, submits a message — UI freezes, no response. |
@@ -143,24 +143,24 @@ All files changed to recover the system, grouped by layer.
 
 | File | Change |
 |------|--------|
-| `~/.cline/cline.json` | Reset to model `minimax/MiniMax-M3`, small_model `minimax/MiniMax-M2.7`, default_agent `quick`, `supabase.enabled: false`, `hindsight.enabled: false`, MCP permissions `deny` |
+| `~/.cline/cline.json` | Reset to model `minimax/MiniMax-M3`, small_model `minimax/MiniMax-M2.7`, default_agent `pam`, `supabase.enabled: false`, `hindsight.enabled: false`, MCP permissions `deny` |
 | `~/.config/cline/cline.json` | Same reset as above |
 
 ### Layer 4 — Project-Local Config Override
 
 | File | Change |
 |------|--------|
-| `~/Projects/BizarHarness/config/cline.json` | Removed `default_agent: odin`, removed `model: cline/deepseek-v4-flash-free`, re-aligned MCP enable flags to match global baseline |
+| `~/Projects/BizarHarness/config/cline.json` | Removed `default_agent: mike`, removed `model: cline/deepseek-v4-flash-free`, re-aligned MCP enable flags to match global baseline |
 
 ### Layer 5 — Interactive Agent Model Rerouting
 
 | File | Change |
 |------|--------|
-| `config/agents/quick.md` | Changed YAML `model` from `cline/deepseek-v4-flash-free` to `minimax/MiniMax-M2.7` |
-| `config/agents/frigg.md` | Same change |
-| `config/agents/vor.md` | Same change |
-| `config/agents/mimir.md` | Same change |
-| `config/agents/heimdall.md` | Same change |
+| `config/agents/pam.md` | Changed YAML `model` from `cline/deepseek-v4-flash-free` to `minimax/MiniMax-M2.7` |
+| `config/agents/susan.md` | Same change |
+| `config/agents/janet.md` | Same change |
+| `config/agents/greg.md` | Same change |
+| `config/agents/brenda.md` | Same change |
 
 ### Layer 6 — Re-entrant Mutex Removal (Core Fix)
 
@@ -224,11 +224,11 @@ The five agent files had `model: cline/deepseek-v4-flash-free` hard-coded in YAM
 | Path | Purpose |
 |------|---------|
 | `~/Projects/BizarHarness/config/cline.json` | Project-local Cline override; was re-enabling broken models and MCPs |
-| `config/agents/quick.md` | Quick agent definition; had hard-coded free-tier model |
-| `config/agents/frigg.md` | Frigg agent definition; same |
-| `config/agents/vor.md` | Vör agent definition; same |
-| `config/agents/mimir.md` | Mimir agent definition; same |
-| `config/agents/heimdall.md` | Heimdall agent definition; same |
+| `config/agents/pam.md` | Quick agent definition; had hard-coded free-tier model |
+| `config/agents/susan.md` | Frigg agent definition; same |
+| `config/agents/janet.md` | Vör agent definition; same |
+| `config/agents/greg.md` | Mimir agent definition; same |
+| `config/agents/brenda.md` | Heimdall agent definition; same |
 
 ### BizarHarness Plugin Source
 

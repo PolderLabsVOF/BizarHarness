@@ -1,6 +1,6 @@
 ---
 name: read-the-damn-docs
-description: When using a library, tool, or API you don't fully understand, READ THE DOCS before guessing. Don't infer behavior from function names. The source of truth is the official documentation and source code, not your prior assumptions. Triggers when about to use an unfamiliar library/API or debugging an unfamiliar error.
+description: When using a library, tool, or API you don't fully understand, READ THE DOCS before guessing. Don't infer behavior from function names. The source of truth is the official documentation and source code, not your prior assumptions.
 version: 1
 ---
 
@@ -34,7 +34,7 @@ When resolving how a library/tool/API works, use this priority order:
 
 ```
 1. IDENTIFY: "I'm about to use library X for the first time (or first time in months)"
-2. READ: WebFetch the official docs for the specific function/method I'll call
+2. READ: webfetch the official docs for the specific function/method I'll call
    - Don't read the entire docs — read the specific section
 3. VERIFY: cross-check against source if anything is ambiguous
 4. NOTE: write down the gotchas in your agent memory or a relevant file
@@ -65,7 +65,7 @@ Don't write code, run it, see the error, and fix from there. That works for triv
 
 ### "I used this library before, I know it"
 
-Libraries change. APIs deprecate. Defaults shift. Even if you used something 6 months ago, a quick doc check (30 seconds) saves 10 minutes of debugging when your prior knowledge is stale.
+Libraries change. APIs deprecate. Defaults shift. Even if you used something 6 months ago, a pam doc check (30 seconds) saves 10 minutes of debugging when your prior knowledge is stale.
 
 ### "The README example is enough"
 
@@ -82,7 +82,7 @@ Sometimes. But error messages are often misleading or incomplete. Reading the do
 ```
 [Agent wants to use the Vite `defineConfig` API for the first time]
 Agent: "Let me check the Vite docs for the exact shape of `defineConfig`."
-[WebFetch https://vitejs.dev/config/]
+[webfetch https://vitejs.dev/config/]
 Agent: "OK, `defineConfig` accepts a UserConfig object with `plugins`, `build`, etc.
        I need a `define` key for compile-time constants."
 [Writes correct config]
@@ -102,9 +102,9 @@ Agent: "Hmm, the docs must have changed. Let me guess it's a different syntax."
 
 ## Where to read
 
-- **WebFetch** the official docs URL: `WebFetch <url>` — fast, gives you the actual current docs
-- **Source code** via Semble search: `mcp__semble__search "functionName" <repo>` — useful when docs are vague
-- **Local docs** if available: Semble search for project's own docs
+- **Webfetch** the official docs URL: `webfetch <url>` — fast, gives you the actual current docs
+- **Source code** via Semble search: `semble search "functionName" <repo>` — useful when docs are vague
+- **Local docs** if available: `semble search "<query>" --content docs` for the project's own docs
 
 ## See also
 

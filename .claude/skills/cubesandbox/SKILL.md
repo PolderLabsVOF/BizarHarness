@@ -13,12 +13,12 @@ is an E2B-compatible KVM microVM service for AI agents. Each sandbox:
 - has its own guest OS kernel (no shared-kernel escape),
 - is reachable via the E2B SDK (`pypi install cubesandbox`).
 
-It is the right host for any `Bash` call whose side effects should not
+It is the right host for any `bash` call whose side effects should not
 escape the sandbox: file writes, package installs, network probes, etc.
 
 ## When to route through CubeSandbox
 
-- Any `Bash` call that writes to disk — especially under `~/.config/`,
+- Any `bash` call that writes to disk — especially under `~/.config/`,
   `/tmp/`, or `node_modules/`.
 - Running untrusted user code (third-party repos, eval scripts).
 - Test isolation: each session gets a fresh `/home/agent` filesystem.
@@ -26,7 +26,7 @@ escape the sandbox: file writes, package installs, network probes, etc.
 
 ## When NOT to route through CubeSandbox
 
-- Pure read-only inspection (use `Read` directly).
+- Pure read-only inspection (use `read_file` directly).
 - Single-keystroke git plumbing (`git status`, `git diff`, `git log`).
 - Heavy commands that boot a new instance — reuse an open one.
 
@@ -120,7 +120,7 @@ Bizar's `bizar_sandbox_run` tool uses this when `BIZAR_PROXY_CREDS=1`.
 | Layer | Component | Behavior |
 |-------|-----------|----------|
 | CLI | `bizar sandbox run` | Wraps SDK, persists last sandbox across calls |
-| Plugin | `bizar_sandbox_run` | In-session tool — runs a `Bash` command in a fresh sandbox |
+| Plugin | `bizar_sandbox_run` | In-session tool — runs a `bash` command in a fresh sandbox |
 | Skill | `cubesandbox` (this) | Discovery + best practices |
 | Agent | `@sandbox-runner` (optional) | Routes risky ops automatically |
 | Hook | `PreToolUse` (v6.3+) | Detects dangerous patterns and forces sandbox routing |

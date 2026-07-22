@@ -1,6 +1,6 @@
 ---
 name: obsidian
-description: Use the Bizar Memory Service for persistent project knowledge — local Obsidian-compatible Markdown + Git-shared sync. Read vault entries before non-trivial decisions; write after meaningful work. Three layers: Markdown (truth) → Git (collaboration) → LightRAG (derived index, Phase 2). Triggers when memory vaults, vault entries, or shared project knowledge are referenced.
+description: Use the Bizar Memory Service for persistent project knowledge — local Obsidian-compatible Markdown + Git-shared sync. Read vault entries before non-trivial decisions; write after meaningful work. Three layers: Markdown (truth) → Git (collaboration) → LightRAG (derived index, Phase 2).
 version: 2
 ---
 
@@ -19,7 +19,7 @@ bizar memory status    # confirm vault reachable
 bizar memory doctor    # schema + secrets + git state
 ```
 
-Memory is accessed via the `bizar memory` CLI — agents have `Bash` access and can invoke it directly.
+Memory is accessed via the `bizar memory` CLI — agents have `bash: allow` and can invoke it directly.
 
 **Find the vault root:**
 ```bash
@@ -303,4 +303,4 @@ The vault directory is a Git repo. `bizar memory sync` does, in order:
 - `wiki/Architecture.md` — system-level architecture, including the Memory section.
 - `wiki/Self-Improvement.md` — self-improvement log conventions.
 - `config/skills/glyph/SKILL.md` — graphify knowledge graph (separate from the memory vault).
-- `config/skills/glyph/SKILL.md` — graphify knowledge graph (separate from the memory vault).
+- `config/skills/obsidian-skills/SKILL.md` — Obsidian Markdown / Bases / Canvas / CLI (auto-installed by `install.sh` via `skills add kepano/obsidian-skills`).

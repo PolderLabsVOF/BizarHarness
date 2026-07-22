@@ -60,14 +60,14 @@ writeFileSync(
   'utf8',
 );
 writeFileSync(
-  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'odin.md'),
+  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'mike.md'),
   '---\ndescription: Router\nmode: router\ntags: [orchestration]\ncategory: reasoning\n---\nRoute.\n',
   'utf8',
 );
 writeFileSync(
   join(HOME_OVERRIDE, '.config', 'bizar', 'agent-status.json'),
   JSON.stringify({
-    odin: {
+    mike: {
       status: 'idle',
       currentTaskId: null,
       lastSeen: Date.now(),
@@ -229,12 +229,12 @@ await check('mods.list', async () => {
 
 // ─── 6: settings.ui_reset_button ─────────────────────────────────
 await check('settings.ui_reset_button', async () => {
-  try { await sh('agent-browser', ['close', '--all']); } catch { /* ignore */ }
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+  try { await sh('kevin', ['close', '--all']); } catch { /* ignore */ }
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
   await new Promise((r) => setTimeout(r, 2500));
   try {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="settings"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="settings"]']);
   } catch (err) {
     throw new Error(`sidebar click failed: ${err.message}`);
   }
@@ -245,22 +245,22 @@ await check('settings.ui_reset_button', async () => {
     String.raw`(function(){ var el = document.getElementById('configuration'); if (el) el.scrollIntoView({behavior: 'instant', block: 'start'}); return el ? 'scrolled' : 'missing'; })()`,
     'utf8',
   ).toString('base64');
-  await sh('agent-browser', ['eval', '-b', scrollB64]).catch(() => {});
+  await sh('kevin', ['eval', '-b', scrollB64]).catch(() => {});
   await new Promise((r) => setTimeout(r, 600));
 
   const b64 = Buffer.from(
     String.raw`(document.querySelector('[data-testid="settings-reset"]') ? 'yes' : 'no')`,
     'utf8',
   ).toString('base64');
-  const { out } = await sh('agent-browser', ['eval', '-b', b64]);
+  const { out } = await sh('kevin', ['eval', '-b', b64]);
   let s = out.trim();
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
   s = s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
   if (!s.includes('yes')) {
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'settings-missing.png')]).catch(() => {});
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'settings-missing.png')]).catch(() => {});
     throw new Error(`settings-reset testid missing: ${s}`);
   }
-  await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'settings-with-reset.png')]);
+  await sh('kevin', ['screenshot', join(SHOT_DIR, 'settings-with-reset.png')]);
   return `testid=settings-reset rendered`;
 });
 
@@ -270,7 +270,7 @@ await check('plugin_options.ui_form', async () => {
     String.raw`(document.querySelector('[data-testid="plugin-options-form"]') ? 'yes' : 'no')`,
     'utf8',
   ).toString('base64');
-  const { out } = await sh('agent-browser', ['eval', '-b', b64]);
+  const { out } = await sh('kevin', ['eval', '-b', b64]);
   let s = out.trim();
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
   s = s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -281,7 +281,7 @@ await check('plugin_options.ui_form', async () => {
 });
 
 try {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
 } catch { /* ignore */ }
 
 await boot.close?.();

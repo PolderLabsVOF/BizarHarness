@@ -15,7 +15,7 @@
 
 **Date:** 2026-07-07
 **Status:** Accepted
-**Deciders:** @tyr, @drb0rk
+**Deciders:** @karen, @drb0rk
 **Supersedes:** none
 **Related:** DEC-002, DEC-003, DEC-004, DEC-005
 

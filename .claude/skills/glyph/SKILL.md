@@ -1,6 +1,6 @@
 ---
 name: glyph
-description: Create visual glyphs at `artifacts/<slug>/` for plans, recaps, design proposals, postmortems, handoffs. Glyphs should be compact and visual — one screen, dense info, no walls of text. This skill enforces that. Use when the user asks for a plan preview, design review surface, or decisions document that needs visual blocks (Stat, Callout, Table, Decision, etc.).
+description: Create visual glyphs at `artifacts/<slug>/` for plans, recaps, design proposals, postmortems, handoffs. Glyphs should be compact and visual — one screen, dense info, no walls of text. This skill enforces that.
 version: 4
 ---
 
@@ -15,7 +15,7 @@ artifacts/<slug>/
 └── comments.json      ← free-placed pins (mutable)
 ```
 
-Two locations: `<projectRoot>/.bizar/artifacts/` (preferred) and `~/.bizar_home/artifacts/` (global).
+Two locations: `<projectRoot>/.bizar/artifacts/` (preferred) and `~/.config/cline/artifacts/` (global).
 
 ## Frontmatter
 
@@ -158,5 +158,6 @@ Also check yourself: does it fit on one screen? Are there any 4-sentence RichTex
 
 ## See also
 
-- `bizar-dash/src/server/glyphs/mdx-compiler.mjs` — MDX compiler
-- `bizar-dash/src/server/artifacts.mjs` — artifact route (the legacy glyph React view was removed in v10 — artifacts is the current surface)
+- `bizar-dash/src/server/glyphs/mdx-compiler.mjs` — parser
+- `bizar-dash/src/web/views/glyphs/GlyphRenderer.tsx` — React renderer (has error banner)
+- `bizar-dash/src/web/views/glyphs/components.tsx` — block implementations

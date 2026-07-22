@@ -43,7 +43,7 @@ function seedProject(root) {
 - [x] Audit views (done)
 - [x] Wire settings (done)
 - [ ] Live e2e proof (fixture)
-owner: heimdall
+owner: brenda
 
 ## G-002 — Goals parity (fixture)
 

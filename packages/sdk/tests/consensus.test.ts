@@ -36,11 +36,11 @@ import {
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
-const FIVE_PEERS = ["odin", "frigg", "vor", "mimir", "heimdall"] as const;
+const FIVE_PEERS = ["mike", "susan", "janet", "greg", "brenda"] as const;
 
 function newFivePeerConsensus(opts: Partial<ConstructorParameters<typeof ByzantineConsensus>[0]> = {}): ByzantineConsensus {
   return new ByzantineConsensus({
-    localAgentId: "odin",
+    localAgentId: "mike",
     peers: [...FIVE_PEERS],
     quorum: 3,
     maxFaults: 1,
@@ -59,15 +59,15 @@ describe("ByzantineConsensus — happy path (3-of-5)", () => {
     expect(phase).toBe("prepare");
     expect(proposalId).toMatch(/^bft-v\d+-[\da-f]+$/);
 
-    const r1 = c.castVote(proposalId, "odin", "yes");
+    const r1 = c.castVote(proposalId, "mike", "yes");
     expect(r1.approvals).toBe(1);
     expect(r1.committed).toBe(false);
 
-    const r2 = c.castVote(proposalId, "frigg", "yes");
+    const r2 = c.castVote(proposalId, "susan", "yes");
     expect(r2.approvals).toBe(2);
     expect(r2.committed).toBe(false);
 
-    const r3 = c.castVote(proposalId, "vor", "yes");
+    const r3 = c.castVote(proposalId, "janet", "yes");
     expect(r3.approvals).toBe(3);
     expect(r3.committed).toBe(true);
     expect(r3.phase).toBe("reply");
@@ -76,21 +76,21 @@ describe("ByzantineConsensus — happy path (3-of-5)", () => {
 
   test("exactly 3 yes + 2 abstain → commit (3-of-5 simple majority)", () => {
     const { proposalId } = c.propose({ a: 1 });
-    c.castVote(proposalId, "odin", "yes");
-    c.castVote(proposalId, "frigg", "yes");
-    c.castVote(proposalId, "vor", "yes");
-    const r = c.castVote(proposalId, "mimir", "abstain");
+    c.castVote(proposalId, "mike", "yes");
+    c.castVote(proposalId, "susan", "yes");
+    c.castVote(proposalId, "janet", "yes");
+    const r = c.castVote(proposalId, "greg", "abstain");
     expect(r.committed).toBe(true);
     expect(r.approvals).toBe(3);
   });
 
   test("2 yes + 3 no (all 5 votes) → rejected (cannot reach quorum)", () => {
     const { proposalId } = c.propose({ a: 1 });
-    c.castVote(proposalId, "odin", "yes");
-    c.castVote(proposalId, "frigg", "yes");
-    c.castVote(proposalId, "vor", "no");
-    c.castVote(proposalId, "mimir", "no");
-    const r = c.castVote(proposalId, "heimdall", "no");
+    c.castVote(proposalId, "mike", "yes");
+    c.castVote(proposalId, "susan", "yes");
+    c.castVote(proposalId, "janet", "no");
+    c.castVote(proposalId, "greg", "no");
+    const r = c.castVote(proposalId, "brenda", "no");
     expect(r.committed).toBe(false);
     expect(r.status).toBe("rejected");
     expect(r.phase).toBe("reply");
@@ -100,11 +100,11 @@ describe("ByzantineConsensus — happy path (3-of-5)", () => {
 
   test("late vote after commit is a no-op (returns current snapshot)", () => {
     const { proposalId } = c.propose({ x: 1 });
-    c.castVote(proposalId, "odin", "yes");
-    c.castVote(proposalId, "frigg", "yes");
-    const committed = c.castVote(proposalId, "vor", "yes");
+    c.castVote(proposalId, "mike", "yes");
+    c.castVote(proposalId, "susan", "yes");
+    const committed = c.castVote(proposalId, "janet", "yes");
     expect(committed.committed).toBe(true);
-    const late = c.castVote(proposalId, "mimir", "yes");
+    const late = c.castVote(proposalId, "greg", "yes");
     expect(late.committed).toBe(true);
     expect(late.phase).toBe("reply");
   });
@@ -145,10 +145,10 @@ describe("ByzantineConsensus — view-change / faulty proposer", () => {
   test("tie-break (2-2-1) does not commit (only 2 yes)", () => {
     const c = newFivePeerConsensus();
     const { proposalId } = c.propose({ split: true });
-    c.castVote(proposalId, "odin", "yes");
-    c.castVote(proposalId, "frigg", "yes");
-    c.castVote(proposalId, "vor", "no");
-    const r = c.castVote(proposalId, "mimir", "no");
+    c.castVote(proposalId, "mike", "yes");
+    c.castVote(proposalId, "susan", "yes");
+    c.castVote(proposalId, "janet", "no");
+    const r = c.castVote(proposalId, "greg", "no");
     expect(r.committed).toBe(false);
     expect(r.approvals).toBe(2);
     expect(r.rejections).toBe(2);
@@ -189,7 +189,7 @@ describe("ByzantineConsensus — empty quorum / expiry", () => {
     nowMs += 100;
     expect(c.getProposal(proposalId)?.status).toBe("expired");
     // Subsequent castVote on an expired proposal is a no-op snapshot.
-    const r = c.castVote(proposalId, "odin", "yes");
+    const r = c.castVote(proposalId, "mike", "yes");
     expect(r.committed).toBe(false);
   });
 });
@@ -209,13 +209,13 @@ describe("ByzantineConsensus — validation", () => {
 
   test("peer count < 2 throws", () => {
     expect(() =>
-      new ByzantineConsensus({ localAgentId: "odin", peers: ["odin"] }),
+      new ByzantineConsensus({ localAgentId: "mike", peers: ["mike"] }),
     ).toThrow(/>=2/);
   });
 
   test("castVote on unknown proposalId throws", () => {
     const c = newFivePeerConsensus();
-    expect(() => c.castVote("missing", "odin", "yes")).toThrow(/unknown proposalId/);
+    expect(() => c.castVote("missing", "mike", "yes")).toThrow(/unknown proposalId/);
   });
 
   test("castVote from non-peer throws", () => {
@@ -300,21 +300,21 @@ describe("QueenCoordinator — round-robin + fault-skip", () => {
 describe("createConsensus orchestrator", () => {
   test("returns a handle with the expected surface", () => {
     const c: ConsensusHandle = createConsensus({
-      localAgentId: "odin",
+      localAgentId: "mike",
       peers: [...FIVE_PEERS],
     });
-    expect(c.localAgentId).toBe("odin");
+    expect(c.localAgentId).toBe("mike");
     expect(c.getQuorum()).toBe(3);
     expect(c.getPeers()).toEqual([...FIVE_PEERS]);
-    expect(c.getCurrentProposer()).toBe("odin"); // head of seeded round-robin
+    expect(c.getCurrentProposer()).toBe("mike"); // head of seeded round-robin
   });
 
   test("full lifecycle: propose → castVote × 3 → committed + status reflects", () => {
-    const c = createConsensus({ localAgentId: "odin", peers: [...FIVE_PEERS] });
+    const c = createConsensus({ localAgentId: "mike", peers: [...FIVE_PEERS] });
     const { proposalId }: ProposeResult = c.propose({ task: "approve-pr" });
-    c.castVote(proposalId, "odin", "yes");
-    c.castVote(proposalId, "frigg", "yes");
-    const final = c.castVote(proposalId, "vor", "yes");
+    c.castVote(proposalId, "mike", "yes");
+    c.castVote(proposalId, "susan", "yes");
+    const final = c.castVote(proposalId, "janet", "yes");
     expect(final.committed).toBe(true);
     const s: ConsensusStatus = c.status();
     expect(s.committed).toBe(1);
@@ -323,7 +323,7 @@ describe("createConsensus orchestrator", () => {
   });
 
   test("viewChange() advances view number and proposer", () => {
-    const c = createConsensus({ localAgentId: "odin", peers: [...FIVE_PEERS] });
+    const c = createConsensus({ localAgentId: "mike", peers: [...FIVE_PEERS] });
     const before = c.getCurrentProposer();
     const r = c.viewChange("test-fault");
     expect(r.previousProposer).toBe(before);
@@ -343,10 +343,10 @@ describe("getSharedConsensus — singleton", () => {
 
   test("default roster is the 5-agent Norse set", () => {
     const c = getSharedConsensus();
-    expect(c.getPeers()).toEqual(["odin", "frigg", "vor", "mimir", "heimdall"]);
+    expect(c.getPeers()).toEqual(["mike", "susan", "janet", "greg", "brenda"]);
     expect(c.getQuorum()).toBe(DEFAULT_QUORUM);
     expect(c.getPeers().length).toBe(DEFAULT_PEER_COUNT);
-    expect(c.localAgentId).toBe("odin");
+    expect(c.localAgentId).toBe("mike");
   });
 
   test("resetSharedConsensus drops the singleton", () => {

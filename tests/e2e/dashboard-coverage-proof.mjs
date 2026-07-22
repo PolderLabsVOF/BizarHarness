@@ -53,14 +53,14 @@ mkdirSync(join(HOME_OVERRIDE, '.config', 'bizar'), { recursive: true });
 mkdirSync(join(projectRoot, '.bizar'), { recursive: true });
 
 const agents = [
-  { name: 'odin',    description: 'Router',         mode: 'router',   tags: ['orchestration'], category: 'reasoning', prompt: 'Route.' },
-  { name: 'thor',    description: 'Coder',          mode: 'subagent', tags: ['code','review'],  category: 'code',      prompt: 'Implement.' },
-  { name: 'frigg',   description: 'Reader',         mode: 'subagent', tags: ['research'],       category: 'research',  prompt: 'Answer.' },
-  { name: 'heimdall', description: 'Heimdall ops',  mode: 'subagent', tags: ['ops'],            category: 'ops',       prompt: 'Watch.' },
+  { name: 'mike',    description: 'Router',         mode: 'router',   tags: ['orchestration'], category: 'reasoning', prompt: 'Route.' },
+  { name: 'todd',    description: 'Coder',          mode: 'subagent', tags: ['code','review'],  category: 'code',      prompt: 'Implement.' },
+  { name: 'susan',   description: 'Reader',         mode: 'subagent', tags: ['research'],       category: 'research',  prompt: 'Answer.' },
+  { name: 'brenda', description: 'Heimdall ops',  mode: 'subagent', tags: ['ops'],            category: 'ops',       prompt: 'Watch.' },
   { name: 'loki',    description: 'Trickster',      mode: 'subagent', tags: ['misc'],           category: 'misc',      prompt: 'Trick.' },
   { name: 'fenrir',  description: 'Heavy compute',  mode: 'subagent', tags: ['compute'],        category: 'compute',   prompt: 'Crunch.' },
   { name: 'sif',     description: 'Writer',         mode: 'subagent', tags: ['docs'],           category: 'docs',      prompt: 'Write.' },
-  { name: 'tyr',     description: 'Justice',        mode: 'subagent', tags: ['review'],         category: 'review',    prompt: 'Judge.' },
+  { name: 'karen',     description: 'Justice',        mode: 'subagent', tags: ['review'],         category: 'review',    prompt: 'Judge.' },
 ];
 for (const a of agents) {
   writeFileSync(
@@ -75,7 +75,7 @@ const now = Date.now();
 const bizarStatuses = {};
 for (const a of agents) {
   let status;
-  if (a.name === 'thor') status = 'working';
+  if (a.name === 'todd') status = 'working';
   else if (a.name === 'loki') status = 'paused';
   else if (a.name === 'fenrir') status = 'error';
   else if (a.name === 'sif') status = 'stuck';
@@ -239,8 +239,8 @@ async function check(name, fn) {
 
 async function agentBrowserEval(expr) {
   const b64 = Buffer.from(expr, 'utf8').toString('base64');
-  const { out } = await sh('agent-browser', ['eval', '-b', b64]);
-  // agent-browser wraps the JS result in literal quotes. Unwrap twice:
+  const { out } = await sh('kevin', ['eval', '-b', b64]);
+  // kevin wraps the JS result in literal quotes. Unwrap twice:
   // the outer `"` + escaped JSON + `"` then JSON.parse the payload.
   let s = out.trim();
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
@@ -280,15 +280,15 @@ try {
   });
 
   // Open browser.
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
   await new Promise((r) => setTimeout(r, 2000));
 
   // ─── AgentsView: per-agent status grid (umbrella #1) ──────────
   await check('coverage.agents.status_grid', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="agents"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="agents"]']);
     await new Promise((r) => setTimeout(r, 2000));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'agents-coverage.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'agents-coverage.png')]);
 
     const totalCards = parseInt(await agentBrowserEval(
       String.raw`document.querySelectorAll('.v8-agent-card').length`
@@ -321,9 +321,9 @@ try {
       return chips.length;
     })()`;
     const b64 = Buffer.from(clickJs, 'utf8').toString('base64');
-    await sh('agent-browser', ['eval', '-b', b64]);
+    await sh('kevin', ['eval', '-b', b64]);
     await new Promise((r) => setTimeout(r, 1200));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'agents-cc-filter.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'agents-cc-filter.png')]);
 
     // After click, count cards with cc: prefix in their visible name.
     // In CI without `claude` CLI no CC agents are merged so this is 0;
@@ -338,9 +338,9 @@ try {
 
   // ─── GoalsView: 6 goal cards + status coverage (umbrella #5) ──
   await check('coverage.goals.status_coverage', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="goals"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="goals"]']);
     await new Promise((r) => setTimeout(r, 1800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'goals-coverage.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'goals-coverage.png')]);
 
     const cardCount = parseInt(await agentBrowserEval(
       String.raw`document.querySelectorAll('[data-testid^="goal-card-"]').length`
@@ -357,9 +357,9 @@ try {
 
   // ─── OverviewView: tokens sparkline + active project ──────────
   await check('coverage.overview.data_driven', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="overview"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="overview"]']);
     await new Promise((r) => setTimeout(r, 1800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'overview-coverage.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'overview-coverage.png')]);
 
     const sparkline = parseInt(await agentBrowserEval(
       String.raw`document.querySelectorAll('[data-testid="overview-tokens-sparkline"]').length`
@@ -373,7 +373,7 @@ try {
   results.push({ name: 'coverage.error', ok: false, detail: err.message });
   console.error('coverage error:', err.message);
 } finally {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
   await boot.close?.();
   writeFileSync(join(SHOT_DIR, 'results.json'),
     JSON.stringify({ results, shots: SHOT_DIR, projectRoot, homeOverride: HOME_OVERRIDE }, null, 2));

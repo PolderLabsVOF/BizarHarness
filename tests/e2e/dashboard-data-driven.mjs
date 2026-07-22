@@ -53,11 +53,11 @@ mkdirSync(join(HOME_OVERRIDE, '.local', 'share', 'bizar'), { recursive: true });
 mkdirSync(join(projectRoot, '.bizar'), { recursive: true });
 
 const agents = [
-  { name: 'odin',   successRate: 1.0 },
-  { name: 'thor',   successRate: 0.9 },
-  { name: 'frigg',  successRate: 0.7 },
+  { name: 'mike',   successRate: 1.0 },
+  { name: 'todd',   successRate: 0.9 },
+  { name: 'susan',  successRate: 0.7 },
   { name: 'loki',   successRate: 0.4 },
-  { name: 'tyr',    successRate: 1.0 },
+  { name: 'karen',    successRate: 1.0 },
 ];
 const now = Date.now();
 const status = {};
@@ -218,7 +218,7 @@ async function check(name, fn) {
 
 async function agentBrowserEval(expr) {
   const b64 = Buffer.from(expr, 'utf8').toString('base64');
-  const { out } = await sh('agent-browser', ['eval', '-b', b64]);
+  const { out } = await sh('kevin', ['eval', '-b', b64]);
   let s = out.trim();
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
   s = s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -260,14 +260,14 @@ try {
   });
 
   // Open SPA, walk views.
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
   await new Promise((r) => setTimeout(r, 2000));
 
   await check('data.ui.agents_metric_tiles', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="agents"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="agents"]']);
     await new Promise((r) => setTimeout(r, 2000));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'agents-metrics.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'agents-metrics.png')]);
 
     const counts = await agentBrowserEval(
       String.raw`JSON.stringify({ tasks: document.querySelectorAll('[data-testid="agent-card-tasks"]').length, success: document.querySelectorAll('[data-testid="agent-card-success"]').length, lastSeen: document.querySelectorAll('[data-testid="agent-card-lastseen"]').length })`
@@ -280,9 +280,9 @@ try {
   });
 
   await check('data.ui.goals_status_coverage', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="goals"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="goals"]']);
     await new Promise((r) => setTimeout(r, 1800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'goals-coverage.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'goals-coverage.png')]);
 
     const main = await agentBrowserEval(
       String.raw`(document.querySelector('main')?.innerText || document.body.innerText || '')`
@@ -297,9 +297,9 @@ try {
   });
 
   await check('data.ui.overview_sparkline', async () => {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="overview"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="overview"]']);
     await new Promise((r) => setTimeout(r, 1800));
-    await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'overview-sparkline.png')]);
+    await sh('kevin', ['screenshot', join(SHOT_DIR, 'overview-sparkline.png')]);
 
     const sparklineCount = parseInt(await agentBrowserEval(
       String.raw`document.querySelectorAll('[data-testid="overview-tokens-sparkline"]').length`
@@ -311,7 +311,7 @@ try {
   results.push({ name: 'data.error', ok: false, detail: err.message });
   console.error('data error:', err.message);
 } finally {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
   await boot.close?.();
   writeFileSync(join(SHOT_DIR, 'results.json'),
     JSON.stringify({ results, shots: SHOT_DIR, projectRoot, homeOverride: HOME_OVERRIDE }, null, 2));

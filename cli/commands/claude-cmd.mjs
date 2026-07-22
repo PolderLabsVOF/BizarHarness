@@ -121,7 +121,7 @@ export function showClaudeCmdHelp() {
     bizar config --json
     bizar plugin list
     bizar team auth-sprint "Plan and implement user auth with tests"
-    bizar subagent mimir "Find all places where the auth token is verified"
+    bizar subagent greg "Find all places where the auth token is verified"
     bizar run "fix the failing test in src/auth.test.ts"
 
   Related:
@@ -262,7 +262,7 @@ export async function runClaudeTeam(args = []) {
 }
 
 /**
- * `bizar subagent <agent> "task"` — spawn a quick read-only research
+ * `bizar subagent <agent> "task"` — spawn a pam read-only research
  * subagent via `claude --agent <name> "..."`.
  *
  * Note: Claude Code's in-session subagent dispatch uses the `Agent`
@@ -272,7 +272,7 @@ export async function runClaudeTeam(args = []) {
  */
 export async function runClaudeSubagent(args = []) {
   if (args.length === 0) {
-    console.log(chalk.cyan('  bizar subagent — Spawn a quick read-only research subagent\n'));
+    console.log(chalk.cyan('  bizar subagent — Spawn a pam read-only research subagent\n'));
     console.log(chalk.dim('  Subagents are research agents. They run in parallel, '));
     console.log(chalk.dim('  keep their own context window, and return a focused report.'));
     console.log(chalk.dim('  Use them for broad codebase exploration without burning context.\n'));

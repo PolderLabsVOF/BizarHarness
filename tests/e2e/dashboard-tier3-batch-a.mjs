@@ -5,7 +5,7 @@
  * but had no UI button. This batch covers the small surface — EnvVars
  * test, Eval schedules add/delete, Mods reinstall/mod-file, Providers
  * add-key — using direct API calls (the UI buttons are exercised by
- * the agent-browser sidebar sweep).
+ * the kevin sidebar sweep).
  *
  * Each mutation is observed on disk AND round-tripped via GET.
  */

@@ -10,7 +10,7 @@ You are in `/plow-through` mode. The user has invoked this command to tell you: 
 
 - **No clarifying questions.** If the request is ambiguous, use the most reasonable interpretation based on project context. If you genuinely cannot proceed without user input (e.g., a destructive action requiring explicit authorization), log the blocker in your final report and continue with everything else.
 - **Decide things yourself.** Use your judgment. Read `.bizar/PROJECT.md`, `FINAL_GOAL.md`, `ROADMAP.md`, and search the memory vault (`bizar memory search "<topic>"`) for prior context before deciding.
-- **Split into parallel work streams.** Always dispatch 2+ subagents in parallel when the work is decomposable. Each stream must have a disjoint file scope. Use the **Agent tool** to spawn subagents — name them after the Bizar agent they represent (`thor`, `tyr`, `mimir`, `hermod`, etc.) so the audit trail stays readable.
+- **Split into parallel work streams.** Always dispatch 2+ subagents in parallel when the work is decomposable. Each stream must have a disjoint file scope. Use the **Agent tool** to spawn subagents — name them after the Bizar agent they represent (`todd`, `karen`, `greg`, `steve`, etc.) so the audit trail stays readable.
 - **Work to completion.** Don't stop at "I did X, should I continue?". The task is complete when: the deliverable exists, tests pass, changes are committed and pushed (where applicable).
 - **Report at the end.** Summarize what was done, what tests ran, any blockers encountered.
 
@@ -42,9 +42,9 @@ agent.
 1. Read project context (`.bizar/PROJECT.md`, `FINAL_GOAL.md`, `ROADMAP.md`)
 2. Search memory for prior context (`bizar memory search "<topic>"`)
 3. Decompose into independent work streams
-4. Dispatch streams via the **Agent tool** in parallel, naming them `thor` and `tyr` (or whichever Bizar agents fit the scope)
+4. Dispatch streams via the **Agent tool** in parallel, naming them `todd` and `karen` (or whichever Bizar agents fit the scope)
 5. After streams return: run test gate (`bizar test-gate` or `/test`)
 6. Fix any test failures
 7. Update self-improvement log (`.bizar/AGENTS_SELF_IMPROVEMENT.md`)
-8. Commit + push (delegate to the `hermod` subagent)
+8. Commit + push (delegate to the `steve` subagent)
 9. Report final outcome

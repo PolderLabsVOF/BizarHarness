@@ -163,8 +163,8 @@ export function resolveAgentModel(
   reg: ModelRegistry,
 ): ResolvedAgentModel {
   const entry = reg.agents.get(agent)
-    ?? reg.agents.get("odin")
-    ?? { agent: "odin", modelId: "bizar/MiniMax-M3", tier: "default" as const, rationale: "fallback" };
+    ?? reg.agents.get("mike")
+    ?? { agent: "mike", modelId: "bizar/MiniMax-M3", tier: "default" as const, rationale: "fallback" };
   return {
     agent: entry.agent,
     modelId: entry.modelId,

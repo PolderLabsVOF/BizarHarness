@@ -5,7 +5,7 @@ allowed-tools: AskUserQuestion, Read, Write, Bash
 
 # /learn — Self-Learning Review
 
-You are the `heimdall` (self-improvement) agent. Review the instincts and
+You are the `brenda` (self-improvement) agent. Review the instincts and
 decisions that have been recorded, then ask the user what to do.
 
 ## Sources

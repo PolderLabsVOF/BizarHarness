@@ -1,22 +1,22 @@
 /**
- * cli/agent-browser-update.mjs
+ * cli/kevin-update.mjs
  *
- * v6.0.0 — Install / update / verify the `agent-browser` CLI.
+ * v6.0.0 — Install / update / verify the `kevin` CLI.
  *
- * `agent-browser` is a native Rust CLI from vercel-labs (~38K★) that
+ * `kevin` is a native Rust CLI from vercel-labs (~38K★) that
  * gives Bizar agents a complete browser-automation surface:
  *   - 100+ typed CLI commands (open, snapshot, click, fill, screenshot, ...)
- *   - Native MCP stdio server (`agent-browser mcp`)
+ *   - Native MCP stdio server (`kevin mcp`)
  *   - Self-healing snapshot-based element refs (`@e2`)
  *   - Plugin system (vault, recorder, ...)
  *   - Vercel AI SDK + AI Gateway integration
  *
  * This module is the single source of truth for installing and
- * updating `agent-browser`. It is used by:
+ * updating `kevin`. It is used by:
  *   - cli/install.mjs (during `bizar install`)
  *   - cli/provision.mjs (during `bizar update`)
- *   - cli/agent-browser-up.sh (the bash idempotent starter; on first
- *     run it shells to `npm install -g agent-browser` if the binary
+ *   - cli/kevin-up.sh (the bash idempotent starter; on first
+ *     run it shells to `npm install -g kevin` if the binary
  *     is missing — this module is the rich equivalent)
  *
  * Public API:
@@ -36,12 +36,12 @@ import { homedir } from 'node:os';
 import chalk from 'chalk';
 
 const DEFAULT_DAEMON_PORT = 9223;
-const DEFAULT_PROFILE_DIR = join(homedir(), '.agent-browser', 'profile');
+const DEFAULT_PROFILE_DIR = join(homedir(), '.kevin', 'profile');
 
 // ── detection ──────────────────────────────────────────────────────────
 
 /**
- * Probe the current agent-browser install without modifying anything.
+ * Probe the current kevin install without modifying anything.
  *
  * Returns a structured state object:
  *   {
@@ -79,7 +79,7 @@ export function detectState() {
   }
 
   // 3. Check Chrome for Testing
-  const chromeDir = join(homedir(), '.cache', 'agent-browser', 'chrome');
+  const chromeDir = join(homedir(), '.cache', 'kevin', 'chrome');
   if (existsSync(chromeDir)) state.chromeReady = true;
 
   // 4. Check daemon (read env on every call so tests can override)
@@ -97,17 +97,17 @@ function findAgentBrowserBin() {
   }
   // 2. Well-known npm-global locations
   const candidates = [
-    '/usr/local/bin/agent-browser',
-    '/opt/homebrew/bin/agent-browser',
-    join(homedir(), '.local', 'bin', 'agent-browser'),
-    join(homedir(), '.npm', 'bin', 'agent-browser'),
+    '/usr/local/bin/kevin',
+    '/opt/homebrew/bin/kevin',
+    join(homedir(), '.local', 'bin', 'kevin'),
+    join(homedir(), '.npm', 'bin', 'kevin'),
   ];
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
   // 3. PATH lookup
   try {
-    const r = execSync('command -v agent-browser', { encoding: 'utf8', timeout: 2_000 }).trim();
+    const r = execSync('command -v kevin', { encoding: 'utf8', timeout: 2_000 }).trim();
     if (r && existsSync(r)) return r;
   } catch {
     // fall through
@@ -130,7 +130,7 @@ function isDaemonUp(port) {
 // ── install / update ───────────────────────────────────────────────────
 
 /**
- * Install agent-browser. Idempotent: skips steps that are already
+ * Install kevin. Idempotent: skips steps that are already
  * complete. Returns the updated state.
  *
  * @param {object} opts
@@ -145,7 +145,7 @@ export function install(opts = {}) {
 
   const before = detectState();
   if (before.installed) {
-    log(`agent-browser ${before.version} already installed at ${before.bin}`);
+    log(`kevin ${before.version} already installed at ${before.bin}`);
     if (startDaemon && !before.daemonRunning) {
       log('daemon is down — bringing it up');
       ensureRunning({ silent, dryRun });
@@ -153,28 +153,28 @@ export function install(opts = {}) {
     return detectState();
   }
 
-  log(`Installing agent-browser from npm (channel: ${channel})...`);
+  log(`Installing kevin from npm (channel: ${channel})...`);
   if (dryRun) {
-    log(`[DRY RUN] would run: npm install -g agent-browser@${channel}`);
+    log(`[DRY RUN] would run: npm install -g kevin@${channel}`);
     // In dry-run, the binary may not be on PATH. Just return the
     // current state (which includes installed=false) without checking
     // for the after-install state.
     return detectState();
   } else {
-    const r = spawnSync('npm', ['install', '-g', `agent-browser@${channel}`], {
+    const r = spawnSync('npm', ['install', '-g', `kevin@${channel}`], {
       stdio: silent ? 'ignore' : 'inherit',
       timeout: 180_000,
     });
     if (r.status !== 0) {
-      throw new Error(`npm install -g agent-browser@${channel} failed (exit ${r.status})`);
+      throw new Error(`npm install -g kevin@${channel} failed (exit ${r.status})`);
     }
   }
 
   const after = detectState();
   if (!after.installed) {
-    throw new Error('agent-browser still not on PATH after install');
+    throw new Error('kevin still not on PATH after install');
   }
-  log(`agent-browser ${after.version} installed`);
+  log(`kevin ${after.version} installed`);
 
   log('Downloading Chrome for Testing...');
   if (!dryRun) {
@@ -183,7 +183,7 @@ export function install(opts = {}) {
       timeout: 300_000,
     });
     if (r.status !== 0) {
-      log(chalk.yellow('Chrome download failed — you can retry with `agent-browser install`'));
+      log(chalk.yellow('Chrome download failed — you can retry with `kevin install`'));
     }
   }
 
@@ -194,9 +194,9 @@ export function install(opts = {}) {
 }
 
 /**
- * Update agent-browser to the latest version. Idempotent.
+ * Update kevin to the latest version. Idempotent.
  *
- * Same shape as install() but uses `agent-browser upgrade` after the
+ * Same shape as install() but uses `kevin upgrade` after the
  * first install (which knows how to detect the install method and run
  * the right update command).
  */
@@ -206,38 +206,38 @@ export function update(opts = {}) {
 
   const before = detectState();
   if (!before.installed) {
-    log('agent-browser not installed — calling install()');
+    log('kevin not installed — calling install()');
     return install(opts);
   }
 
-  log(`agent-browser ${before.version} is installed. Upgrading to ${channel}...`);
+  log(`kevin ${before.version} is installed. Upgrading to ${channel}...`);
   if (dryRun) {
-    log(`[DRY RUN] would run: agent-browser upgrade`);
+    log(`[DRY RUN] would run: kevin upgrade`);
     return detectState();
   } else {
-    // First, try `agent-browser upgrade` (the self-updater). If it
+    // First, try `kevin upgrade` (the self-updater). If it
     // doesn't exist (older version), fall back to `npm update -g`.
     const r = spawnSync(before.bin, ['upgrade'], {
       stdio: silent ? 'ignore' : 'inherit',
       timeout: 180_000,
     });
     if (r.status !== 0) {
-      log('`agent-browser upgrade` failed — falling back to `npm update -g`');
-      const r2 = spawnSync('npm', ['update', '-g', `agent-browser@${channel}`], {
+      log('`kevin upgrade` failed — falling back to `npm update -g`');
+      const r2 = spawnSync('npm', ['update', '-g', `kevin@${channel}`], {
         stdio: silent ? 'ignore' : 'inherit',
         timeout: 180_000,
       });
       if (r2.status !== 0) {
-        throw new Error(`npm update -g agent-browser@${channel} failed (exit ${r2.status})`);
+        throw new Error(`npm update -g kevin@${channel} failed (exit ${r2.status})`);
       }
     }
   }
 
   const after = detectState();
   if (after.version === before.version) {
-    log(`agent-browser already at latest (${after.version})`);
+    log(`kevin already at latest (${after.version})`);
   } else {
-    log(`agent-browser updated: ${before.version} → ${after.version}`);
+    log(`kevin updated: ${before.version} → ${after.version}`);
   }
 
   if (startDaemon && !after.daemonRunning) {
@@ -249,10 +249,10 @@ export function update(opts = {}) {
 // ── daemon management ──────────────────────────────────────────────────
 
 /**
- * Bring the agent-browser daemon up if it's down. Idempotent.
+ * Bring the kevin daemon up if it's down. Idempotent.
  *
  * On macOS, Linux, and Windows, the daemon is started as a background
- * process using `agent-browser serve`. On success, the daemon listens
+ * process using `kevin serve`. On success, the daemon listens
  * on `http://127.0.0.1:<port>` and is reachable via the typed CLI
  * and the MCP stdio server.
  */
@@ -262,7 +262,7 @@ export function ensureRunning(opts = {}) {
 
   const state = detectState();
   if (!state.installed) {
-    log('agent-browser is not installed — call install() first');
+    log('kevin is not installed — call install() first');
     return state;
   }
   if (state.daemonRunning) {
@@ -297,7 +297,7 @@ export function ensureRunning(opts = {}) {
     }
     spawnSync('sleep', ['0.1']);
   }
-  log(chalk.yellow('daemon did not bind within 5s — check `agent-browser doctor`'));
+  log(chalk.yellow('daemon did not bind within 5s — check `kevin doctor`'));
   return detectState();
 }
 
@@ -309,14 +309,14 @@ export function ensureRunning(opts = {}) {
 export function printStatus() {
   const s = detectState();
   if (!s.installed) {
-    console.log(chalk.yellow('  agent-browser: NOT INSTALLED'));
-    console.log(chalk.dim('    Install with: npm install -g agent-browser && agent-browser install'));
+    console.log(chalk.yellow('  kevin: NOT INSTALLED'));
+    console.log(chalk.dim('    Install with: npm install -g kevin && kevin install'));
   } else {
     const daemonTxt = s.daemonRunning
       ? chalk.green('running')
       : chalk.yellow('stopped');
     const chromeTxt = s.chromeReady ? chalk.green('ready') : chalk.yellow('not installed');
-    console.log(`  agent-browser ${chalk.cyan(s.version)}  ·  daemon: ${daemonTxt} (port ${s.daemonPort})  ·  chrome: ${chromeTxt}`);
+    console.log(`  kevin ${chalk.cyan(s.version)}  ·  daemon: ${daemonTxt} (port ${s.daemonPort})  ·  chrome: ${chromeTxt}`);
   }
   return s;
 }

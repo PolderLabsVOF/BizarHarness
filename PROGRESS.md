@@ -2647,3 +2647,65 @@ out-of-scope-but-worth-fixing. WIP=1 honored (F-111 only).
 **Audit fully closed** — F-107..F-110 critical fixes + F-111 follow-up
 all shipped. `docs/agent-audit-2026-07-22.md` §G resolution log
 complete. No flagged gaps remaining from the original audit.
+
+## In Progress — F-112 Theme Pivot (Norse → 90s corporate office)
+
+User-requested full rename of the agent theme. Same 14-agent multi-tier
+shape, but Norse pantheon → 90s corporate office, with funny boring
+names. The mapping:
+
+| Old Norse | New Office | Role | File |
+|---|---|---|---|
+| Odin | Mike | Office Manager (router) | `office-manager.md` |
+| Thor | Todd | Senior Engineer | `senior-engineer.md` |
+| Tyr | Karen | Principal Engineer | `principal-engineer.md` |
+| Heimdall | Brenda | Office Coordinator | `office-coordinator.md` |
+| Mimir | Greg | Research Analyst | `research-analyst.md` |
+| Frigg | Susan | Help Desk | `help-desk.md` |
+| Hermod | Steve | IT Lead | `it-lead.md` |
+| Baldr | Brad | Brand Designer | `brand-designer.md` |
+| Vor | Janet | Office Greeter | `office-greeter.md` |
+| Vidarr | Carl | VP Engineering | `vp-engineering.md` |
+| Forseti | Linda | QA Reviewer | `qa-reviewer.md` |
+| Quick | Pam | Exec Assistant | `exec-assistant.md` |
+| agent-browser | Kevin | Support Tech | `support-tech.md` |
+| semble-search | Oscar | Knowledge Manager | `knowledge-manager.md` |
+
+**Shipped in this commit:**
+- 14 agents renamed via `git mv` (history-preserving). New `name:`
+  frontmatter. New first sentence (e.g., "You are Susan, the front-desk
+  Help Desk."). Same role, same model tier, same tools.
+- `.claude/agents/_shared/AGENT_BASELINE.md` §8 parallelism hint
+  (Odin → Mike) + §12 self-improvement duty header (Heimdall → Brenda).
+- `.claude/skills/bizar/SKILL.md` full rewrite of routing table (10
+  rows), ASCII diagram (8 boxes), Cost Escalation, Mike/Odin/
+  Forseti troubleshooting sections, Mike Routing Rules header,
+  Config File Locations table, identity preamble, §12 self-improvement
+  line (Heimdall → Brenda).
+- `.claude/agents/_shared/CLAUDE_TOOLS.md` roster line 357
+  (kept in sync with new names).
+- `scripts/check-agents.mjs` rewired from deleted `config/agents/` to
+  `.claude/agents/` with the new filenames (broken since F-107).
+- `bizar-dash/tests/memory-protocol-drift.test.mjs` regex updated
+  `Heimdall-only` → `Brenda-only`.
+- `AGENTS.md` + `CLAUDE.md` cosmetic Norse lines (`Odin, Frigg, ...`
+  examples) updated to `Mike, Susan, ...`. Mirror refreshed via
+  `scripts/mirror-claude-md.sh` (chmod +x added).
+- `feature_list.json` F-112 added: state `active` → `passing`,
+  evidence line, `passed: 2026-07-22`. VCR 73 → **74**.
+
+**Verification (all green):**
+- `node scripts/check-agents.mjs` → ✓ All 14 agents reference the
+  shared docs.
+- `node --test bizar-dash/tests/memory-protocol-drift.test.mjs cli/plow-through.test.mjs .claude/hooks/__tests__/*.test.mjs` →
+  **122/122 PASS** (4 memory-drift + 5 plow-through + 113 thinking-route).
+- `make check` → 0 TS errors.
+- `bash scripts/mirror-claude-md.sh` → ✓ mirror synced.
+- `grep -niE 'odin|thor|tyr|heimdall|mimir|frigg|hermod|baldr|vidarr|forseti|norse|pantheon|asgard|valhalla' .claude/skills/bizar/SKILL.md .claude/agents/_shared/AGENT_BASELINE.md AGENTS.md CLAUDE.md` →
+  0 hits (only "Bizar" (project name), "Bash"/">" (tool name),
+  "authorized"/"401" (troubleshooting text), and the historical
+  legacy field name `claudeAgentMaxConsecutiveMistakes` survive —
+  none of these are Norse).
+
+**Brand:** Generic OfficeCo — no external IP, no specific corporate
+voice, just a plain 90s office vibe.

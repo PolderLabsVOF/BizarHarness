@@ -7,7 +7,7 @@
  * directory — no pollution of the user's real $HOME.
  *
  * Seeds:
- *   - 3 Bizar agents (odin/thor/frigg) at $HOME/.config/cline/agents/
+ *   - 3 Bizar agents (mike/todd/susan) at $HOME/.config/cline/agents/
  *   - 4 tasks across doing/done/queued/blocked at the active project's tasks.json
  *   - 1 CC session stub at $HOME/.config/bizar/agent-status.json so
  *     the AgentsView Source filter shows the Bizar+CC merge path
@@ -15,7 +15,7 @@
  *     projectRoot/.bizar/PROGRESS.md so GoalsView has cards
  *   - 1 project entry in projects.json so tasks load
  *
- * Then drives agent-browser through real sidebar clicks (the v8
+ * Then drives kevin through real sidebar clicks (the v8
  * router is state-based, not hash-based) for all 13 sidebar items
  * (Overview/Tasks/Goals/Agents/Activity/Memory/Schedules/Background/
  * Skills/MCPs/Hooks/Settings/Chat) and asserts each view's main
@@ -47,7 +47,7 @@ if (!process.env.HOME || !process.env.HOME.includes('bh-walk-home')) {
 }
 const HOME_OVERRIDE = process.env.HOME;
 process.env.BIZAR_LIGHTRAG_AUTOSTART = '0';
-// agent-browser caches its chrome binary under ~/.cache; without this
+// kevin caches its chrome binary under ~/.cache; without this
 // override, it would look under the redirected HOME and fail to find chrome.
 process.env.AGENT_BROWSER_EXECUTABLE_PATH = process.env.AGENT_BROWSER_EXECUTABLE_PATH
   || '/home/drb0rk/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
@@ -69,9 +69,9 @@ mkdirSync(join(HOME_OVERRIDE, '.config', 'cline', 'projects'), { recursive: true
 mkdirSync(join(projectRoot, '.bizar'), { recursive: true });
 
 const agents = [
-  { name: 'odin',  description: 'Router',  mode: 'router',   tags: ['orchestration'], category: 'reasoning', prompt: 'Route subagents.' },
-  { name: 'thor',  description: 'Coder',   mode: 'subagent', tags: ['code','review'],  category: 'code',      prompt: 'Implement features.' },
-  { name: 'frigg', description: 'Reader',  mode: 'subagent', tags: ['research'],       category: 'research',  prompt: 'Answer questions.' },
+  { name: 'mike',  description: 'Router',  mode: 'router',   tags: ['orchestration'], category: 'reasoning', prompt: 'Route subagents.' },
+  { name: 'todd',  description: 'Coder',   mode: 'subagent', tags: ['code','review'],  category: 'code',      prompt: 'Implement features.' },
+  { name: 'susan', description: 'Reader',  mode: 'subagent', tags: ['research'],       category: 'research',  prompt: 'Answer questions.' },
 ];
 for (const a of agents) {
   writeFileSync(
@@ -196,19 +196,19 @@ async function check(name, fn) {
 // data-sidebar-item={id} marks each nav button.
 async function inspectRegion(route, matchRe, minBytes = 80) {
   const clickCmd = `button[data-sidebar-item="${route}"]`;
-  await sh('agent-browser', ['click', clickCmd]);
+  await sh('kevin', ['click', clickCmd]);
   await new Promise((r) => setTimeout(r, 2200));
-  await sh('agent-browser', ['screenshot', join(SHOT_DIR, `${route}-logged-in.png`)]);
-  const { out: activeAttr } = await sh('agent-browser',
+  await sh('kevin', ['screenshot', join(SHOT_DIR, `${route}-logged-in.png`)]);
+  const { out: activeAttr } = await sh('kevin',
     ['eval', `document.querySelector('.v8-sidebar-item.is-active')?.getAttribute('data-sidebar-item') ?? ''`]);
-  // agent-browser returns JSON-stringified results; strip outer quotes.
+  // kevin returns JSON-stringified results; strip outer quotes.
   const activeId = activeAttr.trim().replace(/^"|"$/g, '');
   if (activeId !== route) {
     throw new Error(`active sidebar=${activeId} expected=${route}`);
   }
   // Pull the main region; fall back to body innerText.
   const evalMain = "document.querySelector('main, [role=main], #root main')?.innerText ?? document.body.innerText";
-  const { out: main } = await sh('agent-browser', ['eval', evalMain]);
+  const { out: main } = await sh('kevin', ['eval', evalMain]);
   if (main.length < minBytes) {
     throw new Error(`main innerText too short (${main.length})`);
   }
@@ -232,7 +232,7 @@ try {
     const body = await r.json();
     const names = (body.agents || []).map((a) => a.name).sort();
     if (names.length < 3) throw new Error(`expected ≥3 agents, got ${names.length}: ${names.join(',')}`);
-    if (!names.includes('odin') || !names.includes('thor') || !names.includes('frigg')) {
+    if (!names.includes('mike') || !names.includes('todd') || !names.includes('susan')) {
       throw new Error(`missing seed agents in ${names.join(',')}`);
     }
     return `agents=${names.join(',')}`;
@@ -251,8 +251,8 @@ try {
     return `tasks=${tasks.length} statuses=${[...statuses].sort().join(',')}`;
   });
 
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
   await new Promise((r) => setTimeout(r, 1800));
 
   // The v8 sidebar (App.tsx:125-160) wires 12 reachable items. Chat is
@@ -262,7 +262,7 @@ try {
     { route: 'overview',  match: /Overview|Goals at|Active project/i },
     { route: 'tasks',     match: /Sprint S10|Seed agents|Settings mutation|CC goals|Backlog|In progress|Doing|Done/i },
     { route: 'goals',     match: /G-00[1-3]|at-risk|on-track/i },
-    { route: 'agents',    match: /odin|thor|frigg|Bizar/i },
+    { route: 'agents',    match: /mike|todd|susan|Bizar/i },
     { route: 'activity',  match: /Activity|Today|Yesterday|log/i },
     { route: 'memory',    match: /Memory|note|Search|Source/i },
     { route: 'schedules', match: /Schedules|Recurring|New schedule|No schedules/i },
@@ -279,7 +279,7 @@ try {
   results.push({ name: 'walkthrough.error', ok: false, detail: err.message });
   console.error('walkthrough error:', err.message);
 } finally {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
   await boot.close?.();
   writeFileSync(join(SHOT_DIR, 'results.json'),
     JSON.stringify({ results, shots: SHOT_DIR, projectRoot, homeOverride: HOME_OVERRIDE }, null, 2));

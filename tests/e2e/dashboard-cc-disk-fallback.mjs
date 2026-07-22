@@ -66,14 +66,14 @@ writeFileSync(
   'utf8',
 );
 writeFileSync(
-  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'odin.md'),
+  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'mike.md'),
   '---\ndescription: Router\nmode: router\ntags: [orchestration]\ncategory: reasoning\n---\nRoute.\n',
   'utf8',
 );
 writeFileSync(
   join(HOME_OVERRIDE, '.config', 'bizar', 'agent-status.json'),
   JSON.stringify({
-    odin: {
+    mike: {
       status: 'idle',
       currentTaskId: null,
       lastSeen: Date.now(),
@@ -247,23 +247,23 @@ await check('cc-disk.last_snippet', async () => {
 
 // ─── 5: SPA render — AgentsView sees the disk agent ──────────────
 await check('cc-disk.ui_chip_renders', async () => {
-  try { await sh('agent-browser', ['close', '--all']); } catch { /* ignore */ }
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+  try { await sh('kevin', ['close', '--all']); } catch { /* ignore */ }
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
   await new Promise((r) => setTimeout(r, 2500));
   try {
-    await sh('agent-browser', ['click', 'button[data-sidebar-item="agents"]']);
+    await sh('kevin', ['click', 'button[data-sidebar-item="agents"]']);
   } catch (err) {
     throw new Error(`sidebar click failed: ${err.message}`);
   }
   await new Promise((r) => setTimeout(r, 1800));
-  await sh('agent-browser', ['screenshot', join(SHOT_DIR, 'agents-disk.png')]);
+  await sh('kevin', ['screenshot', join(SHOT_DIR, 'agents-disk.png')]);
 
   const b64 = Buffer.from(
     String.raw`(document.querySelector('main')?.innerText || document.body.innerText || '')`,
     'utf8',
   ).toString('base64');
-  const { out } = await sh('agent-browser', ['eval', '-b', b64]);
+  const { out } = await sh('kevin', ['eval', '-b', b64]);
   let s = out.trim();
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
   s = s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -276,7 +276,7 @@ await check('cc-disk.ui_chip_renders', async () => {
 });
 
 try {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
 } catch { /* ignore */ }
 
 await boot.close?.();

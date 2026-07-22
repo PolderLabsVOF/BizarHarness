@@ -27,7 +27,7 @@ const client = createBizarClient({
 // REST — resource-grouped methods
 const sessions = await client.sessions.list({ status: "running" });
 const session = await client.sessions.create({
-  agent: "mimir",
+  agent: "greg",
   prompt: "Research the latest cline serve API.",
 });
 

@@ -4,7 +4,7 @@
 
 **Date:** 2026-07-07
 **Status:** Accepted
-**Deciders:** @tyr
+**Deciders:** @karen
 **Related:** DEC-002, DEC-011
 
 ## Context

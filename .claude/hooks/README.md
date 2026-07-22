@@ -3,8 +3,7 @@
 This directory contains the **Claude Code** adapter scripts that back the
 project-scoped hooks defined in `.claude/settings.json`.
 
-They replaced the legacy Cline hooks in `config/hooks/*` (PreToolUse,
-PostToolUse, TaskStart, TaskResume, UserPromptSubmit). The Claude Code
+They replaced the legacy Cline hooks. The Claude Code
 set is the only supported path on Bizar v6.3.0+; the legacy Cline hooks
 are no longer installed.
 
@@ -14,9 +13,25 @@ are no longer installed.
 |------|-------|---------|-----------|
 | `pretooluse-editwrite.mjs`   | `PreToolUse`       | `Write\|Edit\|MultiEdit\|Bash` | Blocks `.env`/secrets/lockfiles; warns on `console.log`/`debugger`/`.only()` in `src/`; scans `Bash` against the 36-pattern dangerous-pattern list |
 | `posttooluse-editwrite.mjs`  | `PostToolUse`      | `Edit\|Write\|MultiEdit`        | Logs edit/write latency + size to `~/.config/bizar/hook-logs/` |
-| `sessionstart-prime.mjs`     | `SessionStart`     | (none — branches on `source`)  | Primes the agent with CLAUDE.md, AGENTS.md, feature_list state |
-| `userpromptsubmit-tag.mjs`   | `UserPromptSubmit` | (none)                          | Tags prompt for `/team`, `/plow-through`, `/test`, `/validate`, `/plan`, `/audit`, `/pr-review` |
-| `sessionend-recall.mjs`      | `SessionEnd`       | (none)                          | Records a session summary to the memory vault at `~/.bizar_home/memory/projects/<name>/sessions/` |
+| `sessionstart-prime.mjs`     | `SessionStart`     | (none — branches on `source`)  | Reads PROGRESS.md + feature_list.json + git log + .bizar/PROJECT.md; branches on `startup`/`clear`/`resume`; WIP=1 guard |
+| `thinking-route.mjs`         | `UserPromptSubmit` | (none)                          | Slash-command routing (team/plow-through/test/validate/plan/audit/pr-review) + 35-bucket thinking-* mental-model router |
+| `worker-suggest.mjs`        | `UserPromptSubmit` | (none)                          | Calls `cli/worker-dispatcher.mjs:dispatch()` against `config/trigger-patterns.json` |
+| `sessionend-recall.mjs`      | `SessionEnd`       | (none)                          | Reads `transcript_path`; writes `.bizar/sessions/<date>-<id>.md` + `.bizar/session-state.json` handoff |
+
+## SessionStart ↔ SessionEnd handoff
+
+The two lifecycle hooks form a state machine via the `.bizar/session-state.json`
+file:
+
+```
+SessionEnd (session N)
+  ↓ writes .bizar/session-state.json with {nextStep, blockers, filesTouched}
+SessionStart (session N+1, source: "resume")
+  ↑ reads it; primes the agent with "Last nextStep: …" + blockers
+```
+
+If `.bizar/session-state.json` is missing, the resume branch degrades
+gracefully to "No prior session-state.json found — treating as fresh start."
 
 ## I/O contract
 
@@ -90,3 +105,4 @@ execute.
 - `cli/provision-claude.mjs` — installs Claude Code hooks to
   `~/.claude/hooks/` and wires them via `~/.claude/settings.json`.
 - `.claude/settings.json` — the project hook wiring
+- `.bizar/session-state.json` — handoff artifact between SessionEnd and SessionStart

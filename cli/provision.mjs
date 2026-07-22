@@ -430,21 +430,10 @@ function syncDir(srcDir, destDir, opts = {}) {
   return { copied, skipped };
 }
 
-export async function syncAgentFiles({ dryRun = false } = {}) {
-  const src = join(REPO_ROOT, 'config', 'agents');
-  const dest = CLAUDE_AGENTS_DIR;
-  if (!existsSync(src)) return { ok: true, message: `no agents source at ${src}`, copied: 0, skipped: 0 };
-  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}` };
-  ensureDir(dest); ensureDir(join(dest, '_shared'));
-  let { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') });
-  const sharedSrc = join(src, '_shared');
-  if (existsSync(sharedSrc)) {
-    for (const entry of readdirSync(sharedSrc, { withFileTypes: true })) {
-      if (entry.isFile()) { copyFileSync(join(sharedSrc, entry.name), join(dest, '_shared', entry.name)); copied++; }
-    }
-  }
-  return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)`, copied, skipped };
-}
+// F-107: syncAgentFiles removed. Agent definitions live at
+// .claude/agents/ (Claude Code canonical) — they were never sourced
+// from config/agents/ in Claude Code era, and the legacy source dir
+// was deleted.
 
 export async function syncSkillFiles({ dryRun = false } = {}) {
   const src = join(REPO_ROOT, 'config', 'skills');
@@ -704,7 +693,6 @@ export async function runProvision(opts = {}) {
     return r;
   };
 
-  await runStep('Syncing agents',    () => syncAgentFiles({ dryRun, force }));
   await runStep('Syncing skills',    () => syncSkillFiles({ dryRun, force }));
   await runStep('Syncing commands',   () => syncCommandFiles({ dryRun, force }));
   await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force }));

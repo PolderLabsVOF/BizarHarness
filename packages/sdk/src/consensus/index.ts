@@ -112,8 +112,8 @@ export type {
 
 /**
  * The shared consensus singleton used by the MCP tool. Initialized
- * with the Bizar default 5-peer roster (odin / frigg / vor / mimir /
- * heimdall — the same five Norse agents F-033 routes between) and a
+ * with the Bizar default 5-peer roster (mike / susan / janet / greg /
+ * brenda — the same five Norse agents F-033 routes between) and a
  * deterministic seed so MCP-driven consensus is reproducible across
  * restarts. Tests should call `createConsensus()` with their own
  * `localAgentId` + `peers` to get an isolated instance.
@@ -122,8 +122,8 @@ export type {
  * surface F-033 already exposes, so a single MCP call can drive the
  * same set of agents the orchestrator routes to.
  */
-const DEFAULT_PEERS: readonly string[] = ["odin", "frigg", "vor", "mimir", "heimdall"];
-const DEFAULT_LOCAL_AGENT = "odin";
+const DEFAULT_PEERS: readonly string[] = ["mike", "susan", "janet", "greg", "brenda"];
+const DEFAULT_LOCAL_AGENT = "mike";
 const DEFAULT_PROPOSER_SEED = "bizar-f039-default";
 
 let _shared: ConsensusHandle | null = null;

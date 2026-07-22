@@ -9,7 +9,7 @@
  *       codemod-intent ($0 Tier-1 short-circuit) >
  *         q-learning-router (8-action agent pick) >
  *           model-router (Thompson bandit for tier) >
- *             default ("odin", "mid", confidence 0.5)
+ *             default ("mike", "mid", confidence 0.5)
  *
  * The orchestrator is what the `hooks_route` MCP tool (and any
  * in-process caller such as the Odin agent) calls to make a routing
@@ -146,11 +146,11 @@ export function getRouter(opts: GetRouterOpts = {}): RouterBundle {
  *
  * Order:
  *  1. caller-supplied `explicitAgent` wins outright.
- *  2. Tier-1 codemod intent → agent="heimdall" (routine implementation),
+ *  2. Tier-1 codemod intent → agent="brenda" (routine implementation),
  *     tier="flash" ($0), confidence 1.0, surface `[CODEMOD_AVAILABLE]`.
  *  3. Q-learning agent pick (clamped to known agent names).
  *  4. Thompson-bandit model-tier pick.
- *  5. Defaults: agent="odin", tier="mid".
+ *  5. Defaults: agent="mike", tier="mid".
  */
 export function decideAgentWith(
   modelRouter: ModelRouter,
@@ -186,7 +186,7 @@ export function decideAgentWith(
     // shape.
     surfacedTags.push(tierTag({ tier: "flash", confidence: 1.0 }));
     return {
-      agent: "heimdall",
+      agent: "brenda",
       modelTier: "flash",
       agentConfidence: 1.0,
       modelConfidence: 1.0,

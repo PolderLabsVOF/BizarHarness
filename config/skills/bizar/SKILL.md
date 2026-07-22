@@ -253,7 +253,7 @@ Single-key mode is unchanged — if only `MINIMAX_API_KEY` is set (or no key rot
 
 ## Verbose Agent Baseline Reference
 
-> The 12 always-on rules in `config/agents/_shared/AGENT_BASELINE.md`
+> The 12 always-on rules in `.claude/agents/_shared/AGENT_BASELINE.md`
 > are auto-loaded into every agent session at startup. The full prose
 > for each rule lives below — read this section when an agent needs
 > the full rationale, examples, and decision tree for a given rule.

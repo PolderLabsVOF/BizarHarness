@@ -1,17 +1,17 @@
 import inquirer from 'inquirer';
 
 const AGENTS_LIST = [
-  { name: 'Odin ᛟ  — MiniMax-M3 (Router)', value: 'odin.md', checked: true },
-  { name: 'Frigg ᚠ  — DeepSeek (Codebase Q&A, read-only)', value: 'frigg.md', checked: true },
-  { name: 'Vör ᚡ  — DeepSeek (Clarification)', value: 'vor.md', checked: true },
-  { name: 'Mimir ᛗ — DeepSeek (Research)', value: 'mimir.md', checked: true },
-  { name: 'Heimdall ᚹ — DeepSeek (Simple tasks)', value: 'heimdall.md', checked: true },
-  { name: 'Hermod ᚱ — MiniMax-M2.7 (Git ops)', value: 'hermod.md', checked: true },
-  { name: 'Thor ᚦ  — MiniMax-M2.7 (Mid impl.)', value: 'thor.md', checked: true },
-  { name: 'Baldr ᛒ  — MiniMax-M2.7 (Design)', value: 'baldr.md', checked: true },
-  { name: 'Tyr ᛏ  — MiniMax-M3 (Complex impl.)', value: 'tyr.md', checked: true },
-  { name: 'Vidarr ᛉ — MiniMax-M3 (Last resort)', value: 'vidarr.md', checked: false },
-  { name: 'Forseti ᚨ — MiniMax-M3 (Plan audit)', value: 'forseti.md', checked: true },
+  { name: 'Odin ᛟ  — MiniMax-M3 (Router)', value: 'mike.md', checked: true },
+  { name: 'Frigg ᚠ  — DeepSeek (Codebase Q&A, read-only)', value: 'susan.md', checked: true },
+  { name: 'Vör ᚡ  — DeepSeek (Clarification)', value: 'janet.md', checked: true },
+  { name: 'Mimir ᛗ — DeepSeek (Research)', value: 'greg.md', checked: true },
+  { name: 'Heimdall ᚹ — DeepSeek (Simple tasks)', value: 'brenda.md', checked: true },
+  { name: 'Hermod ᚱ — MiniMax-M2.7 (Git ops)', value: 'steve.md', checked: true },
+  { name: 'Thor ᚦ  — MiniMax-M2.7 (Mid impl.)', value: 'todd.md', checked: true },
+  { name: 'Baldr ᛒ  — MiniMax-M2.7 (Design)', value: 'brad.md', checked: true },
+  { name: 'Tyr ᛏ  — MiniMax-M3 (Complex impl.)', value: 'karen.md', checked: true },
+  { name: 'Vidarr ᛉ — MiniMax-M3 (Last resort)', value: 'carl.md', checked: false },
+  { name: 'Forseti ᚨ — MiniMax-M3 (Plan audit)', value: 'linda.md', checked: true },
 ];
 
 export async function promptComponents() {

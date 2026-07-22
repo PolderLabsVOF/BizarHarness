@@ -11,10 +11,10 @@ import { join } from 'node:path';
 import { resolveClaudeDir, PATHS } from './paths.mjs';
 
 const AGENT_FILES = [
-  'odin.md', 'vor.md', 'frigg.md', 'quick.md',
-  'mimir.md', 'heimdall.md', 'hermod.md', 'thor.md', 'baldr.md',
-  'tyr.md', 'vidarr.md', 'forseti.md',
-  'semble-search.md',
+  'mike.md', 'janet.md', 'susan.md', 'pam.md',
+  'greg.md', 'brenda.md', 'steve.md', 'todd.md', 'brad.md',
+  'karen.md', 'carl.md', 'linda.md',
+  'oscar.md',
 ];
 
 /**

@@ -23,7 +23,7 @@ work + explicit coordination**. Examples:
 - **Bug hunt** — Mimir traces the data flow while Tyr writes the fix and tests.
 
 Do NOT use `/team` for trivial single-file edits or single-question
-clarifications. Use `@heimdall` directly for those.
+clarifications. Use `@brenda` directly for those.
 
 ## Default Team Composition
 
@@ -31,12 +31,12 @@ If the user does not specify a team composition, spawn this default:
 
 | Role          | Agent   | Model             | Job                                   |
 |---------------|---------|-------------------|---------------------------------------|
-| Lead          | @odin   | minimax/MiniMax-M3   | Coordinate, synthesize, gate quality  |
-| Implementer 1 | @thor   | minimax/MiniMax-M2.7 | Moderate-complexity implementation   |
-| Implementer 2 | @tyr    | minimax/MiniMax-M3   | Complex / cross-cutting work         |
-| Researcher    | @mimir  | bizar/MiniMax-M3 | Codebase research, pattern discovery  |
-| Git ops       | @hermod | minimax/MiniMax-M2.7 | Branch, commit, push, PR             |
-| Reviewer      | @forseti| minimax/MiniMax-M3   | Audit plan + final output            |
+| Lead          | @mike   | minimax/MiniMax-M3   | Coordinate, synthesize, gate quality  |
+| Implementer 1 | @todd   | minimax/MiniMax-M2.7 | Moderate-complexity implementation   |
+| Implementer 2 | @karen    | minimax/MiniMax-M3   | Complex / cross-cutting work         |
+| Researcher    | @greg  | bizar/MiniMax-M3 | Codebase research, pattern discovery  |
+| Git ops       | @steve | minimax/MiniMax-M2.7 | Branch, commit, push, PR             |
+| Reviewer      | @linda| minimax/MiniMax-M3   | Audit plan + final output            |
 
 You can swap or remove any of these — but always keep at least one
 implementer and a reviewer.
@@ -56,14 +56,14 @@ implementer and a reviewer.
 4. **Launch in parallel** — use the **Agent tool** in a **single
    message** with multiple `Agent` calls so all teammates run
    concurrently. Each call's prompt names the Bizar agent
-   (`thor`, `tyr`, `mimir`, `hermod`, `forseti`) so the audit
+   (`todd`, `karen`, `greg`, `steve`, `linda`) so the audit
    trail stays readable. For long-running work, pass
    `run_in_background: true`.
 5. **Monitor** — while the team runs, return control to the user.
    The team runs asynchronously. Check teammate progress only
    when the user asks (use `SendMessage` to the named agent).
-6. **Synthesize** — when teammates report back, gate through @forseti
-   (audit) and @hermod (commit/push). Then report the final outcome
+6. **Synthesize** — when teammates report back, gate through @linda
+   (audit) and @steve (commit/push). Then report the final outcome
    to the user with file:line references.
 
 ## Pre-Dispatch Checklist (MANDATORY)
@@ -123,9 +123,9 @@ audit the fix for completeness. Hermod — commit + push.
 - **Two agents write the same file** — STOP, revert one branch, reassign.
 - **One agent stalls** — use `TaskStop` to terminate, route the
   remaining scope to another agent.
-- **Tests fail after team work** — dispatch `thor` to investigate;
+- **Tests fail after team work** — dispatch `todd` to investigate;
   do not paper over the failure.
-- **Git conflict** — route to `hermod` for `git rebase` / merge
+- **Git conflict** — route to `steve` for `git rebase` / merge
   resolution.
 - **A teammate goes silent** — send a `SendMessage` to the named
   agent for a status report; if dead, kill and re-spawn with a

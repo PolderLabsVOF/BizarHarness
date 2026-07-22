@@ -1,11 +1,11 @@
 ---
 name: memory-protocol
-description: How Bizar agents use the project memory vault via the `bizar memory` CLI. Read at session start, append on session end. No codebase exploration needed. Triggers on session-start checks, memory writes/reads, and any vault interaction.
+description: How Bizar agents use the project memory vault. Read at session start, append on session end. No codebase exploration needed.
 ---
 
 # Bizar Memory Protocol
 
-**MANDATORY at every new session.** Run before starting any work. No codebase exploration needed.
+**⚠️ MANDATORY at every new session.** Run before starting any work. No codebase exploration needed.
 
 The Bizar Memory Service is the project's long-term memory. Every project has a vault (Markdown + Git) located by reading `.bizar/memory.json`. **Agents that skip this step are likely to contradict decisions already made, break things already fixed, or suggest things the user already tried.**
 

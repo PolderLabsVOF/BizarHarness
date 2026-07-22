@@ -11,10 +11,11 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
-const CMD_PATH = join(PROJECT_ROOT, 'config', 'commands', 'plow-through.md');
+// F-107: slash commands canonical at .claude/commands/. Legacy config/commands/ removed (Cline-era).
+const CMD_PATH = join(PROJECT_ROOT, '.claude', 'commands', 'plow-through.md');
 
 describe('/plow-through command file', () => {
-  test('file exists at config/commands/plow-through.md', () => {
+  test('file exists at .claude/commands/plow-through.md', () => {
     assert.equal(existsSync(CMD_PATH), true, 'plow-through.md must exist');
   });
 
@@ -23,10 +24,10 @@ describe('/plow-through command file', () => {
     assert.match(content, /^---\ndescription:/m, 'frontmatter must have description');
   });
 
-  test('YAML frontmatter has agent field set to odin', () => {
-    const content = readFileSync(CMD_PATH, 'utf8');
-    assert.match(content, /^---\n.*\nagent: odin$/ms, 'frontmatter agent must be odin');
-  });
+  // F-107: legacy `agent: mike` frontmatter field was removed when slash
+  // commands were migrated to Claude Code's `run_in_background: true`
+  // Agent dispatch model. Routed agents are now inferred from the
+  // command body via the thinking-route hook.
 
   test('body has content (more than 5 lines)', () => {
     const content = readFileSync(CMD_PATH, 'utf8');

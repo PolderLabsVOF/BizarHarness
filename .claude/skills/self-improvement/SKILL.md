@@ -1,6 +1,6 @@
 ---
 name: self-improvement
-description: Use when setting up, configuring, or debugging the project-level self-improvement system. Every task records lessons learned to .bizar/AGENTS_SELF_IMPROVEMENT.md for agent behavior improvement across sessions. Triggers when appending/updating self-improvement entries or reading active rules.
+description: Use when setting up, configuring, or debugging the project-level self-improvement system. Every task records lessons learned to .bizar/AGENTS_SELF_IMPROVEMENT.md for agent behavior improvement across sessions.
 ---
 
 # Self Improvement
@@ -11,7 +11,7 @@ Project-level learning system. Every task records what worked, what didn't, and 
 
 1. **Session start**: Odin reads `.bizar/AGENTS_SELF_IMPROVEMENT.md` from project root and factors active rules into routing
 2. **During work**: Agents follow documented patterns and avoid previously-caught mistakes
-3. **Task completion**: Odin dispatches @heimdall to append a structured entry to the file
+3. **Task completion**: Odin dispatches @brenda to append a structured entry to the file
 4. **Next session**: The cycle repeats — agents get smarter over time
 
 ## File Format
@@ -31,7 +31,7 @@ The file lives at `<project-root>/.bizar/AGENTS_SELF_IMPROVEMENT.md`. Structure:
 - **Lesson**: What we learned
 - **Pattern**: What to do next time
 - **Files**: src/foo.ts, src/bar.ts
-- **Agent**: thor, tyr
+- **Agent**: todd, karen
 ```
 
 ## Entry Rules for Agents
@@ -44,7 +44,7 @@ When writing an entry:
 - **Active Rules**: At the top, keep 5-10 distilled patterns from recent entries. If adding a new entry makes it necessary, add a rule too or promote a pattern from an entry.
 - **Deduplicate**: Don't repeat the same lesson. If the same lesson comes up again, update the existing entry's date instead.
 - **Be specific**: "Always use strictNullChecks" not "TypeScript is good"
-- **Agent tag**: Use the subagent name (thor, tyr, heimdall, mimir, etc.)
+- **Agent tag**: Use the subagent name (todd, karen, brenda, greg, etc.)
 
 ## Setup
 

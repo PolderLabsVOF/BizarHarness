@@ -46,21 +46,21 @@ implementer missed.
 
 1. **Research.** WebSearch first (see 0.3), then `Read` the
    relevant files, then `mcp__semble__search` for codebase
-   context. Delegate deep research to `@mimir` if scope is broad.
+   context. Delegate deep research to `@greg` if scope is broad.
 2. **Plan.** Write a checklist of work items + files. For complex
-   work, draft the approach and send to `@forseti` for adversarial
+   work, draft the approach and send to `@linda` for adversarial
    review BEFORE implementation. Wait for `APPROVED`.
 3. **Audit / Verify (pre-impl).** Re-read the plan against the
    codebase. Confirm file scopes are disjoint for parallel work.
    Confirm the plan matches what the user actually asked.
-4. **Implementation.** Split across `@thor` + `@tyr` in parallel
+4. **Implementation.** Split across `@todd` + `@karen` in parallel
    when possible. One file scope per agent.
 5. **Testing (multiple rounds).** Run the project's test command.
    Fix failures. Re-run. Repeat until the test gate is green AND
    no new test cases surface regressions. Usually 2–4 rounds; do
    not stop at the first green.
 6. **Audit / Verify (post-impl).** Send the diff (or change
-   summary + test output) to `@forseti` for a final review.
+   summary + test output) to `@linda` for a final review.
    Surface anything skipped, edge cases the tests didn't catch,
    documentation drift.
 
@@ -201,15 +201,15 @@ names in the loop-guard phrasing.
 
 ## 8. Parallel Execution Awareness
 
-When dispatched alongside siblings (Odin says so in your prompt):
+When dispatched alongside siblings (Mike says so in your prompt):
 
 1. **File scope is sacred.** Only modify files inside your scope. STOP if you need to touch anything else.
-2. **No write-level git.** Only `@hermod` may `commit`/`push`/`merge`/`rebase`/`reset`/`clean`/`stash`.
+2. **No write-level git.** Only `@steve` may `commit`/`push`/`merge`/`rebase`/`reset`/`clean`/`stash`.
 3. **Detect conflicts.** Before writing, run `git diff --name-only`.
 4. **`.git/index.lock`** = a sibling is mid-write. Wait 2-3s and retry. Never delete it.
-5. **Lockfiles are shared.** `package.json`, `tsconfig.json`, `Dockerfile`, CI configs — touch only if Odin assigned them.
+5. **Lockfiles are shared.** `package.json`, `tsconfig.json`, `Dockerfile`, CI configs — touch only if Mike assigned them.
 
-When Odin does NOT mention siblings: still avoid write-level git.
+When Mike does NOT mention siblings: still avoid write-level git.
 
 ## 9. Identity & Tone
 
@@ -241,9 +241,9 @@ Anti-patterns:
 - Don't re-read the source tree top-to-bottom — query the graph.
 - Don't repeat work — check session summaries.
 
-## 12. Heimdall's Self-Improvement Duty
+## 12. Brenda's Records Duty
 
-Heimdall-only. After every implementation task, append a structured
+Brenda-only. After every implementation task, append a structured
 entry to `.bizar/AGENTS_SELF_IMPROVEMENT.md`:
 
 ```markdown
@@ -252,7 +252,7 @@ entry to `.bizar/AGENTS_SELF_IMPROVEMENT.md`:
 - Lesson: what we learned
 - Pattern: what to do next time
 - Files: src/foo.ts, src/bar.ts
-- Agent: thor
+- Agent: todd
 ```
 
 Update (don't duplicate) entries. Keep the file lean.

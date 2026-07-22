@@ -28,7 +28,7 @@ export async function runAudit() {
     const lines = content.split('\n');
 
     // Check 1: Dangerous bash permissions on review-only agents
-    if (file.includes('forseti') || file.includes('semble-search')) {
+    if (file.includes('linda') || file.includes('oscar')) {
       if (content.includes('bash: allow')) {
         issues.push({ path, severity: 'HIGH', msg: 'Review-only agent has bash permission' });
       }
@@ -38,7 +38,7 @@ export async function runAudit() {
     }
 
     // Check 2: Frigg should never have edit/write
-    if (file.includes('frigg')) {
+    if (file.includes('susan')) {
       if (content.includes('edit: allow')) {
         issues.push({ path, severity: 'HIGH', msg: 'Read-only Q&A agent (Frigg) has edit permission' });
       }
@@ -48,7 +48,7 @@ export async function runAudit() {
     }
 
     // Check 3: Odin should have minimal permissions
-    if (file.includes('odin')) {
+    if (file.includes('mike')) {
       const dangerousForOdin = ['bash', 'edit', 'write', 'glob', 'grep', 'question'];
       for (const tool of dangerousForOdin) {
         if (content.includes(`${tool}: allow`)) {

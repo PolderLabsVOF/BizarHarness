@@ -42,14 +42,14 @@ mkdirSync(join(HOME_OVERRIDE, '.local', 'share', 'bizar'), { recursive: true });
 mkdirSync(join(projectRoot, '.bizar'), { recursive: true });
 
 writeFileSync(
-  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'odin.md'),
+  join(HOME_OVERRIDE, '.config', 'cline', 'agents', 'mike.md'),
   '---\ndescription: Router\nmode: router\ntags: [orchestration]\ncategory: reasoning\n---\nRoute.\n',
   'utf8',
 );
 writeFileSync(
   join(HOME_OVERRIDE, '.config', 'bizar', 'agent-status.json'),
   JSON.stringify({
-    odin: {
+    mike: {
       status: 'idle',
       currentTaskId: null,
       lastSeen: Date.now(),
@@ -157,7 +157,7 @@ async function check(name, fn) {
 
 async function agentBrowserEval(expr) {
   const b64 = Buffer.from(expr, 'utf8').toString('base64');
-  const { out } = await sh('agent-browser', ['eval', '-b', b64]);
+  const { out } = await sh('kevin', ['eval', '-b', b64]);
   let s = out.trim();
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
   s = s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -170,7 +170,7 @@ async function agentBrowserEval(expr) {
 // it's still reachable via URL hash + covered by Move 2 indirectly.
 const SURFACES = [
   { route: 'overview',   match: /Tokens|Goal|Active project|status/i,   minBytes: 200, waitMs: 1400 },
-  { route: 'agents',     match: /odin|idle|router|agent/i,             minBytes: 200, waitMs: 1400 },
+  { route: 'agents',     match: /mike|idle|router|agent/i,             minBytes: 200, waitMs: 1400 },
   { route: 'goals',      match: /G-001|on-track|coverage|filter/i,     minBytes: 200, waitMs: 1400 },
   { route: 'tasks',      match: /Task|column|board|kanban|queue|status/i, minBytes: 100, waitMs: 2200 },
   { route: 'settings',   match: /Settings|theme|density|library/i,     minBytes: 100, waitMs: 1400 },
@@ -186,20 +186,20 @@ const SURFACES = [
 try {
   // Boot SPA, walk every primary sidebar item, capture innerText bytes
   // and screenshot.
-  await sh('agent-browser', ['set', 'viewport', '1440', '900']);
-  await sh('agent-browser', ['open', `http://127.0.0.1:${PORT}/`]);
+  await sh('kevin', ['set', 'viewport', '1440', '900']);
+  await sh('kevin', ['open', `http://127.0.0.1:${PORT}/`]);
   await new Promise((r) => setTimeout(r, 2500));
 
   for (const surface of SURFACES) {
     await check(`matrix.${surface.route}.loads`, async () => {
-      const clickCmd = `agent-browser click "button[data-sidebar-item=\"${surface.route}\"]"`;
+      const clickCmd = `kevin click "button[data-sidebar-item=\"${surface.route}\"]"`;
       try {
-        await sh('agent-browser', ['click', `button[data-sidebar-item="${surface.route}"]`]);
+        await sh('kevin', ['click', `button[data-sidebar-item="${surface.route}"]`]);
       } catch (err) {
         throw new Error(`sidebar click failed: ${err.message}`);
       }
       await new Promise((r) => setTimeout(r, surface.waitMs ?? 1400));
-      await sh('agent-browser', ['screenshot', join(SHOT_DIR, `${surface.route}-matrix.png`)]);
+      await sh('kevin', ['screenshot', join(SHOT_DIR, `${surface.route}-matrix.png`)]);
 
       const main = await agentBrowserEval(
         String.raw`(document.querySelector('main')?.innerText || document.body.innerText || '')`
@@ -228,7 +228,7 @@ try {
   results.push({ name: 'matrix.error', ok: false, detail: err.message });
   console.error('matrix error:', err.message);
 } finally {
-  await sh('agent-browser', ['close', '--all']).catch(() => {});
+  await sh('kevin', ['close', '--all']).catch(() => {});
   await boot.close?.();
   writeFileSync(join(SHOT_DIR, 'results.json'), JSON.stringify({
     surfaces: SURFACES,
