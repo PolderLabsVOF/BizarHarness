@@ -46,7 +46,8 @@ Highlights:
 - bullet 2
 - bullet 3
 
-Co-authored-by: Odin <noreply@polderlabs.dev>"
+Tests: <N> pass / 0 fail across <M> runners.
+tsc: clean. build: <main> KB + <mobile> KB."
 
 # Tag
 git tag -a vX.Y.Z -m "vX.Y.Z — short title"

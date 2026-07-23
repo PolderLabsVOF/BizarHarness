@@ -490,6 +490,34 @@ export async function syncHookFiles({ dryRun = false } = {}) {
   return { ok: true, message: 'hook scripts installed', copied: readdirSync(dest).length, skipped: 0 };
 }
 
+// ─── git hooks ──────────────────────────────────────────────────────────────
+//
+// Install the repo-local git hooks (.git/hooks/commit-msg, pre-commit, pre-push)
+// from scripts/git-hooks/. Runs only when invoked from inside a git repo, so
+// the npm-install path (which doesn't have a .git/) is a no-op.
+export function installGitHooks({ dryRun = false } = {}) {
+  if (!existsSync(REPO_ROOT) || !existsSync(join(REPO_ROOT, '.git'))) {
+    return { ok: true, message: 'no git repo — skipping git hook install', installed: [] };
+  }
+  if (dryRun) return { ok: true, message: '[dry-run] would install git hooks from scripts/git-hooks/', installed: [] };
+
+  const src = join(REPO_ROOT, 'scripts', 'git-hooks');
+  const dest = join(REPO_ROOT, '.git', 'hooks');
+  if (!existsSync(src)) return { ok: true, message: `no git hooks source at ${src}`, installed: [] };
+  ensureDir(dest);
+  const installed = [];
+  for (const name of readdirSync(src)) {
+    const fp = join(src, name);
+    const st = statSync(fp);
+    if (!st.isFile()) continue;
+    const dst = join(dest, name);
+    copyFileSync(fp, dst);
+    try { chmodSync(dst, 0o755); } catch { /* ignore */ }
+    installed.push(name);
+  }
+  return { ok: true, message: `${installed.length} git hook(s) installed`, installed };
+}
+
 // ─── settings.json ──────────────────────────────────────────────────────────
 
 export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
@@ -697,6 +725,7 @@ export async function runProvision(opts = {}) {
   await runStep('Syncing commands',   () => syncCommandFiles({ dryRun, force }));
   await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force }));
   await runStep('Syncing hooks',      () => syncHookFiles({ dryRun, force }));
+  await runStep('Installing git hooks', () => installGitHooks({ dryRun }));
   await runStep('Building SDK',       () => buildSdk({ dryRun }));
   await runStep('Building plugin',    () => buildPlugin({ dryRun }));
   await runStep('Building dashboard', () => buildDash({ dryRun }));

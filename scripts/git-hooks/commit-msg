@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Strip Claude/agent co-author trailers that don't belong on Bizar commits.
+#
+# Why: Claude Code's CLI appends "Co-Authored-By: Claude <noreply@anthropic.com>"
+# by default; older Bizar release docs also templated Norse/office-agent
+# personas as co-authors. This repo's commits should only carry the human
+# author identity. Any matching trailers get removed before the commit lands.
+#
+# To bypass in an emergency: git commit --no-verify
+set -euo pipefail
+
+msg_file="$1"
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+# Remove the two known offender trailers (case-insensitive on the header).
+# Also strip any Co-authored-by: line whose email ends in @anthropic.com
+# or @polderlabs.dev — defense-in-depth against future variations.
+sed -E \
+  -e '/^[Cc]o-[Aa]uthored-[Bb]y:[[:space:]]*Claude <noreply@anthropic\.com>[[:space:]]*$/d' \
+  -e '/^[Cc]o-[Aa]uthored-[Bb]y:[[:space:]]*[^<]*<(noreply@anthropic\.com|noreply@polderlabs\.dev)>$/d' \
+  "$msg_file" > "$tmp"
+
+# Collapse runs of blank lines that may result from trailer removal.
+awk 'BEGIN { blank=0; seen=0 } {
+  if ($0 == "") { blank++ }
+  else {
+    if (blank > 0 && seen) print "";
+    blank=0; print; seen=1
+  }
+}' "$tmp" > "${tmp}.2"
+mv "${tmp}.2" "$tmp"
+
+if ! cmp -s "$msg_file" "$tmp"; then
+  echo "commit-msg: stripped Claude/agent co-author trailers" >&2
+fi
+
+mv "$tmp" "$msg_file"

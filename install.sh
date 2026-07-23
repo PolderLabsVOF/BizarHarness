@@ -32,6 +32,13 @@ EOF
     Darwin) macos;;
     *) err "Unsupported OS — use install.ps1 on Windows"; exit 1;;
   esac
+  # Auto-install the repo-local git hooks (pre-commit, pre-push, commit-msg).
+  # The commit-msg hook strips Claude/agent co-author trailers from commits
+  # so the human author identity is the only one on every Bizar commit.
+  if [ "${DRY:-0}" -eq 0 ] && [ -f "$(dirname "$0")/scripts/install-hooks.sh" ]; then
+    note "Installing git hooks (commit-msg + pre-commit + pre-push)..."
+    bash "$(dirname "$0")/scripts/install-hooks.sh" || warn "git hook install failed — run ./scripts/install-hooks.sh manually"
+  fi
   local a=(--mode=install)
   [ "$ni" -eq 1 ] && a+=(--yes)
   [ "${DRY:-0}" -eq 1 ] && a+=(--dry-run)

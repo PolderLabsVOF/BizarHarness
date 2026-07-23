@@ -256,12 +256,10 @@ Highlights:
 Tests: <N> pass / 0 fail across <M> runners.
 tsc: clean. build: <main> KB + <mobile> KB.
 
-Co-authored-by: Odin <noreply@polderlabs.dev>
-Co-authored-by: Thor <noreply@polderlabs.dev>
-Co-authored-by: Tyr <noreply@polderlabs.dev>"
+Co-authored-by: Berk de Rooij <berk@berkderooij.nl>"
 ```
 
-Use `Co-authored-by:` trailers for each agent that contributed. v4.7.0 used a multi-paragraph commit body with a `Highlights:` block — this is preferred over a single-line commit.
+Commits are authored by the human (Berk de Rooij). Do NOT add `Co-authored-by:` trailers for sub-agents — they're tools the human directed, not collaborators. The repo's `commit-msg` hook auto-strips Claude/agent trailers if they slip in. v4.7.0 used a multi-paragraph commit body with a `Highlights:` block — this is preferred over a single-line commit.
 
 ### Step 9 — Tag
 
