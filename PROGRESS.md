@@ -445,6 +445,16 @@ drift away from the original ask.
 ## Current State
 
 - **Last release (master):** v10.0.5-S4 (Moves 1+2+3+4: surfaces + tier-3 + errors + data-driven polish).
+- **F-115 — @carl debug-specialist agent (new).** Premium-tier last-resort debug
+  agent. Created `.claude/agents/debug-specialist.md` (the @carl system
+  prompt — Tier-4 model override, hard stop at 2 attempts, no auto-routing)
+  and added the escalation section to `.claude/agents/office-manager.md`
+  routing to `@carl` when `@todd`/`@karen` stall for 2+ rounds. Smoke check
+  extended in `cli/post-install-smoke.mjs` to verify the agent file is
+  discoverable in the roster. AGENTS.md + CLAUDE.md gain the Carl inventory
+  line. This unblocks the office-manager escalation path the 3-phase
+  pipeline was missing — Mike now has a fallback when a bug resists both
+  implementation tiers.
 - **This session:** shipping v10.0.5 across 4 moves to close the
   umbrella brief — Moves 1+2+3+4 done, paperwork in progress.
 - **v10.0.5-Move 4 deliverables (data-driven polish):**
