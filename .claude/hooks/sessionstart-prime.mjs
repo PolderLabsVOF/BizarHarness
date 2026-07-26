@@ -32,7 +32,7 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MAX_BRIEFING = 800; // hard cap, characters
+const MAX_BRIEFING = 1200; // hard cap, characters
 const PROJECT_NAME = 'BizarHarness';
 const HOOK_LOG_DIR = '.config/bizar/hook-logs';
 const SESSION_STATE = '.bizar/session-state.json';
@@ -186,6 +186,12 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   lines.push('- Rules: AGENT_BASELINE.md §4b thinking defaults active; WIP=1 honored.');
   lines.push('- First move: confirm scope, then read PROGRESS.md and feature_list.json.');
+  // Default-first-stop hint when nothing is active yet.
+  if (featureBrief && featureBrief.active.length === 0) {
+    lines.push(
+      '- Default pipeline: user → @mike → Phase 1 (@greg + @oscar research) → Phase 2 (@paul plan, @linda audit) → Phase 3 (@todd + @karen, with @ria when UI scope; then @linda post-impl + @kevin E2E + @todd test gate; final atomic commit by @steve). Trivial asks skip straight to @brenda.',
+    );
+  }
   return lines.join('\n');
 }
 

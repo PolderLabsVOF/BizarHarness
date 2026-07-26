@@ -434,6 +434,37 @@ function syncDir(srcDir, destDir, opts = {}) {
 // .claude/agents/ (Claude Code canonical) — they were never sourced
 // from config/agents/ in Claude Code era, and the legacy source dir
 // was deleted.
+//
+// F-113: syncAgentFiles reinstated. Premium agents (@paul, @ria) and
+// any future agent definition must reach user-level `~/.claude/agents/`
+// so Claude Code sessions outside this repo can resolve them via the
+// Agent tool. Filtered to `*.md` to avoid leaking workspace files.
+
+export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
+  const src = join(REPO_ROOT, '.claude', 'agents');
+  const dest = CLAUDE_AGENTS_DIR;
+  if (!existsSync(src)) return { ok: true, message: `no agents source at ${src}`, copied: 0, skipped: 0 };
+  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}` };
+  ensureDir(dest);
+  const { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') });
+  return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)`, copied, skipped };
+}
+
+// F-113: syncModelRouter added. The model-router.json file lives in
+// the repo at .claude/model-router.json and routes per-agent model
+// selection. Copied to user-level so the Bizar plugin / SDK can read
+// it without a cwd dependency.
+
+export async function syncModelRouter({ dryRun = false, force = false } = {}) {
+  const src = join(REPO_ROOT, '.claude', 'model-router.json');
+  const dest = join(CLAUDE_DIR, 'model-router.json');
+  if (!existsSync(src)) return { ok: true, message: `no model-router at ${src}` };
+  if (existsSync(dest) && !force) return { ok: true, message: `${dest} already exists — pass --force to overwrite` };
+  if (dryRun) return { ok: true, message: `[dry-run] would copy ${src} → ${dest}` };
+  ensureDir(CLAUDE_DIR);
+  copyFileSync(src, dest);
+  return { ok: true, message: `model-router.json → ${dest}`, path: dest };
+}
 
 export async function syncSkillFiles({ dryRun = false } = {}) {
   const src = join(REPO_ROOT, 'config', 'skills');
@@ -548,6 +579,8 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     env: {
       BIZAR_HOME,
       BIZAR_MEMORY_VAULT: process.env.BIZAR_MEMORY_VAULT || join(BIZAR_HOME, 'memory-vault'),
+      ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || 'http://localhost:20128/v1',
+      BIZAR_MODEL_ROUTER_URL: process.env.BIZAR_MODEL_ROUTER_URL || 'http://localhost:20128/v1',
     },
     hooks: {
       PreToolUse: [{ matcher: 'Write|Edit|MultiEdit|Bash', hooks: [{ type: 'command', command: join(CLAUDE_HOOKS_DIR, 'pretooluse-editwrite.mjs'), timeout: 10 }] }],
@@ -725,6 +758,7 @@ export async function runProvision(opts = {}) {
   await runStep('Syncing commands',   () => syncCommandFiles({ dryRun, force }));
   await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force }));
   await runStep('Syncing hooks',      () => syncHookFiles({ dryRun, force }));
+  await runStep('Syncing agents',     () => syncAgentFiles({ dryRun, force }));
   await runStep('Installing git hooks', () => installGitHooks({ dryRun }));
   await runStep('Building SDK',       () => buildSdk({ dryRun }));
   await runStep('Building plugin',    () => buildPlugin({ dryRun }));
@@ -734,6 +768,11 @@ export async function runProvision(opts = {}) {
   const settingsStep = writeClaudeSettings({ dryRun, force });
   if (settingsStep.ok) logOk(settingsStep.message); else logErr(settingsStep.message);
   stepResults.push({ label: 'settings.json', ...settingsStep });
+
+  section('Syncing model-router.json');
+  const routerStep = await syncModelRouter({ dryRun, force });
+  if (routerStep.ok) logOk(routerStep.message); else logErr(routerStep.message);
+  stepResults.push({ label: 'model-router', ...routerStep });
 
   section('MCP server (bizar)');
   const mcpStep = setupMcpServer({ dryRun });
@@ -763,6 +802,9 @@ export async function runProvision(opts = {}) {
   const anyFail = stepResults.some(r => !r.ok);
   if (anyFail) console.log(chalk.yellow('  ⚠ Some steps had issues.'));
   else { console.log(chalk.bold.green('  ✓ Bizar is ready.')); console.log(chalk.dim('     Next: restart your Claude Code session.')); }
+  console.log('');
+  console.log(chalk.dim('  Premium model: ANTHROPIC_MODEL=cx/gpt-5.6-sol claude'));
+  console.log(chalk.dim('  See /use-premium or .claude/commands/use-premium.md for the full launch snippet.'));
   console.log('');
   return { ok: !anyFail, mode: effectiveMode, state: detectState(), stepResults };
 }

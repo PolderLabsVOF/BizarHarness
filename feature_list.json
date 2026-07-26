@@ -2155,6 +2155,13 @@
       ]
     },
     {
+      "id": "F-114",
+      "behavior": "3-phase orchestrator pipeline (research→plan→implement) with parallel agents inside each phase; premium agents @paul and @ria on cx/gpt-5.6-sol; user-level install plumbing via cli/provision.mjs",
+      "verification": "make check green; office-manager.md, planner.md, ui-designer.md, model-router.json, sessionstart-prime.mjs, settings.json, post-install-smoke.mjs, provision.mjs, plan.md updated; premium checks added to smoke; ANTHROPIC_BASE_URL plumbing; SessionStart primer updated",
+      "state": "passing",
+      "evidence": "make check green; office-manager.md, planner.md, ui-designer.md, model-router.json, sessionstart-prime.mjs, settings.json, post-install-smoke.mjs, provision.mjs, plan.md updated; premium checks added to smoke; ANTHROPIC_BASE_URL plumbing; SessionStart primer updated"
+    },
+    {
       "id": "F-115",
       "behavior": "Add @carl last-resort debug agent (premium tier), route from office-manager.md when @todd/@karen stall",
       "verification": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added",
@@ -2162,6 +2169,11 @@
       "evidence": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added"
     }
   ],
+  "vcr": {
+    "passing": 75,
+    "activated": 75,
+    "ratio": 1
+  }
   "vcr": {
     "passing": 74,
     "activated": 74,

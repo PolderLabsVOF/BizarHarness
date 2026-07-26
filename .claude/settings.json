@@ -49,7 +49,8 @@
     "BIZAR_MEMORY_VAULT": "${HOME}/.bizar_home/memory",
     "BIZAR_LOOPS_DIR": "${HOME}/.bizar_loops",
     "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
-    "BIZAR_MODEL_ROUTER_URL": "http://localhost:20128/v1"
+    "BIZAR_MODEL_ROUTER_URL": "http://localhost:20128/v1",
+    "_model_default_comment": "ANTHROPIC_MODEL is unset by default; sessions run on the router's default (bizar/MiniMax-M3). Override per-session via /use-premium or with `ANTHROPIC_MODEL=cx/gpt-5.6-sol claude`. See .claude/commands/use-premium.md."
   },
   "hooks": {
     "PreToolUse": [

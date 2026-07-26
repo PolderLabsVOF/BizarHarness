@@ -43,10 +43,12 @@
     "todd":          { "model": "bizar/MiniMax-M2.7","tier": "mid",     "rationale": "Mid-complexity implementation; cheaper than default." },
     "karen":           { "model": "cx/gpt-5.6-terra","tier": "high",    "rationale": "Top-tier implementation; high reasoning." },
     "carl":        { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "Last-resort debug — strongest reasoning." },
-    "janet":           { "model": "oc/mimo-v2.5-free", "tier": "budget", "rationale": "Clarifying question; budget tier." }
+    "janet":           { "model": "oc/mimo-v2.5-free", "tier": "budget", "rationale": "Clarifying question; budget tier." },
+    "paul":            { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "Default planner for every non-trivial session. Planning quality is the bottleneck for downstream impl cost — premium reasoning wins." },
+    "ria":             { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "UI/UX design craft — typography, spacing, motion, anti-slop. Same reasoning budget as @brad." }
   },
   "policies": {
-    "gpt_only_for": ["complex debugging", "planning work", "UI design language", "deep review", "routing/decomposition"],
+    "gpt_only_for": ["complex debugging", "planning work", "default planning", "UI design language", "UI/UX craft", "deep review", "routing/decomposition"],
     "gpt_never_for": ["research", "implementation", "everyday tasks", "Q&A", "mechanical edits"],
     "fallback_chain": ["cx/gpt-5.6-sol", "cx/gpt-5.6-terra", "cx/gpt-5.6-luna", "bizar/MiniMax-M3", "bizar/MiniMax-M2.7", "bizar/MiniMax-M2.5", "oc/deepseek-v4-flash-free", "oc/mimo-v2.5-free"],
     "escalate_on_failure": true,
