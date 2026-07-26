@@ -78,6 +78,15 @@ expressed as a Claude Code skill (markdown + optional hooks script) plus,
 when state is needed across sessions, a Claude Code MCP server registered
 via the Agent SDK (`@anthropic-ai/claude-agent-sdk`).
 
+**3-phase orchestrator pipeline** (Mike, `office-manager`): for every
+non-trivial request Mike runs three phases in order — Phase 1 *Research*
+(`@greg` + `@oscar` in parallel) → Phase 2 *Plan* (`@paul` draft, `@linda`
+adversarial audit, gate) → Phase 3 *Implement* (`@todd` + `@karen`, with
+`@ria` when the plan touches UI; then `@linda` post-impl audit, `@kevin`
+browser E2E if UI changed, `@todd` test gate, and `@steve` atomic commit).
+Parallelism INSIDE each phase; serialization ACROSS. Trivial asks skip
+straight to `@brenda`.
+
 The mistake limit follows Claude Code's default of `6` consecutive
 tool-validation failures before a session is aborted; specific agents
 may override this in their `.claude/agents/<agent>.md` `permission`
@@ -106,7 +115,7 @@ hooks, `{ hookSpecificOutput: { permissionDecision: "allow" | "deny" | "ask", ..
 - `templates/evaluator-rubric.md` — Sprint scoring rubric
 - `templates/clean-state-checklist.md` — 5-dimension exit checklist
 - `.claude/settings.json` — Project-scoped Claude Code tool permissions
-- `.claude/agents/*.md` — Bizar agent definitions (Mike, Susan, ...)
+- `.claude/agents/*.md` — Bizar agent definitions (Mike, Paul, Susan, Ria, Carl, ...)
 - `.claude/skills/*/SKILL.md` — Bizar skill packs (auto-loaded by name)
 - `.claude/commands/*.md` — User/project-level slash commands
 - `.claude/hooks/*` — Executable hook scripts (PreToolUse, PostToolUse, ...)
@@ -238,7 +247,7 @@ BizarHarness/
 ├── .nvmrc                  # pinned runtime version
 ├── .claude/
 │   ├── settings.json       # scoped tool access
-│   ├── agents/             # Mike, Susan, ... (one .md per agent)
+│   ├── agents/             # Mike, Paul, Susan, Ria, Carl, ... (one .md per agent)
 │   ├── skills/             # auto-loaded SKILL.md packs
 │   ├── commands/           # user-level slash commands
 │   ├── hooks/              # executable hook scripts

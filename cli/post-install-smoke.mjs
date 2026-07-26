@@ -20,7 +20,7 @@
  *   CheckResult: { name: string, ok: boolean, message: string }
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -30,6 +30,16 @@ const HOME = homedir();
 const DEFAULT_BIZAR_HOME = join(HOME, '.config', 'bizar');
 const DEFAULT_MEMORY_VAULT = join(HOME, '.bizar_memory');
 const DEFAULT_DASHBOARD_PORT = 4097;
+const CLAUDE_DIR = join(HOME, '.claude');
+
+function readJsonSafe(file, fallback = null) {
+  try {
+    if (!existsSync(file)) return fallback;
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
 
 /**
  * @param {object} opts
@@ -184,7 +194,63 @@ export async function runSmokeTest({ bizarHome, repoPath, timeoutMs = DEFAULT_TI
     }
   });
 
-  // ── 6. lightrag-server installed ─────────────────────────────────────────
+  // ── 6. Premium agents (@paul, @ria) registered at user-level ────────────
+  // F-113: syncAgentFiles copies .claude/agents/*.md to ~/.claude/agents/.
+  // Without these, the Agent tool cannot resolve @paul / @ria from any
+  // session — including the one running this smoke test.
+  check('@paul agent registered', () => {
+    const fp = join(CLAUDE_DIR, 'agents', 'planner.md');
+    if (!existsSync(fp)) {
+      return { ok: false, message: `${fp} missing — re-run ./install.sh` };
+    }
+    return { ok: true, message: '@paul agent registered' };
+  });
+
+  check('@ria agent registered', () => {
+    const fp = join(CLAUDE_DIR, 'agents', 'ui-designer.md');
+    if (!existsSync(fp)) {
+      return { ok: false, message: `${fp} missing — re-run ./install.sh` };
+    }
+    return { ok: true, message: '@ria agent registered' };
+  });
+
+  check('@carl agent registered', () => {
+    const fp = join(CLAUDE_DIR, 'agents', 'debug-specialist.md');
+    if (!existsSync(fp)) {
+      return { ok: false, message: `${fp} missing — re-run ./install.sh` };
+    }
+    return { ok: true, message: '@carl agent registered (last-resort debug, premium)' };
+  });
+
+  check('model-router.json synced', () => {
+    const fp = join(CLAUDE_DIR, 'model-router.json');
+    if (!existsSync(fp)) return { ok: false, message: `${fp} missing — re-run ./install.sh` };
+    const data = readJsonSafe(fp, null);
+    if (!data || !data.agents || !data.agents.paul || !data.agents.ria || !data.agents.carl) {
+      return { ok: false, message: 'paul/ria/carl missing from model-router.json' };
+    }
+    if (
+      data.agents.paul.tier !== 'premium' ||
+      data.agents.ria.tier !== 'premium' ||
+      data.agents.carl.tier !== 'premium'
+    ) {
+      return { ok: false, message: 'paul/ria/carl not all at premium tier' };
+    }
+    return { ok: true, message: 'paul + ria + carl in model-router.json (premium)' };
+  });
+
+  check('ANTHROPIC_BASE_URL set in user settings', () => {
+    const fp = join(CLAUDE_DIR, 'settings.json');
+    if (!existsSync(fp)) return { ok: false, message: `${fp} missing` };
+    const data = readJsonSafe(fp, null);
+    const url = data?.env?.ANTHROPIC_BASE_URL;
+    if (!url || url === 'null') {
+      return { ok: false, message: 'ANTHROPIC_BASE_URL not configured' };
+    }
+    return { ok: true, message: `ANTHROPIC_BASE_URL=${url}` };
+  });
+
+  // ── 7. lightrag-server installed ─────────────────────────────────────────
   // Just verify the binary exists — `lightrag-hku` (uv tool) does not
   // reliably support --version across all versions, so we check file
   // presence instead of running it.

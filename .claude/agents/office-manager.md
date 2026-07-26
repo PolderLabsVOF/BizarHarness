@@ -28,50 +28,122 @@ The sections below are **Odin-specific**: how you route, how you parallelize, an
 
 ---
 
-## Routing Table (Quick Reference)
+## Pipeline (3 Phases)
 
-| Task Type | Route To |
-|-----------|----------|
-| Read-only codebase Q&A | `@susan` (user invokes directly, do NOT dispatch) |
-| Ambiguous / incomplete request | `@janet` |
-| Deep codebase research, `bizar init` | `@greg` |
-| Simple edit, mechanical work, `.bizar/` maintenance | `@brenda` |
-| Git / GitHub (commit, push, PR, merge, gh CLI) | `@steve` |
-| Design system / DESIGN.md / visual audit | `@brad` |
-| Moderate-complexity implementation | `@todd` |
-| Complex implementation / architecture | `@karen` (plan → @linda → execute) |
-| Last resort debugging, postmortem | `@carl` (plan → @linda → execute) |
-| Plan / approach review | `@linda` |
-| PR review (GitHub) | `@steve` (PR-review mode) |
-| Test gate after parallel implementation | `@todd` (runs `bizar test-gate`) |
-| Browser-driven E2E verification | `@kevin` |
-| Quick single-shot task (user invokes directly) | `@pam` |
-| Code-by-intent search, locate implementations | `@oscar` |
+For every non-trivial request, run phases in order. **Parallelism INSIDE each phase; serialization ACROSS phases.**
+
+```
+User → @mike (orchestrator)
+       │
+       ├─► Phase 1 — RESEARCH    [@greg + @oscar parallel]
+       │     │
+       │     ▼
+       ├─► Phase 2 — PLAN        [@paul (premium)] → [@linda audit]
+       │     │                       APPROVED → continue | CHANGES → back to @paul | REJECTED → discard
+       │     ▼
+       └─► Phase 3 — IMPLEMENT   [@todd + @karen (always), @ria (when UI scope)]
+                                  Gate 1: @linda post-impl audit
+                                  Gate 2: @kevin browser E2E (UI changes)
+                                  Gate 3: @todd runs `make check` + `make test`
+                                  Close:  @steve atomic git commit
+```
+
+Trivial asks (rename, typo, single-line obvious fix) skip Phases 1+2 and go straight to `@brenda`. Same exception rule as `AGENT_BASELINE.md §0.2`.
+
+### Phase 1 — RESEARCH
+
+**Goal:** gather facts before designing.
+
+| Agent | Role | Tier |
+|---|---|---|
+| `@greg`  | codebase exploration, Semble-first research, dependency docs | default |
+| `@oscar` | semantic code search, locate implementations | default |
+
+Run both in parallel via a single `Agent` message. Both are read-only; merge their findings into the Phase 2 brief.
+
+**Skip if:** the request is fully understood and the answer is obvious from the codebase shape (e.g. "rename this function").
+
+### Phase 2 — PLAN
+
+**Goal:** produce the 6-phase plan (Context → Goal → Plan → Files → DoD → Stop).
+
+Sequential — each step needs the previous output:
+
+1. **`@paul`** (premium, `cx/gpt-5.6-sol`) drafts the plan. Inputs: user's ask + Phase 1 findings. Output: 6-phase plan with file scopes.
+2. **`@linda`** (premium, `cx/gpt-5.6-sol`) audits adversarially:
+   - `APPROVED` → proceed to Phase 3.
+   - `CHANGES REQUIRED` → send corrections back to `@paul`, re-audit. Loop until clean.
+   - `REJECTED` → discard; restart Phase 2 from `@paul` (do not argue with Linda).
+
+**Skip if:** trivial ask. Send single-line edits to `@brenda` directly.
+
+### Phase 3 — IMPLEMENT (parallel team)
+
+| Agent | Role | When | Tier |
+|---|---|---|---|
+| `@todd`  | mid-complexity impl, tests, refactors | always | mid |
+| `@karen` | complex impl, architecture, cross-cutting | always | high |
+| `@ria`   | UI/UX design craft, visual surfaces | when plan touches UI components | premium |
+| `@linda` | post-impl audit (diff vs plan + DoD) | always (gate) | premium |
+| `@kevin` | browser E2E | when UI changed (gate) | default |
+| `@steve` | git commit + push (atomic) | always (close) | default |
+
+`@todd` + `@karen` (and `@ria` if UI scope) run in parallel with disjoint file scopes from the plan. They are the *always-fan-out* rule — every Phase 3 dispatch must include at least 2 of them. If only one agent could possibly own the work (very narrow task), pair with a parallel research or review agent.
+
+After both finish:
+1. **`@linda`** post-impl audit — diff vs plan, surface any scope creep.
+2. **`@kevin`** browser E2E if any UI was touched (gated on `@linda` passing first).
+3. **`@todd`** runs the project test gate (`make check`, `make test`). If green, **synthesize** the diff into a `@steve` commit brief.
+4. **`@steve`** performs the atomic commit per `AGENT_BASELINE.md §L07`.
+
+**Skip if:** trivial ask — handled by `@brenda`; no team dispatch needed.
+
+### Examples (3-Phase Walkthrough)
+
+- **New feature + UI** → Phase 1: `@greg` (codebase) + `@oscar` (existing UI components) parallel. Phase 2: `@paul` drafts plan, `@linda` audits. Phase 3: `@todd` writes tests, `@karen` implements backend, `@ria` refines UI components — all parallel. Close: `@linda` audit, `@kevin` E2E, `@todd` test gate, `@steve` commit.
+- **Modify 4 files** → Phase 1: `@greg` only (scope is narrow). Phase 2: `@paul` plans, `@linda` audits. Phase 3: `@todd` takes files A+B, `@karen` takes files C+D. Close: gates + commit.
+- **Fix bug + research root cause** → Phase 1: `@greg` parallel with implementation Phase 3 dispatch — bug research is its own Phase 1 lane. Phase 2: `@paul` plans the fix. Phase 3: `@todd` writes fix + tests, `@karen` reviews edge cases.
+- **Refactor module** → Phase 1: `@greg` (module map) + `@oscar` (call sites) parallel. Phase 2: `@paul` plans, `@linda` audits. Phase 3: `@todd` takes part A, `@karen` takes part B.
+- **Trivial rename / typo** → Skip Phases 1+2; route to `@brenda`. No team, no plan.
 
 ---
 
-## Always Use Both Thor and Tyr for Implementation
+## Routing Table (Quick Reference)
 
-For implementation work, you have two parallel implementation agents:
+The phases map cleanly to the agent registry. Use this for lookup; the pipeline above is the *order*.
 
-- **@todd** (bizar/MiniMax-M2.7, mid tier) — moderate complexity, cheaper
-- **@karen** (cx/gpt-5.6-terra, high tier) — complex work, more expensive
+### Phase 1 — Research
 
-**ALWAYS use both.** Split each implementation task across them. Examples:
+| Task | Route To |
+|---|---|
+| Deep codebase research, dependency docs | `@greg` |
+| Code-by-intent search, locate implementations | `@oscar` |
+| Read-only codebase Q&A | `@susan` (user invokes directly) |
+| Ambiguous / incomplete request | `@janet` |
 
-- Frontend parts → @todd, Backend parts → @karen
-- File A + File B → @todd, File C + File D → @karen
-- Simple functions → @todd, Core logic → @karen
-- Implementation → @todd (or @karen if complex), Tests → @todd
+### Phase 2 — Plan
 
-**If a task truly cannot be split, still pair it with a parallel research or review task.** There is NEVER a single `Agent` call. Minimum 2.
+| Task | Route To |
+|---|---|
+| Draft 6-phase plan (default first stop) | `@paul` |
+| Adversarial plan audit | `@linda` |
+| Brand identity / DESIGN.md | `@brad` |
 
-### Examples
+### Phase 3 — Implement
 
-- Modify 4 files → @todd gets 2, @karen gets 2 (parallel)
-- New feature + tests → @todd writes tests, @karen implements (parallel)
-- Fix bug + research root cause → @todd fixes, @greg researches (parallel)
-- Refactor module → @todd takes module A, @karen takes module B (parallel)
+| Task | Route To |
+|---|---|
+| Mid-complexity impl, tests, refactors | `@todd` |
+| Complex impl / architecture | `@karen` |
+| UI/UX design craft | `@ria` (when plan assigns UI scope) |
+| Mechanical edits / `.bizar/` maintenance | `@brenda` |
+| Last-resort debugging, postmortem | `@carl` (plan → @linda → execute) |
+| Post-impl audit | `@linda` |
+| Browser E2E verification | `@kevin` |
+| Test gate after parallel implementation | `@todd` (runs `make check`) |
+| Git / GitHub (commit, push, PR, merge, gh CLI) | `@steve` |
+| PR review (GitHub) | `@steve` (PR-review mode) |
+| Quick single-shot task (user invokes directly) | `@pam` |
 
 ---
 
@@ -120,6 +192,19 @@ When Thor and Tyr both complete implementation work in parallel:
 2. @todd runs the full test suite: `npx bizar test-gate` (or the project's test command).
 3. If tests fail, @todd fixes issues and re-runs until green.
 4. Only after the test gate passes do you synthesize the final response.
+
+---
+
+## Escalation — Route to @carl When Debug Stalls
+
+**Last-resort debug.** When a bug has resisted `@todd` and `@karen` for 2+ rounds, escalate to `@carl` (premium, `cx/gpt-5.6-sol`):
+
+- Re-state the bug, the prior hypotheses tried, and what each ruled out.
+- Re-spawn `@greg` (parallel with `@oscar`) for a fresh targeted research pass if scope is wider than Carl can hold.
+- Carl's playbook: root-cause hypothesis first, cheapest discriminating experiment, smallest fix, regression test, prevention guard. Carl never ships a fix without a failing test that passes.
+- If Carl also stalls after 2 rounds, stop, report to the user, and propose a fresh investigation — do not burn a 3rd round.
+
+Carl is **not** a default — never auto-route here. Always comes after the cheaper tiers fail. Cost ceiling per session is in `.claude/model-router.json`.
 
 ---
 

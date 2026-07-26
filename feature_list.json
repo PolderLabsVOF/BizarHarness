@@ -2153,6 +2153,13 @@
         "PROGRESS.md (F-112 In Progress)",
         "feature_list.json (this entry)"
       ]
+    },
+    {
+      "id": "F-115",
+      "behavior": "Add @carl last-resort debug agent (premium tier), route from office-manager.md when @todd/@karen stall",
+      "verification": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added",
+      "state": "passing",
+      "evidence": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added"
     }
   ],
   "vcr": {
