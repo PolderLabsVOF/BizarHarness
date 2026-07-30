@@ -2,6 +2,39 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-119 Mandatory Agent and Documentation Grounding
+
+**Objective:** Ensure every primary request enters the Bizar agent pipeline and
+every shipped agent consults current official documentation instead of guessing
+or using trial-and-error for external APIs, libraries, CLIs, and configuration.
+
+### Baseline
+
+- `make check`: passed before implementation.
+- `worker-suggest.mjs` emits no routing context when no worker pattern matches,
+  so the primary session can bypass Bizar agents.
+- Three shipped agents (`oscar`, `janet`, and `linda`) do not have `WebSearch`
+  in their tool allowlist.
+- The shared baseline recommends official documentation but does not require a
+  search before version-sensitive external work.
+
+### Implementation plan
+
+1. Turn the prompt-routing hook into an always-on Bizar delegation policy while
+   preserving specialized worker suggestions.
+2. Inject the documentation-grounding contract at every subagent start.
+3. Give every shipped agent `WebSearch` access and strengthen the shared
+   baseline against guess-and-try integration work.
+4. Extend agent, provisioner, hook, and E2E checks so policy drift fails tests.
+5. Synchronize architecture/state documentation and run the full harness gates.
+
+### Stop condition
+
+F-119 may pass only when every non-empty primary prompt receives mandatory Bizar
+delegation context, every subagent receives official-documentation grounding,
+all shipped agents expose `WebSearch`, and regression plus full harness gates
+pass.
+
 ## Complete — v10.9.0 Release
 
 **Objective:** Publish the completed core-harness rebuild, repository cleanup,

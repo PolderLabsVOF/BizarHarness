@@ -470,11 +470,20 @@
       "evidence": "2026-07-30 collision-free parallel execution: editing agents use isolated worktrees; dependency-aware SQLite task claims, expiring path leases, edit-hook enforcement, and a single-consumer integration queue pass cross-process regression tests; make check, make test (298 SDK + 295 Node), make e2e (10/10), make check-arch (4/4), make clean-check (5/5), make audit (10.0/10.0), make eval-gate (39/39), and package verification passed (commit b5b3aef).",
       "commit": "b5b3aef",
       "passed": "2026-07-30"
+    },
+    {
+      "id": "F-119",
+      "behavior": "Route every primary request through Bizar agents and require every shipped agent to ground external API, library, CLI, and configuration work in current official documentation.",
+      "verification": "agent policy and hook tests; provisioner tests; make check; make test; make e2e; make check-arch; make clean-check",
+      "state": "active",
+      "layer": "core",
+      "category": "agents",
+      "created": "2026-07-30"
     }
   ],
   "vcr": {
     "passing": 39,
-    "activated": 39,
-    "ratio": 1
+    "activated": 40,
+    "ratio": 0.975
   }
 }
