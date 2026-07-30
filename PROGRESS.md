@@ -2,11 +2,13 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — F-119 Mandatory Agent and Documentation Grounding
+## Complete — F-119 Mandatory Agent and Documentation Grounding
 
 **Objective:** Ensure every primary request enters the Bizar agent pipeline and
 every shipped agent consults current official documentation instead of guessing
 or using trial-and-error for external APIs, libraries, CLIs, and configuration.
+
+**Implementation commit:** `9dd7ec4`
 
 ### Baseline
 
@@ -50,10 +52,18 @@ pass.
 - `make test`: 298 SDK tests and 300 Node/CLI/hook/script tests passed.
 - `make e2e`: 11/11 checks passed.
 - `make clean-check`: 5/5 dimensions passed.
+- `make audit`: 10.0/10.0.
+- `make eval-gate`: 40/40 features passed.
+- `make vcr`: 40/40 = 1.000.
 
 ### Blockers
 
 None.
+
+### Next steps
+
+No F-119 work remains. Select the next `not_started` feature before further
+product changes.
 
 ## Complete — v10.9.0 Release
 
