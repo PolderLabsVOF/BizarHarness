@@ -562,8 +562,8 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       SessionEnd: [{ hooks: [hook('sessionend-recall.mjs'), hook('learning-extract.mjs')] }],
       PreCompact: [{ matcher: '*', hooks: [hook('precompact-priorities.sh', 15, 'bash')] }],
       SubagentStart: [
-        { matcher: '^(brad|carl|pam|brenda|karen|todd|ria)$', hooks: [hook('worktree-bootstrap.mjs', 30)] },
         { matcher: '^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$', hooks: [hook('advisor-context.mjs')] },
+        { matcher: '^(brad|carl|pam|brenda|karen|todd|ria)$', hooks: [hook('worktree-bootstrap.mjs', 30)] },
       ],
     },
   };

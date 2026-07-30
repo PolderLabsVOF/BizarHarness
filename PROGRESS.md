@@ -103,7 +103,9 @@ can proceed safely.
 
 ### Next steps
 
-- Run the full repository verification and adversarial review gates.
+- Provisioner hook ordering is repaired; the focused provisioner/worktree
+  regression set passes 14/14.
+- Rerun the full repository verification and adversarial review gates.
 - Close F-118 only after fresh evidence is recorded.
 
 ## Complete — F-117 Repository Structure Cleanup

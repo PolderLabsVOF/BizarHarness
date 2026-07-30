@@ -103,11 +103,11 @@
       { "matcher": "*", "hooks": [{ "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/precompact-priorities.sh\"", "timeout": 15 }] }
     ],
     "SubagentStart": [
-      { "matcher": "^(brad|carl|pam|brenda|karen|todd|ria)$", "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-bootstrap.mjs\"", "timeout": 30 }
-      ] },
       { "matcher": "^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$", "hooks": [
         { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/advisor-context.mjs\"", "timeout": 15 }
+      ] },
+      { "matcher": "^(brad|carl|pam|brenda|karen|todd|ria)$", "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-bootstrap.mjs\"", "timeout": 30 }
       ] }
     ]
   }
