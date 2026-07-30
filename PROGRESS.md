@@ -2,11 +2,14 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — F-117 Repository Structure Cleanup
+## Complete — F-117 Repository Structure Cleanup
 
 **Objective:** Remove confirmed obsolete files, abandoned fixtures, generated
 residue, and package-boundary leaks while preserving every retained Claude Code
 harness behavior.
+
+**Implementation commit:** `c42b04e` (`refactor: remove obsolete repository
+residue`)
 
 ### Behavior lock
 
@@ -60,6 +63,7 @@ harness behavior.
 - `make clean-check`: 5/5 dimensions passed.
 - `make audit`: 10.0/10.0.
 - `make eval-gate`: 38 passing, 0 failing.
+- `make vcr`: 38/38 = 1.000.
 - `npm pack --dry-run`: 259 files, 449,561 bytes, 1,386,851 bytes
   unpacked; no test source, duplicate skills, local state, or memory residue.
 
@@ -104,3 +108,8 @@ harness behavior.
 ### Blockers
 
 None.
+
+### Next steps
+
+- No cleanup work remains. Select the next `not_started` feature before making
+  further product changes.

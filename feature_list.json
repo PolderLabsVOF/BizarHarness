@@ -451,15 +451,18 @@
       "id": "F-117",
       "behavior": "Remove obsolete repository fixtures, retired configuration and templates, generated residue, and publish-boundary leaks without changing retained Claude Code harness behavior.",
       "verification": "targeted repository/package structure tests; npm pack --dry-run; make check; make test; make e2e; make clean-check; make audit",
-      "state": "active",
+      "state": "passing",
       "layer": "all",
       "category": "harness",
-      "created": "2026-07-30"
+      "created": "2026-07-30",
+      "evidence": "2026-07-30 repository cleanup: obsolete fixtures/config/templates and 448 MB local residue removed; package reduced from 427 to 259 files; make check, make test (298 SDK + 276 Node), make e2e (10/10), make clean-check (5/5), make check-arch (4/4), live Podman verification, make eval-gate (38/38), make audit (10.0/10.0), and repository/package verification passed (commit c42b04e).",
+      "commit": "c42b04e",
+      "passed": "2026-07-30"
     }
   ],
   "vcr": {
-    "passing": 37,
+    "passing": 38,
     "activated": 38,
-    "ratio": 0.9736842105263158
+    "ratio": 1
   }
 }
