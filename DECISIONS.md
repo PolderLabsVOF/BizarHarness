@@ -9,3 +9,4 @@
 | [DEC-012](docs/decisions/DEC-012-core-only-guarded-autonomy.md) | Core-only architecture and human approval boundaries | Accepted |
 | [DEC-013](docs/decisions/DEC-013-collision-free-parallel-execution.md) | Worktree isolation, durable task leases, and serialized integration | Accepted |
 | [DEC-014](docs/decisions/DEC-014-mandatory-agent-grounding.md) | Mandatory Bizar routing and official-documentation grounding | Accepted |
+| [DEC-015](docs/decisions/DEC-015-openkan-control-plane.md) | OpenKan is Bizar's external control plane | Accepted |

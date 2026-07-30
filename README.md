@@ -11,7 +11,11 @@ Bizar is a guarded-autonomy harness for Claude Code. It packages 16 uniquely nam
 - Preserves bounded session handoffs and learning evidence without providing a general-purpose note vault.
 - Guards compaction fidelity, commit quality, prose quality, dangerous shell commands, protected paths, and reviewer context.
 
-Bizar deliberately ships no web control plane, browser extension, background web service, or note-vault/search subsystem.
+Bizar deliberately ships no embedded web control plane, browser extension,
+background web service, or note-vault/search subsystem. The machine-readable
+`bizar control` command lets an optional OpenKan installation present Bizar
+agents, tasks, sessions, feature state, and durable messages without coupling
+to Bizar internals.
 
 ## Quick start
 
@@ -35,7 +39,7 @@ Claude Code reads `.claude/settings.json`. `cli/provision.mjs` can copy agents, 
 | `.claude/commands/` | Slash-command workflows |
 | `.claude/hooks/` | Safety, HITL, lifecycle, routing, telemetry, and compaction hooks |
 | `packages/sdk/` | Agent registry, router, learning logs, federation, consensus, and MCP |
-| `cli/` | Installer, validator, backup, audit, cost/claim/task, sandbox, repair |
+| `cli/` | Installer, validator, backup, audit, cost/claim/task/control, sandbox, repair |
 | `scripts/` | Architecture, absence, E2E, feature, eval, and clean-state verification |
 
 The MCP tools are `plan_action`, `loop_start`, `loop_stop`, `loop_list`, `loop_status`, `graph_query`, `graph_path`, `list_instincts`, and `list_decisions`.
@@ -61,6 +65,20 @@ bizar task integrate pass 1 --worker steve --evidence "aggregate checks passed"
 The integration queue records the commit, base reference, verification command,
 owner, integrator, and outcome. It deliberately does not perform unapproved
 merge, rebase, push, or publication operations.
+
+## OpenKan control plane
+
+`bizar control snapshot --json` exposes the current agent catalogue, durable
+task and integration queues, feature ledger, progress summary, Claude Code
+background sessions, and durable control messages. OpenKan invokes task and
+session mutations through the same CLI instead of importing Bizar modules or
+opening its SQLite database.
+
+Messages are atomically queued under `.bizar/control/messages/`. Supported
+Claude Code `SessionStart` and `UserPromptSubmit` hooks claim and inject matching
+messages exactly once. A session-targeted message can request a documented
+background resume; Bizar never edits transcripts or attaches to private process
+internals.
 
 ## Guarded autonomy
 

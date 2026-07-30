@@ -41,6 +41,18 @@ try {
   check('settings and lifecycle hooks', missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : `${events.length} events wired`);
   check('human approval policy', settings.permissions?.defaultMode === 'acceptEdits' && settings.permissions?.ask?.some((v) => v.includes('git commit')), 'acceptEdits + explicit mutation asks');
   check('Bizar MCP registration', settings.mcpServers?.bizar?.args?.includes('@polderlabs/bizar-sdk'), 'stdio SDK command configured');
+  const controlHook = 'control-inbox.mjs';
+  const controlEvents = ['SessionStart', 'UserPromptSubmit'];
+  const missingControlEvents = controlEvents.filter((event) =>
+    !(settings.hooks?.[event] || []).some((group) =>
+      (group.hooks || []).some((hook) => hook.command?.includes(controlHook))));
+  check(
+    'OpenKan control inbox',
+    missingControlEvents.length === 0,
+    missingControlEvents.length
+      ? `missing from ${missingControlEvents.join(', ')}`
+      : 'durable messages inject at supported hook boundaries',
+  );
 } catch (error) {
   check('settings parse', false, error.message);
 }
@@ -76,6 +88,7 @@ check('skill mirror', JSON.stringify(canonicalSkills) === JSON.stringify(mirrore
 const requiredHooks = [
   'agent-grounding.mjs',
   'advisor-context.mjs',
+  'control-inbox.mjs',
   'content-style-guard.mjs',
   'git-workflow-guard.mjs',
   'precompact-priorities.sh',
@@ -102,6 +115,13 @@ const hookTests = readdirSync(join(ROOT, '.claude', 'hooks', '__tests__'))
   .filter((name) => name.endsWith('.test.mjs'))
   .map((name) => join('.claude', 'hooks', '__tests__', name));
 run('hook guard tests', process.execPath, ['--test', '--test-concurrency=1', ...hookTests]);
+run('control plane tests', process.execPath, [
+  '--test',
+  '--test-concurrency=1',
+  'cli/control-store.test.mjs',
+  'cli/control-inbox-hook.test.mjs',
+  'cli/commands/control.test.mjs',
+]);
 
 const failed = results.filter((result) => !result.ok);
 console.log(`\n  ${results.length - failed.length}/${results.length} checks passed\n`);

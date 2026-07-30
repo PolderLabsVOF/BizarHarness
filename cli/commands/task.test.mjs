@@ -124,3 +124,20 @@ test('task CLI serializes integration queue ownership', () => {
   ], root);
   assert.equal(JSON.parse(result.stdout).taskId, 'second');
 });
+
+test('task CLI cancels pending work through the durable ledger', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-task-cancel-'));
+  roots.push(root);
+  const db = join(root, 'tasks.sqlite');
+
+  assert.equal(run([
+    'create', 'obsolete', '--title', 'Obsolete task', '--db', db, '--json',
+  ], root).status, 0);
+  const result = run([
+    'cancel', 'obsolete', '--reason', 'Replaced by OpenKan task', '--db', db, '--json',
+  ], root);
+  assert.equal(result.status, 0, result.stderr);
+  const task = JSON.parse(result.stdout);
+  assert.equal(task.state, 'cancelled');
+  assert.equal(task.blocker, 'Replaced by OpenKan task');
+});

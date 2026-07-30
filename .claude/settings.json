@@ -83,12 +83,14 @@
       ] }
     ],
     "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/control-inbox.mjs\"", "timeout": 10 }] },
       { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/worker-suggest.mjs\"", "timeout": 10 }] },
       { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/thinking-route.mjs\"", "timeout": 10 }] },
       { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry.mjs\"", "timeout": 10 }] }
     ],
     "SessionStart": [
       { "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/control-inbox.mjs\"", "timeout": 10 },
         { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sessionstart-prime.mjs\"", "timeout": 15 },
         { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry.mjs\"", "timeout": 10 }
       ] }

@@ -41,6 +41,24 @@ deliver queued messages at supported Claude Code hook boundaries, and receive
 live Bizar snapshots over WebSocket, with both repositories' full test suites
 green.
 
+### Implementation status
+
+- Added `bizar control` JSON commands for agent, feature/progress, durable task,
+  integration queue, Claude Code session, and message snapshots.
+- Added atomic file-per-message queueing and exactly-once hook claims at
+  `SessionStart` and `UserPromptSubmit`.
+- Added task cancellation and safe stop support limited to Claude-reported live
+  session PIDs.
+- OpenKan commit `0ef6c76` adds the CLI adapter, validated REST mutations,
+  loopback WebSocket snapshots/commands, settings, the Bizar workspace, and a
+  real cross-repository E2E script.
+- OpenKan: 346 tests passed; sanity check passed; cross-repository E2E passed
+  5/5; browser verification rendered 16 agents, 41 features, sessions, tasks,
+  and messages without an error overlay; npm audit reports zero vulnerabilities.
+- Bizar: 298 SDK and 307 Node tests passed; targeted control/task tests passed
+  11/11; E2E passed 13/13; architecture passed 5/5; clean-state passed 5/5;
+  TypeScript check passed.
+
 ### Blockers
 
 None.

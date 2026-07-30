@@ -11,6 +11,24 @@ Claude Code is the host. Native Agent, Skill, command, permission, and hook surf
 3. **Integration:** `.claude/settings.json` launches the SDK's stdio MCP server directly.
 4. **Operations:** `cli`, `scripts`, `.harness`, and `templates` install, validate, audit, back up, and verify the harness.
 
+## OpenKan control boundary
+
+Bizar does not embed a web server or dashboard. The `bizar control` CLI is the
+stable, machine-readable boundary for an optional OpenKan control plane. It
+exposes agent definitions, the task and integration ledgers, feature/progress
+state, Claude Code background sessions, and durable messages as JSON.
+
+OpenKan invokes the CLI with argument arrays and owns all HTTP, WebSocket, and
+browser code. It never imports Bizar modules, opens Bizar's SQLite database,
+edits Claude transcripts, or duplicates task-lease semantics.
+
+Cross-agent messages are file-per-message records under
+`.bizar/control/messages/`. Atomic rename provides claim serialization.
+`SessionStart` and `UserPromptSubmit` hooks inject matching messages through
+Claude Code's documented `additionalContext` surface. Session-targeted messages
+may request a background resume, but Bizar does not attempt unsupported
+live-process mutation.
+
 ## Parallel execution boundary
 
 Code-writing subagents declare `isolation: worktree` and branch from the
@@ -69,7 +87,8 @@ architecture rule fail if either property drifts.
 
 Session lifecycle hooks write a bounded handoff and structured session record. Learning hooks maintain compact instinct and decision JSONL records. These files support continuation and routing only; there is no note CRUD, vault indexing, semantic search, or knowledge-base tool family.
 
-## No local web surface
+## No embedded local web surface
 
 The retained CLI starts no web server. Visual planning uses Claude Code's
-native session surfaces and repository documents.
+native session surfaces and repository documents, or the optional external
+OpenKan adapter through `bizar control`.

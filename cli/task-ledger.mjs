@@ -489,6 +489,39 @@ export class TaskLedger {
     return transaction.immediate();
   }
 
+  cancelTask({ taskId, owner, reason = '' }) {
+    const id = requireText(taskId, 'taskId');
+    const expectedOwner = owner ? String(owner).trim() : '';
+    const now = this.now();
+    const transaction = this.db.transaction(() => {
+      const row = this._row(id);
+      if (!row) throw new TaskLedgerError('TASK_NOT_FOUND', `task not found: ${id}`);
+      if (['integrated', 'cancelled'].includes(row.state)) {
+        throw new TaskLedgerError('TASK_NOT_CANCELLABLE', `task ${id} is ${row.state}`);
+      }
+      if (row.owner && expectedOwner && row.owner !== expectedOwner) {
+        throw new TaskLedgerError('OWNER_MISMATCH', `task ${id} is owned by ${row.owner}`);
+      }
+      this.db.prepare(
+        `UPDATE tasks
+         SET state = 'cancelled', blocker = ?, lease_expires_at = NULL,
+             updated_at = ?
+         WHERE id = ?`,
+      ).run(String(reason || ''), now, id);
+      this.db.prepare(
+        `UPDATE integration_queue
+         SET status = 'cancelled', finished_at = ?
+         WHERE task_id = ? AND status IN ('queued','active')`,
+      ).run(now, id);
+      this._event(id, 'cancelled', {
+        owner: expectedOwner || row.owner,
+        reason: String(reason || ''),
+      }, now);
+      return this.getTask(id);
+    });
+    return transaction.immediate();
+  }
+
   _serializeIntegration(row) {
     if (!row) return null;
     return {

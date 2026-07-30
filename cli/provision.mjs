@@ -554,11 +554,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
         { matcher: 'Skill', hooks: [hook('simplify-guard.mjs', 30)] },
       ],
       UserPromptSubmit: [
+        { hooks: [hook('control-inbox.mjs', 10)] },
         { hooks: [hook('worker-suggest.mjs', 10)] },
         { hooks: [hook('thinking-route.mjs', 10)] },
         { hooks: [hook('telemetry.mjs', 10)] },
       ],
-      SessionStart: [{ hooks: [hook('sessionstart-prime.mjs'), hook('telemetry.mjs', 10)] }],
+      SessionStart: [{ hooks: [hook('control-inbox.mjs', 10), hook('sessionstart-prime.mjs'), hook('telemetry.mjs', 10)] }],
       SessionEnd: [{ hooks: [hook('sessionend-recall.mjs'), hook('learning-extract.mjs')] }],
       PreCompact: [{ matcher: '*', hooks: [hook('precompact-priorities.sh', 15, 'bash')] }],
       SubagentStart: [

@@ -25,6 +25,7 @@ function parseFlags(args) {
     '--verify-command',
     '--worker',
     '--error',
+    '--reason',
   ]);
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -60,6 +61,7 @@ function showHelp() {
     bizar task claim <id> --owner <agent> [--workspace <path>] [--lease-ms <ms>]
     bizar task heartbeat <id> --owner <agent> [--lease-ms <ms>]
     bizar task complete <id> --owner <agent> [--evidence <text>]
+    bizar task cancel <id> [--owner <agent>] [--reason <text>]
     bizar task sweep
     bizar task integrate enqueue <id> --commit <sha> --owner <agent>
     bizar task integrate claim --worker <integrator>
@@ -217,6 +219,15 @@ export async function run(name, args, isHelpRequest) {
         evidence: flags.evidence || '',
       });
       print(task, flags, (row) => chalk.green(`  ✓ Completed ${row.id}`));
+      return true;
+    }
+    if (subcommand === 'cancel') {
+      const task = ledger.cancelTask({
+        taskId: requireArg(taskId, 'task cancel requires <id>'),
+        owner: flags.owner || process.env.BIZAR_AGENT_ID || '',
+        reason: flags.reason || '',
+      });
+      print(task, flags, (row) => chalk.green(`  ✓ Cancelled ${row.id}`));
       return true;
     }
     if (subcommand === 'sweep') {

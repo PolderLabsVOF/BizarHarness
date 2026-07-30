@@ -116,6 +116,7 @@ function showHelp() {
     cost <subcommand>      Atomic cost gate (SQLite-backed room budget tracker)
     claim <subcommand>     GitHub-style claim protocol over feature_list.json
     task <subcommand>      Durable dependency/worktree/path task coordination
+    control <subcommand>   Machine-readable agents/tasks/sessions/messages API
 
   Examples:
     bizar install
@@ -390,6 +391,22 @@ async function main() {
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) {
         console.error(chalk.red(`  ✗ Usage: bizar task <subcommand> — run 'bizar task --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
+    case 'control': {
+      const mod = await importCommand('control');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load control command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'control');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar control <subcommand> — run 'bizar control --help'`));
         process.exit(EXIT_USAGE);
       }
       break;
