@@ -10,3 +10,4 @@
 - [Core feature audit, 2026-07-30](audits/core-feature-audit-2026-07-30.md)
 - [claude-codex-settings parity, 2026-07-30](audits/claude-codex-settings-parity-2026-07-30.md)
 - [Decision index](../DECISIONS.md)
+- [Repository cleanup audit, 2026-07-30](audits/repository-cleanup-2026-07-30.md)

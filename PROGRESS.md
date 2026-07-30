@@ -2,69 +2,54 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## Current State — F-116 Complete
+## In Progress — F-117 Repository Structure Cleanup
 
-**Objective achieved:** Audited every retained Bizar feature, removed the
-complete web control plane and Bizar note-vault/search system, and adapted the
-applicable autonomous/human-approval workflows from
-`fcakyon/claude-codex-settings`.
+**Objective:** Remove confirmed obsolete files, abandoned fixtures, generated
+residue, and package-boundary leaks while preserving every retained Claude Code
+harness behavior.
 
-**Authoritative upstream:** `fcakyon/claude-codex-settings` commit
-`39b67e9d244124a575d648364b19e85c510e48a8` (2026-07-29).
+### Behavior lock
 
-**Implementation commit:** `0f1090f` — `refactor: rebuild Bizar as a guarded
-Claude Code harness`.
+- `make check`: passed before cleanup.
+- `make test`: 298 SDK tests and 267 Node/CLI/hook/script tests passed.
+- `npm pack --dry-run`: baseline captured at 427 files; the package currently
+  leaks 29 test files and one stale literal-`${HOME}` memory path.
 
-### Completed implementation
+### Cleanup plan
 
-- Deleted the dashboard, local artifact editor, browser extensions/bookmarklet,
-  web-service/deployment plumbing, UI dependencies, application E2E suite, old
-  plugin compatibility package, and obsolete documentation.
-- Deleted the Bizar note-vault/search implementation, memory MCP tools, SDK
-  exports/dist artifacts, CLI/service commands, skills, settings, integrations,
-  tests, and stale ignored project state.
-- Added executable removal and SDK network-boundary checks.
-- Ported guarded Git/PR workflows, simplify-before-commit, content-style,
-  intelligent compaction, bounded advisor context, and local-only telemetry.
-- Updated Claude settings and provisioning for explicit ask/deny boundaries,
-  optional Auto policy, portable hooks, and the official agent-browser MCP.
-- Re-audited retained CLI/SDK/agent behavior and fixed current API/runtime drift:
-  CubeSandbox, agent-browser, provider setup, RCA, migration, runtime paths,
-  sprint parsing, schedule claims, agent identities, and generated SDK cleanup.
-- Added retained-feature and upstream-parity matrices under `docs/audits/`.
+1. Delete tracked dead paths with no retained references: the `fresh901` install
+   fixture, retired `bizar-plugins` registry, committed `.config` hook log,
+   project-local Serena config, obsolete Docker ignore file, root Skills CLI
+   lock, retired eval fixtures, and retired schedule templates.
+2. Remove local generated residue proven unrelated to source: literal `${HOME}`
+   trees, package tarballs, duplicate Skills CLI caches, old resume logs,
+   abandoned fixture dependencies, stale package-local runtime data, and
+   already-retired template remnants.
+3. Rewrite ignore/package boundaries around the current Claude Code harness;
+   eliminate Cline/Vite/dashboard/memory-era rules and prevent tests, local
+   state, duplicate skill mirrors, and source-only tooling from entering the
+   published package.
+4. Add executable repository/package structure regression checks before the
+   deletion pass, then run targeted validation after each smell category.
+5. Synchronize architecture, packaging, and cleanup documentation and close the
+   feature only after the full test, E2E, clean-state, audit, eval, and VCR gates.
 
-### Verification evidence
+### Fallback review
 
-- `make check`: passed.
-- `make test`: 298 SDK tests and 268 Node/CLI/hook/script tests passed.
-- `make e2e`: 10/10 core Claude Code integration checks passed.
-- `make clean-check`: 5/5 dimensions passed.
-- `make audit`: 10.0/10.0 across all 12 categories.
-- `make check-arch`: 3/3 executable architecture rules passed.
-- Removed-surface verifier: dashboard and Bizar note-vault/search surfaces absent.
-- Skill mirror: 65 canonical skills, 65 synchronized, 0 orphans.
-- Agent check: 16 unique agent identities, all shared-contract references valid.
+- Production masking fallbacks: none found in the cleanup scope.
+- `catch {}` findings are confined to test cleanup or fixtures that detect
+  swallowed errors; the test teardown is a grounded best-effort cleanup path.
+- Documentation mentioning model fallbacks is decision guidance, not an
+  alternate runtime path.
+- Escalation: none required; no ambiguous cross-layer fallback is being changed.
 
-### Sprint scoring — F-116
+### Explicit exclusions
 
-| Dimension             | Score | Evidence                                      |
-| --------------------- | ----- | --------------------------------------------- |
-| Correctness           | A     | Compile, unit/integration, and E2E gates green |
-| Arch compliance       | A     | `make check-arch` passed 3/3                  |
-| Test coverage         | A     | 566 tests plus 10 E2E checks passed           |
-| Verification evidence | A     | Commit `0f1090f` plus recorded gate output    |
-
-### Closure verification
-
-- `make eval-gate`: 37/37 retained features passed. Local JSONL pass rates are
-  enforced when present; clean checkouts use tracked commit-backed evidence.
-- `make vcr`: 37/37 = 1.000.
-- Post-ledger `make check`, `make clean-check`, `make audit`, `make check-arch`,
-  and the removed-surface verifier all passed.
-
-### Next Steps
-
-No active feature. Select a new `not_started` feature before further code work.
+- `research/` is user-owned comparative research and remains untouched.
+- Root `node_modules/`, `.omx/`, and current bounded `.bizar/` operational state
+  remain local runtime material, not cleanup targets during the active session.
+- No retained CLI, SDK, MCP, hook, agent, command, or skill behavior is in scope
+  for redesign.
 
 ### Blockers
 
