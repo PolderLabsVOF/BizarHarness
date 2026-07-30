@@ -6,7 +6,7 @@
  *
  * Architecture:
  *   - `bizar` is the core runtime plus installer, audit, init, export,
- *     update, guarded team/subagent, cost, and claim commands.
+ *     update, guarded team/subagent, cost, claim, and task commands.
  *   - Subcommand implementations are in `cli/commands/*.mjs`.
  */
 import chalk from 'chalk';
@@ -115,6 +115,7 @@ function showHelp() {
     rca                    Analyze a GitHub issue (Claude Code CLI sample)
     cost <subcommand>      Atomic cost gate (SQLite-backed room budget tracker)
     claim <subcommand>     GitHub-style claim protocol over feature_list.json
+    task <subcommand>      Durable dependency/worktree/path task coordination
 
   Examples:
     bizar install
@@ -373,6 +374,22 @@ async function main() {
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) {
         console.error(chalk.red(`  ✗ Usage: bizar claim <subcommand> — run 'bizar claim --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
+    case 'task': {
+      const mod = await importCommand('task');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load task command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'task');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar task <subcommand> — run 'bizar task --help'`));
         process.exit(EXIT_USAGE);
       }
       break;

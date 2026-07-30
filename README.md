@@ -35,10 +35,25 @@ Claude Code reads `.claude/settings.json`. `cli/provision.mjs` can copy agents, 
 | `.claude/commands/` | Slash-command workflows |
 | `.claude/hooks/` | Safety, HITL, lifecycle, routing, telemetry, and compaction hooks |
 | `packages/sdk/` | Agent registry, router, learning logs, federation, consensus, and MCP |
-| `cli/` | Installer, validator, backup, audit, cost/claim, sandbox, repair |
+| `cli/` | Installer, validator, backup, audit, cost/claim/task, sandbox, repair |
 | `scripts/` | Architecture, absence, E2E, feature, eval, and clean-state verification |
 
 The MCP tools are `plan_action`, `loop_start`, `loop_stop`, `loop_list`, `loop_status`, `graph_query`, `graph_path`, `list_instincts`, and `list_decisions`.
+
+## Parallel agent coordination
+
+Code-writing subagents run in isolated Git worktrees. `bizar task` stores a
+shared SQLite task graph under Git's common directory, so all worktrees observe
+the same dependencies, owners, path scopes, and expiring leases. The
+PreToolUse ownership hook denies edits outside the current task scope and edits
+to paths leased by sibling agents.
+
+```sh
+bizar task create sdk-change --title "Update SDK" --scope "packages/sdk/**"
+bizar task claim sdk-change --owner todd --workspace "$PWD"
+bizar task heartbeat sdk-change --owner todd
+bizar task complete sdk-change --owner todd --evidence "targeted tests passed"
+```
 
 ## Guarded autonomy
 

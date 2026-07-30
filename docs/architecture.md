@@ -19,6 +19,12 @@ only the installed dependency tree is linked from the main checkout. The
 designated Git integrator remains in the target checkout and serializes
 completed work rather than letting sibling agents merge concurrently.
 
+The task database defaults to `<git-common-dir>/bizar/tasks.sqlite`, which is
+shared by linked worktrees but remains outside tracked source. Atomic SQLite
+transactions guard dependency readiness, task claims, path-scope collisions,
+and lease recovery. A PreToolUse hook consults the same database before every
+Write/Edit/MultiEdit operation.
+
 ## Source and publication boundary
 
 `config/skills` is the canonical skill source; `.claude/skills` is a repository

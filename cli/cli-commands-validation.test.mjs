@@ -24,7 +24,7 @@ const ALL_COMMANDS = [
   // Own module
   'install', 'update', 'migrate', 'validate',
   'setup-provider', 'team', 'subagent', 'run',
-  'rca', 'sandbox', 'cost', 'claim',
+  'rca', 'sandbox', 'cost', 'claim', 'task',
 ];
 
 const NON_OWN_MODULE = new Set([

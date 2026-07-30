@@ -46,6 +46,22 @@ editable checkout, racing task claims, or integrating changes concurrently.
 - Targeted worktree policy tests pass 3/3; shared agent checks and hook tests
   also pass.
 
+### Durable task DAG status
+
+- Added a Git-common SQLite task database, so main and linked worktrees share
+  one coordination state without a daemon or network service.
+- Task creation records dependencies, exact/file-or-directory scopes,
+  priorities, artifacts, evidence, attempts, owners, workspaces, sessions, and
+  expiring leases.
+- Claims use immediate SQLite transactions; dependency-blocked and overlapping
+  path claims fail atomically.
+- Expired leases return tasks and scopes to the ready pool, and active owners
+  can renew through `bizar task heartbeat`.
+- The PreToolUse path guard denies out-of-scope edits from a task worktree and
+  same-path edits from the main or sibling checkout.
+- Targeted task/hook/CLI tests pass 9/9, including a real two-process scope
+  claim race; `make check` passes.
+
 ### Stop condition
 
 F-118 may move to `passing` only when two independent task workspaces can hold
@@ -70,7 +86,6 @@ can proceed safely.
 
 ### Next steps
 
-- Implement the dependency-aware task ledger and path ownership guard.
 - Implement the serialized integration queue after task behavior is locked.
 
 ## Complete — F-117 Repository Structure Cleanup

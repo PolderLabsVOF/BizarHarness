@@ -545,7 +545,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     },
     hooks: {
       PreToolUse: [
-        { matcher: 'Write|Edit|MultiEdit', hooks: [hook('pretooluse-editwrite.mjs', 30), hook('content-style-guard.mjs', 30)] },
+        { matcher: 'Write|Edit|MultiEdit', hooks: [hook('pretooluse-editwrite.mjs', 30), hook('path-ownership-guard.mjs', 30), hook('content-style-guard.mjs', 30)] },
         { matcher: 'Bash', hooks: [hook('pretooluse-bash.mjs', 30), hook('git-workflow-guard.mjs', 30), hook('content-style-guard.mjs', 30), hook('simplify-guard.mjs', 30)] },
       ],
       PostToolUse: [

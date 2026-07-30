@@ -61,6 +61,7 @@
     "PreToolUse": [
       { "matcher": "Write|Edit|MultiEdit", "hooks": [
         { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-editwrite.mjs\"", "timeout": 30 },
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/path-ownership-guard.mjs\"", "timeout": 30 },
         { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/content-style-guard.mjs\"", "timeout": 30 }
       ] },
       { "matcher": "Bash", "hooks": [
