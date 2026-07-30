@@ -2,10 +2,13 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — F-118 Collision-Free Parallel Execution
+## Complete — F-118 Collision-Free Parallel Execution
 
 **Objective:** Let multiple Claude Code agents collaborate without sharing an
 editable checkout, racing task claims, or integrating changes concurrently.
+
+**Implementation commits:** `10b5f0f`, `3d9e23b`, `c8572b8`, `26bdfc3`,
+`b5b3aef`
 
 ### Baseline
 
@@ -103,15 +106,29 @@ can proceed safely.
 
 ### Next steps
 
-- Provisioner hook ordering is repaired; the focused provisioner/worktree
-  regression set passes 14/14.
-- Direct review found that an expired task worktree could fall through to the
-  unclaimed-edit lane. The guard now denies expired, pending, completed, and
-  integrating task workspaces; linked worktrees require an active task; queued
-  scopes remain protected from main-checkout edits. Targeted regression tests
-  pass 16/16.
-- Rerun the full repository verification and adversarial review gates.
-- Close F-118 only after fresh evidence is recorded.
+No F-118 work remains. Select the next `not_started` feature before making
+further product changes.
+
+### Final verification
+
+- `make check`: passed.
+- `make test`: 298 SDK tests and 295 Node/CLI/hook/script tests passed.
+- `make e2e`: 10/10 checks passed.
+- `make check-arch`: 4/4 rules passed; 40 thinking skills verified.
+- `make clean-check`: 5/5 dimensions passed.
+- `make audit`: 10.0/10.0.
+- `make eval-gate`: 39/39 features passed.
+- `make verify-repo-structure`: passed.
+- `npm pack --dry-run`: 263 files, 460,308 bytes packed, 1,430,715 bytes
+  unpacked.
+
+### Remaining risks
+
+- The integration queue intentionally requires an explicit pass/fail decision;
+  stale integration supervision is a later roadmap item.
+- Remote/WebSocket transport, trajectory replay, checkpoint rollback, and
+  OpenTelemetry remain out of scope and are documented in the research
+  roadmap.
 
 ## Complete — F-117 Repository Structure Cleanup
 

@@ -463,15 +463,18 @@
       "id": "F-118",
       "behavior": "Run parallel editing agents in isolated worktrees, coordinate dependency-aware tasks with expiring path leases, and serialize completed work through a durable integration queue.",
       "verification": "worktree policy tests; task DAG and path-ownership tests; integration queue concurrency tests; make check; make test; make e2e; make check-arch; make clean-check",
-      "state": "active",
+      "state": "passing",
       "layer": "all",
       "category": "orchestration",
-      "created": "2026-07-30"
+      "created": "2026-07-30",
+      "evidence": "2026-07-30 collision-free parallel execution: editing agents use isolated worktrees; dependency-aware SQLite task claims, expiring path leases, edit-hook enforcement, and a single-consumer integration queue pass cross-process regression tests; make check, make test (298 SDK + 295 Node), make e2e (10/10), make check-arch (4/4), make clean-check (5/5), make audit (10.0/10.0), make eval-gate (39/39), and package verification passed (commit b5b3aef).",
+      "commit": "b5b3aef",
+      "passed": "2026-07-30"
     }
   ],
   "vcr": {
-    "passing": 38,
+    "passing": 39,
     "activated": 39,
-    "ratio": 0.974359
+    "ratio": 1
   }
 }
