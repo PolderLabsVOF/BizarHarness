@@ -1,7 +1,7 @@
 ---
 name: oscar
 description: Oscar — Knowledge Manager. Code search specialist using Semble. Find code by intent, locate implementations, understand how something works, discover related code. Prefer over Bash/Read/Grep for any semantic or exploratory question.
-tools: Read, Glob, Grep, WebFetch, Skill
+tools: Read, Glob, Grep, WebFetch, WebSearch, Skill
 model: bizar/MiniMax-M3
 ---
 

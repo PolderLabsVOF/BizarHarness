@@ -74,6 +74,7 @@ const REQUIRED_COMMANDS = [
 
 // v6.3.0 — Claude Code hook adapter scripts (executable, .mjs extension).
 const REQUIRED_HOOKS = [
+  'agent-grounding.mjs',
   'advisor-context.mjs',
   'content-style-guard.mjs',
   'git-workflow-guard.mjs',

@@ -113,6 +113,8 @@ test('SessionStart: startup source emits structured briefing', () => {
     assert.match(ctx, /Active feature: F-103/);
     assert.match(ctx, /rewrite sessionstart-prime/);
     assert.match(ctx, /WIP=1 honored/);
+    assert.match(ctx, /every request routes through Bizar agents/);
+    assert.match(ctx, /official docs via WebSearch\/WebFetch/);
     assert.match(ctx, /First move:/);
   } finally {
     rmSync(dir, { recursive: true, force: true });

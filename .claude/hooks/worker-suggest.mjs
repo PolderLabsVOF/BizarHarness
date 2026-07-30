@@ -4,10 +4,10 @@
  *
  * Bizar Background Workers — UserPromptSubmit hook.
  *
- * Runs on every user prompt. Calls `dispatch()` from cli/worker-dispatcher.mjs
- * to find Bizar skills/agents that should be suggested for the prompt text.
- * Emits suggestions to stderr (stdout is reserved for Claude Code's hook
- * protocol). Always exits 0 — this is a suggestion, not a gate.
+ * Runs on every user prompt. Injects the mandatory Bizar delegation policy,
+ * then calls `dispatch()` from cli/worker-dispatcher.mjs to add specialized
+ * skill/agent suggestions. Emits suggestions to stderr (stdout is reserved for
+ * Claude Code's hook protocol).
  *
  * Claude Code stdin shape (UserPromptSubmit):
  *   {
@@ -15,7 +15,7 @@
  *     "transcript_path": "...",
  *     "cwd": "...",
  *     "hook_event_name": "UserPromptSubmit",
- *     "user_prompt": "raw prompt text"
+ *     "prompt": "raw prompt text"
  *   }
  *
  * Claude Code stdout shape (hookSpecificOutput.additionalContext):
@@ -42,7 +42,7 @@ process.stdin.on('end', () => {
     input = {};
   }
 
-  const prompt = String(input.user_prompt || '').trim();
+  const prompt = String(input.prompt ?? input.user_prompt ?? '').trim();
 
   // Empty prompts get the silent treatment — the user has not yet
   // committed any intent.
@@ -57,6 +57,14 @@ process.stdin.on('end', () => {
     return;
   }
 
+  const routePolicy = [
+    'Mandatory Bizar routing policy:',
+    '- If this is the primary session, use the Agent tool to delegate the request to custom Bizar agent @mike before doing task analysis or implementation.',
+    '- @mike must route trivial work to @brenda and non-trivial work through the configured research, plan, implementation, review, and verification agents.',
+    '- Do not implement directly in the primary session.',
+    '- If you are already running as a Bizar custom agent, follow your assigned role and do not recursively dispatch yourself.',
+  ].join('\n');
+
   let suggestions;
   try {
     suggestions = dispatch(prompt, { maxSuggestions: 3 });
@@ -69,7 +77,7 @@ process.stdin.on('end', () => {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: '',
+        additionalContext: routePolicy,
       },
     }) + '\n');
     process.exit(0);
@@ -85,17 +93,17 @@ process.stdin.on('end', () => {
     );
   }
 
-  // Build additionalContext for the model so the next turn is primed.
-  let note;
-  if (suggestions.length === 0) {
-    note = '';
-  } else {
+  // Build additionalContext for the model so Bizar routing is mandatory even
+  // when no specialized worker pattern matches.
+  let note = routePolicy;
+  if (suggestions.length > 0) {
     const lines = suggestions.map((s) => {
       const skillPart = s.skill ? `, skill=${s.skill}` : '';
       const agentPart = s.agent ? `, agent=${s.agent}` : '';
       return `- ${s.workerId} (weight=${s.weight}${skillPart}${agentPart}) matched "${s.matchedPattern}"`;
     });
-    note =
+    note +=
+      '\n\n' +
       'Bizar workers suggest the following skills/agents for this prompt:\n' +
       lines.join('\n');
   }

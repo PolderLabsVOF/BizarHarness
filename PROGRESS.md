@@ -35,6 +35,26 @@ delegation context, every subagent receives official-documentation grounding,
 all shipped agents expose `WebSearch`, and regression plus full harness gates
 pass.
 
+### Implementation status
+
+- `worker-suggest.mjs` now emits mandatory `@mike` routing context for every
+  non-empty prompt, including unmatched prompts and dispatcher failures.
+- A new all-agent `SubagentStart` hook requires `WebSearch` plus `WebFetch`
+  against current official documentation before external integration work.
+- All 16 shipped agents reference the shared baseline and expose `WebSearch`;
+  the architecture gate now verifies both properties.
+- Project settings, generated settings, validation, session-start briefing,
+  E2E coverage, architecture docs, and DEC-014 are synchronized.
+- Targeted hook tests pass 18/18; provisioner tests pass 11/11;
+  `make check-arch` passes 5/5; `make check` passes.
+- `make test`: 298 SDK tests and 300 Node/CLI/hook/script tests passed.
+- `make e2e`: 11/11 checks passed.
+- `make clean-check`: 5/5 dimensions passed.
+
+### Blockers
+
+None.
+
 ## Complete — v10.9.0 Release
 
 **Objective:** Publish the completed core-harness rebuild, repository cleanup,

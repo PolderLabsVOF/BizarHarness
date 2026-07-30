@@ -184,7 +184,7 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
     }
   }
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
-  lines.push('- Rules: AGENT_BASELINE.md §4b thinking defaults active; WIP=1 honored.');
+  lines.push('- Rules: every request routes through Bizar agents; external APIs require current official docs via WebSearch/WebFetch; WIP=1 honored.');
   lines.push('- First move: confirm scope, then read PROGRESS.md and feature_list.json.');
   // Default-first-stop hint when nothing is active yet.
   if (featureBrief && featureBrief.active.length === 0) {

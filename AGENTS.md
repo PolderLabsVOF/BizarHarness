@@ -36,13 +36,29 @@ make session-end              # lifecycle compatibility target
 
 Clear, local, reversible work proceeds autonomously: inspect, edit, test, and iterate without permission handoffs. The project defaults to `acceptEdits`; eligible operators may opt into Claude Code Auto mode. PreToolUse hooks still deny prohibited actions and escalate externally visible or irreversible actions with `permissionDecision: "ask"`.
 
+Every non-empty primary request must use Claude Code's Agent tool to enter the
+Bizar agent pipeline through `office-manager` (`@mike`) before task analysis or
+implementation. Mike routes trivial work to `@brenda` and non-trivial work
+through the phased team. A session already running as a Bizar custom agent
+follows its assigned role and does not recursively dispatch itself.
+
+Every shipped agent has `WebSearch` access. Before proposing, explaining,
+troubleshooting, or implementing behavior from an external API, library,
+framework, CLI, configuration format, or version-sensitive dependency, the
+agent must WebSearch for current official documentation and WebFetch the exact
+relevant page. Guess-and-try integration work is prohibited. When official
+documentation is unavailable or ambiguous, inspect authoritative source code
+and report the evidence gap.
+
 For non-trivial requests, `office-manager` coordinates three ordered phases:
 
 1. Research: `greg` (`research-analyst.md`) plus an implementation-context specialist.
 2. Plan: `planner` drafts; `qa-reviewer` challenges assumptions and test shape.
 3. Implement: engineering agents edit and test; review and verification follow before `commit-staged` asks for the final human commit confirmation.
 
-Do not manufacture delegation authority. Use Claude Code's native Agent tool only when bounded parallel work materially improves the outcome.
+Use Claude Code's native Agent tool for Bizar routing on every request.
+Additional parallel fan-out remains bounded to scopes that materially improve
+speed, quality, or safety.
 
 ## Architecture
 

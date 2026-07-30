@@ -32,14 +32,29 @@ Prepare the exact command/action, scope, evidence, and rollback before requestin
 ## 4. Research and tool routing
 
 - Repository facts: Read/Grep/Glob/Semble and current tests.
-- External APIs or libraries: official documentation first.
+- External APIs, libraries, frameworks, CLIs, configuration formats, and
+  version-sensitive behavior: use WebSearch first to locate the current
+  official documentation, then WebFetch the exact relevant page before
+  proposing or attempting a solution.
+- Never guess an external API shape or use trial-and-error as a substitute for
+  documentation. If official docs are unavailable or ambiguous, inspect
+  authoritative source code, state the evidence gap, and qualify the result.
+- Handoffs and final reports identify the official documentation or source
+  evidence used. Purely repository-local facts use current files, tests, and
+  tool output instead of artificial web citations.
 - Ambiguous requests: inspect project context before asking.
 - Repeated failure: stop retrying variants; gather new evidence and revise the hypothesis.
 - Skills: load the applicable installed skill before following its workflow.
 
 ## 5. Agent coordination
 
-Work directly by default. Delegate only bounded independent scopes that improve speed, quality, or safety. Prompts must name ownership, deliverable, validation, sibling awareness, and escalation conditions. The leader integrates results and runs final verification.
+Every non-empty primary request enters the Bizar agent pipeline through `@mike`.
+Trivial work is delegated to `@brenda`; non-trivial work uses the configured
+research, planning, implementation, review, and verification roles. A Bizar
+subagent already executing its assigned role must not recursively dispatch
+itself.
+
+Prompts must name ownership, deliverable, validation, sibling awareness, and escalation conditions. The leader integrates results and runs final verification.
 
 ## 6. Implementation quality
 

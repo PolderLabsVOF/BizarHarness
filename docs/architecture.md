@@ -50,6 +50,21 @@ The MCP server exposes nine tools only: plan CRUD, loop state, graph query/path,
 
 Local reversible work is the autonomous lane. Hook precedence is used intentionally: deny beats ask, ask beats the permission mode's normal approval. Protected paths and dangerous commands are denied; external publication and irreversible actions ask the operator. Auto mode is optional and account/provider-dependent, not assumed by the harness.
 
+## Agent routing and evidence
+
+Every non-empty primary prompt receives `UserPromptSubmit` context requiring
+delegation through the custom `mike` agent. Mike routes trivial work to
+`brenda`; non-trivial work enters the phased research, plan, implementation,
+review, and verification pipeline. Specialized worker matches supplement this
+route but never replace it.
+
+Every `SubagentStart` receives a grounding contract: external APIs, libraries,
+frameworks, CLIs, configuration formats, and version-sensitive behavior require
+`WebSearch` for current official documentation followed by `WebFetch` of the
+exact relevant page. All shipped agents expose `WebSearch` and reference the
+shared baseline. `scripts/check-agents.mjs` and the `agent-grounding`
+architecture rule fail if either property drifts.
+
 ## Operational records
 
 Session lifecycle hooks write a bounded handoff and structured session record. Learning hooks maintain compact instinct and decision JSONL records. These files support continuation and routing only; there is no note CRUD, vault indexing, semantic search, or knowledge-base tool family.

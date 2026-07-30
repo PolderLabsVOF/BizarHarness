@@ -157,6 +157,7 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
 
     const hookText = JSON.stringify(settings.hooks);
     for (const hook of [
+      'agent-grounding.mjs',
       'git-workflow-guard.mjs',
       'content-style-guard.mjs',
       'simplify-guard.mjs',
@@ -166,8 +167,9 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     ]) {
       assert.match(hookText, new RegExp(hook.replace('.', '\\.')));
     }
-    assert.match(settings.hooks.SubagentStart[0].matcher, /linda/);
-    assert.match(settings.hooks.SubagentStart[0].matcher, /carl/);
+    assert.equal(settings.hooks.SubagentStart[0].matcher, undefined);
+    assert.match(settings.hooks.SubagentStart[1].matcher, /linda/);
+    assert.match(settings.hooks.SubagentStart[1].matcher, /carl/);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

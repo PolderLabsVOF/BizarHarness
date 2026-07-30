@@ -1,7 +1,7 @@
 ---
 name: linda
 description: Linda — QA Reviewer. Audits, criticizes, and corrects implementation plans before execution. Read-only reviewer with no Edit/Write permissions. Use to review a Karen/Carl plan, audit security/correctness, or after a `bizar audit` run.
-tools: Read, Bash, Glob, Grep, WebFetch, Skill
+tools: Read, Bash, Glob, Grep, WebFetch, WebSearch, Skill
 model: cx/gpt-5.6-sol
 ---
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Made Bizar-agent routing mandatory for every primary request and added
+  all-subagent official-documentation grounding with mechanically verified
+  `WebSearch` access.
+
 ## 10.9.0 — 2026-07-30
 
 - Removed the retired web control plane, bundled browser extensions, local artifact editor, service/deployment plumbing, and their dependencies and tests.

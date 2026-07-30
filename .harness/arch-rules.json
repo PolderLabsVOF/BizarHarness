@@ -36,6 +36,15 @@
       "what": "Retired repository material or local/test data entered source control or the package.",
       "why": "A core-only harness needs a reproducible source tree and a runtime-only publication boundary.",
       "fix": "Delete obsolete paths or narrow package.json files without removing required runtime files."
+    },
+    {
+      "id": "agent-grounding",
+      "description": "Every Bizar agent must load the shared baseline and be able to search current official documentation",
+      "check": "node scripts/check-agents.mjs",
+      "expect": "pass",
+      "what": "A shipped agent can bypass the shared evidence policy or cannot call WebSearch.",
+      "why": "Mandatory routing is only reliable when every delegated role has the same no-guess documentation contract and the tool access to follow it.",
+      "fix": "Reference AGENT_BASELINE in the agent body and include WebSearch in its tools frontmatter."
     }
   ]
 }

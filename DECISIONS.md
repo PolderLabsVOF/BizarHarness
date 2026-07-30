@@ -8,3 +8,4 @@
 | [DEC-011](docs/decisions/DEC-011-claude-code-migration.md) | Claude Code-native host and Agent SDK/MCP integration | Accepted |
 | [DEC-012](docs/decisions/DEC-012-core-only-guarded-autonomy.md) | Core-only architecture and human approval boundaries | Accepted |
 | [DEC-013](docs/decisions/DEC-013-collision-free-parallel-execution.md) | Worktree isolation, durable task leases, and serialized integration | Accepted |
+| [DEC-014](docs/decisions/DEC-014-mandatory-agent-grounding.md) | Mandatory Bizar routing and official-documentation grounding | Accepted |

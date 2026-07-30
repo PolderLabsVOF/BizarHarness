@@ -1,12 +1,12 @@
 /**
  * scripts/check-agents.mjs
  *
- * v10.7.0 — Verifies every agent file references the right shared docs.
+ * Verifies every agent file references the shared baseline and can search
+ * current official documentation.
  *
- * Fails (exit 1) if any shipped Bizar agent is missing the
- * AGENT_BASELINE or CLAUDE_TOOLS reference. This catches drift early —
- * an agent that doesn't reference the baseline doesn't get the
- * always-on rules at runtime.
+ * Fails (exit 1) if any shipped Bizar agent is missing AGENT_BASELINE or
+ * WebSearch access. This catches drift before an agent can bypass the
+ * always-on routing and documentation-grounding rules.
  *
  * Reads from `.claude/agents/` (canonical Claude Code location).
  * The legacy `config/agents/` tree was removed in F-107.
@@ -55,8 +55,11 @@ for (const file of AGENT_FILES) {
     if (writesCode && !NON_ISOLATED_WRITERS.has(file) && !isolated) {
       rows.push([file, 'NO ISOLATION', 'code-writing agents require isolation: worktree']);
       failed++;
-    } else if (!hasBaseline && !hasClaudeTools) {
-      rows.push([file, 'NO REFERENCE', 'needs AGENT_BASELINE or CLAUDE_TOOLS in body']);
+    } else if (!hasBaseline) {
+      rows.push([file, 'NO BASELINE', 'must reference AGENT_BASELINE']);
+      failed++;
+    } else if (!/\bWebSearch\b/.test(tools)) {
+      rows.push([file, 'NO WEBSEARCH', 'tools must include WebSearch']);
       failed++;
     } else {
       const refs = [
@@ -68,7 +71,7 @@ for (const file of AGENT_FILES) {
   }
 }
 
-console.log('\n  Agent → Shared-Docs reference check (v10.7.0)\n');
+console.log('\n  Agent grounding policy check\n');
 console.log('  ' + 'agent'.padEnd(24) + 'status'.padEnd(14) + 'references');
 console.log('  ' + '-'.repeat(60));
 for (const [file, status, refs] of rows) {
@@ -76,7 +79,7 @@ for (const [file, status, refs] of rows) {
 }
 console.log('');
 if (failed > 0) {
-  console.log(`  ✗ ${failed} agent(s) missing the AGENT_BASELINE/CLAUDE_TOOLS reference.\n`);
+  console.log(`  ✗ ${failed} agent(s) violate the baseline/WebSearch policy.\n`);
   process.exit(1);
 }
-console.log(`  ✓ All ${AGENT_FILES.length} agents have unique names and reference the shared docs.\n`);
+console.log(`  ✓ All ${AGENT_FILES.length} agents have unique names, baseline grounding, and WebSearch access.\n`);

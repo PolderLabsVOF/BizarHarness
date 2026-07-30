@@ -46,14 +46,27 @@ try {
 }
 
 const agents = readdirSync(join(ROOT, '.claude', 'agents')).filter((name) => name.endsWith('.md'));
-const agentNames = agents.map((file) => {
+const agentSources = agents.map((file) => {
   const source = readFileSync(join(ROOT, '.claude', 'agents', file), 'utf8');
-  return /^name:\s*([^\s]+)\s*$/m.exec(source)?.[1];
+  return { file, source, name: /^name:\s*([^\s]+)\s*$/m.exec(source)?.[1] };
 });
+const agentNames = agentSources.map(({ name }) => name);
 check(
   'shipped agents',
   agents.length === 16 && agentNames.every(Boolean) && new Set(agentNames).size === agents.length,
   `${agents.length} unique agent definitions`,
+);
+const ungroundedAgents = agentSources
+  .filter(({ source }) =>
+    !/^tools:\s*.*\bWebSearch\b.*$/m.test(source)
+    || !/AGENT_BASELINE|agent-baseline/i.test(source))
+  .map(({ file }) => file);
+check(
+  'agent documentation grounding',
+  ungroundedAgents.length === 0,
+  ungroundedAgents.length
+    ? `missing policy/tool: ${ungroundedAgents.join(', ')}`
+    : `${agents.length} agents have WebSearch + baseline`,
 );
 
 const canonicalSkills = readdirSync(join(ROOT, 'config', 'skills'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
@@ -61,6 +74,7 @@ const mirroredSkills = readdirSync(join(ROOT, '.claude', 'skills'), { withFileTy
 check('skill mirror', JSON.stringify(canonicalSkills) === JSON.stringify(mirroredSkills), `${canonicalSkills.length} canonical skills`);
 
 const requiredHooks = [
+  'agent-grounding.mjs',
   'advisor-context.mjs',
   'content-style-guard.mjs',
   'git-workflow-guard.mjs',
