@@ -2,24 +2,35 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — v10.9.0 Release
+## Complete — v10.9.0 Release
 
 **Objective:** Publish the completed core-harness rebuild, repository cleanup,
 and collision-free parallel execution work as GitHub release `v10.9.0`.
 
-### Release plan
+### Release contents
 
-1. Synchronize root package, SDK package, and SDK runtime version metadata.
-2. Convert the current changelog entry into dated `v10.9.0` release notes.
-3. Run the documented release gates and package dry-run.
-4. Commit the release metadata, tag the verified commit, push `master` and the
-   tag, then create and verify the GitHub release.
+- Root package, SDK package, and SDK runtime version metadata are synchronized
+  at `10.9.0`.
+- `CHANGELOG.md` contains dated notes for the retained-core rebuild, repository
+  cleanup, and collision-free agent collaboration.
+- The release tarball contains 263 files and reports version `10.9.0`.
+
+### Verification
+
+- `make verify-removed-surfaces`: passed.
+- `make check-arch`: 4/4 rules passed; 40 thinking skills verified.
+- `make test`: 298 SDK tests and 295 Node/CLI/hook/script tests passed.
+- `make e2e`: 10/10 checks passed.
+- `make clean-check`: 5/5 dimensions passed.
+- `make check`: passed.
+- `make verify-repo-structure`: passed.
+- `npm pack --dry-run`: 263 files, 460,308 bytes packed, 1,430,715 bytes
+  unpacked.
 
 ### Stop condition
 
-The release is complete when `origin/master` contains the release commit,
-remote tag `v10.9.0` resolves to that commit, and GitHub reports a published
-`v10.9.0` release.
+The verified release commit is the source of remote tag `v10.9.0` and the
+published GitHub release.
 
 ## Complete — F-118 Collision-Free Parallel Execution
 
