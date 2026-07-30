@@ -5,7 +5,7 @@
  * Or:  npm run test -- --test-path-pattern decisions
  */
 
-import { describe, test, expect, afterEach } from "vitest";
+import { describe, test, expect, afterEach, beforeAll } from "vitest";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -43,7 +43,7 @@ async function importFresh() {
 describe("decisions", () => {
   let helpers;
 
-  test.beforeAll(async () => {
+  beforeAll(async () => {
     helpers = await importFresh();
   });
 
@@ -127,7 +127,12 @@ describe("decisions", () => {
     // Isolated surrogate pair (invalid standalone UTF-8).
     const input = "hello \uD800 world";
     const out = datamark(input);
-    expect(out).not.toContain("\uD800");
+    expect(
+      Array.from(String(out)).some((char) => {
+        const code = char.charCodeAt(0);
+        return code >= 0xD800 && code <= 0xDFFF;
+      }),
+    ).toBe(false);
     expect(out).toContain("�");
   });
 });

@@ -163,20 +163,25 @@ function recordAgentInSwarmOn(
 }
 
 describe("SwarmTopologyRegistry — module-level helpers", () => {
+  beforeEach(() => {
+    swarmTopologyRegistry.reset();
+  });
+
+  afterEach(() => {
+    swarmTopologyRegistry.reset();
+  });
+
   test("initSwarm helper shares state with swarmTopologyRegistry", () => {
     const r = initSwarm({ swarmId: "shared" });
     expect(swarmTopologyRegistry.getSwarm(r.swarmId)).toBeDefined();
     expect(getSwarm(r.swarmId)?.swarmId).toBe("shared");
     expect(listSwarms().some((s) => s.swarmId === "shared")).toBe(true);
-    // cleanup
-    swarmTopologyRegistry.decommissionSwarm("shared");
   });
 
   test("recordAgentInSwarm helper reflects in swarmTopologyRegistry", () => {
     const r = initSwarm({ swarmId: "record-helper" });
     recordAgentInSwarm(r.swarmId, "agent-x");
     expect(swarmTopologyRegistry.getSwarm(r.swarmId)?.agentIds).toContain("agent-x");
-    swarmTopologyRegistry.decommissionSwarm(r.swarmId);
   });
 
   test("decommissionSwarm helper reflects in swarmTopologyRegistry", () => {

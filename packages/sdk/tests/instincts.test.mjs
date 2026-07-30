@@ -45,7 +45,7 @@ async function importFresh() {
 describe("instincts", () => {
   let helpers;
 
-  test.beforeAll(async () => {
+  beforeAll(async () => {
     helpers = await importFresh();
   });
 

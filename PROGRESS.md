@@ -11,6 +11,7 @@
 ### Baseline evidence (2026-07-30)
 
 - `make check` passes TypeScript with zero errors.
+- Baseline `make test` initially exposed test-isolation/API defects in `swarm-topology.test.ts`, `decisions.test.mjs`, and `instincts.test.mjs`, plus a Node 24 parallel test-runner deserialization failure. The retained-core gate is now stable: 315 SDK tests and 109 CLI tests pass, with the CLI suite serialized explicitly.
 - `feature_list.json` is malformed at HEAD because two adjacent `vcr` objects are missing a comma; repair is the first state change.
 - `PROGRESS.md` previously described an obsolete v8 dashboard rewrite and contradicted the active user objective.
 - Dashboard code and functionality are spread across `bizar-dash/`, root build/dev scripts, dashboard E2E tests, package dependencies, install/provision flows, Docker/deploy files, docs, feature state, bookmarklet/browser-extension integrations, and SDK/CLI references.

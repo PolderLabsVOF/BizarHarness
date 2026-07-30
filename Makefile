@@ -39,7 +39,7 @@ test:  ## Run all unit tests (sdk + cli)
 		echo "(bun not found — falling back to vitest via npm)"; \
 		node_modules/.bin/vitest run --root packages/sdk; \
 	fi
-	@node --test cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/__tests__/cost-gate.test.mjs cli/__tests__/feature-list-bridge.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs 2>&1 | tail -5
+	@node --test --test-concurrency=1 cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/__tests__/cost-gate.test.mjs cli/__tests__/feature-list-bridge.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs
 
 e2e:  ## End-to-end tests (SDK + Claude Code integration)
 	@echo "▶ E2E: SDK load + tool registration..."
