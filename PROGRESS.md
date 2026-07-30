@@ -2,11 +2,13 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — F-120 OpenKan Control Plane Integration
+## Complete — F-120 OpenKan Control Plane Integration
 
 **Objective:** Expose Bizar agents, durable tasks, Claude Code sessions, and
 cross-agent messages through OpenKan without restoring the retired Bizar web
 dashboard or memory subsystem.
+
+**Implementation commit:** `8f606ff`
 
 ### Baseline
 
@@ -57,7 +59,8 @@ green.
   and messages without an error overlay; npm audit reports zero vulnerabilities.
 - Bizar: 298 SDK and 307 Node tests passed; targeted control/task tests passed
   11/11; E2E passed 13/13; architecture passed 5/5; clean-state passed 5/5;
-  TypeScript check passed.
+  TypeScript check passed; audit scored 10.0/10.0; eval gate and VCR passed
+  41/41.
 
 ### Blockers
 

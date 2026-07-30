@@ -487,15 +487,18 @@
       "id": "F-120",
       "behavior": "Expose Bizar agents, durable tasks, Claude Code sessions, and cross-agent messages through OpenKan with a CLI-backed WebSocket control plane.",
       "verification": "control CLI and inbox tests; OpenKan adapter/API/WebSocket/UI tests; make check; make test; make e2e; make check-arch; make clean-check",
-      "state": "active",
+      "state": "passing",
+      "evidence": "2026-07-30 OpenKan control plane: Bizar targeted control/task tests 11/11, 298 SDK + 307 Node tests, E2E 13/13, architecture 5/5, clean-state 5/5, and make check passed; OpenKan 346 tests, sanity check, E2E 5/5, browser rendering, and zero-vulnerability npm audit passed (Bizar commit 8f606ff; OpenKan commit 0ef6c76).",
+      "commit": "8f606ff",
       "layer": "all",
       "category": "integration",
-      "created": "2026-07-30"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     }
   ],
   "vcr": {
-    "passing": 40,
+    "passing": 41,
     "activated": 41,
-    "ratio": 0.9756
+    "ratio": 1
   }
 }

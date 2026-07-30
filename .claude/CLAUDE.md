@@ -11,7 +11,7 @@
 ---
 
 
-Bizar Harness is a Claude Code-native, guarded-autonomy harness. It ships project and user-level agents, skills, slash commands, hooks, an MCP server, CLI utilities, and verification scripts. It has no web control plane and no Bizar note-vault subsystem.
+Bizar Harness is a Claude Code-native, guarded-autonomy harness. It ships project and user-level agents, skills, slash commands, hooks, an MCP server, CLI utilities, and verification scripts. It has no embedded web control plane and no Bizar note-vault subsystem; OpenKan can consume the explicit `bizar control` CLI boundary as an optional external UI.
 
 If you are an agent: read this file, read `PROGRESS.md`, inspect `feature_list.json`, then run `make check` before changing code.
 
@@ -78,10 +78,15 @@ speed, quality, or safety.
 - `.claude/commands/` — user-invoked workflows.
 - `.claude/hooks/` + `.claude/settings.json` — safety, routing, lifecycle, telemetry, compaction, reviewer-context, simplify, and HITL gates.
 - `packages/sdk/` — typed autonomy primitives and the nine-tool stdio MCP surface: plans, loops, graph queries, instincts, and decisions.
-- `cli/` — install/provision, audit, validation, backup, cost/claim, sandbox, and repair utilities.
+- `cli/` — install/provision, audit, validation, backup, cost/claim/task, OpenKan control, sandbox, and repair utilities.
 - `scripts/` + `.harness/` + `templates/` — verification, feature/eval state, audit output, and reusable contracts.
 
-The harness has no browser/server UI layer or local web editor. Session handoff and learning logs are bounded operational records for autonomy; they are not a general note vault, semantic search service, or knowledge-base API.
+The harness has no embedded browser/server UI layer or local web editor.
+`bizar control` is a machine-readable subprocess boundary for optional OpenKan
+integration; OpenKan owns HTTP, WebSocket, and presentation concerns. Session
+handoff, control inbox, and learning logs are bounded operational records for
+autonomy; they are not a general note vault, semantic search service, or
+knowledge-base API.
 
 ## State and evidence
 

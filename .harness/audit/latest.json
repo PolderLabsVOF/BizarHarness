@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T13:03:46.047Z",
+  "generatedAt": "2026-07-30T13:45:40.696Z",
   "scope": "Claude Code core harness (dashboard and Bizar note-vault excluded and prohibited)",
   "categories": {
     "typecheck": {
@@ -28,7 +28,7 @@
     },
     "featureListState": {
       "score": 10,
-      "evidence": "40 retained features have machine-readable state."
+      "evidence": "41 retained features have machine-readable state."
     },
     "cleanState": {
       "score": 10,
