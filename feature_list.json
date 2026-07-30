@@ -458,11 +458,20 @@
       "evidence": "2026-07-30 repository cleanup: obsolete fixtures/config/templates and 448 MB local residue removed; package reduced from 427 to 259 files; make check, make test (298 SDK + 276 Node), make e2e (10/10), make clean-check (5/5), make check-arch (4/4), live Podman verification, make eval-gate (38/38), make audit (10.0/10.0), and repository/package verification passed (commit c42b04e).",
       "commit": "c42b04e",
       "passed": "2026-07-30"
+    },
+    {
+      "id": "F-118",
+      "behavior": "Run parallel editing agents in isolated worktrees, coordinate dependency-aware tasks with expiring path leases, and serialize completed work through a durable integration queue.",
+      "verification": "worktree policy tests; task DAG and path-ownership tests; integration queue concurrency tests; make check; make test; make e2e; make check-arch; make clean-check",
+      "state": "active",
+      "layer": "all",
+      "category": "orchestration",
+      "created": "2026-07-30"
     }
   ],
   "vcr": {
     "passing": 38,
-    "activated": 38,
-    "ratio": 1
+    "activated": 39,
+    "ratio": 0.974359
   }
 }

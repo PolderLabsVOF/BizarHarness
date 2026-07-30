@@ -11,3 +11,4 @@
 - [claude-codex-settings parity, 2026-07-30](audits/claude-codex-settings-parity-2026-07-30.md)
 - [Decision index](../DECISIONS.md)
 - [Repository cleanup audit, 2026-07-30](audits/repository-cleanup-2026-07-30.md)
+- [Agent harness comparison and roadmap, 2026-07-30](audits/agent-harness-roadmap-2026-07-30.md)

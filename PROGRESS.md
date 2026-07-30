@@ -2,6 +2,62 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-118 Collision-Free Parallel Execution
+
+**Objective:** Let multiple Claude Code agents collaborate without sharing an
+editable checkout, racing task claims, or integrating changes concurrently.
+
+### Baseline
+
+- `make check`: passed before implementation.
+- No feature was active before F-118.
+- The current `/team` protocol relies on manually disjoint scopes.
+- Editing agents do not declare permanent worktree isolation.
+- `feature_list.json` claims are feature-specific and do not model a general
+  dependency graph, workspace lease, path ownership, or integration queue.
+
+### Implementation plan
+
+1. Make worktree isolation the default for code-writing subagents, configure
+   worktrees to branch from the current `HEAD`, bootstrap shared dependencies
+   safely, and verify the policy mechanically.
+2. Add a SQLite-backed task DAG with atomic dependency-aware claims, expiring
+   leases, worktree ownership, conservative path-scope collision detection, and
+   a PreToolUse edit guard.
+3. Add a serialized integration queue that accepts verified task commits,
+   permits one active integrator at a time, and routes failed integration back
+   to the owning task without performing unapproved Git publication actions.
+4. Document the comparative harness research and retained design boundaries.
+5. Run targeted regression tests, then `make check`, `make test`, `make e2e`,
+   `make check-arch`, `make clean-check`, `make audit`, and `make eval-gate`.
+
+### Stop condition
+
+F-118 may move to `passing` only when two independent task workspaces can hold
+non-overlapping claims concurrently, overlapping scopes are rejected, blocked
+dependencies cannot be claimed, expired leases are recoverable, and the
+integration queue proves single-consumer ordering.
+
+### Explicit exclusions
+
+- No dashboard, note vault, semantic memory, persistent web service, or
+  WebSocket transport.
+- No automatic merge, rebase, push, or publication bypassing existing human
+  approval policy.
+- No replacement of Claude Code's native Agent, worktree, or SendMessage
+  surfaces.
+
+### Blockers
+
+OMX Ralplan preflight returned `unsupported_documented_leader_proof`, so the
+unsupported consensus/delegation lane is not being used. Direct implementation
+can proceed safely.
+
+### Next steps
+
+- Commit the F-118 planning/research checkpoint.
+- Add behavior-locking tests before each runtime implementation pass.
+
 ## Complete — F-117 Repository Structure Cleanup
 
 **Objective:** Remove confirmed obsolete files, abandoned fixtures, generated
