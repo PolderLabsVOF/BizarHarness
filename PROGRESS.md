@@ -2,6 +2,25 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — v10.9.0 Release
+
+**Objective:** Publish the completed core-harness rebuild, repository cleanup,
+and collision-free parallel execution work as GitHub release `v10.9.0`.
+
+### Release plan
+
+1. Synchronize root package, SDK package, and SDK runtime version metadata.
+2. Convert the current changelog entry into dated `v10.9.0` release notes.
+3. Run the documented release gates and package dry-run.
+4. Commit the release metadata, tag the verified commit, push `master` and the
+   tag, then create and verify the GitHub release.
+
+### Stop condition
+
+The release is complete when `origin/master` contains the release commit,
+remote tag `v10.9.0` resolves to that commit, and GitHub reports a published
+`v10.9.0` release.
+
 ## Complete — F-118 Collision-Free Parallel Execution
 
 **Objective:** Let multiple Claude Code agents collaborate without sharing an
