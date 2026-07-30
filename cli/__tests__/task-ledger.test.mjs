@@ -199,6 +199,62 @@ describe('durable task DAG', () => {
       filePath: join(main, 'src', 'index.ts'),
     }).reason, 'SCOPE_OWNED');
   });
+
+  test('expired and non-active worktrees cannot continue editing', () => {
+    const { root, ledger, advance } = fixture();
+    const main = join(root, 'main');
+    const isolated = join(root, 'isolated');
+    mkdirSync(join(main, 'src'), { recursive: true });
+    mkdirSync(join(isolated, 'src'), { recursive: true });
+
+    ledger.createTask({ id: 'source', title: 'Source', scopes: ['src/**'] });
+    ledger.claimTask({
+      taskId: 'source',
+      owner: 'todd',
+      workspace: isolated,
+      leaseMs: 1_000,
+    });
+    advance(1_001);
+
+    assert.equal(ledger.authorizeEdit({
+      cwd: isolated,
+      filePath: join(isolated, 'src', 'index.ts'),
+      requireTask: true,
+    }).reason, 'LEASE_EXPIRED');
+
+    ledger.sweepExpiredLeases();
+    assert.equal(ledger.authorizeEdit({
+      cwd: isolated,
+      filePath: join(isolated, 'src', 'index.ts'),
+      requireTask: true,
+    }).reason, 'TASK_NOT_EDITABLE');
+  });
+
+  test('linked worktree edits require a task and completed scopes stay reserved', () => {
+    const { root, ledger } = fixture();
+    const main = join(root, 'main');
+    const unclaimed = join(root, 'unclaimed');
+    const completed = join(root, 'completed');
+    mkdirSync(join(main, 'src'), { recursive: true });
+    mkdirSync(join(unclaimed, 'src'), { recursive: true });
+    mkdirSync(join(completed, 'src'), { recursive: true });
+
+    assert.equal(ledger.authorizeEdit({
+      cwd: unclaimed,
+      filePath: join(unclaimed, 'src', 'index.ts'),
+      requireTask: true,
+    }).reason, 'TASK_REQUIRED');
+
+    ledger.createTask({ id: 'done', title: 'Done', scopes: ['src/**'] });
+    ledger.claimTask({ taskId: 'done', owner: 'todd', workspace: completed });
+    ledger.completeTask({ taskId: 'done', owner: 'todd', evidence: 'tests pass' });
+
+    assert.equal(ledger.authorizeEdit({
+      cwd: main,
+      repoRoot: main,
+      filePath: join(main, 'src', 'index.ts'),
+    }).reason, 'SCOPE_OWNED');
+  });
 });
 
 describe('serialized integration queue', () => {

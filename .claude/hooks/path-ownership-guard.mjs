@@ -37,14 +37,29 @@ process.stdin.on('end', () => {
     cwd,
     encoding: 'utf8',
   });
+  const worktrees = spawnSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd,
+    encoding: 'utf8',
+  });
   const repoRoot = top.status === 0 && top.stdout.trim()
     ? resolve(top.stdout.trim())
     : cwd;
+  const mainWorktree = worktrees.status === 0
+    ? /^worktree (.+)$/m.exec(worktrees.stdout)?.[1]
+    : null;
+  const requireTask = Boolean(
+    mainWorktree && resolve(mainWorktree) !== repoRoot,
+  );
 
   let ledger;
   try {
     ledger = new TaskLedger({ dbPath });
-    const authorization = ledger.authorizeEdit({ cwd, filePath, repoRoot });
+    const authorization = ledger.authorizeEdit({
+      cwd,
+      filePath,
+      repoRoot,
+      requireTask,
+    });
     if (!authorization.allowed) {
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {

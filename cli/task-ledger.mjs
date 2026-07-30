@@ -365,7 +365,7 @@ export class TaskLedger {
     const reset = this.db.prepare(
       `UPDATE tasks
        SET state = 'pending', owner = NULL, owner_session_id = NULL,
-           workspace = NULL, lease_expires_at = NULL, blocker = NULL,
+           lease_expires_at = NULL, blocker = NULL,
            updated_at = ?
        WHERE id = ?`,
     );
@@ -712,21 +712,45 @@ export class TaskLedger {
     return transaction.immediate();
   }
 
-  authorizeEdit({ cwd, filePath, repoRoot }) {
+  authorizeEdit({ cwd, filePath, repoRoot, requireTask = false }) {
     const now = this.now();
     const workingDirectory = resolve(requireText(cwd, 'cwd'));
     const absoluteFile = resolve(workingDirectory, requireText(filePath, 'filePath'));
-    const live = this.db.prepare(
+    const assigned = this.db.prepare(
       `SELECT * FROM tasks
-       WHERE state = 'active'
-         AND lease_expires_at IS NOT NULL
-         AND lease_expires_at > ?
-       ORDER BY length(workspace) DESC`,
-    ).all(now).map((row) => this._serialize(row));
+       WHERE workspace IS NOT NULL
+         AND state IN ('pending','active','blocked','completed','integrating')
+       ORDER BY
+         CASE state
+           WHEN 'active' THEN 0
+           WHEN 'integrating' THEN 1
+           WHEN 'completed' THEN 2
+           WHEN 'blocked' THEN 3
+           ELSE 4
+         END,
+         updated_at DESC,
+         length(workspace) DESC`,
+    ).all().map((row) => this._serialize(row));
 
-    const current = live.find((task) =>
+    const current = assigned.find((task) =>
       task.workspace && pathInside(resolve(task.workspace), workingDirectory));
     if (current) {
+      if (current.state !== 'active') {
+        return {
+          allowed: false,
+          reason: 'TASK_NOT_EDITABLE',
+          taskId: current.id,
+          state: current.state,
+        };
+      }
+      if (!current.leaseExpiresAt || current.leaseExpiresAt <= now) {
+        return {
+          allowed: false,
+          reason: 'LEASE_EXPIRED',
+          taskId: current.id,
+          leaseExpiresAt: current.leaseExpiresAt,
+        };
+      }
       if (!pathInside(resolve(current.workspace), absoluteFile)) {
         return {
           allowed: false,
@@ -748,10 +772,20 @@ export class TaskLedger {
           };
     }
 
+    const reserved = this.db.prepare(
+      `SELECT * FROM tasks
+       WHERE state IN ('completed','integrating')
+          OR (
+            state = 'active'
+            AND lease_expires_at IS NOT NULL
+            AND lease_expires_at > ?
+          )
+       ORDER BY updated_at DESC`,
+    ).all(now).map((row) => this._serialize(row));
     const root = resolve(repoRoot || workingDirectory);
     if (!pathInside(root, absoluteFile)) return { allowed: true };
     const relativePath = normalizeRelativePath(relative(root, absoluteFile));
-    const owner = live.find((task) =>
+    const owner = reserved.find((task) =>
       relativePath && task.scopes.some((scope) => scopeContains(scope, relativePath)));
     if (owner) {
       return {
@@ -760,6 +794,13 @@ export class TaskLedger {
         taskId: owner.id,
         owner: owner.owner,
         workspace: owner.workspace,
+        path: relativePath,
+      };
+    }
+    if (requireTask) {
+      return {
+        allowed: false,
+        reason: 'TASK_REQUIRED',
         path: relativePath,
       };
     }

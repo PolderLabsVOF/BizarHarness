@@ -105,6 +105,11 @@ can proceed safely.
 
 - Provisioner hook ordering is repaired; the focused provisioner/worktree
   regression set passes 14/14.
+- Direct review found that an expired task worktree could fall through to the
+  unclaimed-edit lane. The guard now denies expired, pending, completed, and
+  integrating task workspaces; linked worktrees require an active task; queued
+  scopes remain protected from main-checkout edits. Targeted regression tests
+  pass 16/16.
 - Rerun the full repository verification and adversarial review gates.
 - Close F-118 only after fresh evidence is recorded.
 
