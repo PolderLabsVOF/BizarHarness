@@ -31,6 +31,21 @@ editable checkout, racing task claims, or integrating changes concurrently.
 5. Run targeted regression tests, then `make check`, `make test`, `make e2e`,
    `make check-arch`, `make clean-check`, `make audit`, and `make eval-gate`.
 
+### Worktree isolation status
+
+- Added behavior-locking tests for isolated editing agents, `HEAD`-based
+  worktrees, bootstrap hook registration, and dependency linking from a real
+  linked Git worktree.
+- All ordinary code-writing subagents now declare `isolation: worktree`; the IT
+  lead remains the intentional non-isolated integration owner.
+- Worktree bootstrap now recognizes linked-worktree `.git` files, resolves the
+  main checkout correctly, and shares only `node_modules`. Mutable build output
+  and runtime state remain isolated.
+- Project settings and the provisioner configure `worktree.baseRef: head` and a
+  bounded cleanup period.
+- Targeted worktree policy tests pass 3/3; shared agent checks and hook tests
+  also pass.
+
 ### Stop condition
 
 F-118 may move to `passing` only when two independent task workspaces can hold
@@ -55,8 +70,8 @@ can proceed safely.
 
 ### Next steps
 
-- Commit the F-118 planning/research checkpoint.
-- Add behavior-locking tests before each runtime implementation pass.
+- Implement the dependency-aware task ledger and path ownership guard.
+- Implement the serialized integration queue after task behavior is locked.
 
 ## Complete — F-117 Repository Structure Cleanup
 

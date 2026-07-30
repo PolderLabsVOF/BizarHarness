@@ -11,6 +11,14 @@ Claude Code is the host. Native Agent, Skill, command, permission, and hook surf
 3. **Integration:** `.claude/settings.json` launches the SDK's stdio MCP server directly.
 4. **Operations:** `cli`, `scripts`, `.harness`, and `templates` install, validate, audit, back up, and verify the harness.
 
+## Parallel execution boundary
+
+Code-writing subagents declare `isolation: worktree` and branch from the
+leader's current `HEAD`. Their source trees and build outputs are independent;
+only the installed dependency tree is linked from the main checkout. The
+designated Git integrator remains in the target checkout and serializes
+completed work rather than letting sibling agents merge concurrently.
+
 ## Source and publication boundary
 
 `config/skills` is the canonical skill source; `.claude/skills` is a repository

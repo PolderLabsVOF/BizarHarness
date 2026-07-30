@@ -530,6 +530,10 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       ],
     },
     attribution: { commit: '', pr: '' },
+    worktree: {
+      baseRef: 'head',
+      cleanupPeriodDays: 7,
+    },
     enableWorkflows: true,
     alwaysThinkingEnabled: true,
     autoDreamEnabled: true,
@@ -557,7 +561,10 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       SessionStart: [{ hooks: [hook('sessionstart-prime.mjs'), hook('telemetry.mjs', 10)] }],
       SessionEnd: [{ hooks: [hook('sessionend-recall.mjs'), hook('learning-extract.mjs')] }],
       PreCompact: [{ matcher: '*', hooks: [hook('precompact-priorities.sh', 15, 'bash')] }],
-      SubagentStart: [{ matcher: '^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$', hooks: [hook('advisor-context.mjs')] }],
+      SubagentStart: [
+        { matcher: '^(brad|carl|pam|brenda|karen|todd|ria)$', hooks: [hook('worktree-bootstrap.mjs', 30)] },
+        { matcher: '^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$', hooks: [hook('advisor-context.mjs')] },
+      ],
     },
   };
 
@@ -576,6 +583,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     merged.hooks = { ...(existing.hooks || {}), ...bizarSettings.hooks };
     merged.autoMode = existing.autoMode || bizarSettings.autoMode;
     merged.attribution = existing.attribution || bizarSettings.attribution;
+    merged.worktree = { ...(bizarSettings.worktree || {}), ...(existing.worktree || {}) };
     for (const key of ['enableWorkflows', 'alwaysThinkingEnabled', 'autoDreamEnabled', 'showThinkingSummaries']) {
       if (merged[key] === undefined) merged[key] = bizarSettings[key];
     }

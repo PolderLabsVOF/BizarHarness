@@ -26,6 +26,7 @@ const AGENT_FILES = readdirSync(agentsDir)
 let failed = 0;
 const rows = [];
 const names = new Map();
+const NON_ISOLATED_WRITERS = new Set(['it-lead.md']);
 
 for (const file of AGENT_FILES) {
   const path = join(agentsDir, file);
@@ -40,6 +41,9 @@ for (const file of AGENT_FILES) {
   const hasBaseline = /AGENT_BASELINE|agent-baseline/i.test(text);
   const hasClaudeTools = /CLAUDE_TOOLS/i.test(text);
   const name = /^name:\s*([^\s]+)\s*$/m.exec(text)?.[1];
+  const tools = /^tools:\s*(.+)$/m.exec(text)?.[1] || '';
+  const writesCode = /\b(?:Edit|Write)\b/.test(tools);
+  const isolated = /^isolation:\s*worktree\s*$/m.test(text);
   if (!name) {
     rows.push([file, 'NO NAME', 'frontmatter name is required']);
     failed++;
@@ -48,7 +52,10 @@ for (const file of AGENT_FILES) {
     failed++;
   } else {
     names.set(name, file);
-    if (!hasBaseline && !hasClaudeTools) {
+    if (writesCode && !NON_ISOLATED_WRITERS.has(file) && !isolated) {
+      rows.push([file, 'NO ISOLATION', 'code-writing agents require isolation: worktree']);
+      failed++;
+    } else if (!hasBaseline && !hasClaudeTools) {
       rows.push([file, 'NO REFERENCE', 'needs AGENT_BASELINE or CLAUDE_TOOLS in body']);
       failed++;
     } else {

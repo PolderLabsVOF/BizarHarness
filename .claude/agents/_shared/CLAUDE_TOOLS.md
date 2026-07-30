@@ -384,7 +384,9 @@ agent needs them:
 - **`TaskStop`** — stop a background `Agent` that's looping, stalling, or no longer relevant.
 - **`TodoWrite`** — track a multi-step plan in the agent's scratchpad. Use 3-7 items max; refine as you go.
 - **`NotebookEdit`** — edit Jupyter notebook cells. Rarely needed outside data work.
-- **`EnterWorktree` / `ExitWorktree`** — git worktree isolation. Only when explicitly requested.
+- **`EnterWorktree` / `ExitWorktree`** — git worktree isolation. Bizar's
+  code-writing subagents use `isolation: worktree` by default; use these tools
+  directly when an additional isolated session is explicitly needed.
 - **`WebSearch`** — covered above.
 
 These are documented at https://code.claude.com/docs/en/agent-sdk/overview.
