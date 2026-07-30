@@ -50,6 +50,7 @@ The Git workflow hook denies force-push, rebase, unsupported commit subjects, an
 
 ```sh
 make verify-removed-surfaces
+make verify-repo-structure
 make check-arch
 make test
 make e2e
@@ -57,7 +58,10 @@ make clean-check
 make check
 ```
 
-See [the documentation index](docs/INDEX.md), [architecture](docs/architecture.md), [core feature audit](docs/audits/core-feature-audit-2026-07-30.md), and [upstream parity matrix](docs/audits/claude-codex-settings-parity-2026-07-30.md).
+The root package uses a runtime-only allowlist: no test files, local state,
+duplicate skill mirror, or source-only fixture is published.
+
+See [the documentation index](docs/INDEX.md), [architecture](docs/architecture.md), [core feature audit](docs/audits/core-feature-audit-2026-07-30.md), [repository cleanup audit](docs/audits/repository-cleanup-2026-07-30.md), and [upstream parity matrix](docs/audits/claude-codex-settings-parity-2026-07-30.md).
 
 ## License
 

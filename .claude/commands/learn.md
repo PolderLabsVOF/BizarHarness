@@ -12,13 +12,15 @@ decisions that have been recorded, then ask the user what to do.
 
 - Instinct log: `.bizar/learning/instincts.jsonl` (or via SDK: `listInstincts()`)
 - Decisions log: `.bizar/learning/decisions.jsonl` (or via SDK: `listDecisions()`)
-- Session traces: `.harness/traces/sessions.jsonl`
+- Session outcomes: `.bizar/sessions/*.md`
+- Rejected-action feedback: `~/.config/bizar/telemetry/reject-feedback.jsonl`
 
 ## Process
 
 1. Read recent instincts (`listInstincts()` or read the JSONL directly).
 2. Read recent decisions (`listDecisions()` or read the JSONL directly).
-3. Read `.harness/traces/sessions.jsonl` for recent session outcomes.
+3. Read recent `.bizar/sessions/*.md` outcomes and local rejected-action
+   feedback when those files exist.
 4. Ask the user one question per category via `AskUserQuestion`:
 
    a) **New instinct?** — "You ran `make check` N times. Save a low-confidence

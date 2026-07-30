@@ -29,7 +29,7 @@ process.stdin.on('end', () => {
   // `packages/sdk/src/dangerous-patterns.ts` — kept inline so this hook
   // works without importing the SDK at runtime.
   // For the `rm` family, the path argument must be EXACTLY the dangerous
-  // root — not a prefix of a deeper path. `/home/drb0rk/projects/foo.mjs`
+  // root — not a prefix of a deeper path. `/home/user/projects/foo.mjs`
   // is a legitimate delete, not "wipe home directory". The old patterns
   // matched any path STARTING with `/home` and so blocked every file
   // delete under the project root (false positive).

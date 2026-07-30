@@ -87,6 +87,12 @@ describe('install marker (installed.json)', () => {
   });
 });
 
+test('provisioner reports the root package version', async () => {
+  const { BIZAR_VERSION, REPO_ROOT } = await import('./provision.mjs');
+  const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
+  assert.equal(BIZAR_VERSION, pkg.version);
+});
+
 describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
   let home;
 

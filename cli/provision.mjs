@@ -2,7 +2,7 @@
 /**
  * cli/provision.mjs
  *
- * v10.0.0 — Unified installer + updater (Claude Code-native).
+ * Unified installer + updater (Claude Code-native).
  *
  * `bizar install` and `bizar update` are the same code path with
  * different `mode` flags. Both are idempotent and safe to re-run.
@@ -39,6 +39,13 @@ const HOME = homedir();
 // Repo root = `<pkg>/cli/provision.mjs` → one level up.
 export const REPO_ROOT = resolve(__dirname, '..');
 export const PKG_MAIN = '@polderlabs/bizar';
+export const BIZAR_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')).version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
 
@@ -679,7 +686,7 @@ export async function runProvision(opts = {}) {
   const effectiveMode = mode === 'update' ? 'update' : 'install';
 
   console.log('');
-  console.log(chalk.bold.cyan('  ⚡ BizarHarness Provisioner v10.0.0 (Claude Code)'));
+  console.log(chalk.bold.cyan(`  ⚡ BizarHarness Provisioner v${BIZAR_VERSION} (Claude Code)`));
   console.log(chalk.dim(`     Mode: ${effectiveMode}${force ? ' (force)' : ''}${dryRun ? ' (dry-run)' : ''}`));
   console.log('');
 
@@ -904,7 +911,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-// Back-compat alias — v10.0.0 historical API. 'bizar update' historically
+// Back-compat alias — `bizar update` historically
 // called `runUpdate(args)`; we collapsed install + update onto
 // `runProvision({ mode: 'update', ... })`. Keep `runUpdate` importable so
 // `cli/commands/install.mjs` (which still uses the historical signature)

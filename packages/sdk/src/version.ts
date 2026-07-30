@@ -1,4 +1,4 @@
 /**
- * SDK version constant. Updated by release-please (in v0.7.1+).
+ * SDK version constant. Keep synchronized with the workspace package versions.
  */
-export const SDK_VERSION = "0.7.0-alpha.1" as const;
+export const SDK_VERSION = "10.7.2" as const;

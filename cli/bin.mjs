@@ -389,7 +389,7 @@ async function main() {
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 const thisFile = fileURLToPath(import.meta.url);
-// Resolve symlinks: when invoked via a symlink (e.g. /home/drb0rk/.local/bin/bizar),
+// Resolve symlinks: when invoked via a symlink (e.g. /home/user/.local/bin/bizar),
 // process.argv[1] is the symlink path, but import.meta.url is the resolved target.
 // Compare via realpath so main() runs regardless of how the script is invoked.
 const { realpathSync } = await import('node:fs');

@@ -1,28 +1,8 @@
-# Exclude test files from npm tarball
-cli/*.test.mjs
-
-# Source maps — only ship hidden sourcemaps (sourcemap: 'hidden' in vite.config)
-bizar-dash/dist/**/*.map
-
-# Test files
+# Defense in depth for paths selected by package.json#files.
 **/__tests__/
-**/*.test.mjs
-**/*.test.ts
-**/*.test.tsx
+**/*.test.*
 
-# Internal design docs (not for npm)
+# Local runtime state and malformed generated paths.
 .bizar/
-
-# Project plans (user data, not package)
-.bizar/plans/
-
-# GitHub wiki (lives on GitHub)
-wiki/
-
-# Standard npmignore
-node_modules/
+${HOME}/
 *.log
-.DS_Store
-
-# Templates shipped with the package
-!templates/plan/htmx.min.js

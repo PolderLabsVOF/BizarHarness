@@ -24,13 +24,13 @@ await mkdirSync(EVALS_DIR, { recursive: true });
 
 /** Run eval-gate and return { stdout, stderr, exitCode } */
 async function runGate(args = []) {
-  const proc = spawnSync("/home/drb0rk/.bun/bin/bun", [
+  const proc = spawnSync(process.env.BUN_BIN || "bun", [
     "run",
     join(__dirname, "eval-gate.mjs"),
     ...args,
   ], {
     cwd: ROOT,
-    env: { ...process.env, PATH: `/home/drb0rk/.bun/bin:${process.env.PATH || "/usr/bin:/bin"}` },
+    env: process.env,
     encoding: "utf8",
   });
   const stdout = proc.stdout || "";

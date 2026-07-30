@@ -11,6 +11,16 @@ Claude Code is the host. Native Agent, Skill, command, permission, and hook surf
 3. **Integration:** `.claude/settings.json` launches the SDK's stdio MCP server directly.
 4. **Operations:** `cli`, `scripts`, `.harness`, and `templates` install, validate, audit, back up, and verify the harness.
 
+## Source and publication boundary
+
+`config/skills` is the canonical skill source; `.claude/skills` is a repository
+mirror for project sessions, not a second published copy. The root npm package
+ships production CLI files, compiled SDK output, canonical configuration,
+Claude agents/commands/hooks/settings, and install-time Git hooks. Tests,
+runtime state, research clones, fixtures, and local tool metadata are excluded.
+`scripts/verify-repo-structure.mjs` enforces both the tracked tree and package
+manifest.
+
 ## MCP boundary
 
 The MCP server exposes nine tools only: plan CRUD, loop state, graph query/path, and read-only instinct/decision records. Tool handlers operate on local files and do not call a local HTTP service.

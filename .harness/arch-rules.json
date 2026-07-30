@@ -27,6 +27,15 @@
       "what": "Skill copies drifted.",
       "why": "Provisioning and project sessions must load identical instructions.",
       "fix": "Edit config/skills and run make sync-skills-mirror."
+    },
+    {
+      "id": "repo-structure",
+      "description": "Tracked and published paths must match the core harness",
+      "check": "node scripts/verify-repo-structure.mjs",
+      "expect": "pass",
+      "what": "Retired repository material or local/test data entered source control or the package.",
+      "why": "A core-only harness needs a reproducible source tree and a runtime-only publication boundary.",
+      "fix": "Delete obsolete paths or narrow package.json files without removing required runtime files."
     }
   ]
 }

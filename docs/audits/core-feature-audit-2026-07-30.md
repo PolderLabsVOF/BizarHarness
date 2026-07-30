@@ -20,7 +20,7 @@ Scope: every shipped Bizar feature after removal of the application control plan
 | ESM/static hygiene | F-057 | CLI static test | Node test | Retained. |
 | Progress parsing and sprint contracts | F-096 | `cli/progress-parser.mjs`, `scripts/sprint.mjs` | canonical root-heading, round-trip, and contract-generation tests | Retained after extraction from the deleted server tree; `.bizar/PROGRESS.md` is no longer a competing state source. |
 | Session lifecycle | F-103, F-104 | SessionStart/SessionEnd hooks | lifecycle hook tests | Retained as bounded handoff/trace evidence. |
-| Container verification | F-031 | `scripts/test-in-container.sh` | static audit; optional real run | Retained. Podman/Docker availability is environment-dependent. |
+| Container verification | F-031 | `scripts/test-in-container.sh` | shell contract test; optional real run | Retained with the current strict check/test/E2E/architecture/package gates. Podman/Docker availability is environment-dependent. |
 
 ## Removal findings
 

@@ -7,6 +7,7 @@
 | CLI/provision | B+ | serial Node tests + command help validation | historical compatibility branches |
 | Skills and agents | A- | skill mirror/metadata checks + agent audit | documentation drift |
 | Harness scripts | A- | script unit tests + architecture/absence gates | platform-specific shell behavior |
+| Repository/package structure | A | tracked-path + `npm pack` allowlist verifier | manifest drift |
 
 ## Required sequence
 
@@ -14,6 +15,6 @@
 2. `make check` for TypeScript.
 3. `make test` for retained unit/integration surfaces.
 4. `make e2e` for SDK/MCP/Claude Code wiring.
-5. `make verify-removed-surfaces`, `make check-arch`, and `make clean-check` for repository invariants.
+5. `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, and `make clean-check` for repository invariants.
 
 Fresh output, not historical evidence, is required for completion claims.

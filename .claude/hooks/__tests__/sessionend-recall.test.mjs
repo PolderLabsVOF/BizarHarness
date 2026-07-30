@@ -77,7 +77,7 @@ test('SessionEnd: writes session note + state from transcript', () => {
   const transcript = makeTranscript([
     { type: 'message', timestamp: '2026-07-22T18:00:00Z', message: { role: 'user', content: 'implement F-103 hook overhaul' } },
     { type: 'message', timestamp: '2026-07-22T18:00:05Z', message: { role: 'assistant', content: [
-      { type: 'tool_use', name: 'Write', input: { file_path: '/home/drb0rk/.claude/hooks/sessionstart-prime.mjs', content: 'x' } },
+      { type: 'tool_use', name: 'Write', input: { file_path: '/home/user/.claude/hooks/sessionstart-prime.mjs', content: 'x' } },
     ]}},
     { type: 'message', timestamp: '2026-07-22T18:00:10Z', message: { role: 'user', content: 'continue' } },
   ]);

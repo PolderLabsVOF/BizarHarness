@@ -24,6 +24,7 @@ make test                     # retained SDK, CLI, hook, and harness tests
 make e2e                      # real SDK/MCP/Claude Code integration smoke test
 make check-arch               # architectural and removed-surface checks
 make verify-removed-surfaces  # prove deleted subsystems are absent
+make verify-repo-structure    # prove tracked/package paths are clean
 make clean-check              # debug-artifact/static hygiene gate
 make vcr                      # feature-ledger reality ratio
 make session-start            # lifecycle compatibility target
@@ -62,7 +63,7 @@ Do not manufacture delegation authority. Use Claude Code's native Agent tool onl
 - `.claude/hooks/` + `.claude/settings.json` — safety, routing, lifecycle, telemetry, compaction, reviewer-context, simplify, and HITL gates.
 - `packages/sdk/` — typed autonomy primitives and the nine-tool stdio MCP surface: plans, loops, graph queries, instincts, and decisions.
 - `cli/` — install/provision, audit, validation, backup, cost/claim, sandbox, and repair utilities.
-- `scripts/` + `.harness/` + `templates/` — verification, feature/eval state, session traces, and reusable contracts.
+- `scripts/` + `.harness/` + `templates/` — verification, feature/eval state, audit output, and reusable contracts.
 
 The harness has no browser/server UI layer or local web editor. Session handoff and learning logs are bounded operational records for autonomy; they are not a general note vault, semantic search service, or knowledge-base API.
 
@@ -72,13 +73,13 @@ The harness has no browser/server UI layer or local web editor. Session handoff 
 - `feature_list.json` — WIP=1 feature state.
 - `DECISIONS.md` and `docs/decisions/` — current architecture decisions.
 - `.harness/evals/` — feature evaluation records.
-- `.harness/traces/` — gitignored runtime traces.
+- `~/.config/bizar/telemetry/` — local correlation and rejected-action feedback.
 - `.bizar/session-state.json` — bounded SessionEnd→SessionStart handoff.
 
 ## Definition of done
 
 1. Behavior is implemented with a regression test.
 2. Documentation and feature state describe the actual code.
-3. `make verify-removed-surfaces`, `make check-arch`, `make test`, `make e2e`, `make clean-check`, and `make check` pass as applicable.
+3. `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make test`, `make e2e`, `make clean-check`, and `make check` pass as applicable.
 4. `PROGRESS.md` records fresh evidence and no required work remains.
 5. `/simplify` reviews the staged diff before the approval-gated commit.

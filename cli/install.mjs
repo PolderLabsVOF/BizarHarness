@@ -1,7 +1,7 @@
 /**
  * cli/install.mjs
  *
- * v10.0.0 — Back-compat shim. The real implementation lives under cli/install/.
+ * Back-compat shim. The real implementation lives under cli/install/.
  * Re-exports the public API for the install/update CLI commands.
  *
  * New code should import from the submodules directly:
