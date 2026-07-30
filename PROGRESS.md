@@ -2,6 +2,49 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-120 OpenKan Control Plane Integration
+
+**Objective:** Expose Bizar agents, durable tasks, Claude Code sessions, and
+cross-agent messages through OpenKan without restoring the retired Bizar web
+dashboard or memory subsystem.
+
+### Baseline
+
+- `make check`: passed before implementation.
+- `make e2e`: 11/11 passed after the F-119 push.
+- Bizar exposes durable SQLite task coordination and guarded Claude Code
+  process wrappers, but no stable machine-readable control-plane command.
+- Claude Code 2.1.207 exposes background-session listing and background
+  start/resume operations; it does not document a standalone external
+  live-process messaging socket.
+- OpenKan 0.2.1 exposes a local HTTP/SSE board, task UI, and OpenCode session
+  integration, but no Bizar adapter or WebSocket collaboration surface.
+
+### Implementation plan
+
+1. Add a machine-readable `bizar control` boundary for agents, tasks, sessions,
+   session lifecycle operations, and a durable atomic message inbox.
+2. Inject queued messages through supported Claude Code `SessionStart` and
+   `UserPromptSubmit` hooks instead of mutating live process internals.
+3. Add an OpenKan Bizar adapter with REST commands and a WebSocket snapshot/event
+   channel, keeping the repositories decoupled through the CLI contract.
+4. Add an OpenKan Bizar workspace for task, message, session, and agent
+   management, plus configuration and capability/error states.
+5. Lock behavior with unit/integration tests and run both repositories' full
+   verification gates, including Bizar E2E and OpenKan browser/API smoke tests.
+
+### Stop condition
+
+F-120 may pass only when OpenKan can discover Bizar agents, list and mutate
+Bizar tasks, list/start/message/stop locally spawned Claude Code sessions,
+deliver queued messages at supported Claude Code hook boundaries, and receive
+live Bizar snapshots over WebSocket, with both repositories' full test suites
+green.
+
+### Blockers
+
+None.
+
 ## Complete — F-119 Mandatory Agent and Documentation Grounding
 
 **Objective:** Ensure every primary request enters the Bizar agent pipeline and

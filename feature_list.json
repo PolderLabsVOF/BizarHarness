@@ -482,11 +482,20 @@
       "evidence": "2026-07-30 mandatory agent grounding: every non-empty primary prompt receives @mike routing context; every SubagentStart receives current official-documentation instructions; all 16 agents expose WebSearch and reference AGENT_BASELINE; targeted hook tests 18/18, provisioner 11/11, make test (298 SDK + 300 Node), make e2e (11/11), make check-arch (5/5), make clean-check (5/5), and make check passed (commit 9dd7ec4).",
       "commit": "9dd7ec4",
       "passed": "2026-07-30"
+    },
+    {
+      "id": "F-120",
+      "behavior": "Expose Bizar agents, durable tasks, Claude Code sessions, and cross-agent messages through OpenKan with a CLI-backed WebSocket control plane.",
+      "verification": "control CLI and inbox tests; OpenKan adapter/API/WebSocket/UI tests; make check; make test; make e2e; make check-arch; make clean-check",
+      "state": "active",
+      "layer": "all",
+      "category": "integration",
+      "created": "2026-07-30"
     }
   ],
   "vcr": {
     "passing": 40,
-    "activated": 40,
-    "ratio": 1
+    "activated": 41,
+    "ratio": 0.9756
   }
 }
