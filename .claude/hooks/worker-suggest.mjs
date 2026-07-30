@@ -9,6 +9,12 @@
  * skill/agent suggestions. Emits suggestions to stderr (stdout is reserved for
  * Claude Code's hook protocol).
  *
+ * Uses import.meta.url + dynamic import() to resolve the sibling CLI module so
+ * the hook works regardless of install path (fixes ERR_MODULE_NOT_FOUND after
+ * installation when the repo source lived at a non-default location).
+ * Lazy import inside the stdin handler avoids top-level-await issues in any
+ * transitive dependency chain.
+ *
  * Claude Code stdin shape (UserPromptSubmit):
  *   {
  *     "session_id": "...",
@@ -29,12 +35,15 @@
  */
 'use strict';
 
-import { dispatch } from '../../cli/worker-dispatcher.mjs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let raw = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { raw += chunk; });
-process.stdin.on('end', () => {
+process.stdin.on('end', async () => {
   let input = {};
   try {
     input = JSON.parse(raw || '{}');
@@ -64,6 +73,25 @@ process.stdin.on('end', () => {
     '- Do not implement directly in the primary session.',
     '- If you are already running as a Bizar custom agent, follow your assigned role and do not recursively dispatch yourself.',
   ].join('\n');
+
+  let dispatch;
+  try {
+    ({ dispatch } = await import(join(__dirname, '..', '..', 'cli', 'worker-dispatcher.mjs')));
+  } catch (err) {
+    process.stderr.write(
+      `[bizar.workers] WARN: dispatch failed (import): ${
+        err && err.message ? err.message : String(err)
+      }\n`,
+    );
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext: routePolicy,
+      },
+    }) + '\n');
+    process.exit(0);
+    return;
+  }
 
   let suggestions;
   try {

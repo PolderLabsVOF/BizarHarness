@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+## [10.10.1] - 2026-07-30
+
+- Fixed broken relative imports in UserPromptSubmit hooks (`control-inbox.mjs`,
+  `worker-suggest.mjs`) that failed with `ERR_MODULE_NOT_FOUND` after
+  installation when the project source lived at any path other than the
+  build-time assumption. Imports are now resolved via `import.meta.url` +
+  dynamic `import()` anchored to the script's own location.
+
+
 
 - Made Bizar-agent routing mandatory for every primary request and added
   all-subagent official-documentation grounding with mechanically verified
