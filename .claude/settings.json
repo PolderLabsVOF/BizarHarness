@@ -11,9 +11,7 @@
       "mcp__bizar__plan_action", "mcp__bizar__loop_list", "mcp__bizar__loop_status",
       "mcp__bizar__loop_start", "mcp__bizar__loop_stop", "mcp__bizar__graph_query",
       "mcp__bizar__graph_path", "mcp__bizar__list_instincts", "mcp__bizar__list_decisions",
-      "mcp__semble__*", "mcp__agent-browser__*"
-    ],
-    "ask": [
+      "mcp__semble__*", "mcp__agent-browser__*",
       "Bash(git commit *)", "Bash(git push *)", "Bash(gh pr create *)", "Bash(gh pr edit *)",
       "Bash(gh pr merge *)", "Bash(gh release *)", "Bash(npm publish *)", "Bash(bun publish *)",
       "Bash(vercel deploy *)", "Bash(wrangler deploy *)"
