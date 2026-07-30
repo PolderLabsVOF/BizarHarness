@@ -2,6 +2,35 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+
+## In Progress — F-121 Fix Broken UserPromptSubmit Hook Imports
+
+**Objective:** Fix broken relative imports in `control-inbox.mjs` and
+`worker-suggest.mjs` that fail with `ERR_MODULE_NOT_FOUND` after installation
+when the repo source lives at a non-default path.
+
+**Baseline:** `node /home/drb0rk/.claude/hooks/control-inbox.mjs < /dev/null` exits 1
+with `ERR_MODULE_NOT_FOUND` because `../../cli/control-store.mjs` resolves to
+`/home/drb0rk/cli/` which does not exist.
+
+**Implementation plan:**
+
+1. Replace the hardcoded `../../cli/*.mjs` import with
+   `import.meta.url` + `dirname` + `dynamic import()` so resolution is
+   relative to the script's own location.
+2. Use lazy dynamic import inside the stdin handler to avoid top-level-await
+   issues in the transitive dependency chain
+   (`control-store.mjs` → `task-ledger.mjs` → `better-sqlite3`).
+3. Add regression tests that spawn the hook binary and assert `ERR_MODULE_NOT_FOUND`
+   does not appear in stderr.
+
+**Status:**
+- Hook source files fixed in repo root and worktree.
+- Regression tests added and passing (6/6).
+- Version bump and CHANGELOG update pending.
+
+**Blockers:** None.
+
 ## Complete — F-120 OpenKan Control Plane Integration
 
 **Objective:** Expose Bizar agents, durable tasks, Claude Code sessions, and

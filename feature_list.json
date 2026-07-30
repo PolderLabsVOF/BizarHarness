@@ -494,6 +494,15 @@
       "category": "integration",
       "created": "2026-07-30",
       "passed": "2026-07-30"
+    },
+    {
+      "id": "F-121",
+      "behavior": "Fix broken UserPromptSubmit hook imports so they resolve regardless of install path",
+      "verification": "node --test .claude/hooks/__tests__/control-inbox.test.mjs .claude/hooks/__tests__/worker-suggest.test.mjs; make check",
+      "state": "active",
+      "layer": "core",
+      "category": "hooks",
+      "created": "2026-07-30"
     }
   ],
   "vcr": {
