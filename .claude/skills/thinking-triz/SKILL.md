@@ -167,5 +167,5 @@ A completed TRIZ analysis produces:
 | **Compromising instead of separating** | Accepting a midpoint on the trade-off curve without trying separation | Try all four separation dimensions before compromising |
 | **Skipping separation, jumping to principles** | Immediately scanning the 40 principles without trying time/space/condition/scale | Separation is the primary procedure; principles are the fallback |
 | **Applying to non-technical problems** | Using TRIZ for org dynamics or interpersonal conflicts | Separation targets system parameters, not people |
-| **Over-applying to testable contradictions** | Running full TRIZ when a pam measurement resolves which side matters | If you can test it cheaply, test it |
+| **Over-applying to testable contradictions** | Running full TRIZ when a quick measurement resolves which side matters | If you can test it cheaply, test it |
 | **Ignoring existing resources** | Adding new components when existing ones could be reused | Resource analysis before new component proposals |

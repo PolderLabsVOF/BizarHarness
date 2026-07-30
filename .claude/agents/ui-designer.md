@@ -53,7 +53,7 @@ Every design review you produce must score each dimension 0–5 and cite specifi
 - Lead with the overall score and a one-line verdict.
 - Then the 10-dimension table, with file:line citations.
 - Then a "Top 3 fixes" list — concrete, file-scoped, with verification steps.
-- End with a "What Thor/Tyr will build" checklist (component-by-component, like Brad's DESIGN.md handoff).
+- End with a "What Todd/Karen will build" checklist (component-by-component, like Brad's DESIGN.md handoff).
 - If you produce a visual companion, follow `glyph` (`.claude/skills/glyph/SKILL.md`).
 
 ## Tools Available
@@ -66,15 +66,14 @@ Every design review you produce must score each dimension 0–5 and cite specifi
 
 ## Always-On Skills
 
-**Follow the `glyph` skill** (`.claude/skills/glyph/SKILL.md`) — compact, visual, one-screen glyphs at `artifacts/<slug>/` for design reviews and proposals.
+Keep design reviews in repository-local `DESIGN.md` documents and use
+Mermaid diagrams when a compact visual explanation helps.
 
 **Follow the `de-sloppify` skill** (`.claude/skills/de-sloppify/SKILL.md`) when reviewing recent diffs for AI-generated slop (verbose comments, redundant docstrings, hallucinated imports, dead helpers). Use proactively after every audit that proposes new components.
 
-**Follow the `dataviz` skill** (`.claude/skills/dataviz/SKILL.md`) when the surface includes any chart, graph, plot, dashboard tile, or KPI row — even if it's just one sparkline. Anti-slop charts are a special case.
-
 ## Always-On Rules
 
-**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — §0.3 (always WebSearch for current design trends), §8 (parallel awareness when working alongside siblings), §11 (new-session bootstrap from memory).
+**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — §0.3 (always WebSearch for current design trends), §8 (parallel awareness when working alongside siblings), §11 (new-session bootstrap from the bounded session handoff).
 
 ## Relationship to @brad
 

@@ -27,7 +27,7 @@ You do **not** have `Agent` permission. If work needs a subagent, refuse and tel
 
 ## Always-On Rules
 
-**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
+**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it defines evidence sources, guarded autonomy, approval boundaries, coordination, and verification.
 
 Keep replies short. The user picked you for speed, not depth.
 

@@ -1,141 +1,51 @@
 import chalk from 'chalk';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { clineConfigDir } from './utils.mjs';
+import { claudeConfigDir } from './utils.mjs';
 
-const CONFIG_DIR = clineConfigDir();
+const CONFIG_DIR = claudeConfigDir();
+
+function frontmatter(text) {
+  const match = /^---\n([\s\S]*?)\n---/.exec(text);
+  return match?.[1] || '';
+}
 
 export async function runAudit() {
-  console.log(chalk.bold.hex('#ef4444')('\n  ⚔  BIZARHARNESS AUDIT ⚔\n'));
-  console.log(chalk.dim('  Scanning agent configuration for security and correctness issues...\n'));
-
+  console.log(chalk.bold.cyan('\n  BIZARHARNESS AGENT AUDIT\n'));
   const agentsDir = join(CONFIG_DIR, 'agents');
   if (!existsSync(agentsDir)) {
-    console.log(chalk.yellow('  ✗ No agents directory found at', agentsDir));
-    return;
+    const result = { issues: [{ path: agentsDir, severity: 'HIGH', msg: 'agents directory missing' }], warnings: [], score: 0 };
+    console.log(chalk.red(`  ✗ No agents directory found at ${agentsDir}`));
+    return result;
   }
-
-  const files = readdirSync(agentsDir).filter(f => f.endsWith('.md'));
-  let totalIssues = 0;
-  let totalWarnings = 0;
 
   const issues = [];
   const warnings = [];
-
+  const files = readdirSync(agentsDir).filter((file) => file.endsWith('.md'));
   for (const file of files) {
-    const content = readFileSync(join(agentsDir, file), 'utf-8');
-    const path = `agents/${file}`;
-    const lines = content.split('\n');
-
-    // Check 1: Dangerous bash permissions on review-only agents
-    if (file.includes('linda') || file.includes('oscar')) {
-      if (content.includes('bash: allow')) {
-        issues.push({ path, severity: 'HIGH', msg: 'Review-only agent has bash permission' });
-      }
-      if (content.includes('edit: allow')) {
-        issues.push({ path, severity: 'HIGH', msg: 'Review-only agent has edit permission — should be edit: deny' });
-      }
+    const path = join(agentsDir, file);
+    const text = readFileSync(path, 'utf8');
+    const meta = frontmatter(text);
+    if (!meta) issues.push({ path, severity: 'HIGH', msg: 'missing YAML frontmatter' });
+    for (const field of ['name:', 'description:', 'tools:', 'model:']) {
+      if (!meta.includes(field)) warnings.push({ path, severity: 'WARN', msg: `missing ${field.slice(0, -1)} field` });
+    }
+    if (/(?:sk-[A-Za-z0-9_-]{20,}|api[-_]?key\s*[:=]\s*["'][^"']{12,})/i.test(text)) {
+      issues.push({ path, severity: 'CRITICAL', msg: 'possible embedded credential' });
     }
 
-    // Check 2: Frigg should never have edit/write
-    if (file.includes('susan')) {
-      if (content.includes('edit: allow')) {
-        issues.push({ path, severity: 'HIGH', msg: 'Read-only Q&A agent (Frigg) has edit permission' });
-      }
-      if (content.includes('write: allow')) {
-        issues.push({ path, severity: 'HIGH', msg: 'Read-only Q&A agent (Frigg) has write permission' });
-      }
+    const tools = meta.match(/^tools:\s*(.+)$/m)?.[1] || '';
+    if (file === 'office-manager.md' && /\b(?:Bash|Edit|Write)\b/.test(tools)) {
+      issues.push({ path, severity: 'HIGH', msg: 'primary router has execution tools' });
     }
-
-    // Check 3: Odin should have minimal permissions
-    if (file.includes('mike')) {
-      const dangerousForOdin = ['bash', 'edit', 'write', 'glob', 'grep', 'question'];
-      for (const tool of dangerousForOdin) {
-        if (content.includes(`${tool}: allow`)) {
-          issues.push({ path, severity: 'HIGH', msg: `Odin has ${tool} permission but should be pure router` });
-        }
-      }
-    }
-
-    // Check 4: API keys in agent descriptions or content
-    const apiKeyPatterns = [
-      /sk-[a-zA-Z0-9]{20,}/g,
-      /api[-_]?key['":]?\s*['"][a-zA-Z0-9_\-]{16,}/gi,
-      /AIza[0-9A-Za-z\-_]{35}/g,
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      for (const pattern of apiKeyPatterns) {
-        const matches = lines[i].match(pattern);
-        if (matches) {
-          issues.push({ path, severity: 'CRITICAL', line: i + 1, msg: 'Possible API key exposed in agent content' });
-        }
-      }
-    }
-
-    // Check 5: Model validation
-    const modelMatch = content.match(/^model:\s*(.+)$/m);
-    if (modelMatch) {
-      const model = modelMatch[1].trim();
-      const validModels = [
-        'cline/deepseek-v4-flash-free',
-        'minimax/MiniMax-M2.7',
-        'minimax/MiniMax-M3',
-      ];
-      if (!validModels.includes(model)) {
-        warnings.push({ path, severity: 'WARN', msg: `Unknown model: ${model}` });
-      }
-    }
-
-    // Check 6: Missing model field
-    if (!content.includes('model:')) {
-      warnings.push({ path, severity: 'WARN', msg: 'Missing model field' });
-    }
-
-    // Check 7: Missing description
-    if (!content.includes('description:')) {
-      warnings.push({ path, severity: 'WARN', msg: 'Missing description field' });
+    if (['qa-reviewer.md', 'research-analyst.md'].includes(file) && /\b(?:Edit|Write)\b/.test(tools)) {
+      issues.push({ path, severity: 'HIGH', msg: 'read-only reviewer has mutation tools' });
     }
   }
 
-  // Check 8: AGENTS.md exists
-  const agentsMd = join(CONFIG_DIR, 'AGENTS.md');
-  if (!existsSync(agentsMd)) {
-    issues.push({ path: 'AGENTS.md', severity: 'HIGH', msg: 'AGENTS.md routing table not found' });
-  }
-
-  // Check 9: Rules directory
-  const rulesDir = join(CONFIG_DIR, 'rules');
-  if (!existsSync(rulesDir)) {
-    warnings.push({ path: 'rules/', severity: 'WARN', msg: 'Rules directory not found' });
-  }
-
-  // Print results
-  for (const item of issues) {
-    totalIssues++;
-    const icon = item.severity === 'CRITICAL' ? '🔥' : '⚠';
-    const color = item.severity === 'CRITICAL' ? chalk.red : item.severity === 'HIGH' ? chalk.hex('#f59e0b') : chalk.yellow;
-    console.log(`  ${icon} ${color(item.severity.padEnd(8))} ${chalk.dim(item.path)}${item.line ? chalk.dim(`:${item.line}`) : ''}`);
-    console.log(chalk.dim(`     ${item.msg}`));
-  }
-
-  for (const item of warnings) {
-    totalWarnings++;
-    console.log(`  ⓘ  ${chalk.cyan('INFO'.padEnd(8))} ${chalk.dim(item.path)}`);
-    console.log(chalk.dim(`     ${item.msg}`));
-  }
-
-  console.log();
-  if (totalIssues === 0 && totalWarnings === 0) {
-    console.log(chalk.green('  ✓ No issues found. Configuration looks clean.\n'));
-  } else {
-    console.log(chalk[totalIssues > 0 ? 'red' : 'yellow'](
-      `  Found ${totalIssues} issue(s) and ${totalWarnings} warning(s).\n`
-    ));
-  }
-
-  const score = Math.max(0, Math.round(100 - (totalIssues * 15 + totalWarnings * 5)));
-  const scoreColor = score >= 90 ? chalk.green : score >= 70 ? chalk.hex('#f59e0b') : chalk.red;
-  console.log(chalk.bold(`  Security Score: ${scoreColor(`${score}/100`)}\n`));
-
-  return { issues, warnings, score, totalIssues, totalWarnings };
+  for (const item of issues) console.log(chalk.red(`  ✗ ${item.severity} ${item.path}: ${item.msg}`));
+  for (const item of warnings) console.log(chalk.yellow(`  ⚠ ${item.path}: ${item.msg}`));
+  const score = Math.max(0, 100 - issues.length * 15 - warnings.length * 3);
+  console.log(`\n  Security score: ${score}/100 (${files.length} agents)\n`);
+  return { issues, warnings, score, totalIssues: issues.length, totalWarnings: warnings.length };
 }

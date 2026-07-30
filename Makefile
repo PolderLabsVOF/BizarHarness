@@ -3,11 +3,8 @@
 # Single source of truth for agent commands. Every target is idempotent
 # and exits 0 on success. Run `make help` to see all targets.
 #
-# Migrated to Claude Code (v6.3.0). All `cline`-era targets are gone;
-# the harness now consumes Claude Code via the SDK + MCP server under
-# `packages/sdk/`. Plugin lives under `plugins/bizar/` as a thin shim
-# that re-exports the SDK; the previous framework-coupled plugin source
-# has been deleted.
+# Claude Code-native: the runtime is the SDK + stdio MCP server under
+# `packages/sdk/`, with hooks, agents, skills, and commands under `.claude/`.
 
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -23,8 +20,8 @@ setup:  ## Install Claude Code CLI + Bizar deps
 	npm install
 	@echo "✓ Claude Code CLI + Bizar deps installed"
 
-dev:  ## Start dashboard + SDK in dev mode
-	npm run dev
+dev:  ## Run the SDK test watcher
+	npm run test:sdk:watch
 
 check:  ## Typecheck + lint
 	@echo "▶ Running TypeScript check..."
@@ -33,30 +30,12 @@ check:  ## Typecheck + lint
 	@echo "▶ Skipping eval gate (run 'make eval-gate' to enforce)."
 
 test:  ## Run all unit tests (sdk + cli)
-	@if command -v bun >/dev/null 2>&1; then \
-		bun test packages/sdk; \
-	else \
-		echo "(bun not found — falling back to vitest via npm)"; \
-		node_modules/.bin/vitest run --root packages/sdk; \
-	fi
-	@node --test --test-concurrency=1 cli/install.test.mjs cli/provision.test.mjs cli/worker-dispatcher.test.mjs cli/__tests__/cost-gate.test.mjs cli/__tests__/feature-list-bridge.test.mjs cli/commands/setup-provider.test.mjs cli/commands/rca.test.mjs
+	@npm test
 
 e2e:  ## End-to-end tests (SDK + Claude Code integration)
 	@echo "▶ E2E: SDK load + tool registration..."
-	@if command -v bun >/dev/null 2>&1; then \
-		bun run scripts/bh-full-e2e.mjs; \
-	else \
-		echo "(bun not found — running e2e with node)"; \
-		node scripts/bh-full-e2e.mjs; \
-	fi
-
-e2e-orchestration:  ## Sprint S25 — boot dashboard, hit merged endpoints, exercise admin
-	@echo "▶ E2E orchestration: boot + snapshot + agents + goals + ws + admin..."
-	@BIZAR_E2E_SKIP_RESTART=$${BIZAR_E2E_SKIP_RESTART:-1} node tests/e2e/orchestration-center.mjs --port=$${BIZAR_E2E_PORT:-4173}
-
-e2e-real-env:  ## Sprint S36 — real-env harness: every new v9.2.0 page endpoint against live server
-	@echo "▶ E2E real-environment: 7 new pages, real server, no fixture..."
-	@node tests/e2e/real-environment.mjs --port=$${BIZAR_E2E_PORT:-4183}
+	@npm run build:sdk
+	@node scripts/bh-full-e2e.mjs
 
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json
@@ -79,10 +58,11 @@ sync-skills-mirror:  ## Mirror config/skills/ -> .claude/skills/ (idempotent)
 verify-thinking-skills:  ## Verify every thinking-*/skillopt SKILL.md is well-formed
 	@node scripts/verify-thinking-skills.mjs
 
-clean-check:  ## Remove console.log/debugger and run lint
-	@echo "▶ Scanning for console.log / debugger / .only()..."
-	@! grep -rEn '(console\.log|debugger|\.only\()' packages/sdk/src plugins/bizar/index.ts --include='*.ts' --include='*.mjs' 2>/dev/null | grep -v test | grep -v '\.test\.' || (echo "✗ debug artifacts found" && exit 1)
-	@echo "✓ clean-check passed"
+clean-check:  ## Run the five-dimension clock-out verifier
+	@bash scripts/clean-state-check.sh
+
+verify-removed-surfaces:  ## Prove removed UI and note-vault systems are absent
+	@node scripts/verify-removed-surfaces.mjs
 
 audit:  ## Run harness audit (12 categories, 0-100 score)
 	@echo "▶ Running harness audit..."
@@ -137,4 +117,4 @@ worktree-init:  ## Bootstrap a new worktree with shared node_modules / dist syml
 	@./scripts/worktree-setup.sh "$(WORKTREE)"
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e e2e-orchestration e2e-real-env vcr verify-feature check-arch clean-check audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills
+.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check verify-removed-surfaces audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills

@@ -12,13 +12,13 @@
  *             default ("mike", "mid", confidence 0.5)
  *
  * The orchestrator is what the `hooks_route` MCP tool (and any
- * in-process caller such as the Odin agent) calls to make a routing
+ * in-process caller such as the office-manager agent) calls to make a routing
  * decision. It surfaces two human-readable tags on `stdout`-equivalent
  * surfaces:
  *
  *   - `[CODEMOD_AVAILABLE] <intent>` — printed BEFORE the model call
  *     would happen, telling the model that a deterministic $0 codemod
- *     could short-circuit the work. Honoured by the Odin prompt.
+ *     could short-circuit the work. Honoured by the office-manager prompt.
  *   - `[TASK_MODEL_RECOMMENDATION] <tier> (conf=<n>)` — appended to
  *     prompt-side telemetry so downstream model selection knows the
  *     bandit-learner thinks this task should be routed to `flash` /

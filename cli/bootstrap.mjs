@@ -3,22 +3,19 @@
  *
  * v3.2.2 — Self-bootstrap on first bin invocation.
  *
- * Replaces the postinstall hook (which npm v10+ blocks by default).
- * Every `bizar` bin command now checks setup status on entry and runs
- * the postinstall logic automatically if anything is missing.
+ * Explicit setup status and installation helper.
  *
  * Key design:
  *   - Checks for SETUP_MARKERS (odyssey files that prove setup was done)
  *   - If ALL markers exist → silent no-op
- *   - If ANY marker is missing → runs postinstall logic
- *   - Idempotent: already-installed components are skipped by the postinstall
+ *   - If ANY marker is missing → the explicit setup action runs the provisioner
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 
-import { clineAgentsDir, clineConfigDir } from './utils.mjs';
-import { runPostInstall } from './install.mjs';
+import { claudeAgentsDir, claudeConfigDir } from './utils.mjs';
+import { runInstaller } from './install.mjs';
 
 /**
  * Key files that prove setup has been run at least once.
@@ -26,8 +23,8 @@ import { runPostInstall } from './install.mjs';
  * If ANY are missing → setup is needed.
  */
 const SETUP_MARKERS = [
-  join(clineAgentsDir(), 'mike.md'),           // core agent installed
-  join(clineConfigDir(), 'plugins', 'bizar'),   // plugin installed
+  join(claudeAgentsDir(), 'office-manager.md'),
+  join(claudeConfigDir(), 'settings.json'),
 ];
 
 /**
@@ -49,7 +46,7 @@ export function checkSetupStatus() {
  */
 function printSetupBanner() {
   // Use console.log directly to avoid chalk formatting issues in non-TTY
-  console.log('\n  ⚡ First-time setup — Bizar needs to install agents, plugin, Semble, Skills CLI...\n');
+  console.log('\n  ⚡ First-time setup — Bizar needs to install Claude Code agents, hooks, skills, and settings...\n');
 }
 
 /**
@@ -59,7 +56,7 @@ function printSetupBanner() {
  *   autoApprove — if true, skip interactive prompts (BIZAR_SKIP_OPTIONAL_INSTALLS already set by caller)
  *   silent       — if true, suppress the "first-time setup" banner (used when invoked silently on bin entry)
  *
- * Idempotent: runPostInstall() skips already-installed components.
+ * Idempotent: the provisioner skips already-installed components.
  */
 export async function ensureSetup({ silent = false } = {}) {
   const status = checkSetupStatus();
@@ -73,5 +70,5 @@ export async function ensureSetup({ silent = false } = {}) {
     printSetupBanner();
   }
 
-  await runPostInstall();
+  await runInstaller({ mode: 'install' });
 }

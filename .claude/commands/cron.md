@@ -1,11 +1,11 @@
 ---
-description: Manage scheduled cron tasks for autonomous agent runs.
+description: Manage the local schedule registry used by explicit Claude Code or external scheduler workflows.
 allowed-tools: Read, Write, Bash, WebFetch
 ---
 
 # /cron — Scheduled Autonomous Tasks
 
-Manage cron tasks that run on a schedule using the Bizar SDK cron API.
+Manage schedule records with the Bizar SDK cron API.
 
 ## Usage
 
@@ -26,7 +26,7 @@ Manage cron tasks that run on a schedule using the Bizar SDK cron API.
 
 Use the SDK cron API:
 ```
-import { addCronTask, listCronTasks, removeCronTask } from "@polderlabs/bizar-sdk/agent/cron";
+import { addCronTask, listCronTasks, removeCronTask } from "@polderlabs/bizar-sdk";
 ```
 
 - `addCronTask({ cron, prompt, recurring })` — add a task
@@ -34,3 +34,7 @@ import { addCronTask, listCronTasks, removeCronTask } from "@polderlabs/bizar-sd
 - `removeCronTask(id)` — removes by id, returns true if found
 
 Tasks are persisted to `.bizar/cron.json` in the project root.
+
+Bizar does not run a persistent scheduler daemon. Adding a record does not
+execute it by itself; connect the registry to an explicitly configured Claude
+Code workflow or operating-system scheduler.

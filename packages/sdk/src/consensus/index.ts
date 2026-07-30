@@ -3,13 +3,13 @@
  *
  * F-039 — wraps `ByzantineConsensus` behind a stable factory API and
  * re-exports every type/utility callers need. This is the surface the
- * MCP tool (`consensus_propose`) and any future dashboard wiring
+ * SDK callers and future coordination adapters
  * consume.
  *
  * The orchestrator is intentionally minimal — it's a thin facade over
  * `ByzantineConsensus` plus the type re-exports. Anything fancier
- * (proposer scheduling, fault dashboards, etc.) belongs in `queen.ts`
- * or a future `dashboard.ts`.
+ * (proposer scheduling, fault reporting, etc.) belongs in `queen.ts`
+ * or a dedicated adapter.
  */
 
 import { ByzantineConsensus, type ByzantineConsensusOpts } from "./byzantine.js";
@@ -62,7 +62,7 @@ export interface ConsensusHandle {
 /**
  * Build a `ConsensusHandle` for a given local agent + peer roster.
  * The returned object is the public surface used by the MCP tool and
- * any dashboard wiring.
+ * any presentation-layer wiring.
  */
 export function createConsensus(opts: CreateConsensusOpts): ConsensusHandle {
   const instance = new ByzantineConsensus(opts);
@@ -113,7 +113,7 @@ export type {
 /**
  * The shared consensus singleton used by the MCP tool. Initialized
  * with the Bizar default 5-peer roster (mike / susan / janet / greg /
- * brenda — the same five Norse agents F-033 routes between) and a
+ * brenda — the same five office-role agents F-033 routes between) and a
  * deterministic seed so MCP-driven consensus is reproducible across
  * restarts. Tests should call `createConsensus()` with their own
  * `localAgentId` + `peers` to get an isolated instance.

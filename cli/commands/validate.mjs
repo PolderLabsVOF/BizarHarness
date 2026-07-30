@@ -10,18 +10,14 @@
  *   - `claude` CLI reachable + version
  *   - `~/.claude/settings.json` exists + parses
  *   - Bizar MCP server registered (mcpServers.bizar.*)
- *   - Bizar plugin entry in MCP config
- *   - 14 agent files in `~/.claude/agents/`
- *   - 14 skills mirrored from `config/skills/` → `~/.claude/skills/`
+ *   - 16 uniquely named agent files in `~/.claude/agents/`
+ *   - skills mirrored from `config/skills/` → `~/.claude/skills/`
  *   - 7 rules mirrored from `config/rules/` → `~/.claude/rules/`
- *   - 4-5 hook adapter scripts in `~/.claude/hooks/`
- *     (PreToolUse / PostToolUse / SessionStart / UserPromptSubmit /
- *     SessionEnd, all chmod +x)
- *   - 14 slash commands in `~/.claude/commands/`
- *     (incl. /team /test /validate)
+ *   - guarded autonomy hooks, including approval, compaction, and advisor context
+ *   - shipped slash commands in `~/.claude/commands/`
  *   - permissions.allow includes mcp__bizar__*
  *   - permissions.deny covers dangerous patterns
- *   - ~/.bizar_home/ exists (memory vault + loops dir)
+ *   - ~/.config/bizar/ exists (loop/runtime state)
  *
  * Exits non-zero if any check fails. Use `--json` for machine output.
  * Use `--strict` to also fail on lenient checks.
@@ -51,7 +47,7 @@ function claudeDir() {
 }
 
 /**
- * Resolve the Bizar HOME directory (memory vault + loops).
+ * Resolve the Bizar runtime-state directory.
  */
 function bizarHome() {
   return process.env.BIZAR_HOME
@@ -61,31 +57,38 @@ function bizarHome() {
 const REPO_ROOT = process.env.BIZAR_REPO_ROOT || process.cwd();
 
 const REQUIRED_AGENTS = [
-  'mike.md', 'janet.md', 'susan.md', 'pam.md',
-  'greg.md', 'brenda.md', 'steve.md', 'todd.md', 'brad.md',
-  'karen.md', 'carl.md', 'linda.md',
-  'oscar.md', 'kevin.md',
+  'brand-designer.md', 'debug-specialist.md', 'exec-assistant.md',
+  'help-desk.md', 'it-lead.md', 'knowledge-manager.md',
+  'office-coordinator.md', 'office-greeter.md', 'office-manager.md',
+  'planner.md', 'principal-engineer.md', 'qa-reviewer.md',
+  'research-analyst.md', 'senior-engineer.md', 'support-tech.md',
+  'ui-designer.md',
 ];
 
 const REQUIRED_COMMANDS = [
-  'audit.md', 'bizar.md', 'explain.md', 'init.md', 'learn.md',
-  'plan.md', 'plow-through.md', 'pr-review.md', 'tailscale-serve.md',
-  'visual-plan.md',
-  'team.md', 'test.md', 'validate.md', 'setup-provider.md',
+  'audit.md', 'bizar.md', 'cron.md', 'explain.md', 'init.md', 'learn.md',
+  'plan.md', 'plow-through.md', 'pr-review.md', 'setup-provider.md',
+  'spec.md', 'sprint.md', 'tailscale-serve.md', 'team.md', 'test.md',
+  'use-default.md', 'use-premium.md', 'validate.md',
 ];
 
 // v6.3.0 — Claude Code hook adapter scripts (executable, .mjs extension).
 const REQUIRED_HOOKS = [
-  'pretooluse-editwrite.mjs',
+  'advisor-context.mjs',
+  'content-style-guard.mjs',
+  'git-workflow-guard.mjs',
+  'learning-extract.mjs',
   'posttooluse-editwrite.mjs',
+  'precompact-priorities.sh',
+  'pretooluse-bash.mjs',
+  'pretooluse-editwrite.mjs',
+  'sessionend-recall.mjs',
   'sessionstart-prime.mjs',
-  'userpromptsubmit-tag.mjs',
-  'sessionend-record.mjs',
+  'simplify-guard.mjs',
+  'telemetry.mjs',
+  'thinking-route.mjs',
+  'worker-suggest.mjs',
 ];
-
-// v6.3.0 — Claude Code-aware runtime deps. The Bizar SDK + the Claude
-// Code agent SDK are the only required deps for the Bizar MCP server.
-const REQUIRED_RUNTIME_DEPS = ['zod', '@anthropic-ai/claude-agent-sdk'];
 
 function check(name, fn) {
   return Promise.resolve()
@@ -178,13 +181,12 @@ const CHECKS = {
       'Bash(rm -rf /)',
       'Bash(sudo *)',
       'Write(./node_modules/**)',
-      'Write(./package-lock.json)',
     ];
     const missing = required.filter((r) => !deny.includes(r));
     if (missing.length > 0) {
       return `missing ${missing.length} deny pattern(s) (advisory): ${missing.join(', ')}`;
     }
-    return `${deny.length} deny pattern(s) — all 5 required present`;
+    return `${deny.length} deny pattern(s) — all required present`;
   },
 
   'hooks-pretooluse-wired': async () => {
@@ -243,17 +245,20 @@ const CHECKS = {
   },
 
   'agent-frontmatter-format': async () => {
-    // Claude Code reads agents via `.md` files with YAML frontmatter.
-    // Spot-check that at least the mike.md agent has frontmatter.
     const dir = join(claudeDir(), 'agents');
     if (!existsSync(dir)) throw new Error('agents dir missing');
-    const mike = join(dir, 'mike.md');
-    if (!existsSync(mike)) throw new Error('mike.md missing');
-    const text = readFileSync(mike, 'utf8');
-    if (!text.startsWith('---')) {
-      throw new Error('mike.md has no YAML frontmatter — Claude Code may not load it');
+    const names = new Map();
+    for (const file of REQUIRED_AGENTS) {
+      const text = readFileSync(join(dir, file), 'utf8');
+      if (!text.startsWith('---')) {
+        throw new Error(`${file} has no YAML frontmatter`);
+      }
+      const name = /^name:\s*([^\s]+)\s*$/m.exec(text)?.[1];
+      if (!name) throw new Error(`${file} has no frontmatter name`);
+      if (names.has(name)) throw new Error(`duplicate agent name ${name}: ${names.get(name)}, ${file}`);
+      names.set(name, file);
     }
-    return 'mike.md has YAML frontmatter';
+    return `${names.size} unique agent names`;
   },
 
   'slash-commands-installed': async () => {
@@ -336,37 +341,6 @@ const CHECKS = {
     return `BIZAR_HOME = ${h}`;
   },
 
-  'bizar-memory-vault-exists': async () => {
-    const vault = join(bizarHome(), 'memory-vault');
-    if (!existsSync(vault)) {
-      throw new Error(`memory vault missing at ${vault} — run \`bizar install\``);
-    }
-    return `memory vault = ${vault}`;
-  },
-
-  'plugin-runtime-deps': async () => {
-    // v6.3.0 — for Claude Code, the runtime deps live in the
-    // Bizar SDK's node_modules, not in a `~/.claude/plugins/bizar/`
-    // dir. We probe the SDK install via npm root -g + the
-    // bizar-sdk entry. This is best-effort.
-    try {
-      const out = spawnSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 5000 }).stdout || '';
-      const root = out.trim();
-      if (!root) throw new Error('npm root -g returned empty');
-      const sdkPath = join(root, '@polderlabs', 'bizar-sdk');
-      if (!existsSync(sdkPath)) {
-        return `Bizar SDK not found at ${sdkPath} — install via npm install -g @polderlabs/bizar-sdk (advisory)`;
-      }
-      const missing = REQUIRED_RUNTIME_DEPS.filter((d) => !existsSync(join(sdkPath, 'node_modules', d)));
-      if (missing.length > 0) {
-        return `missing runtime deps in SDK: ${missing.join(', ')} (advisory)`;
-      }
-      return `runtime deps present (${REQUIRED_RUNTIME_DEPS.join(', ')})`;
-    } catch (err) {
-      return `could not probe SDK install: ${err.message} (advisory)`;
-    }
-  },
-
   '9router-reachable': async () => {
     const url = process.env.NINEROUTER_URL || 'http://localhost:20128';
     const ac = new AbortController();
@@ -419,16 +393,13 @@ const CHECK_ORDER = [
   'rules-installed',
   'hooks-installed',
   'bizar-home-exists',
-  'bizar-memory-vault-exists',
   'claude-md-mirrored',
-  'plugin-runtime-deps',
   '9router-reachable',
 ];
 
 const LENIENT_CHECKS = new Set([
   'claude-cli-reachable', // Claude Code CLI is normally on $PATH only on dev hosts; CI containers without it shouldn't fail validation
   '9router-reachable',
-  'plugin-runtime-deps', // best-effort probe via `npm root -g`
   'permissions-deny-dangerous', // advisory — user may have intentionally customized
   'hooks-sessionend-wired', // advisory — SessionEnd is optional
   'claude-settings-schema', // advisory — schema field is documentation
@@ -446,7 +417,7 @@ export function showValidateHelp() {
     bizar validate --help         Show this help
 
   Description:
-    A 21-point health check that confirms the Bizar install is fully
+    A complete health check that confirms the Bizar install is fully
     integrated with Claude Code:
       • claude CLI reachable + version
       • ~/.claude/settings.json parses + Bizar MCP server registered
@@ -454,12 +425,10 @@ export function showValidateHelp() {
       • permissions.deny covers dangerous patterns
       • hooks (PreToolUse / PostToolUse / SessionStart / UserPromptSubmit
         / SessionEnd) wired in settings.json
-      • all 14 agent files installed with Claude Code frontmatter
-      • all 14 slash commands (/audit, /bizar, /explain, /init, /learn,
-        /plan, /plow-through, /pr-review, /tailscale-serve,
-        /visual-plan, /team, /test, /validate)
+      • all 16 agent files installed with unique Claude Code names
+      • all shipped slash commands
       • all skills / rules / hooks mirrored to ~/.claude/
-      • ~/.bizar_home/ + memory vault ready
+      • ~/.config/bizar/ runtime state ready
       • 9Router gateway reachable (lenient unless --strict)
 
   Exit codes:

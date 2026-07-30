@@ -13,7 +13,7 @@ The Bizar harness expects 9Router at `http://localhost:20128` by default. Overri
 
 ```bash
 export NINEROUTER_URL="http://localhost:20128"      # or VPS / tunnel URL
-export NINEROUTER_KEY="sk-..."                      # from Dashboard → Keys (only if requireApiKey=true)
+export NINEROUTER_KEY="sk-..."                      # from your provider configuration (only if requireApiKey=true)
 ```
 
 All requests: `${NINEROUTER_URL}/v1/...` with header `Authorization: Bearer ${NINEROUTER_KEY}` (omit if auth disabled).
@@ -75,6 +75,6 @@ single key rotation + observability.
 
 ## Errors
 
-- 401 → set/refresh `NINEROUTER_KEY` (Dashboard → Keys)
+- 401 → set/refresh `NINEROUTER_KEY` (provider configuration)
 - 400 `Invalid model format` → check `model` exists in `/v1/models/<kind>`
 - 503 `All accounts unavailable` → wait `retry-after` or add another provider account

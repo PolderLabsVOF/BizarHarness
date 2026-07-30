@@ -1,109 +1,32 @@
-# Bizar Skills - Reference
+# Bizar Skills Reference
 
-Skills are specialized instruction sets that agents load before working on specific domains. They live as `SKILL.md` files in well-known directories and are injected into agent context when relevant.
+Skills are Markdown instruction packs with YAML frontmatter. Load the relevant installed skill before applying a domain-specific workflow.
 
-## What Skills Are
+## Locations and precedence
 
-A skill is a Markdown file with YAML frontmatter. The frontmatter declares a `description` that the agent matcher uses to decide when to load the skill. The body contains domain-specific knowledge, patterns, gotchas, and code examples.
+1. `~/.claude/skills/<name>/SKILL.md`
+2. `~/.agents/skills/<name>/SKILL.md`
+3. `.agents/skills/<name>/SKILL.md`
+4. `.claude/skills/<name>/SKILL.md`
 
-Example `SKILL.md`:
+The installer copies Bizar's bundled `config/skills/` packs into the Claude Code skill directory. The repository copy remains the development source of truth.
 
-```yaml
----
-name: my-skill
-description: Use when working with X. Covers Y and Z.
----
-# My Skill
-
-## When to use
-...
-
-## Key concepts
-...
-
-## Code examples
-...
-
-## Common gotchas
-...
-```
-
-## Where Skills Live
-
-| Path | Source | Priority | Notes |
-|---|---|---|---|
-| `~/.claude/skills/<name>/SKILL.md` | User / System | Highest | User-overridable builtins |
-| `~/.agents/skills/<name>/SKILL.md` | User-added | High | Installed via `skills add` |
-| `bizar-dash/skills/<name>/SKILL.md` | Shipped | Medium | Ships with BizarHarness package |
-| `.agents/skills/<name>/SKILL.md` | Project | Low | Project-local skills |
-| `.claude/skills/<name>/SKILL.md` | Project | Lowest | Project-local skills |
-
-When the same skill name appears in multiple places, the highest-priority source wins.
-
-## Discovering Skills
-
-Use the `skills` CLI:
+## Discovery
 
 ```bash
-# List installed skills
 skills list --json
-
-# Search for a skill
 skills search "react"
-
-# Install from a repository
 skills add owner/repo -s "skill-name" -y
 ```
 
-Known repositories:
-- `vercel-labs/skills` - find-skills, skill-creator, general tools
-- `vercel-labs/agent-skills` - React, Next.js, frontend performance
-- `shadcn/ui` - shadcn/ui components
-- `supabase/agent-skills` - Postgres, Auth, Edge Functions
-- `mattpocork/skills` - TypeScript, TDD
-- `anthropics/skills` - Claude patterns, agents
-- `leonxlnx/taste-skill` - design, UI/UX
+## Core Bizar packs
 
-## Shipped Bizar Skills
+- `bizar` — guarded autonomy, routing, approval boundaries, and completion gates.
+- `agent-baseline` — rules inherited by every agent.
+- `self-improvement` — `.bizar/AGENTS_SELF_IMPROVEMENT.md` protocol.
+- `skills-cli` — skill discovery and installation.
+- `providers` / `9router` — model-provider configuration.
+- `sdk` — Bizar typed SDK and MCP integration.
+- thinking skills — structured reasoning patterns loaded only when relevant.
 
-These skills ship with BizarHarness and are available immediately:
-
-| Skill | Description |
-|---|---|
-| `bizar` | Norse-pantheon multi-agent system, Odin routing, agent tiers |
-| `agent-baseline` | Always-on rules: Semble, Skills CLI, loop guard, copyright |
-| `self-improvement` | .bizar/AGENTS_SELF_IMPROVEMENT.md protocol |
-| `obsidian` | Bizar Memory Service (Obsidian + Git + LightRAG) |
-| `minimax` | MiniMax provider, multi-key rotation, usage tracking |
-| `providers` | Provider subsystem, backup keys, auto-add wizard |
-| `chat` | Chat + claude session integration |
-| `usage` | Token usage monitoring, cost estimation, MiniMax usage dashboard |
-| `skills-cli` | skills CLI reference, skill repos, discovery protocol |
-| `lightrag` | LightRAG integration, claude-code-native defaults, indexing |
-| `sdk` | @polderlabs/bizar-sdk on Cloudflare Workers |
-
-## Skill Loading
-
-Agents check skill relevance at dispatch time. You can also load a skill explicitly in conversation using the `Skill` tool:
-
-```
-Load the `minimax` skill before we discuss multi-key rotation.
-```
-
-## Adding a Project Skill
-
-Create a skill directory in your project:
-
-```bash
-mkdir -p .agents/skills/my-project-skill
-cat > .agents/skills/my-project-skill/SKILL.md << 'EOF'
----
-name: my-project-skill
-description: Use when working on my project's specific domain X.
----
-# My Project Skill
-...
-EOF
-```
-
-Project skills are picked up automatically on next session start.
+Inspect `.claude/skills/` rather than relying on a hard-coded inventory; the installer and user may add or remove packs.

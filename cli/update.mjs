@@ -9,7 +9,7 @@
  * Why a thin wrapper:
  *   - One source of truth. Install + update used to drift apart (and
  *     did — install.mjs and update.mjs each grew their own copy of
- *     "copy plugin, patch cline.json, sync skills, run doctor").
+ *     "sync Claude Code surfaces, refresh settings, run doctor").
  *     Now both call the same function.
  *   - Easier to maintain. Adding a new step means editing provision.mjs
  *     once; both `install` and `update` pick it up.

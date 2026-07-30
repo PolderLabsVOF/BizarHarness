@@ -164,7 +164,7 @@ describe("BizarAgentRegistry — type allowlist", () => {
       "researcher",
       "performance-engineer",
       "security-auditor",
-      "memory-specialist",
+      "context-specialist",
     ]);
   });
 
@@ -270,8 +270,8 @@ describe("BizarAgentRegistry — singleton", () => {
   });
 
   test("register on singleton is visible via getAgent on the same singleton", () => {
-    const r = bizarAgentRegistry.registerAgent({ type: "memory-specialist" });
-    expect(bizarAgentRegistry.getAgent(r.agentId)?.type).toBe("memory-specialist");
+    const r = bizarAgentRegistry.registerAgent({ type: "context-specialist" });
+    expect(bizarAgentRegistry.getAgent(r.agentId)?.type).toBe("context-specialist");
     // cleanup so we don't pollute later tests
     bizarAgentRegistry.terminateAgent({ agentId: r.agentId, reason: "cleanup" });
   });

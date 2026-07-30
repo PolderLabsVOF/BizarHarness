@@ -37,7 +37,7 @@ When resolving how a library/tool/API works, use this priority order:
 2. READ: webfetch the official docs for the specific function/method I'll call
    - Don't read the entire docs — read the specific section
 3. VERIFY: cross-check against source if anything is ambiguous
-4. NOTE: write down the gotchas in your agent memory or a relevant file
+4. NOTE: write down durable gotchas in the relevant project documentation
 5. USE: now write the code, knowing the actual API
 ```
 
@@ -65,7 +65,7 @@ Don't write code, run it, see the error, and fix from there. That works for triv
 
 ### "I used this library before, I know it"
 
-Libraries change. APIs deprecate. Defaults shift. Even if you used something 6 months ago, a pam doc check (30 seconds) saves 10 minutes of debugging when your prior knowledge is stale.
+Libraries change. APIs deprecate. Defaults shift. Even if you used something 6 months ago, a quick doc check (30 seconds) saves 10 minutes of debugging when your prior knowledge is stale.
 
 ### "The README example is enough"
 
@@ -108,6 +108,6 @@ Agent: "Hmm, the docs must have changed. Let me guess it's a different syntax."
 
 ## See also
 
-- [[obsidian]] — write postmortems and patterns to the project vault
+- repository docs — write postmortems and durable patterns under version control
 - [[glyph]] — create a glyph when the design decision is non-trivial
 - The agent baseline — `simplest thing that works` rule

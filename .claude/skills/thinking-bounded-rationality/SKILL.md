@@ -33,7 +33,7 @@ Search/investigation that could run indefinitely? → yes → Is closing the gap
 
 - **Irreversible or high-stakes choices** (data deletion, security boundaries, schema/migration decisions, public commitments) — the gap between good and best is worth the budget; optimize and verify.
 - **Correctness gates** — tests, security checks, and "did the fix actually work?" are not satisficeable; you need the right answer, not a sufficient-looking one.
-- **The answer is cheaply knowable** — if one more grep or a single file read would settle it definitively, just do it; don't satisfice your way past a pam fact.
+- **The answer is cheaply knowable** — if one more grep or a single file read would settle it definitively, just do it; don't satisfice your way past a quick fact.
 - **The threshold can't be stated** — if you can't articulate what "good enough" means, you can't satisfice responsibly; clarify the requirement first.
 
 ## Trigger Card

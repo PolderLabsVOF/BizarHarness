@@ -1,86 +1,70 @@
-/**
- * cli/kevin-update.test.mjs
- *
- * Unit tests for the v6.0.0 kevin install/update module.
- * Uses node:test (no `expect` — uses `assert` instead).
- */
-
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 
 const {
   detectState,
   printStatus,
   install,
   update,
-  ensureRunning,
-} = await import("./kevin-update.mjs");
+  doctor,
+} = await import('./agent-browser-update.mjs');
 
-describe("kevin-update", () => {
-  it("exports the public API", () => {
-    assert.equal(typeof detectState, "function");
-    assert.equal(typeof printStatus, "function");
-    assert.equal(typeof install, "function");
-    assert.equal(typeof update, "function");
-    assert.equal(typeof ensureRunning, "function");
+describe('agent-browser update integration', () => {
+  it('exports the supported lifecycle API', () => {
+    assert.equal(typeof detectState, 'function');
+    assert.equal(typeof printStatus, 'function');
+    assert.equal(typeof install, 'function');
+    assert.equal(typeof update, 'function');
+    assert.equal(typeof doctor, 'function');
   });
 
-  it("detectState returns a structured state object", () => {
-    const s = detectState();
-    assert.ok("installed" in s);
-    assert.ok("version" in s);
-    assert.ok("chromeReady" in s);
-    assert.ok("daemonRunning" in s);
-    assert.ok("profileDir" in s);
-    assert.ok("daemonPort" in s);
-    assert.ok("bin" in s);
-    assert.equal(typeof s.installed, "boolean");
-    if (s.installed) {
-      assert.equal(typeof s.version, "string");
+  it('returns a minimal structured state', () => {
+    const state = detectState();
+    assert.equal(typeof state.installed, 'boolean');
+    assert.ok('version' in state);
+    assert.ok('bin' in state);
+    if (state.installed) {
+      assert.equal(typeof state.version, 'string');
+      assert.equal(typeof state.bin, 'string');
     } else {
-      assert.equal(s.version, null);
+      assert.equal(state.version, null);
     }
   });
 
-  it("detectState profileDir points to ~/.kevin/profile by default", () => {
-    const s = detectState();
-    assert.match(s.profileDir, /\.kevin\/profile$/);
-  });
-
-  it("detectState default daemon port is 9223", () => {
-    delete process.env.AGENT_BROWSER_PORT;
-    const s = detectState();
-    assert.equal(s.daemonPort, 9223);
-  });
-
-  it("printStatus does not throw (regardless of install state)", () => {
-    const origLog = console.log;
-    const captured = [];
-    console.log = (...args) => captured.push(args.join(" "));
+  it('prints status without requiring an installation', () => {
+    const original = console.log;
+    const output = [];
+    console.log = (...args) => output.push(args.join(' '));
     try {
       printStatus();
     } finally {
-      console.log = origLog;
+      console.log = original;
     }
-    assert.ok(captured.length > 0);
-    assert.match(captured[0], /kevin/);
+    assert.ok(output.some((line) => line.includes('agent-browser')));
   });
 
-  it("install with dryRun=true returns a state object", () => {
-    const s = install({ dryRun: true, silent: true });
-    assert.ok("installed" in s);
+  it('install dry-run is side-effect free', () => {
+    const before = detectState();
+    const after = install({ dryRun: true, silent: true });
+    assert.deepEqual(after, before);
   });
 
-  it("update with dryRun=true returns a state object", () => {
-    const s = update({ dryRun: true, silent: true });
-    assert.ok("installed" in s);
+  it('update dry-run is side-effect free', () => {
+    const before = detectState();
+    const after = update({ dryRun: true, silent: true });
+    assert.deepEqual(after, before);
   });
 
-  it("ensureRunning with dryRun=true returns a state object", () => {
-    const s = ensureRunning({ dryRun: true });
-    assert.ok("installed" in s);
+  it('doctor reports a missing binary without throwing', () => {
+    const original = process.env.AGENT_BROWSER_BIN;
+    process.env.AGENT_BROWSER_BIN = '/definitely/not/agent-browser';
+    try {
+      const result = doctor({ silent: true });
+      assert.equal(typeof result.ok, 'boolean');
+      assert.equal(typeof result.message, 'string');
+    } finally {
+      if (original === undefined) delete process.env.AGENT_BROWSER_BIN;
+      else process.env.AGENT_BROWSER_BIN = original;
+    }
   });
-
-  // NOTE: AGENT_BROWSER_PORT env override is tested manually (node --test
-  // spawns a child process that doesn't inherit the parent's env).
 });

@@ -1,6 +1,6 @@
 ---
 name: thinking-archetypes
-description: Use when the same problem keeps recurring despite fixes, growth stalled with no obvious cause, or a pam fix made things worse—match it to a known structural pattern instead of re-diagnosing.
+description: Use when the same problem keeps recurring despite fixes, growth stalled with no obvious cause, or a quick fix made things worse—match it to a known structural pattern instead of re-diagnosing.
 ---
 
 # Systems Archetypes
@@ -24,7 +24,7 @@ If no archetype fits after a genuine look, don't force one — drop to `thinking
 ## When to Use
 
 - The same problem keeps recurring despite multiple "fixes"
-- A pam fix made things worse over time
+- A quick fix made things worse over time
 - Growth stalled without an obvious cause
 - A shared resource (CI, staging, a cache, a service quota) keeps degrading
 - Two efforts are escalating against each other (duplicated services, alert/threshold arms races)

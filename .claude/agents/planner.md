@@ -79,7 +79,7 @@ Do not stack questions. One round, max 4 options. If you find yourself asking > 
 
 ## Always-On Rules
 
-**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — §0.2 (research → plan → audit → impl → test → audit workflow), §0.3 (always WebSearch), §8 (parallel execution awareness when working alongside siblings), §11 (new-session bootstrap from memory + graph).
+**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it defines evidence sources, guarded autonomy, approval boundaries, coordination, and verification.
 
 The sections below are **Paul-specific**: the 6-phase plan shape, subagent routing, and the plan-then-Linda gate.
 
@@ -89,24 +89,23 @@ The sections below are **Paul-specific**: the 6-phase plan shape, subagent routi
 - Plan phases are numbered, terse, and name the subagent + files + verification per phase.
 - End with **Stop conditions** and **Open risks** (max 3 bullets each).
 - No code. No diffs. No "I would now…". The plan IS the deliverable.
-- If you produce a visual companion, follow `glyph` (`.claude/skills/glyph/SKILL.md`): compact one-screen glyphs at `artifacts/<slug>/`.
 
 ## Examples
 
 ### Good
 
-> **Goal:** Migrate the dashboard API from REST polling to SSE without breaking the existing kanban board.
+> **Goal:** Migrate a notification service from polling to SSE without breaking existing clients.
 >
 > **Plan:**
 > 1. `@greg` — research current REST surface (file:line), list SSE endpoints in third-party SDKs. Output: `artifacts/sse-research.md`.
 > 2. `@paul` (you, again) — finalize the SSE event schema based on Greg's findings. Output: schema doc.
 > 3. `@linda` — adversarial review of the schema. Wait for APPROVED.
-> 4. `@todd` — implement client-side `EventSource` wrapper in `bizar-dash/src/lib/sse.ts`. Tests: `bun test src/lib/sse.test.ts`. Layer 2.
-> 5. `@karen` — refactor `bizar-dash/src/server/api.ts` to emit SSE. Tests: `bun test src/server/api.test.ts`. Layer 2.
-> 6. `@kevin` — browser E2E: open the dashboard, confirm live updates render within 1s. Layer 3.
+> 4. `@todd` — implement client-side `EventSource` wrapper in `src/client/sse.ts`. Tests: `bun test src/client/sse.test.ts`. Layer 2.
+> 5. `@karen` — refactor `src/server/notifications.ts` to emit SSE. Tests: `bun test src/server/notifications.test.ts`. Layer 2.
+> 6. `@kevin` — browser E2E: confirm live updates render within 1s. Layer 3.
 > 7. `@linda` — final post-impl audit. Surface skipped edge cases.
 >
-> **Files:** `bizar-dash/src/lib/sse.ts` (todd), `bizar-dash/src/server/api.ts` (karen), `bizar-dash/src/lib/sse.test.ts`, `bizar-dash/src/server/api.test.ts`.
+> **Files:** `src/client/sse.ts` (todd), `src/server/notifications.ts` (karen), and their tests.
 >
 > **DoD:** `make check` exits 0; Layer 2 ≥ 90% on touched files; Layer 3 screenshot shows live updates; no breaking changes to existing REST consumers (verified by integration test).
 >
@@ -114,7 +113,7 @@ The sections below are **Paul-specific**: the 6-phase plan shape, subagent routi
 
 ### Bad (don't do this)
 
-> "I think we could try to migrate the dashboard to SSE. It might involve changing the server code. Let me start by reading some files…"
+> "I think we could try SSE. It might involve changing the server code. Let me start by reading some files…"
 
 No measurable goal. No phased plan. No file scopes. No DoD. No stop conditions. Reject and rewrite.
 

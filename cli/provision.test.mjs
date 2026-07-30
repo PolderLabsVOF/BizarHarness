@@ -1,8 +1,7 @@
 /**
  * cli/provision.test.mjs
  *
- * v5.x — Tests for the idempotency marker and installLightrag functions
- * added in the "fully functional installer" gap-closure.
+ * Tests for provision idempotency and Claude Code configuration sync.
  */
 import { test, describe, beforeEach, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,6 +16,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 // Mock HOME for all tests
 const ORIG_HOME = process.env.HOME;
@@ -26,9 +26,6 @@ function freshHome() {
   const home = mkdtempSync(join(tmpdir(), 'bizar-provision-'));
   process.env.HOME = home;
   delete process.env.XDG_CONFIG_HOME;
-  delete process.env.BIZAR_DASHBOARD_PORT;
-  delete process.env.CLINE_SERVER_PASSWORD;
-  delete process.env.BIZAR_MEMORY_VAULT;
   return home;
 }
 
@@ -90,30 +87,6 @@ describe('install marker (installed.json)', () => {
   });
 });
 
-// ── installLightragProvision ───────────────────────────────────────────────
-
-describe('installLightragProvision()', () => {
-  test('dryRun returns ok without making changes', async () => {
-    const { installLightragProvision } = await import('./provision.mjs');
-    const result = await installLightragProvision({ dryRun: true });
-    assert.equal(result.ok, true);
-    assert.ok(result.message.includes('[dry-run]'));
-  });
-
-  test('returns failure when uv not available', async () => {
-    const { installLightragProvision } = await import('./provision.mjs');
-    // uv is likely available in the test env, but if it is, the test still passes
-    // (already installed). The key is that it doesn't throw.
-    const result = await installLightragProvision({ dryRun: false });
-    // Result is either ok=true (already installed) or ok=false (uv missing)
-    // Either way, no exception was thrown.
-    assert.equal(typeof result.ok, 'boolean');
-    assert.ok(typeof result.message === 'string');
-  });
-});
-
-// ── buildServiceEnvFile ──────────────────────────────────────────────────────
-
 describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
   let home;
 
@@ -146,89 +119,61 @@ describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
     assert.equal(typeof result.counts.rules, 'number');
   });
 
-  // NOTE: the real-run filesystem test would require re-exporting
-  // CLINE_DIR as a function so tests can override it. Per the project's
-  // architecture (NEVER call ClineCore.create() in unit tests, NEVER
-  // touch the user's real ~/.cline/), we leave that as an E2E concern.
-  // The dryRun test above + the message-format assertion prove the
-  // rules-sync code path is wired into syncConfigExtras.
+  // The dry-run test and message-format assertion prove the rules-sync
+  // code path is wired without touching a user's real Claude config.
 });
 
-// ── buildServiceEnvFile ──────────────────────────────────────────────────────
+test('generated Claude settings contain guarded autonomy and current runtime paths', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-settings-'));
+  const claudeDir = join(home, '.claude');
+  try {
+    const script = `
+      import { writeClaudeSettings } from './cli/provision.mjs';
+      const result = writeClaudeSettings({ force: true });
+      if (!result.ok) process.exit(1);
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: join(import.meta.dirname, '..'),
+      env: {
+        ...process.env,
+        HOME: home,
+        CLAUDE_CONFIG_DIR: claudeDir,
+        BIZAR_HOME: join(home, '.config', 'bizar'),
+      },
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
+    assert.equal(settings.permissions.defaultMode, 'acceptEdits');
+    assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
+    assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
+    assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
 
-describe('buildServiceEnvFile()', () => {
-  let home;
-
-  beforeEach(() => {
-    home = freshHome();
-    process.env.HOME = home;
-    delete process.env.XDG_CONFIG_HOME;
-    delete process.env.BIZAR_HOME;
-  });
-
-  afterEach(() => {
-    restoreHome();
-    if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
-  });
-
-  test('includes all required env vars', async () => {
-    const { buildServiceEnvFile } = await import('./service-env.mjs');
-    const content = buildServiceEnvFile({ repoPath: '/repo' });
-    const required = [
-      'BIZAR_HOME', 'BIZAR_REPO', 'PATH',
-      'CLINE_SERVER_PASSWORD', 'BIZAR_DASHBOARD_PORT',
-      'BIZAR_DASHBOARD_HOST', 'BIZAR_LOG_LEVEL',
-      'BIZAR_LIGHTRAG_AUTOSTART',
-      'BIZAR_MEMORY_VAULT',
-    ];
-    for (const var_ of required) {
-      assert.ok(
-        content.includes(`${var_}=`),
-        `${var_} should be present in env file`,
-      );
+    const hookText = JSON.stringify(settings.hooks);
+    for (const hook of [
+      'git-workflow-guard.mjs',
+      'content-style-guard.mjs',
+      'simplify-guard.mjs',
+      'advisor-context.mjs',
+      'telemetry.mjs',
+      'precompact-priorities.sh',
+    ]) {
+      assert.match(hookText, new RegExp(hook.replace('.', '\\.')));
     }
-  });
-
-  test('generates CLINE_SERVER_PASSWORD when not set', async () => {
-    const { buildServiceEnvFile } = await import('./service-env.mjs');
-    const content = buildServiceEnvFile({ repoPath: '/repo' });
-    const lines = content.split('\n');
-    const pwdLine = lines.find(l => l.startsWith('CLINE_SERVER_PASSWORD='));
-    assert.ok(pwdLine, 'CLINE_SERVER_PASSWORD line should exist');
-    const pwd = pwdLine.split('=')[1];
-    assert.ok(pwd.length > 0, 'password should be non-empty');
-  });
-
-  test('adds ~/.local/bin to PATH when uv tools are present', async () => {
-    const { buildServiceEnvFile } = await import('./service-env.mjs');
-    // Ensure HOME is set for the test
-    process.env.HOME = home;
-    const content = buildServiceEnvFile({ repoPath: '/repo' });
-    assert.ok(content.includes('.local/bin:'), 'PATH should include ~/.local/bin');
-  });
-
-  test('uses BIZAR_MEMORY_VAULT from env when set', async () => {
-    const { buildServiceEnvFile } = await import('./service-env.mjs');
-    process.env.BIZAR_MEMORY_VAULT = '/my/custom/vault';
-    try {
-      const content = buildServiceEnvFile({ repoPath: '/repo' });
-      assert.ok(content.includes('BIZAR_MEMORY_VAULT=/my/custom/vault'));
-    } finally {
-      delete process.env.BIZAR_MEMORY_VAULT;
-    }
-  });
+    assert.match(settings.hooks.SubagentStart[0].matcher, /linda/);
+    assert.match(settings.hooks.SubagentStart[0].matcher, /carl/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 // ── writeBizarSkillLock (v6.2.5) ──────────────────────────────────────────────
 //
-// Cline's marketplace UI reads `~/.agents/.skill-lock.json` to decide
-// whether a skill is installed. Without writing entries there, users
-// see "No skills installed" in Cline's Skills tab even though SKILL.md
-// files are correctly mirrored to `~/.cline/skills/` and
-// `~/.agents/skills/`. These tests pin the contract of the
-// `writeBizarSkillLock` helper that the installer uses.
+// The shared skills registry reads `~/.agents/.skill-lock.json` to decide
+// whether a skill is installed. These tests pin the compatibility lock
+// contract used by the installer.
 
-describe('writeBizarSkillLock() — Cline marketplace registration', () => {
+describe('writeBizarSkillLock() — shared registry compatibility', () => {
   let home, skillsSrc, agentsDir;
 
   beforeEach(() => {

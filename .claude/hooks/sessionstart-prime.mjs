@@ -27,12 +27,12 @@
 
 'use strict';
 
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MAX_BRIEFING = 1200; // hard cap, characters
+const MAX_BRIEFING = 800; // hard cap, characters
 const PROJECT_NAME = 'BizarHarness';
 const HOOK_LOG_DIR = '.config/bizar/hook-logs';
 const SESSION_STATE = '.bizar/session-state.json';
@@ -82,8 +82,8 @@ function logLifecycle(cwd, sessionId, source) {
     const dir = join(cwd, HOOK_LOG_DIR);
     const today = new Date().toISOString().slice(0, 10);
     const logFile = join(dir, `task-start-${today}.jsonl`);
-    require('node:fs').mkdirSync(dir, { recursive: true });
-    require('node:fs').appendFileSync(
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(
       logFile,
       JSON.stringify({
         ts: new Date().toISOString(),

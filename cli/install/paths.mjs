@@ -41,12 +41,9 @@ export const PATHS = {
   skillsDir:     join(CLAUDE_DIR, 'skills'),
   commandsDir:   join(CLAUDE_DIR, 'commands'),
   hooksDir:      join(CLAUDE_DIR, 'hooks'),
-  pluginsDir:    join(CLAUDE_DIR, 'plugins'),
   settingsFile:  join(CLAUDE_DIR, 'settings.json'),
   bizarHome:     BIZAR_HOME,
-  servicePid:    join(BIZAR_HOME, 'service.pid'),
-  dashboardPid:   join(BIZAR_HOME, 'dashboard.pid'),
-  dashboardPort: join(BIZAR_HOME, 'dashboard.port'),
+  loopsDir:      join(BIZAR_HOME, 'loops'),
   installMarker: join(BIZAR_HOME, 'installed.json'),
 };
 
@@ -66,12 +63,10 @@ export function printInstallLocations(_opts = {}) {
   console.log(chalk.bold('│') + `    ├─ skills/          bundled skill packs`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + `    ├─ commands/        slash commands`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + `    ├─ hooks/           PreToolUse, PostToolUse, …`.padEnd(69) + chalk.bold('│'));
-  console.log(chalk.bold('│') + `    ├─ plugins/bizar/   the MCP server`.padEnd(69) + chalk.bold('│'));
-  console.log(chalk.bold('│') + `    └─ settings.json    scoped permissions + hooks`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    └─ settings.json    scoped permissions + hooks + MCP`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + ' '.repeat(68) + chalk.bold('│'));
   console.log(chalk.bold('│') + `  Bizar runtime state   ${PATHS.bizarHome}`.padEnd(69) + chalk.bold('│'));
-  console.log(chalk.bold('│') + `    ├─ service.pid      background daemon PID`.padEnd(69) + chalk.bold('│'));
-  console.log(chalk.bold('│') + `    ├─ dashboard.pid    dashboard server PID`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    ├─ loops/           autonomous loop state`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + `    └─ installed.json   install manifest (version, hash)`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + ' '.repeat(68) + chalk.bold('│'));
   console.log(chalk.bold('│') + `  Override with: ${dim('CLAUDE_CONFIG_DIR=/path/to/dir')}`.padEnd(69) + chalk.bold('│'));

@@ -1,168 +1,106 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "mcpServers": {
-    "bizar": {
-      "command": "npx",
-      "args": ["-y", "@polderlabs/bizar-sdk", "mcp"],
-      "env": {
-        "BIZAR_HOME": "${HOME}/.bizar_home",
-        "BIZAR_MEMORY_VAULT": "${HOME}/.bizar_home/memory"
-      }
-    },
-    "semble": {
-      "command": "semble",
-      "args": ["mcp"]
-    },
-    "kevin": {
-      "command": "kevin",
-      "args": ["mcp"]
-    }
+    "bizar": { "command": "npx", "args": ["-y", "@polderlabs/bizar-sdk", "mcp"], "env": { "BIZAR_HOME": "${HOME}/.config/bizar" } },
+    "semble": { "command": "semble", "args": ["mcp"] },
+    "agent-browser": { "command": "agent-browser", "args": ["mcp"] }
   },
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
-      "mcp__bizar__memory_read",
-      "mcp__bizar__memory_list",
-      "mcp__bizar__memory_search",
-      "mcp__bizar__memory_write",
-      "mcp__bizar__plan_action",
-      "mcp__bizar__open_kb",
-      "mcp__bizar__loop_list",
-      "mcp__bizar__loop_status",
-      "mcp__bizar__loop_start",
-      "mcp__bizar__loop_stop",
-      "mcp__bizar__graph_query",
-      "mcp__bizar__graph_path",
-      "mcp__bizar__danger_check",
-      "Read(~/.bizar_memory/**)",
-      "mcp__semble__*",
-      "mcp__agent-browser__*"
+      "mcp__bizar__plan_action", "mcp__bizar__loop_list", "mcp__bizar__loop_status",
+      "mcp__bizar__loop_start", "mcp__bizar__loop_stop", "mcp__bizar__graph_query",
+      "mcp__bizar__graph_path", "mcp__bizar__list_instincts", "mcp__bizar__list_decisions",
+      "mcp__semble__*", "mcp__agent-browser__*"
+    ],
+    "ask": [
+      "Bash(git commit *)", "Bash(git push *)", "Bash(gh pr create *)", "Bash(gh pr edit *)",
+      "Bash(gh pr merge *)", "Bash(gh release *)", "Bash(npm publish *)", "Bash(bun publish *)",
+      "Bash(vercel deploy *)", "Bash(wrangler deploy *)"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./secrets/**)",
-      "Bash(rm -rf /)",
-      "Bash(sudo *)"
+      "Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)",
+      "Bash(rm -rf /)", "Bash(sudo *)", "Bash(git push --force *)", "Bash(git push -f *)",
+      "Bash(git rebase *)", "Write(./node_modules/**)"
     ]
   },
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Source control: the current repository and its configured remotes.",
+      "Development scope: local files, tests, builds, and declared dependencies in the current repository."
+    ],
+    "allow": [
+      "$defaults",
+      "Local reversible edits and test/build commands within the current repository.",
+      "Installing dependencies already declared by repository manifests without changing those manifests.",
+      "Read-only Git, GitHub, documentation, and package-registry operations."
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Commits, pushes, pull-request mutations, releases, package publication, or deployments without the configured human approval hook.",
+      "Force push, rebase, remote branch deletion, or other history rewriting.",
+      "Production or shared-infrastructure writes, credential changes, public exposure, or irreversible local destruction."
+    ]
+  },
+  "attribution": { "commit": "", "pr": "" },
+  "enableWorkflows": true,
+  "alwaysThinkingEnabled": true,
+  "autoDreamEnabled": true,
+  "showThinkingSummaries": true,
   "env": {
-    "BIZAR_HOME": "${HOME}/.bizar_home",
-    "BIZAR_MEMORY_VAULT": "${HOME}/.bizar_home/memory",
-    "BIZAR_LOOPS_DIR": "${HOME}/.bizar_loops",
+    "BIZAR_HOME": "${HOME}/.config/bizar",
     "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
-    "BIZAR_MODEL_ROUTER_URL": "http://localhost:20128/v1",
-    "_model_default_comment": "ANTHROPIC_MODEL is unset by default; sessions run on the router's default (bizar/MiniMax-M3). Override per-session via /use-premium or with `ANTHROPIC_MODEL=cx/gpt-5.6-sol claude`. See .claude/commands/use-premium.md."
+    "BIZAR_MODEL_ROUTER_URL": "http://localhost:20128/v1"
   },
   "hooks": {
     "PreToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/pretooluse-editwrite.mjs",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/pretooluse-bash.mjs",
-            "timeout": 30
-          }
-        ]
-      }
+      { "matcher": "Write|Edit|MultiEdit", "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-editwrite.mjs\"", "timeout": 30 },
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/content-style-guard.mjs\"", "timeout": 30 }
+      ] },
+      { "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-bash.mjs\"", "timeout": 30 },
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-workflow-guard.mjs\"", "timeout": 30 },
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/content-style-guard.mjs\"", "timeout": 30 },
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/simplify-guard.mjs\"", "timeout": 30 }
+      ] }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/posttooluse-editwrite.mjs",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /home/drb0rk/projects/BizarHarness/.claude/hooks/auto-instinct.sh",
-            "timeout": 15
-          }
-        ]
-      },
-      {
-        "matcher": "Bash(git push*)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /home/drb0rk/projects/BizarHarness/.claude/hooks/post-merge-audit.sh",
-            "timeout": 60
-          }
-        ]
-      },
-      {
-        "matcher": "EnterWorktree",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /home/drb0rk/projects/BizarHarness/scripts/worktree-setup.sh",
-            "timeout": 60
-          }
-        ]
-      }
+      { "matcher": "Edit|Write|MultiEdit", "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/posttooluse-editwrite.mjs\"", "timeout": 30 }
+      ] },
+      { "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-instinct.sh\"", "timeout": 15 }
+      ] },
+      { "matcher": "Skill", "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/simplify-guard.mjs\"", "timeout": 30 }
+      ] }
     ],
     "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/worker-suggest.mjs",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/thinking-route.mjs",
-            "timeout": 10
-          }
-        ]
-      }
+      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/worker-suggest.mjs\"", "timeout": 10 }] },
+      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/thinking-route.mjs\"", "timeout": 10 }] },
+      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry.mjs\"", "timeout": 10 }] }
     ],
     "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/sessionstart-prime.mjs",
-            "timeout": 15
-          }
-        ]
-      }
+      { "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sessionstart-prime.mjs\"", "timeout": 15 },
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry.mjs\"", "timeout": 10 }
+      ] }
     ],
     "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/sessionend-recall.mjs",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "node /home/drb0rk/projects/BizarHarness/.claude/hooks/learning-extract.mjs",
-            "timeout": 15
-          }
-        ]
-      }
+      { "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sessionend-recall.mjs\"", "timeout": 15 },
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/learning-extract.mjs\"", "timeout": 15 }
+      ] }
+    ],
+    "PreCompact": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/precompact-priorities.sh\"", "timeout": 15 }] }
+    ],
+    "SubagentStart": [
+      { "matcher": "^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$", "hooks": [
+        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/advisor-context.mjs\"", "timeout": 15 }
+      ] }
     ]
   }
 }

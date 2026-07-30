@@ -17,9 +17,6 @@ export function repoPath(...parts) {
 /**
  * Resolve the Claude Code global config directory.
  *
- * v6.3.0 — Bizar is Claude Code-native. The legacy `~/.cline/`
- * path is kept as a back-compat alias via the wrappers below.
- *
  *   1. `process.env.CLAUDE_CONFIG_DIR` (explicit override)
  *   2. `$HOME/.claude` (Claude Code default)
  */
@@ -51,22 +48,6 @@ export function claudeHooksDir() {
   return join(claudeConfigDir(), 'hooks');
 }
 
-/**
- * @deprecated v6.3.0 — Claude Code migration. Use `claudeConfigDir()`.
- * Thin wrapper so older scripts that haven't been migrated keep working.
- */
-export function clineConfigDir() {
-  return claudeConfigDir();
-}
-
-/**
- * @deprecated v6.3.0 — Claude Code migration. Use `claudeAgentsDir()`.
- * Thin wrapper so older scripts that haven't been migrated keep working.
- */
-export function clineAgentsDir() {
-  return claudeAgentsDir();
-}
-
 async function tryReadVersion(filePath) {
   try {
     const raw = await readFile(filePath, 'utf8');
@@ -82,24 +63,6 @@ function commandExists(command) {
     ? spawnSync('where', [command], { stdio: 'ignore' })
     : spawnSync('which', [command], { stdio: 'ignore' });
   return probe.status === 0;
-}
-
-/**
- * @deprecated v6.3.0 — Claude Code migration. Use `detectClaude()`.
- * Probe for the legacy Cline CLI to power compat reports.
- */
-export async function detectCline() {
-  const configDir = claudeConfigDir();
-  const agentsDir = claudeAgentsDir();
-  let exists = false;
-  let version = '';
-  try {
-    await access(configDir, constants.F_OK);
-    exists = true;
-  } catch {
-    exists = false;
-  }
-  return { exists, version, configDir, agentsDir };
 }
 
 /**

@@ -226,7 +226,7 @@ test('slash: /team triggers slash note without invoking router', () => {
   const out = JSON.parse(r.stdout);
   const ctx = out.hookSpecificOutput.additionalContext;
   assert.match(ctx, /\[slash: \/team\]/);
-  assert.match(ctx, /Odin spawns a coordinated team/);
+  assert.match(ctx, /Mike spawns a coordinated team/);
   assert.match(ctx, /Slash command detected/);
 });
 
@@ -289,15 +289,13 @@ test('slash: /pr-review routes to slash note (not mental model)', () => {
 for (const c of [
   ['/setup-provider',  'Configure a provider'],
   ['/explain',         'Read-only explanation'],
-  ['/visual-plan',     'visual plan canvas'],
   ['/tailscale-serve', 'Tailscale'],
-  ['/bizar',           'Bizar SDK passthrough'],
+  ['/bizar',           'Bizar harness orientation'],
   ['/init',            'bizar init'],
   ['/cron',            'scheduled tasks'],
   ['/spec',            '5-section spec'],
   ['/sprint',          'sprint-contract'],
-  ['/goal',            'long-term goal'],
-  ['/learn',           'self-improvement'],
+  ['/learn',           'bounded instincts'],
 ]) {
   test(`slash: ${c[0]} routes to slash note`, () => {
     const r = runHook(JSON.stringify({ user_prompt: `${c[0]} something` }));

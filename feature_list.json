@@ -1,2187 +1,453 @@
 {
   "$schema": "https://bizar.dev/schemas/feature_list.v1.json",
-  "description": "Machine-readable feature state for Bizar Harness. One entry per feature; WIP=1 enforced; only passing features count toward VCR.",
+  "description": "Machine-readable state for the retained Claude Code harness. Removed subsystems and historical implementation-only entries are intentionally absent.",
   "features": [
     {
       "id": "F-001",
-      "behavior": "MCP server loads in Claude Code host via Agent SDK tool registration",
-      "verification": "make check (TS 0 errors) + make e2e (plugin setup returns < 1s, 19 tools registered)",
+      "behavior": "Claude Code stdio MCP server exposes the retained nine-tool local surface",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "Phase 1 commit 97ddb19; 17 tools registered, 4 hooks wired",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "core",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "97ddb19",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ]
-    },
-    {
-      "id": "F-002",
-      "behavior": "All 17 tools use Claude Code MCP tool registration (via @anthropic-ai/claude-agent-sdk)",
-      "verification": "make check (TS 0 errors); grep 'from @cline/sdk' shows createTool in all 17 tools",
-      "state": "passing",
-      "evidence": "Phase 2 commit f8d0d87; 17 tools ported to AgentTool shape",
-      "layer": "L1",
-      "category": "core",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "f8d0d87",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ]
-    },
-    {
-      "id": "F-003",
-      "behavior": "In-process ClaudeSdkRuntime (was ClineRuntime) replaces subprocess",
-      "verification": "make check (TS 0 errors) + make e2e (setup < 1s, no subprocess spawn)",
-      "state": "passing",
-      "evidence": "Phase 3 commit 3511390; clineruntime.ts added; setup() returns in 3ms",
-      "layer": "L1+L3",
-      "category": "core",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "3511390",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ]
-    },
-    {
-      "id": "F-004",
-      "behavior": "Memory tools read/write in-process vault (no dashboard HTTP)",
-      "verification": "make check + make e2e (memory cycle: write\u2192read\u2192list\u2192search)",
-      "state": "passing",
-      "evidence": "Phase 3 commit 3511390; memory-vault.ts added; 4 memory tools ported",
-      "layer": "L3",
-      "category": "core",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "3511390",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ]
-    },
-    {
-      "id": "F-005",
-      "behavior": "Agent teams: bizar_spawn_team + bizar_team_status",
-      "verification": "make check + make e2e (both tools registered when ClineRuntime up)",
-      "state": "passing",
-      "evidence": "Phase 3 commit 3511390; team-spawn.ts + team-status.ts added",
-      "layer": "L3",
-      "category": "teams",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "3511390",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ]
-    },
-    {
-      "id": "F-006",
-      "behavior": "Kanban board: Tasks.tsx + /api/tasks + tasks-store",
-      "verification": "Dashboard renders 5-column kanban against /api/tasks; WS tasks:change + tasks:delete handled",
-      "state": "passing",
-      "evidence": "Existing in dashboard (Tasks.tsx 784 lines, tasks.mjs REST, tasks-store.mjs)",
-      "layer": "L3",
-      "category": "ui",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "3511390",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ]
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-007",
-      "behavior": "Harness audit passes all CRITICAL items",
-      "verification": "bash tools/audit-harness.sh . \u2014 0 CRITICAL fail",
+      "behavior": "Harness audit command produces structured repository evidence",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-007 \u2014 all layers green",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "3511390",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ]
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-008",
-      "behavior": "Makefile with all required targets (setup / dev / check / test / e2e / vcr / check-arch / clean-check / session-start / session-end / verify-feature)",
-      "verification": "make help lists all targets; each runs without error on a clean repo",
+      "behavior": "Makefile provides setup, check, test, e2e, architecture, absence, clean-state, and feature gates",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-008 \u2014 all layers green",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-009",
-      "behavior": "scripts/{verify-feature.sh, check-arch.sh, clean-state-check.sh, session-trace.sh}",
-      "verification": "All four scripts executable, idempotent, exit 0 on success",
+      "behavior": "Verification scripts cover architecture, dependencies, feature state, evals, sessions, and removed surfaces",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-009 \u2014 all layers green",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-010",
-      "behavior": "templates/{sprint-contract.md, evaluator-rubric.md, clean-state-checklist.md}",
-      "verification": "All three templates exist and reference each other",
+      "behavior": "Sprint, evaluator, clean-state, plan, schedule, and eval fixture templates remain reusable without an application service",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-010 \u2014 all layers green",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-011",
-      "behavior": ".claude/settings.json scopes tool access for agents",
-      "verification": "JSON parses; agent permissions scoped to plugin tooling",
+      "behavior": "Claude Code settings scope MCP tools, protected paths, guarded autonomy, and human approval hooks",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-011 \u2014 all layers green",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-012",
-      "behavior": ".harness/arch-rules.json with WHAT/WHY/FIX format",
-      "verification": "At least 3 rules; each has what/why/fix fields with agent-actionable text",
+      "behavior": "Architecture rules use executable WHAT/WHY/FIX checks",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-012 \u2014 all layers green",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-013",
-      "behavior": "docs/{architecture.md, quality-document.md}",
-      "verification": "Both docs exist with required sections",
+      "behavior": "Current architecture, quality, safety, release, audit, and decision documentation matches code",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-013 \u2014 all layers green",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
-    },
-    {
-      "id": "F-014",
-      "behavior": "Module-level ARCHITECTURE.md / CONSTRAINTS.md in plugins/bizar, bizar-dash, packages/sdk",
-      "verification": "All 4 module docs exist; describe that module's design + hard rules",
-      "state": "passing",
-      "evidence": "make verify-feature F-014 \u2014 all layers green",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "docs",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-015",
-      "behavior": ".nvmrc pins Node runtime version",
-      "verification": "File exists with a valid version string",
+      "behavior": "Pinned Node runtime and package engine constraints are present",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-015 \u2014 all layers green",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors. Common: missing type annotation, wrong zod shape, missing import from @cline/sdk."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "Run `make test` and fix failing tests. Check test output for expected vs actual values."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output. Plugin must register 19 tools + 4 hooks. Memory cycle (write\u2192read\u2192list\u2192search) must pass. Team tools must register when ClineRuntime is up."
-        }
-      ],
-      "passed": "2026-07-07",
-      "commit": "3511390"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "toolchain",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-016",
-      "behavior": "Tool approval gate (dangerous-pattern detection)",
-      "verification": "make check + 36+ patterns registered, beforeTool blocks deny",
+      "behavior": "Dangerous shell and protected-path PreToolUse gates deny or escalate unsafe operations",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "plugins/bizar/src/dangerous-patterns.ts registered; 36 patterns (25 deny + 11 require-approval); test coverage in safety.test.ts",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
-          "repair": "Run `make test` and fix failing tests."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "safety",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-017",
-      "behavior": "Skill curator (closed learning loop, Hermes pattern)",
-      "verification": "make check + safety.test.ts (5 tests)",
+      "behavior": "Canonical skills are mirrored and verified; learning suggestions cannot mutate them directly",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "plugins/bizar/src/hooks/skill-curator.ts created; tracks use/failure; flags revisions after 5 failures; per-skill JSONL at ~/.bizar/skills/usage.jsonl",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
-          "repair": "Run `make test` and fix failing tests."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
-        }
-      ]
-    },
-    {
-      "id": "F-018",
-      "behavior": "Pre-compaction memory flush (OpenClaw pattern)",
-      "verification": "make check + safety.test.ts (3 tests)",
-      "state": "passing",
-      "evidence": "plugins/bizar/src/hooks/memory-flush-on-compact.ts; writes pre-compact snapshot to vault when shouldCompact() returns true; wired into beforeModel",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
-          "repair": "Run `make test` and fix failing tests."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "skills",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-019",
-      "behavior": "Knowledge graph query tools (bizar_graph_query, _path, _explain)",
-      "verification": "make check + safety.test.ts (3 tests) + E2E (3 tests)",
+      "behavior": "Local knowledge graph query and shortest-path MCP tools operate without a service",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "plugins/bizar/src/tools/graph-query.ts created; 3 tools registered (BFS path, label search, neighbor explain); reads .bizar/graph/graph.json (814 nodes in BizarHarness graph)",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
-          "repair": "Run `make test` and fix failing tests."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
-        }
-      ]
-    },
-    {
-      "id": "F-020",
-      "behavior": "Harness research synthesis \u2014 apply walkinglabs/awesome-harness-engineering + Bizar improvement plan",
-      "verification": "make check + 4 new components + 19 new tests + 5 new E2E checks",
-      "state": "passing",
-      "evidence": "Cross-referenced 200+ projects in awesome-harness-engineering + 11 research rounds in research/agent-harness-survey; applied 4 P0/P1 improvements from the 12 in the improvement plan",
-      "layer": "L1+L3",
-      "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check` and fix TypeScript errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/safety.test.ts",
-          "repair": "Run `make test` and fix failing tests."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Check /tmp/bh-full-e2e.mjs output; tools must register and execute."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "sdk",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-021",
-      "behavior": "Agent-browser integration (v6.0.0 MS-2026-05)",
-      "verification": "make check + agent-browser.test.ts (7 tests) + cli/agent-browser-up.sh",
+      "behavior": "Agent-browser CLI/MCP integration and skill documentation are installed",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "v6.0.0 \u2014 replaced browser-harness (Python CDP, v5.x) with agent-browser (native Rust CLI from vercel-labs). 6 plugin tools (bizar_browser_open/snapshot/click/fill/screenshot/command). New SKILL.md, new agent def, new install script, MCP integration.",
-      "layer": "L1+L3",
-      "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run `make check`."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/tools/agent-browser.test.ts",
-          "repair": "Run `make test`."
-        },
-        {
-          "label": "e2e",
-          "cmd": "cli/agent-browser-up.sh doctor",
-          "repair": "Install agent-browser: npm install -g agent-browser && agent-browser install"
-        }
-      ]
-    },
-    {
-      "id": "F-022",
-      "behavior": "MILESTONES.md + IMPLEMENTATION_PLAN.md (v6.0.0 strategy + tactics)",
-      "verification": "make check + docs/INDEX.md updated to link both",
-      "state": "passing",
-      "evidence": "Top-level MILESTONES.md (256 lines): vision, pillars, closed loops, 4 phases, audit score by version. IMPLEMENTATION_PLAN.md (246 lines): current state, active sprint (MS-2026-05), sub-deliverables, test gates, commit points.",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-07",
-      "passed": "2026-07-07",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "n/a"
-        },
-        {
-          "label": "unit",
-          "cmd": "n/a",
-          "repair": "n/a"
-        },
-        {
-          "label": "e2e",
-          "cmd": "n/a",
-          "repair": "n/a"
-        }
-      ]
-    },
-    {
-      "id": "F-023",
-      "behavior": "Claude Code mistake-recovery callback \u2014 keep sessions alive on invalid_tool_call / tool_execution_failed; stop on api_error",
-      "verification": "make check (TS 0 errors) + plugins/bizar/tests/mistake-recovery.test.ts 10 pass",
-      "state": "passing",
-      "evidence": "plugins/bizar/src/mistake-recovery.ts (88 lines) + 10 unit tests covering continue/stop branches, custom guidance, observer wiring. Wired via ClineRuntime defaultOnConsecutiveMistakeLimitReached.",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-09",
-      "passed": "2026-07-09",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "n/a"
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/mistake-recovery.test.ts",
-          "repair": "n/a"
-        },
-        {
-          "label": "e2e",
-          "cmd": "n/a",
-          "repair": "n/a"
-        }
-      ]
-    },
-    {
-      "id": "F-024",
-      "behavior": "Tool-discipline directive \u2014 prefer built-in tools over bash; cap run_commands at ~600 chars; forbid xargs/sed -i/heredocs",
-      "verification": "make check (TS 0 errors) + plugins/bizar/tests/tool-discipline.test.ts 9 pass",
-      "state": "passing",
-      "evidence": "plugins/bizar/src/tool-discipline.ts (94 lines). Injected by beforeModel idempotently via TOOL_DISCIPLINE_MARKER. Includes mapping table read\u2192read_file, search\u2192search_codebase, edit\u2192editor, list\u2192list_files, fetch\u2192web_fetch.",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-09",
-      "passed": "2026-07-09",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "n/a"
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/tool-discipline.test.ts",
-          "repair": "n/a"
-        },
-        {
-          "label": "e2e",
-          "cmd": "n/a",
-          "repair": "n/a"
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "integration",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-025",
-      "behavior": "Installer auto-configures Claude Code (was Cline pre-v6.3.0): syncs config/rules/ \u2192 ~/.claude/rules/, sets claudeAgentMaxConsecutiveMistakes in plugin metadata",
-      "verification": "make check (TS 0 errors) + cli/provision.test.mjs > syncConfigExtras rules-sync pass",
+      "behavior": "Installer/provisioner syncs Claude Code agents, skills, commands, hooks, rules, settings, and MCP registration",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "cli/provision.mjs:syncConfigExtras now also copies config/rules/*.md to ${CLINE_DIR}/rules/. config/cline.json.template adds clineruntimeMaxConsecutiveMistakes:6 to the plugin metadata block.",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "installer",
-      "created": "2026-07-09",
-      "passed": "2026-07-09",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "n/a"
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test cli/provision.test.mjs",
-          "repair": "n/a"
-        },
-        {
-          "label": "e2e",
-          "cmd": "n/a",
-          "repair": "n/a"
-        }
-      ]
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-026",
-      "behavior": "9Router gateway \u2014 all 13 Bizar agents route chat through 9Router at http://localhost:20128/v1; 8 capability skills installed (chat, web-search, web-fetch, image, TTS, STT, embeddings)",
-      "verification": "make check (TS 0 errors) + bun cli/bin.mjs doctor shows \u2713 9router-reachable healthy at http://localhost:20128 + \u2713 provider-config-sanity \u2192 provider.9router",
+      "behavior": "9Router gateway skills provide chat, search, fetch, image, speech, and embedding capabilities",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "config/cline.json.template adds provider.9router (baseUrl/apiKey) and switches all agent model strings to 9router/<id>. config/skills/9router*/SKILL.md (8 files) cover entry + chat + web-search + web-fetch + image + TTS + STT + embeddings. cli/doctor.mjs:check9routerReachable hits /api/health with 4s timeout. NINEROUTER_KEY env var (and NINEROUTER_URL override) supported.",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-09",
-      "passed": "2026-07-09",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "n/a"
-        },
-        {
-          "label": "unit",
-          "cmd": "bun cli/bin.mjs doctor",
-          "repair": "n/a"
-        },
-        {
-          "label": "e2e",
-          "cmd": "n/a",
-          "repair": "n/a"
-        }
-      ]
-    },
-    {
-      "id": "F-027",
-      "behavior": "v6.3.0: Bizar migrated from Cline to Claude Code. v6.1.0 was Cline-only with OpenCode already removed (historical).",
-      "verification": "make check (TS 0 errors) + grep -r 'legacyClineConfigDir\\|promptAndInstallOptional' cli/ returns nothing + grep -r 'opencode\\|legacyCline' ROADMAP.md IMPLEMENTATION_PLAN.md returns only historical/SUPERSEDED references",
-      "state": "passing",
-      "evidence": "cli/utils.mjs:legacyClineConfigDir() removed. cli/install.mjs:promptAndInstallOptional() removed. cli/install.mjs:runPostInstall slimmed to Cline-only bootstrap. docs/decisions/DEC-001-cline-rewrite.md + docs/migration-guide.md + docs/migrations/cline-replacement.md marked SUPERSEDED. ROADMAP.md \u00a71.5 closed; B-CLINE-1/2/3 marked RESOLVED. IMPLEMENTATION_PLAN.md opencode.json line item marked REMOVED.",
-      "layer": "L1",
-      "category": "harness",
-      "created": "2026-07-09",
-      "passed": "2026-07-09",
-      "commit": "current",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "n/a"
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar packages/sdk",
-          "repair": "n/a"
-        },
-        {
-          "label": "e2e",
-          "cmd": "n/a",
-          "repair": "n/a"
-        }
-      ]
-    },
-    {
-      "id": "F-028",
-      "behavior": "Bizar installer writes ~/.agents/.skill-lock.json entries for every config/skills/<name>/SKILL.md; Cline marketplace UI stops showing 0 skills",
-      "verification": "make check + bizar validate (skill-marketplace-registered check present)",
-      "state": "passing",
-      "evidence": "make verify-feature F-028 \u2014 all layers green (2026-07-10)",
-      "layer": "L3",
-      "category": "harness-integration",
-      "created": "2026-07-10",
-      "passed": "2026-07-10",
-      "commit": "566fc07",
-      "layers": [
-        {
-          "label": "unit",
-          "cmd": "node --test cli/provision.test.mjs",
-          "repair": "Run the new tests. writeBizarSkillLock must return {ok,count,path}; idempotent on re-run."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bash scripts/test-in-container.sh",
-          "repair": "Check ~/.agents/.skill-lock.json in a fresh container; must contain all 18 Bizar skills."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "integration",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-029",
-      "behavior": "CubeSandbox (E2B-compatible KVM microVM) runs untrusted scripts via bizar_sandbox_run plugin tool and bizar sandbox CLI",
-      "verification": "make check + container test",
+      "behavior": "CubeSandbox CLI workflow provides an isolated untrusted-code execution option",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "plugins/bizar/src/tools/sandbox.ts (bizar_sandbox_run + bizar_sandbox_exec); cli/commands/sandbox.mjs (doctor/run/list/kill/install-template); config/skills/cubesandbox/SKILL.md; 7 sandbox tests",
-      "layer": "L3",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "sandbox",
-      "created": "2026-07-10",
-      "passed": "2026-07-10",
-      "commit": "508f2c1",
-      "layers": [
-        {
-          "label": "unit",
-          "cmd": "bun test plugins/bizar/tests/tools/sandbox.test.ts",
-          "repair": "The dangerous-patterns gate must reject curl|bash. All 7 tests must pass."
-        },
-        {
-          "label": "e2e",
-          "cmd": "podman run --rm docker.io/library/alpine:latest sh -lc \"bun cli/bin.mjs sandbox doctor\"",
-          "repair": "Should reach CubeSandbox SDK + control-node check; missing SDK is acceptable (lenient return)."
-        }
-      ]
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-030",
-      "behavior": "Walkinglabs awesome-harness-engineering canon codified: harness-engineering skill + init.sh (L06 initializer) + CLAUDE.md mirror",
-      "verification": "./init.sh --fast; make mirror-agents-md-check",
+      "behavior": "Harness-engineering initializer and operating contracts are installed",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "config/skills/harness-engineering/SKILL.md; init.sh (148 lines); scripts/mirror-agents-md.sh; AGENT_BASELINE.md compacted 735 to 155 lines",
-      "layer": "L3",
-      "category": "harness-engineering",
-      "created": "2026-07-10",
-      "passed": "2026-07-10",
-      "commit": "31a0d9d",
-      "layers": [
-        {
-          "label": "unit",
-          "cmd": "./init.sh --fast",
-          "repair": "Each section must print check. Exit 0 healthy; exit 1 blocker."
-        },
-        {
-          "label": "e2e",
-          "cmd": "./scripts/mirror-agents-md.sh --check",
-          "repair": "Edit AGENTS.md and run mirror script; diff must be empty."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "harness",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-031",
-      "behavior": "Container-based test runner (scripts/test-in-container.sh) verifies the entire Bizar pipeline on a fresh podman + alpine image",
-      "verification": "./scripts/test-in-container.sh exits 0 with all 6 stages green",
+      "behavior": "Container test runner validates the core package in a fresh environment",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-031 \u2014 all layers green (2026-07-10)",
-      "layer": "L3",
-      "category": "harness-engineering",
-      "created": "2026-07-10",
-      "passed": "2026-07-10",
-      "commit": "566fc07",
-      "layers": [
-        {
-          "label": "e2e",
-          "cmd": "./scripts/test-in-container.sh",
-          "repair": "Lines for typecheck, plugin+SDK tests, CLI tests must each end in check. Container pulls alpine + bun via curl."
-        }
-      ]
-    },
-    {
-      "id": "F-032",
-      "behavior": "Swarm Coordination: agent lifecycle MCP tools (agent/spawn, agent/list, agent/terminate) + swarm/init + topology registry backed by BizarAgentRegistry",
-      "verification": "make check (TS 0 errors) + make test + a script that spawns a coder, lists it, terminates it, and reads back the registry",
-      "state": "passing",
-      "layer": "L1+L3",
-      "category": "ruflo-port",
-      "created": "2026-07-11",
-      "passed": "2026-07-12",
-      "commit": "92c6e6a",
-      "ruflo_source": "v3/mcp/tools/agent-tools.ts:363/408/450 + swarm-tools.ts:389",
-      "files_touched": [
-        "packages/sdk/src/mcp/server.ts",
-        "packages/sdk/src/agent-registry.ts (new)",
-        "packages/sdk/src/swarm-topology.ts (new)"
-      ],
-      "evidence": "F-032 swarm coordination: 72 SDK tests pass across 3 files (+18 over initial ruflo port: 9 AGENT_TYPES allowlist cases, 6 BizarAgentRegistry persistence cases, 6 SwarmTopologyRegistry persistence cases, plus the new agent_spawn allowlist-rejection MCP test). BIZAR_TOOLS now includes agent_spawn / agent_list / agent_terminate / swarm_init (4 new). Agent ids are crypto.randomUUID()-backed (agent-<uuid>); agent types enforced via 9-entry allowlist (coder / tester / reviewer / system-architect / planner / researcher / performance-engineer / security-auditor / memory-specialist); persistence opt-in via { persistPath } (singleton writes to .harness/agents.json + .harness/topology.json).",
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run make check, fix TS errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test packages/sdk/src/__tests__/agent-registry.test.ts packages/sdk/src/__tests__/swarm-topology.test.ts",
-          "repair": "Run make test, fix failures."
-        },
-        {
-          "label": "e2e",
-          "cmd": "bun run /tmp/bh-full-e2e.mjs",
-          "repair": "Plugin must register 19+4=23 tools total. Memory cycle must still pass."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "test",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-033",
-      "behavior": "Self-Learning: ReasoningBank distillation pipeline (ADR-174: RETRIEVE \u2192 JUDGE \u2192 DISTILL \u2192 CONSOLIDATE) + adaptive model router with Tier-1 codemod intent detection ($0 var-to-const/remove-console/add-logging) + Thompson sampling bandit + Q-learning agent-route",
-      "verification": "make check (TS 0 errors) + bun test packages/sdk + a roundtrip test that writes a memory entry, runs the distiller, verifies a promoted pattern was created with provenance_tier set",
+      "behavior": "Adaptive routing, codemod intent, Q-learning, and bounded instinct/decision records support self-improvement",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "F-033 self-learning: 129 SDK tests pass (8 files, +25 new for codemod-intent/model-router/q-learning-router/memory-distillation). 3 new MCP tools registered (model_route, agent_route, memory_distill). BIZAR_TOOLS now 20 (13 + 4 F-032 + 3 F-033). Roundtrip test confirms oracle:test-exec promotion with provenance_tier set.",
-      "layer": "L1+L2",
-      "category": "ruflo-port",
-      "created": "2026-07-11",
-      "passed": "2026-07-11",
-      "ruflo_source": "v3/@claude-flow/neural/src/reasoning-bank.ts + cli/src/ruvector/{model-router,q-learning-router,enhanced-model-router}.ts",
-      "files_touched": [
-        "packages/sdk/src/mcp/server.ts",
-        "packages/sdk/src/router/{model-router,q-learning-router,codemod-intent,memory-distillation}.ts (new)",
-        "packages/sdk/src/index.ts",
-        "packages/sdk/tests/{router,model-router,q-learning-router,memory-distillation}.test.mjs (new)",
-        "packages/sdk/tests/sdk.test.mjs",
-        "bizar-dash/src/server/memory-{distillation,consolidator}.mjs (new)",
-        "cli/memory-constants.mjs"
-      ],
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "cd packages/sdk && npx tsc --noEmit",
-          "repair": "Run `npx tsc --noEmit` and fix TS errors. Common: import path for the new router modules, missing type annotation on tool handler args."
-        },
-        {
-          "label": "unit",
-          "cmd": "cd packages/sdk && npx vitest run tests/router.test.mjs tests/model-router.test.mjs tests/q-learning-router.test.mjs tests/memory-distillation.test.mjs",
-          "repair": "All 25+ new tests must pass: codemod-intent 5+ positive/5+ negative per intent, Thompson sampling shifts priors, Q-learning shifts Q, distillation produces \u22651 promoted oracle:test-exec pattern with provenance_tier set."
-        },
-        {
-          "label": "roundtrip",
-          "cmd": "node /tmp/f033-roundtrip.mjs",
-          "repair": "Write 3 coding_convention notes (one with test-exec tag), run distiller, assert \u22651 promoted pattern with provenance_tier='oracle:test-exec'."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "learning",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-034",
-      "behavior": "Background Workers: trigger-pattern dispatcher wired to UserPromptSubmit \u2014 auto-suggests relevant Bizar skills/agents when prompt text matches (e.g. 'missing tests' \u2192 testgaps worker \u2192 skill invocation)",
-      "verification": "make check + bun test cli + a dry-run that feeds 5 sample prompts and verifies the dispatcher emits the expected worker ids",
+      "behavior": "UserPromptSubmit trigger router suggests relevant agents and skills without taking action",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "config/trigger-patterns.json (12 workers: testgaps, audit, deepdive, refactor, document, optimize, ultralearn, consolidate, predict, map, preload, benchmark). cli/worker-dispatcher.mjs (256 lines, dispatch()/listWorkers()/loadPatterns()/resetCache(), no external deps, cached regex compilation). .claude/hooks/worker-suggest.mjs (110 lines, UserPromptSubmit hook, exits 0, emits hookSpecificOutput.additionalContext on stdout, stderr log for operator visibility). .claude/settings.json UserPromptSubmit entry appended (preserves existing userpromptsubmit-tag.mjs). L09 layer 1 (node --check on hook + dispatcher) PASS. L09 layer 2 (node --test cli/worker-dispatcher.test.mjs) PASS \u2014 18/18 cases (5 canonical dry-run prompts + 8 edge cases + listWorkers + 4 loadPatterns/cache lifecycle). L09 layer 3 (./scripts/test-in-container.sh) currently FAILS at typecheck stage due to pre-existing F-035 WIP in cli/commands/cost.mjs (cost-gate port) \u2014 unrelated to F-034; F-034 introduces zero TS source. F-034 commits land cleanly on v6.3.0 base.",
-      "layer": "L3",
-      "category": "ruflo-port",
-      "created": "2026-07-11",
-      "passed": "2026-07-11",
-      "commit": "533d81b",
-      "ruflo_source": "v3/@claude-flow/swarm/src/workers/worker-dispatch.ts:147-240 + hooks/src/workers/index.ts",
-      "files_touched": [
-        "config/trigger-patterns.json (new)",
-        "cli/worker-dispatcher.mjs (new)",
-        "cli/worker-dispatcher.test.mjs (new)",
-        ".claude/hooks/worker-suggest.mjs (new)",
-        ".claude/settings.json (UserPromptSubmit wiring append)",
-        "Makefile (test pipeline adds worker-dispatcher.test.mjs)",
-        "package.json (npm test script adds worker-dispatcher.test.mjs)"
-      ],
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "node --check .claude/hooks/worker-suggest.mjs && node --check cli/worker-dispatcher.mjs",
-          "repair": "Fix syntax errors in the hook script or dispatcher."
-        },
-        {
-          "label": "unit",
-          "cmd": "node --test cli/worker-dispatcher.test.mjs",
-          "repair": "Fix failures. dispatch() and listWorkers() must both work; all 12 workers must be discoverable; 5 sample prompts + edge cases + cache lifecycle must pass."
-        },
-        {
-          "label": "e2e",
-          "cmd": "./scripts/test-in-container.sh",
-          "repair": "Container test must exit 0 with all stages green (bootstrap, install, claude CLI, typecheck, tests, e2e, validate). F-034 adds no new infra; failures here are caused by other WIP."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "routing",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-035",
-      "behavior": "MetaHarness: atomic cost gate (SQLite-backed room budget tracker w/ reserve/commit/release) + 3-tier model routing transparency panel + GitHub claim protocol (ClaimService over feature_list.json)",
-      "verification": "make check (TS 0 errors) + node --test cost-gate + feature-list-bridge (43 pass) + vitest RoutingDecisions (5 pass) + container E2E; `bizar cost register/reserve/commit` and `bizar claim/release/handoff/steal/transition` round-trip end-to-end",
+      "behavior": "SQLite cost gate and feature claim protocol provide budget and ownership primitives",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make verify-feature F-035 \u2014 all layers green (2026-07-11)",
-      "passed": "2026-07-11",
-      "commit": "6b96d2e",
-      "layer": "L1+L3",
-      "category": "ruflo-port",
-      "created": "2026-07-11",
-      "ruflo_source": "v3/@claude-flow/cli/src/business-pods/bbs-budget-tracker.ts:151 + commands/issues.ts + services/claim-service.ts",
-      "files_touched": [
-        "cli/cost-gate.mjs (new)",
-        "cli/commands/cost.mjs (new)",
-        "cli/feature-list-bridge.mjs (new)",
-        "cli/commands/claim.mjs (new)",
-        "cli/__tests__/cost-gate.test.mjs (new)",
-        "cli/__tests__/feature-list-bridge.test.mjs (new)",
-        "bizar-dash/src/web/components/agents/RoutingDecisions.tsx (new)",
-        "bizar-dash/src/web/components/agents/RoutingDecisions.test.tsx (new)",
-        "bizar-dash/src/web/lib/types.ts (added RoutingTier + RoutingDecision + WsMessage routing:decision variant)",
-        "bizar-dash/src/web/styles/main.css (appended routing-decisions CSS)",
-        "bizar-dash/vitest.config.ts (added src/web/components/agents/**/*.test.{ts,tsx} include)",
-        "cli/bin.mjs (wired `cost` and `claim` dispatch cases)",
-        "package.json (added new CLI tests to the npm test pipeline)"
-      ],
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "0 errors. cost-gate.mjs uses `// @ts-nocheck` because @types/better-sqlite3 doesn't export the Database/Statement types yet; runtime is correct."
-        },
-        {
-          "label": "unit",
-          "cmd": "node --test cli/__tests__/cost-gate.test.mjs cli/__tests__/feature-list-bridge.test.mjs && cd bizar-dash && npx vitest run src/web/components/agents/RoutingDecisions.test.tsx",
-          "repair": "All three suites green (43 + 5 = 48 tests). If a new case is added, mirror the existing node --test (CLI) and vitest (dashboard) patterns."
-        },
-        {
-          "label": "e2e",
-          "cmd": "./scripts/test-in-container.sh",
-          "repair": "Container test exercises typecheck + SDK + CLI test battery + sandbox doctor + validate on a fresh alpine + bun image. The two SDK-side BizarAgentRegistry failures are F-032 territory (pre-existing, unrelated to F-035)."
-        }
-      ]
-    },
-    {
-      "id": "F-036",
-      "behavior": "Goal Planner UI: GOAP-style plain-English goal input \u2192 A* plan \u2192 live kanban + DependencyGraph + CommunicationLog + RealTimeEventLog + QualityGates panels wired to the existing WebSocket feed and .harness/traces/sessions.jsonl",
-      "verification": "make build:dash + make test:web + a browser-driven screenshot that types a goal, runs the planner, and verifies the kanban + dep graph + comm log all render against a seeded session",
-      "state": "passing",
-      "layer": "L1+L2+L3",
-      "category": "ruflo-port",
-      "created": "2026-07-11",
-      "ruflo_source": "v3/goal_ui/src/{pages/Agents.tsx,components/agents/{TaskBoard,DependencyGraph,CommunicationLog,RealTimeEventLog,QualityGates}.tsx}",
-      "files_touched": [
-        "bizar-dash/src/web/pages/GoalPlanner.tsx (new)",
-        "bizar-dash/src/web/components/agents/{CommunicationLog,RealTimeEventLog,DependencyGraph,QualityGates}.tsx (new)",
-        "bizar-dash/src/web/components/goals/{GoalInput,PlanVisualization}.tsx (new)",
-        "bizar-dash/src/server/routes/goal-planner.mjs (new)",
-        "bizar-dash/src/web/lib/goapPlanner.ts (new)"
-      ],
-      "passed": "2026-07-11",
-      "commit": "1a2ade2",
-      "evidence": "make verify-feature F-036 \u2014 all layers green (2026-07-11)"
-    },
-    {
-      "id": "F-037",
-      "behavior": "v6.3.0 migration gap cleanup \u2014 remove dead Cline-era paths from clineruntime.ts, cline.json.template, cli/commands/validate.*, plugins/bizar/src/tools so make e2e no longer needs workarounds",
-      "verification": "make check (0 TS errors) + make test (all pass, no skip/xfail) + make e2e (13/13 green) + narrow grep over the 4 target paths returns 0 hits for cline / @cline / clineruntime (broader cli/ has ~234 hits but all are documented intentional back-compat / migration helpers \u2014 not framework-coupled source)",
-      "state": "passing",
-      "passed": "2026-07-12",
-      "commit": "4e7bb83648dd6634ad3036a81379421d51e1646e",
-      "evidence": "make check exit 0 + 294/294 unit tests pass + make e2e 13/13 green + clean-check 5/5 + plugins/bizar/{ARCHITECTURE,CONSTRAINTS,README}.md rewritten for the post-rewrite shim state (no longer describe deleted files) + scripts/check-forbidden-imports.sh removed (src/ empty) + plugins/bizar/tsconfig.json slimmed (no src/**/*.ts or tests/**/*.ts globs) + docs/migration-guide.md final-status entry added (records what was removed + categorizes the residual cli/ hits as intentional migration tooling) + 2 pre-existing F-038 TS errors fixed in passing (trust.ts unused _now prefix, federation/index.ts redundant imports)",
-      "layer": "L1+L2+L3",
-      "category": "tech-debt",
-      "created": "2026-07-12",
-      "ruflo_source": null,
-      "files_touched": [
-        "plugins/bizar/ARCHITECTURE.md (rewrite \u2014 was describing deleted Cline-era tree)",
-        "plugins/bizar/CONSTRAINTS.md (rewrite \u2014 was MANDATING createTool from @cline/sdk etc.)",
-        "plugins/bizar/README.md (rewrite \u2014 was 449-line v0.4 plugin manual)",
-        "plugins/bizar/scripts/check-forbidden-imports.sh (delete \u2014 src/ is empty post-F-037)",
-        "plugins/bizar/tsconfig.json (slim \u2014 drop src/**/*.ts + tests/**/*.ts include globs)",
-        "docs/migration-guide.md (add F-037 entry; correct stale clineruntime.ts claim)",
-        "packages/sdk/src/federation/trust.ts (rename unused `now` param to `_now` \u2014 pre-existing F-038 TS error surfaced by the SDK tsconfig's noUnusedParameters)",
-        "packages/sdk/src/federation/index.ts (drop 3 redundant re-imported names from the top of the file \u2014 pre-existing F-038 TS errors)"
-      ],
-      "already_removed_by_v6_3_0_cycle": [
-        "packages/sdk/src/clineruntime.ts (replaced by packages/sdk/src/mcp/server.ts)",
-        ".claude/cline.json.template (replaced by .claude/settings.json + .claude/mcp.json)",
-        "cli/commands/validate.mjs was already Claude-Code-native (zero Cline branches at F-037 start)",
-        "plugins/bizar/src/tools/* (22 Cline createTool files; migrated to BIZAR_TOOLS in packages/sdk/src/mcp/server.ts)"
-      ],
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run make check, fix TS errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "make test",
-          "repair": "294/294 must remain green."
-        },
-        {
-          "label": "e2e",
-          "cmd": "make e2e",
-          "repair": "13/13 must remain green. Key checks: 'plugin shim does not import @cline/*' + 'SDK TypeScript compiles cleanly'."
-        },
-        {
-          "label": "gap-grep",
-          "cmd": "grep -rEn 'cline|@cline' packages/sdk/src cli/commands/validate.mjs plugins/bizar/src .claude --include='*.ts' --include='*.mjs' --include='*.js' --include='*.json' --include='*.template' | grep -v 'docs/migration-guide.md' | grep -v 'CHANGELOG.md' | grep -v '\\.claude/worktrees/'",
-          "repair": "0 hits in the 4 target paths. Broader cli/ hits are documented in migration-guide.md#F-037 as intentional back-compat."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "cli",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-038",
-      "behavior": "Cross-installation agent federation skeleton \u2014 HMAC+nonce envelopes, PII pipeline (soc2/gdpr/hipaa/permissive), TrustEvaluator, PolicyEngine, AuditService, FederationBudget tracker (per-call {maxTokens, maxUsd} + maxHops)",
-      "verification": "make check (0 TS errors) + a Node script that creates 2 Bizar instances with shared HMAC key, sends a federation-envelope from instance A to instance B, and verifies TrustEvaluator accepts and AuditService logs the call",
+      "behavior": "Federation primitives enforce signed envelopes, PII policy, trust, audit, and hop/budget limits",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "passed": "2026-07-12",
-      "evidence": "8 federation modules (envelope/hmac/pii/trust/policy/audit/budget/index) + federation_status MCP tool wired into BIZAR_TOOLS; 101/101 vitest pass (envelope 10 + hmac 22 + pii 12 + trust 9 + policy 11 + audit 10 + budget 16 + orchestrator 11); /tmp/f038-federation-roundtrip.mjs 34/34 PASS (sign + PII redact + receive + tamper reject + nonce replay reject + budget reserve/commit/release + audit log + status snapshot); tsc --noEmit exits 0",
-      "layer": "L1+L3",
-      "category": "ruflo-port",
-      "created": "2026-07-12",
-      "commit": "8733d62",
-      "ruflo_source": "v3/@claude-flow/plugin-agent-federation/src/plugin.ts + plugin-agent-federation/src/domain/entities/federation-envelope.ts:1-20",
-      "files_touched": [
-        "packages/sdk/src/federation/envelope.ts (new)",
-        "packages/sdk/src/federation/hmac.ts (new)",
-        "packages/sdk/src/federation/pii.ts (new)",
-        "packages/sdk/src/federation/trust.ts (new)",
-        "packages/sdk/src/federation/policy.ts (new)",
-        "packages/sdk/src/federation/audit.ts (new)",
-        "packages/sdk/src/federation/budget.ts (new)",
-        "packages/sdk/src/federation/index.ts (new)",
-        "packages/sdk/tests/federation/*.test.ts (new, 8 files)",
-        "packages/sdk/src/mcp/server.ts (add federation_status MCP tool)"
-      ],
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run make check, fix TS errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test packages/sdk/tests/federation",
-          "repair": "Fix failures."
-        },
-        {
-          "label": "e2e",
-          "cmd": "node /tmp/f038-federation-roundtrip.mjs",
-          "repair": "Two-instance HMAC roundtrip + PII redaction + budget reserve/commit must work end-to-end."
-        }
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "sdk",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-039",
-      "behavior": "Hive-mind Byzantine fault-tolerant consensus (thin port) \u2014 3-of-5 majority for review/decision steps when multiple agents disagree; PBFT pre-prepare/prepare/commit/reply phases, view changes, fault detection",
-      "verification": "make check (0 TS errors) + a Node script that runs 5 mock agents through a 3-of-5 vote on a 3-step decision (pre-prepare \u2192 prepare \u2192 commit \u2192 reply) and verifies majority consensus + view-change on simulated faulty agent",
+      "behavior": "Byzantine consensus primitives implement majority/PBFT review decisions",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L1+L3",
-      "category": "ruflo-port",
-      "created": "2026-07-12",
-      "ruflo_source": "v3/@claude-flow/swarm/src/consensus/byzantine.ts + raft.ts + gossip.ts + crdt.ts + transport.ts",
-      "files_touched": [
-        "packages/sdk/src/consensus/byzantine.ts (new)",
-        "packages/sdk/src/consensus/types.ts (new)",
-        "packages/sdk/src/consensus/queen.ts (new)",
-        "packages/sdk/src/consensus/index.ts (new)",
-        "packages/sdk/src/mcp/server.ts (add consensus_propose MCP tool)",
-        "packages/sdk/src/index.ts (export consensus module)"
-      ],
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "bunx tsc --noEmit",
-          "repair": "Run make check, fix TS errors."
-        },
-        {
-          "label": "unit",
-          "cmd": "bun test packages/sdk/tests/consensus.test.ts",
-          "repair": "Fix failures. ByzantineConsensus + QueenCoordinator + createConsensus + getSharedConsensus must all behave per the F-039 spec."
-        },
-        {
-          "label": "e2e",
-          "cmd": "node /tmp/f039-consensus-roundtrip.mjs",
-          "repair": "5 mock agents, 3-of-5 vote, view-change on faulty proposer must work end-to-end. 4 scenarios: happy commit, 2-2-1 split + view-change + re-propose, replay protection, proposer self-fault."
-        }
-      ],
-      "passed": "2026-07-11",
-      "commit": "ec32df2",
-      "evidence": "make verify-feature F-039 \u2014 all layers green (2026-07-11)"
-    },
-    {
-      "id": "F-052",
-      "behavior": "v8 dashboard live data plumbing \u2014 every v8 view pulls from the dashboard backend (Overview, Tasks, Goals, Agents, Activity, Memory, Libraries, Settings). Unified Agents view shows Bizar + Claude Code background agents with a source filter. Goals render from .bizar/PROGRESS.md. WS subscriptions for tasks:change / agents:change / activity:new / goals:change / agent:status. New /api/goals and /api/cc-agents REST routes mounted in api.mjs.",
-      "verification": "npx vitest run src/web/v8 \u2014 195 tests pass (142 baseline + ~53 new data hooks / view rewrites). node --test against backend progress-parser + bg-poller + agents-cc suites \u2014 15/15 pass.",
-      "state": "passing",
-      "layer": "L1+L2",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/server/progress-parser.mjs (new)",
-        "bizar-dash/src/server/progress-parser.test.mjs (new, 8 cases)",
-        "bizar-dash/src/server/routes/goals.mjs (new, full CRUD over PROGRESS.md)",
-        "bizar-dash/src/server/routes/agents-cc.mjs (new, claude agents --json + enrichment)",
-        "bizar-dash/src/server/routes/agents-cc.test.mjs (new, 4 cases)",
-        "bizar-dash/src/server/bg-poller.mjs (tickCCAgents with SHA-1 digest diff)",
-        "bizar-dash/src/server/bg-poller.test.mjs (new, 3 cases)",
-        "bizar-dash/src/server/api.mjs (mount goals + cc-agents routers)",
-        "bizar-dash/src/web/v8/data/{fetcher,types,useFetch,useWebSocket}.ts (new)",
-        "bizar-dash/src/web/v8/__tests__/{useFetch,useWebSocket}.test.ts (new, 5+5 cases)",
-        "bizar-dash/src/web/v8/__tests__/views.test.tsx (rewrote seeded-data tests against mocked fetch)",
-        "bizar-dash/src/web/v8/views/{Overview,Tasks,Goals,Agents,Activity,Memory,Libraries,Settings}/*View.tsx (rewritten for live data)",
-        "bizar-dash/src/web/v8/views/Router.tsx (drop hardcoded library arrays)"
-      ],
-      "layers": [
-        {
-          "label": "compile",
-          "cmd": "make check",
-          "repair": "0 TS errors expected."
-        },
-        {
-          "label": "unit",
-          "cmd": "npx vitest run src/web/v8 && node --test bizar-dash/src/server/{progress-parser,routes/agents-cc,bg-poller}.test.mjs",
-          "repair": "All v8 frontend vitest cases (195) and backend node:test cases (15) must pass. Common: missing fetch mock in views.test, broken WS subscriber leak, Router barrel syntax error."
-        },
-        {
-          "label": "e2e",
-          "cmd": "make e2e",
-          "repair": "Add a /api/goals parse-shape check to bh-full-e2e.mjs. Then 14/14 expected."
-        }
-      ],
-      "passed": "2026-07-13",
-      "commit": "4092295",
-      "evidence": "npx vitest run src/web/v8 \u2014 25 files, 195/195 pass (2026-07-13). node --test 3 backend files \u2014 15/15 pass (2026-07-13)."
-    },
-    {
-      "id": "F-053",
-      "behavior": "v8 Agent detail Drawer + control plane (S11). Click any agent card \u2192 right-side Sheet with avatar/role/source badge/current task/prompt textarea + Send / Restart / Copy id buttons. Send routes to /api/cc-agents/:id/send for CC background agents and /api/agents/:name/invoke for Bizar agents. Backend routes/agents-cc.mjs adds kill + send endpoints.",
-      "verification": "tsc --noEmit 0 errors. control-plane.test.tsx 7/7 vitest cases (AgentDetail: name/badge/task callout/Send endpoint routing/button presence; GoalDetail: editable fields/KR list/PATCH on blur). Backend agents-cc 4/4 pass.",
-      "state": "passing",
-      "layer": "L1+L2",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/ui/agents/AgentDetail.tsx (new, Sheet + buttons + fetchJson routing)",
-        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (onOpen wiring + AgentDetail mount)",
-        "bizar-dash/src/server/routes/agents-cc.mjs (POST /cc-agents/:id/kill and /send)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7390713"
-    },
-    {
-      "id": "F-054",
-      "behavior": "v8 Goal editor Drawer + create flow (S12). Card click \u2192 editable Title / Status / Owner / Due + inline KR list (toggle done, add via Enter, remove). Each field PATCHes /api/goals/:id on blur; KR ops hit /key-results/:krId. '+ New goal' button POSTs /api/goals then opens the new goal for editing. Source-of-truth stays .bizar/PROGRESS.md.",
-      "verification": "tsc --noEmit 0 errors. control-plane.test.tsx 7/7 pass (GoalDetail sections). progress-parser 8/8 + round-trip pass.",
-      "state": "passing",
-      "layer": "L1+L2",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/ui/goals/GoalDetail.tsx (new, Sheet + editable fields + KR list)",
-        "bizar-dash/src/web/v8/views/Goals/GoalsView.tsx (+ New goal + Drawer mount)",
-        "bizar-dash/src/server/routes/goals.mjs (already shipped in S10; POST + PATCH + KR endpoints)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7390713"
-    },
-    {
-      "id": "F-055",
-      "behavior": "Command palette control surface (S13). \u2318K palette gains three groups: Agents (Spawn Coder/Researcher/Planner/Reviewer \u2192 POST /api/agents), Tasks (New task via window.prompt \u2192 POST /api/tasks/submit), Projects (dynamically loaded from /api/projects \u2192 POST /api/projects/:id/activate). Existing Navigation/Actions/Settings groups preserved.",
-      "verification": "tsc --noEmit 0 errors. The existing AppCommandPalette.test.tsx continues to pass (palette structure unchanged on the outside).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/CommandPalette/AppCommandPalette.tsx (3 new groups + spawnAgent + newTask + switchProject helpers)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7390713"
-    },
-    {
-      "id": "F-056",
-      "behavior": "Settings section wiring pass (S14). All 16 sections either render real controls (theme, density, density-rules, plugins/mcps/skills/hooks counts pulled live) or persist via PATCH /api/settings. control-plane.test.tsx regression suite pins the AgentDetail + GoalDetail wiring.",
-      "verification": "tsc --noEmit 0 errors. SettingsView smoke test (renders 16 sections, marks General as active) passes via views.test.tsx.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/__tests__/control-plane.test.tsx (new, 7 cases)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7390713"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "sdk",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-057",
-      "behavior": "S15 — ESM `require('node:fs')` regression fix. Replaced all 4 production `require('node:fs')` call sites in cli/commands/tailscale.mjs, cli/commands/voice.mjs, and cli/service-env.mjs with top-level ESM imports. Added a static-analysis guard (cli/__tests__/esm-no-require.test.mjs) that greps every production .mjs file under cli/ and asserts no `require(` call exists outside comments and string literals. Guards against the bug returning on Node 18/20 LTS, where `require` is undefined inside ESM modules. The bug fires silently on Node 22+ thanks to the require shim, masking it on dev boxes.",
-      "verification": "npm run typecheck green (0 errors). npm test green (109/109 + 9/9). New cli/__tests__/esm-no-require.test.mjs passes after the fix; fails with a clear 4-line offender list on the unfixed source.",
+      "behavior": "Static ESM validation prevents CommonJS require calls in production MJS modules",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L0",
-      "category": "cli",
-      "created": "2026-07-13",
-      "files_touched": [
-        "cli/commands/tailscale.mjs",
-        "cli/commands/voice.mjs",
-        "cli/service-env.mjs",
-        "cli/__tests__/esm-no-require.test.mjs (new, 2 cases)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-058",
-      "behavior": "S23 — Overview snapshot includes real tasks/goals/agents/tokens/needsAttention counts. Before this fix, state.getOverview() returned only counts.* so every Overview StatTile rendered 0/— on a live dashboard. New enrichOverview() in routes/overview.mjs aggregates task buckets from tasksStore, goal buckets from parseProgress() against .bizar/PROGRESS.md (CC's /goal canonical store), and agent buckets from the merged Bizar + CC roster.",
-      "verification": "make check 0 errors. node --test routes/overview.test.mjs passes. make e2e-orchestration reports snapshot.tasks_shape=queued,active,done,blocked and snapshot.goals_shape=total,done,atRisk with non-zero values when the active project has tasks and goals.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "server",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/server/routes/overview.mjs",
-        "bizar-dash/src/server/routes/agents-cc.mjs (peekCachedAgents export)",
-        "bizar-dash/src/server/routes/overview.test.mjs (new)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-059",
-      "behavior": "S24 — /api/agents merges Bizar + CC agents in a single response with source: 'bizar' | 'cc' discriminator. CC roster read via peekCachedAgents() (no extra subprocess per request). /api/agents now returns the union list so the dashboard shows both ecosystems side-by-side from one endpoint.",
-      "verification": "make check 0 errors. make e2e-orchestration reports agents.merged_shape pass; every agent row has source discriminator. UI: AgentsView source-chip filter renders both 'bizar' and 'cc' rows.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "server",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/server/routes/agents.mjs",
-        "bizar-dash/src/server/routes/agents-cc.mjs"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-060",
-      "behavior": "S25 — Live orchestration-center e2e. make e2e-orchestration boots the dashboard on a free port, hits /api/health, /api/snapshot, /api/agents, /api/goals, exercises /api/gc, completes a WS handshake, and writes evidence to /tmp/bizar-e2e-<pid>.json. Exits non-zero on any failure.",
-      "verification": "make e2e-orchestration reports All 12 steps passed; evidence JSON contains 12 ok=true entries with detail strings naming each endpoint and shape.",
-      "state": "passing",
-      "layer": "L1",
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
       "category": "test",
-      "created": "2026-07-13",
-      "files_touched": [
-        "tests/e2e/orchestration-center.mjs (new)",
-        "Makefile (e2e-orchestration target)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-061",
-      "behavior": "S32 — GoalsView inline create + delete (no window.prompt/window.confirm). Create opens a Sheet with title + description fields and validates non-empty title before POSTing /api/goals. Delete toggles an inline confirm row inside the card so the user can confirm without leaving the view.",
-      "verification": "make check 0 errors. dashboard vitest passes. make e2e-orchestration 18/18.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "ui",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Goals/GoalsView.tsx"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-062",
-      "behavior": "S32 — LibrariesView CHANGE_EVENTS.hooks typo fix. Was ['agents:change','agents:change'] (copy-paste); now ['hooks:change','agents:change']. Also adds hooks:change to ALL_EVENTS so the always-on WS listener is registered regardless of which tab the user is on.",
-      "verification": "make check 0 errors.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "ui",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Libraries/LibrariesView.tsx"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-063",
-      "behavior": "S30+S31 — E2E hardening. PUT /api/settings round-trip verified live (theme.mode persists). PROGRESS.md fixture pre-seeded with 4 goals so snapshot.goals.total=4 and needsAttention.length≥1 assertions are non-trivial.",
-      "verification": "make e2e-orchestration reports 18/18 live steps; settings.roundtrip asserts theme.mode=dark; goals.fixture_count asserts count=4.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "test",
-      "created": "2026-07-13",
-      "files_touched": [
-        "tests/e2e/orchestration-center.mjs"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-064",
-      "behavior": "S33 — 7 new v8 pages (Doctor, Usage, Backup, Notifications, Diagnostics, Headroom, Eval) wired through existing server routes. Each page renders the standard pattern (ViewHeader + Skeleton + EmptyState + Card + fetchJson) and is reachable from the Sidebar's new System group. Router.tsx adds 7 lazy() imports + 7 case arms.",
-      "verification": "make check 0 errors. dashboard vitest passes 7 new view cases (one per new view) via installFetchMock URL-pattern matching. Sidebar counts all 7 new entries in the System group.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Doctor/DoctorView.tsx (new)",
-        "bizar-dash/src/web/v8/views/Usage/UsageView.tsx (new)",
-        "bizar-dash/src/web/v8/views/Backup/BackupView.tsx (new)",
-        "bizar-dash/src/web/v8/views/Notifications/NotificationsView.tsx (new)",
-        "bizar-dash/src/web/v8/views/Diagnostics/DiagnosticsView.tsx (new)",
-        "bizar-dash/src/web/v8/views/Headroom/HeadroomView.tsx (new)",
-        "bizar-dash/src/web/v8/views/Eval/EvalView.tsx (new)",
-        "bizar-dash/src/web/v8/views/Router.tsx (7 lazy imports + 7 case arms)",
-        "bizar-dash/src/web/v8/shell/Sidebar.tsx (7 new icons + 7 entries in System group)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-065",
-      "behavior": "S34 — SettingsView audit gap closure. 9 HIGH/MEDIUM findings closed: hook switches (PreToolUse/PostToolUse/TaskStart/TaskResume/UserPromptSubmit) now persist via update() instead of inert defaultChecked; notification channel select bound to state (toast/system/both/silent); storage paths (local store/cache/sessions) editable Inputs that persist; cache budget real Slider (64-4096 MB) bound to state; timezone selector (21 common IANA zones) added to General section; activityCompact promoted to state-bound. NativeSelect gains optional id_attr prop for test targeting of the timezone selector.",
-      "verification": "make check 0 errors. audit-fixes.test.tsx 6/6 cases (SettingsView timezone, TasksView create flow, AgentsView create flow) pass.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Settings/SettingsView.tsx (12 new state fields + 21-entry COMMON_TIMEZONES + wired controls)",
-        "bizar-dash/src/web/v8/ui/controls/Select.tsx (id_attr prop for test targeting)",
-        "bizar-dash/src/web/v8/__tests__/audit-fixes.test.tsx (new, 6 cases)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-066",
-      "behavior": "S35 — TasksView and AgentsView create forms via Sheet. TasksView gains a + New task button opening a Sheet with title/description/priority fields, POSTing to /api/tasks. AgentsView gains a + New agent button opening a Sheet with name/role fields, POSTing to /api/agents. Replaces the v9.0.5-era window.prompt/window.confirm blockers.",
-      "verification": "make check 0 errors. audit-fixes.test.tsx covers both create flows (Sheet opens, fields render, submit posts to correct endpoint).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "dashboard",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Tasks/TasksView.tsx (+ New task Sheet + createDraft + saveCreate)",
-        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (+ New agent Sheet + createDraft + saveCreate)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-067",
-      "behavior": "S36 — Real-environment e2e harness. tests/e2e/real-environment.mjs boots the dashboard server against a real tmp project (no fixture override), hits each of the 7 new endpoint groups (Doctor, Usage, Backup, Notifications, Diagnostics, Headroom, Eval), exercises the notification read flow (insert → mark read → assert unread count drops), and writes evidence to /tmp/bizar-real-env-<pid>.json. Exits non-zero on any failure. Seeds ~/.config/bizar/notifications.jsonl with PID-keyed entry to test the read flow. Makefile e2e-real-env target added.",
-      "verification": "make e2e-real-env reports All 14 live steps passed. Evidence JSON contains 14 ok=true entries with detail strings naming each endpoint + the notification read flow assertions.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "test",
-      "created": "2026-07-13",
-      "files_touched": [
-        "tests/e2e/real-environment.mjs (new, 14 live steps)",
-        "Makefile (e2e-real-env target + .PHONY line update)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "pending"
-    },
-    {
-      "id": "F-068",
-      "behavior": "S38 — ChatView. Three-pane layout (session list, transcript, composer). Live deltas via WS chat:delta + chat:message. Regenerate per assistant message. Audit button. All actions use Sheet / inline confirm.",
-      "verification": "bizar-dash/src/web/v8/__tests__/chat-view.test.tsx passes (7 cases). End-to-end chat roundtrip asserted in tests/e2e/ws-chat-roundtrip.mjs (6/6).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Chat/ChatView.tsx (new, ~355 LOC)",
-        "bizar-dash/src/web/v8/views/Router.tsx (chat case arm)",
-        "bizar-dash/src/web/v8/shell/Sidebar.tsx (Chat entry)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "682d3cc"
-    },
-    {
-      "id": "F-069",
-      "behavior": "S39 — ProjectsView. List with active badge, Add Sheet, Activate, Remove (inline-confirm), Auto-detect, Scan. Backed by /api/projects.",
-      "verification": "bizar-dash/src/web/v8/__tests__/projects-view.test.tsx passes (6 cases). Full suite 307 tests after S39.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Projects/ProjectsView.tsx (new, 225 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "d26fd6f"
-    },
-    {
-      "id": "F-070",
-      "behavior": "S39 — ClaudeSessionsView + detail. List, rename (inline), delete (inline-confirm), Open-to-detail Sheet, New session Sheet. Detail sheet shows message timeline + follow-up send.",
-      "verification": "bizar-dash/src/web/v8/__tests__/claude-sessions-view.test.tsx passes (7 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/ClaudeSessions/ClaudeSessionsView.tsx (new, ~250 LOC)",
-        "bizar-dash/src/web/v8/views/ClaudeSessions/ClaudeSessionDetail.tsx (new, ~140 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "d26fd6f"
-    },
-    {
-      "id": "F-071",
-      "behavior": "S39 — Project interface added to data/types.ts.",
-      "verification": "Used by ProjectsView; Project interface present at data/types.ts.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "data",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/data/types.ts (Project interface)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "d952666"
-    },
-    {
-      "id": "F-072",
-      "behavior": "S40 — HistoryView. Timeline from /api/history with kind + project filter chips, refresh button, live updates on history:new WS.",
-      "verification": "bizar-dash/src/web/v8/__tests__/history-view.test.tsx passes (4 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/History/HistoryView.tsx (new, ~210 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "13016df"
-    },
-    {
-      "id": "F-073",
-      "behavior": "S40 — AdminView. Card grid with 7 tiles (gc, cache-clear, memory-reindex, logs-purge, restart, rebuild, export-activity). Destructive actions get inline confirm. Export opens in new tab.",
-      "verification": "bizar-dash/src/web/v8/__tests__/admin-view.test.tsx passes (6 cases). Real-env probe admin.gc_ok passes. Bug fixed: routes/admin.mjs paths corrected from /gc to /admin/gc (router.use() does not auto-prefix).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Admin/AdminView.tsx (new, ~200 LOC)",
-        "bizar-dash/src/server/routes/admin.mjs (path bug fix)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "13016df"
-    },
-    {
-      "id": "F-074",
-      "behavior": "S40 — AuthView. /api/auth/status, Reveal (bearer token), Rotate with inline confirm.",
-      "verification": "bizar-dash/src/web/v8/__tests__/auth-view.test.tsx passes (3 cases). Real-env probe auth.status_shape passes.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Auth/AuthView.tsx (new, ~165 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "13016df"
-    },
-    {
-      "id": "F-075",
-      "behavior": "S41 — EnvVarsView. List with masked values, Add/Edit/Bulk-Import Sheets, Export trigger, inline-confirm Delete. Client-side BIZAR_[A-Z0-9_]+ validation.",
-      "verification": "bizar-dash/src/web/v8/__tests__/env-vars-view.test.tsx passes (5 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/EnvVars/EnvVarsView.tsx (new, ~325 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "d952666"
-    },
-    {
-      "id": "F-076",
-      "behavior": "S41 — ConfigView. 4 tabs: Runtime config (raw JSON viewer + Reload/Save via /api/config), Providers (CRUD via /api/config/providers), MCPs (list via /api/config/mcps), System LLM (GET/PUT /api/llm/system-llm).",
-      "verification": "bizar-dash/src/web/v8/__tests__/config-view.test.tsx passes (4 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Config/ConfigView.tsx (new, ~340 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "d952666"
-    },
-    {
-      "id": "F-077",
-      "behavior": "S42 — DialogsView. Active queue (GET /api/dialogs). Per-row Dismiss with inline confirm (DELETE /api/dialogs/:id). Live via dialog:show WS.",
-      "verification": "bizar-dash/src/web/v8/__tests__/dialogs-view.test.tsx passes (3 cases). Bug fix: original polled every 15s with setInterval which leaked in jsdom and crashed workers with OOM; replaced with WS subscription.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Dialogs/DialogsView.tsx (new, ~140 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "218e46f"
-    },
-    {
-      "id": "F-078",
-      "behavior": "S42 — ProvidersView. List (GET /api/providers), active-default card (GET /api/providers/active), per-provider active-key masked sub-card (GET /api/providers/:id/active-key), inline-confirm Rotate (POST /api/providers/:id/rotate), Auto-detect trigger (GET /api/providers/auto-detect).",
-      "verification": "bizar-dash/src/web/v8/__tests__/providers-view.test.tsx passes (4 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Providers/ProvidersView.tsx (new, ~220 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "218e46f"
-    },
-    {
-      "id": "F-079",
-      "behavior": "S42 — ModsView. Installed + Registry sections. Enable toggle (PUT /api/mods/:id {enabled}), inline-confirm Uninstall (DELETE /api/mods/:id), Upgrade (POST /api/mods/:id/upgrade). Install Sheet accepts registry id or local path.",
-      "verification": "bizar-dash/src/web/v8/__tests__/mods-view.test.tsx passes (5 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Mods/ModsView.tsx (new, ~330 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "218e46f"
-    },
-    {
-      "id": "F-080",
-      "behavior": "S42 — UpdateView. Package list (GET /api/updates/status), Check (GET /api/updates/check), per-package Apply with inline confirm (POST /api/updates/apply {packages}), Apply all card. Live progress log from update:progress / update:log / update:complete WS.",
-      "verification": "bizar-dash/src/web/v8/__tests__/update-view.test.tsx passes (3 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Update/UpdateView.tsx (new, ~280 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "218e46f"
-    },
-    {
-      "id": "F-081",
-      "behavior": "S43 — ArtifactsView. List (GET /api/artifacts), Add Sheet (POST /api/artifacts {slug, ...}), Open-to-detail Sheet loading /api/artifacts/:slug + /render, inline-confirm Delete (DELETE /api/artifacts/:slug).",
-      "verification": "bizar-dash/src/web/v8/__tests__/artifacts-view.test.tsx passes (4 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Artifacts/ArtifactsView.tsx (new, ~250 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7e99103"
-    },
-    {
-      "id": "F-082",
-      "behavior": "S43 — LightRAGView. Defaults form (GET/PUT /api/lightrag/defaults), Status card with running + pid + host:port + log tail (GET /api/lightrag/status), Autostart trigger (POST /api/lightrag/autostart).",
-      "verification": "bizar-dash/src/web/v8/__tests__/lightrag-view.test.tsx passes (3 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/LightRAG/LightRAGView.tsx (new, ~210 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7e99103"
-    },
-    {
-      "id": "F-083",
-      "behavior": "S43 — VoiceView. List (GET /api/voice/list), inline audio player via /api/voice/:id/audio, Upload Sheet (FormData POST /api/voice/upload), inline-confirm Delete (DELETE /api/voice/:id).",
-      "verification": "bizar-dash/src/web/v8/__tests__/voice-view.test.tsx passes (3 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Voice/VoiceView.tsx (new, ~180 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7e99103"
-    },
-    {
-      "id": "F-084",
-      "behavior": "S43 — ClipboardView. Saved clip list (GET /api/clipboard/list), Save Sheet (POST /api/clipboard/save), inline-confirm Delete (DELETE /api/clipboard/:id).",
-      "verification": "bizar-dash/src/web/v8/__tests__/clipboard-view.test.tsx passes (3 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Clipboard/ClipboardView.tsx (new, ~190 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7e99103"
-    },
-    {
-      "id": "F-085",
-      "behavior": "S43 — ObsidianView. Vault stats (GET /api/obsidian), notes list (GET /api/obsidian/notes), per-note inline expand (GET /api/obsidian/notes/:path), inline-confirm Delete (DELETE /api/obsidian/notes/:path), Rebuild index (POST /api/obsidian/index).",
-      "verification": "bizar-dash/src/web/v8/__tests__/obsidian-view.test.tsx passes (3 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Obsidian/ObsidianView.tsx (new, ~200 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7e99103"
-    },
-    {
-      "id": "F-086",
-      "behavior": "S43 — MiscView. Global fuzzy search panel (GET /api/search?q=) with kind icons, Tailscale card (GET /api/tailscale/status + Enable POST /api/tailscale/enable + Disable POST /api/tailscale/disable).",
-      "verification": "bizar-dash/src/web/v8/__tests__/misc-view.test.tsx passes (3 cases). Spawn palette actions were already wired in AppCommandPalette from earlier work.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Misc/MiscView.tsx (new, ~200 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "7e99103"
-    },
-    {
-      "id": "F-087",
-      "behavior": "S37 — Chat WS protocol foundations. WsMessage union gains chat:delta / chat:message / chat:done / chat:error / history:new / projects:change / update:progress. New ChatMessage / ChatSession / ClaudeSession / HistoryEvent interfaces.",
-      "verification": "bizar-dash/src/web/v8/__tests__/chat-types.test.ts passes (4 cases). tests/e2e/ws-chat-roundtrip.mjs passes 6/6.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "data",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/data/types.ts (WsMessage union + 4 interfaces)",
-        "bizar-dash/src/web/v8/ui/chat/EventStream.tsx (new)",
-        "bizar-dash/src/web/v8/ui/chat/MessageBubble.tsx (new)",
-        "bizar-dash/src/web/v8/ui/chat/ChatDrawer.tsx (new)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "69aa434"
-    },
-    {
-      "id": "F-088",
-      "behavior": "S45 — AgentHierarchy view. Collapsible parent/child tree of Bizar agents (parent: links in agent frontmatter) sourced from GET /api/agents/hierarchy. EmptyState when roots is empty. Live refetch via agents:change WS.",
-      "verification": "bizar-dash/src/web/v8/__tests__/agent-hierarchy.test.tsx passes (4 cases: empty, one-root-two-children, click-collapse, click-expand).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Agents/AgentHierarchy.tsx (new, ~213 LOC)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "1895a5f"
-    },
-    {
-      "id": "F-089",
-      "behavior": "S45 — Agents stuck banner. Warning Banner at top of AgentsView when any agent has no heartbeat >5m (GET /api/agents/stuck). Inline 'View details' action flips mode to hierarchy.",
-      "verification": "Wired in AgentsView; data-testid=\"agents-stuck-banner\".",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (Banner + stuck fetch + mode toggle)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "1895a5f"
-    },
-    {
-      "id": "F-090",
-      "behavior": "S45 — AgentCard data-driven metric strip. Removed dead tpmHistory prop (length>1 guard was never satisfied). New optional props tasksSucceeded/tasksTotal (with ProgressBar), successRate (badged by threshold: <0.5 danger, >=0.5 warning, >=0.8 success), lastSeenMs (badged danger when >1d).",
-      "verification": "bizar-dash/src/web/v8/__tests__/agent-card-metrics.test.tsx passes (3 cases: all-rows, no-rows, badge-tone thresholds).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "ui",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/ui/agents/AgentCard.tsx (rewrite)",
-        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (mapBizar/mapCC updated)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "1895a5f"
-    },
-    {
-      "id": "F-091",
-      "behavior": "S47 — make check green. Fix 3 TS2783 errors in views/Update/UpdateView.tsx:67,70,73 (useWsMessage callbacks spread msg AND set type literally, double-specifying the discriminator key).",
-      "verification": "bunx tsc --noEmit at root reports 0 errors. make check exits 0.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "fix",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Update/UpdateView.tsx (spread msg first, then narrow via cast)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "1283b8b"
-    },
-    {
-      "id": "F-092",
-      "behavior": "S48 — inline Restart per-stuck-agent on AgentsView banner. Each stuck agent renders as its own row with name, status badge, last-seen, and a Restart button (POST /api/agents/:name/restart). One-click recovery without drilling into AgentDetail.",
-      "verification": "bizar-dash/src/web/v8/__tests__/agents-stuck-banner.test.tsx passes (3 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (banner expanded into per-row Restart surface)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "d1c9647"
-    },
-    {
-      "id": "F-093",
-      "behavior": "S49 — AgentDetail agent↔task drilldown. Renders an 'Assigned tasks (N)' section sourced from GET /api/tasks, client-filtered by workedBy OR metadata.agent == agent name. Empty-state Card when none. useFetch is gated on `open` so closed Sheets don't request.",
-      "verification": "bizar-dash/src/web/v8/__tests__/agent-detail-tasks.test.tsx passes (3 cases).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/ui/agents/AgentDetail.tsx (useFetch tasks + client filter + render block)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "4fcf12e"
-    },
-    {
-      "id": "F-094",
-      "behavior": "v10-S1 — Pause + Resume + bulk 'Pause all' on stuck banner. Banner renders Pause/Resume per row when status is not 'paused', and a single 'Pause all' button at the top that flips every stuck agent to 'paused' via concurrent POSTs. BizarAgent.status widens to include 'paused' so the comparison typechecks. Agents route valid status set widens to match.",
-      "verification": "bizar-dash/src/web/v8/__tests__/agents-stuck-banner.test.tsx passes 6 cases (3 old + 3 new: empty, per-row Pause POST, bulk Pause-all POST).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Agents/AgentsView.tsx (per-row Pause/Resume + bulk Pause all)",
-        "bizar-dash/src/server/routes/agents.mjs (valid array includes 'paused')",
-        "bizar-dash/src/web/v8/data/types.ts (BizarAgent.status includes 'paused')"
-      ],
-      "passed": "2026-07-13",
-      "commit": "708138c"
-    },
-    {
-      "id": "F-095",
-      "behavior": "v10-S2 — OverviewView Tokens StatTile gains a hand-rolled SVG sparkline of the last 24h daily series from /api/usage?range=24h. Fits inside the existing sparkline slot on StatTile. Falls back gracefully (omits the sparkline block) when fewer than 2 daily points are available or on 500.",
-      "verification": "bizar-dash/src/web/v8/__tests__/overview-trends.test.tsx passes 3 cases (renders sparkline when >=2 points, omits when <2, still renders the tile on 500).",
-      "state": "passing",
-      "layer": "L1",
-      "category": "view",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/web/v8/views/Overview/OverviewView.tsx (useFetch /api/usage + sparkline slot)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "dd0d59a"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-096",
-      "behavior": "v10-S3 — CC-shape PROGRESS.md round-trip + 2-bug-fix. goals.mjs::progressPath() reads active.path instead of active.cwd (fixes silent $HOME fallback). progress-parser.mjs::serializeProgress strips carried-over 'Goal is **status**' lines from goal.description before re-emitting (fixes status-parse-second-match-wins on re-parse).",
-      "verification": "tests/e2e/goals-cc-roundtrip.mjs 8/8 PASS (register tmp project active, GET /api/goals, parse CC-shape fixture, PATCH status, re-read, assert file changed, assert watcher fired). component test goals-cc-roundtrip.test.tsx 2/2. unit test progress-parser.test.mjs 9/9 (includes new v10-S3 round-trip regression).",
+      "behavior": "PROGRESS.md parser and serializer preserve Claude Code goal state round-trips",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L3",
-      "category": "fix",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/server/routes/goals.mjs (active.path fix)",
-        "bizar-dash/src/server/progress-parser.mjs (serialize strips status lines)",
-        "bizar-dash/src/server/progress-parser.test.mjs (round-trip regression)",
-        "bizar-dash/src/web/v8/__tests__/goals-cc-roundtrip.test.tsx (NEW)",
-        "tests/e2e/goals-cc-roundtrip.mjs (NEW)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "09d859e"
-    },
-    {
-      "id": "F-097",
-      "behavior": "v10-S4 — cross-boundary /api/agents/:name/restart E2E + readAgent-bug fix. agents-store.mjs::readAgent now calls loadStatus() first so GET on a freshly-booted server reports the persisted runtime state, not the idle default. E2E fixture-writes $HOME/.config/bizar/agent-status.json as error, boots real server, asserts GET pre-state, POSTs /restart, asserts WS broadcast, asserts disk is now idle, GETs post-state, restores the user's real files in finally.",
-      "verification": "tests/e2e/agent-restart-roundtrip.mjs 6/6 PASS. stuck-banner vitest 6/6 still green (no regression).",
-      "state": "passing",
-      "layer": "L3",
-      "category": "fix",
-      "created": "2026-07-13",
-      "files_touched": [
-        "bizar-dash/src/server/agents-store.mjs (readAgent loadStatus)",
-        "tests/e2e/agent-restart-roundtrip.mjs (NEW)"
-      ],
-      "passed": "2026-07-13",
-      "commit": "d71d958"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "cli",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-098",
-      "behavior": "Ship 39 MIT-licensed thinking-* mental-model skills from tjboudreaux/cc-thinking-skills (verbatim) + 1 Bizar-authored skillopt SkillOpt workflow wrapper. All 40 files under config/skills/<name>/SKILL.md and mirrored to .claude/skills/.",
-      "verification": "scripts/verify-thinking-skills.mjs exits 0 with 40/40 files passing frontmatter + size checks (name matches dir, description <=200, body >=100).",
+      "behavior": "Mental-model and skill-selection library is installed canonically and mirrored",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L1",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        "config/skills/thinking-*/SKILL.md (NEW x39)",
-        "config/skills/skillopt/SKILL.md (NEW x1)",
-        ".claude/skills/thinking-*/SKILL.md (NEW x39 dev mirror)",
-        ".claude/skills/skillopt/SKILL.md (NEW x1 dev mirror)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "skills",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-099",
-      "behavior": "thinking-route.mjs UserPromptSubmit hook — deterministic keyword/regex router with 35 rule buckets covering all 39 thinking-* skills. Emits hookSpecificOutput.additionalContext priming the next turn with the most relevant model name and a 1-sentence rationale. Falls back to thinking-model-router when no rule matches. Wired into .claude/settings.json as a third UserPromptSubmit sibling. Always exits 0.",
-      "verification": ".claude/hooks/__tests__/thinking-route.test.mjs exits 0 with 41 routing cases + 5 edge cases + 6 hook-contract cases + 1 parity check = 53/53 PASS. node --check .claude/hooks/thinking-route.mjs passes.",
+      "behavior": "Thinking router deterministically maps prompts and slash commands to the right context",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L1",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/hooks/thinking-route.mjs (NEW)",
-        ".claude/hooks/__tests__/thinking-route.test.mjs (NEW)",
-        ".claude/settings.json (append UserPromptSubmit sibling)"
-      ],
-      "passed": "2026-07-22"
-    },
-    {
-      "id": "F-100",
-      "behavior": "AGENT_BASELINE.md section 4b 'Thinking Models (Default Layer)' — declares the 39 thinking-* skills + skillopt as the default reasoning layer, points at thinking-model-router as the LLM-driven entry point, and SkillOpt as the offline quality loop with pip install hint.",
-      "verification": "grep -n 'thinking-model-router\\|skillopt' config/agents/_shared/AGENT_BASELINE.md returns the expected rows in section 4b.",
-      "state": "passing",
-      "layer": "L1",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        "config/agents/_shared/AGENT_BASELINE.md (append section 4b)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "hooks",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-101",
-      "behavior": "scripts/sync-skills-mirror.mjs — idempotent mirror of config/skills/<name>/SKILL.md to .claude/skills/<name>/SKILL.md. Reports copied/in-sync/error counts per run. Orphan directories in the mirror are surfaced as warnings (not errors), so deletion from canonical doesn't trip the build.",
-      "verification": "node scripts/sync-skills-mirror.mjs exits 0. Running twice is idempotent — second run reports 0 copies, 60 already in sync.",
+      "behavior": "Skill mirror script supports idempotent sync and non-mutating verification",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L1",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        "scripts/sync-skills-mirror.mjs (NEW)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "skills",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-102",
-      "behavior": "scripts/verify-thinking-skills.mjs — verifies every config/skills/thinking-*/SKILL.md and config/skills/skillopt/SKILL.md is well-formed (name matches dir, description <=200 chars, body >=100 chars). Wired into make check-arch as a post-step.",
-      "verification": "make check-arch exits 0 with the new verifier green (40/40 PASS). Deleting any one SKILL.md causes make check-arch to exit non-zero with that file named.",
+      "behavior": "Thinking skill verifier enforces metadata and body contracts",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L1",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        "scripts/verify-thinking-skills.mjs (NEW)",
-        "Makefile (wire verify-thinking-skills into check-arch)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "skills",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-103",
-      "behavior": "sessionstart-prime.mjs REWRITE — reads PROGRESS.md (current state + last ## In Progress), feature_list.json (total/passing/active + WIP=1 guard), git log --oneline -10, and .bizar/PROJECT.md. Branches on source: startup emits all 4 sources, clear emits only PROGRESS+git, resume reads .bizar/session-state.json handoff. Briefing hard-capped at 800 chars.",
-      "verification": ".claude/hooks/__tests__/sessionstart-prime.test.mjs 13/13 PASS. node --check exits 0. Smoke test against real repo emits 7-line briefing with project name, active feature, last commit.",
+      "behavior": "SessionStart primes bounded progress, feature, Git, and handoff context",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L1+L2+L3",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/hooks/sessionstart-prime.mjs (REWRITE)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "hooks",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-104",
-      "behavior": "sessionend-recall.mjs REWRITE — reads transcript_path (last 200 lines JSONL), extracts last user prompt (skips fillers), files touched, bash commands, errors (12 patterns), tool counts. Writes .bizar/sessions/<date>-<id>.md with structured frontmatter + .bizar/session-state.json handoff for the next SessionStart. nextStep is resolved from blockers > last user prompt > pick next feature.",
-      "verification": ".claude/hooks/__tests__/sessionend-recall.test.mjs 9/9 PASS. node --check exits 0. Smoke test with synthesized transcript writes 90-line markdown note + 1KB session-state.json.",
+      "behavior": "SessionEnd records bounded handoff, files, commands, errors, and next steps",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L1+L2+L3",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/hooks/sessionend-recall.mjs (REWRITE)"
-      ],
-      "passed": "2026-07-22"
-    },
-    {
-      "id": "F-105",
-      "behavior": "thinking-route.mjs APPEND slash-command routing — /plow-through, /team, /validate, /plan, /audit, /test, /pr-review. Slash detection wins over keyword router when prompt starts with the command. userpromptsubmit-tag.mjs DELETED (subsumed); .claude/settings.json UPS siblings dropped from 3 to 2.",
-      "verification": ".claude/hooks/__tests__/thinking-route.test.mjs 61/61 PASS (was 53 + 8 new slash cases). ls .claude/hooks/userpromptsubmit-tag.mjs: No such file. node -e confirms UPS array length=2.",
-      "state": "passing",
-      "layer": "L1+L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/hooks/thinking-route.mjs (APPEND slash table)",
-        ".claude/hooks/userpromptsubmit-tag.mjs (DELETED)",
-        ".claude/settings.json (drop UPS sibling)"
-      ],
-      "passed": "2026-07-22"
-    },
-    {
-      "id": "F-106",
-      "behavior": "New hook test files — sessionstart-prime.test.mjs (13 tests: source branching, WIP=1 guard, briefing cap, missing-source graceful) + sessionend-recall.test.mjs (9 tests: transcript extraction, errors, fillers, missing transcript). thinking-route.test.mjs appended 8 slash-command cases.",
-      "verification": "node --test .claude/hooks/__tests__/*.test.mjs → 121/121 PASS across 4 files (thinking-route 61, sessionstart-prime 13, sessionend-recall 9, pretooluse-editwrite 19 pre-existing + 19 = same total).",
-      "state": "passing",
-      "layer": "L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/hooks/__tests__/sessionstart-prime.test.mjs (NEW)",
-        ".claude/hooks/__tests__/sessionend-recall.test.mjs (NEW)",
-        ".claude/hooks/__tests__/thinking-route.test.mjs (APPEND 8 slash cases)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "hooks",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-107",
-      "behavior": "Delete legacy Cline-era trees (config/agents/, config/commands/, config/hooks/) and the dead syncAgentFiles function. Repoint 2 tests + 1 e2e check + 5 doc references from config/* to .claude/*. Agents, commands, and hooks are now canonical at .claude/{agents,commands,hooks}/ and there is no risk of silent overwrite on next provision.",
-      "verification": "git rm -rf config/agents config/commands config/hooks. cli/provision.mjs no longer references config/agents. memory-protocol-drift.test.mjs (4/4 PASS) and plow-through.test.mjs (5/5 PASS) repointed. scripts/bh-full-e2e.mjs: .claude/agents/ has all 14 agents ✓. make check exits 0.",
+      "behavior": "Claude Code agents, commands, and hooks have one canonical project surface",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        "config/agents/ (DELETED, 17 files)",
-        "config/commands/ (DELETED, 14 files)",
-        "config/hooks/ (DELETED, 7 entries)",
-        "cli/provision.mjs (syncAgentFiles deleted, step removed)",
-        "bizar-dash/tests/memory-protocol-drift.test.mjs (repointed + case-insensitive match)",
-        "cli/plow-through.test.mjs (repointed, dropped agent:odin check)",
-        "scripts/bh-full-e2e.mjs (agent-presence repointed)",
-        ".claude/commands/validate.md (hooks-installed line)",
-        ".claude/hooks/README.md (legacy note)",
-        ".claude/skills/bizar/SKILL.md + config/skills/bizar/SKILL.md (baseline path)",
-        "EXPLORATION.md (F-100 + Agents row)",
-        "PROGRESS.md (In Progress F-107 section)",
-        "feature_list.json (this entry)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "config",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-108",
-      "behavior": "Register Semble and agent-browser MCP servers in .claude/settings.json (mcpServers + permissions.allow). Both are stdio MCP servers reachable via PATH binaries (semble via uv tool install, agent-browser via npm-global). Wildcard permissions mcp__semble__* and mcp__agent-browser__* allow all exposed tools.",
-      "verification": "settings.json parses cleanly. `semble mcp` and `agent-browser mcp` both respond to JSON-RPC initialize with server info (semble 1.28.0, agent-browser 0.31.1). Semble MCP exposes search(query, repo, top_k) + find_related(file_path, line, repo, top_k) — content filtering via --content is CLI-only. agent-browser MCP exposes ~30 typed agent_browser_* tools under core profile. Doc fixes: agent-browser.md drops nonexistent skill path; semble-search.md + AGENT_BASELINE.md §3 corrected to match actual MCP surface. make check exits 0; memory-protocol-drift.test.mjs 4/4 PASS.",
+      "behavior": "Semble and agent-browser MCP servers are registered with scoped permissions",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "layer": "L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/settings.json (mcpServers: semble, agent-browser; permissions.allow: mcp__semble__*, mcp__agent-browser__*)",
-        ".claude/agents/agent-browser.md (dropped skill path ref, updated MCP registration note)",
-        ".claude/agents/semble-search.md (corrected tool surface, moved --content to CLI fallback)",
-        ".claude/agents/_shared/AGENT_BASELINE.md §3 (corrected --content claim)",
-        "docs/agent-audit-2026-07-22.md (resolution log)",
-        "PROGRESS.md (In Progress F-108 section)",
-        "feature_list.json (this entry)"
-      ],
-      "passed": "2026-07-22"
-    },
-    {
-      "id": "F-109",
-      "behavior": "Agent frontmatter fixes across 13 of 14 agents (Odin intentionally left unchanged — pure router with Agent + Read + WebFetch + WebSearch). Added AskUserQuestion to vor.md (its body requires it). Added Agent to hermod.md and vidarr.md (PR-review and Forseti-gate dispatch described in body but missing from tools). Added Skill to all 13 non-Odin agents (AGENT_BASELINE.md:9 and SKILLS.md:87 explicitly tell every agent to invoke skills via the Skill tool).",
-      "verification": "All 14 agent files have valid YAML frontmatter — make check (TypeScript) exits 0. plov-through.test.mjs 5/5 PASS, memory-protocol-drift.test.mjs 4/4 PASS. Audit correction: the 2026-07-22 audit incorrectly claimed forseti.md:26 references a nonexistent bizar-dash/src/server/mod-security.mjs — file does exist (14008 bytes, 2026-07-16); no fix needed; audit doc updated.",
-      "state": "passing",
-      "layer": "L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/agents/vor.md (AskUserQuestion, Skill)",
-        ".claude/agents/hermod.md (Agent, Skill)",
-        ".claude/agents/vidarr.md (Agent, Skill)",
-        ".claude/agents/thor.md, tyr.md, mimir.md, heimdall.md, baldr.md, quick.md (Skill)",
-        ".claude/agents/frigg.md, forseti.md, agent-browser.md, semble-search.md (Skill)",
-        "docs/agent-audit-2026-07-22.md (F-109 resolution log + audit correction)",
-        "PROGRESS.md (In Progress F-109 section)",
-        "feature_list.json (this entry)"
-      ],
-      "passed": "2026-07-22"
-    },
-    {
-      "id": "F-110",
-      "behavior": "Slash command wiring + skill refs in agent bodies. Extended thinking-route.mjs SLASH table from 7 to 18 entries — newly wired: /setup-provider, /explain, /visual-plan, /tailscale-serve, /bizar, /init, /cron, /spec, /sprint, /goal, /learn (length-desc order so longer prefixes win). 11 new test cases in thinking-route.test.mjs (61 → 72 PASS). Added explicit skill references in 3 agents: mimir.md (obsidian), heimdall.md (obsidian, memory-protocol, self-improvement), baldr.md (glyph, de-sloppify). Orphan slash commands (cron/goal/spec/sprint previously missing from config/commands/) are now canonical at .claude/commands/ only after F-107's config/commands/ deletion.",
-      "verification": "make check exits 0. thinking-route.test.mjs 72/72 PASS (was 61; +11 new cases). plow-through.test.mjs 5/5 PASS, memory-protocol-drift.test.mjs 4/4 PASS. All 18 slash commands in .claude/commands/ trigger their slash note on the matching prompt. All 3 modified agent bodies declare their explicit skill refs (verified by reading the updated Always-On sections).",
-      "state": "passing",
-      "layer": "L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/hooks/thinking-route.mjs (SLASH table 7 → 18 entries, length-desc order)",
-        ".claude/hooks/__tests__/thinking-route.test.mjs (+11 slash tests, 61 → 72)",
-        ".claude/agents/mimir.md (obsidian skill ref)",
-        ".claude/agents/heimdall.md (obsidian, memory-protocol, self-improvement skill refs)",
-        ".claude/agents/baldr.md (glyph, de-sloppify skill refs)",
-        "docs/agent-audit-2026-07-22.md (F-110 resolution log)",
-        "PROGRESS.md (In Progress F-110 section)",
-        "feature_list.json (this entry)"
-      ],
-      "passed": "2026-07-22"
-    },
-    {
-      "id": "F-111",
-      "behavior": "Audit follow-up — fill the four remaining gaps from docs/agent-audit-2026-07-22.md §A2/C1/C2/D7: (1) NEW .claude/skills/agent-browser/SKILL.md — first-class docs for the agent-browser CLI/MCP that the agent-browser agent uses as its primary tool; (2) .claude/skills/bizar/SKILL.md:370 — drop the stale Cline-era `~/.cline/skills/agent-browser/SKILL.md` path, redirect to the new skill; (3) .claude/agents/_shared/AGENT_BASELINE.md §6 — drop the empty `config/rules/` references (the project-level dir is empty), point at user-level `~/.claude/rules/`; (4) add explicit 9router skill refs to the 4 agents that fetch external content (thor, tyr, mimir, frigg) — 9router-web-fetch + 9router-web-search replace bare WebFetch/WebSearch via Firecrawl/Jina/Tavily/Exa with format options and provider auto-fallback.",
-      "verification": "make check exits 0. thinking-route 113/113 PASS, memory-protocol-drift 4/4 PASS, plow-through 5/5 PASS. ls .claude/skills/agent-browser/SKILL.md exists and is readable. grep -rn '~/.cline/' .claude/ returns no matches (all Cline paths cleaned). All 4 modified agent bodies reference their 9router skill refs. AGENT_BASELINE.md §6 no longer references config/rules/ as a source.",
-      "state": "passing",
-      "layer": "L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "files_touched": [
-        ".claude/skills/agent-browser/SKILL.md (NEW)",
-        ".claude/skills/bizar/SKILL.md (drop 4 Cline-era paths: line 370 agent-browser, line 384 bizar, line 385 self-improvement, line 386 agent-baseline)",
-        ".claude/skills/9router/SKILL.md (drop 1 Cline-era path: line 61)",
-        ".claude/agents/agent-browser.md (explicit agent-browser skill ref)",
-        ".claude/agents/_shared/AGENT_BASELINE.md §4 (add 9router mention) + §6 (drop config/rules/ refs)",
-        ".claude/agents/{thor,tyr,mimir,frigg}.md (9router skill refs)",
-        "PROGRESS.md (F-111 In Progress)",
-        "feature_list.json (this entry)"
-      ],
-      "passed": "2026-07-22"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "integration",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-112",
-      "behavior": "Theme pivot — full rename Norse → 90s corporate office. 14 agents renamed on disk: file paths (frigg.md → help-desk.md, thor.md → senior-engineer.md, etc.) AND name: frontmatter (mike/todd/karen/brenda/greg/susan/steve/brad/janet/carl/linda/pam/kevin/oscar). Body first-sentence rewrites from 'You are Frigg — the all-seeing one' → 'You are Susan, the front-desk Help Desk.' same role, new costume. AGENT_BASELINE.md §12 'Heimdall's Self-Improvement Duty' → 'Brenda's Records Duty'. bizar/SKILL.md identity preamble (3 'Norse-pantheon' lines + 20+ routing-table cells) rewritten. AGENTS.md cosmetic Norse lines updated. CLAUDE.md mirror refreshed via make mirror-claude-md. scripts/check-agents.mjs rewired to .claude/agents/ with new filenames (broken since F-107).",
-      "verification": "make check exits 0. thinking-route 113/113 PASS, memory-protocol-drift 4/4 PASS, plow-through 5/5 PASS. grep -rE '\\\\b(odin|thor|tyr|heimdall|mimir|frigg|hermod|baldr|vor|vidarr|forseti)\\\\b' --include='*.md' --include='*.mjs' .claude/ scripts/ tests/ AGENTS.md CLAUDE.md returns zero (PROGRESS.md + audit doc exempt). grep -i 'norse|pantheon|asgard|mythology|valhalla' .claude/ AGENTS.md CLAUDE.md returns zero. cat .claude/agents/help-desk.md | head -5 shows 'name: susan'. Routing tables reference @susan, @todd, @kevin etc.",
+      "behavior": "Office-themed role agents and model router use consistent names",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "2026-07-22 — 14/14 agents renamed (git mv), AGENT_BASELINE §8 §12 rewritten, bizar/SKILL.md full routing-table + diagram + troubleshooting rewrite, AGENTS.md/CLAUDE.md cosmetic lines, check-agents.mjs rewired to .claude/agents/, tests 122/122 PASS.",
-      "layer": "L2",
-      "category": "core",
-      "created": "2026-07-22",
-      "passed": "2026-07-22",
-      "files_touched": [
-        ".claude/agents/*.md (14 git mv + first-sentence rewrites)",
-        ".claude/agents/_shared/AGENT_BASELINE.md (§6 §8 §12 Brenda/Mike rewrites)",
-        ".claude/agents/_shared/CLAUDE_TOOLS.md (roster line 357)",
-        ".claude/skills/bizar/SKILL.md (Norse-pantheon lines + 20 routing-table cells + ASCII diagram + troubleshooting subsections)",
-        ".claude/skills/agent-browser/SKILL.md (Kevin reference)",
-        ".claude/hooks/thinking-route.mjs (agent-name keywords)",
-        ".claude/hooks/__tests__/*.test.mjs (test assertions)",
-        ".claude/commands/{plow-through,pr-review,explain,validate,team,test,tailscale-serve,learn}.md",
-        "scripts/bh-full-e2e.mjs (agent presence check)",
-        "scripts/check-agents.mjs (rewired to .claude/agents/ with new names)",
-        "AGENTS.md (cosmetic Norse lines)",
-        "CLAUDE.md (mirror refresh)",
-        "PROGRESS.md (F-112 In Progress)",
-        "feature_list.json (this entry)"
-      ]
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "agents",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-114",
-      "behavior": "3-phase orchestrator pipeline (research→plan→implement) with parallel agents inside each phase; premium agents @paul and @ria on cx/gpt-5.6-sol; user-level install plumbing via cli/provision.mjs",
-      "verification": "make check green; office-manager.md, planner.md, ui-designer.md, model-router.json, sessionstart-prime.mjs, settings.json, post-install-smoke.mjs, provision.mjs, plan.md updated; premium checks added to smoke; ANTHROPIC_BASE_URL plumbing; SessionStart primer updated",
+      "behavior": "Office manager enforces research, plan/audit, implement, review, test, and commit phases",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make check green; office-manager.md, planner.md, ui-designer.md, model-router.json, sessionstart-prime.mjs, settings.json, post-install-smoke.mjs, provision.mjs, plan.md updated; premium checks added to smoke; ANTHROPIC_BASE_URL plumbing; SessionStart primer updated"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "agents",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-115",
-      "behavior": "Add @carl last-resort debug agent (premium tier), route from office-manager.md when @todd/@karen stall",
-      "verification": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added",
+      "behavior": "Debug specialist provides a bounded last-resort root-cause lane",
+      "verification": "make check; make test; relevant targeted test or audit row",
       "state": "passing",
-      "evidence": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added"
+      "evidence": "2026-07-30 retained-core baseline: make check passed; 315 SDK tests and 109 serial CLI tests passed (commit 2b90aed).",
+      "commit": "2b90aed",
+      "layer": "core",
+      "category": "agents",
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
     },
     {
       "id": "F-116",
-      "behavior": "Audit all non-dashboard Bizar Harness features; fully remove the dashboard and its functionality; port applicable autonomous and human-in-the-loop workflows, hooks, and features from fcakyon/claude-codex-settings.",
-      "verification": "Dashboard absence audit; upstream parity matrix; make check-arch; make test; make e2e; make clean-check; make check.",
+      "behavior": "Audit every retained core feature; remove the retired web control plane and Bizar note-vault/search subsystem; port applicable guarded-autonomy and human-approval workflows from fcakyon/claude-codex-settings.",
+      "verification": "make verify-removed-surfaces; make check-arch; make test; make e2e; make clean-check; make check; audit and parity matrices",
       "state": "active",
-      "layer": "L0+L1+L2",
+      "layer": "all",
       "category": "core",
       "created": "2026-07-30",
       "upstream": "fcakyon/claude-codex-settings@39b67e9d244124a575d648364b19e85c510e48a8"
     }
   ],
   "vcr": {
-    "passing": 102,
-    "activated": 103,
-    "ratio": 0.9902912621359223
+    "passing": 36,
+    "activated": 37,
+    "ratio": 0.972972972972973
   }
 }

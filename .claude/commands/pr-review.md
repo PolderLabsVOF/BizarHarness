@@ -18,7 +18,7 @@ or branch name.
    - **`greg` (research)** — trace the diff's blast radius:
      - Files changed and their blast radius
      - Related call sites / consumers that might break
-     - Historical context (search `bizar memory search "<feature>"`)
+     - Historical context from git history, repository docs, and issue/PR discussion
      - Tests that should have run
    - **`linda` (audit)** — security and correctness review:
      - Permission grants added or expanded
@@ -36,8 +36,7 @@ or branch name.
    - Non-blocking suggestions
    - Test plan
 
-4. Post the review as a PR comment via `gh pr review <ref>
-   --comment --body-file -` (or `--approve` / `--request-changes`).
+4. Prepare the exact review body and verdict. Posting is an external side effect: request approval unless the user explicitly asked to publish the review in the current request. After approval, use `gh pr review <ref> --comment --body-file -` (or the approved verdict).
 
 5. Return the review summary to the user with the PR URL.
 

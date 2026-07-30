@@ -1,6 +1,6 @@
 # BizarHarness Skill
 
-Norse-pantheon multi-agent system skill for Claude Code.
+Guarded multi-agent system skill for Claude Code.
 
 Copy to `~/.claude/skills/bizar/SKILL.md` to install.
 

@@ -18,27 +18,19 @@ const BIN = `${REPO}/cli/bin.mjs`;
 
 const ALL_COMMANDS = [
   // Util-based (live in cli/commands/util.mjs)
-  'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
-  'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
-  'kevin', 'kevin-up', 'providers',
+  'audit', 'init', 'export', 'test-gate',
+  'doctor', 'repair', 'heads-up', 'backup', 'restore',
+  'browser',
   // Own module
-  'install', 'update',
-  'service',
-  'dash', 'dashboard',
-  'minimax', 'tailscale', 'lightrag',
-  'mod', 'usage',
-  'deploy', 'plugin', 'marketplace',
-  'artifact',
-  'memory',
-  'memory',
-  'clip', 'ocr',
-  'voice', 'workspace', 'eval',
+  'install', 'update', 'migrate', 'validate',
+  'setup-provider', 'team', 'subagent', 'run',
+  'rca', 'sandbox', 'cost', 'claim',
 ];
 
 const NON_OWN_MODULE = new Set([
-  'audit', 'init', 'export', 'test-gate', 'dev-link', 'dev-unlink',
-  'doctor', 'repair', 'heads-up', 'bg', 'digest', 'backup', 'restore',
-  'kevin', 'kevin-up', 'providers', 'install', 'update',
+  'audit', 'init', 'export', 'test-gate',
+  'doctor', 'repair', 'heads-up', 'backup', 'restore',
+  'browser', 'install', 'update',
 ]);
 
 const seen = new Set();
@@ -60,7 +52,7 @@ for (const cmd of ALL_COMMANDS) {
   const exitCode = r.status;
 
   // Pass criteria:
-  //  - Exit code 0 OR 2 (CLINE exit code for usage/help is 2 sometimes)
+  //  - Exit code 0 OR 2 (usage/help may use 2)
   //  - stdout mentions the command name or contains a recognizable help string
   //  - stderr is empty OR mentions the command name (not "module not found")
   const hasModuleError = stderr.includes('Cannot find module') ||

@@ -26,7 +26,7 @@ You do **not** do codebase research or deep exploration — that goes to @greg. 
 
 ## Workflow
 
-1. Read the task brief carefully. If ambiguous, report back to Odin — do not improvise.
+1. Read the task brief carefully. If ambiguous, report back to Mike — do not improvise.
 2. Semble-search for the affected files and existing patterns.
 3. Read the full files you'll modify.
 4. Plan with a checklist for tasks with 3+ steps.
@@ -37,16 +37,16 @@ You do **not** do codebase research or deep exploration — that goes to @greg. 
 
 ## Test Gate (Bizar-Specific)
 
-When Odin tells you to run the test gate after parallel implementation work:
+When Mike tells you to run the test gate after parallel implementation work:
 
 1. Run the full test suite: `npx bizar test-gate` (or the project's test command).
 2. If tests fail, fix the issues and re-run until green.
-3. If a test failure is unrelated to your work, report it to Odin — do not silently fix someone else's code.
+3. If a test failure is unrelated to your work, report it to Mike — do not silently fix someone else's code.
 4. Only after the gate is green do you return a success summary.
 
 ## Always-On Rules
 
-**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it covers Semble, Skills CLI, Obsidian vault, loop guard, parallel execution, and the full general agent baseline.
+**Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it defines evidence sources, guarded autonomy, approval boundaries, coordination, and verification.
 
 **Prefer the `9router-web-fetch` and `9router-web-search` skills** (`.claude/skills/9router-web-fetch/SKILL.md`, `9router-web-search/SKILL.md`) over bare WebFetch/WebSearch when fetching external docs — Firecrawl/Jina/Tavily/Exa with format options beat raw HTML. Read `.claude/skills/9router/SKILL.md` first for setup.
 

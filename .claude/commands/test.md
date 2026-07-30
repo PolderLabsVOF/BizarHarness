@@ -36,7 +36,7 @@ To run a specific Bizar test scope instead, pass arguments to
 `/test`. The arguments are forwarded to the underlying runner and
 are available as `$ARGUMENTS` (or `$1`, `$2`, ...):
 
-- `/test plugins/bizar` — run only the Bizar plugin tests (bun)
+- `/test packages/sdk` — run only the Bizar SDK tests
 - `/test --testPathPattern=auth` — pass a flag to the runner
 
 ## When to Use
@@ -47,7 +47,7 @@ are available as `$ARGUMENTS` (or `$1`, `$2`, ...):
 
 ## Common Patterns
 
-- **Post-implementation gate** — after Thor and Tyr finish their
+- **Post-implementation gate** — after Todd and Karen finish their
   parallel work, dispatch `todd` to run `/test`. If failures, fix
   and re-run.
 - **PR check** — run `/test` in CI before merging.
@@ -59,4 +59,4 @@ are available as `$ARGUMENTS` (or `$1`, `$2`, ...):
 - `bizar test-gate` — the underlying CLI command
 - `bizar doctor` — checks the Bizar install itself (not project tests)
 - `make check` — typecheck + tests (full pipeline, dev only)
-- `make e2e` — Bizar plugin end-to-end (dev only)
+- `make e2e` — Claude Code core-harness end-to-end

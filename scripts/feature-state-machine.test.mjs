@@ -10,6 +10,7 @@
  */
 
 import { writeFileSync, mkdirSync, rmSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,16 +24,20 @@ await mkdirSync(EVALS_DIR, { recursive: true });
 
 /** @param {string[]} args */
 async function runScript(args = []) {
-  const proc = Bun.spawn({
-    cmd: ["/home/drb0rk/.bun/bin/bun", "run", SCRIPT, ...args],
+  const proc = spawnSync("/home/drb0rk/.bun/bin/bun", [
+    "run",
+    SCRIPT,
+    ...args,
+  ], {
     cwd: ROOT,
-    env: { PATH: "/home/drb0rk/.bun/bin:/usr/bin:/bin" },
+    env: { ...process.env, PATH: `/home/drb0rk/.bun/bin:${process.env.PATH || "/usr/bin:/bin"}` },
+    encoding: "utf8",
   });
-  const [stdout, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr: "", exitCode };
+  return {
+    stdout: proc.stdout || "",
+    stderr: proc.stderr || "",
+    exitCode: proc.status ?? 1,
+  };
 }
 
 function withFeatureList(

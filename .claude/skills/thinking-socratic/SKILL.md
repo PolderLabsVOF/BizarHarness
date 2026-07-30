@@ -55,7 +55,7 @@ Stated problem is a vague symptom?                   → yes → QUESTION DOWN T
 
 | Question | Use When |
 |----------|----------|
-| "What are we assuming here?" | Conclusion seems too pam |
+| "What are we assuming here?" | Conclusion seems too quick |
 | "Is this always true?" | Generalization made |
 | "What if that assumption is wrong?" | Testing robustness |
 | "Why do we believe this?" | Basis unclear |

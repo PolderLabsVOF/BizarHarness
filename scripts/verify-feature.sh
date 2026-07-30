@@ -38,7 +38,7 @@ if ! (cd "$ROOT" && bunx tsc --noEmit 2>&1 | tail -3); then
   echo "REPAIR: Run 'make check' and fix TypeScript errors. Common issues:"
   echo "        - Missing type annotation"
   echo "        - Wrong zod shape passed to createTool"
-  echo "        - Missing import from @cline/sdk or @cline/core"
+  echo "        - Missing implementation or executable verification evidence"
   exit 1
 fi
 echo "  PASS"

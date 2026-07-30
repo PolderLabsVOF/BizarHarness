@@ -1,6 +1,6 @@
 ---
 name: thinking-debiasing
-description: In a long trajectory where you're defending a path you committed to early, run a pam self-check for sunk-cost and confirmation bias before continuing — only when evidence is being explained away.
+description: In a long trajectory where you're defending a path you committed to early, run a quick self-check for sunk-cost and confirmation bias before continuing — only when evidence is being explained away.
 ---
 
 # Cognitive Debiasing

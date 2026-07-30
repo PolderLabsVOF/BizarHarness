@@ -8,7 +8,7 @@
  * suitable for callers (e.g. `bizar update`) that want to act on the
  * result without re-printing the per-check output.
  *
- * Checks (9 total):
+ * Checks (8 total):
  *   claude-cli-reachable:    claude --version exits 0
  *   settings-valid:          ~/.claude/settings.json parses
  *   mcp-server-registered:   settings.json has mcpServers.bizar
@@ -16,7 +16,7 @@
  *   agent-files-installed:   agent .md files deployed
  *   skill-files-installed:   SKILL.md files deployed
  *   tools-on-path:           at least one of semble/skills/claude
- *   memory-vault:            BIZAR_HOME exists (memory subdir lazy)
+ *   bizar-home:              BIZAR_HOME exists
  *   9router-reachable:       provider gateway responds
  *
  * Usage:
@@ -26,12 +26,13 @@
  */
 import chalk from 'chalk';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
-const BIZAR_HOME = process.env.BIZAR_HOME || join(homedir(), '.bizar_home');
+const BIZAR_HOME = process.env.BIZAR_HOME
+  || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'bizar');
 
 // ── individual checks ───────────────────────────────────────────────────────
 
@@ -123,17 +124,11 @@ async function checkToolsAvailable() {
   return `available: ${found.join(', ')}`;
 }
 
-async function checkMemoryVault() {
+async function checkBizarHome() {
   if (!existsSync(BIZAR_HOME)) {
     throw new Error(`BIZAR_HOME missing: ${BIZAR_HOME}`);
   }
-  const memDir = process.env.BIZAR_MEMORY_VAULT || join(BIZAR_HOME, 'memory');
-  if (!existsSync(memDir)) {
-    // Not fatal — the vault is created lazily on first write.
-    return `BIZAR_HOME present; memory vault will be created on demand`;
-  }
-  const st = statSync(memDir);
-  return `memory vault at ${memDir} (${st.isDirectory() ? 'dir' : '?'})`;
+  return `BIZAR_HOME present at ${BIZAR_HOME}`;
 }
 
 async function check9RouterReachable() {
@@ -160,7 +155,7 @@ const CHECKS = [
   { name: 'agent-files-installed',     run: checkAgentFilesInstalled },
   { name: 'skill-files-installed',     run: checkSkillFilesInstalled },
   { name: 'tools-on-path',             run: checkToolsAvailable },
-  { name: 'memory-vault',              run: checkMemoryVault },
+  { name: 'bizar-home',                run: checkBizarHome },
   { name: '9router-reachable',         run: check9RouterReachable },
 ];
 

@@ -17,7 +17,7 @@ Every stuck situation must move through these phases in order:
    - `semble search "<concept>"` for codebase patterns
    - `webfetch` for official documentation
    - `read` for related files in the repo
-   - `obsidian_search` for prior project context
+   - repository files, git history, and Semble for prior project context
    - `skill <name>` for domain-specific guidance
    - Ask the user if you are still uncertain after research
 3. **Act with confidence.** After research, make one decisive attempt. If it still fails, return to phase 2 with the new information. Never return to phase 1.
@@ -61,7 +61,7 @@ Never do any of the following:
 
 ### Loop Guard Is The Last Resort
 
-The runtime loop guard in `cline.json` (`loopThresholdWarn: 5`, `loopThresholdEscalate: 8`, `loopThresholdBlock: 12`) is a safety net for when this rule fails. It is not the primary defense.
+The bounded loop runtime and Claude Code permission hooks are safety nets for when this rule fails. They are not the primary defense.
 
 If the loop guard fires, the rule failed first. Agents must self-correct before the guard kicks in. A trigger at 5 identical calls means the agent should have stopped at 2 and researched.
 

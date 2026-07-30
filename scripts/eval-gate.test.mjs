@@ -10,6 +10,7 @@
  */
 
 import { writeFileSync, mkdirSync, rmSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,16 +23,18 @@ await mkdirSync(EVALS_DIR, { recursive: true });
 
 /** Run eval-gate and return { stdout, stderr, exitCode } */
 async function runGate(args = []) {
-  const proc = Bun.spawn({
-    cmd: ["/home/drb0rk/.bun/bin/bun", "run", join(__dirname, "eval-gate.mjs"), ...args],
+  const proc = spawnSync("/home/drb0rk/.bun/bin/bun", [
+    "run",
+    join(__dirname, "eval-gate.mjs"),
+    ...args,
+  ], {
     cwd: ROOT,
-    env: { PATH: "/home/drb0rk/.bun/bin:/usr/bin:/bin" },
+    env: { ...process.env, PATH: `/home/drb0rk/.bun/bin:${process.env.PATH || "/usr/bin:/bin"}` },
+    encoding: "utf8",
   });
-  const [stdout, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    proc.exited,
-  ]);
-  const stderr = ""; // not captured
+  const stdout = proc.stdout || "";
+  const stderr = proc.stderr || "";
+  const exitCode = proc.status ?? 1;
   return { stdout, stderr, exitCode };
 }
 

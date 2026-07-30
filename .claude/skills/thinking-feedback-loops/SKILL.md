@@ -302,7 +302,7 @@ Cold water arrives → Too cold! → Oscillation continues
     fix root cause
 ```
 
-**Behavior:** Addiction to pam fixes; fundamental capability atrophies
+**Behavior:** Addiction to quick fixes; fundamental capability atrophies
 
 **Examples:**
 

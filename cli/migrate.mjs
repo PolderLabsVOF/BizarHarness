@@ -3,22 +3,22 @@
  *
  * v10.3.0 — One-time migration path for users with v6.x-era installs.
  *
- * Detects:
- *   - ~/.config/cline/         (Cline-era Claude Code config)
- *   - ~/.config/bizar/        (Bizar runtime state, pre-v10)
+ * Detects `~/.config/cline/`, the retired Cline-era Claude Code config,
+ * and moves it to `~/.claude/`.
  *
- * Moves both to ~/.claude/ (canonical Claude Code path).
+ * `~/.config/bizar/` is current Bizar operational state and is never
+ * treated as migration input.
  *
  * Idempotent — leaves a .migration-stamp file so it never re-runs.
  * `--check` reports state without modifying anything.
  */
 
 import chalk from 'chalk';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/** @typedef {{ hasLegacyClaude: boolean, hasLegacyBizar: boolean, paths: string[] }} LegacyInfo */
+/** @typedef {{ hasLegacyClaude: boolean, paths: string[] }} LegacyInfo */
 
 /**
  * Detect legacy install state.
@@ -27,13 +27,10 @@ import { join } from 'node:path';
  */
 export function detectLegacyInstall(home) {
   const legacyClaude = join(home, '.config', 'cline');
-  const legacyBizar = join(home, '.config', 'bizar');
   const paths = [];
   const hasLegacyClaude = existsSync(legacyClaude);
-  const hasLegacyBizar = existsSync(legacyBizar);
   if (hasLegacyClaude) paths.push(legacyClaude);
-  if (hasLegacyBizar) paths.push(legacyBizar);
-  return { hasLegacyClaude, hasLegacyBizar, paths };
+  return { hasLegacyClaude, paths };
 }
 
 /**
@@ -42,7 +39,7 @@ export function detectLegacyInstall(home) {
  * @returns {boolean}
  */
 export function isAlreadyMigrated(home) {
-  const stamp = join(home, '.claude', 'bizar', '.migration-stamp');
+  const stamp = join(home, '.claude', '.bizar-cline-migration-stamp');
   return existsSync(stamp);
 }
 
@@ -52,9 +49,9 @@ export function isAlreadyMigrated(home) {
  * @param {string} version - version string
  */
 export function markMigrated(home, version) {
-  const dir = join(home, '.claude', 'bizar');
+  const dir = join(home, '.claude');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const stamp = join(dir, '.migration-stamp');
+  const stamp = join(dir, '.bizar-cline-migration-stamp');
   writeFileSync(stamp, `migrated=${version}\n`);
 }
 
@@ -66,7 +63,7 @@ export function markMigrated(home, version) {
 export async function migrateLegacy({ dryRun = false, force = false, home = homedir() } = {}) {
   const legacy = detectLegacyInstall(home);
 
-  if (!legacy.hasLegacyClaude && !legacy.hasLegacyBizar) {
+  if (!legacy.hasLegacyClaude) {
     return { ok: true, message: 'No legacy install found — nothing to do.' };
   }
 
@@ -77,7 +74,6 @@ export async function migrateLegacy({ dryRun = false, force = false, home = home
   if (dryRun) {
     const what = [];
     if (legacy.hasLegacyClaude) what.push(`  ~/.config/cline/ → ~/.claude/`);
-    if (legacy.hasLegacyBizar) what.push(`  ~/.config/bizar/ → ~/.claude/`);
     return {
       ok: true,
       message: `Dry run — would move:\n${what.join('\n')}`,
@@ -92,13 +88,6 @@ export async function migrateLegacy({ dryRun = false, force = false, home = home
   if (legacy.hasLegacyClaude) {
     const src = join(home, '.config', 'cline');
     const dst = join(claudeDir);
-    await moveAtomic(src, dst);
-  }
-
-  // Move ~/.config/bizar/ → ~/.claude/bizar/
-  if (legacy.hasLegacyBizar) {
-    const src = join(home, '.config', 'bizar');
-    const dst = join(claudeDir, 'bizar');
     await moveAtomic(src, dst);
   }
 
@@ -128,6 +117,18 @@ async function moveAtomic(src, dst) {
  * @param {string[]} args
  */
 export async function runMigrate(args) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  bizar migrate — Migrate legacy Claude Code configuration
+
+  Usage:
+    bizar migrate [--dry-run] [--force]
+    bizar migrate --check
+
+  Existing files are preserved unless a migration is explicitly run.
+  `);
+    return;
+  }
   const dryRun = args.includes('--dry-run');
   const force = args.includes('--force');
   const check = args.includes('--check');
@@ -136,12 +137,11 @@ export async function runMigrate(args) {
   if (check) {
     const legacy = detectLegacyInstall(home);
     const migrated = isAlreadyMigrated(home);
-    if (!legacy.hasLegacyClaude && !legacy.hasLegacyBizar) {
+    if (!legacy.hasLegacyClaude) {
       console.log(chalk.green('No legacy install found.'));
     } else {
       console.log(chalk.yellow('Legacy install detected:'));
       if (legacy.hasLegacyClaude) console.log(`  ~/.config/cline/ (Cline-era config)`);
-      if (legacy.hasLegacyBizar) console.log(`  ~/.config/bizar/ (Bizar pre-v10 state)`);
     }
     console.log(`Already migrated: ${migrated ? chalk.green('yes') : chalk.red('no')}`);
     return;

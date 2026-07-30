@@ -69,7 +69,7 @@ Default → raw audio bytes (Content-Type `audio/mp3`).
 | Provider | `model` format | Notes |
 |---|---|---|
 | `openai` | `tts-1/alloy` (model/voice) or just voice | Default model `gpt-4o-mini-tts` |
-| `elevenlabs` | `<model_id>/<voice_id>` or `<voice_id>` | Default model `eleven_flash_v2_5`; list voices in Dashboard |
+| `elevenlabs` | `<model_id>/<voice_id>` or `<voice_id>` | Default model `eleven_flash_v2_5`; list voices through the provider API |
 | `openrouter` | `openai/gpt-4o-mini-tts/alloy` | Streamed via chat-completions audio modality |
 | `edge-tts` | voice id e.g. `vi-VN-HoaiMyNeural` | **noAuth**; default `vi-VN-HoaiMyNeural` |
 | `google-tts` | language code e.g. `en`, `vi` | **noAuth** |

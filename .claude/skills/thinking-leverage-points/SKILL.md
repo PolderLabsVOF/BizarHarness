@@ -15,7 +15,7 @@ Donella Meadows' "Places to Intervene in a System" ranks intervention points by 
 
 - Choosing where to focus engineering effort on a system you can already see
 - Incremental tweaks (timeouts, buffer sizes, more instances) keep not solving the problem
-- Deciding between a pam parameter change and a structural fix
+- Deciding between a quick parameter change and a structural fix
 
 ```
 Want to change system behavior?

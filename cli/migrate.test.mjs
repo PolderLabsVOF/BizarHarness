@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { detectLegacyInstall, isAlreadyMigrated, markMigrated, migrateLegacy } from './migrate.mjs';
 
-test('detect — finds both legacy dirs', () => {
+test('detect — finds only the retired Cline config', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'bizar-migrate-test-'));
   try {
     const fakeHome = join(tmp, 'home');
@@ -17,8 +17,8 @@ test('detect — finds both legacy dirs', () => {
 
     const result = detectLegacyInstall(fakeHome);
     if (!result.hasLegacyClaude) throw new Error('expected hasLegacyClaude=true');
-    if (!result.hasLegacyBizar) throw new Error('expected hasLegacyBizar=true');
-    if (result.paths.length !== 2) throw new Error(`expected 2 paths, got ${result.paths.length}`);
+    if ('hasLegacyBizar' in result) throw new Error('current Bizar state must not be migration input');
+    if (result.paths.length !== 1) throw new Error(`expected 1 path, got ${result.paths.length}`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -46,17 +46,16 @@ test('migrate — moves files to ~/.claude/ and writes stamp', async () => {
     const data = JSON.parse(readFileSync(migratedSettings, 'utf8'));
     if (data.tabSize !== 2) throw new Error('settings.json content wrong');
 
-    // Verify bizar content landed in ~/.claude/bizar/
-    const migratedState = join(fakeHome, '.claude', 'bizar', 'state.json');
-    if (!existsSync(migratedState)) throw new Error('state.json not migrated');
+    // Current Bizar operational state is intentionally untouched.
+    const currentState = join(fakeHome, '.config', 'bizar', 'state.json');
+    if (!existsSync(currentState)) throw new Error('current Bizar state was moved');
 
     // Verify stamp written
-    const stamp = join(fakeHome, '.claude', 'bizar', '.migration-stamp');
+    const stamp = join(fakeHome, '.claude', '.bizar-cline-migration-stamp');
     if (!existsSync(stamp)) throw new Error('migration stamp not written');
 
     // Verify originals gone
     if (existsSync(join(fakeHome, '.config', 'cline'))) throw new Error('cline not removed');
-    if (existsSync(join(fakeHome, '.config', 'bizar'))) throw new Error('bizar not removed');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -67,8 +66,8 @@ test('idempotent — second run returns "already migrated" without touching anyt
   try {
     const fakeHome = join(tmp, 'home');
     mkdirSync(join(fakeHome, '.config', 'cline'), { recursive: true });
-    mkdirSync(join(fakeHome, '.claude', 'bizar'), { recursive: true });
-    writeFileSync(join(fakeHome, '.claude', 'bizar', '.migration-stamp'), 'migrated=10.3.0\n');
+    mkdirSync(join(fakeHome, '.claude'), { recursive: true });
+    writeFileSync(join(fakeHome, '.claude', '.bizar-cline-migration-stamp'), 'migrated=10.3.0\n');
 
     const result = await migrateLegacy({ dryRun: false, force: false, home: fakeHome });
     if (!result.message.includes('Already migrated')) {

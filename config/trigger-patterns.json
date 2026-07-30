@@ -1,7 +1,7 @@
 {
   "$schema": "./trigger-patterns.v1.schema.json",
   "version": 1,
-  "description": "Trigger-pattern table for the Bizar Background Workers dispatcher. Each worker maps zero-or-more regex patterns to a Bizar skill and/or agent. The dispatcher in cli/worker-dispatcher.mjs reads this file, matches user prompts against the regex arrays (case-insensitive), and emits 0..N suggestions ranked by weight.",
+  "description": "Prompt-trigger table for Bizar skill and agent suggestions. The UserPromptSubmit dispatcher emits ranked, non-blocking context hints.",
   "workers": [
     {
       "id": "testgaps",
@@ -17,7 +17,7 @@
       ],
       "weight": 0.8,
       "skill": "harness-engineering",
-      "agent": "forseti",
+      "agent": "linda",
       "description": "Identify test coverage gaps and untested code paths."
     },
     {
@@ -32,7 +32,7 @@
       ],
       "weight": 0.9,
       "skill": "harness-engineering",
-      "agent": "forseti",
+      "agent": "linda",
       "description": "Security analysis and vulnerability scanning."
     },
     {
@@ -48,7 +48,7 @@
       ],
       "weight": 0.7,
       "skill": null,
-      "agent": "mimir",
+      "agent": "greg",
       "description": "Deep code analysis and thorough explanation."
     },
     {
@@ -63,7 +63,7 @@
       ],
       "weight": 0.7,
       "skill": null,
-      "agent": "thor",
+      "agent": "todd",
       "description": "Code refactoring suggestions and structural cleanup."
     },
     {
@@ -79,7 +79,7 @@
       ],
       "weight": 0.6,
       "skill": null,
-      "agent": "baldr",
+      "agent": "brenda",
       "description": "Auto-documentation generation (README, JSDoc, API docs)."
     },
     {
@@ -94,7 +94,7 @@
       ],
       "weight": 0.7,
       "skill": null,
-      "agent": "thor",
+      "agent": "todd",
       "description": "Performance optimization and tuning."
     },
     {
@@ -109,22 +109,8 @@
       ],
       "weight": 0.65,
       "skill": "harness-engineering",
-      "agent": "mimir",
+      "agent": "greg",
       "description": "Deep knowledge acquisition and learning."
-    },
-    {
-      "id": "consolidate",
-      "regex": [
-        "consolidate",
-        "merge memories",
-        "clean up memory",
-        "deduplicate",
-        "memory maintenance"
-      ],
-      "weight": 0.5,
-      "skill": "harness-engineering",
-      "agent": null,
-      "description": "Memory consolidation and cleanup."
     },
     {
       "id": "predict",
@@ -137,7 +123,7 @@
       ],
       "weight": 0.55,
       "skill": null,
-      "agent": "mimir",
+      "agent": "greg",
       "description": "Predictive preloading and anticipation."
     },
     {
@@ -152,7 +138,7 @@
       ],
       "weight": 0.6,
       "skill": "harness-engineering",
-      "agent": "mimir",
+      "agent": "greg",
       "description": "Codebase mapping and architecture analysis."
     },
     {
@@ -179,7 +165,7 @@
       ],
       "weight": 0.65,
       "skill": null,
-      "agent": "thor",
+      "agent": "todd",
       "description": "Performance benchmarking."
     }
   ]

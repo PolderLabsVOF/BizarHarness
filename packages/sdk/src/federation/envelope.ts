@@ -25,8 +25,8 @@
  */
 export const FEDERATION_MESSAGE_TYPES = [
   "task-assignment",
-  "memory-query",
-  "memory-response",
+  "context-query",
+  "context-response",
   "context-share",
   "status-broadcast",
   "trust-change",

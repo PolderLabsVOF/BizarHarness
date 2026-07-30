@@ -4,7 +4,6 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "jsx": "react-jsx",
     "allowJs": true,
     "checkJs": false,
     "strict": true,
@@ -26,10 +25,6 @@
   },
   "include": [
     "cli/**/*.mjs",
-    "bizar-dash/src/**/*.mjs",
-    "bizar-dash/src/**/*.ts",
-    "bizar-dash/src/web/**/*",
-    "plugins/bizar/**/*.ts",
     "packages/sdk/src/**/*",
     "packages/sdk/tests/**/*"
   ],

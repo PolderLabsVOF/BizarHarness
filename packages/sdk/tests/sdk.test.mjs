@@ -7,10 +7,9 @@
  * Uses vitest. The suite covers:
  *   - dist artefacts present after build:sdk
  *   - package.json exports map
- *   - SDK module surfaces (memory, fingerprint, dangerous-patterns, mcp)
+ *   - SDK module surfaces (fingerprint, dangerous-patterns, mcp)
  *   - dangerous-pattern behaviour (rm -rf / denied)
  *   - fingerprint stability
- *   - frontmatter round-trip
  */
 
 import { describe, test, expect } from "vitest";
@@ -28,14 +27,12 @@ describe("SDK build", () => {
       "index.js", "index.d.ts",
       "dangerous-patterns.js", "dangerous-patterns.d.ts",
       "fingerprint.js", "fingerprint.d.ts",
-      "memory/index.js", "memory/index.d.ts",
       "mcp/server.js", "mcp/server.d.ts",
       "mcp/bin.js", "mcp/bin.d.ts",
-      // v6.4.0 — F-033 Self-Learning (codemod + bandit + distillation).
+      // v6.4.0 — F-033 Self-Learning (codemod + bandit).
       "router/codemod-intent.js", "router/codemod-intent.d.ts",
       "router/model-router.js", "router/model-router.d.ts",
       "router/q-learning-router.js", "router/q-learning-router.d.ts",
-      "router/memory-distillation.js", "router/memory-distillation.d.ts",
       // v10.1.1 — F-034 Self-Learning (Pillar D): instincts + decisions.
       "learning/index.js", "learning/index.d.ts",
       "learning/instincts.js", "learning/instincts.d.ts",
@@ -45,11 +42,11 @@ describe("SDK build", () => {
     }
   });
 
-  test("package.json exports map declares memory, mcp, dangerous-patterns", async () => {
+  test("package.json exports map declares the retained public modules", async () => {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
     expect(pkg.name).toBe("@polderlabs/bizar-sdk");
     expect(pkg.exports["."]).toBeTruthy();
-    expect(pkg.exports["./memory"]).toBeTruthy();
+    expect(pkg.exports["./memory"]).toBeUndefined();
     expect(pkg.exports["./mcp"]).toBeTruthy();
     expect(pkg.exports["./dangerous-patterns"]).toBeTruthy();
   });
@@ -68,30 +65,17 @@ describe("SDK module surface", () => {
     expect(typeof mod.fingerprint).toBe("function");
   });
 
-  test("memory module exports vault helpers", async () => {
-    const mod = await import("../dist/memory/index.js");
-    expect(typeof mod.readNote).toBe("function");
-    expect(typeof mod.writeNote).toBe("function");
-    expect(typeof mod.listNotes).toBe("function");
-    expect(typeof mod.searchNotes).toBe("function");
-    expect(typeof mod.parseFrontmatter).toBe("function");
-    expect(typeof mod.serializeFrontmatter).toBe("function");
-    expect(typeof mod.resolveVaultRoot).toBe("function");
-    expect(typeof mod.DEFAULT_MEMORY_VAULT).toBe("string");
-  });
-
-  test("MCP server module exposes the 14-tool surface (12 legacy v6 + 2 Pillar D)", async () => {
+  test("MCP server module exposes only the retained tool surface", async () => {
     const mod = await import("../dist/mcp/server.js");
     expect(Array.isArray(mod.BIZAR_TOOLS)).toBe(true);
-    expect(mod.BIZAR_TOOLS.length).toBeGreaterThanOrEqual(14);
+    expect(mod.BIZAR_TOOLS.length).toBe(9);
     expect(typeof mod.createBizarMcpServer).toBe("function");
     expect(typeof mod.createBizarMcpServerConfig).toBe("function");
     expect(typeof mod.defineTool).toBe("function");
     expect(typeof mod.getBizarMcpToolSummary).toBe("function");
 
     const expectedNames = new Set([
-      "memory_read", "memory_write", "memory_list", "memory_search",
-      "plan_action", "open_kb",
+      "plan_action",
       "loop_list", "loop_status", "loop_start", "loop_stop",
       "graph_query", "graph_path",
       // Pillar D — read-back tools added in v10.3.0 audit cleanup.
@@ -114,8 +98,6 @@ describe("SDK module surface", () => {
     expect(typeof ql.QLearningRouter).toBe("function");
     expect(Array.isArray(ql.AGENT_ACTIONS)).toBe(true);
 
-    const ds = await import("../dist/router/memory-distillation.js");
-    expect(typeof ds.runDistillation).toBe("function");
   });
 });
 
@@ -150,25 +132,5 @@ describe("fingerprint stability", () => {
     const a = fingerprint("Bash", { command: "ls" });
     const b = fingerprint("Edit", { command: "ls" });
     expect(a).not.toBe(b);
-  });
-});
-
-describe("frontmatter round-trip", () => {
-  test("parses simple values", async () => {
-    const { parseFrontmatter } = await import("../dist/memory/index.js");
-    const md = "---\ntitle: Test\ncount: 3\n---\nHello world";
-    const parsed = parseFrontmatter(md);
-    expect(parsed.frontmatter.title).toBe("Test");
-    expect(parsed.frontmatter.count).toBe("3");
-    expect(parsed.body.trim()).toBe("Hello world");
-  });
-
-  test("serialize + parse preserves array form", async () => {
-    const { parseFrontmatter, serializeFrontmatter } = await import("../dist/memory/index.js");
-    const md = serializeFrontmatter({ title: "Test", tags: ["a", "b"] }, "\nbody");
-    expect(md.startsWith("---")).toBe(true);
-    const parsed = parseFrontmatter(md);
-    expect(parsed.frontmatter.title).toBe("Test");
-    expect(md.includes("tags: [a, b]")).toBe(true);
   });
 });

@@ -2,15 +2,13 @@
  * cli/commands/util.mjs
  *
  * Miscellaneous utility commands:
- *   audit, init, export, test-gate, dev-link, dev-unlink,
- *   doctor, repair, heads-up, bg, kevin, kevin-up, providers detect,
+ *   audit, init, export, test-gate, doctor, repair, heads-up,
+ *   browser,
  *   backup, restore
  */
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
 // ── Help texts ──────────────────────────────────────────────────────────────────
 
@@ -44,7 +42,7 @@ export function showExportHelp() {
   bizar export — Export agents/rules to another harness
 
   Usage:
-    bizar export [claude|cursor|cline]
+    bizar export [claude|cursor]
 
   Description:
     Copies installed Bizar agents and rules into another harness format.
@@ -70,41 +68,6 @@ export function showTestGateHelp() {
   `);
 }
 
-export function showDevLinkHelp() {
-  console.log(`
-  bizar dev-link / dev-unlink — Manage a symlink from the cline plugin dir
-  to a local source checkout, so edits propagate to cline on next session.
-
-  Usage:
-    bizar dev-link [source-dir]    Symlink source-dir (default: ./plugins/bizar)
-                                   to ~/.config/cline/plugins/bizar
-    bizar dev-link --force         Replace an existing deployed copy
-    bizar dev-unlink               Remove the dev symlink + restore from npm
-    bizar dev-unlink --force       Remove even if not a symlink (destructive)
-
-  Description:
-    By default, cline loads the Bizar plugin from
-    ~/.config/cline/plugins/bizar, which is a real directory copied
-    from the npm package. Edits to plugins/bizar/ in the BizarHarness
-    repo don't propagate until you re-run the installer.
-
-    \`bizar dev-link\` replaces that directory with a symlink pointing
-    at your local checkout, so source edits are picked up immediately.
-    \`bizar dev-unlink\` reverses the change by removing the symlink
-    and re-installing the deployed copy from the npm package.
-
-    While the dev link is in place, \`bizar update\` will skip the
-    plugin-copy step (and print a warning) so it doesn't clobber the
-    link. Run \`bizar dev-unlink\` first, or pass --force to overwrite.
-
-  Examples:
-    bizar dev-link
-    bizar dev-link /home/me/projects/bizar/plugins/bizar
-    bizar dev-link --force
-    bizar dev-unlink
-  `);
-}
-
 export function showDoctorHelp() {
   console.log(`
   bizar doctor — Check the BizarHarness install for health issues
@@ -114,19 +77,16 @@ export function showDoctorHelp() {
 
   Description:
     Runs a battery of health checks against the local install:
-      • cline CLI reachable
-      • ~/.config/cline/cline.json parses as JSON
-      • the Bizar plugin is registered
-      • plugin path resolves
-      • @polderlabs/bizar-plugin is installed globally
-      • core agent files are installed (mike, pam, todd, karen)
-      • semble / skills on PATH (lenient — at least one)
-      • dashboard reachable (skipped if no port file)
-      • provider.minimax block + MiniMax model flags are sane
+      • Claude Code CLI and settings
+      • Bizar MCP registration
+      • hook wiring
+      • installed agents and skills
+      • required local tools
+      • model-router reachability
 
     Prints ✓/✗ for each check and a final summary. Exits non-zero
-    if any check fails. Use \`bizar doctor\` after a manual config
-    edit or to diagnose "why is cline misbehaving?" questions.
+    if any check fails. Use \`bizar doctor\` after installation or
+    a manual Claude Code configuration edit.
 
   Related:
     bizar update              Update + auto-run doctor on success
@@ -155,8 +115,8 @@ export function showBackupHelp() {
     bizar backup delete <path>  Delete a backup
 
   Description:
-    Backs up config (~/.config/bizar/, ~/.config/cline/), memory,
-    usage logs, and optionally project-level state (.bizar/, skills/).
+    Backs up Bizar config and optionally project-level state
+    (.bizar/, .claude/skills/, .agents/skills/).
     Backups are stored under ~/.local/share/bizar/backups/.
 
   Examples:
@@ -164,24 +124,6 @@ export function showBackupHelp() {
     bizar backup "before-upgrade"
     bizar backup list
     bizar backup verify ~/.local/share/bizar/backups/bizar-2025-07-05-120000
-  `);
-}
-
-export function showProvidersHelp() {
-  console.log(`
-  bizar providers - Auto-detect provider API keys
-
-  Usage:
-    bizar providers detect     Auto-detect provider API keys from env + cline.json
-    bizar providers --help     Show this help
-
-  Description:
-    Scans process.env + ~/.config/cline/cline.json for known provider
-    API keys (OpenAI, Anthropic, OpenRouter, MiniMax, etc.) and reports
-    what's available. Useful before the first \`bizar install\` to verify
-    credentials are picked up.
-
-  No API keys are sent over the network - detection is local.
   `);
 }
 
@@ -282,40 +224,10 @@ export async function run(name, args, isHelpRequest) {
       else await runTestGate();
       break;
 
-    case 'dev-link':
-      if (isHelpRequest) showDevLinkHelp();
-      else {
-        const { createDevLink } = await import('../dev-link.mjs');
-        const positional = args.filter((a) => !a.startsWith('-'));
-        const flags = args.filter((a) => a.startsWith('-'));
-        const sourceDir = positional[0] ?? null;
-        const force = flags.includes('--force') || flags.includes('-f');
-        const ok = createDevLink(sourceDir, { force });
-        if (!ok) process.exit(1);
-      }
-      break;
-
-    case 'dev-unlink':
-      if (isHelpRequest) showDevLinkHelp();
-      else {
-        const { removeDevLink } = await import('../dev-link.mjs');
-        const force = args.includes('--force') || args.includes('-f');
-        const ok = await removeDevLink({ force });
-        if (!ok) process.exit(1);
-      }
-      break;
-
     case 'doctor':
       if (isHelpRequest) showDoctorHelp();
       else {
         const wantJson = args.includes('--json');
-        if (args[0] === 'smoke') {
-          // `bizar doctor smoke` — run post-install smoke test
-          const { runSmokeTest } = await import('../post-install-smoke.mjs');
-          const result = await runSmokeTest();
-          if (wantJson) process.stdout.write(JSON.stringify(result) + '\n');
-          process.exit(result.ok ? 0 : 1);
-        }
         const { runDoctor } = await import('../doctor.mjs');
         const result = await runDoctor({ silent: wantJson, json: wantJson });
         if (wantJson) process.stdout.write(JSON.stringify(result) + '\n');
@@ -348,7 +260,7 @@ export async function run(name, args, isHelpRequest) {
       }
       const sub = args[0];
       if (sub === 'list') {
-        const { listBackups } = await import('../../bizar-dash/src/server/backup-store.mjs');
+        const { listBackups } = await import('../core/backup-store.mjs');
         const backups = await listBackups();
         if (backups.length === 0) {
           console.log('  No backups found.');
@@ -366,7 +278,7 @@ export async function run(name, args, isHelpRequest) {
       if (sub === 'verify') {
         const path = args[1];
         if (!path) { console.error('  Usage: bizar backup verify <path>'); process.exit(1); }
-        const { verifyBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+        const { verifyBackup } = await import('../core/backup-store.mjs');
         const result = await verifyBackup({ backupPath: path });
         if (result.ok) {
           console.log(chalk.green('  ✓ Backup is valid'));
@@ -380,7 +292,7 @@ export async function run(name, args, isHelpRequest) {
       if (sub === 'delete') {
         const path = args[1];
         if (!path) { console.error('  Usage: bizar backup delete <path>'); process.exit(1); }
-        const { deleteBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+        const { deleteBackup } = await import('../core/backup-store.mjs');
         const result = await deleteBackup({ backupPath: path });
         if (result.ok) {
           console.log(chalk.green('  ✓ Backup deleted'));
@@ -392,7 +304,7 @@ export async function run(name, args, isHelpRequest) {
       }
       // Default: create backup
       const label = sub || null;
-      const { createBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+      const { createBackup } = await import('../core/backup-store.mjs');
       const result = await createBackup({ label });
       if (result.ok) {
         console.log(chalk.green('  ✓ Backup created'));
@@ -415,7 +327,7 @@ export async function run(name, args, isHelpRequest) {
       if (!path) { showRestoreHelp(); process.exit(1); }
       const dryRun = args.includes('--dry-run');
       const conflictStrategy = args.includes('--overwrite') ? 'overwrite' : args.includes('--skip') ? 'skip' : 'merge';
-      const { restoreBackup } = await import('../../bizar-dash/src/server/backup-store.mjs');
+      const { restoreBackup } = await import('../core/backup-store.mjs');
       const result = await restoreBackup({ backupPath: path, dryRun, conflictStrategy });
       if (dryRun) {
         console.log('  Dry-run mode — no files were modified.');
@@ -446,50 +358,9 @@ export async function run(name, args, isHelpRequest) {
       }
       break;
 
-    case 'bg':
-      if (isHelpRequest) {
-        console.log('  bg <subcommand>   Manage background agents (list/view/kill/logs)');
-      } else {
-        const { runBg } = await import('../bg.mjs');
-        await runBg(args[0], args.slice(1));
-      }
-      break;
-
-    case 'digest':
-      // v4.8.0 — Weekly digest management
-      if (isHelpRequest) {
-        const { showDigestHelp } = await import('../digest.mjs');
-        showDigestHelp();
-      } else {
-        const { runDigest } = await import('../digest.mjs');
-        await runDigest(args[0], args.slice(1));
-      }
-      break;
-
-    case 'kevin-up': {
-      const { execFileSync } = await import('node:child_process');
-      const sub = args[0] || 'start';
-      const __dirname = fileURLToPath(new URL('.', import.meta.url));
-      const scriptPath = join(__dirname, '..', 'kevin-up.sh');
-      try {
-        const out = execFileSync('bash', [scriptPath, sub], {
-          encoding: 'utf8',
-          stdio: 'inherit',
-        });
-        if (out) process.stdout.write(out);
-      } catch (err) {
-        console.error(chalk.red(`  ✗ kevin-up ${sub} failed (exit ${err.status ?? 1})`));
-        process.exit(err.status || 1);
-      }
-      break;
-    }
-
-    case 'kevin': {
-      // v6.0.0 — install / update / verify the kevin CLI.
-      // (The 'kevin-up' sibling is the bash wrapper that just
-      // manages the daemon process; this is the rich installer + updater.)
-      const { install, update, detectState, ensureRunning, printStatus } =
-        await import('../kevin-update.mjs');
+    case 'browser': {
+      const { install, update, detectState, doctor, printStatus } =
+        await import('../agent-browser-update.mjs');
       const sub = args[0] || 'status';
       switch (sub) {
         case 'status':
@@ -497,17 +368,14 @@ export async function run(name, args, isHelpRequest) {
           break;
         case 'install': {
           const s = install({ silent: false });
-          console.log(chalk.green('\n  kevin ready.'));
-          console.log(`    version:    ${s.version}`);
-          console.log(`    daemon:     ${s.daemonRunning ? 'running' : 'stopped'}`);
-          console.log(`    profile:    ${s.profileDir}`);
+          console.log(chalk.green('\n  agent-browser ready.'));
+          console.log(`    version: ${s.version}`);
           break;
         }
         case 'update': {
           const s = update({ silent: false });
-          console.log(chalk.green('\n  kevin up-to-date.'));
-          console.log(`    version:    ${s.version}`);
-          console.log(`    daemon:     ${s.daemonRunning ? 'running' : 'stopped'}`);
+          console.log(chalk.green('\n  agent-browser up-to-date.'));
+          console.log(`    version: ${s.version}`);
           break;
         }
         case 'detect': {
@@ -515,60 +383,32 @@ export async function run(name, args, isHelpRequest) {
           console.log(JSON.stringify(s, null, 2));
           break;
         }
-        case 'start':
-          ensureRunning({ silent: false });
-          break;
-        case 'stop': {
-          const { spawnSync } = await import('node:child_process');
-          const killed = spawnSync('pkill', ['-f', 'kevin serve'], { stdio: 'ignore' });
-          if (killed.status === 0) {
-            console.log(chalk.green('  ✓ daemon stopped'));
-          } else {
-            console.log(chalk.dim('  daemon was not running'));
+        case 'doctor': {
+          const result = doctor({ silent: false });
+          if (!result.ok) {
+            console.error(chalk.red(`  ✗ ${result.message}`));
+            process.exitCode = 1;
           }
           break;
         }
         default:
-          console.log(`bizar kevin <sub>
+          console.log(`bizar browser <subcommand>
 
   Subcommands:
     status   one-line status (default)
-    install  install kevin + download Chrome
+    install  install agent-browser + its managed browser
     update   upgrade to the latest version
     detect   JSON state (for scripts)
-    start    start the daemon
-    stop     stop the daemon
+    doctor   run the official diagnostic
 
   Examples:
-    bizar kevin status
-    bizar kevin install
-    bizar kevin update
-    bizar kevin start`);
+    bizar browser status
+    bizar browser install
+    bizar browser update
+    bizar browser doctor`);
       }
       break;
     }
-
-    case 'providers':
-      if (isHelpRequest || args.length === 0) {
-        showProvidersHelp();
-        break;
-      }
-      if (args[0] === 'detect') {
-        const { runProvidersDetect } = await import('../providers-detect.mjs');
-        await runProvidersDetect(args.slice(1));
-      }
-      break;
-
-    case 'plan':
-      // Alias for artifact
-      if (isHelpRequest) {
-        const { showHelp } = await import('../artifact-cli.mjs');
-        showHelp();
-      } else {
-        const { runArtifact } = await import('../artifact-cli.mjs');
-        await runArtifact(args, {});
-      }
-      break;
 
     default:
       return false;

@@ -1,7 +1,7 @@
 /**
  * src/server/atomic.mjs
  *
- * Atomic file I/O utilities for the Bizar Memory Service. Uses the
+ * Atomic file I/O utilities for Bizar runtime state. Uses the
  * proven tmp+rename pattern to ensure files are either fully written or
  * not written at all (no partial writes on crash).
  *

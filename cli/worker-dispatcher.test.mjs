@@ -1,7 +1,7 @@
 /**
  * cli/worker-dispatcher.test.mjs
  *
- * F-034 Background Workers — unit tests for the trigger-pattern dispatcher.
+ * Prompt suggestion router — unit tests for the trigger-pattern dispatcher.
  * Uses Node's built-in `node:test`. No external test framework.
  *
  * Strategy:
@@ -35,7 +35,6 @@ after(() => {
 // ── Canonical F-034 dry-run: 5 sample prompts → expected worker ids ─────────
 
 describe('dispatch() — canonical 5-prompt dry run', () => {
-  let tmpdir_created = false;
   // Make sure cache is fresh for each run.
   before(() => { resetCache(); });
 
@@ -148,11 +147,11 @@ describe('dispatch() — edge cases', () => {
 describe('listWorkers()', () => {
   before(() => { resetCache(); });
 
-  test('returns the full worker set (all 12)', () => {
+  test('returns the full worker set', () => {
     const ids = listWorkers();
     const expected = [
       'testgaps', 'audit', 'deepdive', 'refactor', 'document', 'optimize',
-      'ultralearn', 'consolidate', 'predict', 'map', 'preload', 'benchmark',
+      'ultralearn', 'predict', 'map', 'preload', 'benchmark',
     ];
     for (const id of expected) {
       assert.ok(ids.includes(id), `expected worker ${id} in ${JSON.stringify(ids)}`);

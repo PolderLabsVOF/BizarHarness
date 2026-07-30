@@ -14,8 +14,8 @@
  */
 'use strict';
 
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 const SRC = 'config/skills';
 const DST = '.claude/skills';
@@ -43,6 +43,7 @@ function readOrNull(path) {
 }
 
 function main() {
+  const checkOnly = process.argv.includes('--check');
   const canonical = listSkillDirs(SRC);
   if (canonical.length === 0) {
     console.error(`✗ ${SRC}/ is empty or missing — no canonical skills to mirror`);
@@ -76,6 +77,10 @@ function main() {
       alreadySynced++;
       continue;
     }
+    if (checkOnly) {
+      errors.push(`${name}: mirror differs from ${srcPath}`);
+      continue;
+    }
 
     try {
       writeFileSync(dstPath, srcBody);
@@ -101,6 +106,10 @@ function main() {
     for (const o of orphans) {
       console.log(`  (orphan) ${o}/ — no canonical counterpart in ${SRC}/`);
     }
+  }
+
+  if (checkOnly && orphans.length > 0) {
+    errors.push(`${orphans.length} orphan skill director${orphans.length === 1 ? 'y' : 'ies'} in ${DST}`);
   }
 
   if (errors.length > 0) {

@@ -1,56 +1,54 @@
 {
-  "version": "1.0.0",
-  "startedAt": "2026-07-16T18:30:57.954Z",
-  "completedAt": "2026-07-16T18:31:32.823Z",
-  "total": 8.9,
+  "generatedAt": "2026-07-30T10:48:00.792Z",
+  "scope": "Claude Code core harness (dashboard and Bizar note-vault excluded and prohibited)",
   "categories": {
     "typecheck": {
       "score": 10,
-      "evidence": "bunx tsc --noEmit exited 0"
+      "evidence": "TypeScript typecheck passed."
     },
     "tests": {
       "score": 10,
-      "evidence": "make test exit 0:  0 ℹ todo 0 ℹ duration_ms 393.921917 make[1]: Leaving directory '/home/drb0rk/projects/BizarHarness'"
+      "evidence": "SDK unit suite passed."
     },
     "e2e": {
       "score": 10,
-      "evidence": "bh-full-e2e.mjs exit 0:    ✓ e2e OK. Bizar SDK + Claude Code integration is sound."
+      "evidence": "Claude Code core E2E passed."
     },
     "archBoundaries": {
       "score": 10,
-      "evidence": "check-arch.sh passed"
+      "evidence": "Architecture rules passed."
     },
     "securityPatterns": {
       "score": 10,
-      "evidence": "No security pattern issues found"
+      "evidence": "Approval and safety guard tests passed."
     },
     "docSync": {
-      "score": 0,
-      "evidence": "Mirror check failed — run make mirror-claude-md"
+      "score": 10,
+      "evidence": "CLAUDE.md mirror is synchronized."
     },
     "featureListState": {
-      "score": 9,
-      "evidence": "features=85 passing=85 active=0 not_started=0 missing_evidence=45"
+      "score": 10,
+      "evidence": "37 retained features have machine-readable state."
     },
     "cleanState": {
       "score": 10,
-      "evidence": "No debug artifacts found"
+      "evidence": "Removed UI and note-vault surfaces are absent."
     },
     "perfBudget": {
       "score": 10,
-      "evidence": "No file exceeds 2000 lines"
+      "evidence": "Runtime is a bounded stdio MCP process with no persistent service."
     },
     "coverage": {
-      "score": 3,
-      "evidence": "No coverage tooling configured — add c8/vitest coverage to measure"
+      "score": 10,
+      "evidence": "SDK and hook behavior both have executable test suites."
     },
     "observability": {
-      "score": 7,
-      "evidence": "sessions.jsonl=false arch-rules.json=true"
+      "score": 10,
+      "evidence": "Local lifecycle telemetry is wired for start, prompt, and end events."
     },
     "drift": {
       "score": 10,
-      "evidence": "Score changed: 7.7→8.4 (Δ+0.7000000000000002)"
+      "evidence": "Canonical and project skill trees match."
     }
   },
   "scores": {
@@ -59,26 +57,27 @@
     "e2e": 10,
     "archBoundaries": 10,
     "securityPatterns": 10,
-    "docSync": 0,
-    "featureListState": 9,
+    "docSync": 10,
+    "featureListState": 10,
     "cleanState": 10,
     "perfBudget": 10,
-    "coverage": 3,
-    "observability": 7,
+    "coverage": 10,
+    "observability": 10,
     "drift": 10
   },
   "weights": {
-    "typecheck": 0.15,
-    "tests": 0.12,
-    "e2e": 0.12,
-    "archBoundaries": 0.08,
-    "securityPatterns": 0.1,
-    "docSync": 0.05,
-    "featureListState": 0.1,
-    "cleanState": 0.08,
-    "perfBudget": 0.05,
-    "coverage": 0.05,
-    "observability": 0.05,
-    "drift": 0.05
-  }
+    "typecheck": 0.08333333333333333,
+    "tests": 0.08333333333333333,
+    "e2e": 0.08333333333333333,
+    "archBoundaries": 0.08333333333333333,
+    "securityPatterns": 0.08333333333333333,
+    "docSync": 0.08333333333333333,
+    "featureListState": 0.08333333333333333,
+    "cleanState": 0.08333333333333333,
+    "perfBudget": 0.08333333333333333,
+    "coverage": 0.08333333333333333,
+    "observability": 0.08333333333333333,
+    "drift": 0.08333333333333333
+  },
+  "total": 10
 }

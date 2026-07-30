@@ -28,7 +28,7 @@ export type AgentStatus = "active" | "terminated";
  * Bizar's typed-agent allowlist. Mirrors the six typed agents in
  * `config/agents/` (coder / tester / reviewer / system-architect /
  * planner / researcher) plus three ruflo-derived typed routes
- * (performance-engineer / security-auditor / memory-specialist).
+ * (performance-engineer / security-auditor / context-specialist).
  * `registerAgent` rejects anything outside this set so the MCP tools
  * surface a typed vocabulary callers can rely on.
  */
@@ -41,7 +41,7 @@ export const AGENT_TYPES = [
   "researcher",
   "performance-engineer",
   "security-auditor",
-  "memory-specialist",
+  "context-specialist",
 ] as const;
 
 export type AllowedAgentType = (typeof AGENT_TYPES)[number];

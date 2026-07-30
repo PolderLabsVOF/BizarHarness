@@ -75,13 +75,6 @@ process.stdin.on('end', () => {
     }
   }
 
-  // No dangerous pattern — allow.
-  const out = {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'allow',
-    },
-    additionalContext: `Bizar PreToolUse(Bash): scanned ${command.length} chars, no dangerous pattern.`,
-  };
-  process.stdout.write(JSON.stringify(out) + '\n');
+  // No dangerous pattern: defer to Claude Code permissions/auto-mode.
+  process.stdout.write('{}\n');
 });

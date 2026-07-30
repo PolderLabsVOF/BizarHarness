@@ -11,8 +11,8 @@ describe('PATHS', () => {
   test('has all required keys', () => {
     const required = [
       'claudeDir', 'agentsDir', 'skillsDir', 'commandsDir',
-      'hooksDir', 'pluginsDir', 'settingsFile', 'bizarHome',
-      'servicePid', 'dashboardPid', 'dashboardPort', 'installMarker',
+      'hooksDir', 'settingsFile', 'bizarHome',
+      'loopsDir', 'installMarker',
     ];
     for (const key of required) {
       assert.ok(key in PATHS, `missing key: ${key}`);

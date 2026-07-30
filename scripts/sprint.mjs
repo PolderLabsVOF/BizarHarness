@@ -1,7 +1,7 @@
 /**
  * scripts/sprint.mjs
  *
- * /sprint <goal-id> — auto-fill a sprint contract from a goal in PROGRESS.md.
+ * /sprint <goal-id> — auto-fill a sprint contract from root PROGRESS.md.
  *
  * Usage:
  *   node scripts/sprint.mjs <goal-id> [projectRoot]
@@ -17,7 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** @param {string} goalId @param {string} projectRoot */
 export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
   // 1. Find and read progress-parser.mjs
-  const parserPath = join(projectRoot, 'bizar-dash', 'src', 'server', 'progress-parser.mjs');
+  const parserPath = join(projectRoot, 'cli', 'progress-parser.mjs');
   let parseProgress;
   try {
     ({ parseProgress } = await import(parserPath));
@@ -25,8 +25,8 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
     throw new Error(`progress-parser.mjs not found at ${parserPath}`);
   }
 
-  // 2. Read .bizar/PROGRESS.md
-  const progressPath = join(projectRoot, '.bizar', 'PROGRESS.md');
+  // 2. Read the canonical root PROGRESS.md.
+  const progressPath = join(projectRoot, 'PROGRESS.md');
   if (!existsSync(progressPath)) {
     throw new Error(`PROGRESS.md not found at ${progressPath}`);
   }
@@ -37,7 +37,7 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
   const goal = goals.find((g) => g.id.toUpperCase() === goalId.toUpperCase());
   if (!goal) {
     const available = goals.map((g) => g.id).join(', ');
-    throw new Error(`goal '${goalId}' not found in .bizar/PROGRESS.md. Available: ${available || 'none'}`);
+    throw new Error(`goal '${goalId}' not found in PROGRESS.md. Available: ${available || 'none'}`);
   }
 
   // 4. Read template
@@ -49,9 +49,6 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
 
   // 5. Build pre-filled content
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const unchecked = (text) => text.replace('[x]', '[ ]');
-  const checked = (text) => text.replace('[ ]', '[x]');
-
   // Split template into lines for section-by-section replacement
   const lines = template.split('\n');
   const out = [];
@@ -60,8 +57,6 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
   let inScopeIn = false;
   let inScopeOut = false;
   let inDod = false;
-  let inArch = false;
-  let inRisk = false;
   let filledFeatureId = false;
   let filledTitle = false;
   let filledOwner = false;
@@ -76,9 +71,7 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
 
     // Fill Identification section
     if (!filledFeatureId && /Feature ID/.test(line)) {
-      out.push(line);
-      // Next line is the value row — fill it
-      out.push(`- **Feature ID:** ${goal.id}`);
+      out.push(line.replace('F-NNN', goal.id));
       filledFeatureId = true;
       continue;
     }
@@ -88,8 +81,7 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       continue;
     }
     if (!filledSprintDate && /Sprint date/.test(line)) {
-      out.push(line);
-      out.push(`- **Sprint date:** ${today}`);
+      out.push(line.replace('YYYY-MM-DD', today));
       filledSprintDate = true;
       continue;
     }
@@ -104,8 +96,6 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       inScopeIn = true;
       inScopeOut = false;
       inDod = false;
-      inArch = false;
-      inRisk = false;
       out.push(line);
       continue;
     }
@@ -113,8 +103,6 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       inScopeIn = false;
       inScopeOut = true;
       inDod = false;
-      inArch = false;
-      inRisk = false;
       out.push(line);
       // Add a blank "not yet defined" placeholder if no scope-out is natural
       out.push('\n- _None defined yet — add items as the sprint evolves_\n');
@@ -146,8 +134,6 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       inScopeIn = false;
       inScopeOut = false;
       inDod = true;
-      inArch = false;
-      inRisk = false;
       out.push(line);
       continue;
     }
@@ -164,15 +150,11 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       inScopeIn = false;
       inScopeOut = false;
       inDod = false;
-      inArch = true;
-      inRisk = false;
     }
     if (/^\s*## Risk/.test(line)) {
       inScopeIn = false;
       inScopeOut = false;
       inDod = false;
-      inArch = false;
-      inRisk = true;
     }
 
     out.push(line);

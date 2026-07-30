@@ -39,11 +39,10 @@ async function callJson(toolName: string, args: unknown): Promise<unknown> {
 }
 
 describe("BIZAR_TOOLS surface", () => {
-  test("ships the legacy v6 memory/plan/kb/loop/graph tools", () => {
+  test("ships the retained plan/loop/graph tools", () => {
     const names = new Set(BIZAR_TOOLS.map((t) => t.name));
     for (const expected of [
-      "memory_read", "memory_write", "memory_list", "memory_search",
-      "plan_action", "open_kb",
+      "plan_action",
       "loop_start", "loop_stop", "loop_list", "loop_status",
       "graph_query", "graph_path",
     ]) {
@@ -65,6 +64,7 @@ describe("BIZAR_TOOLS surface", () => {
       "hooks_route", "memory_distill", "consensus_propose",
       "federation_status", "session_heartbeat",
       "cron_add", "cron_list", "cron_remove", "danger_check",
+      "memory_read", "memory_write", "memory_list", "memory_search", "open_kb",
     ]) {
       expect(names.has(gone), `deleted tool still present: ${gone}`).toBe(false);
     }
@@ -109,18 +109,5 @@ describe("Pillar D tools", () => {
       const arr = JSON.parse(r) as unknown[];
       expect(arr.length).toBeLessThanOrEqual(10);
     }
-  });
-});
-
-describe("Memory tools (legacy v6 surface)", () => {
-  test("memory_search returns 'no_matches' for an unknown query", async () => {
-    const r = await callText("memory_search", { query: "definitely_no_such_thing_xyz" });
-    expect(r).toBe("no_matches");
-  });
-
-  test("memory_list returns a string body", async () => {
-    const r = await callText("memory_list", {});
-    expect(typeof r).toBe("string");
-    // Either empty string or newline-separated paths — never an exception.
   });
 });

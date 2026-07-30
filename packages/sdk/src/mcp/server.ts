@@ -1,13 +1,10 @@
 /**
  * mcp/server.ts — Claude Code MCP server exposing Bizar tools.
  *
- * This is the Claude Code-native replacement for the legacy Cline
- * `AgentPlugin` (plugins/bizar/index.ts). The Cline plugin hosted its
- * tools inside the Cline runtime via `createTool()`. Claude Code
- * doesn't have an equivalent plugin runtime API; instead, third-party
- * tools are exposed via the Model Context Protocol (MCP). This file
+ * Claude Code loads these third-party tools through the Model Context
+ * Protocol (MCP). This file
  * exports a single `createBizarMcpServer()` factory that wraps every
- * Bizar tool (memory, plan, graph, loop, KB, sandbox, browser) as an
+ * Bizar tool (plans, loops, graph, and learning) as an
  * MCP `tool()` definition, bundled into an SDK MCP server via the
  * `@anthropic-ai/claude-agent-sdk` `createSdkMcpServer()`.
  *
@@ -17,7 +14,7 @@
  *     import { query } from "@anthropic-ai/claude-agent-sdk";
  *
  *     for await (const msg of query({
- *       prompt: "Read my note on sandbox architecture",
+ *       prompt: "Find the graph path to the sandbox command",
  *       options: {
  *         mcpServers: { bizar: createBizarMcpServer() },
  *         allowedTools: ["mcp__bizar__*"],
@@ -30,22 +27,14 @@
  * (via `mcpServers` key) or `.mcp.json` so every Claude Code session
  * picks it up automatically.
  *
- * v6.3.0 — rewrite: replaces the Cline-runtime plugin with a Claude
- * Code MCP server. All tool logic is framework-agnostic, so semantics
- * are preserved 1:1 from the old plugin.
+ * The retained registry covers planning, bounded loops, graph queries,
+ * and compact learning summaries.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-import {
-  listNotes,
-  readNote,
-  searchNotes,
-  writeNote,
-  resolveVaultRoot,
-} from "../memory/index.js";
 import { listInstincts } from "../learning/instincts.js";
 import { listDecisions } from "../learning/decisions.js";
 
@@ -74,8 +63,7 @@ export interface SdkMcpServerConfig {
 
 /**
  * Build a single MCP tool definition with a zod-less validator. This
- * avoids taking a hard dep on zod at SDK-level; the dashboard or
- * installer wraps this with real zod validation when wiring into
+ * avoids taking a hard dep on zod at SDK-level; the installer wraps this with real zod validation when wiring into
  * `tool()`.
  */
 export function defineTool<Args>(
@@ -100,70 +88,6 @@ function err(text: string) {
   // a structured payload so the model can react.
   return { content: [{ type: "text" as const, text: `error: ${text}` }] };
 }
-
-// ---------------------------------------------------------------------------
-// Memory tools (4)
-// ---------------------------------------------------------------------------
-
-const memoryReadTool = defineTool<{ path: string }>(
-  "memory_read",
-  "Read a memory note from the Bizar vault. Path is relative to the vault root (e.g. 'projects/foo/notes.md').",
-  { path: "string" },
-  async ({ path }) => {
-    try {
-      const note = readNote(resolveVaultRoot(), path);
-      if (!note) return err(`not_found: ${path}`);
-      return ok(note.raw);
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-const memoryWriteTool = defineTool<{ path: string; body: string; tags?: string }>(
-  "memory_write",
-  "Write a memory note to the Bizar vault. Creates the parent directory as needed.",
-  { path: "string", body: "string", tags: "string" },
-  async ({ path, body, tags }) => {
-    try {
-      const fm: Record<string, unknown> = {
-        title: path.replace(/\.md$/, "").split("/").pop(),
-        createdAt: new Date().toISOString(),
-      };
-      if (tags) fm.tags = tags.split(",").map((t) => t.trim()).filter(Boolean);
-      const note = writeNote(resolveVaultRoot(), path, fm, body);
-      return ok(`wrote: ${note.relPath} (${note.size} bytes)`);
-    } catch (e) { return err(String(e)); }
-  },
-);
-
-const memoryListTool = defineTool<{ prefix?: string; limit?: number }>(
-  "memory_list",
-  "List memory notes in the Bizar vault, optionally filtered by a path prefix.",
-  { prefix: "string", limit: "number" },
-  async ({ prefix, limit }) => {
-    try {
-      const n = limit ?? 50;
-      const notes = listNotes(resolveVaultRoot(), prefix ?? "", n);
-      return ok(notes.map((m) => m.relPath).join("\n"));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
-const memorySearchTool = defineTool<{ query: string; limit?: number }>(
-  "memory_search",
-  "Full-text search the Bizar memory vault. Returns matching note paths and a snippet.",
-  { query: "string", limit: "number" },
-  async ({ query: q, limit }) => {
-    try {
-      const n = limit ?? 20;
-      const notes = searchNotes(resolveVaultRoot(), q, n);
-      if (notes.length === 0) return ok("no_matches");
-      return ok(notes.map((m) => `${m.relPath}\n---\n${m.body.slice(0, 240)}…`).join("\n\n"));
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
 
 // ---------------------------------------------------------------------------
 // Pillar D — instinct + decision read-back (v10.3.0)
@@ -211,10 +135,9 @@ const listDecisionsTool = defineTool<{ project?: string; limit?: number }>(
 );
 
 // ---------------------------------------------------------------------------
-// Plan / KB tools
+// Plan tools
 // ---------------------------------------------------------------------------
 
-const KB_HOME = join(homedir(), ".bizar_kb");
 const PLANS_DIRNAME = "plans";
 
 function findRepoRoot(): string {
@@ -262,23 +185,17 @@ const planActionTool = defineTool<{ slug: string; action: "read" | "list" | "cre
   },
 );
 
-const openKbTool = defineTool<{ path?: string }>(
-  "open_kb",
-  "Print the path to the Bizar knowledge base (Obsidian-compatible vault). The dashboard can open it externally; for Claude Code use memory_* tools instead.",
-  { path: "string" },
-  async () => ok(`${resolveVaultRoot()}\nAlso: ${KB_HOME}`),
-  { readOnlyHint: true },
-);
-
 // ---------------------------------------------------------------------------
 // Loop tools
 // ---------------------------------------------------------------------------
 
-const LOOPS_DIR = join(homedir(), ".bizar_loops");
+const BIZAR_HOME = process.env.BIZAR_HOME
+  || join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "bizar");
+const LOOPS_DIR = process.env.BIZAR_LOOPS_DIR || join(BIZAR_HOME, "loops");
 
 const loopListTool = defineTool<{ limit?: number }>(
   "loop_list",
-  "List active and recent Bizar loops in this machine's loop store (~/.bizar_loops/).",
+  "List active and recent Bizar loops in the configured Bizar runtime store.",
   { limit: "number" },
   async ({ limit }) => {
     try {
@@ -315,7 +232,7 @@ const loopStatusTool = defineTool<{ name: string }>(
 
 const loopStartTool = defineTool<{ name: string; prompt: string; intervalMs?: number; maxIterations?: number }>(
   "loop_start",
-  "Create a new Bizar loop. The loop can be picked up by Claude Code via Agent tool background mode or the dashboard's loop runner.",
+  "Create a new Bizar loop for a Claude Code background agent to pick up.",
   { name: "string", prompt: "string", intervalMs: "number", maxIterations: "number" },
   async ({ name, prompt, intervalMs, maxIterations }) => {
     try {
@@ -335,7 +252,7 @@ const loopStartTool = defineTool<{ name: string; prompt: string; intervalMs?: nu
 
 const loopStopTool = defineTool<{ name: string }>(
   "loop_stop",
-  "Mark a Bizar loop as stopped. The dashboard loop-runner and Claude Code background agents will halt on next poll.",
+  "Mark a Bizar loop as stopped. Claude Code background agents halt on their next poll.",
   { name: "string" },
   async ({ name }) => {
     try {
@@ -423,12 +340,7 @@ const graphPathTool = defineTool<{ from: string; to: string }>(
 // ---------------------------------------------------------------------------
 
 export const BIZAR_TOOLS: SdkMcpToolDef[] = [
-  memoryReadTool,
-  memoryWriteTool,
-  memoryListTool,
-  memorySearchTool,
   planActionTool,
-  openKbTool,
   loopListTool,
   loopStatusTool,
   loopStartTool,
@@ -464,7 +376,7 @@ export function createBizarMcpServerConfig(opts?: { name?: string; version?: str
 
 /**
  * Build and return an `McpSdkServerConfigWithInstance` from the real
- * SDK. This is the runtime path used by `bin.ts` and the dashboard.
+ * SDK. This is the runtime path used by `bin.ts`.
  *
  * Pass `sdk` (the result of `await import("@anthropic-ai/claude-agent-sdk")`)
  * to avoid taking a hard dependency on the SDK from this package.

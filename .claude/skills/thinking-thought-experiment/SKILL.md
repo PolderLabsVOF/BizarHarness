@@ -32,7 +32,7 @@ Need to understand how something behaves?
 
 ## When NOT to Use
 
-- **If you can cheaply test or measure it, test it.** A thought experiment is a substitute for empiricism, not a replacement — a load test, a feature flag, a query against real data, or a pam spike beats imagined consequences every time. Reach for this skill only when the real experiment is genuinely out of reach.
+- **If you can cheaply test or measure it, test it.** A thought experiment is a substitute for empiricism, not a replacement — a load test, a feature flag, a query against real data, or a quick spike beats imagined consequences every time. Reach for this skill only when the real experiment is genuinely out of reach.
 - **For adversarial "how would an attacker break this" analysis, use thinking-red-team** — it has the structured attack-surface and findings format. Don't reinvent it here.
 
 ## Trigger Card
@@ -209,7 +209,7 @@ Template for each:
 
 ### The Adversarial Analysis
 
-> For real security work, prefer **thinking-red-team** (structured attack surface + reproducible-attack-path findings). Use the sketch below only as a pam lens, not a substitute.
+> For real security work, prefer **thinking-red-team** (structured attack surface + reproducible-attack-path findings). Use the sketch below only as a quick lens, not a substitute.
 
 ```markdown
 ## Thought Experiment: Attacker Perspective

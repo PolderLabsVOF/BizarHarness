@@ -9,7 +9,6 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./memory": "./dist/memory/index.js",
     "./mcp": "./dist/mcp/server.js",
     "./dangerous-patterns": "./dist/dangerous-patterns.js",
     "./learning": "./dist/learning/index.js"

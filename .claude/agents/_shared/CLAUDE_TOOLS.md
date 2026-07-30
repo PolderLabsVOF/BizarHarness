@@ -354,7 +354,7 @@ Background (async, returns immediately):
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `subagent_type` | string | **yes** | A Bizar agent name declared in `.claude/agents/<name>.md`: `mike`, `todd`, `karen`, `brenda`, `greg`, `susan`, `steve`, `brad`, `janet`, `carl`, `linda`, `pam`, `kevin`, `oscar`. |
+| `subagent_type` | string | **yes** | A Bizar agent name declared in `.claude/agents/*.md`: `mike`, `paul`, `todd`, `karen`, `brenda`, `greg`, `susan`, `steve`, `brad`, `ria`, `janet`, `carl`, `linda`, `pam`, `kevin`, `oscar`. |
 | `prompt` | string | **yes** | What to do. Be specific. |
 | `description` | string | no | Short summary shown in the TUI. |
 | `run_in_background` | bool | no | Default `false`. Set true for async dispatch. |

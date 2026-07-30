@@ -5,23 +5,8 @@
  * (`createClineSdk`, `subscribeClineEvents`, `Cline*` types) have been
  * removed because Bizar no longer integrates with the Cline runtime.
  * The Claude Code integration is via the MCP server exported from
- * `./mcp/server.ts` (`createBizarMcpServer`) and the in-process memory
- * vault exported from `./memory/index.ts`.
+ * `./mcp/server.ts` (`createBizarMcpServer`) through its guarded MCP and SDK primitives.
  */
-
-// In-process memory vault (Obsidian-compatible markdown notes).
-export {
-  readNote,
-  writeNote,
-  listNotes,
-  searchNotes,
-  parseFrontmatter,
-  serializeFrontmatter,
-  resolveVaultRoot,
-  DEFAULT_MEMORY_VAULT,
-  LEGACY_MEMORY_VAULT,
-} from "./memory/index.js";
-export type { MemoryNote } from "./memory/index.js";
 
 // Dangerous-pattern scanner.
 export {

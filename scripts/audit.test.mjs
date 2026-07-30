@@ -96,7 +96,7 @@ test('missing feature_list.json yields score 0 for feature-list-state (tolerates
     renameSync(flPath, backupPath);
   }
   try {
-    const { stdout } = execSync(`node "${AUDIT_SCRIPT}" 2>&1`, {
+    const stdout = execSync(`node "${AUDIT_SCRIPT}" 2>&1`, {
       cwd: PROJECT_ROOT,
       encoding: 'utf8',
     });

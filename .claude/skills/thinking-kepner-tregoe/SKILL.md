@@ -34,7 +34,7 @@ Defect is selective (not 100%)? → No → IS/IS-NOT has no signal; use direct d
 
 - **The failure is uniform** (affects 100% of requests/everything) — there is no IS-vs-IS-NOT boundary to contrast; PA gives no signal. Use `thinking-systems` or direct debugging.
 - **The cause is already obvious** from a stack trace, error message, or a single recent change — just fix it; IS/IS-NOT is overhead here.
-- **A pam hypothesis is cheaply testable** — test it (`thinking-occams-razor`) before building a full specification matrix.
+- **A quick hypothesis is cheaply testable** — test it (`thinking-occams-razor`) before building a full specification matrix.
 - **Pure decision-making with no deviation to diagnose** — use `thinking-opportunity-cost`, not KT's Decision Analysis.
 - **Risk assessment for a planned change** — use `thinking-pre-mortem`, not KT's Potential Problem Analysis.
 

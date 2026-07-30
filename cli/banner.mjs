@@ -9,28 +9,17 @@ const RUNE_HELM = `
     ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
 `;
 
-const PANTHEON = `
-
-    ╔══════════════════════════════════════════╗
-    ║                                          ║
-    ║    ᛟ Odin     ᛗ Mimir    ᚹ Heimdall     ║
-    ║    ᚱ Hermod   ᚦ Thor     ᛏ Tyr          ║
-    ║    ᛉ Vidarr   ᚨ Forseti  ᛒ Baldr        ║
-    ║                                          ║
-    ╚══════════════════════════════════════════╝
-`;
-
 export function showBanner() {
   console.clear();
   console.log(chalk.hex('#6366f1').bold(RUNE_HELM));
-  console.log(chalk.hex('#a855f7')('    Norse Pantheon Agent System for cline'));
+  console.log(chalk.hex('#a855f7')('    Guarded autonomous agent system for Claude Code'));
   console.log();
-  console.log(chalk.dim('    13 agents · 4 cost tiers · Obsidian vault long-term memory · Semble · Skills CLI · Mods'));
+  console.log(chalk.dim('    16 agents · guarded autonomy · human approval gates · MCP · Skills CLI'));
   console.log();
 }
 
 export function showPantheon() {
-  console.log(chalk.hex('#312e81')(PANTHEON));
+  console.log(chalk.hex('#312e81')('    Claude Code agents · guarded workflows · explicit approval gates'));
 }
 
 export function sectionHeading(text) {

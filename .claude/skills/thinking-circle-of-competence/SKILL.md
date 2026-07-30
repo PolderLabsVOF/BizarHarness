@@ -27,7 +27,7 @@ About to give a specific/high-stakes answer?
 
 ## When NOT to Use
 - **The answer is grounded and verifiable** — you've read the file, run the command, or it's stable common knowledge. Don't perform false humility on things you actually know; needless hedging is its own failure.
-- **The cost of being wrong is trivial and reversible** — a pam reversible attempt with a caveat can beat stalling, as long as you flag it as unverified.
+- **The cost of being wrong is trivial and reversible** — a quick reversible attempt with a caveat can beat stalling, as long as you flag it as unverified.
 - **You can just look it up right now** — then the move is *fetch*, not abstain. Abstention is the fallback when grounding is genuinely unavailable, not an excuse to skip a cheap check.
 - **Brainstorming / clearly-hypothetical framing** — when the user has signalled they want options or speculation, labeled informed guesses are appropriate.
 

@@ -1,50 +1,31 @@
 ---
-description: Autonomous mode — work fully independently, make all decisions, complete the task end-to-end without asking the user anything.
+description: Autonomous local execution with explicit human approval boundaries.
 ---
 
-# Plow Through — Autonomous Mode
+# Plow Through — Guarded Autonomous Mode
 
-You are in `/plow-through` mode. The user has invoked this command to tell you: **work autonomously, don't ask, decide things yourself, complete the task end-to-end.**
+Execute the requested local work end-to-end without pausing for ordinary reversible steps.
 
-## Contract
+1. Read repository instructions, `PROGRESS.md`, and relevant project files.
+2. Infer reasonable details from evidence; record material assumptions.
+3. Use direct execution by default. Use parallel dispatch only for genuinely
+   independent scopes where it materially improves throughput.
+4. Continue through edit, targeted tests, full required gates, documentation, and state updates.
+5. Stop only when verified complete or when an approval-gated action is the only remaining step.
 
-- **No clarifying questions.** If the request is ambiguous, use the most reasonable interpretation based on project context. If you genuinely cannot proceed without user input (e.g., a destructive action requiring explicit authorization), log the blocker in your final report and continue with everything else.
-- **Decide things yourself.** Use your judgment. Read `.bizar/PROJECT.md`, `FINAL_GOAL.md`, `ROADMAP.md`, and search the memory vault (`bizar memory search "<topic>"`) for prior context before deciding.
-- **Split into parallel work streams.** Always dispatch 2+ subagents in parallel when the work is decomposable. Each stream must have a disjoint file scope. Use the **Agent tool** to spawn subagents — name them after the Bizar agent they represent (`todd`, `karen`, `greg`, `steve`, etc.) so the audit trail stays readable.
-- **Work to completion.** Don't stop at "I did X, should I continue?". The task is complete when: the deliverable exists, tests pass, changes are committed and pushed (where applicable).
-- **Report at the end.** Summarize what was done, what tests ran, any blockers encountered.
+No clarifying questions are needed for ordinary, reversible work whose intent
+is established by repository evidence.
 
-## Background agents for long-running work
+## When not to use
 
-Use the **Agent tool** with `run_in_background: true` (or the
-dashboard UI) to spawn background agents for tasks that span more
-than a few minutes. Check on them later via the dashboard's
-Background Agents panel or by sending a message to the teammate
-agent.
+Do not use this mode when the request is planning-only, materially ambiguous,
+destructive, production-facing, credential-gated, or changes scope beyond the
+user's stated objective.
 
-## When to use
+## Approval boundary
 
-- Multi-file refactors that don't require user approval
-- Bug-fix sweeps across a known surface area
-- Implementing a clearly-spec'd feature from the roadmap
-- Migration tasks (e.g., "migrate all CSS from @apply to vanilla")
-- Cleanup work (rename X, delete dead code Y, etc.)
+Do not push, publish, deploy, merge, change credentials/access, modify production data, or perform a destructive action that the user did not explicitly request. Prepare the exact action and evidence, then request approval once.
 
-## When NOT to use
+## Completion report
 
-- Anything that touches auth, billing, or destructive operations on user data
-- Architectural decisions with multiple valid approaches (use `/plan` first)
-- Tasks where you genuinely need user input on a key decision
-- Anything where being wrong has high consequences (merges to main, security patches)
-
-## Execution pattern
-
-1. Read project context (`.bizar/PROJECT.md`, `FINAL_GOAL.md`, `ROADMAP.md`)
-2. Search memory for prior context (`bizar memory search "<topic>"`)
-3. Decompose into independent work streams
-4. Dispatch streams via the **Agent tool** in parallel, naming them `todd` and `karen` (or whichever Bizar agents fit the scope)
-5. After streams return: run test gate (`bizar test-gate` or `/test`)
-6. Fix any test failures
-7. Update self-improvement log (`.bizar/AGENTS_SELF_IMPROVEMENT.md`)
-8. Commit + push (delegate to the `steve` subagent)
-9. Report final outcome
+Report the result, changed files, validation evidence, assumptions, and any approval-gated next action. Never claim completion while required local verification is still pending.

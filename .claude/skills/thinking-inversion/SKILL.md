@@ -5,7 +5,7 @@ description: When planning work where optimism may be hiding risks, ask "how wou
 
 # Inversion Thinking
 
-> **Redirect:** For most risk-anticipation work, prefer `thinking-pre-mortem` — it produces a narrative prospective-hindsight pass that surfaces richer, more specific failure causes than a generic checklist. Use inversion only as a pam failure-mode enumeration on a scoped feature/design; for full plans, launches, or strategic decisions, pre-mortem is the stronger tool.
+> **Redirect:** For most risk-anticipation work, prefer `thinking-pre-mortem` — it produces a narrative prospective-hindsight pass that surfaces richer, more specific failure causes than a generic checklist. Use inversion only as a quick failure-mode enumeration on a scoped feature/design; for full plans, launches, or strategic decisions, pre-mortem is the stronger tool.
 
 ## Trigger Card
 

@@ -1,64 +1,29 @@
 ---
 name: self-improvement
-description: Use when setting up, configuring, or debugging the project-level self-improvement system. Every task records lessons learned to .bizar/AGENTS_SELF_IMPROVEMENT.md for agent behavior improvement across sessions.
+description: Use when reviewing Bizar's bounded project learning records and converting repeated evidence into explicit, human-reviewable operating rules.
 ---
 
-# Self Improvement
+# Bounded Self-Improvement
 
-Project-level learning system. Every task records what worked, what didn't, and what patterns to follow next time — stored in `.bizar/AGENTS_SELF_IMPROVEMENT.md` at the project root.
+Bizar retains small operational learning records for routing and continuity:
 
-## How It Works
+- `.bizar/learning/instincts.jsonl`
+- `.bizar/learning/decisions.jsonl`
+- `.bizar/AGENTS_SELF_IMPROVEMENT.md`
 
-1. **Session start**: Odin reads `.bizar/AGENTS_SELF_IMPROVEMENT.md` from project root and factors active rules into routing
-2. **During work**: Agents follow documented patterns and avoid previously-caught mistakes
-3. **Task completion**: Odin dispatches @brenda to append a structured entry to the file
-4. **Next session**: The cycle repeats — agents get smarter over time
+These are not a note vault, semantic search index, or general memory API.
 
-## File Format
+## Workflow
 
-The file lives at `<project-root>/.bizar/AGENTS_SELF_IMPROVEMENT.md`. Structure:
+1. Read only the recent records relevant to the current failure or repeated
+   pattern.
+2. Require concrete evidence from tests, commands, or reviewed outcomes.
+3. Deduplicate against existing active rules.
+4. Propose one specific rule with a trigger, action, evidence, and scope.
+5. Ask the operator before promoting, dropping, or materially changing a rule.
+6. Keep the active rule set small; remove obsolete advice instead of endlessly
+   appending.
 
-```markdown
-# Self Improvement
-
-## Active Rules
-<!-- Keep top 5-10 actionable patterns here. Extract from recent entries. -->
-
-## Log
-
-### 2026-06-16: Brief descriptive title
-- **Context**: What was the task
-- **Lesson**: What we learned
-- **Pattern**: What to do next time
-- **Files**: src/foo.ts, src/bar.ts
-- **Agent**: todd, karen
-```
-
-## Entry Rules for Agents
-
-When writing an entry:
-
-- **File per project** — `.bizar/AGENTS_SELF_IMPROVEMENT.md` at the root of whatever project you're working in
-- **If file doesn't exist**, create it with the header template
-- **Entry format**: H3 date header, bullet list with Context, Lesson, Pattern, Files, Agent
-- **Active Rules**: At the top, keep 5-10 distilled patterns from recent entries. If adding a new entry makes it necessary, add a rule too or promote a pattern from an entry.
-- **Deduplicate**: Don't repeat the same lesson. If the same lesson comes up again, update the existing entry's date instead.
-- **Be specific**: "Always use strictNullChecks" not "TypeScript is good"
-- **Agent tag**: Use the subagent name (todd, karen, brenda, greg, etc.)
-
-## Setup
-
-For a new project where no such file exists yet, create the initial file:
-
-```
-# Self Improvement
-
-Template for project-specific agent learning. Entries are auto-appended by Odin
-at task completion and read at session start.
-
-## Active Rules
-
-<!-- Top 5-10 actionable patterns extracted from recent entries -->
-
-## Log
-```
+Do not store credentials, conversation transcripts, personal data, broad notes,
+or copied external content. Repository documentation and Git remain the source
+of truth for durable project knowledge.

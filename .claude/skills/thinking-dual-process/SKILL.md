@@ -26,7 +26,7 @@ The trigger is **easy answer + real cost of error.** If the answer was hard-won,
 - The task is high-stakes or irreversible (data migration, security, deletion, public commitment) and the answer felt obvious.
 - The domain is unfamiliar or the task is novel — no well-worn pattern to rely on.
 - The answer requires statistical or quantitative reasoning (where fast completion is reliably miscalibrated).
-- You're reviewing work and it "looks fine" on a pam pass.
+- You're reviewing work and it "looks fine" on a quick pass.
 - A claim is plausible and convenient but you haven't actually checked it against the code/docs/data.
 
 Decision flow:
@@ -40,7 +40,7 @@ Answer arrived fast? → High stakes OR unfamiliar? → yes → RUN A VERIFICATI
 - **Routine, reversible, low-stakes tasks.** Renaming a variable, a trivial edit, an obvious lookup — re-verifying everything is wasted budget and invites analysis paralysis.
 - **You already worked through it deliberately.** If the answer was hard-won, a second pass is redundant; the trigger is *easy answer + high stakes*, not every answer.
 - **The verification pass would cost more than the error it prevents.** Match the depth of the check to the cost of being wrong.
-- **You can just run it.** If a test or a pam execution would settle it, do that instead of more reasoning.
+- **You can just run it.** If a test or a quick execution would settle it, do that instead of more reasoning.
 
 ## The Two Modes
 

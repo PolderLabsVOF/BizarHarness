@@ -257,7 +257,7 @@ Low margin:
 + Efficient resource use
 - Risk of outages
 - Constant firefighting
-- Technical debt from pam fixes
+- Technical debt from quick fixes
 
 Sweet spot: Margin where cost of buffer < expected cost of margin-breach × probability
 ```

@@ -15,17 +15,7 @@ const RUNE_HELM = `
     ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
 `;
 
-const PANTHEON = `
-    ╔══════════════════════════════════════════╗
-    ║                                          ║
-    ║    ᛟ Odin     ᛗ Mimir    ᚹ Heimdall     ║
-    ║    ᚱ Hermod   ᚦ Thor     ᛏ Tyr          ║
-    ║    ᛉ Vidarr   ᚨ Forseti  ᛒ Baldr        ║
-    ║                                          ║
-    ╚══════════════════════════════════════════╝
-`;
-
-const TAGLINE = '14 agents · 6 cost tiers · dashboard · Obsidian vault long-term memory · Mods · Skills CLI';
+const TAGLINE = '16 agents · guarded autonomy · human approval gates · MCP · Skills CLI';
 
 export const palette = {
   primary: chalk.hex('#6366f1'),
@@ -44,16 +34,16 @@ export function showBanner(version) {
     console.log(chalk.bold.hex('#6366f1')(`\n  ⚡ BizarHarness v${version}\n`));
   } else {
     console.log(chalk.bold.hex('#6366f1')(RUNE_HELM));
-    console.log(chalk.hex('#a855f7')('    Norse Pantheon Agent System for Claude Code'));
+    console.log(chalk.hex('#a855f7')('    Guarded autonomous agent system for Claude Code'));
   }
   console.log();
   console.log(chalk.dim(`    ${TAGLINE}`));
   console.log();
 }
 
-/** Print the Norse pantheon card. */
+/** Print a compact capability card. */
 export function showPantheon() {
-  console.log(chalk.hex('#312e81')(PANTHEON));
+  console.log(chalk.hex('#312e81')('    Claude Code agents · guarded workflows · explicit approval gates'));
 }
 
 /**

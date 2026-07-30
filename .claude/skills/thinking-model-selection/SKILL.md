@@ -114,7 +114,7 @@ Rationale: [Why this model for this problem]
 ```
 DIAGNOSTIC PROBLEMS (What's causing this?)
 ├── Known categories exist → Kepner-Tregoe (systematic analysis)
-├── Need pam root cause → 5 Whys Plus (iterative drilling)
+├── Need quick root cause → 5 Whys Plus (iterative drilling)
 ├── Hypothesis-driven → Scientific Method (test and falsify)
 └── System-wide issue → Feedback Loops (find reinforcing patterns)
 
