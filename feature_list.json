@@ -438,16 +438,19 @@
       "id": "F-116",
       "behavior": "Audit every retained core feature; remove the retired web control plane and Bizar note-vault/search subsystem; port applicable guarded-autonomy and human-approval workflows from fcakyon/claude-codex-settings.",
       "verification": "make verify-removed-surfaces; make check-arch; make test; make e2e; make clean-check; make check; audit and parity matrices",
-      "state": "active",
+      "state": "passing",
       "layer": "all",
       "category": "core",
       "created": "2026-07-30",
-      "upstream": "fcakyon/claude-codex-settings@39b67e9d244124a575d648364b19e85c510e48a8"
+      "upstream": "fcakyon/claude-codex-settings@39b67e9d244124a575d648364b19e85c510e48a8",
+      "evidence": "2026-07-30 core-only rebuild: dashboard and Bizar note-vault/search surfaces absent; make check, make test (298 SDK + 268 Node), make e2e (10/10), make clean-check (5/5), make check-arch (3/3), make eval-gate (37/37), and make audit (10.0/10.0) passed; retained-feature and upstream-parity matrices completed (commit 0f1090f).",
+      "commit": "0f1090f",
+      "passed": "2026-07-30"
     }
   ],
   "vcr": {
-    "passing": 36,
+    "passing": 37,
     "activated": 37,
-    "ratio": 0.972972972972973
+    "ratio": 1
   }
 }

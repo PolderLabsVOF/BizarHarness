@@ -1,12 +1,13 @@
 /**
- * eval-gate.test.mjs — 5 tests for eval-gate.mjs
+ * eval-gate.test.mjs — 6 tests for eval-gate.mjs
  *
  * Tests:
  *   1. passing-feature eval present → pass
  *   2. fail-rate threshold → fail
- *   3. missing eval flagged → fail
- *   4. malformed JSONL tolerated → pass
- *   5. dry-run mode → no exit failure
+ *   3. missing eval with no tracked evidence → fail
+ *   4. missing eval with commit-backed tracked evidence → pass
+ *   5. malformed JSONL tolerated → pass
+ *   6. dry-run mode → no exit failure
  */
 
 import { writeFileSync, mkdirSync, rmSync, readFileSync } from "node:fs";
@@ -83,7 +84,7 @@ await withFeatureList(
   }
 );
 
-// ── test 3: missing eval flagged → fail ──────────────────────────────────────
+// ── test 3: missing eval and tracked evidence flagged → fail ─────────────────
 
 await withFeatureList(
   [{ id: "F-999", behavior: "test", state: "passing" }],
@@ -93,11 +94,32 @@ await withFeatureList(
       console.error("FAIL test_3: expected non-zero exit for missing eval");
       process.exit(1);
     }
-    console.log("PASS test_3: missing eval file → fail");
+    console.log("PASS test_3: missing eval and tracked evidence → fail");
   }
 );
 
-// ── test 4: malformed JSONL tolerated → pass ─────────────────────────────────
+// ── test 4: tracked evidence is the clean-checkout fallback ──────────────────
+
+await withFeatureList(
+  [{
+    id: "F-998",
+    behavior: "test",
+    state: "passing",
+    evidence: "make check and make e2e passed",
+    commit: "abc1234",
+  }],
+  async () => {
+    const r = await runGate();
+    if (r.exitCode !== 0) {
+      console.error("FAIL test_4: commit-backed tracked evidence should pass");
+      console.error(r.stdout);
+      process.exit(1);
+    }
+    console.log("PASS test_4: commit-backed tracked evidence → pass");
+  }
+);
+
+// ── test 5: malformed JSONL tolerated → pass ─────────────────────────────────
 
 await writeFileSync(join(EVALS_DIR, "F-003.jsonl"), [
   JSON.stringify({ passed: true }),
@@ -114,21 +136,21 @@ await withFeatureList(
       console.error("FAIL test_4: malformed JSONL should be tolerated");
       process.exit(1);
     }
-    console.log("PASS test_4: malformed JSONL lines tolerated → pass");
+    console.log("PASS test_5: malformed JSONL lines tolerated → pass");
   }
 );
 
-// ── test 5: dry-run mode ─────────────────────────────────────────────────────
+// ── test 6: dry-run mode ─────────────────────────────────────────────────────
 
 await withFeatureList(
   [{ id: "F-001", behavior: "test", state: "passing" }],
   async () => {
     const r = await runGate(["--dry-run"]);
     if (r.exitCode !== 0) {
-      console.error("FAIL test_5: dry-run should always exit 0");
+      console.error("FAIL test_6: dry-run should always exit 0");
       process.exit(1);
     }
-    console.log("PASS test_5: dry-run exits 0 regardless of gate state");
+    console.log("PASS test_6: dry-run exits 0 regardless of gate state");
   }
 );
 
@@ -138,4 +160,4 @@ rmSync(join(EVALS_DIR, "F-001.jsonl"), { force: true });
 rmSync(join(EVALS_DIR, "F-002.jsonl"), { force: true });
 rmSync(join(EVALS_DIR, "F-003.jsonl"), { force: true });
 
-console.log("\nAll 5 tests passed.");
+console.log("\nAll 6 tests passed.");

@@ -69,7 +69,7 @@ audit:  ## Run harness audit (12 categories, 0-100 score)
 	@node scripts/audit.mjs --write
 	@echo "✓ audit complete — output written to .harness/audit/latest.json"
 
-eval-gate:  ## Verify passing features have satisfying eval files (>= 0.9 pass-rate)
+eval-gate:  ## Verify local eval pass rates or tracked commit-backed evidence
 	@echo "▶ Running eval gate..."
 	@/home/drb0rk/.bun/bin/bun run scripts/eval-gate.mjs
 	@echo "✓ eval gate passed"
