@@ -20,6 +20,11 @@ function parseFlags(args) {
     '--lease-ms',
     '--state',
     '--evidence',
+    '--commit',
+    '--base-ref',
+    '--verify-command',
+    '--worker',
+    '--error',
   ]);
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -56,6 +61,11 @@ function showHelp() {
     bizar task heartbeat <id> --owner <agent> [--lease-ms <ms>]
     bizar task complete <id> --owner <agent> [--evidence <text>]
     bizar task sweep
+    bizar task integrate enqueue <id> --commit <sha> --owner <agent>
+    bizar task integrate claim --worker <integrator>
+    bizar task integrate pass <queue-id> --worker <integrator> --evidence <text>
+    bizar task integrate fail <queue-id> --worker <integrator> --error <text>
+    bizar task integrate list [--state queued|active|passed|failed]
 
   Task states:
     ${TASK_STATES.join(' | ')}
@@ -104,6 +114,52 @@ export async function run(name, args, isHelpRequest) {
   let ledger;
   try {
     ledger = new TaskLedger({ dbPath });
+    if (subcommand === 'integrate') {
+      const action = taskId;
+      const target = flags._[2];
+      if (action === 'enqueue') {
+        const item = ledger.enqueueIntegration({
+          taskId: requireArg(target, 'task integrate enqueue requires <id>'),
+          commitSha: requireArg(flags.commit, 'task integrate enqueue requires --commit <sha>'),
+          baseRef: flags.baseref,
+          verifyCommand: flags.verifycommand,
+          submittedBy:
+            flags.owner || process.env.BIZAR_AGENT_ID || process.env.USER,
+        });
+        print(item, flags, (row) =>
+          chalk.green(`  ✓ Enqueued task ${row.taskId} as integration item ${row.id}`));
+        return true;
+      }
+      if (action === 'claim') {
+        const item = ledger.claimNextIntegration({
+          worker: flags.worker || process.env.BIZAR_AGENT_ID || process.env.USER,
+        });
+        print(item, flags, (row) =>
+          chalk.green(`  ✓ Claimed integration item ${row.id} for ${row.claimedBy}`));
+        return true;
+      }
+      if (action === 'pass' || action === 'fail') {
+        const item = ledger.finishIntegration({
+          queueId: requireArg(target, `task integrate ${action} requires <queue-id>`),
+          worker: flags.worker || process.env.BIZAR_AGENT_ID || process.env.USER,
+          success: action === 'pass',
+          evidence: flags.evidence,
+          error: flags.error,
+        });
+        print(item, flags, (row) =>
+          chalk.green(`  ✓ Integration item ${row.id} ${row.status}`));
+        return true;
+      }
+      if (action === 'list' || action === 'ls') {
+        const items = ledger.listIntegrations({ status: flags.state });
+        print({ count: items.length, items }, flags);
+        return true;
+      }
+      throw new TaskLedgerError(
+        'USAGE',
+        `unknown integration subcommand: ${action || '(missing)'}`,
+      );
+    }
     if (subcommand === 'create') {
       requireArg(taskId, 'task create requires <id>');
       const task = ledger.createTask({

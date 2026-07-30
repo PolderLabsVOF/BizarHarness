@@ -201,6 +201,169 @@ describe('durable task DAG', () => {
   });
 });
 
+describe('serialized integration queue', () => {
+  function completedTask(fixtureState, id, scope, owner = 'todd') {
+    const { root, ledger } = fixtureState;
+    ledger.createTask({ id, title: id, scopes: [scope] });
+    ledger.claimTask({
+      taskId: id,
+      owner,
+      workspace: join(root, id),
+    });
+    ledger.completeTask({
+      taskId: id,
+      owner,
+      evidence: `${id} tests passed`,
+    });
+  }
+
+  test('only one integration item is active and queued work remains FIFO', () => {
+    const state = fixture();
+    completedTask(state, 'first', 'src/first.ts');
+    completedTask(state, 'second', 'src/second.ts');
+    state.ledger.enqueueIntegration({
+      taskId: 'first',
+      commitSha: '1111111',
+      submittedBy: 'todd',
+    });
+    state.advance(1);
+    state.ledger.enqueueIntegration({
+      taskId: 'second',
+      commitSha: '2222222',
+      submittedBy: 'karen',
+    });
+
+    const first = state.ledger.claimNextIntegration({ worker: 'steve' });
+    assert.equal(first.taskId, 'first');
+    expectCode(
+      () => state.ledger.claimNextIntegration({ worker: 'other-integrator' }),
+      'INTEGRATION_BUSY',
+    );
+
+    state.ledger.finishIntegration({
+      queueId: first.id,
+      worker: 'steve',
+      success: true,
+      evidence: 'make check passed after cherry-pick',
+    });
+    assert.equal(state.ledger.getTask('first').state, 'integrated');
+
+    const second = state.ledger.claimNextIntegration({ worker: 'steve' });
+    assert.equal(second.taskId, 'second');
+  });
+
+  test('integration failure returns work to the original owner with a repair lease', () => {
+    const state = fixture();
+    completedTask(state, 'failing', 'src/failing.ts', 'karen');
+    state.ledger.enqueueIntegration({
+      taskId: 'failing',
+      commitSha: 'abcdef1',
+      submittedBy: 'karen',
+      verifyCommand: 'make check',
+    });
+
+    const item = state.ledger.claimNextIntegration({ worker: 'steve' });
+    const failed = state.ledger.finishIntegration({
+      queueId: item.id,
+      worker: 'steve',
+      success: false,
+      error: 'aggregate typecheck failed',
+    });
+
+    assert.equal(failed.status, 'failed');
+    const task = state.ledger.getTask('failing');
+    assert.equal(task.state, 'active');
+    assert.equal(task.owner, 'karen');
+    assert.equal(task.blocker, 'aggregate typecheck failed');
+    assert.ok(task.leaseExpiresAt > Date.parse('2026-07-30T10:00:00.000Z'));
+  });
+
+  test('incomplete tasks cannot enter integration', () => {
+    const state = fixture();
+    state.ledger.createTask({ id: 'active', title: 'Active', scopes: ['src/**'] });
+    expectCode(
+      () => state.ledger.enqueueIntegration({
+        taskId: 'active',
+        commitSha: 'abcdef1',
+        submittedBy: 'todd',
+      }),
+      'TASK_NOT_COMPLETED',
+    );
+  });
+
+  test('integration does not reactivate a scope claimed after queueing', () => {
+    const state = fixture();
+    completedTask(state, 'queued', 'src/**');
+    state.ledger.enqueueIntegration({
+      taskId: 'queued',
+      commitSha: 'abcdef1',
+      submittedBy: 'todd',
+    });
+
+    state.advance(30 * 60 * 1_000 + 1);
+    state.ledger.createTask({
+      id: 'new-owner',
+      title: 'New owner',
+      scopes: ['src/index.ts'],
+    });
+    state.ledger.claimTask({
+      taskId: 'new-owner',
+      owner: 'karen',
+      workspace: join(state.root, 'new-owner'),
+    });
+
+    expectCode(
+      () => state.ledger.claimNextIntegration({ worker: 'steve' }),
+      'INTEGRATION_SCOPE_CONFLICT',
+    );
+  });
+
+  test('cross-process integrators cannot claim queue work concurrently', async () => {
+    const state = fixture();
+    completedTask(state, 'queued', 'src/queued.ts');
+    state.ledger.enqueueIntegration({
+      taskId: 'queued',
+      commitSha: 'abcdef1',
+      submittedBy: 'todd',
+    });
+
+    const moduleUrl = new URL('../task-ledger.mjs', import.meta.url).href;
+    const program = `
+      import { TaskLedger } from ${JSON.stringify(moduleUrl)};
+      const [dbPath, worker] = process.argv.slice(1);
+      const ledger = new TaskLedger({ dbPath });
+      try {
+        const item = ledger.claimNextIntegration({ worker });
+        process.stdout.write(JSON.stringify({ ok: true, id: item.id }));
+      } catch (error) {
+        process.stdout.write(JSON.stringify({ ok: false, code: error.code }));
+        process.exitCode = 2;
+      } finally {
+        ledger.close();
+      }
+    `;
+    const run = (worker) => new Promise((resolveResult) => {
+      const child = spawn(process.execPath, [
+        '--input-type=module',
+        '-e',
+        program,
+        state.ledger.dbPath,
+        worker,
+      ]);
+      let stdout = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+      child.on('close', (code) => resolveResult({ code, result: JSON.parse(stdout) }));
+    });
+
+    const results = await Promise.all([run('steve-a'), run('steve-b')]);
+    assert.equal(results.filter((result) => result.result.ok).length, 1);
+    assert.equal(
+      results.filter((result) => result.result.code === 'INTEGRATION_BUSY').length,
+      1,
+    );
+  });
+});
+
 test('all worktrees resolve the same Git-common task database', () => {
   const parent = mkdtempSync(join(tmpdir(), 'bizar-task-common-'));
   roots.push(parent);

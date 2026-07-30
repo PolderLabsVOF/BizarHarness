@@ -25,6 +25,13 @@ transactions guard dependency readiness, task claims, path-scope collisions,
 and lease recovery. A PreToolUse hook consults the same database before every
 Write/Edit/MultiEdit operation.
 
+Completed task commits enter the same database's FIFO integration queue. An
+immediate transaction and a partial unique index guarantee one active
+integrator across processes. Passing integration releases the path reservation
+and marks the task integrated; failure returns it to the original owner with a
+repair lease and structured blocker. The queue never bypasses Git or
+publication approval hooks.
+
 ## Source and publication boundary
 
 `config/skills` is the canonical skill source; `.claude/skills` is a repository

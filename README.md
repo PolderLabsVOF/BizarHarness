@@ -53,7 +53,14 @@ bizar task create sdk-change --title "Update SDK" --scope "packages/sdk/**"
 bizar task claim sdk-change --owner todd --workspace "$PWD"
 bizar task heartbeat sdk-change --owner todd
 bizar task complete sdk-change --owner todd --evidence "targeted tests passed"
+bizar task integrate enqueue sdk-change --commit abc1234 --owner todd
+bizar task integrate claim --worker steve
+bizar task integrate pass 1 --worker steve --evidence "aggregate checks passed"
 ```
+
+The integration queue records the commit, base reference, verification command,
+owner, integrator, and outcome. It deliberately does not perform unapproved
+merge, rebase, push, or publication operations.
 
 ## Guarded autonomy
 

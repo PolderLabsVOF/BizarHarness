@@ -75,12 +75,37 @@ CREATE TABLE IF NOT EXISTS task_events (
   payload_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS integration_queue (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id         TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  status          TEXT NOT NULL DEFAULT 'queued'
+                  CHECK (status IN ('queued','active','passed','failed','cancelled')),
+  commit_sha      TEXT NOT NULL,
+  base_ref        TEXT NOT NULL DEFAULT 'HEAD',
+  verify_command  TEXT NOT NULL DEFAULT 'make check',
+  submitted_by    TEXT NOT NULL,
+  claimed_by      TEXT,
+  evidence        TEXT,
+  error           TEXT,
+  created_at      INTEGER NOT NULL,
+  started_at      INTEGER,
+  finished_at     INTEGER
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_state_lease
   ON tasks (state, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on
   ON task_dependencies (depends_on);
 CREATE INDEX IF NOT EXISTS idx_task_events_task_ts
   ON task_events (task_id, ts);
+CREATE INDEX IF NOT EXISTS idx_integration_queue_status_created
+  ON integration_queue (status, created_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_integration_one_live_task
+  ON integration_queue (task_id)
+  WHERE status IN ('queued','active');
+CREATE UNIQUE INDEX IF NOT EXISTS idx_integration_single_active
+  ON integration_queue (status)
+  WHERE status = 'active';
 `;
 
 export class TaskLedgerError extends Error {
@@ -218,6 +243,29 @@ export class TaskLedger {
        WHERE d.task_id = ?
        ORDER BY d.depends_on`,
     ).all(taskId).filter((dependency) => !DEPENDENCY_SATISFIED.has(dependency.state));
+  }
+
+  _findLiveScopeConflict(taskId, scopes, now) {
+    const live = this.db.prepare(
+      `SELECT id, owner, workspace, scopes_json
+       FROM tasks
+       WHERE id <> ? AND state IN ('active','completed','integrating')
+         AND lease_expires_at IS NOT NULL AND lease_expires_at > ?`,
+    ).all(taskId, now);
+    for (const other of live) {
+      const otherScopes = parseJson(other.scopes_json, []);
+      const scope = scopes.find((candidate) =>
+        otherScopes.some((otherScope) => scopesOverlap(candidate, otherScope)));
+      if (scope) {
+        return {
+          taskId: other.id,
+          owner: other.owner,
+          workspace: other.workspace,
+          scope,
+        };
+      }
+    }
+    return null;
   }
 
   _serialize(row) {
@@ -361,28 +409,13 @@ export class TaskLedger {
       }
 
       const scopes = parseJson(row.scopes_json, []);
-      const live = this.db.prepare(
-        `SELECT id, owner, workspace, scopes_json
-         FROM tasks
-         WHERE id <> ? AND state = 'active'
-           AND lease_expires_at IS NOT NULL AND lease_expires_at > ?`,
-      ).all(taskId, now);
-      for (const other of live) {
-        const otherScopes = parseJson(other.scopes_json, []);
-        const collision = scopes.find((scope) =>
-          otherScopes.some((otherScope) => scopesOverlap(scope, otherScope)));
-        if (collision) {
-          throw new TaskLedgerError(
-            'SCOPE_CONFLICT',
-            `task ${taskId} overlaps live task ${other.id}`,
-            {
-              taskId: other.id,
-              owner: other.owner,
-              workspace: other.workspace,
-              scope: collision,
-            },
-          );
-        }
+      const conflict = this._findLiveScopeConflict(taskId, scopes, now);
+      if (conflict) {
+        throw new TaskLedgerError(
+          'SCOPE_CONFLICT',
+          `task ${taskId} overlaps live task ${conflict.taskId}`,
+          conflict,
+        );
       }
 
       const leaseExpiresAt = now + leaseMs;
@@ -440,11 +473,241 @@ export class TaskLedger {
       this.db.prepare(
         `UPDATE tasks
          SET state = 'completed', evidence = ?, artifacts_json = ?,
-             lease_expires_at = NULL, completed_at = ?, updated_at = ?
+             lease_expires_at = ?, completed_at = ?, updated_at = ?
          WHERE id = ?`,
-      ).run(String(evidence || ''), JSON.stringify(artifacts || []), now, now, id);
+      ).run(
+        String(evidence || ''),
+        JSON.stringify(artifacts || []),
+        now + DEFAULT_LEASE_MS,
+        now,
+        now,
+        id,
+      );
       this._event(id, 'completed', { owner: expectedOwner, evidence }, now);
       return this.getTask(id);
+    });
+    return transaction.immediate();
+  }
+
+  _serializeIntegration(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      taskId: row.task_id,
+      status: row.status,
+      commitSha: row.commit_sha,
+      baseRef: row.base_ref,
+      verifyCommand: row.verify_command,
+      submittedBy: row.submitted_by,
+      claimedBy: row.claimed_by,
+      evidence: row.evidence,
+      error: row.error,
+      createdAt: row.created_at,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+    };
+  }
+
+  getIntegration(queueId) {
+    const id = Number(queueId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new TaskLedgerError('INVALID_INPUT', 'queueId must be a positive integer');
+    }
+    const row = this.db.prepare(`SELECT * FROM integration_queue WHERE id = ?`).get(id);
+    if (!row) {
+      throw new TaskLedgerError('INTEGRATION_NOT_FOUND', `integration item not found: ${queueId}`);
+    }
+    return this._serializeIntegration(row);
+  }
+
+  listIntegrations({ status } = {}) {
+    const rows = status
+      ? this.db.prepare(
+          `SELECT * FROM integration_queue WHERE status = ? ORDER BY created_at, id`,
+        ).all(status)
+      : this.db.prepare(
+          `SELECT * FROM integration_queue ORDER BY created_at, id`,
+        ).all();
+    return rows.map((row) => this._serializeIntegration(row));
+  }
+
+  enqueueIntegration(input) {
+    const taskId = requireText(input?.taskId, 'taskId');
+    const commitSha = requireText(input?.commitSha, 'commitSha');
+    const baseRef = String(input.baseRef || 'HEAD').trim() || 'HEAD';
+    const verifyCommand = String(input.verifyCommand || 'make check').trim() || 'make check';
+    const submittedBy = requireText(input?.submittedBy, 'submittedBy');
+    const now = this.now();
+
+    const transaction = this.db.transaction(() => {
+      const task = this._row(taskId);
+      if (!task) throw new TaskLedgerError('TASK_NOT_FOUND', `task not found: ${taskId}`);
+      if (task.state !== 'completed') {
+        throw new TaskLedgerError(
+          'TASK_NOT_COMPLETED',
+          `task ${taskId} must be completed before integration`,
+        );
+      }
+      const conflict = this._findLiveScopeConflict(
+        taskId,
+        parseJson(task.scopes_json, []),
+        now,
+      );
+      if (conflict) {
+        throw new TaskLedgerError(
+          'INTEGRATION_SCOPE_CONFLICT',
+          `task ${taskId} overlaps live task ${conflict.taskId}`,
+          conflict,
+        );
+      }
+      const live = this.db.prepare(
+        `SELECT id FROM integration_queue
+         WHERE task_id = ? AND status IN ('queued','active')`,
+      ).get(taskId);
+      if (live) {
+        throw new TaskLedgerError(
+          'INTEGRATION_EXISTS',
+          `task ${taskId} already has live integration item ${live.id}`,
+        );
+      }
+
+      const result = this.db.prepare(
+        `INSERT INTO integration_queue
+          (task_id, commit_sha, base_ref, verify_command, submitted_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(taskId, commitSha, baseRef, verifyCommand, submittedBy, now);
+      this.db.prepare(
+        `UPDATE tasks SET lease_expires_at = ?, updated_at = ? WHERE id = ?`,
+      ).run(now + DEFAULT_LEASE_MS, now, taskId);
+      this._event(taskId, 'integration-enqueued', {
+        queueId: Number(result.lastInsertRowid),
+        commitSha,
+        submittedBy,
+      }, now);
+      return this.getIntegration(Number(result.lastInsertRowid));
+    });
+    return transaction.immediate();
+  }
+
+  claimNextIntegration({ worker }) {
+    const claimedBy = requireText(worker, 'worker');
+    const now = this.now();
+    const transaction = this.db.transaction(() => {
+      const active = this.db.prepare(
+        `SELECT * FROM integration_queue WHERE status = 'active' LIMIT 1`,
+      ).get();
+      if (active) {
+        throw new TaskLedgerError(
+          'INTEGRATION_BUSY',
+          `integration item ${active.id} is active for ${active.claimed_by}`,
+          { active: this._serializeIntegration(active) },
+        );
+      }
+      const next = this.db.prepare(
+        `SELECT q.*
+         FROM integration_queue q
+         JOIN tasks t ON t.id = q.task_id
+         WHERE q.status = 'queued'
+         ORDER BY t.priority DESC, q.created_at, q.id
+         LIMIT 1`,
+      ).get();
+      if (!next) {
+        throw new TaskLedgerError('INTEGRATION_EMPTY', 'integration queue is empty');
+      }
+      const task = this._row(next.task_id);
+      const conflict = this._findLiveScopeConflict(
+        next.task_id,
+        parseJson(task.scopes_json, []),
+        now,
+      );
+      if (conflict) {
+        throw new TaskLedgerError(
+          'INTEGRATION_SCOPE_CONFLICT',
+          `task ${next.task_id} overlaps live task ${conflict.taskId}`,
+          conflict,
+        );
+      }
+
+      this.db.prepare(
+        `UPDATE integration_queue
+         SET status = 'active', claimed_by = ?, started_at = ?
+         WHERE id = ?`,
+      ).run(claimedBy, now, next.id);
+      this.db.prepare(
+        `UPDATE tasks
+         SET state = 'integrating', lease_expires_at = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(now + MAX_LEASE_MS, now, next.task_id);
+      this._event(next.task_id, 'integration-claimed', {
+        queueId: next.id,
+        worker: claimedBy,
+      }, now);
+      return this.getIntegration(next.id);
+    });
+    return transaction.immediate();
+  }
+
+  finishIntegration(input) {
+    const queueId = Number(input?.queueId);
+    if (!Number.isInteger(queueId) || queueId <= 0) {
+      throw new TaskLedgerError('INVALID_INPUT', 'queueId must be a positive integer');
+    }
+    const worker = requireText(input?.worker, 'worker');
+    const success = input?.success === true;
+    const evidence = success ? requireText(input.evidence, 'evidence') : String(input.evidence || '');
+    const error = success ? '' : requireText(input.error, 'error');
+    const now = this.now();
+
+    const transaction = this.db.transaction(() => {
+      const item = this.db.prepare(
+        `SELECT * FROM integration_queue WHERE id = ?`,
+      ).get(queueId);
+      if (!item) {
+        throw new TaskLedgerError(
+          'INTEGRATION_NOT_FOUND',
+          `integration item not found: ${queueId}`,
+        );
+      }
+      if (item.status !== 'active') {
+        throw new TaskLedgerError(
+          'INTEGRATION_NOT_ACTIVE',
+          `integration item ${queueId} is ${item.status}`,
+        );
+      }
+      if (item.claimed_by !== worker) {
+        throw new TaskLedgerError(
+          'INTEGRATOR_MISMATCH',
+          `integration item ${queueId} is claimed by ${item.claimed_by}`,
+        );
+      }
+
+      const status = success ? 'passed' : 'failed';
+      this.db.prepare(
+        `UPDATE integration_queue
+         SET status = ?, evidence = ?, error = ?, finished_at = ?
+         WHERE id = ?`,
+      ).run(status, evidence || null, error || null, now, queueId);
+      if (success) {
+        this.db.prepare(
+          `UPDATE tasks
+           SET state = 'integrated', evidence = ?, blocker = NULL,
+               lease_expires_at = NULL, integrated_at = ?, updated_at = ?
+           WHERE id = ?`,
+        ).run(evidence, now, now, item.task_id);
+      } else {
+        this.db.prepare(
+          `UPDATE tasks
+           SET state = 'active', blocker = ?, lease_expires_at = ?, updated_at = ?
+           WHERE id = ?`,
+        ).run(error, now + DEFAULT_LEASE_MS, now, item.task_id);
+      }
+      this._event(item.task_id, success ? 'integration-passed' : 'integration-failed', {
+        queueId,
+        worker,
+        evidence: evidence || undefined,
+        error: error || undefined,
+      }, now);
+      return this.getIntegration(queueId);
     });
     return transaction.immediate();
   }

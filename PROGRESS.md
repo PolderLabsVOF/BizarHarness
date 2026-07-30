@@ -62,6 +62,23 @@ editable checkout, racing task claims, or integrating changes concurrently.
 - Targeted task/hook/CLI tests pass 9/9, including a real two-process scope
   claim race; `make check` passes.
 
+### Serialized integration queue status
+
+- Completed task commits can be enqueued with base reference, verification
+  command, submitter, and evidence metadata.
+- Immediate transactions plus a partial unique index permit only one active
+  integration owner across processes; pending work remains priority/FIFO
+  ordered.
+- Passing integration marks the task integrated and releases its path
+  reservation.
+- Failed integration returns the task to its original owner with a structured
+  blocker and bounded repair lease.
+- A queued item cannot reactivate if an overlapping scope was claimed after its
+  reservation expired.
+- The queue intentionally records and serializes integration without running
+  unapproved merge, rebase, push, or publication actions.
+- Targeted task, queue, hook, and CLI tests pass 14/14; `make check` passes.
+
 ### Stop condition
 
 F-118 may move to `passing` only when two independent task workspaces can hold
@@ -86,7 +103,8 @@ can proceed safely.
 
 ### Next steps
 
-- Implement the serialized integration queue after task behavior is locked.
+- Run the full repository verification and adversarial review gates.
+- Close F-118 only after fresh evidence is recorded.
 
 ## Complete — F-117 Repository Structure Cleanup
 

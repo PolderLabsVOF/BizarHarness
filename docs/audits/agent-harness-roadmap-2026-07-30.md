@@ -178,3 +178,18 @@ Only after the task ledger is stable:
 7. Only one integration item can be active at a time.
 8. Integration failure returns the task to its owner with structured evidence.
 9. No automatic Git publication or persistent network service is introduced.
+
+## Implementation status
+
+F-118 implements the P0 milestone:
+
+- code-writing subagents use isolated worktrees based on the current `HEAD`;
+- a Git-common SQLite task DAG provides dependency-aware claims, scopes, leases,
+  recovery, and edit-hook enforcement;
+- a cross-process FIFO integration queue permits one integrator and returns
+  failed work to its original owner;
+- Git publication remains outside the queue and behind existing approval
+  policy.
+
+Trajectory replay, behavioral audit replacement, checkpoint/rollback, remote
+transport, and OpenTelemetry remain later roadmap items.
