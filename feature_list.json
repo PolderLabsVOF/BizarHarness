@@ -2167,16 +2167,21 @@
       "verification": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added",
       "state": "passing",
       "evidence": "make check green; debug-specialist.md created; smoke check added; office-manager.md escalation section added"
+    },
+    {
+      "id": "F-116",
+      "behavior": "Audit all non-dashboard Bizar Harness features; fully remove the dashboard and its functionality; port applicable autonomous and human-in-the-loop workflows, hooks, and features from fcakyon/claude-codex-settings.",
+      "verification": "Dashboard absence audit; upstream parity matrix; make check-arch; make test; make e2e; make clean-check; make check.",
+      "state": "active",
+      "layer": "L0+L1+L2",
+      "category": "core",
+      "created": "2026-07-30",
+      "upstream": "fcakyon/claude-codex-settings@39b67e9d244124a575d648364b19e85c510e48a8"
     }
   ],
   "vcr": {
-    "passing": 75,
-    "activated": 75,
-    "ratio": 1
-  }
-  "vcr": {
-    "passing": 74,
-    "activated": 74,
-    "ratio": 1
+    "passing": 102,
+    "activated": 103,
+    "ratio": 0.9902912621359223
   }
 }
