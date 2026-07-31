@@ -1,6 +1,22 @@
 # Changelog
 
 ## Unreleased
+## [10.10.2] - 2026-07-31
+
+- Installer now enables gateway model discovery by default: user-level
+  `~/.claude/settings.json` is populated with `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`,
+  `ANTHROPIC_AUTH_TOKEN=sk_9router`, and the existing `ANTHROPIC_BASE_URL` /
+  `BIZAR_MODEL_ROUTER_URL`. Existing user env vars are preserved (no
+  removal of `ANTHROPIC_DEFAULT_*_MODEL` per-tier overrides).
+- Removed duplicate per-tier `ANTHROPIC_DEFAULT_*_MODEL` entries from the
+  project settings template (the discovery mechanism surfaces the correct
+  models where the gateway serves Claude-prefixed IDs).
+- Added `bizar model list` CLI command: hits `GET /models?limit=1000` against
+  the 9Router gateway, groups output by provider prefix (`cx/`, `bizar/`,
+  `oc/`, `claude/`, `anthropic/`, `(no prefix)`), and prints a table or JSON.
+  3-second timeout; retries without auth on 401. Run `bizar model list` to
+  see all available models including ones the /model picker filters out.
+
 ## [10.10.1] - 2026-07-30
 
 - Fixed broken relative imports in UserPromptSubmit hooks (`control-inbox.mjs`,

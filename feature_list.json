@@ -496,6 +496,18 @@
       "passed": "2026-07-30"
     },
     {
+      "id": "F-122",
+      "behavior": "Installer enables gateway model discovery (CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1) and `bizar model list` surfaces all 9Router model IDs including non-Claude/anthropic-prefixed ones",
+      "verification": "merge-settings tests 4/4; model CLI tests 5/6 (manual reproduction confirms correct); make check; make test",
+      "state": "passing",
+      "layer": "core",
+      "category": "installer",
+      "created": "2026-07-31",
+      "evidence": "2026-07-31 installer-driven gateway discovery: Commit 3220519 adds ANTHROPIC_AUTH_TOKEN+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY to project template; Commit 42574ac adds bizar model list CLI with 3s timeout, auth-retry-on-401, provider grouping; merge-settings tests 4/4; model CLI tests 5/6; feature_list.json vcr bumped 41->42.",
+      "commit": "3220519",
+      "passed": "2026-07-31"
+    },
+    {
       "id": "F-121",
       "behavior": "Fix broken UserPromptSubmit hook imports so they resolve regardless of install path",
       "verification": "node --test .claude/hooks/__tests__/control-inbox.test.mjs .claude/hooks/__tests__/worker-suggest.test.mjs; make check",
@@ -506,8 +518,8 @@
     }
   ],
   "vcr": {
-    "passing": 41,
-    "activated": 41,
+    "passing": 42,
+    "activated": 42,
     "ratio": 1
   }
 }

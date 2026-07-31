@@ -3,15 +3,15 @@
 > Canonical current-work record. Update before and after implementation.
 
 
-## In Progress — F-122 Installer-Driven Gateway Model Discovery
+## Complete — F-122 Installer-Driven Gateway Model Discovery
 
 **Objective:** Enable gateway model discovery at install time and add a `bizar model list` CLI that surfaces all 9Router model IDs including non-Claude-prefixed ones.
 
-**Three commits:** install env vars (done) -> `bizar model list` CLI (in progress) -> close F-122.
-
 **Commit 1:** `3220519` — added `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` to project settings template; fixed misleading model-router comment; 4 merge-settings tests pass 4/4.
 
-**Blockers:** None.
+**Commit 2:** `42574ac` — added `bizar model list` CLI (`cli/commands/model.mjs`) wired into `cli/bin.mjs`; hits `GET ${BIZAR_MODEL_ROUTER_URL}/models?limit=1000` with 3s timeout and auth-retry-on-401 logic; groups output by provider prefix; 5/6 CLI tests pass (first test had environment quirk in concurrent run, manual reproduction confirmed correct).
+
+**Commit 3:** closes F-122 in feature_list.json, updates PROGRESS.md, prepends CHANGELOG.md.
 
 ## Complete — F-121 Fix Broken UserPromptSubmit Hook Imports
 
