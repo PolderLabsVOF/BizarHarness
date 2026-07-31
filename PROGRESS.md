@@ -3,7 +3,20 @@
 > Canonical current-work record. Update before and after implementation.
 
 
-## In Progress — F-121 Fix Broken UserPromptSubmit Hook Imports
+## In Progress — F-122 Installer-Driven Gateway Model Discovery
+
+**Objective:** Enable gateway model discovery at install time and add a `bizar model list` CLI that surfaces all 9Router model IDs including non-Claude-prefixed ones.
+
+**Three commits:** install env vars (this one) -> `bizar model list` CLI -> close F-122.
+
+**Baseline:**
+- `writeClaudeSettings()` already does a correct merge: `merged.env = { ...(existing.env || {}), ...bizarSettings.env }`. No installer code changes needed.
+- Project `.claude/settings.json` has `ANTHROPIC_BASE_URL` and `BIZAR_MODEL_ROUTER_URL` but lacks `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`.
+- Project `.claude/settings.json` does NOT have `ANTHROPIC_DEFAULT_*_MODEL` entries (those live in user-level `~/.claude/settings.json`).
+
+**Blockers:** None.
+
+## Complete — F-121 Fix Broken UserPromptSubmit Hook Imports
 
 **Objective:** Fix broken relative imports in `control-inbox.mjs` and
 `worker-suggest.mjs` that fail with `ERR_MODULE_NOT_FOUND` after installation

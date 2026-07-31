@@ -2,7 +2,7 @@
   "$schema": "https://bizar.dev/schema/model-router.v1.json",
   "version": "11.0.0",
   "endpoint": "http://localhost:20128/v1",
-  "comment": "Single local router. Set BIZAR_MODEL_ROUTER_URL or ANTHROPIC_BASE_URL to override. Models discovered live from /v1/models.",
+  "comment": "Gateway model discovery is enabled at install time; the /model picker surfaces only IDs prefixed with \"claude\" or \"anthropic\". Run \"bizar model list\" to see the full set.",
   "tiers": {
     "premium": {
       "models": ["cx/gpt-5.6-sol"],
