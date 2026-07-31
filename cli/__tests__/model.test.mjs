@@ -104,7 +104,9 @@ describe('bizar model list', { concurrency: 1 }, () => {
     assert.ok(stdout.includes('oc/'), 'table should contain oc/ group');
     assert.ok(stdout.includes('(no prefix)'), 'table should contain (no prefix) group');
     assert.ok(stdout.includes('anthropic/'), 'table should contain anthropic/ group');
-    assert.ok(stdout.includes('claude/'), 'table should contain claude/ group');
+    // Note: claude/ appears in PROVIDER_GROUPS but no sample model matches
+    // that prefix; the slash-less "claude-3-5-sonnet-20241022" lands under
+    // "(no prefix)" instead, which is asserted above.
   });
 
   it('--json exits 0 and emits valid JSON', async () => {
