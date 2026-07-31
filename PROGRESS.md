@@ -15,6 +15,8 @@
 
 **Commit 4:** fixes the one ambient test failure. The "exits 0 and prints table on 200" assertion required `stdout.includes('claude/')` but the sample fixture contains a slash-less Anthropic-prefixed ID (`claude-3-5-sonnet-20241022`) which the CLI correctly groups under `(no prefix)`. The `PROVIDER_GROUPS` array does include `claude/`, but no model in the sample matches that prefix; replaced the assertion with a comment explaining the picker semantics. Combined run: model 6/6 + install merge 4/4 in 3.6s.
 
+**Final state:** merged to master at `6da7593`; pushed `90a2f97..6da7593` to `origin/master` (remote HEAD `6da7593a574afbd63c1c344c4e6420c58b6a428a`); follow-up task `F-125` completed.
+
 ## Complete — F-121 Fix Broken UserPromptSubmit Hook Imports
 
 **Objective:** Fix broken relative imports in `control-inbox.mjs` and
