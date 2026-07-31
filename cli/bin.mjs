@@ -412,6 +412,22 @@ async function main() {
       break;
     }
 
+    case 'model': {
+      const mod = await importCommand('model');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load model command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'model');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar model <subcommand> — run 'bizar model --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
     default: {
       console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
       showHelp();

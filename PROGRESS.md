@@ -7,12 +7,9 @@
 
 **Objective:** Enable gateway model discovery at install time and add a `bizar model list` CLI that surfaces all 9Router model IDs including non-Claude-prefixed ones.
 
-**Three commits:** install env vars (this one) -> `bizar model list` CLI -> close F-122.
+**Three commits:** install env vars (done) -> `bizar model list` CLI (in progress) -> close F-122.
 
-**Baseline:**
-- `writeClaudeSettings()` already does a correct merge: `merged.env = { ...(existing.env || {}), ...bizarSettings.env }`. No installer code changes needed.
-- Project `.claude/settings.json` has `ANTHROPIC_BASE_URL` and `BIZAR_MODEL_ROUTER_URL` but lacks `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`.
-- Project `.claude/settings.json` does NOT have `ANTHROPIC_DEFAULT_*_MODEL` entries (those live in user-level `~/.claude/settings.json`).
+**Commit 1:** `3220519` — added `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` to project settings template; fixed misleading model-router comment; 4 merge-settings tests pass 4/4.
 
 **Blockers:** None.
 
