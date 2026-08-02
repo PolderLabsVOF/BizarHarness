@@ -352,6 +352,58 @@ function syncDir(srcDir, destDir, opts = {}) {
   return { copied, skipped };
 }
 
+/**
+ * Remove entries in destDir that are not present in srcDir.
+ * Honors the same recursive shape and filter as syncDir().
+ * Used by --force installs to clear stale files left over from
+ * previous versions (e.g. agents renamed by F-112).
+ *
+ * Policy: `bizar install --force` treats the global state under
+ * `~/.claude/{agents,skills,commands,rules,hooks}` as fully Bizar-
+ * managed. Anything in dest that does not appear in src is removed.
+ * This is intentionally aggressive; users who keep hand-edited
+ * entries under those paths should run without `--force` to leave
+ * them alone. See PROGRESS.md F-141 for the trade-off.
+ *
+ * Returns { removed, kept } counts.
+ */
+export function pruneStale(srcDir, destDir, opts = {}) {
+  if (!existsSync(destDir)) return { removed: 0, kept: 0 };
+  if (!existsSync(srcDir)) return { removed: 0, kept: 0 };
+  let removed = 0, kept = 0;
+  for (const name of readdirSync(destDir)) {
+    if (name.startsWith('.')) continue;
+    const dp = join(destDir, name);
+    const sp = join(srcDir, name);
+    let dstStat;
+    try { dstStat = statSync(dp); } catch { continue; }
+    const srcExists = existsSync(sp);
+    if (dstStat.isDirectory()) {
+      if (!srcExists) {
+        rmSync(dp, { recursive: true, force: true });
+        removed++;
+        continue;
+      }
+      const r = pruneStale(sp, dp, opts);
+      removed += r.removed;
+      kept += r.kept;
+      // Drop now-empty directories.
+      try {
+        if (readdirSync(dp).length === 0) rmSync(dp, { recursive: true, force: true });
+      } catch { /* ignore */ }
+      continue;
+    }
+    if (!srcExists) {
+      if (opts.filter && !opts.filter(name, dp)) { kept++; continue; }
+      rmSync(dp, { force: true });
+      removed++;
+    } else {
+      kept++;
+    }
+  }
+  return { removed, kept };
+}
+
 // F-107: syncAgentFiles removed. Agent definitions live at
 // .claude/agents/ (Claude Code canonical) — they were never sourced
 // from config/agents/ in Claude Code era, and the legacy source dir
@@ -366,10 +418,13 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
   const src = join(REPO_ROOT, '.claude', 'agents');
   const dest = CLAUDE_AGENTS_DIR;
   if (!existsSync(src)) return { ok: true, message: `no agents source at ${src}`, copied: 0, skipped: 0 };
-  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}` };
+  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest);
   const { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') });
-  return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)`, copied, skipped };
+  let pruned = 0;
+  if (force) pruned = pruneStale(src, dest, { filter: n => n.endsWith('.md') }).removed;
+  const tail = pruned ? `, pruned ${pruned} stale` : '';
+  return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)${tail}`, copied, skipped, pruned };
 }
 
 // F-113: syncModelRouter added. The model-router.json file lives in
@@ -399,11 +454,11 @@ export async function syncModelRouter({ dryRun = false, force = false } = {}) {
   return { ok: true, message: `model-router.json → ${dest}`, path: dest };
 }
 
-export async function syncSkillFiles({ dryRun = false } = {}) {
+export async function syncSkillFiles({ dryRun = false, force = false } = {}) {
   const src = join(REPO_ROOT, 'config', 'skills');
   const dest = CLAUDE_SKILLS_DIR;
   if (!existsSync(src)) return { ok: true, message: `no skills source at ${src}`, copied: 0, skipped: 0 };
-  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}` };
+  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest); copyDirContents(src, dest);
   const sharedBaseline = join(REPO_ROOT, 'config', 'agents', '_shared', 'AGENT_BASELINE.md');
   if (existsSync(sharedBaseline)) {
@@ -411,39 +466,55 @@ export async function syncSkillFiles({ dryRun = false } = {}) {
     ensureDir(baselineDir);
     copyFileSync(sharedBaseline, join(baselineDir, 'SKILL.md'));
   }
+  // Skill packs are directories containing SKILL.md; a stray non-SKILL.md
+  // file in dest is almost certainly user-owned. Restrict the prune pass
+  // to .md files only.
+  let pruned = 0;
+  if (force) pruned = pruneStale(src, dest, { filter: n => n.endsWith('.md') }).removed;
   const count = readdirSync(dest).filter(n => { try { return statSync(join(dest, n)).isDirectory(); } catch { return false; } }).length;
-  return { ok: true, message: `${count} skill(s) synced`, copied: count, skipped: 0 };
+  const tail = pruned ? `, pruned ${pruned} stale` : '';
+  return { ok: true, message: `${count} skill(s) synced${tail}`, copied: count, skipped: 0, pruned };
 }
 
-export async function syncCommandFiles({ dryRun = false } = {}) {
+export async function syncCommandFiles({ dryRun = false, force = false } = {}) {
   const candidates = [join(REPO_ROOT, '.claude', 'commands'), join(REPO_ROOT, 'config', 'commands')];
   let src = null;
   for (const c of candidates) if (existsSync(c)) { src = c; break; }
   if (!src) return { ok: true, message: 'no commands source found', copied: 0, skipped: 0 };
   const dest = CLAUDE_COMMANDS_DIR;
-  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}` };
+  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest);
   const { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') });
-  return { ok: true, message: `${copied} command(s) synced (${skipped} kept)`, copied, skipped };
+  let pruned = 0;
+  if (force) pruned = pruneStale(src, dest, { filter: n => n.endsWith('.md') }).removed;
+  const tail = pruned ? `, pruned ${pruned} stale` : '';
+  return { ok: true, message: `${copied} command(s) synced (${skipped} kept)${tail}`, copied, skipped, pruned };
 }
 
-export async function syncRulesFiles({ dryRun = false } = {}) {
+export async function syncRulesFiles({ dryRun = false, force = false } = {}) {
   const src = join(REPO_ROOT, 'config', 'rules');
   const dest = CLAUDE_RULES_DIR;
   if (!existsSync(src)) return { ok: true, message: `no rules source at ${src}`, copied: 0, skipped: 0 };
-  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}` };
+  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest);
   const { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') || n.endsWith('.txt') });
-  return { ok: true, message: `${copied} rule(s) synced (${skipped} kept)`, copied, skipped };
+  let pruned = 0;
+  if (force) pruned = pruneStale(src, dest, { filter: n => n.endsWith('.md') || n.endsWith('.txt') }).removed;
+  const tail = pruned ? `, pruned ${pruned} stale` : '';
+  return { ok: true, message: `${copied} rule(s) synced (${skipped} kept)${tail}`, copied, skipped, pruned };
 }
 
-export async function syncHookFiles({ dryRun = false } = {}) {
+export async function syncHookFiles({ dryRun = false, force = false } = {}) {
   const src = join(REPO_ROOT, '.claude', 'hooks');
   const dest = CLAUDE_HOOKS_DIR;
   ensureDir(dest);
   if (!existsSync(src)) return { ok: true, message: `no hooks source at ${src}`, copied: 0, skipped: 0 };
-  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}` };
+  if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   copyDirContents(src, dest);
+  // Hooks are .mjs / .sh scripts. Restrict prune to those extensions so
+  // any user-owned file (READMEs, fixtures, etc.) is not removed.
+  let pruned = 0;
+  if (force) pruned = pruneStale(src, dest, { filter: n => n.endsWith('.mjs') || n.endsWith('.sh') }).removed;
   for (const name of readdirSync(dest)) {
     const fp = join(dest, name);
     try {
@@ -451,7 +522,8 @@ export async function syncHookFiles({ dryRun = false } = {}) {
       if (st.isFile() && (name.endsWith('.sh') || name.endsWith('.mjs'))) chmodSync(fp, 0o755);
     } catch { /* ignore */ }
   }
-  return { ok: true, message: 'hook scripts installed', copied: readdirSync(dest).length, skipped: 0 };
+  const tail = pruned ? `, pruned ${pruned} stale` : '';
+  return { ok: true, message: `hook scripts installed${tail}`, copied: readdirSync(dest).length, skipped: 0, pruned };
 }
 
 // ─── git hooks ──────────────────────────────────────────────────────────────

@@ -18,7 +18,10 @@ export function showInstallHelp() {
   Usage:
     bizar install                       Install (or refresh) every component
     bizar install --dry-run             Print what would happen, change nothing
-    bizar install --force               Overwrite existing files
+    bizar install --force               Overwrite existing files AND prune stale
+                                        entries in ~/.claude/{agents,skills,
+                                        commands,rules,hooks}
+    bizar install --yes                 Assume yes for any non-destructive prompt
     bizar install --help                Show this help
 
   Description:
@@ -84,12 +87,25 @@ export function showUpdateHelp() {
 
 // ── Command runners ────────────────────────────────────────────────────────────
 
+function parseInstallFlags(args) {
+  const opts = {};
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--force') opts.force = true;
+    else if (a === '--dry-run') opts.dryRun = true;
+    else if (a === '--yes' || a === '-y') opts.yes = true;
+    else if (a === '--quiet') opts.quiet = true;
+    else if (a === '--mode=update') opts.mode = 'update';
+  }
+  return opts;
+}
+
 export async function install(args, isHelpRequest) {
   if (isHelpRequest) {
     showInstallHelp();
     return;
   }
-  await runInstaller({});
+  await runInstaller(parseInstallFlags(args));
   // v4.4.3 — After install, repair any stale bin symlinks so the
   // user picks up the new code.
   try {

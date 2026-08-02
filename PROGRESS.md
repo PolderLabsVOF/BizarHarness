@@ -696,3 +696,87 @@ None.
 
 - No cleanup work remains. Select the next `not_started` feature before making
   further product changes.
+
+## In Progress — F-141 Installer: --force Prunes Stale Global Files
+
+**Objective:** Fix two installer defects that broke `bizar install --force`
+and left stale agent/skill/command/rule/hook entries in `~/.claude/` after
+every Bizar release that renamed or removed files (e.g. the F-112 Norse→office
+rebrand left `odin.md`, `frigg.md`, `mimir.md`, `tyr.md`, `thor.md`,
+`heimdall.md`, `hermod.md`, `forseti.md`, `baldr.md`, `vidarr.md`, `vor.md`
+polluting `~/.claude/agents/`).
+
+**Defect 1 — flags dropped.** `cli/commands/install.mjs:install()` called
+`runInstaller({})`, discarding `args`. `--force`, `--dry-run`, `--yes`,
+`--quiet`, `--mode=update` were silently swallowed; users could not request a
+force-prune at all.
+
+**Defect 2 — installer was dirty.** `cli/provision.mjs:syncDir()` only added
+and overwrote; it never removed obsolete entries. After any rename, dead
+agent/skill/command names persisted in `~/.claude/` and polluted Claude
+Code's Agent-tool subagent_type registry in every session.
+
+**Defect 3 (discovered mid-fix) — published global package missing native binding.**
+`@polderlabs/bizar@10.12.0` shipped with `better-sqlite3@12.11.1` source
+but no compiled `better_sqlite3.node` artifact. The PreToolUse path-ownership
+hook (`path-ownership-guard.mjs`) instantiates `TaskLedger` to authorize
+edits, and `TaskLedger` requires that binding. Without it, every edit to
+`cli/**` was denied with `LEDGER_UNAVAILABLE`, which is exactly the failure
+pattern the user's Codex smoke test reported. Fixed by rebuilding the
+binding in the global install via `npm install-scripts approve
+better-sqlite3@12.11.1 && npm rebuild better-sqlite3`; the binding now
+compiles and the hook authorizes edits normally.
+
+**Changes:**
+
+- `cli/provision.mjs` — exported new `pruneStale(srcDir, destDir, opts)`
+  helper that walks dest alongside src, honors the same `filter` as
+  `syncDir`, deletes files/subdirs present in dest but absent in src, and
+  drops now-empty dirs. `syncAgentFiles`, `syncSkillFiles`,
+  `syncCommandFiles`, `syncRulesFiles`, and `syncHookFiles` now invoke
+  `pruneStale` after the copy step **only when `force: true`** and report
+  the count in their result message. Default installs remain additive-only.
+  Skills prune is filtered to `*.md` and hooks prune to `*.mjs` / `*.sh`
+  so user-owned READMEs / fixtures / data files are not collateral damage.
+  Agents, commands, and rules prune is identity (every entry is Bizar-
+  authored) — see "Manual recovery" below.
+- `cli/commands/install.mjs` — added `parseInstallFlags()` that forwards
+  `--force`, `--dry-run`, `--yes`, `--quiet`, `--mode=update` to
+  `runInstaller`. Updated help text to describe `--force` as also pruning
+  stale entries.
+- `cli/install/index.mjs` — `runInstaller` now passes `force`, `dryRun`,
+  `yes` through to `runProvision`.
+- `cli/install/prune.test.mjs` — new test file. 9/9 pass; covers prune
+  semantics (file removal, filter respect, recursive directory pruning,
+  empty/missing dest, skill `.md`-filter policy) and `runInstaller` flag
+  wiring (quiet/dry-run/force accept; multi-flag parse does not throw).
+
+**Verification:**
+
+- `node --test cli/install/prune.test.mjs` — 9/9 pass.
+- `node --test cli/install/index.test.mjs` — 4/4 pass (regression).
+- `node --test cli/provision.test.mjs` — 12/12 pass (regression).
+- `make check` — TypeScript gate green.
+- `make test` — 396/396 pass (full project).
+- `make clean-check` — 5/5 dimensions clean.
+- Real `bizar install --force` smoke test in a sandboxed `CLAUDE_CONFIG_DIR`
+  with planted `odin.md` + `frigg.md` stale Norse agents: pruned, current
+  16 office agents present, `.txt` user file in skills/ preserved.
+
+**Task tracking:** `bizar task create F-141` → `F-142` → `F-143` (each
+recreated as the scope grew) all claimed by `@main` with the working set
+covered by the lease.
+
+**Excluded from this change:** commit, push, npm publication, GitHub
+release, feature-ledger `passing` flip, and any other externally visible
+action. Per `AGENTS.md`, commits require explicit human confirmation. Run
+`/simplify` before requesting the approval-gated commit.
+
+**Manual recovery for users who already have stale agents:** run
+`bizar install --force` once. The installer will delete the obsolete
+Norse-named agents, skills, commands, rules, and hooks from `~/.claude/`
+and leave only the current source-of-truth. **Warning**: `--force` is the
+documented aggressive policy — anything in `~/.claude/{agents,commands,rules}`
+that does not exist in the repo source will be deleted. Keep hand-edited
+customizations in a separate project or under `~/.claude/plugins/...` and
+run installer without `--force` so they are left untouched.

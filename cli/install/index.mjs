@@ -13,12 +13,13 @@ import { printInstallLocations } from './paths.mjs';
  * Thin orchestrator entry point.
  * @param {object} opts
  * @param {boolean} [opts.dryRun]
- * @param {boolean} [opts.force]
- * @param {boolean} [opts.quiet] - Only print the location card
- * @param {string}  [opts.mode]  - 'install' | 'update'
+ * @param {boolean} [opts.force]   - overwrite existing files AND prune stale entries
+ * @param {boolean} [opts.quiet]   - Only print the location card
+ * @param {string}  [opts.mode]    - 'install' | 'update'
+ * @param {boolean} [opts.yes]     - assume yes for any non-destructive prompts
  */
 export async function runInstaller(opts = {}) {
-  const { dryRun = false, force = false, quiet = false, mode = 'install' } = opts;
+  const { dryRun = false, force = false, quiet = false, mode = 'install', yes = false } = opts;
 
   if (quiet) {
     printInstallLocations({ dryRun, force });
@@ -28,5 +29,5 @@ export async function runInstaller(opts = {}) {
   showBanner();
   printInstallLocations({ dryRun, force });
 
-  return runProvision({ mode, dryRun, force });
+  return runProvision({ mode, dryRun, force, yes });
 }

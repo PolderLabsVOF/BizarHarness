@@ -540,6 +540,20 @@
       "created": "2026-08-02",
       "commit": "8b2ee9e639a984be517e88473245b70932b83c39",
       "evidence": "2026-08-02 OMC-informed overhaul implemented against pinned upstream commit 41a4c0f77144c5beb5f5f000a89cff379c680606 and committed as 8b2ee9e639a984be517e88473245b70932b83c39. Independent final audit APPROVED; focused custom-router/model suite 41/41 and SDK registry/parity suite 8/8; full SDK 297/297 and Node 387/387; make e2e 13/13; make clean-check 5/5; make check, verify-removed-surfaces, verify-repo-structure, and check-arch passed; audit 10.0/10.0; eval-gate 45/45; plugin validation passed; root npm package contains 296 files and SDK package 123 files with no backup/temp files. Master was pushed through closure commit 9c46323b67ddb9389e6076c136166e4dec9853f1; @polderlabs/bizar@10.12.0 and @polderlabs/bizar-sdk@10.12.0 are published as npm latest and passed a fresh registry-install/version smoke test. No GitHub release or tag was requested or created."
+    },
+    {
+      "id": "F-141",
+      "behavior": "bizar install --force prunes stale agent/skill/command/rule/hook entries from ~/.claude/ to match repo source; --force flag is recognized by the CLI dispatch chain",
+      "verification": "make check; make test; cli/install/prune.test.mjs; smoke-test install --force against sandboxed CLAUDE_CONFIG_DIR removes stale entries",
+      "state": "active",
+      "evidence": "uncommitted: 9/9 prune tests pass; 396/396 make test; smoke test confirmed odin.md/frigg.md removed, 16 office agents installed, user-owned .txt in skills preserved",
+      "commit": null,
+      "layer": "core",
+      "category": "installer",
+      "created": "2026-08-02",
+      "passed": null,
+      "wip_holder": "@main",
+      "task": "F-143"
     }
   ],
   "vcr": {
