@@ -39,6 +39,13 @@ executable repository-structure gate verifies root, SDK package, SDK constant,
 and plugin-manifest version parity. Historical cancellation and audit text now
 clearly precedes and is superseded by the user's newer publication approval.
 
+**Implementation commit (2026-08-02):** `8b2ee9e639a984be517e88473245b70932b83c39`
+(`feat: overhaul Bizar orchestration workflows`) contains the complete F-129
+implementation and v10.12.0 release metadata. The final staged matrix passed:
+SDK 297/297, Node 387/387, E2E 13/13, clean-state 5/5, audit 10.0/10.0,
+eval-gate 45/45, plugin validation, and clean root/SDK package manifests.
+The feature ledger is closed against this real commit before push/publication.
+
 **Pre-change evidence:** `master` and `origin/master` both resolve to `0118da3`.
 The upstream research clone is `/tmp/oh-my-claudecode-research` at
 `41a4c0f77144c5beb5f5f000a89cff379c680606`. Current Bizar already has a phased
@@ -123,13 +130,10 @@ verification; and workflow state did not reject symlinked ancestors. Repair
 lanes are active with new packed/plugin/curl/bypass/path regressions.
 
 **Current local state:** Implementation, adversarial review, and all required
-runtime gates are complete. F-129 remains `active` with `commit: null` because
-commit creation is a hard human-approval boundary. The earlier cancellation
-kept this state truthful until the newer explicit commit/push/npm authorization
-recorded above. `make vcr` therefore remains 43/44 (0.977) until the real
-implementation commit can be recorded; all behavior/build/test/E2E/clean-state
-gates pass. No commit, push, tag, release, npm publication, deployment, or
-public mutation had occurred at this checkpoint.
+runtime gates are complete. The authorized implementation commit now exists,
+so F-129 has truthfully moved to `passing` with commit-backed evidence and VCR
+has returned to 44/44. Push and npm publication remain pending; no GitHub release,
+tag, deployment, or other public mutation is requested.
 
 **First final-audit repair scope (2026-08-02):** Enforce the immutable workflow
 model snapshot at each Claude Code `Agent` dispatch; make the
@@ -203,8 +207,9 @@ deep-equal CLI/SDK snapshot fingerprints. Every required gate passed in order:
 `make check`, `make verify-removed-surfaces`, `make verify-repo-structure`,
 `make check-arch`, `make test`, `make e2e`, `make clean-check`, and a final
 `make check`. `git diff --check` is clean. The only intentionally incomplete
-state is the approval-gated commit; therefore F-129 remains active and VCR
-remains 43/44 rather than misrepresenting uncommitted work as passing.
+state is external publication: the implementation commit exists, F-129 is
+passing, and VCR is 44/44. Push and npm publication are the next authorized
+steps; no GitHub release or tag is requested.
 
 
 ## Superseded by F-129 — F-128 Reduce Agent Permission Friction + Parallelism

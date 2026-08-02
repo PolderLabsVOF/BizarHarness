@@ -534,17 +534,17 @@
       "id": "F-129",
       "behavior": "Adopt an OMC-informed orchestration architecture with one GPT-5.6 Sol office manager, skill-based GPT/MiniMax worker routing, durable workflow modes, and full /autopilot lifecycle support.",
       "verification": "workflow state and hook tests; agent/model routing tests; skill mirror checks; make verify-removed-surfaces; make verify-repo-structure; make check-arch; make test; make e2e; make clean-check; make check",
-      "state": "active",
+      "state": "passing",
       "layer": "core",
       "category": "orchestration",
       "created": "2026-08-02",
-      "commit": null,
-      "evidence": "2026-08-02 OMC-informed overhaul implemented locally against pinned upstream commit 41a4c0f77144c5beb5f5f000a89cff379c680606. Independent final audit APPROVED; focused custom-router/model suite 41/41 and SDK registry/parity suite 8/8; full SDK 297/297 and Node 387/387; make e2e 13/13; make clean-check 5/5; make check, verify-removed-surfaces, verify-repo-structure, and check-arch passed; plugin validation passed; npm dry-run package contains 296 files and no backup/temp files. Feature remains active with commit:null until the now-authorized implementation commit exists; push and npm publication are explicitly authorized, while no GitHub release or tag was requested."
+      "commit": "8b2ee9e639a984be517e88473245b70932b83c39",
+      "evidence": "2026-08-02 OMC-informed overhaul implemented against pinned upstream commit 41a4c0f77144c5beb5f5f000a89cff379c680606 and committed as 8b2ee9e639a984be517e88473245b70932b83c39. Independent final audit APPROVED; focused custom-router/model suite 41/41 and SDK registry/parity suite 8/8; full SDK 297/297 and Node 387/387; make e2e 13/13; make clean-check 5/5; make check, verify-removed-surfaces, verify-repo-structure, and check-arch passed; audit 10.0/10.0; eval-gate 45/45; plugin validation passed; root npm dry-run package contains 296 files and SDK package 123 files with no backup/temp files. Push and npm publication are explicitly authorized; no GitHub release or tag was requested."
     }
   ],
   "vcr": {
-    "passing": 43,
+    "passing": 44,
     "activated": 44,
-    "ratio": 0.9773
+    "ratio": 1
   }
 }
