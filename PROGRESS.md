@@ -46,6 +46,13 @@ SDK 297/297, Node 387/387, E2E 13/13, clean-state 5/5, audit 10.0/10.0,
 eval-gate 45/45, plugin validation, and clean root/SDK package manifests.
 The feature ledger is closed against this real commit before push/publication.
 
+**Push and npm publication complete (2026-08-02):** `master` was pushed
+normally through closure commit `9c46323b67ddb9389e6076c136166e4dec9853f1`.
+`@polderlabs/bizar-sdk@10.12.0` and `@polderlabs/bizar@10.12.0` were published
+with public access and both npm `latest` tags resolve to 10.12.0. A fresh
+registry install imported `SDK_VERSION=10.12.0` and `bizar --version` returned
+10.12.0. No GitHub release, tag, deployment, or force/history mutation occurred.
+
 **Pre-change evidence:** `master` and `origin/master` both resolve to `0118da3`.
 The upstream research clone is `/tmp/oh-my-claudecode-research` at
 `41a4c0f77144c5beb5f5f000a89cff379c680606`. Current Bizar already has a phased
@@ -132,8 +139,8 @@ lanes are active with new packed/plugin/curl/bypass/path regressions.
 **Current local state:** Implementation, adversarial review, and all required
 runtime gates are complete. The authorized implementation commit now exists,
 so F-129 has truthfully moved to `passing` with commit-backed evidence and VCR
-has returned to 44/44. Push and npm publication remain pending; no GitHub release,
-tag, deployment, or other public mutation is requested.
+has returned to 44/44. Push and both npm publications are complete; no GitHub
+release, tag, deployment, or other public mutation was requested or performed.
 
 **First final-audit repair scope (2026-08-02):** Enforce the immutable workflow
 model snapshot at each Claude Code `Agent` dispatch; make the
@@ -206,10 +213,11 @@ regressions.
 deep-equal CLI/SDK snapshot fingerprints. Every required gate passed in order:
 `make check`, `make verify-removed-surfaces`, `make verify-repo-structure`,
 `make check-arch`, `make test`, `make e2e`, `make clean-check`, and a final
-`make check`. `git diff --check` is clean. The only intentionally incomplete
-state is external publication: the implementation commit exists, F-129 is
-passing, and VCR is 44/44. Push and npm publication are the next authorized
-steps; no GitHub release or tag is requested.
+`make check`. `git diff --check` is clean. At that checkpoint only external
+publication remained: the implementation commit existed, F-129 was passing,
+and VCR was 44/44. The authorized push and npm publications subsequently
+completed with registry-install verification; no GitHub release or tag was
+requested.
 
 
 ## Superseded by F-129 — F-128 Reduce Agent Permission Friction + Parallelism

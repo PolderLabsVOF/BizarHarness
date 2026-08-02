@@ -539,7 +539,7 @@
       "category": "orchestration",
       "created": "2026-08-02",
       "commit": "8b2ee9e639a984be517e88473245b70932b83c39",
-      "evidence": "2026-08-02 OMC-informed overhaul implemented against pinned upstream commit 41a4c0f77144c5beb5f5f000a89cff379c680606 and committed as 8b2ee9e639a984be517e88473245b70932b83c39. Independent final audit APPROVED; focused custom-router/model suite 41/41 and SDK registry/parity suite 8/8; full SDK 297/297 and Node 387/387; make e2e 13/13; make clean-check 5/5; make check, verify-removed-surfaces, verify-repo-structure, and check-arch passed; audit 10.0/10.0; eval-gate 45/45; plugin validation passed; root npm dry-run package contains 296 files and SDK package 123 files with no backup/temp files. Push and npm publication are explicitly authorized; no GitHub release or tag was requested."
+      "evidence": "2026-08-02 OMC-informed overhaul implemented against pinned upstream commit 41a4c0f77144c5beb5f5f000a89cff379c680606 and committed as 8b2ee9e639a984be517e88473245b70932b83c39. Independent final audit APPROVED; focused custom-router/model suite 41/41 and SDK registry/parity suite 8/8; full SDK 297/297 and Node 387/387; make e2e 13/13; make clean-check 5/5; make check, verify-removed-surfaces, verify-repo-structure, and check-arch passed; audit 10.0/10.0; eval-gate 45/45; plugin validation passed; root npm package contains 296 files and SDK package 123 files with no backup/temp files. Master was pushed through closure commit 9c46323b67ddb9389e6076c136166e4dec9853f1; @polderlabs/bizar@10.12.0 and @polderlabs/bizar-sdk@10.12.0 are published as npm latest and passed a fresh registry-install/version smoke test. No GitHub release or tag was requested or created."
     }
   ],
   "vcr": {
