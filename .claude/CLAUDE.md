@@ -40,12 +40,37 @@ make session-end              # lifecycle compatibility target
 - **MUST** verify evidence before claiming completion.
 - **MUST NOT** commit `console.log`, `debugger`, `.only()`, credentials, generated secrets, or runtime logs.
 - **MUST NOT** use a persistent Claude daemon. Claude Code and the Agent SDK run in-process; background work uses Claude Code's Agent tool.
-- **MUST NOT** bypass human approval for commits, pushes, pull-request mutations, releases, package publication, deployments, production/shared-infrastructure writes, credential changes, public exposure, or irreversible destruction.
 - **MUST NOT** rebase or force-push under the default project policy.
+
+## Autonomy and parallelism
+
+Agents execute clear, local, reversible work autonomously — they inspect,
+edit, test, and iterate without pausing for routine decisions. Routine
+decisions (file layout, naming, scope of a single commit, choosing between
+two equivalent stdlib calls, picking a verification command from the Makefile,
+or marking a task `passing` after `make check` is green) do NOT require
+human approval and MUST NOT trigger a permission handoff. PreToolUse hooks
+still deny prohibited actions and escalate externally visible or irreversible
+actions with `permissionDecision: "ask"`; that escalation list is the
+authoritative floor, not a starting point.
+
+Subagent dispatch through the Agent tool is the default for disjoint work.
+When two or more subtasks have non-overlapping file scopes and no data
+dependency on each other's intermediate output, the orchestrator MUST
+dispatch them in parallel in a single tool block rather than sequentially.
+Sequential dispatch is reserved for tasks that depend on a previous step's
+output (research → plan → implement, integration that requires a commit SHA,
+verification that consumes a build artifact). The `office-manager` skill
+enforces this; individual agents do not re-derive the rule.
+
+The authoritative hard approval list (cannot be auto-approved) is: commits, pushes, pull-request
+mutations, releases, package publication, deployments, production/shared-
+infrastructure writes, credential changes, public exposure, irreversible
+destruction. Everything else proceeds.
 
 ## Execution model
 
-Clear, local, reversible work proceeds autonomously: inspect, edit, test, and iterate without permission handoffs. The project defaults to `acceptEdits`; eligible operators may opt into Claude Code Auto mode. PreToolUse hooks still deny prohibited actions and escalate externally visible or irreversible actions with `permissionDecision: "ask"`.
+The autonomy and approval policy above governs this execution model. The project defaults to `acceptEdits`; eligible operators may opt into Claude Code Auto mode.
 
 Every non-empty primary request must use Claude Code's Agent tool to enter the
 Bizar agent pipeline through `office-manager` (`@mike`) before task analysis or

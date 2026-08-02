@@ -1,25 +1,13 @@
 /**
- * router/agent-model-registry.ts — resolve agent → concrete model ID.
+ * Strict agent → exact-model registry for Bizar's v2 model-router contract.
  *
- * v10.1.0 — Reads `.claude/model-router.json` (the Bizar model registry)
- * and exposes:
- *
- *   - resolveAgentModel(agent)         → { modelId, tier, endpoint, rationale }
- *   - listAgentModels()                → Array<{ agent, modelId, tier, ... }>
- *   - resolveTierModel(tier)           → { modelId, endpoint, fallback[] }
- *   - getEndpoint()                    → endpoint URL (env override honored)
- *
- * The router decides which tier; this registry decides which concrete
- * model ID lives at that tier and which endpoint URL to call. Together
- * they form the dispatch contract the MCP `route_agent` tool surfaces.
- *
- * Why a separate module: the Thompson-bandit model-router.ts doesn't
- * know about model IDs (it only reasons about `flash / mid / expensive`
- * priors). The agent-registry.ts knows about agent types but not about
- * concrete models. This module is the bridge.
+ * Role selection happens elsewhere. This module validates the independently
+ * configured complexity tiers and exact per-agent assignments, then refuses
+ * unknown or unavailable identities instead of substituting another model.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 export type BizarTier =
@@ -30,6 +18,29 @@ export type BizarTier =
   | "mid"
   | "budget";
 
+export type ModelRegistryErrorCode =
+  | "CONFIG_NOT_FOUND"
+  | "CONFIG_INVALID"
+  | "GATEWAY_POLICY_INVALID"
+  | "MODEL_POLICY_INVALID"
+  | "UNKNOWN_AGENT"
+  | "UNKNOWN_TIER"
+  | "RUN_ID_REQUIRED"
+  | "GATEWAY_AVAILABILITY_REQUIRED"
+  | "DUPLICATE_AGENT_ASSIGNMENT"
+  | "REQUESTED_MODEL_UNAVAILABLE"
+  | "SNAPSHOT_INVALID";
+
+export class ModelRegistryError extends Error {
+  readonly code: ModelRegistryErrorCode;
+
+  constructor(code: ModelRegistryErrorCode, message: string) {
+    super(message);
+    this.name = "ModelRegistryError";
+    this.code = code;
+  }
+}
+
 export interface AgentModelEntry {
   agent: string;
   modelId: string;
@@ -39,44 +50,89 @@ export interface AgentModelEntry {
 
 export interface TierModelEntry {
   tier: BizarTier;
-  modelIds: string[];
+  /** Exactly one model ID. Multi-model tier lists are forbidden fallbacks. */
+  modelIds: readonly [string];
   purpose: string;
 }
 
-export interface ResolvedAgentModel {
-  agent: string;
-  modelId: string;
-  tier: BizarTier;
+export interface ResolvedAgentModel extends AgentModelEntry {
   endpoint: string;
-  rationale: string;
 }
 
 export interface ResolvedTierModel {
   tier: BizarTier;
   modelId: string;
-  fallback: string[];
+  /** Kept for API compatibility; strict v2 registries always return []. */
+  fallback: readonly [];
   endpoint: string;
   purpose: string;
 }
 
-export interface ModelRegistry {
+export interface GatewayPolicy {
+  required: true;
   endpoint: string;
-  agents: Map<string, AgentModelEntry>;
-  tiers: Map<BizarTier, TierModelEntry>;
-  fallbackChain: string[];
-  gptOnlyFor: string[];
-  gptNeverFor: string[];
+  availabilityProbe: string;
+  exactModelRequired: true;
+  unavailableBehavior: "fail";
+}
+
+export interface ModelRegistryPolicy {
+  mainOrchestrator: string;
+  assignmentSnapshot: "immutable-per-run";
+  requireConfiguredGateway: true;
+  requireExactRequestedModel: true;
+  rejectDispatchModelOverride: true;
+  silentFallback: false;
+  unavailableModel: "fail-and-report";
+}
+
+export interface ModelRegistry {
+  version: string;
+  /** Effective endpoint; environment/source overrides may change only this. */
+  endpoint: string;
+  /** Endpoint declared by the validated registry. */
+  configuredEndpoint: string;
+  gateway: GatewayPolicy;
+  policies: ModelRegistryPolicy;
+  agents: ReadonlyMap<string, Readonly<AgentModelEntry>>;
+  tiers: ReadonlyMap<BizarTier, Readonly<TierModelEntry>>;
 }
 
 export interface RegistrySource {
   /** Path to `model-router.json`. Default: `.claude/model-router.json`. */
   configPath?: string;
-  /** Override the endpoint URL (otherwise read from the JSON). */
+  /** Endpoint-only override. Exact agent/model identities remain unchanged. */
   endpoint?: string;
 }
 
-const DEFAULT_CONFIG = ".claude/model-router.json";
+export interface RunAssignmentSnapshot {
+  readonly schemaVersion: 1;
+  readonly runId: string;
+  readonly createdAt: string;
+  readonly routerVersion: string;
+  readonly gatewayEndpoint: string;
+  readonly availabilityProbe: string;
+  readonly assignments: Readonly<Record<string, Readonly<{
+    /** Canonical snapshot key shared with the CLI workflow state and hooks. */
+    model: string;
+    tier: BizarTier;
+    rationale: string;
+  }>>>;
+  readonly fingerprint: string;
+}
 
+export interface CreateRunAssignmentSnapshotInput {
+  runId: string;
+  registry: ModelRegistry;
+  /** Successful `/models` probe result from `registry.endpoint`. */
+  availableModelIds: Iterable<string>;
+  /** Defaults to every configured agent. */
+  agentNames?: Iterable<string>;
+  /** Injectable for deterministic tests/audit replay. */
+  createdAt?: string;
+}
+
+const DEFAULT_CONFIG = ".claude/model-router.json";
 const KNOWN_TIERS: readonly BizarTier[] = [
   "premium",
   "high",
@@ -86,138 +142,273 @@ const KNOWN_TIERS: readonly BizarTier[] = [
   "budget",
 ] as const;
 
-function isKnownTier(t: unknown): t is BizarTier {
-  return typeof t === "string" && (KNOWN_TIERS as readonly string[]).includes(t);
+function registryError(code: ModelRegistryErrorCode, message: string): never {
+  throw new ModelRegistryError(code, message);
 }
 
-/**
- * Read the registry from disk. Tolerates a missing/corrupt file by
- * returning a minimal registry pointing at the local router default —
- * agents can still operate, just without the per-agent rationale data.
- */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isKnownTier(value: unknown): value is BizarTier {
+  return typeof value === "string" && (KNOWN_TIERS as readonly string[]).includes(value);
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function expectRecord(value: unknown, field: string): Record<string, unknown> {
+  if (!isRecord(value)) registryError("CONFIG_INVALID", `${field} must be an object.`);
+  return value;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (isRecord(value)) {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function parseGateway(raw: Record<string, unknown>, configuredEndpoint: string): GatewayPolicy {
+  const gateway = expectRecord(raw.gateway, "gateway");
+  if (
+    gateway.required !== true
+    || gateway.exactModelRequired !== true
+    || gateway.unavailableBehavior !== "fail"
+    || !nonEmptyString(gateway.endpoint)
+    || !nonEmptyString(gateway.availabilityProbe)
+    || gateway.endpoint !== configuredEndpoint
+  ) {
+    registryError(
+      "GATEWAY_POLICY_INVALID",
+      "gateway must require the configured endpoint, an availability probe, exact models, and fail-on-unavailable behavior.",
+    );
+  }
+  return {
+    required: true,
+    endpoint: gateway.endpoint,
+    availabilityProbe: gateway.availabilityProbe,
+    exactModelRequired: true,
+    unavailableBehavior: "fail",
+  };
+}
+
+function parsePolicies(raw: Record<string, unknown>): ModelRegistryPolicy {
+  const policies = expectRecord(raw.policies, "policies");
+  const fallbackChain = policies.fallback_chain;
+  if (
+    !nonEmptyString(policies.mainOrchestrator)
+    || policies.assignmentSnapshot !== "immutable-per-run"
+    || policies.requireConfiguredGateway !== true
+    || policies.requireExactRequestedModel !== true
+    || policies.rejectDispatchModelOverride !== true
+    || policies.silentFallback !== false
+    || policies.unavailableModel !== "fail-and-report"
+    || (fallbackChain !== undefined && (!Array.isArray(fallbackChain) || fallbackChain.length !== 0))
+  ) {
+    registryError(
+      "MODEL_POLICY_INVALID",
+      "policies must require immutable exact assignments and contain no silent or ordered model fallback.",
+    );
+  }
+  return {
+    mainOrchestrator: policies.mainOrchestrator,
+    assignmentSnapshot: "immutable-per-run",
+    requireConfiguredGateway: true,
+    requireExactRequestedModel: true,
+    rejectDispatchModelOverride: true,
+    silentFallback: false,
+    unavailableModel: "fail-and-report",
+  };
+}
+
+function parseTiers(raw: Record<string, unknown>): Map<BizarTier, Readonly<TierModelEntry>> {
+  const rawTiers = expectRecord(raw.tiers, "tiers");
+  const tiers = new Map<BizarTier, Readonly<TierModelEntry>>();
+  for (const [name, value] of Object.entries(rawTiers)) {
+    if (!isKnownTier(name)) registryError("CONFIG_INVALID", `Unknown model tier ${name}.`);
+    const tier = expectRecord(value, `tiers.${name}`);
+    if (
+      !Array.isArray(tier.models)
+      || tier.models.length !== 1
+      || !nonEmptyString(tier.models[0])
+      || !nonEmptyString(tier.purpose)
+    ) {
+      registryError("MODEL_POLICY_INVALID", `Tier ${name} must define exactly one model and a purpose.`);
+    }
+    tiers.set(name, Object.freeze({ tier: name, modelIds: [tier.models[0]] as [string], purpose: tier.purpose }));
+  }
+  if (tiers.size === 0) registryError("CONFIG_INVALID", "At least one model tier is required.");
+  return tiers;
+}
+
+function parseAgents(
+  raw: Record<string, unknown>,
+  tiers: ReadonlyMap<BizarTier, Readonly<TierModelEntry>>,
+): Map<string, Readonly<AgentModelEntry>> {
+  const rawAgents = expectRecord(raw.agents, "agents");
+  const agents = new Map<string, Readonly<AgentModelEntry>>();
+  for (const [name, value] of Object.entries(rawAgents)) {
+    if (!nonEmptyString(name)) registryError("CONFIG_INVALID", "Agent names must be non-empty.");
+    const agent = expectRecord(value, `agents.${name}`);
+    if (!nonEmptyString(agent.model) || !isKnownTier(agent.tier) || !nonEmptyString(agent.rationale)) {
+      registryError("CONFIG_INVALID", `Agent ${name} must define an exact model, known tier, and rationale.`);
+    }
+    const tier = tiers.get(agent.tier);
+    if (!tier || tier.modelIds[0] !== agent.model) {
+      registryError("MODEL_POLICY_INVALID", `Agent ${name} model must exactly match tier ${agent.tier}.`);
+    }
+    agents.set(name, Object.freeze({ agent: name, modelId: agent.model, tier: agent.tier, rationale: agent.rationale }));
+  }
+  if (agents.size === 0) registryError("CONFIG_INVALID", "At least one agent assignment is required.");
+  return agents;
+}
+
+/** Load and strictly validate the v2 registry. Missing or invalid input throws. */
 export function loadModelRegistry(src: RegistrySource = {}): ModelRegistry {
-  const fp = src.configPath
+  const configPath = src.configPath
     ? isAbsolute(src.configPath) ? src.configPath : resolve(src.configPath)
     : resolve(DEFAULT_CONFIG);
 
-  let raw: Partial<ModelRegistryJson> = {};
-  if (existsSync(fp)) {
-    try {
-      raw = JSON.parse(readFileSync(fp, "utf8")) as Partial<ModelRegistryJson>;
-    } catch {
-      raw = {};
-    }
+  let rawValue: unknown;
+  try {
+    rawValue = JSON.parse(readFileSync(configPath, "utf8"));
+  } catch (error: unknown) {
+    const code = isRecord(error) && error.code === "ENOENT" ? "CONFIG_NOT_FOUND" : "CONFIG_INVALID";
+    const detail = error instanceof Error ? error.message : String(error);
+    registryError(code, `Cannot load model registry at ${configPath}: ${detail}`);
   }
 
-  const endpoint = src.endpoint
+  const raw = expectRecord(rawValue, "model registry");
+  if (!nonEmptyString(raw.version) || raw.$schema !== "https://bizar.dev/schema/model-router.v2.json") {
+    registryError("CONFIG_INVALID", "The model registry must declare the v2 schema and a version.");
+  }
+  if (!nonEmptyString(raw.endpoint)) registryError("CONFIG_INVALID", "endpoint must be a non-empty string.");
+
+  const gateway = parseGateway(raw, raw.endpoint);
+  const policies = parsePolicies(raw);
+  const tiers = parseTiers(raw);
+  const agents = parseAgents(raw, tiers);
+  if (!agents.has(policies.mainOrchestrator)) {
+    registryError("MODEL_POLICY_INVALID", `Main orchestrator ${policies.mainOrchestrator} has no exact assignment.`);
+  }
+
+  const endpointOverride = src.endpoint
     ?? process.env.BIZAR_MODEL_ROUTER_URL
-    ?? process.env.ANTHROPIC_BASE_URL
-    ?? raw.endpoint
-    ?? "http://localhost:20128/v1";
-
-  const agents = new Map<string, AgentModelEntry>();
-  if (raw.agents && typeof raw.agents === "object") {
-    for (const [name, def] of Object.entries(raw.agents)) {
-      if (!def || typeof def !== "object") continue;
-      const modelId = typeof def.model === "string" ? def.model : "bizar/MiniMax-M3";
-      const tier = isKnownTier(def.tier) ? def.tier : "default";
-      const rationale = typeof def.rationale === "string" ? def.rationale : "";
-      agents.set(name, { agent: name, modelId, tier, rationale });
-    }
+    ?? process.env.ANTHROPIC_BASE_URL;
+  if (endpointOverride !== undefined && !nonEmptyString(endpointOverride)) {
+    registryError("GATEWAY_POLICY_INVALID", "The endpoint override must be a non-empty string.");
   }
 
-  const tiers = new Map<BizarTier, TierModelEntry>();
-  if (raw.tiers && typeof raw.tiers === "object") {
-    for (const [name, def] of Object.entries(raw.tiers)) {
-      if (!def || typeof def !== "object") continue;
-      if (!isKnownTier(name)) continue;
-      const ids = Array.isArray(def.models) ? def.models.filter((m): m is string => typeof m === "string") : [];
-      const purpose = typeof def.purpose === "string" ? def.purpose : "";
-      tiers.set(name, { tier: name, modelIds: ids, purpose });
-    }
-  }
-
-  const fallbackChain = Array.isArray(raw.policies?.fallback_chain)
-    ? raw.policies.fallback_chain.filter((m): m is string => typeof m === "string")
-    : [];
-
-  const gptOnlyFor = Array.isArray(raw.policies?.gpt_only_for)
-    ? raw.policies.gpt_only_for.filter((s): s is string => typeof s === "string")
-    : [];
-
-  const gptNeverFor = Array.isArray(raw.policies?.gpt_never_for)
-    ? raw.policies.gpt_never_for.filter((s): s is string => typeof s === "string")
-    : [];
-
-  return { endpoint, agents, tiers, fallbackChain, gptOnlyFor, gptNeverFor };
-}
-
-/**
- * Resolve the concrete model + endpoint for a named agent.
- * Falls back to the default agent entry (or a hard-coded `bizar/MiniMax-M3`
- * if even the default is missing) so a call always returns something
- * usable. Never throws.
- */
-export function resolveAgentModel(
-  agent: string,
-  reg: ModelRegistry,
-): ResolvedAgentModel {
-  const entry = reg.agents.get(agent)
-    ?? reg.agents.get("mike")
-    ?? { agent: "mike", modelId: "bizar/MiniMax-M3", tier: "default" as const, rationale: "fallback" };
   return {
-    agent: entry.agent,
-    modelId: entry.modelId,
-    tier: entry.tier,
-    endpoint: reg.endpoint,
-    rationale: entry.rationale,
+    version: raw.version,
+    endpoint: endpointOverride ?? raw.endpoint,
+    configuredEndpoint: raw.endpoint,
+    gateway,
+    policies,
+    agents,
+    tiers,
   };
 }
 
-/**
- * Resolve a tier to its primary model ID + the fallback chain. Always
- * returns at least one model ID.
- */
-export function resolveTierModel(tier: BizarTier, reg: ModelRegistry): ResolvedTierModel {
-  const entry = reg.tiers.get(tier);
-  const primary = entry?.modelIds[0] ?? "bizar/MiniMax-M3";
-  const fallback = entry?.modelIds.slice(1) ?? [];
+/** Resolve a known agent. Unknown names are configuration errors, not hints. */
+export function resolveAgentModel(agent: string, registry: ModelRegistry): ResolvedAgentModel {
+  const entry = registry.agents.get(agent);
+  if (!entry) registryError("UNKNOWN_AGENT", `No exact model assignment exists for agent ${agent}.`);
+  return { ...entry, endpoint: registry.endpoint };
+}
+
+/** Resolve a known tier. Strict v2 tiers contain one model and no fallbacks. */
+export function resolveTierModel(tier: BizarTier, registry: ModelRegistry): ResolvedTierModel {
+  const entry = registry.tiers.get(tier);
+  if (!entry) registryError("UNKNOWN_TIER", `No exact model assignment exists for tier ${tier}.`);
   return {
     tier,
-    modelId: primary,
-    fallback,
-    endpoint: reg.endpoint,
-    purpose: entry?.purpose ?? "",
+    modelId: entry.modelIds[0],
+    fallback: [],
+    endpoint: registry.endpoint,
+    purpose: entry.purpose,
   };
 }
 
-/**
- * Return the full agent → model table. Stable order: insertion order from
- * the JSON (preserves whatever order the operator wrote).
- */
-export function listAgentModels(reg: ModelRegistry): AgentModelEntry[] {
-  return Array.from(reg.agents.values());
+export function listAgentModels(registry: ModelRegistry): AgentModelEntry[] {
+  return Array.from(registry.agents.values(), (entry) => ({ ...entry }));
+}
+
+/** Read the effective endpoint without inventing a default registry/model. */
+export function getEndpoint(registry?: ModelRegistry): string {
+  return registry?.endpoint ?? loadModelRegistry().endpoint;
 }
 
 /**
- * Convenience: read the endpoint from the registry / env. Useful in
- * scripts that don't want to load the full registry just for a URL.
+ * Snapshot exact assignments after a successful gateway availability probe.
+ * The returned canonical schemaVersion 1 payload uses the same `model` key and
+ * fingerprint algorithm as the CLI workflow snapshot. Every value is frozen.
  */
-export function getEndpoint(reg?: ModelRegistry): string {
-  if (reg) return reg.endpoint;
-  return process.env.BIZAR_MODEL_ROUTER_URL
-    ?? process.env.ANTHROPIC_BASE_URL
-    ?? "http://localhost:20128/v1";
-}
+export function createRunAssignmentSnapshot({
+  runId,
+  registry,
+  availableModelIds,
+  agentNames,
+  createdAt = new Date().toISOString(),
+}: CreateRunAssignmentSnapshotInput): RunAssignmentSnapshot {
+  if (!nonEmptyString(runId)) registryError("RUN_ID_REQUIRED", "A non-empty runId is required.");
+  if (!availableModelIds || typeof availableModelIds[Symbol.iterator] !== "function") {
+    registryError("GATEWAY_AVAILABILITY_REQUIRED", "Gateway model availability evidence is required.");
+  }
 
-interface ModelRegistryJson {
-  endpoint?: string;
-  tiers?: Partial<Record<BizarTier, { models?: string[]; purpose?: string }>>;
-  agents?: Record<string, { model?: string; tier?: string; rationale?: string }>;
-  policies?: {
-    fallback_chain?: string[];
-    gpt_only_for?: string[];
-    gpt_never_for?: string[];
-    [k: string]: unknown;
+  const available = new Set(availableModelIds);
+  if (available.size === 0) {
+    registryError("GATEWAY_AVAILABILITY_REQUIRED", "The configured gateway returned no available models.");
+  }
+  const requested = agentNames === undefined ? Array.from(registry.agents.keys()) : Array.from(agentNames);
+  if (requested.length === 0) registryError("UNKNOWN_AGENT", "At least one agent assignment is required.");
+  if (new Set(requested).size !== requested.length) {
+    registryError("DUPLICATE_AGENT_ASSIGNMENT", "Each agent may appear only once in a run snapshot.");
+  }
+
+  const assignments: Record<string, { model: string; tier: BizarTier; rationale: string }> = {};
+  for (const agent of requested) {
+    const resolved = resolveAgentModel(agent, registry);
+    if (!available.has(resolved.modelId)) {
+      registryError(
+        "REQUESTED_MODEL_UNAVAILABLE",
+        `Configured model ${resolved.modelId} for agent ${agent} is unavailable; refusing silent fallback.`,
+      );
+    }
+    assignments[agent] = {
+      model: resolved.modelId,
+      tier: resolved.tier,
+      rationale: resolved.rationale,
+    };
+  }
+
+  const payload = {
+    schemaVersion: 1 as const,
+    runId,
+    createdAt,
+    routerVersion: registry.version,
+    gatewayEndpoint: registry.endpoint,
+    availabilityProbe: registry.gateway.availabilityProbe,
+    assignments,
   };
+  const fingerprint = createHash("sha256").update(stableJson(payload)).digest("hex");
+  return deepFreeze({ ...payload, fingerprint });
+}
+
+export function verifyRunAssignmentSnapshot(snapshot: RunAssignmentSnapshot): boolean {
+  if (!snapshot || !nonEmptyString(snapshot.fingerprint)) return false;
+  const { fingerprint, ...payload } = snapshot;
+  const expected = createHash("sha256").update(stableJson(payload)).digest("hex");
+  return fingerprint === expected;
 }

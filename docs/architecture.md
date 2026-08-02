@@ -11,6 +11,53 @@ Claude Code is the host. Native Agent, Skill, command, permission, and hook surf
 3. **Integration:** `.claude/settings.json` launches the SDK's stdio MCP server directly.
 4. **Operations:** `cli`, `scripts`, `.harness`, and `templates` install, validate, audit, back up, and verify the harness.
 
+## Plugin and hook boundary
+
+`.claude-plugin/plugin.json` describes Bizar's distributable Claude Code
+surface: agents, skills, commands, hooks, and the retained stdio MCP server.
+Project-local `.claude/` configuration remains the contributor surface, while
+the installer materializes an immutable versioned bundle for user-wide use.
+
+All lifecycle entries invoke the stable `bizar hook <event>` dispatcher rather
+than reaching through checkout-relative paths. The dispatcher reads one Claude
+Code event object from stdin, resolves the active installed bundle, calls the
+event implementation, and emits schema-valid JSON. Project and plugin wiring
+are verified as equivalent, and simultaneous activation must not execute a
+logical hook twice.
+
+Hook code is finite and deterministic. It uses exit status `2` only for an
+intentional block, never starts a daemon, and does not convert transcript,
+tool, or web content into executable instructions.
+
+## Durable workflows and autopilot
+
+The workflow registry permits one primary durable mode for a real project path
+and Claude session. `/autopilot` advances through a closed lifecycle:
+
+```text
+research/specification -> consensus plan -> implementation waves
+  -> QA/fix -> multi-perspective validation -> complete
+```
+
+An active phase can become blocked, failed, or cancelled. Resume continues the
+recorded phase; QA and validation can return bounded fixes to implementation.
+Iteration, repeated-failure, QA, and validation ceilings prevent an unbounded
+Stop-hook loop.
+
+State is bounded operational metadata: schema/run/session identifiers,
+workspace identity, objective digest, phase and revision, resolved routing,
+task/claim references, attempt counters, and evidence references. Writes use
+session/project ownership checks, symlink rejection, atomic replacement, and
+compare-before-write revisions so duplicate hooks cannot advance twice.
+Completion requires an explicit revision-bound transition after fresh
+verification; assistant prose and stale transcript records are not evidence.
+
+`UserPromptSubmit` selects explicit workflow triggers, `SessionStart` restores
+active context, `SubagentStart`/`SubagentStop` bind and verify task claims,
+`PostToolUseFailure` records bounded failure signatures, `PreCompact`
+checkpoints, and `Stop` requests only the next valid action. Cancellation is
+always available and never performs Git or publication mutations.
+
 ## OpenKan control boundary
 
 Bizar does not embed a web server or dashboard. The `bizar control` CLI is the
@@ -76,6 +123,20 @@ delegation through the custom `mike` agent. Mike routes trivial work to
 review, and verification pipeline. Specialized worker matches supplement this
 route but never replace it.
 
+Mike is the sole general orchestrator and is pinned to `cx/gpt-5.6-sol`.
+Workers do not redesign or recursively own the pipeline: they execute bounded
+research, planning, implementation, review, and verification assignments.
+Their models come from one strict role/difficulty registry: GPT Terra for
+high-complexity engineering and adversarial review, GPT Luna for design and
+medium synthesis, MiniMax M3 for general research and implementation, M2.7 for
+mechanical execution/test repair, and M2.5 for trivial coordination work.
+
+Each workflow stores an immutable snapshot of the resolved agent/model matrix
+before dispatch. Gateway model discovery must confirm every selected ID;
+unavailable or externally overridden models are reported as routing blockers,
+not silently replaced. The `cx/*` and `bizar/*` IDs are compatibility-gateway
+contracts rather than Anthropic-supported non-Claude routing.
+
 Every `SubagentStart` receives a grounding contract: external APIs, libraries,
 frameworks, CLIs, configuration formats, and version-sensitive behavior require
 `WebSearch` for current official documentation followed by `WebFetch` of the
@@ -86,6 +147,12 @@ architecture rule fail if either property drifts.
 ## Operational records
 
 Session lifecycle hooks write a bounded handoff and structured session record. Learning hooks maintain compact instinct and decision JSONL records. These files support continuation and routing only; there is no note CRUD, vault indexing, semantic search, or knowledge-base tool family.
+
+Workflow and task records do not change that boundary. Bizar has no general
+memory/note-vault subsystem, no persistent Claude daemon, and no automatic
+commit, push, pull-request, release, package-publication, deployment, public
+exposure, or irreversible-destruction path. Those mutations remain protected
+by the human-approval hooks even while autopilot is active.
 
 ## No embedded local web surface
 

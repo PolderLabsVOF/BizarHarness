@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "bizar-harness",
+  "displayName": "Bizar Harness",
+  "version": "10.12.0",
+  "description": "Guarded multi-agent workflows for Claude Code with a single orchestrator, durable workflow state, and explicit human approval boundaries.",
+  "author": {
+    "name": "Polderlabs"
+  },
+  "homepage": "https://github.com/DrB0rk/BizarHarness#readme",
+  "repository": "https://github.com/DrB0rk/BizarHarness",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "multi-agent",
+    "orchestration",
+    "autopilot",
+    "guarded-autonomy"
+  ],
+  "skills": "./config/skills/",
+  "commands": "./.claude/commands/",
+  "agents": [
+    "./.claude/agents/brand-designer.md",
+    "./.claude/agents/debug-specialist.md",
+    "./.claude/agents/exec-assistant.md",
+    "./.claude/agents/help-desk.md",
+    "./.claude/agents/it-lead.md",
+    "./.claude/agents/knowledge-manager.md",
+    "./.claude/agents/office-coordinator.md",
+    "./.claude/agents/office-greeter.md",
+    "./.claude/agents/office-manager.md",
+    "./.claude/agents/planner.md",
+    "./.claude/agents/principal-engineer.md",
+    "./.claude/agents/qa-reviewer.md",
+    "./.claude/agents/research-analyst.md",
+    "./.claude/agents/senior-engineer.md",
+    "./.claude/agents/support-tech.md",
+    "./.claude/agents/ui-designer.md"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

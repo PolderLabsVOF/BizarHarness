@@ -68,10 +68,12 @@ before starting a task.
 curl -sS http://localhost:20128/api/health
 ```
 
-If the response is not `{"ok":true}`, ask the user whether 9Router is running
-or whether `NINEROUTER_URL` should be re-pointed. Do NOT fall back to a
-non-routed provider silently — the whole point of 9Router is auto-fallback +
-single key rotation + observability.
+If the response is not `{"ok":true}`, record the failure (stderr note or
+`.bizar/9router-health.json`). Continue only through a fallback that the
+current project or session explicitly configured. Never infer, invent, or
+silently substitute a non-routed provider. If no explicit fallback exists,
+stop the affected capability and report 9Router's unavailability as a
+blocker rather than guess-and-try.
 
 ## Errors
 

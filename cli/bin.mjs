@@ -117,6 +117,8 @@ function showHelp() {
     claim <subcommand>     GitHub-style claim protocol over feature_list.json
     task <subcommand>      Durable dependency/worktree/path task coordination
     control <subcommand>   Machine-readable agents/tasks/sessions/messages API
+    workflow <subcommand>  Session-bound autopilot workflow state
+    hook <name>            Run a portable Claude Code hook
 
   Examples:
     bizar install
@@ -425,6 +427,35 @@ async function main() {
         console.error(chalk.red(`  ✗ Usage: bizar model <subcommand> — run 'bizar model --help'`));
         process.exit(EXIT_USAGE);
       }
+      break;
+    }
+
+    case 'workflow': {
+      const mod = await importCommand('workflow');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load workflow command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'workflow');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar workflow <subcommand> — run 'bizar workflow --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
+    case 'hook': {
+      const mod = await importCommand('hook');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load hook command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'hook');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) process.exit(EXIT_USAGE);
       break;
     }
 

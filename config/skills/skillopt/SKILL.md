@@ -1,6 +1,6 @@
 ---
 name: skillopt
-description: Microsoft's SkillOpt trains skill files via rollouts + reflection against a frozen target model. Install with `pip install skillopt` and produce a `best_skill.md`. Always human-review.
+description: Microsoft's SkillOpt trains skill files via rollouts + reflection against a frozen target model. Prepares narrow tweaks for approval; gates structural rewrites.
 ---
 
 # SkillOpt Workflow
@@ -11,7 +11,7 @@ SkillOpt (microsoft/SkillOpt, MIT-licensed) is a Microsoft Research Python tool 
 
 It is *not* a general prompt editor and *not* a free-form rewriting tool. It is a closed-loop optimizer: it changes the skill text, runs the agent under the new skill against the benchmark, measures reward, and keeps mutations that improve the score.
 
-**Core Principle:** SkillOpt trains a skill file the way you'd fine-tune a model — with a held-out validation gate, a frozen target, and a reward signal — not by hand-tweaking prose. Don't commit the output without human review; treat `best_skill.md` as a candidate, not a verdict.
+**Core Principle:** SkillOpt trains a skill file the way you'd fine-tune a model — with a held-out validation gate, a frozen target, and a reward signal — not by hand-tweaking prose. Treat `best_skill.md` as a candidate. Autonomous mode (default): prepare and stage narrow tweaks (<50 lines, no new tool/skill surface) for review. Gated mode: queue structural rewrites for next-session review. Both modes route any commit through the approval-gated `commit-staged` workflow.
 
 ## When to Use
 
@@ -34,7 +34,7 @@ Skill quality question?
 - **No benchmark, no reward, no frozen target.** SkillOpt needs all three. If any is missing, the loop has nothing to optimize against — you'll burn compute on something you can't evaluate. Compose the benchmark first or skip SkillOpt entirely.
 - **For a one-off skill polish.** SkillOpt is a multi-rollout loop with token cost on the order of dozens to hundreds of completions. For "rewrite this paragraph to be clearer," edit the skill by hand. Reach for SkillOpt when you have evidence the skill underperforms and a way to measure the fix.
 - **On a non-frozen target model.** If the target model is updating daily, the rollout scores are non-reproducible and the held-out gate stops meaning anything. Pin the model version and don't retrain against a moving target.
-- **Without human review of `best_skill.md`.** SkillOpt optimizes the reward signal — that is not the same as "is this skill correct, well-bounded, and aligned with what we want the agent to do." A skill that scores higher on the rubric can still be narrower, more brittle, or subtly off-vibe. Always review before committing.
+- **Without the correct mode tag.** Tag narrow tweaks as `autonomous` (prepare and stage for review) and structural rewrites as `gated` (queue for session review). Default is `autonomous` for changes under 50 lines with no new tool/skill surface. Neither tag authorizes a commit; all commits require the normal approval gate.
 
 ## The 6-Phase Loop
 
@@ -106,13 +106,13 @@ diff config/skills/thinking-some-skill/SKILL.md skillopt-out/best_skill.md
 cp skillopt-out/best_skill.md config/skills/thinking-some-skill/SKILL.md
 ```
 
-We do **not** vendor SkillOpt into the Bizar JS harness — the tool lives in Python (`pip install skillopt`), runs offline, and writes a markdown artifact. The Bizar loop is: write draft → run SkillOpt → human review `best_skill.md` → commit if better.
+The Bizar loop is: write draft — run SkillOpt — tag mode — (autonomous: prepare and stage for review | gated: queue for next session). If an autonomous candidate passes review, route the staged diff through `commit-staged`; the mode tag never grants commit authority. Mis-tagged structural rewrites surface in the next session summary for human review.
 
 ## Pitfalls
 
 - **Don't retrain daily.** The target model is frozen for a reason; if your benchmark doesn't drift, the skill shouldn't either. Bumping SkillOpt runs on every PR turns the skill into a moving target the agent can't build a stable intuition against.
 - **Don't bypass the held-out gate.** It's tempting to "peek" at validation items to bias the mutation — that converts the loop into a curve-fit on a small set and the held-out number stops meaning anything. Hold-out integrity is the whole point.
-- **Never auto-commit `best_skill.md`.** It is a *candidate*. The reward signal optimizes task success; it does not optimize for tone, scope, or alignment with sibling skills in the same family. A/B test in shadow, then promote deliberately.
+- **Never tag structural rewrites as `autonomous`.** If the diff adds new tools, new triggers, new permissions, or exceeds 50 lines, tag `gated` and queue for review. Autonomous is only for preparing and staging narrow, text-bounded skill polishing; it does not bypass commit approval.
 - **Don't use SkillOpt on skills you don't have a benchmark for.** If the input space and reward are unknown, you're optimizing prose against nothing and will learn something — just not something useful.
 - **Don't optimize `thinking-*` skills together as one bundle.** They share front-matter shape but address different problem types; co-optimizing entangles their effects and makes individual improvements hard to attribute.
 
@@ -123,7 +123,7 @@ We do **not** vendor SkillOpt into the Bizar JS harness — the tool lives in Py
 | What skills ship | `config/skills/<name>/SKILL.md` (canonical, provisioned) |
 | Provision to user | `cli/provision.mjs:syncConfigExtras` + `writeBizarSkillLock` |
 | Skill discovery at runtime | `~/.claude/skills/<name>/SKILL.md` (provisioned mirror) |
-| Offline quality loop | SkillOpt (this skill) — run on a draft, produce `best_skill.md`, human-promote |
+| Offline quality loop | SkillOpt (this skill) — run on a draft, produce `best_skill.md`, tag mode (autonomous: prepare/stage for approval | gated: queue for review) |
 | Editing prose by hand | You + your editor — fine for one-off tweaks, don't loop it |
 
 SkillOpt is a **research-quality tool** for the rare case where you have the benchmark, the reward, and the time. For 90% of skill edits, just write it well.

@@ -511,15 +511,40 @@
       "id": "F-121",
       "behavior": "Fix broken UserPromptSubmit hook imports so they resolve regardless of install path",
       "verification": "node --test .claude/hooks/__tests__/control-inbox.test.mjs .claude/hooks/__tests__/worker-suggest.test.mjs; make check",
-      "state": "active",
+      "state": "passing",
+      "evidence": "2026-07-30 hook-import fix: control-inbox.mjs and worker-suggest.mjs replace ../../cli/*.mjs with import.meta.url + dirname + dynamic import(); regression tests spawn hook binary and assert ERR_MODULE_NOT_FOUND absent from stderr; targeted tests pass 6/6.",
+      "commit": "5fc7f69",
       "layer": "core",
       "category": "hooks",
-      "created": "2026-07-30"
+      "created": "2026-07-30",
+      "passed": "2026-07-30"
+    },
+    {
+      "id": "F-128",
+      "behavior": "Reduce agent permission friction and enable parallel subagent dispatch by default",
+      "verification": "make check-arch; make check; targeted test for mirror and scope behavior",
+      "state": "not_started",
+      "layer": "core",
+      "category": "harness",
+      "created": "2026-07-31",
+      "commit": null,
+      "evidence": "Uncommitted F-128 edits were preserved and folded into the active F-129 overhaul after release cancellation; this feature must not claim passing until a future approval-gated commit contains the behavior."
+    },
+    {
+      "id": "F-129",
+      "behavior": "Adopt an OMC-informed orchestration architecture with one GPT-5.6 Sol office manager, skill-based GPT/MiniMax worker routing, durable workflow modes, and full /autopilot lifecycle support.",
+      "verification": "workflow state and hook tests; agent/model routing tests; skill mirror checks; make verify-removed-surfaces; make verify-repo-structure; make check-arch; make test; make e2e; make clean-check; make check",
+      "state": "active",
+      "layer": "core",
+      "category": "orchestration",
+      "created": "2026-08-02",
+      "commit": null,
+      "evidence": "2026-08-02 OMC-informed overhaul implemented locally against pinned upstream commit 41a4c0f77144c5beb5f5f000a89cff379c680606. Independent final audit APPROVED; focused custom-router/model suite 41/41 and SDK registry/parity suite 8/8; full SDK 297/297 and Node 387/387; make e2e 13/13; make clean-check 5/5; make check, verify-removed-surfaces, verify-repo-structure, and check-arch passed; plugin validation passed; npm dry-run package contains 296 files and no backup/temp files. Feature remains active with commit:null until the now-authorized implementation commit exists; push and npm publication are explicitly authorized, while no GitHub release or tag was requested."
     }
   ],
   "vcr": {
-    "passing": 42,
-    "activated": 42,
-    "ratio": 1
+    "passing": 43,
+    "activated": 44,
+    "ratio": 0.9773
   }
 }

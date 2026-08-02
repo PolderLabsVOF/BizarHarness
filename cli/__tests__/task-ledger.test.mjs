@@ -200,7 +200,7 @@ describe('durable task DAG', () => {
     }).reason, 'SCOPE_OWNED');
   });
 
-  test('expired and non-active worktrees cannot continue editing', () => {
+  test('expired leases return tasks to pending; requireTask still gates edits', () => {
     const { root, ledger, advance } = fixture();
     const main = join(root, 'main');
     const isolated = join(root, 'isolated');
@@ -223,11 +223,14 @@ describe('durable task DAG', () => {
     }).reason, 'LEASE_EXPIRED');
 
     ledger.sweepExpiredLeases();
+    // After sweep the task is back to `pending`. Falling through to the
+    // reserved-scope check (requireTask=true, no scope-owner) yields
+    // TASK_REQUIRED — the workspace needs a fresh active claim to edit.
     assert.equal(ledger.authorizeEdit({
       cwd: isolated,
       filePath: join(isolated, 'src', 'index.ts'),
       requireTask: true,
-    }).reason, 'TASK_NOT_EDITABLE');
+    }).reason, 'TASK_REQUIRED');
   });
 
   test('linked worktree edits require a task and completed scopes stay reserved', () => {

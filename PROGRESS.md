@@ -3,6 +3,248 @@
 > Canonical current-work record. Update before and after implementation.
 
 
+## In Progress — F-129 OMC-Informed Workflow Overhaul
+
+**Objective:** Research `yeachan-heo/oh-my-claudecode` at a pinned revision and
+adapt its strongest orchestration patterns into Bizar: a single GPT-5.6 Sol
+office manager, skill-based model routing across GPT and MiniMax workers,
+durable mutually-exclusive workflow modes, and `/autopilot` with planning,
+parallel execution, QA, validation, resume, and cancellation.
+
+**Release cancellation:** The proposed v10.12.0 release was cancelled before
+any commit, push, tag, GitHub release, npm publication, or deployment. Local
+F-128 review fixes remain intentionally preserved in the working tree.
+
+**Publication authorization (2026-08-02):** The user has now explicitly
+authorized committing the completed F-129 scope, pushing it to the configured
+GitHub remote, and publishing the npm package. Prepare v10.12.0 because
+v10.11.0 is already the npm `latest`; retain the completed gate evidence,
+exclude user-owned untracked files, and do not create a GitHub release or tag
+unless separately requested.
+
+**Publication preparation:** Root package, SDK package, SDK version constant,
+and changelog are synchronized at v10.12.0. npm authentication is active as
+`drb0rk`; GitHub CLI/SSH authentication is active as `DrB0rk`; local `master`
+and `origin/master` were even before staging. Fresh version/package and full
+verification gates are required before commit, push, and npm publication.
+
+**Staged simplify review:** The first complete staged-tree review found one
+remaining version surface: the Claude Code plugin manifest was still 10.11.0.
+Synchronize it to 10.12.0 and extend the repository version-parity verifier to
+cover the manifest. Also reconcile historical cancellation wording with the
+newer explicit publication authorization before repeating the staged review.
+
+**Simplify repair complete:** The plugin manifest is now 10.12.0 and the
+executable repository-structure gate verifies root, SDK package, SDK constant,
+and plugin-manifest version parity. Historical cancellation and audit text now
+clearly precedes and is superseded by the user's newer publication approval.
+
+**Pre-change evidence:** `master` and `origin/master` both resolve to `0118da3`.
+The upstream research clone is `/tmp/oh-my-claudecode-research` at
+`41a4c0f77144c5beb5f5f000a89cff379c680606`. Current Bizar already has a phased
+Mike pipeline and model router, but no first-class autopilot/ralph/QA mode
+registry, persistent stop-loop controller, or plugin manifest equivalent.
+
+**Constraints:** Preserve the retired Bizar memory/note-vault boundary; do not
+copy upstream memory/wiki subsystems. Preserve approval gates for external and
+irreversible actions. Treat upstream as research input, reimplement only the
+necessary behavior, record license/provenance, and keep OpenKan at the existing
+`bizar control` boundary.
+
+**Plan:**
+1. Complete official Claude Code/plugin documentation research and a pinned
+   upstream feature inventory.
+2. Write the adoption/gap document and an audited architecture plan.
+3. Make Mike the sole GPT-5.6 Sol orchestrator and define explicit skill-based
+   GPT/MiniMax worker tiers.
+4. Add the plugin/skill/command/hook workflow surface, including durable mode
+   state, keyword routing, `/autopilot`, resume, cancel, and verification loops.
+5. Add regression and E2E coverage, synchronize mirrors/docs, and run every
+   applicable repository gate.
+
+**Research complete (2026-08-02):** Upstream `v4.15.7` is MIT-licensed and
+was inspected at the pinned commit above. Adopt: role/complexity separation,
+frozen per-run routing, explicit phase handoffs, session/project-bound atomic
+state, sanitized keyword detection, bounded verify/fix loops, and portable
+hook dispatch. Adapt: autopilot becomes `research/spec → consensus plan →
+implementation waves → QA/fix → multi-perspective validation`, using Bizar's
+native Agent/task/worktree primitives. Reject: memory/wiki/notepad services,
+tmux or daemon transports, automatic commits/merges, permissive mutation
+approval, and duplicated generated shipping trees.
+
+**Audited implementation shape:** Build the compare-before-write workflow core
+first. Then use disjoint parallel lanes for (A) hook/installer portability and
+persistent mode, (B) skills/commands/plugin metadata, (C) the canonical
+agent/model registry with Mike pinned to Sol, and (D) provenance/architecture
+documentation. Stop hooks never infer success from stale transcript text: the
+active agent records an explicit revision-bound transition after fresh evidence.
+External model IDs are valid only through the configured compatible gateway;
+missing requested models are reported instead of silently substituted.
+
+**Stop condition:** The research document names adopted/adapted/rejected OMC
+features; `/autopilot` can start, persist, resume, validate, complete, and
+cancel without bypassing approval policy; one Sol orchestrator delegates to
+tiered GPT/MiniMax agents; all full repository gates pass; no release mutation
+has occurred.
+
+**Implementation and verification complete locally (2026-08-02):**
+- Added strict session/project-bound workflow state and `bizar workflow`
+  start/status/advance/fail/resume/cancel commands with hashed goal/evidence,
+  descriptor integrity, atomic compare-before-write revisions, fixed profiles,
+  and bounded QA/validation retries.
+- Added `/autopilot` and companion workflow skills/commands, native plugin and
+  hook manifests, sanitized explicit command routing, persistent Stop handling,
+  and a package-relative `bizar hook` dispatcher that preserves tool/agent
+  matcher scopes.
+- Reconciled installer-owned hooks without deleting foreign hooks and upgraded
+  stale Bizar-owned model routers while preserving unrecognized user routers.
+- Pinned Mike to `cx/gpt-5.6-sol`; split role selection from complexity/model
+  tiers; assigned all 16 agents across GPT 5.6 and MiniMax models; removed SDK
+  fallback behavior and added strict immutable run snapshots.
+- Added `docs/oh-my-claudecode-adoption-2026-08-02.md`, architecture/changelog
+  updates, plugin packaging rules, and focused regression coverage.
+
+**Fresh focused evidence:** final custom-router/model regression suite 41/41;
+SDK registry/parity suite 8/8; independent adversarial review approved the
+inference-endpoint and snapshot-parity repairs. Full gates: SDK 297/297; Node
+387/387; removed-surface and repository/package boundaries passed;
+architecture 5/5 plus 40/40 skill checks; `make e2e` 13/13;
+`make clean-check` 5/5; final `make check` passed. Plugin validation passed
+with its expected root-`CLAUDE.md` context warning, and npm dry-run packaging
+contains 296 files with no backup or temporary files.
+
+**Post-implementation audit repair (2026-08-02):** The first green run exposed
+integration gaps that require repair before completion: strict model snapshots
+were not yet wired into workflow starts; plugin hooks assumed a global `bizar`
+binary; curl-pipe installation still assumed a checkout; project permissions
+could fail open for hard-approval commands; command-to-skill indirection
+conflicted with `disable-model-invocation`; SubagentStop had no deliverable
+verification; and workflow state did not reject symlinked ancestors. Repair
+lanes are active with new packed/plugin/curl/bypass/path regressions.
+
+**Current local state:** Implementation, adversarial review, and all required
+runtime gates are complete. F-129 remains `active` with `commit: null` because
+commit creation is a hard human-approval boundary. The earlier cancellation
+kept this state truthful until the newer explicit commit/push/npm authorization
+recorded above. `make vcr` therefore remains 43/44 (0.977) until the real
+implementation commit can be recorded; all behavior/build/test/E2E/clean-state
+gates pass. No commit, push, tag, release, npm publication, deployment, or
+public mutation had occurred at this checkpoint.
+
+**First final-audit repair scope (2026-08-02):** Enforce the immutable workflow
+model snapshot at each Claude Code `Agent` dispatch; make the
+simplify-before-commit hook parse Git global options such as `-C` and
+`--git-dir`; and require concrete, verifiable SubagentStop evidence rather than
+generic completion prose. These repairs were completed and regression-tested;
+release and publication remain cancelled.
+
+**Second adversarial audit (2026-08-02):** The first final-repair pass and all
+repository gates were green, but direct bypass probes found five remaining
+contract gaps: ordinary (non-autopilot) Agent dispatch still honored model
+overrides; quoted Git executables and additional valid global options bypassed
+commit approval/simplify; SubagentStop accepted uncorroborated prose; installed
+settings omitted two gateway-discovery variables; and the package boundary did
+not exclude a local `.bak` file. These are now the only active repair scope.
+The local backup file must remain untouched; packaging must exclude it.
+
+**Third adversarial audit (2026-08-02):** The named bypasses above are closed,
+but fail-closed review found three deeper cases: dynamically constructed shell
+executables could still conceal Git mutations; transcript verification could
+precede a later edit; and ordinary Bizar dispatch did not prove live gateway
+availability or fail closed if a safety hook crashed. Final repair must deny
+indirect guarded Git actions, require verification after the last mutation,
+validate ordinary-agent availability, and convert safety-hook failures into a
+blocking decision. No publication work is in scope.
+
+**Fourth adversarial audit (2026-08-02):** The third repair passed its focused
+and full test gates, but active workflow dispatch still reloaded the canonical
+model-router gateway instead of the custom gateway whose exact assignments had
+been frozen at workflow start. The final bounded repair is to fingerprint the
+snapshot's availability-probe contract and make the Agent guard validate the
+assigned model against that frozen endpoint/probe. A cross-process regression
+must prove that no injected registry is needed and that the canonical gateway
+is never consulted for an active custom-router run.
+
+**Fourth audit repair complete (2026-08-02):** CLI and SDK run-assignment
+snapshots now fingerprint both the effective gateway endpoint and availability
+probe. Workflow-state validation rejects missing or malformed frozen probe
+coordinates. Active Agent dispatch reads assignments and live-probe coordinates
+only from the persisted immutable snapshot; ordinary dispatch continues to use
+the canonical router. A cross-process-style regression starts with a custom
+router, invokes the guard later without an injected registry, proves only the
+custom probe URL is called, allows the exact reported model, and denies it when
+absent. Fresh evidence: focused Node tests 33/33, SDK registry tests 7/7,
+`make check` passed, and `git diff --check` passed.
+
+**Fifth audit repair complete (2026-08-02):** Active Bizar Agent dispatch now
+fails closed unless `ANTHROPIC_BASE_URL` matches the workflow snapshot's frozen
+gateway endpoint; a nonempty contradictory `BIZAR_MODEL_ROUTER_URL` also
+denies. Comparison removes trailing slashes only, and endpoint failures happen
+before the frozen availability URL is probed. `bizar workflow start` enforces
+the same effective-inference contract before probing or writing state. CLI and
+SDK schemaVersion 1 assignment snapshots now share the canonical `model` key,
+payload shape, stable serialization, and fingerprint algorithm. Direct parity
+coverage deep-compares snapshots created from identical inputs. Fresh evidence:
+focused Node tests 34/34, SDK registry tests 8/8, `npm run build:sdk` and
+`make check` passed, no stale SDK `modelId` snapshot consumers remain, and
+`git diff --check` passed.
+
+**Fifth adversarial audit finding (2026-08-02; repaired above):** The frozen
+probe contract was enforced, but two compatibility gaps remained before final
+verification. The Agent guard did not yet prove Claude Code's effective
+inference endpoint matched the frozen gateway, and the CLI/SDK schema-version-1
+snapshots used different assignment field names and fingerprints. The repair
+closed both gaps with fail-closed endpoint checks and direct snapshot parity
+regressions.
+
+**Final verification (2026-08-02):** The fifth repair received an independent
+`APPROVED` verdict with direct missing/mismatched/matching endpoint probes and
+deep-equal CLI/SDK snapshot fingerprints. Every required gate passed in order:
+`make check`, `make verify-removed-surfaces`, `make verify-repo-structure`,
+`make check-arch`, `make test`, `make e2e`, `make clean-check`, and a final
+`make check`. `git diff --check` is clean. The only intentionally incomplete
+state is the approval-gated commit; therefore F-129 remains active and VCR
+remains 43/44 rather than misrepresenting uncommitted work as passing.
+
+
+## Superseded by F-129 — F-128 Reduce Agent Permission Friction + Parallelism
+
+**Commit (planned, atomic):** F-128 ships the autonomy + parallelism policy in one commit covering `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `cli/task-ledger.mjs`, `cli/__tests__/task-ledger.test.mjs`, `scripts/bh-full-e2e.mjs`, `.claude/agents/planner.md`, `.claude/agents/office-greeter.md`, `config/skills/9router/SKILL.md`, `config/skills/self-improvement/SKILL.md`, `config/skills/skillopt/SKILL.md`, `packages/sdk/src/version.ts`, `packages/sdk/package.json`, `feature_list.json`, `PROGRESS.md`. Mirror regen via `make mirror-claude-md` and skill sync via `make sync-skills-mirror`.
+
+**After (F-128):** `AGENTS.md` adds `## Autonomy and parallelism` section (routine decisions autonomous; parallel dispatch for disjoint scopes; hard approval list = commits, pushes, PRs, releases, deploys, prod writes, creds, public exposure, irreversible destruction). Mirrors reflect this in `CLAUDE.md` and `.claude/CLAUDE.md`. `planner.md` drops default one-question policy; `office-greeter.md` only fires on genuinely unresolvable ambiguity. 9router, self-improvement, and skillopt skills no longer pause for routine failures. `pretooluse-bash.mjs` already lacked a `../..` heuristic — no change needed there. Path-ownership guard fix: `cli/task-ledger.mjs` `authorizeEdit` now treats only `active`-state tasks as the `current` workspace match (fall-through for completed/cancelled), so completed tasks can no longer block edits. E2E human-approval check rewritten to verify the explicit mutation allow-list under `acceptEdits` rather than the obsolete `ask` list.
+
+**Objective:** Stop the agents from repeatedly asking the user for routine decisions. Keep hard safety gates (commits, pushes, releases, deploys, credentials, rebase, force-push, secrets, destructive system ops). Where work has 2+ independent sub-tasks, fan out in parallel via the Agent tool — no sequential single-agent execution.
+
+**Implementation plan:**
+1. Update `AGENTS.md` baseline with two explicit policies: routine decisions are autonomous; independent disjoint work fans out in parallel. ✅ done.
+2. Mirror to `CLAUDE.md` and `.claude/CLAUDE.md`. ✅ done via `make mirror-claude-md`.
+3. Tighten `planner.md` (no default "one early question" policy — resolve from evidence or pick a reversible default). ✅ done.
+4. Narrow `office-greeter.md` (Janet) invocation to decisions that cannot be derived from repository evidence or a safe default. ✅ done.
+5. Add an explicit autonomous-decision + parallel-fan-out rule to the implementation-agent baseline (covered via AGENTS.md cross-reference and skill updates). ✅ done.
+6. Downgrade the `../..` traversal `ask` heuristic in `pretooluse-bash.mjs` to allow (or remove). — N/A; heuristic did not exist.
+7. Add targeted regression tests for the mirror and the bash hook downgrade. — path-ownership guard updated; `expired leases return tasks to pending; requireTask still gates edits` test reflects the new fall-through semantics; 13/13 task-ledger tests pass.
+8. Run `make check-arch`, `make check`, and the targeted tests. ✅ all green: 5/5 arch, 13/13 e2e, 318/318 non-model unit tests, 13/13 task-ledger unit tests, 6/6 model tests.
+9. Update `feature_list.json`: F-128 → `passing`; bump VCR. ✅ done.
+10. Commit via Steve (atomic single commit) + push.
+
+**Pre-conditions:** F-122 closed; F-121 promoted to `passing` in `feature_list.json` (was incorrectly still `active`); VCR 42 passing prior to F-128.
+
+**Status:** Local edits are preserved and incorporated into F-129. F-128 is
+truthfully returned to `not_started` because it never received a commit and
+therefore cannot satisfy the feature ledger's `passing` contract. Release
+review restored a hard simplify-before-commit decision for missing or stale
+markers while retaining the 30-minute freshness window needed by repeated hook
+evaluation. Repository verification now accepts both npm 11's array-shaped and
+npm 12's keyed-object `npm pack --json` manifests. Fresh targeted coverage is
+29/29; `make check-arch` is 5/5 and `make check` passes.
+
+**Stop condition:** Modified agents and skills produce no new "ask the user" mid-task pauses for routine decisions; targeted tests pass; `make check-arch` and `make check` pass. ✅ met.
+
+**Known issues (out of F-128 scope):**
+- `scopeContains('**', path)` returns false for any non-empty path; `scopeContains('.md', path)` does not implement glob — the matcher is plain string-equality. F-128 worked around by using directory globs `dir/**` and explicit file names. Filed as follow-up.
+- `cli/__tests__/model.test.mjs` "exits 1 on network error" leaves the spawned `bizar model list` subprocess pending; node test runner gets SIGINT during teardown. All 6 model tests pass; the `make test` runner does not exit cleanly because of this orphaned child. Pre-existing — fix in F-129 candidate.
+- SDK version drift: SDK `10.10.1` vs root `10.11.0` (from F-122 bump that didn't propagate). Fixed in F-128 to `10.11.0`/`10.11.0`.
+
 ## Complete — F-122 Installer-Driven Gateway Model Discovery
 
 **Objective:** Enable gateway model discovery at install time and add a `bizar model list` CLI that surfaces all 9Router model IDs including non-Claude-prefixed ones.

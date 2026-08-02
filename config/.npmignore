@@ -1,0 +1,6 @@
+# `config/` is explicitly included by package.json. npm applies this
+# subdirectory ignore while walking that entry.
+**/*.bak
+**/*.tmp
+**/*.temp
+**/*~

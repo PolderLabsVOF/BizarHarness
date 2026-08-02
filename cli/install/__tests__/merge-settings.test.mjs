@@ -1,184 +1,129 @@
-/**
- * cli/install/__tests__/merge-settings.test.mjs
- *
- * Tests that writeClaudeSettings() correctly:
- * 1. Writes minimal settings with the four gateway-discovery env vars when
- *    no existing ~/.claude/settings.json is present.
- * 2. Preserves all existing top-level fields (permissions, hooks, mcpServers,
- *    attribution, worktree, enableWorkflows) when merging.
- * 3. Adds the four gateway-discovery env vars without removing any existing
- *    ANTHROPIC_DEFAULT_*_MODEL entries the user already has.
- */
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { describe, it } from 'node:test';
 
-const TEMP_CLAUDE_DIR = join(process.env.TMPDIR || '/tmp', `bizar-test-claude-${Date.now()}`);
+const REPO_ROOT = resolve(import.meta.dirname, '../../..');
+const GATEWAY_KEYS = [
+  'ANTHROPIC_BASE_URL',
+  'BIZAR_MODEL_ROUTER_URL',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',
+];
 
-function runProvisionInline(claudeDir, existingSettings = null) {
-  // Mirror the readJsonSafe / ensureDir / writeFileSync logic inline
-  // so we can test the actual writeClaudeSettings merge behaviour.
-  const settingsFile = join(claudeDir, 'settings.json');
-  const existing = existingSettings !== null
-    ? existingSettings
-    : (existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, 'utf8')) : {});
-
-  const BIZAR_HOME = process.env.BIZAR_HOME || join(process.env.HOME || '/home/test', '.config/bizar');
-
-  const hook = (name) => ({
-    type: 'command',
-    command: `node "${join(claudeDir, 'hooks', name)}"`,
-    timeout: 30,
-  });
-
-  const bizarSettings = {
-    $schema: 'https://json.schemastore.org/claude-code-settings.json',
-    mcpServers: {
-      bizar: { type: 'stdio', command: 'npx', args: ['-y', '@polderlabs/bizar-sdk', 'mcp'], env: { BIZAR_HOME } },
-      semble: { type: 'stdio', command: 'semble', args: ['mcp'] },
-      'agent-browser': { type: 'stdio', command: 'agent-browser', args: ['mcp'] },
-    },
-    permissions: {
-      defaultMode: 'acceptEdits',
-      allow: ['mcp__bizar__*', 'mcp__semble__*', 'mcp__agent-browser__*'],
-      ask: [
-        'Bash(git commit *)', 'Bash(git push *)',
-        'Bash(gh pr create *)', 'Bash(gh pr edit *)', 'Bash(gh pr merge *)',
-        'Bash(gh release *)', 'Bash(npm publish *)', 'Bash(bun publish *)',
-        'Bash(vercel deploy *)', 'Bash(wrangler deploy *)',
-      ],
-      deny: [
-        'Read(./.env)', 'Read(./.env.*)',
-        'Bash(rm -rf /)', 'Bash(sudo *)',
-        'Bash(git push --force *)', 'Bash(git push -f *)', 'Bash(git rebase *)',
-        'Write(./node_modules/**)',
-      ],
-    },
-    env: {
-      BIZAR_HOME,
-      ANTHROPIC_BASE_URL: 'http://localhost:20128/v1',
-      BIZAR_MODEL_ROUTER_URL: 'http://localhost:20128/v1',
-      ANTHROPIC_AUTH_TOKEN: 'sk_9router',
-      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1',
-    },
-    hooks: {
-      PreToolUse: [
-        { matcher: 'Write|Edit|MultiEdit', hooks: [hook('pretooluse-editwrite.mjs')] },
-        { matcher: 'Bash', hooks: [hook('pretooluse-bash.mjs')] },
-      ],
-    },
-  };
-
-  const merged = { ...existing };
-  merged.$schema   = merged.$schema || bizarSettings.$schema;
-  merged.mcpServers = { ...(existing.mcpServers || {}), ...bizarSettings.mcpServers };
-  merged.permissions = {
-    defaultMode: existing.permissions?.defaultMode || bizarSettings.permissions.defaultMode,
-    allow: [...new Set([...(existing.permissions?.allow || []), ...bizarSettings.permissions.allow])],
-    deny:  [...new Set([...(existing.permissions?.deny || []),  ...bizarSettings.permissions.deny])],
-    ask:   [...new Set([...(existing.permissions?.ask || []), ...bizarSettings.permissions.ask])],
-  };
-  merged.env   = { ...(existing.env || {}), ...bizarSettings.env };
-  merged.hooks = { ...(existing.hooks || {}), ...bizarSettings.hooks };
-  merged.autoMode = existing.autoMode || bizarSettings.autoMode;
-  merged.attribution = existing.attribution || bizarSettings.attribution;
-  merged.worktree = { ...(bizarSettings.worktree || {}), ...(existing.worktree || {}) };
-  for (const key of ['enableWorkflows', 'alwaysThinkingEnabled', 'autoDreamEnabled', 'showThinkingSummaries']) {
-    if (merged[key] === undefined) merged[key] = bizarSettings[key];
-  }
-
+function runProductionWriter({ existing, force = false, env = {} } = {}) {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-settings-merge-'));
+  const claudeDir = join(home, '.claude');
+  const settingsPath = join(claudeDir, 'settings.json');
   mkdirSync(claudeDir, { recursive: true });
-  writeFileSync(settingsFile, JSON.stringify(merged, null, 2) + '\n');
-  return merged;
+  if (existing) writeFileSync(settingsPath, `${JSON.stringify(existing)}\n`);
+
+  const childEnv = {
+    ...process.env,
+    HOME: home,
+    CLAUDE_CONFIG_DIR: claudeDir,
+    BIZAR_HOME: join(home, '.config', 'bizar'),
+  };
+  for (const key of GATEWAY_KEYS) delete childEnv[key];
+  Object.assign(childEnv, env);
+
+  try {
+    const script = `
+      import { writeClaudeSettings } from './cli/provision.mjs';
+      const result = writeClaudeSettings({ force: ${JSON.stringify(force)} });
+      if (!result.ok) throw new Error(result.message);
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: REPO_ROOT,
+      env: childEnv,
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    return JSON.parse(readFileSync(settingsPath, 'utf8'));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 }
 
-before(() => {
-  mkdirSync(TEMP_CLAUDE_DIR, { recursive: true });
-  // Set CLAUDE_CONFIG_DIR so the module reads from our temp dir
-  process.env.CLAUDE_CONFIG_DIR = TEMP_CLAUDE_DIR;
-});
-
-after(() => {
-  rmSync(TEMP_CLAUDE_DIR, { recursive: true, force: true });
-  delete process.env.CLAUDE_CONFIG_DIR;
-});
-
-describe('writeClaudeSettings merge logic', () => {
-
-  it('writes minimal settings with four gateway-discovery env vars when no existing settings', () => {
-    const settingsFile = join(TEMP_CLAUDE_DIR, 'settings.json');
-    // Ensure no settings file exists
-    if (existsSync(settingsFile)) rmSync(settingsFile);
-
-    runProvisionInline(TEMP_CLAUDE_DIR, {});
-
-    const written = JSON.parse(readFileSync(settingsFile, 'utf8'));
-    assert.strictEqual(written.env.ANTHROPIC_BASE_URL, 'http://localhost:20128/v1');
-    assert.strictEqual(written.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
-    assert.strictEqual(written.env.BIZAR_MODEL_ROUTER_URL, 'http://localhost:20128/v1');
-    assert.strictEqual(written.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
-    assert.strictEqual(written.env.ANTHROPIC_DEFAULT_OPUS_MODEL, undefined);
-    assert.strictEqual(written.permissions.defaultMode, 'acceptEdits');
+describe('writeClaudeSettings gateway environment', () => {
+  it('production writer emits the complete project gateway contract', () => {
+    const settings = runProductionWriter();
+    assert.equal(settings.env.BIZAR_HOME.endsWith('/.config/bizar'), true);
+    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'http://localhost:20128/v1');
+    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'http://localhost:20128/v1');
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
+    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
   });
 
-  it('preserves existing permissions, hooks, mcpServers when merging', () => {
-    const settingsFile = join(TEMP_CLAUDE_DIR, 'settings.json');
-    const existing = {
-      permissions: { defaultMode: 'ask', allow: ['Bash(ls)'], deny: [], ask: [] },
-      hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node custom-hook.mjs' }] }] },
-      mcpServers: { myServer: { type: 'stdio', command: 'node', args: ['my-server.mjs'] } },
-      attribution: { commit: 'C000', pr: 'P000' },
-    };
-    rmSync(settingsFile, { force: true });
-    writeFileSync(settingsFile, JSON.stringify(existing));
-
-    const merged = runProvisionInline(TEMP_CLAUDE_DIR, existing);
-
-    assert.strictEqual(merged.permissions.defaultMode, 'ask');         // user value kept
-    assert.deepStrictEqual(merged.mcpServers.myServer, { type: 'stdio', command: 'node', args: ['my-server.mjs'] }); // user server kept
-    assert.strictEqual(merged.mcpServers.bizar.type, 'stdio');          // bizar server added
-    assert.strictEqual(merged.attribution.commit, 'C000');              // user attribution kept
-    assert.strictEqual(merged.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router'); // discovery env added
-    assert.strictEqual(merged.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
-  });
-
-  it('preserves existing ANTHROPIC_DEFAULT_OPUS_MODEL without removing it', () => {
-    const settingsFile = join(TEMP_CLAUDE_DIR, 'settings.json');
+  it('normal updates preserve user values and align missing gateway keys', () => {
     const existing = {
       env: {
-        ANTHROPIC_BASE_URL: 'http://localhost:20128/v1',
-        ANTHROPIC_DEFAULT_OPUS_MODEL: 'anthropic/opus-4-20241120',
-        ANTHROPIC_DEFAULT_SONNET_MODEL: 'anthropic/sonnet-4-20241120',
+        MY_CUSTOM_VAR: 'kept',
+        BIZAR_HOME: '/custom/bizar',
+        ANTHROPIC_BASE_URL: 'https://gateway.example/v1',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'anthropic/custom-opus',
       },
+      permissions: { defaultMode: 'ask', allow: ['Bash(ls)'] },
+      mcpServers: { custom: { type: 'stdio', command: 'custom-mcp' } },
     };
-    rmSync(settingsFile, { force: true });
-    writeFileSync(settingsFile, JSON.stringify(existing));
-
-    const merged = runProvisionInline(TEMP_CLAUDE_DIR, existing);
-
-    assert.strictEqual(merged.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'anthropic/opus-4-20241120');
-    assert.strictEqual(merged.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'anthropic/sonnet-4-20241120');
-    assert.strictEqual(merged.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
-    assert.strictEqual(merged.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
+    const settings = runProductionWriter({ existing });
+    assert.equal(settings.env.MY_CUSTOM_VAR, 'kept');
+    assert.equal(settings.env.BIZAR_HOME, '/custom/bizar');
+    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
+    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://gateway.example/v1');
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
+    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
+    assert.equal(settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'anthropic/custom-opus');
+    assert.equal(settings.permissions.defaultMode, 'ask');
+    assert.equal(settings.mcpServers.custom.command, 'custom-mcp');
   });
 
-  it('adds discovery env vars to existing env block without overwriting other vars', () => {
-    const settingsFile = join(TEMP_CLAUDE_DIR, 'settings.json');
-    const existing = {
-      env: {
-        MY_CUSTOM_VAR: 'custom-value',
-        ANTHROPIC_BASE_URL: 'http://localhost:20128/v1',
+  it('normal updates retain explicitly configured gateway values', () => {
+    const settings = runProductionWriter({
+      existing: {
+        env: {
+          ANTHROPIC_BASE_URL: 'https://gateway.example/v1',
+          BIZAR_MODEL_ROUTER_URL: 'https://models.example/v1',
+          ANTHROPIC_AUTH_TOKEN: 'user-token',
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '0',
+        },
       },
-    };
-    rmSync(settingsFile, { force: true });
-    writeFileSync(settingsFile, JSON.stringify(existing));
+    });
+    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
+    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://models.example/v1');
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'user-token');
+    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '0');
+  });
 
-    const merged = runProvisionInline(TEMP_CLAUDE_DIR, existing);
+  it('fresh installs use explicit gateway environment and keep URLs aligned', () => {
+    const settings = runProductionWriter({
+      env: {
+        ANTHROPIC_BASE_URL: 'https://router.example/v1',
+        ANTHROPIC_AUTH_TOKEN: 'ambient-token',
+        CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: 'enabled',
+      },
+    });
+    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://router.example/v1');
+    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://router.example/v1');
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'ambient-token');
+    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, 'enabled');
+  });
 
-    assert.strictEqual(merged.env.MY_CUSTOM_VAR, 'custom-value');
-    assert.strictEqual(merged.env.ANTHROPIC_BASE_URL, 'http://localhost:20128/v1');
-    assert.strictEqual(merged.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
-    assert.strictEqual(merged.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
+  it('force refreshes managed keys without deleting unrelated user env', () => {
+    const settings = runProductionWriter({
+      force: true,
+      existing: { env: { MY_CUSTOM_VAR: 'kept', ANTHROPIC_AUTH_TOKEN: 'old-token' } },
+      env: { ANTHROPIC_AUTH_TOKEN: 'replacement-token' },
+    });
+    assert.equal(settings.env.MY_CUSTOM_VAR, 'kept');
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'replacement-token');
   });
 });

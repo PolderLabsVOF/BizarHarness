@@ -36,16 +36,57 @@ console.log('\n  BIZAR E2E — Claude Code core harness\n');
 const settingsPath = join(ROOT, '.claude', 'settings.json');
 try {
   const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
-  const events = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'SessionStart', 'SessionEnd', 'PreCompact', 'SubagentStart'];
+  const events = [
+    'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure',
+    'UserPromptSubmit', 'SessionStart', 'SessionEnd', 'PreCompact',
+    'SubagentStart', 'SubagentStop', 'Stop',
+  ];
   const missing = events.filter((event) => !Array.isArray(settings.hooks?.[event]));
   check('settings and lifecycle hooks', missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : `${events.length} events wired`);
-  check('human approval policy', settings.permissions?.defaultMode === 'acceptEdits' && settings.permissions?.ask?.some((v) => v.includes('git commit')), 'acceptEdits + explicit mutation asks');
+  const { EVENT_CHAINS } = await import('../cli/commands/hook.mjs');
+  const guardWired = (settings.hooks?.PreToolUse || []).some((group) =>
+    (group.hooks || []).some((hook) => hook.command === 'bizar hook pre-tool-use'))
+    && EVENT_CHAINS['pre-tool-use'].includes('git-workflow-guard');
+  const guardedCommands = ['git commit -m "test: approval boundary"', 'git push origin main', 'npm publish --access public'];
+  const guardDecisions = guardedCommands.map((command) => {
+    const result = spawnSync(process.execPath, [join(ROOT, 'cli', 'bin.mjs'), 'hook', 'pre-tool-use'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      input: JSON.stringify({
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        cwd: ROOT,
+        tool_input: { command },
+      }),
+      timeout: 5_000,
+    });
+    if (result.status !== 0) return `exit:${result.status}`;
+    try {
+      return JSON.parse(result.stdout).hookSpecificOutput?.permissionDecision;
+    } catch {
+      return 'invalid-output';
+    }
+  });
+  check(
+    'human approval policy',
+    settings.permissions?.defaultMode === 'acceptEdits'
+      && guardWired
+      && JSON.stringify(guardDecisions) === JSON.stringify(['deny', 'ask', 'ask']),
+    guardWired
+      ? `git-workflow-guard decisions: ${guardDecisions.join(', ')}`
+      : 'git-workflow-guard is not wired for Bash PreToolUse',
+  );
   check('Bizar MCP registration', settings.mcpServers?.bizar?.args?.includes('@polderlabs/bizar-sdk'), 'stdio SDK command configured');
-  const controlHook = 'control-inbox.mjs';
-  const controlEvents = ['SessionStart', 'UserPromptSubmit'];
-  const missingControlEvents = controlEvents.filter((event) =>
-    !(settings.hooks?.[event] || []).some((group) =>
-      (group.hooks || []).some((hook) => hook.command?.includes(controlHook))));
+  const controlEvents = [
+    ['SessionStart', 'session-start'],
+    ['UserPromptSubmit', 'user-prompt-submit'],
+  ];
+  const missingControlEvents = controlEvents
+    .filter(([event, dispatcher]) =>
+      !(settings.hooks?.[event] || []).some((group) =>
+        (group.hooks || []).some((hook) => hook.command === `bizar hook ${dispatcher}`))
+      || !EVENT_CHAINS[dispatcher].includes('control-inbox'))
+    .map(([event]) => event);
   check(
     'OpenKan control inbox',
     missingControlEvents.length === 0,
@@ -91,9 +132,14 @@ const requiredHooks = [
   'control-inbox.mjs',
   'content-style-guard.mjs',
   'git-workflow-guard.mjs',
+  'keyword-router.mjs',
+  'permission-request.mjs',
+  'persistent-mode.mjs',
+  'post-tool-use-failure.mjs',
   'precompact-priorities.sh',
   'simplify-guard.mjs',
   'telemetry.mjs',
+  'verify-deliverables.mjs',
 ];
 const missingHooks = requiredHooks.filter((name) => !existsSync(join(ROOT, '.claude', 'hooks', name)));
 check('ported workflow hooks', missingHooks.length === 0, missingHooks.length ? `missing ${missingHooks.join(', ')}` : `${requiredHooks.length} hooks present`);

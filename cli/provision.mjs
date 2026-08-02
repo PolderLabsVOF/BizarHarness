@@ -377,11 +377,22 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
 // selection. Copied to user-level so the Bizar SDK can read
 // it without a cwd dependency.
 
+export function isBizarManagedModelRouter(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && typeof value.$schema === 'string'
+    && /^https:\/\/bizar\.dev\/schema\/model-router\.v\d+\.json$/.test(value.$schema),
+  );
+}
+
 export async function syncModelRouter({ dryRun = false, force = false } = {}) {
   const src = join(REPO_ROOT, '.claude', 'model-router.json');
   const dest = join(CLAUDE_DIR, 'model-router.json');
   if (!existsSync(src)) return { ok: true, message: `no model-router at ${src}` };
-  if (existsSync(dest) && !force) return { ok: true, message: `${dest} already exists — pass --force to overwrite` };
+  if (existsSync(dest) && !force && !isBizarManagedModelRouter(readJsonSafe(dest, null))) {
+    return { ok: true, message: `${dest} is user-managed — pass --force to overwrite`, preserved: true };
+  }
   if (dryRun) return { ok: true, message: `[dry-run] would copy ${src} → ${dest}` };
   ensureDir(CLAUDE_DIR);
   copyFileSync(src, dest);
@@ -473,12 +484,105 @@ export function installGitHooks({ dryRun = false } = {}) {
 
 // ─── settings.json ──────────────────────────────────────────────────────────
 
+const LEGACY_BIZAR_HOOK_FILES = new Set([
+  'advisor-context.mjs',
+  'agent-grounding.mjs',
+  'agent-model-guard.mjs',
+  'auto-instinct.sh',
+  'content-style-guard.mjs',
+  'control-inbox.mjs',
+  'git-workflow-guard.mjs',
+  'git-command-parser.mjs',
+  'keyword-router.mjs',
+  'learning-extract.mjs',
+  'path-ownership-guard.mjs',
+  'permission-request.mjs',
+  'persistent-mode.mjs',
+  'posttooluse-editwrite.mjs',
+  'post-tool-use-failure.mjs',
+  'precompact-priorities.sh',
+  'pretooluse-bash.mjs',
+  'pretooluse-editwrite.mjs',
+  'sessionend-recall.mjs',
+  'sessionstart-prime.mjs',
+  'simplify-guard.mjs',
+  'telemetry.mjs',
+  'thinking-route.mjs',
+  'verify-deliverables.mjs',
+  'worker-suggest.mjs',
+  'worktree-bootstrap.mjs',
+]);
+
+export function isBizarOwnedHook(hook) {
+  if (!hook || typeof hook !== 'object' || typeof hook.command !== 'string') return false;
+  const command = hook.command.trim();
+  if (/^(?:"[^"]*bizar"|'[^']*bizar'|bizar)\s+hook\s+[a-z0-9-]+(?:\s|$)/i.test(command)) {
+    return true;
+  }
+  return [...LEGACY_BIZAR_HOOK_FILES].some((name) =>
+    command.includes(`/.claude/hooks/${name}`)
+    || command.includes(`\\.claude\\hooks\\${name}`)
+    || command.includes(join(CLAUDE_HOOKS_DIR, name)),
+  );
+}
+
+export function mergeBizarHooks(existingHooks = {}, desiredHooks = {}) {
+  const cleaned = {};
+  for (const [eventName, groups] of Object.entries(existingHooks || {})) {
+    if (!Array.isArray(groups)) {
+      cleaned[eventName] = groups;
+      continue;
+    }
+    cleaned[eventName] = groups.flatMap((group) => {
+      if (!group || typeof group !== 'object' || !Array.isArray(group.hooks)) return [group];
+      const hooks = group.hooks.filter((entry) => !isBizarOwnedHook(entry));
+      return hooks.length > 0 ? [{ ...group, hooks }] : [];
+    });
+  }
+
+  for (const [eventName, desiredGroups] of Object.entries(desiredHooks || {})) {
+    const target = Array.isArray(cleaned[eventName]) ? [...cleaned[eventName]] : [];
+    for (const desired of desiredGroups) {
+      const desiredMatcher = desired.matcher;
+      const index = target.findIndex((group) =>
+        group && typeof group === 'object' && group.matcher === desiredMatcher && Array.isArray(group.hooks),
+      );
+      if (index === -1) target.push(structuredClone(desired));
+      else target[index] = { ...target[index], hooks: [...target[index].hooks, ...structuredClone(desired.hooks)] };
+    }
+    cleaned[eventName] = target;
+  }
+  return cleaned;
+}
+
+const HARD_MUTATION_PERMISSION = /^(?:Bash\()?\s*(?:git\s+(?:commit|push)|gh\s+(?:pr\s+(?:create|edit|merge|close|reopen|ready|review|comment)|release\s+(?:create|edit|delete|upload))|(?:npm|bun|pnpm)\s+publish|(?:vercel|wrangler|flyctl)\s+(?:deploy|publish))\b/i;
+
+export function normalizePermissionLists(existing = {}, desired = {}) {
+  const existingAllow = Array.isArray(existing.allow) ? existing.allow : [];
+  const movedToAsk = existingAllow.filter((rule) => HARD_MUTATION_PERMISSION.test(String(rule)));
+  return {
+    defaultMode: existing.defaultMode || desired.defaultMode,
+    allow: [...new Set([
+      ...existingAllow.filter((rule) => !HARD_MUTATION_PERMISSION.test(String(rule))),
+      ...(desired.allow || []),
+    ])],
+    deny: [...new Set([...(existing.deny || []), ...(desired.deny || [])])],
+    ask: [...new Set([...(existing.ask || []), ...movedToAsk, ...(desired.ask || [])])],
+  };
+}
+
 export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const fp = join(CLAUDE_DIR, 'settings.json');
   const existing = readJsonSafe(fp, {}) || {};
-  const hook = (name, timeout = 15, runtime = 'node') => ({
+  const existingEnv = existing.env || {};
+  const defaultGatewayUrl = 'http://localhost:20128/v1';
+  const gatewayUrl = process.env.ANTHROPIC_BASE_URL
+    || process.env.BIZAR_MODEL_ROUTER_URL
+    || (!force && (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL))
+    || defaultGatewayUrl;
+  const hook = (name, timeout = 15) => ({
     type: 'command',
-    command: `${runtime} "${join(CLAUDE_HOOKS_DIR, name)}"`,
+    command: `bizar hook ${name}`,
     timeout,
   });
 
@@ -499,14 +603,21 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       allow: ['mcp__bizar__*', 'mcp__semble__*', 'mcp__agent-browser__*'],
       ask: [
         'Bash(git commit *)', 'Bash(git push *)',
+        'Bash(git -C * commit *)', 'Bash(git -C * push *)',
+        'Bash(git --git-dir=* commit *)', 'Bash(git --git-dir=* push *)',
         'Bash(gh pr create *)', 'Bash(gh pr edit *)', 'Bash(gh pr merge *)',
+        'Bash(gh pr close *)', 'Bash(gh pr reopen *)', 'Bash(gh pr ready *)',
+        'Bash(gh pr review *)', 'Bash(gh pr comment *)',
         'Bash(gh release *)', 'Bash(npm publish *)', 'Bash(bun publish *)',
-        'Bash(vercel deploy *)', 'Bash(wrangler deploy *)',
+        'Bash(pnpm publish *)', 'Bash(vercel deploy *)', 'Bash(wrangler deploy *)',
+        'Bash(flyctl deploy *)',
       ],
       deny: [
         'Read(./.env)', 'Read(./.env.*)',
         'Bash(rm -rf /)', 'Bash(sudo *)',
-        'Bash(git push --force *)', 'Bash(git push -f *)', 'Bash(git rebase *)',
+        'Bash(git push --force *)', 'Bash(git push -f *)',
+        'Bash(git -C * push --force *)', 'Bash(git -C * push -f *)',
+        'Bash(git rebase *)', 'Bash(git -C * rebase *)', 'Bash(git --git-dir=* rebase *)',
         'Write(./node_modules/**)',
       ],
     },
@@ -540,49 +651,42 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     showThinkingSummaries: true,
     env: {
       BIZAR_HOME,
-      ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || 'http://localhost:20128/v1',
-      BIZAR_MODEL_ROUTER_URL: process.env.BIZAR_MODEL_ROUTER_URL || 'http://localhost:20128/v1',
+      ANTHROPIC_BASE_URL: gatewayUrl,
+      BIZAR_MODEL_ROUTER_URL: process.env.BIZAR_MODEL_ROUTER_URL || gatewayUrl,
+      ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || 'sk_9router',
+      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:
+        process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY || '1',
     },
     hooks: {
-      PreToolUse: [
-        { matcher: 'Write|Edit|MultiEdit', hooks: [hook('pretooluse-editwrite.mjs', 30), hook('path-ownership-guard.mjs', 30), hook('content-style-guard.mjs', 30)] },
-        { matcher: 'Bash', hooks: [hook('pretooluse-bash.mjs', 30), hook('git-workflow-guard.mjs', 30), hook('content-style-guard.mjs', 30), hook('simplify-guard.mjs', 30)] },
-      ],
-      PostToolUse: [
-        { matcher: 'Edit|Write|MultiEdit', hooks: [hook('posttooluse-editwrite.mjs', 30)] },
-        { matcher: 'Bash', hooks: [hook('auto-instinct.sh', 15, 'bash')] },
-        { matcher: 'Skill', hooks: [hook('simplify-guard.mjs', 30)] },
-      ],
-      UserPromptSubmit: [
-        { hooks: [hook('control-inbox.mjs', 10)] },
-        { hooks: [hook('worker-suggest.mjs', 10)] },
-        { hooks: [hook('thinking-route.mjs', 10)] },
-        { hooks: [hook('telemetry.mjs', 10)] },
-      ],
-      SessionStart: [{ hooks: [hook('control-inbox.mjs', 10), hook('sessionstart-prime.mjs'), hook('telemetry.mjs', 10)] }],
-      SessionEnd: [{ hooks: [hook('sessionend-recall.mjs'), hook('learning-extract.mjs')] }],
-      PreCompact: [{ matcher: '*', hooks: [hook('precompact-priorities.sh', 15, 'bash')] }],
-      SubagentStart: [
-        { hooks: [hook('agent-grounding.mjs')] },
-        { matcher: '^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$', hooks: [hook('advisor-context.mjs')] },
-        { matcher: '^(brad|carl|pam|brenda|karen|todd|ria)$', hooks: [hook('worktree-bootstrap.mjs', 30)] },
-      ],
+      UserPromptSubmit: [{ hooks: [hook('user-prompt-submit', 10)] }],
+      SessionStart: [{ hooks: [hook('session-start')] }],
+      PreToolUse: [{ matcher: '*', hooks: [hook('pre-tool-use')] }],
+      PermissionRequest: [{ matcher: '*', hooks: [hook('permission-request')] }],
+      PostToolUse: [{ matcher: '*', hooks: [hook('post-tool-use')] }],
+      PostToolUseFailure: [{ matcher: '*', hooks: [hook('post-tool-use-failure')] }],
+      SubagentStart: [{ hooks: [hook('subagent-start')] }],
+      SubagentStop: [{ hooks: [hook('subagent-stop')] }],
+      PreCompact: [{ matcher: '*', hooks: [hook('pre-compact')] }],
+      Stop: [{ hooks: [hook('stop')] }],
+      SessionEnd: [{ hooks: [hook('session-end')] }],
     },
   };
 
   const merged = { ...existing };
-  if (force) { Object.assign(merged, bizarSettings); }
+  if (force) {
+    Object.assign(merged, bizarSettings);
+    merged.env = { ...(existing.env || {}), ...bizarSettings.env };
+    merged.hooks = mergeBizarHooks(existing.hooks, bizarSettings.hooks);
+  }
   else {
     merged.$schema   = merged.$schema || bizarSettings.$schema;
     merged.mcpServers = { ...(existing.mcpServers || {}), ...bizarSettings.mcpServers };
-    merged.permissions = {
-      defaultMode: existing.permissions?.defaultMode || bizarSettings.permissions.defaultMode,
-      allow: [...new Set([...(existing.permissions?.allow || []), ...bizarSettings.permissions.allow])],
-      deny:  [...new Set([...(existing.permissions?.deny || []),  ...bizarSettings.permissions.deny])],
-      ask:   [...new Set([...(existing.permissions?.ask || []), ...bizarSettings.permissions.ask])],
-    };
-    merged.env   = { ...(existing.env || {}), ...bizarSettings.env };
-    merged.hooks = { ...(existing.hooks || {}), ...bizarSettings.hooks };
+    merged.permissions = normalizePermissionLists(existing.permissions, bizarSettings.permissions);
+    // A normal update fills missing Bizar defaults without replacing values a
+    // user has deliberately configured. `force` refreshes Bizar-owned keys but
+    // still retains unrelated environment entries.
+    merged.env   = { ...bizarSettings.env, ...(existing.env || {}) };
+    merged.hooks = mergeBizarHooks(existing.hooks, bizarSettings.hooks);
     merged.autoMode = existing.autoMode || bizarSettings.autoMode;
     merged.attribution = existing.attribution || bizarSettings.attribution;
     merged.worktree = { ...(bizarSettings.worktree || {}), ...(existing.worktree || {}) };

@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## [10.12.0] - 2026-08-02
+
+- Added a Claude Code-native Bizar plugin manifest and stable `bizar hook`
+  dispatcher so agents, skills, commands, MCP registration, and lifecycle
+  hooks use the same portable installed boundary.
+- Added durable, session/project-bound workflow state and an `/autopilot`
+  lifecycle spanning research/specification, consensus planning, implementation
+  waves, bounded QA/fix cycles, validation, resume, completion, failure, and
+  cancellation.
+- Made Mike the sole GPT-5.6 Sol orchestrator and moved workers to a strict,
+  skill/difficulty-based GPT/MiniMax registry with immutable per-run routing
+  snapshots and explicit gateway-availability failures rather than silent
+  substitution.
+- Preserved the guarded-autonomy boundary: no note-vault or general memory
+  subsystem, no persistent daemon, no automatic commit/push/release/publication,
+  and no embedded HTTP/WebSocket UI. OpenKan remains optional through
+  `bizar control`.
+
 ## [10.10.2] - 2026-07-31
 
 - Installer now enables gateway model discovery by default: user-level

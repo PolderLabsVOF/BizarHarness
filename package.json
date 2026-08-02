@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "10.10.1",
+  "version": "10.12.0",
   "description": "Autonomous, human-in-the-loop multi-agent harness for Claude Code with guarded workflows, typed SDK primitives, and MCP tools.",
   "type": "module",
   "bin": {
@@ -8,6 +8,8 @@
   },
   "files": [
     "AGENTS.md",
+    ".claude-plugin/plugin.json",
+    "hooks/hooks.json",
     "cli/**/*.mjs",
     "!cli/**/*.test.mjs",
     "!cli/**/__tests__/**",
@@ -27,6 +29,7 @@
     "scripts/git-hooks/commit-msg",
     "scripts/git-hooks/pre-commit",
     "scripts/git-hooks/pre-push",
+    "scripts/plugin-hook-runner.cjs",
     "scripts/install-hooks.sh"
   ],
   "scripts": {

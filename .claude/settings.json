@@ -1,25 +1,82 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "mcpServers": {
-    "bizar": { "command": "npx", "args": ["-y", "@polderlabs/bizar-sdk", "mcp"], "env": { "BIZAR_HOME": "${HOME}/.config/bizar" } },
-    "semble": { "command": "semble", "args": ["mcp"] },
-    "agent-browser": { "command": "agent-browser", "args": ["mcp"] }
+    "bizar": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@polderlabs/bizar-sdk",
+        "mcp"
+      ],
+      "env": {
+        "BIZAR_HOME": "${HOME}/.config/bizar"
+      }
+    },
+    "semble": {
+      "command": "semble",
+      "args": [
+        "mcp"
+      ]
+    },
+    "agent-browser": {
+      "command": "agent-browser",
+      "args": [
+        "mcp"
+      ]
+    }
   },
   "permissions": {
     "defaultMode": "acceptEdits",
     "allow": [
-      "mcp__bizar__plan_action", "mcp__bizar__loop_list", "mcp__bizar__loop_status",
-      "mcp__bizar__loop_start", "mcp__bizar__loop_stop", "mcp__bizar__graph_query",
-      "mcp__bizar__graph_path", "mcp__bizar__list_instincts", "mcp__bizar__list_decisions",
-      "mcp__semble__*", "mcp__agent-browser__*",
-      "Bash(git commit *)", "Bash(git push *)", "Bash(gh pr create *)", "Bash(gh pr edit *)",
-      "Bash(gh pr merge *)", "Bash(gh release *)", "Bash(npm publish *)", "Bash(bun publish *)",
-      "Bash(vercel deploy *)", "Bash(wrangler deploy *)"
+      "mcp__bizar__plan_action",
+      "mcp__bizar__loop_list",
+      "mcp__bizar__loop_status",
+      "mcp__bizar__loop_start",
+      "mcp__bizar__loop_stop",
+      "mcp__bizar__graph_query",
+      "mcp__bizar__graph_path",
+      "mcp__bizar__list_instincts",
+      "mcp__bizar__list_decisions",
+      "mcp__semble__*",
+      "mcp__agent-browser__*"
     ],
     "deny": [
-      "Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)",
-      "Bash(rm -rf /)", "Bash(sudo *)", "Bash(git push --force *)", "Bash(git push -f *)",
-      "Bash(git rebase *)", "Write(./node_modules/**)"
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf /)",
+      "Bash(sudo *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git -C * push --force *)",
+      "Bash(git -C * push -f *)",
+      "Bash(git rebase *)",
+      "Bash(git -C * rebase *)",
+      "Bash(git --git-dir=* rebase *)",
+      "Write(./node_modules/**)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git -C * commit *)",
+      "Bash(git -C * push *)",
+      "Bash(git --git-dir=* commit *)",
+      "Bash(git --git-dir=* push *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr reopen *)",
+      "Bash(gh pr ready *)",
+      "Bash(gh pr review *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh release *)",
+      "Bash(npm publish *)",
+      "Bash(bun publish *)",
+      "Bash(vercel deploy *)",
+      "Bash(wrangler deploy *)",
+      "Bash(pnpm publish *)",
+      "Bash(flyctl deploy *)"
     ]
   },
   "autoMode": {
@@ -41,7 +98,10 @@
       "Production or shared-infrastructure writes, credential changes, public exposure, or irreversible local destruction."
     ]
   },
-  "attribution": { "commit": "", "pr": "" },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "worktree": {
     "baseRef": "head",
     "cleanupPeriodDays": 7
@@ -58,62 +118,131 @@
     "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1"
   },
   "hooks": {
-    "PreToolUse": [
-      { "matcher": "Write|Edit|MultiEdit", "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-editwrite.mjs\"", "timeout": 30 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/path-ownership-guard.mjs\"", "timeout": 30 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/content-style-guard.mjs\"", "timeout": 30 }
-      ] },
-      { "matcher": "Bash", "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-bash.mjs\"", "timeout": 30 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-workflow-guard.mjs\"", "timeout": 30 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/content-style-guard.mjs\"", "timeout": 30 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/simplify-guard.mjs\"", "timeout": 30 }
-      ] }
-    ],
-    "PostToolUse": [
-      { "matcher": "Edit|Write|MultiEdit", "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/posttooluse-editwrite.mjs\"", "timeout": 30 }
-      ] },
-      { "matcher": "Bash", "hooks": [
-        { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-instinct.sh\"", "timeout": 15 }
-      ] },
-      { "matcher": "Skill", "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/simplify-guard.mjs\"", "timeout": 30 }
-      ] }
-    ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/control-inbox.mjs\"", "timeout": 10 }] },
-      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/worker-suggest.mjs\"", "timeout": 10 }] },
-      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/thinking-route.mjs\"", "timeout": 10 }] },
-      { "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry.mjs\"", "timeout": 10 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook user-prompt-submit",
+            "timeout": 10
+          }
+        ]
+      }
     ],
     "SessionStart": [
-      { "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/control-inbox.mjs\"", "timeout": 10 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sessionstart-prime.mjs\"", "timeout": 15 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/telemetry.mjs\"", "timeout": 10 }
-      ] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook session-start",
+            "timeout": 15
+          }
+        ]
+      }
     ],
-    "SessionEnd": [
-      { "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/sessionend-recall.mjs\"", "timeout": 15 },
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/learning-extract.mjs\"", "timeout": 15 }
-      ] }
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook pre-tool-use",
+            "timeout": 15
+          }
+        ]
+      }
     ],
-    "PreCompact": [
-      { "matcher": "*", "hooks": [{ "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/precompact-priorities.sh\"", "timeout": 15 }] }
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook permission-request",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook post-tool-use",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook post-tool-use-failure",
+            "timeout": 15
+          }
+        ]
+      }
     ],
     "SubagentStart": [
-      { "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/agent-grounding.mjs\"", "timeout": 15 }
-      ] },
-      { "matcher": "^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$", "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/advisor-context.mjs\"", "timeout": 15 }
-      ] },
-      { "matcher": "^(brad|carl|pam|brenda|karen|todd|ria)$", "hooks": [
-        { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-bootstrap.mjs\"", "timeout": 30 }
-      ] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook subagent-start",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook subagent-stop",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook pre-compact",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook stop",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bizar hook session-end",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }

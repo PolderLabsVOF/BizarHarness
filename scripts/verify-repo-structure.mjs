@@ -25,22 +25,27 @@ const FORBIDDEN_TRACKED_FILES = new Set([
 ]);
 
 const REQUIRED_PACKAGE_FILES = [
+  '.claude-plugin/plugin.json',
   '.claude/hooks/pretooluse-bash.mjs',
   '.claude/settings.json',
   'AGENTS.md',
   'cli/bin.mjs',
   'config/skills/bizar/SKILL.md',
+  'hooks/hooks.json',
   'packages/sdk/dist/index.js',
+  'scripts/plugin-hook-runner.cjs',
   'scripts/install-hooks.sh',
 ];
 
 const ALLOWED_PACKAGE_ROOTS = new Set([
   '.claude',
+  '.claude-plugin',
   'AGENTS.md',
   'LICENSE',
   'README.md',
   'cli',
   'config',
+  'hooks',
   'install.sh',
   'package.json',
   'packages',
@@ -70,6 +75,9 @@ export function inspectPackagePaths(paths) {
     ) {
       problems.push(`test file shipped: ${path}`);
     }
+    if (/(?:\.bak|\.tmp|\.temp|\.orig|~)$/.test(path)) {
+      problems.push(`backup or temporary file shipped: ${path}`);
+    }
     if (
       path.includes('${HOME}') ||
       path.includes('/.bizar/') ||
@@ -89,7 +97,7 @@ export function inspectPackagePaths(paths) {
   return [...new Set(problems)].sort();
 }
 
-export function inspectVersionState(rootVersion, sdkVersion, sdkConstant) {
+export function inspectVersionState(rootVersion, sdkVersion, sdkConstant, pluginVersion) {
   const problems = [];
   if (!rootVersion) problems.push('root package version is missing');
   if (sdkVersion !== rootVersion) {
@@ -98,7 +106,19 @@ export function inspectVersionState(rootVersion, sdkVersion, sdkConstant) {
   if (sdkConstant !== rootVersion) {
     problems.push(`SDK_VERSION ${sdkConstant || 'missing'} != root ${rootVersion || 'missing'}`);
   }
+  if (pluginVersion !== rootVersion) {
+    problems.push(`plugin manifest version ${pluginVersion || 'missing'} != root ${rootVersion || 'missing'}`);
+  }
   return problems;
+}
+
+export function packageFilesFromPackReport(report) {
+  const entries = Array.isArray(report) ? report : Object.values(report ?? {});
+  const files = entries[0]?.files;
+  if (!Array.isArray(files)) {
+    throw new Error('npm pack did not return a file manifest');
+  }
+  return files.map((file) => file.path);
 }
 
 function run(command, args) {
@@ -120,19 +140,16 @@ function readTrackedPaths() {
 
 function readPackagePaths() {
   const output = run('npm', ['pack', '--dry-run', '--json', '--ignore-scripts']);
-  const report = JSON.parse(output);
-  if (!Array.isArray(report) || !report[0]?.files) {
-    throw new Error('npm pack did not return a file manifest');
-  }
-  return report[0].files.map((file) => file.path);
+  return packageFilesFromPackReport(JSON.parse(output));
 }
 
 function readVersionProblems() {
   const rootPackage = JSON.parse(readFileSync('package.json', 'utf8'));
   const sdkPackage = JSON.parse(readFileSync('packages/sdk/package.json', 'utf8'));
+  const pluginManifest = JSON.parse(readFileSync('.claude-plugin/plugin.json', 'utf8'));
   const versionSource = readFileSync('packages/sdk/src/version.ts', 'utf8');
   const sdkConstant = versionSource.match(/SDK_VERSION\s*=\s*["']([^"']+)["']/)?.[1];
-  return inspectVersionState(rootPackage.version, sdkPackage.version, sdkConstant);
+  return inspectVersionState(rootPackage.version, sdkPackage.version, sdkConstant, pluginManifest.version);
 }
 
 export function main() {

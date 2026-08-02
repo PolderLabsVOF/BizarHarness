@@ -46,7 +46,7 @@ function runModelList(port, extraArgs = []) {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-const { describe, it, after } = await import('node:test');
+const { describe, it, afterEach } = await import('node:test');
 
 const SAMPLE_MODELS = [
   { id: 'cx/gpt-5.6-sol', display_name: 'GPT-5.6 Sol' },
@@ -81,12 +81,18 @@ describe('bizar model list', { concurrency: 1 }, () => {
 
   function stopServer() {
     return new Promise((res) => {
-      if (server) server.close(() => res());
-      else res();
+      const activeServer = server;
+      server = undefined;
+      if (!activeServer) {
+        res();
+        return;
+      }
+      activeServer.close(() => res());
+      activeServer.closeAllConnections?.();
     });
   }
 
-  after(async () => {
+  afterEach(async () => {
     await stopServer();
   });
 

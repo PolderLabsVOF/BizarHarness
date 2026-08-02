@@ -55,7 +55,6 @@ process.stdin.on('end', () => {
     { name: 'read-shadow', pattern: /\/etc\/(shadow|passwd|sudoers)\b/i, decision: 'ask', reason: 'Read sensitive system file' },
     { name: 'read-ssh', pattern: /\.ssh\//i, decision: 'deny', reason: 'Read SSH keys' },
     { name: 'read-aws-creds', pattern: /~\/\.aws\/credentials/i, decision: 'deny', reason: 'Read AWS credentials' },
-    { name: 'path-traversal', pattern: /(\.\.\/){2,}/i, decision: 'ask', reason: 'Multiple path traversal' },
     { name: 'git-force-push-main', pattern: /\bgit\s+push\s+(-f|--force)(\s+--.*)?\s+origin\s+(main|master)\b/i, decision: 'deny', reason: 'Force push to main/master' },
     { name: 'git-reset-hard', pattern: /\bgit\s+reset\s+--hard\b/i, decision: 'ask', reason: 'git reset --hard' },
   ];

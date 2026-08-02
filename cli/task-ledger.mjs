@@ -767,15 +767,7 @@ export class TaskLedger {
 
     const current = assigned.find((task) =>
       task.workspace && pathInside(resolve(task.workspace), workingDirectory));
-    if (current) {
-      if (current.state !== 'active') {
-        return {
-          allowed: false,
-          reason: 'TASK_NOT_EDITABLE',
-          taskId: current.id,
-          state: current.state,
-        };
-      }
+    if (current && current.state === 'active') {
       if (!current.leaseExpiresAt || current.leaseExpiresAt <= now) {
         return {
           allowed: false,

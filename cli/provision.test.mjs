@@ -93,6 +93,14 @@ test('provisioner reports the root package version', async () => {
   assert.equal(BIZAR_VERSION, pkg.version);
 });
 
+test('model router ownership recognizes Bizar schemas and preserves foreign schemas', async () => {
+  const { isBizarManagedModelRouter } = await import('./provision.mjs');
+  assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v1.json' }), true);
+  assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v2.json' }), true);
+  assert.equal(isBizarManagedModelRouter({ $schema: 'https://example.test/custom-router.json' }), false);
+  assert.equal(isBizarManagedModelRouter(null), false);
+});
+
 describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
   let home;
 
@@ -154,22 +162,26 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
     assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
+    assert.ok(settings.permissions.ask.includes('Bash(git -C * push *)'));
+    assert.ok(settings.permissions.ask.includes('Bash(gh pr review *)'));
+    assert.ok(settings.permissions.deny.includes('Bash(git --git-dir=* rebase *)'));
+    assert.equal(settings.permissions.allow.some((rule) => /git (?:commit|push)|gh (?:pr|release)|publish|deploy/.test(rule)), false);
 
     const hookText = JSON.stringify(settings.hooks);
     for (const hook of [
-      'agent-grounding.mjs',
-      'git-workflow-guard.mjs',
-      'content-style-guard.mjs',
-      'simplify-guard.mjs',
-      'advisor-context.mjs',
-      'telemetry.mjs',
-      'precompact-priorities.sh',
+      'bizar hook user-prompt-submit',
+      'bizar hook session-start',
+      'bizar hook pre-tool-use',
+      'bizar hook permission-request',
+      'bizar hook post-tool-use-failure',
+      'bizar hook subagent-stop',
+      'bizar hook pre-compact',
+      'bizar hook stop',
     ]) {
-      assert.match(hookText, new RegExp(hook.replace('.', '\\.')));
+      assert.match(hookText, new RegExp(hook));
     }
     assert.equal(settings.hooks.SubagentStart[0].matcher, undefined);
-    assert.match(settings.hooks.SubagentStart[1].matcher, /linda/);
-    assert.match(settings.hooks.SubagentStart[1].matcher, /carl/);
+    assert.equal(settings.hooks.SubagentStart[0].hooks[0].command, 'bizar hook subagent-start');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

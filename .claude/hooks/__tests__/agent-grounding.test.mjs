@@ -66,8 +66,8 @@ test('project settings apply grounding to all subagents', () => {
   );
   const hooks = settings.hooks.SubagentStart;
   const grounding = hooks.find((entry) =>
-    JSON.stringify(entry).includes('agent-grounding.mjs'));
-  assert.ok(grounding, 'SubagentStart must run agent-grounding.mjs');
+    JSON.stringify(entry).includes('bizar hook subagent-start'));
+  assert.ok(grounding, 'SubagentStart must run the portable Bizar dispatcher');
   assert.equal(
     grounding.matcher,
     undefined,

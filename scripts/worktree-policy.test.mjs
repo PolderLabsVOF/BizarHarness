@@ -55,20 +55,26 @@ describe('worktree-first agent policy', () => {
     );
   });
 
-  test('project settings branch worktrees from HEAD and bootstrap isolated editors', () => {
+  test('project settings branch worktrees from HEAD and bootstrap isolated editors', async () => {
     const settings = JSON.parse(readFileSync(SETTINGS, 'utf8'));
     assert.equal(settings.worktree?.baseRef, 'head');
 
     const subagentHooks = settings.hooks?.SubagentStart ?? [];
-    const bootstrap = subagentHooks.find((entry) =>
-      JSON.stringify(entry).includes('worktree-bootstrap.mjs'));
-    assert.ok(bootstrap, 'SubagentStart must run worktree-bootstrap.mjs');
+    assert.ok(
+      subagentHooks.some((entry) => JSON.stringify(entry).includes('bizar hook subagent-start')),
+      'SubagentStart must use the portable Bizar dispatcher',
+    );
+    const { selectEventChain } = await import('../cli/commands/hook.mjs');
 
     for (const file of ISOLATED_EDITORS) {
       const source = readFileSync(join(AGENTS_DIR, file), 'utf8');
       const name = /^name:\s*(\S+)\s*$/m.exec(source)?.[1];
       assert.ok(name, `${file} must declare a name`);
-      assert.match(bootstrap.matcher, new RegExp(`\\b${name}\\b`));
+      assert.ok(
+        selectEventChain('subagent-start', JSON.stringify({ agent_type: name }))
+          .includes('worktree-bootstrap'),
+        `${name} must dispatch worktree-bootstrap`,
+      );
     }
   });
 

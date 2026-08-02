@@ -7,9 +7,19 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { findGitCommand } from './git-command-parser.mjs';
 
 const ALLOWED_COMMIT_TYPES = ['feat', 'fix', 'refactor', 'docs', 'style', 'test', 'build', 'chore'];
 const AI_ATTRIBUTION = /Claude-Session:|Co-Authored-By:\s*(?:Claude|Codex|ChatGPT|OpenAI|Gemini|Cursor|Copilot)|Generated with[^\n]*Claude Code|claude\.ai\/code\/session/i;
+const GH_GLOBAL_OPTION = String.raw`(?:(?:-R|--repo|--hostname)\s+(?:"[^"]*"|'[^']*'|\S+)|--(?:help|version))`;
+
+function commandPattern(program, globalOption, subcommand) {
+  return new RegExp(`\\b${program}(?:\\s+${globalOption})*\\s+${subcommand}\\b`, 'i');
+}
+
+function hasGhCommand(command, noun, actions) {
+  return commandPattern('gh', GH_GLOBAL_OPTION, `${noun}\\s+(?:${actions})`).test(command);
+}
 
 function output(decision, reason) {
   process.stdout.write(JSON.stringify({
@@ -55,23 +65,32 @@ process.stdin.on('end', () => {
   const command = Array.isArray(commandValue) ? commandValue.join(' ') : String(commandValue || '');
   const cwd = String(input.cwd || process.cwd());
 
-  if (/\bgit\s+(?:-\S+\s+)*push\b[\s\S]*(?:--force(?:-with-lease|-if-includes)?|-f)\b/i.test(command)) {
+  const push = findGitCommand(command, 'push');
+  const rebase = findGitCommand(command, 'rebase');
+  const commit = findGitCommand(command, 'commit');
+  const hasGuardedActionToken = /\b(?:commit|push|rebase)\b/i.test(command);
+  const hasExecutableIndirection = /(?:\$\(|`|\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)|\beval\b|\b(?:ba|z|k|c|fi)?sh\s+-c\b)/i.test(command);
+  if (!push && !rebase && !commit && hasGuardedActionToken && hasExecutableIndirection) {
+    output('deny', 'Dynamic shell indirection around commit, push, or rebase cannot be safely classified. Use a literal Git command so Bizar can apply the required approval policy.');
+    return;
+  }
+  if (push && push.args.some((arg) => arg === '-f' || /^--force(?:-with-lease|-if-includes)?(?:=|$)/.test(arg))) {
     output('deny', 'Force-pushing rewrites shared history. Create a follow-up commit or a new branch instead.');
     return;
   }
-  if (/\bgit\s+(?:-\S+\s+)*rebase\b/i.test(command)) {
+  if (rebase) {
     output('deny', 'Rebasing rewrites history. Use a merge or follow-up commit unless the user explicitly changes project policy.');
     return;
   }
-  if (AI_ATTRIBUTION.test(command) && /\b(?:git\s+commit|gh\s+pr)\b/i.test(command)) {
+  if (AI_ATTRIBUTION.test(command) && (commit || hasGhCommand(command, 'pr', '\\w+'))) {
     output('deny', 'Remove AI-attribution trailers or generated-by links from the commit or pull-request text.');
     return;
   }
 
-  if (/\bgit\s+(?:-\S+\s+)*commit\b/i.test(command)) {
+  if (commit) {
     const message = commitMessage(command);
     const subject = message.split('\n').find((line) => line.trim())?.trim() ?? '';
-    if (subject && !new RegExp(`^(?:${ALLOWED_COMMIT_TYPES.join('|')}):\\s+\\S`, 'i').test(subject)) {
+    if (subject && !new RegExp(`^(?:${ALLOWED_COMMIT_TYPES.join('|')})(\\([^)]+\\))?:\\s+\\S`, 'i').test(subject)) {
       output('deny', `Use a conventional commit subject: ${ALLOWED_COMMIT_TYPES.join(', ')} followed by ": description".`);
       return;
     }
@@ -79,7 +98,7 @@ process.stdin.on('end', () => {
     return;
   }
 
-  if (/\bgh\s+pr\s+(?:create|edit)\b/i.test(command)) {
+  if (hasGhCommand(command, 'pr', 'create|edit')) {
     const hasBody = /(?:^|\s)(?:-b|--body)(?:=|\s)/.test(command);
     const hasImage = /!\[[^\]]*\]\([^)]*\)|<img\b/i.test(command);
     if (hasBody && !hasImage && hasDesignChanges(cwd)) {
@@ -90,15 +109,18 @@ process.stdin.on('end', () => {
     return;
   }
 
-  if (/\bgh\s+pr\s+(?:merge|close|reopen)\b/i.test(command)) {
+  if (hasGhCommand(command, 'pr', 'merge|close|reopen|ready|review|comment')) {
     output('ask', 'Apply this pull-request state change on GitHub?');
     return;
   }
-  if (/\bgit\s+(?:-\S+\s+)*push\b/i.test(command)) {
+  if (push) {
     output('ask', 'Push local commits to the remote repository?');
     return;
   }
-  if (/\b(?:gh\s+release\s+(?:create|upload|delete)|npm\s+publish|bun\s+publish|pnpm\s+publish|(?:vercel|wrangler|flyctl)\s+(?:deploy|publish))\b/i.test(command)) {
+  const releaseMutation = hasGhCommand(command, 'release', 'create|edit|delete|upload');
+  const packagePublish = /\b(?:npm|bun|pnpm)\b[\s\S]*\bpublish\b/i.test(command);
+  const deployment = /\b(?:(?:npx|bunx|pnpm\s+exec)\s+)?(?:vercel|wrangler|flyctl)\b[\s\S]*(?:\bdeploy\b|\bpublish\b|--prod\b)/i.test(command);
+  if (releaseMutation || packagePublish || deployment) {
     output('ask', 'This command publishes or deploys externally. Continue?');
   }
 });

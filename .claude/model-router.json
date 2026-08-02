@@ -1,57 +1,179 @@
 {
-  "$schema": "https://bizar.dev/schema/model-router.v1.json",
+  "$schema": "https://bizar.dev/schema/model-router.v2.json",
   "version": "11.0.0",
   "endpoint": "http://localhost:20128/v1",
-  "comment": "Gateway model discovery is enabled at install time; the /model picker surfaces only IDs prefixed with \"claude\" or \"anthropic\". Run \"bizar model list\" to see the full set.",
+  "comment": "Bizar assigns one exact gateway model to each shipped agent. Role selection and complexity/model selection are separate decisions; every run snapshots its assignments before dispatch.",
+  "gateway": {
+    "required": true,
+    "endpoint": "http://localhost:20128/v1",
+    "availabilityProbe": "/models",
+    "exactModelRequired": true,
+    "unavailableBehavior": "fail",
+    "documentation": "https://code.claude.com/docs/en/llm-gateway"
+  },
   "tiers": {
     "premium": {
       "models": ["cx/gpt-5.6-sol"],
-      "purpose": "Complex debugging, planning work, UI design language, deep review — heaviest reasoning, highest cost."
+      "purpose": "Primary orchestration, system planning, and last-resort debugging where reasoning quality dominates cost."
     },
     "high": {
       "models": ["cx/gpt-5.6-terra"],
-      "purpose": "Complex implementation, routing, architecture — high reasoning at lower cost than sol."
+      "purpose": "Complex implementation and adversarial review where mistakes are expensive."
     },
     "mid-design": {
       "models": ["cx/gpt-5.6-luna"],
-      "purpose": "Design critique alt — visually-oriented mid-tier."
+      "purpose": "Focused visual-system and interaction-design reasoning."
     },
     "default": {
       "models": ["bizar/MiniMax-M3"],
-      "purpose": "Everyday default — fast general-purpose reasoning."
+      "purpose": "Broad, high-throughput research and guarded delivery operations."
     },
     "mid": {
       "models": ["bizar/MiniMax-M2.7"],
-      "purpose": "Mid-complexity implementation, research — slightly cheaper than default."
+      "purpose": "Bounded technical analysis, code search, and moderate implementation."
     },
     "budget": {
-      "models": ["bizar/MiniMax-M2.5", "oc/deepseek-v4-flash-free", "oc/mimo-v2.5-free"],
-      "purpose": "Trivial lookups, mechanical edits, clarifying questions — lowest cost."
+      "models": ["bizar/MiniMax-M2.5"],
+      "purpose": "Deterministic edits, clarification, and mechanical verification."
+    }
+  },
+  "roleRouting": {
+    "orchestration": {
+      "agents": ["mike"],
+      "purpose": "The single primary entrypoint; decomposes, dispatches, coordinates, and synthesizes without implementing."
+    },
+    "research": {
+      "agents": ["greg", "oscar"],
+      "purpose": "Repository mapping and official-documentation evidence gathering."
+    },
+    "planning": {
+      "agents": ["paul"],
+      "purpose": "Turn researched facts into reversible, testable implementation plans."
+    },
+    "clarification": {
+      "agents": ["janet"],
+      "purpose": "Ask one high-value question only when missing information materially blocks the plan."
+    },
+    "review": {
+      "agents": ["linda"],
+      "purpose": "Adversarial plan and implementation review."
+    },
+    "implementation": {
+      "agents": ["karen", "todd", "brenda", "pam"],
+      "purpose": "Implement approved work at complexity-appropriate depth."
+    },
+    "debugging": {
+      "agents": ["carl"],
+      "purpose": "Resolve failures that survived lower-cost debugging passes."
+    },
+    "design": {
+      "agents": ["brad", "ria"],
+      "purpose": "Define and audit product visual language and interaction quality."
+    },
+    "verification": {
+      "agents": ["kevin"],
+      "purpose": "Collect browser and user-facing behavior evidence."
+    },
+    "support": {
+      "agents": ["susan"],
+      "purpose": "Answer read-only project questions with source references."
+    },
+    "delivery": {
+      "agents": ["steve"],
+      "purpose": "Perform approval-gated Git and external delivery operations."
     }
   },
   "agents": {
-    "kevin": { "model": "bizar/MiniMax-M3", "tier": "default", "rationale": "Browser driving is mechanical + reactive." },
-    "brad":         { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "UI design language needs the highest reasoning." },
-    "linda":       { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "Plan review + audit; weakest reasoning is the bottleneck." },
-    "susan":         { "model": "bizar/MiniMax-M3", "tier": "default", "rationale": "Read-only Q&A — fast default." },
-    "brenda":      { "model": "bizar/MiniMax-M3", "tier": "default", "rationale": "Mechanical edits and .bizar/ maintenance." },
-    "steve":        { "model": "bizar/MiniMax-M3", "tier": "default", "rationale": "Git/GitHub ops — command templates." },
-    "greg":         { "model": "bizar/MiniMax-M3", "tier": "default", "rationale": "Codebase research — sheer volume, cheap model wins." },
-    "mike":          { "model": "cx/gpt-5.6-terra","tier": "high",    "rationale": "Routing + decomposition; high reasoning required." },
-    "pam":         { "model": "oc/deepseek-v4-flash-free", "tier": "budget", "rationale": "Single-shot tiny tasks — budget tier." },
-    "oscar": { "model": "bizar/MiniMax-M3", "tier": "default", "rationale": "Semantic code search — default reasoning." },
-    "todd":          { "model": "bizar/MiniMax-M2.7","tier": "mid",     "rationale": "Mid-complexity implementation; cheaper than default." },
-    "karen":           { "model": "cx/gpt-5.6-terra","tier": "high",    "rationale": "Top-tier implementation; high reasoning." },
-    "carl":        { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "Last-resort debug — strongest reasoning." },
-    "janet":           { "model": "oc/mimo-v2.5-free", "tier": "budget", "rationale": "Clarifying question; budget tier." },
-    "paul":            { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "Default planner for every non-trivial session. Planning quality is the bottleneck for downstream impl cost — premium reasoning wins." },
-    "ria":             { "model": "cx/gpt-5.6-sol",  "tier": "premium", "rationale": "UI/UX design craft — typography, spacing, motion, anti-slop. Same reasoning budget as @brad." }
+    "mike": {
+      "model": "cx/gpt-5.6-sol",
+      "tier": "premium",
+      "rationale": "The sole main orchestrator must sustain cross-phase decomposition, coordination, and synthesis without losing project constraints."
+    },
+    "paul": {
+      "model": "cx/gpt-5.6-sol",
+      "tier": "premium",
+      "rationale": "System-wide plans and reversible execution boundaries require the strongest long-horizon reasoning."
+    },
+    "carl": {
+      "model": "cx/gpt-5.6-sol",
+      "tier": "premium",
+      "rationale": "Last-resort debugging is reserved for novel, cross-cutting failures after cheaper agents have stalled."
+    },
+    "karen": {
+      "model": "cx/gpt-5.6-terra",
+      "tier": "high",
+      "rationale": "Complex implementation and architecture work need high reasoning while preserving a distinct escalation tier."
+    },
+    "linda": {
+      "model": "cx/gpt-5.6-terra",
+      "tier": "high",
+      "rationale": "Adversarial review needs strong independent reasoning to detect plan, security, and verification gaps."
+    },
+    "brad": {
+      "model": "cx/gpt-5.6-luna",
+      "tier": "mid-design",
+      "rationale": "Brand systems benefit from a focused design model rather than general implementation capacity."
+    },
+    "ria": {
+      "model": "cx/gpt-5.6-luna",
+      "tier": "mid-design",
+      "rationale": "UI critique, interaction detail, and accessibility review align with the focused design tier."
+    },
+    "greg": {
+      "model": "bizar/MiniMax-M3",
+      "tier": "default",
+      "rationale": "Repository and official-documentation research needs broad context handling at high throughput."
+    },
+    "steve": {
+      "model": "bizar/MiniMax-M3",
+      "tier": "default",
+      "rationale": "Guarded Git and delivery operations need dependable command reasoning more than speculative depth."
+    },
+    "todd": {
+      "model": "bizar/MiniMax-M2.7",
+      "tier": "mid",
+      "rationale": "Moderate implementation is bounded enough for the mid tier while still requiring technical judgment."
+    },
+    "oscar": {
+      "model": "bizar/MiniMax-M2.7",
+      "tier": "mid",
+      "rationale": "Intent-based code discovery is a bounded technical analysis task with concrete evidence checks."
+    },
+    "susan": {
+      "model": "bizar/MiniMax-M2.7",
+      "tier": "mid",
+      "rationale": "Source-grounded project explanations need enough reasoning to connect code paths without implementation overhead."
+    },
+    "brenda": {
+      "model": "bizar/MiniMax-M2.5",
+      "tier": "budget",
+      "rationale": "Routine deterministic edits and maintenance should use the lowest capable model."
+    },
+    "pam": {
+      "model": "bizar/MiniMax-M2.5",
+      "tier": "budget",
+      "rationale": "Single-shot mechanical tasks are intentionally constrained to the budget model."
+    },
+    "janet": {
+      "model": "bizar/MiniMax-M2.5",
+      "tier": "budget",
+      "rationale": "One targeted clarification is a narrow task that does not justify a higher reasoning tier."
+    },
+    "kevin": {
+      "model": "bizar/MiniMax-M2.5",
+      "tier": "budget",
+      "rationale": "Scripted browser verification is mechanical and evidence-driven."
+    }
   },
   "policies": {
-    "gpt_only_for": ["complex debugging", "planning work", "default planning", "UI design language", "UI/UX craft", "deep review", "routing/decomposition"],
-    "gpt_never_for": ["research", "implementation", "everyday tasks", "Q&A", "mechanical edits"],
-    "fallback_chain": ["cx/gpt-5.6-sol", "cx/gpt-5.6-terra", "cx/gpt-5.6-luna", "bizar/MiniMax-M3", "bizar/MiniMax-M2.7", "bizar/MiniMax-M2.5", "oc/deepseek-v4-flash-free", "oc/mimo-v2.5-free"],
-    "escalate_on_failure": true,
-    "cost_ceiling_per_session_usd": 5.0
+    "mainOrchestrator": "mike",
+    "assignmentSnapshot": "immutable-per-run",
+    "requireConfiguredGateway": true,
+    "requireExactRequestedModel": true,
+    "rejectDispatchModelOverride": true,
+    "silentFallback": false,
+    "unavailableModel": "fail-and-report",
+    "fallback_chain": [],
+    "costCeilingPerSessionUsd": 5.0
   }
 }
