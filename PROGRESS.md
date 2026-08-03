@@ -316,6 +316,18 @@ evaluation. Repository verification now accepts both npm 11's array-shaped and
 npm 12's keyed-object `npm pack --json` manifests. Fresh targeted coverage is
 29/29; `make check-arch` is 5/5 and `make check` passes.
 
+**F-128g regenerator audit (2026-08-03):** Reopened F-128 as F-128g to verify
+whether the F-128 behavior ever shipped on master. All F-128 behavior is on
+master, split across three absorbing commits: `b5b3aef` (F-118, path-ownership
+completed-state fallthrough in `cli/task-ledger.mjs` `authorizeEdit`),
+`9dd7ec4` (F-119, baseline + WebSearch tightening), and `8b2ee9e` (F-129,
+`## Autonomy and parallelism` section at AGENTS.md:34–49 mirrored into
+CLAUDE.md and .claude/CLAUDE.md, planner.md and office-greeter.md narrowing).
+Per the F-128 row's explicit gate ("must not claim passing until a future
+approval-gated commit contains the behavior"), composing a fresh atomic commit
+would be a no-op rebuild; F-128 stays `not_started` and F-128g closed with
+this audit trail instead of a commit.
+
 **Stop condition:** Modified agents and skills produce no new "ask the user" mid-task pauses for routine decisions; targeted tests pass; `make check-arch` and `make check` pass. ✅ met.
 
 **Known issues (out of F-128 scope):**
