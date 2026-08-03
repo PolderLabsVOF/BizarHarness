@@ -1,5 +1,37 @@
 # Changelog
 
+## [10.12.2] - 2026-08-03
+
+- Loosened Bizar hook rules so agents stop getting hung up on redundant
+  per-tool-call leaves:
+  - Dropped `content-style-guard` and `simplify-guard` from the
+    pre-tool-use chain. Edit/Write now runs 2 leaves (was 3). Bash now
+    runs 2 leaves (was 4).
+  - `path-ownership-guard.mjs` no longer forks `git worktree list` on
+    every edit. The worktree-bootstrap hook already establishes task
+    scope on session start. The hook is now a single in-memory ledger
+    lookup.
+  - `simplify-guard.mjs` freshness window extended 30 min to 4 hours
+    and skips the gate when the staged diff is exclusively CHANGELOG,
+    version-bump, or lockfile-only changes.
+  - `git-workflow-guard.mjs` dropped the AI-attribution trailer deny
+    (the trailers never appear because `attribution.commit` is empty).
+    The conventional-commit subject check is now a soft `additionalContext`
+    warning attached to the same `ask` response (no separate deny).
+    Force-push, rebase, and shell-indirection around guarded actions
+    still deny.
+  - `pretooluse-editwrite.mjs` dropped the always-on `additionalContext`
+    line that told the model which tool and path it just called.
+- All security-critical denies preserved: dangerous bash patterns,
+  writes to `.env` / `.envrc` / `secrets/` / `credentials/` /
+  `node_modules/`, commit/push/merge/release/publish/deploy via `gh`,
+  `npm`, `vercel`, `wrangler`, `flyctl`.
+- `cli/install/prune.test.mjs` replaces a tautological indirect test
+  with two direct unit tests against the shared `parseFlags()` helper.
+- Internal: `pruneReport(srcDir, destDir, filter, force)` extracted
+  in `cli/provision.mjs` to consolidate five copies of the prune
+  block across the sync helpers.
+
 ## [10.12.1] - 2026-08-03
 
 - Fixed `bizar install --force` so it actually prunes stale entries in
