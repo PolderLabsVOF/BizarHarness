@@ -847,3 +847,10 @@ hook rules that were firing per-tool-call and blocking legitimate work.
 **Shipped:** F-145 commits `f3f82b6`, `48d67bf`, release bump `8a701a3`,
 v10.12.2 published to npm (`@polderlabs/bizar` and `@polderlabs/bizar-sdk`).
 Ledger closed in this commit: F-145 flips to `passing`, VCR 45 → 46.
+
+## Complete — 9router picker proxy (F-147)
+- Date: 2026-08-02
+- Branch: feat/9router-model-discovery
+- Proxy: http://127.0.0.1:20129 -> http://localhost:20128 (gateway)
+- Rewrites upstream IDs to `claude-...` on GET /v1/models; passthrough elsewhere
+- Surfaces all 9router models in /model picker without replacing Anthropic defaults

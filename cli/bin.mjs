@@ -117,6 +117,7 @@ function showHelp() {
     claim <subcommand>     GitHub-style claim protocol over feature_list.json
     task <subcommand>      Durable dependency/worktree/path task coordination
     control <subcommand>   Machine-readable agents/tasks/sessions/messages API
+    picker-proxy <start>   Run the 9router picker proxy (default port 20129)
     workflow <subcommand>  Session-bound autopilot workflow state
     hook <name>            Run a portable Claude Code hook
 
@@ -457,6 +458,11 @@ async function main() {
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) process.exit(EXIT_USAGE);
       break;
+    }
+
+    case 'picker-proxy': {
+      await import('./commands/picker-proxy.mjs');
+      return;
     }
 
     default: {

@@ -568,6 +568,30 @@
       "passed": "2026-08-03",
       "wip_holder": "@main",
       "task": "F-145v4"
+    },
+    {
+      "id": "F-147",
+      "title": "9router picker proxy",
+      "description": "Proxy that rewrites upstream model IDs to claude-... so Claude Code's /model picker surfaces all 9router models without losing Anthropic defaults.",
+      "state": "active",
+      "category": "cli",
+      "scope": [
+        "cli/commands/9router-picker-proxy.mjs",
+        "cli/commands/picker-proxy.mjs",
+        "cli/bin.mjs",
+        ".claude/settings.json",
+        ".claude/model-router.json",
+        "cli/__tests__/9router-picker-proxy.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": {
+        "tests": [],
+        "commands": [
+          "make check",
+          "node --test cli/__tests__/9router-picker-proxy.test.mjs"
+        ]
+      }
     }
   ],
   "vcr": {

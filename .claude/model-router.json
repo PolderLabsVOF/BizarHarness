@@ -1,11 +1,11 @@
 {
   "$schema": "https://bizar.dev/schema/model-router.v2.json",
   "version": "11.0.0",
-  "endpoint": "http://localhost:20128/v1",
+  "endpoint": "http://localhost:20129/v1",
   "comment": "Bizar assigns one exact gateway model to each shipped agent. Role selection and complexity/model selection are separate decisions; every run snapshots its assignments before dispatch.",
   "gateway": {
     "required": true,
-    "endpoint": "http://localhost:20128/v1",
+    "endpoint": "http://localhost:20129/v1",
     "availabilityProbe": "/models",
     "exactModelRequired": true,
     "unavailableBehavior": "fail",
