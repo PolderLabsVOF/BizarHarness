@@ -16,8 +16,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = join(__dirname, '..', 'worker-suggest.mjs');
@@ -87,4 +89,42 @@ test('worker-suggest: invalid JSON on stdin exits 0', () => {
   assert.equal(r.status, 0, `expected exit 0, got ${r.status}`);
   assert.ok(r.stderr.indexOf('ERR_MODULE_NOT_FOUND') === -1,
     `ERR_MODULE_NOT_FOUND found in stderr: ${r.stderr}`);
+});
+
+
+test('worker-suggest: short-circuits when .bizar/.quick-once sentinel exists', () => {
+  const sentinelDir = mkdtempSync(join(tmpdir(), 'bizar-quick-'));
+  mkdirSync(join(sentinelDir, '.bizar'), { recursive: true });
+  writeFileSync(join(sentinelDir, '.bizar', '.quick-once'), '');
+  try {
+    const { status, stdout, stderr } = runHook({
+      session_id: 'quick-session',
+      cwd: sentinelDir,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'rename this file',
+    });
+    assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+    const obj = parseStdout(stdout);
+    assert.ok(obj, `stdout not parseable JSON: ${stdout}`);
+    assert.equal(obj.hookSpecificOutput.additionalContext, '');
+  } finally {
+    rmSync(sentinelDir, { recursive: true, force: true });
+  }
+});
+
+test('worker-suggest: emits orchestrator prompt (you ARE @mike) when sentinel absent', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'orch-session',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'implement feature X',
+  });
+  assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+  const obj = parseStdout(stdout);
+  assert.ok(obj);
+  assert.match(obj.hookSpecificOutput.additionalContext, /you ARE @mike/);
+  assert.doesNotMatch(
+    obj.hookSpecificOutput.additionalContext,
+    /Do not implement directly in the primary session\./,
+  );
 });

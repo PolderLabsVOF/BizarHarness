@@ -2,6 +2,13 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — Inline orchestrator + /quick (F-148)
+- Date: 2026-08-02
+- Branch: feat/orchestrator-quick
+- Primary session now IS @mike (no recursive dispatch)
+- /quick command creates .bizar/.quick-once sentinel for one-turn bypass
+- Session-end hook removes the sentinel
+
 
 ## In Progress — F-129 OMC-Informed Workflow Overhaul
 
