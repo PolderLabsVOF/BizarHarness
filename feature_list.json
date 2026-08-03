@@ -613,11 +613,37 @@
           "node --test cli/__tests__/9router-picker-proxy.test.mjs"
         ]
       }
+    },
+    {
+      "id": "F-148",
+      "title": "Inline orchestrator + /quick bypass",
+      "description": "Make the primary session BE @mike (orchestrator inline). /quick slash command bypasses routing for trivial tasks via a sentinel file.",
+      "state": "active",
+      "category": "harness",
+      "scope": [
+        ".claude/hooks/worker-suggest.mjs",
+        ".claude/commands/quick.md",
+        ".claude/hooks/sessionend-recall.mjs",
+        ".claude/hooks/__tests__/worker-suggest.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": {
+        "tests": [],
+        "commands": [
+          "make check",
+          "node --test .claude/hooks/__tests__/worker-suggest.test.mjs"
+        ]
+      },
+      "behavior": "Primary session inline-orchestrates as @mike (no recursive dispatch); /quick sets .bizar/.quick-once sentinel for one-turn bypass; session-end clears the sentinel.",
+      "verification": "node --test .claude/hooks/__tests__/worker-suggest.test.mjs; make check",
+      "layer": "core",
+      "created": "2026-08-03"
     }
   ],
   "vcr": {
     "passing": 46,
-    "activated": 46,
-    "ratio": 1
+    "activated": 47,
+    "ratio": 0.9787
   }
 }

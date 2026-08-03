@@ -36,6 +36,7 @@
 'use strict';
 
 import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -53,6 +54,21 @@ process.stdin.on('end', async () => {
 
   const prompt = String(input.prompt ?? input.user_prompt ?? '').trim();
 
+  // /quick sentinel bypass: when .bizar/.quick-once exists, skip the
+  // orchestrator routing policy for this single turn. The sentinel is
+  // created by the /quick slash command and removed by session-end.
+  const quickSentinel = join(input.cwd || process.cwd(), '.bizar', '.quick-once');
+  if (existsSync(quickSentinel)) {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext: '',
+      },
+    }) + '\n');
+    process.exit(0);
+    return;
+  }
+
   // Empty prompts get the silent treatment — the user has not yet
   // committed any intent.
   if (prompt.length === 0) {
@@ -68,9 +84,8 @@ process.stdin.on('end', async () => {
 
   const routePolicy = [
     'Mandatory Bizar routing policy:',
-    '- If this is the primary session, use the Agent tool to delegate the request to custom Bizar agent @mike before doing task analysis or implementation.',
+    '- If this is the primary session, you ARE @mike. Inline-play the orchestrator role: decompose the request, route to specialists via the Agent tool inside this session when a specialist would materially improve the answer, and synthesize the verified result. Otherwise execute directly. Keep the phased research/plan/implement/review discipline as guidance, not as a forced dispatch gate.',
     '- @mike must route trivial work to @brenda and non-trivial work through the configured research, plan, implementation, review, and verification agents.',
-    '- Do not implement directly in the primary session.',
     '- If you are already running as a Bizar custom agent, follow your assigned role and do not recursively dispatch yourself.',
   ].join('\n');
 
