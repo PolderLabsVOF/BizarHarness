@@ -559,20 +559,20 @@
       "id": "F-145",
       "behavior": "loosen Bizar hook rules so agents stop getting hung up: drop redundant content-style-guard and simplify-guard from per-tool-use chain, drop AI-attribution trailer deny, downgrade conventional-commit subject check to a soft warning, extend simplify-guard freshness window 30 min to 4 hours with trivial-diff skip, drop the always-on pretooluse-editwrite additionalContext noise line",
       "verification": "make check; make test; .claude/hooks/__tests__/*.test.mjs",
-      "state": "active",
-      "evidence": "uncommitted: 145/145 hook tests pass; 397/397 make test; make check TS clean",
-      "commit": null,
+      "state": "passing",
+      "evidence": "f3f82b6 + 48d67bf + 8a701a3 + v10.12.2 published; 145/145 hook tests pass; 397/397 make test; make check TS clean",
+      "commit": "8a701a3",
       "layer": "core",
       "category": "hooks",
       "created": "2026-08-03",
-      "passed": null,
+      "passed": "2026-08-03",
       "wip_holder": "@main",
       "task": "F-145v4"
     }
   ],
   "vcr": {
-    "passing": 45,
-    "activated": 45,
+    "passing": 46,
+    "activated": 46,
     "ratio": 1
   }
 }

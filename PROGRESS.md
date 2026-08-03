@@ -843,3 +843,7 @@ hook rules that were firing per-tool-call and blocking legitimate work.
   credentials/, node_modules/).
 - git-workflow-guard for any commit/push/merge/release/publish/deploy
   via gh, npm, vercel, wrangler, flyctl.
+
+**Shipped:** F-145 commits `f3f82b6`, `48d67bf`, release bump `8a701a3`,
+v10.12.2 published to npm (`@polderlabs/bizar` and `@polderlabs/bizar-sdk`).
+Ledger closed in this commit: F-145 flips to `passing`, VCR 45 → 46.
