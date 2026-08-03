@@ -590,7 +590,7 @@
       "commit": "c82077d",
       "category": "sdk",
       "scope": ["packages/sdk/src/mcp/server.ts", ".claude/settings.json", "cli/audit.mjs", "packages/sdk/tests/", "PROGRESS.md", "feature_list.json"],
-      "evidence": { "tests": ["packages/sdk/tests/mcp-agent-tools.test.ts"], "commands": ["make check"] }
+      "evidence": "c82077d + F-146 agent-facing CLI wrappers; 5 new tools: bizar_task, bizar_workflow, bizar_control, bizar_audit, bizar_model_list; .claude/settings.json mcp__bizar__* allowlist expanded; cli/audit.mjs gained --json branch; packages/sdk/tests/mcp-agent-tools.test.ts 7/7; mcp-tools.test.ts + sdk.test.mjs updated; make check TS clean; make test 407/407."
     },
     {
       "id": "F-147",
@@ -610,13 +610,7 @@
         "PROGRESS.md",
         "feature_list.json"
       ],
-      "evidence": {
-        "tests": ["cli/__tests__/9router-picker-proxy.test.mjs"],
-        "commands": [
-          "make check",
-          "node --test cli/__tests__/9router-picker-proxy.test.mjs"
-        ]
-      }
+      "evidence": "803ac5a + 9router picker proxy on 127.0.0.1:20129 -> gateway 20128; rewrites upstream IDs to claude-... on GET /v1/models; passthrough elsewhere; .claude/model-router.json + .claude/settings.json endpoint flips; cli/__tests__/9router-picker-proxy.test.mjs 3/3; make check TS clean; picker-proxy help + dispatch arm added."
     },
     {
       "id": "F-148",
@@ -634,17 +628,7 @@
         "PROGRESS.md",
         "feature_list.json"
       ],
-      "evidence": {
-        "tests": [".claude/hooks/__tests__/worker-suggest.test.mjs"],
-        "commands": [
-          "make check",
-          "node --test .claude/hooks/__tests__/worker-suggest.test.mjs"
-        ]
-      },
-      "behavior": "Primary session inline-orchestrates as @mike (no recursive dispatch); /quick sets .bizar/.quick-once sentinel for one-turn bypass; session-end clears the sentinel.",
-      "verification": "node --test .claude/hooks/__tests__/worker-suggest.test.mjs; make check",
-      "layer": "core",
-      "created": "2026-08-03"
+      "evidence": "6a5e158 + primary session inline-orchestrates as @mike (no recursive dispatch); .bizar/.quick-once sentinel short-circuits worker-suggest.mjs for one turn; sessionend-recall.mjs clears the sentinel; .claude/commands/quick.md registered; .claude/hooks/__tests__/worker-suggest.test.mjs 5/5; agent-grounding test updated for new prompt."
     },
     {
       "id": "F-149",
@@ -661,10 +645,7 @@
         "PROGRESS.md",
         "feature_list.json"
       ],
-      "evidence": {
-        "tests": ["cli/__tests__/worktree-merge.test.mjs"],
-        "commands": ["make check", "node --test cli/__tests__/worktree-merge.test.mjs"]
-      }
+      "evidence": "fb05e08 + cli/commands/worktree-merge.mjs tags source branch tip as merge-archive/<branch>-<sha> then git merge --no-ff; cli/__tests__/worktree-merge.test.mjs 4/4 (tag creation, --no-ff merge, branch-not-found, no-arg rejection); bin.mjs dispatch arm + help line; bin.mjs indentation restored after conflict resolution."
     }
   ],
   "vcr": {
