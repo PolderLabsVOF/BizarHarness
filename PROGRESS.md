@@ -875,3 +875,10 @@ explaining the omission. Write a 4-assertion regression test.
 `PROGRESS.md`, `feature_list.json`. SKILL.md upstream body written verbatim with
 `disable-model-invocation` removed and omission comment added. Regression test
 4/4. Gates green.
+
+## Complete — 9router picker proxy (F-147)
+- Date: 2026-08-02
+- Branch: feat/9router-model-discovery
+- Proxy: http://127.0.0.1:20129 -> http://localhost:20128 (gateway)
+- Rewrites upstream IDs to `claude-...` on GET /v1/models; passthrough elsewhere
+- Surfaces all 9router models in /model picker without replacing Anthropic defaults
