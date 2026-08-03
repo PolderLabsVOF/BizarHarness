@@ -545,20 +545,34 @@
       "id": "F-141",
       "behavior": "bizar install --force prunes stale agent/skill/command/rule/hook entries from ~/.claude/ to match repo source; --force flag is recognized by the CLI dispatch chain",
       "verification": "make check; make test; cli/install/prune.test.mjs; smoke-test install --force against sandboxed CLAUDE_CONFIG_DIR removes stale entries",
-      "state": "active",
-      "evidence": "uncommitted: 9/9 prune tests pass; 396/396 make test; smoke test confirmed odin.md/frigg.md removed, 16 office agents installed, user-owned .txt in skills preserved",
-      "commit": null,
+      "state": "passing",
+      "evidence": "c7ab0b4 + 43853b4 + v10.12.1 published; 10/10 prune tests pass; 397/397 make test; smoke test confirmed odin.md/frigg.md removed, 16 office agents installed, user-owned .txt in skills preserved",
+      "commit": "c7ab0b4",
       "layer": "core",
       "category": "installer",
       "created": "2026-08-02",
-      "passed": null,
+      "passed": "2026-08-03",
       "wip_holder": "@main",
       "task": "F-143"
+    },
+    {
+      "id": "F-145",
+      "behavior": "loosen Bizar hook rules so agents stop getting hung up: drop redundant content-style-guard and simplify-guard from per-tool-use chain, drop AI-attribution trailer deny, downgrade conventional-commit subject check to a soft warning, extend simplify-guard freshness window 30 min to 4 hours with trivial-diff skip, drop the always-on pretooluse-editwrite additionalContext noise line",
+      "verification": "make check; make test; .claude/hooks/__tests__/*.test.mjs",
+      "state": "active",
+      "evidence": "uncommitted: 145/145 hook tests pass; 397/397 make test; make check TS clean",
+      "commit": null,
+      "layer": "core",
+      "category": "hooks",
+      "created": "2026-08-03",
+      "passed": null,
+      "wip_holder": "@main",
+      "task": "F-145v4"
     }
   ],
   "vcr": {
-    "passing": 44,
-    "activated": 44,
+    "passing": 45,
+    "activated": 45,
     "ratio": 1
   }
 }

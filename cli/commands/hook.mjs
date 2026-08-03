@@ -16,8 +16,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const HOOK_ROOT = resolve(PACKAGE_ROOT, '.claude', 'hooks');
 const PRETOOL_SAFETY_LEAVES = new Set([
-  'pretooluse-editwrite', 'path-ownership-guard', 'content-style-guard',
-  'pretooluse-bash', 'git-workflow-guard', 'simplify-guard', 'agent-model-guard',
+  'pretooluse-editwrite', 'path-ownership-guard',
+  'pretooluse-bash', 'git-workflow-guard',
+  'agent-model-guard',
 ]);
 
 export const HOOK_PROGRAMS = Object.freeze({
@@ -65,16 +66,13 @@ export const EVENT_CHAINS = Object.freeze({
   'pre-tool-use': Object.freeze([
     'pretooluse-editwrite',
     'path-ownership-guard',
-    'content-style-guard',
     'pretooluse-bash',
     'git-workflow-guard',
-    'simplify-guard',
   ]),
   'permission-request': Object.freeze(['permission-request-policy']),
   'post-tool-use': Object.freeze([
     'posttooluse-editwrite',
     'auto-instinct',
-    'simplify-guard',
   ]),
   'post-tool-use-failure': Object.freeze(['post-tool-use-failure-policy']),
   'subagent-start': Object.freeze([
@@ -224,10 +222,10 @@ export function selectEventChain(eventKey, input = '') {
 
   if (eventKey === 'pre-tool-use') {
     if (/^(Write|Edit|MultiEdit)$/.test(toolName)) {
-      return ['pretooluse-editwrite', 'path-ownership-guard', 'content-style-guard'];
+      return ['pretooluse-editwrite', 'path-ownership-guard'];
     }
     if (toolName === 'Bash') {
-      return ['pretooluse-bash', 'git-workflow-guard', 'content-style-guard', 'simplify-guard'];
+      return ['pretooluse-bash', 'git-workflow-guard'];
     }
     if (toolName === 'Agent') return ['agent-model-guard'];
     return [];
@@ -236,7 +234,6 @@ export function selectEventChain(eventKey, input = '') {
   if (eventKey === 'post-tool-use') {
     if (/^(Write|Edit|MultiEdit)$/.test(toolName)) return ['posttooluse-editwrite'];
     if (toolName === 'Bash') return ['auto-instinct'];
-    if (toolName === 'Skill') return ['simplify-guard'];
     return [];
   }
 

@@ -75,14 +75,13 @@ test('PreTool safety leaf failures deny while context leaf failures fail open', 
 
 test('event dispatcher preserves tool and agent matcher scopes', () => {
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Bash' })), [
-    'pretooluse-bash', 'git-workflow-guard', 'content-style-guard', 'simplify-guard',
+    'pretooluse-bash', 'git-workflow-guard',
   ]);
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Edit' })), [
-    'pretooluse-editwrite', 'path-ownership-guard', 'content-style-guard',
+    'pretooluse-editwrite', 'path-ownership-guard',
   ]);
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Read' })), []);
   assert.deepEqual(selectEventChain('post-tool-use', JSON.stringify({ tool_name: 'Bash' })), ['auto-instinct']);
-  assert.deepEqual(selectEventChain('post-tool-use', JSON.stringify({ tool_name: 'Skill' })), ['simplify-guard']);
   assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'greg' })), ['agent-grounding']);
   assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'karen' })), [
     'agent-grounding', 'advisor-context', 'worktree-bootstrap',

@@ -10,7 +10,6 @@ import { spawnSync } from 'node:child_process';
 import { findGitCommand } from './git-command-parser.mjs';
 
 const ALLOWED_COMMIT_TYPES = ['feat', 'fix', 'refactor', 'docs', 'style', 'test', 'build', 'chore'];
-const AI_ATTRIBUTION = /Claude-Session:|Co-Authored-By:\s*(?:Claude|Codex|ChatGPT|OpenAI|Gemini|Cursor|Copilot)|Generated with[^\n]*Claude Code|claude\.ai\/code\/session/i;
 const GH_GLOBAL_OPTION = String.raw`(?:(?:-R|--repo|--hostname)\s+(?:"[^"]*"|'[^']*'|\S+)|--(?:help|version))`;
 
 function commandPattern(program, globalOption, subcommand) {
@@ -82,19 +81,24 @@ process.stdin.on('end', () => {
     output('deny', 'Rebasing rewrites history. Use a merge or follow-up commit unless the user explicitly changes project policy.');
     return;
   }
-  if (AI_ATTRIBUTION.test(command) && (commit || hasGhCommand(command, 'pr', '\\w+'))) {
-    output('deny', 'Remove AI-attribution trailers or generated-by links from the commit or pull-request text.');
-    return;
-  }
-
   if (commit) {
     const message = commitMessage(command);
     const subject = message.split('\n').find((line) => line.trim())?.trim() ?? '';
-    if (subject && !new RegExp(`^(?:${ALLOWED_COMMIT_TYPES.join('|')})(\\([^)]+\\))?:\\s+\\S`, 'i').test(subject)) {
-      output('deny', `Use a conventional commit subject: ${ALLOWED_COMMIT_TYPES.join(', ')} followed by ": description".`);
-      return;
+    // F-145 loosening: subject-shape check is a soft warning attached to
+    // the same hook response as the `ask` decision (the dispatcher
+    // expects one JSON line per leaf).
+    const conventional = subject && !new RegExp(`^(?:${ALLOWED_COMMIT_TYPES.join('|')})(\\([^)]+\\))?:\\s+\\S`, 'i').test(subject);
+    const payload = {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'ask',
+        permissionDecisionReason: `Create this local commit${subject ? `: ${subject}` : ''}?`,
+      },
+    };
+    if (conventional) {
+      payload.hookSpecificOutput.additionalContext = `Conventional commit hint: prefer "type: subject" (types: ${ALLOWED_COMMIT_TYPES.join(', ')}).`;
     }
-    output('ask', `Create this local commit${subject ? `: ${subject}` : ''}?`);
+    process.stdout.write(`${JSON.stringify(payload)}\n`);
     return;
   }
 

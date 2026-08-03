@@ -61,13 +61,14 @@ describe('Git and publication guard', () => {
     }
   });
 
-  test('denies unsupported commit subjects and asks for valid commits', () => {
+  test('warns on unsupported commit subjects and asks for both (F-145)', () => {
     const invalid = runHook('git-workflow-guard.mjs', {
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
       tool_input: { command: 'git commit -m \"misc: vague\"' },
     });
-    assert.equal(decision(invalid), 'deny');
+    assert.equal(decision(invalid), 'ask');
+    assert.match(String(invalid.hookSpecificOutput?.additionalContext || ''), /Conventional commit/i);
 
     const valid = runHook('git-workflow-guard.mjs', {
       hook_event_name: 'PreToolUse',
@@ -375,7 +376,7 @@ test('simplify marker outside freshness window blocks commit', () => {
 
   const mark = join(repo, '.git', 'bizar-simplify.ok');
   const fingerprint = spawnSync('git', ['write-tree'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
-  writeFileSync(mark, JSON.stringify({ timestamp: Date.now() - 31 * 60 * 1000, fingerprint }));
+  writeFileSync(mark, JSON.stringify({ timestamp: Date.now() - 5 * 60 * 60 * 1000, fingerprint }));
 
   const result = runHook('simplify-guard.mjs', {
     hook_event_name: 'PreToolUse',

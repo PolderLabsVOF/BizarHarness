@@ -66,7 +66,9 @@ test('Write .envrc → deny', () => {
 test('Write .env.example → allow (docs)', () => {
   const r = runHook('Write', '/repo/research/gstack/.env.example');
   assert.notEqual(r.decision, 'deny');
-  assert.match(r.context, /Bizar PreToolUse/);
+  // F-145: hook no longer emits an additionalContext note for the
+  // common path. Confirm it stays silent on legitimate writes.
+  assert.equal(r.context, null);
 });
 
 test('Write .env.sample → allow (docs)', () => {
@@ -122,11 +124,9 @@ test('Write pnpm-lock.yaml → allow', () => {
 test('Write src/index.ts → allow + neutral context', () => {
   const r = runHook('Write', '/repo/src/index.ts');
   assert.notEqual(r.decision, 'deny');
-  assert.match(r.context, /tool=Write/);
-  assert.match(r.context, /path=\/repo\/src\/index\.ts/);
-  // No debug-artifact warning in the hook context line anymore.
-  assert.doesNotMatch(r.context, /console\.log/);
-  assert.doesNotMatch(r.context, /Heads up/);
+  // F-145: the always-on context line was noise. Hook stays silent
+  // on legitimate writes.
+  assert.equal(r.context, null);
 });
 
 test('Edit .env → deny (same rule applies to Edit)', () => {

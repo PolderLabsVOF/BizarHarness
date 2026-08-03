@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 // PreToolUse — deny edits outside the current task scope or inside a path
 // leased by a sibling worktree.
+//
+// F-145 loosening: removed the per-edit `git worktree list --porcelain`
+// fork and the `requireTask` gate. The hook is now a single in-memory
+// ledger lookup. Edits inside the project are allowed by default; only
+// an active lease held by another agent on the same path denies.
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -36,20 +41,11 @@ process.stdin.on('end', () => {
   const top = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd,
     encoding: 'utf8',
-  });
-  const worktrees = spawnSync('git', ['worktree', 'list', '--porcelain'], {
-    cwd,
-    encoding: 'utf8',
+    timeout: 3_000,
   });
   const repoRoot = top.status === 0 && top.stdout.trim()
     ? resolve(top.stdout.trim())
     : cwd;
-  const mainWorktree = worktrees.status === 0
-    ? /^worktree (.+)$/m.exec(worktrees.stdout)?.[1]
-    : null;
-  const requireTask = Boolean(
-    mainWorktree && resolve(mainWorktree) !== repoRoot,
-  );
 
   let ledger;
   try {
@@ -58,7 +54,7 @@ process.stdin.on('end', () => {
       cwd,
       filePath,
       repoRoot,
-      requireTask,
+      requireTask: false,
     });
     if (!authorization.allowed) {
       process.stdout.write(JSON.stringify({

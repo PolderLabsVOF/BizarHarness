@@ -780,3 +780,66 @@ documented aggressive policy — anything in `~/.claude/{agents,commands,rules}`
 that does not exist in the repo source will be deleted. Keep hand-edited
 customizations in a separate project or under `~/.claude/plugins/...` and
 run installer without `--force` so they are left untouched.
+
+
+## Complete — F-145 Loosen Bizar Hook Rules
+
+**Objective:** Stop wasting agent time on redundant or overly strict
+hook rules that were firing per-tool-call and blocking legitimate work.
+
+**Root causes:**
+
+- Pre-tool-use chain had 3-4 leaves firing per tool call. Two of them
+  (content-style-guard, simplify-guard) either duplicated work done
+  elsewhere or blocked legitimate commits because a 30-minute freshness
+  window did not match how refactors actually unfold.
+- path-ownership-guard.mjs ran worktree list --porcelain plus a
+  separate rev-parse on every Edit/Write/MultiEdit. The worktree
+  fork was redundant with what worktree-bootstrap already established.
+- git-workflow-guard.mjs denied commits whose subject did not match the
+  conventional commit regex, and stripped any AI-attribution trailer in
+  commit messages. But attribution.commit is empty in settings.json and
+  the conventional-commit check fired before the user got the ask prompt.
+- simplify-guard.mjs had a 30-minute freshness window and required a
+  byte-identical staged-tree fingerprint. Any follow-up commit during a
+  refactor immediately re-tripped the gate.
+
+**Fixes:**
+
+- cli/commands/hook.mjs - dropped content-style-guard and simplify-guard
+  from the per-tool-use chain. Edit/Write runs pretooluse-editwrite plus
+  path-ownership-guard (2 leaves). Bash runs pretooluse-bash plus
+  git-workflow-guard (2 leaves). Skill no longer runs simplify-guard in
+  PostToolUse. Kept agent-model-guard in PRETOOL_SAFETY_LEAVES so its
+  failures still deny.
+- .claude/hooks/path-ownership-guard.mjs - removed the per-edit
+  worktree list --porcelain fork. Hook is now a single in-memory ledger
+  lookup. Default requireTask to false; another active lease on the same
+  path still denies.
+- .claude/hooks/simplify-guard.mjs - freshness window 30 min to 4
+  hours. Skip the check when the staged diff is exclusively CHANGELOG,
+  version-bump, or lockfile-only (low-risk follow-up commits).
+- .claude/hooks/git-workflow-guard.mjs - dropped the AI-attribution
+  trailer check entirely. Conventional-commit subject check is now a
+  soft warning attached to the same ask response (no separate deny).
+  Force-push and shell-indirection around guarded actions still deny.
+- .claude/hooks/pretooluse-editwrite.mjs - dropped the always-on
+  additionalContext line that was telling the model which tool/path it
+  just called. Pure noise, removed.
+
+**Verification:**
+
+- node --test .claude/hooks/__tests__/*.test.mjs - 145/145 pass.
+- make test - 397/397 pass.
+- make check - TypeScript clean.
+
+**Still denying (security-critical, not loosened):**
+
+- Force-push to any branch (push --force / -f).
+- Shell indirection that hides a guarded action.
+- pretooluse-bash dangerous patterns (rm -rf, sudo, kill PID 1, metadata
+  IPs, secrets access).
+- pretooluse-editwrite secrets guard (.env, .envrc, secrets/,
+  credentials/, node_modules/).
+- git-workflow-guard for any commit/push/merge/release/publish/deploy
+  via gh, npm, vercel, wrangler, flyctl.

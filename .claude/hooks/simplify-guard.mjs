@@ -17,7 +17,8 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { findGitCommand } from './git-command-parser.mjs';
 
-const FRESHNESS_WINDOW_MS = 30 * 60 * 1000;
+const FRESHNESS_WINDOW_MS = 4 * 60 * 60 * 1000;
+const TRIVIAL_PATH = /^(?:CHANGELOG\.md|package(-lock)?\.json|.*\/package(-lock)?\.json|\.claude-plugin\/plugin\.json|packages\/[^/]+\/src\/version\.ts)$/;
 
 function marker(cwd) {
   const result = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-dir'], {
@@ -50,6 +51,18 @@ function readMarker(path) {
   }
 }
 
+function isTrivialDiff(cwd) {
+  const result = spawnSync('git', ['diff', '--cached', '--name-only'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
+  if (result.status !== 0) return false;
+  const paths = result.stdout.split('\n').map((p) => p.trim()).filter(Boolean);
+  if (paths.length === 0) return false;
+  return paths.every((p) => TRIVIAL_PATH.test(p));
+}
+
 let raw = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { raw += chunk; });
@@ -70,6 +83,9 @@ process.stdin.on('end', () => {
   const commandValue = input.tool_input?.command;
   const command = Array.isArray(commandValue) ? commandValue.join(' ') : String(commandValue || '');
   if (!findGitCommand(command, 'commit')) return;
+
+  if (isTrivialDiff(cwd)) return;
+
   const approval = readMarker(mark);
   const age = approval ? Date.now() - approval.timestamp : Infinity;
   const fingerprint = stagedFingerprint(cwd);
