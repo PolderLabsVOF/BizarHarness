@@ -1,5 +1,22 @@
 # Changelog
 
+## [10.12.1] - 2026-08-03
+
+- Fixed `bizar install --force` so it actually prunes stale entries in
+  `~/.claude/{agents,skills,commands,rules,hooks}` against the bundled
+  source. Previously the `--force` / `--dry-run` / `--quiet` / `--yes`
+  flags were dropped at the `runInstaller` boundary, so `bizar install --force`
+  silently ran the default non-pruning path and left stale F-112
+  Norse → 90s office rebrand agents behind.
+- Added `pruneStale()` in `cli/provision.mjs` (recursive, filter-aware)
+  wired into all five sync functions. Skills and hooks use extension
+  filters so user-owned `.txt` / `.json` are preserved; agents,
+  commands, and rules prune every dest entry not in source.
+- Consolidated the install/update flag parser into `parseFlags()` in
+  `cli/provision.mjs` so the two commands stay in lockstep.
+- Added `cli/install/prune.test.mjs` (10 tests) pinning prune semantics,
+  flag wiring, and the shared parser.
+
 ## [10.12.0] - 2026-08-02
 
 - Added a Claude Code-native Bizar plugin manifest and stable `bizar hook`
