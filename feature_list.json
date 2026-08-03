@@ -578,23 +578,27 @@
       "category": "skills",
       "created": "2026-08-03",
       "passed": "2026-08-03",
-      "commit": null,
+      "commit": "c2ffab1",
       "evidence": "Task F-146-full active; SKILL.md verbatim upstream body with disable-model-invocation removed; 4/4 regression test pass; gates clean."
     },
     {
       "id": "F-146",
       "title": "Bizar MCP agent tools",
       "description": "Expose bizar task/workflow/control/audit/model_list as MCP tools so agents don't shell out for CLI.",
-      "state": "active",
+      "state": "passing",
+      "passed": "2026-08-03",
+      "commit": "c82077d",
       "category": "sdk",
       "scope": ["packages/sdk/src/mcp/server.ts", ".claude/settings.json", "cli/audit.mjs", "packages/sdk/tests/", "PROGRESS.md", "feature_list.json"],
-      "evidence": { "tests": [], "commands": ["make check"] }
+      "evidence": { "tests": ["packages/sdk/tests/mcp-agent-tools.test.ts"], "commands": ["make check"] }
     },
     {
       "id": "F-147",
       "title": "9router picker proxy",
       "description": "Proxy that rewrites upstream model IDs to claude-... so Claude Code's /model picker surfaces all 9router models without losing Anthropic defaults.",
-      "state": "active",
+      "state": "passing",
+      "passed": "2026-08-03",
+      "commit": "803ac5a",
       "category": "cli",
       "scope": [
         "cli/commands/9router-picker-proxy.mjs",
@@ -607,7 +611,7 @@
         "feature_list.json"
       ],
       "evidence": {
-        "tests": [],
+        "tests": ["cli/__tests__/9router-picker-proxy.test.mjs"],
         "commands": [
           "make check",
           "node --test cli/__tests__/9router-picker-proxy.test.mjs"
@@ -618,7 +622,9 @@
       "id": "F-148",
       "title": "Inline orchestrator + /quick bypass",
       "description": "Make the primary session BE @mike (orchestrator inline). /quick slash command bypasses routing for trivial tasks via a sentinel file.",
-      "state": "active",
+      "state": "passing",
+      "passed": "2026-08-03",
+      "commit": "6a5e158",
       "category": "harness",
       "scope": [
         ".claude/hooks/worker-suggest.mjs",
@@ -629,7 +635,7 @@
         "feature_list.json"
       ],
       "evidence": {
-        "tests": [],
+        "tests": [".claude/hooks/__tests__/worker-suggest.test.mjs"],
         "commands": [
           "make check",
           "node --test .claude/hooks/__tests__/worker-suggest.test.mjs"
@@ -644,7 +650,9 @@
       "id": "F-149",
       "title": "Worktree merge safety",
       "description": "Add bizar worktree-merge subcommand that archives the source branch tip as merge-archive/<branch>-<sha> before git merge --no-ff, so parallel pipeline work is never lost on conflict resolution and merge topology stays visible in git log --graph.",
-      "state": "active",
+      "state": "passing",
+      "passed": "2026-08-03",
+      "commit": "fb05e08",
       "category": "harness",
       "scope": [
         "cli/commands/worktree-merge.mjs",
@@ -654,14 +662,14 @@
         "feature_list.json"
       ],
       "evidence": {
-        "tests": [],
+        "tests": ["cli/__tests__/worktree-merge.test.mjs"],
         "commands": ["make check", "node --test cli/__tests__/worktree-merge.test.mjs"]
       }
     }
   ],
   "vcr": {
-    "passing": 46,
-    "activated": 47,
-    "ratio": 0.9787
+    "passing": 51,
+    "activated": 51,
+    "ratio": 1.000
   }
 }
