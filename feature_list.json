@@ -503,9 +503,9 @@
       "layer": "core",
       "category": "installer",
       "created": "2026-07-31",
-      "evidence": "2026-07-31 installer-driven gateway discovery: Commit 3220519 adds ANTHROPIC_AUTH_TOKEN+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY to project template; Commit 42574ac adds bizar model list CLI with 3s timeout, auth-retry-on-401, provider grouping; merge-settings tests 4/4; model CLI tests 5/6; feature_list.json vcr bumped 41->42.",
+      "evidence": "2026-08-03 regenerator: F-122 already shipped via commits 3220519 (installer adds ANTHROPIC_AUTH_TOKEN+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY to project template) and 42574ac (bizar model list CLI with 3s timeout, auth-retry-on-401, provider grouping). Current master re-verified: merge-settings 5/5 (cli/install/__tests__/merge-settings.test.mjs — production writer, normal-update preserve, normal-update retain, fresh-install, force-refresh); model CLI 6/6 (cli/__tests__/model.test.mjs — 200/JSON, --json exit, 401-retry, 401-persistent, timeout, network-error); cli/provision.mjs:649-777 (writeClaudeSettings) emits all four env vars; cli/commands/model.mjs:1-152 wired at cli/bin.mjs:419-433; .claude/settings.json:118-124 carries the same defaults; .claude/model-router.json:1-13 points to picker-proxy F-147.",
       "commit": "3220519",
-      "passed": "2026-07-31"
+      "passed": "2026-08-03"
     },
     {
       "id": "F-121",

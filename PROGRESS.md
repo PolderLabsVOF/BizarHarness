@@ -2,6 +2,57 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-122 Installer-Driven Gateway Model Discovery (regenerator)
+
+**Objective:** Reopen F-122 with current code, since the original F-122 closed
+on commits `3220519 / 42574ac` but the feature ledger row's evidence fell
+out of sync (stale test counts, missing pointer to the current code surface).
+Verify the regenerated behavior with current test counts and refresh the
+ledger evidence; no behavior change is required.
+
+**Implementation commits:** `3220519` (installer), `42574ac` (bizar model list
+CLI) — already on master and shipped in v10.10.2.
+
+**Regenerator evidence (no code change):**
+
+- `cli/provision.mjs` `writeClaudeSettings` (lines 649–777) emits four env
+  vars on normal update and on `--force`: `ANTHROPIC_BASE_URL`,
+  `BIZAR_MODEL_ROUTER_URL`, `ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`. User-owned values are preserved
+  without `--force`; `--force` refreshes the managed keys without deleting
+  unrelated user env.
+- `cli/commands/model.mjs` (1–152) wires `bizar model list` at
+  `cli/bin.mjs:419–433`. 3-second `AbortController` timeout, auth-retry-on-401,
+  provider-prefix grouping (`cx/`, `bizar/`, `oc/`, `claude/`, `anthropic/`,
+  `(no prefix)` fallback for slash-less IDs).
+- `.claude/settings.json:118–124` already carries the four env defaults.
+- `.claude/model-router.json:1–13` points at the picker-proxy endpoint
+  (F-147 surface) so the picker shows every gateway ID.
+- `node --test cli/install/__tests__/merge-settings.test.mjs cli/__tests__/model.test.mjs`
+  → 11/11 pass (merge-settings 5/5 + model CLI 6/6).
+- `feature_list.json` F-122 evidence refreshed to current test counts and
+  current commit; `passed` date moved to 2026-08-03 to reflect the regenerator.
+
+**Out of scope:** CHANGELOG.md (no new release — 10.13.0 already shipped),
+`cli/__tests__/model.test.mjs:181` orphan-subprocess teardown (pre-existing
+fragility tracked at PROGRESS.md:305).
+
+## Complete — v10.13.0 Release
+
+- Date: 2026-08-03
+- 5 features shipped: F-146 i-have-adhd skill, F-146 Bizar MCP agent tools,
+  F-147 9router picker proxy, F-148 inline orchestrator + /quick bypass,
+  F-149 worktree-merge safety.
+- Versions synchronized at 10.13.0 across root `package.json`,
+  `packages/sdk/package.json`, `packages/sdk/src/version.ts`,
+  `.claude-plugin/plugin.json`.
+- `@polderlabs/bizar@10.13.0` published (301 files, 514.4 kB).
+- `@polderlabs/bizar-sdk@10.13.0` published (123 files, 118.0 kB).
+- Tag `v10.13.0` → c9f504d pushed to origin.
+- All gates green: make check / test / e2e / verify-removed-surfaces /
+  verify-repo-structure / check-arch / clean-check / vcr (51/51).
+- 407/407 tests pass, 13/13 e2e checks pass.
+
 ## Complete — Inline orchestrator + /quick (F-148)
 - Date: 2026-08-02
 - Branch: feat/orchestrator-quick
