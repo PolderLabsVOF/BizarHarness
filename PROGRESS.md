@@ -860,6 +860,17 @@ hook rules that were firing per-tool-call and blocking legitimate work.
 
 **Shipped:** F-145 commits `f3f82b6`, `48d67bf`, release bump `8a701a3`,
 v10.12.2 published to npm (`@polderlabs/bizar` and `@polderlabs/bizar-sdk`).
+
+## Complete — Worktree merge safety (F-149)
+- Date: 2026-08-03
+- Branch: feat/worktree-merge-safety
+- `bizar worktree-merge <branch>` tags source branch tip as
+  `merge-archive/<branch>-<sha>` before merge, then `git merge --no-ff`
+  so parallel pipeline work is never lost and the merge topology stays
+  visible. Bootstrap-time branch-uniqueness guard deferred: worktree
+  creation runs outside the Bizar command surface today, so adding the
+  guard belongs with whichever tool creates the worktree.
+- Tests: 4/4 pass (`cli/__tests__/worktree-merge.test.mjs`).
 Ledger closed in this commit: F-145 flips to `passing`, VCR 45 → 46.
 
 ## Complete — F-146 Bundle i-have-adhd Skill (always-on)

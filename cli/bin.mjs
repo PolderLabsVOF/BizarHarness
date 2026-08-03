@@ -120,6 +120,7 @@ function showHelp() {
     picker-proxy <start>   Run the 9router picker proxy (default port 20129)
     workflow <subcommand>  Session-bound autopilot workflow state
     hook <name>            Run a portable Claude Code hook
+    worktree-merge <branch>  Merge a feature branch with archive tag (no work lost)
 
   Examples:
     bizar install
@@ -462,6 +463,11 @@ async function main() {
 
     case 'picker-proxy': {
       await import('./commands/picker-proxy.mjs');
+      return;
+    }
+
+    case 'worktree-merge': {
+      await import('./commands/worktree-merge.mjs');
       return;
     }
 
