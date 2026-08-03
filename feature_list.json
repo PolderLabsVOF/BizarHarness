@@ -568,6 +568,15 @@
       "passed": "2026-08-03",
       "wip_holder": "@main",
       "task": "F-145v4"
+    },
+    {
+      "id": "F-146",
+      "title": "Bizar MCP agent tools",
+      "description": "Expose bizar task/workflow/control/audit/model_list as MCP tools so agents don't shell out for CLI.",
+      "state": "active",
+      "category": "sdk",
+      "scope": ["packages/sdk/src/mcp/server.ts", ".claude/settings.json", "cli/audit.mjs", "packages/sdk/tests/", "PROGRESS.md", "feature_list.json"],
+      "evidence": { "tests": [], "commands": ["make check"] }
     }
   ],
   "vcr": {

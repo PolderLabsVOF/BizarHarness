@@ -45,6 +45,9 @@ describe("BIZAR_TOOLS surface", () => {
       "plan_action",
       "loop_start", "loop_stop", "loop_list", "loop_status",
       "graph_query", "graph_path",
+      // F-146 — agent-facing CLI wrappers.
+      "bizar_task", "bizar_workflow", "bizar_control",
+      "bizar_audit", "bizar_model_list",
     ]) {
       expect(names.has(expected), `missing tool: ${expected}`).toBe(true);
     }

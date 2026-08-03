@@ -11,11 +11,18 @@ function frontmatter(text) {
 }
 
 export async function runAudit() {
-  console.log(chalk.bold.cyan('\n  BIZARHARNESS AGENT AUDIT\n'));
+  // F-146 — machine-readable JSON branch for `bizar_audit` MCP tool.
+  // Must short-circuit BEFORE any human-formatted console output so the
+  // tool result is pure JSON.
+  const jsonMode = process.argv.includes('--json');
+
+  const emit = (line) => { if (!jsonMode) console.log(line); };
+  if (!jsonMode) emit(chalk.bold.cyan('\n  BIZARHARNESS AGENT AUDIT\n'));
   const agentsDir = join(CONFIG_DIR, 'agents');
   if (!existsSync(agentsDir)) {
     const result = { issues: [{ path: agentsDir, severity: 'HIGH', msg: 'agents directory missing' }], warnings: [], score: 0 };
-    console.log(chalk.red(`  ✗ No agents directory found at ${agentsDir}`));
+    emit(chalk.red(`  ✗ No agents directory found at ${agentsDir}`));
+    if (jsonMode) process.stdout.write(JSON.stringify(result));
     return result;
   }
 
@@ -43,9 +50,11 @@ export async function runAudit() {
     }
   }
 
-  for (const item of issues) console.log(chalk.red(`  ✗ ${item.severity} ${item.path}: ${item.msg}`));
-  for (const item of warnings) console.log(chalk.yellow(`  ⚠ ${item.path}: ${item.msg}`));
+  for (const item of issues) emit(chalk.red(`  ✗ ${item.severity} ${item.path}: ${item.msg}`));
+  for (const item of warnings) emit(chalk.yellow(`  ⚠ ${item.path}: ${item.msg}`));
   const score = Math.max(0, 100 - issues.length * 15 - warnings.length * 3);
-  console.log(`\n  Security score: ${score}/100 (${files.length} agents)\n`);
-  return { issues, warnings, score, totalIssues: issues.length, totalWarnings: warnings.length };
+  emit(`\n  Security score: ${score}/100 (${files.length} agents)\n`);
+  const result = { issues, warnings, score, totalIssues: issues.length, totalWarnings: warnings.length };
+  if (jsonMode) process.stdout.write(JSON.stringify(result));
+  return result;
 }
