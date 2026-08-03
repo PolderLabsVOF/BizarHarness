@@ -25,7 +25,7 @@ test('every non-empty primary prompt receives mandatory Bizar routing', () => {
   assert.match(context, /mandatory Bizar routing/i);
   assert.match(context, /Agent tool/);
   assert.match(context, /@mike/);
-  assert.match(context, /do not implement directly/i);
+  assert.match(context, /you ARE @mike/i);
 });
 
 test('specialized suggestions supplement rather than replace mandatory routing', () => {
