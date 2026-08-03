@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "bizar-harness",
   "displayName": "Bizar Harness",
-  "version": "10.12.2",
+  "version": "10.13.0",
   "description": "Guarded multi-agent workflows for Claude Code with a single orchestrator, durable workflow state, and explicit human approval boundaries.",
   "author": {
     "name": "Polderlabs"

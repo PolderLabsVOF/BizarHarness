@@ -1,5 +1,25 @@
 # Changelog
 
+## [10.13.0] - 2026-08-03
+
+- F-146: bundle `i-have-adhd` skill (always-on) from ayghri upstream; add
+  4-assertion regression test.
+- F-146: expose `bizar task / workflow / control / audit / model list`
+  as MCP tools so agents don't shell out for CLI.
+- F-147: 9router picker proxy (`127.0.0.1:20129` → gateway `20128`)
+  rewrites upstream IDs to `claude-...` on `GET /v1/models` so Claude
+  Code's `/model` picker surfaces every gateway model.
+- F-148: primary session now IS `@mike` (no recursive dispatch);
+  `/quick` sets `.bizar/.quick-once` for one-turn routing bypass;
+  session-end clears the sentinel.
+- F-149: `bizar worktree-merge <branch>` tags the source branch tip as
+  `merge-archive/<branch>-<sha>` before `git merge --no-ff`, so parallel
+  pipeline work is never lost on conflict resolution and merge topology
+  stays visible in `git log --graph`.
+- Versions synchronized at 10.13.0 across root `package.json`,
+  `packages/sdk/package.json`, `packages/sdk/src/version.ts`, and
+  `.claude-plugin/plugin.json`.
+
 ## [10.12.2] - 2026-08-03
 
 - Loosened Bizar hook rules so agents stop getting hung up on redundant
