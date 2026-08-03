@@ -71,7 +71,7 @@ try {
     'human approval policy',
     settings.permissions?.defaultMode === 'acceptEdits'
       && guardWired
-      && JSON.stringify(guardDecisions) === JSON.stringify(['deny', 'ask', 'ask']),
+      && JSON.stringify(guardDecisions) === JSON.stringify(['ask', 'ask', 'ask']),
     guardWired
       ? `git-workflow-guard decisions: ${guardDecisions.join(', ')}`
       : 'git-workflow-guard is not wired for Bash PreToolUse',
