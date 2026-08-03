@@ -568,6 +568,24 @@
       "passed": "2026-08-03",
       "wip_holder": "@main",
       "task": "F-145v4"
+    },
+    {
+      "id": "F-149",
+      "title": "Worktree merge safety",
+      "description": "Add bizar worktree-merge subcommand that archives the source branch tip as merge-archive/<branch>-<sha> before git merge --no-ff, so parallel pipeline work is never lost on conflict resolution and merge topology stays visible in git log --graph.",
+      "state": "active",
+      "category": "harness",
+      "scope": [
+        "cli/commands/worktree-merge.mjs",
+        "cli/bin.mjs",
+        "cli/__tests__/worktree-merge.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": {
+        "tests": [],
+        "commands": ["make check", "node --test cli/__tests__/worktree-merge.test.mjs"]
+      }
     }
   ],
   "vcr": {

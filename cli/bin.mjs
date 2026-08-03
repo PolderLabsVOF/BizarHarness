@@ -119,6 +119,7 @@ function showHelp() {
     control <subcommand>   Machine-readable agents/tasks/sessions/messages API
     workflow <subcommand>  Session-bound autopilot workflow state
     hook <name>            Run a portable Claude Code hook
+    worktree-merge <branch>  Merge a feature branch with archive tag (no work lost)
 
   Examples:
     bizar install
@@ -457,6 +458,11 @@ async function main() {
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) process.exit(EXIT_USAGE);
       break;
+    }
+
+    case 'worktree-merge': {
+      await import('./commands/worktree-merge.mjs');
+      return;
     }
 
     default: {
