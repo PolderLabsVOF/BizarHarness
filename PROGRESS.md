@@ -847,3 +847,24 @@ hook rules that were firing per-tool-call and blocking legitimate work.
 **Shipped:** F-145 commits `f3f82b6`, `48d67bf`, release bump `8a701a3`,
 v10.12.2 published to npm (`@polderlabs/bizar` and `@polderlabs/bizar-sdk`).
 Ledger closed in this commit: F-145 flips to `passing`, VCR 45 → 46.
+
+## Complete — F-146 Bundle i-have-adhd Skill (always-on)
+
+**Objective:** Downstream skill `i-have-adhd` from `ayghri/i-have-adhd` upstream
+(https://github.com/ayghri/i-have-adhd). Bundle verbatim upstream body, drop the
+`disable-model-invocation: true` frontmatter line to keep the skill always-on,
+drop the Hermes-specific `metadata.hermes` block, add an inline comment
+explaining the omission. Write a 4-assertion regression test.
+
+**Verification:**
+
+- node --test config/skills/i-have-adhd/__tests__/always-on.test.mjs — 4/4 pass.
+- make verify-repo-structure — clean.
+- make check — TypeScript clean.
+- make clean-check — no debug artifacts.
+- make vcr — 46/46 unchanged.
+
+**Evidence:** Task F-146-full active with scope `config/skills/i-have-adhd/**`,
+`PROGRESS.md`, `feature_list.json`. SKILL.md upstream body written verbatim with
+`disable-model-invocation` removed and omission comment added. Regression test
+4/4. Gates green.

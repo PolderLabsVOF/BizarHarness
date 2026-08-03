@@ -568,6 +568,18 @@
       "passed": "2026-08-03",
       "wip_holder": "@main",
       "task": "F-145v4"
+    },
+    {
+      "id": "F-146",
+      "behavior": "Bundle i-have-adhd skill from ayghri/i-have-adhd upstream verbatim, drop disable-model-invocation to keep always-on, add omission comment",
+      "verification": "node --test config/skills/i-have-adhd/__tests__/always-on.test.mjs; make verify-repo-structure; make check; make clean-check; make vcr",
+      "state": "passing",
+      "layer": "core",
+      "category": "skills",
+      "created": "2026-08-03",
+      "passed": "2026-08-03",
+      "commit": null,
+      "evidence": "Task F-146-full active; SKILL.md verbatim upstream body with disable-model-invocation removed; 4/4 regression test pass; gates clean."
     }
   ],
   "vcr": {
