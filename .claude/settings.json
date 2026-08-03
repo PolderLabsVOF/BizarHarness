@@ -37,6 +37,11 @@
       "mcp__bizar__graph_path",
       "mcp__bizar__list_instincts",
       "mcp__bizar__list_decisions",
+      "mcp__bizar__bizar_task",
+      "mcp__bizar__bizar_workflow",
+      "mcp__bizar__bizar_control",
+      "mcp__bizar__bizar_audit",
+      "mcp__bizar__bizar_model_list",
       "mcp__semble__*",
       "mcp__agent-browser__*"
     ],

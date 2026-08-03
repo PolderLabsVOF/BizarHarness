@@ -34,6 +34,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { spawnSync } from "node:child_process";
 
 import { listInstincts } from "../learning/instincts.js";
 import { listDecisions } from "../learning/decisions.js";
@@ -88,6 +89,17 @@ function err(text: string) {
   // a structured payload so the model can react.
   return { content: [{ type: "text" as const, text: `error: ${text}` }] };
 }
+
+// Spawn the local `bizar` CLI with --json. Thin wrappers for the 5 agent-
+// facing surfaces (task, workflow, control, audit, model list) so subagents
+// can call them through MCP instead of shelling out. 30s ceiling keeps the
+// MCP request from hanging on a stuck subprocess.
+function runBizar(args: string[]): { ok: true; stdout: string } | { ok: false; error: string } {
+  const r = spawnSync("bizar", [...args, "--json"], { encoding: "utf8", timeout: 30_000 });
+  if (r.status !== 0) return { ok: false, error: `bizar ${args.join(" ")} exited ${r.status}: ${r.stderr || r.stdout}` };
+  return { ok: true, stdout: r.stdout };
+}
+function readJsonSafe<T>(text: string): T | null { try { return JSON.parse(text) as T; } catch { return null; } }
 
 // ---------------------------------------------------------------------------
 // Pillar D — instinct + decision read-back (v10.3.0)
@@ -336,6 +348,115 @@ const graphPathTool = defineTool<{ from: string; to: string }>(
 );
 
 // ---------------------------------------------------------------------------
+// Agent-facing CLI wrappers (F-146) — thin `bizar <surface> --json` shells.
+// ---------------------------------------------------------------------------
+
+// Forward action + arbitrary key/value args to `bizar task <action> --json`.
+// Valid actions: create, ready, list, show, claim, heartbeat, complete,
+// cancel, sweep.
+const bizarTaskTool = defineTool<Record<string, string>>(
+  "bizar_task",
+  "Wrapper around `bizar task <action> --json`. Actions: create, ready, list, show, claim, heartbeat, complete, cancel, sweep. Pass other CLI flags (e.g. --title, --scope, --depends-on, --owner, --workspace, --lease-ms, --evidence, --reason) as string fields.",
+  { action: "string" },
+  async (args) => {
+    try {
+      const { action, ...rest } = args;
+      if (!action) return err("missing action");
+      const flat: string[] = [action];
+      for (const [k, v] of Object.entries(rest)) {
+        if (v === undefined || v === null || v === "") continue;
+        flat.push(`--${k}`, String(v));
+      }
+      const r = runBizar(["task", ...flat]);
+      if (!r.ok) return err(r.error);
+      const parsed = readJsonSafe<unknown>(r.stdout);
+      return ok(parsed !== null ? JSON.stringify(parsed) : r.stdout);
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+// Forward action + args to `bizar workflow <action> --json`.
+// Valid actions: start, status, resume, advance, fail, cancel.
+const bizarWorkflowTool = defineTool<Record<string, string>>(
+  "bizar_workflow",
+  "Wrapper around `bizar workflow <action> --json`. Actions: start, status, resume, advance, fail, cancel. Pass CLI flags (e.g. --goal, --profile, --session, --run, --revision, --stage, --evidence, --reason) as string fields.",
+  { action: "string" },
+  async (args) => {
+    try {
+      const { action, ...rest } = args;
+      if (!action) return err("missing action");
+      const flat: string[] = [action];
+      for (const [k, v] of Object.entries(rest)) {
+        if (v === undefined || v === null || v === "") continue;
+        flat.push(`--${k}`, String(v));
+      }
+      const r = runBizar(["workflow", ...flat]);
+      if (!r.ok) return err(r.error);
+      const parsed = readJsonSafe<unknown>(r.stdout);
+      return ok(parsed !== null ? JSON.stringify(parsed) : r.stdout);
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+// Forward action + args to `bizar control <action> --json`.
+// Valid actions: snapshot, agents, tasks, sessions, messages, message.
+const bizarControlTool = defineTool<Record<string, string>>(
+  "bizar_control",
+  "Wrapper around `bizar control <action> --json`. Actions: snapshot, agents, tasks, sessions, messages, message. Pass CLI flags (e.g. --agent, --session, --text, --from) as string fields.",
+  { action: "string" },
+  async (args) => {
+    try {
+      const { action, ...rest } = args;
+      if (!action) return err("missing action");
+      const flat: string[] = [action];
+      for (const [k, v] of Object.entries(rest)) {
+        if (v === undefined || v === null || v === "") continue;
+        flat.push(`--${k}`, String(v));
+      }
+      const r = runBizar(["control", ...flat]);
+      if (!r.ok) return err(r.error);
+      const parsed = readJsonSafe<unknown>(r.stdout);
+      return ok(parsed !== null ? JSON.stringify(parsed) : r.stdout);
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+// `bizar audit --json` — single-shot wrapper, no action routing needed.
+const bizarAuditTool = defineTool<Record<string, string>>(
+  "bizar_audit",
+  "Wrapper around `bizar audit --json`. Emits the structured audit report (issues, warnings, score) without human-formatted output.",
+  {},
+  async () => {
+    try {
+      const r = runBizar(["audit"]);
+      if (!r.ok) return err(r.error);
+      const parsed = readJsonSafe<unknown>(r.stdout);
+      if (parsed !== null) return ok(JSON.stringify(parsed));
+      // CLI did not honour --json; surface a structured error so callers
+      // know the binary is on an older revision than this wrapper expects.
+      return err(`bizar audit did not emit JSON; first chars: ${r.stdout.slice(0, 80)}`);
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+// `bizar model list --json` — gateway model inventory.
+const bizarModelListTool = defineTool<Record<string, string>>(
+  "bizar_model_list",
+  "Wrapper around `bizar model list --json`. Lists every model id reachable through the configured 9Router gateway.",
+  {},
+  async () => {
+    try {
+      const r = runBizar(["model", "list"]);
+      if (!r.ok) return err(r.error);
+      const parsed = readJsonSafe<unknown>(r.stdout);
+      return ok(parsed !== null ? JSON.stringify(parsed) : r.stdout);
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+// ---------------------------------------------------------------------------
 // Factory — wire all tools into an MCP server
 // ---------------------------------------------------------------------------
 
@@ -349,6 +470,12 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   graphPathTool,
   listInstinctsTool,
   listDecisionsTool,
+  // F-146 — agent-facing CLI wrappers
+  bizarTaskTool,
+  bizarWorkflowTool,
+  bizarControlTool,
+  bizarAuditTool,
+  bizarModelListTool,
 ];
 
 /**

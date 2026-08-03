@@ -3,6 +3,13 @@
 > Canonical current-work record. Update before and after implementation.
 
 
+## Complete — Bizar MCP agent tools (F-146)
+- Date: 2026-08-02
+- Branch: feat/mcp-agent-tools
+- 5 new tools: bizar_task, bizar_workflow, bizar_control, bizar_audit, bizar_model_list
+- Audit gained --json branch at cli/audit.mjs
+
+
 ## In Progress — F-129 OMC-Informed Workflow Overhaul
 
 **Objective:** Research `yeachan-heo/oh-my-claudecode` at a pinned revision and
