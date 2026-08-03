@@ -159,26 +159,27 @@ describe('runInstaller() flag wiring (F-141)', () => {
     const result = await runInstaller({ force: true });
     assert.equal(result.ok, true);
   });
+});
 
-  test('parseInstallFlags accepts --force --dry-run --quiet --yes', async () => {
-    // parseInstallFlags is internal; exercise it through the public
-    // install() command entry. install() also calls runRepair which
-    // touches repo paths — guard it so the test only covers parse.
-    const mod = await import('../commands/install.mjs');
-    // --help short-circuits before any provisioner / repair work,
-    // so it validates that the dispatch path does not reject flags.
-    const captured = [];
-    const origWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = (chunk, ...rest) => { captured.push(String(chunk)); return origWrite(chunk, ...rest); };
-    try {
-      await mod.install(['--force', '--dry-run', '--yes', '--quiet'], false);
-    } finally {
-      process.stdout.write = origWrite;
-    }
-    // install() with --quiet forwards to runInstaller({quiet:true}),
-    // which prints the location card and returns. No error thrown =
-    // parseInstallFlags handled the flags.
-    assert.ok(true, 'flags parsed without throwing');
+describe('parseFlags() shared between install and provisioner', () => {
+  // The argv parser lives in cli/provision.mjs and is the single
+  // source of truth for installer flags. install() in
+  // cli/commands/install.mjs imports it directly. These tests pin
+  // the surface so install/update/provision stay in lockstep.
+  test('--force --dry-run --yes are recognized', async () => {
+    const { parseFlags } = await import('../provision.mjs');
+    const opts = parseFlags(['--force', '--dry-run', '--yes', '-y', '--non-interactive']);
+    assert.equal(opts.force, true);
+    assert.equal(opts.dryRun, true);
+    assert.equal(opts.yes, true);
+  });
+
+  test('--mode=update flips mode to update', async () => {
+    const { parseFlags } = await import('../provision.mjs');
+    assert.equal(parseFlags(['--mode=update']).mode, 'update');
+    assert.equal(parseFlags(['--mode=install']).mode, 'install');
+    assert.equal(parseFlags([]).mode, 'install');
+    assert.equal(parseFlags(['--update']).mode, 'update');
   });
 });
 

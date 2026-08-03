@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import { runInstaller } from '../install.mjs';
 import { runUpdate } from '../update.mjs';
 import { runRepair } from '../repair.mjs';
+import { parseFlags } from '../provision.mjs';
 
 // ── Help texts ──────────────────────────────────────────────────────────────────
 
@@ -87,25 +88,16 @@ export function showUpdateHelp() {
 
 // ── Command runners ────────────────────────────────────────────────────────────
 
-function parseInstallFlags(args) {
-  const opts = {};
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--force') opts.force = true;
-    else if (a === '--dry-run') opts.dryRun = true;
-    else if (a === '--yes' || a === '-y') opts.yes = true;
-    else if (a === '--quiet') opts.quiet = true;
-    else if (a === '--mode=update') opts.mode = 'update';
-  }
-  return opts;
-}
-
 export async function install(args, isHelpRequest) {
   if (isHelpRequest) {
     showInstallHelp();
     return;
   }
-  await runInstaller(parseInstallFlags(args));
+  // parseFlags lives in cli/provision.mjs and is the canonical argv
+  // parser for the installer family. Reusing it keeps install and
+  // update in lockstep on flag semantics.
+  const { mode, dryRun, force, yes } = parseFlags(args);
+  await runInstaller({ mode, dryRun, force, yes });
   // v4.4.3 — After install, repair any stale bin symlinks so the
   // user picks up the new code.
   try {
