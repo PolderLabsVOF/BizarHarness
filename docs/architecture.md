@@ -123,7 +123,7 @@ delegation through the custom `mike` agent. Mike routes trivial work to
 review, and verification pipeline. Specialized worker matches supplement this
 route but never replace it.
 
-Mike is the sole general orchestrator and is pinned to `cx/gpt-5.6-sol`.
+Mike is the sole general orchestrator and is pinned to `claude-qwen/qwen3.8-max` (Qwen 3.8 Max via the 9router gateway).
 Workers do not redesign or recursively own the pipeline: they execute bounded
 research, planning, implementation, review, and verification assignments.
 Their models come from one strict role/difficulty registry: GPT Terra for

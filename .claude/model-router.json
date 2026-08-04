@@ -1,8 +1,8 @@
 {
   "$schema": "https://bizar.dev/schema/model-router.v2.json",
-  "version": "11.0.0",
+  "version": "11.1.0",
   "endpoint": "http://localhost:20129/v1",
-  "comment": "Bizar assigns one exact gateway model to each shipped agent. Role selection and complexity/model selection are separate decisions; every run snapshots its assignments before dispatch.",
+  "comment": "Bizar assigns one exact gateway model to each shipped agent. Role selection and complexity/model selection are separate decisions; every run snapshots its assignments before dispatch. Premium orchestrator/debug/planning tier uses Qwen 3.8 Max via the 9router gateway; MiniMax tiers are routed as claude-minimax/* gateway IDs.",
   "gateway": {
     "required": true,
     "endpoint": "http://localhost:20129/v1",
@@ -13,8 +13,8 @@
   },
   "tiers": {
     "premium": {
-      "models": ["cx/gpt-5.6-sol"],
-      "purpose": "Primary orchestration, system planning, and last-resort debugging where reasoning quality dominates cost."
+      "models": ["claude-qwen/qwen3.8-max"],
+      "purpose": "Primary orchestration, system planning, and last-resort debugging where reasoning quality dominates cost. Qwen 3.8 Max is reserved for the user-facing orchestrator, planning, and Carl escalation."
     },
     "high": {
       "models": ["cx/gpt-5.6-terra"],
@@ -25,15 +25,15 @@
       "purpose": "Focused visual-system and interaction-design reasoning."
     },
     "default": {
-      "models": ["bizar/MiniMax-M3"],
+      "models": ["claude-minimax/MiniMax-M3"],
       "purpose": "Broad, high-throughput research and guarded delivery operations."
     },
     "mid": {
-      "models": ["bizar/MiniMax-M2.7"],
+      "models": ["claude-minimax/MiniMax-M2.7"],
       "purpose": "Bounded technical analysis, code search, and moderate implementation."
     },
     "budget": {
-      "models": ["bizar/MiniMax-M2.5"],
+      "models": ["claude-minimax/MiniMax-M2.5"],
       "purpose": "Deterministic edits, clarification, and mechanical verification."
     }
   },
@@ -85,19 +85,19 @@
   },
   "agents": {
     "mike": {
-      "model": "cx/gpt-5.6-sol",
+      "model": "claude-qwen/qwen3.8-max",
       "tier": "premium",
-      "rationale": "The sole main orchestrator must sustain cross-phase decomposition, coordination, and synthesis without losing project constraints."
+      "rationale": "The sole main orchestrator the user talks to; Qwen 3.8 Max sustains cross-phase decomposition, coordination, and synthesis without losing project constraints."
     },
     "paul": {
-      "model": "cx/gpt-5.6-sol",
+      "model": "claude-qwen/qwen3.8-max",
       "tier": "premium",
-      "rationale": "System-wide plans and reversible execution boundaries require the strongest long-horizon reasoning."
+      "rationale": "System-wide plans and reversible execution boundaries require the strongest long-horizon reasoning; shares the user-facing orchestrator tier."
     },
     "carl": {
-      "model": "cx/gpt-5.6-sol",
+      "model": "claude-qwen/qwen3.8-max",
       "tier": "premium",
-      "rationale": "Last-resort debugging is reserved for novel, cross-cutting failures after cheaper agents have stalled."
+      "rationale": "Last-resort debugging is reserved for novel cross-cutting failures; Qwen 3.8 Max gives Carl the same headroom as the user-facing orchestrator."
     },
     "karen": {
       "model": "cx/gpt-5.6-terra",
@@ -120,47 +120,47 @@
       "rationale": "UI critique, interaction detail, and accessibility review align with the focused design tier."
     },
     "greg": {
-      "model": "bizar/MiniMax-M3",
+      "model": "claude-minimax/MiniMax-M3",
       "tier": "default",
       "rationale": "Repository and official-documentation research needs broad context handling at high throughput."
     },
     "steve": {
-      "model": "bizar/MiniMax-M3",
+      "model": "claude-minimax/MiniMax-M3",
       "tier": "default",
       "rationale": "Guarded Git and delivery operations need dependable command reasoning more than speculative depth."
     },
     "todd": {
-      "model": "bizar/MiniMax-M2.7",
+      "model": "claude-minimax/MiniMax-M2.7",
       "tier": "mid",
       "rationale": "Moderate implementation is bounded enough for the mid tier while still requiring technical judgment."
     },
     "oscar": {
-      "model": "bizar/MiniMax-M2.7",
+      "model": "claude-minimax/MiniMax-M2.7",
       "tier": "mid",
       "rationale": "Intent-based code discovery is a bounded technical analysis task with concrete evidence checks."
     },
     "susan": {
-      "model": "bizar/MiniMax-M2.7",
+      "model": "claude-minimax/MiniMax-M2.7",
       "tier": "mid",
       "rationale": "Source-grounded project explanations need enough reasoning to connect code paths without implementation overhead."
     },
     "brenda": {
-      "model": "bizar/MiniMax-M2.5",
+      "model": "claude-minimax/MiniMax-M2.5",
       "tier": "budget",
       "rationale": "Routine deterministic edits and maintenance should use the lowest capable model."
     },
     "pam": {
-      "model": "bizar/MiniMax-M2.5",
+      "model": "claude-minimax/MiniMax-M2.5",
       "tier": "budget",
       "rationale": "Single-shot mechanical tasks are intentionally constrained to the budget model."
     },
     "janet": {
-      "model": "bizar/MiniMax-M2.5",
+      "model": "claude-minimax/MiniMax-M2.5",
       "tier": "budget",
       "rationale": "One targeted clarification is a narrow task that does not justify a higher reasoning tier."
     },
     "kevin": {
-      "model": "bizar/MiniMax-M2.5",
+      "model": "claude-minimax/MiniMax-M2.5",
       "tier": "budget",
       "rationale": "Scripted browser verification is mechanical and evidence-driven."
     }

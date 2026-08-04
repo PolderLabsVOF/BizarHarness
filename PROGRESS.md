@@ -2,6 +2,43 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-163 Registry rebrand: claude-qwen + claude-minimax
+
+**Objective:** Repoint the agent registry and tier table at the new 9router
+gateway IDs after the user added a Qwen provider and the MiniMax IDs were
+re-prefixed. The user-facing orchestrator (`@mike`), planning (`@paul`),
+and last-resort debugging (`@carl`) move to `claude-qwen/qwen3.8-max`;
+MiniMax tiers move to `claude-minimax/*`; design/implementation high tiers
+remain on `cx/gpt-5.6-{terra,luna}`. Every frontmatter, test fixture,
+CLI string, command doc, and ledger row is updated; no behavior change
+beyond the model-id swap.
+
+**Files touched in F-163:**
+- `.claude/model-router.json` — version 11.0.0 → 11.1.0; tier models +
+  agent assignments + rationales; tier purpose note added for Qwen
+  orchestrator tier.
+- `.claude/agents/*.md` (16 files) — `model:` frontmatter + body refs in
+  `office-manager.md` (lines 79, 207).
+- `scripts/agent-model-registry.test.mjs` — `ALLOWED_MODELS` set, test
+  title, mike/linda snapshot assertions, tamper target, unavailability
+  fixture.
+- `packages/sdk/tests/agent-model-registry.test.mjs` — SAMPLE fixture +
+  assertions + tamper targets for parity test.
+- `cli/__tests__/workflow-state.test.mjs` — mike model assertion, probe
+  fixture, tamper target, unavailability filter (4 refs).
+- `cli/__tests__/model.test.mjs` — SAMPLE_MODELS fixture + table
+  assertions (cx/, claude-minimax/, claude-qwen/ groups).
+- `cli/commands/model.mjs` — `PROVIDER_GROUPS` and help text.
+- `cli/provision.mjs:935` — premium hint message.
+- `docs/architecture.md:126` — Mike pinning text.
+- `.claude/commands/use-default.md`, `.claude/commands/use-premium.md` —
+  model id strings and subagent listing.
+- `feature_list.json` — F-163 row (passing).
+- `CHANGELOG.md` — Unreleased entry.
+
+**Registry test:** `node --test scripts/agent-model-registry.test.mjs` →
+7/7 green (verified post-edit).
+
 ## Complete — F-122 Installer-Driven Gateway Model Discovery (regenerator)
 
 **Objective:** Reopen F-122 with current code, since the original F-122 closed

@@ -932,7 +932,7 @@ export async function runProvision(opts = {}) {
   if (anyFail) console.log(chalk.yellow('  ⚠ Some steps had issues.'));
   else { console.log(chalk.bold.green('  ✓ Bizar is ready.')); console.log(chalk.dim('     Next: restart your Claude Code session.')); }
   console.log('');
-  console.log(chalk.dim('  Premium model: ANTHROPIC_MODEL=cx/gpt-5.6-sol claude'));
+  console.log(chalk.dim('  Premium model: ANTHROPIC_MODEL=claude-qwen/qwen3.8-max claude'));
   console.log(chalk.dim('  See /use-premium or .claude/commands/use-premium.md for the full launch snippet.'));
   console.log('');
   return { ok: !anyFail, mode: effectiveMode, state: detectState(), stepResults };

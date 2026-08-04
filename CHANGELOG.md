@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- F-163: Repoint the agent registry at the new 9router gateway IDs:
+  orchestrator (`@mike`), planning (`@paul`), and last-resort debugging
+  (`@carl`) now run on `claude-qwen/qwen3.8-max`; MiniMax tiers are
+  re-prefixed as `claude-minimax/MiniMax-{M3,M2.7,M2.5}`; design and
+  high-implementation tiers remain on `cx/gpt-5.6-{terra,luna}`.
+  `.claude/model-router.json` version bumped 11.0.0 → 11.1.0; 16 agent
+  frontmatter lines, `scripts/agent-model-registry.test.mjs`,
+  `packages/sdk/tests/agent-model-registry.test.mjs`,
+  `cli/__tests__/workflow-state.test.mjs`, `cli/__tests__/model.test.mjs`,
+  `cli/commands/model.mjs`, `cli/provision.mjs:935`, `docs/architecture.md`,
+  `.claude/commands/use-default.md`, `.claude/commands/use-premium.md`,
+  `PROGRESS.md`, `feature_list.json`, and `CHANGELOG.md` updated for
+  consistency. `node --test scripts/agent-model-registry.test.mjs` → 7/7.
+
 ## [10.13.0] - 2026-08-03
 
 - F-146: bundle `i-have-adhd` skill (always-on) from ayghri upstream; add

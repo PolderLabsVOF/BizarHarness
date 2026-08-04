@@ -174,7 +174,7 @@ test('production starts require exact availability and bind an immutable assignm
   assert.equal(state.assignmentSnapshot.gatewayEndpoint, testRegistry.gateway.endpoint);
   assert.equal(state.assignmentSnapshot.availabilityProbe, testRegistry.gateway.availabilityProbe);
   assert.equal(Object.keys(state.assignmentSnapshot.assignments).length, Object.keys(testRegistry.agents).length);
-  assert.equal(state.assignmentSnapshot.assignments.mike.model, 'cx/gpt-5.6-sol');
+  assert.equal(state.assignmentSnapshot.assignments.mike.model, 'claude-qwen/qwen3.8-max');
   assert.equal(Object.isFrozen(state.assignmentSnapshot), true);
   assert.equal(Object.isFrozen(state.assignmentSnapshot.assignments.mike), true);
 });
@@ -199,7 +199,7 @@ test('availability probes enforce timeout and exact response ids', async () => {
       registry: testRegistry,
       fetchImpl: async () => ({
         ok: true,
-        async json() { return { data: [{ id: ' cx/gpt-5.6-sol ' }] }; },
+        async json() { return { data: [{ id: ' claude-qwen/qwen3.8-max ' }] }; },
       }),
     }),
     (error) => error instanceof WorkflowStateError && error.code === 'GATEWAY_RESPONSE_INVALID',
@@ -441,7 +441,7 @@ test('assignment snapshots reject cross-run reuse and fingerprint tampering', (t
   const secondPaths = resolveWorkflowPaths({ projectRoot: secondRoot, sessionId: 'session-1' });
   const second = startWorkflow({ projectRoot: secondRoot, sessionId: 'session-1', goal: 'Protect fingerprints' });
   const tampered = JSON.parse(JSON.stringify(second));
-  tampered.assignmentSnapshot.assignments.mike.model = 'bizar/MiniMax-M2.5';
+  tampered.assignmentSnapshot.assignments.mike.model = 'claude-minimax/MiniMax-M2.5';
   writeFileSync(secondPaths.statePath, JSON.stringify(tampered));
   assertCode('ASSIGNMENT_INTEGRITY_ERROR', () => getWorkflowState({ projectRoot: secondRoot, sessionId: 'session-1' }));
 });
@@ -662,7 +662,7 @@ test('CLI refuses to start when effective inference routing cannot use the froze
 
 test('CLI refuses unavailable exact agent models without writing workflow state', async (t) => {
   const root = project(t);
-  const unavailable = availableModelIds.filter((id) => id !== 'cx/gpt-5.6-sol');
+  const unavailable = availableModelIds.filter((id) => id !== 'claude-qwen/qwen3.8-max');
   const gateway = await fakeModelGateway(t, root, unavailable);
   gateway.env.CLAUDE_SESSION_ID = 'unavailable-session';
   const result = await runWorkflowCli(root, gateway.env, [

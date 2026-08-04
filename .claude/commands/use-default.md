@@ -1,14 +1,14 @@
 ---
-description: Revert Claude Code to the default tier (bizar/MiniMax-M3). Prints the exact shell command and env vars to unset.
+description: Revert Claude Code to the default tier (claude-minimax/MiniMax-M3). Prints the exact shell command and env vars to unset.
 allowed-tools: Bash
 ---
 
-# /use-default — Revert to bizar/MiniMax-M3 (default)
+# /use-default — Revert to claude-minimax/MiniMax-M3 (default)
 
 The local model router at `http://localhost:20128/v1` defaults to
-`bizar/MiniMax-M3` for everyday reasoning. Use this when you've
-been running on premium (`cx/gpt-5.6-sol`) and want to drop back to
-the cheaper default.
+`claude-minimax/MiniMax-M3` for everyday reasoning. Use this when you've
+been running on premium (`claude-qwen/qwen3.8-max`) and want to drop back
+to the cheaper default.
 
 ## Commands
 
@@ -30,7 +30,7 @@ claude
 ### Revert a project-level override
 
 If you added `ANTHROPIC_MODEL` to `.claude/settings.local.json` for
-this project, remove it (or set it back to `bizar/MiniMax-M3`).
+this project, remove it (or set it back to `claude-minimax/MiniMax-M3`).
 
 ```json
 {

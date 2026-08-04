@@ -49,10 +49,10 @@ function runModelList(port, extraArgs = []) {
 const { describe, it, afterEach } = await import('node:test');
 
 const SAMPLE_MODELS = [
-  { id: 'cx/gpt-5.6-sol', display_name: 'GPT-5.6 Sol' },
+  { id: 'claude-qwen/qwen3.8-max', display_name: 'Qwen 3.8 Max' },
   { id: 'cx/gpt-5.6-terra', display_name: 'GPT-5.6 Terra' },
-  { id: 'bizar/MiniMax-M3', display_name: 'MiniMax M3' },
-  { id: 'bizar/MiniMax-M2.7', display_name: 'MiniMax M2.7' },
+  { id: 'claude-minimax/MiniMax-M3', display_name: 'MiniMax M3' },
+  { id: 'claude-minimax/MiniMax-M2.7', display_name: 'MiniMax M2.7' },
   { id: 'oc/deepseek-v4-flash-free', display_name: 'DeepSeek V4 Flash Free' },
   { id: 'anthropic/sonnet-4-20251120', display_name: 'Sonnet 4' },
   { id: 'claude-3-5-sonnet-20241022', display_name: 'Claude 3.5 Sonnet' },
@@ -105,8 +105,8 @@ describe('bizar model list', { concurrency: 1 }, () => {
     const { stdout, stderr, code } = await runModelList(serverPort);
     assert.strictEqual(code, 0, `expected 0, got ${code}. stderr: ${stderr}`);
     assert.ok(stdout.includes('cx/'), 'table should contain cx/ group');
-    assert.ok(stdout.includes('cx/gpt-5.6-sol'), 'table should contain cx/gpt-5.6-sol');
-    assert.ok(stdout.includes('bizar/'), 'table should contain bizar/ group');
+    assert.ok(stdout.includes('claude-qwen/qwen3.8-max'), 'table should contain claude-qwen/qwen3.8-max');
+    assert.ok(stdout.includes('claude-minimax/'), 'table should contain claude-minimax/ group');
     assert.ok(stdout.includes('oc/'), 'table should contain oc/ group');
     assert.ok(stdout.includes('(no prefix)'), 'table should contain (no prefix) group');
     assert.ok(stdout.includes('anthropic/'), 'table should contain anthropic/ group');

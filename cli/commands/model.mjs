@@ -16,7 +16,7 @@ const BIZAR_MODEL_ROUTER_URL = process.env.BIZAR_MODEL_ROUTER_URL
 const ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN || 'sk_9router';
 
 const PROVIDER_GROUPS = [
-  'cx/', 'bizar/', 'oc/', 'claude/', 'anthropic/',
+  'cx/', 'claude-minimax/', 'claude-qwen/', 'oc/', 'claude/', 'anthropic/',
 ];
 
 function showHelp() {
@@ -31,7 +31,7 @@ function showHelp() {
     Fetches GET ${BIZAR_MODEL_ROUTER_URL}/models?limit=1000
     and prints a table of provider | id | display_name.
     The /model picker inside Claude Code shows only "claude"/"anthropic" prefixed
-    IDs. This command exposes the full set (cx/, bizar/, oc/, etc.).
+    IDs. This command exposes the full set (cx/, claude-minimax/, claude-qwen/, oc/, etc.).
 
   Flags:
     --json   Emit { providers: { "cx/": [...], ... }, total: N }

@@ -646,11 +646,36 @@
         "feature_list.json"
       ],
       "evidence": "fb05e08 + cli/commands/worktree-merge.mjs tags source branch tip as merge-archive/<branch>-<sha> then git merge --no-ff; cli/__tests__/worktree-merge.test.mjs 4/4 (tag creation, --no-ff merge, branch-not-found, no-arg rejection); bin.mjs dispatch arm + help line; bin.mjs indentation restored after conflict resolution."
+    },
+    {
+      "id": "F-163",
+      "title": "Registry rebrand: claude-qwen + claude-minimax gateway IDs; qwen3.8-max orchestrates",
+      "description": "Repoint the agent registry at the new 9router gateway IDs: orchestrator/planning/last-resort-debug on claude-qwen/qwen3.8-max; MiniMax tiers on claude-minimax/*; design/implementation high tiers remain on cx/gpt-5.6-{terra,luna}. All frontmatter, tests, CLI strings, command docs, and ledger rows stay consistent.",
+      "state": "passing",
+      "passed": "2026-08-03",
+      "commit": "F-163",
+      "category": "harness",
+      "scope": [
+        ".claude/model-router.json",
+        ".claude/agents/**",
+        ".claude/commands/**",
+        "scripts/agent-model-registry.test.mjs",
+        "packages/sdk/tests/agent-model-registry.test.mjs",
+        "cli/__tests__/workflow-state.test.mjs",
+        "cli/__tests__/model.test.mjs",
+        "cli/commands/model.mjs",
+        "cli/provision.mjs",
+        "docs/architecture.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "CHANGELOG.md"
+      ],
+      "evidence": "F-163 + .claude/model-router.json v11.0.0->11.1.0 with claude-qwen/qwen3.8-max premium + claude-minimax/* tiers; 16 agent frontmatter updated; scripts/agent-model-registry.test.mjs 7/7 (ALLOWED_MODELS, mike/linda/todd/ria snapshot, tamper, unavailability); packages/sdk/tests/agent-model-registry.test.mjs parity test green; cli/__tests__/workflow-state.test.mjs + cli/__tests__/model.test.mjs + cli/commands/model.mjs (PROVIDER_GROUPS) all consistent; use-default.md/use-premium.md updated; docs/architecture.md + cli/provision.mjs:935 updated."
     }
   ],
   "vcr": {
-    "passing": 51,
-    "activated": 51,
+    "passing": 52,
+    "activated": 52,
     "ratio": 1.000
   }
 }

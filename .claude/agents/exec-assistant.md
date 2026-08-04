@@ -2,7 +2,7 @@
 name: pam
 description: Pam — Executive Assistant. Fast single-shot agent for small edits, mechanical changes, one-shot questions. No delegation, no parallel streams, no Agent tool. Use for "rename this file", "fix this typo", quick lookups.
 tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch, WebSearch, Skill
-model: bizar/MiniMax-M2.5
+model: claude-minimax/MiniMax-M2.5
 isolation: worktree
 ---
 

@@ -13,12 +13,12 @@ const ROOT = resolve(import.meta.dirname, '..');
 const AGENTS_DIR = join(ROOT, '.claude', 'agents');
 const ROUTER_PATH = join(ROOT, '.claude', 'model-router.json');
 const ALLOWED_MODELS = new Set([
-  'cx/gpt-5.6-sol',
+  'claude-qwen/qwen3.8-max',
   'cx/gpt-5.6-terra',
   'cx/gpt-5.6-luna',
-  'bizar/MiniMax-M3',
-  'bizar/MiniMax-M2.7',
-  'bizar/MiniMax-M2.5',
+  'claude-minimax/MiniMax-M3',
+  'claude-minimax/MiniMax-M2.7',
+  'claude-minimax/MiniMax-M2.5',
 ]);
 
 function readAgents() {
@@ -45,10 +45,10 @@ describe('canonical Bizar agent/model registry', () => {
       assert.ok(ALLOWED_MODELS.has(agent.model), `${agent.name} has unsupported model ${agent.model}`);
       assert.match(agent.tools ?? '', /(?:^|,\s*)WebSearch(?:,|$)/, `${agent.name} must retain WebSearch`);
     }
-    assert.deepEqual(new Set(agents.map(({ model }) => model)), ALLOWED_MODELS, 'the six requested GPT/MiniMax models should all be used');
+    assert.deepEqual(new Set(agents.map(({ model }) => model)), ALLOWED_MODELS, 'the six requested Qwen/cx/MiniMax models should all be used');
   });
 
-  it('keeps Mike as the unique primary orchestrator on GPT-5.6 Sol', () => {
+  it('keeps Mike as the unique primary orchestrator on Qwen 3.8 Max', () => {
     assert.equal(registry.policies.mainOrchestrator, 'mike');
     assert.deepEqual(registry.roleRouting.orchestration.agents, ['mike']);
     const orchestrationMemberships = Object.entries(registry.roleRouting)
@@ -57,7 +57,7 @@ describe('canonical Bizar agent/model registry', () => {
     assert.deepEqual(orchestrationMemberships, ['orchestration']);
 
     const mike = agents.find(({ name }) => name === 'mike');
-    assert.equal(mike?.model, 'cx/gpt-5.6-sol');
+    assert.equal(mike?.model, 'claude-qwen/qwen3.8-max');
     assert.match(mike?.text ?? '', /single main orchestrator/i);
   });
 
@@ -115,8 +115,8 @@ describe('per-run model assignment snapshot', () => {
       createdAt: '2026-08-02T00:00:00.000Z',
     });
 
-    assert.equal(snapshot.assignments.mike.model, 'cx/gpt-5.6-sol');
-    assert.equal(snapshot.assignments.todd.model, 'bizar/MiniMax-M2.7');
+    assert.equal(snapshot.assignments.mike.model, 'claude-qwen/qwen3.8-max');
+    assert.equal(snapshot.assignments.todd.model, 'claude-minimax/MiniMax-M2.7');
     assert.equal(snapshot.assignments.ria.model, 'cx/gpt-5.6-luna');
     assert.equal(snapshot.gatewayEndpoint, registry.gateway.endpoint);
     assert.equal(snapshot.availabilityProbe, registry.gateway.availabilityProbe);
@@ -124,12 +124,12 @@ describe('per-run model assignment snapshot', () => {
     assert.equal(Object.isFrozen(snapshot.assignments), true);
     assert.equal(Object.isFrozen(snapshot.assignments.mike), true);
     assert.equal(verifyRunAssignmentSnapshot(snapshot), true);
-    assert.throws(() => { snapshot.assignments.mike.model = 'bizar/MiniMax-M2.5'; }, TypeError);
+    assert.throws(() => { snapshot.assignments.mike.model = 'claude-minimax/MiniMax-M2.5'; }, TypeError);
   });
 
   it('fails rather than substituting an unavailable or unknown assignment', () => {
     assert.throws(
-      () => createRunAssignmentSnapshot({ runId: 'run-124', agentNames: ['mike'], availableModelIds: ['bizar/MiniMax-M3'], registry }),
+      () => createRunAssignmentSnapshot({ runId: 'run-124', agentNames: ['mike'], availableModelIds: ['claude-minimax/MiniMax-M3'], registry }),
       (error) => error.code === 'REQUESTED_MODEL_UNAVAILABLE' && /refusing silent fallback/.test(error.message),
     );
     assert.throws(

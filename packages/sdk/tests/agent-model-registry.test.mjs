@@ -28,14 +28,14 @@ const SAMPLE = {
     unavailableBehavior: 'fail',
   },
   tiers: {
-    premium: { models: ['cx/gpt-5.6-sol'], purpose: 'Primary orchestration.' },
-    mid: { models: ['bizar/MiniMax-M2.7'], purpose: 'Moderate implementation.' },
-    budget: { models: ['bizar/MiniMax-M2.5'], purpose: 'Mechanical work.' },
+    premium: { models: ['claude-qwen/qwen3.8-max'], purpose: 'Primary orchestration.' },
+    mid: { models: ['claude-minimax/MiniMax-M2.7'], purpose: 'Moderate implementation.' },
+    budget: { models: ['claude-minimax/MiniMax-M2.5'], purpose: 'Mechanical work.' },
   },
   agents: {
-    mike: { model: 'cx/gpt-5.6-sol', tier: 'premium', rationale: 'single main orchestrator' },
-    todd: { model: 'bizar/MiniMax-M2.7', tier: 'mid', rationale: 'moderate implementation' },
-    pam: { model: 'bizar/MiniMax-M2.5', tier: 'budget', rationale: 'single-shot mechanical work' },
+    mike: { model: 'claude-qwen/qwen3.8-max', tier: 'premium', rationale: 'single main orchestrator' },
+    todd: { model: 'claude-minimax/MiniMax-M2.7', tier: 'mid', rationale: 'moderate implementation' },
+    pam: { model: 'claude-minimax/MiniMax-M2.5', tier: 'budget', rationale: 'single-shot mechanical work' },
   },
   policies: {
     mainOrchestrator: 'mike',
@@ -94,12 +94,12 @@ describe('strict agent-model-registry v2', () => {
     assert.equal(registry.policies.silentFallback, false);
 
     const mike = resolveAgentModel('mike', registry);
-    assert.equal(mike.modelId, 'cx/gpt-5.6-sol');
+    assert.equal(mike.modelId, 'claude-qwen/qwen3.8-max');
     assert.equal(mike.tier, 'premium');
     assert.equal(mike.endpoint, SAMPLE.endpoint);
 
     const budget = resolveTierModel('budget', registry);
-    assert.equal(budget.modelId, 'bizar/MiniMax-M2.5');
+    assert.equal(budget.modelId, 'claude-minimax/MiniMax-M2.5');
     assert.deepEqual(budget.fallback, []);
     assert.equal(listAgentModels(registry).length, 3);
     assert.equal(getEndpoint(registry), SAMPLE.endpoint);
@@ -132,12 +132,12 @@ describe('strict agent-model-registry v2', () => {
 
   it('rejects missing gateway guarantees, model overrides, and every fallback list', () => {
     const fallback = clone(SAMPLE);
-    fallback.policies.fallback_chain = ['bizar/MiniMax-M2.5'];
+    fallback.policies.fallback_chain = ['claude-minimax/MiniMax-M2.5'];
     writeConfig(configPath, fallback);
     expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
 
     const multiModelTier = clone(SAMPLE);
-    multiModelTier.tiers.budget.models.push('bizar/MiniMax-M2.7');
+    multiModelTier.tiers.budget.models.push('claude-minimax/MiniMax-M2.7');
     writeConfig(configPath, multiModelTier);
     expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
 
@@ -154,7 +154,7 @@ describe('strict agent-model-registry v2', () => {
 
   it('rejects assignment/tier drift and unknown agent or tier resolution', () => {
     const drifted = clone(SAMPLE);
-    drifted.agents.todd.model = 'bizar/MiniMax-M2.5';
+    drifted.agents.todd.model = 'claude-minimax/MiniMax-M2.5';
     writeConfig(configPath, drifted);
     expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
 
@@ -170,12 +170,12 @@ describe('strict agent-model-registry v2', () => {
       runId: 'run-123',
       registry,
       agentNames: ['mike', 'todd'],
-      availableModelIds: ['cx/gpt-5.6-sol', 'bizar/MiniMax-M2.7'],
+      availableModelIds: ['claude-qwen/qwen3.8-max', 'claude-minimax/MiniMax-M2.7'],
       createdAt: '2026-08-02T00:00:00.000Z',
     });
 
-    assert.equal(snapshot.assignments.mike.model, 'cx/gpt-5.6-sol');
-    assert.equal(snapshot.assignments.todd.model, 'bizar/MiniMax-M2.7');
+    assert.equal(snapshot.assignments.mike.model, 'claude-qwen/qwen3.8-max');
+    assert.equal(snapshot.assignments.todd.model, 'claude-minimax/MiniMax-M2.7');
     assert.equal(snapshot.gatewayEndpoint, registry.endpoint);
     assert.equal(snapshot.availabilityProbe, registry.gateway.availabilityProbe);
     assert.equal(Object.isFrozen(snapshot), true);
@@ -183,7 +183,7 @@ describe('strict agent-model-registry v2', () => {
     assert.equal(Object.isFrozen(snapshot.assignments.mike), true);
     assert.equal(verifyRunAssignmentSnapshot(snapshot), true);
     assert.equal(verifyRunAssignmentSnapshot({ ...snapshot, availabilityProbe: '/other-models' }), false);
-    assert.throws(() => { snapshot.assignments.mike.model = 'bizar/MiniMax-M2.5'; }, TypeError);
+    assert.throws(() => { snapshot.assignments.mike.model = 'claude-minimax/MiniMax-M2.5'; }, TypeError);
   });
 
   it('produces the exact canonical schemaVersion 1 payload and fingerprint as the CLI snapshot', () => {
@@ -191,7 +191,7 @@ describe('strict agent-model-registry v2', () => {
     const input = {
       runId: 'parity-run-1',
       agentNames: ['mike', 'todd'],
-      availableModelIds: ['cx/gpt-5.6-sol', 'bizar/MiniMax-M2.7'],
+      availableModelIds: ['claude-qwen/qwen3.8-max', 'claude-minimax/MiniMax-M2.7'],
       createdAt: '2026-08-02T12:00:00.000Z',
     };
     const sdkSnapshot = createRunAssignmentSnapshot({ ...input, registry });
@@ -219,7 +219,7 @@ describe('strict agent-model-registry v2', () => {
         runId: 'run-125',
         registry,
         agentNames: ['mike'],
-        availableModelIds: ['bizar/MiniMax-M2.5'],
+        availableModelIds: ['claude-minimax/MiniMax-M2.5'],
       }),
       'REQUESTED_MODEL_UNAVAILABLE',
     );
@@ -228,7 +228,7 @@ describe('strict agent-model-registry v2', () => {
         runId: 'run-126',
         registry,
         agentNames: ['unknown'],
-        availableModelIds: ['cx/gpt-5.6-sol'],
+        availableModelIds: ['claude-qwen/qwen3.8-max'],
       }),
       'UNKNOWN_AGENT',
     );
