@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [10.14.0] - 2026-08-03
 
 - F-163: Repoint the agent registry at the new 9router gateway IDs:
   orchestrator (`@mike`), planning (`@paul`), and last-resort debugging
@@ -15,6 +15,9 @@
   `.claude/commands/use-default.md`, `.claude/commands/use-premium.md`,
   `PROGRESS.md`, `feature_list.json`, and `CHANGELOG.md` updated for
   consistency. `node --test scripts/agent-model-registry.test.mjs` → 7/7.
+- Versions synchronized at 10.14.0 across root `package.json`,
+  `packages/sdk/package.json`, `packages/sdk/src/version.ts`, and
+  `.claude-plugin/plugin.json`.
 
 ## [10.13.0] - 2026-08-03
 
