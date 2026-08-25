@@ -158,7 +158,7 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
-    assert.equal(settings.permissions.defaultMode, 'acceptEdits');
+    assert.equal(settings.permissions.defaultMode, 'bypassPermissions');
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
     assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));

@@ -68,9 +68,18 @@ export function resolveClaudeDir() {
 
 export const CLAUDE_DIR = resolveClaudeDir();
 
-/** `~/.config/bizar/` — Bizar runtime state (NOT under ~/.claude/). */
-export const BIZAR_HOME = process.env.BIZAR_HOME
-  || join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'bizar');
+/** `~/.config/bizar/` — Bizar runtime state (NOT under ~/.claude/). Resolved
+ * lazily so callers can override `BIZAR_HOME` per-invocation via the
+ * process environment, e.g. `BIZAR_HOME=/tmp/bizar node cli/bin.mjs install`. */
+function computeBizarHome() {
+  return process.env.BIZAR_HOME
+    || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'bizar');
+}
+/** Back-compat: `BIZAR_HOME` is re-evaluated on every read. Use this everywhere
+ * instead of capturing the value at module load. */
+export function BIZAR_HOME() {
+  return computeBizarHome();
+}
 
 // Standard Claude Code subdirectories
 export const CLAUDE_AGENTS_DIR   = join(CLAUDE_DIR, 'agents');
@@ -78,7 +87,6 @@ export const CLAUDE_SKILLS_DIR   = join(CLAUDE_DIR, 'skills');
 export const CLAUDE_COMMANDS_DIR = join(CLAUDE_DIR, 'commands');
 export const CLAUDE_HOOKS_DIR    = join(CLAUDE_DIR, 'hooks');
 export const CLAUDE_RULES_DIR    = join(CLAUDE_DIR, 'rules');
-const INSTALL_MARKER_FILE  = join(BIZAR_HOME, 'installed.json');
 
 // ─── Tiny utilities ──────────────────────────────────────────────────────────
 
@@ -203,7 +211,7 @@ function section(title) { console.log('\n' + chalk.bold.cyan(`── ${title} �
 
 /** Read the install marker file. Returns null if missing. */
 export function readInstallMarker() {
-  return readJsonSafe(INSTALL_MARKER_FILE, null);
+  return readJsonSafe(join(BIZAR_HOME(), 'installed.json'), null);
 }
 
 /** Write the install marker file. */
@@ -215,9 +223,9 @@ export function writeInstallMarker({ version, repoPath, serviceUnit }) {
     serviceUnit: serviceUnit || null,
   };
   try {
-    mkdirSync(BIZAR_HOME, { recursive: true });
-    writeFileSync(INSTALL_MARKER_FILE, JSON.stringify(marker, null, 2) + '\n');
-    return { ok: true, marker };
+    mkdirSync(BIZAR_HOME(), { recursive: true });
+    writeFileSync(join(BIZAR_HOME(), 'installed.json'), JSON.stringify(marker, null, 2) + '\n');
+    return { ok: true, marker, message: `install marker → ${join(BIZAR_HOME(), 'installed.json')}` };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -300,10 +308,10 @@ export async function buildSdk({ dryRun = false } = {}) {
 
 /** Ensure `~/.config/bizar/` exists with loop state. Idempotent. */
 export function ensureBizarHome({ dryRun = false } = {}) {
-  if (dryRun) return { ok: true, message: `[dry-run] would ensure ${BIZAR_HOME}` };
-  mkdirSync(BIZAR_HOME, { recursive: true });
-  mkdirSync(join(BIZAR_HOME, 'loops'), { recursive: true });
-  return { ok: true, message: `${BIZAR_HOME} ready`, path: BIZAR_HOME };
+  if (dryRun) return { ok: true, message: `[dry-run] would ensure ${BIZAR_HOME()}` };
+  mkdirSync(BIZAR_HOME(), { recursive: true });
+  mkdirSync(join(BIZAR_HOME(), 'loops'), { recursive: true });
+  return { ok: true, message: `${BIZAR_HOME()} ready`, path: BIZAR_HOME() };
 }
 
 // ─── Toolchain ───────────────────────────────────────────────────────────────
@@ -661,19 +669,25 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     timeout,
   });
 
+  // The shipped settings template (`config/claude/settings.json`) is the
+  // source of truth for defaultMode, worktree, enableWorkflows, etc. We
+  // overlay Bizar-owned keys (mcpServers, hooks, env) on top so the installer
+  // honors user preferences without having to fork the template here.
+  const shipped = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'settings.json'), {}) || {};
   const bizarSettings = {
-    $schema: 'https://json.schemastore.org/claude-code-settings.json',
+    ...shipped,
+    $schema: shipped.$schema || 'https://json.schemastore.org/claude-code-settings.json',
     mcpServers: {
       bizar: {
         type: 'stdio',
         command: 'npx',
         args: ['-y', '@polderlabs/bizar-sdk', 'mcp'],
-        env: { BIZAR_HOME },
+        env: { BIZAR_HOME: BIZAR_HOME() },
       },
       semble: { type: 'stdio', command: 'semble', args: ['mcp'] },
       'agent-browser': { type: 'stdio', command: 'agent-browser', args: ['mcp'] },
     },
-    permissions: {
+    permissions: shipped.permissions || {
       defaultMode: 'acceptEdits',
       allow: ['mcp__bizar__*', 'mcp__semble__*', 'mcp__agent-browser__*'],
       ask: [
@@ -696,7 +710,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
         'Write(./node_modules/**)',
       ],
     },
-    autoMode: {
+    autoMode: shipped.autoMode || {
       environment: [
         '$defaults',
         'Source control: the current repository and its configured remotes.',
@@ -715,17 +729,17 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
         'Production or shared-infrastructure writes, credential changes, public exposure, or irreversible local destruction.',
       ],
     },
-    attribution: { commit: '', pr: '' },
-    worktree: {
+    attribution: shipped.attribution || { commit: '', pr: '' },
+    worktree: shipped.worktree || {
       baseRef: 'head',
       cleanupPeriodDays: 7,
     },
-    enableWorkflows: true,
-    alwaysThinkingEnabled: true,
-    autoDreamEnabled: true,
-    showThinkingSummaries: true,
+    enableWorkflows: shipped.enableWorkflows !== undefined ? shipped.enableWorkflows : true,
+    alwaysThinkingEnabled: shipped.alwaysThinkingEnabled !== undefined ? shipped.alwaysThinkingEnabled : true,
+    autoDreamEnabled: shipped.autoDreamEnabled !== undefined ? shipped.autoDreamEnabled : true,
+    showThinkingSummaries: shipped.showThinkingSummaries !== undefined ? shipped.showThinkingSummaries : true,
     env: {
-      BIZAR_HOME,
+      BIZAR_HOME: BIZAR_HOME(),
       ANTHROPIC_BASE_URL: gatewayUrl,
       BIZAR_MODEL_ROUTER_URL: process.env.BIZAR_MODEL_ROUTER_URL || gatewayUrl,
       ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || 'sk_9router',
@@ -855,7 +869,7 @@ export function detectState() {
     rulesDir:    { exists: existsSync(CLAUDE_RULES_DIR),     count: countMd(CLAUDE_RULES_DIR) },
     settingsFile: { exists: existsSync(settingsPath), parses: settings !== null && typeof settings === 'object', path: settingsPath },
     mcpServer,
-    bizarHome: { exists: existsSync(BIZAR_HOME), path: BIZAR_HOME },
+    bizarHome: { exists: existsSync(BIZAR_HOME()), path: BIZAR_HOME() },
     gitRepo: existsSync(join(REPO_ROOT, '.git')),
   };
 }
@@ -919,6 +933,16 @@ export async function runProvision(opts = {}) {
   const mcpStep = setupMcpServer({ dryRun });
   if (mcpStep.ok) logOk(mcpStep.message); else logWarn(mcpStep.message);
   stepResults.push({ label: 'mcp-server', ...mcpStep });
+
+  section('Writing install marker');
+  if (!dryRun) {
+    const markerStep = writeInstallMarker({ repoPath: REPO_ROOT });
+    if (markerStep.ok) logOk(markerStep.message || `installed.json → ${BIZAR_HOME()}/installed.json`);
+    else logErr(markerStep.error || 'install marker write failed');
+    stepResults.push({ label: 'install-marker', ...markerStep });
+  } else {
+    stepResults.push({ label: 'install-marker', ok: true, message: `[dry-run] would write ${BIZAR_HOME()}/installed.json` });
+  }
 
   section('CLAUDE.md mirror');
   const claudeMdStep = writeClaudeMdMirror({ dryRun, force });
