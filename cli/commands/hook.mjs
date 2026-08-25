@@ -14,7 +14,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const HOOK_ROOT = resolve(PACKAGE_ROOT, '.claude', 'hooks');
+const HOOK_ROOT = resolve(PACKAGE_ROOT, 'config', 'claude', 'hooks');
 const PRETOOL_SAFETY_LEAVES = new Set([
   'pretooluse-editwrite', 'path-ownership-guard',
   'pretooluse-bash', 'git-workflow-guard',

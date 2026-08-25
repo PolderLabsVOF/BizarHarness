@@ -10,8 +10,8 @@ import {
 
 const CLEAN_PACKAGE = [
   '.claude-plugin/plugin.json',
-  '.claude/hooks/pretooluse-bash.mjs',
-  '.claude/settings.json',
+  'config/claude/hooks/pretooluse-bash.mjs',
+  'config/claude/settings.json',
   'AGENTS.md',
   'LICENSE',
   'README.md',
@@ -31,8 +31,8 @@ test('tracked repository structure rejects retired roots and metadata', () => {
       'cli/bin.mjs',
       '${HOME}/leaked-state.json',
       '.config/bizar/hook.jsonl',
-      '.claude/hooks/post-merge-audit.sh',
-      '.claude/skills/find-skills',
+      'config/claude/hooks/post-merge-audit.sh',
+      'config/claude/skills/find-skills',
       '.dockerignore',
       '.serena/project.yml',
       'bizar-plugins/registry.json',
@@ -47,8 +47,8 @@ test('tracked repository structure rejects retired roots and metadata', () => {
     [
       '${HOME}/leaked-state.json',
       '.config/bizar/hook.jsonl',
-      '.claude/hooks/post-merge-audit.sh',
-      '.claude/skills/find-skills',
+      'config/claude/hooks/post-merge-audit.sh',
+      'config/claude/skills/find-skills',
       '.dockerignore',
       '.serena/project.yml',
       'bizar-plugins/registry.json',
@@ -91,8 +91,8 @@ test('package manifest accepts npm 11 arrays and npm 12 keyed objects', () => {
 test('package boundary rejects tests, local state, duplicate skills, and missing runtime files', () => {
   const problems = inspectPackagePaths([
     ...CLEAN_PACKAGE.filter((path) => path !== 'packages/sdk/dist/index.js'),
-    '.claude/hooks/__tests__/guard.test.mjs',
-    '.claude/skills/bizar/SKILL.md',
+    'config/claude/hooks/__tests__/guard.test.mjs',
+    'config/claude/skills/bizar/SKILL.md',
     'config/skills/skillopt/SKILL.md.bak',
     'packages/sdk/${HOME}/.bizar_home/memory/session.md',
     'templates/schedules/daily.json',

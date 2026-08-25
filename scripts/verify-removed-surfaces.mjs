@@ -32,9 +32,9 @@ const removedPaths = [
   '.bizar/PROGRESS.md',
   '.bizar/activity-flow.md',
   '.bizar/lightrag',
-  '.claude/skills/lightrag',
-  '.claude/skills/memory-protocol',
-  '.claude/skills/obsidian',
+  'config/claude/skills/lightrag',
+  'config/claude/skills/memory-protocol',
+  'config/claude/skills/obsidian',
   'config/skills/lightrag',
   'config/skills/memory-protocol',
   'config/skills/obsidian',
@@ -61,9 +61,9 @@ const scanRoots = [
   'cli',
   'packages',
   'scripts',
-  '.claude/hooks',
-  '.claude/commands',
-  '.claude/settings.json',
+  'config/claude/hooks',
+  'config/claude/commands',
+  'config/claude/settings.json',
   'config',
   'Makefile',
   'package.json',
@@ -104,7 +104,7 @@ for (const name of Object.keys({ ...rootPackage.dependencies, ...rootPackage.dev
 const sdkPackage = JSON.parse(readFileSync(join(root, 'packages/sdk/package.json'), 'utf8'));
 if (sdkPackage.exports?.['./memory']) failures.push('SDK still exports ./memory');
 
-const settings = JSON.parse(readFileSync(join(root, '.claude/settings.json'), 'utf8'));
+const settings = JSON.parse(readFileSync(join(root, 'config/claude/settings.json'), 'utf8'));
 const settingsText = JSON.stringify(settings);
 for (const tool of ['memory_read', 'memory_write', 'memory_list', 'memory_search', 'open_kb']) {
   if (settingsText.includes(tool)) failures.push(`settings still reference ${tool}`);

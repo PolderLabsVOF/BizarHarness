@@ -15,4 +15,4 @@ Bizar is a Claude Code-native autonomous engineering harness. Its control surfac
 - Verify with the smallest proving test, then all repository-required gates.
 - Report changed files, validation evidence, assumptions, and remaining risks.
 
-The installed `.claude/agents/_shared/AGENT_BASELINE.md` contains the detailed baseline inherited by every Bizar role.
+The installed `config/claude/agents/_shared/AGENT_BASELINE.md` contains the detailed baseline inherited by every Bizar role.

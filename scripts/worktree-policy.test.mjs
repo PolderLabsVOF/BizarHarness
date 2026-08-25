@@ -14,8 +14,8 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const AGENTS_DIR = join(ROOT, '.claude', 'agents');
-const SETTINGS = join(ROOT, '.claude', 'settings.json');
+const AGENTS_DIR = join(ROOT, 'config', 'claude', 'agents');
+const SETTINGS = join(ROOT, 'config', 'claude', 'settings.json');
 const WORKTREE_SETUP = join(ROOT, 'scripts', 'worktree-setup.sh');
 
 const ISOLATED_EDITORS = [

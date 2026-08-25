@@ -9,7 +9,7 @@
  * Returns up to `opts.maxSuggestions` (default 3) weighted matches, sorted
  * by weight desc.
  *
- * The hook at `.claude/hooks/worker-suggest.mjs` calls `dispatch()` on
+ * The hook at `config/claude/hooks/worker-suggest.mjs` calls `dispatch()` on
  * every `UserPromptSubmit` event. Pure JS, no external deps; safe to
  * import from either Node or Bun.
  *

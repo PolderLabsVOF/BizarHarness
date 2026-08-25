@@ -5,4 +5,4 @@
 
 Bizar uses Claude Code's native Agent, Skill, commands, hooks, permissions, and Agent SDK/MCP surfaces. It does not embed or manage another agent runtime and does not start a persistent Claude subprocess.
 
-Agent definitions live in `.claude/agents`, commands in `.claude/commands`, hooks in `.claude/hooks`, and project settings in `.claude/settings.json`. `packages/sdk` provides framework-light primitives and the stdio MCP server. `cli/provision.mjs` installs the same surfaces at user scope.
+Agent definitions live in `config/claude/agents`, commands in `config/claude/commands`, hooks in `config/claude/hooks`, and project settings in `config/claude/settings.json`. `packages/sdk` provides framework-light primitives and the stdio MCP server. `cli/provision.mjs` installs the same surfaces at user scope.

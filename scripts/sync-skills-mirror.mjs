@@ -18,7 +18,7 @@ import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SRC = 'config/skills';
-const DST = '.claude/skills';
+const DST = 'config/claude/skills';
 
 function listSkillDirs(root) {
   let entries;

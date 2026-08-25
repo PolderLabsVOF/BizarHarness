@@ -99,7 +99,7 @@ export interface ModelRegistry {
 }
 
 export interface RegistrySource {
-  /** Path to `model-router.json`. Default: `.claude/model-router.json`. */
+  /** Path to `model-router.json`. Default: `config/claude/model-router.json`. */
   configPath?: string;
   /** Endpoint-only override. Exact agent/model identities remain unchanged. */
   endpoint?: string;
@@ -132,7 +132,7 @@ export interface CreateRunAssignmentSnapshotInput {
   createdAt?: string;
 }
 
-const DEFAULT_CONFIG = ".claude/model-router.json";
+const DEFAULT_CONFIG = "config/claude/model-router.json";
 const KNOWN_TIERS: readonly BizarTier[] = [
   "premium",
   "high",

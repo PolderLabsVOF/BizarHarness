@@ -4,7 +4,10 @@
 # and exits 0 on success. Run `make help` to see all targets.
 #
 # Claude Code-native: the runtime is the SDK + stdio MCP server under
-# `packages/sdk/`, with hooks, agents, skills, and commands under `.claude/`.
+# `packages/sdk/`, with hooks, agents, skills, and commands in `config/claude/`
+# (the repo deliberately has no top-level `.claude/` so Claude Code sessions
+# inside the repo do not auto-load Bizar's own assets; `bizar install`
+# provisions them to the user's `~/.claude/`).
 
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -52,7 +55,7 @@ check-arch:  ## Run architectural constraints (scripts/check-arch.sh)
 	@echo "▶ Verifying thinking-* skill files..."
 	@node scripts/verify-thinking-skills.mjs
 
-sync-skills-mirror:  ## Mirror config/skills/ -> .claude/skills/ (idempotent)
+sync-skills-mirror:  ## Mirror config/skills/ -> config/claude/skills/ (idempotent)
 	@node scripts/sync-skills-mirror.mjs
 
 verify-thinking-skills:  ## Verify every thinking-*/skillopt SKILL.md is well-formed
@@ -84,10 +87,10 @@ feature-state-machine:  ## Enforce plan→exec→verify→audit state machine pe
 
 # ── Claude Code-specific ───────────────────────────────────────────────────
 # session-start / session-end were Cline-era targets. Claude Code now
-# auto-primes via the SessionStart hook (see .claude/settings.json), so
+# auto-primes via the SessionStart hook (see config/claude/settings.json), so
 # the targets are kept as thin no-op echoes for backward compat.
 session-start:  ## [deprecated] Claude Code auto-primes via SessionStart hook
-	@echo "✓ Claude Code auto-primes via .claude/hooks/sessionstart-prime.mjs"
+	@echo "✓ Claude Code auto-primes via config/claude/hooks/sessionstart-prime.mjs"
 
 session-end:  ## [deprecated] Claude Code handles session end automatically
 	@echo "✓ Claude Code handles session end via SessionEnd hook"
@@ -95,10 +98,10 @@ session-end:  ## [deprecated] Claude Code handles session end automatically
 init:  ## Run the Claude Code-native initializer
 	@./init.sh --fast
 
-mirror-claude-md:  ## Regenerate .claude/CLAUDE.md mirror from AGENTS.md
+mirror-claude-md:  ## Regenerate config/claude/CLAUDE.md mirror from AGENTS.md
 	@./scripts/mirror-claude-md.sh
 
-mirror-claude-md-check:  ## CI check: .claude/CLAUDE.md is in sync with AGENTS.md
+mirror-claude-md-check:  ## CI check: config/claude/CLAUDE.md is in sync with AGENTS.md
 	@./scripts/mirror-claude-md.sh --check
 
 cleanup: verify-repo-structure  ## Verify the repository and package contain no stale paths

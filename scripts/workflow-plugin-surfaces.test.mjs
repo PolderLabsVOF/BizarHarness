@@ -32,7 +32,7 @@ function read(relativePath) {
 test('workflow skills have exact project mirrors and durable state commands', () => {
   for (const name of workflowNames) {
     const canonical = read(`config/skills/${name}/SKILL.md`);
-    const mirror = read(`.claude/skills/${name}/SKILL.md`);
+    const mirror = read(`config/claude/skills/${name}/SKILL.md`);
 
     assert.equal(mirror, canonical, `${name} mirror must be byte-identical`);
     assert.match(canonical, new RegExp(`^---\\nname: ${name}\\n`, 'm'));
@@ -49,19 +49,19 @@ test('workflow skills have exact project mirrors and durable state commands', ()
   assert.match(autopilot, /--evidence "\$BOUNDED_EVIDENCE"/);
   assert.match(autopilot, /41a4c0f77144c5beb5f5f000a89cff379c680606/);
 
-  const autopilotCommand = read('.claude/commands/autopilot.md');
+  const autopilotCommand = read('config/claude/commands/autopilot.md');
   assert.match(autopilotCommand, /argument-hint: "\[--workflow <default\|plan-build-qa>\] <task or outcome>"/);
 });
 
 test('slash commands are thin pointers to canonical workflow skills', () => {
   for (const name of workflowNames) {
-    const command = read(`.claude/commands/${name}.md`);
+    const command = read(`config/claude/commands/${name}.md`);
     assert.match(command, /allowed-tools: Skill/);
     assert.match(command, /Invoke the Skill tool exactly once/);
     assert.match(command, new RegExp(`bizar-harness:${name}`));
     assert.match(command, new RegExp('select the installed `' + name + '` skill'));
     assert.match(command, /Pass `\$ARGUMENTS` unchanged/);
-    assert.doesNotMatch(command, /config\/skills\/|\.claude\/skills\/|SKILL\.md/);
+    assert.doesNotMatch(command, /config\/skills\/|config\/claude\/skills\/|SKILL\.md/);
     assert.ok(command.length < 600, `${name} command must not duplicate its skill`);
   }
 });
@@ -71,9 +71,9 @@ test('Claude Code plugin manifest references canonical in-root components', () =
 
   assert.equal(manifest.name, 'bizar-harness');
   assert.equal(manifest.skills, './config/skills/');
-  assert.equal(manifest.commands, './.claude/commands/');
+  assert.equal(manifest.commands, './config/claude/commands/');
   assert.ok(Array.isArray(manifest.agents));
-  assert.ok(manifest.agents.includes('./.claude/agents/office-manager.md'));
+  assert.ok(manifest.agents.includes('./config/claude/agents/office-manager.md'));
   assert.equal(manifest.hooks, './hooks/hooks.json');
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
 

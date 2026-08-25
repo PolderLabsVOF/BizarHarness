@@ -26,7 +26,7 @@
     }
   },
   "permissions": {
-    "defaultMode": "acceptEdits",
+    "defaultMode": "bypassPermissions",
     "allow": [
       "mcp__bizar__plan_action",
       "mcp__bizar__loop_list",
@@ -109,8 +109,15 @@
   },
   "worktree": {
     "baseRef": "head",
+    "bgIsolation": "worktree",
     "cleanupPeriodDays": 7
   },
+  "model": "claude/minimax/MiniMax-M3",
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true,
+  "askUserQuestionTimeout": "5m",
+  "showThinkingSummaries": true,
   "enableWorkflows": true,
   "alwaysThinkingEnabled": true,
   "autoDreamEnabled": true,

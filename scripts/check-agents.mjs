@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const ROOT = join(__filename, '..', '..');
 
-const agentsDir = join(ROOT, '.claude', 'agents');
+const agentsDir = join(ROOT, 'config', 'claude', 'agents');
 const AGENT_FILES = readdirSync(agentsDir)
   .filter((file) => file.endsWith('.md'))
   .sort();

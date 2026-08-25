@@ -40,7 +40,7 @@ When approval is required, present the exact command/action, scope, evidence, an
 - `bizar claim` — feature ownership and state transitions.
 - `bizar team` / `bizar subagent` — Claude Code-native coordination wrappers.
 - MCP tools — plans, loops, graph queries, instincts, and decisions.
-- `.claude/hooks/` — guardrails, routing, lifecycle context, and learning extraction.
+- `config/claude/hooks/` — guardrails, routing, lifecycle context, and learning extraction.
 
 ## Completion
 

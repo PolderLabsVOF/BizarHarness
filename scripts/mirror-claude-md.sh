@@ -3,16 +3,16 @@
 # scripts/mirror-claude-md.sh — keep both CLAUDE.md mirrors in sync with AGENTS.md.
 #
 # Both files are part of the walkinglabs/awesome-harness-engineering
-# convention. AGENTS.md is the canonical source; .claude/CLAUDE.md is
+# convention. AGENTS.md is the canonical source; config/claude/CLAUDE.md is
 # the mirror for tools that hard-code `CLAUDE.md` as the entry point.
 #
 # Usage: ./scripts/mirror-claude-md.sh [--check]
 #
-# --check exits 1 if .claude/CLAUDE.md is out of sync (for CI).
+# --check exits 1 if config/claude/CLAUDE.md is out of sync (for CI).
 #
 # v6.3.0 — Migrated from mirror-agents-md.sh to mirror-claude-md.sh.
-# The mirror now lives at .claude/CLAUDE.md (Claude Code's standard
-# project-scope settings dir) instead of the repo root.
+# The mirror moved from .claude/CLAUDE.md to config/claude/CLAUDE.md when
+# the repo dropped the top-level .claude/ directory.
 
 set -euo pipefail
 
@@ -32,7 +32,7 @@ if [[ ! -f AGENTS.md ]]; then
 fi
 
 ROOT_MIRROR="CLAUDE.md"
-MIRROR_DIR=".claude"
+MIRROR_DIR="config/claude"
 MIRROR="$MIRROR_DIR/CLAUDE.md"
 
 mkdir -p "$MIRROR_DIR"

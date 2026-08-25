@@ -39,7 +39,7 @@ const featureList = (() => {
 
 const settings = (() => {
   try {
-    return JSON.parse(readFileSync(join(ROOT, '.claude', 'settings.json'), 'utf8'));
+    return JSON.parse(readFileSync(join(ROOT, 'config', 'claude', 'settings.json'), 'utf8'));
   } catch {
     return null;
   }
@@ -50,7 +50,7 @@ const categories = {
   tests: command('npm', ['run', 'test:sdk', '--silent'], 'SDK unit suite passed.', 'SDK unit suite failed'),
   e2e: command(process.execPath, ['scripts/bh-full-e2e.mjs'], 'Claude Code core E2E passed.', 'Core E2E failed'),
   archBoundaries: command('bash', ['scripts/check-arch.sh', '.'], 'Architecture rules passed.', 'Architecture rule failed'),
-  securityPatterns: command(process.execPath, ['.claude/hooks/__tests__/workflow-guards.test.mjs'], 'Approval and safety guard tests passed.', 'Workflow guard test failed'),
+  securityPatterns: command(process.execPath, ['config/claude/hooks/__tests__/workflow-guards.test.mjs'], 'Approval and safety guard tests passed.', 'Workflow guard test failed'),
   docSync: command('bash', ['scripts/mirror-claude-md.sh', '--check'], 'CLAUDE.md mirror is synchronized.', 'CLAUDE.md mirror drifted'),
   featureListState: predicate(
     !!featureList?.features?.length,
@@ -64,7 +64,7 @@ const categories = {
     'MCP runtime entry is missing.',
   ),
   coverage: predicate(
-    existsSync(join(ROOT, 'packages', 'sdk', 'tests')) && existsSync(join(ROOT, '.claude', 'hooks', '__tests__')),
+    existsSync(join(ROOT, 'packages', 'sdk', 'tests')) && existsSync(join(ROOT, 'config', 'claude', 'hooks', '__tests__')),
     'SDK and hook behavior both have executable test suites.',
     'SDK or hook test coverage directory is missing.',
   ),

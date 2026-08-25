@@ -16,13 +16,13 @@ successful `/simplify` token.
 
 ## Implementation
 
-- `.claude/hooks/pretooluse-bash.mjs`
-- `.claude/hooks/pretooluse-editwrite.mjs`
-- `.claude/hooks/git-workflow-guard.mjs`
-- `.claude/hooks/simplify-guard.mjs`
-- `.claude/settings.json`
+- `config/claude/hooks/pretooluse-bash.mjs`
+- `config/claude/hooks/pretooluse-editwrite.mjs`
+- `config/claude/hooks/git-workflow-guard.mjs`
+- `config/claude/hooks/simplify-guard.mjs`
+- `config/claude/settings.json`
 
 ## Verification
 
-Run `node --test --test-concurrency=1 .claude/hooks/__tests__/*.test.mjs`
+Run `node --test --test-concurrency=1 config/claude/hooks/__tests__/*.test.mjs`
 and `make e2e`.

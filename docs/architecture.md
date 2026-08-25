@@ -6,17 +6,18 @@ Claude Code is the host. Native Agent, Skill, command, permission, and hook surf
 
 ## Layers
 
-1. **Control configuration:** `.claude/agents`, `.claude/commands`, `.claude/hooks`, `.claude/settings.json`, and canonical `config/skills`.
+1. **Control configuration:** `config/claude/agents`, `config/claude/commands`, `config/claude/hooks`, `config/claude/settings.json`, and canonical `config/skills`. The repo deliberately has no top-level `.claude/` directory so Claude Code sessions inside the repo do not auto-load Bizar's own assets.
 2. **Core library:** `packages/sdk` contains framework-light registries, routing, learning records, federation, consensus, dangerous-pattern checks, and MCP definitions.
-3. **Integration:** `.claude/settings.json` launches the SDK's stdio MCP server directly.
+3. **Integration:** `config/claude/settings.json` is the canonical settings template shipped via the npm package; `bizar install` writes it (merged with the user's existing settings) to their `~/.claude/settings.json`.
 4. **Operations:** `cli`, `scripts`, `.harness`, and `templates` install, validate, audit, back up, and verify the harness.
 
 ## Plugin and hook boundary
 
 `.claude-plugin/plugin.json` describes Bizar's distributable Claude Code
 surface: agents, skills, commands, hooks, and the retained stdio MCP server.
-Project-local `.claude/` configuration remains the contributor surface, while
-the installer materializes an immutable versioned bundle for user-wide use.
+Project-local `config/claude/` configuration is the contributor surface, while
+the installer materializes an immutable versioned bundle to `~/.claude/` on the
+user's machine.
 
 All lifecycle entries invoke the stable `bizar hook <event>` dispatcher rather
 than reaching through checkout-relative paths. The dispatcher reads one Claude
@@ -99,11 +100,12 @@ publication approval hooks.
 
 ## Source and publication boundary
 
-`config/skills` is the canonical skill source; `.claude/skills` is a repository
-mirror for project sessions, not a second published copy. The root npm package
-ships production CLI files, compiled SDK output, canonical configuration,
-Claude agents/commands/hooks/settings, and install-time Git hooks. Tests,
-runtime state, research clones, fixtures, and local tool metadata are excluded.
+`config/skills` is the canonical skill source; `config/claude/skills` is a
+repository mirror for project sessions, not a second published copy. The root
+npm package ships production CLI files, compiled SDK output, canonical
+configuration, Claude agents/commands/hooks/settings, and install-time Git
+hooks. Tests, runtime state, research clones, fixtures, and local tool
+metadata are excluded.
 `scripts/verify-repo-structure.mjs` enforces both the tracked tree and package
 manifest.
 

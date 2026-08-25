@@ -16,8 +16,8 @@ const FORBIDDEN_TRACKED_PREFIXES = [
 ];
 
 const FORBIDDEN_TRACKED_FILES = new Set([
-  '.claude/hooks/post-merge-audit.sh',
-  '.claude/skills/find-skills',
+  'config/claude/hooks/post-merge-audit.sh',
+  'config/claude/skills/find-skills',
   '.dockerignore',
   'scripts/overnight-loop.mjs',
   'scripts/session-trace.sh',
@@ -26,8 +26,8 @@ const FORBIDDEN_TRACKED_FILES = new Set([
 
 const REQUIRED_PACKAGE_FILES = [
   '.claude-plugin/plugin.json',
-  '.claude/hooks/pretooluse-bash.mjs',
-  '.claude/settings.json',
+  'config/claude/hooks/pretooluse-bash.mjs',
+  'config/claude/settings.json',
   'AGENTS.md',
   'cli/bin.mjs',
   'config/skills/bizar/SKILL.md',
@@ -38,7 +38,6 @@ const REQUIRED_PACKAGE_FILES = [
 ];
 
 const ALLOWED_PACKAGE_ROOTS = new Set([
-  '.claude',
   '.claude-plugin',
   'AGENTS.md',
   'LICENSE',
@@ -82,7 +81,7 @@ export function inspectPackagePaths(paths) {
       path.includes('${HOME}') ||
       path.includes('/.bizar/') ||
       path.includes('/.bizar_home/') ||
-      path.startsWith('.claude/skills/')
+      path.startsWith('.claude/skills/') || path.startsWith('config/claude/skills/')
     ) {
       problems.push(`local or duplicate package path: ${path}`);
     }

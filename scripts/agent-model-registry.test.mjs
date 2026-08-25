@@ -10,8 +10,8 @@ import {
 } from '../config/agents/model-assignment.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const AGENTS_DIR = join(ROOT, '.claude', 'agents');
-const ROUTER_PATH = join(ROOT, '.claude', 'model-router.json');
+const AGENTS_DIR = join(ROOT, 'config', 'claude', 'agents');
+const ROUTER_PATH = join(ROOT, 'config', 'claude', 'model-router.json');
 const ALLOWED_MODELS = new Set([
   'claude-qwen/qwen3.8-max',
   'cx/gpt-5.6-terra',

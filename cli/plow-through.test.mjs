@@ -11,8 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
-// F-107: slash commands canonical at .claude/commands/. Legacy config/commands/ removed (Cline-era).
-const CMD_PATH = join(PROJECT_ROOT, '.claude', 'commands', 'plow-through.md');
+// Slash commands canonical at config/claude/commands/. (Renamed from .claude to keep repo out of Claude Code's project auto-load.)
+const CMD_PATH = join(PROJECT_ROOT, 'config', 'claude', 'commands', 'plow-through.md');
 
 describe('/plow-through command file', () => {
   test('file exists at .claude/commands/plow-through.md', () => {

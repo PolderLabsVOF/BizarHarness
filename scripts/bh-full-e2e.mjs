@@ -33,7 +33,7 @@ function run(name, command, args) {
 
 console.log('\n  BIZAR E2E — Claude Code core harness\n');
 
-const settingsPath = join(ROOT, '.claude', 'settings.json');
+const settingsPath = join(ROOT, 'config', 'claude', 'settings.json');
 try {
   const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
   const events = [
@@ -98,9 +98,9 @@ try {
   check('settings parse', false, error.message);
 }
 
-const agents = readdirSync(join(ROOT, '.claude', 'agents')).filter((name) => name.endsWith('.md'));
+const agents = readdirSync(join(ROOT, 'config', 'claude', 'agents')).filter((name) => name.endsWith('.md'));
 const agentSources = agents.map((file) => {
-  const source = readFileSync(join(ROOT, '.claude', 'agents', file), 'utf8');
+  const source = readFileSync(join(ROOT, 'config', 'claude', 'agents', file), 'utf8');
   return { file, source, name: /^name:\s*([^\s]+)\s*$/m.exec(source)?.[1] };
 });
 const agentNames = agentSources.map(({ name }) => name);
@@ -123,7 +123,7 @@ check(
 );
 
 const canonicalSkills = readdirSync(join(ROOT, 'config', 'skills'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-const mirroredSkills = readdirSync(join(ROOT, '.claude', 'skills'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+const mirroredSkills = readdirSync(join(ROOT, 'config', 'claude', 'skills'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
 check('skill mirror', JSON.stringify(canonicalSkills) === JSON.stringify(mirroredSkills), `${canonicalSkills.length} canonical skills`);
 
 const requiredHooks = [
@@ -141,7 +141,7 @@ const requiredHooks = [
   'telemetry.mjs',
   'verify-deliverables.mjs',
 ];
-const missingHooks = requiredHooks.filter((name) => !existsSync(join(ROOT, '.claude', 'hooks', name)));
+const missingHooks = requiredHooks.filter((name) => !existsSync(join(ROOT, 'config', 'claude', 'hooks', name)));
 check('ported workflow hooks', missingHooks.length === 0, missingHooks.length ? `missing ${missingHooks.join(', ')}` : `${requiredHooks.length} hooks present`);
 
 const requiredTools = [
@@ -157,9 +157,9 @@ check('MCP tool surface', missingTools.length === 0, missingTools.length ? `miss
 
 run('SDK typecheck', process.execPath, [join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'), '--noEmit', '-p', 'packages/sdk/tsconfig.json']);
 run('removed-surface verifier', process.execPath, ['scripts/verify-removed-surfaces.mjs']);
-const hookTests = readdirSync(join(ROOT, '.claude', 'hooks', '__tests__'))
+const hookTests = readdirSync(join(ROOT, 'config', 'claude', 'hooks', '__tests__'))
   .filter((name) => name.endsWith('.test.mjs'))
-  .map((name) => join('.claude', 'hooks', '__tests__', name));
+  .map((name) => join('config', 'claude', 'hooks', '__tests__', name));
 run('hook guard tests', process.execPath, ['--test', '--test-concurrency=1', ...hookTests]);
 run('control plane tests', process.execPath, [
   '--test',

@@ -426,7 +426,7 @@ function pruneReport(srcDir, destDir, filter, force) {
 // Agent tool. Filtered to `*.md` to avoid leaking workspace files.
 
 export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
-  const src = join(REPO_ROOT, '.claude', 'agents');
+  const src = join(REPO_ROOT, 'config', 'claude', 'agents');
   const dest = CLAUDE_AGENTS_DIR;
   if (!existsSync(src)) return { ok: true, message: `no agents source at ${src}`, copied: 0, skipped: 0 };
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
@@ -451,7 +451,7 @@ export function isBizarManagedModelRouter(value) {
 }
 
 export async function syncModelRouter({ dryRun = false, force = false } = {}) {
-  const src = join(REPO_ROOT, '.claude', 'model-router.json');
+  const src = join(REPO_ROOT, 'config', 'claude', 'model-router.json');
   const dest = join(CLAUDE_DIR, 'model-router.json');
   if (!existsSync(src)) return { ok: true, message: `no model-router at ${src}` };
   if (existsSync(dest) && !force && !isBizarManagedModelRouter(readJsonSafe(dest, null))) {
@@ -484,7 +484,7 @@ export async function syncSkillFiles({ dryRun = false, force = false } = {}) {
 }
 
 export async function syncCommandFiles({ dryRun = false, force = false } = {}) {
-  const candidates = [join(REPO_ROOT, '.claude', 'commands'), join(REPO_ROOT, 'config', 'commands')];
+  const candidates = [join(REPO_ROOT, 'config', 'claude', 'commands'), join(REPO_ROOT, 'config', 'commands')];
   let src = null;
   for (const c of candidates) if (existsSync(c)) { src = c; break; }
   if (!src) return { ok: true, message: 'no commands source found', copied: 0, skipped: 0 };
@@ -509,7 +509,7 @@ export async function syncRulesFiles({ dryRun = false, force = false } = {}) {
 }
 
 export async function syncHookFiles({ dryRun = false, force = false } = {}) {
-  const src = join(REPO_ROOT, '.claude', 'hooks');
+  const src = join(REPO_ROOT, 'config', 'claude', 'hooks');
   const dest = CLAUDE_HOOKS_DIR;
   ensureDir(dest);
   if (!existsSync(src)) return { ok: true, message: `no hooks source at ${src}`, copied: 0, skipped: 0 };
@@ -1027,7 +1027,7 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
   }
 
   // Hooks
-  const hooksSrc = join(REPO_ROOT, '.claude', 'hooks');
+  const hooksSrc = join(REPO_ROOT, 'config', 'claude', 'hooks');
   if (existsSync(hooksSrc)) {
     const hooksDst = join(CLAUDE_DIR, 'hooks');
     ensureDir(hooksDst);
