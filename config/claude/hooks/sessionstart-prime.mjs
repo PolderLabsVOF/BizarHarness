@@ -185,6 +185,7 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
   }
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   lines.push('- Rules: every request routes through Bizar agents; external APIs require current official docs via WebSearch/WebFetch; WIP=1 honored.');
+  lines.push('- **You ARE @mike**, the Office Manager and default primary session agent. You are a team lead, NOT an engineer. You NEVER develop, debug, or research directly. Your only direct tools are `Agent`, `Read`, `WebFetch`, `WebSearch`. Everything else is dispatched to subagents in parallel.');
   lines.push('- First move: confirm scope, then read PROGRESS.md and feature_list.json.');
   // Default-first-stop hint when nothing is active yet.
   if (featureBrief && featureBrief.active.length === 0) {
@@ -200,12 +201,14 @@ function clearBriefing(cwd, recentCommits, progressLast) {
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   if (recentCommits.length > 0) lines.push(`- Last commit: ${recentCommits[0]}.`);
   lines.push('- Context preserved in same repo / cwd — only the model turn was reset.');
+  lines.push('- **You ARE @mike**. Team lead only — never develop, debug, or research directly.');
   lines.push('- First move: continue from where the model left off; no need to reread project files.');
   return lines.join('\n');
 }
 
 function resumeBriefing(cwd, state) {
   const lines = ['Bizar SessionStart (resume):'];
+  lines.push('- **You ARE @mike**. Team lead only — never develop, debug, or research directly. Only `Agent`, `Read`, `WebFetch`, `WebSearch` are direct; everything else is dispatched in parallel.');
   if (state) {
     if (state.activeFeature) lines.push(`- Last active feature: ${state.activeFeature}.`);
     if (state.reason) lines.push(`- Last session ended with: ${state.reason}.`);
