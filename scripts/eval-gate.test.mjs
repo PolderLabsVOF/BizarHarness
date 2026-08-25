@@ -14,6 +14,16 @@ import { writeFileSync, mkdirSync, rmSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
+
+function bunAvailable() {
+  try {
+    execSync("command -v bun", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -24,11 +34,10 @@ await mkdirSync(EVALS_DIR, { recursive: true });
 
 /** Run eval-gate and return { stdout, stderr, exitCode } */
 async function runGate(args = []) {
-  const proc = spawnSync(process.env.BUN_BIN || "bun", [
-    "run",
-    join(__dirname, "eval-gate.mjs"),
-    ...args,
-  ], {
+  const runner = process.env.BUN_BIN || bunAvailable() ? "bun" : process.execPath;
+  const proc = spawnSync(runner, runner === "bun"
+    ? ["run", join(__dirname, "eval-gate.mjs"), ...args]
+    : [join(__dirname, "eval-gate.mjs"), ...args], {
     cwd: ROOT,
     env: process.env,
     encoding: "utf8",

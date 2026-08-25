@@ -11,7 +11,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { TaskLedger, resolveTaskDatabase } from '../../cli/task-ledger.mjs';
+import { TaskLedger, resolveTaskDatabase } from '../../../cli/task-ledger.mjs';
 
 let raw = '';
 process.stdin.setEncoding('utf8');

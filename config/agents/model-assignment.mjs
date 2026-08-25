@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-export const DEFAULT_MODEL_ROUTER_PATH = resolve(ROOT, '..', 'config', 'claude', 'model-router.json');
+export const DEFAULT_MODEL_ROUTER_PATH = resolve(ROOT, 'config', 'claude', 'model-router.json');
 
 function fail(code, message) {
   const error = new Error(message);

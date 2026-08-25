@@ -4,9 +4,9 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-import { WorkflowStateError, getWorkflowState } from '../../cli/core/workflow-state.mjs';
-import { loadModelRouter } from '../../config/agents/model-assignment.mjs';
-import { probeAvailableModels } from '../../cli/commands/workflow.mjs';
+import { WorkflowStateError, getWorkflowState } from '../../../cli/core/workflow-state.mjs';
+import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
+import { probeAvailableModels } from '../../../cli/commands/workflow.mjs';
 
 const BUILT_IN_AGENT_TYPES = new Set([
   'Explore', 'Plan', 'general-purpose', 'statusline-setup', 'claude-code-guide',

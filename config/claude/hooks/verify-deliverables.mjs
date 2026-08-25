@@ -11,7 +11,7 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-import { TaskLedger, resolveTaskDatabase } from '../../cli/task-ledger.mjs';
+import { TaskLedger, resolveTaskDatabase } from '../../../cli/task-ledger.mjs';
 
 const EDITING_AGENTS = new Set([
   'senior-engineer',

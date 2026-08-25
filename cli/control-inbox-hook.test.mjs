@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 
 import { enqueueControlMessage } from './control-store.mjs';
 
-const HOOK = resolve(import.meta.dirname, '..', '.claude', 'hooks', 'control-inbox.mjs');
+const HOOK = resolve(import.meta.dirname, '..', 'config', 'claude', 'hooks', 'control-inbox.mjs');
 const roots = [];
 
 afterEach(() => {

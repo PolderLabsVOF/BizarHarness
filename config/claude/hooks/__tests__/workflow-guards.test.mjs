@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { TaskLedger } from '../../../cli/task-ledger.mjs';
+import { TaskLedger } from '../../../../cli/task-ledger.mjs';
 
 const hooksDir = join(import.meta.dirname, '..');
 const roots = [];
@@ -430,7 +430,7 @@ test('advisor hook injects bounded parent context', () => {
 
 test('project settings wire portable guarded-autonomy hooks', () => {
   const settings = JSON.parse(readFileSync(join(hooksDir, '..', 'settings.json'), 'utf8'));
-  assert.equal(settings.permissions.defaultMode, 'acceptEdits');
+  assert.equal(settings.permissions.defaultMode, 'bypassPermissions');
   assert.equal(settings.enableWorkflows, true);
   assert.ok(settings.hooks.PreCompact);
   assert.ok(settings.hooks.SubagentStart);

@@ -92,7 +92,7 @@ process.stdin.on('end', async () => {
 
   let dispatch;
   try {
-    ({ dispatch } = await import(join(__dirname, '..', '..', 'cli', 'worker-dispatcher.mjs')));
+    ({ dispatch } = await import(join(__dirname, '..', '..', '..', 'cli', 'worker-dispatcher.mjs')));
   } catch (err) {
     process.stderr.write(
       `[bizar.workers] WARN: dispatch failed (import): ${

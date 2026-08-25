@@ -4,10 +4,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
-import { resolveWorkflowPaths, startWorkflow } from '../../../cli/core/workflow-state.mjs';
+import { loadModelRouter } from '../../../../config/agents/model-assignment.mjs';
+import { resolveWorkflowPaths, startWorkflow } from '../../../../cli/core/workflow-state.mjs';
 import { guardAgentModel } from '../agent-model-guard.mjs';
-import { selectEventChain } from '../../../cli/commands/hook.mjs';
+import { selectEventChain } from '../../../../cli/commands/hook.mjs';
 
 function decision(output) {
   return output.hookSpecificOutput?.permissionDecision;

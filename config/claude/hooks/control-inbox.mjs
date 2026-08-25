@@ -47,7 +47,7 @@ async function main() {
   // Uses import.meta.url to anchor relative resolution.
   let claimControlMessages;
   try {
-    ({ claimControlMessages } = await import(join(__dirname, '..', '..', 'cli', 'control-store.mjs')));
+    ({ claimControlMessages } = await import(join(__dirname, '..', '..', '..', 'cli', 'control-store.mjs')));
   } catch (err) {
     process.stderr.write(`[bizar.control] WARN: could not load control-store: ${err && err.message ? err.message : String(err)}\n`);
     process.stdout.write(JSON.stringify({ continue: true }) + '\n');

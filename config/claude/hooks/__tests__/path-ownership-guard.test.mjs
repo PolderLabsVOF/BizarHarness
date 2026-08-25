@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
-import { TaskLedger } from '../../../cli/task-ledger.mjs';
+import { TaskLedger } from '../../../../cli/task-ledger.mjs';
 
 const HOOK = join(import.meta.dirname, '..', 'path-ownership-guard.mjs');
 const roots = [];
