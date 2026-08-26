@@ -18,6 +18,12 @@ const AGENTS_DIR = join(ROOT, 'config', 'claude', 'agents');
 const SETTINGS = join(ROOT, 'config', 'claude', 'settings.json');
 const WORKTREE_SETUP = join(ROOT, 'scripts', 'worktree-setup.sh');
 
+// Agents that ship as code-writing editors. They MUST declare
+// `isolation: worktree` in frontmatter so the SubagentStart hook can spin
+// up an isolated checkout. `office-manager.md` is the orchestrator itself
+// — it does not declare worktree isolation for its own session, but its
+// body MUST document the worktree dispatch discipline for every Agent
+// call it makes.
 const ISOLATED_EDITORS = [
   'brand-designer.md',
   'debug-specialist.md',
@@ -27,6 +33,10 @@ const ISOLATED_EDITORS = [
   'senior-engineer.md',
   'ui-designer.md',
 ];
+
+// File names whose frontmatter MUST document the orchestrator-level
+// dispatch discipline (isolation: "worktree" on every editing Agent call).
+const ORCHESTRATOR_AGENTS = ['office-manager.md'];
 
 const roots = [];
 
@@ -52,6 +62,47 @@ describe('worktree-first agent policy', () => {
       integrator,
       /^isolation:\s*worktree\s*$/m,
       'the integration owner must remain in the target checkout',
+    );
+  });
+
+  test('office-manager documents the worktree dispatch discipline', () => {
+    for (const file of ORCHESTRATOR_AGENTS) {
+      const source = readFileSync(join(AGENTS_DIR, file), 'utf8');
+      // The orchestrator itself never runs in a worktree, but its dispatch
+      // template MUST require every editing subagent to run in one.
+      assert.doesNotMatch(
+        source,
+        /^isolation:\s*worktree\s*$/m,
+        `${file} itself is the orchestrator and must not run in a worktree`,
+      );
+      assert.match(
+        source,
+        /isolation:\s*["']worktree["']/,
+        `${file} must document isolation: "worktree" on dispatched editing agents`,
+      );
+      assert.match(
+        source,
+        /Worktree Discipline/i,
+        `${file} must contain a Worktree Discipline section`,
+      );
+      assert.match(
+        source,
+        /wt\/<agent_type>/,
+        `${file} must document the wt/<agent_type>-<short-task-id> branch naming convention`,
+      );
+    }
+  });
+
+  test('project settings mandate bgIsolation and cleanup', () => {
+    const settings = JSON.parse(readFileSync(SETTINGS, 'utf8'));
+    assert.equal(
+      settings.worktree?.bgIsolation,
+      'worktree',
+      'worktree.bgIsolation must be "worktree" by default',
+    );
+    assert.ok(
+      Number(settings.worktree?.cleanupPeriodDays) >= 1,
+      'worktree.cleanupPeriodDays must be at least 1',
     );
   });
 

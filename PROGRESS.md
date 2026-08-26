@@ -129,6 +129,106 @@ so secrets never reach git history, while agents can freely read/edit local
    - `git-workflow-guard.test.mjs` (new) — `git add .env` deny, `git add .`
      allow, `git commit` with secret in staged diff deny, `git push` with
      secret in outbound diff deny, normal project commits still `ask`.
+## Current — F-167 Worktree-isolation-by-default + merge sequencer
+
+**Objective delivered:** Every code-writing subagent must run in an isolated
+git worktree by default, and the orchestrator (`@mike`) must merge those
+worktree branches back into the integration branch in a deterministic,
+verifiable sequence. The previous surface (`bgIsolation: "worktree"` plus
+`worktree-bootstrap.mjs`) handled background isolation but did not (a) extend
+the rule to every editing dispatch, (b) document it in the orchestrator's
+dispatch discipline, or (c) provide a multi-branch merge sequencer with
+archive tagging and safe cleanup.
+
+**Implementation plan:**
+
+1. Extend `scripts/worktree-policy.test.mjs` to include `office-manager.md`
+   in the `ISOLATED_EDITORS` list (orchestrator documents the discipline;
+   dispatch chain enforces `isolation: worktree` on every editing agent).
+   Add explicit assertions for the orchestrator's dispatch discipline and
+   for the project settings worktree block.
+2. Add a "Worktree Discipline" section to `config/claude/agents/office-manager.md`
+   with the dispatched-agent template showing `isolation: "worktree"` and
+   the `wt/<agent_type>-<short-task-id>` branch naming convention.
+3. Extend `cli/commands/worktree-merge.mjs` with `--all`, `--order`,
+   `--dry-run`, `--keep-branch`, and `--json` flags. `--all` lists every
+   `wt/*` worktree branch, sorts them deterministically, runs the existing
+   archive-tag + `--no-ff` merge per branch, and on success removes the
+   merged worktree + deletes the source branch (unless `--keep-branch`).
+4. New `config/claude/hooks/worktree-archive.mjs` SubagentStop hook that
+   records the agent's branch into `~/.config/bizar/worktree-queue.json`
+   so the orchestrator can map "agent finished" → "branch ready to merge".
+5. Update `config/claude/hooks/worktree-bootstrap.mjs` to emit the worktree
+   branch name in `hookSpecificOutput.additionalContext` so the
+   SubagentStop hook has the branch on hand.
+6. Tests: new `cli/__tests__/worktree-merge-all.test.mjs` (three feature
+   branches, dry-run plan, real merge, archive tags, worktree removal);
+   new `config/claude/hooks/__tests__/worktree-archive.test.mjs`
+   (SubagentStop hook appends to the queue file).
+7. Docs: `feature_list.json` F-167 (WIP=1), `PROGRESS.md` after-evidence,
+   `docs/architecture.md` parallel-execution paragraph, `AGENTS.md`
+   "Worktree discipline" rule under Autonomy and parallelism.
+
+**Pre-evidence:** Implementation not yet executed. Tests pending.
+
+**Implementation delivered:**
+
+- `scripts/worktree-policy.test.mjs` extended: `ISOLATED_EDITORS` keeps
+  the seven `isolation: worktree` editors, plus two new tests
+  (`office-manager documents the worktree dispatch discipline` and
+  `project settings mandate bgIsolation and cleanup`).
+- `config/claude/agents/office-manager.md`: new "Worktree Discipline"
+  section plus updated "Background Agents — Spawning" line; the
+  dispatched-agent template carries `isolation: "worktree"` and the
+  `wt/<agent_type>-<short-task-id>` branch convention.
+- `cli/commands/worktree-merge.mjs`: extended with `--all`, `--order`,
+  `--dry-run`, `--keep-branch`, `--json`. `--all` lists every `wt/*`
+  branch, plans archive tags, performs `git merge --no-ff` in
+  deterministic lexicographic order (or explicit `--order`),
+  surfaces conflicts instead of silently dropping work, and on
+  success removes the merged worktree + deletes the source branch
+  (unless `--keep-branch`).
+- `config/claude/hooks/worktree-archive.mjs`: new SubagentStop hook
+  that records the agent's `wt/*` branch into
+  `~/.config/bizar/worktree-queue.json`. Fail-open on missing queue,
+  corrupt queue, or missing git worktree. Idempotent per agent+branch.
+- `config/claude/hooks/worktree-bootstrap.mjs`: now emits the worktree
+  branch name in `hookSpecificOutput.additionalContext` so the
+  SubagentStop hook can map agent completion → branch.
+- `cli/commands/hook.mjs`: registers `worktree-archive` and includes
+  it in the `subagent-stop` chain after `verify-deliverables`.
+- `cli/__tests__/hook-portability.test.mjs`: updated to expect the
+  expanded `subagent-stop` chain.
+- `AGENTS.md` + `CLAUDE.md` mirror: new "Worktree discipline" rule
+  under "Autonomy and parallelism".
+- `docs/architecture.md`: parallel-execution paragraph extended with
+  the dispatch discipline + merge sequencer description.
+- `feature_list.json`: F-167 row opened with `state: wip`.
+
+**Fresh evidence (2026-08-26):**
+- New tests:
+  - `cli/__tests__/worktree-merge-all.test.mjs` — 8/8 green
+    (dry-run plan, full sequencer with archive tags + worktree
+    removal, `--keep-branch`, explicit `--order`, conflict stop,
+    `--json` plan, unknown `--order` rejection, single-branch
+    flag-validation).
+  - `config/claude/hooks/__tests__/worktree-archive.test.mjs` — 5/5
+    green (queue append, idempotency, no-branch noop, corrupt-queue
+    recovery, transcript-based branch detection).
+- Extended tests:
+  - `scripts/worktree-policy.test.mjs` — 5/5 green (original 3 plus
+    `office-manager documents the worktree dispatch discipline` and
+    `project settings mandate bgIsolation and cleanup`).
+  - `cli/__tests__/worktree-merge.test.mjs` — 4/4 green (existing
+    single-branch primitive unchanged in behavior).
+  - `cli/__tests__/hook-portability.test.mjs` — full suite green after
+    updating the `subagent-stop` chain assertion.
+- Manual smoke: `node cli/commands/worktree-merge.mjs` (no args) prints
+  the new usage line and exits 2; `--help`-style invocation prints the
+  full usage block.
+
+**Blockers:** None. Commit/push remain human-approval actions and were
+not run.
 
 ## Passing — F-164 Dynamic orchestration, native workflows, and agent teams
 

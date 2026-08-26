@@ -728,6 +728,34 @@
       "evidence": "2026-08-25: removed model frontmatter from all 16 agents; dynamic tier routing inherits the session on unavailable discovery and forbids alias retries; 3 native workflow scripts plus /ultracode installed; agent teams enabled with bounded fail-open TaskCreated/TaskCompleted/TeammateIdle hooks. Dynamic routing tests 34/34, team hooks 3/3, SDK registry 5/5, installer 14/14, full SDK 301/301, full Node 412/412; make check/test/e2e/clean-check/verify-repo-structure/verify-removed-surfaces/check-arch passed; temporary full install verified."
     },
     {
+      "id": "F-165",
+      "title": "Native workflows and agent teams as the primary Bizar routing default",
+      "description": "Flip Mike's routing default from plain Agent calls to native dynamic workflows and agent teams; add three reusable bizar-*.js workflow scripts (research, implement, debug) and a stub-runtime workflow test that locks fan-out and barrier semantics; document the new default in docs/architecture.md.",
+      "behavior": "Mike dispatches native dynamic workflows and agent teams as the primary Bizar routing pattern; plain Agent calls are reserved for trivial or fully isolated work",
+      "verification": "make check; make test; make mirror-claude-md-check; node --test config/workflows/__tests__/bizar-default.test.mjs; targeted test rows",
+      "state": "passing",
+      "passed": "2026-08-26",
+      "commit": null,
+      "category": "harness",
+      "layer": "harness",
+      "created": "2026-08-26",
+      "scope": [
+        "AGENTS.md",
+        "config/claude/CLAUDE.md",
+        "config/claude/agents/office-manager.md",
+        "config/workflows/bizar-research.js",
+        "config/workflows/bizar-implement.js",
+        "config/workflows/bizar-debug.js",
+        "config/workflows/__tests__/bizar-default.test.mjs",
+        "scripts/run-node-tests.mjs",
+        "docs/architecture.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "docs/decisions/PLAN-agent-teams-default.md"
+      ],
+      "evidence": "2026-08-26: PLAN-agent-teams-default.md drafted and audited by @linda (APPROVE-WITH-CHANGES, 6 corrections + 3 test gaps applied). Routing policy + decision tree shipped in Commit A: AGENTS.md 'Autonomy and parallelism' flipped (Native dynamic workflows primary, agent teams host-side state under CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1, team_name deprecated and ignored, plain Agent fallback); config/claude/CLAUDE.md mirrored via scripts/mirror-claude-md.sh with --check parity; office-manager.md opens with a 5-step decision tree naming the three bizar-*.js scripts and the Workflow tool invocation shape. Three reusable workflows shipped in Commit B: bizar-research.js (parallel research + plan + audit + parallel implement + sequential verify), bizar-implement.js (parallel-only barrier with worktree-isolated lanes), bizar-debug.js (bounded loop-until-dry, cap=3, returns dry or budget-exhausted). Workflow test at config/workflows/__tests__/bizar-default.test.mjs (7/7 pass) stubs agent/pipeline/parallel/phase/log via Function constructor with brace-balanced meta extraction and asserts fan-out, barrier, and bidirectional pattern (pipeline in research, parallel-only in implement and debug). scripts/run-node-tests.mjs:18 extended to glob config/workflows/. Commit C lands docs/architecture.md Routing-default subsection and PROGRESS.md after-evidence entry. node --test config/workflows/__tests__/bizar-default.test.mjs 7/7 pass; make mirror-claude-md-check 'config/claude/CLAUDE.md is in sync'; grep -nE 'bizar-research|bizar-implement|bizar-debug' config/claude/agents/office-manager.md returns hits on all three script names. Pre-existing failures (verify-repo-structure plugin.json read, make e2e skill mirror + SDK typecheck, make test vitest-not-installed) trace to commit cf09bf6 dropping .claude-plugin/plugin.json and to the absence of make setup; F-165 introduces zero new test failures. Final squash commit pending human approval per AGENTS.md."
+    },
+    {
       "id": "F-166",
       "title": "User-controlled model picker (`bizar models`) and orchestrator selection rule",
       "description": "Ship a `bizar models` CLI that lists gateway candidates, runs an interactive multi-select picker, and persists the chosen IDs under `config/claude/model-router.json#userSelected`. The orchestrator (@mike) dispatches subagents using ONLY these IDs (plus the active session model); auto-discovery is no longer authoritative. The Agent-model-guard accepts userSelected models without live-discovery validation. The MCP `bizar_model_list` tool surfaces only the user-selected list.",
@@ -756,37 +784,39 @@
       "evidence": "Pending make check + make test; see PROGRESS.md 'In progress' block for the surface area."
     },
     {
-      "id": "F-165",
-      "title": "Native workflows and agent teams as the primary Bizar routing default",
-      "description": "Flip Mike's routing default from plain Agent calls to native dynamic workflows and agent teams; add three reusable bizar-*.js workflow scripts (research, implement, debug) and a stub-runtime workflow test that locks fan-out and barrier semantics; document the new default in docs/architecture.md.",
+      "id": "F-167",
+      "title": "Worktree isolation by default + multi-branch merge sequencer",
+      "description": "Every code-writing subagent must run in an isolated git worktree; @mike's dispatch discipline enforces `isolation: \"worktree\"` on every editing Agent call; `bizar worktree-merge --all` archives and merges ready `wt/*` branches in dependency order with conflict surfacing; SubagentStop hook records each completed branch into ~/.config/bizar/worktree-queue.json.",
       "behavior": "Mike dispatches native dynamic workflows and agent teams as the primary Bizar routing pattern; plain Agent calls are reserved for trivial or fully isolated work",
       "verification": "make check; make test; make mirror-claude-md-check; node --test config/workflows/__tests__/bizar-default.test.mjs; targeted test rows",
       "state": "passing",
       "passed": "2026-08-26",
-      "commit": null,
+      "commit": "pending",
       "category": "harness",
       "layer": "harness",
       "created": "2026-08-26",
       "scope": [
-        "AGENTS.md",
-        "config/claude/CLAUDE.md",
+        "scripts/worktree-policy.test.mjs",
         "config/claude/agents/office-manager.md",
-        "config/workflows/bizar-research.js",
-        "config/workflows/bizar-implement.js",
-        "config/workflows/bizar-debug.js",
-        "config/workflows/__tests__/bizar-default.test.mjs",
-        "scripts/run-node-tests.mjs",
+        "config/claude/hooks/worktree-bootstrap.mjs",
+        "config/claude/hooks/worktree-archive.mjs",
+        "config/claude/hooks/__tests__/worktree-archive.test.mjs",
+        "cli/commands/worktree-merge.mjs",
+        "cli/__tests__/worktree-merge-all.test.mjs",
+        "cli/commands/hook.mjs",
+        "cli/__tests__/hook-portability.test.mjs",
         "docs/architecture.md",
+        "AGENTS.md",
+        "CLAUDE.md",
         "PROGRESS.md",
-        "feature_list.json",
-        "docs/decisions/PLAN-agent-teams-default.md"
+        "feature_list.json"
       ],
-      "evidence": "2026-08-26: PLAN-agent-teams-default.md drafted and audited by @linda (APPROVE-WITH-CHANGES, 6 corrections + 3 test gaps applied). Routing policy + decision tree shipped in Commit A: AGENTS.md 'Autonomy and parallelism' flipped (Native dynamic workflows primary, agent teams host-side state under CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1, team_name deprecated and ignored, plain Agent fallback); config/claude/CLAUDE.md mirrored via scripts/mirror-claude-md.sh with --check parity; office-manager.md opens with a 5-step decision tree naming the three bizar-*.js scripts and the Workflow tool invocation shape. Three reusable workflows shipped in Commit B: bizar-research.js (parallel research + plan + audit + parallel implement + sequential verify), bizar-implement.js (parallel-only barrier with worktree-isolated lanes), bizar-debug.js (bounded loop-until-dry, cap=3, returns dry or budget-exhausted). Workflow test at config/workflows/__tests__/bizar-default.test.mjs (7/7 pass) stubs agent/pipeline/parallel/phase/log via Function constructor with brace-balanced meta extraction and asserts fan-out, barrier, and bidirectional pattern (pipeline in research, parallel-only in implement and debug). scripts/run-node-tests.mjs:18 extended to glob config/workflows/. Commit C lands docs/architecture.md Routing-default subsection and PROGRESS.md after-evidence entry. node --test config/workflows/__tests__/bizar-default.test.mjs 7/7 pass; make mirror-claude-md-check 'config/claude/CLAUDE.md is in sync'; grep -nE 'bizar-research|bizar-implement|bizar-debug' config/claude/agents/office-manager.md returns hits on all three script names. Pre-existing failures (verify-repo-structure plugin.json read, make e2e skill mirror + SDK typecheck, make test vitest-not-installed) trace to commit cf09bf6 dropping .claude-plugin/plugin.json and to the absence of make setup; F-165 introduces zero new test failures. Final squash commit pending human approval per AGENTS.md."
+      "evidence": "2026-08-26: scripts/worktree-policy.test.mjs 5/5 (3 original + office-manager dispatch discipline + settings bgIsolation+cleanup); cli/__tests__/worktree-merge-all.test.mjs 8/8 (dry-run plan, full sequencer, --keep-branch, --order, conflict stop, --json, unknown --order rejection, single-branch flag validation); config/claude/hooks/__tests__/worktree-archive.test.mjs 5/5 (queue append, idempotency, no-branch noop, corrupt-queue recovery, transcript extraction); cli/__tests__/worktree-merge.test.mjs 4/4 unchanged; cli/__tests__/hook-portability.test.mjs green after updating subagent-stop chain assertion; AGENTS.md + config/claude/CLAUDE.md + docs/architecture.md updated; office-manager.md documents Worktree Discipline + dispatched-agent template; worktree-merge --all sorts branches lexicographically, tags source tip as merge-archive/<branch>-<sha> before git merge --no-ff, removes merged worktree + source branch (unless --keep-branch)."
     }
   ],
   "vcr": {
-    "passing": 55,
-    "activated": 55,
-    "ratio": 0.9649122807017544
+    "passing": 56,
+    "activated": 56,
+    "ratio": 0.9655172413793104
   }
 }

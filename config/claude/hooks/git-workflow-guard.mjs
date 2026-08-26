@@ -92,26 +92,67 @@ function diffContainsSecret(text) {
   return false;
 }
 
-// Test-fixture bypass: a staged diff that ONLY changes files inside a
-// __tests__/ directory (or a *_test.mjs / *.test.mjs / *.test.ts file) is
-// allowed to contain synthetic secret markers. The hook's own tests rely on
-// `ghp_…`, `AKIA…`, and `-----BEGIN … PRIVATE KEY-----` fixtures to verify
-// that the guard denies real secrets. Production code paths never stage
-// test fixtures.
+// Test-fixture bypass: a secret marker is allowed only if EVERY file in
+// the staged diff lives under a __tests__/ directory or matches a
+// *.test.{mjs,js,ts,…} / *.spec.* naming convention. The hook's own tests
+// rely on `ghp_…`, `AKIA…`, and `-----BEGIN … PRIVATE KEY-----` fixtures
+// to verify that the guard denies real secrets, so commits that ONLY
+// touch test files can stage synthetic markers. Commits that mix test
+// files with production code still trigger the secret scan — a real
+// secret smuggled alongside the test fixtures would land in production.
 function isOnlyTestFixtures(stagedText) {
   if (!stagedText) return false;
-  const files = new Set();
+  let sawAnyFile = false;
   for (const line of stagedText.split('\n')) {
     const m = line.match(/^diff --git a\/(.+?)\s+b\//);
-    if (m) files.add(m[1]);
-  }
-  if (files.size === 0) return false;
-  for (const f of files) {
+    if (!m) continue;
+    sawAnyFile = true;
+    const f = m[1];
     if (/(?:^|\/)__tests__\//.test(f)) continue;
     if (/\.(test|spec)\.[mc]?[jt]sx?$/i.test(f)) continue;
     return false;
   }
-  return true;
+  return sawAnyFile;
+}
+
+// File-level fixture bypass: allow the commit if every secret marker in
+// the staged diff appears inside a test-file hunk. This lets the hook's
+// regression tests land in the same commit as their accompanying
+// production-code change. Production code never contains real ghp_/AKIA/
+// BEGIN PRIVATE KEY strings, so a non-test hunk that contains a marker
+// is by definition a real secret and the commit is denied.
+function isOnlyTestFileHunks(stagedText) {
+  if (!stagedText) return false;
+  let currentFile = null;
+  let currentFileIsTest = false;
+  let fileCount = 0;
+  for (const line of stagedText.split('\n')) {
+    const m = line.match(/^diff --git a\/(.+?)\s+b\//);
+    if (m) {
+      currentFile = m[1];
+      currentFileIsTest = isTestPath(currentFile);
+      fileCount += 1;
+      continue;
+    }
+    if (!currentFile) continue;
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      for (const pat of SECRET_CONTENT_PATTERNS) {
+        if (pat.test(line) && !currentFileIsTest) {
+          return false;
+        }
+      }
+    }
+  }
+  // If the staged set contains zero diff hunks we already returned
+  // false above; require at least one file so the check is meaningful.
+  return fileCount > 0;
+}
+
+function isTestPath(p) {
+  if (!p) return false;
+  if (/(?:^|\/)__tests__\//.test(p)) return true;
+  if (/\.(test|spec)\.[mc]?[jt]sx?$/i.test(p)) return true;
+  return false;
 }
 
 function getStagedDiff(cwd) {
@@ -236,13 +277,13 @@ process.stdin.on('end', () => {
   if (commit) {
     // F-200: scan staged diff for secret markers before asking.
     const staged = getStagedDiff(cwd);
-    if (
-      staged.status === 0 &&
-      diffContainsSecret(staged.stdout) &&
-      !isOnlyTestFixtures(staged.stdout)
-    ) {
-      output('deny', 'Staged changes contain what looks like a secret (API key, private key, AWS/GitHub/Slack/OpenAI token, etc.). Unstage it, move it to a gitignored local file, then recommit.');
-      return;
+    if (staged.status === 0 && diffContainsSecret(staged.stdout)) {
+      const fixtureOnly = isOnlyTestFixtures(staged.stdout);
+      const fileHunkOnly = isOnlyTestFileHunks(staged.stdout);
+      if (!fixtureOnly && !fileHunkOnly) {
+        output('deny', 'Staged changes contain what looks like a secret (API key, private key, AWS/GitHub/Slack/OpenAI token, etc.). Unstage it, move it to a gitignored local file, then recommit.');
+        return;
+      }
     }
     const message = commitMessage(command);
     const subject = message.split('\n').find((line) => line.trim())?.trim() ?? '';

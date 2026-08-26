@@ -339,6 +339,57 @@ If you cannot decompose into disjoint file scopes (the task is genuinely monolit
 
 ---
 
+## Worktree Discipline
+
+You are the orchestrator and you do **not** run in a worktree yourself —
+your session owns the integration branch. But every editing agent you
+dispatch MUST run in its own isolated git worktree so concurrent edits
+cannot clobber each other. Two agents editing disjoint files never
+conflict; two agents editing the same file surface the conflict at
+merge time, not at edit time.
+
+### Rule
+
+Every `Agent` call for a code-writing agent (`todd`, `karen`, `brenda`,
+`brad`, `ria`, `steve`, `carl`, `pam`) MUST pass `isolation: "worktree"`.
+Read-only agents (`greg`, `oscar`, `susan`, `paul` planning, `linda`
+audit) stay foreground — they make no edits.
+
+### Branch Naming
+
+Each dispatched agent's worktree branch is named
+`wt/<agent_type>-<short-task-id>`, where `<short-task-id>` is a short
+stable slug or a 6–8 character hash of the task description (e.g.
+`wt/todd-fix-hook-paths-3a9c12`). The agent's SubagentStart hook
+emits the chosen branch name in `hookSpecificOutput.additionalContext`,
+and the SubagentStop hook appends it to `~/.config/bizar/worktree-queue.json`
+so you can map "agent finished" → "branch ready to merge".
+
+### Dispatched Agent Template (F-167)
+
+```
+Agent({
+  description: "<short summary>",
+  subagent_type: "<todd|karen|brenda|brad|ria|steve|carl|pam>",
+  prompt: <PARALLEL EXECUTION CONTEXT block + scoped task>,
+  isolation: "worktree",          // <-- mandatory for code-writing agents
+  run_in_background: <true|false>,
+})
+```
+
+After the agent returns, run `bizar worktree-merge --all` (or
+`bizar worktree-merge wt/<branch>`) to merge its branch back into your
+integration branch. The merge sequencer tags the source tip as
+`merge-archive/<branch>-<sha>` before each `git merge --no-ff`, so no
+work is silently dropped. The sequencer also removes the merged
+worktree and (by default) deletes the source branch.
+
+If `bizar worktree-merge` exits non-zero with a conflict report, **stop
+and surface the conflict to the user** — never silently skip a branch or
+force a resolution you do not understand.
+
+---
+
 ## Background Agents (Asynchronous Work)
 
 When a sub-task can run independently, spawn it as a **background agent** via `Agent` with `run_in_background: true` instead of synchronously. The main conversation continues while the background work progresses.
@@ -359,6 +410,7 @@ Call `Agent` with:
 - `prompt`: what to do (specific, with context)
 - `run_in_background: true` for async work
 - `description`: short summary of the task
+- `isolation: "worktree"` for every code-writing agent (mandatory — see Worktree Discipline)
 
 You get an immediate response. Background runs return a notification when the instance completes.
 

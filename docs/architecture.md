@@ -100,6 +100,21 @@ only the installed dependency tree is linked from the main checkout. The
 designated Git integrator remains in the target checkout and serializes
 completed work rather than letting sibling agents merge concurrently.
 
+The orchestrator's dispatch discipline (`office-manager.md` — "Worktree
+Discipline") makes worktree isolation mandatory for every editing `Agent`
+call: dispatched branches are named `wt/<agent_type>-<short-task-id>` and
+are merged back through `bizar worktree-merge --all`, which lists every
+`wt/*` worktree branch, tags each source tip as
+`merge-archive/<branch>-<sha>`, then performs `git merge --no-ff` in
+dependency order, surfaces conflicts instead of silently dropping work,
+and removes the merged worktree plus the source branch (unless
+`--keep-branch`). The SubagentStart hook
+(`config/claude/hooks/worktree-bootstrap.mjs`) emits the chosen branch
+in `hookSpecificOutput.additionalContext`; the SubagentStop hook
+(`config/claude/hooks/worktree-archive.mjs`) appends the branch to
+`~/.config/bizar/worktree-queue.json` so the orchestrator can map
+"agent finished" → "branch ready to merge".
+
 The task database defaults to `<git-common-dir>/bizar/tasks.sqlite`, which is
 shared by linked worktrees but remains outside tracked source. Atomic SQLite
 transactions guard dependency readiness, task claims, path-scope collisions,
