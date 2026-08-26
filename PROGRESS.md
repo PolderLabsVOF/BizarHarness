@@ -1029,3 +1029,10 @@ explaining the omission. Write a 4-assertion regression test.
 - Proxy: http://127.0.0.1:20129 -> http://localhost:20128 (gateway)
 - Rewrites upstream IDs to `claude-...` on GET /v1/models; passthrough elsewhere
 - Surfaces all 9router models in /model picker without replacing Anthropic defaults
+
+## Local commits always allowed
+- `permissions.allow` ships with explicit `Bash(git commit *)` family patterns (master is clean so this is the first landing).
+- Regression test `cli/__tests__/settings-permissions.test.mjs` fails the build if any commit-pattern lands in `ask` or `deny`.
+- Live `~/.claude/settings.json` mirrors the template.
+- AGENTS.md notes the policy.
+- Tests: green.

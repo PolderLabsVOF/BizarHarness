@@ -207,7 +207,11 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.ok(settings.permissions.ask.includes('Bash(git -C * push *)'));
     assert.ok(settings.permissions.ask.includes('Bash(gh pr review *)'));
     assert.ok(settings.permissions.deny.includes('Bash(git --git-dir=* rebase *)'));
-    assert.equal(settings.permissions.allow.some((rule) => /git (?:commit|push)|gh (?:pr|release)|publish|deploy/.test(rule)), false);
+    // Local git commit is always allowed silently; push/gh pr/release/publish/deploy stay HITL.
+    assert.ok(settings.permissions.allow.includes('Bash(git commit *)'));
+    assert.ok(settings.permissions.allow.includes('Bash(git -C * commit *)'));
+    assert.ok(settings.permissions.allow.includes('Bash(git --git-dir=* commit *)'));
+    assert.equal(settings.permissions.allow.some((rule) => /git push|gh (?:pr|release)|publish|deploy/.test(rule)), false);
 
     const hookText = JSON.stringify(settings.hooks);
     for (const hook of [

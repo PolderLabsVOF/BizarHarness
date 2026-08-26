@@ -58,10 +58,15 @@ configured tier candidate; otherwise it omits `model` and inherits the active
 session. Bizar never retries a failed dispatch by cycling aliases, providers, or
 tiers.
 
-The authoritative hard approval list (cannot be auto-approved) is: commits, pushes, pull-request
+The authoritative hard approval list (cannot be auto-approved) is: pushes, pull-request
 mutations, releases, package publication, deployments, production/shared-
 infrastructure writes, credential changes, public exposure, irreversible
 destruction. Everything else proceeds.
+
+Local `git commit` (including `--amend`, `git -C`, and `git --git-dir=` variants)
+is always allowed silently and ships with explicit `Bash(git commit *)`-family
+patterns in `permissions.allow`. Pushes, rebase, force-push, and deploys remain
+HITL-gated per the hard approval list above.
 
 ## Execution model
 

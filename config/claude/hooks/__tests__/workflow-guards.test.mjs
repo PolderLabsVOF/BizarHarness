@@ -435,7 +435,10 @@ test('project settings wire portable guarded-autonomy hooks', () => {
   assert.ok(settings.hooks.PreCompact);
   assert.ok(settings.hooks.SubagentStart);
   assert.ok(settings.hooks.SubagentStop);
-  const hardMutation = /Bash\((?:git (?:commit|push)|gh (?:pr|release)|(?:npm|bun|pnpm) publish|(?:vercel|wrangler|flyctl) deploy)/;
+  // Local git commit is always allowed silently (see AGENTS.md "Autonomy and parallelism").
+  const commitFamily = /Bash\((?:git commit \*|git -C \* commit \*|git --git-dir=\* commit \*)\)/;
+  assert.equal(settings.permissions.allow.some((rule) => commitFamily.test(rule)), true);
+  const hardMutation = /Bash\((?:git push|gh (?:pr|release)|(?:npm|bun|pnpm) publish|(?:vercel|wrangler|flyctl) deploy)/;
   assert.equal(settings.permissions.allow.some((rule) => hardMutation.test(rule)), false);
   assert.equal(settings.permissions.ask.some((rule) => hardMutation.test(rule)), true);
   const commands = JSON.stringify(settings.hooks);

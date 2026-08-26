@@ -28,6 +28,18 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "allow": [
+      "Bash(git commit *)",
+      "Bash(git commit)",
+      "Bash(git -C * commit *)",
+      "Bash(git -C * commit)",
+      "Bash(git --git-dir=* commit *)",
+      "Bash(git --git-dir=* commit)",
+      "Bash(git commit --amend *)",
+      "Bash(git commit --amend)",
+      "Bash(git -C * commit --amend *)",
+      "Bash(git -C * commit --amend)",
+      "Bash(git --git-dir=* commit --amend *)",
+      "Bash(git --git-dir=* commit --amend)",
       "mcp__bizar__plan_action",
       "mcp__bizar__loop_list",
       "mcp__bizar__loop_status",
@@ -61,11 +73,8 @@
       "Write(./node_modules/**)"
     ],
     "ask": [
-      "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(git -C * commit *)",
       "Bash(git -C * push *)",
-      "Bash(git --git-dir=* commit *)",
       "Bash(git --git-dir=* push *)",
       "Bash(gh pr create *)",
       "Bash(gh pr edit *)",
