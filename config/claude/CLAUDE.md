@@ -42,6 +42,21 @@ make session-end              # lifecycle compatibility target
 - **MUST NOT** use a persistent Claude daemon. Claude Code and the Agent SDK run in-process; background work uses Claude Code's Agent tool.
 - **MUST NOT** rebase or force-push under the default project policy.
 
+### Worktree discipline
+
+Every code-writing Agent call dispatched by an orchestrator MUST pass
+`isolation: "worktree"`. Read-only agents stay foreground. Dispatched
+worktrees branch from HEAD as `wt/<agent_type>-<short-task-id>`. The
+SubagentStart hook (`config/claude/hooks/worktree-bootstrap.mjs`) bootstraps
+the worktree; the SubagentStop hook (`config/claude/hooks/worktree-archive.mjs`)
+records the branch into `~/.config/bizar/worktree-queue.json`. The
+orchestrator merges the queue with `bizar worktree-merge --all` (or one
+branch at a time with `bizar worktree-merge <branch>`); the sequencer
+tags each source tip as `merge-archive/<branch>-<sha>` before
+`git merge --no-ff` and surfaces conflicts instead of silently dropping
+work. Conflicts MUST be reported to the user for resolution; never silently
+force a resolution you do not understand.
+
 ## Autonomy and parallelism
 
 Agents execute clear, local, reversible work autonomously — they inspect,

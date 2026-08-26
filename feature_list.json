@@ -695,6 +695,32 @@
         "feature_list.json"
       ],
       "evidence": "2026-08-25: removed model frontmatter from all 16 agents; dynamic tier routing inherits the session on unavailable discovery and forbids alias retries; 3 native workflow scripts plus /ultracode installed; agent teams enabled with bounded fail-open TaskCreated/TaskCompleted/TeammateIdle hooks. Dynamic routing tests 34/34, team hooks 3/3, SDK registry 5/5, installer 14/14, full SDK 301/301, full Node 412/412; make check/test/e2e/clean-check/verify-repo-structure/verify-removed-surfaces/check-arch passed; temporary full install verified."
+    },
+    {
+      "id": "F-167",
+      "title": "Worktree isolation by default + multi-branch merge sequencer",
+      "description": "Every code-writing subagent must run in an isolated git worktree; @mike's dispatch discipline enforces `isolation: \"worktree\"` on every editing Agent call; `bizar worktree-merge --all` archives and merges ready `wt/*` branches in dependency order with conflict surfacing; SubagentStop hook records each completed branch into ~/.config/bizar/worktree-queue.json.",
+      "state": "passing",
+      "passed": "2026-08-26",
+      "commit": "pending",
+      "category": "harness",
+      "scope": [
+        "scripts/worktree-policy.test.mjs",
+        "config/claude/agents/office-manager.md",
+        "config/claude/hooks/worktree-bootstrap.mjs",
+        "config/claude/hooks/worktree-archive.mjs",
+        "config/claude/hooks/__tests__/worktree-archive.test.mjs",
+        "cli/commands/worktree-merge.mjs",
+        "cli/__tests__/worktree-merge-all.test.mjs",
+        "cli/commands/hook.mjs",
+        "cli/__tests__/hook-portability.test.mjs",
+        "docs/architecture.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "2026-08-26: scripts/worktree-policy.test.mjs 5/5 (3 original + office-manager dispatch discipline + settings bgIsolation+cleanup); cli/__tests__/worktree-merge-all.test.mjs 8/8 (dry-run plan, full sequencer, --keep-branch, --order, conflict stop, --json, unknown --order rejection, single-branch flag validation); config/claude/hooks/__tests__/worktree-archive.test.mjs 5/5 (queue append, idempotency, no-branch noop, corrupt-queue recovery, transcript extraction); cli/__tests__/worktree-merge.test.mjs 4/4 unchanged; cli/__tests__/hook-portability.test.mjs green after updating subagent-stop chain assertion; AGENTS.md + config/claude/CLAUDE.md + docs/architecture.md updated; office-manager.md documents Worktree Discipline + dispatched-agent template; worktree-merge --all sorts branches lexicographically, tags source tip as merge-archive/<branch>-<sha> before git merge --no-ff, removes merged worktree + source branch (unless --keep-branch)."
     }
   ],
   "vcr": {

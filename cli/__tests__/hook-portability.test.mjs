@@ -90,7 +90,7 @@ test('event dispatcher preserves tool and agent matcher scopes', () => {
     'agent-grounding', 'advisor-context', 'worktree-bootstrap',
   ]);
   assert.deepEqual(selectEventChain('subagent-stop', JSON.stringify({ agent_type: 'karen' })), [
-    'verify-deliverables',
+    'verify-deliverables', 'worktree-archive',
   ]);
 });
 

@@ -47,6 +47,7 @@ export const HOOK_PROGRAMS = Object.freeze({
   'team-lifecycle': 'team-lifecycle.mjs',
   'verify-deliverables': 'verify-deliverables.mjs',
   'worker-suggest': 'worker-suggest.mjs',
+  'worktree-archive': 'worktree-archive.mjs',
   'worktree-bootstrap': 'worktree-bootstrap.mjs',
 });
 
@@ -81,7 +82,7 @@ export const EVENT_CHAINS = Object.freeze({
     'advisor-context',
     'worktree-bootstrap',
   ]),
-  'subagent-stop': Object.freeze(['verify-deliverables']),
+  'subagent-stop': Object.freeze(['verify-deliverables', 'worktree-archive']),
   'task-created': Object.freeze(['team-lifecycle']),
   'task-completed': Object.freeze(['team-lifecycle']),
   'teammate-idle': Object.freeze(['team-lifecycle']),

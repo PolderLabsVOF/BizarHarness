@@ -54,11 +54,22 @@ process.stdin.on('end', () => {
     return;
   }
 
+  // Find the worktree branch so SubagentStop (worktree-archive) can map
+  // agent completion -> branch. Falls back to "unknown" if the worktree
+  // is detached, which still keeps the dispatch working.
+  const branchMatch = /^branch refs\/heads\/(.+)$/m.exec(list.stdout);
+  const branch = branchMatch ? branchMatch[1].trim() : null;
+  const branchLine = branch
+    ? `Agent is working on branch ${branch}. On completion, run \`bizar worktree-merge ${branch}\` (or \`bizar worktree-merge --all\` to merge every wt/* branch in order).`
+    : 'Agent is working in an isolated worktree; on completion, run `bizar worktree-merge --all` to merge ready branches in order.';
+
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'SubagentStart',
-      additionalContext:
+      additionalContext: [
         'Bizar: this editing agent is isolated in a worktree; claim a bizar task scope before modifying shared project paths.',
+        branchLine,
+      ].join('\n\n'),
     },
   }) + '\n');
 });
