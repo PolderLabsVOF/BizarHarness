@@ -33,6 +33,9 @@ try {
 rendered.reverse();
 let recent = rendered.join('\n\n---\n\n');
 if (recent.length > 30_000) recent = `…[older turns truncated]\n${recent.slice(-30_000)}`;
+// Strip CCR (context-compaction-retrieval) compression markers so subagents
+// do not interpret them as user content. Replace with a brief note.
+recent = recent.replace(/\[\s*CCR\s+retrieve[^\]]*\]/g, '[compacted context omitted]');
 const additionalContext = recent
   ? `Review the caller's request against this recent parent-session evidence, not only its summary:\n\n<recent-conversation>\n${recent}\n</recent-conversation>`
   : 'The parent transcript could not be reconstructed. State any context needed before making a strong claim.';

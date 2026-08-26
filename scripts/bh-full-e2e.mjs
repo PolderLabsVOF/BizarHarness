@@ -44,8 +44,16 @@ try {
   const missing = events.filter((event) => !Array.isArray(settings.hooks?.[event]));
   check('settings and lifecycle hooks', missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : `${events.length} events wired`);
   const { EVENT_CHAINS } = await import('../cli/commands/hook.mjs');
-  const guardWired = (settings.hooks?.PreToolUse || []).some((group) =>
-    (group.hooks || []).some((hook) => hook.command === 'bizar hook pre-tool-use'))
+  // F-169: the shipped template routes every hook through either the
+  // wrapper shim (sh -c probe or absolute wrapper path) instead of a
+  // bare `bizar hook <sub>` invocation. The guard-wire check therefore
+  // accepts either form but rejects bare `bizar hook` strings.
+  const preToolUseWired = (settings.hooks?.PreToolUse || []).some((group) =>
+    (group.hooks || []).some((hook) =>
+      hook.command && hook.command.includes('pre-tool-use')
+      && !/^bizar hook [a-z0-9-]+$/.test(hook.command.trim())
+    ));
+  const guardWired = preToolUseWired
     && EVENT_CHAINS['pre-tool-use'].includes('git-workflow-guard');
   const guardedCommands = ['git commit -m "test: approval boundary"', 'git push origin main', 'npm publish --access public'];
   const guardDecisions = guardedCommands.map((command) => {
@@ -84,7 +92,10 @@ try {
   const missingControlEvents = controlEvents
     .filter(([event, dispatcher]) =>
       !(settings.hooks?.[event] || []).some((group) =>
-        (group.hooks || []).some((hook) => hook.command === `bizar hook ${dispatcher}`))
+        (group.hooks || []).some((hook) =>
+          hook.command && hook.command.includes(dispatcher)
+          && !/^bizar hook [a-z0-9-]+$/.test(hook.command.trim())
+        ))
       || !EVENT_CHAINS[dispatcher].includes('control-inbox'))
     .map(([event]) => event);
   check(

@@ -65,8 +65,11 @@ test('project settings apply grounding to all subagents', () => {
     readFileSync(join(hooksDir, '..', 'settings.json'), 'utf8'),
   );
   const hooks = settings.hooks.SubagentStart;
+  // F-169: SubagentStart hook now routes through the wrapper shim (either
+  // via sh -c probe OR an absolute wrapper path). Match the subagent-start
+  // subcommand label regardless of which wrapper form shipped.
   const grounding = hooks.find((entry) =>
-    JSON.stringify(entry).includes('bizar hook subagent-start'));
+    JSON.stringify(entry).includes('subagent-start'));
   assert.ok(grounding, 'SubagentStart must run the portable Bizar dispatcher');
   assert.equal(
     grounding.matcher,

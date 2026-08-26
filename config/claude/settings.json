@@ -27,6 +27,21 @@
   },
   "permissions": {
     "defaultMode": "bypassPermissions",
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf /)",
+      "Bash(sudo *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git -C * push --force *)",
+      "Bash(git -C * push -f *)",
+      "Bash(git rebase *)",
+      "Bash(git -C * rebase *)",
+      "Bash(git --git-dir=* rebase *)",
+      "Write(./node_modules/**)"
+    ],
     "allow": [
       "mcp__bizar__plan_action",
       "mcp__bizar__loop_list",
@@ -43,24 +58,7 @@
       "mcp__bizar__bizar_audit",
       "mcp__bizar__bizar_model_list",
       "mcp__semble__*",
-      "mcp__agent-browser__*"
-    ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)",
-      "Bash(rm -rf /)",
-      "Bash(sudo *)",
-      "Bash(git push --force *)",
-      "Bash(git push -f *)",
-      "Bash(git -C * push --force *)",
-      "Bash(git -C * push -f *)",
-      "Bash(git rebase *)",
-      "Bash(git -C * rebase *)",
-      "Bash(git --git-dir=* rebase *)",
-      "Write(./node_modules/**)"
-    ],
-    "ask": [
+      "mcp__agent-browser__*",
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(git -C * commit *)",
@@ -119,6 +117,7 @@
   "askUserQuestionTimeout": "5m",
   "showThinkingSummaries": true,
   "enableWorkflows": true,
+  "disableAutoCompact": true,
   "autoDreamEnabled": true,
   "env": {
     "BIZAR_HOME": "${HOME}/.config/bizar",
@@ -134,7 +133,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook user-prompt-submit",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook user-prompt-submit'",
             "timeout": 10
           }
         ]
@@ -145,7 +144,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook session-start",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook session-start'",
             "timeout": 15
           }
         ]
@@ -157,7 +156,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook pre-tool-use",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook pre-tool-use'",
             "timeout": 15
           }
         ]
@@ -169,7 +168,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook permission-request",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook permission-request'",
             "timeout": 15
           }
         ]
@@ -181,7 +180,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook post-tool-use",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook post-tool-use'",
             "timeout": 15
           }
         ]
@@ -193,7 +192,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook post-tool-use-failure",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook post-tool-use-failure'",
             "timeout": 15
           }
         ]
@@ -204,7 +203,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook subagent-start",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook subagent-start'",
             "timeout": 15
           }
         ]
@@ -215,7 +214,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook subagent-stop",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook subagent-stop'",
             "timeout": 15
           }
         ]
@@ -226,7 +225,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook task-created",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook task-created'",
             "timeout": 5
           }
         ]
@@ -237,7 +236,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook task-completed",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook task-completed'",
             "timeout": 5
           }
         ]
@@ -248,7 +247,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook teammate-idle",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook teammate-idle'",
             "timeout": 5
           }
         ]
@@ -260,7 +259,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook pre-compact",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook pre-compact'",
             "timeout": 15
           }
         ]
@@ -271,7 +270,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook stop",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook stop'",
             "timeout": 15
           }
         ]
@@ -282,7 +281,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bizar hook session-end",
+            "command": "sh -c 'BIZAR=\"\"; for d in \"$HOME/.npm-global/bin\" \"$HOME/.local/bin\" \"/usr/local/bin\" \"/usr/bin\"; do [ -x \"$d/bizar\" ] && BIZAR=\"$d/bizar\" && break; done; if [ -z \"$BIZAR\" ] && command -v bizar >/dev/null 2>&1; then BIZAR=\"$(command -v bizar)\"; fi; if [ -z \"$BIZAR\" ]; then BIZAR=\"npx -y @polderlabs/bizar-sdk\"; fi; exec $BIZAR hook session-end'",
             "timeout": 15
           }
         ]

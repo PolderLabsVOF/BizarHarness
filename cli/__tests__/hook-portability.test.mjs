@@ -94,7 +94,11 @@ test('event dispatcher preserves tool and agent matcher scopes', () => {
   ]);
 });
 
-test('permission merge moves external mutations out of allow and into ask', () => {
+test('permission merge preserves allow + ask + deny (F-169 user override)', () => {
+  // F-169: the Bizar policy used to move hard-mutation rules from `allow`
+  // back into `ask`. The user override for this install keeps them in
+  // `allow` so subagents do not prompt under bypassPermissions. The
+  // normalizer now merges lists verbatim rather than re-promoting rules.
   const normalized = normalizePermissionLists({
     defaultMode: 'acceptEdits',
     allow: ['Read', 'Bash(git push *)', 'Bash(npm publish *)', 'Bash(gh pr view *)'],
@@ -106,11 +110,14 @@ test('permission merge moves external mutations out of allow and into ask', () =
     ask: ['Bash(gh release *)'],
     deny: ['Bash(git push --force *)'],
   });
-  assert.deepEqual(normalized.allow, ['Read', 'Bash(gh pr view *)', 'mcp__bizar__*']);
-  assert.ok(normalized.ask.includes('Bash(git push *)'));
-  assert.ok(normalized.ask.includes('Bash(npm publish *)'));
+  assert.deepEqual(normalized.allow, ['Read', 'Bash(git push *)', 'Bash(npm publish *)', 'Bash(gh pr view *)', 'mcp__bizar__*']);
+  assert.ok(normalized.ask.includes('Bash(custom approval *)'));
   assert.ok(normalized.ask.includes('Bash(gh release *)'));
   assert.ok(normalized.deny.includes('Bash(git rebase *)'));
+  assert.ok(normalized.deny.includes('Bash(git push --force *)'));
+  // Hard-mutation rules must NOT be moved out of allow by the merge.
+  assert.ok(normalized.allow.includes('Bash(git push *)'));
+  assert.ok(normalized.allow.includes('Bash(npm publish *)'));
 });
 
 test('model router ownership recognizes Bizar v1/v2 but not user routers', () => {
