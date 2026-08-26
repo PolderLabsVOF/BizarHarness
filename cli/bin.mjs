@@ -416,14 +416,37 @@ async function main() {
       break;
     }
 
+    case 'models': {
+      const mod = await importCommand('models');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load models command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'models');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar models [--list|--set|--clear|--json] — run 'bizar models --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
     case 'model': {
+      // Deprecated alias. Routes to the original `model.mjs` so the
+      // legacy JSON shape (`{ providers: { ... }, total: N }`) and table
+      // output keep working for existing scripts and tests. New code
+      // should use `bizar models` (see `case 'models'`).
       const mod = await importCommand('model');
       if (!mod) {
         console.error(chalk.red(`  ✗ Could not load model command module`));
         process.exit(EXIT_ERROR);
         return;
       }
-      dbg('loaded command module:', 'model');
+      dbg('loaded command module (deprecated alias):', 'model');
+      if (!isHelpRequest) {
+        console.error(chalk.yellow('  ! `bizar model` is deprecated; use `bizar models` for the new picker surface.'));
+      }
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) {
         console.error(chalk.red(`  ✗ Usage: bizar model <subcommand> — run 'bizar model --help'`));

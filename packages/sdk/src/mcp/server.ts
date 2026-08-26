@@ -443,11 +443,14 @@ const bizarAuditTool = defineTool<Record<string, string>>(
 // `bizar model list --json` — gateway model inventory.
 const bizarModelListTool = defineTool<Record<string, string>>(
   "bizar_model_list",
-  "Wrapper around `bizar model list --json`. Lists every model id reachable through the configured 9Router gateway.",
+  "Wrapper around `bizar models --json`. Returns ONLY the models the user has explicitly enabled via `bizar models` (the `userSelected` block of `config/claude/model-router.json`). Live discovery is filtered out by default to avoid surfacing dozens of unrelated models. Empty list = orchestrator inherits the active session model.",
   {},
   async () => {
     try {
-      const r = runBizar(["model", "list"]);
+      // Prefer the new `bizar models` surface; fall back to the legacy
+      // `bizar model list` alias for older installs. The CLI is responsible
+      // for filtering to userSelected.
+      const r = runBizar(["models", "--json"]);
       if (!r.ok) return err(r.error);
       const parsed = readJsonSafe<unknown>(r.stdout);
       return ok(parsed !== null ? JSON.stringify(parsed) : r.stdout);

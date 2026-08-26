@@ -2,6 +2,27 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In progress — F-166 User-controlled model picker (`bizar models`)
+
+**Objective:** Give the user explicit control over which models the Bizar
+orchestrator (@mike) may dispatch to. Live gateway discovery is no longer the
+gate; the user picker is.
+
+**Surface area:**
+- New CLI `bizar models` (interactive picker, `--list`, `--set`, `--clear`, `--json`) with deprecated `bizar model` alias.
+- Persistence: `config/claude/model-router.json#userSelected` (atomic write, preserves all other fields).
+- Orchestrator rule: dispatch ONLY with `userSelected.models`. If the block is empty, inherit the session. No auto-discovery, no adding tier candidates that are not user-selected.
+- Agent-model-guard: accepts models in any `tiers.<x>.models` (with live discovery) AND models in `userSelected.models` (picker IS the discovery — live probe bypassed for these).
+- MCP `bizar_model_list`: filters output to user-selected.
+- Office-manager prompt: documents the new decision tree + tier heuristic table.
+
+**Tier heuristic** (set by picker, overridable per model in `userSelected.tierHints`):
+- `qwen3.8 | gpt-5* | opus | o3-pro | o4-mini | sonnet-4*` → premium
+- `haiku-4* | sonnet-3-7 | mini-high | m3-high | grok-3` → high
+- `sonnet | gpt-4 | default | m3` → default
+- `nano | mini | haiku (older) | flash | lite | tiny` → budget
+- otherwise → mid
+
 ## Passing — F-164 Dynamic orchestration, native workflows, and agent teams
 
 **Objective delivered:** Removed brittle fixed model pins from all 16 custom

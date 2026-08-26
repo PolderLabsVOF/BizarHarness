@@ -111,6 +111,14 @@ manifest.
 
 ## MCP boundary
 
+The Bizar stdio MCP server exposes a fixed tool surface to Claude Code. Tools
+are wrappers around typed SDK primitives (plans, loops, graph queries,
+instincts, decisions) plus agent-facing CLI shims (`bizar_task`,
+`bizar_workflow`, `bizar_control`, `bizar_audit`). `bizar_model_list` returns
+ONLY the user-selected models from `model-router.json#userSelected` (plus a
+total-available count for context) — never the raw gateway inventory. This
+prevents dozens of unrelated gateway IDs from flooding the model's context.
+
 The MCP server exposes nine tools only: plan CRUD, loop state, graph query/path, and read-only instinct/decision records. Tool handlers operate on local files and do not call a local HTTP service.
 
 ## Autonomy and approval
@@ -127,16 +135,22 @@ route but never replace it.
 
 Mike is the sole general orchestrator. Agent roles are model-agnostic: no
 custom agent carries fixed `model:` frontmatter. Before each dispatch Mike
-selects the cheapest sufficient tier from task risk and complexity. When live
-gateway discovery reports a configured candidate, Mike passes that model on the
-Agent call. When discovery is unavailable, stale, ambiguous, or has no matching
-candidate, the Agent call omits `model` and inherits the active session model.
-A dispatch is attempted once; Bizar does not cycle aliases, providers, or tiers.
+selects the cheapest sufficient user-selected model from task risk and
+complexity. **Model selection is user-driven, not auto-discovered**: the
+user explicitly enables the IDs they trust via `bizar models`, which writes
+them to `config/claude/model-router.json#userSelected`. The orchestrator
+dispatches ONLY with IDs in that block; if the block is missing or empty,
+the Agent call omits `model` and inherits the active session model. The
+picker is the discovery surface — live gateway discovery is not required to
+validate user picks (the Agent-model-guard enforces that and bypasses the
+live probe for IDs in `userSelected`). A dispatch is attempted once; Bizar
+does not cycle aliases, providers, or tiers.
 
 Workflow state records only the routing decisions made for requested agents,
-including whether each dispatch used a concrete live candidate or inherited the
-session. The `cx/*`, `claude-qwen/*`, and `claude-minimax/*` IDs are optional
-compatibility-gateway contracts, not permanent properties of agent roles.
+including whether each dispatch used a concrete user-selected candidate or
+inherited the session. The `cx/*`, `claude-qwen/*`, and `claude-minimax/*`
+IDs are optional compatibility-gateway contracts, not permanent properties
+of agent roles.
 
 Bizar also installs three native Claude Code dynamic workflows under
 `~/.claude/workflows/`: `ultracode`, `ultracode-review`, and

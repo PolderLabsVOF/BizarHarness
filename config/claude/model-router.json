@@ -1,8 +1,14 @@
 {
   "$schema": "https://bizar.dev/schema/model-router.v3.json",
-  "version": "12.0.0",
+  "version": "13.0.0",
   "endpoint": "http://localhost:20129/v1",
-  "comment": "Mike selects the cheapest sufficient model tier per dispatch. Agent roles never carry fixed models. When live discovery cannot prove a concrete model, omit the Agent model override and inherit the active session model instead of retrying aliases.",
+  "comment": "Mike selects the cheapest sufficient user-selected model per dispatch. Agent roles never carry fixed models. The orchestrator dispatches ONLY with IDs in `userSelected.models`. When `userSelected` is empty, omit the Agent model override and inherit the active session model instead of retrying aliases.",
+  "userSelected": {
+    "models": [],
+    "lastUpdated": null,
+    "source": "default-empty",
+    "tierHints": {}
+  },
   "gateway": {
     "required": false,
     "endpoint": "http://localhost:20129/v1",
