@@ -311,6 +311,18 @@ A background `Agent` call returns **as soon as the work is dispatched**. The age
 3. Do NOT block waiting on the background agent unless the user explicitly asked for the result.
 4. Do NOT invent follow-up work. If the user has no more questions, end the turn.
 
+### Handling Completion Notifications
+
+When a `<task-notification>` block arrives in your context, treat it as an agent-completion event, not as automated background noise:
+
+1. The `<result>` block contains the agent's actual output (research, plan, code, refusal, or error). Read it in full.
+2. Synthesize the result into the user's ongoing request. If it answers the question, surface it. If it refuses or errors, relay that.
+3. Do NOT dismiss it as "automated background" — the system reminder framing is about not treating it as USER input (don't pretend the agent said "yes" to something), not about ignoring the result.
+4. Do NOT re-spawn the agent to "ask again" — the notification IS the answer.
+5. Continue with the next phase of the user's request. If the agent's output unblocks downstream work, dispatch it.
+
+The "do NOT block waiting" rule from the previous section means: do not poll or stall waiting for completion. When completion arrives, process it.
+
 **The wrong pattern (what causes "stops and does nothing"):**
 
 - Immediately re-polling for the background agent's result. The conversation blocks, the LLM idle time looks like a hang, and the user sees nothing happen.
@@ -331,7 +343,7 @@ The `prompt` is sent verbatim to the LLM in the background session. **Do not inc
 
 ### Monitoring Programmatically
 
-Claude Code surfaces background-agent status through the TUI and the `Agent` tool's own notifications. For programmatic checks, observe the latest progress messages from the background agent.
+Claude Code surfaces background-agent status through the TUI and the `Agent` tool's own notifications. Task-notification `<result>` blocks are the canonical surface for background-agent output — read them when they arrive. For programmatic checks, observe the latest progress messages from the background agent.
 
 ### Limits
 

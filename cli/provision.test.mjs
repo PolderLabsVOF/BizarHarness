@@ -198,32 +198,40 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.worktree.bgIsolation, 'worktree');
     assert.equal(settings.enableWorkflows, true);
     assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
-    assert.equal(settings.hooks.TaskCreated[0].hooks[0].command, 'bizar hook task-created');
-    assert.equal(settings.hooks.TaskCompleted[0].hooks[0].command, 'bizar hook task-completed');
-    assert.equal(settings.hooks.TeammateIdle[0].hooks[0].command, 'bizar hook teammate-idle');
+    assert.equal(settings.hooks.TaskCreated[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} task-created`);
+    assert.equal(settings.hooks.TaskCompleted[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} task-completed`);
+    assert.equal(settings.hooks.TeammateIdle[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} teammate-idle`);
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
     assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
+    assert.equal(settings.disableAutoCompact, true);
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
-    assert.ok(settings.permissions.ask.includes('Bash(git -C * push *)'));
-    assert.ok(settings.permissions.ask.includes('Bash(gh pr review *)'));
+    assert.ok(settings.permissions.allow.includes('Bash(git -C * push *)'));
+    assert.ok(settings.permissions.allow.includes('Bash(gh pr review *)'));
+    assert.ok(settings.permissions.allow.includes('Bash(gh release *)'));
     assert.ok(settings.permissions.deny.includes('Bash(git --git-dir=* rebase *)'));
-    assert.equal(settings.permissions.allow.some((rule) => /git (?:commit|push)|gh (?:pr|release)|publish|deploy/.test(rule)), false);
+    assert.equal(((settings.permissions.ask) || []).some((rule) => /git (?:commit|push)|gh (?:pr|release)|publish|deploy/.test(rule)), false);
 
     const hookText = JSON.stringify(settings.hooks);
+    // Bare `bizar hook` invocations are forbidden: Claude Code's stripped PATH
+    // drops them silently. Every hook must route through the wrapper.
+    assert.equal(/bizar hook [a-z0-9-]+/.test(hookText), false);
     for (const hook of [
-      'bizar hook user-prompt-submit',
-      'bizar hook session-start',
-      'bizar hook pre-tool-use',
-      'bizar hook permission-request',
-      'bizar hook post-tool-use-failure',
-      'bizar hook subagent-stop',
-      'bizar hook pre-compact',
-      'bizar hook stop',
+      'bizar-hook-wrapper.sh user-prompt-submit',
+      'bizar-hook-wrapper.sh session-start',
+      'bizar-hook-wrapper.sh pre-tool-use',
+      'bizar-hook-wrapper.sh permission-request',
+      'bizar-hook-wrapper.sh post-tool-use-failure',
+      'bizar-hook-wrapper.sh subagent-stop',
+      'bizar-hook-wrapper.sh pre-compact',
+      'bizar-hook-wrapper.sh stop',
     ]) {
-      assert.match(hookText, new RegExp(hook));
+      assert.match(hookText, new RegExp(hook.replace(/\./g, '\\.')));
     }
     assert.equal(settings.hooks.SubagentStart[0].matcher, undefined);
-    assert.equal(settings.hooks.SubagentStart[0].hooks[0].command, 'bizar hook subagent-start');
+    assert.equal(
+      settings.hooks.SubagentStart[0].hooks[0].command,
+      `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} subagent-start`,
+    );
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -325,6 +333,87 @@ describe('writeBizarSkillLock() — shared registry compatibility', () => {
     const result = writeBizarSkillLock({ skillsSrc, agentsDir });
     assert.equal(result.ok, true);
     assert.equal(result.count, 0);
+  });
+});
+
+describe('writeClaudeSettings — hook wrapper path (F-169)', () => {
+  let home;
+  let claudeDir;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'bizar-hooks-wrapper-'));
+    claudeDir = join(home, '.claude');
+    process.env.HOME = home;
+    delete process.env.XDG_CONFIG_DIR;
+  });
+
+  afterEach(() => {
+    restoreHome();
+    if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
+  });
+
+  test('emitted settings.json contains no bare `bizar hook` commands', () => {
+    const script = `
+      import { writeClaudeSettings } from './cli/provision.mjs';
+      const result = writeClaudeSettings({ force: true });
+      if (!result.ok) process.exit(1);
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: join(import.meta.dirname, '..'),
+      env: {
+        ...process.env,
+        HOME: home,
+        CLAUDE_CONFIG_DIR: claudeDir,
+        BIZAR_HOME: join(home, '.config', 'bizar'),
+      },
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const settingsPath = join(claudeDir, 'settings.json');
+    assert.equal(existsSync(settingsPath), true);
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+
+    const allCommands = [];
+    for (const groups of Object.values(settings.hooks || {})) {
+      for (const group of groups || []) {
+        for (const hook of group.hooks || []) {
+          if (typeof hook.command === 'string') allCommands.push(hook.command);
+        }
+      }
+    }
+    assert.ok(allCommands.length > 0, 'expected hook commands to be present');
+    for (const cmd of allCommands) {
+      assert.equal(
+        /bizar hook [a-z0-9-]+/.test(cmd),
+        false,
+        `bare "bizar hook" forbidden in emitted settings: ${cmd}`,
+      );
+      assert.match(
+        cmd,
+        /bizar-hook-wrapper\.sh [a-z0-9-]+/,
+        `expected wrapper path in command: ${cmd}`,
+      );
+    }
+  });
+
+  test('emitted settings.json contains disableAutoCompact: true', () => {
+    const script = `
+      import { writeClaudeSettings } from './cli/provision.mjs';
+      const result = writeClaudeSettings({ force: true });
+      if (!result.ok) process.exit(1);
+    `;
+    spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: join(import.meta.dirname, '..'),
+      env: {
+        ...process.env,
+        HOME: home,
+        CLAUDE_CONFIG_DIR: claudeDir,
+        BIZAR_HOME: join(home, '.config', 'bizar'),
+      },
+      encoding: 'utf8',
+    });
+    const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
+    assert.equal(settings.disableAutoCompact, true);
   });
 });
 

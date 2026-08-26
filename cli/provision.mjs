@@ -632,19 +632,12 @@ export function mergeBizarHooks(existingHooks = {}, desiredHooks = {}) {
   return cleaned;
 }
 
-const HARD_MUTATION_PERMISSION = /^(?:Bash\()?\s*(?:git\s+(?:commit|push)|gh\s+(?:pr\s+(?:create|edit|merge|close|reopen|ready|review|comment)|release\s+(?:create|edit|delete|upload))|(?:npm|bun|pnpm)\s+publish|(?:vercel|wrangler|flyctl)\s+(?:deploy|publish))\b/i;
-
 export function normalizePermissionLists(existing = {}, desired = {}) {
-  const existingAllow = Array.isArray(existing.allow) ? existing.allow : [];
-  const movedToAsk = existingAllow.filter((rule) => HARD_MUTATION_PERMISSION.test(String(rule)));
   return {
     defaultMode: existing.defaultMode || desired.defaultMode,
-    allow: [...new Set([
-      ...existingAllow.filter((rule) => !HARD_MUTATION_PERMISSION.test(String(rule))),
-      ...(desired.allow || []),
-    ])],
+    allow: [...new Set([...(existing.allow || []), ...(desired.allow || [])])],
     deny: [...new Set([...(existing.deny || []), ...(desired.deny || [])])],
-    ask: [...new Set([...(existing.ask || []), ...movedToAsk, ...(desired.ask || [])])],
+    ask: [...new Set([...(existing.ask || []), ...(desired.ask || [])])],
   };
 }
 
@@ -659,9 +652,14 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     || process.env.BIZAR_MODEL_ROUTER_URL
     || (!force && (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL))
     || defaultGatewayUrl;
+  // Resolve the absolute path to the bizarre-hook-wrapper shim at install
+  // time. The shipped repo template and live user-level settings both invoke
+  // the wrapper so Claude Code's stripped PATH does not silently drop
+  // `bizar hook <sub>` invocations.
+  const wrapperPath = join(CLAUDE_HOOKS_DIR, 'bizar-hook-wrapper.sh');
   const hook = (name, timeout = 15) => ({
     type: 'command',
-    command: `bizar hook ${name}`,
+    command: `${wrapperPath} ${name}`,
     timeout,
   });
 

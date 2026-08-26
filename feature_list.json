@@ -673,6 +673,29 @@
       "evidence": "F-163 + .claude/model-router.json v11.0.0->11.1.0 with claude-qwen/qwen3.8-max premium + claude-minimax/* tiers; 16 agent frontmatter updated; scripts/agent-model-registry.test.mjs 7/7 (ALLOWED_MODELS, mike/linda/todd/ria snapshot, tamper, unavailability); packages/sdk/tests/agent-model-registry.test.mjs parity test green; cli/__tests__/workflow-state.test.mjs + cli/__tests__/model.test.mjs + cli/commands/model.mjs (PROVIDER_GROUPS) all consistent; use-default.md/use-premium.md updated; docs/architecture.md + cli/provision.mjs:935 updated."
     },
     {
+      "id": "F-169",
+      "title": "Hook wiring + subagent permissions + CCR disable",
+      "description": "Stop three session-friction defects: (a) bare `bizar hook <sub>` invocations fail with `command not found` because Claude Code invokes hooks via /bin/sh with a stripped PATH; (b) `permissions.ask` patterns force prompts under bypassPermissions; (c) auto-compaction injects `[CCR retrieve hash=...]` markers into the parent transcript that the advisor-context hook forwards verbatim to subagents. Ship `bizar-hook-wrapper.sh` as the canonical hook entrypoint, move hard-mutation rules into `permissions.allow`, and disable auto-compact in the repo template.",
+      "state": "in_progress",
+      "wip_holder": "@todd",
+      "passed": null,
+      "commit": "pending",
+      "category": "harness",
+      "scope": [
+        "config/claude/settings.json",
+        "config/claude/hooks/bizar-hook-wrapper.sh",
+        "config/claude/hooks/__tests__/bizar-hook-wrapper.test.mjs",
+        "cli/provision.mjs",
+        "cli/provision.test.mjs",
+        "AGENTS.md",
+        "config/claude/CLAUDE.md",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "2026-08-26 wrapper script + tests + provision factory rewrite. 5/5 wrapper tests pass; 16/16 provision tests pass including new F-169 wrapper-path and disableAutoCompact assertions; make check green. Live ~/.claude/settings.json mirrored.",
+      "created": "2026-08-26"
+    },
+    {
       "id": "F-164",
       "title": "Dynamic orchestrator model routing, native workflows, and agent teams",
       "description": "Remove fixed model pins from custom agents; let Mike choose an available model tier per dispatch or inherit the session; install native Claude Code workflows including /ultracode; enable agent teams with bounded fail-open lifecycle hooks.",

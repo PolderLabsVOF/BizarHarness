@@ -432,14 +432,22 @@ test('project settings wire portable guarded-autonomy hooks', () => {
   const settings = JSON.parse(readFileSync(join(hooksDir, '..', 'settings.json'), 'utf8'));
   assert.equal(settings.permissions.defaultMode, 'bypassPermissions');
   assert.equal(settings.enableWorkflows, true);
+  assert.equal(settings.disableAutoCompact, true);
   assert.ok(settings.hooks.PreCompact);
   assert.ok(settings.hooks.SubagentStart);
   assert.ok(settings.hooks.SubagentStop);
   const hardMutation = /Bash\((?:git (?:commit|push)|gh (?:pr|release)|(?:npm|bun|pnpm) publish|(?:vercel|wrangler|flyctl) deploy)/;
-  assert.equal(settings.permissions.allow.some((rule) => hardMutation.test(rule)), false);
-  assert.equal(settings.permissions.ask.some((rule) => hardMutation.test(rule)), true);
+  // F-169: hard-mutation rules now ship in allow (user override of the
+  // AGENTS.md hard approval list). They MUST NOT be in ask anymore.
+  assert.ok(settings.permissions.allow.some((rule) => hardMutation.test(rule)));
+  assert.equal((settings.permissions.ask || []).some((rule) => hardMutation.test(rule)), false);
   const commands = JSON.stringify(settings.hooks);
-  assert.match(commands, /bizar hook/);
+  // F-169: bare `bizar hook <sub>` invocations are forbidden because
+  // Claude Code strips PATH under /bin/sh. The shipped template must
+  // route every hook through the wrapper shim or its inline sh -c
+  // probe — never a bare `bizar hook` invocation.
+  assert.equal(/bizar hook [a-z0-9-]+/.test(commands), false, 'bare `bizar hook <sub>` is forbidden');
+  assert.match(commands, /sh -c|bizar-hook-wrapper\.sh/);
   assert.doesNotMatch(commands, /\$CLAUDE_PROJECT_DIR/);
   assert.doesNotMatch(commands, /\/home\/drb0rk\/projects\/BizarHarness/);
 });

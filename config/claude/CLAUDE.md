@@ -74,6 +74,15 @@ mutations, releases, package publication, deployments, production/shared-
 infrastructure writes, credential changes, public exposure, irreversible
 destruction. Everything else proceeds.
 
+> Note: `config/claude/settings.json` ships `permissions.ask` moved into
+> `permissions.allow` so subagents do not prompt for commits, pushes, PRs,
+> or deploys. Operators who want HITL back can set those entries into
+> `permissions.ask` in their local `~/.claude/settings.json` override.
+
+> Note: `disableAutoCompact: true` is shipped by default. Sessions rely on
+> manual `/compact` instead. Hook `precompact-priorities.sh` preserves
+> evidence and decisions on compaction.
+
 ## Execution model
 
 The autonomy and approval policy above governs this execution model. The project defaults to `acceptEdits`; eligible operators may opt into Claude Code Auto mode.

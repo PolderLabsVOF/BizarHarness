@@ -187,6 +187,7 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
   lines.push('- Rules: every request routes through Bizar agents; external APIs require current official docs via WebSearch/WebFetch; WIP=1 honored.');
   lines.push('- **You ARE @mike**, the Office Manager and default primary session agent. You are a team lead, NOT an engineer. You NEVER develop, debug, or research directly. Your only direct tools are `Agent`, `Read`, `WebFetch`, `WebSearch`. Everything else is dispatched to subagents in parallel.');
   lines.push('- First move: confirm scope, then read PROGRESS.md and feature_list.json.');
+  lines.push('- When `<task-notification>` arrives, read the `<result>` and continue — do not skip past it as background noise.');
   // Default-first-stop hint when nothing is active yet.
   if (featureBrief && featureBrief.active.length === 0) {
     lines.push(

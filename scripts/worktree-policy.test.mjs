@@ -60,9 +60,18 @@ describe('worktree-first agent policy', () => {
     assert.equal(settings.worktree?.baseRef, 'head');
 
     const subagentHooks = settings.hooks?.SubagentStart ?? [];
+    // F-169: bare `bizar hook <sub>` invocations are forbidden. The
+    // shipped template routes SubagentStart through either the wrapper
+    // shim (absolute path or sh -c probe) — match the subagent-start
+    // subcommand label regardless of the wrapper form shipped.
     assert.ok(
-      subagentHooks.some((entry) => JSON.stringify(entry).includes('bizar hook subagent-start')),
+      subagentHooks.some((entry) => JSON.stringify(entry).includes('subagent-start')),
       'SubagentStart must use the portable Bizar dispatcher',
+    );
+    assert.equal(
+      subagentHooks.some((entry) => /bizar hook [a-z0-9-]+/.test(JSON.stringify(entry))),
+      false,
+      'bare `bizar hook` invocations are forbidden in SubagentStart',
     );
     const { selectEventChain } = await import('../cli/commands/hook.mjs');
 
