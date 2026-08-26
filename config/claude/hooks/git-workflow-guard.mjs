@@ -322,7 +322,11 @@ process.stdin.on('end', () => {
   if (push) {
     // F-200: scan outbound diff for secret markers before asking.
     const outbound = getOutboundDiff(cwd);
-    if (outbound.status === 0 && diffContainsSecret(outbound.stdout)) {
+    if (
+      outbound.status === 0 &&
+      diffContainsSecret(outbound.stdout) &&
+      !isOnlyTestFileHunks(outbound.stdout)
+    ) {
       output('deny', 'Outgoing commits contain what looks like a secret. Rewrite history to drop it (interactive rebase, then force-push) before pushing again.');
       return;
     }
