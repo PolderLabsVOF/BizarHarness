@@ -169,7 +169,7 @@ describe('durable task DAG', () => {
     );
   });
 
-  test('edit authorization enforces the current workspace scope and sibling claims', () => {
+  test('edit authorization enforces sibling claims and allows the claimant to edit freely', () => {
     const { root, ledger } = fixture();
     const main = join(root, 'main');
     const isolated = join(root, 'isolated');
@@ -184,23 +184,28 @@ describe('durable task DAG', () => {
       workspace: isolated,
     });
 
+    // Active task's own scope: ALLOWED (claim against others, not self).
     assert.equal(ledger.authorizeEdit({
       cwd: isolated,
       filePath: join(isolated, 'src', 'index.ts'),
     }).allowed, true);
 
+    // Active task editing outside its own scope: ALLOWED (F-200
+    // loosening — scope is a sibling claim, not a self-restriction).
     assert.equal(ledger.authorizeEdit({
       cwd: isolated,
       filePath: join(isolated, 'docs', 'design.md'),
-    }).reason, 'OUT_OF_SCOPE');
+    }).allowed, true);
 
+    // Different workspace, file in active task's scope: DENIED with
+    // SCOPE_OWNED — the scope still blocks sibling workers.
     assert.equal(ledger.authorizeEdit({
       cwd: main,
       filePath: join(main, 'src', 'index.ts'),
     }).reason, 'SCOPE_OWNED');
   });
 
-  test('expired leases return tasks to pending; requireTask still gates edits', () => {
+  test('expired leases fall through to TASK_REQUIRED when caller requires a task', () => {
     const { root, ledger, advance } = fixture();
     const main = join(root, 'main');
     const isolated = join(root, 'isolated');
@@ -216,24 +221,33 @@ describe('durable task DAG', () => {
     });
     advance(1_001);
 
-    assert.equal(ledger.authorizeEdit({
-      cwd: isolated,
-      filePath: join(isolated, 'src', 'index.ts'),
-      requireTask: true,
-    }).reason, 'LEASE_EXPIRED');
-
-    ledger.sweepExpiredLeases();
-    // After sweep the task is back to `pending`. Falling through to the
-    // reserved-scope check (requireTask=true, no scope-owner) yields
-    // TASK_REQUIRED — the workspace needs a fresh active claim to edit.
+    // F-200: LEASE_EXPIRED is no longer a separate code — expired leases
+    // fall through to the reserved-scope check. With requireTask=true
+    // and no live reservation, the result is TASK_REQUIRED.
     assert.equal(ledger.authorizeEdit({
       cwd: isolated,
       filePath: join(isolated, 'src', 'index.ts'),
       requireTask: true,
     }).reason, 'TASK_REQUIRED');
+
+    ledger.sweepExpiredLeases();
+    // After sweep the task is back to `pending`. With no active claim
+    // and no scope owner, requireTask=true still yields TASK_REQUIRED.
+    assert.equal(ledger.authorizeEdit({
+      cwd: isolated,
+      filePath: join(isolated, 'src', 'index.ts'),
+      requireTask: true,
+    }).reason, 'TASK_REQUIRED');
+
+    // With requireTask=false the same edit is allowed (F-200 loosening).
+    assert.equal(ledger.authorizeEdit({
+      cwd: isolated,
+      filePath: join(isolated, 'src', 'index.ts'),
+      requireTask: false,
+    }).allowed, true);
   });
 
-  test('linked worktree edits require a task and completed scopes stay reserved', () => {
+  test('linked worktree edits require a task and completed scopes are released', () => {
     const { root, ledger } = fixture();
     const main = join(root, 'main');
     const unclaimed = join(root, 'unclaimed');
@@ -252,11 +266,13 @@ describe('durable task DAG', () => {
     ledger.claimTask({ taskId: 'done', owner: 'todd', workspace: completed });
     ledger.completeTask({ taskId: 'done', owner: 'todd', evidence: 'tests pass' });
 
+    // F-200 loosening: completed tasks no longer reserve scopes. A
+    // sibling worker can now edit the same path in the main repo.
     assert.equal(ledger.authorizeEdit({
       cwd: main,
       repoRoot: main,
       filePath: join(main, 'src', 'index.ts'),
-    }).reason, 'SCOPE_OWNED');
+    }).allowed, true);
   });
 });
 

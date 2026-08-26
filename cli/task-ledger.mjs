@@ -749,68 +749,29 @@ export class TaskLedger {
     const now = this.now();
     const workingDirectory = resolve(requireText(cwd, 'cwd'));
     const absoluteFile = resolve(workingDirectory, requireText(filePath, 'filePath'));
-    const assigned = this.db.prepare(
-      `SELECT * FROM tasks
-       WHERE workspace IS NOT NULL
-         AND state IN ('pending','active','blocked','completed','integrating')
-       ORDER BY
-         CASE state
-           WHEN 'active' THEN 0
-           WHEN 'integrating' THEN 1
-           WHEN 'completed' THEN 2
-           WHEN 'blocked' THEN 3
-           ELSE 4
-         END,
-         updated_at DESC,
-         length(workspace) DESC`,
-    ).all().map((row) => this._serialize(row));
-
-    const current = assigned.find((task) =>
-      task.workspace && pathInside(resolve(task.workspace), workingDirectory));
-    if (current && current.state === 'active') {
-      if (!current.leaseExpiresAt || current.leaseExpiresAt <= now) {
-        return {
-          allowed: false,
-          reason: 'LEASE_EXPIRED',
-          taskId: current.id,
-          leaseExpiresAt: current.leaseExpiresAt,
-        };
-      }
-      if (!pathInside(resolve(current.workspace), absoluteFile)) {
-        return {
-          allowed: false,
-          reason: 'OUTSIDE_WORKSPACE',
-          taskId: current.id,
-        };
-      }
-      const relativePath = normalizeRelativePath(relative(current.workspace, absoluteFile));
-      const allowed = relativePath &&
-        current.scopes.some((scope) => scopeContains(scope, relativePath));
-      return allowed
-        ? { allowed: true, taskId: current.id, scope: current.scopes.find((scope) => scopeContains(scope, relativePath)) }
-        : {
-            allowed: false,
-            reason: 'OUT_OF_SCOPE',
-            taskId: current.id,
-            path: relativePath,
-            scopes: current.scopes,
-          };
-    }
-
+    // Reserved-scope guard: only ACTIVE tasks with a live lease block
+    // sibling edits. Completed, integrated, blocked, and pending tasks do
+    // not hold scopes any more (F-200 loosening). The active task in the
+    // caller's workspace is NOT restricted by its own scope — its scope
+    // is filtered out of the reserved set so it can edit anything in
+    // its workspace. Required so agents can edit any path that isn't a
+    // git-tracked secret (e.g. PROGRESS.md, settings, scratch).
     const reserved = this.db.prepare(
       `SELECT * FROM tasks
-       WHERE state IN ('completed','integrating')
-          OR (
-            state = 'active'
-            AND lease_expires_at IS NOT NULL
-            AND lease_expires_at > ?
-          )
+       WHERE state = 'active'
+         AND lease_expires_at IS NOT NULL
+         AND lease_expires_at > ?
        ORDER BY updated_at DESC`,
     ).all(now).map((row) => this._serialize(row));
     const root = resolve(repoRoot || workingDirectory);
     if (!pathInside(root, absoluteFile)) return { allowed: true };
     const relativePath = normalizeRelativePath(relative(root, absoluteFile));
-    const owner = reserved.find((task) =>
+    // Identify the current active task (workspace contains the absolute
+    // file) and remove it from the reserved set so it can self-edit.
+    const current = reserved.find((task) =>
+      task.workspace && pathInside(resolve(task.workspace), absoluteFile));
+    const others = reserved.filter((task) => task !== current);
+    const owner = others.find((task) =>
       relativePath && task.scopes.some((scope) => scopeContains(scope, relativePath)));
     if (owner) {
       return {
@@ -822,13 +783,13 @@ export class TaskLedger {
         path: relativePath,
       };
     }
-    if (requireTask) {
+    if (requireTask && !current) {
       return {
         allowed: false,
         reason: 'TASK_REQUIRED',
         path: relativePath,
       };
     }
-    return { allowed: true };
+    return { allowed: true, taskId: current?.id };
   }
 }

@@ -1,11 +1,25 @@
 #!/usr/bin/env node
-// PreToolUse — deny edits outside the current task scope or inside a path
-// leased by a sibling worktree.
+// PreToolUse — Bizar path-ownership guard.
 //
-// F-145 loosening: removed the per-edit `git worktree list --porcelain`
-// fork and the `requireTask` gate. The hook is now a single in-memory
-// ledger lookup. Edits inside the project are allowed by default; only
-// an active lease held by another agent on the same path denies.
+// Behaviour (F-200 loosening):
+//   - Files outside the repo root (e.g. /tmp/foo, scratch dirs, any path
+//     outside `repoRoot`) are ALWAYS allowed.
+//   - Files inside the repo are allowed unless a sibling active task
+//     holds a live lease on the same path (SCOPE_OWNED).
+//   - The active task in the caller's workspace does NOT restrict
+//     itself — its scope is a claim against OTHER concurrent workers,
+//     not a restriction on the claimant. Agents can edit any file in
+//     their workspace that isn't a git-tracked secret.
+//   - Completed, integrated, blocked, and pending tasks no longer
+//     reserve scopes. Only active-with-lease tasks block siblings.
+//
+// This is implemented in `cli/task-ledger.mjs` `authorizeEdit`. This
+// hook is a thin wrapper that runs the ledger lookup and maps the
+// `allowed: false` result into a Claude Code `deny` decision.
+//
+// F-145 history: removed the per-edit `git worktree list --porcelain`
+// fork and the `requireTask` gate. The hook is a single in-memory
+// ledger lookup now.
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';

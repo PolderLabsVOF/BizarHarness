@@ -28,9 +28,6 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)",
       "Bash(rm -rf /)",
       "Bash(sudo *)",
       "Bash(git push --force *)",
@@ -40,7 +37,14 @@
       "Bash(git rebase *)",
       "Bash(git -C * rebase *)",
       "Bash(git --git-dir=* rebase *)",
-      "Write(./node_modules/**)"
+      "Write(./node_modules/**)",
+      "Bash(git add .env*)",
+      "Bash(git add **/.env)",
+      "Bash(git add **/.env.*)",
+      "Bash(git add **/secrets/**)",
+      "Bash(git add **/credentials/**)",
+      "Bash(git add **/*.pem)",
+      "Bash(git add **/*.key)"
     ],
     "allow": [
       "mcp__bizar__plan_action",

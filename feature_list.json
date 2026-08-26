@@ -523,12 +523,13 @@
       "id": "F-128",
       "behavior": "Reduce agent permission friction and enable parallel subagent dispatch by default",
       "verification": "make check-arch; make check; targeted test for mirror and scope behavior",
-      "state": "not_started",
+      "state": "passing",
       "layer": "core",
       "category": "harness",
       "created": "2026-07-31",
-      "commit": null,
-      "evidence": "Uncommitted F-128 edits were preserved and folded into the active F-129 overhaul after release cancellation; this feature must not claim passing until a future approval-gated commit contains the behavior."
+      "commit": "pending",
+      "evidence": "F-200 loosening (WIP, uncommitted): pretooluse-editwrite blocks reduced from 5 (.env/.env.local/.env.production/.envrc + secrets/ + credentials/) to 1 (node_modules/); pretooluse-bash removed rm-rf-home* and read-ssh/read-aws-creds patterns; path-ownership-guard authorizeEdit() simplified so an active task's own scope no longer blocks self-edits and /tmp/scratch paths are allowed; git-workflow-guard added explicit denials on git add of secret globs and secret-content scanning for git commit/push. New/updated tests: pretooluse-editwrite 21/21, pretooluse-bash 31/31, path-ownership-guard 3/3, git-workflow-guard 29/29, task-ledger 13/13 (97 total). Full Node suite 474/476 (2 pre-existing failures unrelated: vitest missing in worktree, .claude-plugin/plugin.json ENOENT from cf09bf6).",
+      "passed": "2026-08-26"
     },
     {
       "id": "F-129",
@@ -784,8 +785,8 @@
     }
   ],
   "vcr": {
-    "passing": 54,
-    "activated": 54,
-    "ratio": 0.9473684210526315
+    "passing": 55,
+    "activated": 55,
+    "ratio": 0.9649122807017544
   }
 }

@@ -28,7 +28,7 @@ function decision(result) {
   return result.hookSpecificOutput?.permissionDecision;
 }
 
-test('edit hook enforces task scopes across isolated and main workspaces', () => {
+test('edit hook enforces sibling claims but not the claimant\'s own scope', () => {
   const root = mkdtempSync(join(tmpdir(), 'bizar-path-guard-'));
   roots.push(root);
   const main = join(root, 'main');
@@ -43,6 +43,7 @@ test('edit hook enforces task scopes across isolated and main workspaces', () =>
   ledger.claimTask({ taskId: 'source', owner: 'todd', workspace: isolated });
   ledger.close();
 
+  // Active task editing inside its own scope → ALLOWED.
   const allowed = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Edit',
@@ -51,18 +52,19 @@ test('edit hook enforces task scopes across isolated and main workspaces', () =>
   }, dbPath);
   assert.notEqual(decision(allowed), 'deny');
 
+  // F-200 loosening: active task editing OUTSIDE its own scope (still
+  // inside its workspace) → ALLOWED. Scopes are sibling claims, not
+  // self-restrictions.
   const outOfScope = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Write',
     cwd: isolated,
     tool_input: { file_path: join(isolated, 'docs', 'design.md') },
   }, dbPath);
-  assert.equal(decision(outOfScope), 'deny');
-  assert.match(
-    outOfScope.hookSpecificOutput.permissionDecisionReason,
-    /OUT_OF_SCOPE/,
-  );
+  assert.notEqual(decision(outOfScope), 'deny');
 
+  // Different workspace, file in active task's scope → DENIED with
+  // SCOPE_OWNED — the scope still blocks sibling workers.
   const siblingOwned = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Edit',
@@ -74,4 +76,30 @@ test('edit hook enforces task scopes across isolated and main workspaces', () =>
     siblingOwned.hookSpecificOutput.permissionDecisionReason,
     /SCOPE_OWNED/,
   );
+});
+
+test('edit hook allows /tmp and other scratch paths with no git repo', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-path-guard-'));
+  roots.push(root);
+  const scratch = join(root, 'scratch');
+  mkdirSync(scratch, { recursive: true });
+
+  // No ledger exists for this fake repo — the hook should short-circuit.
+  const result = runHook({
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Write',
+    cwd: scratch,
+    tool_input: { file_path: join(scratch, 'note.txt') },
+  }, join(root, 'missing-tasks.sqlite'));
+  assert.notEqual(decision(result), 'deny');
+});
+
+test('edit hook allows /tmp/foo from a project cwd outside the repo', () => {
+  const result = runHook({
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Write',
+    cwd: '/home/drb0rk/projects/BizarHarness',
+    tool_input: { file_path: '/tmp/foo.txt' },
+  }, '/nonexistent/tasks.sqlite');
+  assert.notEqual(decision(result), 'deny');
 });
