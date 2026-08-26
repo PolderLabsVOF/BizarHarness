@@ -704,6 +704,30 @@
       "created": "2026-08-26"
     },
     {
+      "id": "F-170",
+      "title": "Remove stale .claude-plugin/plugin.json references and add regression guard",
+      "description": "Commit cf09bf6 deliberately dropped `.claude-plugin/plugin.json` but four scripts and tests still referenced it, causing `make verify-repo-structure`, `make e2e`, `scripts/workflow-plugin-surfaces.test.mjs`, and `cli/__tests__/installer.test.mjs` to fail on the missing manifest. Remove the dead references, invert the assertions, drop the manifest version from the SDK parity check, and add a regression test that locks the deletion in place.",
+      "state": "in_progress",
+      "wip_holder": "@todd",
+      "wip": 1,
+      "passed": null,
+      "commit": "pending",
+      "category": "harness",
+      "scope": [
+        "scripts/verify-repo-structure.mjs",
+        "scripts/verify-repo-structure.test.mjs",
+        "scripts/workflow-plugin-surfaces.test.mjs",
+        "scripts/__tests__/verify-removed-claude-plugin.test.mjs",
+        "config/claude/hooks/simplify-guard.mjs",
+        "package.json",
+        "docs/architecture.md",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "Pending; see PROGRESS.md F-170 evidence entry after commit lands.",
+      "created": "2026-08-26"
+    },
+    {
       "id": "F-164",
       "title": "Dynamic orchestrator model routing, native workflows, and agent teams",
       "description": "Remove fixed model pins from custom agents; let Mike choose an available model tier per dispatch or inherit the session; install native Claude Code workflows including /ultracode; enable agent teams with bounded fail-open lifecycle hooks.",
@@ -763,7 +787,6 @@
       "passed": null,
       "commit": "pending",
       "category": "harness",
-      "wip": 1,
       "scope": [
         "cli/commands/models.mjs",
         "cli/commands/model.mjs",

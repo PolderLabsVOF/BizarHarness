@@ -28,10 +28,10 @@ single-shot, or fully isolated work. Routing policy and decision tree live in
 
 ## Plugin and hook boundary
 
-`.claude-plugin/plugin.json` describes Bizar's distributable Claude Code
-surface: agents, skills, commands, hooks, and the retained stdio MCP server.
-Project-local `config/claude/` configuration is the contributor surface, while
-the installer materializes an immutable versioned bundle to `~/.claude/` on the
+`.claude-plugin/plugin.json` was deliberately dropped in commit cf09bf6;
+Bizar no longer ships a distributable Claude Code plugin manifest. Project-
+local `config/claude/` configuration is the contributor surface, while the
+installer materializes an immutable versioned bundle to `~/.claude/` on the
 user's machine.
 
 All lifecycle entries invoke the stable `bizar hook <event>` dispatcher rather

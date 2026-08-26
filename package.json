@@ -8,7 +8,6 @@
   },
   "files": [
     "AGENTS.md",
-    ".claude-plugin/plugin.json",
     "hooks/hooks.json",
     "cli/**/*.mjs",
     "!cli/**/*.test.mjs",
