@@ -2,6 +2,83 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Active — F-165 Native workflows and agent teams as primary Bizar default
+
+**Current objective:** Flip the Bizar routing default from plain `Agent`
+calls to native dynamic workflows and agent teams. Plan audited and approved
+by @linda (APPROVE-WITH-CHANGES, six corrections + three test gaps, all
+applied). Source of truth:
+`docs/decisions/PLAN-agent-teams-default.md`.
+
+**Commit A in flight:** routing policy + decision tree.
+
+- `AGENTS.md` "Autonomy and parallelism" paragraph replaces the
+  "Subagent dispatch through the Agent tool is the default" framing with
+  the workflow-primary, agent-team-as-host-side-state, plain-`Agent`-as-
+  fallback wording. `team_name` is documented as deprecated and ignored
+  per Anthropic's docs.
+- `config/claude/CLAUDE.md` regenerated from `AGENTS.md` via
+  `scripts/mirror-claude-md.sh`; `--check` confirms parity.
+- `config/claude/agents/office-manager.md` opens "How You Route" with a
+  decision tree that names the three `bizar-*.js` workflow scripts and
+  the `Workflow` tool invocation shape.
+- `feature_list.json` opens `F-165` (WIP=1) and points at this plan.
+
+**Commit B in flight:** three reusable workflow scripts + workflow test.
+
+- `config/workflows/bizar-research.js` — pipeline pattern with parallel
+  research + plan + audit + parallel implementation lanes + sequential
+  verify. Returns `ready-for-integration` with disjoint lanes, evidence,
+  and reviews.
+- `config/workflows/bizar-implement.js` — parallel-only barrier pattern.
+  Scope extraction → parallel lanes (worktree isolation) → single barrier
+  `agent()` → single verify → single synthesis. Returns
+  `ready-for-integration` with a MERGE plan.
+- `config/workflows/bizar-debug.js` — bounded loop-until-dry. RCA
+  hypothesis → adversarial `agent()` verify → bounded re-plan if
+  unconfirmed (cap=3) → smallest fix + regression test → verify.
+  Returns `dry` or `budget-exhausted`.
+- `config/workflows/__tests__/bizar-default.test.mjs` — `node --test`
+  suite. Stubs `agent`/`pipeline`/`parallel`/`phase`/`log` via `Function`
+  constructor with brace-balanced `meta` extraction. Asserts fan-out,
+  barrier, and bidirectional pattern (pipeline in research, parallel-only
+  in implement and debug). 7/7 tests pass.
+- `scripts/run-node-tests.mjs:18` extended to glob `config/workflows/`.
+
+**Commit C in flight:** docs + ledger close-out.
+
+- `docs/architecture.md` gains a "Routing default" subsection under
+  "Runtime model" naming native workflows + agent teams as the primary
+  pattern and pointing at `F-165`.
+- `PROGRESS.md` records this entry.
+- `feature_list.json` `F-165` will be promoted to `passing` after the
+  human-approved commit lands.
+
+**Verification (2026-08-26):**
+
+- `node --test config/workflows/__tests__/bizar-default.test.mjs` —
+  7/7 pass.
+- `make mirror-claude-md-check` — `config/claude/CLAUDE.md` in sync with
+  `AGENTS.md`.
+- `node scripts/run-node-tests.mjs` — picks up the new test alongside the
+  pre-existing Node suites (three pre-existing failures remain:
+  `force=true accepted`, `runInstaller() flag wiring`, and
+  `Claude Code plugin manifest references canonical in-root components`;
+  all three are caused by commit `cf09bf6` removing
+  `.claude-plugin/plugin.json` and are not introduced by F-165).
+- `make verify-removed-surfaces` — clean.
+- `make check-arch` — clean (0 failed, skill-frontmatter gate green).
+
+**Pre-existing failures observed but not caused by F-165:**
+
+- `make verify-repo-structure` — fails reading
+  `.claude-plugin/plugin.json` (deleted by `cf09bf6`).
+- `make e2e` — fails on `skill mirror` and `SDK typecheck` (both
+  pre-existing on master before F-165 changes were made).
+- `make test` — fails because `node_modules/.bin/vitest` is not installed;
+  this requires `make setup` which is a one-time bootstrap outside the
+  scope of F-165.
+
 ## Passing — F-164 Dynamic orchestration, native workflows, and agent teams
 
 **Objective delivered:** Removed brittle fixed model pins from all 16 custom

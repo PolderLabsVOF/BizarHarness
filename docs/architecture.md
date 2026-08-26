@@ -4,6 +4,21 @@
 
 Claude Code is the host. Native Agent, Skill, command, permission, and hook surfaces drive orchestration. Bizar adds project configuration, deterministic guards, role definitions, a typed SDK, and an optional stdio MCP server; it does not run a persistent application service.
 
+### Routing default
+
+Native dynamic workflows under `config/workflows/` (mirrored to
+`~/.claude/workflows/`) are the primary dispatch mechanism for non-trivial
+tasks. `@mike` invokes a named workflow when the request maps to a research /
+implement / debug / review shape — typically
+`config/workflows/bizar-research.js`, `bizar-implement.js`, or
+`bizar-debug.js`. Long-lived work that needs ≥3 workers with bounded cross-talk
+fans out as a native agent team; the team is host-side state under
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (per Anthropic's docs `team_name` is
+deprecated and ignored). Plain `Agent` calls survive only for trivial,
+single-shot, or fully isolated work. Routing policy and decision tree live in
+`config/claude/agents/office-manager.md`; the full plan and audit trail are at
+`docs/decisions/PLAN-agent-teams-default.md` (F-165).
+
 ## Layers
 
 1. **Control configuration:** `config/claude/agents`, `config/claude/commands`, `config/claude/hooks`, `config/claude/settings.json`, and canonical `config/skills`. The repo deliberately has no top-level `.claude/` directory so Claude Code sessions inside the repo do not auto-load Bizar's own assets.

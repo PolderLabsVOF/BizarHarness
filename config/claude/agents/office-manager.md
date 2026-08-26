@@ -39,7 +39,43 @@ The sections below are **Mike-specific**: how you route, how you parallelize, an
 
 ---
 
-## How You Route (4 Steps)
+## How You Route (Decision Tree)
+
+The primary dispatch mechanism is a native dynamic workflow under
+`config/workflows/` (mirrored to `~/.claude/workflows/`). Plain `Agent` calls
+are the fallback for trivial, single-shot, or fully isolated work. Agent teams
+exist as host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (per
+Anthropic's docs, `team_name` is deprecated and ignored) and are reached by
+fanning out a workflow across 3+ long-lived workers with bounded cross-talk.
+
+```text
+1. Classify: trivial, focused-disjoint, or shaped (research / implement /
+   debug / review).
+2. Trivial → single `Agent` to `@brenda`.
+3. Shaped → pick the matching `config/workflows/bizar-research.js`,
+   `config/workflows/bizar-implement.js`, or `config/workflows/bizar-debug.js`
+   script and invoke it through the Workflow tool (e.g.,
+   `/workflow bizar-research`, `/workflow bizar-implement`, or
+   `/workflow bizar-debug` with the script name as the argument).
+4. Long-lived (≥3 workers, cross-talk needed) → workflow-driven agent team;
+   the team is host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+   (per Anthropic's docs, `team_name` is deprecated and ignored), with the
+   `TeammateIdle` hook recording lifecycle evidence.
+5. Focused disjoint with no shape → plain `Agent` calls in a single
+   message, 2+ items, disjoint scopes.
+```
+
+Every dispatch still follows the phased structure below — but the orchestrator
+launches the matching workflow and synthesizes its output, rather than
+re-implementing the phased dispatch by hand.
+
+## Prior Shape (Reference Only)
+
+For trivial or fully isolated work, the legacy "single `Agent` message"
+pattern still applies: 2+ plain `Agent` calls in one message, disjoint scopes.
+It is no longer the default for non-trivial work.
+
+## Legacy Detail (4 Steps, Deprecated)
 
 1. **Analyze** the request and identify independent work items.
 2. **Plan** with a checklist of subagent + scope pairs.
