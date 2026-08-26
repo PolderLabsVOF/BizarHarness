@@ -155,6 +155,16 @@ The MCP server exposes nine tools only: plan CRUD, loop state, graph query/path,
 
 Local reversible work is the autonomous lane. Hook precedence is used intentionally: deny beats ask, ask beats the permission mode's normal approval. Protected paths and dangerous commands are denied; external publication and irreversible actions ask the operator. Auto mode is optional and account/provider-dependent, not assumed by the harness.
 
+> As of `POLICY-full-permissions-and-advisory-hooks` (2026-08-26), the hook
+> layer is **advisory** rather than gating. Every `PreToolUse` hook returns
+> `permissionDecision: "allow"` and injects safety guidance via
+> `hookSpecificOutput.additionalContext`. `permissions.deny` and
+> `permissions.ask` are emptied. Agents run with full permissions and
+> receive contextual guidance instead of silent blocks. The hard approval
+> list (commits, pushes, releases, publication, production writes,
+> credential changes, irreversible destruction) remains a human-only gate.
+> See [`docs/decisions/POLICY-full-permissions-and-advisory-hooks.md`](decisions/POLICY-full-permissions-and-advisory-hooks.md).
+
 ## Agent routing and evidence
 
 Every non-empty primary prompt receives `UserPromptSubmit` context requiring
