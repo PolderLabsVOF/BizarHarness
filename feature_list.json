@@ -503,7 +503,7 @@
       "layer": "core",
       "category": "installer",
       "created": "2026-07-31",
-      "evidence": "2026-08-03 regenerator: F-122 already shipped via commits 3220519 (installer adds ANTHROPIC_AUTH_TOKEN+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY to project template) and 42574ac (bizar model list CLI with 3s timeout, auth-retry-on-401, provider grouping). Current master re-verified: merge-settings 5/5 (cli/install/__tests__/merge-settings.test.mjs — production writer, normal-update preserve, normal-update retain, fresh-install, force-refresh); model CLI 6/6 (cli/__tests__/model.test.mjs — 200/JSON, --json exit, 401-retry, 401-persistent, timeout, network-error); cli/provision.mjs:649-777 (writeClaudeSettings) emits all four env vars; cli/commands/model.mjs:1-152 wired at cli/bin.mjs:419-433; .claude/settings.json:118-124 carries the same defaults; .claude/model-router.json:1-13 points to picker-proxy F-147.",
+      "evidence": "2026-08-03 regenerator: F-122 already shipped via commits 3220519 (installer adds ANTHROPIC_AUTH_TOKEN+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY to project template) and 42574ac (bizar model list CLI with 3s timeout, auth-retry-on-401, provider grouping). Current master re-verified: merge-settings 5/5 (cli/install/__tests__/merge-settings.test.mjs \u2014 production writer, normal-update preserve, normal-update retain, fresh-install, force-refresh); model CLI 6/6 (cli/__tests__/model.test.mjs \u2014 200/JSON, --json exit, 401-retry, 401-persistent, timeout, network-error); cli/provision.mjs:649-777 (writeClaudeSettings) emits all four env vars; cli/commands/model.mjs:1-152 wired at cli/bin.mjs:419-433; .claude/settings.json:118-124 carries the same defaults; .claude/model-router.json:1-13 points to picker-proxy F-147.",
       "commit": "3220519",
       "passed": "2026-08-03"
     },
@@ -589,7 +589,14 @@
       "passed": "2026-08-03",
       "commit": "c82077d",
       "category": "sdk",
-      "scope": ["packages/sdk/src/mcp/server.ts", ".claude/settings.json", "cli/audit.mjs", "packages/sdk/tests/", "PROGRESS.md", "feature_list.json"],
+      "scope": [
+        "packages/sdk/src/mcp/server.ts",
+        ".claude/settings.json",
+        "cli/audit.mjs",
+        "packages/sdk/tests/",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
       "evidence": "c82077d + F-146 agent-facing CLI wrappers; 5 new tools: bizar_task, bizar_workflow, bizar_control, bizar_audit, bizar_model_list; .claude/settings.json mcp__bizar__* allowlist expanded; cli/audit.mjs gained --json branch; packages/sdk/tests/mcp-agent-tools.test.ts 7/7; mcp-tools.test.ts + sdk.test.mjs updated; make check TS clean; make test 407/407."
     },
     {
@@ -746,11 +753,39 @@
         "feature_list.json"
       ],
       "evidence": "Pending make check + make test; see PROGRESS.md 'In progress' block for the surface area."
+    },
+    {
+      "id": "F-165",
+      "title": "Native workflows and agent teams as the primary Bizar routing default",
+      "description": "Flip Mike's routing default from plain Agent calls to native dynamic workflows and agent teams; add three reusable bizar-*.js workflow scripts (research, implement, debug) and a stub-runtime workflow test that locks fan-out and barrier semantics; document the new default in docs/architecture.md.",
+      "behavior": "Mike dispatches native dynamic workflows and agent teams as the primary Bizar routing pattern; plain Agent calls are reserved for trivial or fully isolated work",
+      "verification": "make check; make test; make mirror-claude-md-check; node --test config/workflows/__tests__/bizar-default.test.mjs; targeted test rows",
+      "state": "passing",
+      "passed": "2026-08-26",
+      "commit": null,
+      "category": "harness",
+      "layer": "harness",
+      "created": "2026-08-26",
+      "scope": [
+        "AGENTS.md",
+        "config/claude/CLAUDE.md",
+        "config/claude/agents/office-manager.md",
+        "config/workflows/bizar-research.js",
+        "config/workflows/bizar-implement.js",
+        "config/workflows/bizar-debug.js",
+        "config/workflows/__tests__/bizar-default.test.mjs",
+        "scripts/run-node-tests.mjs",
+        "docs/architecture.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "docs/decisions/PLAN-agent-teams-default.md"
+      ],
+      "evidence": "2026-08-26: PLAN-agent-teams-default.md drafted and audited by @linda (APPROVE-WITH-CHANGES, 6 corrections + 3 test gaps applied). Routing policy + decision tree shipped in Commit A: AGENTS.md 'Autonomy and parallelism' flipped (Native dynamic workflows primary, agent teams host-side state under CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1, team_name deprecated and ignored, plain Agent fallback); config/claude/CLAUDE.md mirrored via scripts/mirror-claude-md.sh with --check parity; office-manager.md opens with a 5-step decision tree naming the three bizar-*.js scripts and the Workflow tool invocation shape. Three reusable workflows shipped in Commit B: bizar-research.js (parallel research + plan + audit + parallel implement + sequential verify), bizar-implement.js (parallel-only barrier with worktree-isolated lanes), bizar-debug.js (bounded loop-until-dry, cap=3, returns dry or budget-exhausted). Workflow test at config/workflows/__tests__/bizar-default.test.mjs (7/7 pass) stubs agent/pipeline/parallel/phase/log via Function constructor with brace-balanced meta extraction and asserts fan-out, barrier, and bidirectional pattern (pipeline in research, parallel-only in implement and debug). scripts/run-node-tests.mjs:18 extended to glob config/workflows/. Commit C lands docs/architecture.md Routing-default subsection and PROGRESS.md after-evidence entry. node --test config/workflows/__tests__/bizar-default.test.mjs 7/7 pass; make mirror-claude-md-check 'config/claude/CLAUDE.md is in sync'; grep -nE 'bizar-research|bizar-implement|bizar-debug' config/claude/agents/office-manager.md returns hits on all three script names. Pre-existing failures (verify-repo-structure plugin.json read, make e2e skill mirror + SDK typecheck, make test vitest-not-installed) trace to commit cf09bf6 dropping .claude-plugin/plugin.json and to the absence of make setup; F-165 introduces zero new test failures. Final squash commit pending human approval per AGENTS.md."
     }
   ],
   "vcr": {
-    "passing": 53,
-    "activated": 53,
-    "ratio": 1.000
+    "passing": 54,
+    "activated": 54,
+    "ratio": 0.9473684210526315
   }
 }

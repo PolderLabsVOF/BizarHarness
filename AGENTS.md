@@ -43,14 +43,18 @@ still deny prohibited actions and escalate externally visible or irreversible
 actions with `permissionDecision: "ask"`; that escalation list is the
 authoritative floor, not a starting point.
 
-Subagent dispatch through the Agent tool is the default for focused disjoint
-work. Native dynamic workflows under `~/.claude/workflows/` are used when a
-large or repeatable task benefits from deterministic scripted fan-out. Native
-agent teams are used only when independent workers need direct communication or
-shared task state. When two or more subtasks have non-overlapping file scopes
-and no data dependency on each other's intermediate output, the orchestrator
-MUST dispatch them concurrently. Sequential dispatch is reserved for dependent
-phases and integration.
+Native dynamic workflows under `config/workflows/` and `~/.claude/workflows/`
+are the primary dispatch mechanism for non-trivial tasks. Mike dispatches a
+named workflow when the request maps to a research / implement / debug /
+review shape. For work that needs 3+ long-lived workers with bounded cross-
+talk, Mike invokes a workflow that fans out as a native agent team; the team
+is host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and per
+Anthropic's docs `team_name` is deprecated and ignored. Plain `Agent` calls
+are reserved for trivial, single-shot, or fully isolated work. When two or
+more subtasks within a workflow have non-overlapping file scopes and no data
+dependency on each other's intermediate output, the orchestrator MUST dispatch
+them concurrently through `parallel([...])`. Sequential dispatch is reserved
+for dependent phases and integration.
 
 Agent roles are model-agnostic. Mike selects the cheapest sufficient tier for
 each dispatch. It passes a concrete model only when live discovery proves a

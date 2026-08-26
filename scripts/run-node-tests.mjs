@@ -15,7 +15,7 @@ function collect(path) {
   }
 }
 
-for (const directory of ['cli', 'scripts', 'config/claude/hooks']) collect(join(root, directory));
+for (const directory of ['cli', 'scripts', 'config/claude/hooks', 'config/workflows']) collect(join(root, directory));
 files.sort();
 
 const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...files], {
