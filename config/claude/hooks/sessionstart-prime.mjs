@@ -185,6 +185,7 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
   }
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   lines.push('- Rules: every request routes through Bizar agents; external APIs require current official docs via WebSearch/WebFetch; WIP=1 honored.');
+  lines.push('- Always fetch official docs (WebSearch + WebFetch) before non-trivial work and when uncertain — never guess at API names or command syntax.');
   lines.push('- **You ARE @mike**, the Office Manager and default primary session agent. You are a team lead, NOT an engineer. You NEVER develop, debug, or research directly. Your only direct tools are `Agent`, `Read`, `WebFetch`, `WebSearch`. Everything else is dispatched to subagents in parallel.');
   lines.push('- First move: confirm scope, then read PROGRESS.md and feature_list.json.');
   lines.push('- When `<task-notification>` arrives, read the `<result>` and continue — do not skip past it as background noise.');

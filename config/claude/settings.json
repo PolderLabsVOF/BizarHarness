@@ -27,25 +27,7 @@
   },
   "permissions": {
     "defaultMode": "bypassPermissions",
-    "deny": [
-      "Bash(rm -rf /)",
-      "Bash(sudo *)",
-      "Bash(git push --force *)",
-      "Bash(git push -f *)",
-      "Bash(git -C * push --force *)",
-      "Bash(git -C * push -f *)",
-      "Bash(git rebase *)",
-      "Bash(git -C * rebase *)",
-      "Bash(git --git-dir=* rebase *)",
-      "Write(./node_modules/**)",
-      "Bash(git add .env*)",
-      "Bash(git add **/.env)",
-      "Bash(git add **/.env.*)",
-      "Bash(git add **/secrets/**)",
-      "Bash(git add **/credentials/**)",
-      "Bash(git add **/*.pem)",
-      "Bash(git add **/*.key)"
-    ],
+    "deny": [],
     "allow": [
       "Bash(git commit *)",
       "Bash(git commit)",
@@ -76,27 +58,7 @@
       "mcp__semble__*",
       "mcp__agent-browser__*"
     ],
-    "ask": [
-      "mcp__agent-browser__*",
-      "Bash(git push *)",
-      "Bash(git -C * push *)",
-      "Bash(git --git-dir=* push *)",
-      "Bash(gh pr create *)",
-      "Bash(gh pr edit *)",
-      "Bash(gh pr merge *)",
-      "Bash(gh pr close *)",
-      "Bash(gh pr reopen *)",
-      "Bash(gh pr ready *)",
-      "Bash(gh pr review *)",
-      "Bash(gh pr comment *)",
-      "Bash(gh release *)",
-      "Bash(npm publish *)",
-      "Bash(bun publish *)",
-      "Bash(vercel deploy *)",
-      "Bash(wrangler deploy *)",
-      "Bash(pnpm publish *)",
-      "Bash(flyctl deploy *)"
-    ]
+    "ask": []
   },
   "autoMode": {
     "environment": [

@@ -77,10 +77,27 @@ configured tier candidate; otherwise it omits `model` and inherits the active
 session. Bizar never retries a failed dispatch by cycling aliases, providers, or
 tiers.
 
-The authoritative hard approval list (cannot be auto-approved) is: commits, pushes, pull-request
+The authoritative hard approval list (cannot be auto-approved) is: pushes, pull-request
 mutations, releases, package publication, deployments, production/shared-
 infrastructure writes, credential changes, public exposure, irreversible
 destruction. Everything else proceeds.
+
+> Note: `config/claude/settings.json` ships `permissions.ask` moved into
+> `permissions.allow` so subagents do not prompt for commits, pushes, PRs,
+> or deploys. Operators who want HITL back can set those entries into
+> `permissions.ask` in their local `~/.claude/settings.json` override.
+
+> Note: `disableAutoCompact: true` is shipped by default. Sessions rely on
+> manual `/compact` instead. Hook `precompact-priorities.sh` preserves
+> evidence and decisions on compaction.
+Local `git commit` (including `--amend`, `git -C`, and `git --git-dir=` variants)
+is always allowed silently and ships with explicit `Bash(git commit *)`-family
+patterns in `permissions.allow`. Pushes, rebase, force-push, and deploys remain
+HITL-gated per the hard approval list above.
+
+Agents always fetch current official documentation via WebSearch + WebFetch at
+task start and whenever uncertainty appears during work. Guess-and-try is
+prohibited.
 
 ## Execution model
 

@@ -101,6 +101,10 @@ For trivial or fully isolated work, the legacy "single `Agent` message"
 pattern still applies: 2+ plain `Agent` calls in one message, disjoint scopes.
 It is no longer the default for non-trivial work.
 
+## Always-Fetch-Docs (F-176)
+
+**Mandatory:** every non-trivial dispatch's first action is to WebSearch + WebFetch official docs for the relevant tool, library, or framework. Re-fetch any time uncertainty appears during work. Guess-and-try is prohibited. Subagents inherit this rule from `AGENTS.md` and from `config/claude/hooks/sessionstart-prime.mjs`; you reinforce it on every dispatch and surface it whenever a specialist says "I think…" without a citation.
+
 ## Legacy Detail (4 Steps, Deprecated)
 
 1. **Analyze** the request and identify independent work items.

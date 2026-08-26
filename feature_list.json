@@ -707,11 +707,9 @@
       "id": "F-170",
       "title": "Remove stale .claude-plugin/plugin.json references and add regression guard",
       "description": "Commit cf09bf6 deliberately dropped `.claude-plugin/plugin.json` but four scripts and tests still referenced it, causing `make verify-repo-structure`, `make e2e`, `scripts/workflow-plugin-surfaces.test.mjs`, and `cli/__tests__/installer.test.mjs` to fail on the missing manifest. Remove the dead references, invert the assertions, drop the manifest version from the SDK parity check, and add a regression test that locks the deletion in place.",
-      "state": "in_progress",
-      "wip_holder": "@todd",
-      "wip": 1,
-      "passed": null,
-      "commit": "pending",
+      "state": "passing",
+      "passed": "2026-08-26",
+      "commit": "4888ac7",
       "category": "harness",
       "scope": [
         "scripts/verify-repo-structure.mjs",
@@ -724,7 +722,7 @@
         "PROGRESS.md",
         "feature_list.json"
       ],
-      "evidence": "Pending; see PROGRESS.md F-170 evidence entry after commit lands.",
+      "evidence": "Merge commit landed. scripts/__tests__/verify-removed-claude-plugin.test.mjs 6/6 (no .claude-plugin directory; no script references plugin.json; make verify-repo-structure passes with the deletion; F-176 policy shift took wip=1 at merge time so F-170 transitions to passing).",
       "created": "2026-08-26"
     },
     {
@@ -835,11 +833,46 @@
         "feature_list.json"
       ],
       "evidence": "2026-08-26: scripts/worktree-policy.test.mjs 5/5 (3 original + office-manager dispatch discipline + settings bgIsolation+cleanup); cli/__tests__/worktree-merge-all.test.mjs 8/8 (dry-run plan, full sequencer, --keep-branch, --order, conflict stop, --json, unknown --order rejection, single-branch flag validation); config/claude/hooks/__tests__/worktree-archive.test.mjs 5/5 (queue append, idempotency, no-branch noop, corrupt-queue recovery, transcript extraction); cli/__tests__/worktree-merge.test.mjs 4/4 unchanged; cli/__tests__/hook-portability.test.mjs green after updating subagent-stop chain assertion; AGENTS.md + config/claude/CLAUDE.md + docs/architecture.md updated; office-manager.md documents Worktree Discipline + dispatched-agent template; worktree-merge --all sorts branches lexicographically, tags source tip as merge-archive/<branch>-<sha> before git merge --no-ff, removes merged worktree + source branch (unless --keep-branch)."
+    },
+    {
+      "id": "F-176",
+      "title": "Full permissions + advisory hooks + always-fetch-docs policy",
+      "description": "User policy shift: agents have full permissions by default (`permissions.deny` and `permissions.ask` are empty); PreToolUse hooks become advisory (always return `permissionDecision: \"allow\"` and inject safety guidance via `hookSpecificOutput.additionalContext`); every session is primed to fetch current official documentation via WebSearch + WebFetch at task start and whenever uncertainty appears during work.",
+      "behavior": "pretooluse-bash, pretooluse-editwrite, path-ownership-guard, and git-workflow-guard return permissionDecision: \"allow\" for every input and inject Heads-up guidance; settings.deny and settings.ask are empty arrays; sessionstart-prime and AGENTS.md add always-fetch-docs bullets",
+      "verification": "make check; make test; cli/__tests__/settings-permissions.test.mjs (deny/ask empty); config/claude/hooks/__tests__/advisory-hooks.test.mjs (sampled inputs); config/claude/hooks/__tests__/{pretooluse-bash,pretooluse-editwrite,path-ownership-guard,git-workflow-guard}.test.mjs; make mirror-claude-md-check",
+      "state": "in_progress",
+      "wip_holder": "@todd",
+      "wip": 1,
+      "passed": null,
+      "commit": "f28965b",
+      "category": "harness",
+      "layer": "harness",
+      "created": "2026-08-26",
+      "scope": [
+        "config/claude/settings.json",
+        "config/claude/hooks/pretooluse-bash.mjs",
+        "config/claude/hooks/pretooluse-editwrite.mjs",
+        "config/claude/hooks/path-ownership-guard.mjs",
+        "config/claude/hooks/git-workflow-guard.mjs",
+        "config/claude/hooks/sessionstart-prime.mjs",
+        "config/claude/agents/office-manager.md",
+        "AGENTS.md",
+        "config/claude/CLAUDE.md",
+        "cli/__tests__/settings-permissions.test.mjs",
+        "config/claude/hooks/__tests__/pretooluse-bash.test.mjs",
+        "config/claude/hooks/__tests__/pretooluse-editwrite.test.mjs",
+        "config/claude/hooks/__tests__/path-ownership-guard.test.mjs",
+        "config/claude/hooks/__tests__/git-workflow-guard.test.mjs",
+        "config/claude/hooks/__tests__/advisory-hooks.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "Merge commit pending. Phase 9 commit f28965b on policy/phase9-advisory-hooks; 19 files / 909 ins / 388 del. cli/__tests__/settings-permissions.test.mjs 4/4 (commit family in allow; deny/ask empty; defaultMode bypassPermissions); config/claude/hooks/__tests__/advisory-hooks.test.mjs 14/14; modified hook tests 94/94."
     }
   ],
   "vcr": {
-    "passing": 56,
-    "activated": 56,
-    "ratio": 0.9655172413793104
+    "passing": 57,
+    "activated": 57,
+    "ratio": 0.95
   }
 }

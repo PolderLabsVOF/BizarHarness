@@ -1,25 +1,22 @@
 #!/usr/bin/env node
 // PreToolUse — Bizar path-ownership guard.
 //
-// Behaviour (F-200 loosening):
+// F-176 (full permissions + advisory hooks):
+//   Hooks never return `deny` or `ask`. They inject guidance via
+//   `additionalContext` and always return `"allow"`. The hook still
+//   consults `cli/task-ledger.mjs` `authorizeEdit` so an agent who IS
+//   tripping over a sibling's live claim gets a clear reminder, but the
+//   trip is a hint, not a block.
+//
+// F-200 loosening (still in force under F-176):
 //   - Files outside the repo root (e.g. /tmp/foo, scratch dirs, any path
 //     outside `repoRoot`) are ALWAYS allowed.
 //   - Files inside the repo are allowed unless a sibling active task
 //     holds a live lease on the same path (SCOPE_OWNED).
 //   - The active task in the caller's workspace does NOT restrict
-//     itself — its scope is a claim against OTHER concurrent workers,
-//     not a restriction on the claimant. Agents can edit any file in
-//     their workspace that isn't a git-tracked secret.
+//     itself — its scope is a claim against OTHER concurrent workers.
 //   - Completed, integrated, blocked, and pending tasks no longer
 //     reserve scopes. Only active-with-lease tasks block siblings.
-//
-// This is implemented in `cli/task-ledger.mjs` `authorizeEdit`. This
-// hook is a thin wrapper that runs the ledger lookup and maps the
-// `allowed: false` result into a Claude Code `deny` decision.
-//
-// F-145 history: removed the per-edit `git worktree list --porcelain`
-// fork and the `requireTask` gate. The hook is a single in-memory
-// ledger lookup now.
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -71,28 +68,41 @@ process.stdin.on('end', () => {
       requireTask: false,
     });
     if (!authorization.allowed) {
-      process.stdout.write(JSON.stringify({
+      const target = authorization.path || filePath;
+      const taskTag = authorization.taskId ? ` (task ${authorization.taskId})` : '';
+      const out = {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          permissionDecision: 'deny',
+          permissionDecision: 'allow',
           permissionDecisionReason:
-            `Bizar path ownership: ${authorization.reason} for ` +
-            `${authorization.path || filePath}` +
-            `${authorization.taskId ? ` (task ${authorization.taskId})` : ''}.`,
+            `Bizar path ownership advisory: ${authorization.reason} for ${target}${taskTag}.`,
+          additionalContext:
+            `[advisory] Heads up: ${target}${taskTag} is held by a sibling task ` +
+            `(${authorization.reason}). Under F-176 the edit is allowed, but you may be ` +
+            `stepping on a concurrent worker — coordinate via @mike before continuing, ` +
+            `or pick a disjoint file scope.`,
         },
-      }) + '\n');
+      };
+      process.stdout.write(JSON.stringify(out) + '\n');
       return;
     }
     process.stdout.write('{}\n');
   } catch (error) {
-    process.stdout.write(JSON.stringify({
+    // F-176: ledger errors no longer block edits; we surface the error
+    // as an advisory so the agent can decide whether to continue.
+    const out = {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
+        permissionDecision: 'allow',
         permissionDecisionReason:
-          `Bizar path ownership: LEDGER_UNAVAILABLE (${error.message || String(error)}).`,
+          `Bizar path ownership advisory: LEDGER_UNAVAILABLE (${error.message || String(error)}).`,
+        additionalContext:
+          `[advisory] Heads up: Bizar task ledger was unreachable ` +
+          `(${error.message || String(error)}). Edits to in-repo paths proceed ` +
+          `without sibling-scope checks. Re-run the audit once the ledger is healthy.`,
       },
-    }) + '\n');
+    };
+    process.stdout.write(JSON.stringify(out) + '\n');
   } finally {
     try { ledger?.close(); } catch { /* process is exiting */ }
   }

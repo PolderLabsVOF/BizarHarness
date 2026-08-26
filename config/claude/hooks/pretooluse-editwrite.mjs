@@ -14,31 +14,28 @@
 //     "tool_input": { "file_path": "...", "content": "..." }
 //   }
 //
-// Claude Code stdout shape:
+// Claude Code stdout shape (F-176):
 //   { "hookSpecificOutput": {
 //       "hookEventName": "PreToolUse",
-//       "permissionDecision": "deny",
-//       "permissionDecisionReason": "..."
-//   }}
-//   ── or ──
-//   { "hookSpecificOutput": {
-//       "hookEventName": "PreToolUse",
-//       "additionalContext": "note for the model"
+//       "permissionDecision": "allow",
+//       "permissionDecisionReason": "...",
+//       "additionalContext": "[advisory] ..."
 //   }}
 //
-// Behaviour (F-200 loosening):
-//   Agents are free to read, edit, and stage any path that is not under
-//   project-managed `node_modules/`. The single hard guard against secrets
-//   reaching git history lives in `git-workflow-guard.mjs` (deny on
-//   `git add` of secret globs, `git commit` and `git push` whose diffs
-//   contain secret markers) and the `permissions.deny` block of
-//   `config/claude/settings.json`. Hooks here only block edits to
-//   package-manager output (`node_modules/`) and confirm doc-style
-//   allow-list patterns (.env.example / .sample / .template / lockfiles).
+// F-176 (full permissions + advisory hooks):
+//   Hooks never return `deny` or `ask`. They inject guidance via
+//   `additionalContext` and always return `"allow"`. The hook exists to
+//   remind the agent when it is touching project-managed dependency
+//   output (`node_modules/`) — writes there are usually package-manager
+//   work, not source edits.
 //
-//   F-145: removed the always-on `additionalContext` line. Every Write/
-//   Edit was emitting a tool/path note into the model's context — pure
-//   noise. The model already knows what tool and path it called.
+// F-200 history:
+//   - Agents are free to read, edit, and stage any path that is not
+//     under project-managed `node_modules/`.
+//   - Hard secret guard against secrets reaching git lives in
+//     `git-workflow-guard.mjs`.
+//   - Doc-style allow-list (.env.example / .sample / .template /
+//     lockfiles) bypasses the package-manager block.
 
 'use strict';
 
@@ -69,29 +66,32 @@ process.stdin.on('end', () => {
   const lowerPath = filePath.toLowerCase();
 
   // Allow-list patterns: docs (.env.example / .sample / .template) and
-  // package-manager output (lockfiles). These are never blocked.
+  // package-manager output (lockfiles). These never trigger the advisory.
   const allowed = [
     /\/\.env\.(example|sample|template|dist)$/i,
     /\/(package-lock|yarn|pnpm-lock|bun)\.lock\w*$/i,
     /\.(lock|lockb)$/i,
   ];
 
-  // Block-list: only project-managed dependency directories. The user
-  // explicitly wants agents to edit `/tmp`, scratch dirs, `secrets/`,
-  // `.env`, `.envrc`, and `credentials/` locally — secret protection
-  // moved to `git-workflow-guard.mjs` (push-time guard).
-  const blocked = [
+  // Advisory list: project-managed dependency directories. Under F-176
+  // these are still allowed but the agent sees a reminder that this is
+  // package-manager output, not source.
+  const advisory = [
     /\/node_modules\//,
   ];
 
   const isAllowed = allowed.some((re) => re.test(lowerPath));
-  if (!isAllowed && blocked.some((re) => re.test(lowerPath))) {
+  if (!isAllowed && advisory.some((re) => re.test(lowerPath))) {
     const out = {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
+        permissionDecision: 'allow',
         permissionDecisionReason:
-          `Bizar PreToolUse: refusing to write to protected path '${filePath}' (Bizar harness policy).`,
+          `Bizar PreToolUse advisory: '${filePath}' is inside a package-manager directory.`,
+        additionalContext:
+          `[advisory] Heads up: '${filePath}' is inside a package-manager output directory ` +
+          `(e.g. node_modules/). Edits here are normally regenerable via the package manager; ` +
+          `consider whether the change belongs in source instead.`,
       },
     };
     process.stdout.write(JSON.stringify(out) + '\n');
