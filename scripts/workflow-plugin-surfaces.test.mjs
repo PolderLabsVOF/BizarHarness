@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import {
   chmodSync,
   copyFileSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -63,27 +62,6 @@ test('slash commands are thin pointers to canonical workflow skills', () => {
     assert.match(command, /Pass `\$ARGUMENTS` unchanged/);
     assert.doesNotMatch(command, /config\/skills\/|config\/claude\/skills\/|SKILL\.md/);
     assert.ok(command.length < 600, `${name} command must not duplicate its skill`);
-  }
-});
-
-test('Claude Code plugin manifest references canonical in-root components', () => {
-  const manifest = JSON.parse(read('.claude-plugin/plugin.json'));
-
-  assert.equal(manifest.name, 'bizar-harness');
-  assert.equal(manifest.skills, './config/skills/');
-  assert.equal(manifest.commands, './config/claude/commands/');
-  assert.ok(Array.isArray(manifest.agents));
-  assert.ok(manifest.agents.includes('./config/claude/agents/office-manager.md'));
-  assert.equal(manifest.hooks, './hooks/hooks.json');
-  assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
-
-  for (const field of ['skills', 'commands', 'hooks']) {
-    assert.doesNotMatch(manifest[field], /(^|\/)\.\.($|\/)/);
-    assert.ok(existsSync(resolve(root, manifest[field])), `${field} path must exist`);
-  }
-  for (const agent of manifest.agents) {
-    assert.doesNotMatch(agent, /(^|\/)\.\.($|\/)/);
-    assert.ok(existsSync(resolve(root, agent)), `agent path must exist: ${agent}`);
   }
 });
 

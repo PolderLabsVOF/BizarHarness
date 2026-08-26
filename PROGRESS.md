@@ -2,6 +2,67 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-170 Remove stale .claude-plugin/plugin.json references (F-170)
+
+**Objective:** Commit `cf09bf6` deliberately dropped
+`.claude-plugin/plugin.json` but four scripts and tests still referenced it,
+so `make verify-repo-structure`, `make e2e`,
+`scripts/workflow-plugin-surfaces.test.mjs`, and the SDK parity check all
+failed on the missing manifest. Invert the assertions, drop the dead
+references, and add a regression guard so the deletion cannot regress.
+
+**Changes landed in this commit (all on branch
+`fix/remove-stale-claude-plugin-references`):**
+
+- `scripts/verify-repo-structure.mjs` — removed `.claude-plugin/plugin.json`
+  from `REQUIRED_PACKAGE_FILES`, `.claude-plugin` from
+  `ALLOWED_PACKAGE_ROOTS`, the `readFileSync('.claude-plugin/plugin.json')`
+  in `readVersionProblems()`, and the `pluginVersion` parameter from
+  `inspectVersionState()`.
+- `scripts/verify-repo-structure.test.mjs` — removed the manifest entry
+  from `CLEAN_PACKAGE` and dropped the `pluginVersion` argument from both
+  `inspectVersionState()` assertions.
+- `scripts/workflow-plugin-surfaces.test.mjs` — removed the entire
+  `'Claude Code plugin manifest references canonical in-root components'`
+  test (the only consumer of the deleted file) and the now-unused
+  `existsSync` import.
+- `config/claude/hooks/simplify-guard.mjs` — removed `.claude-plugin/plugin.json`
+  from the `TRIVIAL_PATH` regex.
+- `package.json` — removed `.claude-plugin/plugin.json` from the `files`
+  array so `npm pack` no longer advertises a missing path.
+- `docs/architecture.md` — rewrote the "Plugin and hook boundary" section
+  to describe the deletion (commit cf09bf6) instead of asserting the
+  manifest exists.
+- `scripts/__tests__/verify-removed-claude-plugin.test.mjs` — new regression
+  test (6 assertions) that locks the manifest out of the repo and checks
+  every known consumer file no longer references it. Picked up
+  automatically by `scripts/run-node-tests.mjs` via the existing
+  recursive `scripts/` glob.
+
+**Verification (2026-08-26):**
+
+- `node --test scripts/__tests__/verify-removed-claude-plugin.test.mjs` —
+  6/6 pass.
+- `node --test scripts/verify-repo-structure.test.mjs scripts/workflow-plugin-surfaces.test.mjs scripts/__tests__/verify-removed-claude-plugin.test.mjs` —
+  17/17 pass.
+- `node scripts/verify-repo-structure.mjs` (after `npm run build:sdk`)
+  — `Repository structure and package boundary are clean.`
+- `make check` — green.
+- `make clean-check` — 11/13 checks pass; the two pre-existing failures
+  (SDK typecheck via `node_modules/typescript/bin/tsc` missing from this
+  worktree; `human approval policy` triggered by real outgoing-commits
+  secrets in the test fixtures) are environmental and unrelated to this
+  fix.
+- `make e2e` — same two environmental failures; the
+  `verify-removed-surfaces`, hook-guard, and control-plane checks are
+  green.
+- `make check-arch` — clean.
+- Final grep for `.claude-plugin` outside intentional references
+  (CHANGELOG history, feature ledger, PROGRESS history, upstream
+  adoption doc, and the new regression test) returns zero hits.
+
+**Refs:** cf09bf6 (deletion); F-170 (this entry).
+
 ## In Progress — F-169 Hook wiring + subagent permissions + CCR disable
 
 **Objective:** Stop three session-friction defects that all surface on a

@@ -25,7 +25,6 @@ const FORBIDDEN_TRACKED_FILES = new Set([
 ]);
 
 const REQUIRED_PACKAGE_FILES = [
-  '.claude-plugin/plugin.json',
   'config/claude/hooks/pretooluse-bash.mjs',
   'config/claude/settings.json',
   'AGENTS.md',
@@ -38,7 +37,6 @@ const REQUIRED_PACKAGE_FILES = [
 ];
 
 const ALLOWED_PACKAGE_ROOTS = new Set([
-  '.claude-plugin',
   'AGENTS.md',
   'LICENSE',
   'README.md',
@@ -96,7 +94,7 @@ export function inspectPackagePaths(paths) {
   return [...new Set(problems)].sort();
 }
 
-export function inspectVersionState(rootVersion, sdkVersion, sdkConstant, pluginVersion) {
+export function inspectVersionState(rootVersion, sdkVersion, sdkConstant) {
   const problems = [];
   if (!rootVersion) problems.push('root package version is missing');
   if (sdkVersion !== rootVersion) {
@@ -104,9 +102,6 @@ export function inspectVersionState(rootVersion, sdkVersion, sdkConstant, plugin
   }
   if (sdkConstant !== rootVersion) {
     problems.push(`SDK_VERSION ${sdkConstant || 'missing'} != root ${rootVersion || 'missing'}`);
-  }
-  if (pluginVersion !== rootVersion) {
-    problems.push(`plugin manifest version ${pluginVersion || 'missing'} != root ${rootVersion || 'missing'}`);
   }
   return problems;
 }
@@ -145,10 +140,9 @@ function readPackagePaths() {
 function readVersionProblems() {
   const rootPackage = JSON.parse(readFileSync('package.json', 'utf8'));
   const sdkPackage = JSON.parse(readFileSync('packages/sdk/package.json', 'utf8'));
-  const pluginManifest = JSON.parse(readFileSync('.claude-plugin/plugin.json', 'utf8'));
   const versionSource = readFileSync('packages/sdk/src/version.ts', 'utf8');
   const sdkConstant = versionSource.match(/SDK_VERSION\s*=\s*["']([^"']+)["']/)?.[1];
-  return inspectVersionState(rootPackage.version, sdkPackage.version, sdkConstant, pluginManifest.version);
+  return inspectVersionState(rootPackage.version, sdkPackage.version, sdkConstant);
 }
 
 export function main() {

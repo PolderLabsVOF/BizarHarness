@@ -9,7 +9,6 @@ import {
 } from './verify-repo-structure.mjs';
 
 const CLEAN_PACKAGE = [
-  '.claude-plugin/plugin.json',
   'config/claude/hooks/pretooluse-bash.mjs',
   'config/claude/settings.json',
   'AGENTS.md',
@@ -107,14 +106,13 @@ test('package boundary rejects tests, local state, duplicate skills, and missing
   );
 });
 
-test('version state requires root, SDK, and plugin manifest parity', () => {
-  assert.deepEqual(inspectVersionState('10.7.2', '10.7.2', '10.7.2', '10.7.2'), []);
+test('version state requires root and SDK parity', () => {
+  assert.deepEqual(inspectVersionState('10.7.2', '10.7.2', '10.7.2'), []);
   assert.deepEqual(
-    inspectVersionState('10.7.2', '10.6.0', '0.7.0-alpha.1', '10.6.0'),
+    inspectVersionState('10.7.2', '10.6.0', '0.7.0-alpha.1'),
     [
       'SDK package version 10.6.0 != root 10.7.2',
       'SDK_VERSION 0.7.0-alpha.1 != root 10.7.2',
-      'plugin manifest version 10.6.0 != root 10.7.2',
     ],
   );
 });

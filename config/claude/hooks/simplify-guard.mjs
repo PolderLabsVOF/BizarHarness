@@ -18,7 +18,7 @@ import { spawnSync } from 'node:child_process';
 import { findGitCommand } from './git-command-parser.mjs';
 
 const FRESHNESS_WINDOW_MS = 4 * 60 * 60 * 1000;
-const TRIVIAL_PATH = /^(?:CHANGELOG\.md|package(-lock)?\.json|.*\/package(-lock)?\.json|\.claude-plugin\/plugin\.json|packages\/[^/]+\/src\/version\.ts)$/;
+const TRIVIAL_PATH = /^(?:CHANGELOG\.md|package(-lock)?\.json|.*\/package(-lock)?\.json|packages\/[^/]+\/src\/version\.ts)$/;
 
 function marker(cwd) {
   const result = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-dir'], {
