@@ -4,6 +4,12 @@
 // Invokes the hook with a synthetic Claude Code PreToolUse payload over
 // stdin, captures stdout, and asserts on `permissionDecision`.
 //
+// F-176 (full permissions + advisory hooks):
+//   Every input returns `permissionDecision: "allow"`. Writes to
+//   package-manager output (`node_modules/`) inject a `[advisory]`
+//   reminder via `additionalContext`. Doc-style env templates and
+//   lockfiles stay silent.
+//
 // Run:  node --test .claude/hooks/__tests__/pretooluse-editwrite.test.mjs
 
 'use strict';
@@ -34,7 +40,7 @@ function runHook(toolName, filePath) {
     throw new Error(`hook exited ${result.status}\nstderr: ${result.stderr}`);
   }
   const out = result.stdout.trim();
-  if (!out || out === '{}') return { decision: null, context: null };
+  if (!out || out === '{}') return { decision: null, reason: null, context: null };
   const parsed = JSON.parse(out);
   return {
     decision: parsed.hookSpecificOutput?.permissionDecision ?? null,
@@ -43,115 +49,121 @@ function runHook(toolName, filePath) {
   };
 }
 
-// F-200 loosening: the .env / .envrc / secrets / credentials block-list
+function assertAdvisoryAllow(r) {
+  assert.equal(r.decision, 'allow', `expected allow, got ${r.decision}`);
+  assert.ok(r.context, 'expected additionalContext to be set');
+  assert.match(r.context, /Heads up/, 'advisory context should start with Heads up');
+}
+
+// F-200 + F-176: the .env / .envrc / secrets / credentials block-list
 // was removed. Agents can read/edit these locally — only pushing them
-// to git is denied (see git-workflow-guard.mjs and permissions.deny).
-// The hook now only blocks writes to project-managed dependency dirs.
+// to git triggers the secret-pattern guard (see git-workflow-guard.mjs).
+// The hook now only injects an advisory for project-managed dependency
+// dirs (`node_modules/`).
 
-test('Write /tmp/foo → allow (outside-project paths are wide open)', () => {
+test('Write /tmp/foo → no decision (outside-project paths are wide open)', () => {
   const r = runHook('Write', '/tmp/scratch/foo.txt');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write /repo/.env → allow (F-200 — local edits allowed)', () => {
+test('Write /repo/.env → no decision (F-200 — local edits allowed)', () => {
   const r = runHook('Write', '/repo/.env');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write /repo/.env.local → allow (F-200)', () => {
+test('Write /repo/.env.local → no decision (F-200)', () => {
   const r = runHook('Write', '/repo/.env.local');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write /repo/.env.production → allow (F-200)', () => {
+test('Write /repo/.env.production → no decision (F-200)', () => {
   const r = runHook('Write', '/repo/.env.production');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write /repo/.envrc → allow (F-200)', () => {
+test('Write /repo/.envrc → no decision (F-200)', () => {
   const r = runHook('Write', '/repo/.envrc');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write /repo/secrets/api.key → allow (F-200 — local edit OK)', () => {
+test('Write /repo/secrets/api.key → no decision (F-200 — local edit OK)', () => {
   const r = runHook('Write', '/repo/secrets/api.key');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write /repo/credentials/x.json → allow (F-200)', () => {
+test('Write /repo/credentials/x.json → no decision (F-200)', () => {
   const r = runHook('Write', '/repo/credentials/x.json');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write .env.example → allow (docs)', () => {
+test('Write .env.example → no decision (docs)', () => {
   const r = runHook('Write', '/repo/research/gstack/.env.example');
-  assert.notEqual(r.decision, 'deny');
-  // F-145: hook no longer emits an additionalContext note for the
-  // common path. Confirm it stays silent on legitimate writes.
-  assert.equal(r.context, null);
+  assert.equal(r.decision, null);
 });
 
-test('Write .env.sample → allow (docs)', () => {
+test('Write .env.sample → no decision (docs)', () => {
   const r = runHook('Write', '/repo/templates/.env.sample');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write .env.template → allow (docs)', () => {
+test('Write .env.template → no decision (docs)', () => {
   const r = runHook('Write', '/repo/templates/deploy/docker/.env.template');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write node_modules/x.js → deny (project-managed dependency dir)', () => {
+test('Write node_modules/x.js → allow + warn advisory', () => {
   const r = runHook('Write', '/repo/node_modules/x.js');
-  assert.equal(r.decision, 'deny');
+  assertAdvisoryAllow(r);
+  assert.match(r.context, /package-manager/);
 });
 
-test('Write deep node_modules path → deny', () => {
+test('Write deep node_modules path → allow + warn advisory', () => {
   const r = runHook('Write', '/repo/node_modules/@scope/pkg/dist/index.js');
-  assert.equal(r.decision, 'deny');
+  assertAdvisoryAllow(r);
+  assert.match(r.context, /package-manager/);
 });
 
-test('Write bun.lock → allow (package-manager output)', () => {
+test('Write bun.lock → no decision (package-manager output)', () => {
   const r = runHook('Write', '/repo/bun.lock');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write bun.lockb → allow (binary lock variant)', () => {
+test('Write bun.lockb → no decision (binary lock variant)', () => {
   const r = runHook('Write', '/repo/bun.lockb');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write package-lock.json → allow (package-manager output)', () => {
+test('Write package-lock.json → no decision (package-manager output)', () => {
   const r = runHook('Write', '/repo/package-lock.json');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write yarn.lock → allow', () => {
+test('Write yarn.lock → no decision', () => {
   const r = runHook('Write', '/repo/yarn.lock');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write pnpm-lock.yaml → allow', () => {
+test('Write pnpm-lock.yaml → no decision', () => {
   const r = runHook('Write', '/repo/pnpm-lock.yaml');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('Write src/index.ts → allow + neutral context', () => {
+test('Write src/index.ts → no decision + neutral context', () => {
   const r = runHook('Write', '/repo/src/index.ts');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
   // F-145: the always-on context line was noise. Hook stays silent
   // on legitimate writes.
   assert.equal(r.context, null);
 });
 
-test('Edit .env → allow (F-200 — Edit same as Write)', () => {
+test('Edit .env → no decision (F-200 — Edit same as Write)', () => {
   const r = runHook('Edit', '/repo/.env');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
-test('MultiEdit .env.example → allow (docs)', () => {
+test('MultiEdit .env.example → no decision (docs)', () => {
   const r = runHook('MultiEdit', '/repo/.env.example');
-  assert.notEqual(r.decision, 'deny');
+  assert.equal(r.decision, null);
 });
 
 test('Unknown tool → no decision (silent pass)', () => {

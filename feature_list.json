@@ -763,7 +763,6 @@
       "passed": null,
       "commit": "pending",
       "category": "harness",
-      "wip": 1,
       "scope": [
         "cli/commands/models.mjs",
         "cli/commands/model.mjs",
@@ -812,6 +811,41 @@
         "feature_list.json"
       ],
       "evidence": "2026-08-26: scripts/worktree-policy.test.mjs 5/5 (3 original + office-manager dispatch discipline + settings bgIsolation+cleanup); cli/__tests__/worktree-merge-all.test.mjs 8/8 (dry-run plan, full sequencer, --keep-branch, --order, conflict stop, --json, unknown --order rejection, single-branch flag validation); config/claude/hooks/__tests__/worktree-archive.test.mjs 5/5 (queue append, idempotency, no-branch noop, corrupt-queue recovery, transcript extraction); cli/__tests__/worktree-merge.test.mjs 4/4 unchanged; cli/__tests__/hook-portability.test.mjs green after updating subagent-stop chain assertion; AGENTS.md + config/claude/CLAUDE.md + docs/architecture.md updated; office-manager.md documents Worktree Discipline + dispatched-agent template; worktree-merge --all sorts branches lexicographically, tags source tip as merge-archive/<branch>-<sha> before git merge --no-ff, removes merged worktree + source branch (unless --keep-branch)."
+    },
+    {
+      "id": "F-176",
+      "title": "Full permissions + advisory hooks + always-fetch-docs policy",
+      "description": "User policy shift: agents have full permissions by default (`permissions.deny` and `permissions.ask` are empty); PreToolUse hooks become advisory (always return `permissionDecision: \"allow\"` and inject safety guidance via `hookSpecificOutput.additionalContext`); every session is primed to fetch current official documentation via WebSearch + WebFetch at task start and whenever uncertainty appears during work.",
+      "behavior": "pretooluse-bash, pretooluse-editwrite, path-ownership-guard, and git-workflow-guard return permissionDecision: \"allow\" for every input and inject Heads-up guidance; settings.deny and settings.ask are empty arrays; sessionstart-prime and AGENTS.md add always-fetch-docs bullets",
+      "verification": "make check; make test; cli/__tests__/settings-permissions.test.mjs (deny/ask empty); config/claude/hooks/__tests__/advisory-hooks.test.mjs (sampled inputs); config/claude/hooks/__tests__/{pretooluse-bash,pretooluse-editwrite,path-ownership-guard,git-workflow-guard}.test.mjs; make mirror-claude-md-check",
+      "state": "in_progress",
+      "wip_holder": "@todd",
+      "wip": 1,
+      "passed": null,
+      "commit": "pending",
+      "category": "harness",
+      "layer": "harness",
+      "created": "2026-08-26",
+      "scope": [
+        "config/claude/settings.json",
+        "config/claude/hooks/pretooluse-bash.mjs",
+        "config/claude/hooks/pretooluse-editwrite.mjs",
+        "config/claude/hooks/path-ownership-guard.mjs",
+        "config/claude/hooks/git-workflow-guard.mjs",
+        "config/claude/hooks/sessionstart-prime.mjs",
+        "config/claude/agents/office-manager.md",
+        "AGENTS.md",
+        "config/claude/CLAUDE.md",
+        "cli/__tests__/settings-permissions.test.mjs",
+        "config/claude/hooks/__tests__/pretooluse-bash.test.mjs",
+        "config/claude/hooks/__tests__/pretooluse-editwrite.test.mjs",
+        "config/claude/hooks/__tests__/path-ownership-guard.test.mjs",
+        "config/claude/hooks/__tests__/git-workflow-guard.test.mjs",
+        "config/claude/hooks/__tests__/advisory-hooks.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "Pending make check + make test; see PROGRESS.md 'In progress' block for surface area."
     }
   ],
   "vcr": {

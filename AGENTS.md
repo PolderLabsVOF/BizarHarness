@@ -95,6 +95,10 @@ is always allowed silently and ships with explicit `Bash(git commit *)`-family
 patterns in `permissions.allow`. Pushes, rebase, force-push, and deploys remain
 HITL-gated per the hard approval list above.
 
+Agents always fetch current official documentation via WebSearch + WebFetch at
+task start and whenever uncertainty appears during work. Guess-and-try is
+prohibited.
+
 ## Execution model
 
 The autonomy and approval policy above governs this execution model. The project defaults to `acceptEdits`; eligible operators may opt into Claude Code Auto mode.

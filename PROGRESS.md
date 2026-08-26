@@ -2,6 +2,79 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-176 Full permissions + advisory hooks + always-fetch-docs
+
+**Objective:** Apply the user policy shift — agents have full permissions by
+default, PreToolUse hooks are advisory only (always return
+`permissionDecision: "allow"` and inject safety guidance via
+`hookSpecificOutput.additionalContext`), and every session is primed to
+fetch current official documentation via WebSearch + WebFetch at task start
+and whenever uncertainty appears during work.
+
+**What changed:**
+
+- `config/claude/settings.json` ships `permissions.deny` and
+  `permissions.ask` as empty arrays. `defaultMode: "bypassPermissions"`
+  and the explicit `permissions.allow` entries (local `git commit`
+  family + Bizar MCP tools) are unchanged. Pushes, rebase, force-push,
+  deploys, release, publish, and PR mutations used to live in `ask`;
+  they now flow silently and surface only as advisory reminders in
+  `git-workflow-guard.mjs`.
+- `config/claude/hooks/pretooluse-bash.mjs` returns
+  `permissionDecision: "allow"` for every input. Patterns that USED to
+  be denied/asked (`rm -rf /`, `sudo`, metadata-IP, `curl|sh`, force-
+  push-to-main, `git reset --hard`) inject `[advisory]` /
+  `[advisory:critical]` context. The 19-entry scanner stays inline so
+  the hook works without the SDK at runtime.
+- `config/claude/hooks/pretooluse-editwrite.mjs` returns `allow` for
+  every input. Writes inside `node_modules/` inject a package-manager
+  advisory; doc-style env templates (`.env.example`, `.env.sample`,
+  `.env.template`) and lockfiles stay silent.
+- `config/claude/hooks/path-ownership-guard.mjs` returns `allow` for
+  every input. Sibling-scope `SCOPE_OWNED` conflicts and
+  `LEDGER_UNAVAILABLE` errors surface as advisory reminders instead of
+  denying the edit.
+- `config/claude/hooks/git-workflow-guard.mjs` returns `allow` for
+  every input. Secret-pattern matches at `git add` / `git commit` /
+  `git push` and force-push / rebase inject `[advisory:critical]`
+  reminders; commit / push / PR mutation / release / publish / deploy
+  inject `[advisory]` (warn-severity) reminders.
+- `config/claude/hooks/sessionstart-prime.mjs` adds a priming bullet:
+  "Before starting any non-trivial task or whenever you are uncertain
+  during work, WebFetch / WebSearch for current official documentation.
+  Never guess at API names, command syntax, or config keys — research
+  first."
+- `config/claude/agents/office-manager.md` documents an
+  "Always-Fetch-Docs (F-176)" subsection near the dispatch decision
+  section: every non-trivial dispatch's first action is to WebSearch +
+  WebFetch official docs.
+- `AGENTS.md` and `config/claude/CLAUDE.md` gain an
+  "always fetch current official documentation" line in the
+  Autonomy and parallelism section. The mirror is regenerated via
+  `scripts/mirror-claude-md.sh`; `--check` confirms parity.
+
+**Test changes:**
+
+- `cli/__tests__/settings-permissions.test.mjs` gains two tests
+  asserting `permissions.deny` and `permissions.ask` are `[]` and that
+  `permissions.defaultMode` is `"bypassPermissions"`. The existing
+  commit-family allow test is preserved.
+- `config/claude/hooks/__tests__/advisory-hooks.test.mjs` (NEW) exercises
+  a representative sample of inputs against each guarded hook and
+  asserts the F-176 shared contract: `permissionDecision: "allow"` for
+  every input, `[advisory]` / `[advisory:critical]` context where
+  applicable, and silent pass for safe inputs.
+- `config/claude/hooks/__tests__/{pretooluse-bash,pretooluse-editwrite,
+  path-ownership-guard,git-workflow-guard}.test.mjs` are rewritten to
+  assert `allow` + advisory context for patterns that USED to deny/ask,
+  and silent pass for safe inputs. The historical grep keys (`Heads up`,
+  `package-manager`, `SCOPE_OWNED`, `secret`, `Force-pushing`,
+  `Rebasing`) keep regression coverage on the new wording.
+
+**WIP=1 invariant:** F-176 holds `wip: 1`. F-166's prior `wip: 1` was
+removed; F-166 stays `state: in_progress` (the model-picker work is
+not yet done) but is no longer the headline WIP.
+
 ## In Progress — F-169 Hook wiring + subagent permissions + CCR disable
 
 **Objective:** Stop three session-friction defects that all surface on a

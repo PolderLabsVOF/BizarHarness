@@ -2,27 +2,30 @@
 /**
  * Guard irreversible or externally visible Git/GitHub operations.
  *
- * F-200 tightening:
- *   This hook is the SINGLE hard guard against secrets reaching git
- *   history. Workspace restrictions are loosened elsewhere
- *   (`pretooluse-bash.mjs`, `pretooluse-editwrite.mjs`,
- *   `path-ownership-guard.mjs`); secrets never reach git through them
- *   because this hook denies:
- *     - `git add` of `.env*`, `secrets/**`, `*.pem`, `*.key` files
- *     - `git commit` whose staged diff contains secret markers
- *       (`API_KEY=`, `SECRET=`, `-----BEGIN * PRIVATE KEY-----`, etc.)
- *     - `git push` whose outbound diff contains secret markers
- *   Normal `git add .`, `git commit -m "feat: ..."`, and `git push` of
- *   project files are not blocked by this guard.
+ * F-176 (full permissions + advisory hooks):
+ *   Agents have full permissions by default. Hooks never return
+ *   `permissionDecision: "deny"` or `"ask"`; they inject safety guidance
+ *   via `hookSpecificOutput.additionalContext` and always return
+ *   `"allow"`. This hook's job is to remind the agent when it is
+ *   about to do something the user should see — push, force-push,
+ *   rebase, secret-stage, secret-push, release, publish, deploy, or PR
+ *   mutation — without ever refusing.
  *
- * Behaviour summary:
+ * F-200 history (the patterns this hook still watches):
  *   - Safe local inspection (status, log, diff) is autonomous.
- *   - History rewriting (rebase, force-push) is denied.
- *   - `git add` of secret files is denied outright.
- *   - `git commit` and `git push` scan their respective diffs for
- *     secret markers and deny when found.
+ *   - History rewriting (rebase, force-push) USED to be denied.
+ *   - `git add` of secret files USED to be denied outright.
+ *   - `git commit` and `git push` scanned their respective diffs for
+ *     secret markers and USED to deny when found.
  *   - `git commit`, `git push`, PR mutations, releases, publishes, and
- *     deploys require a human confirmation in Claude Code.
+ *     deploys USED to require human confirmation.
+ *
+ * F-176 advisory reminders:
+ *   - Force-push, rebase, secret-stage, secret-push: "[advisory:critical]"
+ *     tag, telling the agent to confirm with the user.
+ *   - Commit, push, PR mutation, release, publish, deploy: "[advisory]"
+ *     tag, telling the agent to confirm and that these used to be HITL.
+ *   - Conventional-commit shape: hint as additionalContext.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -31,7 +34,7 @@ import { findGitCommand } from './git-command-parser.mjs';
 const ALLOWED_COMMIT_TYPES = ['feat', 'fix', 'refactor', 'docs', 'style', 'test', 'build', 'chore'];
 const GH_GLOBAL_OPTION = String.raw`(?:(?:-R|--repo|--hostname)\s+(?:"[^"]*"|'[^']*'|\S+)|--(?:help|version))`;
 
-// Secret file globs that must NEVER be staged or pushed (F-200).
+// Secret file globs that the hook still flags (F-200 vocabulary).
 // Match either the bare filename or any path ending in it.
 const SECRET_FILE_PATTERNS = [
   /(^|\/)\.env(\.[a-z0-9_-]+)?$/i,                    // .env, .env.local, .env.production (anywhere)
@@ -73,7 +76,8 @@ function extractAddPaths(args) {
 
 // Marker patterns scanned from staged / outbound diffs. Designed to be
 // conservative — false positives are preferable to letting any secret
-// reach a push.
+// reach a push. Under F-176 a positive match injects a critical-severity
+// advisory rather than blocking the action.
 const SECRET_CONTENT_PATTERNS = [
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/,
   /-----BEGIN [A-Z0-9 ]*SECRET-----/,
@@ -96,7 +100,7 @@ function diffContainsSecret(text) {
 // the staged diff lives under a __tests__/ directory or matches a
 // *.test.{mjs,js,ts,…} / *.spec.* naming convention. The hook's own tests
 // rely on `ghp_…`, `AKIA…`, and `-----BEGIN … PRIVATE KEY-----` fixtures
-// to verify that the guard denies real secrets, so commits that ONLY
+// to verify that the guard warns on real secrets, so commits that ONLY
 // touch test files can stage synthetic markers. Commits that mix test
 // files with production code still trigger the secret scan — a real
 // secret smuggled alongside the test fixtures would land in production.
@@ -120,7 +124,7 @@ function isOnlyTestFixtures(stagedText) {
 // regression tests land in the same commit as their accompanying
 // production-code change. Production code never contains real ghp_/AKIA/
 // BEGIN PRIVATE KEY strings, so a non-test hunk that contains a marker
-// is by definition a real secret and the commit is denied.
+// is by definition a real secret and the commit triggers the advisory.
 function isOnlyTestFileHunks(stagedText) {
   if (!stagedText) return false;
   let currentFile = null;
@@ -192,14 +196,23 @@ function hasGhCommand(command, noun, actions) {
   return commandPattern('gh', GH_GLOBAL_OPTION, `${noun}\\s+(?:${actions})`).test(command);
 }
 
-function output(decision, reason) {
-  process.stdout.write(JSON.stringify({
+// F-176: advisory output — always returns `permissionDecision: "allow"`
+// with safety guidance in `additionalContext`. `severity` is "warn"
+// (default) or "critical"; the latter is reserved for actions that
+// `git-workflow-guard.mjs` USED to hard-deny (force-push, rebase,
+// secret-stage, secret-push). Every advisory context opens with
+// "Heads up:" so tests and downstream consumers can grep it.
+function advisory(severity, reason, extraContext) {
+  const tag = severity === 'critical' ? '[advisory:critical]' : '[advisory]';
+  const payload = {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
-      permissionDecision: decision,
+      permissionDecision: 'allow',
       permissionDecisionReason: reason,
+      additionalContext: `${tag} Heads up: ${reason}${extraContext ? ' ' + extraContext : ''}`,
     },
-  }) + '\n');
+  };
+  process.stdout.write(JSON.stringify(payload) + '\n');
 }
 
 function commitMessage(command) {
@@ -243,19 +256,31 @@ process.stdin.on('end', () => {
   const hasGuardedActionToken = /\b(?:commit|push|rebase|add)\b/i.test(command);
   const hasExecutableIndirection = /(?:\$\(|`|\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)|\beval\b|\b(?:ba|z|k|c|fi)?sh\s+-c\b)/i.test(command);
   if (!push && !rebase && !commit && !add && hasGuardedActionToken && hasExecutableIndirection) {
-    output('deny', 'Dynamic shell indirection around commit, push, rebase, or add cannot be safely classified. Use a literal Git command so Bizar can apply the required approval policy.');
+    advisory(
+      'critical',
+      'Dynamic shell indirection around commit, push, rebase, or add cannot be safely classified.',
+      'Use a literal Git command so the right advisory reminder fires.',
+    );
     return;
   }
   if (push && push.args.some((arg) => arg === '-f' || /^--force(?:-with-lease|-if-includes)?(?:=|$)/.test(arg))) {
-    output('deny', 'Force-pushing rewrites shared history. Create a follow-up commit or a new branch instead.');
+    advisory(
+      'critical',
+      'Force-pushing rewrites shared history.',
+      'Create a follow-up commit or a new branch instead. Confirm with the user before proceeding.',
+    );
     return;
   }
   if (rebase) {
-    output('deny', 'Rebasing rewrites history. Use a merge or follow-up commit unless the user explicitly changes project policy.');
+    advisory(
+      'critical',
+      'Rebasing rewrites history.',
+      'Use a merge or follow-up commit unless the user explicitly changes project policy.',
+    );
     return;
   }
 
-  // F-200: deny `git add <secret>` (literal pathspecs only — shell
+  // F-200: warn on `git add <secret>` (literal pathspecs only — shell
   // globbing happens in the agent's shell so dotfiles and `*.key` come
   // through expanded). If the path contains shell-glob chars we cannot
   // prove a secret is staged, so we let the staged-diff scan at commit
@@ -267,7 +292,11 @@ process.stdin.on('end', () => {
       for (const path of extractAddPaths(args)) {
         if (/[*?[\]]/.test(path)) continue;
         if (isSecretPath(path)) {
-          output('deny', `Refusing to stage secret file '${path}'. Keep .env / secrets / *.pem / *.key local — commit only the project code that consumes them.`);
+          advisory(
+            'critical',
+            `Refusing-style advisory: '${path}' looks like a secret file (.env / secrets / *.pem / *.key).`,
+            'Keep secrets local — commit only the project code that consumes them. Confirm with the user before staging.',
+          );
           return;
         }
       }
@@ -275,32 +304,31 @@ process.stdin.on('end', () => {
   }
 
   if (commit) {
-    // F-200: scan staged diff for secret markers before asking.
+    // F-176: scan staged diff for secret markers and surface them as a
+    // critical advisory rather than denying.
     const staged = getStagedDiff(cwd);
     if (staged.status === 0 && diffContainsSecret(staged.stdout)) {
       const fixtureOnly = isOnlyTestFixtures(staged.stdout);
       const fileHunkOnly = isOnlyTestFileHunks(staged.stdout);
       if (!fixtureOnly && !fileHunkOnly) {
-        output('deny', 'Staged changes contain what looks like a secret (API key, private key, AWS/GitHub/Slack/OpenAI token, etc.). Unstage it, move it to a gitignored local file, then recommit.');
+        advisory(
+          'critical',
+          'Staged changes contain what looks like a secret (API key, private key, AWS/GitHub/Slack/OpenAI token, etc.).',
+          'Unstage it, move it to a gitignored local file, then recommit. Rotate the secret if it has already been pushed.',
+        );
         return;
       }
     }
     const message = commitMessage(command);
     const subject = message.split('\n').find((line) => line.trim())?.trim() ?? '';
-    // F-145: subject-shape check is a soft warning attached to the same
-    // hook response as the `ask` decision.
     const conventional = subject && !new RegExp(`^(?:${ALLOWED_COMMIT_TYPES.join('|')})(\\([^)]+\\))?:\\s+\\S`, 'i').test(subject);
-    const payload = {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'ask',
-        permissionDecisionReason: `Create this local commit${subject ? `: ${subject}` : ''}?`,
-      },
-    };
+    const reason = `Create local commit${subject ? `: ${subject}` : ''}.`;
+    const extras = [];
     if (conventional) {
-      payload.hookSpecificOutput.additionalContext = `Conventional commit hint: prefer "type: subject" (types: ${ALLOWED_COMMIT_TYPES.join(', ')}).`;
+      extras.push(`Conventional commit hint: prefer "type: subject" (types: ${ALLOWED_COMMIT_TYPES.join(', ')}).`);
     }
-    process.stdout.write(`${JSON.stringify(payload)}\n`);
+    extras.push('Local commits used to require HITL confirmation; F-176 lets them proceed silently.');
+    advisory('warn', reason, extras.join(' '));
     return;
   }
 
@@ -308,31 +336,39 @@ process.stdin.on('end', () => {
     const hasBody = /(?:^|\s)(?:-b|--body)(?:=|\s)/.test(command);
     const hasImage = /!\[[^\]]*\]\([^)]*\)|<img\b/i.test(command);
     if (hasBody && !hasImage && hasDesignChanges(cwd)) {
-      output('deny', 'This branch changes visual files. Add before/after evidence to the pull-request body before publishing it.');
+      advisory(
+        'warn',
+        'This branch changes visual files.',
+        'Add before/after evidence to the pull-request body before publishing it.',
+      );
       return;
     }
-    output('ask', 'Publish or modify this pull request on GitHub?');
+    advisory('warn', 'Publish or modify this pull request on GitHub?', 'PR mutations used to require HITL confirmation; F-176 lets them proceed with a heads-up.');
     return;
   }
 
   if (hasGhCommand(command, 'pr', 'merge|close|reopen|ready|review|comment')) {
-    output('ask', 'Apply this pull-request state change on GitHub?');
+    advisory('warn', 'Apply this pull-request state change on GitHub?', 'PR mutations used to require HITL confirmation; F-176 lets them proceed with a heads-up.');
     return;
   }
   if (push) {
-    // F-200: scan outbound diff for secret markers before asking.
+    // F-176: scan outbound diff for secret markers before allowing.
     const outbound = getOutboundDiff(cwd);
-    if (outbound.status === 0 && diffContainsSecret(outbound.stdout)) {
-      output('deny', 'Outgoing commits contain what looks like a secret. Rewrite history to drop it (interactive rebase, then force-push) before pushing again.');
+    if (outbound.status === 0 && diffContainsSecret(outbound.stdout) && !isOnlyTestFileHunks(outbound.stdout)) {
+      advisory(
+        'critical',
+        'Outgoing commits contain what looks like a secret.',
+        'Confirm with the user before pushing; rotate the secret if it has already been pushed.',
+      );
       return;
     }
-    output('ask', 'Push local commits to the remote repository?');
+    advisory('warn', 'Push local commits to the remote repository.', 'Push used to require HITL confirmation; F-176 lets it proceed with a heads-up.');
     return;
   }
   const releaseMutation = hasGhCommand(command, 'release', 'create|edit|delete|upload');
   const packagePublish = /\b(?:npm|bun|pnpm)\b[\s\S]*\bpublish\b/i.test(command);
   const deployment = /\b(?:(?:npx|bunx|pnpm\s+exec)\s+)?(?:vercel|wrangler|flyctl)\b[\s\S]*(?:\bdeploy\b|\bpublish\b|--prod\b)/i.test(command);
   if (releaseMutation || packagePublish || deployment) {
-    output('ask', 'This command publishes or deploys externally. Continue?');
+    advisory('warn', 'This command publishes or deploys externally.', 'Release/publish/deploy used to require HITL confirmation; F-176 lets them proceed with a heads-up.');
   }
 });

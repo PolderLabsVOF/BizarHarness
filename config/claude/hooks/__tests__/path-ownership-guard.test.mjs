@@ -25,10 +25,36 @@ function runHook(input, dbPath) {
 }
 
 function decision(result) {
+  // Silent pass writes `{}` → permissionDecision is undefined.
+  // Anything that sets a decision returns 'allow', 'deny', or 'ask'.
   return result.hookSpecificOutput?.permissionDecision;
 }
 
-test('edit hook enforces sibling claims but not the claimant\'s own scope', () => {
+function assertSilent(result, label) {
+  const d = decision(result);
+  assert.ok(d === undefined || d === null, `${label}: expected silent pass; got ${JSON.stringify(d)}`);
+}
+
+function context(result) {
+  return result.hookSpecificOutput?.additionalContext ?? null;
+}
+
+function assertAdvisoryAllow(result, reasonFragment) {
+  assert.equal(decision(result), 'allow', `expected allow, got ${decision(result)}`);
+  const ctx = context(result);
+  assert.ok(ctx, 'expected additionalContext to be set');
+  assert.match(ctx, /Heads up/, 'advisory context should start with Heads up');
+  if (reasonFragment) {
+    assert.match(ctx, new RegExp(reasonFragment));
+  }
+}
+
+// F-176 (full permissions + advisory hooks):
+//   `path-ownership-guard.mjs` ALWAYS returns `permissionDecision:
+//   "allow"`. When a sibling worker holds the file under SCOPE_OWNED the
+//   agent sees an advisory reminder; otherwise the hook stays silent.
+
+test('edit hook enforces sibling claims as advisory reminders, never blocks', () => {
   const root = mkdtempSync(join(tmpdir(), 'bizar-path-guard-'));
   roots.push(root);
   const main = join(root, 'main');
@@ -43,17 +69,17 @@ test('edit hook enforces sibling claims but not the claimant\'s own scope', () =
   ledger.claimTask({ taskId: 'source', owner: 'todd', workspace: isolated });
   ledger.close();
 
-  // Active task editing inside its own scope → ALLOWED.
+  // Active task editing inside its own scope → silent allow.
   const allowed = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Edit',
     cwd: isolated,
     tool_input: { file_path: join(isolated, 'src', 'index.ts') },
   }, dbPath);
-  assert.notEqual(decision(allowed), 'deny');
+  assertSilent(allowed, 'in-scope edit');
 
   // F-200 loosening: active task editing OUTSIDE its own scope (still
-  // inside its workspace) → ALLOWED. Scopes are sibling claims, not
+  // inside its workspace) → silent allow. Scopes are sibling claims, not
   // self-restrictions.
   const outOfScope = runHook({
     hook_event_name: 'PreToolUse',
@@ -61,17 +87,18 @@ test('edit hook enforces sibling claims but not the claimant\'s own scope', () =
     cwd: isolated,
     tool_input: { file_path: join(isolated, 'docs', 'design.md') },
   }, dbPath);
-  assert.notEqual(decision(outOfScope), 'deny');
+  assertSilent(outOfScope, 'out-of-scope edit');
 
-  // Different workspace, file in active task's scope → DENIED with
-  // SCOPE_OWNED — the scope still blocks sibling workers.
+  // Different workspace, file in active task's scope → ALLOW with
+  // advisory reminder that a sibling worker holds the scope (F-176
+  // used to be a hard deny).
   const siblingOwned = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Edit',
     cwd: main,
     tool_input: { file_path: join(main, 'src', 'index.ts') },
   }, dbPath);
-  assert.equal(decision(siblingOwned), 'deny');
+  assertAdvisoryAllow(siblingOwned, 'SCOPE_OWNED');
   assert.match(
     siblingOwned.hookSpecificOutput.permissionDecisionReason,
     /SCOPE_OWNED/,
@@ -91,7 +118,7 @@ test('edit hook allows /tmp and other scratch paths with no git repo', () => {
     cwd: scratch,
     tool_input: { file_path: join(scratch, 'note.txt') },
   }, join(root, 'missing-tasks.sqlite'));
-  assert.notEqual(decision(result), 'deny');
+  assertSilent(result, 'no-ledger scratch path');
 });
 
 test('edit hook allows /tmp/foo from a project cwd outside the repo', () => {
@@ -101,5 +128,5 @@ test('edit hook allows /tmp/foo from a project cwd outside the repo', () => {
     cwd: '/home/drb0rk/projects/BizarHarness',
     tool_input: { file_path: '/tmp/foo.txt' },
   }, '/nonexistent/tasks.sqlite');
-  assert.notEqual(decision(result), 'deny');
+  assertSilent(result, 'scratch path under project cwd');
 });

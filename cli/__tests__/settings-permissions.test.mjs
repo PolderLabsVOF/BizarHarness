@@ -38,9 +38,21 @@ test('local git commit family is in permissions.allow (not ask, not deny)', () =
   }
 });
 
-test('push --force and rebase stay in permissions.deny', () => {
-  const deny = new Set(loadSettings().permissions?.deny || []);
-  for (const pattern of ['Bash(git push --force *)', 'Bash(git rebase *)']) {
-    assert.ok(deny.has(pattern), `expected deny entry: ${pattern}`);
-  }
+// F-176: full permissions by default. deny and ask are both empty.
+// Everything that USED to be a hard-deny or ask lives in the hook
+// chain as an advisory reminder injected via additionalContext.
+
+test('F-176: permissions.deny is empty (full permissions by default)', () => {
+  const deny = loadSettings().permissions?.deny || [];
+  assert.deepEqual(deny, [], `expected deny to be []; got ${JSON.stringify(deny)}`);
+});
+
+test('F-176: permissions.ask is empty (no HITL prompts on subagents)', () => {
+  const ask = loadSettings().permissions?.ask || [];
+  assert.deepEqual(ask, [], `expected ask to be []; got ${JSON.stringify(ask)}`);
+});
+
+test('F-176: permissions.defaultMode is bypassPermissions', () => {
+  const mode = loadSettings().permissions?.defaultMode;
+  assert.equal(mode, 'bypassPermissions');
 });

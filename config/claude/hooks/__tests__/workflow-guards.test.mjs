@@ -28,7 +28,7 @@ function decision(result) {
 }
 
 describe('Git and publication guard', () => {
-  test('denies history rewriting', () => {
+  test('injects critical advisory for history rewriting (F-176)', () => {
     for (const command of [
       'git push --force-with-lease origin feature',
       'git -C . push -f origin feature',
@@ -39,11 +39,13 @@ describe('Git and publication guard', () => {
         tool_name: 'Bash',
         tool_input: { command },
       });
-      assert.equal(decision(result), 'deny', command);
+      assert.equal(decision(result), 'allow', command);
+      assert.ok(result.hookSpecificOutput?.additionalContext, command);
+      assert.match(result.hookSpecificOutput.additionalContext, /\[advisory:critical\]/, command);
     }
   });
 
-  test('denies guarded Git actions hidden behind shell indirection', () => {
+  test('injects critical advisory for shell-indirected guarded Git actions (F-176)', () => {
     for (const command of [
       '$(printf git) commit -m "fix: hidden"',
       'G=git; $G commit -m "fix: hidden"',
@@ -56,18 +58,20 @@ describe('Git and publication guard', () => {
         tool_name: 'Bash',
         tool_input: { command },
       });
-      assert.equal(decision(result), 'deny', command);
+      assert.equal(decision(result), 'allow', command);
       assert.match(result.hookSpecificOutput.permissionDecisionReason, /indirection/i);
+      assert.ok(result.hookSpecificOutput?.additionalContext, command);
+      assert.match(result.hookSpecificOutput.additionalContext, /\[advisory:critical\]/, command);
     }
   });
 
-  test('warns on unsupported commit subjects and asks for both (F-145)', () => {
+  test('warns on unsupported commit subjects via warn advisory (F-145 + F-176)', () => {
     const invalid = runHook('git-workflow-guard.mjs', {
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
       tool_input: { command: 'git commit -m \"misc: vague\"' },
     });
-    assert.equal(decision(invalid), 'ask');
+    assert.equal(decision(invalid), 'allow');
     assert.match(String(invalid.hookSpecificOutput?.additionalContext || ''), /Conventional commit/i);
 
     const valid = runHook('git-workflow-guard.mjs', {
@@ -75,7 +79,7 @@ describe('Git and publication guard', () => {
       tool_name: 'Bash',
       tool_input: { command: 'git commit -m \"fix: preserve approval boundary\"' },
     });
-    assert.equal(decision(valid), 'ask');
+    assert.equal(decision(valid), 'allow');
 
     for (const command of [
       '"git" commit -m "fix: quoted git"',
@@ -89,11 +93,11 @@ describe('Git and publication guard', () => {
         tool_name: 'Bash',
         tool_input: { command },
       });
-      assert.equal(decision(guarded), 'ask', command);
+      assert.equal(decision(guarded), 'allow', command);
     }
   });
 
-  test('asks before pushes, pull-request publication, and package publication', () => {
+  test('injects advisory before pushes, pull-request publication, and package publication (F-176)', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'bizar-publish-'));
     roots.push(cwd);
     for (const command of [
@@ -113,7 +117,12 @@ describe('Git and publication guard', () => {
         cwd,
         tool_input: { command },
       });
-      assert.equal(decision(result), 'ask');
+      // F-176: hooks never return 'ask'. Push / PR / publish / deploy
+      // surface as warn-severity advisory reminders and the action
+      // proceeds.
+      assert.equal(decision(result), 'allow', command);
+      assert.ok(result.hookSpecificOutput?.additionalContext, command);
+      assert.match(result.hookSpecificOutput.additionalContext, /Heads up/, command);
     }
   });
 });
@@ -441,7 +450,11 @@ test('project settings wire portable guarded-autonomy hooks', () => {
   assert.equal(settings.permissions.allow.some((rule) => commitFamily.test(rule)), true);
   const hardMutation = /Bash\((?:git push|gh (?:pr|release)|(?:npm|bun|pnpm) publish|(?:vercel|wrangler|flyctl) deploy)/;
   assert.equal(settings.permissions.allow.some((rule) => hardMutation.test(rule)), false);
-  assert.equal(settings.permissions.ask.some((rule) => hardMutation.test(rule)), true);
+  // F-176: full permissions by default — `permissions.ask` is empty.
+  // Push / PR / publish / deploy surface as advisory reminders from
+  // `git-workflow-guard.mjs`, not as Claude Code ask-pattern prompts.
+  assert.equal(settings.permissions.ask.some((rule) => hardMutation.test(rule)), false);
+  assert.deepEqual(settings.permissions.ask, []);
   const commands = JSON.stringify(settings.hooks);
   // F-169: bare `bizar hook <sub>` invocations are forbidden because
   // Claude Code strips PATH under /bin/sh. The shipped template must
