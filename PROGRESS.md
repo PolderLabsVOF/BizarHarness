@@ -58,6 +58,11 @@ references, and add a regression guard so the deletion cannot regress.
 - `node --test cli/provision.test.mjs` — 16/16 pass.
 - `node scripts/run-node-tests.mjs` — 558/558 pass (EXIT=0).
 - Installer regenerated from merged template (`bizar install --yes`);
+- `scripts/bh-full-e2e.mjs` — the E2E verifier alignment: the
+  "human approval policy" check still expected three HITL decisions
+  from git-workflow-guard; F-176 made the guard advisory, so the check
+  now expects three silent-allow decisions instead. `make e2e` is
+  13/13 green.
   live `~/.claude/settings.json` parity verified: deny=[] ask=[],
   gateway env values preserved, hooks byte-identical to repo sources.
 - `make clean-check` — 11/13 checks pass; the two pre-existing failures
