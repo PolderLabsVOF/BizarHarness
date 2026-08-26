@@ -632,6 +632,11 @@ export function mergeBizarHooks(existingHooks = {}, desiredHooks = {}) {
   return cleaned;
 }
 
+// Local `git commit` is intentionally allowed silently (see AGENTS.md
+// "Autonomy and parallelism"); only `git push`, `gh pr`/`release`,
+// publishes, and deploys remain hard HITL mutations.
+const HARD_MUTATION_PERMISSION = /^(?:Bash\()?\s*(?:git\s+push|gh\s+(?:pr\s+(?:create|edit|merge|close|reopen|ready|review|comment)|release\s+(?:create|edit|delete|upload))|(?:npm|bun|pnpm)\s+publish|(?:vercel|wrangler|flyctl)\s+(?:deploy|publish))\b/i;
+
 export function normalizePermissionLists(existing = {}, desired = {}) {
   return {
     defaultMode: existing.defaultMode || desired.defaultMode,

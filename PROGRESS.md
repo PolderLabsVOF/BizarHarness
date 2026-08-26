@@ -1198,3 +1198,114 @@ gate; the user picker is.
 - `sonnet | gpt-4 | default | m3` → default
 - `nano | mini | haiku (older) | flash | lite | tiny` → budget
 - otherwise → mid
+## Complete — F-145 Loosen Bizar Hook Rules
+
+**Objective:** Stop wasting agent time on redundant or overly strict
+hook rules that were firing per-tool-call and blocking legitimate work.
+
+**Root causes:**
+
+- Pre-tool-use chain had 3-4 leaves firing per tool call. Two of them
+  (content-style-guard, simplify-guard) either duplicated work done
+  elsewhere or blocked legitimate commits because a 30-minute freshness
+  window did not match how refactors actually unfold.
+- path-ownership-guard.mjs ran worktree list --porcelain plus a
+  separate rev-parse on every Edit/Write/MultiEdit. The worktree
+  fork was redundant with what worktree-bootstrap already established.
+- git-workflow-guard.mjs denied commits whose subject did not match the
+  conventional commit regex, and stripped any AI-attribution trailer in
+  commit messages. But attribution.commit is empty in settings.json and
+  the conventional-commit check fired before the user got the ask prompt.
+- simplify-guard.mjs had a 30-minute freshness window and required a
+  byte-identical staged-tree fingerprint. Any follow-up commit during a
+  refactor immediately re-tripped the gate.
+
+**Fixes:**
+
+- cli/commands/hook.mjs - dropped content-style-guard and simplify-guard
+  from the per-tool-use chain. Edit/Write runs pretooluse-editwrite plus
+  path-ownership-guard (2 leaves). Bash runs pretooluse-bash plus
+  git-workflow-guard (2 leaves). Skill no longer runs simplify-guard in
+  PostToolUse. Kept agent-model-guard in PRETOOL_SAFETY_LEAVES so its
+  failures still deny.
+- .claude/hooks/path-ownership-guard.mjs - removed the per-edit
+  worktree list --porcelain fork. Hook is now a single in-memory ledger
+  lookup. Default requireTask to false; another active lease on the same
+  path still denies.
+- .claude/hooks/simplify-guard.mjs - freshness window 30 min to 4
+  hours. Skip the check when the staged diff is exclusively CHANGELOG,
+  version-bump, or lockfile-only (low-risk follow-up commits).
+- .claude/hooks/git-workflow-guard.mjs - dropped the AI-attribution
+  trailer check entirely. Conventional-commit subject check is now a
+  soft warning attached to the same ask response (no separate deny).
+  Force-push and shell-indirection around guarded actions still deny.
+- .claude/hooks/pretooluse-editwrite.mjs - dropped the always-on
+  additionalContext line that was telling the model which tool/path it
+  just called. Pure noise, removed.
+
+**Verification:**
+
+- node --test .claude/hooks/__tests__/*.test.mjs - 145/145 pass.
+- make test - 397/397 pass.
+- make check - TypeScript clean.
+
+**Still denying (security-critical, not loosened):**
+
+- Force-push to any branch (push --force / -f).
+- Shell indirection that hides a guarded action.
+- pretooluse-bash dangerous patterns (rm -rf, sudo, kill PID 1, metadata
+  IPs, secrets access).
+- pretooluse-editwrite secrets guard (.env, .envrc, secrets/,
+  credentials/, node_modules/).
+- git-workflow-guard for any commit/push/merge/release/publish/deploy
+  via gh, npm, vercel, wrangler, flyctl.
+
+**Shipped:** F-145 commits `f3f82b6`, `48d67bf`, release bump `8a701a3`,
+v10.12.2 published to npm (`@polderlabs/bizar` and `@polderlabs/bizar-sdk`).
+
+## Complete — Worktree merge safety (F-149)
+- Date: 2026-08-03
+- Branch: feat/worktree-merge-safety
+- `bizar worktree-merge <branch>` tags source branch tip as
+  `merge-archive/<branch>-<sha>` before merge, then `git merge --no-ff`
+  so parallel pipeline work is never lost and the merge topology stays
+  visible. Bootstrap-time branch-uniqueness guard deferred: worktree
+  creation runs outside the Bizar command surface today, so adding the
+  guard belongs with whichever tool creates the worktree.
+- Tests: 4/4 pass (`cli/__tests__/worktree-merge.test.mjs`).
+Ledger closed in this commit: F-145 flips to `passing`, VCR 45 → 46.
+
+## Complete — F-146 Bundle i-have-adhd Skill (always-on)
+
+**Objective:** Downstream skill `i-have-adhd` from `ayghri/i-have-adhd` upstream
+(https://github.com/ayghri/i-have-adhd). Bundle verbatim upstream body, drop the
+`disable-model-invocation: true` frontmatter line to keep the skill always-on,
+drop the Hermes-specific `metadata.hermes` block, add an inline comment
+explaining the omission. Write a 4-assertion regression test.
+
+**Verification:**
+
+- node --test config/skills/i-have-adhd/__tests__/always-on.test.mjs — 4/4 pass.
+- make verify-repo-structure — clean.
+- make check — TypeScript clean.
+- make clean-check — no debug artifacts.
+- make vcr — 46/46 unchanged.
+
+**Evidence:** Task F-146-full active with scope `config/skills/i-have-adhd/**`,
+`PROGRESS.md`, `feature_list.json`. SKILL.md upstream body written verbatim with
+`disable-model-invocation` removed and omission comment added. Regression test
+4/4. Gates green.
+
+## Complete — 9router picker proxy (F-147)
+- Date: 2026-08-02
+- Branch: feat/9router-model-discovery
+- Proxy: http://127.0.0.1:20129 -> http://localhost:20128 (gateway)
+- Rewrites upstream IDs to `claude-...` on GET /v1/models; passthrough elsewhere
+- Surfaces all 9router models in /model picker without replacing Anthropic defaults
+
+## Local commits always allowed
+- `permissions.allow` ships with explicit `Bash(git commit *)` family patterns (master is clean so this is the first landing).
+- Regression test `cli/__tests__/settings-permissions.test.mjs` fails the build if any commit-pattern lands in `ask` or `deny`.
+- Live `~/.claude/settings.json` mirrors the template.
+- AGENTS.md notes the policy.
+- Tests: green.

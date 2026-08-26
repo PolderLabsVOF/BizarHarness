@@ -436,11 +436,12 @@ test('project settings wire portable guarded-autonomy hooks', () => {
   assert.ok(settings.hooks.PreCompact);
   assert.ok(settings.hooks.SubagentStart);
   assert.ok(settings.hooks.SubagentStop);
-  const hardMutation = /Bash\((?:git (?:commit|push)|gh (?:pr|release)|(?:npm|bun|pnpm) publish|(?:vercel|wrangler|flyctl) deploy)/;
-  // F-169: hard-mutation rules now ship in allow (user override of the
-  // AGENTS.md hard approval list). They MUST NOT be in ask anymore.
-  assert.ok(settings.permissions.allow.some((rule) => hardMutation.test(rule)));
-  assert.equal((settings.permissions.ask || []).some((rule) => hardMutation.test(rule)), false);
+  // Local git commit is always allowed silently (see AGENTS.md "Autonomy and parallelism").
+  const commitFamily = /Bash\((?:git commit \*|git -C \* commit \*|git --git-dir=\* commit \*)\)/;
+  assert.equal(settings.permissions.allow.some((rule) => commitFamily.test(rule)), true);
+  const hardMutation = /Bash\((?:git push|gh (?:pr|release)|(?:npm|bun|pnpm) publish|(?:vercel|wrangler|flyctl) deploy)/;
+  assert.equal(settings.permissions.allow.some((rule) => hardMutation.test(rule)), false);
+  assert.equal(settings.permissions.ask.some((rule) => hardMutation.test(rule)), true);
   const commands = JSON.stringify(settings.hooks);
   // F-169: bare `bizar hook <sub>` invocations are forbidden because
   // Claude Code strips PATH under /bin/sh. The shipped template must
