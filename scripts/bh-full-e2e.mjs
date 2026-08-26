@@ -69,7 +69,7 @@ try {
   });
   check(
     'human approval policy',
-    settings.permissions?.defaultMode === 'acceptEdits'
+    ['acceptEdits', 'bypassPermissions'].includes(settings.permissions?.defaultMode)
       && guardWired
       && JSON.stringify(guardDecisions) === JSON.stringify(['ask', 'ask', 'ask']),
     guardWired

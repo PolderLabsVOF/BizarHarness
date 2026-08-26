@@ -2,7 +2,36 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — F-163 Registry rebrand: claude-qwen + claude-minimax
+## Passing — F-164 Dynamic orchestration, native workflows, and agent teams
+
+**Objective delivered:** Removed brittle fixed model pins from all 16 custom
+agents. Mike now selects the cheapest sufficient tier for each dispatch, uses a
+concrete model only when live discovery proves a tier candidate, and otherwise
+omits `model` so Claude Code inherits the active session. A failed dispatch is
+never retried by cycling aliases, providers, or tiers.
+
+**Native orchestration delivered:** Bizar installs `ultracode`,
+`ultracode-review`, and `ultracode-research` under
+`$CLAUDE_CONFIG_DIR/workflows/`, plus `/ultracode`. Experimental agent teams are
+enabled with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; TaskCreated,
+TaskCompleted, and TeammateIdle hooks record bounded advisory evidence and always
+fail open.
+
+**Fresh evidence (2026-08-25):**
+- Dynamic routing + workflow state + hook tests: 34/34 passed.
+- Team lifecycle hook tests: 3/3 passed; combined routing/team hooks: 8/8.
+- SDK dynamic registry tests: 5/5 passed.
+- Installer tests: 14/14 passed, including a real temporary config install.
+- Full retained suites: SDK 301/301; Node 412/412.
+- `make check`, `make test`, `make e2e`, `make clean-check`,
+  `make verify-repo-structure`, `make verify-removed-surfaces`, and
+  `make check-arch` passed.
+- Temporary install contained all three workflow scripts, the ultracode skill
+  and command, team hooks/settings, and zero installed agent `model:` pins.
+
+**Blockers:** None. Commit/push remain human-approval actions and were not run.
+
+## Previous — F-163 Registry rebrand: claude-qwen + claude-minimax
 
 **Objective:** Repoint the agent registry and tier table at the new 9router
 gateway IDs after the user added a Qwen provider and the MiniMax IDs were

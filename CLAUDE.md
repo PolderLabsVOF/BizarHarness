@@ -43,14 +43,20 @@ still deny prohibited actions and escalate externally visible or irreversible
 actions with `permissionDecision: "ask"`; that escalation list is the
 authoritative floor, not a starting point.
 
-Subagent dispatch through the Agent tool is the default for disjoint work.
-When two or more subtasks have non-overlapping file scopes and no data
-dependency on each other's intermediate output, the orchestrator MUST
-dispatch them in parallel in a single tool block rather than sequentially.
-Sequential dispatch is reserved for tasks that depend on a previous step's
-output (research → plan → implement, integration that requires a commit SHA,
-verification that consumes a build artifact). The `office-manager` skill
-enforces this; individual agents do not re-derive the rule.
+Subagent dispatch through the Agent tool is the default for focused disjoint
+work. Native dynamic workflows under `~/.claude/workflows/` are used when a
+large or repeatable task benefits from deterministic scripted fan-out. Native
+agent teams are used only when independent workers need direct communication or
+shared task state. When two or more subtasks have non-overlapping file scopes
+and no data dependency on each other's intermediate output, the orchestrator
+MUST dispatch them concurrently. Sequential dispatch is reserved for dependent
+phases and integration.
+
+Agent roles are model-agnostic. Mike selects the cheapest sufficient tier for
+each dispatch. It passes a concrete model only when live discovery proves a
+configured tier candidate; otherwise it omits `model` and inherits the active
+session. Bizar never retries a failed dispatch by cycling aliases, providers, or
+tiers.
 
 The authoritative hard approval list (cannot be auto-approved) is: commits, pushes, pull-request
 mutations, releases, package publication, deployments, production/shared-

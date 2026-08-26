@@ -40,6 +40,9 @@ test('event dispatcher exposes every plugin hook name', () => {
     'stop',
     'subagent-start',
     'subagent-stop',
+    'task-completed',
+    'task-created',
+    'teammate-idle',
     'user-prompt-submit',
   ]);
 });

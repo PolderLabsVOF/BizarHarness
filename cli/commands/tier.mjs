@@ -5,14 +5,12 @@
  * `bizar tier` — automatic task-based model selection.
  *
  * Replays the same tier resolution the @mike orchestrator uses:
- *  1. Read the per-agent assignment from ~/.claude/model-router.json
- *     (synced at install time from config/claude/model-router.json).
- *  2. Read the task description and decide whether to escalate or
- *     demote relative to the agent's default tier.
- *  3. Print the exact model id and a short rationale.
+ *  1. Read the role default from ~/.claude/model-router.json.
+ *  2. Adjust the tier from current task risk and complexity.
+ *  3. Print ordered candidates; dispatch uses a candidate only when live
+ *     discovery proves it, otherwise Agent omits model and inherits the session.
  *
- * No silent fallback: the resolver refuses to assign a model the
- * configured gateway cannot serve.
+ * A failed dispatch is never retried by cycling aliases or providers.
  */
 
 import chalk from 'chalk';
@@ -77,9 +75,9 @@ export async function runTier(cmdArgs) {
     bizar tier [--agent <name>] [--list] [--json] <task-description>
     bizar tier --list        List every shipped agent and its default tier.
 
-  Returns the exact gateway model id assigned to the named agent
-  (defaults to "mike") for the given task, or escalates / demotes
-  based on the task's content.
+  Returns the dynamic tier and ordered model candidates for the named role
+  (defaults to "mike"). Mike uses a concrete candidate only after live
+  discovery; otherwise Claude Code inherits the active session model.
 `);
     return;
   }
@@ -98,30 +96,25 @@ export async function runTier(cmdArgs) {
   const task = taskParts.join(' ').trim();
 
   if (cmdArgs.includes('--list')) {
-    const agents = Object.entries(config.agents || {}).sort(([a], [b]) => a.localeCompare(b));
-    for (const [name, entry] of agents) {
-      console.log(`  ${name.padEnd(20)} ${entry.tier.padEnd(12)} ${entry.model}`);
+    const roles = Object.entries(config.roleDefaults || {}).sort(([a], [b]) => a.localeCompare(b));
+    for (const [name, tier] of roles) {
+      console.log(`  ${name.padEnd(20)} ${String(tier).padEnd(12)} ${(config.tiers?.[tier]?.models || []).join(', ')}`);
     }
     return;
   }
 
-  const agent = config.agents?.[agentName];
-  if (!agent) {
-    console.error(chalk.red(`  ✗ unknown agent '${agentName}' — run \`bizar tier --list\``));
-    process.exit(2);
-  }
+  const defaultTier = config.roleDefaults?.[agentName] || 'default';
 
   if (!task) {
     console.error(chalk.red('  ✗ task description required (or pass --list)'));
     process.exit(2);
   }
 
-  const adjusted = adjustTier(agent.tier, task);
-  const chosenTier = adjusted.tier === 'high' && agent.tier === 'premium'
+  const adjusted = adjustTier(defaultTier, task);
+  const chosenTier = adjusted.tier === 'high' && defaultTier === 'premium'
     ? 'premium'
     : adjusted.tier;
-  const tierEntry = config.tiers?.[chosenTier];
-  const modelId = (tierEntry?.models || [agent.model])[0];
+  const candidates = config.tiers?.[chosenTier]?.models || [];
   const endpoint = process.env.BIZAR_MODEL_ROUTER_URL
     || process.env.ANTHROPIC_BASE_URL
     || config.endpoint;
@@ -129,10 +122,10 @@ export async function runTier(cmdArgs) {
   if (cmdArgs.includes('--json')) {
     console.log(JSON.stringify({
       agent: agentName,
-      defaultTier: agent.tier,
-      defaultModel: agent.model,
+      defaultTier,
       chosenTier,
-      chosenModel: modelId,
+      candidates,
+      selection: 'first-live-candidate-or-inherit-session',
       endpoint,
       source: path,
       reason: adjusted.reason,
@@ -141,10 +134,18 @@ export async function runTier(cmdArgs) {
     return;
   }
 
-  console.log(chalk.bold(`  task     ${task}`));
-  console.log(`  agent    ${agentName} (default tier: ${agent.tier})`);
-  console.log(`  tier     ${chosenTier} — ${adjusted.reason}`);
-  console.log(`  model    ${modelId}`);
-  console.log(`  endpoint ${endpoint}`);
-  console.log(`  source   ${path}`);
+  console.log(chalk.bold(`  task       ${task}`));
+  console.log(`  role       ${agentName} (default tier: ${defaultTier})`);
+  console.log(`  tier       ${chosenTier} — ${adjusted.reason}`);
+  console.log(`  candidates ${candidates.join(', ') || '(none; inherit session)'}`);
+  console.log('  selection  first live candidate, otherwise inherit active session');
+  console.log(`  endpoint   ${endpoint}`);
+  console.log(`  source     ${path}`);
+}
+
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  runTier(process.argv.slice(2)).catch((error) => {
+    console.error(chalk.red(`  ✗ ${error?.message || error}`));
+    process.exitCode = 1;
+  });
 }

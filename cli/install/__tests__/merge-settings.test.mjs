@@ -57,10 +57,11 @@ describe('writeClaudeSettings gateway environment', () => {
   it('production writer emits the complete project gateway contract', () => {
     const settings = runProductionWriter();
     assert.equal(settings.env.BIZAR_HOME.endsWith('/.config/bizar'), true);
-    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'http://localhost:20128/v1');
-    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'http://localhost:20128/v1');
+    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'http://localhost:20129/v1');
+    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'http://localhost:20129/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
     assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
+    assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
   });
 
   it('normal updates preserve user values and align missing gateway keys', () => {

@@ -2,7 +2,6 @@
 name: todd
 description: Todd — Senior Engineer. Mid-complexity implementation. New features, non-trivial debugging, refactoring, code review, and writing tests. Routes to the test gate after parallel implementation. Use for moderate-complexity implementation tasks.
 tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch, WebSearch, Skill
-model: claude-minimax/MiniMax-M2.7
 isolation: worktree
 ---
 

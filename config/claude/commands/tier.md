@@ -18,15 +18,15 @@ node "$(npm root -g)/@polderlabs/bizar/cli/commands/tier.mjs" --list
 
 Selection rules:
 
-1. The agent's tier (`premium` / `high` / `mid-design` / `default` / `mid` /
+1. The role default (`premium` / `high` / `mid-design` / `default` / `mid` /
    `budget`) comes from `~/.claude/model-router.json` (synced at install).
-2. If the task involves reasoning over multiple code paths, design
-   trade-offs, or adversarial review, escalate one tier.
-3. If the task is a single mechanical edit, deterministic transformation, or
-   verification, demote to `budget`.
-4. The chosen tier's exact model id is returned verbatim — no fallback, no
-   silent downgrade. The model router refuses to assign a model that the
-   configured gateway cannot serve.
+2. Mike adjusts that default from the current task's risk and complexity. A
+   role never carries fixed `model:` frontmatter.
+3. If live model discovery reports a configured candidate for the chosen tier,
+   Mike passes the first matching candidate on the Agent call.
+4. If discovery is unavailable, stale, ambiguous, or has no matching candidate,
+   Mike omits `model` and Claude Code inherits the active session model.
+5. A failed dispatch is not retried through aliases, providers, or tiers.
 
-The orchestrator's decision is logged to `~/.config/bizar/tier.log` with a
+The orchestrator's decision can be logged to `~/.config/bizar/tier.log` with a
 short rationale.

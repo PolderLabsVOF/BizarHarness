@@ -671,11 +671,35 @@
         "CHANGELOG.md"
       ],
       "evidence": "F-163 + .claude/model-router.json v11.0.0->11.1.0 with claude-qwen/qwen3.8-max premium + claude-minimax/* tiers; 16 agent frontmatter updated; scripts/agent-model-registry.test.mjs 7/7 (ALLOWED_MODELS, mike/linda/todd/ria snapshot, tamper, unavailability); packages/sdk/tests/agent-model-registry.test.mjs parity test green; cli/__tests__/workflow-state.test.mjs + cli/__tests__/model.test.mjs + cli/commands/model.mjs (PROVIDER_GROUPS) all consistent; use-default.md/use-premium.md updated; docs/architecture.md + cli/provision.mjs:935 updated."
+    },
+    {
+      "id": "F-164",
+      "title": "Dynamic orchestrator model routing, native workflows, and agent teams",
+      "description": "Remove fixed model pins from custom agents; let Mike choose an available model tier per dispatch or inherit the session; install native Claude Code workflows including /ultracode; enable agent teams with bounded fail-open lifecycle hooks.",
+      "state": "passing",
+      "passed": "2026-08-25",
+      "commit": "pending",
+      "category": "harness",
+      "scope": [
+        "config/claude/agents/**",
+        "config/claude/model-router.json",
+        "config/agents/model-assignment.mjs",
+        "config/workflows/**",
+        "config/skills/ultracode/**",
+        "config/claude/commands/ultracode.md",
+        "config/claude/settings.json",
+        "config/claude/hooks/**",
+        "cli/provision.mjs",
+        "packages/sdk/src/router/**",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "2026-08-25: removed model frontmatter from all 16 agents; dynamic tier routing inherits the session on unavailable discovery and forbids alias retries; 3 native workflow scripts plus /ultracode installed; agent teams enabled with bounded fail-open TaskCreated/TaskCompleted/TeammateIdle hooks. Dynamic routing tests 34/34, team hooks 3/3, SDK registry 5/5, installer 14/14, full SDK 301/301, full Node 412/412; make check/test/e2e/clean-check/verify-repo-structure/verify-removed-surfaces/check-arch passed; temporary full install verified."
     }
   ],
   "vcr": {
-    "passing": 52,
-    "activated": 52,
+    "passing": 53,
+    "activated": 53,
     "ratio": 1.000
   }
 }

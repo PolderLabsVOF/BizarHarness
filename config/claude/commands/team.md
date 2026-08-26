@@ -5,7 +5,9 @@ allowed-tools: Read, Bash, Agent, SendMessage
 
 # Team — Coordinated Claude Code Agents
 
-Use `/team` only when parallel, independent scopes materially improve delivery.
+Use `/team` only when teammates need to coordinate or communicate directly while parallel, independent scopes materially improve delivery. Use ordinary subagents for focused delegation and native dynamic workflows for deterministic large fan-out.
+
+Agent teams are experimental. They require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, which Bizar installs by default. Current Claude Code versions create and clean up teams automatically; do not call obsolete `TeamCreate` or `TeamDelete` tools.
 
 ## Protocol
 
@@ -20,6 +22,7 @@ Use `/team` only when parallel, independent scopes materially improve delivery.
    integrator serializes application of completed work and records pass/failure.
 7. The leader runs the final repository gates and owns the completion claim.
 8. Use `SendMessage` for coordination; stop or reassign stalled work rather than duplicating edits.
+9. Treat `TaskCreated`, `TaskCompleted`, and `TeammateIdle` hooks as advisory evidence only. They never block or force retries. A teammate that fails or idles twice is escalated to the lead, not restarted through model aliases.
 
 ## Human approval gates
 

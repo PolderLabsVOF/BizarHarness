@@ -423,15 +423,10 @@ function pruneReport(srcDir, destDir, filter, force) {
   return { pruned, tail: pruned ? `, pruned ${pruned} stale` : '' };
 }
 
-// F-107: syncAgentFiles removed. Agent definitions live at
-// .claude/agents/ (Claude Code canonical) — they were never sourced
-// from config/agents/ in Claude Code era, and the legacy source dir
-// was deleted.
-//
-// F-113: syncAgentFiles reinstated. Premium agents (@paul, @ria) and
-// any future agent definition must reach user-level `~/.claude/agents/`
-// so Claude Code sessions outside this repo can resolve them via the
-// Agent tool. Filtered to `*.md` to avoid leaking workspace files.
+// Agent definitions are sourced from the repository's canonical
+// config/claude/agents/ tree and installed into user-level
+// `$CLAUDE_CONFIG_DIR/agents/`. Filter to `*.md` to avoid copying workspace
+// files; the source tree is never inferred from a project .claude directory.
 
 export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
   const src = join(REPO_ROOT, 'config', 'claude', 'agents');
@@ -444,10 +439,9 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
   return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)${tail}`, copied, skipped, pruned };
 }
 
-// F-113: syncModelRouter added. The model-router.json file lives in
-// the repo at .claude/model-router.json and routes per-agent model
-// selection. Copied to user-level so the Bizar SDK can read
-// it without a cwd dependency.
+// The dynamic model router lives at config/claude/model-router.json and is
+// copied to user-level `$CLAUDE_CONFIG_DIR/model-router.json` so Mike and the
+// SDK can select tiers without a repository cwd dependency.
 
 export function isBizarManagedModelRouter(value) {
   return Boolean(
@@ -658,7 +652,9 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const fp = join(CLAUDE_DIR, 'settings.json');
   const existing = readJsonSafe(fp, {}) || {};
   const existingEnv = existing.env || {};
-  const defaultGatewayUrl = 'http://localhost:20128/v1';
+  const shipped = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'settings.json'), {}) || {};
+  const shippedRouter = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'model-router.json'), {}) || {};
+  const defaultGatewayUrl = shippedRouter.endpoint || shippedRouter.gateway?.endpoint || 'http://localhost:20129/v1';
   const gatewayUrl = process.env.ANTHROPIC_BASE_URL
     || process.env.BIZAR_MODEL_ROUTER_URL
     || (!force && (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL))
@@ -673,7 +669,6 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   // source of truth for defaultMode, worktree, enableWorkflows, etc. We
   // overlay Bizar-owned keys (mcpServers, hooks, env) on top so the installer
   // honors user preferences without having to fork the template here.
-  const shipped = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'settings.json'), {}) || {};
   const bizarSettings = {
     ...shipped,
     $schema: shipped.$schema || 'https://json.schemastore.org/claude-code-settings.json',
@@ -745,6 +740,8 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || 'sk_9router',
       CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:
         process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY || '1',
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:
+        process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS || shipped.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS || '1',
     },
     hooks: {
       UserPromptSubmit: [{ hooks: [hook('user-prompt-submit', 10)] }],
@@ -755,6 +752,9 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       PostToolUseFailure: [{ matcher: '*', hooks: [hook('post-tool-use-failure')] }],
       SubagentStart: [{ hooks: [hook('subagent-start')] }],
       SubagentStop: [{ hooks: [hook('subagent-stop')] }],
+      TaskCreated: [{ hooks: [hook('task-created', 5)] }],
+      TaskCompleted: [{ hooks: [hook('task-completed', 5)] }],
+      TeammateIdle: [{ hooks: [hook('teammate-idle', 5)] }],
       PreCompact: [{ matcher: '*', hooks: [hook('pre-compact')] }],
       Stop: [{ hooks: [hook('stop')] }],
       SessionEnd: [{ hooks: [hook('session-end')] }],
@@ -916,6 +916,7 @@ export async function runProvision(opts = {}) {
   await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force }));
   await runStep('Syncing hooks',      () => syncHookFiles({ dryRun, force }));
   await runStep('Syncing agents',     () => syncAgentFiles({ dryRun, force }));
+  await runStep('Syncing workflows',  () => syncConfigExtras({ dryRun }));
   await runStep('Installing git hooks', () => installGitHooks({ dryRun }));
   await runStep('Building SDK',       () => buildSdk({ dryRun }));
 
@@ -1004,11 +1005,12 @@ export function writeBizarSkillLock({ skillsSrc, agentsDir }) {
 }
 
 /**
- * Sync commands + skills + hooks + rules + workflows into CLAUDE_DIR.
- * Combines the old syncAgentFiles / syncConfigExtras into one.
+ * Sync auxiliary commands + skills + hooks + rules + native workflows into
+ * CLAUDE_DIR. The dedicated sync steps still own the primary command, skill,
+ * hook, and agent mirrors; this function guarantees user-level workflow files.
  */
 export async function syncConfigExtras({ dryRun = false } = {}) {
-  if (dryRun) return { ok: true, message: '[dry-run] would sync commands + skills + hooks + rules + workflows', counts: { skills: 0, commands: 0, hooks: 0, rules: 0, workflows: 0 } };
+  if (dryRun) return { ok: true, message: '[dry-run] would sync auxiliary commands + skills + hooks + rules + native workflows', counts: { skills: 0, commands: 0, hooks: 0, rules: 0, workflows: 0 } };
 
   const copyDirIfExists = async (srcDir, dstDir) => {
     if (!existsSync(srcDir)) return;
@@ -1024,7 +1026,7 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
   const counts = { skills: 0, commands: 0, hooks: 0, rules: 0, workflows: 0 };
 
   // Commands
-  const commandsSrc = join(REPO_ROOT, 'config', 'commands');
+  const commandsSrc = join(REPO_ROOT, 'config', 'claude', 'commands');
   if (existsSync(commandsSrc)) {
     const commandsDst = join(CLAUDE_DIR, 'commands');
     ensureDir(commandsDst);
@@ -1083,7 +1085,8 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
   if (existsSync(workflowsSrc)) {
     const workflowsDst = join(CLAUDE_DIR, 'workflows');
     await copyDirIfExists(workflowsSrc, workflowsDst);
-    counts.workflows = 1;
+    counts.workflows = readdirSync(workflowsSrc, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.js')).length;
   }
 
   return { ok: true, message: `synced (${counts.commands} commands, ${counts.skills} skills, ${counts.hooks} hooks, ${counts.rules} rules, ${counts.workflows} workflows)`, counts };

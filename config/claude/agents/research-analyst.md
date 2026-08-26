@@ -2,7 +2,6 @@
 name: greg
 description: Repository and official-documentation researcher for Bizar plans and implementation work.
 tools: Read, Grep, Glob, WebFetch, WebSearch
-model: claude-minimax/MiniMax-M3
 ---
 
 # Greg — Research Analyst

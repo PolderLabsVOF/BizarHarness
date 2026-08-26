@@ -1,179 +1,121 @@
 {
-  "$schema": "https://bizar.dev/schema/model-router.v2.json",
-  "version": "11.1.0",
+  "$schema": "https://bizar.dev/schema/model-router.v3.json",
+  "version": "12.0.0",
   "endpoint": "http://localhost:20129/v1",
-  "comment": "Bizar assigns one exact gateway model to each shipped agent. Role selection and complexity/model selection are separate decisions; every run snapshots its assignments before dispatch. Premium orchestrator/debug/planning tier uses Qwen 3.8 Max via the 9router gateway; MiniMax tiers are routed as claude-minimax/* gateway IDs.",
+  "comment": "Mike selects the cheapest sufficient model tier per dispatch. Agent roles never carry fixed models. When live discovery cannot prove a concrete model, omit the Agent model override and inherit the active session model instead of retrying aliases.",
   "gateway": {
-    "required": true,
+    "required": false,
     "endpoint": "http://localhost:20129/v1",
     "availabilityProbe": "/models",
-    "exactModelRequired": true,
-    "unavailableBehavior": "fail",
+    "discoveryTimeoutMs": 3000,
+    "unavailableBehavior": "inherit-session",
     "documentation": "https://code.claude.com/docs/en/llm-gateway"
   },
   "tiers": {
     "premium": {
-      "models": ["claude-qwen/qwen3.8-max"],
-      "purpose": "Primary orchestration, system planning, and last-resort debugging where reasoning quality dominates cost. Qwen 3.8 Max is reserved for the user-facing orchestrator, planning, and Carl escalation."
+      "models": [
+        "claude-qwen/qwen3.8-max",
+        "cx/gpt-5.6-terra"
+      ],
+      "purpose": "Architecture, high-risk planning, adversarial verification, and last-resort debugging where mistakes are expensive.",
+      "effort": "high"
     },
     "high": {
-      "models": ["cx/gpt-5.6-terra"],
-      "purpose": "Complex implementation and adversarial review where mistakes are expensive."
+      "models": [
+        "cx/gpt-5.6-terra",
+        "claude-qwen/qwen3.8-max"
+      ],
+      "purpose": "Complex implementation, security review, and cross-cutting reasoning.",
+      "effort": "high"
     },
     "mid-design": {
-      "models": ["cx/gpt-5.6-luna"],
-      "purpose": "Focused visual-system and interaction-design reasoning."
+      "models": [
+        "cx/gpt-5.6-luna",
+        "claude-minimax/MiniMax-M3"
+      ],
+      "purpose": "UI/UX design and product-quality implementation where visual judgment matters.",
+      "effort": "medium"
     },
     "default": {
-      "models": ["claude-minimax/MiniMax-M3"],
-      "purpose": "Broad, high-throughput research and guarded delivery operations."
+      "models": [
+        "claude-minimax/MiniMax-M3",
+        "claude-minimax/MiniMax-M2.7"
+      ],
+      "purpose": "Broad research, git operations, and ordinary engineering work.",
+      "effort": "medium"
     },
     "mid": {
-      "models": ["claude-minimax/MiniMax-M2.7"],
-      "purpose": "Bounded technical analysis, code search, and moderate implementation."
+      "models": [
+        "claude-minimax/MiniMax-M2.7",
+        "claude-minimax/MiniMax-M3"
+      ],
+      "purpose": "Bounded technical analysis, code search, and moderate implementation.",
+      "effort": "medium"
     },
     "budget": {
-      "models": ["claude-minimax/MiniMax-M2.5"],
-      "purpose": "Deterministic edits, clarification, and mechanical verification."
+      "models": [
+        "claude-minimax/MiniMax-M2.5",
+        "claude-minimax/MiniMax-M2.7"
+      ],
+      "purpose": "Routine deterministic edits, targeted clarification, and scripted verification.",
+      "effort": "low"
     }
   },
-  "roleRouting": {
-    "orchestration": {
-      "agents": ["mike"],
-      "purpose": "The single primary entrypoint; decomposes, dispatches, coordinates, and synthesizes without implementing."
-    },
-    "research": {
-      "agents": ["greg", "oscar"],
-      "purpose": "Repository mapping and official-documentation evidence gathering."
-    },
-    "planning": {
-      "agents": ["paul"],
-      "purpose": "Turn researched facts into reversible, testable implementation plans."
-    },
-    "clarification": {
-      "agents": ["janet"],
-      "purpose": "Ask one high-value question only when missing information materially blocks the plan."
-    },
-    "review": {
-      "agents": ["linda"],
-      "purpose": "Adversarial plan and implementation review."
-    },
-    "implementation": {
-      "agents": ["karen", "todd", "brenda", "pam"],
-      "purpose": "Implement approved work at complexity-appropriate depth."
-    },
-    "debugging": {
-      "agents": ["carl"],
-      "purpose": "Resolve failures that survived lower-cost debugging passes."
-    },
-    "design": {
-      "agents": ["brad", "ria"],
-      "purpose": "Define and audit product visual language and interaction quality."
-    },
-    "verification": {
-      "agents": ["kevin"],
-      "purpose": "Collect browser and user-facing behavior evidence."
-    },
-    "support": {
-      "agents": ["susan"],
-      "purpose": "Answer read-only project questions with source references."
-    },
-    "delivery": {
-      "agents": ["steve"],
-      "purpose": "Perform approval-gated Git and external delivery operations."
-    }
+  "roleDefaults": {
+    "mike": "premium",
+    "paul": "premium",
+    "carl": "premium",
+    "karen": "high",
+    "linda": "high",
+    "ria": "mid-design",
+    "greg": "default",
+    "steve": "default",
+    "oscar": "mid",
+    "todd": "mid",
+    "susan": "mid",
+    "pam": "budget",
+    "brenda": "budget",
+    "janet": "budget",
+    "kevin": "budget",
+    "brad": "mid-design"
   },
-  "agents": {
-    "mike": {
-      "model": "claude-qwen/qwen3.8-max",
-      "tier": "premium",
-      "rationale": "The sole main orchestrator the user talks to; Qwen 3.8 Max sustains cross-phase decomposition, coordination, and synthesis without losing project constraints."
+  "complexityRules": [
+    {
+      "when": "irreversible, security-sensitive, architectural, or previously failed twice",
+      "tier": "premium"
     },
-    "paul": {
-      "model": "claude-qwen/qwen3.8-max",
-      "tier": "premium",
-      "rationale": "System-wide plans and reversible execution boundaries require the strongest long-horizon reasoning; shares the user-facing orchestrator tier."
+    {
+      "when": "cross-cutting implementation or adversarial review",
+      "tier": "high"
     },
-    "carl": {
-      "model": "claude-qwen/qwen3.8-max",
-      "tier": "premium",
-      "rationale": "Last-resort debugging is reserved for novel cross-cutting failures; Qwen 3.8 Max gives Carl the same headroom as the user-facing orchestrator."
+    {
+      "when": "UI or product design judgment dominates",
+      "tier": "mid-design"
     },
-    "karen": {
-      "model": "cx/gpt-5.6-terra",
-      "tier": "high",
-      "rationale": "Complex implementation and architecture work need high reasoning while preserving a distinct escalation tier."
+    {
+      "when": "bounded implementation or codebase research",
+      "tier": "mid"
     },
-    "linda": {
-      "model": "cx/gpt-5.6-terra",
-      "tier": "high",
-      "rationale": "Adversarial review needs strong independent reasoning to detect plan, security, and verification gaps."
-    },
-    "brad": {
-      "model": "cx/gpt-5.6-luna",
-      "tier": "mid-design",
-      "rationale": "Brand systems benefit from a focused design model rather than general implementation capacity."
-    },
-    "ria": {
-      "model": "cx/gpt-5.6-luna",
-      "tier": "mid-design",
-      "rationale": "UI critique, interaction detail, and accessibility review align with the focused design tier."
-    },
-    "greg": {
-      "model": "claude-minimax/MiniMax-M3",
-      "tier": "default",
-      "rationale": "Repository and official-documentation research needs broad context handling at high throughput."
-    },
-    "steve": {
-      "model": "claude-minimax/MiniMax-M3",
-      "tier": "default",
-      "rationale": "Guarded Git and delivery operations need dependable command reasoning more than speculative depth."
-    },
-    "todd": {
-      "model": "claude-minimax/MiniMax-M2.7",
-      "tier": "mid",
-      "rationale": "Moderate implementation is bounded enough for the mid tier while still requiring technical judgment."
-    },
-    "oscar": {
-      "model": "claude-minimax/MiniMax-M2.7",
-      "tier": "mid",
-      "rationale": "Intent-based code discovery is a bounded technical analysis task with concrete evidence checks."
-    },
-    "susan": {
-      "model": "claude-minimax/MiniMax-M2.7",
-      "tier": "mid",
-      "rationale": "Source-grounded project explanations need enough reasoning to connect code paths without implementation overhead."
-    },
-    "brenda": {
-      "model": "claude-minimax/MiniMax-M2.5",
-      "tier": "budget",
-      "rationale": "Routine deterministic edits and maintenance should use the lowest capable model."
-    },
-    "pam": {
-      "model": "claude-minimax/MiniMax-M2.5",
-      "tier": "budget",
-      "rationale": "Single-shot mechanical tasks are intentionally constrained to the budget model."
-    },
-    "janet": {
-      "model": "claude-minimax/MiniMax-M2.5",
-      "tier": "budget",
-      "rationale": "One targeted clarification is a narrow task that does not justify a higher reasoning tier."
-    },
-    "kevin": {
-      "model": "claude-minimax/MiniMax-M2.5",
-      "tier": "budget",
-      "rationale": "Scripted browser verification is mechanical and evidence-driven."
+    {
+      "when": "deterministic, mechanical, or clarification-only",
+      "tier": "budget"
     }
-  },
+  ],
   "policies": {
     "mainOrchestrator": "mike",
-    "assignmentSnapshot": "immutable-per-run",
-    "requireConfiguredGateway": true,
-    "requireExactRequestedModel": true,
-    "rejectDispatchModelOverride": true,
-    "silentFallback": false,
-    "unavailableModel": "fail-and-report",
-    "fallback_chain": [],
-    "costCeilingPerSessionUsd": 5.0
+    "selectionOwner": "orchestrator",
+    "dispatchModelOverride": "allowed-when-discovered",
+    "unknownAgent": "inherit-session",
+    "discoveryFailure": "inherit-session",
+    "unavailableModel": "inherit-session",
+    "silentProviderSubstitution": false,
+    "retryModelAliases": false,
+    "snapshotDecisions": true,
+    "maxDispatchModelAttempts": 1
+  },
+  "costControls": {
+    "maxConcurrentAgents": 10,
+    "maxPremiumAgentsPerWorkflow": 3,
+    "preferInheritanceWhenDiscoveryUnavailable": true
   }
 }

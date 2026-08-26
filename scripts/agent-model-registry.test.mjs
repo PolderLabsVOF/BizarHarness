@@ -6,139 +6,70 @@ import { describe, it } from 'node:test';
 import {
   createRunAssignmentSnapshot,
   loadModelRouter,
+  resolveDispatchModel,
   verifyRunAssignmentSnapshot,
 } from '../config/agents/model-assignment.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const AGENTS_DIR = join(ROOT, 'config', 'claude', 'agents');
 const ROUTER_PATH = join(ROOT, 'config', 'claude', 'model-router.json');
-const ALLOWED_MODELS = new Set([
-  'claude-qwen/qwen3.8-max',
-  'cx/gpt-5.6-terra',
-  'cx/gpt-5.6-luna',
-  'claude-minimax/MiniMax-M3',
-  'claude-minimax/MiniMax-M2.7',
-  'claude-minimax/MiniMax-M2.5',
-]);
 
 function readAgents() {
   return readdirSync(AGENTS_DIR)
-    .filter((file) => file.endsWith('.md'))
-    .sort()
-    .map((file) => {
-      const text = readFileSync(join(AGENTS_DIR, file), 'utf8');
-      const frontmatter = text.startsWith('---') ? text.split('---', 3)[1] : '';
-      const field = (name) => new RegExp(`^${name}:\\s*(.+)$`, 'm').exec(frontmatter)?.[1].trim();
-      return { file, text, name: field('name'), model: field('model'), tools: field('tools') };
-    });
+    .filter((name) => name.endsWith('.md'))
+    .map((name) => ({ name, body: readFileSync(join(AGENTS_DIR, name), 'utf8') }));
 }
 
-describe('canonical Bizar agent/model registry', () => {
-  const registry = loadModelRouter(ROUTER_PATH);
-  const agents = readAgents();
-
-  it('enumerates all 16 shipped agents with exact supported models and WebSearch', () => {
-    assert.equal(agents.length, 16);
-    assert.equal(new Set(agents.map(({ name }) => name)).size, agents.length);
-    for (const agent of agents) {
-      assert.ok(agent.name, `${agent.file} must declare a name`);
-      assert.ok(ALLOWED_MODELS.has(agent.model), `${agent.name} has unsupported model ${agent.model}`);
-      assert.match(agent.tools ?? '', /(?:^|,\s*)WebSearch(?:,|$)/, `${agent.name} must retain WebSearch`);
-    }
-    assert.deepEqual(new Set(agents.map(({ model }) => model)), ALLOWED_MODELS, 'the six requested Qwen/cx/MiniMax models should all be used');
-  });
-
-  it('keeps Mike as the unique primary orchestrator on Qwen 3.8 Max', () => {
-    assert.equal(registry.policies.mainOrchestrator, 'mike');
-    assert.deepEqual(registry.roleRouting.orchestration.agents, ['mike']);
-    const orchestrationMemberships = Object.entries(registry.roleRouting)
-      .filter(([, route]) => route.agents.includes('mike'))
-      .map(([role]) => role);
-    assert.deepEqual(orchestrationMemberships, ['orchestration']);
-
-    const mike = agents.find(({ name }) => name === 'mike');
-    assert.equal(mike?.model, 'claude-qwen/qwen3.8-max');
-    assert.match(mike?.text ?? '', /single main orchestrator/i);
-  });
-
-  it('separates role selection from complexity tiers and covers each agent once', () => {
-    const roleMembers = Object.values(registry.roleRouting).flatMap(({ agents: names }) => names);
-    assert.equal(roleMembers.length, agents.length);
-    assert.equal(new Set(roleMembers).size, roleMembers.length, 'each specialist must have exactly one primary role');
-    assert.deepEqual(new Set(roleMembers), new Set(agents.map(({ name }) => name)));
-
-    for (const [role, route] of Object.entries(registry.roleRouting)) {
-      assert.ok(route.purpose, `${role} needs a routing rationale`);
-      assert.ok(Array.isArray(route.agents) && route.agents.length > 0, `${role} needs agents`);
-    }
-    for (const [tier, definition] of Object.entries(registry.tiers)) {
-      assert.ok(definition.purpose, `${tier} needs a complexity rationale`);
-      assert.equal(definition.models.length, 1, `${tier} must resolve to one exact model, not a fallback list`);
+describe('dynamic model router', () => {
+  it('keeps custom agent roles model-agnostic', () => {
+    for (const agent of readAgents()) {
+      assert.doesNotMatch(agent.body, /^model:/m, `${agent.name} must inherit or receive an orchestrator-selected model`);
     }
   });
 
-  it('detects router/frontmatter drift and requires a rationale for every assignment', () => {
-    assert.deepEqual(new Set(Object.keys(registry.agents)), new Set(agents.map(({ name }) => name)));
-    for (const agent of agents) {
-      const assignment = registry.agents[agent.name];
-      assert.equal(assignment.model, agent.model, `${agent.name} frontmatter drifted from the router`);
-      assert.ok(assignment.rationale?.length >= 40, `${agent.name} needs a substantive assignment rationale`);
-      assert.ok(registry.tiers[assignment.tier], `${agent.name} uses unknown tier ${assignment.tier}`);
-      assert.deepEqual(registry.tiers[assignment.tier].models, [assignment.model]);
-    }
+  it('defines orchestrator-owned dynamic tiers and bounded failure behavior', () => {
+    const registry = loadModelRouter(ROUTER_PATH);
+    assert.equal(registry.policies.selectionOwner, 'orchestrator');
+    assert.equal(registry.policies.discoveryFailure, 'inherit-session');
+    assert.equal(registry.policies.unavailableModel, 'inherit-session');
+    assert.equal(registry.policies.retryModelAliases, false);
+    assert.equal(registry.policies.maxDispatchModelAttempts, 1);
+    assert.ok(Object.keys(registry.tiers).length >= 3);
   });
 
-  it('requires the configured gateway and forbids every silent fallback path', () => {
-    assert.equal(registry.gateway.required, true);
-    assert.equal(registry.gateway.endpoint, registry.endpoint);
-    assert.equal(registry.gateway.exactModelRequired, true);
-    assert.equal(registry.gateway.unavailableBehavior, 'fail');
-    assert.equal(registry.policies.requireConfiguredGateway, true);
-    assert.equal(registry.policies.requireExactRequestedModel, true);
-    assert.equal(registry.policies.rejectDispatchModelOverride, true);
-    assert.equal(registry.policies.silentFallback, false);
-    assert.deepEqual(registry.policies.fallback_chain, []);
-    assert.equal(Object.hasOwn(registry.policies, 'gpt_never_for'), false, 'role-level GPT prohibitions contradict complexity routing');
+  it('selects the first live candidate from the chosen tier', () => {
+    const registry = loadModelRouter(ROUTER_PATH);
+    const second = registry.tiers.mid.models[1];
+    const decision = resolveDispatchModel({ agent: 'todd', availableModelIds: [second], registry });
+    assert.equal(decision.tier, 'mid');
+    assert.equal(decision.model, second);
+    assert.equal(decision.inheritSession, false);
   });
-});
 
-describe('per-run model assignment snapshot', () => {
-  const registry = loadModelRouter(ROUTER_PATH);
-  const availableModelIds = [...ALLOWED_MODELS];
+  it('inherits the session when discovery is unavailable or candidates are absent', () => {
+    const registry = loadModelRouter(ROUTER_PATH);
+    assert.equal(resolveDispatchModel({ agent: 'greg', registry }).inheritSession, true);
+    assert.equal(resolveDispatchModel({ agent: 'greg', availableModelIds: [], registry }).inheritSession, true);
+    assert.equal(resolveDispatchModel({ agent: 'unknown', availableModelIds: [], registry }).tier, 'default');
+  });
 
-  it('freezes exact assignments and verifies their fingerprint', () => {
+  it('snapshots only requested dispatch decisions and protects integrity', () => {
+    const registry = loadModelRouter(ROUTER_PATH);
+    const availableModelIds = Object.values(registry.tiers).flatMap((tier) => tier.models);
     const snapshot = createRunAssignmentSnapshot({
       runId: 'run-123',
-      agentNames: ['mike', 'todd', 'ria'],
+      agentNames: ['mike', 'todd'],
       availableModelIds,
       registry,
-      createdAt: '2026-08-02T00:00:00.000Z',
+      createdAt: '2026-08-25T00:00:00.000Z',
     });
-
-    assert.equal(snapshot.assignments.mike.model, 'claude-qwen/qwen3.8-max');
-    assert.equal(snapshot.assignments.todd.model, 'claude-minimax/MiniMax-M2.7');
-    assert.equal(snapshot.assignments.ria.model, 'cx/gpt-5.6-luna');
-    assert.equal(snapshot.gatewayEndpoint, registry.gateway.endpoint);
-    assert.equal(snapshot.availabilityProbe, registry.gateway.availabilityProbe);
+    assert.deepEqual(Object.keys(snapshot.decisions), ['mike', 'todd']);
+    assert.equal(snapshot.decisions.mike.tier, 'premium');
+    assert.equal(snapshot.decisions.todd.tier, 'mid');
     assert.equal(Object.isFrozen(snapshot), true);
-    assert.equal(Object.isFrozen(snapshot.assignments), true);
-    assert.equal(Object.isFrozen(snapshot.assignments.mike), true);
     assert.equal(verifyRunAssignmentSnapshot(snapshot), true);
-    assert.throws(() => { snapshot.assignments.mike.model = 'claude-minimax/MiniMax-M2.5'; }, TypeError);
-  });
-
-  it('fails rather than substituting an unavailable or unknown assignment', () => {
-    assert.throws(
-      () => createRunAssignmentSnapshot({ runId: 'run-124', agentNames: ['mike'], availableModelIds: ['claude-minimax/MiniMax-M3'], registry }),
-      (error) => error.code === 'REQUESTED_MODEL_UNAVAILABLE' && /refusing silent fallback/.test(error.message),
-    );
-    assert.throws(
-      () => createRunAssignmentSnapshot({ runId: 'run-125', agentNames: ['unknown'], availableModelIds, registry }),
-      (error) => error.code === 'UNKNOWN_AGENT',
-    );
-    assert.throws(
-      () => createRunAssignmentSnapshot({ runId: 'run-126', agentNames: ['mike'], registry }),
-      (error) => error.code === 'GATEWAY_AVAILABILITY_REQUIRED',
-    );
+    const tampered = JSON.parse(JSON.stringify(snapshot));
+    tampered.decisions.mike.model = 'tampered/model';
+    assert.equal(verifyRunAssignmentSnapshot(tampered), false);
   });
 });

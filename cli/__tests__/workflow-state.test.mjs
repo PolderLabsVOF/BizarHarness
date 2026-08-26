@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -24,7 +23,6 @@ import {
   WorkflowStateError,
   advanceWorkflow,
   cancelWorkflow,
-  canonicalJson,
   createWorkflowDescriptor,
   failWorkflow,
   getWorkflowState,
@@ -40,7 +38,7 @@ import { probeAvailableModels } from '../commands/workflow.mjs';
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), '..', '..');
 const testRegistry = loadModelRouter();
 const availableModelIds = [
-  ...new Set(Object.values(testRegistry.agents).map((assignment) => assignment.model)),
+  ...new Set(Object.values(testRegistry.tiers).flatMap((tier) => tier.models)),
 ];
 
 function startWorkflow(options) {
@@ -142,41 +140,32 @@ test('fixed descriptors expose only canonical profiles and stages', () => {
   assertCode('INVALID_PROFILE', () => createWorkflowDescriptor('custom-shell-stage'));
 });
 
-test('production starts require exact availability and bind an immutable assignment snapshot', (t) => {
+test('workflow starts snapshot dynamic routing decisions and inherit when discovery is unavailable', (t) => {
   const root = project(t);
-  assertCode('GATEWAY_AVAILABILITY_REQUIRED', () => startWorkflowCore({
+  const inherited = startWorkflowCore({
     projectRoot: root,
-    sessionId: 'session-1',
-    goal: 'No unverified model dispatch',
+    sessionId: 'session-inherit',
+    goal: 'Inherit session model when discovery is unavailable',
     registry: testRegistry,
-  }));
-  assertCode('GATEWAY_UNAVAILABLE', () => startWorkflowCore({
-    projectRoot: root,
-    sessionId: 'session-1',
-    goal: 'No empty model response',
-    registry: testRegistry,
-    availableModelIds: [],
-  }));
-  assertCode('REQUESTED_MODEL_UNAVAILABLE', () => startWorkflowCore({
-    projectRoot: root,
-    sessionId: 'session-1',
-    goal: 'No inexact model substitution',
-    registry: testRegistry,
-    availableModelIds: availableModelIds.map((id) => id.replace(/^cx\//, '')),
-  }));
+    requiredAgents: ['mike'],
+  });
+  assert.equal(inherited.assignmentSnapshot.decisions.mike.model, null);
+  assert.equal(inherited.assignmentSnapshot.decisions.mike.inheritSession, true);
 
   const state = startWorkflow({
     projectRoot: root,
-    sessionId: 'session-1',
-    goal: 'Bind exact agent assignments',
+    sessionId: 'session-live',
+    goal: 'Bind live dynamic routing decisions',
+    requiredAgents: ['mike', 'todd'],
   });
   assert.equal(state.assignmentSnapshot.runId, state.runId);
   assert.equal(state.assignmentSnapshot.gatewayEndpoint, testRegistry.gateway.endpoint);
   assert.equal(state.assignmentSnapshot.availabilityProbe, testRegistry.gateway.availabilityProbe);
-  assert.equal(Object.keys(state.assignmentSnapshot.assignments).length, Object.keys(testRegistry.agents).length);
-  assert.equal(state.assignmentSnapshot.assignments.mike.model, 'claude-qwen/qwen3.8-max');
+  assert.equal(Object.keys(state.assignmentSnapshot.decisions).length, 2);
+  assert.equal(state.assignmentSnapshot.decisions.mike.model, testRegistry.tiers.premium.models[0]);
+  assert.equal(state.assignmentSnapshot.decisions.todd.model, testRegistry.tiers.mid.models[0]);
   assert.equal(Object.isFrozen(state.assignmentSnapshot), true);
-  assert.equal(Object.isFrozen(state.assignmentSnapshot.assignments.mike), true);
+  assert.equal(Object.isFrozen(state.assignmentSnapshot.decisions.mike), true);
 });
 
 test('availability probes enforce timeout and exact response ids', async () => {
@@ -428,10 +417,10 @@ test('state hash and canonical descriptor detect on-disk tampering', (t) => {
   assertCode('DESCRIPTOR_MISMATCH', () => getWorkflowState({ projectRoot: freshRoot, sessionId: 'session-1' }));
 });
 
-test('assignment snapshots reject cross-run reuse and fingerprint tampering', (t) => {
+test('routing snapshots reject cross-run reuse and fingerprint tampering', (t) => {
   const root = project(t);
   const paths = resolveWorkflowPaths({ projectRoot: root, sessionId: 'session-1' });
-  const state = startWorkflow({ projectRoot: root, sessionId: 'session-1', goal: 'Protect assignments' });
+  const state = startWorkflow({ projectRoot: root, sessionId: 'session-1', goal: 'Protect assignments', requiredAgents: ['mike'] });
   const crossRun = JSON.parse(JSON.stringify(state));
   crossRun.assignmentSnapshot.runId = '00000000-0000-4000-8000-000000000000';
   writeFileSync(paths.statePath, JSON.stringify(crossRun));
@@ -439,30 +428,28 @@ test('assignment snapshots reject cross-run reuse and fingerprint tampering', (t
 
   const secondRoot = project(t);
   const secondPaths = resolveWorkflowPaths({ projectRoot: secondRoot, sessionId: 'session-1' });
-  const second = startWorkflow({ projectRoot: secondRoot, sessionId: 'session-1', goal: 'Protect fingerprints' });
+  const second = startWorkflow({ projectRoot: secondRoot, sessionId: 'session-1', goal: 'Protect fingerprints', requiredAgents: ['mike'] });
   const tampered = JSON.parse(JSON.stringify(second));
-  tampered.assignmentSnapshot.assignments.mike.model = 'claude-minimax/MiniMax-M2.5';
+  tampered.assignmentSnapshot.decisions.mike.model = 'claude-minimax/MiniMax-M2.5';
   writeFileSync(secondPaths.statePath, JSON.stringify(tampered));
   assertCode('ASSIGNMENT_INTEGRITY_ERROR', () => getWorkflowState({ projectRoot: secondRoot, sessionId: 'session-1' }));
 });
 
-test('workflow validation rejects an empty frozen availability probe even with a matching snapshot fingerprint', (t) => {
+test('workflow validation accepts session inheritance without discovery evidence', (t) => {
   const root = project(t);
-  const state = structuredClone(startWorkflow({
+  const state = startWorkflowCore({
     projectRoot: root,
     sessionId: 'session-1',
-    goal: 'Validate frozen probe coordinates',
-  }));
-  state.assignmentSnapshot.availabilityProbe = '';
-  const { fingerprint: _fingerprint, ...payload } = state.assignmentSnapshot;
-  state.assignmentSnapshot.fingerprint = createHash('sha256')
-    .update(canonicalJson(payload))
-    .digest('hex');
-
-  assertCode('INVALID_STATE', () => validateWorkflowState(state, {
+    goal: 'Validate session-model inheritance',
+    registry: testRegistry,
+    requiredAgents: ['mike'],
+  });
+  assert.equal(state.assignmentSnapshot.discoveryAttempted, false);
+  assert.equal(state.assignmentSnapshot.decisions.mike.inheritSession, true);
+  assert.equal(validateWorkflowState(state, {
     projectRoot: root,
     sessionId: 'session-1',
-  }));
+  }), state);
 });
 
 test('session ids cannot traverse or alias workflow state paths', (t) => {
@@ -630,7 +617,7 @@ test('CLI accepts matching profile aliases and rejects conflicts before probing'
   assert.equal(gateway.requests.length, 1, 'conflicting aliases must fail before a network probe');
 });
 
-test('CLI refuses to start when effective inference routing cannot use the frozen gateway', async (t) => {
+test('CLI falls back to session inheritance when gateway coordinates are missing or mismatched', async (t) => {
   const root = project(t);
   const gateway = await fakeModelGateway(t, root);
 
@@ -638,38 +625,35 @@ test('CLI refuses to start when effective inference routing cannot use the froze
     ...gateway.env,
     CLAUDE_SESSION_ID: 'missing-inference-endpoint',
     ANTHROPIC_BASE_URL: '',
-  }, ['start', '--goal', 'Require an effective inference endpoint']);
-  assert.equal(missing.status, 2);
-  assert.equal(JSON.parse(missing.stderr).error.code, 'INFERENCE_ENDPOINT_REQUIRED');
+  }, ['start', '--goal', 'Inherit without an effective inference endpoint']);
+  assert.equal(missing.status, 0, missing.stderr);
 
   const mismatch = await runWorkflowCli(root, {
     ...gateway.env,
     CLAUDE_SESSION_ID: 'mismatched-inference-endpoint',
     ANTHROPIC_BASE_URL: 'https://other-gateway.example/v1',
-  }, ['start', '--goal', 'Reject mismatched inference routing']);
-  assert.equal(mismatch.status, 1);
-  assert.equal(JSON.parse(mismatch.stderr).error.code, 'INFERENCE_ENDPOINT_MISMATCH');
+  }, ['start', '--goal', 'Inherit on mismatched inference routing']);
+  assert.equal(mismatch.status, 0, mismatch.stderr);
 
   const contradiction = await runWorkflowCli(root, {
     ...gateway.env,
     CLAUDE_SESSION_ID: 'contradictory-router-endpoint',
     BIZAR_MODEL_ROUTER_URL: 'https://other-gateway.example/v1',
-  }, ['start', '--goal', 'Reject contradictory router routing']);
-  assert.equal(contradiction.status, 1);
-  assert.equal(JSON.parse(contradiction.stderr).error.code, 'INFERENCE_ENDPOINT_MISMATCH');
-  assert.equal(gateway.requests.length, 0, 'endpoint failures must occur before the availability probe');
+  }, ['start', '--goal', 'Inherit on contradictory router routing']);
+  assert.equal(contradiction.status, 0, contradiction.stderr);
+  assert.equal(gateway.requests.length, 0, 'coordinate failures must skip discovery rather than retry');
 });
 
-test('CLI refuses unavailable exact agent models without writing workflow state', async (t) => {
+test('CLI starts with session inheritance when no configured tier model is available', async (t) => {
   const root = project(t);
-  const unavailable = availableModelIds.filter((id) => id !== 'claude-qwen/qwen3.8-max');
-  const gateway = await fakeModelGateway(t, root, unavailable);
-  gateway.env.CLAUDE_SESSION_ID = 'unavailable-session';
+  const gateway = await fakeModelGateway(t, root, ['unconfigured/provider-model']);
+  gateway.env.CLAUDE_SESSION_ID = 'inherit-session';
   const result = await runWorkflowCli(root, gateway.env, [
-    'start', '--goal', 'Do not silently substitute models',
+    'start', '--goal', 'Inherit instead of cycling model aliases',
   ]);
-  assert.equal(result.status, 1);
-  assert.equal(JSON.parse(result.stderr).error.code, 'REQUESTED_MODEL_UNAVAILABLE');
-  const paths = resolveWorkflowPaths({ projectRoot: root, sessionId: 'unavailable-session' });
-  assert.equal(existsSync(paths.statePath), false);
+  assert.equal(result.status, 0, result.stderr);
+  const paths = resolveWorkflowPaths({ projectRoot: root, sessionId: 'inherit-session' });
+  assert.equal(existsSync(paths.statePath), true);
+  const state = JSON.parse(readFileSync(paths.statePath, 'utf8'));
+  assert.equal(state.assignmentSnapshot.discoveryAttempted, true);
 });

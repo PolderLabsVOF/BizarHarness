@@ -101,6 +101,42 @@ test('model router ownership recognizes Bizar schemas and preserves foreign sche
   assert.equal(isBizarManagedModelRouter(null), false);
 });
 
+describe('syncConfigExtras() — native workflows', () => {
+  test('dry-run reports workflow support', async () => {
+    const { syncConfigExtras } = await import('./provision.mjs');
+    const result = await syncConfigExtras({ dryRun: true });
+    assert.equal(result.ok, true);
+    assert.equal(typeof result.counts.workflows, 'number');
+    assert.match(result.message, /workflow/);
+  });
+
+  test('real install copies all shipped workflows and ultracode surfaces', () => {
+    const home = mkdtempSync(join(tmpdir(), 'bizar-workflows-'));
+    const claudeDir = join(home, '.claude');
+    try {
+      const script = `
+        import { syncConfigExtras } from './cli/provision.mjs';
+        const result = await syncConfigExtras();
+        if (!result.ok) process.exit(1);
+        console.log(JSON.stringify(result.counts));
+      `;
+      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+        cwd: join(import.meta.dirname, '..'),
+        env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: claudeDir },
+        encoding: 'utf8',
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      for (const workflow of ['ultracode.js', 'ultracode-review.js', 'ultracode-research.js']) {
+        assert.equal(existsSync(join(claudeDir, 'workflows', workflow)), true, workflow);
+      }
+      assert.equal(existsSync(join(claudeDir, 'skills', 'ultracode', 'SKILL.md')), true);
+      assert.equal(existsSync(join(claudeDir, 'commands', 'ultracode.md')), true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
   let home;
 
@@ -159,6 +195,12 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
     assert.equal(settings.permissions.defaultMode, 'bypassPermissions');
+    assert.equal(settings.worktree.bgIsolation, 'worktree');
+    assert.equal(settings.enableWorkflows, true);
+    assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
+    assert.equal(settings.hooks.TaskCreated[0].hooks[0].command, 'bizar hook task-created');
+    assert.equal(settings.hooks.TaskCompleted[0].hooks[0].command, 'bizar hook task-completed');
+    assert.equal(settings.hooks.TeammateIdle[0].hooks[0].command, 'bizar hook teammate-idle');
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
     assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));

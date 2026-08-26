@@ -318,31 +318,36 @@ export function validateWorkflowState(state, context) {
   assert(state.assignmentSnapshot.runId === state.runId, 'ASSIGNMENT_RUN_MISMATCH', 'model assignment snapshot belongs to a different run');
   assert(verifyRunAssignmentSnapshot(state.assignmentSnapshot), 'ASSIGNMENT_INTEGRITY_ERROR', 'model assignment snapshot fingerprint is invalid');
   assert(
-    typeof state.assignmentSnapshot.gatewayEndpoint === 'string' &&
+    state.assignmentSnapshot.gatewayEndpoint === null || (
+      typeof state.assignmentSnapshot.gatewayEndpoint === 'string' &&
       state.assignmentSnapshot.gatewayEndpoint.length > 0 &&
-      state.assignmentSnapshot.gatewayEndpoint.trim() === state.assignmentSnapshot.gatewayEndpoint,
+      state.assignmentSnapshot.gatewayEndpoint.trim() === state.assignmentSnapshot.gatewayEndpoint
+    ),
     'INVALID_STATE',
-    'model assignment snapshot gateway endpoint is invalid',
+    'routing snapshot gateway endpoint is invalid',
   );
   assert(
-    typeof state.assignmentSnapshot.availabilityProbe === 'string' &&
+    state.assignmentSnapshot.availabilityProbe === null || (
+      typeof state.assignmentSnapshot.availabilityProbe === 'string' &&
       state.assignmentSnapshot.availabilityProbe.length > 0 &&
-      state.assignmentSnapshot.availabilityProbe.trim() === state.assignmentSnapshot.availabilityProbe,
+      state.assignmentSnapshot.availabilityProbe.trim() === state.assignmentSnapshot.availabilityProbe
+    ),
     'INVALID_STATE',
-    'model assignment snapshot availability probe is invalid',
+    'routing snapshot availability probe is invalid',
   );
   assert(
-    state.assignmentSnapshot.assignments &&
-      typeof state.assignmentSnapshot.assignments === 'object' &&
-      !Array.isArray(state.assignmentSnapshot.assignments) &&
-      Object.keys(state.assignmentSnapshot.assignments).length > 0,
+    state.assignmentSnapshot.decisions &&
+      typeof state.assignmentSnapshot.decisions === 'object' &&
+      !Array.isArray(state.assignmentSnapshot.decisions),
     'INVALID_STATE',
-    'model assignment snapshot has no required agents',
+    'routing decision snapshot is invalid',
   );
-  for (const [agent, assignment] of Object.entries(state.assignmentSnapshot.assignments)) {
-    assert(typeof agent === 'string' && agent.length > 0, 'INVALID_STATE', 'model assignment agent is invalid');
-    assert(typeof assignment?.model === 'string' && assignment.model.length > 0, 'INVALID_STATE', `model assignment for ${agent} is invalid`);
-    assert(typeof assignment?.tier === 'string' && assignment.tier.length > 0, 'INVALID_STATE', `model tier for ${agent} is invalid`);
+  for (const [agent, decision] of Object.entries(state.assignmentSnapshot.decisions)) {
+    assert(typeof agent === 'string' && agent.length > 0, 'INVALID_STATE', 'routing decision agent is invalid');
+    assert(decision && typeof decision === 'object', 'INVALID_STATE', `routing decision for ${agent} is invalid`);
+    assert(typeof decision.tier === 'string' && decision.tier.length > 0, 'INVALID_STATE', `routing tier for ${agent} is invalid`);
+    assert(decision.model === null || (typeof decision.model === 'string' && decision.model.length > 0), 'INVALID_STATE', `routing model for ${agent} is invalid`);
+    assert(typeof decision.inheritSession === 'boolean', 'INVALID_STATE', `routing inheritance for ${agent} is invalid`);
   }
   deepFreeze(state.assignmentSnapshot);
   assert(state.attempts && typeof state.attempts === 'object', 'INVALID_STATE', 'workflow attempt counters are missing');

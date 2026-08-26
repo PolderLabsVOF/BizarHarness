@@ -125,19 +125,26 @@ delegation through the custom `mike` agent. Mike routes trivial work to
 review, and verification pipeline. Specialized worker matches supplement this
 route but never replace it.
 
-Mike is the sole general orchestrator and is pinned to `claude-qwen/qwen3.8-max` (Qwen 3.8 Max via the 9router gateway).
-Workers do not redesign or recursively own the pipeline: they execute bounded
-research, planning, implementation, review, and verification assignments.
-Their models come from one strict role/difficulty registry: GPT Terra for
-high-complexity engineering and adversarial review, GPT Luna for design and
-medium synthesis, MiniMax M3 for general research and implementation, M2.7 for
-mechanical execution/test repair, and M2.5 for trivial coordination work.
+Mike is the sole general orchestrator. Agent roles are model-agnostic: no
+custom agent carries fixed `model:` frontmatter. Before each dispatch Mike
+selects the cheapest sufficient tier from task risk and complexity. When live
+gateway discovery reports a configured candidate, Mike passes that model on the
+Agent call. When discovery is unavailable, stale, ambiguous, or has no matching
+candidate, the Agent call omits `model` and inherits the active session model.
+A dispatch is attempted once; Bizar does not cycle aliases, providers, or tiers.
 
-Each workflow stores an immutable snapshot of the resolved agent/model matrix
-before dispatch. Gateway model discovery must confirm every selected ID;
-unavailable or externally overridden models are reported as routing blockers,
-not silently replaced. The `cx/*` and `bizar/*` IDs are compatibility-gateway
-contracts rather than Anthropic-supported non-Claude routing.
+Workflow state records only the routing decisions made for requested agents,
+including whether each dispatch used a concrete live candidate or inherited the
+session. The `cx/*`, `claude-qwen/*`, and `claude-minimax/*` IDs are optional
+compatibility-gateway contracts, not permanent properties of agent roles.
+
+Bizar also installs three native Claude Code dynamic workflows under
+`~/.claude/workflows/`: `ultracode`, `ultracode-review`, and
+`ultracode-research`. Native workflows hold deterministic fan-out in JavaScript;
+subagents handle focused delegation; experimental agent teams handle tasks where
+workers need direct coordination and shared task state. Agent teams are enabled
+with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, while TaskCreated, TaskCompleted,
+and TeammateIdle hooks record advisory evidence without blocking or retrying.
 
 Every `SubagentStart` receives a grounding contract: external APIs, libraries,
 frameworks, CLIs, configuration formats, and version-sensitive behavior require

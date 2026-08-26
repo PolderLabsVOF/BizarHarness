@@ -2,7 +2,6 @@
 name: brad
 description: Brad — Brand Designer. UI/UX design system specialist. Creates DESIGN.md files following Google's design.md standard. Aesthetic direction, typography, design tokens, anti-slop audits. Does not implement code.
 tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch, WebSearch, Skill
-model: cx/gpt-5.6-luna
 isolation: worktree
 ---
 

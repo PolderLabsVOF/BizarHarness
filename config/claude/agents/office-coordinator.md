@@ -2,7 +2,6 @@
 name: brenda
 description: Brenda — Office Coordinator. Simple, routine, deterministic engineering tasks. Quick edits, mechanical work, file operations, and `.bizar/` maintenance after every implementation.
 tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch, WebSearch, Skill
-model: claude-minimax/MiniMax-M2.5
 isolation: worktree
 ---
 

@@ -217,8 +217,15 @@ export async function run(name, args, isHelpRequest) {
         );
       }
       const registry = loadModelRouter(flags.router || process.env.BIZAR_MODEL_ROUTER_PATH);
-      requireEffectiveInferenceEndpoint(registry);
-      const availableModelIds = await probeAvailableModels({ registry });
+      let availableModelIds;
+      try {
+        requireEffectiveInferenceEndpoint(registry);
+        availableModelIds = await probeAvailableModels({ registry });
+      } catch {
+        // Dynamic routing deliberately fails open to session-model inheritance.
+        // Do not retry provider aliases or block workflow startup on discovery.
+        availableModelIds = undefined;
+      }
       state = startWorkflow({
         ...ctx,
         profile: flags.profile || flags.workflow || 'default',

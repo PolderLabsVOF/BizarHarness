@@ -14,223 +14,101 @@ import {
   resolveTierModel,
   verifyRunAssignmentSnapshot,
 } from '../src/router/agent-model-registry.ts';
-import { createRunAssignmentSnapshot as createCliRunAssignmentSnapshot } from '../../../config/agents/model-assignment.mjs';
+import { createRunAssignmentSnapshot as createCliRunAssignmentSnapshot, loadModelRouter } from '../../../config/agents/model-assignment.mjs';
 
 const SAMPLE = {
-  $schema: 'https://bizar.dev/schema/model-router.v2.json',
-  version: '11.0.0',
-  endpoint: 'http://localhost:20128/v1',
-  gateway: {
-    required: true,
-    endpoint: 'http://localhost:20128/v1',
-    availabilityProbe: '/models',
-    exactModelRequired: true,
-    unavailableBehavior: 'fail',
-  },
+  $schema: 'https://bizar.dev/schema/model-router.v3.json',
+  version: '12.0.0',
+  endpoint: 'http://localhost:20129/v1',
+  gateway: { endpoint: 'http://localhost:20129/v1', availabilityProbe: '/models', unavailableBehavior: 'inherit-session' },
   tiers: {
-    premium: { models: ['claude-qwen/qwen3.8-max'], purpose: 'Primary orchestration.' },
-    mid: { models: ['claude-minimax/MiniMax-M2.7'], purpose: 'Moderate implementation.' },
-    budget: { models: ['claude-minimax/MiniMax-M2.5'], purpose: 'Mechanical work.' },
+    premium: { models: ['provider/premium-a', 'provider/premium-b'], purpose: 'hard work', effort: 'high' },
+    default: { models: ['provider/default'], purpose: 'ordinary work', effort: 'medium' },
+    mid: { models: ['provider/mid-a', 'provider/mid-b'], purpose: 'bounded work', effort: 'medium' },
   },
-  agents: {
-    mike: { model: 'claude-qwen/qwen3.8-max', tier: 'premium', rationale: 'single main orchestrator' },
-    todd: { model: 'claude-minimax/MiniMax-M2.7', tier: 'mid', rationale: 'moderate implementation' },
-    pam: { model: 'claude-minimax/MiniMax-M2.5', tier: 'budget', rationale: 'single-shot mechanical work' },
-  },
+  roleDefaults: { mike: 'premium', greg: 'default', todd: 'mid' },
   policies: {
-    mainOrchestrator: 'mike',
-    assignmentSnapshot: 'immutable-per-run',
-    requireConfiguredGateway: true,
-    requireExactRequestedModel: true,
-    rejectDispatchModelOverride: true,
-    silentFallback: false,
-    unavailableModel: 'fail-and-report',
-    fallback_chain: [],
+    mainOrchestrator: 'mike', selectionOwner: 'orchestrator', discoveryFailure: 'inherit-session',
+    unavailableModel: 'inherit-session', retryModelAliases: false, maxDispatchModelAttempts: 1,
   },
 };
 
-function clone(value) {
-  return structuredClone(value);
-}
+let tmpDir;
+let configPath;
+let previousRouterEndpoint;
+let previousAnthropicEndpoint;
 
-function writeConfig(path, value = SAMPLE) {
-  writeFileSync(path, JSON.stringify(value));
-}
+beforeEach(() => {
+  tmpDir = mkdtempSync(join(tmpdir(), 'bizar-sdk-model-router-'));
+  configPath = join(tmpDir, 'model-router.json');
+  writeFileSync(configPath, JSON.stringify(SAMPLE));
+  previousRouterEndpoint = process.env.BIZAR_MODEL_ROUTER_URL;
+  previousAnthropicEndpoint = process.env.ANTHROPIC_BASE_URL;
+  delete process.env.BIZAR_MODEL_ROUTER_URL;
+  delete process.env.ANTHROPIC_BASE_URL;
+});
+
+afterEach(() => {
+  if (previousRouterEndpoint === undefined) delete process.env.BIZAR_MODEL_ROUTER_URL;
+  else process.env.BIZAR_MODEL_ROUTER_URL = previousRouterEndpoint;
+  if (previousAnthropicEndpoint === undefined) delete process.env.ANTHROPIC_BASE_URL;
+  else process.env.ANTHROPIC_BASE_URL = previousAnthropicEndpoint;
+  rmSync(tmpDir, { recursive: true, force: true });
+});
 
 function expectRegistryError(fn, code) {
-  try {
-    fn();
-    assert.fail('expected ModelRegistryError');
-  } catch (error) {
-    assert.ok(error instanceof ModelRegistryError);
-    assert.equal(error.code, code);
-  }
+  try { fn(); assert.fail('expected ModelRegistryError'); }
+  catch (error) { assert.ok(error instanceof ModelRegistryError); assert.equal(error.code, code); }
 }
 
-describe('strict agent-model-registry v2', () => {
-  let tmpDir;
-  let configPath;
-
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'bizar-registry-'));
-    configPath = join(tmpDir, 'model-router.json');
-    writeConfig(configPath);
-  });
-
-  afterEach(() => {
-    delete process.env.BIZAR_MODEL_ROUTER_URL;
-    delete process.env.ANTHROPIC_BASE_URL;
-    rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('loads exact assignments, policies, and single-model tiers', () => {
+describe('dynamic model registry', () => {
+  it('loads tier candidates and role defaults', () => {
     const registry = loadModelRegistry({ configPath });
-    assert.equal(registry.version, '11.0.0');
-    assert.equal(registry.endpoint, SAMPLE.endpoint);
-    assert.equal(registry.configuredEndpoint, SAMPLE.endpoint);
-    assert.equal(registry.agents.size, 3);
-    assert.equal(registry.tiers.size, 3);
-    assert.equal(registry.policies.mainOrchestrator, 'mike');
-    assert.equal(registry.policies.silentFallback, false);
-
-    const mike = resolveAgentModel('mike', registry);
-    assert.equal(mike.modelId, 'claude-qwen/qwen3.8-max');
-    assert.equal(mike.tier, 'premium');
-    assert.equal(mike.endpoint, SAMPLE.endpoint);
-
-    const budget = resolveTierModel('budget', registry);
-    assert.equal(budget.modelId, 'claude-minimax/MiniMax-M2.5');
-    assert.deepEqual(budget.fallback, []);
+    assert.equal(registry.version, '12.0.0');
+    assert.equal(registry.tiers.get('premium').modelIds.length, 2);
+    assert.equal(registry.roleDefaults.get('mike'), 'premium');
     assert.equal(listAgentModels(registry).length, 3);
     assert.equal(getEndpoint(registry), SAMPLE.endpoint);
   });
 
-  it('allows endpoint-only override without changing agent/model identity', () => {
-    process.env.BIZAR_MODEL_ROUTER_URL = 'http://configured-gateway:9000/v1';
+  it('selects a live tier candidate and otherwise inherits the session', () => {
     const registry = loadModelRegistry({ configPath });
-    const resolved = resolveAgentModel('pam', registry);
-    assert.equal(registry.endpoint, 'http://configured-gateway:9000/v1');
-    assert.equal(registry.configuredEndpoint, SAMPLE.endpoint);
-    assert.equal(resolved.modelId, SAMPLE.agents.pam.model);
-    assert.equal(resolved.tier, SAMPLE.agents.pam.tier);
+    const live = resolveAgentModel('mike', registry, ['provider/premium-b']);
+    assert.equal(live.modelId, 'provider/premium-b');
+    assert.equal(live.inheritSession, false);
+    const inherited = resolveAgentModel('todd', registry);
+    assert.equal(inherited.modelId, null);
+    assert.equal(inherited.inheritSession, true);
+    assert.equal(resolveAgentModel('unknown', registry).tier, 'default');
+    assert.equal(resolveTierModel('mid', registry, []).inheritSession, true);
   });
 
-  it('throws typed errors for missing, corrupt, or v1 configuration', () => {
-    expectRegistryError(
-      () => loadModelRegistry({ configPath: join(tmpDir, 'missing.json') }),
-      'CONFIG_NOT_FOUND',
-    );
-
-    writeFileSync(configPath, '{not json');
+  it('validates dynamic non-retrying policy', () => {
+    expectRegistryError(() => loadModelRegistry({ configPath: join(tmpDir, 'missing.json') }), 'CONFIG_NOT_FOUND');
+    writeFileSync(configPath, '{');
     expectRegistryError(() => loadModelRegistry({ configPath }), 'CONFIG_INVALID');
-
-    const legacy = clone(SAMPLE);
-    legacy.$schema = 'https://bizar.dev/schema/model-router.v1.json';
-    writeConfig(configPath, legacy);
-    expectRegistryError(() => loadModelRegistry({ configPath }), 'CONFIG_INVALID');
+    writeFileSync(configPath, JSON.stringify({ ...SAMPLE, policies: { ...SAMPLE.policies, retryModelAliases: true } }));
+    expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
   });
 
-  it('rejects missing gateway guarantees, model overrides, and every fallback list', () => {
-    const fallback = clone(SAMPLE);
-    fallback.policies.fallback_chain = ['claude-minimax/MiniMax-M2.5'];
-    writeConfig(configPath, fallback);
-    expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
-
-    const multiModelTier = clone(SAMPLE);
-    multiModelTier.tiers.budget.models.push('claude-minimax/MiniMax-M2.7');
-    writeConfig(configPath, multiModelTier);
-    expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
-
-    const permissiveOverride = clone(SAMPLE);
-    permissiveOverride.policies.rejectDispatchModelOverride = false;
-    writeConfig(configPath, permissiveOverride);
-    expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
-
-    const gatewayDrift = clone(SAMPLE);
-    gatewayDrift.gateway.endpoint = 'http://different-gateway/v1';
-    writeConfig(configPath, gatewayDrift);
-    expectRegistryError(() => loadModelRegistry({ configPath }), 'GATEWAY_POLICY_INVALID');
-  });
-
-  it('rejects assignment/tier drift and unknown agent or tier resolution', () => {
-    const drifted = clone(SAMPLE);
-    drifted.agents.todd.model = 'claude-minimax/MiniMax-M2.5';
-    writeConfig(configPath, drifted);
-    expectRegistryError(() => loadModelRegistry({ configPath }), 'MODEL_POLICY_INVALID');
-
-    writeConfig(configPath);
+  it('creates integrity-protected dynamic decision snapshots', () => {
     const registry = loadModelRegistry({ configPath });
-    expectRegistryError(() => resolveAgentModel('unknown', registry), 'UNKNOWN_AGENT');
-    expectRegistryError(() => resolveTierModel('high', registry), 'UNKNOWN_TIER');
-  });
-
-  it('creates an immutable, verifiable exact-assignment snapshot', () => {
-    const registry = loadModelRegistry({ configPath });
-    const snapshot = createRunAssignmentSnapshot({
-      runId: 'run-123',
-      registry,
-      agentNames: ['mike', 'todd'],
-      availableModelIds: ['claude-qwen/qwen3.8-max', 'claude-minimax/MiniMax-M2.7'],
-      createdAt: '2026-08-02T00:00:00.000Z',
-    });
-
-    assert.equal(snapshot.assignments.mike.model, 'claude-qwen/qwen3.8-max');
-    assert.equal(snapshot.assignments.todd.model, 'claude-minimax/MiniMax-M2.7');
-    assert.equal(snapshot.gatewayEndpoint, registry.endpoint);
-    assert.equal(snapshot.availabilityProbe, registry.gateway.availabilityProbe);
-    assert.equal(Object.isFrozen(snapshot), true);
-    assert.equal(Object.isFrozen(snapshot.assignments), true);
-    assert.equal(Object.isFrozen(snapshot.assignments.mike), true);
+    const snapshot = createRunAssignmentSnapshot({ runId: 'run-1', agentNames: ['mike', 'todd'], availableModelIds: ['provider/premium-a'], registry, createdAt: '2026-08-25T00:00:00.000Z' });
+    assert.equal(snapshot.decisions.mike.model, 'provider/premium-a');
+    assert.equal(snapshot.decisions.todd.inheritSession, true);
     assert.equal(verifyRunAssignmentSnapshot(snapshot), true);
-    assert.equal(verifyRunAssignmentSnapshot({ ...snapshot, availabilityProbe: '/other-models' }), false);
-    assert.throws(() => { snapshot.assignments.mike.model = 'claude-minimax/MiniMax-M2.5'; }, TypeError);
+    const tampered = structuredClone(snapshot);
+    tampered.decisions.mike.model = 'tampered/model';
+    assert.equal(verifyRunAssignmentSnapshot(tampered), false);
   });
 
-  it('produces the exact canonical schemaVersion 1 payload and fingerprint as the CLI snapshot', () => {
-    const registry = loadModelRegistry({ configPath });
-    const input = {
-      runId: 'parity-run-1',
-      agentNames: ['mike', 'todd'],
-      availableModelIds: ['claude-qwen/qwen3.8-max', 'claude-minimax/MiniMax-M2.7'],
-      createdAt: '2026-08-02T12:00:00.000Z',
-    };
-    const sdkSnapshot = createRunAssignmentSnapshot({ ...input, registry });
-    const cliSnapshot = createCliRunAssignmentSnapshot({
-      ...input,
-      registry: clone(SAMPLE),
-    });
-
-    assert.deepEqual(sdkSnapshot, cliSnapshot);
-  });
-
-  it('fails snapshots when gateway evidence or the exact requested model is absent', () => {
-    const registry = loadModelRegistry({ configPath });
-    expectRegistryError(
-      () => createRunAssignmentSnapshot({
-        runId: 'run-124',
-        registry,
-        agentNames: ['mike'],
-        availableModelIds: [],
-      }),
-      'GATEWAY_AVAILABILITY_REQUIRED',
-    );
-    expectRegistryError(
-      () => createRunAssignmentSnapshot({
-        runId: 'run-125',
-        registry,
-        agentNames: ['mike'],
-        availableModelIds: ['claude-minimax/MiniMax-M2.5'],
-      }),
-      'REQUESTED_MODEL_UNAVAILABLE',
-    );
-    expectRegistryError(
-      () => createRunAssignmentSnapshot({
-        runId: 'run-126',
-        registry,
-        agentNames: ['unknown'],
-        availableModelIds: ['claude-qwen/qwen3.8-max'],
-      }),
-      'UNKNOWN_AGENT',
-    );
+  it('matches the CLI snapshot contract for the canonical router', () => {
+    const cliRegistry = loadModelRouter();
+    const sdkRegistry = loadModelRegistry({ data: cliRegistry });
+    const availableModelIds = Object.values(cliRegistry.tiers).flatMap((tier) => tier.models);
+    const input = { runId: 'parity-run', agentNames: ['mike', 'todd'], availableModelIds, createdAt: '2026-08-25T00:00:00.000Z' };
+    const cli = createCliRunAssignmentSnapshot({ ...input, registry: cliRegistry });
+    const sdk = createRunAssignmentSnapshot({ ...input, registry: sdkRegistry });
+    assert.deepEqual(sdk, cli);
   });
 });
