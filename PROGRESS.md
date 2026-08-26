@@ -2,6 +2,47 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In progress — Loosen workspace restrictions; tighten git secret-push guard
+
+**Objective:** Stop Bizar's hook chain from denying legitimate writes/deletes on
+`/tmp`, scratch dirs, and other non-project locations. Move the only hard
+secret guard into `git-workflow-guard.mjs` (and the `permissions.deny` block)
+so secrets never reach git history, while agents can freely read/edit local
+`.env`, `secrets/`, and other sensitive files when not committing them.
+
+**Plan:**
+1. `pretooluse-editwrite.mjs`: drop `.env`, `.envrc`, `secrets/`, `credentials/`
+   from the blocked set. Keep `node_modules` blocked (project-managed).
+   Lockfiles and `.env.example/.sample/.template` remain allowed.
+2. `pretooluse-bash.mjs`: drop `rm-rf-home` and `rm-rf-home-exact` patterns
+   (over-matched `/home/user/...` paths). Keep `rm-rf-root` and
+   `rm-rf-system` (`/etc|var|usr|boot`) as true destruction. Drop the
+   `read-ssh` / `read-aws-creds` patterns per "secret guard only in git guard".
+3. `path-ownership-guard.mjs`: confirm `/tmp` and outside-repo paths are
+   allowed. The underlying `authorizeEdit()` in `cli/task-ledger.mjs` is
+   simplified to a single reserved-scope check (active task does not
+   restrict its own scope; completed tasks no longer reserve). This is the
+   core F-200 loosening.
+4. `git-workflow-guard.mjs`: tighten — deny `git add` of `.env`, `secrets/`,
+   `*.pem`, `*.key`; deny `git commit` whose staged diff has secret markers;
+   deny `git push` whose outbound diff has secret markers. Normal `git add .`
+   and `git commit` of project files remain `ask`.
+5. `config/claude/settings.json`: remove `Read(./.env)`, `Read(./.env.*)`,
+   `Read(./secrets/**)` from `permissions.deny`. Add `Bash(git add …)` patterns
+   for the secret file globs.
+6. `~/.claude/settings.json`: mirror the `permissions.deny` updates so the user
+   sees the new behaviour immediately.
+7. New / extended regression tests under `config/claude/hooks/__tests__/`:
+   - `pretooluse-bash.test.mjs` — `rm -rf /tmp/scratch` allow,
+     `rm -rf /home/user/...` allow, `rm -rf /` deny, `rm -rf /etc` deny.
+   - `pretooluse-editwrite.test.mjs` (extend) — `/tmp/foo` allow,
+     `./secrets/api.key` allow locally, `./node_modules/x/y` deny.
+   - `path-ownership-guard.test.mjs` (extend) — edit `/tmp/foo` allow,
+     edit `.bizar/session-state.json` respects existing rules.
+   - `git-workflow-guard.test.mjs` (new) — `git add .env` deny, `git add .`
+     allow, `git commit` with secret in staged diff deny, `git push` with
+     secret in outbound diff deny, normal project commits still `ask`.
+
 ## Passing — F-164 Dynamic orchestration, native workflows, and agent teams
 
 **Objective delivered:** Removed brittle fixed model pins from all 16 custom

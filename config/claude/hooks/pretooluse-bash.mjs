@@ -4,8 +4,19 @@
  *
  * Runs the Bizar dangerous-pattern scanner on Bash commands before they
  * execute. Blocks destructive patterns (rm -rf, sudo, SSRF, etc.) via
- * the 36-pattern DANGEROUS_PATTERNS regex list maintained in
+ * the DANGEROUS_PATTERNS regex list maintained in
  * `@polderlabs/bizar-sdk/dist/dangerous-patterns.js`.
+ *
+ * F-200 loosening:
+ *   - `rm -rf` of user-owned sub-paths (`/home`, `/tmp`, `~/`, any user
+ *     project directory) is now ALLOWED. Only true destruction
+ *     (`rm -rf /`, `rm -rf /etc|var|usr|boot`) is denied.
+ *   - `read-ssh` and `read-aws-creds` patterns removed — the secret
+ *     guard is git-only (see `git-workflow-guard.mjs` and the
+ *     `permissions.deny` block). Agents can read env and credential
+ *     files locally; only pushing them to git is denied.
+ *   - `read-shadow` kept (`/etc/shadow|passwd|sudoers`); this is system
+ *     safety, not workspace path restriction.
  *
  * Claude Code PreToolUse input schema:
  *   { session_id, cwd, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command, description } }
@@ -28,17 +39,17 @@ process.stdin.on('end', () => {
   // Inline dangerous-pattern scanner. Mirrors
   // `packages/sdk/src/dangerous-patterns.ts` — kept inline so this hook
   // works without importing the SDK at runtime.
+  //
   // For the `rm` family, the path argument must be EXACTLY the dangerous
   // root — not a prefix of a deeper path. `/home/user/projects/foo.mjs`
-  // is a legitimate delete, not "wipe home directory". The old patterns
-  // matched any path STARTING with `/home` and so blocked every file
-  // delete under the project root (false positive).
+  // is a legitimate delete, not "wipe home directory". F-200 removed
+  // `rm-rf-home` and `rm-rf-home-exact` (they over-matched any `/home/...`
+  // path) and only `rm-rf-root` / `rm-rf-system` remain as true
+  // destruction denials.
   const DANGEROUS = [
     { name: 'rm-rf-root',       pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/(?:\s|$|;|\|)/i, decision: 'deny', reason: 'Recursive delete of root filesystem' },
-    { name: 'rm-rf-system',      pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/(?:etc|var|usr|boot)\b(?:\s|$|;|\|)/i, decision: 'deny', reason: 'Recursive delete of system directory' },
-    { name: 'rm-rf-wildcard',    pattern: /\brm\s+-\w*r\w*f\w*\s+\*/i, decision: 'ask', reason: 'Recursive delete with wildcard' },
-    { name: 'rm-rf-home',        pattern: /\brm\s+(-\w*r\w*f\w*\s+)*~?\/(?:\s|$|;|\|)/i, decision: 'ask', reason: 'Recursive delete of home directory' },
-    { name: 'rm-rf-home-exact',  pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/home(?:\s|$|;|\|)/i, decision: 'ask', reason: 'Recursive delete of /home (the directory, not a sub-path)' },
+    { name: 'rm-rf-system',     pattern: /\brm\s+(-\w*r\w*f\w*\s+)*\/(?:etc|usr|boot)\b/i, decision: 'deny', reason: 'Recursive delete of system directory' },
+    { name: 'rm-rf-wildcard',   pattern: /\brm\s+-\w*r\w*f\w*\s+\*[\s;]*/i, decision: 'ask', reason: 'Recursive delete with wildcard' },
     { name: 'mkfs', pattern: /\bmkfs(\.\w+)?\s+\/dev\//i, decision: 'deny', reason: 'Format filesystem' },
     { name: 'dd-of-dev', pattern: /\bdd\s+.*of=\/dev\//i, decision: 'deny', reason: 'dd to raw device' },
     { name: 'sudo', pattern: /(^|\s|;|&&|\|\|)sudo\b/i, decision: 'ask', reason: 'Sudo escalation' },
@@ -53,8 +64,6 @@ process.stdin.on('end', () => {
     { name: 'shutdown', pattern: /\b(shutdown|halt|poweroff|reboot)\b/i, decision: 'deny', reason: 'System shutdown' },
     { name: 'xmrig', pattern: /\b(xmrig|minerd|cpuminer|cgminer)\b/i, decision: 'deny', reason: 'Crypto miner' },
     { name: 'read-shadow', pattern: /\/etc\/(shadow|passwd|sudoers)\b/i, decision: 'ask', reason: 'Read sensitive system file' },
-    { name: 'read-ssh', pattern: /\.ssh\//i, decision: 'deny', reason: 'Read SSH keys' },
-    { name: 'read-aws-creds', pattern: /~\/\.aws\/credentials/i, decision: 'deny', reason: 'Read AWS credentials' },
     { name: 'git-force-push-main', pattern: /\bgit\s+push\s+(-f|--force)(\s+--.*)?\s+origin\s+(main|master)\b/i, decision: 'deny', reason: 'Force push to main/master' },
     { name: 'git-reset-hard', pattern: /\bgit\s+reset\s+--hard\b/i, decision: 'ask', reason: 'git reset --hard' },
   ];

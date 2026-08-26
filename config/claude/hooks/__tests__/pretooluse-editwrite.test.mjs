@@ -43,24 +43,44 @@ function runHook(toolName, filePath) {
   };
 }
 
-test('Write .env → deny', () => {
+// F-200 loosening: the .env / .envrc / secrets / credentials block-list
+// was removed. Agents can read/edit these locally — only pushing them
+// to git is denied (see git-workflow-guard.mjs and permissions.deny).
+// The hook now only blocks writes to project-managed dependency dirs.
+
+test('Write /tmp/foo → allow (outside-project paths are wide open)', () => {
+  const r = runHook('Write', '/tmp/scratch/foo.txt');
+  assert.notEqual(r.decision, 'deny');
+});
+
+test('Write /repo/.env → allow (F-200 — local edits allowed)', () => {
   const r = runHook('Write', '/repo/.env');
-  assert.equal(r.decision, 'deny');
+  assert.notEqual(r.decision, 'deny');
 });
 
-test('Write .env.local → deny', () => {
+test('Write /repo/.env.local → allow (F-200)', () => {
   const r = runHook('Write', '/repo/.env.local');
-  assert.equal(r.decision, 'deny');
+  assert.notEqual(r.decision, 'deny');
 });
 
-test('Write .env.production → deny', () => {
+test('Write /repo/.env.production → allow (F-200)', () => {
   const r = runHook('Write', '/repo/.env.production');
-  assert.equal(r.decision, 'deny');
+  assert.notEqual(r.decision, 'deny');
 });
 
-test('Write .envrc → deny', () => {
+test('Write /repo/.envrc → allow (F-200)', () => {
   const r = runHook('Write', '/repo/.envrc');
-  assert.equal(r.decision, 'deny');
+  assert.notEqual(r.decision, 'deny');
+});
+
+test('Write /repo/secrets/api.key → allow (F-200 — local edit OK)', () => {
+  const r = runHook('Write', '/repo/secrets/api.key');
+  assert.notEqual(r.decision, 'deny');
+});
+
+test('Write /repo/credentials/x.json → allow (F-200)', () => {
+  const r = runHook('Write', '/repo/credentials/x.json');
+  assert.notEqual(r.decision, 'deny');
 });
 
 test('Write .env.example → allow (docs)', () => {
@@ -81,18 +101,13 @@ test('Write .env.template → allow (docs)', () => {
   assert.notEqual(r.decision, 'deny');
 });
 
-test('Write secrets/api.json → deny', () => {
-  const r = runHook('Write', '/repo/secrets/api.json');
-  assert.equal(r.decision, 'deny');
-});
-
-test('Write credentials/x.json → deny', () => {
-  const r = runHook('Write', '/repo/credentials/x.json');
-  assert.equal(r.decision, 'deny');
-});
-
-test('Write node_modules/x.js → deny', () => {
+test('Write node_modules/x.js → deny (project-managed dependency dir)', () => {
   const r = runHook('Write', '/repo/node_modules/x.js');
+  assert.equal(r.decision, 'deny');
+});
+
+test('Write deep node_modules path → deny', () => {
+  const r = runHook('Write', '/repo/node_modules/@scope/pkg/dist/index.js');
   assert.equal(r.decision, 'deny');
 });
 
@@ -129,9 +144,9 @@ test('Write src/index.ts → allow + neutral context', () => {
   assert.equal(r.context, null);
 });
 
-test('Edit .env → deny (same rule applies to Edit)', () => {
+test('Edit .env → allow (F-200 — Edit same as Write)', () => {
   const r = runHook('Edit', '/repo/.env');
-  assert.equal(r.decision, 'deny');
+  assert.notEqual(r.decision, 'deny');
 });
 
 test('MultiEdit .env.example → allow (docs)', () => {

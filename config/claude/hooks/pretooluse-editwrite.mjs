@@ -26,10 +26,15 @@
 //       "additionalContext": "note for the model"
 //   }}
 //
-// Behaviour:
-//   Block writes to .env, .envrc, secrets/, credentials/, node_modules/.
-//   .env.example/.sample/.template are explicitly allowed (docs, not
-//   secrets). Lockfiles are allowed — they're package-manager output.
+// Behaviour (F-200 loosening):
+//   Agents are free to read, edit, and stage any path that is not under
+//   project-managed `node_modules/`. The single hard guard against secrets
+//   reaching git history lives in `git-workflow-guard.mjs` (deny on
+//   `git add` of secret globs, `git commit` and `git push` whose diffs
+//   contain secret markers) and the `permissions.deny` block of
+//   `config/claude/settings.json`. Hooks here only block edits to
+//   package-manager output (`node_modules/`) and confirm doc-style
+//   allow-list patterns (.env.example / .sample / .template / lockfiles).
 //
 //   F-145: removed the always-on `additionalContext` line. Every Write/
 //   Edit was emitting a tool/path note into the model's context — pure
@@ -63,17 +68,19 @@ process.stdin.on('end', () => {
 
   const lowerPath = filePath.toLowerCase();
 
+  // Allow-list patterns: docs (.env.example / .sample / .template) and
+  // package-manager output (lockfiles). These are never blocked.
   const allowed = [
     /\/\.env\.(example|sample|template|dist)$/i,
     /\/(package-lock|yarn|pnpm-lock|bun)\.lock\w*$/i,
     /\.(lock|lockb)$/i,
   ];
 
+  // Block-list: only project-managed dependency directories. The user
+  // explicitly wants agents to edit `/tmp`, scratch dirs, `secrets/`,
+  // `.env`, `.envrc`, and `credentials/` locally — secret protection
+  // moved to `git-workflow-guard.mjs` (push-time guard).
   const blocked = [
-    /\/\.envrc$/,
-    /\/\.env(\.[a-z0-9_-]+)?$/i,
-    /\/secrets?\//,
-    /\/credentials?\//,
     /\/node_modules\//,
   ];
 
