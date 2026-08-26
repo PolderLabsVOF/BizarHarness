@@ -48,6 +48,18 @@ references, and add a regression guard so the deletion cannot regress.
 - `node scripts/verify-repo-structure.mjs` (after `npm run build:sdk`)
   — `Repository structure and package boundary are clean.`
 - `make check` — green.
+**Post-merge regression-guard alignment (2026-08-26):**
+
+- `cli/provision.test.mjs` — replaced two stale F-167-era rule checks
+  (one expecting a remote-update rule family in allow, one expecting a
+  history-rewrite pattern in deny) with F-176 assertions:
+  `permissions.deny` and `permissions.ask` each deep-equal `[]`.
+  The always-silent local F-167 family assertions are retained.
+- `node --test cli/provision.test.mjs` — 16/16 pass.
+- `node scripts/run-node-tests.mjs` — 558/558 pass (EXIT=0).
+- Installer regenerated from merged template (`bizar install --yes`);
+  live `~/.claude/settings.json` parity verified: deny=[] ask=[],
+  gateway env values preserved, hooks byte-identical to repo sources.
 - `make clean-check` — 11/13 checks pass; the two pre-existing failures
   (SDK typecheck via `node_modules/typescript/bin/tsc` missing from this
   worktree; `human approval policy` triggered by real outgoing-commits

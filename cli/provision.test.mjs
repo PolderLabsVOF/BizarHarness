@@ -205,10 +205,10 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
     assert.equal(settings.disableAutoCompact, true);
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
-    assert.ok(settings.permissions.allow.includes('Bash(git -C * push *)'));
-    assert.ok(settings.permissions.allow.includes('Bash(gh pr review *)'));
-    assert.ok(settings.permissions.allow.includes('Bash(gh release *)'));
-    assert.ok(settings.permissions.deny.includes('Bash(git --git-dir=* rebase *)'));
+    // F-176: full permissions by default — deny/ask ship empty; external
+    // actions are gated by policy text and advisory hooks, not prompts.
+    assert.deepEqual(settings.permissions.deny, []);
+    assert.deepEqual(settings.permissions.ask, []);
     // Local git commit is always allowed silently; push/gh pr/release/publish/deploy stay HITL.
     assert.ok(settings.permissions.allow.includes('Bash(git commit *)'));
     assert.ok(settings.permissions.allow.includes('Bash(git -C * commit *)'));
