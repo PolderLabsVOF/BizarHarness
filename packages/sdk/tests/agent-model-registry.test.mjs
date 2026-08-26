@@ -12,6 +12,7 @@ import {
   loadModelRegistry,
   resolveAgentModel,
   resolveTierModel,
+  userSelectedModelIds,
   verifyRunAssignmentSnapshot,
 } from '../src/router/agent-model-registry.ts';
 import { createRunAssignmentSnapshot as createCliRunAssignmentSnapshot, loadModelRouter } from '../../../config/agents/model-assignment.mjs';
@@ -110,5 +111,35 @@ describe('dynamic model registry', () => {
     const cli = createCliRunAssignmentSnapshot({ ...input, registry: cliRegistry });
     const sdk = createRunAssignmentSnapshot({ ...input, registry: sdkRegistry });
     assert.deepEqual(sdk, cli);
+  });
+
+  it('loads userSelected block when present', () => {
+    const routerWithPicks = {
+      ...SAMPLE,
+      userSelected: {
+        models: ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max'],
+        lastUpdated: '2026-08-26T19:00:00.000Z',
+        source: 'live-pick',
+        tierHints: { 'claude-minimax/MiniMax-M3': 'default', 'claude-qwen/qwen3.8-max': 'premium' },
+      },
+    };
+    const registry = loadModelRegistry({ data: routerWithPicks });
+    assert.ok(registry.userSelected, 'userSelected populated');
+    assert.deepEqual(registry.userSelected.models, ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max']);
+    assert.equal(registry.userSelected.source, 'live-pick');
+    assert.equal(registry.userSelected.tierHints['claude-qwen/qwen3.8-max'], 'premium');
+    assert.deepEqual(userSelectedModelIds(registry), ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max']);
+  });
+
+  it('omits userSelected when missing or empty', () => {
+    const empty = loadModelRegistry({ data: SAMPLE });
+    assert.equal(empty.userSelected, undefined);
+    assert.deepEqual(userSelectedModelIds(empty), []);
+
+    const blankModels = loadModelRegistry({ data: { ...SAMPLE, userSelected: { models: [] } } });
+    assert.equal(blankModels.userSelected, undefined, 'empty models block is treated as absent');
+
+    const whitespaceOnly = loadModelRegistry({ data: { ...SAMPLE, userSelected: { models: ['', '  '] } } });
+    assert.equal(whitespaceOnly.userSelected, undefined, 'whitespace-only models block is treated as absent');
   });
 });

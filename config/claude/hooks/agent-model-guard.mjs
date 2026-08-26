@@ -3,9 +3,16 @@
  * Validate orchestrator-selected Agent model overrides without pinning roles.
  *
  * Bizar agents inherit the active session model by default. Mike may pass an
- * explicit model only when it is one of the configured tier candidates and live
- * discovery has reported it. Discovery failure never blocks dispatch and never
- * triggers alias retries: omit `model` and inherit the session instead.
+ * explicit model only when it is one of the configured tier candidates OR a
+ * model the user explicitly selected via `bizar models` (the picker IS the
+ * discovery surface for user picks — live gateway discovery is not required).
+ *
+ * For non-user-selected models, live discovery is still required when the
+ * caller passes `options.availableModelIds` (defensive: someone may have
+ * manually added a tier candidate that no longer exists).
+ *
+ * Discovery failure never blocks dispatch and never triggers alias retries:
+ * omit `model` and inherit the session instead.
  */
 
 import { readFileSync } from 'node:fs';
@@ -23,8 +30,33 @@ function deny(reason) {
   };
 }
 
+/**
+ * Models that pass the configured-tier check: every model in any
+ * `tiers.<x>.models` block, PLUS every model in `userSelected.models`.
+ */
 function configuredModels(registry) {
-  return new Set(Object.values(registry?.tiers || {}).flatMap((tier) => Array.isArray(tier?.models) ? tier.models : []));
+  const out = new Set();
+  for (const tier of Object.values(registry?.tiers || {})) {
+    if (Array.isArray(tier?.models)) for (const id of tier.models) out.add(id);
+  }
+  const userSelected = registry?.userSelected;
+  if (userSelected && Array.isArray(userSelected.models)) {
+    for (const id of userSelected.models) out.add(id);
+  }
+  return out;
+}
+
+/**
+ * Subset of `configuredModels` that came from the user picker. These bypass
+ * the live-discovery validation (the picker IS the discovery).
+ */
+function userSelectedModels(registry) {
+  const out = new Set();
+  const userSelected = registry?.userSelected;
+  if (userSelected && Array.isArray(userSelected.models)) {
+    for (const id of userSelected.models) out.add(id);
+  }
+  return out;
 }
 
 export async function guardAgentModel(input, options = {}) {
@@ -46,11 +78,15 @@ export async function guardAgentModel(input, options = {}) {
     return {};
   }
 
-  if (!configuredModels(registry).has(requested)) {
-    return deny(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers. Omit model to inherit the session or choose one discovered tier candidate.`);
+  const allowed = configuredModels(registry);
+  if (!allowed.has(requested)) {
+    return deny(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Omit model to inherit the session or pick it via \`bizar models\`.`);
   }
 
-  if (Array.isArray(options.availableModelIds)) {
+  // User-selected models bypass live-discovery validation. The picker is the
+  // discovery surface; users explicitly told us these IDs are valid.
+  const fromUserPick = userSelectedModels(registry).has(requested);
+  if (!fromUserPick && Array.isArray(options.availableModelIds)) {
     const available = new Set(options.availableModelIds);
     if (!available.has(requested)) {
       return deny(`Bizar Agent dispatch blocked: ${requested} was not reported by live discovery. Omit model to inherit the active session; do not retry aliases.`);

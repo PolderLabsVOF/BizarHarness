@@ -718,6 +718,34 @@
         "feature_list.json"
       ],
       "evidence": "2026-08-25: removed model frontmatter from all 16 agents; dynamic tier routing inherits the session on unavailable discovery and forbids alias retries; 3 native workflow scripts plus /ultracode installed; agent teams enabled with bounded fail-open TaskCreated/TaskCompleted/TeammateIdle hooks. Dynamic routing tests 34/34, team hooks 3/3, SDK registry 5/5, installer 14/14, full SDK 301/301, full Node 412/412; make check/test/e2e/clean-check/verify-repo-structure/verify-removed-surfaces/check-arch passed; temporary full install verified."
+    },
+    {
+      "id": "F-166",
+      "title": "User-controlled model picker (`bizar models`) and orchestrator selection rule",
+      "description": "Ship a `bizar models` CLI that lists gateway candidates, runs an interactive multi-select picker, and persists the chosen IDs under `config/claude/model-router.json#userSelected`. The orchestrator (@mike) dispatches subagents using ONLY these IDs (plus the active session model); auto-discovery is no longer authoritative. The Agent-model-guard accepts userSelected models without live-discovery validation. The MCP `bizar_model_list` tool surfaces only the user-selected list.",
+      "state": "in_progress",
+      "passed": null,
+      "commit": "pending",
+      "category": "harness",
+      "wip": 1,
+      "scope": [
+        "cli/commands/models.mjs",
+        "cli/commands/model.mjs",
+        "cli/bin.mjs",
+        "cli/__tests__/models-picker.test.mjs",
+        "cli/__tests__/models-cli.test.mjs",
+        "config/claude/model-router.json",
+        "config/claude/hooks/agent-model-guard.mjs",
+        "config/claude/hooks/__tests__/agent-model-guard.test.mjs",
+        "config/claude/agents/office-manager.md",
+        "packages/sdk/src/router/agent-model-registry.ts",
+        "packages/sdk/tests/agent-model-registry.test.mjs",
+        "packages/sdk/src/mcp/server.ts",
+        "docs/architecture.md",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "Pending make check + make test; see PROGRESS.md 'In progress' block for the surface area."
     }
   ],
   "vcr": {

@@ -63,6 +63,20 @@ export interface ModelRegistryPolicy extends Record<string, unknown> {
   maxDispatchModelAttempts?: number;
 }
 
+/**
+ * Block of user-controlled model picks. Persisted under
+ * `model-router.json#userSelected`. The orchestrator dispatches subagents
+ * using ONLY these IDs (plus the active session model). The picker is the
+ * discovery surface — live gateway discovery is NOT required to validate
+ * picks.
+ */
+export interface UserSelectedModels {
+  models: string[];
+  lastUpdated?: string;
+  source?: string;
+  tierHints?: Partial<Record<BizarTier, string[]>> & Record<string, BizarTier>;
+}
+
 export interface ModelRegistry {
   version: string;
   endpoint: string | null;
@@ -71,6 +85,7 @@ export interface ModelRegistry {
   policies: ModelRegistryPolicy;
   tiers: Map<BizarTier, TierModelEntry>;
   roleDefaults: Map<string, BizarTier>;
+  userSelected?: UserSelectedModels;
 }
 
 export interface RunAssignmentSnapshot {
@@ -145,7 +160,21 @@ export function loadModelRegistry(src: RegistrySource = {}): ModelRegistry {
   const gateway = isRecord(raw.gateway) ? raw.gateway : {};
   const configuredEndpoint = typeof raw.endpoint === "string" ? raw.endpoint : typeof gateway.endpoint === "string" ? gateway.endpoint : null;
   const endpoint = process.env.BIZAR_MODEL_ROUTER_URL ?? process.env.ANTHROPIC_BASE_URL ?? configuredEndpoint;
-  return { version: String(raw.version || "unknown"), endpoint, configuredEndpoint, gateway, policies: raw.policies as ModelRegistry["policies"], tiers, roleDefaults };
+  const userSelected = parseUserSelected(raw.userSelected);
+  return { version: String(raw.version || "unknown"), endpoint, configuredEndpoint, gateway, policies: raw.policies as ModelRegistry["policies"], tiers, roleDefaults, ...(userSelected ? { userSelected } : {}) };
+}
+
+function parseUserSelected(raw: unknown): UserSelectedModels | undefined {
+  if (!isRecord(raw)) return undefined;
+  const models = modelIds(raw.models);
+  const tierHints = isRecord(raw.tierHints) ? Object.fromEntries(Object.entries(raw.tierHints).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, v as BizarTier])) : undefined;
+  if (models.length === 0 && !tierHints) return undefined;
+  return {
+    models,
+    lastUpdated: typeof raw.lastUpdated === "string" ? raw.lastUpdated : undefined,
+    source: typeof raw.source === "string" ? raw.source : undefined,
+    ...(tierHints ? { tierHints } : {}),
+  };
 }
 
 export function resolveTierModel(tier: BizarTier, registry: ModelRegistry, availableModelIds?: readonly string[]): ResolvedTierModel {
@@ -164,6 +193,17 @@ export function resolveAgentModel(agent: string, registry: ModelRegistry, availa
 
 export function listAgentModels(registry: ModelRegistry): AgentModelEntry[] {
   return Array.from(registry.roleDefaults, ([agent, tier]) => resolveAgentModel(agent, registry, undefined, tier));
+}
+
+/**
+ * The set of model IDs the orchestrator is allowed to dispatch to, derived
+ * from `registry.userSelected`. When `userSelected` is missing or empty,
+ * the function returns an empty array and the orchestrator MUST inherit the
+ * active session model instead.
+ */
+export function userSelectedModelIds(registry: ModelRegistry): string[] {
+  if (!registry.userSelected) return [];
+  return [...new Set(registry.userSelected.models.filter((m) => typeof m === "string" && m.trim()))];
 }
 
 export function getEndpoint(registry?: ModelRegistry): string | null {
