@@ -3,7 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-08-26
 **Author:** @mike (orchestrator) on user request
-**Implements:** F-XXX (to be assigned by phase-9-policy-shift agent)
+**Implements:** F-176
+**Superseded by:** F-180
 
 ## Context
 
@@ -100,8 +101,7 @@ Replace the permission-gating model with a guidance-injection model.
   without it may not.
 - **Pre-existing CI/test breakage.** Scripts that reference
   `.claude-plugin/plugin.json` (deleted in `cf09bf6`) fail independently
-  of this policy. Out of scope; tracked in F-XXX
-  (plugin-references-cleanup).
+  of this policy. Out of scope; tracked in F-170 (commit 4888ac7).
 
 ## Implementation surface
 
