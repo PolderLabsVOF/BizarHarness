@@ -735,7 +735,7 @@
       "verification": "make check; make test; make mirror-claude-md-check; node --test config/workflows/__tests__/bizar-default.test.mjs; targeted test rows",
       "state": "passing",
       "passed": "2026-08-26",
-      "commit": null,
+      "commit": "1147212",
       "category": "harness",
       "layer": "harness",
       "created": "2026-08-26",
