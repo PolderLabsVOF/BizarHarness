@@ -913,6 +913,28 @@
       "evidence": "Single template-payload expansion commit (2227246, chore(perms)): 14 wildcard patterns added above the explicit git commit family + 15 mcp__bizar__* / mcp__semble__* entries in config/claude/settings.json permissions.allow; deny and ask remain []; defaultMode remains bypassPermissions. Factory (cli/provision.mjs L779: permissions: shipped.permissions) reads the template directly, so the live mirror step is a plain `bizar install --yes` invocation. Gates: make check green; node --test cli/provision.test.mjs 20/20 (the F-180 byte-for-byte factory invariant still passes because the factory ships the entire shipped.permissions object unchanged). jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty after this commit."
     },
     {
+      "id": "F-183",
+      "title": "Make `bizar install --force` do a fully clean install",
+      "description": "Promote `bizar install --force` from overwrite+prune-stale to a true clean install. Add `forceCleanInstall({ dryRun })` to cli/provision.mjs that wipes ~/.claude/{agents,skills,commands,hooks,rules,workflows,plugins,settings.json} and ~/.agents/, preserves ~/.config/bizar/ (BIZAR_HOME) and ~/.claude/{.credentials.json,statsig,.playwright-mcp}, and stashes the prior settings.json env vars into process.env.BIZAR_SAVED_ENV. Modify writeClaudeSettings so when force===true OR BIZAR_SAVED_ENV is set, ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, BIZAR_MODEL_ROUTER_URL, and BIZAR_HOME from the stash are merged back into the freshly-emitted env so operator credentials survive the wipe. wire forceCleanInstall + post-install runDoctor through runInstaller in cli/install/index.mjs, expose --deep as an alias flag via parseFlags, and update the install help text. Adds cli/install/force-clean.test.mjs covering wipe scope, env preservation, F-181 wildcard inheritance, denied/ask empty, and 16 agents + 74 skills + 39 commands + 30 hooks + 7 rules re-install counts.",
+      "state": "passing",
+      "wip_holder": null,
+      "wip": null,
+      "passed": "2026-08-27",
+      "commit": "see branch",
+      "category": "harness",
+      "owner": "@todd",
+      "scope": [
+        "cli/provision.mjs",
+        "cli/install/index.mjs",
+        "cli/commands/install.mjs",
+        "cli/install/force-clean.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "Single-commit feat(install) on branch wt/todd-f183-force-clean (from master 6ed35a4). forceCleanInstall() resolves CLAUDE_CONFIG_DIR/AGENTS_DIR via env (resolveClaudeDir/resolveAgentsDir lazy), wipes the 7 Bizar-managed dirs + ~/.agents/ + settings.json, preserves ~/.config/bizar/ + ~/.claude/{.credentials.json,statsig,.playwright-mcp} + any user-owned subdir outside the managed set. Stashes ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, BIZAR_MODEL_ROUTER_URL, BIZAR_HOME, ANTHROPIC_MODEL, CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS into process.env.BIZAR_SAVED_ENV (FORCE_CLEAN_PRESERVE_ENV_KEYS). writeClaudeSettings reads the stash (when set) and merges savedEnv.X || process.env.X || existingEnv.X (only when not force). runInstaller orchestrates forceCleanInstall → runProvision(force:true) → runDoctor({silent:true}) and surfaces the wipe summary in result.clean + result.doctor. parseFlags treats --deep as alias for --force. help text in cli/commands/install.mjs rewritten with the clean-install semantics. Test counts: cli/install/force-clean.test.mjs 9/9 (wipe scope 8 paths; BIZAR_HOME preserved; third-party preserved; stash round-trip; dryRun no-op; F-181 wildcards land AND operator env survives; sync counts ≥16 agents, ≥74 skills, ≥39 commands, ≥30 hooks, ≥7 rules; --deep alias; FORCE_CLEAN_PRESERVE_ENV_KEYS frozen list with the 4 canonical keys). cli/provision.test.mjs 20/20 (F-180 byte-for-byte invariant intact because the factory still ships the entire shipped.permissions object). cli/install/index.test.mjs 4/4. cli/install/__tests__/merge-settings.test.mjs 5/5 (existing force:true contract preserved — operator env from process.env still wins over on-disk when no BIZAR_SAVED_ENV stash). cli/__tests__/settings-permissions.test.mjs 4/4. Gates: make check green; make check-arch green; make verify-removed-surfaces green. make verify-repo-structure and make clean-check pre-existing failures (SDK package version 10.15.0 vs root 10.16.1; vitest binary missing because npm install not run here) are environment issues unrelated to this commit. DoD: jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty after @steve merges.",
+      "created": "2026-08-27"
+    },
+    {
       "id": "F-182",
       "title": "Convert remaining hard-deny hooks to advisory (simplify / content-style / agent-model)",
       "description": "F-176 left three hooks on the hard-deny branch — `simplify-guard.mjs` (missing or stale `/simplify` marker blocks `git commit`), `content-style-guard.mjs` (humanize patterns block Writes), and `agent-model-guard.mjs` (out-of-tier or live-discovery-failed model overrides block Agent dispatch). Convert each to the F-176 advisory pattern: `permissionDecision: 'allow'` plus a 🟡 advisory `additionalContext` describing the recommended action. The hard approval gates (push, force-push, rebase, gh, publish, deploy) remain in `git-workflow-guard.mjs` and `permission-request.mjs` per F-176.",
