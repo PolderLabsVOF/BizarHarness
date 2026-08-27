@@ -333,18 +333,53 @@ export function defaultTierHintForId(modelId: string): BizarTier {
   return "mid";
 }
 
+/**
+ * Resolve the model ID for a tier.
+ *
+ * Precedence (F-184):
+ *   1. If `registry.userSelected.models` is non-empty, rank the pool via
+ *      `rankUserSelectedForRole` and pick the first *eligible* candidate.
+ *      When `availableModelIds` is provided, that pick is intersected with
+ *      the live set; no intersection falls through to (2).
+ *   2. Otherwise (or when the user-selected pick has no eligible live
+ *      candidate), use the first live entry from `registry.tiers[tier]`.
+ *   3. When no live candidate exists, `modelId` is `null` and
+ *      `inheritSession` is `true` — the orchestrator keeps the active
+ *      session model.
+ */
 export function resolveTierModel(tier: BizarTier, registry: ModelRegistry, availableModelIds?: readonly string[]): ResolvedTierModel {
   const entry = registry.tiers.get(tier);
   if (!entry) registryError("UNKNOWN_TIER", `Unknown model tier ${tier}.`);
   const available = availableModelIds === undefined ? null : new Set(availableModelIds);
+  const userSelected = registry.userSelected;
+  if (userSelected && userSelected.models.length > 0) {
+    const { eligible } = rankUserSelectedForRole(registry, String(tier));
+    const pick = available ? eligible.find((entry) => available.has(entry.id)) : eligible[0];
+    if (pick) {
+      return { ...entry, modelId: pick.id, fallback: [], endpoint: registry.endpoint, inheritSession: false };
+    }
+  }
   const selected = available ? entry.modelIds.find((id) => available.has(id)) || null : null;
   return { ...entry, modelId: selected, fallback: [], endpoint: registry.endpoint, inheritSession: selected === null };
 }
 
+/**
+ * Resolve the model ID for an agent.
+ *
+ * Rationale values:
+ *   - `"userSelected-ranked"`  — picked from the operator's userSelected pool.
+ *   - `"first live tier candidate"` — fell through to the tier default (live).
+ *   - `"inherit active session model"` — no live candidate; orchestrator inherits.
+ */
 export function resolveAgentModel(agent: string, registry: ModelRegistry, availableModelIds?: readonly string[], tier?: BizarTier): ResolvedAgentModel {
   const chosenTier = tier || registry.roleDefaults.get(agent) || "default";
   const resolved = resolveTierModel(chosenTier, registry, availableModelIds);
-  return { agent, tier: chosenTier, modelId: resolved.modelId, inheritSession: resolved.inheritSession, rationale: resolved.inheritSession ? "inherit active session model" : "first live tier candidate", endpoint: registry.endpoint };
+  const rationale = !resolved.modelId
+    ? "inherit active session model"
+    : registry.userSelected && registry.userSelected.models.includes(resolved.modelId)
+      ? "userSelected-ranked"
+      : "first live tier candidate";
+  return { agent, tier: chosenTier, modelId: resolved.modelId, inheritSession: resolved.inheritSession, rationale, endpoint: registry.endpoint };
 }
 
 export function listAgentModels(registry: ModelRegistry): AgentModelEntry[] {

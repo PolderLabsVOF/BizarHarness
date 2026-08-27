@@ -330,4 +330,58 @@ describe('selected-pool resolver (F-184)', () => {
     assert.equal(compareRankedEntries(eligibleHigh, ineligible) < 0, true, 'eligible wins even against higher score');
     assert.equal(compareRankedEntries(eligibleLow, eligibleLow), 0, 'equal entries sort stably');
   });
+
+  it('resolveTierModel with userSelected non-empty picks the first eligible ranked ID that is also in availableModelIds', () => {
+    const registry = loadModelRegistry({
+      data: {
+        ...SAMPLE,
+        tiers: {
+          premium: { models: ['tier/premium-default-a', 'tier/premium-default-b'], purpose: 'p', effort: 'high' },
+          default: { models: ['tier/default-default'], purpose: 'd', effort: 'medium' },
+          mid: { models: ['tier/mid-a', 'tier/mid-b'], purpose: 'm', effort: 'medium' },
+        },
+        userSelected: {
+          models: ['provider/opus', 'provider/haiku', 'provider/sonnet'],
+          tierHints: { 'provider/opus': 'premium', 'provider/haiku': 'default', 'provider/sonnet': 'default' },
+          profiles: {
+            'provider/opus': { capabilities: { reasoning: true, toolCall: true, structuredOutput: true } },
+            'provider/sonnet': { capabilities: { reasoning: true, toolCall: true } },
+            'provider/haiku': { capabilities: { reasoning: false, toolCall: true } },
+          },
+        },
+      },
+    });
+    const resolved = resolveTierModel('premium', registry, ['tier/premium-default-a', 'provider/sonnet', 'provider/opus']);
+    assert.equal(resolved.modelId, 'provider/opus', 'premium tier picks the first eligible userSelected candidate');
+    assert.equal(resolved.inheritSession, false);
+    const agentResolved = resolveAgentModel('mike', registry, ['tier/premium-default-a', 'provider/sonnet', 'provider/opus']);
+    assert.equal(agentResolved.rationale, 'userSelected-ranked');
+  });
+
+  it('resolveTierModel with userSelected non-empty falls through to the tier default when no userSelected ID is in availableModelIds', () => {
+    const registry = loadModelRegistry({
+      data: {
+        ...SAMPLE,
+        tiers: {
+          premium: { models: ['tier/premium-default-a', 'tier/premium-default-b'], purpose: 'p', effort: 'high' },
+          default: { models: ['tier/default-default'], purpose: 'd', effort: 'medium' },
+          mid: { models: ['tier/mid-a', 'tier/mid-b'], purpose: 'm', effort: 'medium' },
+        },
+        userSelected: {
+          models: ['provider/opus', 'provider/sonnet'],
+          tierHints: { 'provider/opus': 'premium' },
+          profiles: {
+            'provider/opus': { capabilities: { reasoning: true } },
+            'provider/sonnet': { capabilities: { reasoning: true } },
+          },
+        },
+      },
+    });
+    // availableModelIds contains only tier-default IDs, none of which are userSelected.
+    const resolved = resolveTierModel('premium', registry, ['tier/premium-default-b']);
+    assert.equal(resolved.modelId, 'tier/premium-default-b', 'falls back to the first live tier candidate');
+    assert.equal(resolved.inheritSession, false);
+    const agentResolved = resolveAgentModel('mike', registry, ['tier/premium-default-b']);
+    assert.equal(agentResolved.rationale, 'first live tier candidate');
+  });
 });
