@@ -191,14 +191,12 @@ Release` block).
 
 ## Passing — F-183 Make `bizar install --force` do a fully clean install
 
-**Status:** Implementation complete on branch `wt/todd-f183-force-clean`;
-awaiting `@steve` merge for v10.16.2 ledger + release.
+**Status:** Accepted (merge landed; release v10.16.2 in flight).
 
-**Source commit:** on branch `wt/todd-f183-force-clean` (from master `6ed35a4`);
-this commit (`feat(install): make --force do a fully clean install (F-183)`)
-is the source of the F-183 behavior change. @steve updates the
-`commit` field in `feature_list.json` and `DECISIONS.md` to the merge
-SHA when `bizar worktree-merge --all` lands.
+**Merge commit:** `5f114b6` (Merge branch 'wt/todd-f183-force-clean' into master (F-183)).
+**Source commit:** `4789644` on branch `wt/todd-f183-force-clean` (from master `6ed35a4`)
+— `feat(install): make --force do a fully clean install (F-183)`.
+**Release:** v10.16.2 (chore(release) commit lands after this ledger entry).
 
 **What landed:**
 - `cli/provision.mjs` — new exported `forceCleanInstall({ dryRun })`:
@@ -263,14 +261,25 @@ SHA when `bizar worktree-merge --all` lands.
 - `make check-arch` — green
 - `make verify-removed-surfaces` — green
 
-**Known pre-existing failures unrelated to F-183:**
+**Known pre-existing failures unrelated to F-183 (post-merge):**
 - `make verify-repo-structure` — fails on `SDK_VERSION 10.15.0 != root
-  10.16.1`. This is a stale SDK package.json/version.ts vs root
-  package.json. @steve handles the version bump in the v10.16.2
-  release commit.
+  10.16.2`. This is a stale SDK package.json/version.ts vs root
+  package.json. v10.16.2 release commit will sync the SDK on the
+  follow-up bump.
 - `make clean-check` — fails on `vitest: No such file or directory`
   because `node_modules/.bin/vitest` is missing (npm install hasn't
   been run in this worktree). Pre-existing environment issue.
+
+**Post-merge verification on master:**
+- `git log --oneline -3` shows `5f114b6 Merge branch 'wt/todd-f183-force-clean' into master (F-183)`
+  then `4789644 feat(install): make --force do a fully clean install (F-183)`
+  then `6ed35a4 chore(release): v10.16.1`.
+- `jq '.features[] | select(.wip == 1) | .id' feature_list.json`
+  returns empty after this ledger entry.
+- `feature_list.json` F-183 row updated: `commit: "5f114b6"`,
+  `passed: "2026-08-26"`, `wip: null`, `wip_holder: null`.
+- `DECISIONS.md` F-183 row added: —
+  `Make "bizar install --force" do a fully clean install (merge 5f114b6)`.
 
 ---
 
