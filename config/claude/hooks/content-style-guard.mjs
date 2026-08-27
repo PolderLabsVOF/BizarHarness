@@ -65,8 +65,8 @@ process.stdin.on('end', () => {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: `Humanize the text before publishing it: ${notes.join('; ')}.`,
+        permissionDecision: 'allow',
+        additionalContext: `🟡 Style suggestion: humanize the text before publishing. ${notes.join('; ')}. The write will proceed regardless.`,
       },
     }) + '\n');
   }

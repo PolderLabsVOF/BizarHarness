@@ -911,6 +911,29 @@
         "package.json"
       ],
       "evidence": "Single template-payload expansion commit (2227246, chore(perms)): 14 wildcard patterns added above the explicit git commit family + 15 mcp__bizar__* / mcp__semble__* entries in config/claude/settings.json permissions.allow; deny and ask remain []; defaultMode remains bypassPermissions. Factory (cli/provision.mjs L779: permissions: shipped.permissions) reads the template directly, so the live mirror step is a plain `bizar install --yes` invocation. Gates: make check green; node --test cli/provision.test.mjs 20/20 (the F-180 byte-for-byte factory invariant still passes because the factory ships the entire shipped.permissions object unchanged). jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty after this commit."
+    },
+    {
+      "id": "F-182",
+      "title": "Convert remaining hard-deny hooks to advisory (simplify / content-style / agent-model)",
+      "description": "F-176 left three hooks on the hard-deny branch — `simplify-guard.mjs` (missing or stale `/simplify` marker blocks `git commit`), `content-style-guard.mjs` (humanize patterns block Writes), and `agent-model-guard.mjs` (out-of-tier or live-discovery-failed model overrides block Agent dispatch). Convert each to the F-176 advisory pattern: `permissionDecision: 'allow'` plus a 🟡 advisory `additionalContext` describing the recommended action. The hard approval gates (push, force-push, rebase, gh, publish, deploy) remain in `git-workflow-guard.mjs` and `permission-request.mjs` per F-176.",
+      "state": "in_progress",
+      "wip_holder": "@todd",
+      "wip": 1,
+      "passed": null,
+      "commit": null,
+      "category": "harness",
+      "owner": "@todd",
+      "scope": [
+        "config/claude/hooks/simplify-guard.mjs",
+        "config/claude/hooks/content-style-guard.mjs",
+        "config/claude/hooks/agent-model-guard.mjs",
+        "config/claude/hooks/__tests__/agent-model-guard.test.mjs",
+        "config/claude/hooks/__tests__/workflow-guards.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "evidence": "Branch `wt/todd-f182-hooks-advisory` carries the three hook conversions plus the matching test edits; node --test on config/claude/hooks/__tests__/advisory-hooks.test.mjs config/claude/hooks/__tests__/agent-model-guard.test.mjs config/claude/hooks/__tests__/workflow-guards.test.mjs is 35/35 green. make check-arch and make check stay green. The merge archive will tag the final commit SHA; Steve pushes.",
+      "created": "2026-08-26"
     }
   ],
   "vcr": {

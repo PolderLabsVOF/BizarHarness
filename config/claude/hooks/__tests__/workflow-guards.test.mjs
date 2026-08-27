@@ -276,13 +276,14 @@ describe('Danger and style guards', () => {
     assert.deepEqual(result, {});
   });
 
-  test('human-facing filler is denied while source code is ignored', () => {
+  test('human-facing filler emits advisory while source code is ignored', () => {
     const blocked = runHook('content-style-guard.mjs', {
       hook_event_name: 'PreToolUse',
       tool_name: 'Write',
       tool_input: { file_path: '/tmp/README.md', content: 'We leverage a seamless workflow.' },
     });
-    assert.equal(decision(blocked), 'deny');
+    assert.equal(decision(blocked), 'allow');
+    assert.ok(blocked.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext');
 
     const source = runHook('content-style-guard.mjs', {
       hook_event_name: 'PreToolUse',
@@ -339,7 +340,7 @@ test('simplify marker freshness window allows successive commits', () => {
   }
 });
 
-test('simplify marker blocks a commit after the staged tree changes', () => {
+test('simplify marker emits advisory when the staged tree changes', () => {
   const repo = mkdtempSync(join(tmpdir(), 'bizar-simplify-'));
   roots.push(repo);
   spawnSync('git', ['init', '-q'], { cwd: repo });
@@ -361,7 +362,8 @@ test('simplify marker blocks a commit after the staged tree changes', () => {
     cwd: repo,
     tool_input: { command: 'git commit -m "test: changed tree"' },
   });
-  assert.equal(decision(changed), 'deny');
+  assert.equal(decision(changed), 'allow');
+  assert.ok(changed.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext');
 
   runHook('simplify-guard.mjs', {
     hook_event_name: 'PostToolUse',
@@ -378,7 +380,7 @@ test('simplify marker blocks a commit after the staged tree changes', () => {
   assert.deepEqual(reviewedAgain, {});
 });
 
-test('simplify marker outside freshness window blocks commit', () => {
+test('simplify marker outside freshness window emits advisory', () => {
   const repo = mkdtempSync(join(tmpdir(), 'bizar-simplify-'));
   roots.push(repo);
   spawnSync('git', ['init', '-q'], { cwd: repo });
@@ -393,10 +395,11 @@ test('simplify marker outside freshness window blocks commit', () => {
     cwd: repo,
     tool_input: { command: 'git commit -m "test: stale"' },
   });
-  assert.equal(decision(result), 'deny');
+  assert.equal(decision(result), 'allow');
+  assert.ok(result.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext');
 });
 
-test('simplify marker absent blocks commits including Git global-option forms', () => {
+test('simplify marker absent emits advisory across Git global-option forms', () => {
   const repo = mkdtempSync(join(tmpdir(), 'bizar-simplify-'));
   roots.push(repo);
   spawnSync('git', ['init', '-q'], { cwd: repo });
@@ -417,7 +420,8 @@ test('simplify marker absent blocks commits including Git global-option forms', 
       cwd: repo,
       tool_input: { command },
     });
-    assert.equal(decision(result), 'deny', command);
+    assert.equal(decision(result), 'allow', command);
+    assert.ok(result.hookSpecificOutput?.additionalContext, command);
   }
 });
 

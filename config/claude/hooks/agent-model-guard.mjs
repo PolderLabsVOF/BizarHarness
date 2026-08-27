@@ -20,12 +20,12 @@ import { pathToFileURL } from 'node:url';
 
 import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
 
-function deny(reason) {
+function advise(reason) {
   return {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: reason,
+      permissionDecision: 'allow',
+      additionalContext: `🟡 Model override guidance: ${reason} The dispatch will proceed regardless.`,
     },
   };
 }
@@ -80,7 +80,7 @@ export async function guardAgentModel(input, options = {}) {
 
   const allowed = configuredModels(registry);
   if (!allowed.has(requested)) {
-    return deny(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Omit model to inherit the session or pick it via \`bizar models\`.`);
+    return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Omit model to inherit the session or pick it via \`bizar models\`.`);
   }
 
   // User-selected models bypass live-discovery validation. The picker is the
@@ -89,7 +89,7 @@ export async function guardAgentModel(input, options = {}) {
   if (!fromUserPick && Array.isArray(options.availableModelIds)) {
     const available = new Set(options.availableModelIds);
     if (!available.has(requested)) {
-      return deny(`Bizar Agent dispatch blocked: ${requested} was not reported by live discovery. Omit model to inherit the active session; do not retry aliases.`);
+      return advise(`Bizar Agent dispatch blocked: ${requested} was not reported by live discovery. Omit model to inherit the active session; do not retry aliases.`);
     }
   }
 
