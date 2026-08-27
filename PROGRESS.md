@@ -155,6 +155,76 @@ operators can see why each candidate would or would not be selected.
 - `node cli/bin.mjs models explain todd` — prints ranked rows.
 - `node cli/bin.mjs models explain` — exits 2 with actionable error.
 
+## Complete — F-187 Canonical tier taxonomy (IMP-015)
+
+**Date:** 2026-08-27
+**WIP holder:** none (IMP-019 health-aware failover remains active in its own worktree; F-176 keeps `wip: 1` per the ledger invariant — F-187 lands as `passing` because the refactor + drift test + ledger are complete in these commits).
+**Closing branch head:** `bbad0f0` on `worktree-agent-af22e0d2791d76452`; merge commit SHA recorded in the `feature_list.json` F-187 row.
+
+**Objective:** Close IMP-015 from `IMPROVEMENTS.md` line 868 — "Canonical
+tier taxonomy | No `flash/mid/expensive` vs six-tier mismatch remains."
+The SDK's canonical 6-tier taxonomy is exported from
+`packages/sdk/src/router/agent-model-registry.ts#BizarTier`
+(`premium` / `high` / `mid-design` / `default` / `mid` / `budget`), but
+the Thompson-sampling bandit in
+`packages/sdk/src/router/model-router.ts` still declared the legacy
+3-tier type `flash` / `mid` / `expensive`, and `router/index.ts`
+re-exported and surfaced it through `decideAgentWith()`. Land the
+migration and a regression test that fails CI on the first
+reintroduction of the legacy vocabulary.
+
+**Migration surface:**
+- `packages/sdk/src/router/model-router.ts` — drop `export type ModelTier`;
+  re-export `BizarTier` from `agent-model-registry.ts`. Adopt the 6-tier
+  vocabulary in `TIERS`, `DEFAULT_PRIORS`, `getPriors()`, the
+  constructor prior init, `recordOutcome()`, `RouterStateSnapshot.priors`,
+  and the codemod short-circuit (now `tier: 'budget'`). `recordOutcome()`
+  uses a per-tier `REWARDS` map (budget 1.0, mid/default 0.85, mid-design
+  0.7, high 0.55, premium 0.4) instead of the prior 3-way ternary.
+- `packages/sdk/src/router/index.ts` — drop the `ModelTier` re-export;
+  type `RouteDecisionOutput.modelTier` as `BizarTier`. The codemod branch
+  returns `modelTier: 'budget'` and `tierTag({ tier: 'budget', confidence: 1.0 })`.
+
+**Test changes:**
+- `packages/sdk/tests/model-router.test.mjs` — rewrite `flash`/`expensive`
+  literals to `budget`/`premium` (mid unchanged); three new tests pin
+  `high`'s default prior and the per-tier reward increments for `high`
+  and `premium`.
+- `packages/sdk/tests/router-orchestrator.test.mjs` — rewrite `flash`/
+  `expensive` literals; `decideAgentWith({ task: codemod })` assertions
+  flip to `budget`.
+- `packages/sdk/tests/tier-taxonomy-drift.test.mjs` (NEW, 129 lines) —
+  IMP-015 acceptance guard. Scans `packages/sdk/src/` for `ModelTier`
+  declarations, `"flash"` / `"expensive"` string literals, and `ModelTier`
+  TypeScript identifiers. Fails CI on the first mismatch.
+
+**Files touched:**
+- `packages/sdk/src/router/model-router.ts` — 6-tier migration.
+- `packages/sdk/src/router/index.ts` — drop `ModelTier` re-export.
+- `packages/sdk/tests/model-router.test.mjs` — literal rewrite + 3 new tests.
+- `packages/sdk/tests/router-orchestrator.test.mjs` — literal rewrite.
+- `packages/sdk/tests/tier-taxonomy-drift.test.mjs` (NEW) — drift guard.
+- `feature_list.json` — F-187 entry added (state `passing`).
+- `DECISIONS.md` — F-187 row added.
+
+**Verification (run on the worktree, repeated on master post-merge):**
+- `npx vitest run packages/sdk/tests/tier-taxonomy-drift.test.mjs
+  packages/sdk/tests/model-router.test.mjs
+  packages/sdk/tests/router-orchestrator.test.mjs` — **30/30 passing**
+  (13 model-router + 13 router-orchestrator + 4 drift).
+- `make test:sdk` (full SDK suite) — pre-existing suites stay green.
+- `npx tsc --noEmit -p packages/sdk/tsconfig.json` — exit 0, clean types.
+- Drift-test sanity check: temporarily inserting a `"flash"` literal
+  into `router/index.ts` makes the third assertion fail with a
+  line-precise hit list; restoring the file restores the green state.
+
+**Drift policy:** any reintroduction of the legacy `ModelTier` alias,
+`flash` / `expensive` literals, or any other 3-tier-vocabulary surface
+into `packages/sdk/src/` MUST land in the same commit as the matching
+edit to `BizarTier` (or its successor taxonomy) and the matching
+assertion update in `tier-taxonomy-drift.test.mjs`. The drift test
+fails CI on the first mismatch.
+
 ## Complete — F-184 Selected-pool resolver (IMP-016)
 
 **Date:** 2026-08-27

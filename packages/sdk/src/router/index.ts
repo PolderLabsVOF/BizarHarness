@@ -21,8 +21,9 @@
  *     could short-circuit the work. Honoured by the office-manager prompt.
  *   - `[TASK_MODEL_RECOMMENDATION] <tier> (conf=<n>)` — appended to
  *     prompt-side telemetry so downstream model selection knows the
- *     bandit-learner thinks this task should be routed to `flash` /
- *     `mid` / `expensive`.
+ *     bandit-learner thinks this task should be routed to one of the
+ *     6 canonical tiers (`premium` / `high` / `mid-design` / `default`
+ *     / `mid` / `budget`).
  *
  * Persistence: when constructed via `getRouter({ persist: true })`,
  * the orchestrator holds a single shared `ModelRouter` +
@@ -42,9 +43,9 @@ import {
 } from "./codemod-intent.js";
 import {
   ModelRouter,
-  type ModelTier,
   type RouteDecision,
 } from "./model-router.js";
+import type { BizarTier } from "./agent-model-registry.js";
 import {
   QLearningRouter,
   AGENT_ACTIONS,
@@ -66,7 +67,7 @@ export interface RouteInput {
 
 export interface RouteDecisionOutput {
   agent: string;
-  modelTier: ModelTier;
+  modelTier: BizarTier;
   agentConfidence: number;
   modelConfidence: number;
   /** Null unless the prompt matched a Tier-1 codemod intent. */
@@ -147,9 +148,9 @@ export function getRouter(opts: GetRouterOpts = {}): RouterBundle {
  * Order:
  *  1. caller-supplied `explicitAgent` wins outright.
  *  2. Tier-1 codemod intent → agent="brenda" (routine implementation),
- *     tier="flash" ($0), confidence 1.0, surface `[CODEMOD_AVAILABLE]`.
+ *     tier="budget" ($0), confidence 1.0, surface `[CODEMOD_AVAILABLE]`.
  *  3. Q-learning agent pick (clamped to known agent names).
- *  4. Thompson-bandit model-tier pick.
+ *  4. Thompson-bandit model-tier pick (6-tier vocabulary).
  *  5. Defaults: agent="mike", tier="mid".
  */
 export function decideAgentWith(
@@ -180,14 +181,14 @@ export function decideAgentWith(
   const cm = task ? detectCodemodIntent(task) : null;
   if (cm !== null) {
     surfacedTags.push(codemodTag(cm.intent, cm.confidence));
-    // Tier-1 codemod: $0, model tier = "flash" but the call is
-    // supposed to be skipped (deterministic). We still set
-    // modelTier/Confidence so downstream telemetry has consistent
+    // Tier-1 codemod: $0, model tier = "budget" (cheapest 6-tier value)
+    // but the call is supposed to be skipped (deterministic). We still
+    // set modelTier/Confidence so downstream telemetry has consistent
     // shape.
-    surfacedTags.push(tierTag({ tier: "flash", confidence: 1.0 }));
+    surfacedTags.push(tierTag({ tier: "budget", confidence: 1.0 }));
     return {
       agent: "brenda",
-      modelTier: "flash",
+      modelTier: "budget",
       agentConfidence: 1.0,
       modelConfidence: 1.0,
       codemodIntent: cm.intent,
@@ -235,7 +236,6 @@ export type { CodemodIntent, CodemodIntentHit } from "./codemod-intent.js";
 
 export {
   ModelRouter,
-  type ModelTier,
   type RouteDecision,
 } from "./model-router.js";
 

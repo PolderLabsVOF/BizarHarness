@@ -4,30 +4,36 @@
  * v6.4.0 — ported from ruflo `model-router.ts` (Thompson-sampling bandit,
  * ADR-026 + ADR-143). Trims the surface to what Bizar needs:
  *
- *   - 3 tiers:  `flash` (cheap),  `mid` (default),  `expensive`
+ *   - 6 tiers:  `premium` | `high` | `mid-design` | `default` | `mid` | `budget`
+ *     (canonical `BizarTier` taxonomy, exported by
+ *     `./agent-model-registry.js` — IMP-015 closed the 3-tier
+ *     `flash / mid / expensive` mismatch).
  *   - Per-tier Beta(α, β) priors, updated by `recordOutcome()`.
  *   - Marsaglia-Tsang Gamma sampler + Box-Muller normal → sample from Beta
  *     by drawing two Gamma(shape, 1) variates and dividing.
  *   - Tier-1 codemod short-circuit: if `detectCodemodIntent()` says the
- *     prompt is codemod-eligible, we return `{tier: 'flash'}` with
+ *     prompt is codemod-eligible, we return `{tier: 'budget'}` with
  *     confidence 1.0 and tag `codemodIntent` on the result. This is the
  *     $0 path — no model call required.
  *
- * The tier names match Bizar's actual model lineup
- * (`m2.7-flash`, `m2.7`, `m3`). The ruflo vocabulary uses
- * `haiku / sonnet / opus`; we rename to `flash / mid / expensive`
- * so future call-site code reads naturally.
+ * The tier names use Bizar's canonical vocabulary (premium / high /
+ * mid-design / default / mid / budget). The earlier 3-tier vocabulary
+ * (`flash / mid / expensive`) is deprecated; callers must import
+ * `BizarTier` from `./agent-model-registry.js` and stop referencing
+ * the old names. The 6-tier mapping for `recordOutcome()` rewards
+ * generalises the ruflo ADR-026 §BANDIT_REWARDS table.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 
 import { detectCodemodIntent } from "./codemod-intent.js";
+import type { BizarTier } from "./agent-model-registry.js";
 
-export type ModelTier = "flash" | "mid" | "expensive";
+export type { BizarTier } from "./agent-model-registry.js";
 
 export interface RouteDecision {
-  tier: ModelTier;
+  tier: BizarTier;
   confidence: number;
   codemodIntent?: "var-to-const" | "remove-console" | "add-logging";
 }
@@ -37,28 +43,51 @@ export interface BetaPrior {
   beta: number;
 }
 
-const TIERS: ModelTier[] = ["flash", "mid", "expensive"];
+const TIERS: BizarTier[] = ["premium", "high", "mid-design", "default", "mid", "budget"];
 
 /**
- * Default priors — slight optimism for `flash` (so it gets tried for
- * cheap prompts), uniform for `mid`, slight pessimism for `expensive`
- * (it should have to earn its keep). Adjust here, not at the call site.
+ * Default priors — descending optimism by cost (cheap tiers get a
+ * head start so they get tried for cheap prompts; expensive tiers have
+ * to earn their keep). Adjust here, not at the call site.
  */
-const DEFAULT_PRIORS: Record<ModelTier, BetaPrior> = {
-  flash:     { alpha: 2, beta: 1 }, // mean 2/3 ≈ 0.67
-  mid:       { alpha: 1, beta: 1 }, // mean 0.5
-  expensive: { alpha: 1, beta: 2 }, // mean 1/3 ≈ 0.33
+const DEFAULT_PRIORS: Record<BizarTier, BetaPrior> = {
+  premium:     { alpha: 1, beta: 2 }, // mean 1/3 ≈ 0.33 (expensive, pessimistic)
+  high:        { alpha: 1, beta: 2 }, // mean 1/3 ≈ 0.33
+  "mid-design": { alpha: 1, beta: 1 }, // mean 0.5
+  default:     { alpha: 1, beta: 1 }, // mean 0.5
+  mid:         { alpha: 1, beta: 1 }, // mean 0.5
+  budget:      { alpha: 2, beta: 1 }, // mean 2/3 ≈ 0.67 (cheap, optimistic)
+};
+
+/**
+ * Per-tier reward weights — reward scales inversely with cost. A
+ * budget-tier success is treated as the most valuable signal (cheap
+ * wins are gold); a premium-tier success is the least valuable
+ * (expensive wins are wasteful). Fractional updates work fine with
+ * the Beta sampler.
+ */
+const REWARDS: Record<BizarTier, number> = {
+  budget:      1.0,
+  mid:         0.85,
+  default:     0.85,
+  "mid-design": 0.7,
+  high:        0.55,
+  premium:     0.4,
 };
 
 export class ModelRouter {
-  private priors: Record<ModelTier, BetaPrior>;
+  private priors: Record<BizarTier, BetaPrior>;
   private rngState: number;
 
-  constructor(opts?: { priors?: Partial<Record<ModelTier, BetaPrior>>; seed?: number }) {
+  constructor(opts?: { priors?: Partial<Record<BizarTier, BetaPrior>>; seed?: number }) {
+    const overrides = opts?.priors ?? {};
     this.priors = {
-      flash:     { ...DEFAULT_PRIORS.flash,     ...(opts?.priors?.flash     ?? {}) },
-      mid:       { ...DEFAULT_PRIORS.mid,       ...(opts?.priors?.mid       ?? {}) },
-      expensive: { ...DEFAULT_PRIORS.expensive, ...(opts?.priors?.expensive ?? {}) },
+      premium:     { ...DEFAULT_PRIORS.premium,     ...(overrides.premium     ?? {}) },
+      high:        { ...DEFAULT_PRIORS.high,        ...(overrides.high        ?? {}) },
+      "mid-design": { ...DEFAULT_PRIORS["mid-design"], ...(overrides["mid-design"] ?? {}) },
+      default:     { ...DEFAULT_PRIORS.default,     ...(overrides.default     ?? {}) },
+      mid:         { ...DEFAULT_PRIORS.mid,         ...(overrides.mid         ?? {}) },
+      budget:      { ...DEFAULT_PRIORS.budget,      ...(overrides.budget      ?? {}) },
     };
     // LCG seed for reproducible sampling in tests. Default uses
     // Math.random() when seed is not provided.
@@ -66,17 +95,20 @@ export class ModelRouter {
   }
 
   /** Read-only access for telemetry / tests. */
-  getPriors(): Record<ModelTier, BetaPrior> {
+  getPriors(): Record<BizarTier, BetaPrior> {
     return {
-      flash: { ...this.priors.flash },
+      premium: { ...this.priors.premium },
+      high: { ...this.priors.high },
+      "mid-design": { ...this.priors["mid-design"] },
+      default: { ...this.priors.default },
       mid: { ...this.priors.mid },
-      expensive: { ...this.priors.expensive },
+      budget: { ...this.priors.budget },
     };
   }
 
   /**
    * Pick a tier for `prompt`. Codemod-eligible prompts short-circuit
-   * to `flash` (the Tier-1 $0 path). Otherwise we Thompson-sample each
+   * to `budget` (the Tier-1 $0 path). Otherwise we Thompson-sample each
    * tier and return the highest sample, with confidence = max_sample
    * (the posterior mean is `α/(α+β)`, and the max-sampled value is a
    * lower bound on the probability that this tier beats the others).
@@ -85,10 +117,10 @@ export class ModelRouter {
     // Tier-1 codemod short-circuit ($0).
     const cm = detectCodemodIntent(prompt);
     if (cm !== null) {
-      return { tier: "flash", confidence: 1.0, codemodIntent: cm.intent };
+      return { tier: "budget", confidence: 1.0, codemodIntent: cm.intent };
     }
 
-    let best: { tier: ModelTier; sample: number } | null = null;
+    let best: { tier: BizarTier; sample: number } | null = null;
     for (const tier of TIERS) {
       const prior = this.priors[tier];
       const sample = this.sampleBeta(prior.alpha, prior.beta);
@@ -102,21 +134,22 @@ export class ModelRouter {
 
   /**
    * Update the per-tier prior after observing the outcome of a call.
-   * `success === true` increments α; `success === false` increments β.
-   * Cost-adjusted (ruflo ADR-026 §BANDIT_REWARDS):
-   * - flash-success:    +1.0 → α++           (cheap wins are gold)
-   * - mid-success:      +0.7 → α += 0.7      (still good)
-   * - expensive-success:+0.4 → α += 0.4      (expensive wins are wasteful)
-   * - any failure:      β ++
-   *
-   * The fractional updates work fine with the Beta sampler.
+   * `success === true` increments α by the per-tier reward weight;
+   * `success === false` increments β by 1. Cost-adjusted (ruflo
+   * ADR-026 §BANDIT_REWARDS generalised to the 6-tier vocabulary):
+   * - budget-success:      +1.00 → α += 1.00  (cheap wins are gold)
+   * - mid-success:         +0.85 → α += 0.85
+   * - default-success:     +0.85 → α += 0.85
+   * - mid-design-success:  +0.70 → α += 0.70
+   * - high-success:        +0.55 → α += 0.55
+   * - premium-success:     +0.40 → α += 0.40  (expensive wins are wasteful)
+   * - any failure:         β ++
    */
-  recordOutcome(tier: ModelTier, success: boolean): void {
+  recordOutcome(tier: BizarTier, success: boolean): void {
     const prior = this.priors[tier];
     if (!prior) return;
     if (success) {
-      const reward = tier === "flash" ? 1.0 : tier === "mid" ? 0.7 : 0.4;
-      prior.alpha += reward;
+      prior.alpha += REWARDS[tier];
     } else {
       prior.beta += 1;
     }
@@ -223,7 +256,7 @@ export class ModelRouter {
 
 export interface RouterStateSnapshot {
   version: number;
-  priors: Record<ModelTier, BetaPrior>;
+  priors: Record<BizarTier, BetaPrior>;
   rngSeed: number;
 }
 

@@ -51,7 +51,7 @@ describe("decideAgentWith — precedence chain", () => {
     expect(d.agent).toBe("brenda");
     expect(d.agentConfidence).toBe(1.0);
     expect(d.codemodIntent).toBe("var-to-const");
-    expect(d.modelTier).toBe("flash");
+    expect(d.modelTier).toBe("budget");
     // Both tags should be surfaced for a codemod hit.
     expect(d.surfacedTags.some((t) => t.includes("CODEMOD_AVAILABLE"))).toBe(true);
     expect(d.surfacedTags.some((t) => t.includes("TASK_MODEL_RECOMMENDATION"))).toBe(true);
@@ -64,7 +64,7 @@ describe("decideAgentWith — precedence chain", () => {
     expect(["mike", "susan", "janet", "greg", "brenda", "todd", "karen", "linda"])
       .toContain(d.agent);
     expect(d.codemodIntent).toBeNull();
-    expect(["flash", "mid", "expensive"]).toContain(d.modelTier);
+    expect(["premium", "high", "mid-design", "default", "mid", "budget"]).toContain(d.modelTier);
     expect(d.surfacedTags.length).toBe(1);
     expect(d.surfacedTags[0]).toMatch(/^\[TASK_MODEL_RECOMMENDATION\]/);
   });
@@ -89,9 +89,9 @@ describe("tag formatters", () => {
   });
 
   test("tierTag includes tier and confidence", () => {
-    const tag = tierTag({ tier: "flash", confidence: 0.42 });
+    const tag = tierTag({ tier: "budget", confidence: 0.42 });
     expect(tag).toContain("[TASK_MODEL_RECOMMENDATION]");
-    expect(tag).toContain("flash");
+    expect(tag).toContain("budget");
     expect(tag).toMatch(/conf=0\.42/);
   });
 });
@@ -130,7 +130,7 @@ describe("getRouter() — factory + persistence", () => {
       expect(existsSync(qPath)).toBe(true);
       const state = JSON.parse(readFileSync(modelPath, "utf-8"));
       expect(state.version).toBe(1);
-      expect(state.priors.flash.alpha).toBe(2);
+      expect(state.priors.budget.alpha).toBe(2);
     } finally {
       // mkdtempSync + recursive rm
       const { rmSync } = require("node:fs");
@@ -143,13 +143,13 @@ describe("getRouter() — factory + persistence", () => {
     try {
       const fp = join(dir, "router.json");
       const original = new ModelRouter({ seed: 42 });
-      original.recordOutcome("flash", true);
-      original.recordOutcome("flash", true);
+      original.recordOutcome("budget", true);
+      original.recordOutcome("budget", true);
       original.saveTo(fp);
 
       const loaded = ModelRouter.loadFrom(fp);
       const priors = loaded.getPriors();
-      expect(priors.flash.alpha).toBeGreaterThan(2);
+      expect(priors.budget.alpha).toBeGreaterThan(2);
     } finally {
       const { rmSync } = require("node:fs");
       rmSync(dir, { recursive: true, force: true });
