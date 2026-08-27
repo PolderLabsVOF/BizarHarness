@@ -1,3 +1,5 @@
+import { dispatchAgent } from './lib/dispatch.js'
+
 export const meta = {
   name: 'ultracode-review',
   description: 'Review a change across independent dimensions and adversarially verify every finding',
@@ -40,12 +42,22 @@ const lenses = [
   ['maintainability', 'Find concrete integration breakage, duplicated mechanisms, dead paths, and lifecycle leaks.'],
 ]
 
+// Map of lens -> role for the never-downgrade rule. Security and
+// correctness are never-downgrade; the others carry the same risk label
+// but with different capability floors.
+const lensRole = {
+  correctness: { role: 'adversarial', risk: 'high', capabilities: ['reasoning', 'structured-output'] },
+  security: { role: 'security', risk: 'high', capabilities: ['reasoning', 'security'] },
+  tests: { role: 'qa', risk: 'medium', capabilities: ['reasoning', 'structured-output'] },
+  maintainability: { role: 'architect', risk: 'medium', capabilities: ['reasoning', 'architecture'] },
+}
+
 phase('Review')
 const reviewed = await pipeline(
   lenses,
-  (lens) => agent(`Review ${TARGET} through the ${lens[0]} lens. ${lens[1]} Report only actionable defects with a concrete failure scenario; do not praise or speculate.`, { label: `review:${lens[0]}`, phase: 'Review', schema: FINDINGS }),
+  (lens) => dispatchAgent(agent, `reviewer-${lens[0]}`, `Review ${TARGET} through the ${lens[0]} lens. ${lens[1]} Report only actionable defects with a concrete failure scenario; do not praise or speculate.`, { ...lensRole[lens[0]], label: `review:${lens[0]}`, phase: 'Review', schema: FINDINGS }),
   (review, original) => (review?.findings || []).slice(0, 12).map((finding) => ({ ...finding, lens: original[0] })),
-  (findings) => parallel(findings.map((finding, index) => () => agent(`Try to refute this proposed finding. Inspect the exact code path and reject it if it is speculative, pre-existing, unreachable, or already covered.\n${JSON.stringify(finding)}`, { label: `verify:${index + 1}:${finding.file}`, phase: 'Verify', schema: VERDICT }).then((verdict) => ({ finding, verdict })))),
+  (findings) => parallel(findings.map((finding, index) => () => dispatchAgent(agent, `finding-verifier-${index + 1}`, `Try to refute this proposed finding. Inspect the exact code path and reject it if it is speculative, pre-existing, unreachable, or already covered.\n${JSON.stringify(finding)}`, { role: 'adversarial', risk: 'high', capabilities: ['reasoning', 'structured-output'], label: `verify:${index + 1}:${finding.file}`, phase: 'Verify', schema: VERDICT }).then((verdict) => ({ finding, verdict })))),
 )
 
 const verified = reviewed.flat(2).filter(Boolean).filter((item) => item.verdict?.confirmed).map((item) => ({ ...item.finding, verification: item.verdict.reason }))
