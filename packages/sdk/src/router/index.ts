@@ -35,6 +35,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 
 import {
   detectCodemodIntent,
@@ -46,6 +47,11 @@ import {
   type RouteDecision,
 } from "./model-router.js";
 import type { BizarTier } from "./agent-model-registry.js";
+import {
+  selectDispatchModel,
+  type ModelDecision,
+  type TaskFeatures,
+} from "./select-dispatch-model.js";
 import {
   QLearningRouter,
   AGENT_ACTIONS,
@@ -63,6 +69,32 @@ export interface RouteInput {
   /** Optional embedding — currently ignored (reserved for future ANN
    *  lookup that could refine the state bucket). */
   embedding?: number[];
+  /**
+   * Optional role label passed through to `selectDispatchModel`. When
+   * supplied, `decideAgentWith` runs the F-188 central selector after
+   * the precedence chain so the result carries a deterministic
+   * `routingDecisionId`. When omitted, the orchestrator falls back to
+   * the legacy Tier-1 short-circuit / bandit chain (still returns a
+   * `routingDecisionId` for audit traceability, but the selector's
+   * eligible-pool / never-downgrade rules are inert).
+   */
+  role?: string;
+  /** Forwarded to `selectDispatchModel` for the risk-keyed ladder. */
+  risk?: "low" | "medium" | "high";
+  /** Forwarded to `selectDispatchModel` for the exact-capability match. */
+  capabilities?: readonly string[];
+  /** Pre-validated operator-selected profiles (one per `userSelected` ID). */
+  selectedProfiles?: readonly import("./select-dispatch-model.js").ModelProfile[];
+  /** Static tier defaults — metadata, never an exclusion. */
+  staticProfiles?: readonly import("./select-dispatch-model.js").ModelProfile[];
+  /** Active session model — used only when the selected pool is empty. */
+  activeSessionModel?: string;
+  /** Provider health snapshot — failed providers are skipped. */
+  health?: import("./select-dispatch-model.js").ProviderHealthMap;
+  /** Per-role verified-outcome history (consumed by the selector tie-break). */
+  history?: import("./select-dispatch-model.js").OutcomeHistory;
+  /** Required when the F-188 selector is exercised; reused as the audit run id. */
+  runId?: string;
 }
 
 export interface RouteDecisionOutput {
@@ -74,6 +106,28 @@ export interface RouteDecisionOutput {
   codemodIntent: CodemodIntent | null;
   /** `[CODEMOD_AVAILABLE] var-to-const` style surface for prompt pre-injection. */
   surfacedTags: string[];
+  /**
+   * Stable UUID anchored to the dispatch decision. Always populated —
+   * either by `selectDispatchModel` (when role + profiles are
+   * supplied) or by `decideAgentWith` itself for the legacy chains —
+   * so the F-185 failover walker and downstream telemetry have a
+   * consistent audit-trail key.
+   */
+  routingDecisionId: string;
+  /**
+   * Resolved model ID (or `null` for session inheritance). Only
+   * populated when the F-188 selector runs end-to-end (i.e., when
+   * `input.selectedProfiles` and `input.role` are both supplied).
+   */
+  modelId: string | null;
+  /**
+   * Human-readable ladder reason (e.g. `exact-capability`,
+   * `next-stronger`, `strongest-healthy-risk-high`,
+   * `cheapest-healthy-risk-low`, `strongest-healthy-never-downgrade`,
+   * `session-inherit`, `no-eligible-selected`). `null` on the legacy
+   * chains that don't invoke the selector.
+   */
+  selectorReason: string | null;
 }
 
 export interface RouterBundle {
@@ -150,8 +204,19 @@ export function getRouter(opts: GetRouterOpts = {}): RouterBundle {
  *  2. Tier-1 codemod intent → agent="brenda" (routine implementation),
  *     tier="budget" ($0), confidence 1.0, surface `[CODEMOD_AVAILABLE]`.
  *  3. Q-learning agent pick (clamped to known agent names).
- *  4. Thompson-bandit model-tier pick (6-tier vocabulary).
- *  5. Defaults: agent="mike", tier="mid".
+ *  4. F-188 `selectDispatchModel` runs when `input.role` and
+ *     `input.selectedProfiles` are both supplied — its `modelTier`,
+ *     `modelConfidence`, `modelId`, and `routingDecisionId` win
+ *     against the Thompson-bandit fallback. The selector is the
+ *     IMP-013 mandatory primitive and is the canonical source of
+ *     `routingDecisionId`; the legacy bandit chain only contributes
+ *     `routingDecisionId` as a placeholder for parity.
+ *  5. Thompson-bandit model-tier pick (6-tier vocabulary).
+ *  6. Defaults: agent="mike", tier="mid".
+ *
+ * `routingDecisionId` is always populated — either by the F-188
+ * selector or by a stable UUID minted at the top of this function so
+ * the F-185 audit trail has a single key across every chain.
  */
 export function decideAgentWith(
   modelRouter: ModelRouter,
@@ -160,6 +225,7 @@ export function decideAgentWith(
 ): RouteDecisionOutput {
   const task = String(input?.task ?? "");
   const surfacedTags: string[] = [];
+  const routingDecisionId = randomUUID();
 
   // 1. Explicit override — highest precedence.
   if (input.explicitAgent && AGENT_ACTIONS.includes(input.explicitAgent)) {
@@ -174,6 +240,9 @@ export function decideAgentWith(
       modelConfidence: tier.confidence,
       codemodIntent: null,
       surfacedTags,
+      routingDecisionId,
+      modelId: null,
+      selectorReason: null,
     };
   }
 
@@ -193,12 +262,57 @@ export function decideAgentWith(
       modelConfidence: 1.0,
       codemodIntent: cm.intent,
       surfacedTags,
+      routingDecisionId,
+      modelId: null,
+      selectorReason: null,
     };
   }
 
   // 3. Q-learning agent pick.
   const agentDecision: AgentRouteDecision = qRouter.selectAgent(task);
-  // 4. Thompson bandit for model tier.
+
+  // 4. F-188 central selector — when the orchestrator supplied both the
+  // role and the selected/static profile list, the selector wins against
+  // the bandit. The selector's `routingDecisionId` is authoritative;
+  // for the case where the orchestrator did not supply profiles we still
+  // mint a routingDecisionId at the top of the function so the F-185
+  // audit trail has a stable key.
+  const selectedProfiles = input.selectedProfiles ?? [];
+  const staticProfiles = input.staticProfiles ?? [];
+  const runId = input.runId ?? "ad-hoc";
+  if (input.role !== undefined && (selectedProfiles.length > 0 || input.activeSessionModel !== undefined)) {
+    const taskFeatures: TaskFeatures = {
+      task,
+      role: input.role,
+      risk: input.risk,
+      capabilities: input.capabilities ? [...input.capabilities] : undefined,
+    };
+    const decision: ModelDecision = selectDispatchModel({
+      task: taskFeatures,
+      selectedProfiles: [...selectedProfiles],
+      staticProfiles: [...staticProfiles],
+      activeSessionModel: input.activeSessionModel,
+      budget: {},
+      health: input.health ?? {},
+      history: input.history,
+      runId,
+    });
+    surfacedTags.push(tierTag({ tier: decision.tier, confidence: decision.confidence }));
+    return {
+      agent: agentDecision.agent,
+      modelTier: decision.tier,
+      agentConfidence: agentDecision.confidence,
+      modelConfidence: decision.confidence,
+      codemodIntent: null,
+      surfacedTags,
+      routingDecisionId: decision.routingDecisionId,
+      modelId: decision.modelId,
+      selectorReason: decision.reason,
+    };
+  }
+
+  // 5. Thompson bandit for model tier (legacy fallback when the
+  // orchestrator did not supply role + selected profiles).
   const tierDecision: RouteDecision = modelRouter.route(task);
   surfacedTags.push(tierTag(tierDecision));
 
@@ -209,6 +323,9 @@ export function decideAgentWith(
     modelConfidence: tierDecision.confidence,
     codemodIntent: null,
     surfacedTags,
+    routingDecisionId,
+    modelId: null,
+    selectorReason: null,
   };
 }
 
@@ -233,6 +350,32 @@ export {
   CODEMOD_CONFIDENCE_THRESHOLD,
 } from "./codemod-intent.js";
 export type { CodemodIntent, CodemodIntentHit } from "./codemod-intent.js";
+
+// F-188 / IMP-013 central dispatch-model selector. Workflow wrappers,
+// Agent tool callers, and team-member spawns MUST import `selectDispatchModel`
+// from here rather than reaching into `evaluateRoleRequirements` or
+// `pickFailover` directly — see the drift guard test
+// (`packages/sdk/tests/select-dispatch-model-drift.test.mjs`).
+export {
+  selectDispatchModel,
+  NEVER_DOWNGRADE_ROLES,
+  REASON,
+  TIER_STRENGTH,
+  TIER_CHEAPNESS,
+} from "./select-dispatch-model.js";
+export type {
+  ModelDecision,
+  TaskFeatures,
+  ModelProfile,
+  ProviderHealth,
+  ProviderHealthMap,
+  BudgetState,
+  OutcomeHistory,
+  SelectDispatchModelInput,
+  AgentRole,
+  WorkflowPhase,
+  CapabilityToken,
+} from "./select-dispatch-model.js";
 
 export {
   ModelRouter,

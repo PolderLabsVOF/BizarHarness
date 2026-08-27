@@ -1061,11 +1061,39 @@
       "created": "2026-08-27",
       "wip_holder": null,
       "evidence": "2026-08-27: 3 commits on worktree-agent-af22e0d2791d76452. a945e8b refactor model-router.ts to BizarTier (TIERS, DEFAULT_PRIORS, getPriors, recordOutcome, REWARDS map budget 1.0 / mid 0.85 / default 0.85 / mid-design 0.7 / high 0.55 / premium 0.4) and drop ModelTier from router/index.ts. 9fcf4a1 adds packages/sdk/tests/tier-taxonomy-drift.test.mjs (129 lines) scanning packages/sdk/src/ for ModelTier declarations, 'flash'/'expensive' literals, and ModelTier identifiers. bbad0f0 closes the ledger. Merged at 8689190."
+    },
+    {
+      "id": "F-188",
+      "title": "Central dispatch-model selector (IMP-013)",
+      "description": "Close IMP-013 from IMPROVEMENTS.md line 866 — 'Central dispatch-model selector | All dispatch surfaces import one selector.' Land packages/sdk/src/router/select-dispatch-model.ts as the canonical wrapper that workflow engine, Agent tool, and team-member spawn all import. The selector must (a) start eligibility from selectedProfiles (userSelected.models), with staticProfiles as metadata only (line 644); (b) apply the verbatim five-step fallback ladder (line 646): exact-capability match → next stronger from selected pool → strongest healthy when risk=high → cheapest healthy when risk=low → activeSessionModel only when pool empty / no dispatchable; (c) honour the never-downgrade rule (line 654) for roles {security, architecture, adversarial, audit, karen}; (d) consume ProviderHealth to skip unhealthy models; (e) consume OutcomeHistory to prefer positive verified-outcome history on the same role+capability shape; (f) emit routingDecisionId as crypto.randomUUID() for the F-185 audit trail. selectDispatchModel returns ModelDecision {modelId, tier, confidence, ineligibleReasons, routingDecisionId, reason, fallbackChain}. Thread routingDecisionId through router/index.ts decideAgentWith → RouteDecisionOutput. Extend failover.ts PickFailoverInput with primaryDecisionId and surface FailoverVerdict.routingDecisionId. Acceptance: packages/sdk/tests/select-dispatch-model.test.mjs (≥10 cases: empty pool, exact, next-stronger, strongest-high-risk, cheapest-low-risk, medium-risk, unhealthy skip, security no-downgrade, no-eligible, chain order, UUID) + packages/sdk/tests/select-dispatch-model-integration.test.mjs (decideAgentWith round-trip). Drift guard packages/sdk/tests/select-dispatch-model-drift.test.mjs fails CI if any new packages/sdk/src/ file calls evaluateRoleRequirements or pickFailover directly without going through selectDispatchModel.",
+      "behavior": "vitest run packages/sdk/tests/{select-dispatch-model,select-dispatch-model-integration,select-dispatch-model-drift}.test.mjs passes (≥12 + ≥1 + 1 cases); tsc --noEmit exit 0; npm run test:node green.",
+      "verification": "vitest run packages/sdk/tests/{select-dispatch-model,select-dispatch-model-integration,select-dispatch-model-drift}.test.mjs; npx tsc --noEmit; npm run test:node.",
+      "state": "passing",
+      "passed": "2026-08-27",
+      "commit": "a4906c0",
+      "wip_holder": null,
+      "wip": null,
+      "category": "routing",
+      "layer": "sdk",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/router/select-dispatch-model.ts",
+        "packages/sdk/src/router/index.ts",
+        "packages/sdk/src/router/failover.ts",
+        "packages/sdk/tests/select-dispatch-model.test.mjs",
+        "packages/sdk/tests/select-dispatch-model-integration.test.mjs",
+        "packages/sdk/tests/select-dispatch-model-drift.test.mjs",
+        "feature_list.json",
+        "DECISIONS.md",
+        "PROGRESS.md"
+      ],
+      "created": "2026-08-27",
+      "evidence": "Branch wt/todd-imp013-dispatch-selector (3 commits). a4906c0: feat(sdk) land F-188 central dispatch-model selector (new packages/sdk/src/router/select-dispatch-model.ts exporting selectDispatchModel / TaskFeatures / ModelDecision / ModelProfile / ProviderHealth / ProviderHealthMap / BudgetState / OutcomeHistory / NEVER_DOWNGRADE_ROLES / REASON / TIER_STRENGTH / TIER_CHEAPNESS; threaded routingDecisionId through packages/sdk/src/router/index.ts decideAgentWith + RouteDecisionOutput; extended packages/sdk/src/router/failover.ts PickFailoverInput.primaryDecisionId + FailoverVerdict.routingDecisionId; byte-identical JS mirror packages/sdk/src/router/failover-mirror.mjs). ce94578: test(sdk) 28 cases (19 select-dispatch-model + 7 select-dispatch-model-integration + 2 select-dispatch-model-drift) pinning the verbatim five-step fallback ladder, never-downgrade rule, health filter, ineligibleReasons, chain ordering, UUID format, and decideAgentWith round-trip; drift guard verified by injecting a probe line into codemod-intent.ts (test fails) then reverting (test passes). Verification on the branch: npx tsc --noEmit exit 0; npx vitest run packages/sdk/tests/ 352/352 passing across 26 test files (28 are the three F-188 files); npm run test:node 594/595 passing (one pre-existing cli/install/prune.test.mjs force=true accepted fails on the .git/hooks worktree environment issue, unrelated to F-188). jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty once the wip-1 transfer to passing lands."
     }
   ],
   "vcr": {
     "passing": 66,
-    "activated": 67,
-    "ratio": 0.985
+    "activated": 68,
+    "ratio": 0.970
   }
 }
