@@ -504,14 +504,15 @@ export function augmentPayload(opts, decision, agentName) {
  * The single dispatch entry point every workflow script MUST call.
  *
  * Replaces bare `agent(prompt, opts)` calls. The signature
- * `(agentFn, agentName, prompt, opts)` makes the agent-factory explicit
- * so the helper is testable and the workflow runtime's `agent` is
- * passed through (the runtime injects `agent` via the script's
+ * `(agentFn, agentName, prompt, opts, context?)` makes the agent-factory
+ * explicit so the helper is testable and the workflow runtime's `agent`
+ * is passed through (the runtime injects `agent` via the script's
  * argument list, not via a module import).
  *
  * Behaviour:
  *   1. Builds a `TaskFeatures` from `opts`.
- *   2. Loads `userSelected` + health + budget via `loadDispatchContext`.
+ *   2. Loads `userSelected` + health + budget via `loadDispatchContext`
+ *      (or uses the supplied `context` for tests).
  *   3. Runs `selectDispatchModelMirror` to compute the decision.
  *   4. Optionally records the augmented payload into the capture hook.
  *   5. When `opts.dryRun === true`, returns the decision (the runtime
@@ -523,16 +524,17 @@ export function augmentPayload(opts, decision, agentName) {
  * @param {string} agentName - logical agent label (e.g. "mike", "todd")
  * @param {string} prompt - prompt sent to the agent
  * @param {object} opts - role/phase/capabilities/risk + workflow opts
+ * @param {object} [context] - optional dispatch context override (tests)
  * @returns {Promise<*>} the agent's response (or the decision when dryRun)
  */
-export async function dispatchAgent(agentFn, agentName, prompt, opts = {}) {
+export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, context) {
   if (typeof agentFn !== 'function' && opts.dryRun !== true) {
     throw new TypeError('dispatchAgent requires an agent function (or opts.dryRun=true)');
   }
   if (!agentName || typeof agentName !== 'string') {
     throw new TypeError('dispatchAgent requires a non-empty agentName');
   }
-  const decision = computeDecision(agentName, prompt, opts);
+  const decision = computeDecision(agentName, prompt, opts, context);
   const augmented = augmentPayload(opts, decision, agentName);
 
   if (captureFn) {
